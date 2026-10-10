@@ -1,0 +1,224 @@
+// crates/nikaia-std/src/tools/emit_ops.nika
+//
+// **The small questions the emitter asks of a tree and of an operator**,
+// moved from `emit/mod.rs` (ADR-294, #125, #558): Rust's binding strength and
+// spelling of an operator, the suffix of a repeated pattern, which expressions
+// leave, which are a number written down, which index is only literals, and
+// the `#[frame]` attribute a `frame` writes. Leaves of the emitter's call
+// graph: each calls only the others in this file.
+
+/// Rust's binding strength, which Nikaia shares.
+pub fn precedence(op: BinaryOp) -> i64 {
+    return match op {
+        BinaryOp::Mul | BinaryOp::Div | BinaryOp::Rem => 14,
+        BinaryOp::Add | BinaryOp::Sub => 13,
+        // Rust's order below the sums (ADR-285 D10), so a bit operation is
+        // parenthesised where the tree needs it and written bare where not.
+        BinaryOp::Shl | BinaryOp::Shr => 12,
+        BinaryOp::BitAnd => 11,
+        BinaryOp::BitXor => 10,
+        BinaryOp::BitOr => 9,
+        BinaryOp::Eq | BinaryOp::Ne | BinaryOp::Lt | BinaryOp::Le | BinaryOp::Gt | BinaryOp::Ge => 7,
+        BinaryOp::And => 4,
+        BinaryOp::Or => 3,
+    }
+}
+
+/// The operator as Rust writes it.
+pub fn binary_op(op: BinaryOp) -> String {
+    return match op {
+        BinaryOp::Add => "+",
+        BinaryOp::Sub => "-",
+        BinaryOp::Mul => "*",
+        BinaryOp::Div => "/",
+        BinaryOp::Rem => "%",
+        BinaryOp::Eq => "==",
+        BinaryOp::Ne => "!=",
+        BinaryOp::Lt => "<",
+        BinaryOp::Le => "<=",
+        BinaryOp::Gt => ">",
+        BinaryOp::Ge => ">=",
+        BinaryOp::And => "&&",
+        BinaryOp::Or => "||",
+        BinaryOp::BitAnd => "&",
+        BinaryOp::BitOr => "|",
+        BinaryOp::BitXor => "^",
+        BinaryOp::Shl => "<<",
+        BinaryOp::Shr => ">>",
+    }
+}
+
+/// The prefix operator as Rust writes it.
+pub fn unary_op(op: UnaryOp) -> String {
+    return match op {
+        UnaryOp::Neg => "-",
+        UnaryOp::Not => "!",
+        UnaryOp::Ref => "&",
+    }
+}
+
+/// The suffix a repeated pattern is written with.
+pub fn repeat_suffix(rep: Repeat) -> String {
+    return match rep {
+        Repeat::Star => "*",
+        Repeat::Plus => "+",
+        Repeat::Optional => "?",
+        Repeat::Exactly(n) => f"{{{n}}}",
+        Repeat::AtLeast(n) => f"{{{n},}}",
+        Repeat::Between(n, m) => f"{{{n},{m}}}",
+    }
+}
+
+/// `const` or `mut`, the word Rust puts between the `*` and the type.
+pub fn pointing(mutable: bool) -> String {
+    if mutable {
+        return "mut"
+    }
+    return "const"
+}
+
+/// Whether this expression **leaves** rather than coming to a value
+/// (ADR-276 D20). What it decides is where the jump is *written*: a closure is
+/// a function boundary (ADR-276 D16).
+pub fn jumps(expr: ref Expr) -> bool {
+    return match expr {
+        Expr::Throw(_, _) => true,
+        Expr::Return(_, _) => true,
+        Expr::Break(_) => true,
+        Expr::Continue(_) => true,
+        else => false,
+    }
+}
+
+/// Whether a `??`'s fallback ends in a jump: a jump itself, another `??`
+/// whose own fallback does - the chain `a ?? b ?? continue` is one fallback
+/// that may leave - or a block whose last statement does (#457).
+pub fn jumps_at_the_end(expr: ref Expr) -> bool {
+    return match expr {
+        Expr::Coalesce { fallback, .. } => jumps_at_the_end(fallback),
+        Expr::Block(block, _) => block_jumps_at_the_end(block),
+        else => jumps(expr),
+    }
+}
+
+fn block_jumps_at_the_end(block: ref Block) -> bool {
+    if block.stmts.len() == 0 {
+        return false
+    }
+    return match block.stmts[block.stmts.len() - 1].node {
+        Stmt::Return(_) => true,
+        Stmt::Break => true,
+        Stmt::Continue => true,
+        Stmt::Expr(inner) => jumps_at_the_end(inner),
+        else => false,
+    }
+}
+
+/// Whether this expression is a **number written down**, sign and all
+/// (ADR-285 D21): the negation is part of the answer rather than a wrapper
+/// around it.
+pub fn a_number(expr: ref Expr) -> bool {
+    return match expr {
+        Expr::LitInt { .. } => true,
+        Expr::LitFloat(_, _) => true,
+        Expr::Unary { op, expr, .. } => a_negated_number(op, expr),
+        else => false,
+    }
+}
+
+fn a_negated_number(op: UnaryOp, inner: ref Expr) -> bool {
+    return match op {
+        UnaryOp::Neg => a_number(inner),
+        else => false,
+    }
+}
+
+/// Whether an index is written **only in literals**, and therefore needs no
+/// conversion and can take none: `xs[0]`, `xs[-1]`, `&text[1..3]`, `xs[2 * 3]`.
+pub fn only_literals(index: ref Expr) -> bool {
+    return match index {
+        Expr::LitInt { .. } => true,
+        Expr::Unary { expr, .. } => only_literals(expr),
+        Expr::Binary { lhs, rhs, .. } => only_literals(lhs) && only_literals(rhs),
+        Expr::Range { start, end, .. } => only_literals(start) && only_literals(end),
+        else => false,
+    }
+}
+
+/// Whether a written index **counts from the end** (ADR-285 D1).
+pub fn a_negation_inside(index: ref Expr) -> bool {
+    return match index {
+        Expr::Unary { op, expr, .. } => a_negation_or_inside(op, expr),
+        Expr::Binary { lhs, rhs, .. } => a_negation_inside(lhs) || a_negation_inside(rhs),
+        Expr::Range { start, end, .. } => a_negation_inside(start) || a_negation_inside(end),
+        else => false,
+    }
+}
+
+fn a_negation_or_inside(op: UnaryOp, inner: ref Expr) -> bool {
+    return match op {
+        UnaryOp::Neg => true,
+        else => a_negation_inside(inner),
+    }
+}
+
+/// `xs.len()` - the four `std` entries that hand back a length, by the name
+/// all four of them have (ADR-285 D1).
+pub fn is_length(method: ref String, args: ref Vec[Expr]) -> bool {
+    return method == "len" && args.len() == 0
+}
+
+/// Whether a callee's argument at `at` is a **count** the language below takes
+/// in `usize` (ADR-285 D15): today `str::repeat`'s first.
+pub fn is_count(callee: ref String, at: i64) -> bool {
+    return callee == "repeat" && at == 0
+}
+
+/// A list a function value only reads is a slice (#458): `&Vec<T>` written
+/// as `&[T]`.
+pub fn a_list_read_as_a_slice(written: String) -> String {
+    if written.starts_with("&Vec<") && written.ends_with(">") {
+        let rest = written.strip_prefix("&Vec<") ?? ""
+        let element = rest.strip_suffix(">") ?? ""
+        return f"&[{element}]"
+    }
+    return written
+}
+
+/// The `#[frame]` attribute a `frame` writes.
+pub fn frame_attribute(frame: ref FrameAttr) -> String {
+    let mut keys: Vec[String] = []
+    let boundary = frame.boundary?.clone()
+    if boundary != null {
+        keys.push(f"boundary = \"{boundary ?? ""}\"")
+    }
+    if frame.unchecked {
+        keys.push("unchecked")
+    }
+    if keys.len() == 0 {
+        return "#[frame]"
+    }
+    return f"#[frame({keys.join(", ")})]"
+}
+
+/// Whether this expression names a place: a variable, a field, a safe field
+/// or an index.
+pub fn is_a_place(expr: ref Expr) -> bool {
+    return match expr {
+        Expr::Variable(_, _) => true,
+        Expr::Field { .. } => true,
+        Expr::SafeField { .. } => true,
+        Expr::Index { .. } => true,
+        else => false,
+    }
+}
+
+/// Whether a match pattern binds the part it stands for: a single name, or
+/// `else`.
+pub fn binds_a_part(part: ref MatchPattern) -> bool {
+    return match part {
+        MatchPattern::Path(one) => one.len() == 1,
+        MatchPattern::Otherwise => true,
+        else => false,
+    }
+}

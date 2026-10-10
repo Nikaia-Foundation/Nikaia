@@ -14939,6 +14939,545 @@ pub fn is_whole(name: &str) -> bool { name == "i8" || name == "i16" || name == "
 fn uncrossable(ty: &Ty, because: &str) -> Option<Uncrossable> { Some(Uncrossable { ty: ty.text(), because: because.to_owned() }) }
 
 
+// --- emit_items.nika ---
+
+pub fn foreign_params(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>]) -> collections::BTreeMap<String, Vec<Type>> {
+    let mut out: collections::BTreeMap<String, Vec<Type>> = collections::BTreeMap::new();
+    for item in items.iter() {
+        match &item.node {
+            Item::Extern { declarations, .. } => {
+                for declaration in declarations.iter() {
+                    let mut types: Vec<Type> = vec![];
+                    for arg in declaration.node.args.iter() { types.push(arg.ty.clone()); }
+                    out.insert(words.resolve(declaration.node.name).to_owned(), types);
+                }
+            },
+            _ => { },
+        }
+    }
+    out
+}
+
+pub fn opaque_handles(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>]) -> collections::BTreeMap<String, String> {
+    let mut out: collections::BTreeMap<String, String> = collections::BTreeMap::new();
+    for item in items.iter() {
+        match &item.node {
+            Item::Extern { opaque, .. } => { for handle in opaque.iter() { out.insert(words.resolve(handle.node.name).to_owned(), words.resolve(handle.node.released_by).to_owned()); } },
+            _ => { },
+        }
+    }
+    out
+}
+
+pub fn foreign_results(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>]) -> collections::BTreeMap<String, Type> {
+    let mut out: collections::BTreeMap<String, Type> = collections::BTreeMap::new();
+    for item in items.iter() {
+        match &item.node {
+            Item::Extern { declarations, .. } => {
+                for declaration in declarations.iter() {
+                    let ret = match match declaration.node.ret_type.as_ref() {
+                        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                        None => None,
+                    } { Some(__nikaia_value) => __nikaia_value, None => continue };
+                    out.insert(words.resolve(declaration.node.name).to_owned(), ret);
+                }
+            },
+            _ => { },
+        }
+    }
+    out
+}
+
+pub fn foreign_traits(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>]) -> collections::BTreeSet<String> {
+    let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for item in items.iter() {
+        match &item.node {
+            Item::Impl { trait_name, .. } => {
+                let trait_name = *trait_name;
+                let held = match trait_name { Some(__nikaia_value) => __nikaia_value, None => continue };
+                let name = words.resolve(held).to_owned();
+                if name.contains("::") { out.insert(name); }
+            },
+            _ => { },
+        }
+    }
+    out
+}
+
+pub fn declared_errors(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>]) -> collections::BTreeSet<String> {
+    let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for item in items.iter() {
+        match &item.node {
+            Item::Impl { trait_name, target, .. } => {
+                let trait_name = *trait_name;
+                let held = match trait_name { Some(__nikaia_value) => __nikaia_value, None => continue };
+                if words.resolve(held) == "Error" { out.insert(words.resolve(target.name).to_owned()); }
+            },
+            _ => { },
+        }
+    }
+    out
+}
+
+pub fn sum_name(members: &[String]) -> String {
+    let mut spelled: Vec<String> = vec![];
+    for member in members.iter() { spelled.push(member.replace("::", "_")); }
+    format!("__NikaiaThrows_{}", spelled.join("__"))
+}
+
+pub fn sum_variant(member: &str) -> String { member.replace("::", "_") }
+
+pub fn variant_slot(owner: &str, variant: &str, at: i64) -> String { format!("{}.{}#{}", owner, variant, at) }
+
+pub fn dsl_name(words: &winnow_grammar::InternerContext, package: Option<winnow_grammar::Symbol>, target: winnow_grammar::Symbol) -> String {
+    let held = match package { Some(__nikaia_value) => __nikaia_value, None => return words.resolve(target).to_owned() };
+    format!("{}::{}", words.resolve(held), words.resolve(target))
+}
+
+
+// --- emit_ops.nika ---
+
+pub fn precedence(op: BinaryOp) -> i64 {
+    match op {
+        BinaryOp::Mul | BinaryOp::Div | BinaryOp::Rem => 14,
+        BinaryOp::Add | BinaryOp::Sub => 13,
+        BinaryOp::Shl | BinaryOp::Shr => 12,
+        BinaryOp::BitAnd => 11,
+        BinaryOp::BitXor => 10,
+        BinaryOp::BitOr => 9,
+        BinaryOp::Eq | BinaryOp::Ne | BinaryOp::Lt | BinaryOp::Le | BinaryOp::Gt | BinaryOp::Ge => 7,
+        BinaryOp::And => 4,
+        BinaryOp::Or => 3,
+    }
+}
+
+pub fn binary_op(op: BinaryOp) -> String {
+    match op {
+        BinaryOp::Add => String::from("+"),
+        BinaryOp::Sub => String::from("-"),
+        BinaryOp::Mul => String::from("*"),
+        BinaryOp::Div => String::from("/"),
+        BinaryOp::Rem => String::from("%"),
+        BinaryOp::Eq => String::from("=="),
+        BinaryOp::Ne => String::from("!="),
+        BinaryOp::Lt => String::from("<"),
+        BinaryOp::Le => String::from("<="),
+        BinaryOp::Gt => String::from(">"),
+        BinaryOp::Ge => String::from(">="),
+        BinaryOp::And => String::from("&&"),
+        BinaryOp::Or => String::from("||"),
+        BinaryOp::BitAnd => String::from("&"),
+        BinaryOp::BitOr => String::from("|"),
+        BinaryOp::BitXor => String::from("^"),
+        BinaryOp::Shl => String::from("<<"),
+        BinaryOp::Shr => String::from(">>"),
+    }
+}
+
+pub fn unary_op(op: UnaryOp) -> String {
+    match op {
+        UnaryOp::Neg => String::from("-"),
+        UnaryOp::Not => String::from("!"),
+        UnaryOp::Ref => String::from("&"),
+    }
+}
+
+pub fn repeat_suffix(rep: Repeat) -> String {
+    match rep {
+        Repeat::Star => String::from("*"),
+        Repeat::Plus => String::from("+"),
+        Repeat::Optional => String::from("?"),
+        Repeat::Exactly(n) => format!("{{{}}}", n),
+        Repeat::AtLeast(n) => format!("{{{},}}", n),
+        Repeat::Between(n, m) => format!("{{{},{}}}", n, m),
+    }
+}
+
+pub fn pointing(mutable: bool) -> String {
+    if mutable { return String::from("mut"); }
+    String::from("const")
+}
+
+pub fn jumps(expr: &Expr) -> bool { matches!(expr, Expr::Throw(_, _) | Expr::Return(_, _) | Expr::Break(_) | Expr::Continue(_)) }
+
+pub fn jumps_at_the_end(expr: &Expr) -> bool {
+    match expr {
+        Expr::Coalesce { fallback, .. } => { let fallback = nikaia_std::boxed::open(fallback); jumps_at_the_end(fallback) },
+        Expr::Block(block, _) => block_jumps_at_the_end(block),
+        _ => jumps(expr),
+    }
+}
+
+fn block_jumps_at_the_end(block: &Block) -> bool {
+    if block.stmts.is_empty() { return false; }
+    match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1)).node {
+        Stmt::Return(_) => true,
+        Stmt::Break => true,
+        Stmt::Continue => true,
+        Stmt::Expr(inner) => jumps_at_the_end(inner),
+        _ => false,
+    }
+}
+
+pub fn a_number(expr: &Expr) -> bool {
+    match expr {
+        Expr::LitInt { .. } => true,
+        Expr::LitFloat(_, _) => true,
+        Expr::Unary { op, expr, .. } => { let expr = nikaia_std::boxed::open(expr); a_negated_number(*op, expr) },
+        _ => false,
+    }
+}
+
+fn a_negated_number(op: UnaryOp, inner: &Expr) -> bool {
+    match op {
+        UnaryOp::Neg => a_number(inner),
+        _ => false,
+    }
+}
+
+pub fn only_literals(index: &Expr) -> bool {
+    match index {
+        Expr::LitInt { .. } => true,
+        Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); only_literals(expr) },
+        Expr::Binary { lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); only_literals(lhs) && only_literals(rhs) },
+        Expr::Range { start, end, .. } => { let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end); only_literals(start) && only_literals(end) },
+        _ => false,
+    }
+}
+
+pub fn a_negation_inside(index: &Expr) -> bool {
+    match index {
+        Expr::Unary { op, expr, .. } => { let expr = nikaia_std::boxed::open(expr); a_negation_or_inside(*op, expr) },
+        Expr::Binary { lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); a_negation_inside(lhs) || a_negation_inside(rhs) },
+        Expr::Range { start, end, .. } => { let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end); a_negation_inside(start) || a_negation_inside(end) },
+        _ => false,
+    }
+}
+
+fn a_negation_or_inside(op: UnaryOp, inner: &Expr) -> bool {
+    match op {
+        UnaryOp::Neg => true,
+        _ => a_negation_inside(inner),
+    }
+}
+
+pub fn is_length(method: &str, args: &[Expr]) -> bool { method == "len" && args.is_empty() }
+
+pub fn is_count(callee: &str, at: i64) -> bool { callee == "repeat" && at == 0 }
+
+pub fn a_list_read_as_a_slice(written: String) -> String {
+    if written.starts_with("&Vec<") && written.ends_with(">") {
+        let rest = nikaia_std::index::or(written.strip_prefix("&Vec<"), || "");
+        let element = nikaia_std::index::or(rest.strip_suffix(">"), || "");
+        return format!("&[{}]", element);
+    }
+    written
+}
+
+pub fn frame_attribute(frame: &FrameAttr) -> String {
+    let mut keys: Vec<String> = vec![];
+    let boundary = match frame.boundary.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    };
+    if boundary.is_some() { keys.push(format!("boundary = \"{}\"", nikaia_std::index::or(boundary.as_deref(), || ""))); }
+    if frame.unchecked { keys.push(String::from("unchecked")); }
+    if keys.is_empty() { return String::from("#[frame]"); }
+    format!("#[frame({})]", keys.join(", "))
+}
+
+pub fn is_a_place(expr: &Expr) -> bool { matches!(expr, Expr::Variable(_, _) | Expr::Field { .. } | Expr::SafeField { .. } | Expr::Index { .. }) }
+
+pub fn binds_a_part(part: &MatchPattern) -> bool {
+    match part {
+        MatchPattern::Path(one) => one.len() == 1,
+        MatchPattern::Otherwise => true,
+        _ => false,
+    }
+}
+
+
+// --- emit_text.nika ---
+
+pub fn rust_string(text: &str) -> String {
+    let mut out: String = String::from("\"");
+    for c in text.chars() { if c == '"' { out.push_str("\\\""); } else if c == '\\' { out.push_str("\\\\"); } else if c == '\n' { out.push_str("\\n"); } else if c == '\r' { out.push_str("\\r"); } else if c == '\t' { out.push_str("\\t"); } else { out.push(c); } }
+    out.push('"');
+    out
+}
+
+pub fn rust_format_escape(text: &str) -> String {
+    let mut out: String = String::from("");
+    let chars: Vec<scalar> = nikaia_std::list::chars(text.chars());
+    let mut at: i64 = 0;
+    while ((at) as usize) < chars.len() {
+        let c = *nikaia_std::index::get(&chars, (at) as usize);
+        at += 1;
+        if c == '\\' {
+            out.push('\\');
+            if ((at) as usize) >= chars.len() { break; }
+            let escape = *nikaia_std::index::get(&chars, (at) as usize);
+            at += 1;
+            out.push(escape);
+            if escape == 'u' && ((at) as usize) < chars.len() && *nikaia_std::index::get(&chars, (at) as usize) == '{' {
+                while ((at) as usize) < chars.len() {
+                    let inner = *nikaia_std::index::get(&chars, (at) as usize);
+                    at += 1;
+                    out.push(inner);
+                    if inner == '}' { break; }
+                }
+            }
+        } else if c == '{' { out.push_str("{{"); } else if c == '}' { out.push_str("}}"); } else { out.push(c); }
+    }
+    out
+}
+
+pub fn top_level_parts(inside: &str) -> Vec<String> {
+    let mut parts: Vec<String> = vec![];
+    let mut current: String = String::from("");
+    let mut depth = 0;
+    let mut in_text = false;
+    let mut escaped_next = false;
+    for c in inside.chars() {
+        if in_text {
+            current.push(c);
+            if escaped_next { escaped_next = false; } else if c == '\\' { escaped_next = true; } else if c == '"' { in_text = false; }
+            continue;
+        }
+        if c == '"' { in_text = true; } else if c == '{' || c == '(' || c == '[' { depth += 1; } else if c == '}' || c == ')' || c == ']' { depth -= 1; } else if c == ',' && depth == 0 {
+            parts.push(current.trim().to_owned());
+            current = String::from("");
+            continue;
+        }
+        current.push(c);
+    }
+    if !current.trim().is_empty() { parts.push(current.trim().to_owned()); }
+    parts
+}
+
+pub fn format_of(parts: &[FPart]) -> String {
+    let mut format: String = String::from("");
+    for part in parts.iter() {
+        match part {
+            FPart::Text(text) => format.push_str(text),
+            FPart::Hole { spec, .. } => format.push_str(&a_hole_format((spec).as_deref())),
+        }
+    }
+    format
+}
+
+fn a_hole_format(spec: Option<&str>) -> String {
+    let held = match spec { Some(__nikaia_value) => __nikaia_value, None => return String::from("{}") };
+    format!("{{:{}}}", held)
+}
+
+pub fn truncating(method: &str) -> Option<String> {
+    let ty = match method.strip_prefix("truncating_") { Some(__nikaia_value) => __nikaia_value, None => return None };
+    an_integer_type(ty)
+}
+
+pub fn checked(method: &str) -> Option<String> {
+    let ty = match method.strip_prefix("checked_") { Some(__nikaia_value) => __nikaia_value, None => return None };
+    an_integer_type(ty)
+}
+
+fn an_integer_type(ty: &str) -> Option<String> {
+    match ty {
+        "i32" => Some(String::from("i32")),
+        "i64" => Some(String::from("i64")),
+        "u32" => Some(String::from("u32")),
+        "u64" => Some(String::from("u64")),
+        _ => None,
+    }
+}
+
+fn owned_text(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { name, view, .. } => { let view = *view; an_owned_text_name(name, view) },
+        _ => false,
+    }
+}
+
+fn an_owned_text_name(name: &str, view: bool) -> bool {
+    if view { return false; }
+    name == "String"
+}
+
+pub fn held_literal(literal: &str, ty: &Ty) -> String {
+    if owned_text(ty) && literal.starts_with("\"") { return format!("String::from({})", literal); }
+    match ty {
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); held_nullable(literal, inner) },
+        _ => literal.to_owned(),
+    }
+}
+
+fn held_nullable(literal: &str, inner: &Ty) -> String {
+    if literal == "None" { return literal.to_owned(); }
+    if owned_text(inner) && literal.starts_with("\"") { return format!("Some(String::from({}))", literal); }
+    format!("Some({})", literal)
+}
+
+pub fn plain_rust_spelling(ty: &Ty) -> String {
+    match ty {
+        Ty::Named { name, args, view } => { let view = *view; plain_named(name, args, view) },
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); format!("Option<{}>", plain_rust_spelling(inner)) },
+        _ => String::from("_"),
+    }
+}
+
+fn plain_named(written: &str, args: &[Ty], view: bool) -> String {
+    let mut name = written.to_owned();
+    if name == "List" { name = String::from("Vec"); }
+    let mut inner: String = String::from("");
+    if !args.is_empty() {
+        let mut spelled: Vec<String> = vec![];
+        for arg in args.iter() { spelled.push(plain_rust_spelling(arg)); }
+        inner = format!("<{}>", spelled.join(", "));
+    }
+    if view {
+        if name == "str" || name == "String" { return String::from("&str"); }
+        return String::from("_");
+    }
+    if name == "str" { return String::from("String"); }
+    format!("{}{}", name, inner)
+}
+
+
+// --- emit_walk.nika ---
+
+pub fn visited_in_block(block: &Block) -> Vec<&Expr> {
+    let mut out: Vec<&Expr> = vec![];
+    for stmt in block.stmts.iter() { out.extend(visited_in_stmt(&stmt.node)); }
+    out
+}
+
+fn visited_in_stmt(stmt: &Stmt) -> Vec<&Expr> {
+    let mut out: Vec<&Expr> = vec![];
+    match stmt {
+        Stmt::Let { value, .. } => out.extend(visited_in_expr(value)),
+        Stmt::Comptime { value, .. } => out.extend(visited_in_expr(value)),
+        Stmt::Assign { target, value, .. } => {
+            out.extend(visited_in_expr(target));
+            out.extend(visited_in_expr(value));
+        },
+        Stmt::For { iter, body, .. } => {
+            out.extend(visited_in_expr(iter));
+            out.extend(visited_in_block(body));
+        },
+        Stmt::While { cond, body } => {
+            out.extend(visited_in_expr(cond));
+            out.extend(visited_in_block(body));
+        },
+        Stmt::Return(value) => out.extend(visited_in_maybe((value).as_ref())),
+        Stmt::Break => { },
+        Stmt::Continue => { },
+        Stmt::Expr(inner) => out.extend(visited_in_expr(inner)),
+    }
+    out
+}
+
+fn visited_in_maybe(expr: Option<&Expr>) -> Vec<&Expr> { visited_in_expr(match expr { Some(__nikaia_value) => __nikaia_value, None => return vec![] }) }
+
+fn visited_in_maybe_block(block: Option<&Block>) -> Vec<&Expr> { visited_in_block(match block { Some(__nikaia_value) => __nikaia_value, None => return vec![] }) }
+
+fn visited_in_all(all: &[Expr]) -> Vec<&Expr> {
+    let mut out: Vec<&Expr> = vec![];
+    for each in all.iter() { out.extend(visited_in_expr(each)); }
+    out
+}
+
+pub fn visited_in_expr(expr: &Expr) -> Vec<&Expr> {
+    let mut out: Vec<&Expr> = vec![expr];
+    match expr {
+        Expr::Block(block, _) => out.extend(visited_in_block(block)),
+        Expr::Unsafe(block, _) => out.extend(visited_in_block(block)),
+        Expr::Overlap(block, _) => out.extend(visited_in_block(block)),
+        Expr::If { cond, then_branch, else_branch, .. } => {
+            let cond = nikaia_std::boxed::open(cond);
+            out.extend(visited_in_expr(cond));
+            out.extend(visited_in_block(then_branch));
+            out.extend(visited_in_maybe_block((else_branch).as_ref()));
+        },
+        Expr::Call { func, args, .. } => {
+            let func = nikaia_std::boxed::open(func);
+            out.extend(visited_in_expr(func));
+            out.extend(visited_in_all(args));
+        },
+        Expr::MethodCall { receiver, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver);
+            out.extend(visited_in_expr(receiver));
+            out.extend(visited_in_all(args));
+        },
+        Expr::SafeMethod { receiver, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver);
+            out.extend(visited_in_expr(receiver));
+            out.extend(visited_in_all(args));
+        },
+        Expr::Match { value, arms, .. } => {
+            let value = nikaia_std::boxed::open(value);
+            out.extend(visited_in_expr(value));
+            for arm in arms.iter() { out.extend(visited_in_expr(&arm.body)); }
+        },
+        Expr::Tuple(parts, _) => out.extend(visited_in_all(parts)),
+        Expr::ListLit { items, .. } => out.extend(visited_in_all(items)),
+        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); out.extend(visited_in_expr(base)) },
+        Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); out.extend(visited_in_expr(base)) },
+        Expr::StructLit { fields, .. } => { for field in fields.iter() { out.extend(visited_in_maybe((field.value).as_ref())); } },
+        Expr::Closure { body, .. } => out.extend(visited_in_block(body)),
+        Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); out.extend(visited_in_expr(expr)) },
+        Expr::Binary { lhs, rhs, .. } => {
+            let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
+            out.extend(visited_in_expr(lhs));
+            out.extend(visited_in_expr(rhs));
+        },
+        Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); out.extend(visited_in_expr(inner)) },
+        Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); out.extend(visited_in_expr(inner)) },
+        Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); out.extend(visited_in_maybe((value).as_ref())) },
+        Expr::Index { base, index, .. } => {
+            let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
+            out.extend(visited_in_expr(base));
+            out.extend(visited_in_expr(index));
+        },
+        Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); out.extend(visited_in_expr(expr)) },
+        Expr::Coalesce { value, fallback, .. } => {
+            let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback);
+            out.extend(visited_in_expr(value));
+            out.extend(visited_in_expr(fallback));
+        },
+        Expr::TryCatch { expr, handler, .. } => {
+            let expr = nikaia_std::boxed::open(expr);
+            out.extend(visited_in_expr(expr));
+            out.extend(visited_in_block(handler));
+        },
+        Expr::Spawn { body, .. } => { let body = nikaia_std::boxed::open(body); out.extend(visited_in_expr(body)) },
+        _ => { },
+    }
+    out
+}
+
+pub fn template_holes_bound(segments: &[Segment]) -> Vec<(String, Vec<(String, String)>)> {
+    let mut holes: Vec<(String, Vec<(String, String)>)> = vec![];
+    let mut bound: Vec<(String, String)> = vec![];
+    walk_template_holes(segments, &mut bound, &mut holes);
+    holes
+}
+
+fn walk_template_holes(segments: &[Segment], bound: &mut Vec<(String, String)>, out: &mut Vec<(String, Vec<(String, String)>)>) {
+    for segment in segments.iter() {
+        match segment {
+            Segment::Text(_) => { },
+            Segment::Hole { expr, .. } => out.push((expr.to_owned(), bound.to_owned())),
+            Segment::For { binding, collection, body } => {
+                out.push((collection.to_owned(), bound.to_owned()));
+                bound.push((binding.to_owned(), collection.to_owned()));
+                walk_template_holes(body, bound, out);
+                bound.pop();
+            },
+        }
+    }
+}
+
+
 // --- escapes.nika ---
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34997,6 +35536,22 @@ pub mod dsl {
 pub mod dump {
     #[allow(unused_imports)]
     pub use super::{VariantShape, FieldShape, Shapes, Uncrossable, dump, is_whole};
+}
+pub mod emit_items {
+    #[allow(unused_imports)]
+    pub use super::{foreign_params, opaque_handles, foreign_results, foreign_traits, declared_errors, sum_name, sum_variant, variant_slot, dsl_name};
+}
+pub mod emit_ops {
+    #[allow(unused_imports)]
+    pub use super::{precedence, binary_op, unary_op, repeat_suffix, pointing, jumps, jumps_at_the_end, a_number, only_literals, a_negation_inside, is_length, is_count, a_list_read_as_a_slice, frame_attribute, is_a_place, binds_a_part};
+}
+pub mod emit_text {
+    #[allow(unused_imports)]
+    pub use super::{rust_string, rust_format_escape, top_level_parts, format_of, truncating, checked, held_literal, plain_rust_spelling};
+}
+pub mod emit_walk {
+    #[allow(unused_imports)]
+    pub use super::{visited_in_block, visited_in_expr, template_holes_bound};
 }
 pub mod escapes {
     #[allow(unused_imports)]

@@ -1,0 +1,127 @@
+// crates/nikaia-std/src/tools/emit_items.nika
+//
+// **What the emitter reads off a unit's items before it writes any**, moved
+// from `emit/mod.rs` (ADR-294, #125, #558): the parameters, results and
+// handles of the `extern` blocks, the traits an `impl` names from another
+// module, the types that implement `Error`, and the names the sum type of a
+// `throws` list is given. Each walks the items once and calls nothing outside
+// this file.
+
+use std::collections
+
+/// Every `extern` function's parameter types, by name.
+pub fn foreign_params(words: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]]) -> collections::BTreeMap[String, Vec[Type]] {
+    let mut out: collections::BTreeMap[String, Vec[Type]] = collections::BTreeMap()
+    for item in items {
+        match item.node {
+            Item::Extern { declarations, .. } => {
+                for declaration in declarations {
+                    let mut types: Vec[Type] = []
+                    for arg in declaration.node.args {
+                        types.push(arg.ty.clone())
+                    }
+                    out.insert(words.resolve(declaration.node.name).clone(), types)
+                }
+            },
+            else => {},
+        }
+    }
+    return out
+}
+
+/// Every `extern` handle type and the function that releases it.
+pub fn opaque_handles(words: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]]) -> collections::BTreeMap[String, String] {
+    let mut out: collections::BTreeMap[String, String] = collections::BTreeMap()
+    for item in items {
+        match item.node {
+            Item::Extern { opaque, .. } => {
+                for handle in opaque {
+                    out.insert(words.resolve(handle.node.name).clone(), words.resolve(handle.node.released_by).clone())
+                }
+            },
+            else => {},
+        }
+    }
+    return out
+}
+
+/// Every `extern` function's result type, by name.
+pub fn foreign_results(words: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]]) -> collections::BTreeMap[String, Type] {
+    let mut out: collections::BTreeMap[String, Type] = collections::BTreeMap()
+    for item in items {
+        match item.node {
+            Item::Extern { declarations, .. } => {
+                for declaration in declarations {
+                    let ret = declaration.node.ret_type?.clone() ?? continue
+                    out.insert(words.resolve(declaration.node.name).clone(), ret)
+                }
+            },
+            else => {},
+        }
+    }
+    return out
+}
+
+/// The traits an `impl` names through a path (`io::Write`), which the unit
+/// does not declare.
+pub fn foreign_traits(words: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]]) -> collections::BTreeSet[String] {
+    let mut out: collections::BTreeSet[String] = collections::BTreeSet()
+    for item in items {
+        match item.node {
+            Item::Impl { trait_name, .. } => {
+                let held = trait_name ?? continue
+                let name = words.resolve(held).clone()
+                if name.contains("::") {
+                    out.insert(name)
+                }
+            },
+            else => {},
+        }
+    }
+    return out
+}
+
+/// The types a unit declares an `impl Error` for.
+pub fn declared_errors(words: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]]) -> collections::BTreeSet[String] {
+    let mut out: collections::BTreeSet[String] = collections::BTreeSet()
+    for item in items {
+        match item.node {
+            Item::Impl { trait_name, target, .. } => {
+                let held = trait_name ?? continue
+                if words.resolve(held) == "Error" {
+                    out.insert(words.resolve(target.name).clone())
+                }
+            },
+            else => {},
+        }
+    }
+    return out
+}
+
+/// What a generated error sum is called (ADR-280 D15). A program never writes
+/// it: a `catch` matches on the **members'** variants (ADR-023 D4), so the name
+/// exists only in the generated file, spelled so that nothing a program
+/// declares collides with it.
+pub fn sum_name(members: ref Vec[String]) -> String {
+    let mut spelled: Vec[String] = []
+    for member in members {
+        spelled.push(member.replace("::", "_"))
+    }
+    return f"__NikaiaThrows_{spelled.join("__")}"
+}
+
+/// The variant of that sum type a member is.
+pub fn sum_variant(member: ref String) -> String {
+    return member.replace("::", "_")
+}
+
+/// The key a variant's field has in the tables that name it.
+pub fn variant_slot(owner: ref String, variant: ref String, at: i64) -> String {
+    return f"{owner}.{variant}#{at}"
+}
+
+/// A name with its package, `package::target`, or the target alone.
+pub fn dsl_name(words: ref winnow_grammar::InternerContext, package: winnow_grammar::Symbol?, target: winnow_grammar::Symbol) -> String {
+    let held = package ?? return words.resolve(target).clone()
+    return f"{words.resolve(held)}::{words.resolve(target)}"
+}

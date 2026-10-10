@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.789] — 2026-10-10
+
+**The emitter's first leaves are Nikaia: operators, text, items and the walk (`tools/emit_ops.nika`, `emit_text.nika`, `emit_items.nika`, `emit_walk.nika`, #558, #125).**
+- `emit_ops`: `precedence`, `binary_op`, `unary_op`, `repeat_suffix`, `pointing`, `jumps`, `jumps_at_the_end`, `a_number`, `only_literals`, `a_negation_inside`, `is_length`, `is_count`, `a_list_read_as_a_slice`, `frame_attribute`, `is_a_place`, `binds_a_part`. `emit_text`: `rust_string`, `rust_format_escape`, `top_level_parts`, `format_of`, `truncating`, `checked`, `held_literal`, `plain_rust_spelling`. `emit_items`: `foreign_params`, `opaque_handles`, `foreign_results`, `foreign_traits`, `declared_errors`, `sum_name`, `sum_variant`, `variant_slot`, `dsl_name`.
+- `visit_expr` and `visit_block` ask `emit_walk::visited_in_expr` and `visited_in_block`, which return the expressions in the order the walk meets them; the Rust callers keep their closures. `template_holes_bound` is Nikaia too. `holds_view` is `views::holds_view`.
+- Left in Rust: the `Emitter` and its methods, `Out`, `Flow`, `pausing_reach` and the walks that capture state.
+
 ## [0.0.788] — 2026-10-10
 
 **Six reports of the checker are Nikaia (`tools/check_reports.nika`, #558, #125).**

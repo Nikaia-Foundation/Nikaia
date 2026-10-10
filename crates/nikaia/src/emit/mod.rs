@@ -1086,75 +1086,23 @@ impl Needs {
 /// ([ADR-302](../../docs/specification/adr/adr-302.md) D5), by the name a call
 /// writes.
 fn foreign_params(parsed: &Parsed) -> std::collections::BTreeMap<String, Vec<Type>> {
-    let mut out = std::collections::BTreeMap::new();
-    for item in &parsed.program.items {
-        let Item::Extern { declarations, .. } = &item.node else {
-            continue;
-        };
-        for declaration in declarations {
-            out.insert(
-                parsed.text(declaration.node.name).to_string(),
-                declaration
-                    .node
-                    .args
-                    .iter()
-                    .map(|a| a.ty.clone())
-                    .collect::<Vec<_>>(),
-            );
-        }
-    }
-    out
+    nikaia_std::tools::emit_items::foreign_params(&parsed.interner, &parsed.program.items)
 }
 
 /// The opaque handles this file declares, by name, with the function that ends
 /// each one's life ([ADR-302](../../docs/specification/adr/adr-302.md) D7).
 fn opaque_handles(parsed: &Parsed) -> std::collections::BTreeMap<String, String> {
-    let mut out = std::collections::BTreeMap::new();
-    for item in &parsed.program.items {
-        let Item::Extern { opaque, .. } = &item.node else {
-            continue;
-        };
-        for handle in opaque {
-            out.insert(
-                parsed.text(handle.node.name).to_string(),
-                parsed.text(handle.node.released_by).to_string(),
-            );
-        }
-    }
-    out
+    nikaia_std::tools::emit_items::opaque_handles(&parsed.interner, &parsed.program.items)
 }
 
 /// What each `extern "C"` declaration hands back, by the name a call writes
 /// ([ADR-302](../../docs/specification/adr/adr-302.md) D12).
 fn foreign_results(parsed: &Parsed) -> std::collections::BTreeMap<String, Type> {
-    let mut out = std::collections::BTreeMap::new();
-    for item in &parsed.program.items {
-        let Item::Extern { declarations, .. } = &item.node else {
-            continue;
-        };
-        for declaration in declarations {
-            if let Some(ret) = &declaration.node.ret_type {
-                out.insert(parsed.text(declaration.node.name).to_string(), ret.clone());
-            }
-        }
-    }
-    out
+    nikaia_std::tools::emit_items::foreign_results(&parsed.interner, &parsed.program.items)
 }
 
 fn foreign_traits(parsed: &Parsed) -> std::collections::BTreeSet<String> {
-    parsed
-        .program
-        .items
-        .iter()
-        .filter_map(|item| match &item.node {
-            Item::Impl {
-                trait_name: Some(name),
-                ..
-            } => Some(parsed.text(*name).to_string()),
-            _ => None,
-        })
-        .filter(|name| name.contains("::"))
-        .collect()
+    nikaia_std::tools::emit_items::foreign_traits(&parsed.interner, &parsed.program.items)
 }
 
 /// `std`'s shipped contracts, parsed once.
@@ -2032,32 +1980,16 @@ enum Named<'a> {
     Library(&'a str),
 }
 
-/// What a generated error sum is called
-/// ([ADR-280](../../docs/specification/adr/adr-280.md) D15).
-///
-/// A program never writes it: a `catch` matches on the **members'** variants
-/// ([ADR-023](../../docs/specification/adr/adr-023.md) D4), so this name exists
-/// only in the generated file. Spelled so that nothing a program declares
-/// collides with it.
-const SUM: &str = "__NikaiaThrows_";
-
 /// **The generated sum of a set of error types**
 /// ([ADR-280](../../docs/specification/adr/adr-280.md) D15), named from its
 /// members in the ledger's order, so the name is a function of the set.
 pub(crate) fn sum_name(members: &[String]) -> String {
-    format!(
-        "{SUM}{}",
-        members
-            .iter()
-            .map(|m| m.replace("::", "_"))
-            .collect::<Vec<_>>()
-            .join("__")
-    )
+    nikaia_std::tools::emit_items::sum_name(members)
 }
 
 /// A member's variant in the sum.
 pub(crate) fn sum_variant(member: &str) -> String {
-    member.replace("::", "_")
+    nikaia_std::tools::emit_items::sum_variant(member)
 }
 
 /// The call that never comes back
@@ -2098,7 +2030,7 @@ const SHARED_FIELDS: &str = "<field>";
 /// The slot a part of a variant is filed under, beside a struct's
 /// `<struct>.<field>`: `E.Add#0` (0.0.244).
 fn variant_slot(owner: &str, variant: &str, at: usize) -> String {
-    format!("{owner}.{variant}#{at}")
+    nikaia_std::tools::emit_items::variant_slot(owner, variant, at as i64)
 }
 
 /// What the program's own `main` is called in the emitted Rust.
@@ -9613,7 +9545,7 @@ impl<'p> Emitter<'p> {
                     out.push(")");
                     return Ok(());
                 }
-                out.push(unary_op(*op));
+                out.push(&unary_op(*op));
                 self.nested(out, expr, u8::MAX, depth, flow)?;
             }
             Expr::Binary {
@@ -14833,19 +14765,7 @@ impl<'p> Emitter<'p> {
 /// one-to-one. A bare `@frame` stays bare - the boundary is then the rule's
 /// trailing literal, which the backend infers and checks.
 fn frame_attribute(frame: &FrameAttr) -> String {
-    let mut keys = Vec::new();
-    if let Some(boundary) = &frame.boundary {
-        keys.push(format!("boundary = \"{boundary}\""));
-    }
-    if frame.unchecked {
-        keys.push("unchecked".to_string());
-    }
-
-    if keys.is_empty() {
-        "#[frame]".to_string()
-    } else {
-        format!("#[frame({})]", keys.join(", "))
-    }
+    nikaia_std::tools::emit_ops::frame_attribute(frame)
 }
 
 /// What every arm but the last answers, where a `match` is one that only says
@@ -14888,14 +14808,7 @@ fn writes_a_list(parsed: &Parsed, pattern: &Spanned<Pattern>) -> bool {
 }
 
 fn repeat_suffix(rep: Repeat) -> String {
-    match rep {
-        Repeat::Star => "*".to_string(),
-        Repeat::Plus => "+".to_string(),
-        Repeat::Optional => "?".to_string(),
-        Repeat::Exactly(n) => format!("{{{n}}}"),
-        Repeat::AtLeast(n) => format!("{{{n},}}"),
-        Repeat::Between(n, m) => format!("{{{n},{m}}}"),
-    }
+    nikaia_std::tools::emit_ops::repeat_suffix(rep)
 }
 
 /// **An integer literal, and the one case it has to carry its own type**
@@ -14938,23 +14851,11 @@ fn integer_literal(value: i128, widen: bool) -> String {
 /// below is `-(1.into())`, which is a second reason not to write the `into` at
 /// all.
 fn a_number(expr: &Expr) -> bool {
-    match expr {
-        Expr::LitInt { .. } | Expr::LitFloat(_, _) => true,
-        Expr::Unary {
-            op: UnaryOp::Neg,
-            expr,
-            ..
-        } => a_number(expr),
-        _ => false,
-    }
+    nikaia_std::tools::emit_ops::a_number(expr)
 }
 
-fn unary_op(op: UnaryOp) -> &'static str {
-    match op {
-        UnaryOp::Neg => "-",
-        UnaryOp::Not => "!",
-        UnaryOp::Ref => "&",
-    }
+fn unary_op(op: UnaryOp) -> String {
+    nikaia_std::tools::emit_ops::unary_op(op)
 }
 
 /// Rust's binding strength, which Nikaia shares.
@@ -14975,10 +14876,7 @@ fn unary_op(op: UnaryOp) -> &'static str {
 /// lowering that puts an expression inside one has to know whether that
 /// expression is a jump before it does.
 fn jumps(expr: &Expr) -> bool {
-    matches!(
-        expr,
-        Expr::Throw(_, _) | Expr::Return(_, _) | Expr::Break(_) | Expr::Continue(_)
-    )
+    nikaia_std::tools::emit_ops::jumps(expr)
 }
 
 /// **A list a function value only reads is a slice** (#458), as a
@@ -14986,28 +14884,14 @@ fn jumps(expr: &Expr) -> bool {
 /// written `&[T]`, and a function type that took `&Vec<T>` could not be
 /// handed it.
 fn a_list_read_as_a_slice(written: String) -> String {
-    match written
-        .strip_prefix("&Vec<")
-        .and_then(|rest| rest.strip_suffix('>'))
-    {
-        Some(element) => format!("&[{element}]"),
-        None => written,
-    }
+    nikaia_std::tools::emit_ops::a_list_read_as_a_slice(written)
 }
 
 /// Whether a `??`'s fallback ends in a jump: a jump itself, another `??`
 /// whose own fallback does - the chain `a ?? b ?? continue` is one fallback
 /// that may leave - or a block whose last statement does (#457).
 fn jumps_at_the_end(expr: &Expr) -> bool {
-    match expr {
-        Expr::Coalesce { fallback, .. } => jumps_at_the_end(fallback),
-        Expr::Block(block, _) => match block.stmts.last().map(|s| &s.node) {
-            Some(Stmt::Return(_) | Stmt::Break | Stmt::Continue) => true,
-            Some(Stmt::Expr(inner)) => jumps_at_the_end(inner),
-            _ => false,
-        },
-        _ => jumps(expr),
-    }
+    nikaia_std::tools::emit_ops::jumps_at_the_end(expr)
 }
 
 /// **How a call makes the address an `extern "C"` declaration takes**
@@ -15044,11 +14928,8 @@ fn pointer_for(ty: &Type) -> Option<Pointer> {
 }
 
 /// `const` or `mut`, the word Rust puts between the `*` and the type.
-fn pointing(mutable: bool) -> &'static str {
-    match mutable {
-        true => "mut",
-        false => "const",
-    }
+fn pointing(mutable: bool) -> String {
+    nikaia_std::tools::emit_ops::pointing(mutable)
 }
 
 /// Whether a written index **counts from the end**
@@ -15058,31 +14939,17 @@ fn pointing(mutable: bool) -> &'static str {
 /// as one at run time — and it has to *reach* run time, which handed over as
 /// written it does not, because the `usize` the slice wants has no negation.
 fn a_negation_inside(index: &Expr) -> bool {
-    match index {
-        Expr::Unary {
-            op: UnaryOp::Neg, ..
-        } => true,
-        Expr::Unary { expr, .. } => a_negation_inside(expr),
-        Expr::Binary { lhs, rhs, .. } => a_negation_inside(lhs) || a_negation_inside(rhs),
-        Expr::Range { start, end, .. } => a_negation_inside(start) || a_negation_inside(end),
-        _ => false,
-    }
+    nikaia_std::tools::emit_ops::a_negation_inside(index)
 }
 
 fn only_literals(index: &Expr) -> bool {
-    match index {
-        Expr::LitInt { .. } => true,
-        Expr::Unary { expr, .. } => only_literals(expr),
-        Expr::Binary { lhs, rhs, .. } => only_literals(lhs) && only_literals(rhs),
-        Expr::Range { start, end, .. } => only_literals(start) && only_literals(end),
-        _ => false,
-    }
+    nikaia_std::tools::emit_ops::only_literals(index)
 }
 
 /// `xs.len()` - the four `std` entries that hand back a length, by the name all
 /// four of them have ([ADR-285](../../../docs/specification/adr/adr-285.md) D1).
 fn is_length(method: &str, args: &[Expr]) -> bool {
-    method == "len" && args.is_empty()
+    nikaia_std::tools::emit_ops::is_length(method, args)
 }
 
 /// Whether a callee's argument at `at` is a **count** the language below takes in
@@ -15101,48 +14968,15 @@ fn is_length(method: &str, args: &[Expr]) -> bool {
 /// passes through it untouched, which is the same property that lets `index::at`
 /// be written around every index.
 fn is_count(callee: &str, at: usize) -> bool {
-    matches!((callee, at), ("repeat", 0))
+    nikaia_std::tools::emit_ops::is_count(callee, at as i64)
 }
 
 fn precedence(op: BinaryOp) -> u8 {
-    match op {
-        BinaryOp::Mul | BinaryOp::Div | BinaryOp::Rem => 14,
-        BinaryOp::Add | BinaryOp::Sub => 13,
-        // Rust's order below the sums (ADR-285 D10), so a bit operation is
-        // parenthesised where the tree needs it and written bare where not.
-        BinaryOp::Shl | BinaryOp::Shr => 12,
-        BinaryOp::BitAnd => 11,
-        BinaryOp::BitXor => 10,
-        BinaryOp::BitOr => 9,
-        BinaryOp::Eq | BinaryOp::Ne | BinaryOp::Lt | BinaryOp::Le | BinaryOp::Gt | BinaryOp::Ge => {
-            7
-        }
-        BinaryOp::And => 4,
-        BinaryOp::Or => 3,
-    }
+    nikaia_std::tools::emit_ops::precedence(op) as u8
 }
 
-fn binary_op(op: BinaryOp) -> &'static str {
-    match op {
-        BinaryOp::Add => "+",
-        BinaryOp::Sub => "-",
-        BinaryOp::Mul => "*",
-        BinaryOp::Div => "/",
-        BinaryOp::Rem => "%",
-        BinaryOp::Eq => "==",
-        BinaryOp::Ne => "!=",
-        BinaryOp::Lt => "<",
-        BinaryOp::Le => "<=",
-        BinaryOp::Gt => ">",
-        BinaryOp::Ge => ">=",
-        BinaryOp::And => "&&",
-        BinaryOp::Or => "||",
-        BinaryOp::BitAnd => "&",
-        BinaryOp::BitOr => "|",
-        BinaryOp::BitXor => "^",
-        BinaryOp::Shl => "<<",
-        BinaryOp::Shr => ">>",
-    }
+fn binary_op(op: BinaryOp) -> String {
+    nikaia_std::tools::emit_ops::binary_op(op)
 }
 
 /// **The names a `fold`'s or a `par_fold`'s step calls directly** (#433): a
@@ -15239,10 +15073,7 @@ fn pausing_in_a_lambda(at: usize, callee: &str) -> anyhow::Error {
 /// a stream, and `for x in xs.drain()` is the written form of taking the
 /// elements away — none of the three has anything to lend.
 pub(crate) fn is_a_place(expr: &Expr) -> bool {
-    matches!(
-        expr,
-        Expr::Variable(_, _) | Expr::Field { .. } | Expr::SafeField { .. } | Expr::Index { .. }
-    )
+    nikaia_std::tools::emit_ops::is_a_place(expr)
 }
 
 /// The types a ledger records a view-holding field for.
@@ -15258,19 +15089,7 @@ pub(crate) fn is_a_place(expr: &Expr) -> bool {
 /// line the marker — *what is thrown implements `Error`, and the `impl` line
 /// says so*.
 fn declared_errors(parsed: &Parsed) -> std::collections::BTreeSet<String> {
-    let mut out = std::collections::BTreeSet::new();
-    for item in &parsed.program.items {
-        if let Item::Impl {
-            trait_name: Some(trait_name),
-            target,
-            ..
-        } = &item.node
-            && parsed.text(*trait_name) == "Error"
-        {
-            out.insert(parsed.text(target.name).to_string());
-        }
-    }
-    out
+    nikaia_std::tools::emit_items::declared_errors(&parsed.interner, &parsed.program.items)
 }
 
 fn tethered_types(contracts: &crate::contracts::Ledger) -> std::collections::BTreeSet<String> {
@@ -15352,10 +15171,7 @@ pub(crate) fn borrowing_structs_beside(
 /// only field is `fn(ref String) -> i64` names no lifetime either - with one,
 /// it was *lifetime parameter `'a` is never used*.
 pub(crate) fn holds_view(ty: &Type) -> bool {
-    if let Some(code) = &*ty.code {
-        return (*code.result).as_ref().is_some_and(holds_view);
-    }
-    ty.is_view || ty.generics.iter().any(holds_view)
+    nikaia_std::tools::views::holds_view(ty)
 }
 
 /// Every view-holding type the files of a package declare, by name: each
@@ -15419,20 +15235,7 @@ const ON_THE_POOL: [&str; 4] = [
 /// is escaped here; what is quoted is what Rust needs quoted to read the same
 /// bytes back.
 fn rust_string(text: &str) -> String {
-    let mut out = String::with_capacity(text.len() + 2);
-    out.push('"');
-    for c in text.chars() {
-        match c {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            c => out.push(c),
-        }
-    }
-    out.push('"');
-    out
+    nikaia_std::tools::emit_text::rust_string(text)
 }
 
 /// The type a `truncating_` method converts to, if the name is one
@@ -15446,29 +15249,16 @@ fn rust_string(text: &str) -> String {
 /// recognise is an ordinary method call, so a program that writes
 /// `truncating_u8` is refused by the type checker for the method not existing
 /// rather than quietly emitting a conversion nobody described.
-fn truncating(method: &str) -> Option<&'static str> {
-    match method.strip_prefix("truncating_")? {
-        "i32" => Some("i32"),
-        "i64" => Some("i64"),
-        // ADR-285 D3.
-        "u32" => Some("u32"),
-        "u64" => Some("u64"),
-        _ => None,
-    }
+fn truncating(method: &str) -> Option<String> {
+    nikaia_std::tools::emit_text::truncating(method)
 }
 
 /// The type a `checked_` conversion converts to, if the name is one
 /// ([ADR-315](../../../docs/specification/adr/adr-315.md)): the four
 /// `truncating_` has. `checked_add` and the arithmetic are Rust's own methods
 /// and lower as any method does.
-fn checked(method: &str) -> Option<&'static str> {
-    match method.strip_prefix("checked_")? {
-        "i32" => Some("i32"),
-        "i64" => Some("i64"),
-        "u32" => Some("u32"),
-        "u64" => Some("u64"),
-        _ => None,
-    }
+fn checked(method: &str) -> Option<String> {
+    nikaia_std::tools::emit_text::checked(method)
 }
 
 /// Walk every expression in a block, including the ones inside statements.
@@ -15629,30 +15419,8 @@ pub fn branch_starts_first<'p>(
 }
 
 pub(crate) fn visit_block<'a>(block: &'a Block, f: &mut impl FnMut(&'a Expr)) {
-    for stmt in &block.stmts {
-        match &stmt.node {
-            Stmt::Let { value, .. } | Stmt::Comptime { value, .. } => visit_expr(value, f),
-            Stmt::Assign { target, value, .. } => {
-                visit_expr(target, f);
-                visit_expr(value, f);
-            }
-            Stmt::For { iter, body, .. } => {
-                visit_expr(iter, f);
-                visit_block(body, f);
-            }
-            Stmt::While { cond, body } => {
-                visit_expr(cond, f);
-                visit_block(body, f);
-            }
-            Stmt::Return(value) => {
-                if let Some(value) = value {
-                    visit_expr(value, f);
-                }
-            }
-            // Neither holds an expression, so there is nothing here to walk.
-            Stmt::Break | Stmt::Continue => {}
-            Stmt::Expr(expr) => visit_expr(expr, f),
-        }
+    for expr in nikaia_std::tools::emit_walk::visited_in_block(block) {
+        f(expr);
     }
 }
 
@@ -15663,75 +15431,8 @@ pub(crate) fn visit_block<'a>(block: &'a Block, f: &mut impl FnMut(&'a Expr)) {
 /// a `get` is written anywhere inside a `set`'s argument, and a second walk
 /// over the same shape is a second thing to keep in step with the AST.
 pub(crate) fn visit_expr<'a>(expr: &'a Expr, f: &mut impl FnMut(&'a Expr)) {
-    f(expr);
-    match expr {
-        Expr::Block(block, _) | Expr::Unsafe(block, _) | Expr::Overlap(block, _) => {
-            visit_block(block, f)
-        }
-        Expr::If {
-            cond,
-            then_branch,
-            else_branch,
-            ..
-        } => {
-            visit_expr(cond, f);
-            visit_block(then_branch, f);
-            if let Some(block) = else_branch {
-                visit_block(block, f);
-            }
-        }
-        Expr::Call { func, args, .. } => {
-            visit_expr(func, f);
-            args.iter().for_each(|a| visit_expr(a, f));
-        }
-        Expr::MethodCall { receiver, args, .. } | Expr::SafeMethod { receiver, args, .. } => {
-            visit_expr(receiver, f);
-            args.iter().for_each(|a| visit_expr(a, f));
-        }
-        Expr::Match { value, arms, .. } => {
-            visit_expr(value, f);
-            for arm in arms {
-                visit_expr(&arm.body, f);
-            }
-        }
-        Expr::Tuple(parts, _) | Expr::ListLit { items: parts, .. } => {
-            parts.iter().for_each(|p| visit_expr(p, f))
-        }
-        Expr::Field { base, .. } | Expr::SafeField { base, .. } => visit_expr(base, f),
-        Expr::StructLit { fields, .. } => fields
-            .iter()
-            .filter_map(|field| field.value.as_ref())
-            .for_each(|value| visit_expr(value, f)),
-        Expr::Closure { body, .. } => visit_block(body, f),
-        Expr::Unary { expr, .. } => visit_expr(expr, f),
-        Expr::Binary { lhs, rhs, .. } => {
-            visit_expr(lhs, f);
-            visit_expr(rhs, f);
-        }
-        Expr::Try(inner, _) | Expr::Throw(inner, _) => visit_expr(inner, f),
-        Expr::Return(value, _) => {
-            if let Some(value) = &**value {
-                visit_expr(value, f)
-            }
-        }
-        Expr::Break(_) | Expr::Continue(_) => {}
-        Expr::Index { base, index, .. } => {
-            visit_expr(base, f);
-            visit_expr(index, f);
-        }
-        Expr::Cast { expr, .. } => visit_expr(expr, f),
-        Expr::Coalesce {
-            value, fallback, ..
-        } => {
-            visit_expr(value, f);
-            visit_expr(fallback, f);
-        }
-        Expr::TryCatch { expr, handler, .. } => {
-            visit_expr(expr, f);
-            visit_block(handler, f);
-        }
-        Expr::Spawn { body, .. } => visit_expr(body, f),
-        _ => {}
+    for each in nikaia_std::tools::emit_walk::visited_in_expr(expr) {
+        f(each);
     }
 }
 
@@ -15827,21 +15528,7 @@ pub(crate) fn interpolated_holes(parts: &[crate::ast::FPart]) -> Vec<(u32, &Expr
 /// as written - an escape and a doubled brace mean there what they mean here
 /// - and each hole as `{}`, or `{:spec}` where a format follows its `:`.
 pub(crate) fn format_of(parts: &[crate::ast::FPart]) -> String {
-    let mut format = String::new();
-    for part in parts {
-        match part {
-            crate::ast::FPart::Text(text) => format.push_str(text),
-            crate::ast::FPart::Hole {
-                spec: Some(spec), ..
-            } => {
-                format.push_str("{:");
-                format.push_str(spec);
-                format.push('}');
-            }
-            crate::ast::FPart::Hole { spec: None, .. } => format.push_str("{}"),
-        }
-    }
-    format
+    nikaia_std::tools::emit_text::format_of(parts)
 }
 
 pub(crate) fn literal_expressions(parsed: &Parsed, expr: &Expr) -> Vec<Expr> {
@@ -15907,35 +15594,7 @@ fn template_holes(segments: &[template::Segment]) -> Vec<String> {
 pub(crate) fn template_holes_bound(
     segments: &[template::Segment],
 ) -> Vec<(String, Vec<(String, String)>)> {
-    let mut holes = Vec::new();
-    walk_template_holes(segments, &mut Vec::new(), &mut holes);
-    holes
-}
-
-fn walk_template_holes(
-    segments: &[template::Segment],
-    bound: &mut Vec<(String, String)>,
-    out: &mut Vec<(String, Vec<(String, String)>)>,
-) {
-    for segment in segments {
-        match segment {
-            template::Segment::Text(_) => {}
-            template::Segment::Hole { expr, .. } => out.push((expr.clone(), bound.clone())),
-            template::Segment::For {
-                binding,
-                collection,
-                body,
-            } => {
-                // The collection is captured from the enclosing scope with `:`
-                // (ADR-296 D4), and it is a name this program wrote - so it is
-                // read *outside* the binding, which is where it lives.
-                out.push((collection.clone(), bound.clone()));
-                bound.push((binding.clone(), collection.clone()));
-                walk_template_holes(body, bound, out);
-                bound.pop();
-            }
-        }
-    }
+    nikaia_std::tools::emit_walk::template_holes_bound(segments)
 }
 
 /// A plain string on its way into a Rust *format* string.
@@ -15949,29 +15608,7 @@ fn walk_template_holes(
 /// inside one would hand `println!` a `\u` with nothing after it. The same rule
 /// the grammar's `F_TEXT_CHAR` follows for an `f"…"`, for the same reason.
 fn rust_format_escape(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    let mut chars = text.chars().peekable();
-    while let Some(c) = chars.next() {
-        match c {
-            '\\' => {
-                out.push('\\');
-                let Some(escape) = chars.next() else { break };
-                out.push(escape);
-                if escape == 'u' && chars.peek() == Some(&'{') {
-                    for c in chars.by_ref() {
-                        out.push(c);
-                        if c == '}' {
-                            break;
-                        }
-                    }
-                }
-            }
-            '{' => out.push_str("{{"),
-            '}' => out.push_str("}}"),
-            _ => out.push(c),
-        }
-    }
-    out
+    nikaia_std::tools::emit_text::rust_format_escape(text)
 }
 
 /// **A refusal with no place of its own, given the statement's**
@@ -16341,8 +15978,7 @@ enum Names<'a> {
 /// Whether a pattern at a part binds it whole - a name, or `_` - rather than
 /// asking it a question.
 fn binds_a_part(part: &MatchPattern) -> bool {
-    matches!(part, MatchPattern::Path(one) if one.len() == 1)
-        || matches!(part, MatchPattern::Otherwise)
+    nikaia_std::tools::emit_ops::binds_a_part(part)
 }
 
 /// Whether `expr` reads the name `name` anywhere in it.
@@ -16516,93 +16152,23 @@ fn collect_blocks<'b>(block: &'b Block, out: &mut Vec<&'b Block>) {
 /// for one the program declares and for `html`
 /// ([ADR-299](../../docs/specification/adr/adr-299.md) D20).
 pub(crate) fn dsl_name(parsed: &Parsed, package: Option<Symbol>, target: Symbol) -> String {
-    match package {
-        Some(package) => format!("{}::{}", parsed.text(package), parsed.text(target)),
-        None => parsed.text(target).to_string(),
-    }
+    nikaia_std::tools::emit_items::dsl_name(&parsed.interner, package, target)
 }
 
 /// **A literal as a field of `ty` holds it** (ADR-331 D5-D6, ADR-318 D4):
 /// text for an owned `String` is one, and a value for a `T?` is wrapped.
 fn held_literal(literal: &str, ty: &crate::contracts::ty::Ty) -> String {
-    use crate::contracts::ty::Ty;
-    let owned_text =
-        |ty: &Ty| matches!(ty, Ty::Named { name, view: false, .. } if name == "String");
-    match ty {
-        _ if owned_text(ty) && literal.starts_with('"') => format!("String::from({literal})"),
-        Ty::Nullable(inner) if literal != "None" => {
-            match owned_text(inner) && literal.starts_with('"') {
-                true => format!("Some(String::from({literal}))"),
-                false => format!("Some({literal})"),
-            }
-        }
-        _ => literal.to_string(),
-    }
+    nikaia_std::tools::emit_text::held_literal(literal, ty)
 }
 
 /// The parts of `a: 1, b: "x, y"` between its top-level commas: none inside
 /// text, braces or parentheses.
 fn top_level_parts(inside: &str) -> Vec<String> {
-    let (mut parts, mut current, mut depth, mut in_text, mut escaped_next) =
-        (Vec::new(), String::new(), 0i32, false, false);
-    for c in inside.chars() {
-        if in_text {
-            current.push(c);
-            match (escaped_next, c) {
-                (true, _) => escaped_next = false,
-                (false, '\\') => escaped_next = true,
-                (false, '"') => in_text = false,
-                _ => {}
-            }
-            continue;
-        }
-        match c {
-            '"' => in_text = true,
-            '{' | '(' | '[' => depth += 1,
-            '}' | ')' | ']' => depth -= 1,
-            ',' if depth == 0 => {
-                parts.push(current.trim().to_string());
-                current.clear();
-                continue;
-            }
-            _ => {}
-        }
-        current.push(c);
-    }
-    if !current.trim().is_empty() {
-        parts.push(current.trim().to_string());
-    }
-    parts
+    nikaia_std::tools::emit_text::top_level_parts(inside)
 }
 
 /// A field's type as the language below writes it, for a `None` nothing else
 /// types: the plain shapes, and `_` for the rest, which leaves it to `rustc`.
 fn plain_rust_spelling(ty: &crate::contracts::ty::Ty) -> String {
-    use crate::contracts::ty::Ty;
-    match ty {
-        Ty::Named { name, args, view } => {
-            let name = match name.as_str() {
-                "List" => "Vec",
-                other => other,
-            };
-            let inner = match args.is_empty() {
-                true => String::new(),
-                false => format!(
-                    "<{}>",
-                    args.iter()
-                        .map(plain_rust_spelling)
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                ),
-            };
-            match (view, name) {
-                (true, "str" | "String") => "&str".to_string(),
-                (true, _) => "_".to_string(),
-                (false, "str") => "String".to_string(),
-                _ => format!("{name}{inner}"),
-            }
-        }
-        Ty::Nullable(inner) => format!("Option<{}>", plain_rust_spelling(inner)),
-        _ => "_".to_string(),
-    }
+    nikaia_std::tools::emit_text::plain_rust_spelling(ty)
 }

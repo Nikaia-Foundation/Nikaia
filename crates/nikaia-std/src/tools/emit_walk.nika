@@ -1,0 +1,155 @@
+// crates/nikaia-std/src/tools/emit_walk.nika
+//
+// **The walk the emitter asks of a tree**: every expression inside a block or
+// an expression, in the order the walk meets them, moved from `emit/mod.rs`
+// (ADR-294, #125, #558). The answer is a list of references into the tree, so
+// the Rust callers keep their closures and visit the list; the walk itself
+// calls no closure, which Nikaia cannot capture state in. It returns the lists
+// it joins rather than filling one it is handed: a list handed in and the
+// references pushed to it get lifetimes of their own below.
+
+/// Every expression inside this block, in the order a walk meets them.
+pub fn visited_in_block(block: ref Block) -> Vec[ref Expr] {
+    let mut out: Vec[ref Expr] = []
+    for stmt in block.stmts {
+        out.extend(visited_in_stmt(stmt.node))
+    }
+    return out
+}
+
+fn visited_in_stmt(stmt: ref Stmt) -> Vec[ref Expr] {
+    let mut out: Vec[ref Expr] = []
+    match stmt {
+        Stmt::Let { value, .. } => out.extend(visited_in_expr(value)),
+        Stmt::Comptime { value, .. } => out.extend(visited_in_expr(value)),
+        Stmt::Assign { target, value, .. } => {
+            out.extend(visited_in_expr(target))
+            out.extend(visited_in_expr(value))
+        },
+        Stmt::For { iter, body, .. } => {
+            out.extend(visited_in_expr(iter))
+            out.extend(visited_in_block(body))
+        },
+        Stmt::While { cond, body } => {
+            out.extend(visited_in_expr(cond))
+            out.extend(visited_in_block(body))
+        },
+        Stmt::Return(value) => out.extend(visited_in_maybe(value)),
+        Stmt::Break => {},
+        Stmt::Continue => {},
+        Stmt::Expr(inner) => out.extend(visited_in_expr(inner)),
+    }
+    return out
+}
+
+fn visited_in_maybe(expr: ref Expr?) -> Vec[ref Expr] {
+    return visited_in_expr(expr ?? return [])
+}
+
+fn visited_in_maybe_block(block: ref Block?) -> Vec[ref Expr] {
+    return visited_in_block(block ?? return [])
+}
+
+fn visited_in_all(all: ref Vec[Expr]) -> Vec[ref Expr] {
+    let mut out: Vec[ref Expr] = []
+    for each in all {
+        out.extend(visited_in_expr(each))
+    }
+    return out
+}
+
+/// Every expression inside this one, this one included, in the order a walk
+/// meets them.
+pub fn visited_in_expr(expr: ref Expr) -> Vec[ref Expr] {
+    let mut out: Vec[ref Expr] = [expr]
+    match expr {
+        Expr::Block(block, _) => out.extend(visited_in_block(block)),
+        Expr::Unsafe(block, _) => out.extend(visited_in_block(block)),
+        Expr::Overlap(block, _) => out.extend(visited_in_block(block)),
+        Expr::If { cond, then_branch, else_branch, .. } => {
+            out.extend(visited_in_expr(cond))
+            out.extend(visited_in_block(then_branch))
+            out.extend(visited_in_maybe_block(else_branch))
+        },
+        Expr::Call { func, args, .. } => {
+            out.extend(visited_in_expr(func))
+            out.extend(visited_in_all(args))
+        },
+        Expr::MethodCall { receiver, args, .. } => {
+            out.extend(visited_in_expr(receiver))
+            out.extend(visited_in_all(args))
+        },
+        Expr::SafeMethod { receiver, args, .. } => {
+            out.extend(visited_in_expr(receiver))
+            out.extend(visited_in_all(args))
+        },
+        Expr::Match { value, arms, .. } => {
+            out.extend(visited_in_expr(value))
+            for arm in arms {
+                out.extend(visited_in_expr(arm.body))
+            }
+        },
+        Expr::Tuple(parts, _) => out.extend(visited_in_all(parts)),
+        Expr::ListLit { items, .. } => out.extend(visited_in_all(items)),
+        Expr::Field { base, .. } => out.extend(visited_in_expr(base)),
+        Expr::SafeField { base, .. } => out.extend(visited_in_expr(base)),
+        Expr::StructLit { fields, .. } => {
+            for field in fields {
+                out.extend(visited_in_maybe(field.value))
+            }
+        },
+        Expr::Closure { body, .. } => out.extend(visited_in_block(body)),
+        Expr::Unary { expr, .. } => out.extend(visited_in_expr(expr)),
+        Expr::Binary { lhs, rhs, .. } => {
+            out.extend(visited_in_expr(lhs))
+            out.extend(visited_in_expr(rhs))
+        },
+        Expr::Try(inner, _) => out.extend(visited_in_expr(inner)),
+        Expr::Throw(inner, _) => out.extend(visited_in_expr(inner)),
+        Expr::Return(value, _) => out.extend(visited_in_maybe(value)),
+        Expr::Index { base, index, .. } => {
+            out.extend(visited_in_expr(base))
+            out.extend(visited_in_expr(index))
+        },
+        Expr::Cast { expr, .. } => out.extend(visited_in_expr(expr)),
+        Expr::Coalesce { value, fallback, .. } => {
+            out.extend(visited_in_expr(value))
+            out.extend(visited_in_expr(fallback))
+        },
+        Expr::TryCatch { expr, handler, .. } => {
+            out.extend(visited_in_expr(expr))
+            out.extend(visited_in_block(handler))
+        },
+        Expr::Spawn { body, .. } => out.extend(visited_in_expr(body)),
+        else => {},
+    }
+    return out
+}
+
+/// Every hole of a template's segments with the loop bindings in force at it:
+/// the hole's text, and each `for` it stands in as the binding and the
+/// collection the binding walks.
+pub fn template_holes_bound(segments: ref Vec[Segment]) -> Vec[(String, Vec[(String, String)])] {
+    let mut holes: Vec[(String, Vec[(String, String)])] = []
+    let mut bound: Vec[(String, String)] = []
+    walk_template_holes(segments, bound, holes)
+    return holes
+}
+
+fn walk_template_holes(segments: ref Vec[Segment], mut bound: Vec[(String, String)], mut out: Vec[(String, Vec[(String, String)])]) {
+    for segment in segments {
+        match segment {
+            Segment::Text(_) => {},
+            Segment::Hole { expr, .. } => out.push((expr.clone(), bound.clone())),
+            Segment::For { binding, collection, body } => {
+                // The collection is captured from the enclosing scope with `:`
+                // (ADR-296 D4), and it is a name this program wrote - so it is
+                // read *outside* the binding, which is where it lives.
+                out.push((collection.clone(), bound.clone()))
+                bound.push((binding.clone(), collection.clone()))
+                walk_template_holes(body, bound, out)
+                bound.pop()
+            },
+        }
+    }
+}

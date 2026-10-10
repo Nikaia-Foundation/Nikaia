@@ -133,6 +133,10 @@ COMPILER_NIKA = {
     "check_takes.nika": "check: what was taken, what was read after, what a loop or a lambda takes again, and a part of a `mut` parameter not given back (0.0.786)",
     "check_widen.nika": "check: which integer type holds both, where a value widens, where text stands for a file's name, and the reports of NK1102, NK1157 and NK1200 (0.0.787)",
     "check_reports.nika": "check: a bound an argument does not meet, a change to a binding not declared mut, a grammar that did not run, an escape, a handle of one value and a std name without its module (0.0.788)",
+    "emit_ops.nika": "emit: the operators, the jumps, the numbers and the indices the emitter asks about (0.0.789)",
+    "emit_text.nika": "emit: string literals, format strings, f-string formats and the spelling of a type and a literal (0.0.789)",
+    "emit_items.nika": "emit: the extern parameters, results and handles, the foreign traits, declared errors and the sum of a throws list (0.0.789)",
+    "emit_walk.nika": "emit: every expression inside a block or an expression, and the holes of a template (0.0.789)",
 }
 
 

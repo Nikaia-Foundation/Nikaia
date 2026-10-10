@@ -1,0 +1,220 @@
+// crates/nikaia-std/src/tools/emit_text.nika
+//
+// **The text the emitter writes Rust with**, moved from `emit/mod.rs`
+// (ADR-294, #125, #558): a string literal as Rust spells it, a format string's
+// braces, the parts of a comma-separated list at the top level, the format of
+// an f-string, the name of a `truncating_*` or `checked_*` method, and how a
+// type and a literal are written when the declaration is plain Rust. Leaves:
+// each calls only the others in this file.
+
+/// A string as a Rust literal: quotes, backslash and the three control
+/// characters escaped.
+pub fn rust_string(text: ref String) -> String {
+    let mut out: String = "\""
+    for c in text.chars() {
+        if c == '"' {
+            out.push_str("\\\"")
+        } else if c == '\\' {
+            out.push_str("\\\\")
+        } else if c == '\n' {
+            out.push_str("\\n")
+        } else if c == '\r' {
+            out.push_str("\\r")
+        } else if c == '\t' {
+            out.push_str("\\t")
+        } else {
+            out.push(c)
+        }
+    }
+    out.push('"')
+    return out
+}
+
+/// Text written as it is read, as a Rust format string takes it: an escape
+/// stays two characters (`\u{..}` keeps its braces) and every other brace is
+/// doubled.
+pub fn rust_format_escape(text: ref String) -> String {
+    let mut out: String = ""
+    let chars: Vec[scalar] = text.chars().collect()
+    let mut at = 0
+    while at < chars.len() {
+        let c = chars[at]
+        at += 1
+        if c == '\\' {
+            out.push('\\')
+            if at >= chars.len() {
+                break
+            }
+            let escape = chars[at]
+            at += 1
+            out.push(escape)
+            if escape == 'u' && at < chars.len() && chars[at] == '{' {
+                while at < chars.len() {
+                    let inner = chars[at]
+                    at += 1
+                    out.push(inner)
+                    if inner == '}' {
+                        break
+                    }
+                }
+            }
+        } else if c == '{' {
+            out.push_str("{{")
+        } else if c == '}' {
+            out.push_str("}}")
+        } else {
+            out.push(c)
+        }
+    }
+    return out
+}
+
+/// The parts of `inside` separated by a comma that stands at depth zero,
+/// outside a string, each trimmed; a last empty part is left out.
+pub fn top_level_parts(inside: ref String) -> Vec[String] {
+    let mut parts: Vec[String] = []
+    let mut current: String = ""
+    let mut depth = 0
+    let mut in_text = false
+    let mut escaped_next = false
+    for c in inside.chars() {
+        if in_text {
+            current.push(c)
+            if escaped_next {
+                escaped_next = false
+            } else if c == '\\' {
+                escaped_next = true
+            } else if c == '"' {
+                in_text = false
+            }
+            continue
+        }
+        if c == '"' {
+            in_text = true
+        } else if c == '{' || c == '(' || c == '[' {
+            depth += 1
+        } else if c == '}' || c == ')' || c == ']' {
+            depth -= 1
+        } else if c == ',' && depth == 0 {
+            parts.push(current.trim().clone())
+            current = ""
+            continue
+        }
+        current.push(c)
+    }
+    if current.trim().len() > 0 {
+        parts.push(current.trim().clone())
+    }
+    return parts
+}
+
+/// The Rust format string of an f-string's parts: its text, and a `{}` or
+/// `{:spec}` for each hole.
+pub fn format_of(parts: ref Vec[FPart]) -> String {
+    let mut format: String = ""
+    for part in parts {
+        match part {
+            FPart::Text(text) => format.push_str(text),
+            FPart::Hole { spec, .. } => format.push_str(a_hole_format(spec)),
+        }
+    }
+    return format
+}
+
+fn a_hole_format(spec: ref String?) -> String {
+    let held = spec ?? return "{}"
+    return f"{{:{held}}}"
+}
+
+/// `truncating_i32`: the integer type the method names, if it is one the
+/// language truncates to.
+pub fn truncating(method: ref String) -> String? {
+    let ty = method.strip_prefix("truncating_") ?? return null
+    return an_integer_type(ty)
+}
+
+/// `checked_i32`, likewise.
+pub fn checked(method: ref String) -> String? {
+    let ty = method.strip_prefix("checked_") ?? return null
+    return an_integer_type(ty)
+}
+
+fn an_integer_type(ty: ref String) -> String? {
+    return match ty {
+        "i32" => "i32",
+        "i64" => "i64",
+        "u32" => "u32",
+        "u64" => "u64",
+        else => null,
+    }
+}
+
+fn owned_text(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Named { name, view, .. } => an_owned_text_name(name, view),
+        else => false,
+    }
+}
+
+fn an_owned_text_name(name: ref String, view: bool) -> bool {
+    if view {
+        return false
+    }
+    return name == "String"
+}
+
+/// A declared literal as it stands in a `const`/`static` of type `ty`: an
+/// owned `String` is made from it and a nullable holds it in a `Some`.
+pub fn held_literal(literal: ref String, ty: ref Ty) -> String {
+    if owned_text(ty) && literal.starts_with("\"") {
+        return f"String::from({literal})"
+    }
+    return match ty {
+        Ty::Nullable(inner) => held_nullable(literal, inner),
+        else => literal.clone(),
+    }
+}
+
+fn held_nullable(literal: ref String, inner: ref Ty) -> String {
+    if literal == "None" {
+        return literal.clone()
+    }
+    if owned_text(inner) && literal.starts_with("\"") {
+        return f"Some(String::from({literal}))"
+    }
+    return f"Some({literal})"
+}
+
+/// A type as plain Rust spells it, `_` where it cannot be said.
+pub fn plain_rust_spelling(ty: ref Ty) -> String {
+    return match ty {
+        Ty::Named { name, args, view } => plain_named(name, args, view),
+        Ty::Nullable(inner) => f"Option<{plain_rust_spelling(inner)}>",
+        else => "_",
+    }
+}
+
+fn plain_named(written: ref String, args: ref Vec[Ty], view: bool) -> String {
+    let mut name = written.clone()
+    if name == "List" {
+        name = "Vec"
+    }
+    let mut inner: String = ""
+    if args.len() > 0 {
+        let mut spelled: Vec[String] = []
+        for arg in args {
+            spelled.push(plain_rust_spelling(arg))
+        }
+        inner = f"<{spelled.join(", ")}>"
+    }
+    if view {
+        if name == "str" || name == "String" {
+            return "&str"
+        }
+        return "_"
+    }
+    if name == "str" {
+        return "String"
+    }
+    return f"{name}{inner}"
+}
