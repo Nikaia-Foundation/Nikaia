@@ -12861,6 +12861,241 @@ pub fn blocks_of_stmt(stmt: &Stmt) -> Vec<&Block> {
 }
 
 
+// --- check_widen.nika ---
+
+fn integer_rank(name: &str) -> i64 {
+    if name == "u8" { return 0; }
+    if name == "u32" { return 1; }
+    if name == "u64" { return 2; }
+    if name == "i32" { return 3; }
+    if name == "i64" { return 4; }
+    -1
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn common_integer(a: &str, b: &str) -> Option<String> {
+    let x = integer_rank(a);
+    let y = integer_rank(b);
+    if x < 0 || y < 0 { return None; }
+    let mut low = x;
+    let mut high = y;
+    if y < x {
+        low = y;
+        high = x;
+    }
+    let names = vec!["u8", "u32", "u64", "i32", "i64"];
+    if low == 0 { return Some((*nikaia_std::index::get(&names, nikaia_std::index::at(high))).to_owned()); }
+    if low == 1 {
+        if high <= 2 { return Some((*nikaia_std::index::get(&names, nikaia_std::index::at(high))).to_owned()); }
+        return Some("i64".to_owned());
+    }
+    if low == 2 {
+        if high == 2 { return Some("u64".to_owned()); }
+        return None;
+    }
+    if high == 3 { return Some("i32".to_owned()); }
+    Some("i64".to_owned())
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn an_integer_named(ty: &Ty) -> Option<String> {
+    match ty {
+        Ty::Named { name, args, view } => { let view = *view; if !view && args.is_empty() && integer_rank(name) >= 0 { Some(name.to_owned()) } else { None } },
+        _ => None,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn a_plain_name(ty: &Ty) -> Option<String> {
+    match ty {
+        Ty::Named { name, args, .. } => if args.is_empty() { Some(name.to_owned()) } else { None },
+        _ => None,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn widened_into(found: &Ty, want: &Ty) -> Option<String> {
+    let from = nikaia_std::index::or(an_integer_named(found), || "".into());
+    let into = nikaia_std::index::or(an_integer_named(want), || "".into());
+    if from == "" || into == "" || from == into { return None; }
+    let common = nikaia_std::index::or(common_integer(&from, &into), || "".into());
+    if common == into { return Some(into.to_owned()); }
+    None
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn an_integer_that_does_not_widen(found: &Ty, want: &Ty) -> bool {
+    let from = nikaia_std::index::or(an_integer_named(found), || "".into());
+    let into = nikaia_std::index::or(an_integer_named(want), || "".into());
+    if from == "" || into == "" || from == into { return false; }
+    widened_into(found, want).is_none()
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn unsigned_from_signed(found: &Ty, want: &Ty) -> Option<String> {
+    let from = nikaia_std::index::or(a_plain_name(found), || "".into());
+    let into = nikaia_std::index::or(a_plain_name(want), || "".into());
+    let held = match found {
+        Ty::Named { view, .. } => { let view = *view; !view },
+        _ => false,
+    };
+    let wanted = match want {
+        Ty::Named { view, .. } => { let view = *view; !view },
+        _ => false,
+    };
+    if !held || !wanted { return None; }
+    if (from == "i64" || from == "i32") && into == "u64" { return Some("u64".to_owned()); }
+    if from == "i32" && into == "u32" { return Some("u32".to_owned()); }
+    None
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn number_where_no_number_is(want: &Ty, value: &Expr) -> Option<Ty> {
+    let name = match want {
+        Ty::Named { name, .. } => name.to_owned(),
+        _ => return None,
+    };
+    if is_whole(&name) || name == "f32" || name == "f64" { return None; }
+    let literal: &Expr = match value {
+        Expr::Unary { op, expr, .. } => { let expr = nikaia_std::boxed::open(expr); if *op == UnaryOp::Neg { expr } else { value } },
+        _ => value,
+    };
+    match literal {
+        Expr::LitInt { .. } => Some(Ty::Named { name: String::from("i64"), args: vec![], view: false }),
+        Expr::LitFloat(_, _) => Some(Ty::Named { name: String::from("f64"), args: vec![], view: false }),
+        _ => None,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn names_a_path(left: &Ty, right: &Ty) -> bool {
+    let l = nikaia_std::index::or(a_plain_name(left), || "".into());
+    let r = nikaia_std::index::or(a_plain_name(right), || "".into());
+    let l_either = l == "fs::Path" || l == "String" || l == "str";
+    let r_either = r == "fs::Path" || r == "String" || r == "str";
+    l == "fs::Path" && r_either || r == "fs::Path" && l_either
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn text_as_a_path(found: &Ty, want: &Ty) -> i64 {
+    let asked: i64 = match want {
+        Ty::Named { name, args, view } => { let view = *view; if name == "fs::Path" && args.is_empty() { if view { 1 } else { 0 } } else { -1 } },
+        _ => -1,
+    };
+    if asked < 0 { return -1; }
+    let given = nikaia_std::index::or(a_plain_name(found), || "".into());
+    if given == "String" || given == "str" { return asked; }
+    -1
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn views_into_nullable_text(found: &Ty, want: &Ty) -> bool {
+    let present: &Ty = match found {
+        Ty::Nullable(held) => { let held = nikaia_std::boxed::open(held); held },
+        _ => found,
+    };
+    let seen = match present {
+        Ty::Named { name, args, view } => { let view = *view; view && args.is_empty() && name == "str" },
+        _ => false,
+    };
+    let asks = match want {
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); match inner {
+            Ty::Named { name, args, view } => { let view = *view; !view && args.is_empty() && name == "String" },
+            _ => false,
+        } },
+        _ => false,
+    };
+    seen && asks
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn views_into_text(found: &Ty, want: &Ty) -> bool {
+    let seen = match found {
+        Ty::Named { name, args, view } => { let view = *view; view && args.is_empty() && name == "str" },
+        _ => false,
+    };
+    let asks = match want {
+        Ty::Named { name, args, view } => { let view = *view; !view && args.is_empty() && name == "String" },
+        _ => false,
+    };
+    seen && asks || views_into_nullable_text(found, want)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn binary_op_text(op: BinaryOp) -> String {
+    match op {
+        BinaryOp::Add => String::from("+"),
+        BinaryOp::Sub => String::from("-"),
+        BinaryOp::Mul => String::from("*"),
+        BinaryOp::Div => String::from("/"),
+        BinaryOp::Rem => String::from("%"),
+        BinaryOp::BitAnd => String::from("&"),
+        BinaryOp::BitOr => String::from("|"),
+        BinaryOp::BitXor => String::from("^"),
+        BinaryOp::Shl => String::from("<<"),
+        BinaryOp::Shr => String::from(">>"),
+        BinaryOp::Eq => String::from("=="),
+        BinaryOp::Ne => String::from("!="),
+        BinaryOp::Lt => String::from("<"),
+        BinaryOp::Le => String::from("<="),
+        BinaryOp::Gt => String::from(">"),
+        BinaryOp::Ge => String::from(">="),
+        BinaryOp::And => String::from("&&"),
+        BinaryOp::Or => String::from("||"),
+    }
+}
+
+pub fn a_number_asked_for_two_types(name: &str, element: bool, first: &str, second: &str, at: &Span) -> CheckFinding {
+    let mut message: String = String::from("");
+    let mut help: String = String::from("");
+    if element {
+        message = format!("You're using the elements of `{}` as `{}`s and here as `{}`s.", name, first, second);
+        help = format!("Declare its type, `let {}: Vec[{}] = …`, and convert with `as` where the other one is needed.", name, first);
+    } else {
+        message = format!("You're using `{}` as {} `{}` and here as {} `{}`.", name, an_or_a(first), first, an_or_a(second), second);
+        help = format!("Declare its type, `let {}: {} = …`, and convert with `as` where the other one is needed.", name, first);
+    }
+    let notes: Vec<String> = vec!["A number takes its type from how it's used, and these uses want two different types.".to_owned()];
+    check_refusal("NK1200", at, message, notes, Some(help))
+}
+
+pub fn a_list_the_wrong_length_for_its_array(written: i64, wanted: i64, span: &Span, computed: bool) -> CheckFinding {
+    let mut magnitude = wanted;
+    if magnitude < 0 { magnitude = 0 - magnitude; }
+    let had = counted(magnitude, "element");
+    let has = counted(written, "element");
+    let mut message: String = String::from("");
+    let mut help: String = String::from("");
+    if computed {
+        message = format!("This computes {}, but the array holds {}.", has, wanted);
+        help = format!("Change the array's declared length to match, or make the body produce {}.", had);
+    } else {
+        message = format!("This has {}, but the array holds {}.", has, wanted);
+        help = format!("Write {}, or change the array's declared length to match.", had);
+    }
+    let notes: Vec<String> = vec!["The length is part of the type, so an `Array[T, N]` holds exactly `N` elements.".to_owned()];
+    check_refusal("NK1157", span, message, notes, Some(help))
+}
+
+pub fn two_integer_types_for_one_variable(key: &str, variable: &str, bound: &str, ty: &str, name: &str, wide: &str, span: &Span) -> CheckFinding {
+    let message = format!("`{}` takes one type for `{}`, but you're passing `{}` and `{}`.", key, variable, bound, ty);
+    let notes: Vec<String> = vec!["A type parameter takes the type it is given, and an integer is not widened to make two arguments agree.".to_owned()];
+    check_refusal("NK1102", span, message, notes, Some(format!("Convert one of them: `{} as {}`.", name, wide)))
+}
+
+
 // --- check_with.nika ---
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -34517,6 +34752,10 @@ pub mod check_values {
 pub mod check_walk {
     #[allow(unused_imports)]
     pub use super::{child_exprs_of, blocks_of_expr, blocks_of_stmt};
+}
+pub mod check_widen {
+    #[allow(unused_imports)]
+    pub use super::{common_integer, widened_into, an_integer_that_does_not_widen, unsigned_from_signed, number_where_no_number_is, names_a_path, text_as_a_path, views_into_nullable_text, views_into_text, binary_op_text, a_number_asked_for_two_types, a_list_the_wrong_length_for_its_array, two_integer_types_for_one_variable};
 }
 pub mod check_with {
     #[allow(unused_imports)]

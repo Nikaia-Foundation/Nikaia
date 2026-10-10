@@ -59,6 +59,10 @@ use nikaia_std::tools::check_state::{
     CheckPendingCoalesce as PendingCoalesce, CheckPromises as Promises, CheckRead as Read,
     CheckRepeats as Repeats, CheckState, CheckWorld, a_body_never_ends,
 };
+use nikaia_std::tools::check_widen::{
+    self, an_integer_that_does_not_widen, binary_op_text, names_a_path, number_where_no_number_is,
+    views_into_nullable_text, views_into_text,
+};
 use nikaia_std::tools::check_with::CheckCopyable as Copyable;
 
 /// A finding's code as the `&'static str` the compiler's tables and its tests
@@ -1712,23 +1716,6 @@ fn default_written(default: &ast::FieldDefault) -> String {
     }
 }
 
-/// A view of text going into text of its own, present or absent.
-fn views_into_text(found: &Ty, want: &Ty) -> bool {
-    (*found == Ty::view("str") && *want == Ty::named("String"))
-        || views_into_nullable_text(found, want)
-}
-
-/// A view of text, present or absent, going into a `String?`
-/// ([ADR-282](../../../docs/specification/adr/adr-282.md) D12).
-fn views_into_nullable_text(found: &Ty, want: &Ty) -> bool {
-    let present = match found {
-        Ty::Nullable(found) => found.as_ref(),
-        found => found,
-    };
-    matches!(want, Ty::Nullable(inner) if **inner == Ty::named("String"))
-        && *present == Ty::view("str")
-}
-
 fn wrap_for(found: &Ty, want: &Ty, literal: bool) -> Option<Wrap> {
     if let Some(into) = widened_into(found, want) {
         return Some(Wrap::Widen(into));
@@ -1797,157 +1784,45 @@ struct UnsignedSlot {
     refusal: Option<Finding>,
 }
 
-/// **The unsigned type a signed value goes into where it is not negative**:
-/// `i64` and `i32` into `u64`, `i32` into `u32` - every value a non-negative
-/// one can hold fits.
+/// **The unsigned type a signed value goes into where it is not negative**
+/// (`tools/check_widen.nika`).
 fn unsigned_from_signed(found: &Ty, want: &Ty) -> Option<&'static str> {
-    let (
-        Ty::Named {
-            name: from,
-            args: a,
-            view: false,
-        },
-        Ty::Named {
-            name: into,
-            args: b,
-            view: false,
-        },
-    ) = (found, want)
-    else {
-        return None;
-    };
-    if !a.is_empty() || !b.is_empty() {
-        return None;
-    }
-    match (from.as_str(), into.as_str()) {
-        ("i64" | "i32", "u64") => Some("u64"),
-        ("i32", "u32") => Some("u32"),
-        _ => None,
-    }
+    check_widen::unsigned_from_signed(found, want).map(|into| a_static_integer(&into))
+}
+
+/// An integer type's name as a name that lives for the program.
+fn a_static_integer(name: &str) -> &'static str {
+    INTEGERS
+        .iter()
+        .copied()
+        .find(|n| *n == name)
+        .unwrap_or("i64")
 }
 
 /// **The integer types a program writes** (Part I 2.2), as the type names
 /// they are.
 const INTEGERS: [&str; 5] = ["u8", "u32", "u64", "i32", "i64"];
 
-/// **The lossless common type of two integer types**
-/// ([ADR-285](../../../docs/specification/adr/adr-285.md) D32, Part I 2.2's
-/// table): the one type that holds every value of both, where there is one.
-/// `u64` with a signed type has none.
+/// **The lossless common type of two integer types** (`tools/check_widen.nika`).
 pub fn common_integer(a: &str, b: &str) -> Option<&'static str> {
-    // The upper half of Part I 2.2's table, row by row; the lower half is the
-    // same pairs the other way round.
-    const TABLE: [[Option<&str>; 5]; 5] = [
-        //   u8          u32         u64         i32         i64
-        [
-            Some("u8"),
-            Some("u32"),
-            Some("u64"),
-            Some("i32"),
-            Some("i64"),
-        ],
-        [None, Some("u32"), Some("u64"), Some("i64"), Some("i64")],
-        [None, None, Some("u64"), None, None],
-        [None, None, None, Some("i32"), Some("i64")],
-        [None, None, None, None, Some("i64")],
-    ];
-    let rank = |t: &str| INTEGERS.iter().position(|n| *n == t);
-    let (a, b) = (rank(a)?, rank(b)?);
-    TABLE[a.min(b)][a.max(b)]
+    check_widen::common_integer(a, b).map(|common| a_static_integer(&common))
 }
 
-/// **Two different integer types, the second not holding every value of the
-/// first** (D32): `u64` into `i64`, `i64` into `u32`.
-fn an_integer_that_does_not_widen(found: &Ty, want: &Ty) -> bool {
-    let integer = |t: &Ty| match t {
-        Ty::Named {
-            name,
-            args,
-            view: false,
-        } if args.is_empty() => INTEGERS.contains(&name.as_str()),
-        _ => false,
-    };
-    integer(found) && integer(want) && found != want && widened_into(found, want).is_none()
-}
-
-/// **The integer type a slot states, where a narrower one goes into it
-/// without loss** (D32): `u32` into `i64`, never `u64` into `i64`.
+/// **The integer type a slot states, where a narrower one goes into it without
+/// loss** (`tools/check_widen.nika`).
 fn widened_into(found: &Ty, want: &Ty) -> Option<&'static str> {
-    let (
-        Ty::Named {
-            name: from,
-            args: a,
-            view: false,
-        },
-        Ty::Named {
-            name: into,
-            args: b,
-            view: false,
-        },
-    ) = (found, want)
-    else {
-        return None;
-    };
-    if !a.is_empty() || !b.is_empty() || from == into {
-        return None;
-    }
-    common_integer(from, into).filter(|common| common == into)
-}
-
-/// **A number literal where the declared type is not a number** (#471): the
-/// type it takes when nothing asks, so the position's ordinary mismatch says
-/// so. A literal has no type of its own because its use gives it one (Part I
-/// 2.4); a use that is not a number gives it none, and fitting anything was
-/// the hole.
-fn number_where_no_number_is(want: &Ty, value: &Expr) -> Option<Ty> {
-    let Ty::Named { name, .. } = want else {
-        return None;
-    };
-    if nikaia_std::tools::dump::is_whole(name) || matches!(name.as_str(), "f32" | "f64") {
-        return None;
-    }
-    let literal = match value {
-        Expr::Unary {
-            op: crate::ast::UnaryOp::Neg,
-            expr,
-            ..
-        } => expr.as_ref(),
-        value => value,
-    };
-    match literal {
-        Expr::LitInt { .. } => Some(Ty::named("i64")),
-        Expr::LitFloat(_, _) => Some(Ty::named("f64")),
-        _ => None,
-    }
-}
-
-/// **A file's name on one side and a name or text on the other**
-/// (ADR-319 D3), either way round.
-fn names_a_path(left: &Ty, right: &Ty) -> bool {
-    let is = |ty: &Ty, names: &[&str]| matches!(ty, Ty::Named { name, args, .. } if args.is_empty() && names.contains(&name.as_str()));
-    let path = ["fs::Path"];
-    let either = ["fs::Path", "String", "str"];
-    (is(left, &path) && is(right, &either)) || (is(right, &path) && is(left, &either))
+    check_widen::widened_into(found, want).map(|into| a_static_integer(&into))
 }
 
 /// The ledger keys of a file name's methods (ADR-319 D3).
 const PATH_METHODS: &str = "fs::Path::";
 
-/// **Text stands wherever a file's name is asked**
-/// ([ADR-319](../../../docs/specification/adr/adr-319.md) D2): whether `found`
-/// is text and `want` an `fs::Path`, and then whether a view of one is wanted.
+/// **Text stands wherever a file's name is asked**: whether `found` is text and
+/// `want` an `fs::Path`, and then whether a view of one is wanted.
 fn text_as_a_path(found: &Ty, want: &Ty) -> Option<bool> {
-    let Ty::Named { name, args, view } = want else {
-        return None;
-    };
-    if name != "fs::Path" || !args.is_empty() {
-        return None;
-    }
-    match found {
-        Ty::Named { name, args, .. } if args.is_empty() && (name == "String" || name == "str") => {
-            Some(*view)
-        }
-        _ => None,
+    match check_widen::text_as_a_path(found, want) {
+        -1 => None,
+        view => Some(view == 1),
     }
 }
 
@@ -8800,42 +8675,15 @@ impl<'a> Checker<'a> {
         second: &str,
         at: &Span,
     ) {
-        let name = &number.name;
-        let (message, help) = match number.element {
-            false => (
-                format!(
-                    "You're using `{name}` as {} `{first}` and here as {} `{second}`.",
-                    an_or_a(first),
-                    an_or_a(second)
-                ),
-                format!(
-                    "Declare its type, `let {name}: {first} = …`, and convert with `as` where \
-                     the other one is needed."
-                ),
-            ),
-            true => (
-                format!(
-                    "You're using the elements of `{name}` as `{first}`s and here as `{second}`s."
-                ),
-                format!(
-                    "Declare its type, `let {name}: Vec[{first}] = …`, and convert with `as` \
-                     where the other one is needed."
-                ),
-            ),
-        };
-        self.s.findings.push(Finding {
-            severity: Severity::Error,
-            span: *at,
-            code: "NK1200".to_string(),
-            message,
-            notes: vec![
-                "A number takes its type from how it's used, and these uses want two \
-                 different types."
-                    .to_string(),
-            ],
-            help: Some(help),
-            labels: Vec::new(),
-        });
+        self.s
+            .findings
+            .push(check_widen::a_number_asked_for_two_types(
+                &number.name,
+                number.element,
+                first,
+                second,
+                at,
+            ));
     }
 
     /// ADR-285 D29.5: a division whose divisor is a constant zero is refused
@@ -13270,21 +13118,11 @@ impl<'a> Checker<'a> {
                 .get(narrow)
                 .and_then(|arg| names_of(&self.world, arg))
                 .unwrap_or_else(|| "…".to_string());
-            self.s.findings.push(Finding {
-                severity: Severity::Error,
-                span: *span,
-                code: "NK1102".to_string(),
-                message: format!(
-                    "`{key}` takes one type for `{var}`, but you're passing `{bound}` and `{ty}`."
-                ),
-                notes: vec![
-                    "A type parameter takes the type it is given, and an integer is not \
-                     widened to make two arguments agree."
-                        .to_string(),
-                ],
-                help: Some(format!("Convert one of them: `{name} as {wide}`.")),
-                labels: Vec::new(),
-            });
+            self.s
+                .findings
+                .push(check_widen::two_integer_types_for_one_variable(
+                    key, var, &bound, &ty, &name, wide, span,
+                ));
             return;
         }
     }
@@ -19770,41 +19608,14 @@ impl<'a> Checker<'a> {
         span: &Span,
         how: Counted,
     ) {
-        let had = plural(wanted.unsigned_abs() as usize, "element");
-        self.s.findings.push(Finding {
-            severity: Severity::Error,
-            span: *span,
-            code: "NK1157".to_string(),
-            message: match how {
-                Counted::Written => format!(
-                    "This has {}, but the array holds {wanted}.",
-                    plural(written, "element")
-                ),
-                Counted::Computed => format!(
-                    "This computes {}, but the array holds {wanted}.",
-                    plural(written, "element")
-                ),
-            },
-            notes: vec![
-                "The length is part of the type, so an `Array[T, N]` holds exactly `N` \
-                 elements."
-                    .to_string(),
-            ],
-            help: Some(match how {
-                Counted::Written => {
-                    format!("Write {had}, or change the array's declared length to match.")
-                }
-                // **Not *write five elements***, which is what the other half
-                // says and is advice nobody can take here: the number came out
-                // of a body, so the two things a reader can change are the body
-                // and the declaration.
-                Counted::Computed => format!(
-                    "Change the array's declared length to match, or make the body produce \
-                     {had}."
-                ),
-            }),
-            labels: Vec::new(),
-        });
+        self.s
+            .findings
+            .push(check_widen::a_list_the_wrong_length_for_its_array(
+                written as i64,
+                wanted,
+                span,
+                matches!(how, Counted::Computed),
+            ));
     }
 
     /// **`NK1171`: a member a known type or module does not have**
@@ -23521,28 +23332,4 @@ fn is_a_whole_number(name: &str) -> bool {
         name,
         "i8" | "i16" | "i32" | "i64" | "isize" | "u8" | "u16" | "u32" | "u64" | "usize"
     )
-}
-
-/// An operator as it is written.
-fn binary_op_text(op: BinaryOp) -> &'static str {
-    match op {
-        BinaryOp::Add => "+",
-        BinaryOp::Sub => "-",
-        BinaryOp::Mul => "*",
-        BinaryOp::Div => "/",
-        BinaryOp::Rem => "%",
-        BinaryOp::BitAnd => "&",
-        BinaryOp::BitOr => "|",
-        BinaryOp::BitXor => "^",
-        BinaryOp::Shl => "<<",
-        BinaryOp::Shr => ">>",
-        BinaryOp::Eq => "==",
-        BinaryOp::Ne => "!=",
-        BinaryOp::Lt => "<",
-        BinaryOp::Le => "<=",
-        BinaryOp::Gt => ">",
-        BinaryOp::Ge => ">=",
-        BinaryOp::And => "&&",
-        BinaryOp::Or => "||",
-    }
 }

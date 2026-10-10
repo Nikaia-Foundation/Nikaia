@@ -131,6 +131,7 @@ COMPILER_NIKA = {
     "check_doors.nika": "check: a lock inside a lock, a file read under a lock, a name shared by cores, a `set` that reads what it writes (0.0.776)",
     "check_buildtime2.nika": "check: a `comptime` that the build may not run, ran past a bound or depends on itself (0.0.776)",
     "check_takes.nika": "check: what was taken, what was read after, what a loop or a lambda takes again, and a part of a `mut` parameter not given back (0.0.786)",
+    "check_widen.nika": "check: which integer type holds both, where a value widens, where text stands for a file's name, and the reports of NK1102, NK1157 and NK1200 (0.0.787)",
 }
 
 

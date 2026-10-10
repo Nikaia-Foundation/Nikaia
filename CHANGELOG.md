@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.787] — 2026-10-10
+
+**Which integer type holds both, where a value is widened and where text stands for a file's name are Nikaia (`tools/check_widen.nika`, ADR-285 D32, ADR-319, #558, #125).**
+- `common_integer`, `widened_into`, `unsigned_from_signed`, `an_integer_that_does_not_widen`, `number_where_no_number_is`, `names_a_path`, `text_as_a_path`, `views_into_text`, `views_into_nullable_text` and `binary_op_text`, and the reports of `NK1102` (a type variable two integer types are handed to), `NK1157` and `NK1200` are Nikaia. The checker keeps thin adapters where a result is a `&'static str`.
+
 ## [0.0.786] — 2026-10-10
 
 **What was taken, what was read after and what a loop or a lambda takes again are Nikaia (`tools/check_takes.nika`, ADR-293, ADR-094 D7, #558, #125).**

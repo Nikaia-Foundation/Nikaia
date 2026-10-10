@@ -1,0 +1,286 @@
+// crates/nikaia-std/src/tools/check_widen.nika
+//
+// **Which integer type holds both, where a value is widened, and where text
+// stands for a file's name** (Part I 2.2, ADR-285 D32, ADR-319 D2/D3), and the
+// reports of a number or a list whose type or length disagrees with itself
+// (`NK1102`, `NK1157`, `NK1200`), moved from the compiler's checker (ADR-294,
+// #125, #558). Each answers from the types alone.
+
+/// The integer types a program writes (Part I 2.2), as the names they have.
+fn integer_rank(name: ref String) -> i64 {
+    if name == "u8" {
+        return 0
+    }
+    if name == "u32" {
+        return 1
+    }
+    if name == "u64" {
+        return 2
+    }
+    if name == "i32" {
+        return 3
+    }
+    if name == "i64" {
+        return 4
+    }
+    return -1
+}
+
+/// **The lossless common type of two integer types** (ADR-285 D32, Part I
+/// 2.2's table): the one type that holds every value of both, where there is
+/// one. `u64` with a signed type has none.
+pub fn common_integer(a: ref String, b: ref String) -> String? sync {
+    let x = integer_rank(a)
+    let y = integer_rank(b)
+    if x < 0 || y < 0 {
+        return null
+    }
+    let mut low = x
+    let mut high = y
+    if y < x {
+        low = y
+        high = x
+    }
+    let names = ["u8", "u32", "u64", "i32", "i64"]
+    if low == 0 {
+        return names[high].clone()
+    }
+    if low == 1 {
+        if high <= 2 {
+            return names[high].clone()
+        }
+        return "i64".clone()
+    }
+    if low == 2 {
+        if high == 2 {
+            return "u64".clone()
+        }
+        return null
+    }
+    if high == 3 {
+        return "i32".clone()
+    }
+    return "i64".clone()
+}
+
+/// The name of a type that is one integer type, held and not viewed.
+fn an_integer_named(ty: ref Ty) -> String? sync {
+    return match ty {
+        Ty::Named { name, args, view } => if !view && args.len() == 0 && integer_rank(name) >= 0 { name.clone() } else { null },
+        else => null,
+    }
+}
+
+/// A type that is a plain name with no arguments, a view or not.
+fn a_plain_name(ty: ref Ty) -> String? sync {
+    return match ty {
+        Ty::Named { name, args, .. } => if args.len() == 0 { name.clone() } else { null },
+        else => null,
+    }
+}
+
+/// **The integer type a slot states, where a narrower one goes into it
+/// without loss** (D32): `u32` into `i64`, never `u64` into `i64`.
+pub fn widened_into(found: ref Ty, want: ref Ty) -> String? sync {
+    let from = an_integer_named(found) ?? ""
+    let into = an_integer_named(want) ?? ""
+    if from == "" || into == "" || from == into {
+        return null
+    }
+    let common = common_integer(from, into) ?? ""
+    if common == into {
+        return into.clone()
+    }
+    return null
+}
+
+/// **Two different integer types, the second not holding every value of the
+/// first** (D32): `u64` into `i64`, `i64` into `u32`.
+pub fn an_integer_that_does_not_widen(found: ref Ty, want: ref Ty) -> bool sync {
+    let from = an_integer_named(found) ?? ""
+    let into = an_integer_named(want) ?? ""
+    if from == "" || into == "" || from == into {
+        return false
+    }
+    return widened_into(found, want) == null
+}
+
+/// **The unsigned type a signed value goes into where it is not negative**:
+/// `i64` and `i32` into `u64`, `i32` into `u32`.
+pub fn unsigned_from_signed(found: ref Ty, want: ref Ty) -> String? sync {
+    let from = a_plain_name(found) ?? ""
+    let into = a_plain_name(want) ?? ""
+    let held = match found {
+        Ty::Named { view, .. } => !view,
+        else => false,
+    }
+    let wanted = match want {
+        Ty::Named { view, .. } => !view,
+        else => false,
+    }
+    if !held || !wanted {
+        return null
+    }
+    if (from == "i64" || from == "i32") && into == "u64" {
+        return "u64".clone()
+    }
+    if from == "i32" && into == "u32" {
+        return "u32".clone()
+    }
+    return null
+}
+
+/// **A number literal where the declared type is not a number** (#471): the
+/// type it takes when nothing asks, so the position's ordinary mismatch says
+/// so.
+pub fn number_where_no_number_is(want: ref Ty, value: ref Expr) -> Ty? sync {
+    let name = match want {
+        Ty::Named { name, .. } => name.clone(),
+        else => return null,
+    }
+    if is_whole(name) || name == "f32" || name == "f64" {
+        return null
+    }
+    let literal: ref Expr = match value {
+        Expr::Unary { op, expr, .. } => if op == UnaryOp::Neg { expr } else { value },
+        else => value,
+    }
+    return match literal {
+        Expr::LitInt { .. } => Ty::Named { name: "i64", args: [], view: false },
+        Expr::LitFloat(_, _) => Ty::Named { name: "f64", args: [], view: false },
+        else => null,
+    }
+}
+
+/// **A file's name on one side and a name or text on the other** (ADR-319 D3),
+/// either way round.
+pub fn names_a_path(left: ref Ty, right: ref Ty) -> bool sync {
+    let l = a_plain_name(left) ?? ""
+    let r = a_plain_name(right) ?? ""
+    let l_either = l == "fs::Path" || l == "String" || l == "str"
+    let r_either = r == "fs::Path" || r == "String" || r == "str"
+    return (l == "fs::Path" && r_either) || (r == "fs::Path" && l_either)
+}
+
+/// **Text stands wherever a file's name is asked** (ADR-319 D2): -1 where
+/// `found` is not text or `want` not an `fs::Path`; else 1 where a view of one
+/// is wanted and 0 where a value is.
+pub fn text_as_a_path(found: ref Ty, want: ref Ty) -> i64 sync {
+    let asked = match want {
+        Ty::Named { name, args, view } => if name == "fs::Path" && args.len() == 0 { if view { 1 } else { 0 } } else { -1 },
+        else => -1,
+    }
+    if asked < 0 {
+        return -1
+    }
+    let given = a_plain_name(found) ?? ""
+    if given == "String" || given == "str" {
+        return asked
+    }
+    return -1
+}
+
+/// A view of text, present or absent, going into a `String?` (ADR-282 D12).
+pub fn views_into_nullable_text(found: ref Ty, want: ref Ty) -> bool sync {
+    let present: ref Ty = match found {
+        Ty::Nullable(held) => held,
+        else => found,
+    }
+    let seen = match present {
+        Ty::Named { name, args, view } => view && args.len() == 0 && name == "str",
+        else => false,
+    }
+    let asks = match want {
+        Ty::Nullable(inner) => match inner {
+            Ty::Named { name, args, view } => !view && args.len() == 0 && name == "String",
+            else => false,
+        },
+        else => false,
+    }
+    return seen && asks
+}
+
+/// A view of text going into text of its own, present or absent.
+pub fn views_into_text(found: ref Ty, want: ref Ty) -> bool sync {
+    let seen = match found {
+        Ty::Named { name, args, view } => view && args.len() == 0 && name == "str",
+        else => false,
+    }
+    let asks = match want {
+        Ty::Named { name, args, view } => !view && args.len() == 0 && name == "String",
+        else => false,
+    }
+    return (seen && asks) || views_into_nullable_text(found, want)
+}
+
+/// An operator as it is written.
+pub fn binary_op_text(op: BinaryOp) -> String sync {
+    return match op {
+        BinaryOp::Add => "+",
+        BinaryOp::Sub => "-",
+        BinaryOp::Mul => "*",
+        BinaryOp::Div => "/",
+        BinaryOp::Rem => "%",
+        BinaryOp::BitAnd => "&",
+        BinaryOp::BitOr => "|",
+        BinaryOp::BitXor => "^",
+        BinaryOp::Shl => "<<",
+        BinaryOp::Shr => ">>",
+        BinaryOp::Eq => "==",
+        BinaryOp::Ne => "!=",
+        BinaryOp::Lt => "<",
+        BinaryOp::Le => "<=",
+        BinaryOp::Gt => ">",
+        BinaryOp::Ge => ">=",
+        BinaryOp::And => "&&",
+        BinaryOp::Or => "||",
+    }
+}
+
+/// `NK1200`: one number, two uses, two types (ADR-285 D24). `element` is
+/// whether it is the elements of a list that are used.
+pub fn a_number_asked_for_two_types(name: ref String, element: bool, first: ref String, second: ref String, at: ref Span) -> CheckFinding {
+    let mut message: String = ""
+    let mut help: String = ""
+    if element {
+        message = f"You're using the elements of `{name}` as `{first}`s and here as `{second}`s."
+        help = f"Declare its type, `let {name}: Vec[{first}] = …`, and convert with `as` where the other one is needed."
+    } else {
+        message = f"You're using `{name}` as {an_or_a(first)} `{first}` and here as {an_or_a(second)} `{second}`."
+        help = f"Declare its type, `let {name}: {first} = …`, and convert with `as` where the other one is needed."
+    }
+    let notes: Vec[String] = ["A number takes its type from how it's used, and these uses want two different types.".clone()]
+    return check_refusal("NK1200", at, message, notes, help)
+}
+
+/// `NK1157`: a list literal standing where an `Array[T, N]` is wanted, with a
+/// different number of elements (ADR-152 D4). **Both numbers**, because the
+/// length is part of the type and what the reader has to do about it is count.
+/// `computed` is a length a body worked out, not one written.
+pub fn a_list_the_wrong_length_for_its_array(written: i64, wanted: i64, span: ref Span, computed: bool) -> CheckFinding {
+    let mut magnitude = wanted
+    if magnitude < 0 {
+        magnitude = 0 - magnitude
+    }
+    let had = counted(magnitude, "element")
+    let has = counted(written, "element")
+    let mut message: String = ""
+    let mut help: String = ""
+    if computed {
+        message = f"This computes {has}, but the array holds {wanted}."
+        help = f"Change the array's declared length to match, or make the body produce {had}."
+    } else {
+        message = f"This has {has}, but the array holds {wanted}."
+        help = f"Write {had}, or change the array's declared length to match."
+    }
+    let notes: Vec[String] = ["The length is part of the type, so an `Array[T, N]` holds exactly `N` elements.".clone()]
+    return check_refusal("NK1157", span, message, notes, help)
+}
+
+/// `NK1102`: a type variable two integer types are handed to (ADR-285 D32).
+/// `wide` is the type to convert to, `name` the argument to convert.
+pub fn two_integer_types_for_one_variable(key: ref String, variable: ref String, bound: ref String, ty: ref String, name: ref String, wide: ref String, span: ref Span) -> CheckFinding {
+    let message = f"`{key}` takes one type for `{variable}`, but you're passing `{bound}` and `{ty}`."
+    let notes: Vec[String] = ["A type parameter takes the type it is given, and an integer is not widened to make two arguments agree.".clone()]
+    return check_refusal("NK1102", span, message, notes, f"Convert one of them: `{name} as {wide}`.")
+}
