@@ -1,0 +1,206 @@
+// crates/nikaia-std/src/tools/emit_locals.nika
+//
+// **The locals of a body that are never negative**, moved from `emit/mod.rs`
+// (ADR-294, #125, #558): a `let` of a literal that is not negative or a `for`
+// over a range that starts at one, declared once and only ever assigned a
+// literal added or multiplied, and never handed to a call (which may change it
+// as a `mut` parameter). The emitter writes such an index without a check.
+
+use std::collections
+
+struct NnState {
+    declared: collections::BTreeMap[String, i64],
+    candidates: collections::BTreeSet[String],
+    symbols: Vec[winnow_grammar::Symbol],
+    spoiled: collections::BTreeSet[String],
+    seen: collections::BTreeSet[String],
+}
+
+/// The names of the body's locals that are never negative.
+pub fn nonnegative_locals(words: ref winnow_grammar::InternerContext, body: ref Block) -> Vec[winnow_grammar::Symbol] {
+    let mut state = NnState { declared: collections::BTreeMap(), candidates: collections::BTreeSet(), symbols: [], spoiled: collections::BTreeSet(), seen: collections::BTreeSet() }
+    nn_every(words, body, state)
+    // A name handed to a call may be changed by it (`mut` parameters).
+    for expr in visited_in_block(body) {
+        match expr {
+            Expr::Call { args, .. } => nn_spoil_all(words, args, state),
+            Expr::MethodCall { args, .. } => nn_spoil_all(words, args, state),
+            Expr::SafeMethod { args, .. } => nn_spoil_all(words, args, state),
+            else => {},
+        }
+    }
+    let mut out: Vec[winnow_grammar::Symbol] = []
+    for at in 0..<state.symbols.len() {
+        let symbol = state.symbols[at]
+        let name = words.resolve(symbol).clone()
+        if state.candidates.contains(name) && nn_declared_once(state.declared, name) && !state.spoiled.contains(name) {
+            out.push(symbol)
+        }
+    }
+    return out
+}
+
+fn nn_declared_once(declared: ref collections::BTreeMap[String, i64], name: ref String) -> bool {
+    return (declared.get(name) ?? 0) == 1
+}
+
+fn nn_spoil_all(words: ref winnow_grammar::InternerContext, args: ref Vec[Expr], mut state: NnState) {
+    for arg in args {
+        match arg {
+            Expr::Variable(name, _) => nn_spoil(words, name, state),
+            else => {},
+        }
+    }
+}
+
+fn nn_spoil(words: ref winnow_grammar::InternerContext, name: winnow_grammar::Symbol, mut state: NnState) {
+    state.spoiled.insert(words.resolve(name).clone())
+}
+
+fn nn_candidate(words: ref winnow_grammar::InternerContext, name: winnow_grammar::Symbol, mut state: NnState) {
+    state.candidates.insert(words.resolve(name).clone())
+    state.symbols.push(name)
+}
+
+fn nn_declare(words: ref winnow_grammar::InternerContext, name: winnow_grammar::Symbol, mut state: NnState) {
+    let text = words.resolve(name).clone()
+    let before = state.declared.get(text) ?? 0
+    state.declared.insert(text, before + 1)
+}
+
+fn nn_literal(expr: ref Expr) -> bool {
+    return match expr {
+        Expr::LitInt { negative, .. } => !negative,
+        else => false,
+    }
+}
+
+fn nn_keeps(op: ref BinaryOp?, value: ref Expr) -> bool {
+    let held = op ?? return nn_literal(value)
+    return match held {
+        BinaryOp::Add => nn_literal(value),
+        BinaryOp::Mul => nn_literal(value),
+        else => false,
+    }
+}
+
+fn nn_range_from_literal(iter: ref Expr) -> bool {
+    return match iter {
+        Expr::Range { start, .. } => nn_literal(start),
+        else => false,
+    }
+}
+
+fn nn_note(words: ref winnow_grammar::InternerContext, stmt: ref Stmt, mut state: NnState) {
+    match stmt {
+        Stmt::Let { names, ty, value, .. } => {
+            for name in names {
+                nn_declare(words, name, state)
+            }
+            if names.len() == 1 && ty == null && nn_literal(value) {
+                nn_candidate(words, names[0], state)
+            }
+        },
+        Stmt::For { bindings, iter, .. } => {
+            for name in bindings {
+                nn_declare(words, name, state)
+            }
+            if bindings.len() == 1 && nn_range_from_literal(iter) {
+                nn_candidate(words, bindings[0], state)
+            }
+        },
+        Stmt::Assign { target, op, value } => {
+            match target {
+                Expr::Variable(name, _) => {
+                    if !nn_keeps(op, value) {
+                        nn_spoil(words, name, state)
+                    }
+                },
+                else => {},
+            }
+        },
+        else => {},
+    }
+}
+
+fn nn_kind(stmt: ref Stmt) -> String {
+    return match stmt {
+        Stmt::Let { .. } => "let",
+        Stmt::Comptime { .. } => "comptime",
+        Stmt::Assign { .. } => "assign",
+        Stmt::For { .. } => "for",
+        Stmt::While { .. } => "while",
+        Stmt::Return(_) => "return",
+        Stmt::Break => "break",
+        Stmt::Continue => "continue",
+        Stmt::Expr(_) => "expr",
+    }
+}
+
+/// Where a statement stands, what kind it is and the id of what it holds: the
+/// jump in a `throw` and the `if` it stands in start at the same byte.
+fn nn_key(stmt: ref Spanned[Stmt]) -> String {
+    let held = match stmt.node {
+        Stmt::Expr(value) => node_key(value),
+        Stmt::Return(value) => nn_held(value),
+        Stmt::Let { value, .. } => node_key(value),
+        else => 0,
+    }
+    return f"{stmt.span.start}:{stmt.span.end}:{nn_kind(stmt.node)}:{held}"
+}
+
+fn nn_held(value: ref Expr?) -> i64 {
+    let held = value ?? return 0
+    return node_key(held)
+}
+
+fn nn_every(words: ref winnow_grammar::InternerContext, block: ref Block, mut state: NnState) {
+    for stmt in block.stmts {
+        let key = nn_key(stmt)
+        if state.seen.contains(key) {
+            continue
+        }
+        state.seen.insert(key)
+        nn_note(words, stmt.node, state)
+        match stmt.node {
+            Stmt::For { body, .. } => nn_every(words, body, state),
+            Stmt::While { body, .. } => nn_every(words, body, state),
+            else => {},
+        }
+    }
+    for inner in nn_blocks_in(block) {
+        nn_every(words, inner, state)
+    }
+}
+
+/// The blocks inside a block, other than through a statement of its own: the
+/// blocks of its expressions, and the bodies of its loops.
+fn nn_blocks_in(block: ref Block) -> Vec[ref Block] {
+    let mut out: Vec[ref Block] = []
+    for expr in visited_in_block(block) {
+        match expr {
+            Expr::Block(inner, _) => out.push(inner),
+            Expr::Unsafe(inner, _) => out.push(inner),
+            Expr::Overlap(inner, _) => out.push(inner),
+            Expr::If { then_branch, else_branch, .. } => {
+                out.push(then_branch)
+                out.extend(nn_maybe_block(else_branch))
+            },
+            Expr::Closure { body, .. } => out.push(body),
+            else => {},
+        }
+    }
+    for stmt in block.stmts {
+        match stmt.node {
+            Stmt::For { body, .. } => out.push(body),
+            Stmt::While { body, .. } => out.push(body),
+            else => {},
+        }
+    }
+    return out
+}
+
+fn nn_maybe_block(block: ref Block?) -> Vec[ref Block] {
+    let held = block ?? return []
+    return [held]
+}

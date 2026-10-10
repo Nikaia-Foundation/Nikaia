@@ -15035,6 +15035,182 @@ pub fn dsl_name(words: &winnow_grammar::InternerContext, package: Option<winnow_
 }
 
 
+// --- emit_locals.nika ---
+
+#[derive(Debug, Clone, PartialEq)]
+struct NnState {
+    declared: collections::BTreeMap<String, i64>,
+    candidates: collections::BTreeSet<String>,
+    symbols: Vec<winnow_grammar::Symbol>,
+    spoiled: collections::BTreeSet<String>,
+    seen: collections::BTreeSet<String>,
+}
+
+pub fn nonnegative_locals(words: &winnow_grammar::InternerContext, body: &Block) -> Vec<winnow_grammar::Symbol> {
+    let mut state = NnState { declared: collections::BTreeMap::new(), candidates: collections::BTreeSet::new(), symbols: vec![], spoiled: collections::BTreeSet::new(), seen: collections::BTreeSet::new() };
+    nn_every(words, body, &mut state);
+    for expr in visited_in_block(body) {
+        match expr {
+            Expr::Call { args, .. } => nn_spoil_all(words, args, &mut state),
+            Expr::MethodCall { args, .. } => nn_spoil_all(words, args, &mut state),
+            Expr::SafeMethod { args, .. } => nn_spoil_all(words, args, &mut state),
+            _ => { },
+        }
+    }
+    let mut out: Vec<winnow_grammar::Symbol> = vec![];
+    for at in 0..state.symbols.len() as i64 {
+        let symbol = *nikaia_std::index::get(&state.symbols, (at) as usize);
+        let name = words.resolve(symbol).to_owned();
+        if state.candidates.contains(&name) && nn_declared_once(&state.declared, &name) && !state.spoiled.contains(&name) { out.push(symbol); }
+    }
+    out
+}
+
+fn nn_declared_once(declared: &collections::BTreeMap<String, i64>, name: &str) -> bool { nikaia_std::index::or(declared.get(name), || 0) == 1 }
+
+fn nn_spoil_all(words: &winnow_grammar::InternerContext, args: &[Expr], state: &mut NnState) {
+    for arg in args.iter() {
+        match arg {
+            Expr::Variable(name, _) => { let name = *name; nn_spoil(words, name, state) },
+            _ => { },
+        }
+    }
+}
+
+fn nn_spoil(words: &winnow_grammar::InternerContext, name: winnow_grammar::Symbol, state: &mut NnState) { state.spoiled.insert(words.resolve(name).to_owned()); }
+
+fn nn_candidate(words: &winnow_grammar::InternerContext, name: winnow_grammar::Symbol, state: &mut NnState) {
+    state.candidates.insert(words.resolve(name).to_owned());
+    state.symbols.push(name);
+}
+
+fn nn_declare(words: &winnow_grammar::InternerContext, name: winnow_grammar::Symbol, state: &mut NnState) {
+    let text = words.resolve(name).to_owned();
+    let before = nikaia_std::index::or(state.declared.get(&text), || 0);
+    state.declared.insert(text, before + 1);
+}
+
+fn nn_literal(expr: &Expr) -> bool {
+    match expr {
+        Expr::LitInt { negative, .. } => { let negative = *negative; !negative },
+        _ => false,
+    }
+}
+
+fn nn_keeps(op: Option<&BinaryOp>, value: &Expr) -> bool {
+    let held = match op { Some(__nikaia_value) => __nikaia_value, None => return nn_literal(value) };
+    match held {
+        BinaryOp::Add => nn_literal(value),
+        BinaryOp::Mul => nn_literal(value),
+        _ => false,
+    }
+}
+
+fn nn_range_from_literal(iter: &Expr) -> bool {
+    match iter {
+        Expr::Range { start, .. } => { let start = nikaia_std::boxed::open(start); nn_literal(start) },
+        _ => false,
+    }
+}
+
+fn nn_note(words: &winnow_grammar::InternerContext, stmt: &Stmt, state: &mut NnState) {
+    match stmt {
+        Stmt::Let { names, ty, value, .. } => {
+            for name in names.iter() { nn_declare(words, *name, state); }
+            if names.len() == 1 && ty.is_none() && nn_literal(value) { nn_candidate(words, *nikaia_std::index::get(&names, 0), state); }
+        },
+        Stmt::For { bindings, iter, .. } => {
+            for name in bindings.iter() { nn_declare(words, *name, state); }
+            if bindings.len() == 1 && nn_range_from_literal(iter) { nn_candidate(words, *nikaia_std::index::get(&bindings, 0), state); }
+        },
+        Stmt::Assign { target, op, value } => {
+            match target {
+                Expr::Variable(name, _) => {
+                    let name = *name;
+                    if !nn_keeps((op).as_ref(), value) { nn_spoil(words, name, state); }
+                },
+                _ => { },
+            }
+        },
+        _ => { },
+    }
+}
+
+fn nn_kind(stmt: &Stmt) -> String {
+    match stmt {
+        Stmt::Let { .. } => String::from("let"),
+        Stmt::Comptime { .. } => String::from("comptime"),
+        Stmt::Assign { .. } => String::from("assign"),
+        Stmt::For { .. } => String::from("for"),
+        Stmt::While { .. } => String::from("while"),
+        Stmt::Return(_) => String::from("return"),
+        Stmt::Break => String::from("break"),
+        Stmt::Continue => String::from("continue"),
+        Stmt::Expr(_) => String::from("expr"),
+    }
+}
+
+fn nn_key(stmt: &Spanned<Stmt>) -> String {
+    let held = match &stmt.node {
+        Stmt::Expr(value) => node_key(value),
+        Stmt::Return(value) => nn_held((value).as_ref()),
+        Stmt::Let { value, .. } => node_key(value),
+        _ => 0,
+    };
+    format!("{}:{}:{}:{}", stmt.span.start, stmt.span.end, nn_kind(&stmt.node), held)
+}
+
+fn nn_held(value: Option<&Expr>) -> i64 {
+    let held = match value { Some(__nikaia_value) => __nikaia_value, None => return 0 };
+    node_key(held)
+}
+
+fn nn_every(words: &winnow_grammar::InternerContext, block: &Block, state: &mut NnState) {
+    for stmt in block.stmts.iter() {
+        let key = nn_key(stmt);
+        if state.seen.contains(&key) { continue; }
+        state.seen.insert(key);
+        nn_note(words, &stmt.node, state);
+        match &stmt.node {
+            Stmt::For { body, .. } => nn_every(words, body, state),
+            Stmt::While { body, .. } => nn_every(words, body, state),
+            _ => { },
+        }
+    }
+    for inner in nn_blocks_in(block) { nn_every(words, inner, state); }
+}
+
+fn nn_blocks_in(block: &Block) -> Vec<&Block> {
+    let mut out: Vec<&Block> = vec![];
+    for expr in visited_in_block(block) {
+        match expr {
+            Expr::Block(inner, _) => out.push(inner),
+            Expr::Unsafe(inner, _) => out.push(inner),
+            Expr::Overlap(inner, _) => out.push(inner),
+            Expr::If { then_branch, else_branch, .. } => {
+                out.push(then_branch);
+                out.extend(nn_maybe_block((else_branch).as_ref()));
+            },
+            Expr::Closure { body, .. } => out.push(body),
+            _ => { },
+        }
+    }
+    for stmt in block.stmts.iter() {
+        match &stmt.node {
+            Stmt::For { body, .. } => out.push(body),
+            Stmt::While { body, .. } => out.push(body),
+            _ => { },
+        }
+    }
+    out
+}
+
+fn nn_maybe_block(block: Option<&Block>) -> Vec<&Block> {
+    let held = match block { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
+    vec![held]
+}
+
+
 // --- emit_ops.nika ---
 
 pub fn precedence(op: BinaryOp) -> i64 {
@@ -15194,6 +15370,128 @@ pub fn binds_a_part(part: &MatchPattern) -> bool {
         MatchPattern::Otherwise => true,
         _ => false,
     }
+}
+
+
+// --- emit_reach.nika ---
+
+pub fn pausing_reach(words: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, items: &[Spanned<Item>], contracts: &Ledger) -> collections::BTreeMap<String, collections::BTreeSet<String>> {
+    let mut pausing: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for key in contracts.functions.keys() {
+        let contract = match contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if !contract.sync_claim.is_sync() { pausing.insert(key.to_owned()); }
+    }
+    let empty: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
+    if pausing.is_empty() { return empty; }
+    let mut by_last: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
+    for key in pausing.iter() {
+        let last = reach_last_segment(key);
+        let mut keys = reach_keys_for(&by_last, &last);
+        keys.push(key.to_owned());
+        by_last.insert(last, keys);
+    }
+    let mut graph: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
+    for item in items.iter() {
+        match &item.node {
+            Item::Fn { name, body, .. } => {
+                let name = *name;
+                let held = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
+                graph.insert(words.resolve(held).to_owned(), reach_edges_of(words, aliases, &pausing, &by_last, body));
+            },
+            Item::Impl { target, methods, .. } => {
+                let owner = words.resolve(target.name).to_owned();
+                for method in methods.iter() {
+                    match &method.node {
+                        Item::Fn { name, body, .. } => {
+                            let name = *name;
+                            let own = reach_method_name(words, name);
+                            graph.insert(format!("{}::{}", owner, own), reach_edges_of(words, aliases, &pausing, &by_last, body));
+                        },
+                        _ => { },
+                    }
+                }
+            },
+            _ => { },
+        }
+    }
+    let mut reaches = graph.to_owned();
+    loop {
+        let mut changed = false;
+        for key in graph.keys() {
+            let mut entry: collections::BTreeSet<String> = reach_set_for(&reaches, key);
+            let before = entry.len() as i64;
+            for next in entry.to_owned() {
+                let more = match reaches.get(&next) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                for reached in more.iter() { entry.insert(reached.to_owned()); }
+            }
+            if (entry.len() as i64) != before { changed = true; }
+            reaches.insert(key.to_owned(), entry);
+        }
+        if !changed { break; }
+    }
+    let mut kept: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
+    for key in reaches.keys() {
+        if !pausing.contains(key) { continue; }
+        let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
+        for reached in reach_set_for(&reaches, key) { if pausing.contains(&reached) { seen.insert(reached); } }
+        kept.insert(key.to_owned(), seen);
+    }
+    kept
+}
+
+fn reach_method_name(words: &winnow_grammar::InternerContext, name: Option<winnow_grammar::Symbol>) -> String {
+    let held = match name { Some(__nikaia_value) => __nikaia_value, None => return String::from("new") };
+    words.resolve(held).to_owned()
+}
+
+fn reach_last_segment(key: &str) -> String {
+    let mut last: String = key.to_owned();
+    for part in key.split("::") { last = part.to_owned(); }
+    last
+}
+
+fn reach_edges_of(words: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, pausing: &collections::BTreeSet<String>, by_last: &collections::BTreeMap<String, Vec<String>>, body: &Block) -> collections::BTreeSet<String> {
+    let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for expr in visited_in_block(body) {
+        match expr {
+            Expr::Call { func, .. } => {
+                let func = nikaia_std::boxed::open(func);
+                match func {
+                    Expr::Variable(name, _) => { let name = *name; reach_note(aliases, pausing, by_last, &words.resolve(name).to_owned(), &mut out) },
+                    Expr::Path(segments, _) => {
+                        let mut joined: Vec<String> = vec![];
+                        for segment in segments.iter() { joined.push(words.resolve(*segment).to_owned()); }
+                        reach_note(aliases, pausing, by_last, &joined.join("::"), &mut out);
+                    },
+                    _ => { },
+                }
+            },
+            Expr::MethodCall { method, .. } => { let method = *method; reach_note(aliases, pausing, by_last, &words.resolve(method).to_owned(), &mut out) },
+            Expr::SafeMethod { method, .. } => { let method = *method; reach_note(aliases, pausing, by_last, &words.resolve(method).to_owned(), &mut out) },
+            _ => { },
+        }
+    }
+    out
+}
+
+fn reach_note(aliases: &collections::BTreeMap<String, String>, pausing: &collections::BTreeSet<String>, by_last: &collections::BTreeMap<String, Vec<String>>, written: &str, out: &mut collections::BTreeSet<String>) {
+    let name = unaliased_in(aliases, &written);
+    if pausing.contains(&name) {
+        out.insert(name);
+        return;
+    }
+    let keys = match by_last.get(&name) { Some(__nikaia_value) => __nikaia_value, None => return };
+    for key in keys.iter() { out.insert(key.to_owned()); }
+}
+
+fn reach_keys_for(by_last: &collections::BTreeMap<String, Vec<String>>, last: &str) -> Vec<String> {
+    let found = match by_last.get(last) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
+    found.to_owned()
+}
+
+fn reach_set_for(reaches: &collections::BTreeMap<String, collections::BTreeSet<String>>, key: &str) -> collections::BTreeSet<String> {
+    let found = match reaches.get(key) { Some(__nikaia_value) => __nikaia_value, None => return collections::BTreeSet::new() };
+    found.to_owned()
 }
 
 
@@ -35541,9 +35839,17 @@ pub mod emit_items {
     #[allow(unused_imports)]
     pub use super::{foreign_params, opaque_handles, foreign_results, foreign_traits, declared_errors, sum_name, sum_variant, variant_slot, dsl_name};
 }
+pub mod emit_locals {
+    #[allow(unused_imports)]
+    pub use super::{nonnegative_locals};
+}
 pub mod emit_ops {
     #[allow(unused_imports)]
     pub use super::{precedence, binary_op, unary_op, repeat_suffix, pointing, jumps, jumps_at_the_end, a_number, only_literals, a_negation_inside, is_length, is_count, a_list_read_as_a_slice, frame_attribute, is_a_place, binds_a_part};
+}
+pub mod emit_reach {
+    #[allow(unused_imports)]
+    pub use super::{pausing_reach};
 }
 pub mod emit_text {
     #[allow(unused_imports)]

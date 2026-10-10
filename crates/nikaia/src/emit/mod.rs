@@ -4997,7 +4997,7 @@ impl<'p> Emitter<'p> {
         *self.keep_function.borrow_mut() = key.to_string();
         self.nonnegative
             .borrow_mut()
-            .insert(key.to_string(), nonnegative_locals(body));
+            .insert(key.to_string(), nonnegative_locals(self.parsed, body));
         let flow = Flow {
             changed: &[],
             awaited,
@@ -15285,109 +15285,12 @@ fn pausing_reach(
     parsed: &Parsed,
     contracts: &crate::contracts::Ledger,
 ) -> std::collections::BTreeMap<String, std::collections::BTreeSet<String>> {
-    use std::collections::{BTreeMap, BTreeSet};
-
-    let pausing: BTreeSet<&str> = contracts
-        .functions
-        .iter()
-        .filter(|(_, contract)| !contract.sync_claim.is_sync())
-        .map(|(name, _)| name.as_str())
-        .collect();
-    if pausing.is_empty() {
-        return BTreeMap::new();
-    }
-
-    // A bare method name to every pausing key that ends in it, which is the
-    // over-approximation above.
-    let mut by_last: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
-    for key in &pausing {
-        let last = key.rsplit("::").next().unwrap_or(key);
-        by_last.entry(last).or_default().push(key);
-    }
-
-    let edges_of = |body: &Block| -> BTreeSet<String> {
-        let mut out = BTreeSet::new();
-        let mut note = |name: &str| {
-            let name = parsed.unaliased(name);
-            if pausing.contains(name.as_str()) {
-                out.insert(name);
-            } else if let Some(keys) = by_last.get(name.as_str()) {
-                out.extend(keys.iter().map(|k| k.to_string()));
-            }
-        };
-        visit_block(body, &mut |expr| match expr {
-            Expr::Call { func, .. } => match func.as_ref() {
-                Expr::Variable(name, _) => note(parsed.text(*name)),
-                Expr::Path(segments, _) => {
-                    let joined: Vec<&str> = segments.iter().map(|s| parsed.text(*s)).collect();
-                    note(&joined.join("::"));
-                }
-                _ => {}
-            },
-            Expr::MethodCall { method, .. } | Expr::SafeMethod { method, .. } => {
-                note(parsed.text(*method))
-            }
-            _ => {}
-        });
-        out
-    };
-
-    let mut graph: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-    for item in &parsed.program.items {
-        match &item.node {
-            Item::Fn {
-                name: Some(name),
-                body,
-                ..
-            } => {
-                graph.insert(parsed.text(*name).to_string(), edges_of(body));
-            }
-            Item::Impl {
-                target, methods, ..
-            } => {
-                let target = parsed.text(target.name).to_string();
-                for method in methods {
-                    if let Item::Fn { name, body, .. } = &method.node {
-                        let own = match name {
-                            Some(name) => parsed.text(*name).to_string(),
-                            None => "new".to_string(),
-                        };
-                        graph.insert(format!("{target}::{own}"), edges_of(body));
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-
-    // Reachability to a fixpoint, then "reaches itself".
-    let mut reaches: BTreeMap<String, BTreeSet<String>> = graph.clone();
-    loop {
-        let mut changed = false;
-        for key in graph.keys() {
-            let grown: BTreeSet<String> = reaches[key]
-                .iter()
-                .filter_map(|next| reaches.get(next))
-                .flatten()
-                .cloned()
-                .collect();
-            let entry = reaches.get_mut(key).expect("every key was inserted");
-            let before = entry.len();
-            entry.extend(grown);
-            changed |= entry.len() != before;
-        }
-        if !changed {
-            break;
-        }
-    }
-
-    // Only what pauses, because only a pausing call is a future at all - and a
-    // caller that cannot pause holds no future to be infinitely sized.
-    reaches.retain(|key, _| pausing.contains(key.as_str()));
-    for seen in reaches.values_mut() {
-        seen.retain(|key| pausing.contains(key.as_str()));
-    }
-    reaches
+    nikaia_std::tools::emit_reach::pausing_reach(
+        &parsed.interner,
+        &parsed.aliases,
+        &parsed.program.items,
+        contracts,
+    )
 }
 
 /// **Which branches an `overlap` starts first**, for `--overlaps`
@@ -15998,154 +15901,14 @@ fn mentions_symbol(expr: &Expr, name: Symbol) -> bool {
 /// the range starts at one. A name declared twice, or handed to a call - which
 /// might change it - is left out.
 /// [`nonnegative_locals`], for [`crate::bounds`].
-pub(crate) fn nonnegative_names(body: &Block) -> HashSet<Symbol> {
-    nonnegative_locals(body)
+pub(crate) fn nonnegative_names(parsed: &Parsed, body: &Block) -> HashSet<Symbol> {
+    nonnegative_locals(parsed, body)
 }
 
-fn nonnegative_locals(body: &Block) -> HashSet<Symbol> {
-    let mut statements: Vec<&Stmt> = Vec::new();
-    let mut seen: HashSet<StatementKey> = HashSet::new();
-    every_statement(body, &mut statements, &mut seen);
-    let literal = |e: &Expr| {
-        matches!(
-            e,
-            Expr::LitInt {
-                negative: false,
-                ..
-            }
-        )
-    };
-    let mut declared: HashMap<Symbol, usize> = HashMap::new();
-    let mut candidates: HashSet<Symbol> = HashSet::new();
-    let mut spoiled: HashSet<Symbol> = HashSet::new();
-    for stmt in &statements {
-        match stmt {
-            Stmt::Let {
-                names, ty, value, ..
-            } => {
-                for name in names {
-                    *declared.entry(*name).or_default() += 1;
-                }
-                if let [name] = names.as_slice()
-                    && ty.is_none()
-                    && literal(value)
-                {
-                    candidates.insert(*name);
-                }
-            }
-            Stmt::For { bindings, iter, .. } => {
-                for name in bindings {
-                    *declared.entry(*name).or_default() += 1;
-                }
-                if let ([name], Expr::Range { start, .. }) = (bindings.as_slice(), iter)
-                    && literal(start)
-                {
-                    candidates.insert(*name);
-                }
-            }
-            Stmt::Assign {
-                target: Expr::Variable(name, _),
-                op,
-                value,
-            } => {
-                let keeps = match op {
-                    None | Some(BinaryOp::Add) | Some(BinaryOp::Mul) => literal(value),
-                    _ => false,
-                };
-                if !keeps {
-                    spoiled.insert(*name);
-                }
-            }
-            _ => {}
-        }
-    }
-    // A name handed to a call may be changed by it (`mut` parameters).
-    visit_block(body, &mut |expr| {
-        let args = match expr {
-            Expr::Call { args, .. }
-            | Expr::MethodCall { args, .. }
-            | Expr::SafeMethod { args, .. } => args,
-            _ => return,
-        };
-        for arg in args {
-            if let Expr::Variable(name, _) = arg {
-                spoiled.insert(*name);
-            }
-        }
-    });
-    candidates
+fn nonnegative_locals(parsed: &Parsed, body: &Block) -> HashSet<Symbol> {
+    nikaia_std::tools::emit_locals::nonnegative_locals(&parsed.interner, body)
         .into_iter()
-        .filter(|name| declared.get(name) == Some(&1) && !spoiled.contains(name))
         .collect()
-}
-
-/// **A statement told from every other**: where it stands, what kind it is and
-/// the id of the expression it holds. `guarded` files a jump at the span of the
-/// `if` it stands in, so the span and the kind alone name two statements as one
-/// where the jump is a `throw` - and the id of what each holds tells them apart.
-type StatementKey = (u32, u32, std::mem::Discriminant<Stmt>, usize);
-
-fn statement_key(stmt: &Spanned<Stmt>) -> StatementKey {
-    let held = match &stmt.node {
-        Stmt::Expr(value) | Stmt::Return(Some(value)) | Stmt::Let { value, .. } => {
-            crate::check::value_node(value)
-        }
-        _ => 0,
-    };
-    (
-        stmt.span.start,
-        stmt.span.end,
-        std::mem::discriminant(&stmt.node),
-        held,
-    )
-}
-
-/// Every statement of `block` and of every block inside it, once each.
-fn every_statement<'b>(
-    block: &'b Block,
-    out: &mut Vec<&'b Stmt>,
-    seen: &mut HashSet<StatementKey>,
-) {
-    for stmt in &block.stmts {
-        if !seen.insert(statement_key(stmt)) {
-            continue;
-        }
-        out.push(&stmt.node);
-        if let Stmt::For { body, .. } | Stmt::While { body, .. } = &stmt.node {
-            every_statement(body, out, seen);
-        }
-    }
-    let mut inner: Vec<&'b Block> = Vec::new();
-    collect_blocks(block, &mut inner);
-    for b in inner {
-        every_statement(b, out, seen);
-    }
-}
-
-/// Every block that stands inside the expressions of `block`'s statements, at
-/// any depth: an `if`'s branches, a closure's body - one handed to a call too -
-/// a block, an `unsafe` and an `overlap`.
-fn collect_blocks<'b>(block: &'b Block, out: &mut Vec<&'b Block>) {
-    visit_block(block, &mut |expr| match expr {
-        Expr::Block(b, _) | Expr::Unsafe(b, _) | Expr::Overlap(b, _) => out.push(b),
-        Expr::If {
-            then_branch,
-            else_branch,
-            ..
-        } => {
-            out.push(then_branch);
-            if let Some(b) = else_branch {
-                out.push(b);
-            }
-        }
-        Expr::Closure { body, .. } => out.push(body),
-        _ => {}
-    });
-    for stmt in &block.stmts {
-        if let Stmt::For { body, .. } | Stmt::While { body, .. } = &stmt.node {
-            out.push(body);
-        }
-    }
 }
 
 /// What a `dsl` block names: `pkg::Grammar` for a package's, the bare name

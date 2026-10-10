@@ -1,0 +1,154 @@
+// crates/nikaia-std/src/tools/emit_reach.nika
+//
+// **Which pausing functions reach which**, moved from `emit/mod.rs`
+// (ADR-294, #125, #558): the edges of the call graph of a unit's functions and
+// methods, restricted to the calls that may pause, and their closure. A future
+// that reaches itself is a type of infinite size, which the emitter boxes.
+
+use std::collections
+
+/// A function key to the pausing keys it reaches, through a call of a name, a
+/// path or a method. A bare method name draws an edge to **every** pausing key
+/// that ends in it, which over-approximates and is safe: a cycle too many
+/// boxes a future that did not need it.
+pub fn pausing_reach(words: ref winnow_grammar::InternerContext, aliases: ref collections::BTreeMap[String, String], items: ref Vec[Spanned[Item]], contracts: ref Ledger) -> collections::BTreeMap[String, collections::BTreeSet[String]] {
+    let mut pausing: collections::BTreeSet[String] = collections::BTreeSet()
+    for key in contracts.functions.keys() {
+        let contract = contracts.functions.get(key) ?? continue
+        if !contract.sync_claim.is_sync() {
+            pausing.insert(key.clone())
+        }
+    }
+    let empty: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
+    if pausing.len() == 0 {
+        return empty
+    }
+    // A bare method name to every pausing key that ends in it.
+    let mut by_last: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
+    for key in pausing {
+        let last = reach_last_segment(key)
+        let mut keys = reach_keys_for(by_last, last)
+        keys.push(key.clone())
+        by_last.insert(last, keys)
+    }
+    let mut graph: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
+    for item in items {
+        match item.node {
+            Item::Fn { name, body, .. } => {
+                let held = name ?? continue
+                graph.insert(words.resolve(held).clone(), reach_edges_of(words, aliases, pausing, by_last, body))
+            },
+            Item::Impl { target, methods, .. } => {
+                let owner = words.resolve(target.name).clone()
+                for method in methods {
+                    match method.node {
+                        Item::Fn { name, body, .. } => {
+                            let own = reach_method_name(words, name)
+                            graph.insert(f"{owner}::{own}", reach_edges_of(words, aliases, pausing, by_last, body))
+                        },
+                        else => {},
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+    // Reachability to a fixpoint.
+    let mut reaches = graph.clone()
+    while true {
+        let mut changed = false
+        for key in graph.keys() {
+            let mut entry: collections::BTreeSet[String] = reach_set_for(reaches, key)
+            let before = entry.len()
+            for next in entry.clone() {
+                let more = reaches.get(next) ?? continue
+                for reached in more {
+                    entry.insert(reached.clone())
+                }
+            }
+            if entry.len() != before {
+                changed = true
+            }
+            reaches.insert(key.clone(), entry)
+        }
+        if !changed {
+            break
+        }
+    }
+    // Only what pauses, because only a pausing call is a future at all - and a
+    // caller that cannot pause holds no future to be infinitely sized.
+    let mut kept: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
+    for key in reaches.keys() {
+        if !pausing.contains(key) {
+            continue
+        }
+        let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
+        for reached in reach_set_for(reaches, key) {
+            if pausing.contains(reached) {
+                seen.insert(reached)
+            }
+        }
+        kept.insert(key.clone(), seen)
+    }
+    return kept
+}
+
+fn reach_method_name(words: ref winnow_grammar::InternerContext, name: winnow_grammar::Symbol?) -> String {
+    let held = name ?? return "new"
+    return words.resolve(held).clone()
+}
+
+fn reach_last_segment(key: ref String) -> String {
+    let mut last: String = key.clone()
+    for part in key.split("::") {
+        last = part.clone()
+    }
+    return last
+}
+
+fn reach_edges_of(words: ref winnow_grammar::InternerContext, aliases: ref collections::BTreeMap[String, String], pausing: ref collections::BTreeSet[String], by_last: ref collections::BTreeMap[String, Vec[String]], body: ref Block) -> collections::BTreeSet[String] {
+    let mut out: collections::BTreeSet[String] = collections::BTreeSet()
+    for expr in visited_in_block(body) {
+        match expr {
+            Expr::Call { func, .. } => {
+                match func {
+                    Expr::Variable(name, _) => reach_note(aliases, pausing, by_last, words.resolve(name).clone(), out),
+                    Expr::Path(segments, _) => {
+                        let mut joined: Vec[String] = []
+                        for segment in segments {
+                            joined.push(words.resolve(segment).clone())
+                        }
+                        reach_note(aliases, pausing, by_last, joined.join("::"), out)
+                    },
+                    else => {},
+                }
+            },
+            Expr::MethodCall { method, .. } => reach_note(aliases, pausing, by_last, words.resolve(method).clone(), out),
+            Expr::SafeMethod { method, .. } => reach_note(aliases, pausing, by_last, words.resolve(method).clone(), out),
+            else => {},
+        }
+    }
+    return out
+}
+
+fn reach_note(aliases: ref collections::BTreeMap[String, String], pausing: ref collections::BTreeSet[String], by_last: ref collections::BTreeMap[String, Vec[String]], written: String, mut out: collections::BTreeSet[String]) {
+    let name = unaliased_in(aliases, written)
+    if pausing.contains(name) {
+        out.insert(name)
+        return
+    }
+    let keys = by_last.get(name) ?? return
+    for key in keys {
+        out.insert(key.clone())
+    }
+}
+
+fn reach_keys_for(by_last: ref collections::BTreeMap[String, Vec[String]], last: ref String) -> Vec[String] {
+    let found = by_last.get(last) ?? return []
+    return found.clone()
+}
+
+fn reach_set_for(reaches: ref collections::BTreeMap[String, collections::BTreeSet[String]], key: ref String) -> collections::BTreeSet[String] {
+    let found = reaches.get(key) ?? return collections::BTreeSet()
+    return found.clone()
+}

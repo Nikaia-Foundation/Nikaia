@@ -137,6 +137,8 @@ COMPILER_NIKA = {
     "emit_text.nika": "emit: string literals, format strings, f-string formats and the spelling of a type and a literal (0.0.789)",
     "emit_items.nika": "emit: the extern parameters, results and handles, the foreign traits, declared errors and the sum of a throws list (0.0.789)",
     "emit_walk.nika": "emit: every expression inside a block or an expression, and the holes of a template (0.0.789)",
+    "emit_reach.nika": "emit: which pausing functions reach which, and so which futures are infinitely sized (0.0.790)",
+    "emit_locals.nika": "emit: the locals of a body that are never negative (0.0.790)",
 }
 
 

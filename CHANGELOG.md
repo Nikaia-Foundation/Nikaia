@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.790] — 2026-10-10
+
+**The emitter's pausing reach and its never-negative locals are Nikaia (`tools/emit_reach.nika`, `emit_locals.nika`, #558, #125).**
+- `emit_reach::pausing_reach`: the call graph of a unit's functions and methods restricted to the calls that may pause, and its closure (the futures that reach themselves, which the emitter boxes). It reads the edges off `emit_walk::visited_in_block`.
+- `emit_locals::nonnegative_locals`: the `let`s of a literal and the `for`s over a range from a literal that are declared once, assigned only literals added or multiplied, and never handed to a call. It records each statement it has seen by where it stands, its kind and the id of what it holds, so `every_statement`, `collect_blocks` and `statement_key` are gone from `emit`. `nonnegative_names` takes the `Parsed` (the symbols are its interner's); `bounds` passes it.
+
 ## [0.0.789] — 2026-10-10
 
 **The emitter's first leaves are Nikaia: operators, text, items and the walk (`tools/emit_ops.nika`, `emit_text.nika`, `emit_items.nika`, `emit_walk.nika`, #558, #125).**

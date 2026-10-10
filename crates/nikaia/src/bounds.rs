@@ -260,7 +260,7 @@ pub fn proven(
             walk::bounds_aggressive(
                 args,
                 body,
-                crate::emit::nonnegative_names(body)
+                crate::emit::nonnegative_names(parsed, body)
                     .into_iter()
                     .map(|s| parsed.text(s).to_string())
                     .collect(),
@@ -319,7 +319,7 @@ pub fn proven(
                         walk::bounds_aggressive(
                             &Vec::new(),
                             action,
-                            crate::emit::nonnegative_names(action)
+                            crate::emit::nonnegative_names(parsed, action)
                                 .into_iter()
                                 .map(|s| parsed.text(s).to_string())
                                 .collect(),
