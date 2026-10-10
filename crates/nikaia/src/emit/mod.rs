@@ -8002,28 +8002,11 @@ impl<'p> Emitter<'p> {
     /// Whether the function being written hands back text both kinds of
     /// which flow into its result (ADR-282 D14).
     fn returns_either(&self, function: &str) -> bool {
-        let (target, own) = match function.rsplit_once("::") {
-            Some((target, own)) => (Some(target), own),
-            None => (None, function),
-        };
-        let either = |item: &Item| {
-            matches!(item, Item::Fn { name: Some(n), ret_type: Some(t), .. }
-                if self.text(*n) == own && t.either)
-        };
-        self.parsed
-            .program
-            .items
-            .iter()
-            .any(|item| match (&item.node, target) {
-                (
-                    Item::Impl {
-                        target: t, methods, ..
-                    },
-                    Some(target),
-                ) if self.text(t.name) == target => methods.iter().any(|m| either(&m.node)),
-                (node, None) => either(node),
-                _ => false,
-            })
+        nikaia_std::tools::emit_calls::call_returns_either(
+            &self.parsed.interner,
+            &self.parsed.program.items,
+            function,
+        )
     }
 
     /// Whether what stands in the brackets is a **run**: a range written there,
@@ -12197,22 +12180,11 @@ impl<'p> Emitter<'p> {
     /// themselves, written once because a third asker arrived
     /// ([ADR-292](../../docs/specification/adr/adr-292.md) D19).
     fn callee_name(&self, expr: &Expr) -> Option<String> {
-        match expr {
-            Expr::Call { func, .. } => match func.as_ref() {
-                Expr::Variable(name, _) => Some(self.text(*name).to_string()),
-                Expr::Path(segments, _) => Some(
-                    segments
-                        .iter()
-                        .map(|s| self.text(*s))
-                        .collect::<Vec<_>>()
-                        .join("::"),
-                ),
-                _ => None,
-            },
-            Expr::Try(inner, _) => self.callee_name(inner),
-            _ => None,
-        }
-        .map(|name| self.parsed.unaliased(&name))
+        nikaia_std::tools::emit_calls::call_callee_name(
+            &self.parsed.interner,
+            &self.parsed.aliases,
+            expr,
+        )
     }
 
     /// **The set of error types a joining block can fail with**
@@ -12230,29 +12202,14 @@ impl<'p> Emitter<'p> {
     /// off a ledger. A branch whose callee no ledger knows contributes the
     /// absence of a claim, which makes the set the box — the safe direction.
     fn joined_throws<'e>(&self, branches: impl Iterator<Item = &'e Expr>) -> Vec<String> {
-        let mut set: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
-        for value in branches {
-            match self.callee_name(value) {
-                Some(name) => match self
-                    .own_contracts
-                    .functions
-                    .get(&name)
-                    .or_else(|| self.library.functions.get(&name))
-                {
-                    Some(contract) => set.extend(contract.fails_with.iter().cloned()),
-                    None => {
-                        set.insert(crate::contracts::UNNAMED_ERROR.to_string());
-                    }
-                },
-                // Not a call by name: a `throw` written straight into a branch,
-                // an operator, a method. None of them is resolvable here, and
-                // the box is what the absence of a claim lowers to.
-                None => {
-                    set.insert(crate::contracts::UNNAMED_ERROR.to_string());
-                }
-            }
-        }
-        set.into_iter().collect()
+        let branches: Vec<&Expr> = branches.collect();
+        nikaia_std::tools::emit_calls::call_joined_throws(
+            &self.parsed.interner,
+            &self.parsed.aliases,
+            &self.own_contracts,
+            self.library,
+            &branches,
+        )
     }
 
     /// The expressions an `overlap`'s statements are, for [`Emitter::joined_throws`].
@@ -12299,10 +12256,7 @@ impl<'p> Emitter<'p> {
     /// makes it `async` - and an `async fn` that never awaits finishes on its
     /// first poll, while a plain `fn` that needed to pause does not compile.
     fn pauses(&self, key: &str) -> bool {
-        self.own_contracts
-            .functions
-            .get(key)
-            .is_some_and(|contract| !contract.sync_claim.is_sync())
+        nikaia_std::tools::emit_calls::call_pauses(&self.own_contracts, key)
     }
 
     /// Whether a call to a **library** entry pauses (ADR-055 §6 step 3), and
@@ -12326,11 +12280,7 @@ impl<'p> Emitter<'p> {
     /// what made `std`'s pausing entries `async fn`, and this is the line that
     /// reads them.
     fn library_pauses(&self, key: &str) -> Option<String> {
-        self.library
-            .functions
-            .get(key)
-            .filter(|contract| !contract.sync_claim.is_sync())
-            .map(|_| key.to_string())
+        nikaia_std::tools::emit_calls::call_library_pauses(self.library, key)
     }
 
     /// Whether a call to this callee carries an `.await` (ADR-055 D2).
@@ -12397,44 +12347,13 @@ impl<'p> Emitter<'p> {
     }
 
     fn pausing_key(&self, func: &Expr) -> Option<String> {
-        let name = match func {
-            Expr::Variable(name, _) => self.text(*name).to_string(),
-            Expr::Path(segments, _) => segments
-                .iter()
-                .map(|s| self.text(*s))
-                .collect::<Vec<_>>()
-                .join("::"),
-            _ => return None,
-        };
-        let name = self.parsed.unaliased(&name);
-        // **This unit's own, then its constructors, then `std`'s — and the
-        // *first* ledger that has the name is the one that answers.**
-        //
-        // The chain matters and not only the order: a program with its own
-        // `fn read` has a name `std` also has, and falling through once the
-        // local entry says *this does not pause* would put an `.await` on a call
-        // to a function that is not a future. `can_fail`, one column over, has
-        // read its two ledgers this way all along.
-        //
-        // Kap 4.2's anonymous constructor is the middle link: `Stats(temp)` is a
-        // call to the `new` the `impl` provides, so that is the contract to
-        // read.
-        let constructor = format!("{name}::new");
-        let resolved = self
-            .own_contracts
-            .functions
-            .get(&name)
-            .map(|contract| (name.clone(), contract))
-            .or_else(|| {
-                self.own_contracts
-                    .functions
-                    .get(&constructor)
-                    .map(|contract| (constructor.clone(), contract))
-            });
-        match resolved {
-            Some((key, contract)) => (!contract.sync_claim.is_sync()).then_some(key),
-            None => self.library_pauses(&name),
-        }
+        nikaia_std::tools::emit_calls::call_pausing_key(
+            &self.parsed.interner,
+            &self.parsed.aliases,
+            &self.own_contracts,
+            self.library,
+            func,
+        )
     }
 
     /// Whether a struct of this name is declared in this file or beside it.
@@ -12473,26 +12392,13 @@ impl<'p> Emitter<'p> {
     /// checker knows what it goes to (ADR-288). `method_can_fail` reads the
     /// answer the checker handed over instead.
     fn can_fail(&self, func: &Expr) -> bool {
-        let name = match func {
-            Expr::Variable(name, _) => self.text(*name).to_string(),
-            Expr::Path(segments, _) => segments
-                .iter()
-                .map(|s| self.text(*s))
-                .collect::<Vec<_>>()
-                .join("::"),
-            _ => return false,
-        };
-        self.own_contracts
-            .functions
-            .get(&name)
-            .or_else(|| self.own_contracts.functions.get(&format!("{name}::new")))
-            .or_else(|| self.library.lookup(&name).map(|(_, c)| c))
-            // **And a described crate's** (ADR-290 D20): the checker made the
-            // call a place that can fail off the same entry, so the `?` is
-            // owed here - without it the crate's `Result` reached the rest of
-            // the line, and `rustc` said so about a file nobody wrote.
-            .or_else(|| self.described.functions.get(&name))
-            .is_some_and(|contract| !contract.fails_with.is_empty())
+        nikaia_std::tools::emit_calls::call_can_fail(
+            &self.parsed.interner,
+            &self.own_contracts,
+            self.library,
+            &self.described,
+            func,
+        )
     }
 
     /// Whether the checker said this conversion narrows, and which kind it is.

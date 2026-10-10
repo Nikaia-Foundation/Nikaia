@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.792] — 2026-10-10
+
+**What the contracts say about a call the emitter writes is Nikaia (`tools/emit_calls.nika`, #558, #125).**
+- `pausing_key` (an `.await` is owed), `library_pauses`, `pauses`, `can_fail` (a `?` is owed), `callee_name`, `joined_throws` (the errors a set of branches throws together) and `returns_either` read the unit's own ledger, its constructors', `std`'s and a described crate's in the order the chain asks. The `Emitter` methods of those names pass their ledgers and the interner.
+
 ## [0.0.791] — 2026-10-10
 
 **A computed value as the program holds it, and eight reports about one expression, are Nikaia (`tools/check_consts.nika`, `tools/check_exprs.nika`, ADR-311, ADR-152 D4, #558, #125).**

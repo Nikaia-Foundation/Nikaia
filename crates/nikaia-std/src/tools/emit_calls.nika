@@ -1,0 +1,195 @@
+// crates/nikaia-std/src/tools/emit_calls.nika
+//
+// **What the contracts say about a call the emitter is writing**, moved from
+// `emit/mod.rs` (ADR-294, #125, #558): whether the callee pauses (so the call
+// gets an `.await`), whether it can fail (so it gets a `?`), which errors a set
+// of branches throws, and whether a function returns an `Either`. The ledgers
+// are read in the order the chain asks: this unit's own, then its
+// constructors, then `std`'s, then a described crate's.
+
+use std::collections
+
+/// The name a call's callee is written with: a variable, or a path joined with
+/// `::`. Nothing else is a name.
+pub fn call_written_name(words: ref winnow_grammar::InternerContext, func: ref Expr) -> String? {
+    match func {
+        Expr::Variable(name, _) => {
+            return words.resolve(name).clone()
+        },
+        Expr::Path(segments, _) => {
+            let mut parts: Vec[String] = []
+            for segment in segments {
+                parts.push(words.resolve(segment).clone())
+            }
+            return parts.join("::")
+        },
+        else => {},
+    }
+    return null
+}
+
+/// The key of the pausing function this callee is, if it is one: **this unit's
+/// own, then its constructors, then `std`'s - and the first ledger that has the
+/// name is the one that answers.** A program with its own `fn read` has a name
+/// `std` also has, and falling through once the local entry says *this does not
+/// pause* would put an `.await` on a call to a function that is not a future.
+pub fn call_pausing_key(words: ref winnow_grammar::InternerContext, aliases: ref collections::BTreeMap[String, String], own: ref Ledger, library: ref Ledger, func: ref Expr) -> String? {
+    let written = call_written_name(words, func) ?? return null
+    let name = unaliased_in(aliases, written)
+    let constructor = f"{name}::new"
+    if own.functions.contains_key(name) {
+        return call_pausing_when(own, name)
+    }
+    if own.functions.contains_key(constructor) {
+        return call_pausing_when(own, constructor)
+    }
+    return call_library_pauses(library, name)
+}
+
+fn call_pausing_when(ledger: ref Ledger, key: ref String) -> String? {
+    let contract = ledger.functions.get(key) ?? return null
+    if contract.sync_claim.is_sync() {
+        return null
+    }
+    return key.clone()
+}
+
+/// The key, if `std` (or the library beside it) says the function pauses.
+pub fn call_library_pauses(library: ref Ledger, key: ref String) -> String? {
+    return call_pausing_when(library, key)
+}
+
+/// Whether the function this unit's own ledger holds under `key` pauses.
+pub fn call_pauses(own: ref Ledger, key: ref String) -> bool {
+    let contract = own.functions.get(key) ?? return false
+    return !contract.sync_claim.is_sync()
+}
+
+/// 0 where the ledger has no entry, 1 where it has one that fails with nothing,
+/// 2 where it has one that can fail.
+fn call_fails_state(ledger: ref Ledger, name: ref String) -> i64 {
+    let contract = ledger.functions.get(name) ?? return 0
+    if contract.fails_with.len() == 0 {
+        return 1
+    }
+    return 2
+}
+
+/// Whether the callee can fail, so that the call is a place a `?` is owed: this
+/// unit's own entry, its constructor's, `std`'s, and last a described crate's
+/// (ADR-290 D20) - the first that has one answers.
+pub fn call_can_fail(words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, described: ref Ledger, func: ref Expr) -> bool {
+    let name = call_written_name(words, func) ?? return false
+    let constructor = f"{name}::new"
+    let mut state = call_fails_state(own, name)
+    if state == 0 {
+        state = call_fails_state(own, constructor)
+    }
+    if state == 0 {
+        state = call_fails_state(library, name)
+    }
+    if state == 0 {
+        state = call_fails_state(described, name)
+    }
+    return state == 2
+}
+
+/// The name the callee of a call (or of a `?` on one) is written with, with
+/// this file's aliases resolved.
+pub fn call_callee_name(words: ref winnow_grammar::InternerContext, aliases: ref collections::BTreeMap[String, String], expr: ref Expr) -> String? {
+    match expr {
+        Expr::Call { func, .. } => {
+            let written = call_written_name(words, func) ?? return null
+            return unaliased_in(aliases, written)
+        },
+        Expr::Try(inner, _) => {
+            return call_callee_name(words, aliases, inner)
+        },
+        else => {},
+    }
+    return null
+}
+
+/// The errors a set of branches can throw together, sorted: each branch that is
+/// a call by name adds its callee's `throws`, and any other adds the unnamed
+/// error, which is what the absence of a claim lowers to a box for.
+pub fn call_joined_throws(words: ref winnow_grammar::InternerContext, aliases: ref collections::BTreeMap[String, String], own: ref Ledger, library: ref Ledger, branches: ref Vec[ref Expr]) -> Vec[String] {
+    let mut set: collections::BTreeSet[String] = collections::BTreeSet()
+    for value in branches {
+        let name = call_callee_name(words, aliases, value)
+        if name == null {
+            set.insert("?")
+            continue
+        }
+        let callee = name ?? continue
+        let mut found = call_throws_of(own, callee)
+        if found == null {
+            found = call_throws_of(library, callee)
+        }
+        if found == null {
+            set.insert("?")
+            continue
+        }
+        let errors = found ?? []
+        for error in errors {
+            set.insert(error.clone())
+        }
+    }
+    let mut out: Vec[String] = []
+    for error in set {
+        out.push(error.clone())
+    }
+    return out
+}
+
+fn call_throws_of(ledger: ref Ledger, name: ref String) -> Vec[String]? {
+    let contract = ledger.functions.get(name) ?? return null
+    return contract.fails_with.clone()
+}
+
+/// Whether the function written `name` or `Type::name` returns an `Either`.
+pub fn call_returns_either(words: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]], function: ref String) -> bool {
+    let parts: Vec[String] = function.split("::").collect()
+    let own = parts[parts.len() - 1].clone()
+    let mut wanted: String = ""
+    let mut qualified = false
+    if parts.len() > 1 {
+        qualified = true
+        let mut before: Vec[String] = []
+        for at in 0..<parts.len() - 1 {
+            before.push(parts[at].clone())
+        }
+        wanted = before.join("::")
+    }
+    for item in items {
+        match item.node {
+            Item::Fn { name, ret_type, .. } => {
+                if !qualified && call_fn_is_either(words, name, ret_type, own) {
+                    return true
+                }
+            },
+            Item::Impl { target, methods, .. } => {
+                if qualified && words.resolve(target.name) == wanted {
+                    for method in methods {
+                        match method.node {
+                            Item::Fn { name, ret_type, .. } => {
+                                if call_fn_is_either(words, name, ret_type, own) {
+                                    return true
+                                }
+                            },
+                            else => {},
+                        }
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+    return false
+}
+
+fn call_fn_is_either(words: ref winnow_grammar::InternerContext, name: ref winnow_grammar::Symbol?, ret_type: ref Type?, own: ref String) -> bool {
+    let held = name ?? return false
+    let ty = ret_type ?? return false
+    return words.resolve(held) == own && ty.either
+}

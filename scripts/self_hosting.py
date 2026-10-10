@@ -141,6 +141,7 @@ COMPILER_NIKA = {
     "emit_locals.nika": "emit: the locals of a body that are never negative (0.0.790)",
     "check_consts.nika": "check: a computed value as the program holds it, and whether it crosses as the fixed type its declaration names (0.0.791)",
     "check_exprs.nika": "check: eight reports about one expression, said in its own words (0.0.791)",
+    "emit_calls.nika": "emit: whether a call pauses or can fail, the errors a set of branches throws, and whether a function returns an Either (0.0.792)",
 }
 
 
