@@ -1,0 +1,253 @@
+// crates/nikaia-std/src/tools/check_exprs.nika
+//
+// **Reports about one expression, said with the expression's own words**,
+// moved from the compiler's checker (ADR-294, #125, #558): a bit operation
+// computed in a narrower type (`NK1215`) or beside a comparison (`NK1197`), a
+// collection in an `f"…"` hole (`NK1201`), a loop over a `T?` (`NK1206`), a
+// `??` whose sides are a view and a value (`NK1185`), text of its own given to
+// a name bound to a literal (`NK1105`), a view where text of its own is kept
+// and a condition that is not a `bool` (`NK1108`). The words are
+// `written_expression` over the file's names.
+
+/// Whether a type is exactly `String`, held.
+fn a_plain_string(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Named { name, args, view } => !view && args.len() == 0 && name == "String",
+        else => false,
+    }
+}
+
+/// Whether a type is exactly a view of text, `ref String` below.
+fn a_plain_str_view(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Named { name, args, view } => view && args.len() == 0 && name == "str",
+        else => false,
+    }
+}
+
+/// What an expression's shape is for `narrow_by_width`: the operator in
+/// backticks, and what the reader should write; empty where the shape is not
+/// one that depends on the width.
+fn width_dependent(world: ref CheckWorld, value: ref Expr, into: ref String) -> Vec[String] {
+    return match value {
+        Expr::Binary { op, lhs, rhs, .. } => if op.is_bitwise() {
+            width_of_binary(world, op, lhs, rhs, into)
+        } else {
+            []
+        },
+        Expr::Unary { op, expr, .. } => if op == UnaryOp::Not {
+            ["`!`".clone(), f"!({written_expression(world.words, expr)} as {into})"]
+        } else {
+            []
+        },
+        Expr::MethodCall { receiver, method, .. } => width_of_method(world, receiver, method, into),
+        else => [],
+    }
+}
+
+fn width_of_binary(world: ref CheckWorld, op: BinaryOp, lhs: ref Expr, rhs: ref Expr, into: ref String) -> Vec[String] {
+    let sign = binary_op_text(op)
+    let left = written_expression(world.words, lhs)
+    let mut right = written_expression(world.words, rhs)
+    if op != BinaryOp::Shl && op != BinaryOp::Shr {
+        right = f"({right} as {into})"
+    }
+    return [f"`{sign}`", f"({left} as {into}) {sign} {right}"]
+}
+
+fn width_of_method(world: ref CheckWorld, receiver: ref Expr, method: winnow_grammar::Symbol, into: ref String) -> Vec[String] {
+    let name = world.words.resolve(method).clone()
+    if !name.starts_with("wrapping_") && !name.starts_with("saturating_") && !name.starts_with("truncating_") {
+        return []
+    }
+    return [f"`{name}`", f"({written_expression(world.words, receiver)} as {into}).{name}(…)"]
+}
+
+impl CheckState {
+    /// **`NK1215`: a bit operation computed in a narrower type than the one it
+    /// is put into** (ADR-285 D9): `a & b` and the `wrapping_` family depend on
+    /// the width, so widening before and after give different numbers. True
+    /// where it said so.
+    pub fn narrow_by_width(ref mut self, world: ref CheckWorld, value: ref Expr, into: ref String, span: ref Span) -> bool sync {
+        let found = width_dependent(world, value, into)
+        if found.len() == 0 {
+            return false
+        }
+        let what = found[0].clone()
+        let before = found[1].clone()
+        let whole = written_expression(world.words, value)
+        let message = f"This {what} is computed in a narrower type than the `{into}` it is put into."
+        let note = f"The result of {what} depends on the width, so widening before it and after it give different numbers."
+        let help = f"Say which: `{before}` computes in `{into}`, `({whole}) as {into}` computes first and widens the result."
+        self.findings.push(check_refusal("NK1215", span, message, [note], help))
+        return true
+    }
+
+    /// `NK1197`: a bit operation next to a comparison without parentheses
+    /// (ADR-285 D9). Nikaia binds the bit operations tighter than a comparison
+    /// and C looser, so the line can be read two ways.
+    pub fn a_bit_operation_beside_a_comparison(ref mut self, world: ref CheckWorld, op: BinaryOp, lhs: ref Expr, rhs: ref Expr, at: ref Span) sync {
+        let left_bare = a_bare_bit_operation(lhs)
+        let right_bare = a_bare_bit_operation(rhs)
+        if !left_bare && !right_bare {
+            return
+        }
+        let mut left = written_expression(world.words, lhs)
+        if left_bare {
+            left = f"({left})"
+        }
+        let mut right = written_expression(world.words, rhs)
+        if right_bare {
+            right = f"({right})"
+        }
+        let compared = binary_op_text(op)
+        let note = "Nikaia binds `&`, `|`, `^` and the shifts tighter than a comparison, and C binds them looser, so without parentheses the line can be read two ways."
+        self.findings.push(check_refusal("NK1197", at, "Put parentheses around a bit operation next to a comparison.".clone(), [note.clone()], f"Write `{left} {compared} {right}`."))
+    }
+
+    /// `NK1201`: a list, map or set in an `f"…"` hole, which has no text form.
+    /// `spec` is the hole's format spec, where it has one.
+    pub fn a_collection_in_a_hole(ref mut self, world: ref CheckWorld, hole: ref Expr, held: ref Ty, spec: ref String?, span: ref Span) sync {
+        if !is_a_collection_type(held) {
+            return
+        }
+        if spec != null && (spec ?? "").contains("?") {
+            return
+        }
+        let written = written_expression(world.words, hole)
+        let mut what: String = f"`{held.text()}`"
+        let mut help: String = "Write the parts you want in holes of their own, or build the text in a loop first."
+        if is_a_list_type(held) {
+            what = "a list"
+            let shown = match hole {
+                Expr::Variable(_, _) => written.clone(),
+                Expr::Field { .. } => written.clone(),
+                else => f"({written})",
+            }
+            help = f"Join its elements into text first: `let text = {shown}.iter().join(\", \")`, then write `{{text}}`."
+        }
+        let note = f"A hole is written as its value's text, and lists, maps and sets have no text form. `{written}` is {what}."
+        self.findings.push(check_refusal("NK1201", span, f"You can't put {what} in an `f\"…\"` hole.", [note], help))
+    }
+
+    /// `NK1206`: a `for` over a `T?`.
+    pub fn a_loop_over_a_nullable(ref mut self, world: ref CheckWorld, over: ref Ty, iter: ref Expr, span: ref Span) sync {
+        let inner = match over {
+            Ty::Nullable(held) => held.text(),
+            else => return,
+        }
+        let written = written_expression(world.words, iter)
+        let note = f"`{written}` is a `{over.text()}`: a `{inner}` or nothing, and a `for` walks a list, not the maybe of one."
+        let help = f"Say what `null` walks first: `for … in {written} ?? [] {{ … }}`, or check it for `null` before the loop."
+        self.findings.push(check_refusal("NK1206", span, f"`{written}` may be `null`, so a `for` can't walk it directly.", [note], help))
+    }
+
+    /// `NK1185`: a `??` whose left side is a view of what a map keeps and whose
+    /// fallback is a value of its own. Fail-open: only where the held type is a
+    /// declared one that moves.
+    pub fn a_fallback_beside_what_a_map_holds(ref mut self, world: ref CheckWorld, read: ref Expr, held: ref Ty, fallback: ref Ty, span: ref Span) sync {
+        if held.is_a_view() || fallback.is_a_view() || fallback.is_unknown() || a_plain_string(held) {
+            return
+        }
+        let name = match held {
+            Ty::Named { name, .. } => name.clone(),
+            else => return,
+        }
+        if !moves(held) || self.copies_in_the_package.contains(name) {
+            return
+        }
+        let written = written_expression(world.words, read)
+        let message = f"The two sides of `??` don't match: the left is a view of the `{held.text()}` in the map, the fallback a value of its own."
+        let notes: Vec[String] = ["The map keeps its values, so reading one gives a view of it, and `??` has to give back one type.".clone(), "Nikaia never makes a copy behind your back.".clone()]
+        let help = f"Copy the map's value when you need a `{held.text()}` of your own: `{written}?.clone() ?? …`."
+        self.findings.push(check_refusal("NK1185", span, message, notes, help))
+    }
+
+    /// `NK1105`: text of its own given to a name that started as a literal, so
+    /// can only hold a view. True where it said so.
+    pub fn owned_text_into_a_literal_binding(ref mut self, world: ref CheckWorld, target: ref Expr, found: ref Ty, into: ref Ty, span: ref Span) -> bool sync {
+        let name = match target {
+            Expr::Variable(name, _) => world.words.resolve(name).clone(),
+            else => return false,
+        }
+        let local = self.binding(name) ?? return false
+        let literal = local.literal ?? return false
+        if !a_plain_string(found) || !into.is_a_view() {
+            return false
+        }
+        let message = f"You're giving `{name}` text of its own, but it started as a literal, so it can only hold a view of text."
+        let note = "A literal is text built into the program. A name bound to one is a view of that text, so everything it's given later has to be a view too."
+        let help = f"Declare it as text of its own: `let mut {name}: String = \"{literal}\"`."
+        self.findings.push(check_refusal("NK1105", span, message, [note.clone()], help))
+        return true
+    }
+
+    /// `NK1108`: a condition that is not a `bool`; `why` is the note.
+    pub fn expect_bool(ref mut self, found: ref Ty, span: ref Span, why: ref String) sync {
+        let wanted = Ty::Named { name: "bool", args: [], view: false }
+        if found.fits(wanted) {
+            return
+        }
+        let help: String = "Compare it to get a `bool`: `x != 0`, `text != \"\"`, `xs.len() > 0`."
+        self.findings.push(check_refusal("NK1108", span, f"A condition has to be `true` or `false`, but this is `{found.text()}`.", [why.clone()], help))
+    }
+}
+
+/// A bit operation written without parentheses.
+fn a_bare_bit_operation(side: ref Expr) -> bool {
+    return match side {
+        Expr::Binary { op, grouped, .. } => !grouped && op.is_bitwise(),
+        else => false,
+    }
+}
+
+/// What a view kept where text of its own is wanted says: the notes and the way
+/// out (ADR-282 D12); empty where `found` and `want` are not that pair.
+pub struct CheckKept {
+    pub notes: Vec[String],
+    pub help: String,
+}
+
+impl CheckState {
+    /// **A view of text where the keeper needs text of its own**: the three
+    /// sentences by what the value is - a name bound to a literal, a `ref
+    /// String` parameter, or any other view. `named` is the name where `value`
+    /// is one.
+    pub fn a_view_kept(ref self, found: ref Ty, want: ref Ty, named: ref String?, keeper: ref String) -> CheckKept? sync {
+        if !a_plain_str_view(found) || !a_plain_string(want) {
+            return null
+        }
+        let cost = "Nikaia never copies text behind your back: a copy costs as much as the text is long, so it's written where it happens."
+        let said = capitalised(keeper)
+        if named == null {
+            return CheckKept { notes: ["This is a view: it points into text that something else owns.".clone(), f"{said}, so it needs text of its own.", cost.clone()], help: "Write `.clone()` to copy it here." }
+        }
+        let name = (named ?? "").clone()
+        let local = self.binding(name)
+        if local != null {
+            let held = local ?? return null
+            if held.literal != null {
+                let literal = (held.literal ?? "").clone()
+                let first = f"`{name}` was bound to the literal \"{literal}\", so it's a view of that text."
+                let second = f"{said}, so it needs text of its own. Written directly here, the literal would become text of its own; through the name it can't, because that would change how `{name}` was declared above."
+                let way = f"Write \"{literal}\" here directly, or declare `let {name}: String = \"{literal}\"`."
+                return CheckKept { notes: [first, second], help: way }
+            }
+            if a_parameter_binding(held) {
+                let first = f"`{name}` is declared `ref String`, so the text belongs to the caller, who still has it."
+                let way = f"Declare `{name}: String` so the caller hands its text over, or write `{name}.clone()` to copy it here."
+                return CheckKept { notes: [first, f"{said}, so it needs text of its own.", cost.clone()], help: way }
+            }
+        }
+        return CheckKept { notes: ["This is a view: it points into text that something else owns.".clone(), f"{said}, so it needs text of its own.", cost.clone()], help: "Write `.clone()` to copy it here." }
+    }
+}
+
+/// Whether a binding is a parameter.
+fn a_parameter_binding(local: ref CheckLocal) -> bool {
+    if local.immutable == null {
+        return false
+    }
+    let at = local.immutable ?? return false
+    return at.kind == CheckKind::Parameter
+}

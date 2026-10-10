@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.791] — 2026-10-10
+
+**A computed value as the program holds it, and eight reports about one expression, are Nikaia (`tools/check_consts.nika`, `tools/check_exprs.nika`, ADR-311, ADR-152 D4, #558, #125).**
+- `rust_value` and `rust_array_type` (a build-time value as a `const`'s Rust), and `crosses_as_fixed` (whether a computed list or text crosses as the fixed type its declaration names; `CheckCrossing`) are Nikaia. `written_below`, `unwritable_in` and `unwritable_payload` (a value written against its declaration, and what a `const` cannot hold) and `a_table_that_crosses` (the `Fixed::new(…)` of a table; `CheckTable`) are Nikaia too. The float spelling and a variant's declared payload (the host's item tree) are callbacks. `NK1157` is reported from `crosses_as_fixed` directly.
+- `NK1215`, `NK1197`, `NK1201`, `NK1206`, `NK1185`, `NK1105` (text of its own given to a name bound to a literal) and `NK1108` (`expect_bool`), and the three sentences of a view kept where text of its own is wanted (`CheckKept`) are methods of `CheckState`, said in the expression's own words (`written_expression` over the file's names).
+
 ## [0.0.790] — 2026-10-10
 
 **The emitter's pausing reach and its never-negative locals are Nikaia (`tools/emit_reach.nika`, `emit_locals.nika`, #558, #125).**

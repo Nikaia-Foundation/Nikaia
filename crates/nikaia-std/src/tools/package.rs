@@ -10133,6 +10133,401 @@ pub fn a_pausing_sequence(result: Ty, on: &Ty) -> Ty {
 }
 
 
+// --- check_consts.nika ---
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn rust_value(value: &BuildValue, float_text: &impl Fn(f64) -> String) -> Option<String> {
+    match value {
+        BuildValue::Int(n) => return Some(integer_text(n)),
+        BuildValue::Float(n) => {
+            let n = *n;
+            if n.is_finite() { return Some(float_text(n)); }
+            return None;
+        },
+        BuildValue::Bool(yes) => {
+            let yes = *yes;
+            if yes { return Some(String::from("true")); }
+            return Some(String::from("false"));
+        },
+        BuildValue::Text(text) => return Some(format!("\"{}\"", as_a_literal(text))),
+        BuildValue::Tuple(_) => return None,
+        BuildValue::Variant { ty, variant, payload } => {
+            if payload.is_empty() { return Some(format!("{}::{}", ty, variant)); }
+            let mut written: Vec<String> = vec![];
+            for held in payload.iter() {
+                let text = match rust_value(held, float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                written.push(text);
+            }
+            return Some(format!("{}::{}({})", ty, variant, written.join(", ")));
+        },
+        BuildValue::Struct { name, fields } => {
+            let mut written: Vec<String> = vec![];
+            for (field, held) in fields.iter() {
+                let text = match rust_value(held, float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                written.push(format!("{}: {}", field, text));
+            }
+            return Some(format!("{} {{ {} }}", name, written.join(", ")));
+        },
+        BuildValue::List(items) => {
+            let mut written: Vec<String> = vec![];
+            for held in items.iter() {
+                let text = match rust_value(held, float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                written.push(text);
+            }
+            return Some(format!("[{}]", written.join(", ")));
+        },
+        BuildValue::Constant { constructor, parts } => {
+            let mut written: Vec<String> = vec![];
+            for held in parts.iter() {
+                let text = match rust_value(held, float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                written.push(text);
+            }
+            return Some(format!("{}({})", constructor, written.join(", ")));
+        },
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn rust_array_type(items: &[BuildValue]) -> Option<String> {
+    let mut found: String = String::from("");
+    let mut seen = false;
+    for item in items.iter() {
+        let ty: String = match item {
+            BuildValue::Bool(_) => String::from("bool"),
+            BuildValue::Int(n) => if integer_fits(n, "i32") { String::from("i32") } else { String::from("i64") },
+            BuildValue::Float(_) => String::from("f64"),
+            BuildValue::Text(_) => String::from("&str"),
+            BuildValue::Struct { name, .. } => name.to_owned(),
+            BuildValue::Variant { ty, .. } => ty.to_owned(),
+            BuildValue::List(inner) => {
+                let held = match rust_array_type(inner) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                format!("[{}; {}]", held, inner.len() as i64)
+            },
+            BuildValue::Tuple(_) => return None,
+            BuildValue::Constant { constructor, .. } => match constructed(constructor) { Some(__nikaia_value) => __nikaia_value, None => return None },
+        };
+        if !seen {
+            found = ty;
+            seen = true;
+        } else if found != ty { found = "i64".to_owned(); }
+    }
+    if !seen { return None; }
+    Some(found)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CheckCrossing {
+    Fits,
+    Said,
+    Unanswered,
+    Other,
+}
+
+fn computed_kind(evaluated: Option<&BuildValue>) -> i64 {
+    if evaluated.is_none() { return 0; }
+    let value = match evaluated { Some(__nikaia_value) => __nikaia_value, None => return 0 };
+    match value {
+        BuildValue::List(_) => 1,
+        BuildValue::Text(_) => 2,
+        _ => 3,
+    }
+}
+
+fn computed_length(evaluated: Option<&BuildValue>) -> i64 {
+    if evaluated.is_none() { return 0; }
+    let value = match evaluated { Some(__nikaia_value) => __nikaia_value, None => return 0 };
+    match value {
+        BuildValue::List(items) => items.len() as i64,
+        _ => 0,
+    }
+}
+
+fn a_growable_list(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { name, .. } => name == "Vec" || name == "List",
+        _ => false,
+    }
+}
+
+fn list_element(ty: &Ty) -> Ty {
+    match ty {
+        Ty::Named { args, .. } => if !args.is_empty() { (*nikaia_std::index::get(&args, 0)).clone() } else { Ty::Unknown },
+        _ => Ty::Unknown,
+    }
+}
+
+fn type_arguments(ty: &Ty) -> Vec<Ty> {
+    match ty {
+        Ty::Named { args, .. } => args.to_owned(),
+        _ => vec![],
+    }
+}
+
+fn a_pair_of(held: &Ty, key: &Ty, value: &Ty) -> bool {
+    match held {
+        Ty::Unknown => true,
+        Ty::Tuple(parts) => parts.len() == 2 && (*nikaia_std::index::get(&parts, 0)).fits(key) && (*nikaia_std::index::get(&parts, 1)).fits(value),
+        _ => false,
+    }
+}
+
+fn array_length(ty: &Ty) -> Option<i64> {
+    match ty {
+        Ty::Count(n) => { let n = *n; Some(n) },
+        _ => None,
+    }
+}
+
+fn a_view_of_text(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { name, args, view } => { let view = *view; view && name == "str" && args.is_empty() },
+        _ => false,
+    }
+}
+
+fn text_of_its_own(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { name, view, .. } => { let view = *view; !view && name == "String" },
+        _ => false,
+    }
+}
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn crosses_as_fixed(&mut self, found: &Ty, want: &Ty, evaluated: Option<&BuildValue>, span: &Span) -> CheckCrossing {
+        let kind = computed_kind(evaluated);
+        if is_fixed(want) {
+            let args = type_arguments(want);
+            if !a_growable_list(found) || args.len() != 2 { return CheckCrossing::Other; }
+            if !a_pair_of(&list_element(found), nikaia_std::index::get(&args, 0), nikaia_std::index::get(&args, 1)) { return CheckCrossing::Other; }
+            if kind == 1 { return CheckCrossing::Fits; }
+            return CheckCrossing::Unanswered;
+        }
+        let element = slice_element(want);
+        if element.is_some() {
+            if !a_growable_list(found) { return CheckCrossing::Other; }
+            if !list_element(found).fits(nikaia_std::index::or(element.as_ref(), || &Ty::Unknown)) { return CheckCrossing::Other; }
+            if kind == 1 { return CheckCrossing::Fits; }
+            return CheckCrossing::Unanswered;
+        }
+        if a_view_of_text(want) && text_of_its_own(found) {
+            if kind == 2 { return CheckCrossing::Fits; }
+            return CheckCrossing::Unanswered;
+        }
+        let args = match want {
+            Ty::Named { name, args, view } => { let view = *view; if !view && name == ARRAY { args.to_owned() } else { return CheckCrossing::Other; } },
+            _ => return CheckCrossing::Other,
+        };
+        if args.len() != 2 { return CheckCrossing::Other; }
+        let count = match array_length(nikaia_std::index::get(&args, 1)) { Some(__nikaia_value) => __nikaia_value, None => return CheckCrossing::Other };
+        if !a_growable_list(found) { return CheckCrossing::Other; }
+        if kind != 1 { return CheckCrossing::Unanswered; }
+        let length = computed_length(evaluated);
+        if length != count {
+            self.findings.push(a_list_the_wrong_length_for_its_array(length, count, span, true));
+            return CheckCrossing::Said;
+        }
+        if !list_element(found).fits(nikaia_std::index::get(&args, 0)) { return CheckCrossing::Other; }
+        CheckCrossing::Fits
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CheckTable {
+    pub found: bool,
+    pub below: String,
+    pub written: String,
+    pub said: bool,
+}
+
+fn no_table(said: bool) -> CheckTable { CheckTable { found: false, below: String::from(""), written: String::from(""), said } }
+
+fn text_of_value(value: &BuildValue) -> Option<String> {
+    match value {
+        BuildValue::Text(text) => Some(text.to_owned()),
+        _ => None,
+    }
+}
+
+fn a_str_view_key(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { name, view, .. } => { let view = *view; view && name == "str" },
+        _ => false,
+    }
+}
+
+fn const_field_type(declared: Option<&Vec<FieldContract>>, field: &str) -> Option<Ty> {
+    let list = match declared { Some(__nikaia_value) => __nikaia_value, None => return None };
+    for each in list.iter() { if each.name == field { return Some(each.ty.clone()); } }
+    None
+}
+
+fn nth_type(declared: &[Ty], at: i64) -> Option<Ty> {
+    if at < declared.len() as i64 { return Some((*nikaia_std::index::get(&declared, nikaia_std::index::at(at))).clone()); }
+    None
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn unwritable_payload(state: &CheckState, world: &CheckWorld<'_>, ty: &str, variant: &str, payloads: &impl Fn(&str, &str) -> Option<Vec<Ty>>) -> Vec<String> {
+    let carried = match payloads(ty, variant) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
+    for held in carried.iter() { if rust_constant_type(world.library, held).is_none() && state.declared_below(world, held).is_none() { return vec![format!("{}::{}", ty, variant), held.text()]; } }
+    vec![]
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn unwritable_in(state: &CheckState, world: &CheckWorld<'_>, value: &BuildValue, payloads: &impl Fn(&str, &str) -> Option<Vec<Ty>>) -> Vec<String> {
+    match value {
+        BuildValue::Struct { name, fields } => {
+            let own = state.unwritable_field(world, &Ty::Named { name: name.to_owned(), args: vec![], view: false });
+            if !own.is_empty() { return own; }
+            for (_, held) in fields.iter() {
+                let inner = unwritable_in(state, world, held, payloads);
+                if !inner.is_empty() { return inner; }
+            }
+            return vec![];
+        },
+        BuildValue::Variant { ty, variant, payload } => {
+            let own = unwritable_payload(state, world, ty, variant, payloads);
+            if !own.is_empty() { return own; }
+            for held in payload.iter() {
+                let inner = unwritable_in(state, world, held, payloads);
+                if !inner.is_empty() { return inner; }
+            }
+            return vec![];
+        },
+        BuildValue::List(items) => {
+            for held in items.iter() {
+                let inner = unwritable_in(state, world, held, payloads);
+                if !inner.is_empty() { return inner; }
+            }
+            return vec![];
+        },
+        BuildValue::Tuple(parts) => {
+            for held in parts.iter() {
+                let inner = unwritable_in(state, world, held, payloads);
+                if !inner.is_empty() { return inner; }
+            }
+            return vec![];
+        },
+        _ => return vec![],
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn written_below(state: &CheckState, world: &CheckWorld<'_>, value: &BuildValue, want: Option<&Ty>, payloads: &impl Fn(&str, &str) -> Option<Vec<Ty>>, float_text: &impl Fn(f64) -> String) -> Option<String> {
+    if want.is_none() { return rust_value(value, float_text); }
+    let wanted: Ty = nikaia_std::index::or(want.as_ref(), || &Ty::Unknown).clone();
+    match value {
+        BuildValue::List(items) => {
+            let mut held: Ty = element_of(&wanted);
+            let mut borrow: String = String::from("");
+            let slice = slice_element(&wanted);
+            if slice.is_some() {
+                held = nikaia_std::index::or(slice.as_ref(), || &Ty::Unknown).clone();
+                borrow = String::from("&");
+            }
+            let some_held: Option<Ty> = Some(held.clone());
+            let mut written: Vec<String> = vec![];
+            for item in items.iter() {
+                let text = match written_below(state, world, item, (some_held).as_ref(), payloads, float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                written.push(text);
+            }
+            return Some(format!("{}[{}]", borrow, written.join(", ")));
+        },
+        BuildValue::Struct { name, fields } => {
+            let declared = state.fields_of(world, name);
+            let mut written: Vec<String> = vec![];
+            for (field, held) in fields.iter() {
+                let field_want = const_field_type((declared).as_ref(), field);
+                let text = match written_below(state, world, held, (field_want).as_ref(), payloads, float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                written.push(format!("{}: {}", field, text));
+            }
+            return Some(format!("{} {{ {} }}", name, written.join(", ")));
+        },
+        BuildValue::Variant { ty, variant, payload } => {
+            if payload.is_empty() { return Some(format!("{}::{}", ty, variant)); }
+            let declared = nikaia_std::index::or(payloads(ty, variant), || vec![].into());
+            let mut written: Vec<String> = vec![];
+            let mut at: i64 = 0;
+            for held in payload.iter() {
+                let part_want = nth_type(&declared, at);
+                let text = match written_below(state, world, held, (part_want).as_ref(), payloads, float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                written.push(text);
+                at = at + 1;
+            }
+            return Some(format!("{}::{}({})", ty, variant, written.join(", ")));
+        },
+        _ => return rust_value(value, float_text),
+    }
+}
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn a_table_that_crosses(&mut self, world: &CheckWorld<'_>, bound: &str, want: &Ty, pairs: &[BuildValue], span: &Span, payloads: impl Fn(&str, &str) -> Option<Vec<Ty>>, float_text: impl Fn(f64) -> String) -> CheckTable {
+        let args = type_arguments(want);
+        if args.len() != 2 { return no_table(false); }
+        if !a_str_view_key(nikaia_std::index::get(&args, 0)) {
+            self.a_table_key_that_is_not_text(bound, &(*nikaia_std::index::get(&args, 0)).text(), span);
+            return no_table(true);
+        }
+        let held: Ty = (*nikaia_std::index::get(&args, 1)).clone();
+        let mut value_below: String = String::from("");
+        let mut borrow: String = String::from("");
+        let constant = rust_constant_type(world.library, &held);
+        if constant.is_some() { value_below = nikaia_std::index::or(constant.as_deref(), || "").to_owned(); } else {
+            let declared = match self.declared_below(world, &held) { Some(__nikaia_value) => __nikaia_value, None => return no_table(false) };
+            value_below = format!("&'static {}", declared);
+            borrow = String::from("&");
+        }
+        let some_held: Option<Ty> = Some(held.clone());
+        let mut keys: Vec<String> = vec![];
+        let mut values: Vec<String> = vec![];
+        let mut seen: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
+        let mut at: i64 = 0;
+        for pair in pairs.iter() {
+            let parts: Vec<BuildValue> = match pair {
+                BuildValue::Tuple(inner) => inner.to_owned(),
+                _ => return no_table(false),
+            };
+            if parts.len() != 2 { return no_table(false); }
+            let key = match text_of_value(nikaia_std::index::get(&parts, 0)) { Some(__nikaia_value) => __nikaia_value, None => return no_table(false) };
+            if seen.contains_key(&key) {
+                let first = nikaia_std::index::or(*nikaia_std::index::get(&seen, &key), || 0);
+                self.a_table_with_one_key_twice(bound, &key, first, at, span);
+                return no_table(true);
+            }
+            seen.insert(key.to_owned(), at);
+            keys.push(key.to_owned());
+            let text = match written_below(self, world, nikaia_std::index::get(&parts, 1), (some_held).as_ref(), &payloads, &float_text) { Some(__nikaia_value) => __nikaia_value, None => return no_table(false) };
+            values.push(format!("{}{}", borrow, text));
+            at = at + 1;
+        }
+        let table = match build(&keys) { Some(__nikaia_value) => __nikaia_value, None => return no_table(false) };
+        let mut disps: Vec<String> = vec![];
+        for (d1, d2) in table.disps.iter() {
+            let d1 = nikaia_std::num::value(d1);let d2 = nikaia_std::num::value(d2);
+            disps.push(format!("({}, {})", d1, d2));
+        }
+        let mut written_keys: Vec<String> = vec![];
+        for key in table.keys.iter() { written_keys.push(format!("\"{}\"", as_a_literal(key))); }
+        let mut written_values: Vec<String> = vec![];
+        for place in table.order.iter() {
+            let place = nikaia_std::num::value(place);
+            written_values.push((*nikaia_std::index::get(&values, nikaia_std::index::at(place))).to_owned());
+        }
+        CheckTable { found: true, below: format!("Fixed<{}>", value_below), written: format!("Fixed::new({}, &[{}], &[{}], &[{}])", table.seed, disps.join(", "), written_keys.join(", "), written_values.join(", ")), said: false }
+    }
+}
+
+
 // --- check_decls.nika ---
 
 impl CheckState {
@@ -10495,6 +10890,196 @@ impl CheckState {
 fn touches_a_file(contract: &TypeContract) -> bool {
     for touch in contract.touches.iter() { if touch.starts_with("file") { return true; } }
     false
+}
+
+
+// --- check_exprs.nika ---
+
+fn a_plain_string(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { name, args, view } => { let view = *view; !view && args.is_empty() && name == "String" },
+        _ => false,
+    }
+}
+
+fn a_plain_str_view(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { name, args, view } => { let view = *view; view && args.is_empty() && name == "str" },
+        _ => false,
+    }
+}
+
+fn width_dependent(world: &CheckWorld<'_>, value: &Expr, into: &str) -> Vec<String> {
+    match value {
+        Expr::Binary { op, lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); if op.is_bitwise() { width_of_binary(world, *op, lhs, rhs, into) } else { vec![] } },
+        Expr::Unary { op, expr, .. } => { let expr = nikaia_std::boxed::open(expr); if *op == UnaryOp::Not { vec!["`!`".to_owned(), format!("!({} as {})", written_expression(world.words, expr), into)] } else { vec![] } },
+        Expr::MethodCall { receiver, method, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; width_of_method(world, receiver, method, into) },
+        _ => vec![],
+    }
+}
+
+fn width_of_binary(world: &CheckWorld<'_>, op: BinaryOp, lhs: &Expr, rhs: &Expr, into: &str) -> Vec<String> {
+    let sign = binary_op_text(op);
+    let left = written_expression(world.words, lhs);
+    let mut right = written_expression(world.words, rhs);
+    if op != BinaryOp::Shl && op != BinaryOp::Shr { right = format!("({} as {})", right, into); }
+    vec![format!("`{}`", sign), format!("({} as {}) {} {}", left, into, sign, right)]
+}
+
+fn width_of_method(world: &CheckWorld<'_>, receiver: &Expr, method: winnow_grammar::Symbol, into: &str) -> Vec<String> {
+    let name = world.words.resolve(method).to_owned();
+    if !name.starts_with("wrapping_") && !name.starts_with("saturating_") && !name.starts_with("truncating_") { return vec![]; }
+    vec![format!("`{}`", name), format!("({} as {}).{}(…)", written_expression(world.words, receiver), into, name)]
+}
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn narrow_by_width(&mut self, world: &CheckWorld<'_>, value: &Expr, into: &str, span: &Span) -> bool {
+        let found = width_dependent(world, value, into);
+        if found.is_empty() { return false; }
+        let what = (*nikaia_std::index::get(&found, 0)).to_owned();
+        let before = (*nikaia_std::index::get(&found, 1)).to_owned();
+        let whole = written_expression(world.words, value);
+        let message = format!("This {} is computed in a narrower type than the `{}` it is put into.", what, into);
+        let note = format!("The result of {} depends on the width, so widening before it and after it give different numbers.", what);
+        let help = format!("Say which: `{}` computes in `{}`, `({}) as {}` computes first and widens the result.", before, into, whole, into);
+        self.findings.push(check_refusal("NK1215", span, message, vec![note], Some(help)));
+        true
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_bit_operation_beside_a_comparison(&mut self, world: &CheckWorld<'_>, op: BinaryOp, lhs: &Expr, rhs: &Expr, at: &Span) {
+        let left_bare = a_bare_bit_operation(lhs);
+        let right_bare = a_bare_bit_operation(rhs);
+        if !left_bare && !right_bare { return; }
+        let mut left = written_expression(world.words, lhs);
+        if left_bare { left = format!("({})", left); }
+        let mut right = written_expression(world.words, rhs);
+        if right_bare { right = format!("({})", right); }
+        let compared = binary_op_text(op);
+        let note = "Nikaia binds `&`, `|`, `^` and the shifts tighter than a comparison, and C binds them looser, so without parentheses the line can be read two ways.";
+        self.findings.push(check_refusal("NK1197", at, "Put parentheses around a bit operation next to a comparison.".to_owned(), vec![note.to_owned()], Some(format!("Write `{} {} {}`.", left, compared, right))));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_collection_in_a_hole(&mut self, world: &CheckWorld<'_>, hole: &Expr, held: &Ty, spec: Option<&str>, span: &Span) {
+        if !is_a_collection_type(held) { return; }
+        if spec.is_some() && nikaia_std::index::or(spec, || "").contains("?") { return; }
+        let written = written_expression(world.words, hole);
+        let mut what: String = format!("`{}`", held.text());
+        let mut help: String = String::from("Write the parts you want in holes of their own, or build the text in a loop first.");
+        if is_a_list_type(held) {
+            what = String::from("a list");
+            let shown = match hole {
+                Expr::Variable(_, _) => written.to_owned(),
+                Expr::Field { .. } => written.to_owned(),
+                _ => format!("({})", written),
+            };
+            help = format!("Join its elements into text first: `let text = {}.iter().join(\", \")`, then write `{{text}}`.", shown);
+        }
+        let note = format!("A hole is written as its value's text, and lists, maps and sets have no text form. `{}` is {}.", written, what);
+        self.findings.push(check_refusal("NK1201", span, format!("You can't put {} in an `f\"…\"` hole.", what), vec![note], Some(help)));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_loop_over_a_nullable(&mut self, world: &CheckWorld<'_>, over: &Ty, iter: &Expr, span: &Span) {
+        let inner = match over {
+            Ty::Nullable(held) => { let held = nikaia_std::boxed::open(held); held.text() },
+            _ => return,
+        };
+        let written = written_expression(world.words, iter);
+        let note = format!("`{}` is a `{}`: a `{}` or nothing, and a `for` walks a list, not the maybe of one.", written, over.text(), inner);
+        let help = format!("Say what `null` walks first: `for … in {} ?? [] {{ … }}`, or check it for `null` before the loop.", written);
+        self.findings.push(check_refusal("NK1206", span, format!("`{}` may be `null`, so a `for` can't walk it directly.", written), vec![note], Some(help)));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_fallback_beside_what_a_map_holds(&mut self, world: &CheckWorld<'_>, read: &Expr, held: &Ty, fallback: &Ty, span: &Span) {
+        if held.is_a_view() || fallback.is_a_view() || fallback.is_unknown() || a_plain_string(held) { return; }
+        let name = match held {
+            Ty::Named { name, .. } => name.to_owned(),
+            _ => return,
+        };
+        if !moves(held) || self.copies_in_the_package.contains(&name) { return; }
+        let written = written_expression(world.words, read);
+        let message = format!("The two sides of `??` don't match: the left is a view of the `{}` in the map, the fallback a value of its own.", held.text());
+        let notes: Vec<String> = vec!["The map keeps its values, so reading one gives a view of it, and `??` has to give back one type.".to_owned(), "Nikaia never makes a copy behind your back.".to_owned()];
+        let help = format!("Copy the map's value when you need a `{}` of your own: `{}?.clone() ?? …`.", held.text(), written);
+        self.findings.push(check_refusal("NK1185", span, message, notes, Some(help)));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn owned_text_into_a_literal_binding(&mut self, world: &CheckWorld<'_>, target: &Expr, found: &Ty, into: &Ty, span: &Span) -> bool {
+        let name = match target {
+            Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_owned() },
+            _ => return false,
+        };
+        let local = match self.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let literal = match local.literal { Some(__nikaia_value) => __nikaia_value, None => return false };
+        if !a_plain_string(found) || !into.is_a_view() { return false; }
+        let message = format!("You're giving `{}` text of its own, but it started as a literal, so it can only hold a view of text.", name);
+        let note = "A literal is text built into the program. A name bound to one is a view of that text, so everything it's given later has to be a view too.";
+        let help = format!("Declare it as text of its own: `let mut {}: String = \"{}\"`.", name, literal);
+        self.findings.push(check_refusal("NK1105", span, message, vec![note.to_owned()], Some(help)));
+        true
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn expect_bool(&mut self, found: &Ty, span: &Span, why: &str) {
+        let wanted = Ty::Named { name: String::from("bool"), args: vec![], view: false };
+        if found.fits(&wanted) { return; }
+        let help: String = String::from("Compare it to get a `bool`: `x != 0`, `text != \"\"`, `xs.len() > 0`.");
+        self.findings.push(check_refusal("NK1108", span, format!("A condition has to be `true` or `false`, but this is `{}`.", found.text()), vec![why.to_owned()], Some(help)));
+    }
+}
+
+fn a_bare_bit_operation(side: &Expr) -> bool {
+    match side {
+        Expr::Binary { op, grouped, .. } => { let grouped = *grouped; !grouped && op.is_bitwise() },
+        _ => false,
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CheckKept {
+    pub notes: Vec<String>,
+    pub help: String,
+}
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_view_kept(&self, found: &Ty, want: &Ty, named: Option<&str>, keeper: &str) -> Option<CheckKept> {
+        if !a_plain_str_view(found) || !a_plain_string(want) { return None; }
+        let cost = "Nikaia never copies text behind your back: a copy costs as much as the text is long, so it's written where it happens.";
+        let said = capitalised(keeper);
+        if named.is_none() { return Some(CheckKept { notes: vec!["This is a view: it points into text that something else owns.".to_owned(), format!("{}, so it needs text of its own.", said), cost.to_owned()], help: String::from("Write `.clone()` to copy it here.") }); }
+        let name = nikaia_std::index::or(named, || "").to_owned();
+        let local = self.binding(&name);
+        if local.is_some() {
+            let held = match local { Some(__nikaia_value) => __nikaia_value, None => return None };
+            if held.literal.is_some() {
+                let literal = nikaia_std::index::or(held.literal.as_deref(), || "").to_owned();
+                let first = format!("`{}` was bound to the literal \"{}\", so it's a view of that text.", name, literal);
+                let second = format!("{}, so it needs text of its own. Written directly here, the literal would become text of its own; through the name it can't, because that would change how `{}` was declared above.", said, name);
+                let way = format!("Write \"{}\" here directly, or declare `let {}: String = \"{}\"`.", literal, name, literal);
+                return Some(CheckKept { notes: vec![first, second], help: way });
+            }
+            if a_parameter_binding(&held) {
+                let first = format!("`{}` is declared `ref String`, so the text belongs to the caller, who still has it.", name);
+                let way = format!("Declare `{}: String` so the caller hands its text over, or write `{}.clone()` to copy it here.", name, name);
+                return Some(CheckKept { notes: vec![first, format!("{}, so it needs text of its own.", said), cost.to_owned()], help: way });
+            }
+        }
+        Some(CheckKept { notes: vec!["This is a view: it points into text that something else owns.".to_owned(), format!("{}, so it needs text of its own.", said), cost.to_owned()], help: String::from("Write `.clone()` to copy it here.") })
+    }
+}
+
+fn a_parameter_binding(local: &CheckLocal) -> bool {
+    if local.immutable.is_none() { return false; }
+    let at = match local.immutable { Some(__nikaia_value) => __nikaia_value, None => return false };
+    at.kind == CheckKind::Parameter
 }
 
 
@@ -35721,11 +36306,19 @@ pub mod check_calls {
     #[allow(unused_imports)]
     pub use super::{call_arguments, expected_arguments, receiver_bindings, argument_bindings, walks_by_value, shape_through, a_paused_chain, a_pausing_sequence};
 }
+pub mod check_consts {
+    #[allow(unused_imports)]
+    pub use super::{rust_value, rust_array_type, CheckCrossing, CheckTable, unwritable_in, written_below};
+}
 pub mod check_decls {
     #[allow(unused_imports)]
     pub use super::{a_type_base, a_part_one_type};
 }
 pub mod check_doors {}
+pub mod check_exprs {
+    #[allow(unused_imports)]
+    pub use super::{CheckKept};
+}
 pub mod check_imports {}
 pub mod check_literals {
     #[allow(unused_imports)]

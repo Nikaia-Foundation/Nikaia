@@ -1,0 +1,519 @@
+// crates/nikaia-std/src/tools/check_consts.nika
+//
+// **A value the build computed, as the program holds it** (ADR-311, ADR-152 D4,
+// ADR-318 D5), moved from the compiler's checker (ADR-294, #125, #558): the
+// Rust a `const` is written in for a value or an array of them, and whether a
+// computed list crosses as the fixed type its declaration names.
+
+use std::collections
+
+/// **A build-time value, spelled as Rust writes one** - for the shapes a
+/// `const` can hold. Nothing where one cannot be written down, which sends the
+/// caller to `NK1127`: a struct is only as writable as its fields, and a tuple
+/// has no `const` form of its own (ADR-311 D9). `float_text` writes a finite
+/// float as the language below does; a float that is not finite has no literal.
+pub fn rust_value(value: ref BuildValue, float_text: fn(f64) -> String sync) -> String? sync {
+    match value {
+        BuildValue::Int(n) => return integer_text(n),
+        BuildValue::Float(n) => {
+            if n.is_finite() {
+                return float_text(n)
+            }
+            return null
+        },
+        BuildValue::Bool(yes) => {
+            if yes {
+                return "true"
+            }
+            return "false"
+        },
+        BuildValue::Text(text) => return f"\"{as_a_literal(text)}\"",
+        BuildValue::Tuple(_) => return null,
+        BuildValue::Variant { ty, variant, payload } => {
+            if payload.len() == 0 {
+                return f"{ty}::{variant}"
+            }
+            let mut written: Vec[String] = []
+            for held in payload {
+                let text = rust_value(held, float_text) ?? return null
+                written.push(text)
+            }
+            return f"{ty}::{variant}({written.join(", ")})"
+        },
+        BuildValue::Struct { name, fields } => {
+            let mut written: Vec[String] = []
+            for (field, held) in fields {
+                let text = rust_value(held, float_text) ?? return null
+                written.push(f"{field}: {text}")
+            }
+            return f"{name} {{ {written.join(", ")} }}"
+        },
+        // **Inside a struct a list is spelled and nothing more**: the field's
+        // declared type carries the `[T; N]`.
+        BuildValue::List(items) => {
+            let mut written: Vec[String] = []
+            for held in items {
+                let text = rust_value(held, float_text) ?? return null
+                written.push(text)
+            }
+            return f"[{written.join(", ")}]"
+        },
+        // **The ledger's constructor over the parts** (ADR-318 D5).
+        BuildValue::Constant { constructor, parts } => {
+            let mut written: Vec[String] = []
+            for held in parts {
+                let text = rust_value(held, float_text) ?? return null
+                written.push(text)
+            }
+            return f"{constructor}({written.join(", ")})"
+        },
+    }
+}
+
+/// **The Rust element type of a build-time array nothing declared a type for.**
+/// Every element has to agree (ADR-135 D1); an empty one says nothing, and the
+/// declaration has to. `[1, 3_000_000_000]` is an `i64` array, not a mixed one.
+pub fn rust_array_type(items: ref Vec[BuildValue]) -> String? sync {
+    let mut found: String = ""
+    let mut seen = false
+    for item in items {
+        let ty: String = match item {
+            BuildValue::Bool(_) => "bool",
+            BuildValue::Int(n) => if integer_fits(n, "i32") { "i32" } else { "i64" },
+            // **A float is an `f64` where nothing declared otherwise.**
+            BuildValue::Float(_) => "f64",
+            // **Text is a view where it crosses** (ADR-311 D1).
+            BuildValue::Text(_) => "&str",
+            BuildValue::Struct { name, .. } => name.clone(),
+            BuildValue::Variant { ty, .. } => ty.clone(),
+            // **An array of arrays is `[[T; M]; N]`**, and the inner lengths
+            // have to agree: a length is part of the type (ADR-152 D4).
+            BuildValue::List(inner) => {
+                let held = rust_array_type(inner) ?? return null
+                f"[{held}; {inner.len()}]"
+            },
+            BuildValue::Tuple(_) => return null,
+            // **A `std` type's constructor names it** (ADR-318 D5).
+            BuildValue::Constant { constructor, .. } => constructed(constructor) ?? return null,
+        }
+        if !seen {
+            found = ty
+            seen = true
+        } else if found != ty {
+            found = "i64".clone()
+        }
+    }
+    if !seen {
+        return null
+    }
+    return found
+}
+
+/// What `crosses_as_fixed` says (ADR-311 D1): the value crosses as the fixed
+/// type its declaration names, the reader was told what is wrong, nothing
+/// computed it so the declaration is not what is wrong, or it is not this
+/// crossing at all.
+pub enum CheckCrossing {
+    Fits,
+    Said,
+    Unanswered,
+    Other,
+}
+
+/// What was computed: 0 nothing, 1 a list, 2 text, 3 anything else.
+fn computed_kind(evaluated: ref BuildValue?) -> i64 {
+    if evaluated == null {
+        return 0
+    }
+    let value = evaluated ?? return 0
+    return match value {
+        BuildValue::List(_) => 1,
+        BuildValue::Text(_) => 2,
+        else => 3,
+    }
+}
+
+/// The length of a computed list.
+fn computed_length(evaluated: ref BuildValue?) -> i64 {
+    if evaluated == null {
+        return 0
+    }
+    let value = evaluated ?? return 0
+    return match value {
+        BuildValue::List(items) => items.len(),
+        else => 0,
+    }
+}
+
+/// A growable list of this language, by either spelling.
+fn a_growable_list(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Named { name, .. } => name == "Vec" || name == "List",
+        else => false,
+    }
+}
+
+/// What a list holds; `?` where nothing says, which fits everything
+/// (ADR-024 D1).
+fn list_element(ty: ref Ty) -> Ty {
+    return match ty {
+        Ty::Named { args, .. } => if args.len() > 0 { args[0].clone() } else { Ty::Unknown },
+        else => Ty::Unknown,
+    }
+}
+
+/// The arguments of a named type.
+fn type_arguments(ty: ref Ty) -> Vec[Ty] {
+    return match ty {
+        Ty::Named { args, .. } => args.clone(),
+        else => [],
+    }
+}
+
+/// Whether a list's element is a pair of a table's key and value; a `?` is.
+fn a_pair_of(held: ref Ty, key: ref Ty, value: ref Ty) -> bool {
+    return match held {
+        Ty::Unknown => true,
+        Ty::Tuple(parts) => parts.len() == 2 && parts[0].fits(key) && parts[1].fits(value),
+        else => false,
+    }
+}
+
+/// The length an `Array[T, N]` states.
+fn array_length(ty: ref Ty) -> i64? {
+    return match ty {
+        Ty::Count(n) => n,
+        else => null,
+    }
+}
+
+/// Whether a type is a view of text.
+fn a_view_of_text(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Named { name, args, view } => view && name == "str" && args.len() == 0,
+        else => false,
+    }
+}
+
+/// Whether a type is text of its own.
+fn text_of_its_own(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Named { name, view, .. } => !view && name == "String",
+        else => false,
+    }
+}
+
+impl CheckState {
+    /// **Whether a value this build computed crosses into the program as the
+    /// fixed type its declaration names** (ADR-311 D1, D8; ADR-179 D1). Only
+    /// for a value that evaluated: one nothing computed has no length, and
+    /// `NK1166` says the rest. A list the wrong length is `NK1157`.
+    pub fn crosses_as_fixed(ref mut self, found: ref Ty, want: ref Ty, evaluated: ref BuildValue?, span: ref Span) -> CheckCrossing sync {
+        let kind = computed_kind(evaluated)
+        // **A list of pairs crossing as a table** (ADR-311 D8).
+        if is_fixed(want) {
+            let args = type_arguments(want)
+            if !a_growable_list(found) || args.len() != 2 {
+                return CheckCrossing::Other
+            }
+            if !a_pair_of(list_element(found), args[0], args[1]) {
+                return CheckCrossing::Other
+            }
+            if kind == 1 {
+                return CheckCrossing::Fits
+            }
+            return CheckCrossing::Unanswered
+        }
+        // **A `&[T]` is D1's own view form**: the crossing without the length.
+        let element = slice_element(want)
+        if element != null {
+            if !a_growable_list(found) {
+                return CheckCrossing::Other
+            }
+            if !list_element(found).fits(element ?? Ty::Unknown) {
+                return CheckCrossing::Other
+            }
+            if kind == 1 {
+                return CheckCrossing::Fits
+            }
+            return CheckCrossing::Unanswered
+        }
+        // **Text is the other half of D1**: a `String` arrives as a `&str`.
+        if a_view_of_text(want) && text_of_its_own(found) {
+            if kind == 2 {
+                return CheckCrossing::Fits
+            }
+            return CheckCrossing::Unanswered
+        }
+        let args = match want {
+            Ty::Named { name, args, view } => if !view && name == ARRAY { args.clone() } else { return CheckCrossing::Other },
+            else => return CheckCrossing::Other,
+        }
+        if args.len() != 2 {
+            return CheckCrossing::Other
+        }
+        let count = array_length(args[1]) ?? return CheckCrossing::Other
+        if !a_growable_list(found) {
+            return CheckCrossing::Other
+        }
+        // **Nothing computed it, so the declaration is not what is wrong.**
+        if kind != 1 {
+            return CheckCrossing::Unanswered
+        }
+        // **The length is asked first, and of the computed value.**
+        let length = computed_length(evaluated)
+        if length != count {
+            self.findings.push(a_list_the_wrong_length_for_its_array(length, count, span, true))
+            return CheckCrossing::Said
+        }
+        if !list_element(found).fits(args[0]) {
+            return CheckCrossing::Other
+        }
+        return CheckCrossing::Fits
+    }
+}
+
+/// What `a_table_that_crosses` made: the type and the `Fixed::new(…)` of a
+/// table, or nothing, and whether the reader was told what is wrong.
+pub struct CheckTable {
+    pub found: bool,
+    pub below: String,
+    pub written: String,
+    pub said: bool,
+}
+
+fn no_table(said: bool) -> CheckTable {
+    return CheckTable { found: false, below: "", written: "", said: said }
+}
+
+/// The text a computed value is, where it is text.
+fn text_of_value(value: ref BuildValue) -> String? {
+    return match value {
+        BuildValue::Text(text) => text.clone(),
+        else => null,
+    }
+}
+
+/// Whether a table's key type is a view of text.
+fn a_str_view_key(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Named { name, view, .. } => view && name == "str",
+        else => false,
+    }
+}
+
+/// The type a declared field has, where there is a declaration with it.
+fn const_field_type(declared: ref Vec[FieldContract]?, field: ref String) -> Ty? {
+    let list = declared ?? return null
+    for each in list {
+        if each.name == field {
+            return each.ty.clone()
+        }
+    }
+    return null
+}
+
+/// The type at a position, where there is one.
+fn nth_type(declared: ref Vec[Ty], at: i64) -> Ty? {
+    if at < declared.len() {
+        return declared[at].clone()
+    }
+    return null
+}
+
+/// **What one variant declares it carries, where a `const` cannot hold
+/// it**, as the variant and the type: nothing when it can. `payloads` reads
+/// the item tree, which is the host's, because a variant's payload is not a
+/// column of a ledger.
+fn unwritable_payload(state: ref CheckState, world: ref CheckWorld, ty: ref String, variant: ref String, payloads: fn(ref String, ref String) -> Vec[Ty]? sync) -> Vec[String] sync {
+    let carried = payloads(ty, variant) ?? return []
+    for held in carried {
+        if rust_constant_type(world.library, held) == null && state.declared_below(world, held) == null {
+            return [f"{ty}::{variant}", held.text()]
+        }
+    }
+    return []
+}
+
+/// **A field or a payload a `const` cannot hold**, anywhere in a computed
+/// value (`NK1127`): the struct or variant and the type; empty when there is
+/// none. A pair is what a table's rows are (ADR-311 D8, D13).
+pub fn unwritable_in(state: ref CheckState, world: ref CheckWorld, value: ref BuildValue, payloads: fn(ref String, ref String) -> Vec[Ty]? sync) -> Vec[String] sync {
+    match value {
+        BuildValue::Struct { name, fields } => {
+            let own = state.unwritable_field(world, Ty::Named { name: name.clone(), args: [], view: false })
+            if own.len() > 0 {
+                return own
+            }
+            for (_, held) in fields {
+                let inner = unwritable_in(state, world, held, payloads)
+                if inner.len() > 0 {
+                    return inner
+                }
+            }
+            return []
+        },
+        BuildValue::Variant { ty, variant, payload } => {
+            let own = unwritable_payload(state, world, ty, variant, payloads)
+            if own.len() > 0 {
+                return own
+            }
+            for held in payload {
+                let inner = unwritable_in(state, world, held, payloads)
+                if inner.len() > 0 {
+                    return inner
+                }
+            }
+            return []
+        },
+        BuildValue::List(items) => {
+            for held in items {
+                let inner = unwritable_in(state, world, held, payloads)
+                if inner.len() > 0 {
+                    return inner
+                }
+            }
+            return []
+        },
+        BuildValue::Tuple(parts) => {
+            for held in parts {
+                let inner = unwritable_in(state, world, held, payloads)
+                if inner.len() > 0 {
+                    return inner
+                }
+            }
+            return []
+        },
+        else => return [],
+    }
+}
+
+/// **A computed value written against the type its declaration states**, so
+/// a `&[T]` inside a row gets its `&` (ADR-179 D2). Without a declaration it
+/// is `rust_value`.
+pub fn written_below(state: ref CheckState, world: ref CheckWorld, value: ref BuildValue, want: ref Ty?, payloads: fn(ref String, ref String) -> Vec[Ty]? sync, float_text: fn(f64) -> String sync) -> String? sync {
+    if want == null {
+        return rust_value(value, float_text)
+    }
+    let wanted: Ty = (want ?? Ty::Unknown).clone()
+    match value {
+        // **The one shape the declaration decides.** `slice_element` is
+        // `Some` only for a `&[T]`, so an `Array[T, N]` and a `Vec[T]` come
+        // out as `[…]`.
+        BuildValue::List(items) => {
+            let mut held: Ty = element_of(wanted)
+            let mut borrow: String = ""
+            let slice = slice_element(wanted)
+            if slice != null {
+                held = (slice ?? Ty::Unknown).clone()
+                borrow = "&"
+            }
+            let some_held: Ty? = held.clone()
+            let mut written: Vec[String] = []
+            for item in items {
+                let text = written_below(state, world, item, some_held, payloads, float_text) ?? return null
+                written.push(text)
+            }
+            return f"{borrow}[{written.join(", ")}]"
+        },
+        BuildValue::Struct { name, fields } => {
+            let declared = state.fields_of(world, name)
+            let mut written: Vec[String] = []
+            for (field, held) in fields {
+                let field_want = const_field_type(declared, field)
+                let text = written_below(state, world, held, field_want, payloads, float_text) ?? return null
+                written.push(f"{field}: {text}")
+            }
+            return f"{name} {{ {written.join(", ")} }}"
+        },
+        BuildValue::Variant { ty, variant, payload } => {
+            if payload.len() == 0 {
+                return f"{ty}::{variant}"
+            }
+            let declared = payloads(ty, variant) ?? []
+            let mut written: Vec[String] = []
+            let mut at = 0
+            for held in payload {
+                let part_want = nth_type(declared, at)
+                let text = written_below(state, world, held, part_want, payloads, float_text) ?? return null
+                written.push(text)
+                at = at + 1
+            }
+            return f"{ty}::{variant}({written.join(", ")})"
+        },
+        else => return rust_value(value, float_text),
+    }
+}
+
+
+impl CheckState {
+    /// **A table a `comptime` map crosses as** (ADR-311 D4, D5, D8-D10): its
+    /// type and its `Fixed::new(…)`. Text keys, and the rest by name; a number
+    /// wants a dense array, which is a different table. A duplicate key is
+    /// refused at the build.
+    pub fn a_table_that_crosses(ref mut self, world: ref CheckWorld, bound: ref String, want: ref Ty, pairs: ref Vec[BuildValue], span: ref Span, payloads: fn(ref String, ref String) -> Vec[Ty]? sync, float_text: fn(f64) -> String sync) -> CheckTable sync {
+        let args = type_arguments(want)
+        if args.len() != 2 {
+            return no_table(false)
+        }
+        if !a_str_view_key(args[0]) {
+            self.a_table_key_that_is_not_text(bound, args[0].text(), span)
+            return no_table(true)
+        }
+        let held: Ty = args[1].clone()
+        let mut value_below: String = ""
+        let mut borrow: String = ""
+        let constant = rust_constant_type(world.library, held)
+        if constant != null {
+            value_below = (constant ?? "").clone()
+        } else {
+            // **A `struct` or an `enum` this program declares is held as a
+            // view of one** (ADR-311 D1): `Fixed::get` hands back a value, and
+            // a reference to a row is `Copy` where the row is not.
+            let declared = self.declared_below(world, held) ?? return no_table(false)
+            value_below = f"&'static {declared}"
+            borrow = "&"
+        }
+        let some_held: Ty? = held.clone()
+        let mut keys: Vec[String] = []
+        let mut values: Vec[String] = []
+        let mut seen: collections::BTreeMap[String, i64] = collections::BTreeMap()
+        let mut at = 0
+        for pair in pairs {
+            let parts: Vec[BuildValue] = match pair {
+                BuildValue::Tuple(inner) => inner.clone(),
+                else => return no_table(false),
+            }
+            if parts.len() != 2 {
+                return no_table(false)
+            }
+            let key = text_of_value(parts[0]) ?? return no_table(false)
+            // **A duplicate is refused at the build** (D4).
+            if seen.contains_key(key) {
+                let first = seen[key] ?? 0
+                self.a_table_with_one_key_twice(bound, key, first, at, span)
+                return no_table(true)
+            }
+            seen.insert(key.clone(), at)
+            keys.push(key.clone())
+            let text = written_below(self, world, parts[1], some_held, payloads, float_text) ?? return no_table(false)
+            values.push(f"{borrow}{text}")
+            at = at + 1
+        }
+        let table = build(keys) ?? return no_table(false)
+        let mut disps: Vec[String] = []
+        for (d1, d2) in table.disps {
+            disps.push(f"({d1}, {d2})")
+        }
+        let mut written_keys: Vec[String] = []
+        for key in table.keys {
+            written_keys.push(f"\"{as_a_literal(key)}\"")
+        }
+        // **In slot order**, which is the whole of what the table is.
+        let mut written_values: Vec[String] = []
+        for place in table.order {
+            written_values.push(values[place].clone())
+        }
+        return CheckTable { found: true, below: f"Fixed<{value_below}>", written: f"Fixed::new({table.seed}, &[{disps.join(", ")}], &[{written_keys.join(", ")}], &[{written_values.join(", ")}])", said: false }
+    }
+}

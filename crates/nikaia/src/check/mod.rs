@@ -40,7 +40,7 @@ use crate::fold::Constant;
 use crate::parser::Parsed;
 use crate::types::SHAPE_BOUNDS;
 use nikaia_std::tools::check_access::{dotted_path, names_the_argument, variants_named};
-use nikaia_std::tools::check_boundary::element_of;
+use nikaia_std::tools::check_consts::{self, CheckCrossing as Crossing};
 use nikaia_std::tools::check_literals::element_kind;
 use nikaia_std::tools::check_lookups::names_of;
 use nikaia_std::tools::check_names::{integer_named, is_a_literal as is_literal};
@@ -110,6 +110,38 @@ fn a_wall(why: &crate::grammar_run::Wall) -> CheckWall {
             detail: detail.clone(),
         },
     }
+}
+
+/// What one variant declares it carries, by position.
+fn payload_of(
+    parsed_here: &Parsed,
+    beside: &[&Parsed],
+    ty: &str,
+    variant: &str,
+) -> Option<Vec<Ty>> {
+    std::iter::once(parsed_here)
+        .chain(beside.iter().copied())
+        .find_map(|parsed| {
+            parsed
+                .program
+                .items
+                .iter()
+                .find_map(|item| match &item.node {
+                    Item::Enum { name, variants, .. } if parsed.text(*name) == ty => variants
+                        .iter()
+                        .find(|held| parsed.text(held.name) == variant)
+                        .map(|held| match &held.fields {
+                            ast::VariantFields::Unit => Vec::new(),
+                            ast::VariantFields::Tuple(types) => {
+                                types.iter().map(|t| Ty::from_ast(parsed, t)).collect()
+                            }
+                            ast::VariantFields::Named(fields) => {
+                                fields.iter().map(|f| Ty::from_ast(parsed, &f.ty)).collect()
+                            }
+                        }),
+                    _ => None,
+                })
+        })
 }
 
 /// How a lent `??` opens its option, as the emitter is told.
@@ -2413,127 +2445,10 @@ fn shape_member(bound: &str) -> Option<(&'static str, &'static str)> {
     }
 }
 
-/// The Rust element type of a build-time array nothing declared a type for.
-///
-/// **Every element has to agree**, which is the same rule
-/// [ADR-135](../../docs/specification/adr/adr-135.md) D1 gives a list literal
-/// one level up — and an empty one has nothing to read, so it says nothing and
-/// the declaration has to.
+/// The Rust element type of a build-time array nothing declared a type for
+/// (`tools/check_consts.nika`).
 fn rust_array_type(items: &[build_time::Value]) -> Option<String> {
-    let mut found: Option<String> = None;
-    for item in items {
-        let ty = match item {
-            build_time::Value::Bool(_) => "bool".to_string(),
-            build_time::Value::Int(value) => Constant::of(*value).first_type().to_string(),
-            // **A float is an `f64` where nothing declared otherwise**, which
-            // is Part I 2.4's widest-holder rule read over the one shape it
-            // has two of: `f32` is a *declaration*, never an inference.
-            build_time::Value::Float(_) => "f64".to_string(),
-            // **Text is a view where it crosses**
-            // ([ADR-311](../../docs/specification/adr/adr-311.md) D1), and an
-            // array of it is an array of views: `[&str; N]`, which a `const`
-            // holds for the same reason `const X: &str` is one.
-            build_time::Value::Text(_) => "&str".to_string(),
-            // **A struct is its own name below**, which is the same answer the
-            // single struct gets one shape in: a declaration the program wrote
-            // is a type the language below has, and what a `const` needs is the
-            // name. Whether the *fields* can be written is the declaration's
-            // question, and `unwritable_field` asks it.
-            build_time::Value::Struct { name, .. } => name.clone(),
-            // **A variant is its `enum`'s name below**, which is the struct's
-            // answer one shape over: the declaration is a type the language
-            // below has, and what a `const` needs is the name.
-            build_time::Value::Variant { ty, .. } => ty.clone(),
-            // **An array of arrays is `[[T; M]; N]`**, and the inner lengths
-            // have to agree — a length is part of the type
-            // ([ADR-152](../../docs/specification/adr/adr-152.md) D4), so a
-            // list of rows that are not the same length is not a list of one
-            // type and there is nothing to write. Refused by saying nothing,
-            // which reaches `NK1127`; the *value* is fine and it is the
-            // **crossing** that has no shape for it.
-            build_time::Value::List(inner) => {
-                let held = rust_array_type(inner)?;
-                format!("[{held}; {}]", inner.len())
-            }
-            // A tuple's `const` form is the pair it is, and the only place one
-            // stands is inside a `Fixed` — where the two halves are written
-            // into two tables rather than beside each other.
-            build_time::Value::Tuple(_) => return None,
-            // **A `std` type's constructor names it** (ADR-318 D5).
-            build_time::Value::Constant { constructor, .. } => constructed(constructor)?,
-        };
-        match &found {
-            // `[1, 3_000_000_000]` is an `i64` array and not a mixed one: the
-            // widest element decides, which is Part I 2.4's rule read over a
-            // list rather than over one literal.
-            Some(held) if held != &ty => found = Some("i64".to_string()),
-            Some(_) => {}
-            None => found = Some(ty),
-        }
-    }
-    found
-}
-
-/// A build-time value, spelled as Rust writes one — for the shapes a `const`
-/// can hold.
-///
-/// `None` where one of them cannot be written down, which is what sends the
-/// caller to `NK1127`: a field that is a `Vec` has no `const` form, and a
-/// struct is only as writable as its fields.
-fn rust_value(value: &build_time::Value) -> Option<String> {
-    match value {
-        build_time::Value::Int(n) => Some(nikaia_std::tools::integers::integer_text(n)),
-        build_time::Value::Float(n) => float_literal(*n),
-        build_time::Value::Bool(yes) => Some(yes.to_string()),
-        build_time::Value::Text(text) => Some(format!("\"{}\"", build_time::written(text))),
-        // A tuple has no `const` form of its own: the one place a pair stands
-        // is inside a `Fixed`, which writes its halves into two tables rather
-        // than beside each other (ADR-311 D9).
-        build_time::Value::Tuple(_) => None,
-        // `Shade::Odd`, and `Json::Number(1.5)` where it carries something —
-        // which is what a program writes, so it is what a `const` holds.
-        build_time::Value::Variant {
-            ty,
-            variant,
-            payload,
-        } => {
-            if payload.is_empty() {
-                return Some(format!("{ty}::{variant}"));
-            }
-            let mut written = Vec::with_capacity(payload.len());
-            for held in payload {
-                written.push(rust_value(held)?);
-            }
-            Some(format!("{ty}::{variant}({})", written.join(", ")))
-        }
-        build_time::Value::Struct { name, fields } => {
-            let mut written = Vec::with_capacity(fields.len());
-            for (field, held) in fields {
-                written.push(format!("{field}: {}", rust_value(held)?));
-            }
-            Some(format!("{name} {{ {} }}", written.join(", ")))
-        }
-        // **Inside a struct a list is spelled and nothing more**: the field's
-        // declared type carries the `[T; N]`, so `[1, 2, 3]` is what Rust
-        // wants there. Whether the field *may* be a list at all is the
-        // declaration's question and `unwritable_field` asks it.
-        build_time::Value::List(items) => {
-            let mut written = Vec::with_capacity(items.len());
-            for held in items {
-                written.push(rust_value(held)?);
-            }
-            Some(format!("[{}]", written.join(", ")))
-        }
-        // **The ledger's constructor over the parts** (ADR-318 D5):
-        // `time::Duration::new(30, 0)`, a `const fn` below.
-        build_time::Value::Constant { constructor, parts } => {
-            let mut written = Vec::with_capacity(parts.len());
-            for held in parts {
-                written.push(rust_value(held)?);
-            }
-            Some(format!("{constructor}({})", written.join(", ")))
-        }
-    }
+    nikaia_std::tools::check_consts::rust_array_type(items)
 }
 
 /// **A number no annotation typed**
@@ -4392,15 +4307,8 @@ impl<'a> Checker<'a> {
         self.checked.lent_args.insert(value_node(given));
     }
 
-    /// **Owned text assigned to a `let mut` that began as a literal**
-    /// (0.0.232): `NK1105` with the way out that exists.
-    ///
-    /// The binding is a view because a literal is one, and `s + "…"` or an
-    /// f-string assigned to it later makes it text of its own without a word
-    /// ([`grown_text`]). A bare name assigned is not read that way, since it may
-    /// be a view, so here the program has to say it - and the generic help,
-    /// *write `ref` in front of it*, sent the reader to take a view of a value
-    /// that is about to be dropped.
+    /// `NK1105` for text of its own given to a name bound to a literal
+    /// (`tools/check_exprs.nika`).
     fn owned_text_into_a_literal_binding(
         &mut self,
         target: &Expr,
@@ -4408,35 +4316,8 @@ impl<'a> Checker<'a> {
         into: &Ty,
         span: &Span,
     ) -> bool {
-        let Expr::Variable(name, _) = target else {
-            return false;
-        };
-        let name = self.parsed.text(*name).to_string();
-        let Some(literal) = self.s.binding(&name).and_then(|l| l.literal.clone()) else {
-            return false;
-        };
-        if *found != Ty::named("String") || !into.is_a_view() {
-            return false;
-        }
-        self.s.findings.push(Finding {
-            severity: Severity::Error,
-            span: *span,
-            code: "NK1105".to_string(),
-            message: format!(
-                "You're giving `{name}` text of its own, but it started as a literal, so it \
-                 can only hold a view of text."
-            ),
-            notes: vec![
-                "A literal is text built into the program. A name bound to one is a view of \
-                 that text, so everything it's given later has to be a view too."
-                    .to_string(),
-            ],
-            help: Some(format!(
-                "Declare it as text of its own: `let mut {name}: String = \"{literal}\"`."
-            )),
-            labels: Vec::new(),
-        });
-        true
+        self.s
+            .owned_text_into_a_literal_binding(&self.world, target, found, into, span)
     }
 
     /// **`NK1191`: an arithmetic operator on something that has none**
@@ -7722,83 +7603,10 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// **`NK1215`: a computation whose result depends on the width, in a
-    /// narrower type than the place states** (ADR-285 D32): `let t: i64 = a <<
-    /// 3` over a `u32`. Widening before and after are two different numbers, so
-    /// the program says which. Whether `value` was one, and so refused.
+    /// `NK1215` for a bit operation computed in a narrower type
+    /// (`tools/check_exprs.nika`).
     fn narrow_by_width(&mut self, value: &Expr, into: &'static str, span: &Span) -> bool {
-        let whole = written(self.parsed, value);
-        let (what, before) = match value {
-            Expr::Binary {
-                op:
-                    op @ (BinaryOp::BitAnd
-                    | BinaryOp::BitOr
-                    | BinaryOp::BitXor
-                    | BinaryOp::Shl
-                    | BinaryOp::Shr),
-                lhs,
-                rhs,
-                ..
-            } => {
-                let sign = match op {
-                    BinaryOp::BitAnd => "&",
-                    BinaryOp::BitOr => "|",
-                    BinaryOp::BitXor => "^",
-                    BinaryOp::Shl => "<<",
-                    _ => ">>",
-                };
-                let rhs = match op {
-                    BinaryOp::Shl | BinaryOp::Shr => written(self.parsed, rhs),
-                    _ => format!("({} as {into})", written(self.parsed, rhs)),
-                };
-                (
-                    format!("`{sign}`"),
-                    format!("({} as {into}) {sign} {rhs}", written(self.parsed, lhs)),
-                )
-            }
-            Expr::Unary {
-                op: UnaryOp::Not,
-                expr,
-                ..
-            } => (
-                "`!`".to_string(),
-                format!("!({} as {into})", written(self.parsed, expr)),
-            ),
-            Expr::MethodCall {
-                receiver, method, ..
-            } => {
-                let name = self.parsed.text(*method);
-                if !["wrapping_", "saturating_", "truncating_"]
-                    .iter()
-                    .any(|p| name.starts_with(p))
-                {
-                    return false;
-                }
-                (
-                    format!("`{name}`"),
-                    format!("({} as {into}).{name}(…)", written(self.parsed, receiver)),
-                )
-            }
-            _ => return false,
-        };
-        self.s.findings.push(Finding {
-            severity: Severity::Error,
-            span: *span,
-            code: "NK1215".to_string(),
-            message: format!(
-                "This {what} is computed in a narrower type than the `{into}` it is put into."
-            ),
-            notes: vec![format!(
-                "The result of {what} depends on the width, so widening before it and \
-                 after it give different numbers."
-            )],
-            help: Some(format!(
-                "Say which: `{before}` computes in `{into}`, `({whole}) as {into}` computes \
-                 first and widens the result."
-            )),
-            labels: Vec::new(),
-        });
-        true
+        self.s.narrow_by_width(&self.world, value, into, span)
     }
 
     /// One operand of [`Checker::widen_operands`].
@@ -12761,13 +12569,7 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// **`NK1197`: a bit operator written beside a comparison without
-    /// parentheses** ([ADR-285](../../docs/specification/adr/adr-285.md) D10).
-    ///
-    /// This language binds `&` tighter than `==`, so `a & mask == 0` is
-    /// `(a & mask) == 0` - and C binds it the other way, so a reader who learned
-    /// C reads the line as something else. The parenthesis ends the question for
-    /// both, and the message hands it over.
+    /// `NK1197` (`tools/check_exprs.nika`).
     fn a_bit_operation_beside_a_comparison(
         &mut self,
         op: BinaryOp,
@@ -12775,35 +12577,8 @@ impl<'a> Checker<'a> {
         rhs: &Expr,
         at: &Span,
     ) {
-        let bare = |side: &Expr| matches!(side, Expr::Binary { op, grouped: false, .. } if op.is_bitwise());
-        if !bare(lhs) && !bare(rhs) {
-            return;
-        }
-        let side = |e: &Expr| match bare(e) {
-            true => format!("({})", written(self.parsed, e)),
-            false => written(self.parsed, e),
-        };
-        let compared = match op {
-            BinaryOp::Eq => "==",
-            BinaryOp::Ne => "!=",
-            BinaryOp::Lt => "<",
-            BinaryOp::Le => "<=",
-            BinaryOp::Gt => ">",
-            _ => ">=",
-        };
-        self.s.findings.push(Finding {
-            severity: Severity::Error,
-            span: *at,
-            code: "NK1197".to_string(),
-            message: "Put parentheses around a bit operation next to a comparison.".to_string(),
-            notes: vec![
-                "Nikaia binds `&`, `|`, `^` and the shifts tighter than a comparison, and \
-                 C binds them looser, so without parentheses the line can be read two ways."
-                    .to_string(),
-            ],
-            help: Some(format!("Write `{} {compared} {}`.", side(lhs), side(rhs))),
-            labels: Vec::new(),
-        });
+        self.s
+            .a_bit_operation_beside_a_comparison(&self.world, op, lhs, rhs, at);
     }
 
     /// **A type variable two integer types are handed to** (ADR-285 D32):
@@ -13197,13 +12972,7 @@ impl<'a> Checker<'a> {
         });
     }
 
-    /// **`NK1185` for a map's value that is not text** (0.0.246): `m[k] ?? []`
-    /// reads the list the map holds - a view of it, since the map keeps it -
-    /// and the fallback builds a list of its own, and `??` hands back one of
-    /// the two. `rustc` said *the trait bound `&Vec<i64>: From<Vec<_>>` is not
-    /// satisfied* about a file nobody wrote. Text has its own answer above (a
-    /// literal is a view already); a list, a map or a struct has none, so the
-    /// way out is the copy, written where it is wanted.
+    /// `NK1185` (`tools/check_exprs.nika`).
     fn a_fallback_beside_what_a_map_holds(
         &mut self,
         read: &Expr,
@@ -13211,41 +12980,8 @@ impl<'a> Checker<'a> {
         fallback: &Ty,
         span: &Span,
     ) {
-        // A fallback of no known type claims nothing (Part III C.4), and that
-        // is also every one that leaves: `m[k] ?? panic(…)`, `?? return`.
-        if held.is_a_view()
-            || fallback.is_a_view()
-            || fallback.is_unknown()
-            || *held == Ty::named(crate::contracts::ty::TEXT)
-            || !matches!(held, Ty::Named { .. })
-            || !crate::contracts::keeps::moves(held)
-            // **A type of the package that copies** is read out of the map as
-            // a number is (`collect_copies`).
-            || matches!(held, Ty::Named { name, .. } if self.s.copies_in_the_package.contains(name))
-        {
-            return;
-        }
-        let written = written(self.parsed, read);
-        self.s.findings.push(Finding {
-            severity: Severity::Error,
-            span: *span,
-            code: "NK1185".to_string(),
-            message: format!(
-                "The two sides of `??` don't match: the left is a view of the `{held}` in the \
-                 map, the fallback a value of its own."
-            ),
-            notes: vec![
-                "The map keeps its values, so reading one gives a view of it, and `??` has \
-                 to give back one type."
-                    .to_string(),
-                "Nikaia never makes a copy behind your back.".to_string(),
-            ],
-            help: Some(format!(
-                "Copy the map's value when you need a `{held}` of your own: \
-                 `{written}?.clone() ?? …`."
-            )),
-            labels: Vec::new(),
-        });
+        self.s
+            .a_fallback_beside_what_a_map_holds(&self.world, read, held, fallback, span);
     }
 
     /// `NK1184` for an escape in a literal that nothing names
@@ -13497,63 +13233,10 @@ impl<'a> Checker<'a> {
         true
     }
 
-    /// **`NK1201`: a list, a map or a set in an `f"…"` hole.**
-    ///
-    /// A hole is written as its value's text, which the emitter asks the
-    /// language below for with `{}`, its `Display` - and a `Vec`, a `HashMap`
-    /// and a `HashSet` have none, so `f"Reading: {data}"` over `[1, 2, 3]`
-    /// lowered and `rustc` said *`Vec<i64>` doesn't implement
-    /// `std::fmt::Display`* (E0277) about a file nobody wrote
-    /// ([Part III C.1](../../docs/specification/30-nikaia-tooling.md)).
-    ///
-    /// **The specification gives a collection no text form.** Part I 2.5 says
-    /// a hole holds an expression and that what follows its `:` says *how* to
-    /// write the value, and names no way a list is written; ADR-309 and
-    /// ADR-309 are about which literals have holes and say nothing about what
-    /// they may hold. So this refuses rather than inventing a form, and the
-    /// help is the way out that exists: the elements joined into text first
-    /// (`Seq::join`).
-    ///
-    /// Only where the hole's type is **known** to be a collection (C.4), and
-    /// only a hole that does not say how to write itself: a `:` written in a
-    /// hole is handed to the language below as it stands, and one with a `?` in
-    /// it asks for a form every collection there has.
+    /// `NK1201` (`tools/check_exprs.nika`).
     fn a_collection_in_a_hole(&mut self, hole: &Expr, held: &Ty, spec: Option<&str>, span: &Span) {
-        if !is_a_collection(held) || spec.is_some_and(|spec| spec.contains('?')) {
-            return;
-        }
-        let written = written(self.parsed, hole);
-        let (what, help) = match is_a_list(held) {
-            true => (
-                "a list".to_string(),
-                format!(
-                    "Join its elements into text first: `let text = {}.iter().join(\", \")`, \
-                     then write `{{text}}`.",
-                    match hole {
-                        Expr::Variable(_, _) | Expr::Field { .. } => written.clone(),
-                        _ => format!("({written})"),
-                    }
-                ),
-            ),
-            false => (
-                format!("`{held}`"),
-                "Write the parts you want in holes of their own, or build the text in a \
-                 loop first."
-                    .to_string(),
-            ),
-        };
-        self.s.findings.push(Finding {
-            severity: Severity::Error,
-            span: *span,
-            code: "NK1201".to_string(),
-            message: format!("You can't put {what} in an `f\"…\"` hole."),
-            notes: vec![format!(
-                "A hole is written as its value's text, and lists, maps and sets have no \
-                 text form. `{written}` is {what}."
-            )],
-            help: Some(help),
-            labels: Vec::new(),
-        });
+        self.s
+            .a_collection_in_a_hole(&self.world, hole, held, spec, span);
     }
 
     /// `f(a, b)`, `Stats(first)`, `io::read_to_string()`, `write(p, d; append: true)`.
@@ -14935,26 +14618,6 @@ impl<'a> Checker<'a> {
             })
     }
 
-    /// **Why a view of text needs `.to_owned()` here, said for the case it is**
-    /// ([ADR-282](../../docs/specification/adr/adr-282.md) D25).
-    ///
-    /// A language that hides ownership owes the reader the reason at the one
-    /// place it does not: otherwise the question is *the compiler knows exactly
-    /// what to write, so why is it asking me?* Three answers, because there
-    /// are three situations and one sentence for all of them fits none:
-    ///
-    /// * **a name bound to a literal** — the compiler *would* build the literal
-    ///   into a `String` written here, and says so, with the two ways to write
-    ///   it that need nothing;
-    /// * **a parameter declared `ref String`** — the text is the caller's, and
-    ///   the better answer is usually to let the caller hand it over;
-    /// * **any other view** — it points into something that stays where it is.
-    ///
-    /// And the reason itself, once: a copy costs as much as the text is long,
-    /// and one the compiler made on its own would happen on every run with no
-    /// line in the program to show for it ([ADR-005](../../docs/specification/adr/adr-005.md) §3).
-    ///
-    /// `None` where this is not that case, and the caller keeps its own words.
     fn a_view_kept(
         &self,
         found: &Ty,
@@ -14962,68 +14625,12 @@ impl<'a> Checker<'a> {
         value: Option<&Expr>,
         keeper: &str,
     ) -> Option<(Vec<String>, String)> {
-        if *found != Ty::view("str") || *want != Ty::named("String") {
-            return None;
-        }
-        let cost = "Nikaia never copies text behind your back: a copy costs as much as the \
-                    text is long, so it's written where it happens."
-            .to_string();
-        let keeper = sentence(keeper);
         let named = match value {
-            Some(Expr::Variable(name, _)) => Some(self.parsed.text(*name).to_string()),
+            Some(Expr::Variable(name, _)) => Some(self.parsed.text(*name)),
             _ => None,
         };
-        let binding = named.as_deref().and_then(|name| self.s.binding(name));
-        if let (Some(name), Some(literal)) =
-            (&named, binding.as_ref().and_then(|b| b.literal.clone()))
-        {
-            return Some((
-                vec![
-                    format!(
-                        "`{name}` was bound to the literal \"{literal}\", so it's a view of that \
-                         text."
-                    ),
-                    format!(
-                        "{keeper}, so it needs text of its own. Written directly here, the \
-                         literal would become text of its own; through the name it can't, \
-                         because that would change how `{name}` was declared above."
-                    ),
-                ],
-                format!(
-                    "Write \"{literal}\" here directly, or declare \
-                     `let {name}: String = \"{literal}\"`."
-                ),
-            ));
-        }
-        let parameter = binding.is_some_and(|b| {
-            b.immutable
-                .as_ref()
-                .is_some_and(|i| i.kind == Kind::Parameter)
-        });
-        if let (Some(name), true) = (&named, parameter) {
-            return Some((
-                vec![
-                    format!(
-                        "`{name}` is declared `ref String`, so the text belongs to the caller, \
-                         who still has it."
-                    ),
-                    format!("{keeper}, so it needs text of its own."),
-                    cost,
-                ],
-                format!(
-                    "Declare `{name}: String` so the caller hands its text over, or write \
-                     `{name}.clone()` to copy it here."
-                ),
-            ));
-        }
-        Some((
-            vec![
-                "This is a view: it points into text that something else owns.".to_string(),
-                format!("{keeper}, so it needs text of its own."),
-                cost,
-            ],
-            "Write `.clone()` to copy it here.".to_string(),
-        ))
+        let kept = self.s.a_view_kept(found, want, named, keeper)?;
+        Some((kept.notes, kept.help))
     }
 
     /// **The integer type a use asks of a call on a number written as its
@@ -15187,25 +14794,9 @@ impl<'a> Checker<'a> {
         }
     }
 
+    /// `NK1108` for a condition that is not a `bool` (`tools/check_exprs.nika`).
     fn expect_bool(&mut self, found: &Ty, span: &Span, why: &str) {
-        let bool_ty = Ty::named("bool");
-        if found.fits(&bool_ty) {
-            return;
-        }
-        self.s.findings.push(Finding {
-            severity: Severity::Error,
-            span: *span,
-            code: "NK1108".to_string(),
-            message: format!(
-                "A condition has to be `true` or `false`, but this is `{}`.",
-                found.text()
-            ),
-            notes: vec![why.to_string()],
-            help: Some(
-                "Compare it to get a `bool`: `x != 0`, `text != \"\"`, `xs.len() > 0`.".to_string(),
-            ),
-            labels: Vec::new(),
-        });
+        self.s.expect_bool(found, span, why);
     }
 
     /// A written call to something that can fail (`NK2605`).
@@ -17221,35 +16812,9 @@ impl<'a> Checker<'a> {
         });
     }
 
-    /// **`NK1206`: a `for` over a `T?`**. `for word in pick(1)` for a `pick`
-    /// that hands back a `Vec[String]?` was checked as a walk over the list's
-    /// elements and lowered as a walk over the option - once, with the whole
-    /// list as `word` - so `word.len()` counted the list and the program
-    /// printed a number nobody asked for, with nothing refused anywhere. A
-    /// map read is a `T?` too (Part I 4.5), so `for x in m[k]` was the same.
-    /// The way out is to say what `null` loops over.
+    /// `NK1206` (`tools/check_exprs.nika`).
     fn a_loop_over_a_nullable(&mut self, over: &Ty, iter: &Expr, span: &Span) {
-        let Ty::Nullable(inner) = over else {
-            return;
-        };
-        let written = written(self.parsed, iter);
-        self.s.findings.push(Finding {
-            severity: Severity::Error,
-            span: *span,
-            code: "NK1206".to_string(),
-            message: format!("`{written}` may be `null`, so a `for` can't walk it directly."),
-            notes: vec![format!(
-                "`{written}` is a `{}`: a `{}` or nothing, and a `for` walks a list, not \
-                 the maybe of one.",
-                over.text(),
-                inner.text()
-            )],
-            help: Some(format!(
-                "Say what `null` walks first: `for … in {written} ?? [] {{ … }}`, or check \
-                 it for `null` before the loop."
-            )),
-            labels: Vec::new(),
-        });
+        self.s.a_loop_over_a_nullable(&self.world, over, iter, span);
     }
 
     fn a_match_that_misses_a_case(&mut self, on: &Ty, arms: &[ast::MatchArm], span: &Span) {
@@ -17727,19 +17292,8 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// **A list of pairs, crossing as a table**
-    /// ([ADR-311](../../docs/specification/adr/adr-311.md) D9).
-    ///
-    /// Hands back the two halves the `const` needs — `Fixed<i64>` and a
-    /// `Fixed::new(…)` — or `None`. The whole table fits in one expression
-    /// because a `const` promotes an array literal to `'static`, so the emitter
-    /// writes nothing it would not have written for an integer.
-    ///
-    /// The second half of the pair is **whether a refusal was already
-    /// reported**, the same handover `build_time_value` makes: a duplicate key
-    /// is `NK1169` and a key that is not text is `NK1170`, and neither wants
-    /// `NK1127` after it saying the compiler cannot evaluate what it just read
-    /// well enough to name the mistake in.
+    /// The table a `comptime` map crosses as, and whether the reader was told
+    /// what is wrong (`tools/check_consts.nika`).
     fn a_table_that_crosses(
         &mut self,
         bound: &str,
@@ -17747,108 +17301,20 @@ impl<'a> Checker<'a> {
         pairs: &[build_time::Value],
         span: &Span,
     ) -> (Option<(String, String)>, bool) {
-        let Ty::Named { args, .. } = want else {
-            return (None, false);
-        };
-        // **Text keys, and the rest by name** (D5). A number wants a dense
-        // array, which is a different table and a different measurement.
-        let (held, value_below, borrow) = match args.as_slice() {
-            [
-                Ty::Named {
-                    name, view: true, ..
-                },
-                value,
-            ] if name == "str" => {
-                match rust_constant_type(self.world.library, value) {
-                    Some(below) => (value, below, ""),
-                    // **A `struct` or an `enum` this program declares is held
-                    // as a *view* of one** ([ADR-311](../../docs/specification/adr/adr-311.md)
-                    // D1). `Fixed::get` hands back a **value**, which is what
-                    // the ledger promises and what `ROUTES.get(k) ?? 0` means,
-                    // and it needs that value to be `Copy` — 0.0.118's own
-                    // correction, made because `Option<&V>` put a `&&str` in
-                    // the generated file and `??` over one is ambiguous.
-                    //
-                    // A Nikaia `struct` is not `Copy` and **a reference to one
-                    // is**, so the table holds `&'static Row` and nothing about
-                    // `get` changes. What the program reads is a view of the
-                    // row, which is what a `const` of a table could ever have
-                    // handed it.
-                    None => match self.s.declared_below(&self.world, value) {
-                        Some(below) => (value, format!("&'static {below}"), "&"),
-                        None => return (None, false),
-                    },
-                }
-            }
-            [key, _] => {
-                let key = key.text();
-                self.s.a_table_key_that_is_not_text(bound, &key, span);
-                return (None, true);
-            }
-            _ => return (None, false),
-        };
-
-        let mut keys: Vec<String> = Vec::with_capacity(pairs.len());
-        let mut values: Vec<String> = Vec::with_capacity(pairs.len());
-        let mut seen: BTreeMap<String, usize> = BTreeMap::new();
-        for (at, pair) in pairs.iter().enumerate() {
-            let build_time::Value::Tuple(parts) = pair else {
-                return (None, false);
-            };
-            let [build_time::Value::Text(key), value] = parts.as_slice() else {
-                return (None, false);
-            };
-            // **A duplicate is refused at the build** (D4): there is no meaning
-            // a compiler may pick between, and the whole of what a `comptime`
-            // buys is that the failure moves to the line that wrote it.
-            if let Some(first) = seen.insert(key.clone(), at) {
-                self.s
-                    .a_table_with_one_key_twice(bound, key, first as i64, at as i64, span);
-                return (None, true);
-            }
-            keys.push(key.clone());
-            // **Written against the declaration**, so a `&[T]` inside a row
-            // gets its `&` ([ADR-179](../../docs/specification/adr/adr-179.md)
-            // D2) - and the table's own `&` goes in front, where the value is
-            // a declared type.
-            let Some(value) = self.written_below(value, Some(held)) else {
-                return (None, false);
-            };
-            values.push(format!("{borrow}{value}"));
+        let (parsed, beside) = (self.parsed, self.beside);
+        let table = self.s.a_table_that_crosses(
+            &self.world,
+            bound,
+            want,
+            pairs,
+            span,
+            |ty: &str, variant: &str| payload_of(parsed, beside, ty, variant),
+            |f: f64| format!("{f:?}"),
+        );
+        match table.found {
+            true => (Some((table.below, table.written)), false),
+            false => (None, table.said),
         }
-
-        let Some(table) = crate::fixed::build(&keys) else {
-            return (None, false);
-        };
-        let disps: Vec<String> = table
-            .disps
-            .iter()
-            .map(|(d1, d2)| format!("({d1}, {d2})"))
-            .collect();
-        let written_keys: Vec<String> = table
-            .keys
-            .iter()
-            .map(|key| format!("\"{}\"", build_time::written(key)))
-            .collect();
-        // **In slot order**, which is the whole of what the table is: the
-        // generator decided where each key landed, and a value that stayed in
-        // written order would be the wrong one for every key it moved.
-        let written_values: Vec<String> =
-            table.order.iter().map(|at| values[*at].clone()).collect();
-
-        (
-            Some((
-                format!("Fixed<{value_below}>"),
-                format!(
-                    "Fixed::new({}, &[{}], &[{}], &[{}])",
-                    table.seed,
-                    disps.join(", "),
-                    written_keys.join(", "),
-                    written_values.join(", ")
-                ),
-            )),
-            false,
-        )
     }
 
     /// **`[1, 2, 3]`**, and what its type is
@@ -18852,7 +18318,14 @@ impl<'a> Checker<'a> {
         // report a second time in numbers the reader has to compare by eye.
         if let Some(n) = count {
             if items.len() as i64 != n {
-                self.a_list_the_wrong_length_for_its_array(items.len(), n, span, Counted::Written);
+                self.s
+                    .findings
+                    .push(check_widen::a_list_the_wrong_length_for_its_array(
+                        items.len() as i64,
+                        n,
+                        span,
+                        false,
+                    ));
                 return Some(want.clone());
             }
             self.checked.array_literals.insert(value_node(value));
@@ -18887,186 +18360,7 @@ impl<'a> Checker<'a> {
     }
 }
 
-/// Where the element count in `NK1157` came from.
-///
-/// Two sentences under one code, because the rule is one — an `Array[T, N]`
-/// takes exactly `N` — and the **way out** is not: a literal's length is on the
-/// page and can be edited there, where a computed one came out of a body and
-/// *write five elements* is advice nobody can take.
-#[derive(Debug, Clone, Copy)]
-enum Counted {
-    Written,
-    Computed,
-}
-
-/// What [`Checker::crosses_as_fixed`] found, which is four things and not two.
-#[derive(Debug, Clone, Copy)]
-enum Crossing {
-    /// A computed list of exactly the declared length. It fits.
-    Fits,
-    /// Refused here, by name — the lengths differ, and the sentence says both.
-    Said,
-    /// The declaration is a fixed type and the value is growable, and **nothing
-    /// computed it**. The mismatch is not the program's: `NK1152` or `NK1127`
-    /// has already said what is, and a second sentence about the declaration
-    /// would send the reader to a line that is right
-    /// ([Part III C.4](../../docs/specification/30-nikaia-tooling.md)).
-    Unanswered,
-    /// Not this record's pair. The ordinary mismatch applies.
-    Other,
-}
-
 impl<'a> Checker<'a> {
-    /// **Growable going in, fixed coming out**
-    /// ([ADR-311](../../docs/specification/adr/adr-311.md) D1) — whether a
-    /// value this build **computed** crosses into the program as the fixed type
-    /// its declaration names.
-    ///
-    /// ```nika
-    /// fn squares() -> Vec[i64] sync {
-    ///     let mut xs = []
-    ///     for i in 0..<5 { xs.push(i * i) }
-    ///     return xs
-    /// }
-    ///
-    /// comptime TABLE: Array[i64, 5] = squares()
-    /// ```
-    ///
-    /// The body works with a list that does not know its length; the `const`
-    /// below cannot hold one, because a `Vec` allocates. **But the value has
-    /// been computed by the time this is asked**, so its length is a fact and
-    /// `Array[T, N]` is exactly what it crosses as — which is that record's own
-    /// title, and the reason `push` did not need a second shape to be built.
-    ///
-    /// **Only for a value that evaluated.** A `Vec` this compiler could not
-    /// compute has no length, so nothing here can say it is five long; that
-    /// pair goes to `NK1166` the way it always did, and `NK1127` says the rest.
-    ///
-    /// See [`Crossing`] for what the four answers mean.
-    fn crosses_as_fixed(
-        &mut self,
-        found: &Ty,
-        want: &Ty,
-        evaluated: Option<&build_time::Value>,
-        span: &Span,
-    ) -> Crossing {
-        // **A list of pairs crossing as a table**
-        // ([ADR-311](../../docs/specification/adr/adr-311.md) D8), which is the
-        // same crossing one container out: what a body wrote is growable and
-        // what the program holds is fixed, and the **declared type** is what
-        // says so. The keys are known here because the build computed them, so
-        // a table is a thing this value can be.
-        if is_fixed(want) {
-            let Ty::Named { args, .. } = want else {
-                return Crossing::Other;
-            };
-            let [key, value] = args.as_slice() else {
-                return Crossing::Other;
-            };
-            let held = match found {
-                Ty::Named { name, args, .. } if name == "Vec" || name == "List" => args.first(),
-                _ => return Crossing::Other,
-            };
-            // **`?` fits everything** ([ADR-024](../../docs/specification/adr/adr-024.md)
-            // D1), here as in the array crossing below — and that is not a
-            // corner: `[]` is a `Vec[?]`, so a table declared over an empty
-            // list would otherwise be *this is a `Vec[?]` and the `const` says
-            // `Fixed[&str, i64]`*, whose way out asks the reader to write what
-            // they already wrote. A table of nothing is a table.
-            let pairs = match held {
-                None | Some(Ty::Unknown) => true,
-                Some(Ty::Tuple(parts)) => {
-                    parts.len() == 2 && parts[0].fits(key) && parts[1].fits(value)
-                }
-                Some(_) => false,
-            };
-            if !pairs {
-                return Crossing::Other;
-            }
-            return match evaluated {
-                Some(build_time::Value::List(_)) => Crossing::Fits,
-                // Nothing computed it, so the declaration is not what is wrong
-                // — the same reading the other two crossings get.
-                _ => Crossing::Unanswered,
-            };
-        }
-        // **A `&[T]` is D1's own view form**
-        // ([ADR-179](../../docs/specification/adr/adr-179.md) D1), and it is
-        // the crossing without the length: a `Vec[T]` arrives as a view of a
-        // run, the way a `String` arrives as a `&str` one arm down. There is no
-        // count to check, which is the whole reason this spelling exists — a
-        // field whose list is a different length per value has no `Array[T, N]`
-        // to be.
-        if let Some(element) = slice_element(want) {
-            let held = match found {
-                Ty::Named { name, args, .. } if name == "Vec" || name == "List" => args.first(),
-                _ => return Crossing::Other,
-            };
-            // `?` fits everything (ADR-024 D1), so an empty list crosses — the
-            // corner the table above spells out, for the same reason.
-            if matches!(held, Some(held) if !held.fits(&element)) {
-                return Crossing::Other;
-            }
-            return match evaluated {
-                Some(build_time::Value::List(_)) => Crossing::Fits,
-                _ => Crossing::Unanswered,
-            };
-        }
-        // **Text is the other half of D1**, and the simpler one: a `String`
-        // arrives as a `&str`, there is no length in the type, and `const X:
-        // &str` is what the language below has where `const X: String` is not.
-        if matches!(want, Ty::Named { name, args, view: true } if name == "str" && args.is_empty())
-            && matches!(found, Ty::Named { name, view: false, .. } if name == "String")
-        {
-            return match evaluated {
-                Some(build_time::Value::Text(_)) => Crossing::Fits,
-                // Nothing computed it, so the declaration is not what is wrong
-                // — the same reading the list half gets, one type over.
-                _ => Crossing::Unanswered,
-            };
-        }
-        let Ty::Named {
-            name: wanted,
-            args,
-            view: false,
-        } = want
-        else {
-            return Crossing::Other;
-        };
-        if wanted != ty::ARRAY {
-            return Crossing::Other;
-        }
-        let [element, Ty::Count(n)] = args.as_slice() else {
-            return Crossing::Other;
-        };
-        // A growable list of this language, by either spelling. Anything else
-        // is not the crossing this record is about.
-        let held = match found {
-            Ty::Named { name, args, .. } if name == "Vec" || name == "List" => args.first(),
-            _ => return Crossing::Other,
-        };
-        let Some(build_time::Value::List(items)) = evaluated else {
-            // **Nothing computed it, so the declaration is not what is wrong.**
-            // Saying *this is a `Vec[i64]` and the `const` says `Array[i64, 1]`*
-            // would send the reader to a line that is right — the body is what
-            // could not be run, and `NK1152` or `NK1127` has just said so.
-            return Crossing::Unanswered;
-        };
-        // **The length is the whole of the type's other half**, so it is asked
-        // first and it is asked of the *computed* value - which is the number
-        // the reader cannot count off the page, and is why the sentence says it.
-        if items.len() as i64 != *n {
-            self.a_list_the_wrong_length_for_its_array(items.len(), *n, span, Counted::Computed);
-            return Crossing::Said;
-        }
-        // The element type is the ordinary comparison, and `?` fits everything
-        // as it does everywhere else (ADR-024 D1).
-        match held {
-            Some(held) if !held.fits(element) => Crossing::Other,
-            _ => Crossing::Fits,
-        }
-    }
-
     fn unwritable_field(&self, ty: &Ty) -> Option<(String, String)> {
         match self.s.unwritable_field(&self.world, ty).as_slice() {
             [field, held] => Some((field.clone(), held.clone())),
@@ -19074,205 +18368,35 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// **The first part of a computed value the language below cannot write**,
-    /// as the **declaration** at that position says
-    /// ([ADR-311](../../docs/specification/adr/adr-311.md) D2).
-    ///
-    /// [`Checker::unwritable_field`] asks a *type*, which is right for a
-    /// `struct`: every field is there whichever value it holds. An `enum` is
-    /// not like that — `Shape::Empty` is a `const` and `Shape::Many([1, 2])` is
-    /// not, and the two have the same declared type — so the variant has to be
-    /// read off the **value**, and the walk follows it down.
-    ///
-    /// Hands back *where* and *what*: `Shape::Many` and `Vec[i64]`.
+    /// A field or a payload a `const` cannot hold, anywhere in a computed value
+    /// (`tools/check_consts.nika`).
     fn unwritable_in(&self, value: &build_time::Value) -> Option<(String, String)> {
-        match value {
-            build_time::Value::Struct { name, fields } => self
-                .unwritable_field(&Ty::named(name.clone()))
-                .or_else(|| fields.values().find_map(|held| self.unwritable_in(held))),
-            build_time::Value::Variant {
-                ty,
-                variant,
-                payload,
-            } => self
-                .unwritable_payload(ty, variant)
-                .or_else(|| payload.iter().find_map(|held| self.unwritable_in(held))),
-            build_time::Value::List(items) => {
-                items.iter().find_map(|held| self.unwritable_in(held))
-            }
-            // **A pair, which is what a table's rows are**
-            // ([ADR-311](../../docs/specification/adr/adr-311.md) D8). Without
-            // this a `Fixed[&str, Bad]` whose `Bad` holds a `Vec` lowered and
-            // `rustc` answered about the generated file — the same hole the
-            // `enum` had one shape over, and it opened the moment a table
-            // learned to hold a declared type
-            // ([ADR-311](../../docs/specification/adr/adr-311.md) D13).
-            build_time::Value::Tuple(parts) => {
-                parts.iter().find_map(|held| self.unwritable_in(held))
-            }
+        let (parsed, beside) = (self.parsed, self.beside);
+        match check_consts::unwritable_in(
+            &self.s,
+            &self.world,
+            value,
+            &|ty: &str, variant: &str| payload_of(parsed, beside, ty, variant),
+        )
+        .as_slice()
+        {
+            [name, held] => Some((name.clone(), held.clone())),
             _ => None,
         }
     }
 
-    /// **The value spelled below, read against the declaration at each
-    /// position** ([ADR-179](../../docs/specification/adr/adr-179.md) D2).
-    ///
-    /// [`rust_value`] beside it writes a value on its own, which is right for
-    /// every shape whose spelling the value decides: an integer is its digits
-    /// wherever it stands. **A list is the one that is not.** The same
-    /// `Value::List` is `[1, 2, 3]` against an `Array[i64, 3]` and `&[1, 2, 3]`
-    /// against a `&[i64]`, and nothing in the value says which — so the
-    /// *declaration* is walked beside it, down through a struct's fields and a
-    /// variant's payload, and the `&` is written exactly where a slice was
-    /// declared.
-    ///
-    /// **`&` and not `&[…] as &[T]`**: a `const` promotes an array literal to
-    /// `'static`, so `const XS: &[i64] = &[1, 2, 3];` is what Rust already
-    /// does with the shorter spelling ([ADR-296](../../docs/specification/adr/adr-296.md)
-    /// D2 — the generated file says what the program said).
-    ///
-    /// Where nothing is declared it falls back to [`rust_value`], which is the
-    /// case a `comptime` with no annotation is in.
+    /// A computed value written against the type its declaration states
+    /// (`tools/check_consts.nika`).
     fn written_below(&self, value: &build_time::Value, want: Option<&Ty>) -> Option<String> {
-        let Some(want) = want else {
-            return rust_value(value);
-        };
-        match value {
-            // **The one shape the declaration decides.** `slice_element` is
-            // `Some` only for a `&[T]`, so an `Array[T, N]` and a `Vec[T]` take
-            // the arm below and come out as `[…]`.
-            build_time::Value::List(items) => {
-                let (held, borrow) = match slice_element(want) {
-                    Some(element) => (element.clone(), "&"),
-                    None => (element_of(want), ""),
-                };
-                let mut written = Vec::with_capacity(items.len());
-                for item in items {
-                    written.push(self.written_below(item, Some(&held))?);
-                }
-                Some(format!("{borrow}[{}]", written.join(", ")))
-            }
-            build_time::Value::Struct { name, fields } => {
-                let declared = self.s.fields_of(&self.world, name);
-                let mut written = Vec::with_capacity(fields.len());
-                for (field, held) in fields {
-                    let want = declared
-                        .as_ref()
-                        .and_then(|fields| fields.iter().find(|f| &f.name == field))
-                        .map(|f| f.ty.clone());
-                    written.push(format!(
-                        "{field}: {}",
-                        self.written_below(held, want.as_ref())?
-                    ));
-                }
-                Some(format!("{name} {{ {} }}", written.join(", ")))
-            }
-            build_time::Value::Variant {
-                ty,
-                variant,
-                payload,
-            } => {
-                if payload.is_empty() {
-                    return Some(format!("{ty}::{variant}"));
-                }
-                let declared = self.payload_of(ty, variant).unwrap_or_default();
-                let mut written = Vec::with_capacity(payload.len());
-                for (at, held) in payload.iter().enumerate() {
-                    written.push(self.written_below(held, declared.get(at))?);
-                }
-                Some(format!("{ty}::{variant}({})", written.join(", ")))
-            }
-            _ => rust_value(value),
-        }
-    }
-
-    /// What one variant declares it carries, by position.
-    fn payload_of(&self, ty: &str, variant: &str) -> Option<Vec<Ty>> {
-        std::iter::once(self.parsed)
-            .chain(self.beside.iter().copied())
-            .find_map(|parsed| {
-                parsed
-                    .program
-                    .items
-                    .iter()
-                    .find_map(|item| match &item.node {
-                        Item::Enum { name, variants, .. } if parsed.text(*name) == ty => variants
-                            .iter()
-                            .find(|held| parsed.text(held.name) == variant)
-                            .map(|held| match &held.fields {
-                                ast::VariantFields::Unit => Vec::new(),
-                                ast::VariantFields::Tuple(types) => {
-                                    types.iter().map(|t| Ty::from_ast(parsed, t)).collect()
-                                }
-                                ast::VariantFields::Named(fields) => {
-                                    fields.iter().map(|f| Ty::from_ast(parsed, &f.ty)).collect()
-                                }
-                            }),
-                        _ => None,
-                    })
-            })
-    }
-
-    /// What one variant **declares** it carries, where a `const` cannot hold it.
-    ///
-    /// Read from the item tree rather than from a ledger, because a variant's
-    /// payload is not a column: a ledger records what a caller has to know
-    /// about a type it cannot see, and this is the type's own shape.
-    fn unwritable_payload(&self, ty: &str, variant: &str) -> Option<(String, String)> {
-        let carried = std::iter::once(self.parsed)
-            .chain(self.beside.iter().copied())
-            .find_map(|parsed| {
-                parsed
-                    .program
-                    .items
-                    .iter()
-                    .find_map(|item| match &item.node {
-                        Item::Enum { name, variants, .. } if parsed.text(*name) == ty => variants
-                            .iter()
-                            .find(|held| parsed.text(held.name) == variant)
-                            .map(|held| match &held.fields {
-                                ast::VariantFields::Unit => Vec::new(),
-                                ast::VariantFields::Tuple(types) => {
-                                    types.iter().map(|t| Ty::from_ast(parsed, t)).collect()
-                                }
-                                ast::VariantFields::Named(fields) => {
-                                    fields.iter().map(|f| Ty::from_ast(parsed, &f.ty)).collect()
-                                }
-                            }),
-                        _ => None,
-                    })
-            })?;
-        carried
-            .into_iter()
-            .find(|held| {
-                rust_constant_type(self.world.library, held).is_none()
-                    && self.s.declared_below(&self.world, held).is_none()
-            })
-            .map(|held| (format!("{ty}::{variant}"), held.text()))
-    }
-
-    /// `NK1157`: a list literal standing where an `Array[T, N]` is wanted, with
-    /// a different number of elements
-    /// ([ADR-152](../../docs/specification/adr/adr-152.md) D4).
-    ///
-    /// **Both numbers**, because the length *is* part of the type and what the
-    /// reader has to do about it is count: a message saying only that one array
-    /// type is not another leaves the counting undone.
-    fn a_list_the_wrong_length_for_its_array(
-        &mut self,
-        written: usize,
-        wanted: i64,
-        span: &Span,
-        how: Counted,
-    ) {
-        self.s
-            .findings
-            .push(check_widen::a_list_the_wrong_length_for_its_array(
-                written as i64,
-                wanted,
-                span,
-                matches!(how, Counted::Computed),
-            ));
+        let (parsed, beside) = (self.parsed, self.beside);
+        check_consts::written_below(
+            &self.s,
+            &self.world,
+            value,
+            want,
+            &|ty: &str, variant: &str| payload_of(parsed, beside, ty, variant),
+            &|f: f64| format!("{f:?}"),
+        )
     }
 
     /// **`NK1171`: a member a known type or module does not have**
@@ -20834,7 +19958,10 @@ impl<'a> Checker<'a> {
             // below cannot hold one - but the value has been computed by the
             // line above, so its length is known and `Array[T, N]` is exactly
             // what it crosses as.
-            match self.crosses_as_fixed(&narrowed, want, evaluated.as_ref(), span) {
+            match self
+                .s
+                .crosses_as_fixed(&narrowed, want, evaluated.as_ref(), span)
+            {
                 Crossing::Fits | Crossing::Said | Crossing::Unanswered => {}
                 Crossing::Other => {
                     // …and D2's other half: a value that owns memory is refused
@@ -22310,22 +21437,6 @@ fn has_a_default(ty: &Ty) -> bool {
         Ty::Tuple(parts) => parts.len() <= 12 && parts.iter().all(has_a_default),
         _ => false,
     }
-}
-
-/// A float, written as a literal `rustc` reads — or nothing, where it cannot be.
-///
-/// **`{:?}` and not `{}`**, because Rust's `Debug` for a float is the shortest
-/// text that reads back as the same bits, and `Display` is not: `1.0` prints as
-/// `1` under the second, and `const X: f64 = 1;` is not Rust.
-///
-/// **A value that is not finite has no literal in either language.** An
-/// infinity and a `NaN` reach a program through a name — `f64::INFINITY` — and
-/// writing one into a `const` would put a name in the generated file that the
-/// `.nika` line never mentioned. So it is `None` here and `NK1127` at the
-/// caller, which is the honest answer: this is a thing the crossing does not
-/// do.
-fn float_literal(value: f64) -> Option<String> {
-    value.is_finite().then(|| format!("{value:?}"))
 }
 
 /// The closest field name, when one is close enough to be worth suggesting.
