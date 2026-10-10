@@ -84,7 +84,7 @@ fn a_plain_name(ty: ref Ty) -> String? sync {
 pub fn widened_into(found: ref Ty, want: ref Ty) -> String? sync {
     let from = an_integer_named(found) ?? ""
     let into = an_integer_named(want) ?? ""
-    if from == "" || into == "" || from == into {
+    if from.is_empty() || into.is_empty() || from == into {
         return null
     }
     let common = common_integer(from, into) ?? ""
@@ -99,7 +99,7 @@ pub fn widened_into(found: ref Ty, want: ref Ty) -> String? sync {
 pub fn an_integer_that_does_not_widen(found: ref Ty, want: ref Ty) -> bool sync {
     let from = an_integer_named(found) ?? ""
     let into = an_integer_named(want) ?? ""
-    if from == "" || into == "" || from == into {
+    if from.is_empty() || into.is_empty() || from == into {
         return false
     }
     return widened_into(found, want) == null

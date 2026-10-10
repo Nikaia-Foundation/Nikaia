@@ -1,0 +1,256 @@
+// crates/nikaia-std/src/tools/check_reports.nika
+//
+// **Reports the checker makes from what it was told and what it holds**, moved
+// from the compiler's checker (ADR-294, #125, #558): a bound an argument's type
+// does not meet (`NK1164`), a change to a binding not declared `mut`
+// (`NK1138`, `NK1139`), a grammar the build could not run (`NK1178`), an escape
+// nothing names (`NK1184`), a handle made of one value (`NK1101`, `NK1123`) and
+// a `std` name used without its module (`NK1117`). Each is given the facts the
+// walk found; none walks.
+
+use std::collections
+
+/// Why a grammar did not run while the program was built (issue #178), as the
+/// host reports it.
+pub enum CheckWall {
+    /// The input the parser refused, with the parser's own diagnostic.
+    Refused { detail: String },
+    /// A result with no form to build into the program.
+    NoCrossedForm { ty: String, because: String },
+    /// A grammar run inside another one that is still running.
+    InsideAnother { outer: String },
+    /// No directory to compile the parser in.
+    NowhereToBuild,
+    /// The generated parser did not compile.
+    DidNotBuild { detail: String },
+    /// The result could not be read back.
+    Unreadable { detail: String },
+}
+
+/// The lines of a text, each moved in by four spaces.
+fn report_indented(text: ref String) -> String {
+    let mut out: String = ""
+    let mut first = true
+    for line in text.lines() {
+        if !first {
+            out.push_str("\n")
+        }
+        first = false
+        out.push_str("    ")
+        out.push_str(line)
+    }
+    return out
+}
+
+/// The name a type is called, where it is a named one.
+fn a_named_type(ty: ref Ty) -> String? sync {
+    return match ty {
+        Ty::Named { name, .. } => name.clone(),
+        else => null,
+    }
+}
+
+impl CheckState {
+    /// The bounds a function declares: from the unit's own source, or else
+    /// from the signature a ledger records (ADR-295 D18).
+    fn bounds_wanted(ref self, world: ref CheckWorld, key: ref String) -> collections::BTreeMap[String, Vec[String]]? sync {
+        if self.declared_bounds.contains_key(key) {
+            return self.declared_bounds[key]?.clone()
+        }
+        return bounds_in_a_signature(world, key)
+    }
+
+    /// **`NK1164`: a bound the argument's type does not meet** (ADR-295 D18).
+    /// Fail-open in three places, because a correct program refused is worse
+    /// than a wrong one passed on: a trait this unit does not declare, an
+    /// argument that could not be typed, and a parameter of the caller's own,
+    /// which answers for whatever its own bounds say.
+    pub fn a_bound_the_argument_does_not_meet(ref mut self, world: ref CheckWorld, key: ref String, bound: ref collections::BTreeMap[String, Ty], span: ref Span) sync {
+        let wanted = self.bounds_wanted(world, key) ?? return
+        for (parameter, traits) in wanted {
+            let held = bound.get(parameter) ?? continue
+            let actual = a_named_type(held) ?? continue
+            // **A parameter of the caller's own is a different sentence**:
+            // `impl Speaks for V` cannot be written, so the way out is the
+            // caller's own bound list.
+            let of_the_caller = self.type_parameters.contains_key(actual)
+            for trait_name in traits {
+                if self.answers_for(world, actual, trait_name) {
+                    continue
+                }
+                // **A shape bound is a third sentence**: what answers it is
+                // the declaration, and no `impl` does.
+                let shape = (trait_name == "Struct" || trait_name == "Enum") && !world.own.traits.contains_key(trait_name)
+                let mut message: String = ""
+                let mut note: String = ""
+                let mut way_out: String = ""
+                if shape {
+                    let mut article: String = "a"
+                    if trait_name == "Enum" {
+                        article = "an"
+                    }
+                    message = f"`{key}` needs {article} `{trait_name}` here, but `{actual}` isn't one."
+                    note = f"`[{parameter}: {trait_name}]` asks what a type is, not what it does, so it's answered by the declaration, not an `impl`. `{actual}` is {self.what_shape_it_is(actual)}."
+                    if of_the_caller {
+                        way_out = f"Add it to the bound: `[{actual}: … + {trait_name}]`."
+                    } else {
+                        way_out = f"Pass a value of a type declared with `{trait_name.to_lowercase()}`, or remove the bound."
+                    }
+                } else if of_the_caller {
+                    message = f"`{key}` needs a `{trait_name}` here, but `{actual}` isn't declared to be one."
+                    note = f"`{actual}` is a type this function's caller picks, so it can only do what its bounds say, and `{trait_name}` isn't one of them."
+                    way_out = f"Add it to the bound: `[{actual}: … + {trait_name}]`."
+                } else {
+                    message = f"`{key}` needs a `{trait_name}` here, but `{actual}` isn't one."
+                    note = f"`{key}` declares `[{parameter}: {trait_name}]`, so the type passed has to have `{trait_name}`'s methods, and `{actual}` doesn't implement it."
+                    way_out = f"Write `impl {trait_name} for {actual} {{{{ … }}}}`, or pass a type that already has one."
+                }
+                self.findings.push(check_refusal("NK1164", span, message, [note], way_out))
+            }
+        }
+    }
+
+    /// **A change to a binding that was not declared `mut`** (ADR-094 D3;
+    /// `NK1138` for a parameter, `NK1139` for a `let`). Said once per binding:
+    /// a body that changes one usually does so several times. Only where the
+    /// change is certain.
+    pub fn a_changed_binding_says_mut(ref mut self, name: ref String, how: ref String, changed_at: Span) sync {
+        self.changed.push(name.clone())
+        let local = self.binding(name) ?? return
+        let immutable = local.immutable ?? return
+        let declared = immutable.at.start as i64
+        if self.said_mut.contains(declared) {
+            return
+        }
+        let mut code: String = "NK1139"
+        let mut message: String = f"You're changing `{name}`, but it wasn't declared as mutable."
+        let mut notes: Vec[String] = []
+        let mut help: String = f"Add `mut` where it's declared: `let mut {name}`."
+        if immutable.kind == CheckKind::Parameter {
+            code = "NK1138"
+            message = f"You're changing the parameter `{name}`, but it wasn't declared as mutable."
+            notes.push(f"A parameter declared `mut {name}` is changed in place, so the caller sees the change too.")
+            help = f"Write `mut {name}` in the parameter list. If the caller's value should stay as it was, change a copy instead: `let mut {name}_own = {name}`."
+        }
+        self.said_mut.insert(declared)
+        let there = CheckLabel { span: immutable.at.clone(), word: name.clone(), text: "declared here without `mut`", main: false }
+        let here = CheckLabel { span: changed_at.clone(), word: name.clone(), text: how.clone(), main: true }
+        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: changed_at, code: code, message: message, notes: notes, help: help, labels: [there, here] })
+    }
+
+    /// **`NK1178`: a grammar this compiler could not run while it built**
+    /// (issue #178). One code and six sentences, because what a reader can do
+    /// about it differs completely.
+    pub fn a_grammar_that_did_not_run(ref mut self, owner: ref String, rule: ref String, why: ref CheckWall, span: ref Span) sync {
+        let entry = f"{owner}::{rule}"
+        let mut message: String = ""
+        let mut note: String = ""
+        let mut way_out: String = ""
+        match why {
+            CheckWall::Refused { detail } => {
+                message = f"`{entry}` couldn't parse the input it was given."
+                note = f"What the parser said:\n{report_indented(detail)}"
+                way_out = "Fix the input, or change the grammar to accept it."
+            }
+            CheckWall::NoCrossedForm { ty, because } => {
+                message = f"`{entry}` returns a `{ty}`, which can't be computed at build time."
+                note = f"The grammar runs while the program is built, and its result has to be built into the program: {because}"
+                way_out = "Use a rule whose result is a whole number, a `bool`, text, a list of those, or a `struct` made of those."
+            }
+            CheckWall::InsideAnother { outer } => {
+                message = f"`{entry}` would run inside `{outer}`, which is still running."
+                note = "Running a grammar at build time compiles its parser, so one inside another would start the compiler inside itself."
+                way_out = "Run the inner grammar in a `comptime` of its own, and use its value here."
+            }
+            CheckWall::NowhereToBuild => {
+                message = f"`{entry}` has nowhere to compile its parser."
+                note = "Running a grammar at build time compiles its parser, which needs a directory, and this build has none."
+                way_out = "Build with `nikaia build` or `nikaia lower`, which both have one."
+            }
+            CheckWall::DidNotBuild { detail } => {
+                message = f"The parser generated for `{entry}` didn't compile."
+                note = f"This is a bug in the compiler, not in your program.\n{report_indented(detail)}"
+                way_out = "Please report it with your `.nika` file and this message."
+            }
+            CheckWall::Unreadable { detail } => {
+                message = f"`{entry}` ran, but the compiler couldn't read its result."
+                note = f"This is a bug in the compiler: {detail}"
+                way_out = "Please report it with your `.nika` file and this message."
+            }
+        }
+        self.findings.push(check_refusal("NK1178", span, message, [note], way_out))
+    }
+
+    /// **`NK1184`: an escape in a literal that nothing names.** `written` is
+    /// the escape as the literal has it and `why` one clause about it; `all` is
+    /// the list of escapes there are.
+    pub fn an_escape_nothing_names(ref mut self, text: ref String, written: ref String, why: ref String, all: ref String, span: ref Span) sync {
+        let letters: Vec[scalar] = written.chars().collect()
+        let mut help: String = ""
+        if letters.len() > 1 && (letters[1] == 'x' || letters[1] == 'u') {
+            help = "Write a character above `\\x7F` as `\\u{…}`, with up to six hexadecimal digits: `\\u{80}`, `\\u{1F600}`."
+        } else {
+            let doubled = text.replace("\\", "\\\\")
+            help = f"If you meant a backslash, write it twice: `\"{doubled}\"`. Otherwise use one of the escapes above."
+        }
+        let sentence = f"{capitalised(why)}."
+        let listed = f"The escapes are: {all}."
+        self.findings.push(check_refusal("NK1184", span, f"`{written}` isn't an escape Nikaia knows.", [sentence, listed], help))
+    }
+
+    /// **A shared handle made of one value** (`Rc(value)` and its kin):
+    /// `NK1101` for a wrong number of values, `NK1123` for a handle of a
+    /// handle. The type it comes to is the handle of what it holds.
+    pub fn hull(ref mut self, handle: ref String, count: i64, found: ref Vec[Ty], span: ref Span) -> Ty sync {
+        if count != 1 {
+            self.findings.push(check_refusal("NK1101", span, f"`{handle}(…)` takes one value, the one to put in it, but you passed {count}.", [f"A `{handle}[T]` is made from a `T`: `{handle}(value)`."], null))
+            return Ty::Unknown
+        }
+        let mut held = Ty::Unknown
+        if found.len() > 0 {
+            held = found[0].clone()
+        }
+        let inner = a_named_type(held) ?? ""
+        if !inner.is_empty() && is_hull(inner) {
+            self.findings.push(check_refusal("NK1123", span, f"This is already a `{inner}`, so wrapping it in `{handle}` adds nothing.", ["A shared handle is copied by passing it on, never by wrapping it again."], f"Pass the `{inner}` on as it is."))
+            return held
+        }
+        return Ty::Named { name: handle.clone(), args: [held], view: false }
+    }
+
+    /// **`NK1117`: a `std` name written without its module.** Only where the
+    /// name is known to nothing in the program, and exactly one module of
+    /// `std` has it.
+    pub fn a_std_name_without_its_module(ref mut self, world: ref CheckWorld, name: ref String, span: ref Span) sync {
+        if name.contains("::") {
+            return
+        }
+        let known = self.binding(name) != null || resolve_call(world, name) != null || self.structs.contains_key(name) || self.enums.contains_key(name) || world.own.types.contains_key(name) || self.modules.contains(name) || self.grammars.contains_key(name) || name == "access_all" || name == "update_all" || is_hull(name)
+        if known {
+            return
+        }
+        let suffix = f"::{name}"
+        let mut keys: Vec[String] = []
+        for (key, _) in world.library.functions {
+            if key.ends_with(ref suffix) {
+                keys.push(key.clone())
+            }
+        }
+        // **One entry and not several.** Where two modules have the name, the
+        // compiler does not know which was meant and saying so would be a
+        // guess; `NK1117` still says the name is undeclared, which is true.
+        if keys.len() != 1 {
+            return
+        }
+        let key = keys[0].clone()
+        let parts: Vec[ref String] = key.split("::").collect()
+        if parts.len() < 2 {
+            return
+        }
+        let module = parts[0].clone()
+        if !self.std_modules.contains(module) {
+            return
+        }
+        self.findings.push(check_refusal("NK1117", span, f"`{name}` isn't available without its module.", [f"`std` has `{key}`, and it's reached through its module.", "Only a few names are always available; the rest live in a module."], f"Write `use std::{module}` at the top of the file, and `{key}(…)` here."))
+    }
+}

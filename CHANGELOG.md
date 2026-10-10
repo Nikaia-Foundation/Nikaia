@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.788] — 2026-10-10
+
+**Six reports of the checker are Nikaia (`tools/check_reports.nika`, #558, #125).**
+- `NK1164` (a bound the argument's type does not meet), `NK1138` and `NK1139` (a change to a binding not declared `mut`), `NK1178` (a grammar the build could not run; `CheckWall` is what the host reports), `NK1184`, `NK1101` and `NK1123` (a shared handle made of one value) and `NK1117` (a `std` name without its module) are methods of `CheckState`. `changed` and `said_mut` moved from the `Checker` into it.
+
 ## [0.0.787] — 2026-10-10
 
 **Which integer type holds both, where a value is widened and where text stands for a file's name are Nikaia (`tools/check_widen.nika`, ADR-285 D32, ADR-319, #558, #125).**

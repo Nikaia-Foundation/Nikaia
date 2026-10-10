@@ -11450,6 +11450,197 @@ pub fn left_out_text(missing: &[String]) -> String {
 }
 
 
+// --- check_reports.nika ---
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CheckWall {
+    Refused { detail: String },
+    NoCrossedForm { ty: String, because: String },
+    InsideAnother { outer: String },
+    NowhereToBuild,
+    DidNotBuild { detail: String },
+    Unreadable { detail: String },
+}
+
+fn report_indented(text: &str) -> String {
+    let mut out: String = String::from("");
+    let mut first = true;
+    for line in text.lines() {
+        if !first { out.push_str("\n"); }
+        first = false;
+        out.push_str("    ");
+        out.push_str(line);
+    }
+    out
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn a_named_type(ty: &Ty) -> Option<String> {
+    match ty {
+        Ty::Named { name, .. } => Some(name.to_owned()),
+        _ => None,
+    }
+}
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn bounds_wanted(&self, world: &CheckWorld<'_>, key: &str) -> Option<collections::BTreeMap<String, Vec<String>>> {
+        if self.declared_bounds.contains_key(key) {
+            return match *nikaia_std::index::get(&self.declared_bounds, key) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            };
+        }
+        bounds_in_a_signature(world, key)
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_bound_the_argument_does_not_meet(&mut self, world: &CheckWorld<'_>, key: &str, bound: &collections::BTreeMap<String, Ty>, span: &Span) {
+        let wanted = match self.bounds_wanted(world, key) { Some(__nikaia_value) => __nikaia_value, None => return };
+        for (parameter, traits) in wanted.iter() {
+            let held = match bound.get(parameter) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let actual = match a_named_type(&held) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let of_the_caller = self.type_parameters.contains_key(&actual);
+            for trait_name in traits.iter() {
+                if self.answers_for(world, &actual, trait_name) { continue; }
+                let shape = (trait_name == "Struct" || trait_name == "Enum") && !world.own.traits.contains_key(trait_name);
+                let mut message: String = String::from("");
+                let mut note: String = String::from("");
+                let mut way_out: String = String::from("");
+                if shape {
+                    let mut article: String = String::from("a");
+                    if trait_name == "Enum" { article = String::from("an"); }
+                    message = format!("`{}` needs {} `{}` here, but `{}` isn't one.", key, article, trait_name, actual);
+                    note = format!("`[{}: {}]` asks what a type is, not what it does, so it's answered by the declaration, not an `impl`. `{}` is {}.", parameter, trait_name, actual, self.what_shape_it_is(&actual));
+                    if of_the_caller { way_out = format!("Add it to the bound: `[{}: … + {}]`.", actual, trait_name); } else { way_out = format!("Pass a value of a type declared with `{}`, or remove the bound.", trait_name.to_lowercase()); }
+                } else if of_the_caller {
+                    message = format!("`{}` needs a `{}` here, but `{}` isn't declared to be one.", key, trait_name, actual);
+                    note = format!("`{}` is a type this function's caller picks, so it can only do what its bounds say, and `{}` isn't one of them.", actual, trait_name);
+                    way_out = format!("Add it to the bound: `[{}: … + {}]`.", actual, trait_name);
+                } else {
+                    message = format!("`{}` needs a `{}` here, but `{}` isn't one.", key, trait_name, actual);
+                    note = format!("`{}` declares `[{}: {}]`, so the type passed has to have `{}`'s methods, and `{}` doesn't implement it.", key, parameter, trait_name, trait_name, actual);
+                    way_out = format!("Write `impl {} for {} {{{{ … }}}}`, or pass a type that already has one.", trait_name, actual);
+                }
+                self.findings.push(check_refusal("NK1164", span, message, vec![note], Some(way_out)));
+            }
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_changed_binding_says_mut(&mut self, name: &str, how: &str, changed_at: Span) {
+        self.changed.push(name.to_owned());
+        let local = match self.binding(name) { Some(__nikaia_value) => __nikaia_value, None => return };
+        let immutable = match local.immutable { Some(__nikaia_value) => __nikaia_value, None => return };
+        let declared = immutable.at.start as i64;
+        if self.said_mut.contains(&declared) { return; }
+        let mut code: String = String::from("NK1139");
+        let mut message: String = format!("You're changing `{}`, but it wasn't declared as mutable.", name);
+        let mut notes: Vec<String> = vec![];
+        let mut help: String = format!("Add `mut` where it's declared: `let mut {}`.", name);
+        if immutable.kind == CheckKind::Parameter {
+            code = String::from("NK1138");
+            message = format!("You're changing the parameter `{}`, but it wasn't declared as mutable.", name);
+            notes.push(format!("A parameter declared `mut {}` is changed in place, so the caller sees the change too.", name));
+            help = format!("Write `mut {}` in the parameter list. If the caller's value should stay as it was, change a copy instead: `let mut {}_own = {}`.", name, name, name);
+        }
+        self.said_mut.insert(declared);
+        let there = CheckLabel { span: immutable.at.clone(), word: name.to_owned(), text: String::from("declared here without `mut`"), main: false };
+        let here = CheckLabel { span: changed_at.clone(), word: name.to_owned(), text: how.to_owned(), main: true };
+        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: changed_at, code, message, notes, help: Some(help), labels: vec![there, here] });
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_grammar_that_did_not_run(&mut self, owner: &str, rule: &str, why: &CheckWall, span: &Span) {
+        let entry = format!("{}::{}", owner, rule);
+        let mut message: String = String::from("");
+        let mut note: String = String::from("");
+        let mut way_out: String = String::from("");
+        match why {
+            CheckWall::Refused { detail } => {
+                message = format!("`{}` couldn't parse the input it was given.", entry);
+                note = format!("What the parser said:\n{}", report_indented(detail));
+                way_out = String::from("Fix the input, or change the grammar to accept it.");
+            },
+            CheckWall::NoCrossedForm { ty, because } => {
+                message = format!("`{}` returns a `{}`, which can't be computed at build time.", entry, ty);
+                note = format!("The grammar runs while the program is built, and its result has to be built into the program: {}", because);
+                way_out = String::from("Use a rule whose result is a whole number, a `bool`, text, a list of those, or a `struct` made of those.");
+            },
+            CheckWall::InsideAnother { outer } => {
+                message = format!("`{}` would run inside `{}`, which is still running.", entry, outer);
+                note = String::from("Running a grammar at build time compiles its parser, so one inside another would start the compiler inside itself.");
+                way_out = String::from("Run the inner grammar in a `comptime` of its own, and use its value here.");
+            },
+            CheckWall::NowhereToBuild => {
+                message = format!("`{}` has nowhere to compile its parser.", entry);
+                note = String::from("Running a grammar at build time compiles its parser, which needs a directory, and this build has none.");
+                way_out = String::from("Build with `nikaia build` or `nikaia lower`, which both have one.");
+            },
+            CheckWall::DidNotBuild { detail } => {
+                message = format!("The parser generated for `{}` didn't compile.", entry);
+                note = format!("This is a bug in the compiler, not in your program.\n{}", report_indented(detail));
+                way_out = String::from("Please report it with your `.nika` file and this message.");
+            },
+            CheckWall::Unreadable { detail } => {
+                message = format!("`{}` ran, but the compiler couldn't read its result.", entry);
+                note = format!("This is a bug in the compiler: {}", detail);
+                way_out = String::from("Please report it with your `.nika` file and this message.");
+            },
+        }
+        self.findings.push(check_refusal("NK1178", span, message, vec![note], Some(way_out)));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn an_escape_nothing_names(&mut self, text: &str, written: &str, why: &str, all: &str, span: &Span) {
+        let letters: Vec<scalar> = nikaia_std::list::chars(written.chars());
+        let mut help: String = String::from("");
+        if letters.len() > 1 && (*nikaia_std::index::get(&letters, 1) == 'x' || *nikaia_std::index::get(&letters, 1) == 'u') { help = String::from("Write a character above `\\x7F` as `\\u{…}`, with up to six hexadecimal digits: `\\u{80}`, `\\u{1F600}`."); } else {
+            let doubled = text.replace("\\", "\\\\");
+            help = format!("If you meant a backslash, write it twice: `\"{}\"`. Otherwise use one of the escapes above.", doubled);
+        }
+        let sentence = format!("{}.", capitalised(why));
+        let listed = format!("The escapes are: {}.", all);
+        self.findings.push(check_refusal("NK1184", span, format!("`{}` isn't an escape Nikaia knows.", written), vec![sentence, listed], Some(help)));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn hull(&mut self, handle: &str, count: i64, found: &[Ty], span: &Span) -> Ty {
+        if count != 1 {
+            self.findings.push(check_refusal("NK1101", span, format!("`{}(…)` takes one value, the one to put in it, but you passed {}.", handle, count), vec![format!("A `{}[T]` is made from a `T`: `{}(value)`.", handle, handle)], None));
+            return Ty::Unknown;
+        }
+        let mut held = Ty::Unknown;
+        if !found.is_empty() { held = (*nikaia_std::index::get(&found, 0)).clone(); }
+        let inner = nikaia_std::index::or(a_named_type(&held), || "".into());
+        if !inner.is_empty() && is_hull(&inner) {
+            self.findings.push(check_refusal("NK1123", span, format!("This is already a `{}`, so wrapping it in `{}` adds nothing.", inner, handle), vec![String::from("A shared handle is copied by passing it on, never by wrapping it again.")], Some(format!("Pass the `{}` on as it is.", inner))));
+            return held;
+        }
+        Ty::Named { name: handle.to_owned(), args: vec![held], view: false }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_std_name_without_its_module(&mut self, world: &CheckWorld<'_>, name: &str, span: &Span) {
+        if name.contains("::") { return; }
+        let known = self.binding(name).is_some() || resolve_call(world, name).is_some() || self.structs.contains_key(name) || self.enums.contains_key(name) || world.own.types.contains_key(name) || self.modules.contains(name) || self.grammars.contains_key(name) || name == "access_all" || name == "update_all" || is_hull(name);
+        if known { return; }
+        let suffix = format!("::{}", name);
+        let mut keys: Vec<String> = vec![];
+        for (key, _) in world.library.functions.iter() { if key.ends_with(&suffix) { keys.push(key.to_owned()); } }
+        if keys.len() != 1 { return; }
+        let key = (*nikaia_std::index::get(&keys, 0)).to_owned();
+        let parts: Vec<&str> = key.split("::").collect::<Vec<_>>();
+        if parts.len() < 2 { return; }
+        let module = (*nikaia_std::index::get(&parts, 0)).to_owned();
+        if !self.std_modules.contains(&module) { return; }
+        self.findings.push(check_refusal("NK1117", span, format!("`{}` isn't available without its module.", name), vec![format!("`std` has `{}`, and it's reached through its module.", key), String::from("Only a few names are always available; the rest live in a module.")], Some(format!("Write `use std::{}` at the top of the file, and `{}(…)` here.", module, key))));
+    }
+}
+
+
 // --- check_scope.nika ---
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -12025,6 +12216,8 @@ pub struct CheckState {
     pub reading_only: bool,
     pub read_seq: i64,
     pub task_bindings: Vec<Vec<(String, Ty, i64)>>,
+    pub changed: Vec<String>,
+    pub said_mut: collections::BTreeSet<i64>,
 }
 
 
@@ -12921,7 +13114,7 @@ fn a_plain_name(ty: &Ty) -> Option<String> {
 pub fn widened_into(found: &Ty, want: &Ty) -> Option<String> {
     let from = nikaia_std::index::or(an_integer_named(found), || "".into());
     let into = nikaia_std::index::or(an_integer_named(want), || "".into());
-    if from == "" || into == "" || from == into { return None; }
+    if from.is_empty() || into.is_empty() || from == into { return None; }
     let common = nikaia_std::index::or(common_integer(&from, &into), || "".into());
     if common == into { return Some(into.to_owned()); }
     None
@@ -12932,7 +13125,7 @@ pub fn widened_into(found: &Ty, want: &Ty) -> Option<String> {
 pub fn an_integer_that_does_not_widen(found: &Ty, want: &Ty) -> bool {
     let from = nikaia_std::index::or(an_integer_named(found), || "".into());
     let into = nikaia_std::index::or(an_integer_named(want), || "".into());
-    if from == "" || into == "" || from == into { return false; }
+    if from.is_empty() || into.is_empty() || from == into { return false; }
     widened_into(found, want).is_none()
 }
 
@@ -34724,6 +34917,10 @@ pub mod check_pauses {
 pub mod check_refusals {
     #[allow(unused_imports)]
     pub use super::{left_out_text};
+}
+pub mod check_reports {
+    #[allow(unused_imports)]
+    pub use super::{CheckWall};
 }
 pub mod check_scope {
     #[allow(unused_imports)]

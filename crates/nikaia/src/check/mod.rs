@@ -42,9 +42,10 @@ use crate::types::SHAPE_BOUNDS;
 use nikaia_std::tools::check_access::{dotted_path, names_the_argument, variants_named};
 use nikaia_std::tools::check_boundary::element_of;
 use nikaia_std::tools::check_literals::element_kind;
-use nikaia_std::tools::check_lookups::{bounds_in_a_signature, names_of};
+use nikaia_std::tools::check_lookups::names_of;
 use nikaia_std::tools::check_names::{integer_named, is_a_literal as is_literal};
 use nikaia_std::tools::check_patterns::pattern_names;
+use nikaia_std::tools::check_reports::CheckWall;
 use nikaia_std::tools::check_scope::{resolve_call, resolve_method};
 use nikaia_std::tools::check_shapes::{
     an_element_beneath, catches_everything, constructed, element_below, is_fixed, is_growable,
@@ -84,6 +85,30 @@ impl CodeOps for Finding {
         let kept: &'static str = Box::leak(self.code.clone().into_boxed_str());
         codes.insert(kept);
         kept
+    }
+}
+
+/// What a grammar's wall is, as the report of it is given it.
+fn a_wall(why: &crate::grammar_run::Wall) -> CheckWall {
+    use crate::grammar_run::Wall;
+    match why {
+        Wall::Refused { detail } => CheckWall::Refused {
+            detail: detail.clone(),
+        },
+        Wall::NoCrossedForm { ty, because } => CheckWall::NoCrossedForm {
+            ty: ty.clone(),
+            because: because.clone(),
+        },
+        Wall::InsideAnother { grammar } => CheckWall::InsideAnother {
+            outer: grammar.clone(),
+        },
+        Wall::NowhereToBuild => CheckWall::NowhereToBuild,
+        Wall::DidNotBuild { detail } => CheckWall::DidNotBuild {
+            detail: detail.clone(),
+        },
+        Wall::Unreadable { detail } => CheckWall::Unreadable {
+            detail: detail.clone(),
+        },
     }
 }
 
@@ -1320,7 +1345,6 @@ fn walked<'a>(
         rule_results: BTreeMap::new(),
         pushed_into: None,
         fields_by_base: std::cell::OnceCell::new(),
-        said_mut: BTreeSet::new(),
         expected_either: false,
         field_either: false,
         throwing: false,
@@ -1336,7 +1360,6 @@ fn walked<'a>(
         next_choice: 0,
         read_index: std::collections::HashMap::new(),
         pending_coalesces: Vec::new(),
-        changed: Vec::new(),
         writing_index: false,
         read_a_map: false,
         map_read_sites: BTreeSet::new(),
@@ -1475,6 +1498,8 @@ fn walked<'a>(
             reading_only: false,
             read_seq: 0,
             task_bindings: Vec::new(),
+            changed: Vec::new(),
+            said_mut: BTreeSet::new(),
             handed_over: None,
             in_parallel: None,
             scoped_task: false,
@@ -2724,10 +2749,6 @@ struct Checker<'a> {
     /// statement they stand in is walked: one handed to a position that only
     /// reads it is lent, and every other one is taken when the statement ends.
     pending_coalesces: Vec<PendingCoalesce>,
-    /// **Names a method changed or took, or an assignment wrote**, in the
-    /// order they were met: what a `match` arm does to a part other than
-    /// read it (ADR-291).
-    changed: Vec<String>,
     /// Set by an assignment whose target is an index, for the one `Index` it
     /// walks: a key **written** is handed to the map, a key read is lent
     /// (ADR-293 D27).
@@ -2862,7 +2883,6 @@ struct Checker<'a> {
     /// information. It is not scoped, and must not be — two blocks that each
     /// declare an `xs` have two spans, and one that is walked twice is one
     /// span and one message.
-    said_mut: BTreeSet<usize>,
     checked: Checked,
 }
 
@@ -6568,92 +6588,6 @@ impl<'a> Checker<'a> {
         Some(fails)
     }
 
-    /// **What is changed says `mut`** — `NK1138` for a parameter
-    /// ([ADR-094](../../docs/specification/adr/adr-094.md) D3) and `NK1139` for
-    /// a `let` ([Part I 2.1](../../docs/specification/10-nikaia-light.md)).
-    ///
-    /// One rule reached from two sides, and two codes because the word goes in
-    /// a different place and a reader is doing a different thing. A parameter's
-    /// `mut` also decides what the **caller** sees — the value it hands over is
-    /// the one that changes — where a `let`'s is only about this body.
-    ///
-    /// **Both were `rustc`'s until now.** Part I 2.1 writes
-    /// `// x = 20  <-- This would cause a Compiler Error` and this compiler was
-    /// not the one giving it: the binding lowered without its `mut` and the
-    /// answer came back about a file nobody wrote, which is [Part III
-    /// C.1](../../docs/specification/30-nikaia-tooling.md).
-    ///
-    /// **Only where the change is certain.** A method whose entry no ledger
-    /// has, or whose candidates do not agree, is not one to refuse on;
-    /// answering *it might change* would refuse a correct program, which is C.4
-    /// and the worse of the two mistakes.
-    fn a_changed_binding_says_mut(&mut self, name: &str, how: &str, changed_at: Span) {
-        self.changed.push(name.to_string());
-        let Some(at) = self
-            .s
-            .binding(name)
-            .and_then(|local| local.immutable)
-            .filter(|at| !self.said_mut.contains(&at.at.at()))
-        else {
-            return;
-        };
-        // **Said to the reader, in sentences** (Part III C.2, rule 5): what
-        // they wrote, why it cannot work, and what to write instead. The two
-        // places are shown and named - where it changes and where it was
-        // declared - and the record behind the rule stays in the record.
-        let (code, message, notes, help) = match at.kind {
-            Kind::Parameter => (
-                "NK1138",
-                format!(
-                    "You're changing the parameter `{name}`, but it wasn't declared as \
-                     mutable."
-                ),
-                // D3: a parameter's `mut` also decides what the caller sees.
-                vec![format!(
-                    "A parameter declared `mut {name}` is changed in place, so the caller \
-                     sees the change too."
-                )],
-                // D3 names both ways out, and the second is the one that keeps
-                // the caller's value as it was.
-                format!(
-                    "Write `mut {name}` in the parameter list. If the caller's value should \
-                     stay as it was, change a copy instead: `let mut {name}_own = {name}`."
-                ),
-            ),
-            Kind::Let => (
-                "NK1139",
-                format!("You're changing `{name}`, but it wasn't declared as mutable."),
-                Vec::new(),
-                format!("Add `mut` where it's declared: `let mut {name}`."),
-            ),
-        };
-        // Said once per binding: a body that changes one usually does so
-        // several times, and three reports about one declaration is noise.
-        self.said_mut.insert(at.at.at());
-        self.s.findings.push(Finding {
-            severity: Severity::Error,
-            span: changed_at,
-            code: code.to_string(),
-            message,
-            notes,
-            help: Some(help),
-            labels: vec![
-                Label {
-                    span: at.at,
-                    word: name.to_string(),
-                    text: "declared here without `mut`".to_string(),
-                    main: false,
-                },
-                Label {
-                    span: changed_at,
-                    word: name.to_string(),
-                    text: how.to_string(),
-                    main: true,
-                },
-            ],
-        });
-    }
-
     /// **`NK1188`: `==` on a type that does not compare**
     /// ([ADR-204](../../docs/specification/adr/adr-204.md) D3).
     ///
@@ -7124,7 +7058,7 @@ impl<'a> Checker<'a> {
                     matches!(ty, Ty::Seq { .. }) || self.s.takes_away(&self.world, ty)
                 });
             if contract.mutates || takes {
-                self.changed.push(name);
+                self.s.changed.push(name);
             }
         }
         // **A method that walks a produced sequence consumes it**
@@ -7450,7 +7384,8 @@ impl<'a> Checker<'a> {
         }
         // A method's own parameters carry bounds exactly as a free function's
         // do, and one written call is one rule (ADR-278).
-        self.a_bound_the_argument_does_not_meet(&key, &bound, span);
+        self.s
+            .a_bound_the_argument_does_not_meet(&self.world, &key, &bound, span);
         let result = ty::substitute(&result, &bound);
         let result = shape_through(&contract, &on, &found, result);
         let result =
@@ -7640,135 +7575,6 @@ impl<'a> Checker<'a> {
                 && let Some(arg) = args.get(*at)
             {
                 self.checked.count_args.insert(value_node(arg));
-            }
-        }
-    }
-
-    /// **`NK1164`: the type a call picked does not answer for the bound**
-    /// ([ADR-295](../../docs/specification/adr/adr-295.md) D16).
-    ///
-    /// ```nika
-    /// fn tell[T: Speaks](x: T) -> String {
-    ///     return x.say()
-    /// }
-    ///
-    /// tell(rock)     // error[NK1164]
-    /// ```
-    ///
-    /// A bound was **declared and not enforced**: `[T: Speaks]` put `say` in
-    /// reach of the body — which is `NK1126`, and is built — while nothing
-    /// asked the other question a bound exists to ask, *may this type stand
-    /// here*. So the call was accepted and the language below answered *the
-    /// trait bound `Rock: Speaks` is not satisfied* about a file nobody wrote,
-    /// which is [Part III C.1](../../docs/specification/30-nikaia-tooling.md)'s
-    /// class exactly.
-    ///
-    /// **Fail-open in three places**, because C.4 is the other half of the same
-    /// page and a correct program refused is worse than a wrong one passed on:
-    /// a trait this unit does not declare is one nothing here can answer about
-    /// (`traits::check` draws the same line); an argument this compiler could
-    /// not type binds nothing; and a **parameter** in the caller's own scope
-    /// answers for whatever its own bounds say, because there the caller is the
-    /// one who did not pick the type either.
-    fn a_bound_the_argument_does_not_meet(
-        &mut self,
-        key: &str,
-        bound: &BTreeMap<String, Ty>,
-        span: &Span,
-    ) {
-        let wanted = match self.s.declared_bounds.get(key) {
-            Some(wanted) => wanted.clone(),
-            // **A package's function answers from its signature**
-            // ([ADR-295](../../docs/specification/adr/adr-295.md) D18). The map
-            // above is built from the AST of the unit being checked, under the
-            // key a call in *that* unit resolves to; a call written
-            // `handler::dispatch` resolves to a key no unit's AST produced, and
-            // what the bound was came back as `rustc`'s words about the type
-            // this program picked (issue #162
-            // issue #162).
-            None => match bounds_in_a_signature(&self.world, key) {
-                Some(wanted) => wanted,
-                None => return,
-            },
-        };
-        for (parameter, traits) in wanted {
-            let Some(Ty::Named { name: actual, .. }) = bound.get(&parameter) else {
-                continue;
-            };
-            let actual = actual.clone();
-            // **A parameter of the caller's own is a different sentence.**
-            // `impl Speaks for V` is not something anybody can write - `V` is
-            // a name a *further* caller fills in - so the way out is the
-            // caller's own bound list and nowhere else (Part III, C.2).
-            let of_the_caller = self.s.type_parameters.contains_key(&actual);
-            for trait_name in traits {
-                if self.s.answers_for(&self.world, &actual, &trait_name) {
-                    continue;
-                }
-                // **A shape bound is a third sentence**, because the other
-                // two both end in an `impl` and no `impl` answers `Struct`:
-                // what answers it is the declaration, so *write `impl Struct
-                // for i64`* would be a way out that cannot be taken, which
-                // [Part III C.2](../../docs/specification/30-nikaia-tooling.md)
-                // says is not one.
-                let shape = SHAPE_BOUNDS.contains(&trait_name.as_str())
-                    && !self.world.own.traits.contains_key(&trait_name);
-                let (message, note, way_out) = match (shape, of_the_caller) {
-                    (true, of_the_caller) => (
-                        format!(
-                            "`{key}` needs {} `{trait_name}` here, but `{actual}` isn't one.",
-                            match trait_name.as_str() {
-                                "Enum" => "an",
-                                _ => "a",
-                            }
-                        ),
-                        format!(
-                            "`[{parameter}: {trait_name}]` asks what a type is, not what it \
-                             does, so it's answered by the declaration, not an `impl`. `{actual}` \
-                             is {}.",
-                            self.s.what_shape_it_is(&actual)
-                        ),
-                        match of_the_caller {
-                            true => format!("Add it to the bound: `[{actual}: … + {trait_name}]`."),
-                            false => format!(
-                                "Pass a value of a type declared with `{}`, or remove the bound.",
-                                trait_name.to_lowercase()
-                            ),
-                        },
-                    ),
-                    (false, true) => (
-                        format!(
-                            "`{key}` needs a `{trait_name}` here, but `{actual}` isn't declared \
-                             to be one."
-                        ),
-                        format!(
-                            "`{actual}` is a type this function's caller picks, so it can only \
-                             do what its bounds say, and `{trait_name}` isn't one of them."
-                        ),
-                        format!("Add it to the bound: `[{actual}: … + {trait_name}]`."),
-                    ),
-                    (false, false) => (
-                        format!("`{key}` needs a `{trait_name}` here, but `{actual}` isn't one."),
-                        format!(
-                            "`{key}` declares `[{parameter}: {trait_name}]`, so the type \
-                             passed has to have `{trait_name}`'s methods, and `{actual}` doesn't \
-                             implement it."
-                        ),
-                        format!(
-                            "Write `impl {trait_name} for {actual} {{ … }}`, or pass a type \
-                             that already has one."
-                        ),
-                    ),
-                };
-                self.s.findings.push(Finding {
-                    severity: Severity::Error,
-                    span: *span,
-                    code: "NK1164".to_string(),
-                    message,
-                    notes: vec![note],
-                    help: Some(way_out),
-                    labels: Vec::new(),
-                });
             }
         }
     }
@@ -9285,7 +9091,7 @@ impl<'a> Checker<'a> {
                         Expr::Variable(_, _) => "changed here",
                         _ => "one of its parts is changed here",
                     };
-                    self.a_changed_binding_says_mut(&root, how, *span);
+                    self.s.a_changed_binding_says_mut(&root, how, *span);
                     self.s.a_shared_name_changed_in_parallel(&root, span);
                 }
                 // **A write through the brackets is unchanged**
@@ -10516,7 +10322,7 @@ impl<'a> Checker<'a> {
                     self.s.scope.push(frame);
                     self.s.branch.push((choice, taken as i64));
                     let from = self.s.taken_so_far();
-                    let changed_from = self.changed.len();
+                    let changed_from = self.s.changed.len();
                     // **The guard is walked inside the arm's scope** (D2): it
                     // reads the names the pattern bound, and a condition is a
                     // `bool` here exactly as anywhere else.
@@ -11082,7 +10888,7 @@ impl<'a> Checker<'a> {
                     let changes = !candidates.is_empty()
                         && candidates.iter().all(|(_, contract)| contract.mutates);
                     if changes {
-                        self.a_changed_binding_says_mut(
+                        self.s.a_changed_binding_says_mut(
                             &root,
                             &format!("changed here, by `{name}`"),
                             *span,
@@ -12901,72 +12707,6 @@ impl<'a> Checker<'a> {
         true
     }
 
-    /// **`NK1117`: a `std` name written without its module**
-    /// ([ADR-313](../../docs/specification/adr/adr-313.md) D1).
-    ///
-    /// The list on Part I's first page is what needs no `use`, and every entry
-    /// on it is keyed **bare** in the ledger — so a name nothing here declares,
-    /// which `std` has exactly one module entry for, is a name written without
-    /// its prefix. The message names the line to add, because a refusal whose
-    /// way out is one line should hand that line over (Part III, C.2).
-    ///
-    /// **Only where nothing else could have declared it**, which is the same
-    /// list `nothing_declares_it` keeps and for the same reason: refusing a
-    /// correct program is the one thing this checker may never do
-    /// (Part III, C.4). A name a local, a parameter, this unit's own ledger, a
-    /// type declared here, a module or a grammar answers never reaches here.
-    fn a_std_name_without_its_module(&mut self, name: &str, span: &Span) {
-        if name.contains("::") {
-            return;
-        }
-        let known = self.s.binding(name).is_some()
-            || self.resolve(name).is_some()
-            || self.s.structs.contains_key(name)
-            || self.s.enums.contains_key(name)
-            || self.world.own.types.contains_key(name)
-            || self.s.modules.contains(name)
-            || self.s.grammars.contains_key(name)
-            || MultiLock::named(name).is_some()
-            || is_hull(name);
-        if known {
-            return;
-        }
-        let suffix = format!("::{name}");
-        let keys: Vec<&String> = self
-            .world
-            .library
-            .functions
-            .keys()
-            .filter(|key| key.ends_with(&suffix))
-            .collect();
-        // **One entry and not several.** Where two modules have the name, the
-        // compiler does not know which was meant and saying so would be a
-        // guess; `NK1117` still says the name is undeclared, which is true.
-        let [key] = keys.as_slice() else {
-            return;
-        };
-        let Some((module, _)) = key.split_once("::") else {
-            return;
-        };
-        if !self.s.std_modules.contains(module) {
-            return;
-        }
-        self.s.findings.push(Finding {
-            severity: Severity::Error,
-            span: *span,
-            code: "NK1117".to_string(),
-            message: format!("`{name}` isn't available without its module."),
-            notes: vec![
-                format!("`std` has `{key}`, and it's reached through its module."),
-                "Only a few names are always available; the rest live in a module.".to_string(),
-            ],
-            help: Some(format!(
-                "Write `use std::{module}` at the top of the file, and `{key}(…)` here."
-            )),
-            labels: Vec::new(),
-        });
-    }
-
     /// Every integer literal a constant expression is made of, recorded as
     /// being of an unsigned type ([`Checked::unsigned_literals`]).
     fn literals_are(&mut self, value: &Expr, ty: &str, span: &Span) {
@@ -13508,56 +13248,18 @@ impl<'a> Checker<'a> {
         });
     }
 
-    /// **An escape this language's set does not name** (`NK1184`,
-    /// [ADR-188](../../docs/specification/adr/adr-188.md) D3).
-    ///
-    /// A `.nika` literal is written into the generated file verbatim, so what a
-    /// `\` means is the language below's answer and always has been. What a
-    /// program that writes `"a\qb"` *heard* about it was `rustc`'s, ending
-    /// *for more information, visit doc.rust-lang.org/reference/tokens.html*:
-    /// a Nikaia program sent to the Rust reference to find out what it may
-    /// write, which is [Part III C.2](../../docs/specification/30-nikaia-tooling.md)'s
-    /// *in the compiler's own words* not met and
-    /// [C.1](../../docs/specification/30-nikaia-tooling.md)'s class besides.
-    ///
-    /// **It refuses nothing that was accepted**, and that is what
-    /// [`build_time::an_escape_nothing_names`] sharing one table with
-    /// [`build_time::decoded`] is for: everything this refuses is something
-    /// `rustc` refuses one file later, so the only thing that moves is who says
-    /// it and in whose vocabulary ([C.4](../../docs/specification/30-nikaia-tooling.md)).
+    /// `NK1184` for an escape in a literal that nothing names
+    /// (`tools/check_reports.nika`).
     fn an_escape_nothing_names(&mut self, text: &str, span: &Span) {
-        let Some(refused) = crate::build_time::an_escape_nothing_names(text) else {
-            return;
-        };
-        self.s.findings.push(Finding {
-            severity: Severity::Error,
-            span: *span,
-            code: "NK1184".to_string(),
-            message: format!("`{}` isn't an escape Nikaia knows.", refused.written),
-            notes: vec![
-                format!("{}.", sentence(&refused.why)),
-                format!("The escapes are: {}.", crate::build_time::ESCAPES),
-            ],
-            // **Two ways out, and which one is offered is read off the
-            // escape** ([Part III C.2](../../docs/specification/30-nikaia-tooling.md):
-            // a way out that cannot be taken is not one). A `\\x` or a `\\u`
-            // that is malformed was *meant* as a character, so the help names
-            // the form it should have had; anything else is a backslash that
-            // was meant literally, and the way out is to double it.
-            help: Some(match refused.written.chars().nth(1) {
-                Some('x') | Some('u') => {
-                    "Write a character above `\\x7F` as `\\u{…}`, with up to six \
-                     hexadecimal digits: `\\u{80}`, `\\u{1F600}`."
-                        .to_string()
-                }
-                _ => format!(
-                    "If you meant a backslash, write it twice: `\"{}\"`. Otherwise use one \
-                     of the escapes above.",
-                    text.replace('\\', "\\\\")
-                ),
-            }),
-            labels: Vec::new(),
-        });
+        if let Some(refused) = crate::build_time::an_escape_nothing_names(text) {
+            self.s.an_escape_nothing_names(
+                text,
+                &refused.written,
+                &refused.why,
+                crate::build_time::ESCAPES,
+                span,
+            );
+        }
     }
 
     /// **The one thing this checker warns about rather than refusing** - a
@@ -14024,54 +13726,6 @@ impl<'a> Checker<'a> {
         Ty::from_ast(self.parsed, ty)
     }
 
-    fn hull(&mut self, name: &str, args: &[Expr], found: &[Ty], span: &Span) -> Ty {
-        if args.len() != 1 {
-            self.s.findings.push(Finding {
-                severity: Severity::Error,
-                span: *span,
-                code: "NK1101".to_string(),
-                message: format!(
-                    "`{name}(…)` takes one value, the one to put in it, but you passed {}.",
-                    args.len()
-                ),
-                notes: vec![format!(
-                    "A `{name}[T]` is made from a `T`: `{name}(value)`."
-                )],
-                help: None,
-                labels: Vec::new(),
-            });
-            return Ty::Unknown;
-        }
-        let held = found.first().cloned().unwrap_or(Ty::Unknown);
-        // A handle of a handle is two counts around one value and means nothing
-        // the one count does not: it is refused where the type says so, and a
-        // value nothing describes is not claimed about (C.4).
-        if let Ty::Named { name: inner, .. } = &held
-            && is_hull(inner)
-        {
-            self.s.findings.push(Finding {
-                severity: Severity::Error,
-                span: *span,
-                code: "NK1123".to_string(),
-                message: format!(
-                    "This is already a `{inner}`, so wrapping it in `{name}` adds nothing."
-                ),
-                notes: vec![
-                    "A shared handle is copied by passing it on, never by wrapping it again."
-                        .to_string(),
-                ],
-                help: Some(format!("Pass the `{inner}` on as it is.")),
-                labels: Vec::new(),
-            });
-            return held;
-        }
-        Ty::Named {
-            name: name.to_string(),
-            args: vec![held],
-            view: false,
-        }
-    }
-
     fn call(&mut self, func: &Expr, args: &[Expr], config: &[ast::ConfigArg], span: &Span) -> Ty {
         // **`T::attribute(X)` and `T::attributes(X)`, a walked type's own**
         // (ADR-331 D6): `X` is a type, not a value, and is not walked as one.
@@ -14225,7 +13879,8 @@ impl<'a> Checker<'a> {
         // ([ADR-313](../../docs/specification/adr/adr-313.md) D1), and these two
         // are the halves of the rule: a name that lives in a module written
         // without it, and a module used without being introduced.
-        self.a_std_name_without_its_module(&name, span);
+        self.s
+            .a_std_name_without_its_module(&self.world, &name, span);
         self.s.a_module_used_before_it_is_introduced(&name, span);
         // **The head of a call path is one of five things, as a value's is**
         // ([ADR-286](../../docs/specification/adr/adr-286.md) D31, #488):
@@ -14402,7 +14057,7 @@ impl<'a> Checker<'a> {
         // constructor has none, so the type argument would have to come from what
         // is handed in.
         if is_hull(&name) {
-            return self.hull(&name, args, &found, span);
+            return self.s.hull(&name, args.len() as i64, &found, span);
         }
 
         let Some((key, contract)) = resolved else {
@@ -14537,7 +14192,8 @@ impl<'a> Checker<'a> {
         self.a_call_that_hands_its_number_back(&contract, &bound, args);
         // …and what the arguments tell a **bound** (ADR-295 D16), which is the
         // same binding read for the other question a type parameter raises.
-        self.a_bound_the_argument_does_not_meet(&key, &bound, span);
+        self.s
+            .a_bound_the_argument_does_not_meet(&self.world, &key, &bound, span);
         let result = constructed.unwrap_or_else(|| ty::substitute(&result, &bound));
         self.stamped_through(&contract, &found, result)
     }
@@ -18064,7 +17720,8 @@ impl<'a> Checker<'a> {
                 (None, true)
             }
             Err(build_time::Refusal::GrammarWall { grammar, rule, why }) => {
-                self.a_grammar_that_did_not_run(&grammar, &rule, &why, span);
+                self.s
+                    .a_grammar_that_did_not_run(&grammar, &rule, &a_wall(&why), span);
                 (None, true)
             }
         }
@@ -20279,83 +19936,6 @@ impl<'a> Checker<'a> {
         self.s.a_copy_the_source_did_not_write(&name, &want, span);
     }
 
-    /// **`NK1178`: a grammar this compiler could not run while it built**
-    /// (issue #178).
-    ///
-    /// One code and six sentences, because what a reader can do about it
-    /// differs completely: input the parser refused is theirs to fix, a parser
-    /// that did not compile is this compiler's, and a result with no crossed
-    /// form is a decision [ADR-311](../../docs/specification/adr/adr-311.md)
-    /// has not taken yet.
-    fn a_grammar_that_did_not_run(
-        &mut self,
-        grammar: &str,
-        rule: &str,
-        why: &crate::grammar_run::Wall,
-        span: &Span,
-    ) {
-        use crate::grammar_run::Wall;
-        let entry = format!("{grammar}::{rule}");
-        let (message, note, way_out) = match why {
-            // **The input's own diagnostic, relayed whole.** It is in the
-            // grammar's vocabulary and counts its line and column against the
-            // bytes that were parsed, which is what Part II 10.2 A means by
-            // *invalid input fails the build*.
-            Wall::Refused { detail } => (
-                format!("`{entry}` couldn't parse the input it was given."),
-                format!("What the parser said:\n{}", indented(detail)),
-                "Fix the input, or change the grammar to accept it.".to_string(),
-            ),
-            Wall::NoCrossedForm { ty, because } => (
-                format!("`{entry}` returns a `{ty}`, which can't be computed at build time."),
-                format!(
-                    "The grammar runs while the program is built, and its result has to be \
-                     built into the program: {because}"
-                ),
-                "Use a rule whose result is a whole number, a `bool`, text, a list of \
-                 those, or a `struct` made of those."
-                    .to_string(),
-            ),
-            Wall::InsideAnother { grammar: outer } => (
-                format!("`{entry}` would run inside `{outer}`, which is still running."),
-                "Running a grammar at build time compiles its parser, so one inside \
-                 another would start the compiler inside itself."
-                    .to_string(),
-                "Run the inner grammar in a `comptime` of its own, and use its value here."
-                    .to_string(),
-            ),
-            Wall::NowhereToBuild => (
-                format!("`{entry}` has nowhere to compile its parser."),
-                "Running a grammar at build time compiles its parser, which needs a \
-                 directory, and this build has none."
-                    .to_string(),
-                "Build with `nikaia build` or `nikaia lower`, which both have one.".to_string(),
-            ),
-            Wall::DidNotBuild { detail } => (
-                format!("The parser generated for `{entry}` didn't compile."),
-                format!(
-                    "This is a bug in the compiler, not in your program.\n{}",
-                    indented(detail)
-                ),
-                "Please report it with your `.nika` file and this message.".to_string(),
-            ),
-            Wall::Unreadable { detail } => (
-                format!("`{entry}` ran, but the compiler couldn't read its result."),
-                format!("This is a bug in the compiler: {detail}"),
-                "Please report it with your `.nika` file and this message.".to_string(),
-            ),
-        };
-        self.s.findings.push(Finding {
-            severity: Severity::Error,
-            span: *span,
-            code: "NK1178".to_string(),
-            message,
-            notes: vec![note],
-            help: Some(way_out),
-            labels: Vec::new(),
-        });
-    }
-
     // --- looking things up ---------------------------------------------------
 
     /// Bind a name, with the constant it stands for where there is one
@@ -21827,7 +21407,7 @@ impl<'a> Checker<'a> {
             .filter(|(name, ty)| {
                 let taken = self.s.handed[from as usize..].iter().any(|taken| {
                     taken.path == **name || taken.path.starts_with(&format!("{name}."))
-                }) || self.changed[changed_from..].iter().any(|n| n == *name);
+                }) || self.s.changed[changed_from..].iter().any(|n| n == *name);
                 self.s.takes_away(&self.world, ty) && !taken && !gives_back(body, name, self.parsed)
             })
             .map(|(name, _)| name.clone())
@@ -22504,16 +22084,6 @@ impl Checker<'_> {
         };
         crate::contracts::keeps::lends_in(contract, at, &[self.world.library])
     }
-}
-
-/// A relayed diagnostic, moved under the note that introduces it.
-///
-/// **Relayed whole and not re-worded**: the parser's message is in the
-/// grammar's own vocabulary and counts its line and column against the bytes
-/// that were parsed, which is the one place they mean anything. What this does
-/// is put it where the eye is already looking.
-fn indented(text: &str) -> String {
-    nikaia_std::tools::check_words::indented_text(text)
 }
 
 /// A view of a value that copies - a number, a truth value, a character - and

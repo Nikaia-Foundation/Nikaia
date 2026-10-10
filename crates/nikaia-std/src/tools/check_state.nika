@@ -721,4 +721,8 @@ pub struct CheckState {
     /// The bodies of the tasks being walked, each with the names it binds
     /// (name, type, binding): what a task's body takes with it is `NK2101`'s.
     pub task_bindings: Vec[Vec[(String, Ty, i64)]],
+    /// The names a body changed, in order.
+    pub changed: Vec[String],
+    /// The bindings (by where they are declared) already said to need `mut`.
+    pub said_mut: collections::BTreeSet[i64],
 }

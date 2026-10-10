@@ -132,6 +132,7 @@ COMPILER_NIKA = {
     "check_buildtime2.nika": "check: a `comptime` that the build may not run, ran past a bound or depends on itself (0.0.776)",
     "check_takes.nika": "check: what was taken, what was read after, what a loop or a lambda takes again, and a part of a `mut` parameter not given back (0.0.786)",
     "check_widen.nika": "check: which integer type holds both, where a value widens, where text stands for a file's name, and the reports of NK1102, NK1157 and NK1200 (0.0.787)",
+    "check_reports.nika": "check: a bound an argument does not meet, a change to a binding not declared mut, a grammar that did not run, an escape, a handle of one value and a std name without its module (0.0.788)",
 }
 
 
