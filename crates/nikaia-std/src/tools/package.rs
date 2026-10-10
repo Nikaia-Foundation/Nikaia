@@ -12223,6 +12223,22 @@ impl CheckState {
         if !self.std_modules.contains(&module) { return; }
         self.findings.push(check_refusal("NK1117", span, format!("`{}` isn't available without its module.", name), vec![format!("`std` has `{}`, and it's reached through its module.", key), String::from("Only a few names are always available; the rest live in a module.")], Some(format!("Write `use std::{}` at the top of the file, and `{}(…)` here.", module, key))));
     }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_build_time_run_that_stopped_at(&mut self, bound: &str, why: &str, at: i64, function: Option<&str>, span: &Span) {
+        let mut labels: Vec<CheckLabel> = vec![];
+        if at >= 0 {
+            let place = Span { start: u32::try_from(at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) };
+            labels.push(CheckLabel { span: place, word: String::from(""), text: String::from("it stopped here"), main: true });
+            labels.push(CheckLabel { span: span.clone(), word: bound.to_owned(), text: String::from("computed while the program is built"), main: false });
+        }
+        let mut notes: Vec<String> = vec![];
+        if function.is_some() { notes.push(format!("It stopped in `{}`, in another file of the program.", nikaia_std::index::or(function, || ""))); }
+        notes.push("The code a `comptime` runs is the program's own, and it stops where the program would stop when it runs.".to_owned());
+        let mut help: String = String::from("Fix it as you would fix the program stopping there, or compute the value while the program runs, with `let` instead of `comptime`.");
+        if self.computing_default { help = String::from("Fix it as you would fix the program stopping there, or make the option a `T?` and compute the value in the body."); }
+        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1152"), message: format!("`{}` stopped while the program was built: {}.", bound, why), notes, help: Some(help), labels });
+    }
 }
 
 
@@ -13871,6 +13887,59 @@ pub fn two_integer_types_for_one_variable(key: &str, variable: &str, bound: &str
     let message = format!("`{}` takes one type for `{}`, but you're passing `{}` and `{}`.", key, variable, bound, ty);
     let notes: Vec<String> = vec!["A type parameter takes the type it is given, and an integer is not widened to make two arguments agree.".to_owned()];
     check_refusal("NK1102", span, message, notes, Some(format!("Convert one of them: `{} as {}`.", name, wide)))
+}
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn one_type_variable_two_integer_types(&mut self, world: &CheckWorld<'_>, key: &str, wanted: &[(String, Ty)], given: &[Expr], found: &[Ty], span: &Span) {
+        let mut variables: Vec<String> = vec![];
+        let mut types: Vec<String> = vec![];
+        let mut places: Vec<i64> = vec![];
+        let mut at: i64 = 0;
+        while at < wanted.len() as i64 && at < found.len() as i64 {
+            let here: i64 = at;
+            at = at + 1;
+            let variable = match a_variable_by_value(&nikaia_std::index::get(&wanted, nikaia_std::index::at(here)).1) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            if here < given.len() as i64 && is_a_literal(nikaia_std::index::get(&given, nikaia_std::index::at(here))) { continue; }
+            let ty = match an_integer_named(nikaia_std::index::get(&found, nikaia_std::index::at(here))) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let mut seen: i64 = -1;
+            let mut scan: i64 = 0;
+            while scan < variables.len() as i64 {
+                if *nikaia_std::index::get(&variables, nikaia_std::index::at(scan)) == variable { seen = scan; }
+                scan = scan + 1;
+            }
+            if seen < 0 {
+                variables.push(variable.to_owned());
+                types.push(ty.to_owned());
+                places.push(here);
+                continue;
+            }
+            let bound = (*nikaia_std::index::get(&types, nikaia_std::index::at(seen))).to_owned();
+            let there = *nikaia_std::index::get(&places, nikaia_std::index::at(seen));
+            if bound == ty { continue; }
+            let mut narrow: i64 = here;
+            let mut wide = bound.to_owned();
+            let common = common_integer(&bound, &ty);
+            if common.is_some() {
+                wide = nikaia_std::index::or(common.as_deref(), || "").to_owned();
+                if wide != bound { narrow = there; }
+            }
+            let mut name: String = String::from("…");
+            if narrow < given.len() as i64 { name = nikaia_std::index::or(names_of(world, nikaia_std::index::get(&given, nikaia_std::index::at(narrow))), || "…".to_owned().into()); }
+            self.findings.push(two_integer_types_for_one_variable(key, &variable, &bound, &ty, &name, &wide, span));
+            return;
+        }
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn a_variable_by_value(ty: &Ty) -> Option<String> {
+    match ty {
+        Ty::Var { name, view } => { let view = *view; if !view { Some(name.to_owned()) } else { None } },
+        _ => None,
+    }
 }
 
 

@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.793] — 2026-10-10
+
+**A type variable two integer types are handed to, and a build-time run that stopped, are reported from Nikaia (`tools/check_widen.nika`, `tools/check_reports.nika`, ADR-285 D32, ADR-321 D1, #558, #125).**
+- `one_type_variable_two_integer_types` (`NK1102`: the loop over the arguments and the report) and the report of `NK1152` (`a_build_time_run_that_stopped_at`) are methods of `CheckState`. Reading the host's text of where a run stopped, and the name of a function in another file, stay in Rust.
+
 ## [0.0.792] — 2026-10-10
 
 **What the contracts say about a call the emitter writes is Nikaia (`tools/emit_calls.nika`, #558, #125).**

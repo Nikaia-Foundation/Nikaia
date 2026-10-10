@@ -284,3 +284,67 @@ pub fn two_integer_types_for_one_variable(key: ref String, variable: ref String,
     let notes: Vec[String] = ["A type parameter takes the type it is given, and an integer is not widened to make two arguments agree.".clone()]
     return check_refusal("NK1102", span, message, notes, f"Convert one of them: `{name} as {wide}`.")
 }
+
+impl CheckState {
+    /// **A type variable two integer types are handed to** (ADR-285 D32):
+    /// widening takes no part in inference, so `pick(a, b)` for `fn pick[T](a:
+    /// T, b: T)` with an `i32` and an `i64` binds `T` twice. A literal takes the
+    /// type it is handed to and is not asked.
+    pub fn one_type_variable_two_integer_types(ref mut self, world: ref CheckWorld, key: ref String, wanted: ref Vec[(String, Ty)], given: ref Vec[Expr], found: ref Vec[Ty], span: ref Span) sync {
+        let mut variables: Vec[String] = []
+        let mut types: Vec[String] = []
+        let mut places: Vec[i64] = []
+        let mut at = 0
+        while at < wanted.len() && at < found.len() {
+            let here = at
+            at = at + 1
+            let variable = a_variable_by_value(wanted[here].1) ?? continue
+            if here < given.len() && is_a_literal(given[here]) {
+                continue
+            }
+            let ty = an_integer_named(found[here]) ?? continue
+            let mut seen: i64 = -1
+            let mut scan = 0
+            while scan < variables.len() {
+                if variables[scan] == variable {
+                    seen = scan
+                }
+                scan = scan + 1
+            }
+            if seen < 0 {
+                variables.push(variable.clone())
+                types.push(ty.clone())
+                places.push(here)
+                continue
+            }
+            let bound = types[seen].clone()
+            let there = places[seen]
+            if bound == ty {
+                continue
+            }
+            let mut narrow = here
+            let mut wide = bound.clone()
+            let common = common_integer(bound, ty)
+            if common != null {
+                wide = (common ?? "").clone()
+                if wide != bound {
+                    narrow = there
+                }
+            }
+            let mut name: String = "…"
+            if narrow < given.len() {
+                name = names_of(world, given[narrow]) ?? "…".clone()
+            }
+            self.findings.push(two_integer_types_for_one_variable(key, variable, bound, ty, name, wide, span))
+            return
+        }
+    }
+}
+
+/// The name of a type variable taken by value.
+fn a_variable_by_value(ty: ref Ty) -> String? sync {
+    return match ty {
+        Ty::Var { name, view } => if !view { name.clone() } else { null },
+        else => null,
+    }
+}

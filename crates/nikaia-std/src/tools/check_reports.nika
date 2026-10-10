@@ -253,4 +253,27 @@ impl CheckState {
         }
         self.findings.push(check_refusal("NK1117", span, f"`{name}` isn't available without its module.", [f"`std` has `{key}`, and it's reached through its module.", "Only a few names are always available; the rest live in a module."], f"Write `use std::{module}` at the top of the file, and `{key}(…)` here."))
     }
+
+    /// **A build-time run that stopped as the program would** (ADR-321 D1):
+    /// the same code stops the program the same way. In its own words, at the
+    /// place it stopped (`at`, a byte of this file, or -1) and, where that is a
+    /// function of another file, its name.
+    pub fn a_build_time_run_that_stopped_at(ref mut self, bound: ref String, why: ref String, at: i64, function: ref String?, span: ref Span) sync {
+        let mut labels: Vec[CheckLabel] = []
+        if at >= 0 {
+            let place = Span { start: at as u32, end: at as u32 }
+            labels.push(CheckLabel { span: place, word: "", text: "it stopped here", main: true })
+            labels.push(CheckLabel { span: span.clone(), word: bound.clone(), text: "computed while the program is built", main: false })
+        }
+        let mut notes: Vec[String] = []
+        if function != null {
+            notes.push(f"It stopped in `{function ?? ""}`, in another file of the program.")
+        }
+        notes.push("The code a `comptime` runs is the program's own, and it stops where the program would stop when it runs.".clone())
+        let mut help: String = "Fix it as you would fix the program stopping there, or compute the value while the program runs, with `let` instead of `comptime`."
+        if self.computing_default {
+            help = "Fix it as you would fix the program stopping there, or make the option a `T?` and compute the value in the body."
+        }
+        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1152", message: f"`{bound}` stopped while the program was built: {why}.", notes: notes, help: help, labels: labels })
+    }
 }

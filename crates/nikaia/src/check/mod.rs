@@ -12581,11 +12581,8 @@ impl<'a> Checker<'a> {
             .a_bit_operation_beside_a_comparison(&self.world, op, lhs, rhs, at);
     }
 
-    /// **A type variable two integer types are handed to** (ADR-285 D32):
-    /// widening takes no part in inference, so `pick(a, b)` for `fn pick[T](a:
-    /// T, b: T)` with an `i32` and an `i64` binds `T` twice. It is `NK1102`,
-    /// which `rustc` used to answer about a file nobody wrote. A literal takes
-    /// the type it is handed to and is not asked.
+    /// `NK1102` for a type variable two integer types are handed to
+    /// (`tools/check_widen.nika`).
     fn one_type_variable_two_integer_types(
         &mut self,
         key: &str,
@@ -12594,52 +12591,8 @@ impl<'a> Checker<'a> {
         found: &[Ty],
         span: &Span,
     ) {
-        let integer = |ty: &Ty| match ty {
-            Ty::Named {
-                name,
-                args,
-                view: false,
-            } if args.is_empty() && INTEGERS.contains(&name.as_str()) => Some(name.clone()),
-            _ => None,
-        };
-        let mut first: BTreeMap<&str, (String, usize)> = BTreeMap::new();
-        for (at, ((_, want), found)) in wanted.iter().zip(found).enumerate() {
-            let Ty::Var {
-                name: var,
-                view: false,
-            } = want
-            else {
-                continue;
-            };
-            if given.get(at).is_some_and(is_literal) {
-                continue;
-            }
-            let Some(ty) = integer(found) else {
-                continue;
-            };
-            let Some((bound, there)) = first.get(var.as_str()).cloned() else {
-                first.insert(var, (ty, at));
-                continue;
-            };
-            if bound == ty {
-                continue;
-            }
-            let (narrow, wide) = match common_integer(&bound, &ty) {
-                Some(common) if common == bound => (at, common),
-                Some(common) => (there, common),
-                None => (at, bound.as_str()),
-            };
-            let name = given
-                .get(narrow)
-                .and_then(|arg| names_of(&self.world, arg))
-                .unwrap_or_else(|| "…".to_string());
-            self.s
-                .findings
-                .push(check_widen::two_integer_types_for_one_variable(
-                    key, var, &bound, &ty, &name, wide, span,
-                ));
-            return;
-        }
+        self.s
+            .one_type_variable_two_integer_types(&self.world, key, wanted, given, found, span);
     }
 
     /// **`x op= value` over two integer types** (D32): the value is widened
@@ -17172,48 +17125,13 @@ impl<'a> Checker<'a> {
                     _ => None,
                 })
             });
-        let mut labels = Vec::new();
-        if let Some(at) = at {
-            labels.push(Label {
-                span: Span { start: at, end: at },
-                word: String::new(),
-                text: "it stopped here".to_string(),
-                main: true,
-            });
-            labels.push(Label {
-                span: *span,
-                word: bound.to_string(),
-                text: "computed while the program is built".to_string(),
-                main: false,
-            });
-        }
-        let mut notes = Vec::new();
-        if let Some(function) = elsewhere {
-            notes.push(format!(
-                "It stopped in `{function}`, in another file of the program."
-            ));
-        }
-        notes.push(
-            "The code a `comptime` runs is the program's own, and it stops where the program \
-             would stop when it runs."
-                .to_string(),
+        self.s.a_build_time_run_that_stopped_at(
+            bound,
+            why,
+            at.map_or(-1, i64::from),
+            elsewhere.as_deref(),
+            span,
         );
-        self.s.findings.push(Finding {
-            severity: Severity::Error,
-            span: *span,
-            code: "NK1152".to_string(),
-            message: format!("`{bound}` stopped while the program was built: {why}."),
-            notes,
-            help: Some(match self.s.computing_default {
-                true => "Fix it as you would fix the program stopping there, or make the option \
-                         a `T?` and compute the value in the body."
-                    .to_string(),
-                false => "Fix it as you would fix the program stopping there, or compute the \
-                          value while the program runs, with `let` instead of `comptime`."
-                    .to_string(),
-            }),
-            labels,
-        });
     }
 
     fn build_time_value(
