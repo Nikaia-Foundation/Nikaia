@@ -200,6 +200,8 @@ pub mod text {
     clippy::unnecessary_get_then_check,
     clippy::collapsible_match,
     clippy::comparison_to_empty,
+    clippy::only_used_in_recursion,
+    clippy::too_many_arguments,
     unreachable_patterns
 )]
 pub mod tools {

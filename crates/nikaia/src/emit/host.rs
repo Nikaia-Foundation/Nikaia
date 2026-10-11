@@ -23,8 +23,8 @@ use nikaia_std::tools::emit_host::EmitHost;
 use nikaia_std::tools::emit_kinds::{EmitFlow, EmitRefused, EmitScope};
 use nikaia_std::tools::emit_state::EmitWalk;
 
-use super::{Emitter, Flow, Out};
-use crate::ast::Expr;
+use super::{Emitter, Flow, Out, Tail};
+use crate::ast::{Block, Expr};
 
 type Crossing = Result<(), Box<dyn std::error::Error>>;
 
@@ -112,6 +112,11 @@ impl Emitter<'_> {
         }
         let mut link: Option<&(dyn std::error::Error + 'static)> = Some(&*error);
         while let Some(each) = link {
+            // A `throw` in Nikaia wraps the error in its envelope.
+            let each = match each.downcast_ref::<nikaia_std::error::Raised>() {
+                Some(raised) => raised.inner(),
+                None => each,
+            };
             if let Some(refused) = each.downcast_ref::<EmitRefused>() {
                 return Err(match refused.at {
                     Some(at) => crate::diagnostics::refuse_at(at as usize, refused.message.clone()),
@@ -166,6 +171,40 @@ impl EmitHost for Emitter<'_> {
                 Flow::from_emit(flow, scope),
             )
         })
+    }
+
+    fn block_opening_with(
+        &self,
+        walk: &mut EmitWalk,
+        out: &mut Out,
+        block: &Block,
+        depth: i64,
+        flow: EmitFlow,
+        scope: &EmitScope,
+        tail: Tail,
+        opening: Option<String>,
+    ) -> Crossing {
+        self.hosted(walk, || {
+            Emitter::block_opening_with(
+                self,
+                out,
+                block,
+                depth as usize,
+                Flow::from_emit(flow, scope),
+                tail,
+                opening.as_deref(),
+            )
+        })
+    }
+
+    fn wrap_hole(&self, hole: &Expr, wraps: &Vec<(i64, winnow_grammar::Symbol)>) -> Expr {
+        let wraps: Vec<(usize, winnow_grammar::Symbol)> = wraps
+            .iter()
+            .map(|(at, name)| (*at as usize, *name))
+            .collect();
+        let mut wrapped = hole.clone();
+        crate::text_tiers::wrap_hole(&mut wrapped, &wraps);
+        wrapped
     }
 
     fn names_read(&self, expr: &Expr) -> Vec<String> {

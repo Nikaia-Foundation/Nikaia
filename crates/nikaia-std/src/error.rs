@@ -187,6 +187,12 @@ pub struct Raised {
 }
 
 impl Raised {
+    /// The error that was raised, under its envelope: what a caller that
+    /// knows the type (the emitter's host, `EmitRefused`) looks for.
+    pub fn inner(&self) -> &(dyn Error + 'static) {
+        &*self.inner
+    }
+
     /// Everything, for an operator: the message, where it was raised, and the
     /// trace if this process captured one.
     ///

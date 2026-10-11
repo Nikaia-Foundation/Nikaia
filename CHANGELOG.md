@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.822] — 2026-10-11
+
+**emit: the leaves of the core are Nikaia: keys, postfix bases, operands, strings, f-strings, options, guards, grammar entries, templates, blocks, ifs (#558, #125, E9 U2)**
+- New tools/emit_core_leaves.nika: key, postfix_base, nested, handed_back, concatenated, joined_name, format_string, string, dsl_parameters, method_options, guard_written, grammar_entry, template, template_segments, block and if_expr as emit_core_* of EmitState; EmitHost gains block_opening_with and wrap_hole; a refusal thrown in Nikaia (EmitRefused) keeps its line through the envelope.
+
 ## [0.0.821] — 2026-10-11
 
 **check: patterns and boxes, small part questions and the open numbers are Nikaia (#558, #125, C-5b)**

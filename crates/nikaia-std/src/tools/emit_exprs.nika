@@ -87,6 +87,11 @@ fn emit_two(before: ref String, after: ref String) -> (String, String) {
 
 pub fn emit_around(how: ref FactWrap?) -> (String, String) {
     let held = how ?? return emit_two("", "")
+    return emit_around_held(held)
+}
+
+/// The words a wrap puts around a value.
+pub fn emit_around_held(held: ref FactWrap) -> (String, String) {
     return match held {
         FactWrap::Constructor => emit_two("Some(", ")"),
         FactWrap::Conversion => emit_two("", ".into()"),

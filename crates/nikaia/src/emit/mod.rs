@@ -4546,138 +4546,23 @@ impl<'p> Emitter<'p> {
         depth: usize,
         flow: Flow<'_>,
     ) -> Result<()> {
-        // ADR-296 D5: a body with `:name` holes and a target this compiler is
-        // not itself the grammar for is a *statement*, and its value is its own
-        // text. Nothing is substituted into it: a deferred parameter is not
-        // string interpolation, so the value may not be spliced into the source
-        // and change what it means (Part III, 15.3). The holes stay as written
-        // and the driver binds them - which is also the only lowering that
-        // needs to know nothing about the foreign syntax (ADR-296 D17).
-        if crate::dsl::is_deferred(name, content) {
-            if let Some(context) = context {
-                return Err(refused_at!(
-                    flow.statement,
-                    "`dsl {name} {{ … }}` with `:name` holes can't take a context, but \
-                     `{}` was given.",
-                    self.text(*context)
-                ));
-            }
-            out.push(&rust_string(content.trim()));
-            return Ok(());
-        }
-
-        if name != "html" {
-            return Err(refused_at!(
-                flow.statement,
-                "`dsl {name} {{ … }}` has no `:name` holes, and `{name}` isn't a \
-                 language the compiler knows. Add `:name` holes for the parameters, or \
-                 use `dsl html`."
-            ));
-        }
-        if let Some(context) = context {
-            return Err(refused_at!(
-                flow.statement,
-                "`dsl html` can't take a context, but `{}` was given.",
-                self.text(*context)
-            ));
-        }
-
-        // The framing whitespace is not markup: the newline after `{` and the
-        // indentation before `} eod` are there because the template is written
-        // in a file, and a block form that kept them would make every value it
-        // produces carry the indentation of the function it was written in.
-        // Whitespace *inside* the body is kept exactly.
-        // **The template's own refusals get the statement's place too.**
-        // `template.rs` works on text and never saw a file, which is exactly
-        // what `at_the_statement` is for — five refusals, one handover.
-        let segments = at_the_statement(flow, template::split(content.trim()))?;
-
-        // ADR-017 D3. Every hole that escaping cannot make safe, at once: a
-        // template with three of them should say so three times rather than
-        // once per build.
-        let illegal = template::illegal(&segments);
-        if !illegal.is_empty() {
-            let mut message = String::from("the template has holes escaping cannot make safe\n");
-            for (expr, at) in &illegal {
-                message.push_str(&format!("  {}\n", template::illegal_message(expr, at)));
-            }
-            return Err(crate::diagnostics::refuse(message));
-        }
-
-        let pad = "    ".repeat(depth + 1);
-        let close = "    ".repeat(depth);
-        // The compiler knows every literal byte of this template, so it knows
-        // what the result is at least as long as - and a `String` that starts
-        // that size does not double its way there (ADR-178 §1).
-        //
-        // It is a *floor*, not a guess: the holes and the bodies of `<for>`
-        // add to it and never subtract, so reserving it can never be too much
-        // to be worth it, and this needs no threshold and no measurement to
-        // decide between two shapes. What it needed a measurement for is
-        // whether it is worth doing at all, and that is in
-        // `crates/nikaia/tests/measure.rs`.
-        out.push(&format!(
-            "{{\n{pad}let mut __html = String::with_capacity({});\n",
-            template::literal_length(&segments)
-        ));
-        self.template_segments(out, site, &segments, depth + 1, flow)?;
-        out.push(&format!("{pad}__html\n{close}}}"));
-        Ok(())
-    }
-
-    /// The pieces of a template, appended to `__html` in order.
-    fn template_segments(
-        &self,
-        out: &mut Out,
-        site: u32,
-        segments: &[template::Segment],
-        depth: usize,
-        flow: Flow<'_>,
-    ) -> Result<()> {
-        let pad = "    ".repeat(depth);
-
-        for segment in segments {
-            match segment {
-                template::Segment::Text(text) => {
-                    out.push(&format!("{pad}__html.push_str({});\n", rust_string(text)));
-                }
-                template::Segment::Hole { expr, .. } => {
-                    // Parsed as Nikaia and emitted as Nikaia: a hole holds an
-                    // expression of this language, not a foreign one.
-                    let parsed = self.parsed.hole(site, expr).map_err(|e| {
-                        refused_at!(
-                            flow.statement,
-                            "The template hole `{{{expr}}}` can't be read. {e}"
-                        )
-                    })?;
-                    out.push(&format!(
-                        "{pad}__html.push_str(&::nikaia_std::html::Render::render(&"
-                    ));
-                    self.expr(out, &parsed, depth, flow)?;
-                    out.push("));\n");
-                }
-                // The loop of the language below, over the captured collection:
-                // it borrows rather than copies, exactly as it would in the
-                // function around the template.
-                template::Segment::For {
-                    binding,
-                    collection,
-                    body,
-                } => {
-                    // **`.iter()` and not `&`**, for the reason the ordinary
-                    // `for` has it ([ADR-094](../../docs/specification/adr/adr-094.md)
-                    // D4): the captured name may already *be* a view — since
-                    // D1 a parameter the body only reads is one — and
-                    // `&entries` is then a `&&Vec<Entry>`, which Rust does not
-                    // iterate. `.iter()` reads the same through any number of
-                    // references.
-                    out.push(&format!("{pad}for {binding} in {collection}.iter() {{\n"));
-                    self.template_segments(out, site, body, depth + 1, flow)?;
-                    out.push(&format!("{pad}}}\n"));
-                }
-            }
-        }
-        Ok(())
+        let (flow, scope) = flow.to_emit();
+        let crossed = self.nikaia(|walk| {
+            self.s.emit_core_template(
+                &self.world,
+                walk,
+                out,
+                self,
+                name,
+                context.copied(),
+                content,
+                site as i64,
+                depth as i64,
+                flow,
+                &scope,
+            )
+        });
+        self.crossed(crossed)
     }
 
     /// A path, with the map it names chosen the same way its type is.
@@ -4702,13 +4587,20 @@ impl<'p> Emitter<'p> {
     /// only to read its sides, so the side is lent as `&str` - which is
     /// `AsRef` whether the list holds owned text or views of it.
     fn concatenated(&self, out: &mut Out, side: &Expr, depth: usize, flow: Flow<'_>) -> Result<()> {
-        if matches!(side, Expr::Index { .. }) {
-            out.push("::core::convert::AsRef::<str>::as_ref(&");
-            self.expr(out, side, depth, flow)?;
-            out.push(")");
-            return Ok(());
-        }
-        self.expr(out, side, depth, flow)
+        let (flow, scope) = flow.to_emit();
+        let crossed = self.nikaia(|walk| {
+            self.s.emit_core_concatenated(
+                &self.world,
+                walk,
+                out,
+                self,
+                side,
+                depth as i64,
+                flow,
+                &scope,
+            )
+        });
+        self.crossed(crossed)
     }
 
     /// Whether `owner::variant` is a variant of an enum this file declares.
@@ -4815,51 +4707,23 @@ impl<'p> Emitter<'p> {
         flow: Flow<'_>,
         tail: Tail,
     ) -> Result<()> {
-        out.push("if ");
-        self.expr(out, cond, depth, flow)?;
-        out.push(" ");
-        self.block(out, then_branch, depth, flow, tail)?;
-        if let Some(block) = else_branch {
-            out.push(" else ");
-            // **`else if` and not `else { if … }`**
-            // ([ADR-132](../../docs/specification/adr/adr-132.md) D2), so the
-            // generated Rust reads as the source does. The condition is the
-            // block holding **one** `if` and nothing else, which is exactly what
-            // the parser makes of an `else if` - and an `else` whose block holds
-            // an `if` *and* other statements stays a block, because that is what
-            // the author wrote.
-            //
-            // It is the chain's depth this takes away rather than a brace: three
-            // links nested three deep is a line the reader has to unwind, and
-            // Part III C.1's rule is about what a reader of the generated file
-            // meets.
-            if let [only] = block.stmts.as_slice()
-                && let Stmt::Expr(Expr::If {
-                    cond,
-                    then_branch,
-                    else_branch,
-                    ..
-                }) = &only.node
-            {
-                // **The `if` is a statement of the `else` block**, and the
-                // checker recorded what it decided about the condition under
-                // that statement: a lent argument written under the outer
-                // one's was a `&` missing - `else if !has(r.items, x)` handed
-                // a `Vec` where a slice was declared (found moving `touch`'s
-                // walk into Nikaia, #125).
-                return self.if_expr(
-                    out,
-                    cond,
-                    then_branch,
-                    else_branch.as_ref(),
-                    depth,
-                    flow.at(only.span.at()),
-                    tail,
-                );
-            }
-            self.block(out, block, depth, flow, tail)?;
-        }
-        Ok(())
+        let (flow, scope) = flow.to_emit();
+        let crossed = self.nikaia(|walk| {
+            self.s.emit_core_if_expr(
+                &self.world,
+                walk,
+                out,
+                self,
+                cond,
+                then_branch,
+                else_branch,
+                depth as i64,
+                flow,
+                &scope,
+                tail,
+            )
+        });
+        self.crossed(crossed)
     }
 
     /// A cast's operand, through the view a `for` binding is
@@ -4914,7 +4778,21 @@ impl<'p> Emitter<'p> {
         flow: Flow<'_>,
         tail: Tail,
     ) -> Result<()> {
-        self.block_opening_with(out, block, depth, flow, tail, None)
+        let (flow, scope) = flow.to_emit();
+        let crossed = self.nikaia(|walk| {
+            self.s.emit_core_block(
+                &self.world,
+                walk,
+                out,
+                self,
+                block,
+                depth as i64,
+                flow,
+                &scope,
+                tail,
+            )
+        });
+        self.crossed(crossed)
     }
 
     /// The same, with one line written before the statements.
@@ -6414,23 +6292,21 @@ impl<'p> Emitter<'p> {
         depth: usize,
         flow: Flow<'_>,
     ) -> Result<()> {
-        let (before, after) =
-            Self::around_value(self.s.facts.nullable_sites.get(&(span.at() as i64)), value);
-        out.push(&before);
-        // `null` is no text of either kind (ADR-282 D5), and goes as `None`.
-        let either = self.returns_either(flow.function) && !matches!(value, Expr::LitNull(_));
-        if either {
-            out.push("nikaia_std::either_text::either(");
-        }
-        if self.s.facts.lent_returns.contains(&(span.at() as i64)) {
-            out.push("&");
-        }
-        self.expr(out, value, depth, flow)?;
-        if either {
-            out.push(")");
-        }
-        out.push(&after);
-        Ok(())
+        let (flow, scope) = flow.to_emit();
+        let crossed = self.nikaia(|walk| {
+            self.s.emit_core_handed_back(
+                &self.world,
+                walk,
+                out,
+                self,
+                value,
+                span.at() as i64,
+                depth as i64,
+                flow,
+                &scope,
+            )
+        });
+        self.crossed(crossed)
     }
 
     /// Whether parameter `at` of what `callee` names is text both kinds of
@@ -6479,29 +6355,21 @@ impl<'p> Emitter<'p> {
         depth: usize,
         flow: Flow<'_>,
     ) -> Result<()> {
-        if form == crate::check::KeyForm::Either {
-            out.push("nikaia_std::index::key(");
-            self.expr(out, index, depth, flow)?;
-            out.push(")");
-            return Ok(());
-        }
-        if form != crate::check::KeyForm::Lent {
-            return self.expr(out, index, depth, flow);
-        }
-        let bare = matches!(
-            index,
-            Expr::Variable(_, _)
-                | Expr::Field { .. }
-                | Expr::LitInt { .. }
-                | Expr::LitChar(_, _)
-                | Expr::LitBool(_, _)
-        );
-        out.push(if bare { "&" } else { "&(" });
-        self.expr(out, index, depth, flow)?;
-        if !bare {
-            out.push(")");
-        }
-        Ok(())
+        let (flow, scope) = flow.to_emit();
+        let crossed = self.nikaia(|walk| {
+            self.s.emit_core_key(
+                &self.world,
+                walk,
+                out,
+                self,
+                form,
+                index,
+                depth as i64,
+                flow,
+                &scope,
+            )
+        });
+        self.crossed(crossed)
     }
 
     /// A range as the language below writes one, `a..b`, for the two places
@@ -9590,26 +9458,22 @@ impl<'p> Emitter<'p> {
         depth: usize,
         flow: Flow<'_>,
     ) -> Result<()> {
-        if config.is_empty() || !self.s.dsl_drivers.contains(callee) {
-            return Ok(());
-        }
-        let names: Vec<String> = config
-            .iter()
-            .map(|a| self.text(a.name).to_string())
-            .collect();
-        if args > 0 {
-            out.push(", ");
-        }
-        out.push(&format!("{} {{ ", crate::dsl::type_name(&names)));
-        for (i, argument) in config.iter().enumerate() {
-            if i > 0 {
-                out.push(", ");
-            }
-            out.push(&format!("{}: ", self.text(argument.name)));
-            self.expr(out, &argument.value, depth, flow)?;
-        }
-        out.push(" }");
-        Ok(())
+        let (flow, scope) = flow.to_emit();
+        let crossed = self.nikaia(|walk| {
+            self.s.emit_core_dsl_parameters(
+                &self.world,
+                walk,
+                out,
+                self,
+                callee,
+                args as i64,
+                config,
+                depth as i64,
+                flow,
+                &scope,
+            )
+        });
+        self.crossed(crossed)
     }
 
     /// Kap 5.1 at a **method** call: the options become positional, in the order
@@ -9629,31 +9493,22 @@ impl<'p> Emitter<'p> {
         depth: usize,
         flow: Flow<'_>,
     ) -> Result<()> {
-        let name = self.text(method).to_string();
-        if self.s.dsl_drivers.contains(&name) {
-            return Ok(());
-        }
-        let Some(options) = self
-            .s
-            .facts
-            .method_options
-            .get(&((flow.statement as i64), name))
-        else {
-            return Ok(());
-        };
-        for (n, (option, default)) in options.iter().enumerate() {
-            // **The comma belongs *between* arguments**, and a method call whose
-            // arguments are all options has nothing before the first one
-            // ([ADR-133](../../docs/specification/adr/adr-133.md) D1).
-            if n > 0 || args > 0 {
-                out.push(", ");
-            }
-            match config.iter().find(|a| self.text(a.name) == option) {
-                Some(passed) => self.expr(out, &passed.value, depth, flow)?,
-                None => out.push(default),
-            }
-        }
-        Ok(())
+        let (flow, scope) = flow.to_emit();
+        let crossed = self.nikaia(|walk| {
+            self.s.emit_core_method_options(
+                &self.world,
+                walk,
+                out,
+                self,
+                method,
+                args as i64,
+                config,
+                depth as i64,
+                flow,
+                &scope,
+            )
+        });
+        self.crossed(crossed)
     }
 
     /// Whether a branch of an `overlap` can fail out of itself
@@ -10697,51 +10552,20 @@ impl<'p> Emitter<'p> {
     /// A string literal. Which of the two it is decides what comes out, and
     /// that is read off the syntax rather than the text (ADR-309 D2).
     fn string(&self, out: &mut Out, expr: &Expr, depth: usize, flow: Flow<'_>) -> Result<()> {
-        match expr {
-            // Inert text, transcribed. A brace is a brace, so nothing has to be
-            // escaped on the way into a Rust string literal - only a *format*
-            // string treats one specially, and this is not one.
-            //
-            // **Unless its use wants text of its own** (ADR-282 D4), and then
-            // it is constructed there, as `[1, 2]` is `vec![1, 2]` where a
-            // `Vec` is wanted: a literal is a constant being built, not text
-            // the program had being copied.
-            Expr::LitStr { text: literal, .. } => {
-                match self
-                    .s
-                    .facts
-                    .owned_texts
-                    .contains(&crate::check::value_node(expr))
-                {
-                    true => out.push(&format!("String::from(\"{literal}\")")),
-                    false => out.push(&format!("\"{literal}\"")),
-                }
-                Ok(())
-            }
-            // `f"…"` is a `String` whether or not anyone put a hole in it,
-            // because the checker says it is and the two have to agree. With no
-            // hole there is nothing to format, and `format!("x")` is a
-            // roundabout way of writing what `.to_string()` says plainly.
-            Expr::LitInterpolated { parts, .. } => {
-                // **A file's name in a hole** (ADR-319 D4): the parts are
-                // joined in the platform's encoding, a name by its bytes and
-                // anything else by its text.
-                if let Some(names) = self.s.facts.path_holes.get(&crate::check::value_node(expr)) {
-                    return self.joined_name(out, parts, names, depth, flow);
-                }
-                // A malformed literal never gets here: the grammar refuses it
-                // at its place (ADR-309 D8).
-                if interpolated_holes(parts).is_empty() {
-                    out.push(&format!("\"{}\".to_string()", format_of(parts)));
-                    return Ok(());
-                }
-                out.push("format!(");
-                self.format_string(out, parts, depth, flow)?;
-                out.push(")");
-                Ok(())
-            }
-            _ => Err(anyhow!("not a string literal")),
-        }
+        let (flow, scope) = flow.to_emit();
+        let crossed = self.nikaia(|walk| {
+            self.s.emit_core_string(
+                &self.world,
+                walk,
+                out,
+                self,
+                expr,
+                depth as i64,
+                flow,
+                &scope,
+            )
+        });
+        self.crossed(crossed)
     }
 
     /// The future a kept function that may pause hands back: one that crosses
@@ -10761,45 +10585,21 @@ impl<'p> Emitter<'p> {
         depth: usize,
         flow: Flow<'_>,
     ) -> Result<()> {
-        out.push("nikaia_std::fs::path::joined(&[");
-        let mut hole = 0;
-        for (at, part) in parts.iter().enumerate() {
-            if at > 0 {
-                out.push(", ");
-            }
-            match part {
-                // A piece of text is a literal, and a hole that is not a name
-                // is its value's text: neither goes through `format!` with
-                // nothing to format, which `clippy` reads as a mistake in
-                // `std`'s lowered tools.
-                crate::ast::FPart::Text(_) => {
-                    let text = format_of(std::slice::from_ref(part))
-                        .replace("{{", "{")
-                        .replace("}}", "}");
-                    out.push(&format!("std::ffi::OsStr::new(\"{text}\")"));
-                }
-                crate::ast::FPart::Hole { .. } => {
-                    let held = interpolated_holes(std::slice::from_ref(part));
-                    let Some((place, expr)) = held.first() else {
-                        continue;
-                    };
-                    let expr = hole_as_read(self.parsed, *place, expr);
-                    let named = names.get(hole).copied().unwrap_or(false);
-                    out.push(match named {
-                        true => "std::convert::AsRef::<std::ffi::OsStr>::as_ref(&(",
-                        false => "std::ffi::OsStr::new(&std::string::ToString::to_string(&(",
-                    });
-                    self.expr(out, &expr, depth, flow)?;
-                    out.push(match named {
-                        true => "))",
-                        false => ")))",
-                    });
-                    hole += 1;
-                }
-            }
-        }
-        out.push("])");
-        Ok(())
+        let (flow, scope) = flow.to_emit();
+        let crossed = self.nikaia(|walk| {
+            self.s.emit_core_joined_name(
+                &self.world,
+                walk,
+                out,
+                self,
+                parts,
+                names,
+                depth as i64,
+                flow,
+                &scope,
+            )
+        });
+        self.crossed(crossed)
     }
 
     /// The literal as a Rust format string, with its holes as arguments.
@@ -10810,22 +10610,20 @@ impl<'p> Emitter<'p> {
         depth: usize,
         flow: Flow<'_>,
     ) -> Result<()> {
-        // **Built from the parts** (ADR-309 D9): the grammar has read the
-        // literal, so there is nothing left to scan.
-        out.push(&format!("\"{}\"", format_of(parts)));
-
-        // **The holes the grammar parsed** (ADR-309 D6), each by its place.
-        for (hole, expr) in interpolated_holes(parts) {
-            // What the tier pass hands over inside it (ADR-229 D1), as every
-            // other reader of a hole sees it - and the node itself where it
-            // hands nothing, which is the one the checker read
-            // ([`hole_as_read`]).
-            let expr = hole_as_read(self.parsed, hole, expr);
-            let expr: &Expr = &expr;
-            out.push(", ");
-            self.expr(out, expr, depth, flow)?;
-        }
-        Ok(())
+        let (flow, scope) = flow.to_emit();
+        let crossed = self.nikaia(|walk| {
+            self.s.emit_core_format_string(
+                &self.world,
+                walk,
+                out,
+                self,
+                parts,
+                depth as i64,
+                flow,
+                &scope,
+            )
+        });
+        self.crossed(crossed)
     }
 
     /// One arm's pattern. Every shape is one the language below spells the
@@ -10993,16 +10791,8 @@ impl<'p> Emitter<'p> {
         Ok(())
     }
 
-    /// The names a pattern binds out of a boxed part.
-    /// **The boxed parts a guard reads, read through the box** (ADR-246 D5
-    /// item 2): the guard runs before the arm opens them, so each name it
-    /// reads is bound again to a view of what its box holds.
-    fn guard_reopening(&self, pattern: &MatchPattern, guard: &Expr) -> String {
-        self.s
-            .emit_core_guard_reopening(&self.world, self, pattern, guard)
-    }
-
-    /// The guard, with the boxed parts it reads opened for it.
+    /// The guard, with the boxed parts it reads opened for it (ADR-246 D5 item
+    /// 2): each name it reads is bound again to a view of what its box holds.
     fn guard_written(
         &self,
         out: &mut Out,
@@ -11011,15 +10801,21 @@ impl<'p> Emitter<'p> {
         depth: usize,
         flow: Flow<'_>,
     ) -> Result<()> {
-        let reopening = self.guard_reopening(pattern, guard);
-        if reopening.is_empty() {
-            return self.expr(out, guard, depth, flow);
-        }
-        out.push("{ ");
-        out.push(&reopening);
-        self.expr(out, guard, depth, flow)?;
-        out.push(" }");
-        Ok(())
+        let (flow, scope) = flow.to_emit();
+        let crossed = self.nikaia(|walk| {
+            self.s.emit_core_guard_written(
+                &self.world,
+                walk,
+                out,
+                self,
+                pattern,
+                guard,
+                depth as i64,
+                flow,
+                &scope,
+            )
+        });
+        self.crossed(crossed)
     }
 
     fn boxed_bindings(&self, pattern: &MatchPattern, out: &mut Vec<String>) {
@@ -11914,47 +11710,20 @@ impl<'p> Emitter<'p> {
     /// how the tree was written - and without them the emitted Rust means
     /// something else and often still compiles.
     fn postfix_base(&self, out: &mut Out, expr: &Expr, depth: usize, flow: Flow<'_>) -> Result<()> {
-        // **A read through the brackets is a `*`**, which binds looser than a
-        // postfix: `*get(…).len()` is the deref of the length. The one place
-        // its parentheses belong (ADR-293 D33).
-        let a_read =
-            !flow.in_a_place && matches!(expr, Expr::Index { index, .. } if !self.slices( index));
-        // **And so is a `mut` parameter read as its number**
-        // (`copied_in_place`): `(*n).abs()`.
-        let a_read = a_read
-            || !flow.in_a_place
-                && matches!(expr, Expr::Variable(name, _) if self.copied_in_place(flow, self.text(*name)));
-        let parenthesise = a_read
-            || self.emits_as_cast(expr)
-            || matches!(
+        let (flow, scope) = flow.to_emit();
+        let crossed = self.nikaia(|walk| {
+            self.s.emit_core_postfix_base(
+                &self.world,
+                walk,
+                out,
+                self,
                 expr,
-                Expr::Binary { .. }
-                    | Expr::Unary { .. }
-                    | Expr::Range { .. }
-                    | Expr::If { .. }
-                    | Expr::Match { .. }
-                    // It lowers to a `match`, so it needs what a `match` needs.
-                    | Expr::SafeMethod { .. }
-                    | Expr::Block(_, _)
-                    | Expr::Unsafe(_, _)
-                    | Expr::Closure { .. }
-                    | Expr::TryCatch { .. }
-                    | Expr::Dsl { .. }
-                    | Expr::Asm { .. }
-                    // **A negative number before a `.`** (#417): `-7.abs()`
-                    // is `-(7.abs())` below, so `(-7).wrapping_add(2)` came out
-                    // as a different number.
-                    | Expr::LitInt { negative: true, .. }
-            );
-
-        if parenthesise {
-            out.push("(");
-        }
-        self.expr(out, expr, depth, flow)?;
-        if parenthesise {
-            out.push(")");
-        }
-        Ok(())
+                depth as i64,
+                flow,
+                &scope,
+            )
+        });
+        self.crossed(crossed)
     }
 
     /// **Whether this comes out as a Rust `as` conversion**, whatever it was
@@ -11977,10 +11746,6 @@ impl<'p> Emitter<'p> {
         self.s.ends_in_a_cast(&self.world, expr)
     }
 
-    fn emits_as_cast(&self, expr: &Expr) -> bool {
-        self.s.emits_as_cast(&self.world, expr)
-    }
-
     /// **`std`'s count of a sequence**, which counts in `usize` below and is
     /// an `i64` here, as a length is (Part I 2.2): the checker says which
     /// `count()` resolved to it, so a program's own `count` is left alone.
@@ -11998,41 +11763,21 @@ impl<'p> Emitter<'p> {
         depth: usize,
         flow: Flow<'_>,
     ) -> Result<()> {
-        let parenthesise = match expr {
-            // **A sum that ends in a conversion** reads the same way at the
-            // left of a comparison: `at + w.len() as i64 < n` is `i64<n>` to
-            // Rust as much as the conversion alone is (found moving
-            // `contracts::spelling` into Nikaia, #125).
-            Expr::Binary { op, .. } => {
-                precedence(*op) < needs
-                    || (needs == precedence(BinaryOp::Lt) && self.ends_in_a_cast(expr))
-            }
-            // **An operand that comes out as a conversion**, in the two
-            // positions where Rust reads it wrongly without parentheses.
-            //
-            // Beside a **unary** operator, because `as` binds looser: `-x as i64`
-            // is `(-x) as i64`. And as the **left of a comparison**, where it is
-            // not a precedence question at all - `x as i64 < k` is read as
-            // `i64<k>`, the start of a generic argument list, and the program
-            // does not parse. Both would otherwise be a `rustc` message about a
-            // file nobody wrote (Part III, C.1).
-            //
-            // Nowhere else, and that is the same rule: `x as i64 + 1` needs no
-            // parentheses and a parenthesis nobody needs is the other half of
-            // C.1 - `unused_parens` is a warning about the generated file.
-            _ => {
-                self.emits_as_cast(expr) && (needs == u8::MAX || needs == precedence(BinaryOp::Lt))
-            }
-        };
-
-        if parenthesise {
-            out.push("(");
-        }
-        self.expr(out, expr, depth, flow)?;
-        if parenthesise {
-            out.push(")");
-        }
-        Ok(())
+        let (flow, scope) = flow.to_emit();
+        let crossed = self.nikaia(|walk| {
+            self.s.emit_core_nested(
+                &self.world,
+                walk,
+                out,
+                self,
+                expr,
+                needs as i64,
+                depth as i64,
+                flow,
+                &scope,
+            )
+        });
+        self.crossed(crossed)
     }
 
     fn args(
@@ -12574,80 +12319,23 @@ impl<'p> Emitter<'p> {
         depth: usize,
         flow: Flow<'_>,
     ) -> Result<()> {
-        // **The `?` is the call's, and a `catch` is what takes it away.** A
-        // grammar entry propagates on its own everywhere else (Kap 7.1); inside
-        // the half a `catch` guards, the `match` around it handles the failure,
-        // so the `Result` has to arrive whole. Read off `flow` rather than
-        // passed in, which is how every other call decides it.
-        let question = match flow.caught {
-            false => "?",
-            true => "",
-        };
-        let name = self.text(grammar);
-        let def = self.s.grammars.get(name).ok_or_else(|| {
-            refused_at!(
-                flow.statement,
-                "There's no grammar called `{name}` in this file."
+        let (flow, scope) = flow.to_emit();
+        let crossed = self.nikaia(|walk| {
+            self.s.emit_core_grammar_entry(
+                &self.world,
+                walk,
+                out,
+                self,
+                grammar,
+                entry,
+                input,
+                self.build.parallelism(),
+                depth as i64,
+                flow,
+                &scope,
             )
-        })?;
-
-        // **The rule is named at the call** ([ADR-296](../../docs/specification/adr/adr-296.md)
-        // D1, D2). It used to be picked here — the first `entry` rule, a
-        // `par_fold` one beating an earlier one — so a grammar with two of them
-        // got one by source order, in silence. Every `entry` rule is an entry
-        // now, and which one is what the program wrote.
-        let rule = def
-            .rules
-            .iter()
-            .find(|r| r.is_entry && r.name == entry)
-            .ok_or_else(|| {
-                let rule = self.text(entry);
-                match def.rules.iter().any(|r| r.name == entry) {
-                    // **A rule that is not an entry is the grammar's own**
-                    // (D25), and saying *there is no such rule* about one
-                    // written three lines up is the message a reader cannot
-                    // act on.
-                    true => refused_at!(
-                        flow.statement,
-                        "`{rule}` in grammar `{name}` isn't an entry, so the program can't \
-                         call it. Write `entry rule {rule}`."
-                    ),
-                    false => refused_at!(
-                        flow.statement,
-                        "Grammar `{name}` has no entry called `{rule}`."
-                    ),
-                }
-            })?;
-        let rule_name = self.text(rule.name);
-
-        // The input goes to `std` once, which needs it twice: once to parse
-        // and once to say *where* a failure was. A `ParseError` knows the
-        // offset and not the text, so only `render` can turn "at 1042" into
-        // "at line 37, column 9" - and a program that reports a rejected file
-        // without saying which line is not much better than one that panics.
-        // `&*` because the parser takes the text: a mapping, an owned string
-        // and a view all reach it the same way, and none of them has to be
-        // named here.
-        // Both are calls of `std`'s (`grammar::parse`, `grammar::parse_pieces`)
-        // and not blocks, so the call is an expression wherever it stands - a
-        // block of statements in a `match`'s scrutinee is refused by `clippy`.
-        if par_fold_of(rule).is_some() {
-            out.push("nikaia_std::grammar::parse_pieces(&*");
-            self.expr(out, input, depth, flow)?;
-            out.push(&format!(
-                ", |source| {name}::parse_{rule_name}_pieces(source, \
-                 &ParseContext::<()>::default(), {})){question}",
-                self.build.parallelism()
-            ));
-            return Ok(());
-        }
-
-        // A sequential entry rule: no pieces to cut, so the parser is driven
-        // over the whole input once.
-        out.push("nikaia_std::grammar::parse(&*");
-        self.expr(out, input, depth, flow)?;
-        out.push(&format!(", {name}::parse_{rule_name}()){question}"));
-        Ok(())
+        });
+        self.crossed(crossed)
     }
 }
 
@@ -12943,19 +12631,6 @@ fn fold_callees(
     names
 }
 
-/// The `par_fold` a rule *is*, if it is one. A fold with a merge is the only
-/// body the backend generates a piece driver for.
-fn par_fold_of(rule: &GrammarRule) -> Option<&FoldSpec> {
-    rule.alts.iter().find_map(|alt| match &alt.pattern.node {
-        Pattern::Fold(spec) if spec.parallel => Some(spec),
-        Pattern::Bind { pat, .. } => match &pat.node {
-            Pattern::Fold(spec) if spec.parallel => Some(spec),
-            _ => None,
-        },
-        _ => None,
-    })
-}
-
 /// **A lambda whose body pauses, which this lowering cannot write.**
 ///
 /// **What is left of it is a callee nothing describes.** A lambda that pauses
@@ -13144,15 +12819,6 @@ const ON_THE_POOL: [&str; 4] = [
     "supervisor::run",
     "task::scope",
 ];
-
-/// A Rust string literal for text the template wrote itself.
-///
-/// The text is markup by definition - the template author typed it - so nothing
-/// is escaped here; what is quoted is what Rust needs quoted to read the same
-/// bytes back.
-fn rust_string(text: &str) -> String {
-    nikaia_std::tools::emit_text::rust_string(text)
-}
 
 /// The type a `truncating_` method converts to, if the name is one
 /// ([ADR-285](../../../docs/specification/adr/adr-285.md) D13).
@@ -13430,21 +13096,6 @@ fn rust_format_escape(text: &str) -> String {
     nikaia_std::tools::emit_text::rust_format_escape(text)
 }
 
-/// **A refusal with no place of its own, given the statement's**
-/// ([ADR-171](../../docs/specification/adr/adr-171.md) D1).
-///
-/// A helper that works on text — a string literal's holes, say — knows what is
-/// wrong and not where, because it never saw a file. The caller is emitting a
-/// statement and knows exactly where. This is that handover, written once
-/// rather than at each call.
-fn at_the_statement<T>(flow: Flow<'_>, result: Result<T>) -> Result<T> {
-    result.map_err(
-        |error| match crate::diagnostics::refusal_at(&error).is_none() {
-            true => crate::diagnostics::refuse_at(flow.statement, format!("{error}")),
-            false => error,
-        },
-    )
-}
 // ---------------------------------------------------------------------------
 // The tether: where a buffer lives, written out
 // ([ADR-283](../../docs/specification/adr/adr-283.md))

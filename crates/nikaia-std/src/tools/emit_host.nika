@@ -16,6 +16,14 @@ pub trait EmitHost {
     /// `Emitter::expr`: an expression, written to `out`.
     fn expr(ref self, mut walk: EmitWalk, mut out: EmitOut, node: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws
 
+    /// `Emitter::block_opening_with`: a block, with `opening` (one line) written
+    /// before its statements where there is one.
+    fn block_opening_with(ref self, mut walk: EmitWalk, mut out: EmitOut, block: ref Block, depth: i64, flow: EmitFlow, scope: ref EmitScope, tail: EmitTail, opening: String?) sync throws
+
+    /// A hole of an `f"..."` with what the tier pass hands over inside it
+    /// (`text_tiers::wrap_hole`).
+    fn wrap_hole(ref self, hole: ref Expr, wraps: ref Vec[(i64, winnow_grammar::Symbol)]) -> Expr sync
+
     /// The names of the variables read anywhere in `expr`, string holes
     /// included, in the order the walk meets them (`sync::visit_expr`).
     fn names_read(ref self, expr: ref Expr) -> Vec[String] sync

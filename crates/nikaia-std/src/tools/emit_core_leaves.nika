@@ -1,0 +1,561 @@
+// crates/nikaia-std/src/tools/emit_core_leaves.nika
+//
+// **The leaves of the emitter's core** (ADR-294, #125, #558, E9 unit U2): the
+// methods that write a few tokens around one or two sub-expressions and call
+// `expr` for those - a map key, the base of a postfix, an operand of an
+// operator, a value handed back, a string literal, an `f"..."`, the options of
+// a call, a guard, a grammar entry, an `html` template, a block, an `if`.
+// Methods of `EmitState`, `emit_core_*[H: EmitHost]`; the Rust method of the
+// same name is a one-line stub. What stays on the other side of the host is
+// `expr` and `block_opening_with` (until U10), and the one rewrite of a hole
+// that is Rust (`wrap_hole`, the tier pass).
+
+use std::collections
+
+/// `emit_around_value` for the wrap the checker recorded at `at`, if any.
+fn emit_leaf_wrapped(sites: ref collections::BTreeMap[i64, FactWrap], at: i64, value: ref Expr) -> (String, String) {
+    if !sites.contains_key(at) {
+        return emit_two("", "")
+    }
+    let held = sites.get(at) ?? return emit_two("", "")
+    let compound = match value {
+        Expr::Binary { .. } => true,
+        Expr::Unary { .. } => true,
+        Expr::Cast { .. } => true,
+        Expr::Range { .. } => true,
+        Expr::Coalesce { .. } => true,
+        else => false,
+    }
+    let conversion = match held {
+        FactWrap::Conversion => true,
+        else => false,
+    }
+    if compound && conversion {
+        return emit_two("(", ").into()")
+    }
+    return emit_around_held(held)
+}
+
+/// A key that needs no parentheses after a `&`.
+fn emit_leaf_bare_key(index: ref Expr) -> bool {
+    return match index {
+        Expr::Variable(_, _) => true,
+        Expr::Field { .. } => true,
+        Expr::LitInt { .. } => true,
+        Expr::LitChar(_, _) => true,
+        Expr::LitBool(_, _) => true,
+        else => false,
+    }
+}
+
+/// Whether an `f"..."` has a hole.
+fn emit_leaf_has_holes(parts: ref Vec[FPart]) -> bool {
+    for part in parts {
+        match part {
+            FPart::Hole { .. } => return true,
+            else => {}
+        }
+    }
+    return false
+}
+
+/// Whether the rule has an alternative that is a `par_fold`, written bare or
+/// bound to a name.
+fn emit_leaf_par_fold(rule: ref GrammarRule) -> bool {
+    for alt in rule.alts {
+        match alt.pattern.node {
+            Pattern::Fold(spec) => {
+                if spec.parallel {
+                    return true
+                }
+            },
+            Pattern::Bind { pat, .. } => {
+                match pat.node {
+                    Pattern::Fold(spec) => {
+                        if spec.parallel {
+                            return true
+                        }
+                    },
+                    else => {}
+                }
+            },
+            else => {}
+        }
+    }
+    return false
+}
+
+impl EmitState {
+    /// A hole of an `f"..."`, as every reader sees it: what the tier pass hands
+    /// over inside it (ADR-229 D1), and the node itself where it hands nothing.
+    pub fn emit_core_hole[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, at: i64, node: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        if self.hole_wraps.contains_key(at) {
+            let wraps = self.hole_wraps.get(at) ?? return
+            let wrapped = host.wrap_hole(node, wraps)
+            host.expr(walk, out, wrapped, depth, flow, scope)
+            return
+        }
+        host.expr(walk, out, node, depth, flow, scope)
+    }
+
+    /// A key, handed over as it is or lent with a `&`.
+    pub fn emit_core_key[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, form: FactKeyForm, index: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        let kind = match form {
+            FactKeyForm::Either => 1,
+            FactKeyForm::Lent => 2,
+            else => 0,
+        }
+        if kind == 1 {
+            out.push("nikaia_std::index::key(")
+            host.expr(walk, out, index, depth, flow, scope)
+            out.push(")")
+            return
+        }
+        if kind == 0 {
+            host.expr(walk, out, index, depth, flow, scope)
+            return
+        }
+        if emit_leaf_bare_key(index) {
+            out.push("&")
+        } else {
+            out.push("&(")
+        }
+        host.expr(walk, out, index, depth, flow, scope)
+        if !emit_leaf_bare_key(index) {
+            out.push(")")
+        }
+    }
+
+    /// The base of a postfix (`.m()`, `.f`, `[i]`), in parentheses where its
+    /// own shape binds looser than a postfix.
+    pub fn emit_core_postfix_base[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        // **A read through the brackets is a `*`**, which binds looser than a
+        // postfix: `*get(..).len()` is the deref of the length (ADR-293 D33); and
+        // so is a `mut` parameter read as its number (`copied_in_place`).
+        let mut parenthesise = false
+        if !flow.in_a_place {
+            parenthesise = match node {
+                Expr::Index { index, .. } => !self.slices(index),
+                Expr::Variable(name, _) => self.copied_in_place(scope.function, emit_text(world, name)),
+                else => false,
+            }
+        }
+        if !parenthesise {
+            parenthesise = self.emits_as_cast(world, node)
+        }
+        if !parenthesise {
+            parenthesise = match node {
+                Expr::Binary { .. } => true,
+                Expr::Unary { .. } => true,
+                Expr::Range { .. } => true,
+                Expr::If { .. } => true,
+                Expr::Match { .. } => true,
+                Expr::SafeMethod { .. } => true,
+                Expr::Block(_, _) => true,
+                Expr::Unsafe(_, _) => true,
+                Expr::Closure { .. } => true,
+                Expr::TryCatch { .. } => true,
+                Expr::Dsl { .. } => true,
+                Expr::Asm { .. } => true,
+                // **A negative number before a `.`** (#417): `-7.abs()` is
+                // `-(7.abs())` below.
+                Expr::LitInt { negative, .. } => negative,
+                else => false,
+            }
+        }
+        if parenthesise {
+            out.push("(")
+        }
+        host.expr(walk, out, node, depth, flow, scope)
+        if parenthesise {
+            out.push(")")
+        }
+    }
+
+    /// An operand of an operator, parenthesised only where it binds looser than
+    /// the position it stands in (`needs` is the precedence it must keep, `255`
+    /// for a unary operator's).
+    pub fn emit_core_nested[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, needs: i64, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        let parenthesise = match node {
+            // **A sum that ends in a conversion** reads the same way at the left
+            // of a comparison: `at + w.len() as i64 < n` is `i64<n>` to Rust.
+            Expr::Binary { op, .. } => precedence(op) < needs || (needs == precedence(BinaryOp::Lt) && self.ends_in_a_cast(world, node)),
+            // **An operand that comes out as a conversion**, beside a unary
+            // operator and at the left of a comparison, where Rust reads it
+            // wrongly without parentheses.
+            else => self.emits_as_cast(world, node) && (needs == 255 || needs == precedence(BinaryOp::Lt)),
+        }
+        if parenthesise {
+            out.push("(")
+        }
+        host.expr(walk, out, node, depth, flow, scope)
+        if parenthesise {
+            out.push(")")
+        }
+    }
+
+    /// One side of a text `+`: a side read out of a list is lent as `&str`, so
+    /// that it is not moved out of the list.
+    pub fn emit_core_concatenated[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, side: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        let indexed = match side {
+            Expr::Index { .. } => true,
+            else => false,
+        }
+        if indexed {
+            out.push("::core::convert::AsRef::<str>::as_ref(&")
+            host.expr(walk, out, side, depth, flow, scope)
+            out.push(")")
+            return
+        }
+        host.expr(walk, out, side, depth, flow, scope)
+    }
+
+    /// What a `return` or a tail hands back: the nullable wrap, the `Either`
+    /// text, and the `&` of a value lent out of a field (ADR-282 D5).
+    pub fn emit_core_handed_back[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, value: ref Expr, at: i64, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        let (before, after) = emit_leaf_wrapped(self.facts.nullable_sites, at, value)
+        out.push(before)
+        // `null` is no text of either kind (ADR-282 D5), and goes as `None`.
+        let is_null = match value {
+            Expr::LitNull(_) => true,
+            else => false,
+        }
+        let either = call_returns_either(world.words, world.items, scope.function) && !is_null
+        if either {
+            out.push("nikaia_std::either_text::either(")
+        }
+        if self.facts.lent_returns.contains(at) {
+            out.push("&")
+        }
+        host.expr(walk, out, value, depth, flow, scope)
+        if either {
+            out.push(")")
+        }
+        out.push(after)
+    }
+
+    /// An `f"..."` with a file's name in it, as one name (ADR-319 D4): each text
+    /// part and each hole that is not a name as its text, each name as its
+    /// bytes.
+    pub fn emit_core_joined_name[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, parts: ref Vec[FPart], names: ref Vec[bool], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        out.push("nikaia_std::fs::path::joined(&[")
+        let mut hole = 0
+        let mut n = 0
+        for part in parts {
+            if n > 0 {
+                out.push(", ")
+            }
+            n += 1
+            match part {
+                FPart::Text(text) => {
+                    let shown = text.replace("{{", "{").replace("}}", "}")
+                    out.push(f"std::ffi::OsStr::new(\"{shown}\")")
+                },
+                FPart::Hole { expr, at, .. } => {
+                    let named = hole < names.len() && names[hole]
+                    if named {
+                        out.push("std::convert::AsRef::<std::ffi::OsStr>::as_ref(&(")
+                    } else {
+                        out.push("std::ffi::OsStr::new(&std::string::ToString::to_string(&(")
+                    }
+                    self.emit_core_hole(world, walk, out, host, at as i64, expr, depth, flow, scope)
+                    if named {
+                        out.push("))")
+                    } else {
+                        out.push(")))")
+                    }
+                    hole += 1
+                },
+            }
+        }
+        out.push("])")
+    }
+
+    /// The literal as a Rust format string, with its holes as arguments
+    /// (ADR-309 D6, D9).
+    pub fn emit_core_format_string[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, parts: ref Vec[FPart], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        let mut head: String = "\""
+        head.push_str(format_of(parts))
+        head.push_str("\"")
+        out.push(head)
+        for part in parts {
+            match part {
+                FPart::Hole { expr, at, .. } => {
+                    out.push(", ")
+                    self.emit_core_hole(world, walk, out, host, at as i64, expr, depth, flow, scope)
+                },
+                else => {}
+            }
+        }
+    }
+
+    /// A string literal. Which of the two it is decides what comes out, and
+    /// that is read off the syntax rather than the text (ADR-309 D2).
+    pub fn emit_core_string[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        match node {
+            // Inert text, transcribed; **unless its use wants text of its own**
+            // (ADR-282 D4), and then it is constructed there.
+            Expr::LitStr { text, .. } => {
+                if self.facts.owned_texts.contains(node_key(node)) {
+                    out.push(f"String::from(\"{text}\")")
+                } else {
+                    out.push(f"\"{text}\"")
+                }
+            },
+            // `f"..."` is a `String` whether or not anyone put a hole in it.
+            Expr::LitInterpolated { parts, .. } => {
+                // **A file's name in a hole** (ADR-319 D4).
+                if self.facts.path_holes.contains_key(node_key(node)) {
+                    let names = self.facts.path_holes.get(node_key(node)) ?? return
+                    self.emit_core_joined_name(world, walk, out, host, parts, names, depth, flow, scope)
+                    return
+                }
+                if !emit_leaf_has_holes(parts) {
+                    out.push(f"\"{format_of(parts)}\".to_string()")
+                    return
+                }
+                out.push("format!(")
+                self.emit_core_format_string(world, walk, out, host, parts, depth, flow, scope)
+                out.push(")")
+            },
+            else => {
+                throw EmitRefused { message: "not a string literal".clone(), at: null }
+            },
+        }
+    }
+
+    /// ADR-296 D5: the shadow struct a call to a DSL driver builds. A struct
+    /// literal names its fields, so a call may write them in any order.
+    pub fn emit_core_dsl_parameters[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, callee: ref String, args: i64, config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        if config.len() == 0 || !self.dsl_drivers.contains(callee) {
+            return
+        }
+        let mut names: Vec[String] = []
+        for a in config {
+            names.push(emit_text(world, a.name))
+        }
+        if args > 0 {
+            out.push(", ")
+        }
+        out.push(f"{type_name(names)} {{ ")
+        let mut n = 0
+        for argument in config {
+            if n > 0 {
+                out.push(", ")
+            }
+            n += 1
+            out.push(f"{emit_text(world, argument.name)}: ")
+            host.expr(walk, out, argument.value, depth, flow, scope)
+        }
+        out.push(" }")
+    }
+
+    /// Kap 5.1 at a **method** call: the options become positional, in the order
+    /// the declaration gives, and one that was left out becomes its default.
+    pub fn emit_core_method_options[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, method: winnow_grammar::Symbol, args: i64, config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        let name = emit_text(world, method)
+        if self.dsl_drivers.contains(name) {
+            return
+        }
+        let options = self.facts.method_options.get((flow.statement, name.clone())) ?? return
+        let mut n = 0
+        for (option, default) in options {
+            // **The comma belongs *between* arguments** (ADR-133 D1).
+            if n > 0 || args > 0 {
+                out.push(", ")
+            }
+            n += 1
+            let mut found = false
+            for a in config {
+                if !found && emit_text(world, a.name) == option {
+                    host.expr(walk, out, a.value, depth, flow, scope)
+                    found = true
+                }
+            }
+            if !found {
+                out.push(default)
+            }
+        }
+    }
+
+    /// The guard, with the boxed parts it reads opened for it.
+    pub fn emit_core_guard_written[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, pattern: ref MatchPattern, guard: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        let reopening = self.emit_core_guard_reopening(world, host, pattern, guard)
+        if reopening.len() == 0 {
+            host.expr(walk, out, guard, depth, flow, scope)
+            return
+        }
+        out.push("{ ")
+        out.push(reopening)
+        host.expr(walk, out, guard, depth, flow, scope)
+        out.push(" }")
+    }
+
+    /// `Measurements.file(data)` - the whole of what a user writes to run a
+    /// grammar (ADR-296 D1, D2). `parallelism` is how the build asks the driver
+    /// to cut the input.
+    pub fn emit_core_grammar_entry[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, grammar_symbol: winnow_grammar::Symbol, entry: winnow_grammar::Symbol, input: ref Expr, parallelism: ref String, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        // **The `?` is the call's, and a `catch` is what takes it away.**
+        let question = match flow.caught {
+            true => "".clone(),
+            false => "?".clone(),
+        }
+        let name = emit_text(world, grammar_symbol)
+        if !self.grammars.contains_key(name.clone()) {
+            throw EmitRefused { message: f"There's no grammar called `{name}` in this file.", at: flow.statement }
+        }
+        let def = self.grammars.get(name.clone()) ?? return
+        // **The rule is named at the call** (ADR-296 D1, D2): every `entry` rule
+        // is an entry, and which one is what the program wrote.
+        let mut found = false
+        let mut parallel = false
+        let mut named = false
+        let mut rule_name: String = ""
+        for r in def.rules {
+            if r.name == entry {
+                named = true
+            }
+            if r.is_entry && r.name == entry && !found {
+                found = true
+                parallel = emit_leaf_par_fold(r)
+                rule_name = emit_text(world, r.name)
+            }
+        }
+        if !found {
+            let rule = emit_text(world, entry)
+            // **A rule that is not an entry is the grammar's own** (D25).
+            if named {
+                throw EmitRefused { message: f"`{rule}` in grammar `{name}` isn't an entry, so the program can't call it. Write `entry rule {rule}`.", at: flow.statement }
+            }
+            throw EmitRefused { message: f"Grammar `{name}` has no entry called `{rule}`.", at: flow.statement }
+        }
+        if parallel {
+            out.push("nikaia_std::grammar::parse_pieces(&*")
+            host.expr(walk, out, input, depth, flow, scope)
+            out.push(f", |source| {name}::parse_{rule_name}_pieces(source, &ParseContext::<()>::default(), {parallelism})){question}")
+            return
+        }
+        // A sequential entry rule: the parser is driven over the whole input once.
+        out.push("nikaia_std::grammar::parse(&*")
+        host.expr(walk, out, input, depth, flow, scope)
+        out.push(f", {name}::parse_{rule_name}()){question}")
+    }
+
+    /// The pieces of a template, appended to `__html` in order.
+    pub fn emit_core_template_segments[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, site: i64, segments: ref Vec[Segment], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        let pad = "    ".repeat(depth)
+        for segment in segments {
+            match segment {
+                Segment::Text(text) => {
+                    out.push(f"{pad}__html.push_str({rust_string(text)});\n")
+                },
+                Segment::Hole { expr, .. } => {
+                    // A hole holds an expression of this language, parsed where
+                    // the file was read (ADR-340 D2): a key that is not there
+                    // did not parse, and is refused with what was said.
+                    if !self.template_holes.contains_key((site, expr.clone())) {
+                        let said = self.template_errors.get((site, expr.clone())) ?? ""
+                        throw EmitRefused { message: f"The template hole `{{{expr}}}` can't be read. {said}", at: flow.statement }
+                    }
+                    let parsed = self.template_holes.get((site, expr.clone())) ?? return
+                    out.push(f"{pad}__html.push_str(&::nikaia_std::html::Render::render(&")
+                    host.expr(walk, out, parsed, depth, flow, scope)
+                    out.push("));\n")
+                },
+                // The loop of the language below, over the captured collection:
+                // **`.iter()` and not `&`** (ADR-094 D4), for a name that may
+                // already be a view.
+                Segment::For { binding, collection, body } => {
+                    out.push(f"{pad}for {binding} in {collection}.iter() {{\n")
+                    self.emit_core_template_segments(world, walk, out, host, site, body, depth + 1, flow, scope)
+                    out.push(f"{pad}}}\n")
+                },
+            }
+        }
+    }
+
+    /// A `dsl ... { ... } eod` body: the `html` template compiled here
+    /// (ADR-017), or a statement whose holes the call site fills (ADR-296 D5).
+    pub fn emit_core_template[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, name: ref String, context: winnow_grammar::Symbol?, content: ref String, site: i64, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        // ADR-296 D5: a body with `:name` holes and a target this compiler is not
+        // itself the grammar for is a *statement*, and its value is its own text.
+        if is_deferred(name, content) {
+            if context != null {
+                let given = context ?? return
+                throw EmitRefused { message: f"`dsl {name} {{ … }}` with `:name` holes can't take a context, but `{emit_text(world, given)}` was given.", at: flow.statement }
+            }
+            let trimmed: String = content.trim().clone()
+            out.push(rust_string(trimmed))
+            return
+        }
+        if name != "html" {
+            throw EmitRefused { message: f"`dsl {name} {{ … }}` has no `:name` holes, and `{name}` isn't a language the compiler knows. Add `:name` holes for the parameters, or use `dsl html`.", at: flow.statement }
+        }
+        if context != null {
+            let given = context ?? return
+            throw EmitRefused { message: f"`dsl html` can't take a context, but `{emit_text(world, given)}` was given.", at: flow.statement }
+        }
+        // The framing whitespace is not markup; the template's own refusals get
+        // the statement's place too.
+        let framed: String = content.trim().clone()
+        let segments = split(framed) catch {
+            throw EmitRefused { message: f"{error}", at: flow.statement }
+        }
+        // ADR-017 D3. Every hole that escaping cannot make safe, at once.
+        let unsafe_holes = illegal(segments)
+        if unsafe_holes.len() > 0 {
+            let mut message: String = "the template has holes escaping cannot make safe\n"
+            for (expr, at) in unsafe_holes {
+                message.push_str(f"  {illegal_message(expr, at)}\n")
+            }
+            throw EmitRefused { message: message, at: null }
+        }
+        let pad = "    ".repeat(depth + 1)
+        let close = "    ".repeat(depth)
+        // The compiler knows every literal byte of this template, so it knows what
+        // the result is at least as long as (ADR-178 section 1).
+        out.push(f"{{\n{pad}let mut __html = String::with_capacity({literal_length(segments)});\n")
+        self.emit_core_template_segments(world, walk, out, host, site, segments, depth + 1, flow, scope)
+        out.push(f"{pad}__html\n{close}}}")
+    }
+
+    /// A block: its statements with nothing written before them.
+    pub fn emit_core_block[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, block: ref Block, depth: i64, flow: EmitFlow, scope: ref EmitScope, tail: EmitTail) sync throws {
+        host.block_opening_with(walk, out, block, depth, flow, scope, tail, null)
+    }
+
+    /// `if c { ... } else { ... }`, where `tail` says what the whole thing is in
+    /// the position of: the branches are in the same position the `if` is.
+    pub fn emit_core_if_expr[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, condition: ref Expr, then_block: ref Block, else_block: ref Block?, depth: i64, flow: EmitFlow, scope: ref EmitScope, tail: EmitTail) sync throws {
+        out.push("if ")
+        host.expr(walk, out, condition, depth, flow, scope)
+        out.push(" ")
+        self.emit_core_block(world, walk, out, host, then_block, depth, flow, scope, tail)
+        if else_block == null {
+            return
+        }
+        let block = else_block ?? return
+        out.push(" else ")
+        // **`else if` and not `else { if ... }`** (ADR-132 D2): the block that
+        // holds **one** `if` and nothing else is what the parser makes of an
+        // `else if`. The `if` is a statement of the `else` block, and the checker
+        // recorded what it decided about the condition under that statement.
+        if block.stmts.len() == 1 {
+            for only in block.stmts {
+                match only.node {
+                    Stmt::Expr(inner) => {
+                        match inner {
+                            Expr::If { cond, then_branch, else_branch, .. } => {
+                                self.emit_core_if_expr(world, walk, out, host, cond, then_branch, else_branch, depth, flow.at(only.span.start as i64), scope, tail)
+                                return
+                            },
+                            else => {}
+                        }
+                    },
+                    else => {}
+                }
+            }
+        }
+        self.emit_core_block(world, walk, out, host, block, depth, flow, scope, tail)
+    }
+}
