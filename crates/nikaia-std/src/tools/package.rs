@@ -47297,7 +47297,6 @@ pub struct Stored {
 pub enum Destination {
     Field { owner: String, field: String, ty: String },
     Subject { owner: String },
-    Returned { ty: String },
     Task,
     ParamField { param: winnow_grammar::Symbol, owner: String, field: String, ty: String },
 }
@@ -47320,7 +47319,6 @@ struct Here {
     subject: Option<Type>,
     subject_fields: Vec<(String, Type)>,
     declared: Vec<(winnow_grammar::Symbol, Type)>,
-    result: Option<Type>,
     ours: Option<String>,
     carriers: collections::BTreeSet<String>,
     found: Vec<(Span, Destination)>,
@@ -47355,6 +47353,7 @@ pub fn views_stored(asked: &Asked<'_>, items: &[Spanned<Item>], own_buffer: &imp
 pub fn views_checked(asked: &Asked<'_>, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool) -> Vec<Finding> {
     let mut out: Vec<Finding> = vec![];
     for stored in views_stored(asked, items, own_buffer) { if !stored.carried { out.push(finding(&stored)); } }
+    rsrc_findings(asked, items, own_buffer, &mut out);
     out
 }
 
@@ -47376,14 +47375,12 @@ fn finding(stored: &Stored) -> Finding {
         Destination::Field { owner, field, .. } => format!("`{}.{}`", owner, field),
         Destination::ParamField { owner, field, .. } => format!("`{}.{}`", owner, field),
         Destination::Subject { owner } => format!("`{}`, through a call on it", owner),
-        Destination::Returned { .. } => String::from("the value this function returns"),
         Destination::Task => String::from("a task, which goes on running after the call"),
     };
     let why = match &stored.into {
         Destination::ParamField { owner, field, .. } => format!("`{}.{}` belongs to a struct that was passed in, and this function stores into more than one such struct, so it's unclear whose data `{}` points into.", owner, field, param),
         Destination::Field { owner, field, ty } => format!("`{}.{}` is a `{}`, so it points into some data, but `{}: {}` doesn't say whose.", owner, field, ty, param, written),
         Destination::Subject { owner } => format!("A call on `{}` might keep what it's given, and nothing says it doesn't, so `{}` counts as kept.", owner, param),
-        Destination::Returned { ty } => format!("The result is a `{}`, which holds a view, and this function takes views of other data besides `{}`, so it's unclear which one the result points into.", ty, param),
         Destination::Task => String::from("A task keeps running after the call that started it, so anything it looks at has to live longer than the call."),
     };
     let of = of_what((stored.subject).as_deref(), &function);
@@ -47533,9 +47530,6 @@ fn scan(unit: &Unit, asked: &Asked<'_>, target: Option<&Type>, method: u32, item
             let mut any_view = false;
             for (_, ty) in declared.iter() { if ty.is_view { any_view = true; } }
             if !any_view { return; }
-            let mut sources: Vec<String> = vec![];
-            for (param, ty) in declared.iter() { if brings_buffer(unit, asked, ty) { sources.push(asked.names.resolve(*param).to_owned()); } }
-            let subject_is_a_source = takes_a_view_of_itself((receiver).as_ref());
             let result_holds_view = buffered(unit, asked, (ret_type).as_ref());
             let subject_names_a_buffer = named_in(asked, target, &unit.borrowing);
             let subject_name = text_of(asked, target);
@@ -47544,19 +47538,12 @@ fn scan(unit: &Unit, asked: &Asked<'_>, target: Option<&Type>, method: u32, item
             for (param, ty) in declared.iter() {
                 if !ty.is_view { continue; }
                 let param_name = asked.names.resolve(*param).to_owned();
-                let result_is_ours = !subject_is_a_source && sources.len() == 1 && *nikaia_std::index::get(&sources, 0) == param_name;
-                let hands_back = result_holds_view && !result_is_ours;
                 let mut carriers: collections::BTreeSet<String> = collections::BTreeSet::new();
                 carriers.insert(param_name.to_owned());
                 let mut here = Here { subject: match target {
                     Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
                     None => None,
-                }, subject_fields: subject_fields.to_owned(), declared: declared.to_owned(), result: if hands_back {
-                    match ret_type {
-                        Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
-                        None => None,
-                    }
-                } else { None }, ours: if result_holds_view && result_is_ours { text_of(asked, (ret_type).as_ref()) } else { None }, carriers, found: vec![] };
+                }, subject_fields: subject_fields.to_owned(), declared: declared.to_owned(), ours: if result_holds_view { text_of(asked, (ret_type).as_ref()) } else { None }, carriers, found: vec![] };
                 walk_block(unit, asked, body, true, own_buffer, &mut here);
                 one_answer(asked, &here, *param, Scanned { param: param_name, ty: written_type(asked.names, ty), function: function.to_owned(), subject: match subject_name.as_ref() {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -47615,7 +47602,6 @@ fn rank(into: &Destination) -> i64 {
         Destination::Field { .. } => 0,
         Destination::Subject { .. } => 1,
         Destination::Task => 2,
-        Destination::Returned { .. } => 3,
         Destination::ParamField { .. } => 0,
     }
 }
@@ -47678,13 +47664,8 @@ fn walk_block(unit: &Unit, asked: &Asked<'_>, block: &Block, tail: bool, own_buf
                 stores(unit, asked, target, &span, own_buffer, here);
                 stores(unit, asked, value, &span, own_buffer, here);
             },
-            Stmt::Return(value) => returned_maybe(unit, asked, (value).as_ref(), &span, own_buffer, here),
-            Stmt::Expr(expr) => {
-                if returning {
-                    returned(unit, asked, expr, &span, here);
-                    handed_back(unit, asked, expr, &span, own_buffer, here);
-                } else { stores(unit, asked, expr, &span, own_buffer, here); }
-            },
+            Stmt::Return(value) => handed_back_maybe(unit, asked, (value).as_ref(), &span, own_buffer, here),
+            Stmt::Expr(expr) => { if returning { handed_back(unit, asked, expr, &span, own_buffer, here); } else { stores(unit, asked, expr, &span, own_buffer, here); } },
             Stmt::For { bindings, iter, body } => {
                 if mentions(unit, asked, &here, iter) { for binding in bindings.iter() { here.carriers.insert(asked.names.resolve(*binding).to_owned()); } }
                 stores(unit, asked, iter, &span, own_buffer, here);
@@ -47700,9 +47681,8 @@ fn walk_block(unit: &Unit, asked: &Asked<'_>, block: &Block, tail: bool, own_buf
     }
 }
 
-fn returned_maybe(unit: &Unit, asked: &Asked<'_>, value: Option<&Expr>, span: &Span, own_buffer: &impl Fn(&Expr) -> bool, here: &mut Here) {
+fn handed_back_maybe(unit: &Unit, asked: &Asked<'_>, value: Option<&Expr>, span: &Span, own_buffer: &impl Fn(&Expr) -> bool, here: &mut Here) {
     let handed = match value { Some(__nikaia_value) => __nikaia_value, None => return };
-    returned(unit, asked, handed, span, here);
     handed_back(unit, asked, handed, span, own_buffer, here);
 }
 
@@ -47757,75 +47737,10 @@ fn field_of_param(unit: &Unit, asked: &Asked<'_>, param: winnow_grammar::Symbol,
     }
 }
 
-fn returned(unit: &Unit, asked: &Asked<'_>, value: &Expr, span: &Span, here: &mut Here) {
-    let result = match match here.result.as_ref() {
-        Some(__nikaia_it) => Some(__nikaia_it.clone()),
-        None => None,
-    } { Some(__nikaia_value) => __nikaia_value, None => return };
-    if !mentions(unit, asked, &here, value) { return; }
-    if hands_back_another_buffer(unit, asked, &here, value) { return; }
-    here.found.push((span.clone(), Destination::Returned { ty: written_type(asked.names, &result) }));
-}
-
-fn hands_back_another_buffer(unit: &Unit, asked: &Asked<'_>, here: &Here, value: &Expr) -> bool {
-    match value {
-        Expr::MethodCall { receiver, method, args, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; a_method_borrows_elsewhere(unit, asked, here, receiver, method, args) },
-        Expr::SafeMethod { receiver, method, args, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; a_method_borrows_elsewhere(unit, asked, here, receiver, method, args) },
-        Expr::Call { func, args, .. } => { let func = nikaia_std::boxed::open(func); match func {
-            Expr::Variable(name, _) => { let name = *name; borrows_elsewhere(unit, asked, here, asked.names.resolve(name), None, args) },
-            Expr::Path(parts, _) => borrows_elsewhere(unit, asked, here, &joined_path(asked, parts), None, args),
-            _ => false,
-        } },
-        _ => false,
-    }
-}
-
-fn a_method_borrows_elsewhere(unit: &Unit, asked: &Asked<'_>, here: &Here, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr]) -> bool {
-    let ty = match type_of(unit, asked, here, receiver) { Some(__nikaia_value) => __nikaia_value, None => return false };
-    let subject = asked.names.resolve(ty.name);
-    let name = asked.names.resolve(method);
-    let on: Option<Expr> = Some(receiver.clone());
-    borrows_elsewhere(unit, asked, here, &format!("{}::{}", subject, name), (on).as_ref(), args)
-}
-
 fn joined_path(asked: &Asked<'_>, parts: &[winnow_grammar::Symbol]) -> String {
     let mut written: Vec<String> = vec![];
     for part in parts.iter() { written.push(asked.names.resolve(*part).to_owned()); }
     written.join("::")
-}
-
-fn borrows_elsewhere(unit: &Unit, asked: &Asked<'_>, here: &Here, key: &str, receiver: Option<&Expr>, args: &[Expr]) -> bool {
-    let contract = match match *nikaia_std::index::get(&asked.own.functions, key) {
-        Some(__nikaia_it) => Some(__nikaia_it.clone()),
-        None => None,
-    } { Some(__nikaia_value) => __nikaia_value, None => match match *nikaia_std::index::get(&asked.library.functions, key) {
-        Some(__nikaia_it) => Some(__nikaia_it.clone()),
-        None => None,
-    } { Some(__nikaia_value) => __nikaia_value, None => return false } };
-    let signature = match match contract.signature.as_ref() {
-        Some(__nikaia_it) => Some(__nikaia_it.clone()),
-        None => None,
-    } { Some(__nikaia_value) => __nikaia_value, None => return false };
-    if contract.borrows.is_empty() { return false; }
-    let takes_a_receiver = signature.takes_a_receiver();
-    for borrowed in contract.borrows.iter() {
-        if borrowed == "self" {
-            if !receiver_clear(unit, asked, here, receiver) { return false; }
-            continue;
-        }
-        let mut at: i64 = -1;
-        for i in 0..signature.params.len() as i64 { if at < 0 && nikaia_std::index::get(&signature.params, (i) as usize).0 == *borrowed { at = i; } }
-        if at < 0 { return false; }
-        if takes_a_receiver { at -= 1; }
-        if at < 0 || at >= args.len() as i64 { return false; }
-        if mentions(unit, asked, here, nikaia_std::index::get(&args, nikaia_std::index::at(at))) { return false; }
-    }
-    true
-}
-
-fn receiver_clear(unit: &Unit, asked: &Asked<'_>, here: &Here, receiver: Option<&Expr>) -> bool {
-    let on = match receiver { Some(__nikaia_value) => __nikaia_value, None => return false };
-    !mentions(unit, asked, here, on)
 }
 
 fn type_of(unit: &Unit, asked: &Asked<'_>, here: &Here, receiver: &Expr) -> Option<Type> {
@@ -48228,6 +48143,735 @@ pub fn carrying(stored: &[Stored]) -> Vec<(u32, winnow_grammar::Symbol)> {
         }
     }
     out
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ResultSrcWay {
+    span: Span,
+    reach: collections::BTreeSet<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ResultSrcKnown {
+    declared: bool,
+    params: Vec<String>,
+    reach: collections::BTreeSet<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ResultSrcFlow {
+    env: collections::BTreeMap<String, collections::BTreeSet<String>>,
+    ways: Vec<ResultSrcWay>,
+    at: Span,
+    depth: i64,
+    inner: collections::BTreeSet<String>,
+}
+
+fn rsrc_none() -> collections::BTreeSet<String> {
+    let empty: collections::BTreeSet<String> = collections::BTreeSet::new();
+    empty
+}
+
+fn rsrc_join(into: &mut collections::BTreeSet<String>, more: &collections::BTreeSet<String>) { for name in more.iter() { into.insert(name.to_owned()); } }
+
+fn rsrc_flow(at: &Span) -> ResultSrcFlow {
+    let env: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
+    ResultSrcFlow { env, ways: vec![], at: Span { start: at.start, end: at.end }, depth: 0, inner: rsrc_none() }
+}
+
+fn rsrc_of_name(flow: &ResultSrcFlow, name: &str) -> collections::BTreeSet<String> {
+    nikaia_std::index::or(match *nikaia_std::index::get(&flow.env, name) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || rsrc_none().into())
+}
+
+fn rsrc_bind(flow: &mut ResultSrcFlow, name: &str, reach: &collections::BTreeSet<String>) {
+    if reach.is_empty() { return; }
+    let mut now = rsrc_of_name(&flow, name);
+    rsrc_join(&mut now, reach);
+    flow.env.insert(name.to_owned(), now);
+}
+
+fn rsrc_bind_symbol(asked: &Asked<'_>, binding: Option<winnow_grammar::Symbol>, reach: &collections::BTreeSet<String>, flow: &mut ResultSrcFlow) {
+    let name = match binding { Some(__nikaia_value) => __nikaia_value, None => return };
+    rsrc_bind(flow, asked.names.resolve(name), reach);
+}
+
+fn rsrc_bind_root(asked: &Asked<'_>, here: &Here, target: &Expr, reach: &collections::BTreeSet<String>, flow: &mut ResultSrcFlow) {
+    match target {
+        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); rsrc_bind_root(asked, here, base, reach, flow) },
+        Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); rsrc_bind_root(asked, here, base, reach, flow) },
+        Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); rsrc_bind_root(asked, here, base, reach, flow) },
+        Expr::Variable(name, _) => {
+            let name = *name;
+            let written = asked.names.resolve(name).to_owned();
+            if variable_type(asked, here, &written).is_none() { rsrc_bind(flow, &written, reach); }
+        },
+        _ => { },
+    }
+}
+
+fn rsrc_scalar(asked: &Asked<'_>, ty: &Type) -> bool {
+    if ty.is_view || !ty.generics.is_empty() { return false; }
+    let name = asked.names.resolve(ty.name);
+    name == "i8" || name == "i16" || name == "i32" || name == "i64" || name == "isize" || name == "u8" || name == "u16" || name == "u32" || name == "u64" || name == "usize" || name == "f32" || name == "f64" || name == "bool" || name == "char"
+}
+
+fn rsrc_ty_holds_view(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { args, view, .. } => { let view = *view; view || rsrc_any_ty_holds_view(args) },
+        Ty::Tuple(parts) => rsrc_any_ty_holds_view(parts),
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); rsrc_ty_holds_view(inner) },
+        Ty::Seq { item, .. } => { let item = nikaia_std::boxed::open(item); rsrc_ty_holds_view(item) },
+        Ty::Fn { .. } => false,
+        Ty::Count(_) => false,
+        _ => true,
+    }
+}
+
+fn rsrc_any_ty_holds_view(types: &[Ty]) -> bool {
+    for ty in types.iter() { if rsrc_ty_holds_view(ty) { return true; } }
+    false
+}
+
+fn rsrc_eval(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, node: &Expr, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+    match node {
+        Expr::Variable(name, _) => { let name = *name; rsrc_of_name(&flow, asked.names.resolve(name)) },
+        Expr::Field { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; rsrc_field(unit, asked, here, known, own_buffer, base, asked.names.resolve(name), flow) },
+        Expr::SafeField { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; rsrc_field(unit, asked, here, known, own_buffer, base, asked.names.resolve(name), flow) },
+        Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); rsrc_index(unit, asked, here, known, own_buffer, base, index, flow) },
+        Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); rsrc_eval(unit, asked, here, known, own_buffer, expr, flow) },
+        Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); rsrc_eval(unit, asked, here, known, own_buffer, inner, flow) },
+        Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); rsrc_eval(unit, asked, here, known, own_buffer, expr, flow) },
+        Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); rsrc_nothing(unit, asked, here, known, own_buffer, inner, flow) },
+        Expr::Coalesce { value, fallback, .. } => { let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback); rsrc_both(unit, asked, here, known, own_buffer, value, fallback, flow) },
+        Expr::Binary { lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); rsrc_nothing_of(unit, asked, here, known, own_buffer, lhs, rhs, flow) },
+        Expr::Range { start, end, .. } => { let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end); rsrc_nothing_of(unit, asked, here, known, own_buffer, start, end, flow) },
+        Expr::Tuple(parts, _) => rsrc_all(unit, asked, here, known, own_buffer, parts, flow),
+        Expr::ListLit { items, .. } => rsrc_all(unit, asked, here, known, own_buffer, items, flow),
+        Expr::StructLit { fields, .. } => rsrc_fields(unit, asked, here, known, own_buffer, fields, flow),
+        Expr::With { base, fields, .. } => { let base = nikaia_std::boxed::open(base); rsrc_with(unit, asked, here, known, own_buffer, base, fields, flow) },
+        Expr::MethodCall { receiver, method, args, config, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; rsrc_method(unit, asked, here, known, own_buffer, receiver, method, args, config, flow) },
+        Expr::SafeMethod { receiver, method, args, config, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; rsrc_method(unit, asked, here, known, own_buffer, receiver, method, args, config, flow) },
+        Expr::Call { func, args, config, .. } => { let func = nikaia_std::boxed::open(func); rsrc_call(unit, asked, here, known, own_buffer, func, args, config, flow) },
+        Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); rsrc_return(unit, asked, here, known, own_buffer, (value).as_ref(), flow) },
+        Expr::Block(block, _) => rsrc_block(unit, asked, here, known, own_buffer, block, flow),
+        Expr::Unsafe(block, _) => rsrc_block(unit, asked, here, known, own_buffer, block, flow),
+        Expr::Overlap(block, _) => rsrc_block(unit, asked, here, known, own_buffer, block, flow),
+        Expr::If { cond, then_branch, else_branch, .. } => { let cond = nikaia_std::boxed::open(cond); rsrc_if(unit, asked, here, known, own_buffer, cond, then_branch, (else_branch).as_ref(), flow) },
+        Expr::Match { value, arms, .. } => { let value = nikaia_std::boxed::open(value); rsrc_match(unit, asked, here, known, own_buffer, value, arms, flow) },
+        Expr::Closure { body, .. } => rsrc_closure(unit, asked, here, known, own_buffer, body, flow),
+        Expr::Select(arms, _) => rsrc_select(unit, asked, here, known, own_buffer, arms, flow),
+        Expr::TryCatch { expr, handler, .. } => { let expr = nikaia_std::boxed::open(expr); rsrc_both_blocks(unit, asked, here, known, own_buffer, expr, handler, flow) },
+        Expr::Spawn { body, .. } => { let body = nikaia_std::boxed::open(body); rsrc_task(unit, asked, here, known, own_buffer, body, flow) },
+        Expr::Break(_) => rsrc_none(),
+        Expr::Continue(_) => rsrc_none(),
+        Expr::Asm { .. } => rsrc_none(),
+        Expr::Dsl { .. } => rsrc_none(),
+        Expr::Path(_, _) => rsrc_none(),
+        Expr::LitInt { .. } => rsrc_none(),
+        Expr::LitFloat(_, _) => rsrc_none(),
+        Expr::LitStr { .. } => rsrc_none(),
+        Expr::LitInterpolated { .. } => rsrc_none(),
+        Expr::LitChar(_, _) => rsrc_none(),
+        Expr::LitBool(_, _) => rsrc_none(),
+        Expr::LitNull(_) => rsrc_none(),
+    }
+}
+
+fn rsrc_nothing(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, node: &Expr, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+    let walked = rsrc_eval(unit, asked, here, known, own_buffer, node, flow);
+    rsrc_none()
+}
+
+#[allow(clippy::too_many_arguments)]
+fn rsrc_nothing_of(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, first: &Expr, second: &Expr, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+    let walked = rsrc_eval(unit, asked, here, known, own_buffer, first, flow);
+    let other = rsrc_eval(unit, asked, here, known, own_buffer, second, flow);
+    rsrc_none()
+}
+
+#[allow(clippy::too_many_arguments)]
+fn rsrc_both(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, first: &Expr, second: &Expr, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+    let mut out = rsrc_eval(unit, asked, here, known, own_buffer, first, flow);
+    let more = rsrc_eval(unit, asked, here, known, own_buffer, second, flow);
+    rsrc_join(&mut out, &more);
+    out
+}
+
+#[allow(clippy::too_many_arguments)]
+fn rsrc_both_blocks(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, first: &Expr, handler: &Block, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+    let mut out = rsrc_eval(unit, asked, here, known, own_buffer, first, flow);
+    let more = rsrc_block(unit, asked, here, known, own_buffer, handler, flow);
+    rsrc_join(&mut out, &more);
+    out
+}
+
+fn rsrc_all(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, exprs: &[Expr], flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+    let mut out = rsrc_none();
+    for expr in exprs.iter() {
+        let more = rsrc_eval(unit, asked, here, known, own_buffer, expr, flow);
+        rsrc_join(&mut out, &more);
+    }
+    out
+}
+
+fn rsrc_maybe(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, expr: Option<&Expr>, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+    let written = match expr { Some(__nikaia_value) => __nikaia_value, None => return rsrc_none() };
+    rsrc_eval(unit, asked, here, known, own_buffer, written, flow)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn rsrc_field(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, base: &Expr, name: &str, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+    let inner = rsrc_eval(unit, asked, here, known, own_buffer, base, flow);
+    let declared = match field_type(unit, asked, here, base, name) { Some(__nikaia_value) => __nikaia_value, None => return inner };
+    if rsrc_scalar(asked, &declared) { return rsrc_none(); }
+    inner
+}
+
+#[allow(clippy::too_many_arguments)]
+fn rsrc_index(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, base: &Expr, index: &Expr, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+    let inner = rsrc_eval(unit, asked, here, known, own_buffer, base, flow);
+    let read = rsrc_eval(unit, asked, here, known, own_buffer, index, flow);
+    inner
+}
+
+fn rsrc_fields(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, fields: &[FieldInit], flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+    let mut out = rsrc_none();
+    for field in fields.iter() {
+        let mut more = rsrc_none();
+        if field.value.is_none() { more = rsrc_of_name(&flow, asked.names.resolve(field.name)); } else { more = rsrc_maybe(unit, asked, here, known, own_buffer, (field.value).as_ref(), flow); }
+        rsrc_join(&mut out, &more);
+    }
+    out
+}
+
+#[allow(clippy::too_many_arguments)]
+fn rsrc_with(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, base: &Expr, fields: &[FieldInit], flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+    let mut out = rsrc_eval(unit, asked, here, known, own_buffer, base, flow);
+    let more = rsrc_fields(unit, asked, here, known, own_buffer, fields, flow);
+    rsrc_join(&mut out, &more);
+    out
+}
+
+fn rsrc_return(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, value: Option<&Expr>, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+    let reach = rsrc_maybe(unit, asked, here, known, own_buffer, value, flow);
+    rsrc_record(&reach, flow);
+    rsrc_none()
+}
+
+fn rsrc_record(reach: &collections::BTreeSet<String>, flow: &mut ResultSrcFlow) {
+    if flow.depth > 0 {
+        for name in reach.iter() { flow.inner.insert(name.to_owned()); }
+        return;
+    }
+    flow.ways.push(ResultSrcWay { span: Span { start: flow.at.start, end: flow.at.end }, reach: reach.to_owned() });
+}
+
+#[allow(clippy::too_many_arguments)]
+fn rsrc_if(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, cond: &Expr, then_branch: &Block, else_branch: Option<&Block>, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+    let tested = rsrc_eval(unit, asked, here, known, own_buffer, cond, flow);
+    let mut out = rsrc_block(unit, asked, here, known, own_buffer, then_branch, flow);
+    let other = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return out };
+    let more = rsrc_block(unit, asked, here, known, own_buffer, other, flow);
+    rsrc_join(&mut out, &more);
+    out
+}
+
+fn rsrc_pattern_names(asked: &Asked<'_>, pattern: &MatchPattern, out: &mut Vec<String>) {
+    match pattern {
+        MatchPattern::Path(parts) => { if parts.len() == 1 { out.push(asked.names.resolve(*nikaia_std::index::get(&parts, 0)).to_owned()); } },
+        MatchPattern::Tuple { parts, .. } => { for part in parts.iter() { rsrc_pattern_names(asked, part, out); } },
+        MatchPattern::Named { fields, .. } => { for field in fields.iter() { rsrc_pattern_names(asked, &field.pat, out); } },
+        MatchPattern::Or(alternatives) => { for alternative in alternatives.iter() { rsrc_pattern_names(asked, alternative, out); } },
+        _ => { },
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn rsrc_match(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, value: &Expr, arms: &[MatchArm], flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+    let matched = rsrc_eval(unit, asked, here, known, own_buffer, value, flow);
+    let mut out = rsrc_none();
+    for arm in arms.iter() {
+        let mut names: Vec<String> = vec![];
+        rsrc_pattern_names(asked, &arm.pattern, &mut names);
+        for name in names.iter() { rsrc_bind(flow, name, &matched); }
+        let guarded = rsrc_maybe(unit, asked, here, known, own_buffer, (arm.guard).as_ref(), flow);
+        let more = rsrc_eval(unit, asked, here, known, own_buffer, &arm.body, flow);
+        rsrc_join(&mut out, &more);
+    }
+    out
+}
+
+fn rsrc_closure(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, body: &Block, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+    let saved = flow.inner.to_owned();
+    flow.inner = rsrc_none();
+    flow.depth += 1;
+    let mut out = rsrc_block(unit, asked, here, known, own_buffer, body, flow);
+    flow.depth -= 1;
+    for name in flow.inner.iter() { out.insert(name.to_owned()); }
+    flow.inner = saved;
+    out
+}
+
+fn rsrc_task(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, body: &Expr, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+    let saved = flow.inner.to_owned();
+    flow.depth += 1;
+    let walked = rsrc_eval(unit, asked, here, known, own_buffer, body, flow);
+    flow.depth -= 1;
+    flow.inner = saved;
+    rsrc_none()
+}
+
+fn rsrc_select(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, arms: &[SelectArm], flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+    let mut out = rsrc_none();
+    for arm in arms.iter() {
+        let raced = rsrc_eval(unit, asked, here, known, own_buffer, &arm.value, flow);
+        rsrc_bind_symbol(asked, arm.binding, &raced, flow);
+        let more = rsrc_block(unit, asked, here, known, own_buffer, &arm.body, flow);
+        rsrc_join(&mut out, &more);
+    }
+    out
+}
+
+fn rsrc_block(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, block: &Block, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+    let count = block.stmts.len() as i64;
+    let mut tail = rsrc_none();
+    for i in 0..count {
+        flow.at = Span { start: nikaia_std::index::get(&block.stmts, (i) as usize).span.start, end: nikaia_std::index::get(&block.stmts, (i) as usize).span.end };
+        let last = i + 1 == count;
+        match &nikaia_std::index::get(&block.stmts, (i) as usize).node {
+            Stmt::Let { names, value, .. } => {
+                let reach = rsrc_eval(unit, asked, here, known, own_buffer, value, flow);
+                if !own_buffer(value) { for name in names.iter() { rsrc_bind(flow, asked.names.resolve(*name), &reach); } }
+            },
+            Stmt::Comptime { name, value, .. } => {
+                let name = *name;
+                let reach = rsrc_eval(unit, asked, here, known, own_buffer, value, flow);
+                rsrc_bind(flow, asked.names.resolve(name), &reach);
+            },
+            Stmt::Assign { target, value, .. } => {
+                let reach = rsrc_eval(unit, asked, here, known, own_buffer, value, flow);
+                match target {
+                    Expr::Variable(name, _) => { let name = *name; rsrc_bind(flow, asked.names.resolve(name), &reach) },
+                    _ => rsrc_bind_root(asked, here, target, &reach, flow),
+                }
+            },
+            Stmt::Return(value) => {
+                let reach = rsrc_maybe(unit, asked, here, known, own_buffer, (value).as_ref(), flow);
+                rsrc_record(&reach, flow);
+            },
+            Stmt::Expr(expr) => {
+                let reach = rsrc_eval(unit, asked, here, known, own_buffer, expr, flow);
+                if last { tail = reach; }
+            },
+            Stmt::For { bindings, iter, body } => {
+                let reach = rsrc_eval(unit, asked, here, known, own_buffer, iter, flow);
+                for binding in bindings.iter() { rsrc_bind(flow, asked.names.resolve(*binding), &reach); }
+                let walked = rsrc_block(unit, asked, here, known, own_buffer, body, flow);
+            },
+            Stmt::While { cond, body } => {
+                let tested = rsrc_eval(unit, asked, here, known, own_buffer, cond, flow);
+                let walked = rsrc_block(unit, asked, here, known, own_buffer, body, flow);
+            },
+            Stmt::Break => { },
+            Stmt::Continue => { },
+        }
+    }
+    tail
+}
+
+fn rsrc_copy(unit: &Unit, asked: &Asked<'_>, here: &Here, receiver: &Expr, on: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {
+    let ty = match type_of(unit, asked, here, receiver) { Some(__nikaia_value) => __nikaia_value, None => return rsrc_none() };
+    if !ty.is_view && names_borrowing(asked.names, &ty, &unit.borrowing) { return on.to_owned(); }
+    rsrc_none()
+}
+
+#[allow(clippy::too_many_arguments)]
+fn rsrc_method(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+    let on = rsrc_eval(unit, asked, here, known, own_buffer, receiver, flow);
+    let mut positional: Vec<collections::BTreeSet<String>> = vec![];
+    positional.push(on.to_owned());
+    let mut everything = on.to_owned();
+    for arg in args.iter() {
+        let reach = rsrc_eval(unit, asked, here, known, own_buffer, arg, flow);
+        rsrc_join(&mut everything, &reach);
+        positional.push(reach);
+    }
+    for option in config.iter() {
+        let reach = rsrc_eval(unit, asked, here, known, own_buffer, &option.value, flow);
+        rsrc_join(&mut everything, &reach);
+    }
+    let name = asked.names.resolve(method);
+    if name == "clone" || name == "to_string" { return rsrc_copy(unit, asked, here, receiver, &on); }
+    let ty = match type_of(unit, asked, here, receiver) { Some(__nikaia_value) => __nikaia_value, None => return everything };
+    let subject = asked.names.resolve(ty.name);
+    let key = format!("{}::{}", subject, name);
+    rsrc_callee(asked, known, &key, &positional, &everything)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn rsrc_call(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, func: &Expr, args: &[Expr], config: &[ConfigArg], flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+    let mut key: String = String::from("");
+    let mut named = false;
+    let mut everything = rsrc_none();
+    match func {
+        Expr::Variable(name, _) => {
+            let name = *name;
+            let written = asked.names.resolve(name).to_owned();
+            let carried = rsrc_of_name(&flow, &written);
+            if carried.is_empty() && variable_type(asked, here, &written).is_none() {
+                key = written;
+                named = true;
+            }
+            rsrc_join(&mut everything, &carried);
+        },
+        Expr::Path(parts, _) => {
+            key = joined_path(asked, parts);
+            named = true;
+        },
+        _ => {
+            let reach = rsrc_eval(unit, asked, here, known, own_buffer, func, flow);
+            rsrc_join(&mut everything, &reach);
+        },
+    }
+    let mut positional: Vec<collections::BTreeSet<String>> = vec![];
+    for arg in args.iter() {
+        let reach = rsrc_eval(unit, asked, here, known, own_buffer, arg, flow);
+        rsrc_join(&mut everything, &reach);
+        positional.push(reach);
+    }
+    for option in config.iter() {
+        let reach = rsrc_eval(unit, asked, here, known, own_buffer, &option.value, flow);
+        rsrc_join(&mut everything, &reach);
+    }
+    if !named { return everything; }
+    rsrc_callee(asked, known, &key, &positional, &everything)
+}
+
+fn rsrc_callee(asked: &Asked<'_>, known: &collections::BTreeMap<String, ResultSrcKnown>, key: &str, positional: &[collections::BTreeSet<String>], everything: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {
+    let found = nikaia_std::index::or(match *nikaia_std::index::get(&known, key) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || ResultSrcKnown { declared: false, params: vec![], reach: rsrc_none() });
+    if found.declared {
+        let mut out = rsrc_none();
+        for borrowed in found.reach.iter() {
+            let mut at: i64 = -1;
+            for i in 0..found.params.len() as i64 { if at < 0 && *nikaia_std::index::get(&found.params, nikaia_std::index::at(i)) == *borrowed { at = i; } }
+            if at < 0 || at >= positional.len() as i64 { return everything.to_owned(); }
+            rsrc_join(&mut out, nikaia_std::index::get(&positional, nikaia_std::index::at(at)));
+        }
+        return out;
+    }
+    let contract = match match *nikaia_std::index::get(&asked.own.functions, key) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => match match *nikaia_std::index::get(&asked.library.functions, key) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return everything.to_owned() } };
+    let signature = match match contract.signature.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return everything.to_owned() };
+    if signature.result.is_some() {
+        let result = nikaia_std::index::or(match signature.result.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || Ty::Unknown);
+        if !rsrc_ty_holds_view(&result) { return rsrc_none(); }
+    }
+    if contract.borrows.is_empty() { return everything.to_owned(); }
+    let mut out = rsrc_none();
+    for borrowed in contract.borrows.iter() {
+        let mut at: i64 = -1;
+        for i in 0..signature.params.len() as i64 { if at < 0 && nikaia_std::index::get(&signature.params, nikaia_std::index::at(i)).0 == *borrowed { at = i; } }
+        if at < 0 || at >= positional.len() as i64 { return everything.to_owned(); }
+        rsrc_join(&mut out, nikaia_std::index::get(&positional, nikaia_std::index::at(at)));
+    }
+    out
+}
+
+fn rsrc_a_source(unit: &Unit, asked: &Asked<'_>, arg: &FnArg, contract: Option<&FnContract>, at: i64) -> bool {
+    if (*arg.ty.code).is_some() { return false; }
+    if arg.ty.is_view || brings_buffer(unit, asked, &arg.ty) { return true; }
+    let own = match contract { Some(__nikaia_value) => __nikaia_value, None => return false };
+    lends_in_own(own, at, &vec![asked.library])
+}
+
+fn rsrc_size(flow: &ResultSrcFlow) -> i64 {
+    let mut total = flow.env.len() as i64;
+    for (_, reach) in flow.env.iter() { total += reach.len() as i64; }
+    total
+}
+
+fn rsrc_key(owner: Option<&str>, function: &str) -> String {
+    let named = match owner { Some(__nikaia_value) => __nikaia_value, None => return function.to_owned() };
+    format!("{}::{}", named, function)
+}
+
+fn rsrc_params(asked: &Asked<'_>, receiver: Option<&Receiver>, args: &[FnArg]) -> Vec<String> {
+    let mut params: Vec<String> = vec![];
+    if receiver.is_some() {
+        let self_name: String = String::from("self");
+        params.push(self_name);
+    }
+    for arg in args.iter() { params.push(asked.names.resolve(arg.name).to_owned()); }
+    params
+}
+
+fn rsrc_seed(unit: &Unit, asked: &Asked<'_>, subject: Option<&Type>, item: &Item, known: &mut collections::BTreeMap<String, ResultSrcKnown>) {
+    match item {
+        Item::Fn { name, receiver, args, ret_type, .. } => {
+            let name = *name;
+            if buffered(unit, asked, (ret_type).as_ref()) {
+                let owner = text_of(asked, subject);
+                let key = rsrc_key((owner).as_deref(), &function_name(asked.names, name));
+                known.insert(key, ResultSrcKnown { declared: true, params: rsrc_params(asked, (receiver).as_ref(), args), reach: rsrc_none() });
+            }
+        },
+        _ => { },
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn rsrc_function(unit: &Unit, asked: &Asked<'_>, subject: Option<&Type>, trait_name: Option<&winnow_grammar::Symbol>, at: &Span, item: &Item, own_buffer: &impl Fn(&Expr) -> bool, known: &mut collections::BTreeMap<String, ResultSrcKnown>, out: &mut Vec<Finding>, report: bool) -> bool {
+    match item {
+        Item::Fn { name, receiver, args, config, ret_type, body, .. } => {
+            let name = *name;
+            if !buffered(unit, asked, (ret_type).as_ref()) { return false; }
+            let function = function_name(asked.names, name);
+            let owner = text_of(asked, subject);
+            let key = rsrc_key((owner).as_deref(), &function);
+            let own_contract = match *nikaia_std::index::get(&asked.own.functions, &key) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            };
+            let params = rsrc_params(asked, (receiver).as_ref(), args);
+            let self_name: String = String::from("self");
+            let mut sources: Vec<String> = vec![];
+            let mut position: i64 = 0;
+            if receiver.is_some() {
+                position = 1;
+                if takes_a_view_of_itself((receiver).as_ref()) { sources.push(self_name.to_owned()); }
+            }
+            let mut declared: Vec<(winnow_grammar::Symbol, Type)> = vec![];
+            for arg in args.iter() {
+                declared.push((arg.name, arg.ty.clone()));
+                if rsrc_a_source(unit, asked, arg, (own_contract).as_ref(), position) { sources.push(asked.names.resolve(arg.name).to_owned()); }
+                position += 1;
+            }
+            for option in config.iter() { declared.push((option.name, option.ty.clone())); }
+            let walked_here = Here { subject: match subject {
+                Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+                None => None,
+            }, subject_fields: fields_of_type(unit, asked, subject), declared, ours: None, carriers: collections::BTreeSet::new(), found: vec![] };
+            let mut flow = rsrc_flow(at);
+            for source in sources.iter() {
+                let mut own = rsrc_none();
+                own.insert(source.to_owned());
+                flow.env.insert(source.to_owned(), own);
+            }
+            let mut size: i64 = 0;
+            let mut rounds = 0;
+            while rounds < 6 {
+                flow.ways = vec![];
+                flow.depth = 0;
+                let tail = rsrc_block(unit, asked, &walked_here, &known, own_buffer, body, &mut flow);
+                rsrc_tail(body, &tail, &mut flow);
+                let now = rsrc_size(&flow);
+                if rounds > 0 && now == size { break; }
+                size = now;
+                rounds += 1;
+            }
+            let mut reach = rsrc_none();
+            for way in flow.ways.iter() { rsrc_join(&mut reach, &way.reach); }
+            let before = nikaia_std::index::or(match *nikaia_std::index::get(&known, &key) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || ResultSrcKnown { declared: false, params: vec![], reach: rsrc_none() });
+            let changed = (before.reach.len() as i64) != reach.len() as i64;
+            known.insert(key.to_owned(), ResultSrcKnown { declared: true, params, reach: reach.to_owned() });
+            if report {
+                let of = of_what((owner).as_deref(), &function);
+                rsrc_report(asked, &of, &sources, &flow.ways, &reach, (receiver).as_ref(), trait_name, at, out);
+            }
+            return changed;
+        },
+        _ => { },
+    }
+    false
+}
+
+fn rsrc_tail(body: &Block, tail: &collections::BTreeSet<String>, flow: &mut ResultSrcFlow) {
+    let count = body.stmts.len() as i64;
+    if count == 0 { return; }
+    match &nikaia_std::index::get(&body.stmts, nikaia_std::index::at(count - 1)).node {
+        Stmt::Expr(_) => {
+            let span = Span { start: nikaia_std::index::get(&body.stmts, nikaia_std::index::at(count - 1)).span.start, end: nikaia_std::index::get(&body.stmts, nikaia_std::index::at(count - 1)).span.end };
+            flow.ways.push(ResultSrcWay { span, reach: tail.to_owned() });
+        },
+        _ => { },
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn rsrc_report(asked: &Asked<'_>, of: &str, sources: &[String], ways: &[ResultSrcWay], reach: &collections::BTreeSet<String>, receiver: Option<&Receiver>, trait_name: Option<&winnow_grammar::Symbol>, at: &Span, out: &mut Vec<Finding>) {
+    let mut named: Vec<String> = vec![];
+    for source in sources.iter() { if reach.contains(source) { named.push(source.to_owned()); } }
+    if named.len() >= 2 {
+        let first = (*nikaia_std::index::get(&named, 0)).to_owned();
+        let second = (*nikaia_std::index::get(&named, 1)).to_owned();
+        let mut at_first: i64 = -1;
+        let mut at_second: i64 = -1;
+        for i in 0..ways.len() as i64 {
+            if at_first < 0 && nikaia_std::index::get(&ways, (i) as usize).reach.contains(&first) { at_first = i; }
+            if at_second < 0 && nikaia_std::index::get(&ways, (i) as usize).reach.contains(&second) { at_second = i; }
+        }
+        let mut message: String = String::from("");
+        let mut caret = Span { start: at.start, end: at.end };
+        if at_first >= 0 && at_second >= 0 && at_first != at_second {
+            let mut early: i64 = at_first;
+            let mut late: i64 = at_second;
+            let mut a = first.to_owned();
+            let mut b = second.to_owned();
+            if at_second < at_first {
+                early = at_second;
+                late = at_first;
+                a = second.to_owned();
+                b = first.to_owned();
+            }
+            caret = Span { start: nikaia_std::index::get(&ways, nikaia_std::index::at(early)).span.start, end: nikaia_std::index::get(&ways, nikaia_std::index::at(early)).span.end };
+            message = format!("{} hands back a view of `{}`'s data here and of `{}`'s there, so a caller can't tell whose data it gets.", of, a, b);
+        } else {
+            if at_first >= 0 { caret = Span { start: nikaia_std::index::get(&ways, nikaia_std::index::at(at_first)).span.start, end: nikaia_std::index::get(&ways, nikaia_std::index::at(at_first)).span.end }; }
+            message = format!("{} hands back a value that holds views of `{}`'s data and of `{}`'s, so a caller can't tell whose data it gets.", of, first, second);
+        }
+        let note = format!("Whoever calls {} has to keep the data the result points into unchanged while it uses the result, and here that is decided only when the program runs.", of);
+        let split = format!("Split it, so each part hands back views of one of `{}` and `{}`: a function that says which of them (`fn …(…) -> bool`), then a call where it is used that picks one.", first, second);
+        let copy = "Or hand back a copy: declare `-> String` and write `.clone()`, one allocation per call.";
+        let help = format!("{}\n           {}", split, copy);
+        out.push(refusal("NK2302", caret, message, vec![note], help));
+        return;
+    }
+    if trait_name.is_none() { return; }
+    let mut allowed: String = String::from("");
+    if takes_a_view_of_itself(receiver) { allowed = String::from("self"); } else if sources.len() == 1 { allowed = (*nikaia_std::index::get(&sources, 0)).to_owned(); } else { return; }
+    for source in named.iter() {
+        if *source != allowed {
+            let message = format!("{} implements a trait method that hands back views of `{}` only, but this hands back a view of `{}`'s data.", of, allowed, source);
+            let note = format!("Whoever calls it through the trait reads the trait's declaration, which says the result points into `{}`.", allowed);
+            let help: String = String::from("Hand back a view of the one the trait names, or a copy: declare `-> String` and write `.clone()`.");
+            out.push(refusal("NK2302", Span { start: at.start, end: at.end }, message, vec![note], help));
+            return;
+        }
+    }
+}
+
+fn rsrc_declared_views(unit: &Unit, asked: &Asked<'_>, receiver: Option<&Receiver>, args: &[FnArg], ret_type: Option<&Type>) -> i64 {
+    if receiver.is_some() || !buffered(unit, asked, ret_type) { return 0; }
+    let mut views: i64 = 0;
+    for arg in args.iter() { if (*arg.ty.code).is_none() && brings_buffer(unit, asked, &arg.ty) { views += 1; } }
+    views
+}
+
+fn rsrc_declaration(unit: &Unit, asked: &Asked<'_>, method: &Spanned<TraitMethod>, out: &mut Vec<Finding>) {
+    let views = rsrc_declared_views(unit, asked, (method.node.receiver).as_ref(), &method.node.args, (method.node.ret_type).as_ref());
+    if views >= 2 {
+        let function = asked.names.resolve(method.node.name).to_owned();
+        let message = format!("`{}` is declared without a body, takes {} views and hands one back, so a caller can't tell whose data it gets.", function, views);
+        let note = "Whoever calls it through its declaration has to keep the data the result points into unchanged, and a declaration with no `self` and several views doesn't say which.".to_string();
+        let help: String = String::from("Give it a `ref self` to hand back a view of, take one view only, or declare `-> String` and hand back a copy.");
+        out.push(refusal("NK2302", Span { start: method.span.start, end: method.span.end }, message, vec![note], help));
+    }
+}
+
+fn rsrc_function_type(unit: &Unit, asked: &Asked<'_>, ty: &Type, at: &Span, out: &mut Vec<Finding>) {
+    if (*ty.code).is_some() {
+        let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
+        let mut views = 0;
+        for part in ty.generics.iter() { if brings_buffer(unit, asked, part) { views += 1; } }
+        let answer = match (*code.result).as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        };
+        if views >= 2 && buffered(unit, asked, (answer).as_ref()) {
+            let message: String = String::from("A function type that takes two views and hands one back doesn't say which one the result points into, so a caller can't tell whose data it gets.");
+            let note = "Whoever calls through it has to keep the data the result points into unchanged, and the type doesn't say which.".to_string();
+            let help: String = String::from("Take one view only, or hand back a copy: declare `-> String`.");
+            out.push(refusal("NK2302", Span { start: at.start, end: at.end }, message, vec![note], help));
+            return;
+        }
+    }
+    for part in ty.generics.iter() { rsrc_function_type(unit, asked, part, at, out); }
+}
+
+fn rsrc_function_types(unit: &Unit, asked: &Asked<'_>, args: &[FnArg], ret_type: Option<&Type>, at: &Span, out: &mut Vec<Finding>) {
+    for arg in args.iter() { rsrc_function_type(unit, asked, &arg.ty, &arg.span, out); }
+    let written = match ret_type { Some(__nikaia_value) => __nikaia_value, None => return };
+    rsrc_function_type(unit, asked, written, at, out);
+}
+
+fn rsrc_findings(asked: &Asked<'_>, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool, out: &mut Vec<Finding>) {
+    let unit = Unit { borrowing: borrowing_types(asked.names, items), fields: view_fields(asked.names, items) };
+    let mut known: collections::BTreeMap<String, ResultSrcKnown> = collections::BTreeMap::new();
+    let nothing: Option<Type> = None;
+    let no_trait: Option<winnow_grammar::Symbol> = None;
+    for item in items.iter() {
+        match &item.node {
+            Item::Fn { .. } => rsrc_seed(&unit, asked, (nothing).as_ref(), &item.node, &mut known),
+            Item::Impl { target, methods, .. } => {
+                let subject: Option<Type> = Some(target.clone());
+                for method in methods.iter() { rsrc_seed(&unit, asked, (subject).as_ref(), &method.node, &mut known); }
+            },
+            _ => { },
+        }
+    }
+    let mut round = 0;
+    while round < 8 {
+        let mut grew = false;
+        for item in items.iter() {
+            match &item.node {
+                Item::Fn { .. } => { if rsrc_function(&unit, asked, (nothing).as_ref(), (no_trait).as_ref(), &item.span, &item.node, own_buffer, &mut known, out, false) { grew = true; } },
+                Item::Impl { target, methods, .. } => {
+                    let subject: Option<Type> = Some(target.clone());
+                    for method in methods.iter() { if rsrc_function(&unit, asked, (subject).as_ref(), (no_trait).as_ref(), &method.span, &method.node, own_buffer, &mut known, out, false) { grew = true; } }
+                },
+                _ => { },
+            }
+        }
+        if !grew { break; }
+        round += 1;
+    }
+    for item in items.iter() {
+        match &item.node {
+            Item::Fn { args, ret_type, .. } => {
+                let grew = rsrc_function(&unit, asked, (nothing).as_ref(), (no_trait).as_ref(), &item.span, &item.node, own_buffer, &mut known, out, true);
+                rsrc_function_types(&unit, asked, args, (ret_type).as_ref(), &item.span, out);
+            },
+            Item::Impl { trait_name, target, methods, .. } => {
+                let trait_name = *trait_name;
+                let subject: Option<Type> = Some(target.clone());
+                for method in methods.iter() {
+                    let grew = rsrc_function(&unit, asked, (subject).as_ref(), (trait_name).as_ref(), &method.span, &method.node, own_buffer, &mut known, out, true);
+                    match &method.node {
+                        Item::Fn { args, ret_type, .. } => rsrc_function_types(&unit, asked, args, (ret_type).as_ref(), &method.span, out),
+                        _ => { },
+                    }
+                }
+            },
+            Item::Trait { methods, .. } => {
+                for method in methods.iter() {
+                    rsrc_declaration(&unit, asked, method, out);
+                    rsrc_function_types(&unit, asked, &method.node.args, (method.node.ret_type).as_ref(), &method.span, out);
+                }
+            },
+            Item::Struct { fields, .. } => { for field in fields.iter() { rsrc_function_type(&unit, asked, &field.ty, &field.span, out); } },
+            _ => { },
+        }
+    }
 }
 
 

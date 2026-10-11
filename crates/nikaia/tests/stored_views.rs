@@ -174,45 +174,31 @@ fn a_field_that_holds_no_view_is_not_a_destination() {
 // for. They are tests rather than prose so that extending the reach is a visible
 // change to this file rather than a silent one.
 
-/// The view is handed back out of the method, and the result does not point into
-/// that parameter's buffer. Nothing here names a buffer to write on the
-/// parameter, so this is a refusal - and it carries the whole message.
+/// **Handing back the one parameter is no refusal** (ADR-283 D25): the way out
+/// reaches `name` and not the receiver, so the result points into `name` alone.
+/// What the signature then says is `result_source.rs`'s.
 #[test]
-fn a_naked_view_handed_back_from_a_method_is_refused() {
-    let finding = one(r#"
+fn a_naked_view_handed_back_from_a_method_is_accepted() {
+    let found = findings(
+        r#"
         struct Summary { label: ref String }
         impl Summary {
             fn pick(ref self, name: ref String) -> ref String sync {
                 return name
             }
         }
-        "#);
-    assert_eq!(finding.code, "NK2302");
-    assert!(
-        finding.message.contains("`name: ref String`"),
-        "{}",
-        finding.message
+        "#,
     );
-    assert!(
-        finding
-            .notes
-            .iter()
-            .any(|n| n.contains("stored in the value this function returns")),
-        "{:#?}",
-        finding.notes
-    );
-    // Part III C.2: the way out is shown, not described.
-    let help = finding.help.expect("every diagnostic names a way out");
-    assert!(help.contains("struct Held { name: ref String }"), "{help}");
-    assert!(help.contains("examples/1brc.nika"), "{help}");
+    assert!(found.is_empty(), "{found:#?}");
 }
 
 /// A view put into a struct the function builds and hands back, from an `impl`
-/// whose own target holds no view. `Reading` carries a buffer; nothing here says
-/// which one, and the `impl` has none to lend.
+/// whose own target holds no view: the struct points into `name` and nothing
+/// else (D25), so it is accepted.
 #[test]
-fn a_naked_view_put_into_a_struct_that_is_handed_back_is_refused() {
-    let finding = one(r#"
+fn a_naked_view_put_into_a_struct_that_is_handed_back_is_accepted() {
+    let found = findings(
+        r#"
         struct Reading { name: ref String, temp: i32 }
         struct Factory { n: i32 }
         impl Factory {
@@ -220,12 +206,9 @@ fn a_naked_view_put_into_a_struct_that_is_handed_back_is_refused() {
                 return Reading { name: name, temp: self.n }
             }
         }
-        "#);
-    assert!(
-        finding.notes.iter().any(|n| n.contains("`Reading.name`")),
-        "{:#?}",
-        finding.notes
+        "#,
     );
+    assert!(found.is_empty(), "{found:#?}");
 }
 
 /// A task outlives the call, so a view handed to one is refused whatever the
@@ -531,15 +514,12 @@ impl Request {
     assert!(refused.is_empty(), "{refused:#?}");
 }
 
-/// **An argument the callee's column *does* name is still kept**, which is the
-/// half that makes the other one worth having.
-///
-/// `str::trim` hands back a view of its subject, and here the subject is the
-/// parameter — so the result does point into it, and a function whose own
-/// result names another buffer cannot hand it back.
+/// **A call says which of its arguments its result points into**: `str::trim`
+/// hands back a view of its subject, which here is the parameter, and the
+/// parameter is the one source the result has (D25).
 #[test]
-fn an_argument_the_column_does_name_is_still_a_finding() {
-    let refused = findings(
+fn an_argument_the_column_does_name_is_the_one_source() {
+    let found = findings(
         r#"
 struct Holder { label: ref String }
 
@@ -550,7 +530,7 @@ impl Holder {
 }
 "#,
     );
-    assert_eq!(refused.len(), 1, "{refused:#?}");
+    assert!(found.is_empty(), "{found:#?}");
 }
 
 /// **A receiver this walk cannot type says nothing**, and the refusal stands.

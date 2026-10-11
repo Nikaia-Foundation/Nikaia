@@ -38,11 +38,14 @@ fn views_handed_back_c(row: ViewsHandedBackRow) -> ref String {
     return ref row.name
 }
 
+// One source on every way out that has one (ADR-283 D25): `a` or a literal. The
+// version that handed back `a` or `b` shared one lifetime and is NK2302 now
+// (`result_source.rs::plain_string_longest_is_refused_since_d25`).
 fn views_handed_back_first(a: String, b: String) -> ref String {
     if a.len() > b.len() {
         return ref a
     }
-    return ref b
+    return "short"
 }
 
 fn views_handed_back_label(a: String, b: String) -> ref String {
@@ -54,7 +57,7 @@ fn views_handed_back_label(a: String, b: String) -> ref String {
 
 // **D24, step 2**: a view handed back through a parameter lowered as a view
 // borrows from the caller's argument - `'static` was *lifetime may not live
-// long enough* - and with two such parameters they share one lifetime.
+// long enough* (D25: one source on every way out).
 test "a view of a parameter borrows from the argument" {
     let t: String = "y".clone()
     let row = ViewsHandedBackRow { name: "z".clone() }

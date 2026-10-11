@@ -19,10 +19,10 @@ fn findings(source: &str) -> Vec<nikaia::check::Finding> {
         .collect()
 }
 
-/// **A view that could point into two buffers is still refused**: the
-/// result names neither.
+/// **A struct of one parameter's view is accepted beside another view**
+/// (D25): `Reading { name: a }` points into `a` alone, so `b` is free.
 #[test]
-fn a_view_from_one_of_two_buffers_is_refused() {
+fn a_view_from_one_of_two_buffers_is_accepted() {
     let found = findings(
         "struct Reading { name: ref String }\n\n\
          fn pick(a: ref String, b: ref String) -> Reading {\n\
@@ -30,7 +30,7 @@ fn a_view_from_one_of_two_buffers_is_refused() {
          }\n\n\
          fn main() { println(\"x\") }\n",
     );
-    assert!(found.iter().any(|f| f.code == "NK2302"), "{found:#?}");
+    assert!(!found.iter().any(|f| f.code == "NK2302"), "{found:#?}");
 }
 
 /// **Owned text is not a pattern**: `starts_with`, `ends_with` and `contains`

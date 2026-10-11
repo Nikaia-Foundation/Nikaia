@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.837] — 2026-10-11
+
+**NK2302: a result points into the one parameter its body hands back, checked (ADR-283 D25-D26, #580 steps 1-4)**
+- tools/views.nika: a per-function source set replaces the signature trigger and Destination::Returned. Every way out is followed back to the parameters whose views reach it (receiver, written views, types holding views, plain parameters lowered as views); calls map the callee's result to its arguments (a callee of the unit by the fixpoint, from no parameter upwards; any other by its ledger ref(..)); two or more is NK2302 at the first way out. D26: a trait method or function type with no receiver and two views, and a trait impl that hands back a parameter the declaration does not name, are NK2302 at the declaration.
+- Behaviour change not yet confirmed by the owner: fn longest(a: String, b: String) -> ref String is NK2302 (it compiled by union tethering); test plain_string_longest_is_refused_since_d25 in crates/nikaia/tests/result_source.rs. Not built: the ledger line, the emitter's lifetime and the message carets (#580 steps 5-7).
+
 ## [0.0.836] — 2026-10-11
 
 **NK2302: a result points into the one parameter its body hands back, decided (ADR-283 D25-D26, #580)**
