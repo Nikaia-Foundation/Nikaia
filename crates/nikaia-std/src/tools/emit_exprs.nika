@@ -220,18 +220,18 @@ impl EmitState {
 
     /// The name of the first generic parameter of a function: the type a copy
     /// of it walking a shape is made for.
-    pub fn walked_parameter(ref self, world: ref EmitWorld, item: ref Item) -> String {
+    pub fn walked_parameter(ref self, world: ref EmitWorld, item: ref Item) -> ref String {
         return match item {
-            Item::Fn { generics, .. } => self.first_generic(world, generics),
+            Item::Fn { generics, .. } => self.first_generic(world.words, generics),
             else => "",
         }
     }
 
-    fn first_generic(ref self, world: ref EmitWorld, generics: ref Vec[GenericParam]) -> String {
+    fn first_generic(ref self, words: ref winnow_grammar::InternerContext, generics: ref Vec[GenericParam]) -> ref String {
         if generics.len() == 0 {
             return ""
         }
-        return world.words.resolve(generics[0].name).clone()
+        return words.resolve(generics[0].name)
     }
 
     /// The function's name, if it walks the fields of a shape.

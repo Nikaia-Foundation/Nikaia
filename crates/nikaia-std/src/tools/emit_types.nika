@@ -252,10 +252,10 @@ impl EmitState {
     }
 
     /// The name a call's callee is written with where it is a variable.
-    pub fn called_name(ref self, world: ref EmitWorld, func: ref Expr) -> String {
+    pub fn called_name(ref self, words: ref winnow_grammar::InternerContext, func: ref Expr) -> ref String {
         match func {
             Expr::Variable(name, _) => {
-                return world.words.resolve(name).clone()
+                return words.resolve(name)
             },
             else => {},
         }

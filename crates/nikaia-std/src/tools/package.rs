@@ -23533,7 +23533,7 @@ impl EmitState {
         if boxed { out.push("Box::pin("); }
         let handle = nikaia_std::index::or(self.handle_from(world, func), || "".into());
         let hull = handle != "";
-        if hull { if self.handle_from_may_be_null(world, func) { out.push(&format!("{}::maybe(", handle)); } else { out.push(&format!("{}::from_c(\"{}\", ", handle, self.called_name(world, func))); } }
+        if hull { if self.handle_from_may_be_null(world, func) { out.push(&format!("{}::maybe(", handle)); } else { out.push(&format!("{}::from_c(\"{}\", ", handle, self.called_name(world.words, func))); } }
         self.emit_core_called(world, walk, out, host, func, args, config, unchecked, depth, flow, scope)?;
         if hull { out.push(")"); }
         if boxed { out.push(")"); }
@@ -26464,15 +26464,15 @@ impl EmitState {
         let range = matches!(index, Expr::Range { .. });
         range || self.facts.slice_indices.contains(&node_key(index))
     }
-    pub fn walked_parameter(&self, world: &EmitWorld<'_>, item: &Item) -> String {
+    pub fn walked_parameter<'r>(&self, world: &EmitWorld<'r>, item: &Item) -> &'r str {
         match item {
-            Item::Fn { generics, .. } => self.first_generic(world, generics),
-            _ => String::from(""),
+            Item::Fn { generics, .. } => self.first_generic(world.words, generics),
+            _ => "",
         }
     }
-    fn first_generic(&self, world: &EmitWorld<'_>, generics: &[GenericParam]) -> String {
-        if generics.is_empty() { return String::from(""); }
-        world.words.resolve(nikaia_std::index::get(&generics, 0).name).to_owned()
+    fn first_generic<'r>(&self, words: &'r winnow_grammar::InternerContext, generics: &[GenericParam]) -> &'r str {
+        if generics.is_empty() { return ""; }
+        words.resolve(nikaia_std::index::get(&generics, 0).name)
     }
     pub fn walks_a_shape(&self, world: &EmitWorld<'_>, item: &Item) -> Option<String> {
         match item {
@@ -28330,15 +28330,15 @@ impl EmitState {
         String::from("core::ffi::c_void")
     }
     pub fn writes_a_run(&self, world: &EmitWorld<'_>, ty: &Type) -> bool { ty.is_slice || ty.is_view && world.words.resolve(ty.name) == "Array" && ty.generics.len() == 1 }
-    pub fn called_name(&self, world: &EmitWorld<'_>, func: &Expr) -> String {
+    pub fn called_name<'r>(&self, words: &'r winnow_grammar::InternerContext, func: &Expr) -> &'r str {
         match func {
             Expr::Variable(name, _) => {
                 let name = *name;
-                return world.words.resolve(name).to_owned();
+                return words.resolve(name);
             },
             _ => { },
         }
-        String::from("")
+        ""
     }
     pub fn derives(&self, world: &EmitWorld<'_>, name: winnow_grammar::Symbol) -> String {
         let text = world.words.resolve(name).to_owned();

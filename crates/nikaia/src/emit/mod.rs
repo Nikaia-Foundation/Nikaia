@@ -2020,7 +2020,7 @@ impl<'p> Emitter<'p> {
     /// The **first** one, which is what the checker bound: a second parameter
     /// beside it is an ordinary generic and keeps its place in the signature.
     fn walked_parameter(&self, item: &Item) -> String {
-        self.s.walked_parameter(&self.world, item)
+        self.s.walked_parameter(&self.world, item).to_string()
     }
 
     /// A module's items and nothing else - no preamble, no `mod` header.

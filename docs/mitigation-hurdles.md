@@ -61,6 +61,20 @@ choose between state and world at run time (`payloads`, `options_of`), 0 at
 build time; 7 more hand back only literals. In all of `crates/nikaia/src`, 41,
 of which 4 choose at run time. In the moved `tools/*.nika`, 2 of the 34
 `(ref self, world) -> String` methods clone a view of `world` on a way out.
+**Built and measured** (#580 step 8, 0.0.842). The two clones are gone:
+`first_generic` and `called_name` hand back `ref String`, taking the interner
+(`words: ref winnow_grammar::InternerContext`) and not `world`, because the walk
+reads a method of a type another file declares (`EmitWorld.words`) as touching
+every argument. Callgrind (`--branch-sim=yes`, `nikaia lower`, binaries built
+before and after, two runs each; instructions Ir, mispredicted conditional
+branches Bcm): `examples/sqlite` (the `from_c` path) Ir 45,226,764 -> 45,225,843,
+Bcm 354,044 -> 355,734; `tests/language/src/shape_bounds.nika` (a walk copy) Ir
+31,030,750 -> 31,026,305, Bcm 223,870 -> 225,602; `defects_found_running.nika`
+Ir 420,568,668 -> 420,646,650 (a rerun of the same binary moves 20,000 to
+240,000). Both paths run once per function copy or foreign handle, so the saved
+allocation is below the run-to-run spread; the Bcm rise is the same 1,700 on two
+unrelated inputs, which points at the layout of the two binaries and not at these
+functions. No gain is claimed.
 
 ## 2. No lifetimes in the source
 

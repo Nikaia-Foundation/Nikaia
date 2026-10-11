@@ -352,7 +352,7 @@ impl EmitState {
             if self.handle_from_may_be_null(world, func) {
                 out.push(f"{handle}::maybe(")
             } else {
-                out.push(f"{handle}::from_c(\"{self.called_name(world, func)}\", ")
+                out.push(f"{handle}::from_c(\"{self.called_name(world.words, func)}\", ")
             }
         }
         self.emit_core_called(world, walk, out, host, func, args, config, unchecked, depth, flow, scope)

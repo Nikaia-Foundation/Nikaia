@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.842] — 2026-10-11
+
+**NK2302 payoff: two world clones return the view (ADR-283 D25, #580 step 8)**
+- EmitState.first_generic, walked_parameter and called_name hand back a view of the interner instead of cloning it; measured with callgrind, no change beyond the spread (docs/mitigation-hurdles.md 1).
+
 ## [0.0.841] — 2026-10-11
 
 **NK2302: a result of a struct another file declares is walked like one declared here (ADR-283 D25, #580 B12)**
