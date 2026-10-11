@@ -9820,66 +9820,9 @@ impl<'a> Checker<'a> {
         what: &str,
         message: impl Fn(&str, &str) -> String,
     ) {
-        // **A place that says its type is a use of the numbers put there**
-        // ([ADR-285](../../docs/specification/adr/adr-285.md) D24): a field, a
-        // `let`'s annotation, what a function hands back.
-        if let Some(value) = value {
-            self.number_asked(value, want, &span, true);
-            if self.an_open_number_where_none_fits(found, want, value, span, what, &message) {
-                return;
-            }
-        }
-        if self.a_name_in_text(want, value, &span) {
-            return;
-        }
-        // **A view into a position both kinds of text flow into** is borrowed
-        // as it is (ADR-282 D14, ADR-282 D15): that is what the position is for.
-        // The position reads as text of its own, so a view is what needs
-        // letting through.
-        let either = match what {
-            "returns" => self.s.flow.expected_either,
-            "field" => std::mem::take(&mut self.s.flow.field_either),
-            _ => false,
-        };
-        if either && *found == Ty::view("str") && *want == Ty::named("String") {
-            return;
-        }
-        // **Into a `String?` the same holds of what is there**
-        // ([ADR-282](../../docs/specification/adr/adr-282.md) D12): a view,
-        // present or absent, goes into a mixed one as it is, and is refused
-        // from an owned one - which the `?` alone had let through to the
-        // language below.
-        if views_into_nullable_text(found, want) {
-            if either {
-                return;
-            }
-            let present = match found {
-                Ty::Nullable(found) => found.as_ref(),
-                found => found,
-            };
-            let text = Ty::named("String");
-            let before = self.s.findings.len();
-            self.expect(present, &text, span, what, message);
-            if self.s.findings.len() > before
-                && let Some((why, help)) = self.a_view_kept(present, &text, value, keeper)
-                && let Some(finding) = self.s.findings.last_mut()
-            {
-                finding.notes.extend(why);
-                finding.help = Some(help);
-            }
-            return;
-        }
-        let before = self.s.findings.len();
-        self.expect(found, want, span, what, message);
-        if self.s.findings.len() == before {
-            return;
-        }
-        if let Some((why, help)) = self.a_view_kept(found, want, value, keeper)
-            && let Some(finding) = self.s.findings.last_mut()
-        {
-            finding.notes.extend(why);
-            finding.help = Some(help);
-        }
+        self.s.expect_kept(
+            self.world, found, want, value, keeper, &span, what, &message,
+        );
     }
 
     /// **A view kept where the receiver says text of its own**
@@ -9995,87 +9938,10 @@ impl<'a> Checker<'a> {
         want: &Ty,
         span: Span,
         what: &str,
-        message: impl FnOnce(&str, &str) -> String,
+        message: impl Fn(&str, &str) -> String,
     ) {
-        if found.is_unknown() {
-            self.literal_receivers_take(want);
-        }
-        if self.fits_through_deref(found, want) {
-            return;
-        }
-        // A file's name made from text: the position recorded how
-        // (`wrap_for`, ADR-319 D2).
-        if text_as_a_path(found, want).is_some() {
-            return;
-        }
-        // An integer widened where no value can be lost (ADR-285 D32): the
-        // position recorded the widening (`wrap_for`).
-        if widened_into(found, want).is_some() {
-            return;
-        }
-        let waiting = self
-            .s
-            .flow
-            .unsigned_slots
-            .get(&(span.at() as i64))
-            .and_then(|slots| {
-                slots
-                    .iter()
-                    .position(|s| s.refusal.is_none() && s.found == *found && s.want == *want)
-            });
-        let code = match what {
-            "let" => "NK1103",
-            "returns" => "NK1104",
-            "assign" => "NK1105",
-            "field" => "NK1106",
-            // An argument a method's receiver types (ADR-282 D19), which is
-            // the code `arguments` gives one its signature types.
-            "argument" => "NK1102",
-            // **`NK1166`, and it used to be an `unreachable!`.** A `comptime`
-            // whose value disagrees with its declared type reached `expect`
-            // with a word that had no code, and the compiler **panicked** -
-            // which is [Part I 6.8](../../docs/specification/10-nikaia-light.md)'s
-            // *a raw internal error reaching you is a Nikaia bug*, met by the
-            // compiler itself. Found by writing
-            // `comptime PRIMES: Array[i64, 4] = [2, 3, 5, 7]`, which is a
-            // correct program and crashed the build.
-            "const" => "NK1166",
-            other => unreachable!("no code for `{other}`"),
-        };
-        // **An error, one of several, is said as that** (ADR-280 D30).
-        let said = match several_errors(found) {
-            Some(members) => {
-                let text = found.text();
-                message(&text, &want.text()).replace(
-                    &format!("`{text}`"),
-                    &format!("an error, one of {}", members_named(members)),
-                )
-            }
-            None => message(&found.text(), &want.text()),
-        };
-        let finding = Finding {
-            severity: Severity::Error,
-            span,
-            code: code.to_string(),
-            message: said,
-            notes: Vec::new(),
-            help: Some(match several_errors(found) {
-                Some(_) => "Take it apart first: `match error { … }`, and use what each arm \
-                            binds."
-                    .to_string(),
-                None => convert(found, want),
-            }),
-            labels: Vec::new(),
-        };
-        // **Unless the walk may still show it is not negative** (D32): the
-        // refusal waits for its answer.
-        if let Some(at) = waiting
-            && let Some(slots) = self.s.flow.unsigned_slots.get_mut(&(span.at() as i64))
-        {
-            slots[at].refusal = Some(finding);
-            return;
-        }
-        self.s.findings.push(finding);
+        self.s
+            .expect_type(self.world, found, want, &span, what, &message);
     }
 
     /// **The signed values in unsigned slots, asked of the walk** (ADR-285

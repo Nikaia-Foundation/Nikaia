@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.834] — 2026-10-11
+
+**check: expect and expect_kept are Nikaia (C-5g, #558, #125)**
+- check_expect.nika: expect_type (NK1102-NK1106, NK1166) and expect_kept; the Rust expect/expect_kept are one-line stubs.
+
 ## [0.0.833] — 2026-10-11
 
 **check: made_from_text, a_name_in_text, may_fail_here, the reference at a call, gives_back (C-5f, #558, #125)**

@@ -1,0 +1,162 @@
+// crates/nikaia-std/src/tools/check_expect.nika
+//
+// **Where a found type meets the one a position wants** - moved from the
+// compiler's checker (ADR-294, #125, #558, C-5g): `expect` (`NK1102` to
+// `NK1106`, `NK1166`), `expect_kept` (the same, with the reason a view of text
+// was kept) and `a_handler_error_of_several`.
+
+use std::collections
+
+/// **A handler's `error` where several error types arrive** (ADR-280 D30): its
+/// members, and none where it is not one.
+pub fn several_errors_of(ty: ref Ty) -> Vec[Ty] sync {
+    return match ty {
+        Ty::Named { name, args, view } => if name == "Error" && args.len() > 1 && !view { args.clone() } else { [] },
+        else => [],
+    }
+}
+
+/// The code a position's mismatch is told with.
+fn expect_code(what: ref String) -> String sync {
+    return match what {
+        "let" => "NK1103".clone(),
+        "returns" => "NK1104".clone(),
+        "assign" => "NK1105".clone(),
+        "field" => "NK1106".clone(),
+        "argument" => "NK1102".clone(),
+        "const" => "NK1166".clone(),
+        else => "NK1103".clone(),
+    }
+}
+
+impl CheckState {
+    /// Report only when both sides are known and they disagree.
+    pub fn expect_type(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, span: ref Span, what: ref String, message: fn(ref String, ref String) -> String sync) sync {
+        if found.is_unknown() {
+            self.literal_receivers_take(want)
+        }
+        if self.fits_through_deref(world, found, want) {
+            return
+        }
+        // A file's name made from text: the position recorded how (`wrap_for`,
+        // ADR-319 D2).
+        if text_as_a_path(found, want) >= 0 {
+            return
+        }
+        // An integer widened where no value can be lost (ADR-285 D32).
+        if widened_into(found, want) != null {
+            return
+        }
+        let key = span.start as i64
+        let mut waiting: i64 = -1
+        if self.flow.unsigned_slots.contains_key(key) {
+            let slots = self.flow.unsigned_slots.get(key) ?? return
+            let mut index: i64 = 0
+            for slot in slots {
+                if waiting < 0 && slot.refusal == null && slot.found == found && slot.want == want {
+                    waiting = index
+                }
+                index = index + 1
+            }
+        }
+        let code = expect_code(what)
+        // **An error, one of several, is said as that** (ADR-280 D30).
+        let members = several_errors_of(found)
+        let found_text = found.text()
+        let want_text = want.text()
+        let mut said: String = message(found_text, want_text)
+        let mut help: String = way_out_of_a_mismatch(found, want)
+        if members.len() > 0 {
+            said = said.replace(f"`{found_text}`", f"an error, one of {members_named(members)}")
+            help = "Take it apart first: `match error { … }`, and use what each arm binds.".clone()
+        }
+        let finding = check_refusal(code, span, said, [], help)
+        // **Unless the walk may still show it is not negative** (D32): the
+        // refusal waits for its answer.
+        if waiting >= 0 {
+            let held = self.flow.unsigned_slots.get(key) ?? return
+            let mut slots: Vec[CheckUnsignedSlot] = held.clone()
+            slots[waiting].refusal = finding
+            self.flow.unsigned_slots.insert(key, slots)
+            return
+        }
+        self.findings.push(finding)
+    }
+
+    /// [`CheckState::expect_type`], for a position that has the value in hand, so a
+    /// view of text kept where text of its own is wanted can say **why** here
+    /// (ADR-282 D25). `keeper` is the position's own words for what keeps it.
+    pub fn expect_kept(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr?, keeper: ref String, span: ref Span, what: ref String, message: fn(ref String, ref String) -> String sync) sync {
+        // **A place that says its type is a use of the numbers put there**
+        // (ADR-285 D24): a field, a `let`'s annotation, what a function hands
+        // back.
+        if value != null {
+            let given = value ?? return
+            self.number_asked(world, given, want, span, true)
+            if self.an_open_number_where_none_fits(world, found, want, given, span, what, message) {
+                return
+            }
+        }
+        if self.a_name_in_text(world, want, value, span) {
+            return
+        }
+        // **A view into a position both kinds of text flow into** is borrowed
+        // as it is (ADR-282 D14, ADR-282 D15): that is what the position is
+        // for.
+        let mut either = false
+        if what == "returns" {
+            either = self.flow.expected_either
+        }
+        if what == "field" {
+            either = self.flow.field_either
+            self.flow.field_either = false
+        }
+        if either && a_plain_str_view(found) && a_plain_string(want) {
+            return
+        }
+        // **Into a `String?` the same holds of what is there** (ADR-282 D12):
+        // a view, present or absent, goes into a mixed one as it is, and is
+        // refused from an owned one.
+        let mut present: ref Ty = found
+        let mut nullable = false
+        if views_into_nullable_text(found, want) {
+            if either {
+                return
+            }
+            present = match found {
+                Ty::Nullable(held) => held,
+                else => found,
+            }
+            nullable = true
+        }
+        let mut target: Ty = want.clone()
+        if nullable {
+            target = Ty::Named { name: "String".clone(), args: [], view: false }
+        }
+        let before = self.findings.len()
+        self.expect_type(world, present, target, span, what, message)
+        if self.findings.len() > before {
+            self.a_view_kept_beside(world, present, target, value, keeper)
+        }
+    }
+
+    /// The notes and the help a kept view adds to the finding just made.
+    fn a_view_kept_beside(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr?, keeper: ref String) sync {
+        let mut named: String? = null
+        if value != null {
+            let given = value ?? return
+            match given {
+                Expr::Variable(name, _) => {
+                    named = world.words.resolve(name).clone()
+                },
+                else => {},
+            }
+        }
+        let kept = self.a_view_kept(found, want, named, keeper) ?? return
+        let last = self.findings.len() - 1
+        for note in kept.notes {
+            self.findings[last].notes.push(note.clone())
+        }
+        self.findings[last].help = kept.help.clone()
+    }
+}

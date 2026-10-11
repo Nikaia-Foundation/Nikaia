@@ -11642,6 +11642,124 @@ fn touches_a_file(contract: &TypeContract) -> bool {
 }
 
 
+// --- check_expect.nika ---
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn several_errors_of(ty: &Ty) -> Vec<Ty> {
+    match ty {
+        Ty::Named { name, args, view } => { let view = *view; if name == "Error" && args.len() > 1 && !view { args.to_owned() } else { vec![] } },
+        _ => vec![],
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn expect_code(what: &str) -> String {
+    match what {
+        "let" => "NK1103".to_owned(),
+        "returns" => "NK1104".to_owned(),
+        "assign" => "NK1105".to_owned(),
+        "field" => "NK1106".to_owned(),
+        "argument" => "NK1102".to_owned(),
+        "const" => "NK1166".to_owned(),
+        _ => "NK1103".to_owned(),
+    }
+}
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn expect_type(&mut self, world: &CheckWorld<'_>, found: &Ty, want: &Ty, span: &Span, what: &str, message: &impl Fn(&str, &str) -> String) {
+        if found.is_unknown() { self.literal_receivers_take(want); }
+        if self.fits_through_deref(world, found, want) { return; }
+        if text_as_a_path(found, want) >= 0 { return; }
+        if widened_into(found, want).is_some() { return; }
+        let key = span.start as i64;
+        let mut waiting: i64 = -1;
+        if self.flow.unsigned_slots.contains_key(&key) {
+            let slots = match self.flow.unsigned_slots.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return };
+            let mut index: i64 = 0;
+            for slot in slots.iter() {
+                if waiting < 0 && slot.refusal.is_none() && slot.found == *found && slot.want == *want { waiting = index; }
+                index = index + 1;
+            }
+        }
+        let code = expect_code(what);
+        let members = several_errors_of(found);
+        let found_text = found.text();
+        let want_text = want.text();
+        let mut said: String = message(&found_text, &want_text);
+        let mut help: String = way_out_of_a_mismatch(found, want);
+        if !members.is_empty() {
+            said = said.replace(&format!("`{}`", found_text), &format!("an error, one of {}", members_named(&members)));
+            help = "Take it apart first: `match error { … }`, and use what each arm binds.".to_owned();
+        }
+        let finding = check_refusal(&code, span, said, vec![], Some(help));
+        if waiting >= 0 {
+            let held = match self.flow.unsigned_slots.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return };
+            let mut slots: Vec<CheckUnsignedSlot> = held.to_owned();
+            slots[nikaia_std::index::at(waiting)].refusal = Some(finding);
+            self.flow.unsigned_slots.insert(key, slots);
+            return;
+        }
+        self.findings.push(finding);
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn expect_kept(&mut self, world: &CheckWorld<'_>, found: &Ty, want: &Ty, value: Option<&Expr>, keeper: &str, span: &Span, what: &str, message: &impl Fn(&str, &str) -> String) {
+        if value.is_some() {
+            let given = match value { Some(__nikaia_value) => __nikaia_value, None => return };
+            self.number_asked(world, given, want, span, true);
+            if self.an_open_number_where_none_fits(world, found, want, given, span, what, &message) { return; }
+        }
+        if self.a_name_in_text(world, want, value, span) { return; }
+        let mut either = false;
+        if what == "returns" { either = self.flow.expected_either; }
+        if what == "field" {
+            either = self.flow.field_either;
+            self.flow.field_either = false;
+        }
+        if either && a_plain_str_view(found) && a_plain_string(want) { return; }
+        let mut present: &Ty = found;
+        let mut nullable = false;
+        if views_into_nullable_text(found, want) {
+            if either { return; }
+            present = match found {
+                Ty::Nullable(held) => { let held = nikaia_std::boxed::open(held); held },
+                _ => found,
+            };
+            nullable = true;
+        }
+        let mut target: Ty = want.clone();
+        if nullable { target = Ty::Named { name: "String".to_owned(), args: vec![], view: false }; }
+        let before = self.findings.len() as i64;
+        self.expect_type(world, present, &target, span, what, &message);
+        if (self.findings.len() as i64) > before { self.a_view_kept_beside(world, present, &target, value, keeper); }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn a_view_kept_beside(&mut self, world: &CheckWorld<'_>, found: &Ty, want: &Ty, value: Option<&Expr>, keeper: &str) {
+        let mut named: Option<String> = None;
+        if value.is_some() {
+            let given = match value { Some(__nikaia_value) => __nikaia_value, None => return };
+            match given {
+                Expr::Variable(name, _) => {
+                    let name = *name;
+                    named = Some(world.words.resolve(name).to_owned());
+                },
+                _ => { },
+            }
+        }
+        let kept = match self.a_view_kept(found, want, (named).as_deref(), keeper) { Some(__nikaia_value) => __nikaia_value, None => return };
+        let last = self.findings.len() as i64 - 1;
+        for note in kept.notes.iter() { self.findings[nikaia_std::index::at(last)].notes.push(note.to_owned()); }
+        self.findings[nikaia_std::index::at(last)].help = Some(kept.help.to_owned());
+    }
+}
+
+
 // --- check_exprs.nika ---
 
 pub fn a_plain_string(ty: &Ty) -> bool {
@@ -47911,6 +48029,10 @@ pub mod check_decls {
     pub use super::{a_type_base, a_part_one_type};
 }
 pub mod check_doors {}
+pub mod check_expect {
+    #[allow(unused_imports)]
+    pub use super::{several_errors_of};
+}
 pub mod check_exprs {
     #[allow(unused_imports)]
     pub use super::{a_plain_string, CheckKept};

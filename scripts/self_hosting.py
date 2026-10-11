@@ -194,6 +194,7 @@ COMPILER_NIKA = {
     "check_name_in_text.nika": "check: a file's name in an f-string used as text (NK1201) (0.0.X) (0.0.833)",
     "check_may_fail.nika": "check: a written call to something that can fail (NK2605, NK2402) (0.0.X) (0.0.833)",
     "check_references.nika": "check: who writes the reference at a call (NK1137), a lent coalesce, a name given back (0.0.X) (0.0.833)",
+    "check_expect.nika": "check: expect, expect_kept (0.0.834)",
 }
 
 
