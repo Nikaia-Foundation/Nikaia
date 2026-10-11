@@ -233,6 +233,10 @@ impl EmitHost for Emitter<'_> {
         self.build.overlaps_user_code()
     }
 
+    fn crossings_are_possible(&self) -> bool {
+        self.build.crossings_are_possible()
+    }
+
     fn names_read(&self, expr: &Expr) -> Vec<String> {
         let mut names = Vec::new();
         crate::contracts::sync::visit_expr(self.parsed, expr, &mut |each| {

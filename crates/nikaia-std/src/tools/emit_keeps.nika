@@ -102,7 +102,7 @@ impl EmitState {
     }
 
     /// The keep a call to `callee` at the statement is handed.
-    pub fn keep_argument(ref self, walk: ref EmitWalk, function: ref String, statement: i64, callee: ref String) -> String? {
+    pub fn keep_handed(ref self, walk: ref EmitWalk, function: ref String, statement: i64, callee: ref String) -> String? {
         let key = self.keep_plan_key(walk, function) ?? return null
         let plan = self.keep_plans.get(key) ?? return null
         let keep = plan.calls.get((statement, callee.clone())) ?? return null

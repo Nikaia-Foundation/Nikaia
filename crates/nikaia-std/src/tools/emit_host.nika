@@ -38,6 +38,10 @@ pub trait EmitHost {
 
     /// `Build::overlaps_user_code`: user code may run on more than one thread.
     fn overlaps_user_code(ref self) -> bool sync
+
+    /// `Build::crossings_are_possible`: values may cross threads, or the program
+    /// is called from C.
+    fn crossings_are_possible(ref self) -> bool sync
 }
 
 impl EmitState {

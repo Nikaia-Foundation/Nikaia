@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.829] — 2026-10-11
+
+**emit: the arguments and the call of the core are Nikaia: args, called (#558, #125, E9 U5)**
+- New tools/emit_core_args.nika: args (every position of a call: lent views, mut places, wrapped plain values, counts, pointers for C, held buffers, functions run where a pause may happen) and called (walking copies, hulls, doors over several locks, println, constructors, scopes that poll tasks, options and keep) as emit_core_* of EmitState. The Rust methods are one-line stubs; the dead Rust is deleted. EmitHost gains crossings_are_possible. EmitState::keep_argument is renamed keep_handed (a free function of keeps.nika had the name).
+
 ## [0.0.828] — 2026-10-11
 
 **check: the core's scaffolding (baton, core.rs, the hubs expr and block) and the pilot grammar_call, a_compound_write_to_a_map_slot, an_instantiation, a_mut_parameter_given_away (C-6, U-c0, #558, #125)**
