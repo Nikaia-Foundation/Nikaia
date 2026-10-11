@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.833] — 2026-10-11
+
+**check: made_from_text, a_name_in_text, may_fail_here, the reference at a call, gives_back (C-5f, #558, #125)**
+- check_name_in_text.nika holds NK1201 and made_from_text; check_may_fail.nika holds NK2605 and NK2402 (CheckHost.newly_throws); check_references.nika holds the_compiler_writes_the_reference (NK1137), the pending coalesces and gives_back.
+
 ## [0.0.832] — 2026-10-11
 
 **check: the walks below the core: overlap branches, guards inside boxes, claims, what a task keeps across a pause (C-5f, #558, #125)**

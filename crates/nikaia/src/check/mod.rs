@@ -126,14 +126,6 @@ fn payload_of(
         })
 }
 
-/// How a lent `??` opens its option, as the emitter is told.
-fn opened_text(opened: &str) -> &'static str {
-    match opened {
-        ".as_deref()" => ".as_deref()",
-        _ => ".as_ref()",
-    }
-}
-
 use winnow_grammar::Symbol as Ident;
 
 /// The types Part I 2.2 offers, which is what an `as` may name
@@ -1095,6 +1087,7 @@ impl<'a> Checker<'a> {
             reads: self.reads,
             own: self.world.own,
             library: self.world.library,
+            newly: self.newly,
         }
     }
 
@@ -3062,249 +3055,10 @@ impl<'a> Checker<'a> {
             want,
             own,
         } = argument;
-        // `arguments()` drops the receiver, and the contract's positions do
-        // not, so a method's argument sits one further along.
-        let position = at
-            + usize::from(
-                contract
-                    .signature
-                    .as_ref()
-                    .is_some_and(|s| s.takes_a_receiver()),
-            );
-        // **`mut` is asked first, and it is a declaration** (D3): the
-        // parameter lowers to `&mut T` and the argument gains a `&mut`, both
-        // off the word the author wrote. `lends` withholds its claim on such a
-        // position, so exactly one of the two answers.
-        let changes = contract
-            .signature
-            .as_ref()
-            .and_then(|s| s.params.get(position).map(|(name, _)| (s, name)))
-            .is_some_and(|(s, name)| s.mutable.iter().any(|m| m == name));
-        if changes {
-            let Some(given) = given else {
-                return false;
-            };
-            // **The `&mut` is the compiler's, the type is still the
-            // argument's.** This answered *it fits* for whatever stood there,
-            // so a `Walked` handed to a `mut found: Vec[Seen]` was accepted
-            // and `rustc` refused the file (found moving the walk's names
-            // into Nikaia, #125). An argument that is not the parameter's type
-            // falls through to `NK1102` as it does at any other position.
-            if !(found.fits(want) || self.fits_through_deref(found, want)) {
-                return false;
-            }
-            // **A reference that is already there is not written twice.** Where
-            // the argument is a `mut` parameter of the function this call stands
-            // in, the binding *is* a `&mut T`, so the call hands it straight on
-            // and the language below reborrows it. Writing the `&mut` anyway is
-            // not a `&mut &mut T` that works by deref: a `&mut` may only be
-            // taken of a binding that is itself `mut`, and a parameter is not
-            // one, so `rustc` refuses it — *cannot borrow `connection` as
-            // mutable, as it is not declared as mutable* — about a file nobody
-            // wrote ([Part III C.1](../../docs/specification/30-nikaia-tooling.md)).
-            //
-            // `true` and not `false`: nothing is left for the positions below to
-            // decide. This **is** the fit — the argument already has the shape
-            // the parameter asked for — and falling through would measure a
-            // `Connection` against a `Connection` and then look for a wrap.
-            //
-            // Only a bare name. `&mut c.field` for a `mut c` is the reference
-            // the call wants, and `rooted_at` would have said `c` for it.
-            if matches!(given, Expr::Variable(name, _)
-                if self.s.binding(self.parsed.text(*name)).is_some_and(|l| l.changing))
-            {
-                return true;
-            }
-            self.s.facts.mut_args.insert(value_node(given));
-            return true;
-        }
-        let copying = [self.world.library];
-        let lends = match own {
-            true => crate::contracts::keeps::lends_in_own(contract, position, &copying),
-            false => crate::contracts::keeps::lends_in(contract, position, &copying),
-        };
-        if !lends {
-            return false;
-        }
-        let Some(given) = given else {
-            return false;
-        };
-        // **A lambda written in place for a `std` entry is handed over, not
-        // lent**: the entry's counterpart takes an `impl FnOnce` by value, and
-        // the language below infers the closure's parameter types only from a
-        // closure passed as it is - `task::scope(&|s| …)` left `s` untyped.
-        if matches!(given, Expr::Closure { .. })
-            && !self.world.own.functions.contains_key(written)
-            && !self
-                .world
-                .own
-                .functions
-                .contains_key(&format!("{written}::new"))
-            && self.world.library.functions.contains_key(written)
-        {
-            return false;
-        }
-        let wrote_a_reference = matches!(
-            given,
-            Expr::Unary {
-                op: crate::ast::UnaryOp::Ref,
-                ..
-            }
-        );
-        // **Only where the call would be right with the reference in it.** A
-        // `&i64` handed to a `&Request` is `NK1102` and stays one: saying *the
-        // `&` here is the compiler's* about an argument that is the wrong value
-        // would send the reader to fix the punctuation of a line whose type is
-        // wrong.
-        //
-        // The hull's path counts as a fit: a `Shared[Conn]` reaches a `&Conn`
-        // through its deref ([ADR-312](../../docs/specification/adr/adr-312.md)
-        // D5), and that fit was the *source's* `&` before this.
-        //
-        // **Which fit to ask depends on which of the two kinds this is.** A
-        // parameter written `&str` is a view in the declaration already, so
-        // what has to fit it is the argument *with* the reference the compiler
-        // writes — a `String` becomes a `&String` and reaches `&str` the way
-        // the language below reaches it. A parameter written `Stats` and
-        // inferred lent gains its `&` in the declaration too, so both sides
-        // move together and the fit is the one it always was.
-        let fits = match want.is_a_view() {
-            true => {
-                // **`view_of` and not a `&` pasted on the front**, because
-                // a view of a `String` is a `&str` — the one rewrite Part I 6.5
-                // makes, and the same one this checker performs for a `&`
-                // somebody writes. Keeping the name refused `count(dna)` for a
-                // `dna` every caller had been writing `count(&dna)` for.
-                let lent = view_of(found);
-                lent.fits(want) || self.fits_through_deref(&lent, want)
-            }
-            false => {
-                found.fits(want)
-                    || self.fits_through_deref(found, want)
-                    // **A `&` the source wrote is already the view**, and this
-                    // parameter is not one: what has to fit `want` is what the
-                    // `&` was put in front of, because that is the expression
-                    // the compiler would have written its own `&` before. Asked
-                    // the other way, `width(&t)` for a `text: String` that
-                    // `width` only reads came back `&str` against `String` and
-                    // was answered with `NK1102`'s *write `.to_string()`* — a
-                    // help that sends the reader the wrong way about a line
-                    // whose only fault is a character the compiler writes.
-                    || (wrote_a_reference
-                        && viewed_from(found).iter().any(|owned| {
-                            owned.fits(want) || self.fits_through_deref(owned, want)
-                        }))
-            }
-        };
-        if !fits {
-            return false;
-        }
-        if wrote_a_reference {
-            // **A type this compiler could not work out is not one to refuse
-            // punctuation over.** `Ty::Unknown` fits everything, which is the
-            // right answer for an absent claim
-            // ([ADR-024](../../docs/specification/adr/adr-024.md) D1) and no
-            // ground to stand on here: `route(&n)` for an `n` whose type was
-            // never pinned would be refused on the strength of a fit that means
-            // *nothing was checked*, which is [Part III
-            // C.4](../../docs/specification/30-nikaia-tooling.md)'s correct
-            // program refused. Left alone, the `&` the source wrote is the same
-            // character the compiler would have written, so the lowering is the
-            // one either way.
-            //
-            // **Which is why the test sits here and not above the fit.** The
-            // declaration is written off `lends` alone, so anything this
-            // refuses to record is a call whose callee takes a `&T` and whose
-            // argument does not have one - `rustc` about a file nobody wrote.
-            // A condition that skips the *recording* may only be one the
-            // emitter shares; this one skips the *refusal*, and the source's
-            // own `&` stands in for what would have been recorded.
-            if matches!(found, Ty::Unknown) {
-                return false;
-            }
-            // **A `&` at a method call is left alone** (Part III's `NK1137`):
-            // it is the reference the compiler would have written, and the
-            // source's own stands in for it.
-            if contract
-                .signature
-                .as_ref()
-                .is_some_and(|s| s.takes_a_receiver())
-            {
-                return true;
-            }
-            self.s.findings.push(Finding {
-                severity: Severity::Error,
-                span: *span,
-                code: "NK1137".to_string(),
-                message: "You don't need the `ref` here: the compiler lends where it's needed."
-                    .to_string(),
-                notes: vec![format!(
-                    "`{written}` only reads this argument, so it's lent already. Whether an \
-                     argument is lent or handed over is decided by the function, not the call."
-                )],
-                help: Some("Remove the `ref`.".to_string()),
-                labels: Vec::new(),
-            });
-            return true;
-        }
-        // **A view of a nullable handed to a nullable view** is recorded, and
-        // no `&` is what the emitter writes for it: a part a `match` was lent
-        // (`Local::lent`) of type `T?` is an `&Option<T>` below, and a
-        // `ref T?` parameter an `Option<&T>`. The emitter opens the option
-        // (`.as_deref()`, `.as_ref()`), which is what it writes where it lends
-        // a `T?` of its own.
-        let a_lent_nullable = matches!(found, Ty::Nullable(_))
-            && matches!(want, Ty::Nullable(inner) if inner.is_a_view())
-            && matches!(given, Expr::Variable(name, _)
-                if self.s.binding(self.parsed.text(*name)).is_some_and(|local| local.lent));
-        // A value that is already a view needs nothing: the declaration and the
-        // argument agree without a second `&`.
-        if found.is_a_view() && !a_lent_nullable {
-            return false;
-        }
-        // **Nor a name that is a view below whatever its type says**: a `let`
-        // bound to a map read beside a jump (`let at = m[k] ?? continue`) is
-        // a `&String` already, and a second `&` was a `&&String` that
-        // `contains_key` has no `Borrow` for (found moving `describe`'s draft
-        // into Nikaia, #125). A number read that way is the emitter's `*`.
-        if !matches!(found, Ty::Nullable(_))
-            && crate::contracts::keeps::moves(found)
-            && matches!(given, Expr::Variable(name, _)
-                if self.s.binding(self.parsed.text(*name)).is_some_and(|local| local.lent))
-        {
-            return true;
-        }
-        // **Nor does a function this function was lent**: a code parameter
-        // the body only calls is an `&impl Fn` below already, and a second `&`
-        // on a call that hands it on is a new type at every level of a
-        // recursion - `rustc`'s *overflow evaluating the requirement*, found
-        // moving `fold` into Nikaia (ADR-294 D11).
-        if matches!(found, Ty::Fn { .. }) && self.a_lent_parameter(given) {
-            return false;
-        }
-        // **A `??` handed to a position that only reads it lends its left
-        // side** (ADR-279 D5): the answer is a view already, of the name or of
-        // the fallback, and needs no `&` of its own.
-        if self.a_pending_coalesce_is_lent(given) {
-            return true;
-        }
-        // **A plain value lent to a `ref T?` is put in the option too** (Part
-        // I 2.3's wrap at an argument): `name_of(Kind::B)` for a `k: ref
-        // Kind?` is `Some(&Kind::B)`. Settled here, the wrap below was never
-        // recorded, and the emitter opened the value as if it were an option
-        // already - `(Kind::B).as_ref()` (found moving `sync`'s walk into
-        // Nikaia, #125).
-        if matches!(want, Ty::Nullable(inner) if inner.is_a_view())
-            && !matches!(found, Ty::Nullable(_))
-            && !found.is_unknown()
-        {
-            self.s
-                .facts
-                .nullable_args
-                .insert(value_node(given), Wrap::Constructor);
-        }
-        self.s.facts.lent_args.insert(value_node(given));
-        true
+        let at = at as i64;
+        self.s.the_compiler_writes_the_reference(
+            self.world, contract, at, given, found, want, own, written, span,
+        )
     }
 
     /// The name a free call names, unaliased — or nothing where this is not one.
@@ -8889,52 +8643,7 @@ impl<'a> Checker<'a> {
     /// over them. Anything else - a parameter, a field, what `walk` handed
     /// over - may be the operating system's, and is not.
     fn made_from_text(&self, expr: &Expr) -> bool {
-        let text =
-            |ty: &Ty| matches!(ty, Ty::Named { name, .. } if name == "String" || name == "str");
-        match expr {
-            Expr::LitStr { .. } => true,
-            Expr::Variable(name, _) => {
-                self.s
-                    .binding(self.parsed.text(*name))
-                    .is_some_and(|local| {
-                        text(&local.ty)
-                            || self
-                                .s
-                                .flow
-                                .text_paths
-                                .contains(&((local.id as usize) as i64))
-                    })
-            }
-            Expr::LitInterpolated { parts, .. } => crate::emit::interpolated_holes(parts)
-                .iter()
-                .all(|(_, hole)| match hole {
-                    Expr::Variable(name, _) => {
-                        self.s
-                            .binding(self.parsed.text(*name))
-                            .is_some_and(|local| {
-                                !matches!(&local.ty, Ty::Named { name, .. } if name == "fs::Path")
-                                    || self
-                                        .s
-                                        .flow
-                                        .text_paths
-                                        .contains(&((local.id as usize) as i64))
-                            })
-                    }
-                    Expr::LitInt { .. } | Expr::LitStr { .. } => true,
-                    other => self.made_from_text(other),
-                }),
-            Expr::MethodCall {
-                receiver,
-                method,
-                args,
-                ..
-            } => {
-                matches!(self.parsed.text(*method), "join" | "with_extension")
-                    && self.made_from_text(receiver)
-                    && args.iter().all(|arg| self.made_from_text(arg))
-            }
-            _ => false,
-        }
+        self.s.made_from_text(self.world, expr)
     }
 
     /// **`NK1201`, a file's name in an `f"…"` used as text** (ADR-319 D4):
@@ -8943,53 +8652,7 @@ impl<'a> Checker<'a> {
     /// every position; whether the name is text is the program's to say,
     /// with `to_text()` or `display()`.
     fn a_name_in_text(&mut self, want: &Ty, value: Option<&Expr>, span: &Span) -> bool {
-        let Some(literal @ Expr::LitInterpolated { parts, .. }) = value else {
-            return false;
-        };
-        let wants_text = match want {
-            Ty::Nullable(inner) => {
-                matches!(&**inner, Ty::Named { name, .. } if name == "String" || name == "str")
-            }
-            Ty::Named { name, .. } => name == "String" || name == "str",
-            _ => false,
-        };
-        if !wants_text {
-            return false;
-        }
-        let Some(names) = self.s.facts.path_holes.get(&value_node(literal)).cloned() else {
-            return false;
-        };
-        let holes = crate::emit::interpolated_holes(parts);
-        for ((_, hole), is_a_name) in holes.iter().zip(names) {
-            if !is_a_name {
-                continue;
-            }
-            let written = written(self.parsed, hole);
-            let shown = match hole {
-                Expr::Variable(_, _) | Expr::Field { .. } => written.clone(),
-                _ => format!("({written})"),
-            };
-            self.s.findings.push(Finding {
-                severity: Severity::Error,
-                span: *span,
-                code: "NK1201".to_string(),
-                message: format!(
-                    "You can't put the file name `{written}` in an `f\"…\"` that is text."
-                ),
-                notes: vec![
-                    "A hole is written as its value's text, and a file name holds the \
-                     platform's bytes, which need not be text. Here the `f\"…\"` is used \
-                     as text."
-                        .to_string(),
-                ],
-                help: Some(format!(
-                    "Write `{{{shown}.to_text()}}` to use it as text where it is text, or \
-                     `{{{shown}.display()}}` to show it."
-                )),
-                labels: Vec::new(),
-            });
-        }
-        true
+        self.s.a_name_in_text(self.world, want, value, span)
     }
 
     /// `NK1201` (`tools/check_exprs.nika`).
@@ -10495,129 +10158,7 @@ impl<'a> Checker<'a> {
     /// method calls keep, C.4). So it never refuses a program that is right,
     /// and it grows as the ledger does.
     fn may_fail_here(&mut self, key: &str, contract: &FnContract, span: &Span) {
-        // **`NK2108`: a call that can fail stands between a part taken out of
-        // a `mut` parameter and its giving back.** Asked of the ledger's
-        // word, as everything here is; a callee nothing describes says
-        // nothing (C.4).
-        if !contract.fails_with.is_empty() {
-            self.s
-                .a_way_out("fails", key.rsplit("::").next().unwrap_or(key), span);
-        }
-        // **Before the early return**, because the guard's question is asked of
-        // exactly the calls this one declines to report: inside a `catch`,
-        // `self.s.flow.caught` is what sends this function home, and a call that
-        // carries a `throws` is precisely what gives that `catch` something to
-        // do ([ADR-308](../../../docs/specification/adr/adr-308.md)).
-        if !contract.fails_with.is_empty() {
-            if let Some(guarded) = &mut self.s.flow.guarded {
-                guarded.fallible = true;
-                guarded.thrown.extend(contract.fails_with.iter().cloned());
-            }
-            self.newly_reaches_a_handler(key, span);
-            // **And the lambda this may be inside**
-            // ([ADR-277](../../docs/specification/adr/adr-277.md) D7). Here for
-            // the same reason the line above is here: this is the one place
-            // every written call — free or method — has its callee's contract
-            // in hand, and a `catch` further out does not change what the
-            // *lambda* was seen to do.
-            //
-            // **A `catch` further in does.** `fs::read(n, …) catch { "" }`
-            // inside the body handles the failure before the lambda returns,
-            // so the lambda cannot fail and there is nothing for `NK2606` to
-            // say — its own help names this `catch` as the way out. The
-            // question is `handed.caught`, not `self.s.flow.caught`, because only the
-            // first stops at the lambda's edge.
-            if let Some(handed) = self.s.handed_over.as_mut().filter(|h| !h.caught) {
-                handed.fails = true;
-                // **And `NK2606` is then the whole message.** Where the type
-                // the lambda was handed to declares no failure, the function
-                // *around* the lambda is not the one that has to answer for it
-                // — the type is the contract, and telling the reader to write
-                // `throws` on a function that does not fail would be a second
-                // message for one mistake, in the wrong place. Where the type
-                // **does** allow failing, the failure travels to the caller by
-                // [ADR-288](../../docs/specification/adr/adr-288.md) D15 and
-                // `NK2605` is right.
-                if !handed.promised.may_fail {
-                    return;
-                }
-            }
-        }
-        if contract.fails_with.is_empty() || self.s.flow.throwing || self.s.flow.caught {
-            return;
-        }
-        // A grammar action is not code inside a function, and its failure does
-        // not travel to one: past the `=>` it leaves the parser as the Nikaia
-        // error it is and reaches the `catch` beside the `dsl`
-        // ([ADR-023](../../../../docs/specification/adr/adr-023.md) D9). So
-        // there is no `throws` to demand and no function to name.
-        //
-        // **Said here rather than by `current` being `None`**, which is what
-        // said it until a rule's answers needed a key of their own to land
-        // under ([ADR-186](../../../../docs/specification/adr/adr-186.md)):
-        // the two facts are *this is not a
-        // function* and *these calls belong to this entry*, and only the first
-        // of them is this refusal's.
-        if self.s.inside_an_action.is_some() {
-            return;
-        }
-        // A `test` or a `bench` body is the other place with no function to
-        // name, and there `current` is still `None`.
-        let Some(function) = self.s.current.clone() else {
-            return;
-        };
-        self.s.findings.push(Finding {
-            severity: Severity::Error,
-            span: *span,
-            code: "NK2605".to_string(),
-            message: format!("This function can fail, because `{key}` can fail."),
-            notes: vec![
-                format!(
-                    "`{key}` can fail with {}.",
-                    contract
-                        .fails_with
-                        .iter()
-                        .map(|error| format!("`{error}`"))
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                ),
-                "A call that can fail looks like any other call, so its failure passes \
-                 straight through this function unless you handle it."
-                    .to_string(),
-            ],
-            help: Some(format!(
-                "Add `throws` to `{function}`, or handle it at the call: `… catch {{ … }}`."
-            )),
-            labels: Vec::new(),
-        });
-    }
-
-    /// **`NK2402`: an error that newly reaches a `catch` is named once**
-    /// ([ADR-308](../../docs/specification/adr/adr-308.md) D11).
-    ///
-    /// A `catch` handles everything that reaches it and `throws` names no types
-    /// at a signature, so the set arriving at a handler is **open**: it grows
-    /// whenever a callee gains a failure. The handler is still a correct
-    /// program and still handles the new error — as it handles everything. What
-    /// was missing is not a refusal. It is that nobody was told.
-    ///
-    /// So this is a **warning**, printed and stopping nothing, and it is given
-    /// **once**: the commit of the ledger diff is the acknowledgement (D2), and
-    /// after it the new set is the baseline. No marker in the source, nothing
-    /// to type at the handler.
-    ///
-    /// **A handler that matches and one that does not are treated alike** (D3),
-    /// because the question is the same for all three shapes — is this new
-    /// error right where it landed? What the author does about it is theirs,
-    /// and both answers are legitimate.
-    ///
-    /// The caret is on the **call** rather than on the `catch`, because that is
-    /// what the sentence is about: *this call brings something new in here*.
-    fn newly_reaches_a_handler(&mut self, key: &str, span: &Span) {
-        let Some(gained) = self.newly.throws.get(key) else {
-            return;
-        };
-        self.s.newly_reaches_a_handler(key, gained, span);
+        self.nikaia(|state, world, host| state.may_fail_here(world, host, key, contract, span))
     }
 
     /// **`NK2403`: a value's cleanup moved with a contract**
@@ -10845,38 +10386,13 @@ impl<'a> Checker<'a> {
     /// **A `??` in a position that only reads it lends its left side**
     /// (ADR-279 D5): recorded for the emitter, and no longer pending.
     fn a_pending_coalesce_is_lent(&mut self, given: &Expr) -> bool {
-        if !matches!(given, Expr::Coalesce { .. }) {
-            return false;
-        }
-        let key = value_node(given);
-        let Some(at) = self
-            .s
-            .flow
-            .pending_coalesces
-            .iter()
-            .position(|p| p.key == key)
-        else {
-            return false;
-        };
-        let pending = self.s.flow.pending_coalesces.remove(at);
-        self.s
-            .facts
-            .lent_coalesces
-            .insert(pending.key, opened_text(&pending.opened).to_string());
-        true
+        self.s.a_pending_coalesce_is_lent(given)
     }
 
     /// The same for a `??` of text, where the position is a comparison
     /// (issue #98).
     fn a_pending_coalesce_of_text_is_lent(&mut self, given: &Expr) -> bool {
-        let key = value_node(given);
-        let of_text = self
-            .s
-            .flow
-            .pending_coalesces
-            .iter()
-            .any(|p| p.key == key && p.opened == ".as_deref()");
-        of_text && self.a_pending_coalesce_is_lent(given)
+        self.s.a_pending_coalesce_of_text_is_lent(given)
     }
 
     /// Every `??` of the statement just walked that no reading position lent
@@ -13388,7 +12904,13 @@ impl<'a> Checker<'a> {
                 let taken = self.s.handed[from as usize..].iter().any(|taken| {
                     taken.path == **name || taken.path.starts_with(&format!("{name}."))
                 }) || self.s.changed[changed_from..].iter().any(|n| n == *name);
-                self.s.takes_away(self.world, ty) && !taken && !gives_back(body, name, self.parsed)
+                self.s.takes_away(self.world, ty)
+                    && !taken
+                    && !nikaia_std::tools::check_references::check_gives_back(
+                        body,
+                        name,
+                        &self.parsed.interner,
+                    )
             })
             .map(|(name, _)| name.clone())
             .collect();
@@ -13563,21 +13085,6 @@ fn view_of(inner: &Ty) -> Ty {
     nikaia_std::tools::check_types::view_of_type(inner)
 }
 
-/// What a `&x` was a view **of**, as far as [`view_of`] runs backwards.
-///
-/// It does not run backwards cleanly — a `&str` is a view of a `String` and
-/// also a `&str` standing on its own — so this answers the owned types that
-/// would have produced the view, and the caller asks the fit of each.
-///
-/// The one place that needs it is [`Checker::the_compiler_writes_the_reference`],
-/// deciding whether a `&` the source wrote is the one the compiler would have
-/// written anyway. There, a list that is too short costs a refusal that is not
-/// raised and a list that is too long costs a correct program refused, so it is
-/// the short one: only the views this compiler itself makes.
-fn viewed_from(view: &Ty) -> Vec<Ty> {
-    nikaia_std::tools::check_types::viewed_from_type(view)
-}
-
 /// The type several parts of a program own at once (Part I 6.2).
 const SHARED: &str = "Shared";
 /// Part I 6.3's lock, which shares the `Shared` hull's construction line
@@ -13748,79 +13255,6 @@ fn tail_of(block: &Block) -> Option<&Expr> {
         Some(Stmt::Expr(value)) => Some(value),
         _ => None,
     }
-}
-
-/// **Whether an arm hands a name back by value**: as its own value, or through
-/// a `return`. Either needs the part itself and not a view of it.
-fn gives_back(body: &Expr, name: &str, parsed: &Parsed) -> bool {
-    fn is_name(expr: &Expr, name: &str, parsed: &Parsed) -> bool {
-        matches!(expr, Expr::Variable(n, _) if parsed.text(*n) == name)
-    }
-    fn tail(expr: &Expr, name: &str, parsed: &Parsed) -> bool {
-        match expr {
-            Expr::Block(block, _) => block_tail(block, name, parsed),
-            Expr::If {
-                then_branch,
-                else_branch,
-                ..
-            } => {
-                block_tail(then_branch, name, parsed)
-                    || else_branch
-                        .as_ref()
-                        .is_some_and(|b| block_tail(b, name, parsed))
-            }
-            Expr::Match { arms, .. } => arms.iter().any(|arm| tail(&arm.body, name, parsed)),
-            other => is_name(other, name, parsed),
-        }
-    }
-    fn block_tail(block: &Block, name: &str, parsed: &Parsed) -> bool {
-        matches!(block.stmts.last().map(|s| &s.node), Some(Stmt::Expr(e)) if tail(e, name, parsed))
-    }
-    fn block_returns(block: &Block, name: &str, parsed: &Parsed) -> bool {
-        block.stmts.iter().any(|stmt| match &stmt.node {
-            Stmt::Return(Some(value)) => {
-                is_name(value, name, parsed) || returns(value, name, parsed)
-            }
-            Stmt::For { iter, body, .. } => {
-                returns(iter, name, parsed) || block_returns(body, name, parsed)
-            }
-            Stmt::While { cond, body } => {
-                returns(cond, name, parsed) || block_returns(body, name, parsed)
-            }
-            Stmt::Let { value, .. } | Stmt::Comptime { value, .. } => returns(value, name, parsed),
-            Stmt::Assign { value, .. } => returns(value, name, parsed),
-            Stmt::Expr(value) => returns(value, name, parsed),
-            _ => false,
-        })
-    }
-    fn returns(expr: &Expr, name: &str, parsed: &Parsed) -> bool {
-        let mut found = false;
-        crate::emit::visit_expr(expr, &mut |inner| match inner {
-            Expr::Return(value, _)
-                if (**value)
-                    .as_ref()
-                    .is_some_and(|value| is_name(value, name, parsed)) =>
-            {
-                found = true
-            }
-            Expr::Block(block, _) | Expr::Unsafe(block, _) => {
-                found |= block_returns(block, name, parsed);
-            }
-            Expr::If {
-                then_branch,
-                else_branch,
-                ..
-            } => {
-                found |= block_returns(then_branch, name, parsed)
-                    || else_branch
-                        .as_ref()
-                        .is_some_and(|b| block_returns(b, name, parsed));
-            }
-            _ => {}
-        });
-        found
-    }
-    tail(body, name, parsed) || returns(body, name, parsed)
 }
 
 impl Checker<'_> {

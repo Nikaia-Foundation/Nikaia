@@ -12980,6 +12980,7 @@ pub trait CheckHost {
     fn expr(&self, state: &mut CheckState, node: &Expr, span: &Span) -> Ty;
     fn block(&self, state: &mut CheckState, block: &Block) -> Ty;
     fn written(&self, value: &Expr) -> String;
+    fn newly_throws(&self, key: &str) -> Option<Vec<String>>;
 }
 
 fn host_known(local: &CheckLocal) -> Option<BuildValue> {
@@ -14716,6 +14717,60 @@ impl CheckState {
 }
 
 
+// --- check_may_fail.nika ---
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn may_fail_here<H: CheckHost>(&mut self, world: &CheckWorld<'_>, host: &H, key: &str, contract: &FnContract, span: &Span) {
+        if !contract.fails_with.is_empty() {
+            let word = type_last_segment(key);
+            self.a_way_out("fails", &word, span);
+        }
+        if !contract.fails_with.is_empty() {
+            if self.flow.guarded.is_some() {
+                let held: Option<CheckGuarded> = match self.flow.guarded.as_ref() {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                };
+                let mut guarded = nikaia_std::index::or(held, || CheckGuarded::nothing());
+                guarded.fallible = true;
+                for thrown in contract.fails_with.iter() { guarded.thrown.insert(thrown.to_owned()); }
+                self.flow.guarded = Some(guarded);
+            }
+            let gained: Option<Vec<String>> = host.newly_throws(key);
+            if gained.is_some() {
+                let list = match gained { Some(__nikaia_value) => __nikaia_value, None => return };
+                self.newly_reaches_a_handler(key, &list, span);
+            }
+            if self.handed_over.is_some() {
+                let held = match match self.handed_over.as_ref() {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                } { Some(__nikaia_value) => __nikaia_value, None => return };
+                if !held.caught {
+                    let mut handed = held;
+                    handed.fails = true;
+                    let may_fail = handed.promised.may_fail;
+                    self.handed_over = Some(handed);
+                    if !may_fail { return; }
+                }
+            }
+        }
+        if contract.fails_with.is_empty() || self.flow.throwing || self.flow.caught { return; }
+        if self.inside_an_action.is_some() { return; }
+        let function = match match self.current.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        } { Some(__nikaia_value) => __nikaia_value, None => return };
+        let mut errors: Vec<String> = vec![];
+        for error in contract.fails_with.iter() { errors.push(format!("`{}`", error)); }
+        let list = errors.join(", ");
+        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK2605".to_owned(), message: format!("This function can fail, because `{}` can fail.", key), notes: vec![format!("`{}` can fail with {}.", key, list), "A call that can fail looks like any other call, so its failure passes straight through this function unless you handle it.".to_owned()], help: Some(format!("Add `throws` to `{}`, or handle it at the call: `… catch {{ … }}`.", function)), labels: vec![] });
+    }
+}
+
+
 // --- check_members.nika ---
 
 fn mem_offered(head: &str) -> bool { head == "i32" || head == "i64" || head == "u8" || head == "u32" || head == "u64" || head == "f64" || head == "bool" || head == "char" || head == "scalar" || head == "String" || head == "str" || head == "Vec" || head == "HashMap" || head == "HashSet" || head == "Array" || head == "Seq" || head == "Par" }
@@ -14902,6 +14957,115 @@ fn mem_nearest_help(head: &str, member: &str, method: bool, members: &[String], 
     let name = nikaia_std::index::or(near, || "".to_owned().into());
     if method { return format!("Did you mean `.{}()`?", name); }
     format!("Did you mean `{}::{}`?", head, name)
+}
+
+
+// --- check_name_in_text.nika ---
+
+fn check_name_is_text(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { name, .. } => name == "String" || name == "str",
+        _ => false,
+    }
+}
+
+fn check_name_wants_text(want: &Ty) -> bool {
+    match want {
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); check_name_is_text(inner) },
+        _ => check_name_is_text(want),
+    }
+}
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn made_from_text(&self, world: &CheckWorld<'_>, expr: &Expr) -> bool {
+        match expr {
+            Expr::LitStr { .. } => true,
+            Expr::Variable(symbol, _) => {
+                let symbol = *symbol;
+                let name = world.words.resolve(symbol).to_owned();
+                let found = match self.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+                check_name_is_text(&found.ty) || self.flow.text_paths.contains(&found.id)
+            },
+            Expr::LitInterpolated { parts, .. } => {
+                for part in parts.iter() {
+                    match part {
+                        FPart::Hole { expr, .. } => { if !self.a_hole_made_from_text(world, expr) { return false; } },
+                        _ => { },
+                    }
+                }
+                true
+            },
+            Expr::MethodCall { receiver, method, args, .. } => {
+                let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+                let word = world.words.resolve(method).to_owned();
+                if word != "join" && word != "with_extension" { return false; }
+                if !self.made_from_text(world, receiver) { return false; }
+                for arg in args.iter() { if !self.made_from_text(world, arg) { return false; } }
+                true
+            },
+            _ => false,
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn a_hole_made_from_text(&self, world: &CheckWorld<'_>, hole: &Expr) -> bool {
+        match hole {
+            Expr::Variable(symbol, _) => {
+                let symbol = *symbol;
+                let name = world.words.resolve(symbol).to_owned();
+                let found = match self.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+                let a_path = match found.ty {
+                    Ty::Named { ref name, .. } => name == "fs::Path",
+                    _ => false,
+                };
+                !a_path || self.flow.text_paths.contains(&found.id)
+            },
+            Expr::LitInt { .. } => true,
+            Expr::LitStr { .. } => true,
+            _ => self.made_from_text(world, hole),
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_name_in_text(&mut self, world: &CheckWorld<'_>, want: &Ty, value: Option<&Expr>, span: &Span) -> bool {
+        let literal = match value { Some(__nikaia_value) => __nikaia_value, None => return false };
+        match literal {
+            Expr::LitInterpolated { parts, .. } => {
+                if !check_name_wants_text(want) { return false; }
+                let key = id_of(literal) as i64;
+                if !self.facts.path_holes.contains_key(&key) { return false; }
+                let names = match match *nikaia_std::index::get(&self.facts.path_holes, &key) {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                } { Some(__nikaia_value) => __nikaia_value, None => return false };
+                let mut index: i64 = 0;
+                for part in parts.iter() {
+                    match part {
+                        FPart::Hole { expr, .. } => {
+                            if index < names.len() as i64 && *nikaia_std::index::get(&names, nikaia_std::index::at(index)) { self.a_name_in_a_hole(world, expr, span); }
+                            index = index + 1;
+                        },
+                        _ => { },
+                    }
+                }
+                true
+            },
+            _ => false,
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn a_name_in_a_hole(&mut self, world: &CheckWorld<'_>, hole: &Expr, span: &Span) {
+        let written = written_expression(world.words, hole);
+        let shown = match hole {
+            Expr::Variable(_, _) => written.to_owned(),
+            Expr::Field { .. } => written.to_owned(),
+            _ => format!("({})", written),
+        };
+        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1201".to_owned(), message: format!("You can't put the file name `{}` in an `f\"…\"` that is text.", written), notes: vec!["A hole is written as its value's text, and a file name holds the platform's bytes, which need not be text. Here the `f\"…\"` is used as text.".to_owned()], help: Some(format!("Write `{{{}.to_text()}}` to use it as text where it is text, or `{{{}.display()}}` to show it.", shown, shown)), labels: vec![] });
+    }
 }
 
 
@@ -16817,6 +16981,224 @@ impl CheckState {
         let at = (span.start as i64, into_name.to_owned());
         if !checked { let added = self.flow.widening_casts.insert(at); } else if from_name == "f64" { self.facts.narrowing_casts.insert(at, FactNarrowing::FromFloat); } else { self.facts.narrowing_casts.insert(at, FactNarrowing::Integer); }
     }
+}
+
+
+// --- check_references.nika ---
+
+fn check_reference_opened(opened: &str) -> String {
+    if opened == ".as_deref()" { return ".as_deref()".to_owned(); }
+    ".as_ref()".to_owned()
+}
+
+fn check_reference_written(expr: &Expr) -> bool {
+    match expr {
+        Expr::Unary { op, .. } => matches!(op, UnaryOp::Ref),
+        _ => false,
+    }
+}
+
+fn check_reference_nullable(ty: &Ty) -> bool { matches!(ty, Ty::Nullable(_)) }
+
+fn check_reference_nullable_view(ty: &Ty) -> bool {
+    match ty {
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); inner.is_a_view() },
+        _ => false,
+    }
+}
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_pending_coalesce_is_lent(&mut self, given: &Expr) -> bool {
+        match given {
+            Expr::Coalesce { .. } => { },
+            _ => return false,
+        }
+        let key = id_of(given) as i64;
+        let mut found: i64 = -1;
+        for at in 0..self.flow.pending_coalesces.len() as i64 { if found < 0 && nikaia_std::index::get(&self.flow.pending_coalesces, (at) as usize).key == key { found = at; } }
+        if found < 0 { return false; }
+        let pending = self.flow.pending_coalesces.remove(nikaia_std::count::of(found));
+        self.facts.lent_coalesces.insert(pending.key, check_reference_opened(&pending.opened));
+        true
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_pending_coalesce_of_text_is_lent(&mut self, given: &Expr) -> bool {
+        let key = id_of(given) as i64;
+        let mut of_text = false;
+        for pending in self.flow.pending_coalesces.iter() { if pending.key == key && pending.opened == ".as_deref()" { of_text = true; } }
+        of_text && self.a_pending_coalesce_is_lent(given)
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn a_name_that_changes(&self, world: &CheckWorld<'_>, expr: &Expr) -> bool {
+        match expr {
+            Expr::Variable(symbol, _) => {
+                let symbol = *symbol;
+                let name = world.words.resolve(symbol).to_owned();
+                let found = match self.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+                found.changing
+            },
+            _ => false,
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn a_name_that_is_lent(&self, world: &CheckWorld<'_>, expr: &Expr) -> bool {
+        match expr {
+            Expr::Variable(symbol, _) => {
+                let symbol = *symbol;
+                let name = world.words.resolve(symbol).to_owned();
+                let found = match self.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+                found.lent
+            },
+            _ => false,
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn the_compiler_writes_the_reference(&mut self, world: &CheckWorld<'_>, contract: &FnContract, at: i64, given: Option<&Expr>, found: &Ty, want: &Ty, own: bool, written: &str, span: &Span) -> bool {
+        let mut takes_a_receiver = false;
+        let mut changes = false;
+        let mut position = at;
+        let held: Option<Signature> = match contract.signature.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        };
+        if held.is_some() {
+            let signature = match held { Some(__nikaia_value) => __nikaia_value, None => return false };
+            if signature.takes_a_receiver() {
+                takes_a_receiver = true;
+                position = at + 1;
+            }
+            if position < signature.params.len() as i64 {
+                let name = nikaia_std::index::get(&signature.params, nikaia_std::index::at(position)).0.to_owned();
+                changes = nikaia_std::list::contains(&signature.mutable, &name);
+            }
+        }
+        if changes {
+            let given_expr = match given { Some(__nikaia_value) => __nikaia_value, None => return false };
+            if !(found.fits(want) || self.fits_through_deref(world, found, want)) { return false; }
+            if self.a_name_that_changes(world, given_expr) { return true; }
+            self.facts.mut_args.insert(id_of(given_expr) as i64);
+            return true;
+        }
+        let lends = if own { lends_in_own(contract, position, &vec![world.library]) } else { lends_in(contract, position, &vec![world.library]) };
+        if !lends { return false; }
+        let given_expr = match given { Some(__nikaia_value) => __nikaia_value, None => return false };
+        match given_expr {
+            Expr::Closure { .. } => { if !world.own.functions.contains_key(written) && !world.own.functions.contains_key(&format!("{}::new", written)) && world.library.functions.contains_key(written) { return false; } },
+            _ => { },
+        }
+        let wrote_a_reference = check_reference_written(given_expr);
+        let mut fits = false;
+        if want.is_a_view() {
+            let lent = view_of_type(found);
+            fits = lent.fits(want) || self.fits_through_deref(world, &lent, want);
+        } else {
+            fits = found.fits(want) || self.fits_through_deref(world, found, want);
+            if !fits && wrote_a_reference { for owned in viewed_from_type(found) { if owned.fits(want) || self.fits_through_deref(world, &owned, want) { fits = true; } } }
+        }
+        if !fits { return false; }
+        if wrote_a_reference {
+            match found {
+                Ty::Unknown => return false,
+                _ => { },
+            }
+            if takes_a_receiver { return true; }
+            self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1137".to_owned(), message: "You don't need the `ref` here: the compiler lends where it's needed.".to_owned(), notes: vec![format!("`{}` only reads this argument, so it's lent already. Whether an argument is lent or handed over is decided by the function, not the call.", written)], help: Some("Remove the `ref`.".to_owned()), labels: vec![] });
+            return true;
+        }
+        let found_nullable = check_reference_nullable(found);
+        let want_nullable_view = check_reference_nullable_view(want);
+        let a_lent_nullable = found_nullable && want_nullable_view && self.a_name_that_is_lent(world, given_expr);
+        if found.is_a_view() && !a_lent_nullable { return false; }
+        if !found_nullable && moves(found) && self.a_name_that_is_lent(world, given_expr) { return true; }
+        let found_a_function = matches!(found, Ty::Fn { .. });
+        if found_a_function && self.a_lent_parameter(world, given_expr) { return false; }
+        if self.a_pending_coalesce_is_lent(given_expr) { return true; }
+        if want_nullable_view && !found_nullable && !found.is_unknown() { self.facts.nullable_args.insert(id_of(given_expr) as i64, FactWrap::Constructor); }
+        self.facts.lent_args.insert(id_of(given_expr) as i64);
+        true
+    }
+}
+
+pub fn check_gives_back(body: &Expr, name: &str, words: &winnow_grammar::InternerContext) -> bool { check_gives_back_tail(body, name, words) || check_gives_back_returns(body, name, words) }
+
+fn check_gives_back_is_name(expr: &Expr, name: &str, words: &winnow_grammar::InternerContext) -> bool {
+    match expr {
+        Expr::Variable(symbol, _) => { let symbol = *symbol; words.resolve(symbol) == name },
+        _ => false,
+    }
+}
+
+fn check_gives_back_tail(expr: &Expr, name: &str, words: &winnow_grammar::InternerContext) -> bool {
+    match expr {
+        Expr::Block(block, _) => check_gives_back_block_tail(block, name, words),
+        Expr::If { then_branch, else_branch, .. } => {
+            if check_gives_back_block_tail(then_branch, name, words) { return true; }
+            if else_branch.is_some() { return check_gives_back_block_tail(match else_branch { Some(__nikaia_value) => __nikaia_value, None => return false }, name, words); }
+            false
+        },
+        Expr::Match { arms, .. } => {
+            for arm in arms.iter() { if check_gives_back_tail(&arm.body, name, words) { return true; } }
+            false
+        },
+        _ => check_gives_back_is_name(expr, name, words),
+    }
+}
+
+fn check_gives_back_block_tail(block: &Block, name: &str, words: &winnow_grammar::InternerContext) -> bool {
+    if block.stmts.is_empty() { return false; }
+    match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1)).node {
+        Stmt::Expr(inner) => check_gives_back_tail(inner, name, words),
+        _ => false,
+    }
+}
+
+fn check_gives_back_block_returns(block: &Block, name: &str, words: &winnow_grammar::InternerContext) -> bool {
+    for stmt in block.stmts.iter() {
+        let found = match &stmt.node {
+            Stmt::Return(value) => {
+                if value.is_some() {
+                    let inner = match value { Some(__nikaia_value) => __nikaia_value, None => return false };
+                    check_gives_back_is_name(inner, name, words) || check_gives_back_returns(inner, name, words)
+                } else { false }
+            },
+            Stmt::For { iter, body, .. } => check_gives_back_returns(iter, name, words) || check_gives_back_block_returns(body, name, words),
+            Stmt::While { cond, body } => check_gives_back_returns(cond, name, words) || check_gives_back_block_returns(body, name, words),
+            Stmt::Let { value, .. } => check_gives_back_returns(value, name, words),
+            Stmt::Comptime { value, .. } => check_gives_back_returns(value, name, words),
+            Stmt::Assign { value, .. } => check_gives_back_returns(value, name, words),
+            Stmt::Expr(value) => check_gives_back_returns(value, name, words),
+            _ => false,
+        };
+        if found { return true; }
+    }
+    false
+}
+
+fn check_gives_back_returns(expr: &Expr, name: &str, words: &winnow_grammar::InternerContext) -> bool {
+    let mut found = false;
+    for inner in visited_in_expr(expr) {
+        match inner {
+            Expr::Return(value, _) => {
+                let value = nikaia_std::boxed::open(value);
+                if value.is_some() && check_gives_back_is_name(match value { Some(__nikaia_value) => __nikaia_value, None => return false }, name, words) { found = true; }
+            },
+            Expr::Block(block, _) => { if check_gives_back_block_returns(block, name, words) { found = true; } },
+            Expr::Unsafe(block, _) => { if check_gives_back_block_returns(block, name, words) { found = true; } },
+            Expr::If { then_branch, else_branch, .. } => {
+                if check_gives_back_block_returns(then_branch, name, words) { found = true; }
+                if else_branch.is_some() && check_gives_back_block_returns(match else_branch { Some(__nikaia_value) => __nikaia_value, None => return false }, name, words) { found = true; }
+            },
+            _ => { },
+        }
+    }
+    found
 }
 
 
@@ -47570,7 +47952,9 @@ pub mod check_lookups {
     #[allow(unused_imports)]
     pub use super::{names_of, as_this_program_says, bounds_in_a_signature, ledger_function};
 }
+pub mod check_may_fail {}
 pub mod check_members {}
+pub mod check_name_in_text {}
 pub mod check_names {
     #[allow(unused_imports)]
     pub use super::{integer_named, is_a_literal};
@@ -47604,6 +47988,10 @@ pub mod check_places {
     pub use super::{members_named, a_root_is_one_of_two};
 }
 pub mod check_reads {}
+pub mod check_references {
+    #[allow(unused_imports)]
+    pub use super::{check_gives_back};
+}
 pub mod check_refusals {
     #[allow(unused_imports)]
     pub use super::{left_out_text};

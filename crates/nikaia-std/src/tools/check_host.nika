@@ -102,6 +102,9 @@ pub trait CheckHost {
     /// stays Rust until `written` moves (C-5e): the text of a string literal is
     /// Rust's `Debug`.
     fn written(ref self, value: ref Expr) -> String sync
+    /// The errors a callee throws now and did not at the committed ledger (the
+    /// build's `Newly`), where there are any: what `NK2402` is told once.
+    fn newly_throws(ref self, key: ref String) -> Vec[String]? sync
 }
 
 /// What the build worked out a local is: the whole value, or the integer the

@@ -1,0 +1,342 @@
+// crates/nikaia-std/src/tools/check_references.nika
+//
+// **Who writes the reference at a call** (ADR-094 D1, ADR-279 D5, ADR-293 D29),
+// moved from the compiler's checker (ADR-294, #125, #558, C-5f): the compiler
+// writes the `&` where the callee only reads an argument, a written one is
+// refused (`NK1137`), a `mut` parameter gets its `&mut` off the word the author
+// wrote, and a `??` handed to a position that only reads it is lent.
+
+use std::collections
+
+/// How a lent `??` opens its option, as the emitter is told.
+fn check_reference_opened(opened: ref String) -> String {
+    if opened == ".as_deref()" {
+        return ".as_deref()".clone()
+    }
+    return ".as_ref()".clone()
+}
+
+/// Whether the source wrote the `&` itself.
+fn check_reference_written(expr: ref Expr) -> bool {
+    return match expr {
+        Expr::Unary { op, .. } => match op {
+            UnaryOp::Ref => true,
+            else => false,
+        },
+        else => false,
+    }
+}
+
+fn check_reference_nullable(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Nullable(_) => true,
+        else => false,
+    }
+}
+
+fn check_reference_nullable_view(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Nullable(inner) => inner.is_a_view(),
+        else => false,
+    }
+}
+
+impl CheckState {
+    /// **A `??` in a position that only reads it lends its left side**
+    /// (ADR-279 D5): recorded for the emitter, and no longer pending.
+    pub fn a_pending_coalesce_is_lent(ref mut self, given: ref Expr) -> bool sync {
+        match given {
+            Expr::Coalesce { .. } => {},
+            else => return false,
+        }
+        let key = id_of(given) as i64
+        let mut found = -1
+        for at in 0..<self.flow.pending_coalesces.len() {
+            if found < 0 && self.flow.pending_coalesces[at].key == key {
+                found = at
+            }
+        }
+        if found < 0 {
+            return false
+        }
+        let pending = self.flow.pending_coalesces.remove(found)
+        self.facts.lent_coalesces.insert(pending.key, check_reference_opened(pending.opened))
+        return true
+    }
+
+    /// The same for a `??` of text, where the position is a comparison
+    /// (issue #98).
+    pub fn a_pending_coalesce_of_text_is_lent(ref mut self, given: ref Expr) -> bool sync {
+        let key = id_of(given) as i64
+        let mut of_text = false
+        for pending in self.flow.pending_coalesces {
+            if pending.key == key && pending.opened == ".as_deref()" {
+                of_text = true
+            }
+        }
+        return of_text && self.a_pending_coalesce_is_lent(given)
+    }
+
+    /// Whether the expression is a name whose binding a `mut` parameter made:
+    /// a reference that is already there is not written twice.
+    fn a_name_that_changes(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {
+        return match expr {
+            Expr::Variable(symbol, _) => {
+                let name = world.words.resolve(symbol).clone()
+                let found = self.binding(name) ?? return false
+                found.changing
+            },
+            else => false,
+        }
+    }
+
+    /// Whether the expression is a name whose binding was lent to this code.
+    fn a_name_that_is_lent(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {
+        return match expr {
+            Expr::Variable(symbol, _) => {
+                let name = world.words.resolve(symbol).clone()
+                let found = self.binding(name) ?? return false
+                found.lent
+            },
+            else => false,
+        }
+    }
+
+    /// **The compiler writes the reference at the call, and a written one is
+    /// refused** (ADR-094 D1). `at` is the position among the arguments, the
+    /// receiver not counted; `given` what the source wrote there, `found` its
+    /// type and `want` the parameter's; `own` says the callee is a function or
+    /// method of this program's own. Whether the answer is `true`: nothing is
+    /// left for the positions below to decide.
+    pub fn the_compiler_writes_the_reference(ref mut self, world: ref CheckWorld, contract: ref FnContract, at: i64, given: ref Expr?, found: ref Ty, want: ref Ty, own: bool, written: ref String, span: ref Span) -> bool sync {
+        // `arguments()` drops the receiver, and the contract's positions do
+        // not, so a method's argument sits one further along.
+        let mut takes_a_receiver = false
+        let mut changes = false
+        let mut position = at
+        let held: Signature? = contract.signature?.clone()
+        if held != null {
+            let signature = held ?? return false
+            if signature.takes_a_receiver() {
+                takes_a_receiver = true
+                position = at + 1
+            }
+            // **`mut` is asked first, and it is a declaration** (D3): the
+            // parameter lowers to `&mut T` and the argument gains a `&mut`,
+            // both off the word the author wrote.
+            if position < signature.params.len() {
+                let name = signature.params[position].0.clone()
+                changes = signature.mutable.contains(name)
+            }
+        }
+        if changes {
+            let given_expr = given ?? return false
+            // **The `&mut` is the compiler's, the type is still the
+            // argument's.**
+            if !(found.fits(want) || self.fits_through_deref(world, found, want)) {
+                return false
+            }
+            // **A reference that is already there is not written twice.**
+            if self.a_name_that_changes(world, given_expr) {
+                return true
+            }
+            self.facts.mut_args.insert(id_of(given_expr) as i64)
+            return true
+        }
+        let lends = if own { lends_in_own(contract, position, [world.library]) } else { lends_in(contract, position, [world.library]) }
+        if !lends {
+            return false
+        }
+        let given_expr = given ?? return false
+        // **A lambda written in place for a `std` entry is handed over, not
+        // lent**: the entry's counterpart takes an `impl FnOnce` by value.
+        match given_expr {
+            Expr::Closure { .. } => {
+                if !world.own.functions.contains_key(written) && !world.own.functions.contains_key(f"{written}::new") && world.library.functions.contains_key(written) {
+                    return false
+                }
+            },
+            else => {},
+        }
+        let wrote_a_reference = check_reference_written(given_expr)
+        // **Only where the call would be right with the reference in it.**
+        // Which fit to ask depends on which of the two kinds this is: a
+        // parameter written `&str` is a view in the declaration already, so
+        // what has to fit it is the argument *with* the reference the compiler
+        // writes; a parameter written `Stats` and inferred lent gains its `&`
+        // in the declaration too, so both sides move together.
+        let mut fits = false
+        if want.is_a_view() {
+            let lent = view_of_type(found)
+            fits = lent.fits(want) || self.fits_through_deref(world, lent, want)
+        } else {
+            fits = found.fits(want) || self.fits_through_deref(world, found, want)
+            // **A `&` the source wrote is already the view**, and this
+            // parameter is not one: what has to fit `want` is what the `&` was
+            // put in front of.
+            if !fits && wrote_a_reference {
+                for owned in viewed_from_type(found) {
+                    if owned.fits(want) || self.fits_through_deref(world, owned, want) {
+                        fits = true
+                    }
+                }
+            }
+        }
+        if !fits {
+            return false
+        }
+        if wrote_a_reference {
+            // **A type this compiler could not work out is not one to refuse
+            // punctuation over.**
+            match found {
+                Ty::Unknown => return false,
+                else => {},
+            }
+            // **A `&` at a method call is left alone** (Part III's `NK1137`).
+            if takes_a_receiver {
+                return true
+            }
+            self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1137".clone(), message: "You don't need the `ref` here: the compiler lends where it's needed.".clone(), notes: [f"`{written}` only reads this argument, so it's lent already. Whether an argument is lent or handed over is decided by the function, not the call."], help: "Remove the `ref`.".clone(), labels: [] })
+            return true
+        }
+        // **A view of a nullable handed to a nullable view** is recorded, and
+        // no `&` is what the emitter writes for it.
+        let found_nullable = check_reference_nullable(found)
+        let want_nullable_view = check_reference_nullable_view(want)
+        let a_lent_nullable = found_nullable && want_nullable_view && self.a_name_that_is_lent(world, given_expr)
+        // A value that is already a view needs nothing.
+        if found.is_a_view() && !a_lent_nullable {
+            return false
+        }
+        // **Nor a name that is a view below whatever its type says.**
+        if !found_nullable && moves(found) && self.a_name_that_is_lent(world, given_expr) {
+            return true
+        }
+        // **Nor does a function this function was lent.**
+        let found_a_function = match found {
+            Ty::Fn { .. } => true,
+            else => false,
+        }
+        if found_a_function && self.a_lent_parameter(world, given_expr) {
+            return false
+        }
+        // **A `??` handed to a position that only reads it lends its left
+        // side** (ADR-279 D5).
+        if self.a_pending_coalesce_is_lent(given_expr) {
+            return true
+        }
+        // **A plain value lent to a `ref T?` is put in the option too** (Part
+        // I 2.3's wrap at an argument).
+        if want_nullable_view && !found_nullable && !found.is_unknown() {
+            self.facts.nullable_args.insert(id_of(given_expr) as i64, FactWrap::Constructor)
+        }
+        self.facts.lent_args.insert(id_of(given_expr) as i64)
+        return true
+    }
+}
+
+/// **Whether an arm hands a name back by value**: as its own value, or through
+/// a `return`. Either needs the part itself and not a view of it.
+pub fn check_gives_back(body: ref Expr, name: ref String, words: ref winnow_grammar::InternerContext) -> bool {
+    return check_gives_back_tail(body, name, words) || check_gives_back_returns(body, name, words)
+}
+
+fn check_gives_back_is_name(expr: ref Expr, name: ref String, words: ref winnow_grammar::InternerContext) -> bool {
+    return match expr {
+        Expr::Variable(symbol, _) => words.resolve(symbol) == name,
+        else => false,
+    }
+}
+
+fn check_gives_back_tail(expr: ref Expr, name: ref String, words: ref winnow_grammar::InternerContext) -> bool {
+    return match expr {
+        Expr::Block(block, _) => check_gives_back_block_tail(block, name, words),
+        Expr::If { then_branch, else_branch, .. } => {
+            if check_gives_back_block_tail(then_branch, name, words) {
+                return true
+            }
+            if else_branch != null {
+                return check_gives_back_block_tail(else_branch ?? return false, name, words)
+            }
+            false
+        },
+        Expr::Match { arms, .. } => {
+            for arm in arms {
+                if check_gives_back_tail(arm.body, name, words) {
+                    return true
+                }
+            }
+            false
+        },
+        else => check_gives_back_is_name(expr, name, words),
+    }
+}
+
+fn check_gives_back_block_tail(block: ref Block, name: ref String, words: ref winnow_grammar::InternerContext) -> bool {
+    if block.stmts.len() == 0 {
+        return false
+    }
+    return match block.stmts[block.stmts.len() - 1].node {
+        Stmt::Expr(inner) => check_gives_back_tail(inner, name, words),
+        else => false,
+    }
+}
+
+fn check_gives_back_block_returns(block: ref Block, name: ref String, words: ref winnow_grammar::InternerContext) -> bool {
+    for stmt in block.stmts {
+        let found = match stmt.node {
+            Stmt::Return(value) => {
+                if value != null {
+                    let inner = value ?? return false
+                    check_gives_back_is_name(inner, name, words) || check_gives_back_returns(inner, name, words)
+                } else {
+                    false
+                }
+            },
+            Stmt::For { iter, body, .. } => check_gives_back_returns(iter, name, words) || check_gives_back_block_returns(body, name, words),
+            Stmt::While { cond, body } => check_gives_back_returns(cond, name, words) || check_gives_back_block_returns(body, name, words),
+            Stmt::Let { value, .. } => check_gives_back_returns(value, name, words),
+            Stmt::Comptime { value, .. } => check_gives_back_returns(value, name, words),
+            Stmt::Assign { value, .. } => check_gives_back_returns(value, name, words),
+            Stmt::Expr(value) => check_gives_back_returns(value, name, words),
+            else => false,
+        }
+        if found {
+            return true
+        }
+    }
+    return false
+}
+
+fn check_gives_back_returns(expr: ref Expr, name: ref String, words: ref winnow_grammar::InternerContext) -> bool {
+    let mut found = false
+    for inner in visited_in_expr(expr) {
+        match inner {
+            Expr::Return(value, _) => {
+                if value != null && check_gives_back_is_name(value ?? return false, name, words) {
+                    found = true
+                }
+            },
+            Expr::Block(block, _) => {
+                if check_gives_back_block_returns(block, name, words) {
+                    found = true
+                }
+            },
+            Expr::Unsafe(block, _) => {
+                if check_gives_back_block_returns(block, name, words) {
+                    found = true
+                }
+            },
+            Expr::If { then_branch, else_branch, .. } => {
+                if check_gives_back_block_returns(then_branch, name, words) {
+                    found = true
+                }
+                if else_branch != null && check_gives_back_block_returns(else_branch ?? return false, name, words) {
+                    found = true
+                }
+            },
+            else => {},
+        }
+    }
+    return found
+}

@@ -1,0 +1,85 @@
+// crates/nikaia-std/src/tools/check_may_fail.nika
+//
+// **A written call to something that can fail** (`NK2605`, ADR-025 D1), moved
+// from the compiler's checker (ADR-294, #125, #558, C-5f). What the committed
+// ledger lacks (`NK2402`) is asked of the host: `newly_throws`.
+
+use std::collections
+
+impl CheckState {
+    /// **A written call to something that can fail** (`NK2605`). ADR-025 D1
+    /// states the rule for the calls nobody wrote - a block's closing brace, a
+    /// loop's step - and says it is "exactly as a written call would" behave.
+    /// Reported only where the callee's contract says it can fail, which is
+    /// what makes this need no guess: the ledger is the fact, and a callee no
+    /// ledger describes says nothing here.
+    pub fn may_fail_here[H: CheckHost](ref mut self, world: ref CheckWorld, host: ref H, key: ref String, contract: ref FnContract, span: ref Span) sync {
+        // **`NK2108`: a call that can fail stands between a part taken out of
+        // a `mut` parameter and its giving back.** Asked of the ledger's word,
+        // as everything here is; a callee nothing describes says nothing.
+        if contract.fails_with.len() > 0 {
+            let word = type_last_segment(key)
+            self.a_way_out("fails", word, span)
+        }
+        // **Before the early return**, because the guard's question is asked
+        // of exactly the calls this one declines to report: inside a `catch`,
+        // `flow.caught` is what sends this function home, and a call that
+        // carries a `throws` is precisely what gives that `catch` something to
+        // do (ADR-308).
+        if contract.fails_with.len() > 0 {
+            if self.flow.guarded != null {
+                let held: CheckGuarded? = self.flow.guarded?.clone()
+                let mut guarded = held ?? CheckGuarded::nothing()
+                guarded.fallible = true
+                for thrown in contract.fails_with {
+                    guarded.thrown.insert(thrown.clone())
+                }
+                self.flow.guarded = guarded
+            }
+            let gained: Vec[String]? = host.newly_throws(key)
+            if gained != null {
+                let list = gained ?? return
+                self.newly_reaches_a_handler(key, list, span)
+            }
+            // **And the lambda this may be inside** (ADR-277 D7). A `catch`
+            // further in handles the failure before the lambda returns, so the
+            // question is `handed.caught`, not `flow.caught`: only the first
+            // stops at the lambda's edge.
+            if self.handed_over != null {
+                let held = self.handed_over?.clone() ?? return
+                if !held.caught {
+                    let mut handed = held
+                    handed.fails = true
+                    let may_fail = handed.promised.may_fail
+                    self.handed_over = handed
+                    // **And `NK2606` is then the whole message.** Where the type
+                    // the lambda was handed to declares no failure, the type is
+                    // the contract, and telling the reader to write `throws` on
+                    // a function that does not fail would be a second message
+                    // for one mistake, in the wrong place.
+                    if !may_fail {
+                        return
+                    }
+                }
+            }
+        }
+        if contract.fails_with.len() == 0 || self.flow.throwing || self.flow.caught {
+            return
+        }
+        // A grammar action is not code inside a function, and its failure does
+        // not travel to one (ADR-023 D9): there is no `throws` to demand and
+        // no function to name.
+        if self.inside_an_action != null {
+            return
+        }
+        // A `test` or a `bench` body is the other place with no function to
+        // name, and there `current` is still `None`.
+        let function = self.current?.clone() ?? return
+        let mut errors: Vec[String] = []
+        for error in contract.fails_with {
+            errors.push(f"`{error}`")
+        }
+        let list = errors.join(", ")
+        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK2605".clone(), message: f"This function can fail, because `{key}` can fail.", notes: [f"`{key}` can fail with {list}.", "A call that can fail looks like any other call, so its failure passes straight through this function unless you handle it.".clone()], help: f"Add `throws` to `{function}`, or handle it at the call: `… catch {{ … }}`.", labels: [] })
+    }
+}

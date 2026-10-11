@@ -260,6 +260,10 @@ impl CheckHost for Core<'_, '_> {
         self.h.written(value)
     }
 
+    fn newly_throws(&self, key: &str) -> Option<Vec<String>> {
+        self.h.newly_throws(key)
+    }
+
     fn expr(&self, state: &mut CheckState, node: &Expr, span: &Span) -> Ty {
         self.hosted(state, |checker| checker.expr(node, span))
     }

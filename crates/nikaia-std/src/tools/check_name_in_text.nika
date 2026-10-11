@@ -1,0 +1,133 @@
+// crates/nikaia-std/src/tools/check_name_in_text.nika
+//
+// **A file's name in an `f"…"` used as text** (`NK1201`, ADR-319 D4), and the
+// question of whether a path was made from text, moved from the compiler's
+// checker (ADR-294, #125, #558, C-5f).
+
+/// Whether a type is text: `String` or `str`.
+fn check_name_is_text(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Named { name, .. } => name == "String" || name == "str",
+        else => false,
+    }
+}
+
+/// Whether the place a literal is written in wants text: `String`, `str`, or
+/// either of them optional.
+fn check_name_wants_text(want: ref Ty) -> bool {
+    return match want {
+        Ty::Nullable(inner) => check_name_is_text(inner),
+        else => check_name_is_text(want),
+    }
+}
+
+impl CheckState {
+    /// Whether a path expression is **made from text**, as far as this can
+    /// see: a literal, a name that holds text or a name made from text, an
+    /// `f"…"` whose names are, and `join` or `with_extension` over them.
+    /// Anything else - a parameter, a field, what `walk` handed over - may be
+    /// the operating system's, and is not.
+    pub fn made_from_text(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {
+        return match expr {
+            Expr::LitStr { .. } => true,
+            Expr::Variable(symbol, _) => {
+                let name = world.words.resolve(symbol).clone()
+                let found = self.binding(name) ?? return false
+                check_name_is_text(found.ty) || self.flow.text_paths.contains(found.id)
+            },
+            Expr::LitInterpolated { parts, .. } => {
+                for part in parts {
+                    match part {
+                        FPart::Hole { expr, .. } => {
+                            if !self.a_hole_made_from_text(world, expr) {
+                                return false
+                            }
+                        },
+                        else => {},
+                    }
+                }
+                true
+            },
+            Expr::MethodCall { receiver, method, args, .. } => {
+                let word = world.words.resolve(method).clone()
+                if word != "join" && word != "with_extension" {
+                    return false
+                }
+                if !self.made_from_text(world, receiver) {
+                    return false
+                }
+                for arg in args {
+                    if !self.made_from_text(world, arg) {
+                        return false
+                    }
+                }
+                true
+            },
+            else => false,
+        }
+    }
+
+    fn a_hole_made_from_text(ref self, world: ref CheckWorld, hole: ref Expr) -> bool sync {
+        return match hole {
+            Expr::Variable(symbol, _) => {
+                let name = world.words.resolve(symbol).clone()
+                let found = self.binding(name) ?? return false
+                let a_path = match found.ty {
+                    Ty::Named { name, .. } => name == "fs::Path",
+                    else => false,
+                }
+                !a_path || self.flow.text_paths.contains(found.id)
+            },
+            Expr::LitInt { .. } => true,
+            Expr::LitStr { .. } => true,
+            else => self.made_from_text(world, hole),
+        }
+    }
+
+    /// **`NK1201`, a file's name in an `f"…"` used as text** (ADR-319 D4): a
+    /// name holds the platform's bytes, which need not be text, so it has no
+    /// text form where the `f"…"` is text. Refused at the hole, the same at
+    /// every position; whether the name is text is the program's to say, with
+    /// `to_text()` or `display()`. Whether it was one is whether it is
+    /// answered: `true` where `value` is an `f"…"` that wants text and was
+    /// looked at.
+    pub fn a_name_in_text(ref mut self, world: ref CheckWorld, want: ref Ty, value: ref Expr?, span: ref Span) -> bool sync {
+        let literal = value ?? return false
+        return match literal {
+            Expr::LitInterpolated { parts, .. } => {
+                if !check_name_wants_text(want) {
+                    return false
+                }
+                let key = id_of(literal) as i64
+                if !self.facts.path_holes.contains_key(key) {
+                    return false
+                }
+                let names = self.facts.path_holes[key]?.clone() ?? return false
+                let mut index = 0
+                for part in parts {
+                    match part {
+                        FPart::Hole { expr, .. } => {
+                            if index < names.len() && names[index] {
+                                self.a_name_in_a_hole(world, expr, span)
+                            }
+                            index = index + 1
+                        },
+                        else => {},
+                    }
+                }
+                true
+            },
+            else => false,
+        }
+    }
+
+    fn a_name_in_a_hole(ref mut self, world: ref CheckWorld, hole: ref Expr, span: ref Span) sync {
+        let written = written_expression(world.words, hole)
+        let shown = match hole {
+            Expr::Variable(_, _) => written.clone(),
+            Expr::Field { .. } => written.clone(),
+            else => f"({written})",
+        }
+        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1201".clone(), message: f"You can't put the file name `{written}` in an `f\"…\"` that is text.", notes: ["A hole is written as its value's text, and a file name holds the platform's bytes, which need not be text. Here the `f\"…\"` is used as text.".clone()], help: f"Write `{{{shown}.to_text()}}` to use it as text where it is text, or `{{{shown}.display()}}` to show it.", labels: [] })
+    }
+}

@@ -14,6 +14,7 @@ pub(super) struct Host<'a> {
     pub(super) reads: &'a Reads,
     pub(super) own: &'a Ledger,
     pub(super) library: &'a Ledger,
+    pub(super) newly: &'a Newly,
 }
 
 impl Host<'_> {
@@ -253,6 +254,10 @@ impl CheckHost for Host<'_> {
 
     fn written(&self, value: &Expr) -> String {
         super::written_by(self.parsed, value)
+    }
+
+    fn newly_throws(&self, key: &str) -> Option<Vec<String>> {
+        self.newly.throws.get(key).cloned()
     }
 
     /// Code below the core never walks an expression: the hubs are the core's
