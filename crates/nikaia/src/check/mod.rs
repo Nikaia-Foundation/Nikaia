@@ -171,10 +171,6 @@ const OFFERED: [&str; 11] = [
     "i32", "i64", "u8", "u32", "u64", "f64", "bool", "char", "scalar", "String", "str",
 ];
 
-/// The number types a program writes (Part I 2.2,
-/// [ADR-285](../../docs/specification/adr/adr-285.md) D3).
-const OFFERED_NUMBERS: [&str; 6] = ["i32", "i64", "u8", "u32", "u64", "f64"];
-
 /// The note every `NK25xx` carries, because it is the reason the code exists.
 ///
 /// ADR-005 §1 Group B and ADR-037 §3: the verdict may not depend on
@@ -183,77 +179,6 @@ const OFFERED_NUMBERS: [&str; 6] = ["i32", "i64", "u8", "u32", "u64", "f64"];
 /// prevent rather than a property of it.
 const SAME_AT_BOTH: &str = "This is checked even when the program runs on one thread, so \
      code stays correct when `user-parallelism` is turned on.";
-
-/// Where one function's method calls went (ADR-288).
-///
-/// A method call is the one shape neither `sync.rs` analysis can resolve on its
-/// own: `stats.add(5)` names `add` and says nothing about what `stats` is, and
-/// only a type checker knows. This is that answer, handed over.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct MethodCalls {
-    /// The ledger keys its method calls resolved to.
-    pub resolved: BTreeSet<String>,
-    /// It calls a method whose receiver type is not known, or one no ledger
-    /// has an entry for. **Not the same as calling nothing** - it is the
-    /// absence of an answer, and an analysis that claims a property must treat
-    /// it as such (ADR-288 D2).
-    pub unresolved: bool,
-    /// How many such calls, which the boolean above cannot say.
-    ///
-    /// Nothing in the compiler reads it: every analysis wants *is there one*,
-    /// and a count would be a number to be wrong about. It is here for the
-    /// **measurement** [ADR-105](../../docs/specification/adr/adr-105.md) §1
-    /// makes a claim with — *35 unanswered method calls in the corpus, every one
-    /// downstream of a `?` that is a sequence* — so that the claim can be
-    /// checked again rather than remembered. `crates/nikaia/tests/sequences.rs`
-    /// is what checks it.
-    pub unanswered: usize,
-    /// It calls a **kept function value** through a field whose type may
-    /// pause, or may fail: the answer is the type's, not a callee's.
-    pub code_pauses: bool,
-    pub code_fails: bool,
-    /// The function fields it calls through, `Type.field`, outside a `spawn`
-    /// ([ADR-230](../../docs/specification/adr/adr-230.md) D1): what the code
-    /// stored there does is reached from here.
-    pub fields_called: BTreeSet<String>,
-    /// Which of `resolved` were reached from inside a **`spawn`** body, and
-    /// whether any unresolvable call was
-    /// ([ADR-281](../../docs/specification/adr/adr-281.md) D29).
-    ///
-    /// A task started with `spawn` runs **later and elsewhere**, so what it
-    /// does is not what the surrounding function does — where a trailing
-    /// lambda's body *is*, because it runs during the call
-    /// ([ADR-288](../../docs/specification/adr/adr-288.md) D16). An analysis
-    /// that asks about the calling function's own reach subtracts this; one
-    /// that asks what the whole text mentions does not, which is why it is a
-    /// second set rather than a narrowing of the first.
-    pub in_a_task: CallsInATask,
-}
-
-/// The half of [`MethodCalls`] that is inside a `spawn` body.
-///
-/// A type of its own rather than a second [`MethodCalls`], which would nest
-/// forever — and a name that says which half it is, so that a reader of
-/// `calls.in_a_task.resolved` does not have to hold the nesting in their head.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct CallsInATask {
-    /// The ledger keys resolved inside a task's body.
-    pub resolved: BTreeSet<String>,
-    /// A call inside a task's body that could not be resolved.
-    pub unresolved: bool,
-}
-
-/// **What code stored in a function field reaches**
-/// ([ADR-230](../../docs/specification/adr/adr-230.md) D1): the methods a
-/// lambda put there resolves to, whether one of its calls did not resolve, and
-/// the free calls it makes - one entry per `Type.field`, over everything the
-/// package stores there.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct StoredCode {
-    pub resolved: BTreeSet<String>,
-    pub unresolved: bool,
-    pub free: BTreeSet<String>,
-}
 
 /// **What one call was handed**, positional and named, with the types found for
 /// each.
@@ -296,6 +221,10 @@ impl Default for Checked {
 pub use nikaia_std::tools::check_facts::{
     CheckFacts, FactClaim as Claim, FactKeyForm as KeyForm, FactNarrowing as Narrowing,
     FactPausing as PausingEntry, FactViewed as Viewed, FactWrap as Wrap,
+};
+pub use nikaia_std::tools::check_state::{
+    CheckCallsInATask as CallsInATask, CheckMethodCalls as MethodCalls,
+    CheckStoredCode as StoredCode,
 };
 
 /// Every type mistake the ledgers are enough to see, and every loop that can
@@ -495,8 +424,6 @@ fn walked<'a>(
         inside_a_comptime: false,
         literal_receivers: Vec::new(),
         at_a_write_door: false,
-        stored_frames: Vec::new(),
-        rule_results: BTreeMap::new(),
         pushed_into: None,
         fields_by_base: std::cell::OnceCell::new(),
         expected_either: false,
@@ -540,7 +467,6 @@ fn walked<'a>(
         opaque_methods: BTreeSet::new(),
         widening_casts: BTreeSet::new(),
         unsigned_slots: BTreeMap::new(),
-        checked: Checked::default(),
         world: CheckWorld {
             words: &parsed.interner,
             own,
@@ -655,6 +581,11 @@ fn walked<'a>(
             changed: Vec::new(),
             said_mut: BTreeSet::new(),
             facts: CheckFacts::empty(),
+            methods: BTreeMap::new(),
+            stored_code: BTreeMap::new(),
+            stored_frames: Vec::new(),
+            rule_results: BTreeMap::new(),
+            next_binding: 1 << 40,
             handed_over: None,
             in_parallel: None,
             scoped_task: false,
@@ -805,10 +736,12 @@ fn walked<'a>(
 
 /// What the walk found: the state's findings go into the table the emitter reads.
 fn finished(checker: Checker<'_>) -> Checked {
-    let mut checked = checker.checked;
-    checked.findings = checker.s.findings;
-    checked.facts = checker.s.facts;
-    checked
+    Checked {
+        findings: checker.s.findings,
+        facts: checker.s.facts,
+        methods: checker.s.methods,
+        stored_code: checker.s.stored_code,
+    }
 }
 
 /// Everything the emitter needs that only a type checker can answer: the loops
@@ -1508,13 +1441,6 @@ struct Checker<'a> {
     /// the emitter writes `mut` itself for a fold's accumulator and refusing
     /// there would refuse a program that compiles.
     at_a_write_door: bool,
-    /// The lambdas being walked on their way into a function field, innermost
-    /// last (ADR-230 D1): every method call resolved inside one is recorded in
-    /// each.
-    stored_frames: Vec<StoredCode>,
-    /// **Each rule of the grammar being walked, with the type it declares**
-    /// (#500): what a binding `t:term` holds is `term`'s result.
-    rule_results: BTreeMap<String, Ty>,
     /// **The name of an empty list a `push` is being walked on** (#523): its
     /// first use gives it its element type.
     pushed_into: Option<String>,
@@ -1525,15 +1451,6 @@ struct Checker<'a> {
     /// checking a small program cost. `own`'s before `library`'s and each in
     /// key order, which is the order the scan visited them in.
     fields_by_base: std::cell::OnceCell<std::collections::HashMap<String, Vec<Ty>>>,
-    /// The bindings `NK1138` and `NK1139` have already been said about, by the
-    /// byte each declaration starts at.
-    ///
-    /// Said once per binding: a body that changes one usually does so several
-    /// times, and three carets on one declaration is noise rather than
-    /// information. It is not scoped, and must not be — two blocks that each
-    /// declare an `xs` have two spans, and one that is walked twice is one
-    /// span and one message.
-    checked: Checked,
 }
 
 /// One argument as [`Checker::the_compiler_writes_the_reference`] reads it:
@@ -2217,7 +2134,7 @@ impl<'a> Checker<'a> {
 
     fn grammar(&mut self, grammar: &ast::GrammarDef) {
         let named = self.parsed.text(grammar.name).to_string();
-        self.rule_results = grammar
+        self.s.rule_results = grammar
             .rules
             .iter()
             .filter_map(|rule| {
@@ -2248,13 +2165,12 @@ impl<'a> Checker<'a> {
                 .current
                 .replace(format!("{named}::{}", self.parsed.text(rule.name)));
             for alt in &rule.alts {
-                let mut frame = Vec::new();
-                let rules: BTreeSet<&str> = grammar
+                let rules: BTreeSet<String> = grammar
                     .rules
                     .iter()
-                    .map(|r| self.parsed.text(r.name))
+                    .map(|r| self.parsed.text(r.name).to_string())
                     .collect();
-                self.bindings_of(&alt.pattern.node, &rules, &mut frame);
+                let frame = self.s.bindings_of(&self.world, &alt.pattern.node, &rules);
                 // **A fold's lambdas first, and in the pattern's own frame**
                 // ([ADR-296](../../../docs/specification/adr/adr-296.md)),
                 // because a fold may stand beside a binding in a sequence:
@@ -2407,125 +2323,6 @@ impl<'a> Checker<'a> {
             .as_ref()
             .map(|signature| signature.result_or_unit())
             .filter(|result| !result.is_unknown())
-    }
-
-    /// Every `name:pattern` in a pattern: what the built-ins that say match
-    /// ([ADR-314](../../docs/specification/adr/adr-314.md) D1) - `dec[T](…)` a
-    /// `T`, `digit` and `hex_digit` a `char` and a run of them text (Part II
-    /// 10.8), where `rules` (the
-    /// grammar's own) has no rule of that name - and `?` otherwise.
-    fn bindings_of(&self, pattern: &ast::Pattern, rules: &BTreeSet<&str>, out: &mut Vec<Local>) {
-        match pattern {
-            ast::Pattern::Bind { name, pat } => {
-                let ty = self.pattern_type(&pat.node, rules);
-                out.push(local_free(self.parsed.text(*name).to_string(), ty));
-                self.bindings_of(&pat.node, rules, out);
-            }
-            ast::Pattern::Seq(parts) | ast::Pattern::Choice(parts) => {
-                for part in parts {
-                    self.bindings_of(&part.node, rules, out);
-                }
-            }
-            ast::Pattern::Ref { args, .. } => {
-                for arg in args {
-                    self.bindings_of(&arg.node, rules, out);
-                }
-            }
-            ast::Pattern::Repeat { pat, .. } | ast::Pattern::Group(pat) => {
-                self.bindings_of(&pat.node, rules, out)
-            }
-            ast::Pattern::Literal(_) | ast::Pattern::Cut | ast::Pattern::Fold(_) => {}
-        }
-    }
-
-    /// **What a pattern yields, for the name bound to it** (Part II 10.8's
-    /// table, #500): a rule of this grammar its declared result, `until`,
-    /// `text` and the other text built-ins a view of the input, a repetition
-    /// a list of what it repeats - or the text where a character class runs -
-    /// and `p?` a `T?`. What the table does not type stays unknown.
-    fn pattern_type(&self, pattern: &ast::Pattern, rules: &BTreeSet<&str>) -> Ty {
-        // A view of the input, spelled as a written `ref String` is.
-        let text = || Ty::view(ty::TEXT_VIEW);
-        let scalar = || Ty::named("scalar");
-        match pattern {
-            ast::Pattern::Repeat {
-                pat,
-                rep: ast::Repeat::Optional,
-            } => match self.pattern_type(&pat.node, rules) {
-                Ty::Nullable(inner) => Ty::Nullable(inner),
-                inner => Ty::Nullable(Box::new(inner)),
-            },
-            // **A run of a character class is text** (Part II 10.8):
-            // `digit{1,2}`, `digit+`, `hex_digit*`.
-            ast::Pattern::Repeat { pat: run, .. }
-                if matches!(&run.node, ast::Pattern::Ref { name: called, generics, args }
-                    if generics.is_empty()
-                        && args.is_empty()
-                        && matches!(self.parsed.text(*called), "digit" | "hex_digit" | "any")
-                        && !rules.contains(self.parsed.text(*called))) =>
-            {
-                text()
-            }
-            ast::Pattern::Repeat { pat, .. } => match self.pattern_type(&pat.node, rules) {
-                Ty::Unknown => Ty::Unknown,
-                item => Ty::Named {
-                    name: "Vec".to_string(),
-                    args: vec![item],
-                    view: false,
-                },
-            },
-            ast::Pattern::Group(pat) => self.pattern_type(&pat.node, rules),
-            // **A choice whose alternatives agree is of their type**: `s:(ONE |
-            // TWO)` over two rules that hand back a `Shade`.
-            ast::Pattern::Choice(alternatives) => {
-                let mut types = alternatives
-                    .iter()
-                    .map(|alternative| self.pattern_type(&alternative.node, rules));
-                match types.next() {
-                    Some(first) if !first.is_unknown() && types.all(|ty| ty == first) => first,
-                    _ => Ty::Unknown,
-                }
-            }
-            ast::Pattern::Ref {
-                name: called,
-                generics,
-                args,
-            } => {
-                let called = self.parsed.text(*called);
-                if rules.contains(called) {
-                    return self
-                        .rule_results
-                        .get(called)
-                        .cloned()
-                        .unwrap_or(Ty::Unknown);
-                }
-                match (called, generics.as_slice(), args.as_slice()) {
-                    // **Any number type** (Part II 10.8), `f64` too.
-                    ("dec", [ty], _)
-                        if ty.generics.is_empty()
-                            && OFFERED_NUMBERS.contains(&self.parsed.text(ty.name)) =>
-                    {
-                        Ty::named(self.parsed.text(ty.name))
-                    }
-                    ("digit" | "hex_digit" | "any" | "char", [], []) => scalar(),
-                    ("until" | "text", [], [_, ..])
-                    | ("raw_ident" | "string" | "alpha1" | "multispace0" | "multispace1", [], []) => {
-                        text()
-                    }
-                    ("peek", [], [inner]) => self.pattern_type(&inner.node, rules),
-                    ("list", [], [item, _]) => match self.pattern_type(&item.node, rules) {
-                        Ty::Unknown => Ty::Unknown,
-                        item => Ty::Named {
-                            name: "Vec".to_string(),
-                            args: vec![item],
-                            view: false,
-                        },
-                    },
-                    _ => Ty::Unknown,
-                }
-            }
-            _ => Ty::Unknown,
-        }
     }
 
     fn function(&mut self, item: &Item, target: Option<&str>) {
@@ -3594,9 +3391,9 @@ impl<'a> Checker<'a> {
             }
             return unit;
         };
-        self.stored_frames.push(StoredCode::default());
+        self.s.stored_frames.push(StoredCode::empty());
         let found = self.expr(condition, span);
-        let frame = self.stored_frames.pop().unwrap_or_default();
+        let frame = self.s.stored_frames.pop().unwrap_or_else(StoredCode::empty);
         self.expect_bool(&found, span, "An `assert` checks a `bool`.");
         // A number's type is settled below, so the check above cannot see
         // `assert(5)`; the literal is its own answer.
@@ -9544,7 +9341,7 @@ impl<'a> Checker<'a> {
                             .any(|f| f.name == field && matches!(f.ty, Ty::Fn { .. }))
                     });
                     if code_field {
-                        self.stored_frames.push(StoredCode::default());
+                        self.s.stored_frames.push(StoredCode::empty());
                     }
                     // `Reading { name, temp }` is shorthand for `name: name`.
                     if let Some(value) = &init.value {
@@ -9562,7 +9359,8 @@ impl<'a> Checker<'a> {
                     };
                     self.lambda_expected = None;
                     if code_field {
-                        let mut stored = self.stored_frames.pop().unwrap_or_default();
+                        let mut stored =
+                            self.s.stored_frames.pop().unwrap_or_else(StoredCode::empty);
                         match &init.value {
                             Some(Expr::Closure { body, .. }) => {
                                 stored
@@ -9585,10 +9383,10 @@ impl<'a> Checker<'a> {
                             _ => stored.unresolved = true,
                         }
                         let entry = self
-                            .checked
+                            .s
                             .stored_code
                             .entry(format!("{name}.{field}"))
-                            .or_default();
+                            .or_insert_with(StoredCode::empty);
                         entry.resolved.extend(stored.resolved);
                         entry.unresolved |= stored.unresolved;
                         entry.free.extend(stored.free);
@@ -11666,7 +11464,11 @@ impl<'a> Checker<'a> {
                 .kept_calls
                 .insert(((span.at() as i64), name), (!is_sync, throws));
             if let Some(current) = &self.current {
-                let entry = self.checked.methods.entry(current.clone()).or_default();
+                let entry = self
+                    .s
+                    .methods
+                    .entry(current.clone())
+                    .or_insert_with(MethodCalls::empty);
                 entry.code_pauses |= !is_sync;
                 entry.code_fails |= throws;
             }
@@ -12749,10 +12551,10 @@ impl<'a> Checker<'a> {
     /// A function field code is put into where the lock column cannot read it
     /// (ADR-230 D1): undecided, never quiet.
     fn a_field_whose_code_is_not_seen(&mut self, owner: &str, field: &str) {
-        self.checked
+        self.s
             .stored_code
             .entry(format!("{owner}.{field}"))
-            .or_default()
+            .or_insert_with(StoredCode::empty)
             .unresolved = true;
     }
 
@@ -16009,10 +15811,10 @@ impl<'a> Checker<'a> {
             if let Some(current) = &self.current
                 && self.s.task_bindings.is_empty()
             {
-                self.checked
+                self.s
                     .methods
                     .entry(current.clone())
-                    .or_default()
+                    .or_insert_with(MethodCalls::empty)
                     .fields_called
                     .insert(key.clone());
             }
@@ -16030,7 +15832,11 @@ impl<'a> Checker<'a> {
             .field_calls
             .insert(value_node(receiver), !is_sync);
         if let Some(current) = &self.current {
-            let entry = self.checked.methods.entry(current.clone()).or_default();
+            let entry = self
+                .s
+                .methods
+                .entry(current.clone())
+                .or_insert_with(MethodCalls::empty);
             entry.code_pauses |= !is_sync;
             entry.code_fails |= throws;
         }
@@ -18232,7 +18038,7 @@ impl<'a> Checker<'a> {
         if key.is_none() {
             self.guard_has_no_answer();
         }
-        for frame in &mut self.stored_frames {
+        for frame in &mut self.s.stored_frames {
             match key {
                 Some(key) => {
                     frame.resolved.insert(key.to_string());
@@ -18247,7 +18053,11 @@ impl<'a> Checker<'a> {
         // is the one the task walk already keeps, so "inside a task" is
         // exactly what it says.
         let inside_a_task = !self.s.task_bindings.is_empty();
-        let entry = self.checked.methods.entry(current.clone()).or_default();
+        let entry = self
+            .s
+            .methods
+            .entry(current.clone())
+            .or_insert_with(MethodCalls::empty);
         match key {
             Some(key) => {
                 entry.resolved.insert(key.to_string());

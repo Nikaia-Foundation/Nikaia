@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.803] — 2026-10-11
+
+**The checker's method and stored-code tables and the grammar pattern types are Nikaia (`tools/check_state.nika`, `tools/check_grammar.nika`, #558, #125).**
+- `MethodCalls`, `CallsInATask` and `StoredCode` are Nikaia structs, and `methods`, `stored_code` and `stored_frames` live in `CheckState`: the `Checker` no longer holds a `Checked`. `pattern_type` and `bindings_of` (the type a grammar pattern's result has, and the names a rule's pattern binds) are methods of `CheckState`; `rule_results` moved into it, and a binding made there takes its id from a counter of its own.
+
 ## [0.0.802] — 2026-10-11
 
 **The emitter's questions about calls, patterns and shapes are methods of EmitState (tools/emit_exprs.nika, emit_misc.nika, #558, step E4).**

@@ -96,7 +96,7 @@ fn sync_of(source: &str, library: &Ledger, resolved: bool) -> BTreeMap<String, S
     let mut methods = BTreeMap::new();
     if resolved {
         for name in ["tally", "outer"] {
-            let mut calls = MethodCalls::default();
+            let mut calls = MethodCalls::empty();
             if name == "tally" {
                 calls.resolved.insert("SharedMut::access".to_string());
             }

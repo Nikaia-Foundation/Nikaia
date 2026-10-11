@@ -697,7 +697,9 @@ impl LedgerOps for Ledger {
             .iter()
             .flat_map(|c| c.stored_code.iter().map(|(k, v)| (k.clone(), v.clone())))
             .fold(BTreeMap::new(), |mut all, (key, code)| {
-                let entry: &mut crate::check::StoredCode = all.entry(key).or_default();
+                let entry: &mut crate::check::StoredCode = all
+                    .entry(key)
+                    .or_insert_with(crate::check::StoredCode::empty);
                 entry.resolved.extend(code.resolved);
                 entry.unresolved |= code.unresolved;
                 entry.free.extend(code.free);

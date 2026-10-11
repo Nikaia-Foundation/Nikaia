@@ -1,0 +1,173 @@
+// crates/nikaia-std/src/tools/check_grammar.nika
+//
+// **What a grammar's pattern gives its action** (Part II 10.1, #500, #558,
+// #125), moved from the compiler's checker: the type a pattern's result has
+// (`pattern_type`) and the names a rule's pattern binds with it
+// (`bindings_of`). Text is a view, a repeat of a built-in is text, a repeat of
+// anything else is a list, an optional is nullable, and a reference to a rule
+// has the type that rule declares.
+
+use std::collections
+
+/// A named type with no arguments.
+fn pattern_named(name: ref String, view: bool) -> Ty sync {
+    return Ty::Named { name: name.clone(), args: [], view: view }
+}
+
+fn pattern_text() -> Ty sync {
+    return Ty::Named { name: "str", args: [], view: true }
+}
+
+fn pattern_scalar() -> Ty sync {
+    return Ty::Named { name: "scalar", args: [], view: false }
+}
+
+/// A `Vec` of an item type, or `?` where the item is not known.
+fn list_of_known(item: Ty) -> Ty sync {
+    if item.is_unknown() {
+        return Ty::Unknown
+    }
+    return Ty::Named { name: "Vec", args: [item], view: false }
+}
+
+/// The name of a reference to a rule or built-in with no arguments or
+/// generics, and an empty one for any other pattern.
+fn bare_reference(pattern: ref Pattern, world: ref CheckWorld) -> String sync {
+    return match pattern {
+        Pattern::Ref { name, generics, args } => if generics.len() == 0 && args.len() == 0 { world.words.resolve(name).clone() } else { "" },
+        else => "",
+    }
+}
+
+fn an_offered_number_name(name: ref String) -> bool sync {
+    return name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f64"
+}
+
+impl CheckState {
+    /// **The type a pattern's result has** in a rule's action.
+    pub fn pattern_type(ref self, world: ref CheckWorld, pattern: ref Pattern, rules: ref collections::BTreeSet[String]) -> Ty sync {
+        return match pattern {
+            Pattern::Repeat { pat, rep } => self.repeat_type(world, pat.node, rep, rules),
+            Pattern::Group(pat) => self.pattern_type(world, pat.node, rules),
+            Pattern::Choice(alternatives) => self.choice_type(world, alternatives, rules),
+            Pattern::Ref { name, generics, args } => self.reference_type(world, name, generics, args, rules),
+            else => Ty::Unknown,
+        }
+    }
+
+    fn repeat_type(ref self, world: ref CheckWorld, pat: ref Pattern, rep: ref Repeat, rules: ref collections::BTreeSet[String]) -> Ty sync {
+        if rep == Repeat::Optional {
+            let inner = self.pattern_type(world, pat, rules)
+            return match inner {
+                Ty::Nullable(_) => inner,
+                else => Ty::Nullable(inner),
+            }
+        }
+        let called = bare_reference(pat, world)
+        if (called == "digit" || called == "hex_digit" || called == "any") && !rules.contains(called) {
+            return pattern_text()
+        }
+        return list_of_known(self.pattern_type(world, pat, rules))
+    }
+
+    fn choice_type(ref self, world: ref CheckWorld, alternatives: ref Vec[Spanned[Pattern]], rules: ref collections::BTreeSet[String]) -> Ty sync {
+        let mut first = Ty::Unknown
+        let mut at = 0
+        while at < alternatives.len() {
+            let ty = self.pattern_type(world, alternatives[at].node, rules)
+            if at == 0 {
+                if ty.is_unknown() {
+                    return Ty::Unknown
+                }
+                first = ty
+            } else if ty.text() != first.text() {
+                return Ty::Unknown
+            }
+            at = at + 1
+        }
+        return first
+    }
+
+    fn reference_type(ref self, world: ref CheckWorld, name: winnow_grammar::Symbol, generics: ref Vec[Type], args: ref Vec[Spanned[Pattern]], rules: ref collections::BTreeSet[String]) -> Ty sync {
+        let called = world.words.resolve(name).clone()
+        if rules.contains(called) {
+            return self.rule_results[called]?.clone() ?? Ty::Unknown
+        }
+        if called == "dec" && generics.len() == 1 {
+            let written = world.words.resolve(generics[0].name).clone()
+            if generics[0].generics.len() == 0 && an_offered_number_name(written) {
+                return pattern_named(written, false)
+            }
+            return Ty::Unknown
+        }
+        if generics.len() == 0 {
+            if args.len() == 0 {
+                if called == "digit" || called == "hex_digit" || called == "any" || called == "char" {
+                    return pattern_scalar()
+                }
+                if called == "raw_ident" || called == "string" || called == "alpha1" || called == "multispace0" || called == "multispace1" {
+                    return pattern_text()
+                }
+            }
+            if (called == "until" || called == "text") && args.len() >= 1 {
+                return pattern_text()
+            }
+            if called == "peek" && args.len() == 1 {
+                return self.pattern_type(world, args[0].node, rules)
+            }
+            if called == "list" && args.len() == 2 {
+                return list_of_known(self.pattern_type(world, args[0].node, rules))
+            }
+        }
+        return Ty::Unknown
+    }
+
+    /// **The names a rule's pattern binds**, each with its pattern's type, in
+    /// the order they stand.
+    pub fn bindings_of(ref mut self, world: ref CheckWorld, pattern: ref Pattern, rules: ref collections::BTreeSet[String]) -> Vec[CheckLocal] sync {
+        let mut out: Vec[CheckLocal] = []
+        match pattern {
+            Pattern::Bind { name, pat } => {
+                let ty = self.pattern_type(world, pat.node, rules)
+                self.next_binding = self.next_binding + 1
+                out.push(CheckLocal::free(world.words.resolve(name).clone(), ty, self.next_binding))
+                for inner in self.bindings_of(world, pat.node, rules) {
+                    out.push(inner)
+                }
+            },
+            Pattern::Seq(parts) => {
+                for part in parts {
+                    for inner in self.bindings_of(world, part.node, rules) {
+                        out.push(inner)
+                    }
+                }
+            },
+            Pattern::Choice(parts) => {
+                for part in parts {
+                    for inner in self.bindings_of(world, part.node, rules) {
+                        out.push(inner)
+                    }
+                }
+            },
+            Pattern::Ref { args, .. } => {
+                for arg in args {
+                    for inner in self.bindings_of(world, arg.node, rules) {
+                        out.push(inner)
+                    }
+                }
+            },
+            Pattern::Repeat { pat, .. } => {
+                for inner in self.bindings_of(world, pat.node, rules) {
+                    out.push(inner)
+                }
+            },
+            Pattern::Group(pat) => {
+                for inner in self.bindings_of(world, pat.node, rules) {
+                    out.push(inner)
+                }
+            },
+            else => {},
+        }
+        return out
+    }
+}

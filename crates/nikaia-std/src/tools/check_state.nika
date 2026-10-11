@@ -437,6 +437,45 @@ pub struct CheckWorld {
 /// **What the checker keeps while it walks a program**: the findings, the
 /// scope, and what the program declares. The Rust `Checker` holds it as one
 /// field and the questions that need only this move here, a method at a time.
+/// What a function's calls inside a task resolved to (ADR-288 D2).
+pub struct CheckCallsInATask {
+    pub resolved: collections::BTreeSet[String],
+    pub unresolved: bool,
+}
+
+/// **What a function's method calls came to**: the ledger keys they resolved
+/// to, whether one did not (not the same as calling nothing: it is the absence
+/// of an answer), how many, whether code handed to them pauses or fails, and
+/// the function fields it called.
+pub struct CheckMethodCalls {
+    pub resolved: collections::BTreeSet[String],
+    pub unresolved: bool,
+    pub unanswered: i64,
+    pub code_pauses: bool,
+    pub code_fails: bool,
+    pub fields_called: collections::BTreeSet[String],
+    pub in_a_task: CheckCallsInATask,
+}
+
+impl CheckMethodCalls {
+    pub fn empty() -> CheckMethodCalls {
+        return CheckMethodCalls { resolved: collections::BTreeSet(), unresolved: false, unanswered: 0, code_pauses: false, code_fails: false, fields_called: collections::BTreeSet(), in_a_task: CheckCallsInATask { resolved: collections::BTreeSet(), unresolved: false } }
+    }
+}
+
+/// Code stored in a function field, as a node of its own (ADR-230 D1).
+pub struct CheckStoredCode {
+    pub resolved: collections::BTreeSet[String],
+    pub unresolved: bool,
+    pub free: collections::BTreeSet[String],
+}
+
+impl CheckStoredCode {
+    pub fn empty() -> CheckStoredCode {
+        return CheckStoredCode { resolved: collections::BTreeSet(), unresolved: false, free: collections::BTreeSet() }
+    }
+}
+
 pub struct CheckState {
     /// Every mistake it is sure about.
     pub findings: Vec[CheckFinding],
@@ -727,4 +766,14 @@ pub struct CheckState {
     pub said_mut: collections::BTreeSet[i64],
     /// What the emitter reads (`check_facts.nika`).
     pub facts: CheckFacts,
+    /// Each rule of the grammar being walked, with the type it declares (#500).
+    pub rule_results: collections::BTreeMap[String, Ty],
+    /// The id the next binding made here gets (above every id the host gives).
+    pub next_binding: i64,
+    /// What each function calls through a method.
+    pub methods: collections::BTreeMap[String, CheckMethodCalls],
+    /// What code stored in a function field reaches.
+    pub stored_code: collections::BTreeMap[String, CheckStoredCode],
+    /// The stored code being walked, innermost last.
+    pub stored_frames: Vec[CheckStoredCode],
 }

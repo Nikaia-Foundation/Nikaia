@@ -350,7 +350,7 @@ fn the_corpus_has_no_more_unanswered_method_calls_than_it_had() {
         unanswered += checked
             .methods
             .values()
-            .map(|c| c.unanswered)
+            .map(|c| c.unanswered as usize)
             .sum::<usize>();
     }
     // **A tool is read as `lower-std` reads it: in its package** (ADR-294),
@@ -388,7 +388,7 @@ fn the_corpus_has_no_more_unanswered_method_calls_than_it_had() {
             unanswered += checked
                 .methods
                 .values()
-                .map(|c| c.unanswered)
+                .map(|c| c.unanswered as usize)
                 .sum::<usize>();
         }
     }
