@@ -22133,8 +22133,9 @@ impl EmitState {
 }
 
 impl EmitState {
-    pub fn path(&self, world: &EmitWorld<'_>, trusting: bool, segments: &[String]) -> String {
+    pub fn path(&self, world: &EmitWorld<'_>, trusting: bool, unpinned: bool, segments: &[String]) -> String {
         if segments.len() == 2 && *nikaia_std::index::get(&segments, 1) == "new" {
+            if unpinned && (*nikaia_std::index::get(&segments, 0) == "HashMap" || *nikaia_std::index::get(&segments, 0) == "HashSet") { return format!("{}::default", *nikaia_std::index::get(&segments, 0)); }
             let chosen = self.map_name(trusting, nikaia_std::index::get(&segments, 0));
             if chosen != *nikaia_std::index::get(&segments, 0) { return format!("{}::default", chosen); }
         }
@@ -22656,6 +22657,18 @@ impl EmitState {
             }
         }
         if unchecked { out.push("__unchecked"); }
+        let callee_name = nikaia_std::index::or(emit_callee_text(world, func), || "".into());
+        let callee_parts: Vec<&str> = callee_name.split("::").collect::<Vec<_>>();
+        let mut callee_last: String = String::from("");
+        if !callee_parts.is_empty() { callee_last = (*nikaia_std::index::get(&callee_parts, nikaia_std::index::at(callee_parts.len() as i64 - 1))).to_owned(); }
+        if self.seeded_calls.contains_key(&callee_last) {
+            let hidden = match self.seeded_calls.get(&callee_last) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+            let mut fill: String = String::from("nikaia_std::hash::Keyed");
+            if self.trusted_input { fill = String::from("nikaia_std::hash::Fast"); }
+            let mut fills: Vec<String> = vec![];
+            for at in 0..hidden.0 { if at < hidden.1 { fills.push(String::from("_")); } else { fills.push(fill.to_owned()); } }
+            out.push(&format!("::<{}>", fills.join(", ")));
+        }
         out.push("(");
         let takes = self.takes_a_handle_at(world, func);
         let callee = self.emit_call_callee(world, func);
@@ -22857,7 +22870,7 @@ impl EmitState {
             return Ok(true);
         }
         if world.library.functions.contains_key(&format!("{}::new", text)) {
-            out.push(&self.path(world, walk.trusting, &vec![text.to_owned(), "new".to_owned()]));
+            out.push(&self.path(world, walk.trusting, walk.unpinned, &vec![text.to_owned(), "new".to_owned()]));
             out.push("(");
             let takes = self.takes_a_handle(world, &format!("{}::new", text));
             self.emit_core_args(world, walk, out, host, text, args, &takes, depth, flow, scope)?;
@@ -22913,7 +22926,7 @@ impl EmitState {
             let name = emit_text(world, *nikaia_std::index::get(&segments, 1));
             let key = format!("{}::{}::new", module, name);
             if world.library.functions.contains_key(&key) {
-                out.push(&format!("{}::{}", module, self.path(world, walk.trusting, &vec![name.to_owned(), "new".to_owned()])));
+                out.push(&format!("{}::{}", module, self.path(world, walk.trusting, walk.unpinned, &vec![name.to_owned(), "new".to_owned()])));
                 out.push("(");
                 let takes = self.takes_a_handle(world, &key);
                 self.emit_core_args(world, walk, out, host, &key, args, &takes, depth, flow, scope)?;
@@ -23640,7 +23653,7 @@ impl EmitState {
                 walk.variant_counts = Some(counts);
                 let mut names: Vec<String> = vec![];
                 for s in segments.iter() { names.push(emit_text(world, *s)); }
-                out.push(&self.path(world, walk.trusting, &names));
+                out.push(&self.path(world, walk.trusting, false, &names));
                 out.push("(");
                 self.emit_core_args(world, walk, out, host, &variant, args, &vec![], depth, flow, scope)?;
                 walk.boxed_args = None;
@@ -27862,6 +27875,8 @@ pub struct EmitState {
     pub foreign_results: collections::BTreeMap<String, Type>,
     pub trusted_lets: collections::BTreeSet<i64>,
     pub fast_slots: collections::BTreeSet<String>,
+    pub seeded_calls: collections::BTreeMap<String, (i64, i64)>,
+    pub escaped_lets: collections::BTreeSet<i64>,
     pub grammars: collections::BTreeMap<String, GrammarDef>,
     pub keep_plans: collections::BTreeMap<String, BufferPlan>,
     pub methods: collections::BTreeMap<String, EmitMethod>,
@@ -27898,10 +27913,11 @@ pub struct EmitWalk {
     pub variant_counts: Option<Vec<Count>>,
     pub hull_count: Option<Count>,
     pub trusting: bool,
+    pub unpinned: bool,
 }
 
 impl EmitWalk {
-    pub fn fresh() -> EmitWalk { EmitWalk { reached_copy: false, either_prelude: vec![], in_a_kept_call: false, in_parameter: false, grammar_rule_types: collections::BTreeMap::new(), preluded: collections::BTreeSet::new(), wrappers: vec![], holding: None, hold_args: None, keep_function: String::from(""), nonnegative: collections::BTreeMap::new(), specialising: None, at_field: None, code_parameter_runs: false, held: collections::BTreeMap::new(), boxed_args: None, variant_counts: None, hull_count: None, trusting: false } }
+    pub fn fresh() -> EmitWalk { EmitWalk { reached_copy: false, either_prelude: vec![], in_a_kept_call: false, in_parameter: false, grammar_rule_types: collections::BTreeMap::new(), preluded: collections::BTreeSet::new(), wrappers: vec![], holding: None, hold_args: None, keep_function: String::from(""), nonnegative: collections::BTreeMap::new(), specialising: None, at_field: None, code_parameter_runs: false, held: collections::BTreeMap::new(), boxed_args: None, variant_counts: None, hull_count: None, trusting: false, unpinned: false } }
 }
 
 
@@ -45355,12 +45371,14 @@ struct MapClasses {
     lets: Vec<i64>,
     slots: Vec<String>,
     unread: bool,
+    escaped: Vec<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MapPlan {
     pub lets: collections::BTreeSet<i64>,
     pub slots: collections::BTreeSet<String>,
+    pub escaped: collections::BTreeSet<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -45471,7 +45489,7 @@ pub fn trusted_maps(program: &Program, words: &winnow_grammar::InternerContext, 
             _ => { },
         }
     }
-    let mut classes = MapClasses { parent: collections::BTreeMap::new(), poisoned: collections::BTreeSet::new(), lets: vec![], slots: vec![], unread: false };
+    let mut classes = MapClasses { parent: collections::BTreeMap::new(), poisoned: collections::BTreeSet::new(), lets: vec![], slots: vec![], unread: false, escaped: vec![] };
     let mut counter = 0;
     for item in program.items.iter() {
         match &item.node {
@@ -45517,7 +45535,11 @@ pub fn trusted_maps(program: &Program, words: &winnow_grammar::InternerContext, 
     }
     let mut bad: collections::BTreeSet<String> = collections::BTreeSet::new();
     for node in classes.poisoned.iter() { bad.insert(mc_find(&classes, node)); }
-    let mut plan = MapPlan { lets: collections::BTreeSet::new(), slots: collections::BTreeSet::new() };
+    let mut plan = MapPlan { lets: collections::BTreeSet::new(), slots: collections::BTreeSet::new(), escaped: collections::BTreeSet::new() };
+    for at in classes.escaped.iter() {
+        let at = nikaia_std::num::value(at);
+        plan.escaped.insert(at);
+    }
     for at in classes.lets.iter() {
         let at = nikaia_std::num::value(at);
         let node = format!("l:{}", at);
@@ -45555,6 +45577,7 @@ fn tm_walk_function(fname: &str, alone: bool, args: &[FnArg], body: &Block, word
     tm_walk_block(body, words, library, env, classes, &mut walk);
     if walk.unread {
         classes.unread = true;
+        for made in walk.made.iter() { if made.at >= 0 && walk.escapes.contains(&made.id) { classes.escaped.push(made.at); } }
         for node in walk.nodes.iter() { mc_poison(classes, node); }
         mc_poison(classes, &ret);
         return;
@@ -45574,7 +45597,10 @@ fn tm_walk_function(fname: &str, alone: bool, args: &[FnArg], body: &Block, word
     }
     for made in walk.made.iter() {
         if nikaia_std::index::or(walk.bound.get(&made.name), || 0) != 1 { mc_poison(classes, nikaia_std::index::get(&walk.nodes, nikaia_std::index::at(made.id))); }
-        if made.at >= 0 { classes.lets.push(made.at); }
+        if made.at >= 0 {
+            classes.lets.push(made.at);
+            if walk.escapes.contains(&made.id) { classes.escaped.push(made.at); }
+        }
     }
 }
 
@@ -45864,6 +45890,15 @@ fn tm_walk_expr(expr: &Expr, words: &winnow_grammar::InternerContext, library: &
                 let arity = nikaia_std::index::or(env.privates.get(words.resolve(name)), || -1);
                 if arity >= 0 { mc_poison_function(classes, words.resolve(name), arity); }
             }
+        },
+        Expr::StructLit { fields, .. } => {
+            for field in fields.iter() {
+                if field.value.is_some() { tm_walk_expr(match field.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return }, words, library, env, classes, walk); } else {
+                    let id = tm_resolve(words.resolve(field.name), &walk);
+                    if id >= 0 { walk.escapes.insert(id); }
+                }
+            }
+            walk.unread = true;
         },
         Expr::Path(_, _) => { },
         Expr::LitInt { .. } => { },

@@ -34,6 +34,24 @@ pub type TrustedMap<K, V> = std::collections::HashMap<K, V, BuildHasherDefault<F
 /// A `HashSet` for keys the operator chose.
 pub type TrustedSet<K> = std::collections::HashSet<K, BuildHasherDefault<FxHasher>>;
 
+/// **The fast hasher of a map position** (ADR-010 D9): what `TrustedMap` and
+/// `TrustedSet` are written with, and the name Rust code gives a hidden type
+/// parameter of a `pub` Nikaia item to vouch for its keys.
+pub type Fast = BuildHasherDefault<FxHasher>;
+
+/// **The keyed hasher of a map position** (D9): the randomly seeded one `std`
+/// gives every map. It is the default of every hidden type parameter, so Rust
+/// code that names a `pub` type holding maps gets the map that is safe for any
+/// key.
+pub type Keyed = std::hash::RandomState;
+
+/// **What a hidden type parameter of a map position is bounded by** (D9): any
+/// hasher a map can be made with. `Fast` and `Keyed` are the two the compiler
+/// writes.
+pub trait Seed: std::hash::BuildHasher + Default + Clone {}
+
+impl<S: std::hash::BuildHasher + Default + Clone> Seed for S {}
+
 /// The constant `rustc`'s hash multiplies by: the 64-bit odd number closest to
 /// `2^64 / φ`, so that the multiply spreads a change in any bit across the
 /// whole word.

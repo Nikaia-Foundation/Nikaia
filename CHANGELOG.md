@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.844] — 2026-10-11
+
+**A map at a package's boundary is a type parameter each use fills (ADR-010 D9, #581 step 5)**
+- A pub struct's map fields and a pub function's (or pub method's) map parameters and result are hidden type parameters __S0, __S1, ... bounded by nikaia_std::hash::Seed, in declaration order (positions of one type share one: the ledger classes of step 6 refine that); a pub struct's default to nikaia_std::hash::Keyed, a mention of such a type in a signature carries them, an impl is generic over them, a comparison is written by hand (Keyed is std's RandomState). nikaia_std::hash gains Seed, Fast and Keyed. A use fills them: Fast where the package it stands in is trusted, Keyed otherwise, by inference from its arguments and by turbofish for a result no argument fixes; a map made at such a position is made with default() (a let that makes a map and leaves the function included, trust.nika MapPlan.escaped). A package whose pub items hold maps joins its own provenance into the program's: a library that reads from outside keys the maps of the program that fills them. Not built: the ledger maps line, barriers, the Rust adapter names (steps 6-8); the shapes that still reach rustc are the #[ignore]d tests of map_seeds.rs.
+
 ## [0.0.843] — 2026-10-11
 
 **Map classes: a map keeps the fast hash across a private function's parameter and result (ADR-010 D9, #581 step 4)**

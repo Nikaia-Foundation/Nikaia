@@ -524,6 +524,30 @@ impl EmitState {
         if unchecked {
             out.push("__unchecked")
         }
+        // **A hidden map parameter no argument fixes is filled here** (ADR-010
+        // D9): the call names the hasher of the package it stands in.
+        let callee_name = emit_callee_text(world, func) ?? ""
+        let callee_parts: Vec[String] = callee_name.split("::").collect()
+        let mut callee_last: String = ""
+        if callee_parts.len() > 0 {
+            callee_last = callee_parts[callee_parts.len() - 1].clone()
+        }
+        if self.seeded_calls.contains_key(callee_last) {
+            let hidden = self.seeded_calls.get(callee_last) ?? return
+            let mut fill: String = "nikaia_std::hash::Keyed"
+            if self.trusted_input {
+                fill = "nikaia_std::hash::Fast"
+            }
+            let mut fills: Vec[String] = []
+            for at in 0..<hidden.0 {
+                if at < hidden.1 {
+                    fills.push("_")
+                } else {
+                    fills.push(fill.clone())
+                }
+            }
+            out.push(f"::<{fills.join(", ")}>")
+        }
         out.push("(")
         let takes = self.takes_a_handle_at(world, func)
         // The written callee, which is what the checker keyed its answers by:
@@ -813,7 +837,7 @@ impl EmitState {
             // **Through `path`**, because one name below depends on more than the
             // name: a **trusted** map is `TrustedMap::default()` and not
             // `TrustedMap::new()` (ADR-010 D5).
-            out.push(self.path(world, walk.trusting, [text.clone(), "new".clone()]))
+            out.push(self.path(world, walk.trusting, walk.unpinned, [text.clone(), "new".clone()]))
             out.push("(")
             let takes = self.takes_a_handle(world, f"{text}::new")
             self.emit_core_args(world, walk, out, host, text, args, takes, depth, flow, scope)
@@ -872,7 +896,7 @@ impl EmitState {
             // `::new` beside it.
             let key = f"{module}::{name}::new"
             if world.library.functions.contains_key(key) {
-                out.push(f"{module}::{self.path(world, walk.trusting, [name.clone(), "new".clone()])}")
+                out.push(f"{module}::{self.path(world, walk.trusting, walk.unpinned, [name.clone(), "new".clone()])}")
                 out.push("(")
                 let takes = self.takes_a_handle(world, key)
                 self.emit_core_args(world, walk, out, host, key, args, takes, depth, flow, scope)

@@ -516,7 +516,7 @@ impl EmitState {
                 for s in segments {
                     names.push(emit_text(world, s))
                 }
-                out.push(self.path(world, walk.trusting, names))
+                out.push(self.path(world, walk.trusting, false, names))
                 out.push("(")
                 self.emit_core_args(world, walk, out, host, variant, args, [], depth, flow, scope)
                 walk.boxed_args = null

@@ -157,6 +157,8 @@ struct MapClasses {
     slots: Vec[String],
     /// Some function was not read to the end, so what it calls is unknown.
     unread: bool,
+    /// The `let`s whose map leaves the function (returned, stored, handed on).
+    escaped: Vec[i64],
 }
 
 /// The answer: the `let`s and the parameters and results that keep the fast
@@ -164,6 +166,9 @@ struct MapClasses {
 pub struct MapPlan {
     pub lets: collections::BTreeSet[i64],
     pub slots: collections::BTreeSet[String],
+    /// The `let`s whose map leaves its function: where the function's
+    /// positions are type parameters, such a map may stand at one (D9).
+    pub escaped: collections::BTreeSet[i64],
 }
 
 /// A `let` that makes a map: the statement, the name, the binding.
@@ -303,7 +308,7 @@ pub fn trusted_maps(program: ref Program, words: ref winnow_grammar::InternerCon
             else => {}
         }
     }
-    let mut classes = MapClasses { parent: collections::BTreeMap(), poisoned: collections::BTreeSet(), lets: [], slots: [], unread: false }
+    let mut classes = MapClasses { parent: collections::BTreeMap(), poisoned: collections::BTreeSet(), lets: [], slots: [], unread: false, escaped: [] }
     let mut counter = 0
     for item in program.items {
         match item.node {
@@ -356,7 +361,10 @@ pub fn trusted_maps(program: ref Program, words: ref winnow_grammar::InternerCon
     for node in classes.poisoned {
         bad.insert(mc_find(classes, node))
     }
-    let mut plan = MapPlan { lets: collections::BTreeSet(), slots: collections::BTreeSet() }
+    let mut plan = MapPlan { lets: collections::BTreeSet(), slots: collections::BTreeSet(), escaped: collections::BTreeSet() }
+    for at in classes.escaped {
+        plan.escaped.insert(at)
+    }
     for at in classes.lets {
         let node = f"l:{at}"
         if !bad.contains(mc_find(classes, node)) {
@@ -406,6 +414,11 @@ fn tm_walk_function(fname: ref String, alone: bool, args: ref Vec[FnArg], body: 
     tm_walk_block(body, words, library, env, classes, walk)
     if walk.unread {
         classes.unread = true
+        for made in walk.made {
+            if made.at >= 0 && walk.escapes.contains(made.id) {
+                classes.escaped.push(made.at)
+            }
+        }
         for node in walk.nodes {
             mc_poison(classes, node)
         }
@@ -436,6 +449,9 @@ fn tm_walk_function(fname: ref String, alone: bool, args: ref Vec[FnArg], body: 
         }
         if made.at >= 0 {
             classes.lets.push(made.at)
+            if walk.escapes.contains(made.id) {
+                classes.escaped.push(made.at)
+            }
         }
     }
 }
@@ -792,6 +808,22 @@ fn tm_walk_expr(expr: ref Expr, words: ref winnow_grammar::InternerContext, libr
                     mc_poison_function(classes, words.resolve(name), arity)
                 }
             }
+        },
+        // A struct literal is code this does not follow (the function stays
+        // unread), but what it is built from leaves: a map named in a field is a
+        // map that may stand at a hidden parameter (D9).
+        Expr::StructLit { fields, .. } => {
+            for field in fields {
+                if field.value != null {
+                    tm_walk_expr(field.value ?? return, words, library, env, classes, walk)
+                } else {
+                    let id = tm_resolve(words.resolve(field.name), walk)
+                    if id >= 0 {
+                        walk.escapes.insert(id)
+                    }
+                }
+            }
+            walk.unread = true
         },
         Expr::Path(_, _) => {},
         Expr::LitInt { .. } => {},

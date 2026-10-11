@@ -405,8 +405,11 @@ impl EmitState {
     /// through the file's aliases (ADR-286 D12) - once, on the joined path,
     /// because an alias is this file's name for a package and the head segment
     /// is where one can stand.
-    pub fn path(ref self, world: ref EmitWorld, trusting: bool, segments: ref Vec[String]) -> String {
+    pub fn path(ref self, world: ref EmitWorld, trusting: bool, unpinned: bool, segments: ref Vec[String]) -> String {
         if segments.len() == 2 && segments[1] == "new" {
+            if unpinned && (segments[0] == "HashMap" || segments[0] == "HashSet") {
+                return f"{segments[0]}::default"
+            }
             let chosen = self.map_name(trusting, segments[0])
             if chosen != segments[0] {
                 return f"{chosen}::default"

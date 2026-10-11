@@ -934,7 +934,27 @@ impl Program {
             .filter(|u| u.package.is_none())
             .map(|u| &u.parsed)
             .collect();
-        let trust = crate::contracts::trust::analyse_package(&package, std_ledger());
+        let mut trust = crate::contracts::trust::analyse_package(&package, std_ledger());
+        // **A package whose `pub` items hold maps fills them with the hasher of
+        // the program that uses it** (ADR-010 D9), and runs its body with that
+        // hasher: keys it reads from outside reach a map the program may have
+        // given the fixed seed. So such a package is as trusted as the program
+        // is, and the program is no more trusted than it.
+        let mut packages: std::collections::BTreeMap<&str, Vec<&crate::parser::Parsed>> =
+            std::collections::BTreeMap::new();
+        for unit in self.units.iter().filter(|u| u.package.is_some()) {
+            if let Some(name) = unit.package.as_deref() {
+                packages.entry(name).or_default().push(&unit.parsed);
+            }
+        }
+        for files in packages.values() {
+            if crate::emit::holds_map_positions(files)
+                && crate::contracts::trust::analyse_package(files, std_ledger()).provenance
+                    == crate::contracts::Provenance::Untrusted
+            {
+                trust.provenance = crate::contracts::Provenance::Untrusted;
+            }
+        }
         let needs = self.units.iter().fold(Needs::default(), |acc, u| {
             acc.join(crate::proofs::for_unit(
                 &u.path,

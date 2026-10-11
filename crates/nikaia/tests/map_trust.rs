@@ -446,15 +446,14 @@ fn a_struct_shared_between_files_is_one_type_in_any_order() {
             !keyed.contains("TrustedMap") && !keyed.contains("TrustedSet"),
             "{keyed}"
         );
-        assert!(
-            !keyed.contains("HashMap::new()") || keyed.contains("HashMap<"),
-            "{keyed}"
-        );
+        assert!(keyed.contains("::<nikaia_std::hash::Keyed"), "{keyed}");
+        assert!(!keyed.contains("hash::Fast"), "{keyed}");
         let fast = tally_package(&format!("tally-fast-{at}"), names, false);
-        assert!(
-            fast.contains("TrustedMap") && fast.contains("TrustedSet"),
-            "{fast}"
-        );
+        // The struct is `pub`, so its maps are its hidden parameters (D9,
+        // step 5): the package fills them with the fixed seed where it is
+        // trusted, and nothing in it is the keyed `HashMap::new()`.
+        assert!(fast.contains("nikaia_std::hash::Fast"), "{fast}");
+        assert!(!fast.contains("Keyed>()"), "{fast}");
         assert!(
             !fast.contains("HashMap::new()") && !fast.contains("HashSet::new()"),
             "{fast}"

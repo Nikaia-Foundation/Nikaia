@@ -27,6 +27,7 @@ use std::collections::{HashMap, HashSet};
 use anyhow::{Result, anyhow};
 
 mod host;
+mod seeds;
 pub mod template;
 use winnow_grammar::Symbol;
 
@@ -803,6 +804,13 @@ pub fn emit_module_body_at(
     .items_only()
 }
 
+/// **Whether a package has `pub` items with map positions** (ADR-010 D9): the
+/// ones a program that uses it fills with its own hasher, and so the ones whose
+/// body must be as trusted as the program that fills them.
+pub fn holds_map_positions(package: &[&Parsed]) -> bool {
+    !seeds::Seeds::read(package).is_empty()
+}
+
 /// What a program's preamble has to say, over all of its files.
 ///
 /// `uses_std` and the rest are per-file facts, and the preamble is written
@@ -1050,6 +1058,12 @@ struct Emitter<'p> {
     failed: std::cell::RefCell<Option<anyhow::Error>>,
     /// What the emitter looks at and does not own.
     world: EmitWorld<'p>,
+    /// **Which `pub` items hold map positions** (ADR-010 D9): read from every
+    /// file of the build, so a program knows the hidden parameters of the
+    /// library types it names.
+    seeds: seeds::Seeds,
+    /// Where the parameters of the type being written come from.
+    place: std::cell::RefCell<seeds::Place>,
 }
 
 /// What an `impl` says about a method. Enough to adapt a `&mut self` method to
@@ -1656,6 +1670,13 @@ impl<'p> Emitter<'p> {
         described: &crate::contracts::Ledger,
         reads: &Reads,
     ) -> Self {
+        let seeds_of = {
+            let mut all: Vec<&Parsed> = beside.to_vec();
+            if !all.iter().any(|p| std::ptr::eq(*p, parsed)) {
+                all.push(parsed);
+            }
+            seeds::Seeds::read(&all)
+        };
         let mut grammars: std::collections::BTreeMap<String, GrammarDef> =
             std::collections::BTreeMap::new();
         let mut structs = HashSet::new();
@@ -1779,6 +1800,11 @@ impl<'p> Emitter<'p> {
             crate::contracts::Provenance::Trusted => crate::contracts::trust::MapPlan {
                 lets: Default::default(),
                 slots: Default::default(),
+                // Only where a body may hold type parameters is it asked.
+                escaped: match seeds_of.is_empty() {
+                    true => Default::default(),
+                    false => crate::contracts::trust::trusted_maps(parsed, library).escaped,
+                },
             },
             crate::contracts::Provenance::Untrusted => {
                 crate::contracts::trust::trusted_maps(parsed, library)
@@ -1867,7 +1893,13 @@ impl<'p> Emitter<'p> {
             fails,
             trusted_input: provenance == crate::contracts::Provenance::Trusted,
             trusted_lets: plan.lets.clone(),
+            escaped_lets: plan.escaped.clone(),
             fast_slots: plan.slots.clone(),
+            seeded_calls: seeds_of
+                .calls()
+                .iter()
+                .map(|(name, (n, fixed))| (name.clone(), (*n as i64, *fixed as i64)))
+                .collect(),
             proven_indices: propagation
                 .list_indices
                 .iter()
@@ -1938,6 +1970,8 @@ impl<'p> Emitter<'p> {
                 items: &parsed.program.items,
                 library,
             },
+            seeds: seeds_of,
+            place: std::cell::RefCell::new(seeds::Place::default()),
         };
         made.s.sums = made.s.error_sums(&made.world);
         made
@@ -2401,21 +2435,29 @@ impl<'p> Emitter<'p> {
                 is_public,
                 is_extern,
             } => {
-                out.push(&self.derives(*name));
+                // **A `pub` struct's map positions are its hidden type
+                // parameters** (ADR-010 D9), numbered by the fields in order.
+                let seeded = *is_public && !*is_extern && self.seeds.arity(self.text(*name)) > 0;
+                if seeded {
+                    self.place.borrow_mut().declare(0);
+                }
+                let mut derives = self.derives(*name);
+                // `Keyed` is `std`'s own hasher, which does not compare: the
+                // comparison is written by hand for the fields, over any seed.
+                let by_hand = seeded
+                    && generics.is_empty()
+                    && !self.s.borrowing.contains(self.text(*name))
+                    && derives.contains("PartialEq");
+                if by_hand {
+                    derives = derives.replace(", PartialEq", "").replace(", Eq", "");
+                }
+                out.push(&derives);
                 // **C's layout** (ADR-284 D14), and every field `pub` (D15).
                 if *is_extern {
                     out.push("#[repr(C)]\n");
                 }
                 let vis = if *is_public { "pub " } else { "" };
-                // The input lifetime first and the type parameters after it,
-                // which is the order Rust wants them in (ADR-295 D3).
-                let mut parts: Vec<String> = Vec::new();
-                if self.s.borrowing.contains(self.text(*name)) {
-                    parts.push(INPUT_LIFETIME.to_string());
-                }
-                parts.extend(generics.iter().map(|g| self.bounded(g)));
-                let params = angled(&parts);
-                out.push(&format!("{vis}struct {}{params} {{\n", self.name(*name)));
+                let mut body = Out::empty();
                 for field in fields {
                     // Public, because the actions that build this struct are
                     // generated into the grammar's own module.
@@ -2425,7 +2467,7 @@ impl<'p> Emitter<'p> {
                         Lifetimes::Named,
                         self.count_at(SHARED_FIELDS, &slot),
                     );
-                    out.push(&format!(
+                    body.push(&format!(
                         "    {}{}: {},\n",
                         if field.is_public || *is_extern {
                             "pub "
@@ -2436,7 +2478,39 @@ impl<'p> Emitter<'p> {
                         self.boxed_ty(self.text(*name), self.text(field.name), lowered)
                     ));
                 }
+                let hidden = match seeded {
+                    true => self.place.borrow_mut().finish(0),
+                    false => 0,
+                };
+                // The input lifetime first and the type parameters after it,
+                // which is the order Rust wants them in (ADR-295 D3); the
+                // hidden ones last, where their defaults may stand.
+                let mut parts: Vec<String> = Vec::new();
+                if self.s.borrowing.contains(self.text(*name)) {
+                    parts.push(INPUT_LIFETIME.to_string());
+                }
+                parts.extend(generics.iter().map(|g| self.bounded(g)));
+                parts.extend(seeds::Seeds::declared(0, hidden, true));
+                let params = angled(&parts);
+                out.push(&format!("{vis}struct {}{params} {{\n", self.name(*name)));
+                out.append(body);
                 out.push("}\n");
+                if by_hand {
+                    let declares = angled(&seeds::Seeds::declared(0, hidden, false));
+                    let applied = angled(&seeds::Seeds::applied(0, hidden));
+                    let me = self.name(*name);
+                    let same: Vec<String> = fields
+                        .iter()
+                        .map(|f| format!("self.{0} == other.{0}", self.name(f.name)))
+                        .collect();
+                    out.push(&format!(
+                        "impl{declares} PartialEq for {me}{applied} {{\n    fn eq(&self, other: &Self) -> bool {{ {} }}\n}}\n",
+                        if same.is_empty() { "true".to_string() } else { same.join(" && ") }
+                    ));
+                    if self.s.facts.compares_totally.contains(self.text(*name)) {
+                        out.push(&format!("impl{declares} Eq for {me}{applied} {{}}\n"));
+                    }
+                }
                 Ok(())
             }
             Item::Fn { name, .. } => {
@@ -2550,6 +2624,34 @@ impl<'p> Emitter<'p> {
                     ));
                     return Ok(());
                 }
+                // **The methods of a type that declares map parameters take
+                // them** (ADR-010 D9): the `impl` is generic over them, and a
+                // mention of the type inside it is `Self`'s.
+                let hidden = self.seeds.arity(&target_name);
+                let (declares, applied) = match hidden > 0 {
+                    true => (
+                        angled(
+                            &head_parts
+                                .iter()
+                                .cloned()
+                                .chain(seeds::Seeds::declared(0, hidden, false))
+                                .collect::<Vec<_>>(),
+                        ),
+                        angled(
+                            &target_parts
+                                .iter()
+                                .cloned()
+                                .chain(seeds::Seeds::applied(0, hidden))
+                                .collect::<Vec<_>>(),
+                        ),
+                    ),
+                    false => (declares, applied),
+                };
+                if hidden > 0 {
+                    self.place
+                        .borrow_mut()
+                        .enter(&target_name, seeds::Seeds::applied(0, hidden));
+                }
                 let head = match trait_name {
                     Some(t) => format!(
                         "impl{declares} {} for {target_name}{applied}",
@@ -2577,6 +2679,7 @@ impl<'p> Emitter<'p> {
                         out.record(&method.span, st);
                     }
                 }
+                self.place.borrow_mut().leave();
                 out.push("}\n");
                 Ok(())
             }
@@ -3097,6 +3200,29 @@ impl<'p> Emitter<'p> {
         // parameters): every call is seen, so its map parameters and result
         // may keep the fast hash of their class (ADR-010 D9).
         let standalone = owner.is_none() && !*is_public && generics.is_empty() && name.is_some();
+        // **A `pub` function's map positions are its hidden type parameters**
+        // (ADR-010 D9), numbered by the parameters and the result in order.
+        // Inside the `impl` of a type that declares some, a method's own are
+        // not built yet and stay as written.
+        let in_seeded_impl = self.place.borrow().within();
+        let base = match (&owner, in_seeded_impl) {
+            (Some(o), true) => self.seeds.arity(o.target),
+            _ => 0,
+        };
+        let seeded_fn = !self.seeds.is_empty()
+            && name.is_some()
+            && owner.is_none_or(|o| o.declared_by.is_none())
+            && args
+                .iter()
+                .map(|a| &a.ty)
+                .chain(ret_type.iter())
+                .any(|t| match *is_public {
+                    true => self.seeds.positions(self.parsed, t) > 0,
+                    false => self.seeds.mentions_a_struct(self.parsed, t),
+                });
+        if seeded_fn {
+            self.place.borrow_mut().declare(base);
+        }
         let mut params = Vec::new();
         if let Some(receiver) = receiver {
             params.push(
@@ -3682,6 +3808,18 @@ impl<'p> Emitter<'p> {
             String::new()
         };
 
+        let hidden = match seeded_fn {
+            true => self.place.borrow_mut().finish(base),
+            false => 0,
+        };
+        let declared: Vec<String> = declared
+            .into_iter()
+            .chain(seeds::Seeds::declared(base, hidden, false))
+            .collect();
+        // A map made in a body whose positions are parameters is made with the
+        // hasher the parameter holds.
+        let outer_unpinned =
+            self.walking(|w| std::mem::replace(&mut w.unpinned, hidden > 0 || in_seeded_impl));
         let vis = if *is_public { "pub " } else { "" };
         let name = own_name;
         // ADR-303 D4: `fn main` is the runtime's, and the program's own entry
@@ -3872,6 +4010,7 @@ impl<'p> Emitter<'p> {
             }
             None => self.function_body(out, body, depth, declared)?,
         }
+        self.walking(|w| w.unpinned = outer_unpinned);
         // The checked entry after the unchecked one's body, or the brace that
         // closes a copy's checks around its body.
         match pending {
@@ -4488,8 +4627,12 @@ impl<'p> Emitter<'p> {
     /// `default`, which is what every `HashMap<_, _, S>` is built with.
     fn path(&self, segments: &[&str]) -> String {
         let segments: Vec<String> = segments.iter().map(|s| s.to_string()).collect();
-        self.s
-            .path(&self.world, self.walk(|w| w.trusting), &segments)
+        self.s.path(
+            &self.world,
+            self.walk(|w| w.trusting),
+            self.walk(|w| w.unpinned),
+            &segments,
+        )
     }
 
     /// The count the analysis gave the `Shared` written at one position, with the
@@ -4530,7 +4673,7 @@ impl<'p> Emitter<'p> {
         lifetimes: Lifetimes,
         count: crate::contracts::sharing::Count,
     ) -> String {
-        self.nikaia(|walk| {
+        let written = self.nikaia(|walk| {
             self.s.emit_core_ty_counted(
                 &self.world,
                 walk,
@@ -4540,7 +4683,17 @@ impl<'p> Emitter<'p> {
                 lifetimes,
                 count,
             )
-        })
+        });
+        self.seeded(written)
+    }
+
+    /// **A written type, with the hidden map parameters in** (ADR-010 D9).
+    fn seeded(&self, written: String) -> String {
+        if self.seeds.is_empty() {
+            return written;
+        }
+        let mut place = self.place.borrow_mut();
+        self.seeds.write(&written, &mut place, self.s.trusted_input)
     }
 
     /// The queues a settle point drains: at `user_parallelism = yes` only the
@@ -4973,9 +5126,45 @@ impl<'p> Emitter<'p> {
         let trusted =
             matches!(stmt, Stmt::Let { .. }) && self.s.trusted_lets.contains(&(span.at() as i64));
         let outer = self.walking(|w| std::mem::replace(&mut w.trusting, trusted));
+        // **A `let` that makes a map is a position of its own**: its hasher is
+        // the package's, as it was before a body could hold parameters.
+        let pinned = match stmt {
+            Stmt::Let { value, .. } => {
+                self.makes_a_map(value) && !self.s.escaped_lets.contains(&(span.at() as i64))
+            }
+            _ => false,
+        };
+        let loose = self.walk(|w| w.unpinned);
+        if pinned {
+            self.walking(|w| w.unpinned = false);
+        }
         let written = self.a_stmt(out, stmt, span, depth, tail, flow);
         self.walking(|w| w.trusting = outer);
+        self.walking(|w| w.unpinned = loose);
         written
+    }
+
+    /// Whether an expression is `HashMap()` or `HashSet()`, made and nothing else.
+    fn makes_a_map(&self, expr: &Expr) -> bool {
+        let Expr::Call { func, args, .. } = expr else {
+            return false;
+        };
+        if !args.is_empty() {
+            return false;
+        }
+        let name = match &**func {
+            Expr::Variable(name, _) => self.text(*name).to_string(),
+            Expr::Path(segments, _) => segments
+                .iter()
+                .map(|s| self.text(*s))
+                .collect::<Vec<_>>()
+                .join("::"),
+            _ => return false,
+        };
+        matches!(
+            name.rsplit("::").next().unwrap_or(&name),
+            "HashMap" | "HashSet"
+        )
     }
 
     fn a_stmt(
