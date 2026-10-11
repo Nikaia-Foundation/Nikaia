@@ -40,6 +40,10 @@ use crate::fold::Constant;
 use crate::parser::Parsed;
 use nikaia_std::tools::check_access::{dotted_path, names_the_argument, variants_named};
 use nikaia_std::tools::check_consts::{self, CheckCrossing as Crossing};
+use nikaia_std::tools::check_flow::{
+    CheckConstant, CheckFlow, CheckOpenNumber as OpenNumber, CheckUnrolling,
+    CheckUnsignedSlot as UnsignedSlot,
+};
 use nikaia_std::tools::check_items;
 use nikaia_std::tools::check_literals::element_kind;
 use nikaia_std::tools::check_lookups::names_of;
@@ -417,55 +421,7 @@ fn walked<'a>(
         parsed,
         beside,
         reads,
-        raised: (None, None),
-        computes,
-        option_values: Vec::new(),
-        unrolling: None,
-        harvesting,
-        inside_a_comptime: false,
-        literal_receivers: Vec::new(),
-        at_a_write_door: false,
-        pushed_into: None,
-        expected_either: false,
-        field_either: false,
-        throwing: false,
-        caught: false,
-        guarded: None,
-        loops: 0,
-        barrier: None,
-        fallible_methods: BTreeSet::new(),
-        pausing_methods: BTreeSet::new(),
-        settled_methods: BTreeSet::new(),
-        paused_args: Vec::new(),
-        next_choice: 0,
-        read_index: std::collections::HashMap::new(),
-        pending_coalesces: Vec::new(),
-        writing_index: false,
-        read_a_map: false,
-        map_read_sites: BTreeSet::new(),
-        map_views: BTreeSet::new(),
-        last_resolved: None,
-        receiver_name: None,
-        receiver_from_text: false,
-        text_paths: BTreeSet::new(),
-        caught_several: false,
-        caught_one: None,
-        empty_lists: BTreeMap::new(),
-        open_numbers: BTreeMap::new(),
-        open_elements: std::collections::HashMap::new(),
-        lambda_expected: None,
-        unknown_said: 0,
-        open_calls: std::collections::HashMap::new(),
         here: beside.iter().position(|other| std::ptr::eq(*other, parsed)),
-        unknown_bound: BTreeSet::new(),
-        list_constants: std::collections::HashMap::new(),
-        overflowed: BTreeSet::new(),
-        reaching: None,
-        reached: None,
-        grown_text: BTreeSet::new(),
-        opaque_methods: BTreeSet::new(),
-        widening_casts: BTreeSet::new(),
-        unsigned_slots: BTreeMap::new(),
         world: CheckWorld {
             words: &parsed.interner,
             own,
@@ -479,6 +435,7 @@ fn walked<'a>(
             fields_by_base: check_items::fields_by_base(own, library),
         },
         s: CheckState {
+            flow: CheckFlow::start(computes, harvesting),
             findings: Vec::new(),
             structs: BTreeMap::new(),
             copies_in_the_package: BTreeSet::new(),
@@ -721,15 +678,19 @@ fn walked<'a>(
     // on something that is not a failure is a `rustc` error about a file the
     // author never wrote.
     checker.s.facts.fallible_methods = checker
+        .s
+        .flow
         .fallible_methods
-        .difference(&checker.opaque_methods)
+        .difference(&checker.s.flow.opaque_methods)
         .cloned()
         .collect();
     // The same subtraction one column over: an `.await` on something that is not
     // a future is the same kind of message about the same file nobody wrote.
     checker.s.facts.pausing_methods = checker
+        .s
+        .flow
         .pausing_methods
-        .difference(&checker.settled_methods)
+        .difference(&checker.s.flow.settled_methods)
         .cloned()
         .collect();
     // The same subtraction, for the same reason: a checked conversion written on
@@ -738,7 +699,7 @@ fn walked<'a>(
         .s
         .facts
         .narrowing_casts
-        .retain(|at, _| !checker.widening_casts.contains(at));
+        .retain(|at, _| !checker.s.flow.widening_casts.contains(at));
     finished(checker)
 }
 
@@ -851,20 +812,6 @@ fn wrap_for(found: &Ty, want: &Ty, literal: bool) -> Option<Wrap> {
         true => Some(Wrap::Constructor),
         false => Some(Wrap::Conversion),
     }
-}
-
-/// A signed value in a slot that states an unsigned type (ADR-285 D32),
-/// waiting for the walk's answer.
-#[derive(Debug, Clone)]
-struct UnsignedSlot {
-    node: i64,
-    found: Ty,
-    want: Ty,
-    into: String,
-    written: String,
-    span: Span,
-    /// The slot's own refusal, where `expect` would have written one.
-    refusal: Option<Finding>,
 }
 
 /// **The unsigned type a signed value goes into where it is not negative**
@@ -1127,45 +1074,24 @@ fn rust_array_type(items: &[build_time::Value]) -> Option<String> {
     nikaia_std::tools::check_consts::rust_array_type(items)
 }
 
-/// **A number no annotation typed**
-/// ([ADR-285](../../docs/specification/adr/adr-285.md)): one `let`, or several
-/// its uses joined, and what those uses asked of it.
-///
-/// Part I 2.4 says *a number takes the type its use asks for*, and that half was
-/// the language below's inference, inherited rather than built (ADR-285 D20): the
-/// `let` was written bare and `rustc` looked at the uses. Two things broke it.
-/// A use `rustc` cannot see through - `v[i].push(x)`, where `index::at` takes
-/// any integer - left it without an answer; and ADR-285's `u64` and `u32` gave
-/// a number above an `i32` a second type to be, which ADR-285 D23's *"there is
-/// no second answer"* had ruled out.
-struct OpenNumber {
-    /// The name, for the message.
-    name: String,
-    /// Whether it is the elements of the list `name` binds (D34) rather than
-    /// the name's own number.
-    element: bool,
-    /// The `let`, where the type is written and where a refusal points.
-    at: Span,
-    /// The entry this one was joined into, by the `let` it names; itself where
-    /// none. `let c = a + b` joins all three: one operation, one type.
-    joined: usize,
-    /// What the uses asked: the type, the statement, and whether the use is a
-    /// **type standing beside it** (`true`) or an index, which takes any
-    /// integer and prefers an `i64` (D2).
-    asks: Vec<(String, Span, bool)>,
-    /// The numbers it is given as written - its own value and every one
-    /// assigned to it - with the statement and whether it is a bare literal.
-    /// These decide the type where no use does (D3), and every one of them has
-    /// to fit the type that is decided.
-    given: Vec<(Constant, Span, bool)>,
-    /// What an operation over it comes to, where that folds: held to the type
-    /// and never deciding it, because a name is where the widening stops
-    /// (ADR-285 D26).
-    derived: Vec<(Constant, Span)>,
-    /// The statements that give it a number, by the byte they start at, and
-    /// every literal in them: the emitter writes each with the type's suffix
-    /// where it would otherwise write another.
-    written: Vec<(usize, Literals, bool)>,
+impl From<Constant> for CheckConstant {
+    fn from(c: Constant) -> CheckConstant {
+        CheckConstant {
+            value: c.value,
+            beyond: c.beyond,
+            pinned: c.pinned,
+        }
+    }
+}
+
+impl From<CheckConstant> for Constant {
+    fn from(c: CheckConstant) -> Constant {
+        Constant {
+            value: c.value,
+            beyond: c.beyond,
+            pinned: c.pinned,
+        }
+    }
 }
 
 /// A number no other binding gets, for [`Local::id`].
@@ -1202,256 +1128,8 @@ struct Checker<'a> {
     /// **What this build may read while it builds** (ADR-310), carried beside
     /// the files for the same reason: no ledger can say it.
     reads: &'a Reads,
-    /// **The bounds the `comptime` being computed raised**
-    /// ([ADR-321](../../docs/specification/adr/adr-321.md) D11): steps and
-    /// bytes, each where it named one; the workshop's otherwise.
-    raised: (Option<u64>, Option<u64>),
-    /// **Whether this walk computes build-time values at all**: the ledger's
-    /// pass ([`check_for_the_ledger`]) does not, and says nothing for them.
-    computes: bool,
-    /// The addresses of the values a call names after its `;`, in the order
-    /// [`Checker::arguments`] is handed them (#455).
-    option_values: Vec<i64>,
-    /// The fields the **current** unrolling is over, where this walk is one
-    /// ([ADR-304](../../docs/specification/adr/adr-304.md) D7): the concrete
-    /// type's name and the field this turn stands at.
-    ///
-    /// `None` in the generic body, which is walked once with nothing known -
-    /// so `field.of(value)` answers `?` there and refuses nothing, and the
-    /// refusals that matter come from the unrolled walks.
-    unrolling: Option<(String, FieldContract)>,
-    /// **This walk is one unit harvesting another's call sites**, so it does
-    /// not harvest in turn ([ADR-304](../../docs/specification/adr/adr-304.md)
-    /// D2).
-    ///
-    /// Which types a shape walk was used with is a fact about the **program**
-    /// and not about the file the function stands in, and the calls may all
-    /// stand somewhere else - so the unit that writes the copies asks the
-    /// others. Without this flag that question asks itself back.
-    harvesting: bool,
-    /// **Whether the walk is inside a `comptime` initialiser**
-    /// ([ADR-310](../../docs/specification/adr/adr-310.md) D3).
-    ///
-    /// `asset("…")` is the compiler's name for the file a build reads, and it
-    /// stands there and nowhere else. The evaluator answers it where it
-    /// belongs; this says where the ordinary walk must keep quiet, so that two
-    /// walks over one expression do not both have an opinion about one call.
-    inside_a_comptime: bool,
-    /// **Numbers written as a method's receiver in this statement** whose
-    /// call hands back the receiver's own type (#417): the first integer type
-    /// a use asks of the call is theirs, as it would be of `7 + 1`, and they
-    /// keep the first type that holds them where nothing asks.
-    literal_receivers: Vec<(i64, nikaia_std::tools::integers::Integer)>,
-    /// The function being checked hands back text **both kinds** of which
-    /// flow into its result ([ADR-282](../../docs/specification/adr/adr-282.md)
-    /// D3): text of its own is moved in as it is, so it is not a view refused.
-    expected_either: bool,
-    /// The same for the field whose value is being checked.
-    field_either: bool,
-    /// Whether it declared `throws` - which is what says a failure may leave
-    /// it, whether the failing call was written or implicit (ADR-025 D1).
-    throwing: bool,
-    /// Whether the expression being walked is the guarded half of a `catch`.
-    ///
-    /// `fs::read_to_string(p, fs::Root::Anywhere) catch { … }` handles the failure where it
-    /// happens, so nothing leaves the function and `NK2605` has nothing to
-    /// say. It covers the **whole** guarded expression, because that is what
-    /// the handler runs for: in `outer(inner())` both calls are caught. The
-    /// handler's own body is not - a failure raised there propagates - so this
-    /// goes back to what it was before the handler is walked.
-    caught: bool,
-    /// The handler being walked was handed an error that can be **more than
-    /// one type** ([ADR-280](../../docs/specification/adr/adr-280.md) D18).
-    ///
-    /// `match error { … }` reads it. The set of error types arriving at a
-    /// `catch` is **open** ([ADR-023](../../docs/specification/adr/adr-023.md)
-    /// D4), so no `match` over it can be exhaustive — which is why the question
-    /// is about the binding rather than about a type this checker could name.
-    caught_several: bool,
-    /// The **one** error type arriving at the nearest `catch`, where exactly one
-    /// does — and `None` where several do, where none is written down, or
-    /// outside a handler.
-    ///
-    /// **For one question only**: whether `match error { … }` covers every case.
-    /// The binding itself stays `Ty::Unknown`, because giving a binding a type
-    /// where it had none can turn a program that compiles into one that is
-    /// refused, and [Part III
-    /// C.4](../../docs/specification/30-nikaia-tooling.md) makes that its own
-    /// piece of work with its own sweep. This one can only *move* a refusal:
-    /// where the arms miss a case, the words were `rustc`'s about a generated
-    /// file (*non-exhaustive patterns: `IoError::NotText(_)` not covered*),
-    /// which is [Part III C.1](../../docs/specification/30-nikaia-tooling.md);
-    /// where they cover everything, nothing was said before and nothing is said
-    /// now.
-    caught_one: Option<Ty>,
-    /// What the guarded expression of the nearest `catch` turned out to hold,
-    /// while that expression is being walked - and `None` everywhere else.
-    ///
-    /// The mirror of [`Self::caught`], asked in the other direction: that one
-    /// says *a failure here needs no `throws`*, this one says *was there a
-    /// failure at all*. A `catch` over an expression that cannot fail lowers to
-    /// a `match` over something that is not a `Result`, which is `NK1134`
-    /// ([ADR-308](../../../docs/specification/adr/adr-308.md)).
-    guarded: Option<Guarded>,
-    /// How many loops are open around the statement being walked, counted from
-    /// the nearest boundary a jump may not cross rather than from the function.
-    ///
-    /// A `break` is legal where this is not zero, and `NK1132` is what it meets
-    /// where it is (Part I 3.3,
-    /// [ADR-276](../../../docs/specification/adr/adr-276.md) D16).
-    loops: usize,
-    /// What that nearest boundary is, where one stands between here and the
-    /// function's own body: a lambda, a task, an `overlap` branch.
-    ///
-    /// Each of those is **a function of its own in the language below**, and a
-    /// jump does not leave a function - so a `break` inside one whose loop is
-    /// outside it is not a program this compiler may lower
-    /// ([ADR-276](../../../docs/specification/adr/adr-276.md) D16). It is carried
-    /// rather than derived because the message is the whole value of catching
-    /// it here: without the word, the refusal would be `rustc`'s, about a file
-    /// nobody wrote (Part III, C.1).
-    ///
-    /// **A `catch` handler is deliberately not one of these** (D5): it lowers to
-    /// a `match` arm, and a jump in one reaches the loop around it.
-    barrier: Option<String>,
-    /// Method calls whose callee's contract says it can fail, and method calls
-    /// where that could not be established - both as the pair
-    /// [`Checked::fallible_methods`] is keyed by. The difference is the answer;
-    /// a name that is both in one statement is in neither.
-    fallible_methods: BTreeSet<(i64, String)>,
-    opaque_methods: BTreeSet<(i64, String)>,
-    /// The same pair of sets for [`Checked::pausing_methods`]: the calls whose
-    /// callee pauses, and the ones where it does not or could not be
-    /// established. The difference is the answer.
-    pausing_methods: BTreeSet<(i64, String)>,
-    settled_methods: BTreeSet<(i64, String)>,
-    /// The lambdas of the call being walked that paused and were handed to a
-    /// `std` entry, by their shape
-    /// ([ADR-233](../../docs/specification/adr/adr-233.md) D1). Filled by
-    /// [`Self::arguments_given`] and emptied by the call that asked.
-    paused_args: Vec<i64>,
-    /// The next number to give a choice: one per `if` and per `match` walked.
-    next_choice: i64,
-    /// Which read an expression **is**, by the expression's address, so that
-    /// `p.name` extends the read of `p` it stands on and a hand-over names the
-    /// read that was handed ([ADR-293](../../docs/specification/adr/adr-293.md)
-    /// D1). Also what keeps an expression walked twice from counting as two
-    /// reads.
-    read_index: std::collections::HashMap<(usize, usize), usize>,
-    /// **`??`s that may lend their left side** (ADR-279 D5), until the
-    /// statement they stand in is walked: one handed to a position that only
-    /// reads it is lent, and every other one is taken when the statement ends.
-    pending_coalesces: Vec<PendingCoalesce>,
-    /// Set by an assignment whose target is an index, for the one `Index` it
-    /// walks: a key **written** is handed to the map, a key read is lent
-    /// (ADR-293 D27).
-    writing_index: bool,
-    /// Set where an `Index` read a **map**, for the `??` around it: a map read
-    /// hands out a view of the value, whatever the value's type (ADR-293 D28).
-    read_a_map: bool,
-    /// **Every read of a map**, by the expression's address: through the
-    /// brackets or `get`. It is an `Option<&T>` below whatever the type
-    /// says, so a place that keeps a `T?` of its own copies it out or is
-    /// refused ([ADR-293](../../docs/specification/adr/adr-293.md) D15).
-    map_read_sites: BTreeSet<i64>,
-    /// **The bindings a `let` made of a map read** (#297), by
-    /// [`Local::id`]: `let found = calls.get(key)` is a view of what the map
-    /// holds, as the read itself is, and a `??` on the name is the `??` on
-    /// the read.
-    map_views: BTreeSet<i64>,
-    /// The ledger key the last method call resolved to, for the arm around it
-    /// (ADR-293 D24).
-    last_resolved: Option<String>,
-    /// The **name** of the receiver of the method call being walked, where it is
-    /// a plain name ([ADR-105](../../docs/specification/adr/adr-105.md) D2).
-    ///
-    /// `set_receiver`'s arrangement and for its reason: the rule wants the name
-    /// and runs in `call_on`, where the contract is in hand and the receiver's
-    /// expression is not. `None` for a temporary — `map.keys().collect()` walks
-    /// one, and a temporary has no second use to refuse.
-    receiver_name: Option<String>,
-    /// **Whether the receiver of the call being checked is a file's name the
-    /// compiler followed back to text** ([ADR-319](../../docs/specification/adr/adr-319.md)
-    /// D5): then its `to_text` cannot fail. Set for one call, taken by it.
-    receiver_from_text: bool,
-    /// The bindings of a file's name made from text, by binding (D5):
-    /// a literal, text, or an `f"…"` or an operation over such names.
-    text_paths: BTreeSet<i64>,
-    /// The `let`s in the body being walked whose value was an **empty list**
-    /// and whose element type nothing has said yet
-    /// ([ADR-135](../../docs/specification/adr/adr-135.md) D2), by the `let`'s
-    /// byte: the name, and where to put the caret.
-    ///
-    /// An entry **leaves** when the name is read, because a use is what gives
-    /// an empty list its element type; what is left when the body ends is a
-    /// list nothing will ever constrain, and that is `NK1153`.
-    empty_lists: BTreeMap<i64, (String, Span)>,
-    /// **The numbers whose uses decide their type**, by the `let` each was
-    /// bound at ([ADR-285](../../docs/specification/adr/adr-285.md)). Asked
-    /// once the body has been walked, as `empty_lists` is: the use that
-    /// answers stands after the `let`.
-    open_numbers: BTreeMap<i64, OpenNumber>,
-    /// **A list written in number literals, whose elements are one open
-    /// number** ([ADR-285](../../docs/specification/adr/adr-285.md) D34): the
-    /// binding ([`Local::id`]) and the entry of `open_numbers` it names.
-    open_elements: std::collections::HashMap<usize, usize>,
-    /// **The `fn` type the place a lambda stands in declares** (#497): a
-    /// `return` against a declared `fn(i64) -> i64`, a field of one, an
-    /// annotated `let`. Set just before such a lambda is walked, taken by it.
-    lambda_expected: Option<Ty>,
-    /// **A generic call that hands back the number it was given** (#497):
-    /// `hand(7)` for `fn hand[T](x: T) -> T` is as open as the `7`, so its
-    /// value is the arguments' open number. Keyed by the call's arguments
-    /// (`args.as_ptr()`), holding which of them bind the result.
-    open_calls: std::collections::HashMap<i64, Vec<usize>>,
     /// Where this file stands among `beside`, where it does.
     here: Option<usize>,
-    /// **The `let`s whose value had no known type** (#497), by
-    /// [`Local::id`]: that value was refused where it was made, or stood
-    /// back for (an open part, a reflected field), so reading the name again
-    /// is the same cause and is not refused twice.
-    unknown_bound: BTreeSet<i64>,
-    /// How many `NK1245`s this walk has said (or stood back for): an
-    /// expression that is unknown only because a part inside it was is not
-    /// refused again.
-    unknown_said: usize,
-    /// **What such a list holds, where nothing can change it**: an immutable
-    /// `let`'s elements, so `xs[0] + xs[1]` is measured as `a + b` is (D26).
-    list_constants: std::collections::HashMap<i64, Vec<Constant>>,
-    /// **The statements an operation in has already overflowed**, by the byte
-    /// they start at: one refusal for one cause (`an_operation_that_overflows`).
-    overflowed: BTreeSet<i64>,
-    /// **The integer type a `let` states, on its way to the operands**
-    /// ([ADR-285](../../docs/specification/adr/adr-285.md) D32): taken by the
-    /// next expression walked, and handed on only through `+`, `-`, `*`, `/`,
-    /// `%` and a negation, so a constant operation is measured in the type it
-    /// is computed in (`an_operation_that_overflows`).
-    reaching: Option<String>,
-    /// What the expression being walked was handed of [`Checker::reaching`].
-    reached: Option<String>,
-    /// The names this function's body gives text of its own later on, with
-    /// `+` or an f-string ([`grown_text`]): a `let mut` of a literal under one
-    /// of them holds owned text (0.0.232).
-    grown_text: BTreeSet<String>,
-    /// The conversions that do **not** narrow, so a statement holding one of
-    /// those beside a narrowing one to the same type is left alone entirely.
-    widening_casts: BTreeSet<(i64, String)>,
-    /// **Signed values put where an unsigned type is stated**, by the
-    /// statement they stand in: taken where the walk proves them `>= 0`, and
-    /// refused where it does not ([`Checker::unsigned_slots_proved`]).
-    unsigned_slots: BTreeMap<i64, Vec<UnsignedSlot>>,
-    /// Whether the lambda being walked is a **write door**'s block — `update`
-    /// or `update_all` ([ADR-281](../../docs/specification/adr/adr-281.md) D12,
-    /// D6).
-    ///
-    /// It is what narrows `NK1138` at a lambda parameter to where D1 asks for
-    /// it. Everywhere else a parameter without the word is left alone, because
-    /// the emitter writes `mut` itself for a fold's accumulator and refusing
-    /// there would refuse a program that compiles.
-    at_a_write_door: bool,
-    /// **The name of an empty list a `push` is being walked on** (#523): its
-    /// first use gives it its element type.
-    pushed_into: Option<String>,
 }
 
 /// One argument as [`Checker::the_compiler_writes_the_reference`] reads it:
@@ -2494,7 +2172,7 @@ impl<'a> Checker<'a> {
         // statement's, which this checker does not see, so it is not guessed.
         if let Some(spread) = spread {
             let local = local_free(self.parsed.text(*spread).to_string(), Ty::Unknown);
-            self.unknown_bound.insert(local.id as usize as i64);
+            self.s.flow.unknown_bound.insert(local.id as usize as i64);
             frame.push(local);
         }
 
@@ -2503,10 +2181,10 @@ impl<'a> Checker<'a> {
             .map(|t| Ty::from_ast(self.parsed, t).erase(&parameters));
         let outer = std::mem::replace(&mut self.s.expected, expected.clone());
         let outer_either = std::mem::replace(
-            &mut self.expected_either,
+            &mut self.s.flow.expected_either,
             ret_type.as_ref().is_some_and(|t| t.either),
         );
-        let outer_throwing = std::mem::replace(&mut self.throwing, *throws);
+        let outer_throwing = std::mem::replace(&mut self.s.flow.throwing, *throws);
 
         let keeps: Vec<String> = self
             .s
@@ -2537,11 +2215,12 @@ impl<'a> Checker<'a> {
         let outer_run_code = std::mem::replace(&mut self.s.run_code, run_code);
         self.s.scope.push(frame);
         let tail_span = body.stmts.last().map(|s| s.span);
-        let outer_lists = std::mem::take(&mut self.empty_lists);
-        let outer_numbers = std::mem::take(&mut self.open_numbers);
-        let outer_grown = std::mem::replace(&mut self.grown_text, grown_text(self.parsed, body));
+        let outer_lists = std::mem::take(&mut self.s.flow.empty_lists);
+        let outer_numbers = std::mem::take(&mut self.s.flow.open_numbers);
+        let outer_grown =
+            std::mem::replace(&mut self.s.flow.grown_text, grown_text(self.parsed, body));
         let tail = self.block(body);
-        self.grown_text = outer_grown;
+        self.s.flow.grown_text = outer_grown;
         // **The tail hands back as a `return` does**, and a field of a lent
         // place is refused there too (`NK1131`, #576). Read against the scope
         // still standing, as the numbers below are.
@@ -2564,7 +2243,7 @@ impl<'a> Checker<'a> {
             self.number_asked(value, expected, &at, true);
         }
         self.numbers_typed_by_their_uses();
-        self.open_numbers = outer_numbers;
+        self.s.flow.open_numbers = outer_numbers;
         self.s.scope.pop();
 
         // **`NK1153`, once the whole body has been seen**
@@ -2572,7 +2251,8 @@ impl<'a> Checker<'a> {
         // `NK2101`'s reason one page down: the use that gives an empty list its
         // element type stands *after* the `let`, and a single pass reaches a
         // later statement later.
-        for (name, at) in std::mem::replace(&mut self.empty_lists, outer_lists).into_values() {
+        for (name, at) in std::mem::replace(&mut self.s.flow.empty_lists, outer_lists).into_values()
+        {
             self.s.an_empty_list_with_no_element_type(&name, &at);
         }
 
@@ -2643,13 +2323,13 @@ impl<'a> Checker<'a> {
         self.s.a_part_left_out();
         self.s.data_handed_over_is_used_again();
         self.s.reads_on_paths.clear();
-        self.read_index.clear();
+        self.s.flow.read_index.clear();
         self.s.lent_lets.clear();
         self.s.a_task_took_what_is_used_again();
 
         self.s.expected = outer;
-        self.expected_either = outer_either;
-        self.throwing = outer_throwing;
+        self.s.flow.expected_either = outer_either;
+        self.s.flow.throwing = outer_throwing;
         self.s.type_parameters = outer_declared;
         self.s.borrowing_self = outer_borrowing;
         self.s.current = outer_current;
@@ -2698,7 +2378,7 @@ impl<'a> Checker<'a> {
         let at = (span.at() as i64, into.clone());
         match (from, checked) {
             (_, false) => {
-                self.widening_casts.insert(at);
+                self.s.flow.widening_casts.insert(at);
             }
             // Out of a floating-point number: silent three ways - it stops at the
             // limit in both directions and turns "not a number" into zero - and
@@ -3962,7 +3642,7 @@ impl<'a> Checker<'a> {
             .functions
             .get(key)
             .is_some_and(|c| !c.fails_with.is_empty());
-        if fallible && let Some(guarded) = &mut self.guarded {
+        if fallible && let Some(guarded) = &mut self.s.flow.guarded {
             guarded.fallible = true;
             guarded
                 .thrown
@@ -4293,7 +3973,7 @@ impl<'a> Checker<'a> {
         ty: Ty,
         span: &Span,
     ) -> Local {
-        let asked = self.at_a_write_door && !mutable.contains(&name);
+        let asked = self.s.flow.at_a_write_door && !mutable.contains(&name);
         Local {
             written_mut: false,
             id: a_new_binding() as i64,
@@ -4401,7 +4081,7 @@ impl<'a> Checker<'a> {
         // cleanup can fail and the function says `throws`. Its channel is
         // otherwise whatever its body raises, and the settle point hands the
         // body's result back untouched.
-        let failing = fails && self.throwing;
+        let failing = fails && self.s.flow.throwing;
         *self.s.facts.settle_fns.entry(current).or_insert(false) |= failing;
         let key = match failing {
             true => "cleanup::settle_failing",
@@ -4442,7 +4122,7 @@ impl<'a> Checker<'a> {
             }
             _ => "holds",
         };
-        if fails && !self.throwing && !self.caught && self.s.current.is_some() {
+        if fails && !self.s.flow.throwing && !self.s.flow.caught && self.s.current.is_some() {
             self.s.findings.push(Finding {
                 severity: Severity::Error,
                 span: *span,
@@ -4918,7 +4598,8 @@ impl<'a> Checker<'a> {
         };
         // **`to_text` on a name made from text cannot fail** (ADR-319 D5):
         // it reaches the entry that throws nothing, and the emitter writes it.
-        let known_text = key == "fs::Path::to_text" && std::mem::take(&mut self.receiver_from_text);
+        let known_text =
+            key == "fs::Path::to_text" && std::mem::take(&mut self.s.flow.receiver_from_text);
         if known_text {
             self.s.facts.path_methods.insert(value_node(receiver), true);
         }
@@ -4926,10 +4607,10 @@ impl<'a> Checker<'a> {
             true => "fs::Path::text_of",
             false => &key,
         }));
-        self.last_resolved = Some(key.clone());
+        self.s.flow.last_resolved = Some(key.clone());
         // **A receiver the method changes or takes is not only read**: a
         // `match` arm that does this to a part it bound needs the part itself.
-        if let Some(name) = self.receiver_name.clone() {
+        if let Some(name) = self.s.flow.receiver_name.clone() {
             let takes = contract
                 .signature
                 .as_ref()
@@ -4948,7 +4629,7 @@ impl<'a> Checker<'a> {
         // container's methods take a view and are untouched.
         if matches!(&on, Ty::Seq { shape, .. } if !shape.replays)
             && walks_by_value(&contract)
-            && let Some(name) = self.receiver_name.clone()
+            && let Some(name) = self.s.flow.receiver_name.clone()
         {
             let taken = self.s.taken(name, on.clone(), self.s.read_seq, "", span);
             self.s.walked.push(taken);
@@ -4957,7 +4638,7 @@ impl<'a> Checker<'a> {
         // list replaces it, so a read of it afterwards is one of a list that
         // is gone - `NK2105`, where it was `rustc`'s *borrow of moved value*.
         if key == "list::ListExt::map"
-            && let Some(name) = self.receiver_name.clone()
+            && let Some(name) = self.s.flow.receiver_name.clone()
         {
             self.s
                 .hands_over_name(&self.world, &name, "taken by `map`", span);
@@ -4965,7 +4646,7 @@ impl<'a> Checker<'a> {
         // **And `close` takes the value**: nothing of it is left to clean up
         // afterwards, and nothing of it to read.
         if key == "cleanup::close"
-            && let Some(name) = self.receiver_name.clone()
+            && let Some(name) = self.s.flow.receiver_name.clone()
         {
             self.s
                 .hands_over_name(&self.world, &name, "closed by `close`", span);
@@ -5084,7 +4765,7 @@ impl<'a> Checker<'a> {
             .iter()
             .map(|ty| ty::substitute(ty, &bound))
             .collect();
-        let outer_paused = std::mem::take(&mut self.paused_args);
+        let outer_paused = std::mem::take(&mut self.s.flow.paused_args);
         // **A lambda handed to a walk of a `Par[T]` runs on several cores at
         // once** (Part II 12.6, ADR-235 D2): what it may do is asked while it
         // is walked, and a lambda inside it is inside it too.
@@ -5113,14 +4794,20 @@ impl<'a> Checker<'a> {
         // **The element type an empty list's first `push` gives it** (#523):
         // `let mut rows = Vec()` then `rows.push((fragment, tally.n))` makes
         // `rows` a list of what was pushed, for every read after.
-        if let Some(name) = self.pushed_into.take() {
+        if let Some(name) = self.s.flow.pushed_into.take() {
             // **A `push` onto a list of open elements is a use of them**
             // (ADR-285 D34): a typed value asks for its type, and a number is
             // given to them and held to the type they come to.
             let open = self
                 .s
                 .binding(&name)
-                .and_then(|local| self.open_elements.get(&(local.id as usize)).copied())
+                .and_then(|local| {
+                    self.s
+                        .flow
+                        .open_elements
+                        .get(&local.id)
+                        .map(|at| *at as usize)
+                })
                 .map(|at| self.open_root(at));
             // **An empty list's first `push` of a number makes its elements
             // one open number** (#497, ADR-285 D34), as a list written in
@@ -5135,13 +4822,13 @@ impl<'a> Checker<'a> {
                     if name == "Vec" && matches!(args.as_slice(), [] | [Ty::Unknown]))
             {
                 let id = local.id;
-                self.open_numbers.insert(
+                self.s.flow.open_numbers.insert(
                     span.at() as i64,
                     OpenNumber {
                         name: name.clone(),
                         element: true,
                         at: *span,
-                        joined: span.at(),
+                        joined: span.at() as i64,
                         asks: Vec::new(),
                         given: Vec::new(),
                         derived: Vec::new(),
@@ -5149,12 +4836,12 @@ impl<'a> Checker<'a> {
                     },
                 );
                 self.open_number_given(span.at(), value, span);
-                self.open_elements.insert(id as usize, span.at());
+                self.s.flow.open_elements.insert(id, span.at() as i64);
             } else if let (Some(number), "push", [pushed], [value]) =
                 (open, entry, found.as_slice(), args)
             {
                 if let Some(ty) = integer_named(&value_of_a_copy(pushed.unseen())) {
-                    if let Some(number) = self.open_numbers.get_mut(&(number as i64)) {
+                    if let Some(number) = self.s.flow.open_numbers.get_mut(&(number as i64)) {
                         number.asks.push((ty, *span, true));
                     }
                 } else if self.number_shaped(value) {
@@ -5189,7 +4876,7 @@ impl<'a> Checker<'a> {
                 *args = elements;
             }
         }
-        let paused_here = std::mem::replace(&mut self.paused_args, outer_paused);
+        let paused_here = std::mem::replace(&mut self.s.flow.paused_args, outer_paused);
         let pausing_lambda = args.iter().find(|arg| {
             matches!(arg, Expr::Closure { .. }) && paused_here.contains(&value_node(arg))
         });
@@ -5326,6 +5013,8 @@ impl<'a> Checker<'a> {
             // A `mut` parameter is a `&mut Vec` already, and handed on as it
             // is: a second `&mut` may not be taken of it (ADR-094 D3).
             ("Vec::sort_by_key", _) => match self
+                .s
+                .flow
                 .receiver_name
                 .as_deref()
                 .and_then(|name| self.s.binding(name))
@@ -5354,8 +5043,8 @@ impl<'a> Checker<'a> {
         // may pause for every rule that asks: the function around it, the
         // lambda around it, the door around it.
         let written = (span.at() as i64, self.parsed.text(method).to_string());
-        self.settled_methods.remove(&written);
-        self.pausing_methods.insert(written);
+        self.s.flow.settled_methods.remove(&written);
+        self.s.flow.pausing_methods.insert(written);
         let callee = key.to_string();
         self.s.a_call_that_may_pause(&callee, true, false, span);
         result
@@ -5469,7 +5158,7 @@ impl<'a> Checker<'a> {
     /// is refused with the copy to write, where it reached `rustc` as
     /// *mismatched types* about a file nobody wrote.
     fn a_map_read_kept(&mut self, found: &Ty, want: &Ty, value: &Expr, span: &Span) {
-        if !self.map_read_sites.contains(&value_node(value)) {
+        if !self.s.flow.map_read_sites.contains(&value_node(value)) {
             return;
         }
         let (Ty::Nullable(inner), Ty::Nullable(read)) = (want, found) else {
@@ -5546,7 +5235,9 @@ impl<'a> Checker<'a> {
             && !is_literal(value)
             && let Some(into) = unsigned_from_signed(found, want)
         {
-            self.unsigned_slots
+            self.s
+                .flow
+                .unsigned_slots
                 .entry(span.at() as i64)
                 .or_default()
                 .push(UnsignedSlot {
@@ -5604,7 +5295,7 @@ impl<'a> Checker<'a> {
             return;
         };
         if !self.s.jumps(&self.world, fallback)
-            || !self.map_read_sites.contains(&value_node(read))
+            || !self.s.flow.map_read_sites.contains(&value_node(read))
             || into.is_a_view()
             || into.is_unknown()
         {
@@ -5683,7 +5374,7 @@ impl<'a> Checker<'a> {
             return;
         }
         // **Said already**, by the operation inside it that overflowed.
-        if self.overflowed.contains(&(span.at() as i64)) {
+        if self.s.flow.overflowed.contains(&(span.at() as i64)) {
             return;
         }
         // The type it answers to: what stands beside it if that is an integer
@@ -5836,11 +5527,11 @@ impl<'a> Checker<'a> {
     /// The entry an open number was joined into
     /// ([ADR-285](../../docs/specification/adr/adr-285.md) D23).
     fn open_root(&self, mut at: usize) -> usize {
-        while let Some(number) = self.open_numbers.get(&(at as i64)) {
-            if number.joined == at {
+        while let Some(number) = self.s.flow.open_numbers.get(&(at as i64)) {
+            if number.joined as usize == at {
                 break;
             }
-            at = number.joined;
+            at = number.joined as usize;
         }
         at
     }
@@ -5869,11 +5560,11 @@ impl<'a> Checker<'a> {
             Expr::Call { args, .. } => {
                 for &at in args
                     .first()
-                    .and_then(|first| self.open_calls.get(&value_node(first)))
+                    .and_then(|first| self.s.flow.open_calls.get(&value_node(first)))
                     .into_iter()
                     .flatten()
                 {
-                    self.open_numbers_in(&args[at], out);
+                    self.open_numbers_in(&args[at as usize], out);
                 }
             }
             // **A choice between numbers is one number** (D1): each branch's
@@ -5911,7 +5602,11 @@ impl<'a> Checker<'a> {
             return None;
         }
         let local = self.s.binding(self.parsed.text(*name))?;
-        self.open_elements.get(&(local.id as usize)).copied()
+        self.s
+            .flow
+            .open_elements
+            .get(&local.id)
+            .map(|at| *at as usize)
     }
 
     /// **The constant an element of an immutable list of literals is**, where
@@ -5924,7 +5619,11 @@ impl<'a> Checker<'a> {
             return None;
         };
         let local = self.s.binding(self.parsed.text(*name))?;
-        let elements = self.list_constants.get(&((local.id as usize) as i64))?;
+        let elements = self
+            .s
+            .flow
+            .list_constants
+            .get(&((local.id as usize) as i64))?;
         let at = self.constant_of(index)?;
         if at.value.negative {
             return None;
@@ -5946,8 +5645,8 @@ impl<'a> Checker<'a> {
             Expr::Index { .. } => self.open_element_of(expr).is_some(),
             Expr::Call { args, .. } => args
                 .first()
-                .and_then(|first| self.open_calls.get(&value_node(first)))
-                .is_some_and(|at| at.iter().all(|&at| self.number_shaped(&args[at]))),
+                .and_then(|first| self.s.flow.open_calls.get(&value_node(first)))
+                .is_some_and(|at| at.iter().all(|&at| self.number_shaped(&args[at as usize]))),
             Expr::If { .. } | Expr::Match { .. } => number_branches(expr).is_some_and(|tails| {
                 !tails.is_empty() && tails.iter().all(|tail| self.number_shaped(tail))
             }),
@@ -5976,16 +5675,19 @@ impl<'a> Checker<'a> {
             value => value,
         };
         if let Expr::Variable(name, _) = list
-            && let Some(number) = self
-                .s
-                .binding(self.parsed.text(*name))
-                .and_then(|local| self.open_elements.get(&(local.id as usize)).copied())
+            && let Some(number) = self.s.binding(self.parsed.text(*name)).and_then(|local| {
+                self.s
+                    .flow
+                    .open_elements
+                    .get(&local.id)
+                    .map(|at| *at as usize)
+            })
             && let Ty::Named { name, args, .. } = value_of_a_copy(want.unseen())
             && matches!(name.as_str(), "Vec" | "Array")
             && let Some(ty) = args.first().and_then(integer_named)
         {
             let number = self.open_root(number);
-            if let Some(number) = self.open_numbers.get_mut(&(number as i64)) {
+            if let Some(number) = self.s.flow.open_numbers.get_mut(&(number as i64)) {
                 number.asks.push((ty, *at, beside));
             }
             return;
@@ -5996,7 +5698,7 @@ impl<'a> Checker<'a> {
         let mut open = Vec::new();
         self.open_numbers_in(value, &mut open);
         for number in open {
-            if let Some(number) = self.open_numbers.get_mut(&(number as i64)) {
+            if let Some(number) = self.s.flow.open_numbers.get_mut(&(number as i64)) {
                 number.asks.push((ty.clone(), *at, beside));
             }
         }
@@ -6019,9 +5721,9 @@ impl<'a> Checker<'a> {
         for &other in rest {
             let other = self.open_root(other);
             if other != head
-                && let Some(number) = self.open_numbers.get_mut(&(other as i64))
+                && let Some(number) = self.s.flow.open_numbers.get_mut(&(other as i64))
             {
-                number.joined = head;
+                number.joined = head as i64;
             }
         }
     }
@@ -6039,19 +5741,21 @@ impl<'a> Checker<'a> {
         };
         let mut literals = Vec::new();
         literals_in(value, &mut literals);
-        let Some(entry) = self.open_numbers.get_mut(&(number as i64)) else {
+        let Some(entry) = self.s.flow.open_numbers.get_mut(&(number as i64)) else {
             return;
         };
         if let Some(folded) = &pure {
-            entry
-                .given
-                .push((folded.clone(), *span, matches!(value, Expr::LitInt { .. })));
+            entry.given.push((
+                folded.clone().into(),
+                *span,
+                matches!(value, Expr::LitInt { .. }),
+            ));
         }
         if let Some(folded) = derived {
-            entry.derived.push((folded, *span));
+            entry.derived.push((folded.into(), *span));
         }
         entry.written.push((
-            span.at(),
+            span.at() as i64,
             literals,
             pure.as_ref().is_some_and(crate::fold::wants_widening),
         ));
@@ -6060,9 +5764,9 @@ impl<'a> Checker<'a> {
     /// **Every open number of a body, decided** once the body has been walked
     /// ([ADR-285](../../docs/specification/adr/adr-285.md) D24, D25, D27).
     fn numbers_typed_by_their_uses(&mut self) {
-        let numbers = std::mem::take(&mut self.open_numbers);
+        let numbers = std::mem::take(&mut self.s.flow.open_numbers);
         let root = |mut at: usize| loop {
-            let joined = numbers[&(at as i64)].joined;
+            let joined = numbers[&(at as i64)].joined as usize;
             if joined == at {
                 return at;
             }
@@ -6107,7 +5811,7 @@ impl<'a> Checker<'a> {
                 let small = members
                     .iter()
                     .flat_map(|m| &m.given)
-                    .all(|(value, _, _)| value.fits("i32"));
+                    .all(|(value, _, _)| Constant::from(value.clone()).fits("i32"));
                 match small {
                     true => "i32".to_string(),
                     false => "i64".to_string(),
@@ -6129,7 +5833,13 @@ impl<'a> Checker<'a> {
             let before = self.s.findings.len();
             for member in &members {
                 for (value, at, bare) in &member.given {
-                    self.a_number_that_does_not_fit(value, *bare, &held, at, why.clone());
+                    self.a_number_that_does_not_fit(
+                        &value.clone().into(),
+                        *bare,
+                        &held,
+                        at,
+                        why.clone(),
+                    );
                 }
             }
             if self.s.findings.len() == before {
@@ -6137,7 +5847,13 @@ impl<'a> Checker<'a> {
                     if self.s.findings.iter().skip(before).any(|f| f.span == *at) {
                         continue;
                     }
-                    self.a_number_that_does_not_fit(value, false, &held, at, why.clone());
+                    self.a_number_that_does_not_fit(
+                        &value.clone().into(),
+                        false,
+                        &held,
+                        at,
+                        why.clone(),
+                    );
                 }
             }
             // **The type is written** (D4), and a literal the emitter would
@@ -6225,7 +5941,7 @@ impl<'a> Checker<'a> {
         if !matches!(
             op,
             BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Rem
-        ) || self.overflowed.contains(&(span.at() as i64))
+        ) || self.s.flow.overflowed.contains(&(span.at() as i64))
         {
             return;
         }
@@ -6267,8 +5983,8 @@ impl<'a> Checker<'a> {
         self.open_numbers_in(rhs, &mut open);
         if !open.is_empty() {
             for number in open {
-                if let Some(number) = self.open_numbers.get_mut(&(number as i64)) {
-                    number.derived.push((value.clone(), *span));
+                if let Some(number) = self.s.flow.open_numbers.get_mut(&(number as i64)) {
+                    number.derived.push((value.clone().into(), *span));
                 }
             }
             return;
@@ -6285,7 +6001,7 @@ impl<'a> Checker<'a> {
         let before = self.s.findings.len();
         self.a_number_that_does_not_fit(&value, false, &ty, span, None);
         if self.s.findings.len() > before {
-            self.overflowed.insert(span.at() as i64);
+            self.s.flow.overflowed.insert(span.at() as i64);
         }
     }
 
@@ -6349,7 +6065,7 @@ impl<'a> Checker<'a> {
     }
 
     fn stmt(&mut self, stmt: &Stmt, span: &Span) -> Ty {
-        self.literal_receivers.clear();
+        self.s.flow.literal_receivers.clear();
         match stmt {
             Stmt::Let {
                 names,
@@ -6359,27 +6075,27 @@ impl<'a> Checker<'a> {
             } => {
                 self.a_field_of_a_borrowed_subject(value, span, "bound");
                 self.a_mut_parameter_given_away(value, span, "bound");
-                let outer_read = std::mem::replace(&mut self.read_a_map, false);
-                self.reaching = ty
-                    .as_ref()
-                    .and_then(|t| match Ty::from_ast(self.parsed, t) {
-                        Ty::Named {
-                            name,
-                            args,
-                            view: false,
-                        } if args.is_empty() => {
-                            INTEGERS.iter().find(|n| **n == name).map(|n| n.to_string())
-                        }
-                        _ => None,
-                    });
+                let outer_read = std::mem::replace(&mut self.s.flow.read_a_map, false);
+                self.s.flow.reaching =
+                    ty.as_ref()
+                        .and_then(|t| match Ty::from_ast(self.parsed, t) {
+                            Ty::Named {
+                                name,
+                                args,
+                                view: false,
+                            } if args.is_empty() => {
+                                INTEGERS.iter().find(|n| **n == name).map(|n| n.to_string())
+                            }
+                            _ => None,
+                        });
                 if let (Some(t), Expr::Closure { .. } | Expr::ListLit { .. }) = (ty, value) {
-                    self.lambda_expected = Some(Ty::from_ast(self.parsed, t));
+                    self.s.flow.lambda_expected = Some(Ty::from_ast(self.parsed, t));
                 }
                 let found = self.expr(value, span);
-                self.lambda_expected = None;
+                self.s.flow.lambda_expected = None;
                 // **A name bound to a map read is a view of the map** (#297):
                 // the read itself, not one somewhere inside the value.
-                let of_a_map = std::mem::replace(&mut self.read_a_map, outer_read)
+                let of_a_map = std::mem::replace(&mut self.s.flow.read_a_map, outer_read)
                     && matches!(value, Expr::Index { .. } | Expr::MethodCall { .. });
                 // **A value with a cleanup, bound here, dies where this block
                 // ends** (ADR-297 D2).
@@ -6515,7 +6231,7 @@ impl<'a> Checker<'a> {
                     // list of views is the ordinary shape - and one read that
                     // way would refuse it.
                     None if *mutable
-                        && self.grown_text.contains(&name)
+                        && self.s.flow.grown_text.contains(&name)
                         && found.is_a_view()
                         && self
                             .text_literal(&Ty::named("String"), value, true)
@@ -6541,13 +6257,13 @@ impl<'a> Checker<'a> {
                 };
                 let open = match ty {
                     None if bound == Ty::Unknown && self.number_shaped(value) => {
-                        self.open_numbers.insert(
+                        self.s.flow.open_numbers.insert(
                             span.at() as i64,
                             OpenNumber {
                                 name: name.clone(),
                                 element: false,
                                 at: *span,
-                                joined: span.at(),
+                                joined: span.at() as i64,
                                 asks: Vec::new(),
                                 given: Vec::new(),
                                 derived: Vec::new(),
@@ -6570,13 +6286,13 @@ impl<'a> Checker<'a> {
                                 if name == "Vec" && matches!(args.as_slice(), [Ty::Unknown]))
                             && items.iter().all(|item| self.number_shaped(item)) =>
                     {
-                        self.open_numbers.insert(
+                        self.s.flow.open_numbers.insert(
                             span.at() as i64,
                             OpenNumber {
                                 name: name.clone(),
                                 element: true,
                                 at: *span,
-                                joined: span.at(),
+                                joined: span.at() as i64,
                                 asks: Vec::new(),
                                 given: Vec::new(),
                                 derived: Vec::new(),
@@ -6587,7 +6303,10 @@ impl<'a> Checker<'a> {
                             self.open_number_given(span.at(), item, span);
                         }
                         let elements = match mutable {
-                            false => items.iter().map(|item| self.constant_of(item)).collect(),
+                            false => items
+                                .iter()
+                                .map(|item| self.constant_of(item).map(CheckConstant::from))
+                                .collect(),
                             true => None,
                         };
                         Some((span.at(), elements))
@@ -6603,7 +6322,9 @@ impl<'a> Checker<'a> {
                 // that answers it stands *after* this line.
                 let pending = match (ty, value) {
                     (None, Expr::ListLit { items, .. }) if items.is_empty() => {
-                        self.empty_lists
+                        self.s
+                            .flow
+                            .empty_lists
                             .insert(span.at() as i64, (name.clone(), *span));
                         Some(span.at())
                     }
@@ -6626,9 +6347,9 @@ impl<'a> Checker<'a> {
                 }
                 let id = a_new_binding();
                 if let Some((at, elements)) = element {
-                    self.open_elements.insert(id, at);
+                    self.s.flow.open_elements.insert(id as i64, at as i64);
                     if let Some(elements) = elements {
-                        self.list_constants.insert(id as i64, elements);
+                        self.s.flow.list_constants.insert(id as i64, elements);
                     }
                 }
                 // **And typed as one**: a `V?` read out of a map is an option
@@ -6641,7 +6362,7 @@ impl<'a> Checker<'a> {
                     (_, bound) => bound,
                 };
                 if of_a_map {
-                    self.map_views.insert(id as i64);
+                    self.s.flow.map_views.insert(id as i64);
                 }
                 // **A read through the brackets that jumps where nothing is
                 // there binds what the container holds, not a copy of it**:
@@ -6672,10 +6393,10 @@ impl<'a> Checker<'a> {
                 if matches!(&bound, Ty::Named { name, .. } if name == "fs::Path")
                     && self.made_from_text(value)
                 {
-                    self.text_paths.insert(id as i64);
+                    self.s.flow.text_paths.insert(id as i64);
                 }
                 if bound.is_unknown() || self.s.a_drivers_row(&self.world, value) {
-                    self.unknown_bound.insert(id as i64);
+                    self.s.flow.unknown_bound.insert(id as i64);
                 }
                 self.bind_local(Local {
                     id: id as i64,
@@ -6807,7 +6528,7 @@ impl<'a> Checker<'a> {
                 );
                 // **A key written is handed to the map** (ADR-293 D27): the
                 // `Index` arm reads this for the one index it is walking.
-                self.writing_index = op.is_none() && matches!(target, Expr::Index { .. });
+                self.s.flow.writing_index = op.is_none() && matches!(target, Expr::Index { .. });
                 let into = match target {
                     Expr::Index { .. } => match self.expr(target, span) {
                         Ty::Nullable(inner) => *inner,
@@ -6816,7 +6537,7 @@ impl<'a> Checker<'a> {
                     _ => self.expr(target, span),
                 };
                 self.s.reading_only = outer;
-                self.writing_index = false;
+                self.s.flow.writing_index = false;
                 let found = self.expr(value, span);
                 if op.is_none() {
                     self.a_map_read_assigned(&into, value, span);
@@ -6991,9 +6712,9 @@ impl<'a> Checker<'a> {
                 // which is legal there and is a program nobody writes; refusing
                 // it is the direction that can be taken back later, and
                 // accepting it is not.
-                self.loops += 1;
+                self.s.flow.loops += 1;
                 self.block(body);
-                self.loops -= 1;
+                self.s.flow.loops -= 1;
                 self.s.scope.pop();
                 self.s.repeats.pop();
                 Ty::Tuple(Vec::new())
@@ -7088,13 +6809,13 @@ impl<'a> Checker<'a> {
                         && let Some(local) = frame.first_mut()
                         && local.ty.is_unknown()
                     {
-                        self.open_numbers.insert(
+                        self.s.flow.open_numbers.insert(
                             span.at() as i64,
                             OpenNumber {
                                 name: local.name.clone(),
                                 element: false,
                                 at: *span,
-                                joined: span.at(),
+                                joined: span.at() as i64,
                                 asks: Vec::new(),
                                 given: Vec::new(),
                                 derived: Vec::new(),
@@ -7117,7 +6838,11 @@ impl<'a> Checker<'a> {
                         Expr::Variable(name, _) => {
                             if let Some(at) =
                                 self.s.binding(self.parsed.text(*name)).and_then(|list| {
-                                    self.open_elements.get(&(list.id as usize)).copied()
+                                    self.s
+                                        .flow
+                                        .open_elements
+                                        .get(&list.id)
+                                        .map(|at| *at as usize)
                                 })
                             {
                                 local.open_number = Some(self.open_root(at) as i64);
@@ -7126,13 +6851,13 @@ impl<'a> Checker<'a> {
                         Expr::ListLit { items, .. }
                             if !items.is_empty() && items.iter().all(|i| self.number_shaped(i)) =>
                         {
-                            self.open_numbers.insert(
+                            self.s.flow.open_numbers.insert(
                                 span.at() as i64,
                                 OpenNumber {
                                     name: local.name.clone(),
                                     element: false,
                                     at: *span,
-                                    joined: span.at(),
+                                    joined: span.at() as i64,
                                     asks: Vec::new(),
                                     given: Vec::new(),
                                     derived: Vec::new(),
@@ -7157,9 +6882,9 @@ impl<'a> Checker<'a> {
                     body,
                 ));
                 self.s.scope.push(frame);
-                self.loops += 1;
+                self.s.flow.loops += 1;
                 self.block(body);
-                self.loops -= 1;
+                self.s.flow.loops -= 1;
                 self.s.scope.pop();
                 self.s.repeats.pop();
                 Ty::Tuple(Vec::new())
@@ -7183,7 +6908,7 @@ impl<'a> Checker<'a> {
                     Stmt::Break => "break",
                     _ => "continue",
                 };
-                if self.loops == 0 {
+                if self.s.flow.loops == 0 {
                     self.a_jump_with_nowhere_to_go(word, span);
                 }
                 Ty::Unknown
@@ -7200,10 +6925,10 @@ impl<'a> Checker<'a> {
     // --- expressions --------------------------------------------------------
 
     fn expr(&mut self, expr: &Expr, span: &Span) -> Ty {
-        self.reached = self.reaching.take();
-        let said_before = self.unknown_said;
+        self.s.flow.reached = self.s.flow.reaching.take();
+        let said_before = self.s.flow.unknown_said;
         let ty = self.value_of(expr, span);
-        let said_inside = self.unknown_said > said_before;
+        let said_inside = self.s.flow.unknown_said > said_before;
         // **A call on a number written as its receiver is as open as the
         // number** (#417): `7.wrapping_add(1)` is whatever integer its use
         // asks for, as `7 + 1` is, so its type is not claimed here and the
@@ -7231,7 +6956,7 @@ impl<'a> Checker<'a> {
                 };
                 match open {
                     true => {
-                        self.literal_receivers.push(key);
+                        self.s.flow.literal_receivers.push(key);
                         Ty::Unknown
                     }
                     false => ty,
@@ -7254,12 +6979,14 @@ impl<'a> Checker<'a> {
             }
             (_, ty) => ty,
         };
-        if self.read_a_map
+        if self.s.flow.read_a_map
             && (matches!(expr, Expr::Index { .. })
                 || matches!(expr, Expr::MethodCall { method, .. }
                     if self.parsed.text(*method) == "get"))
         {
-            self.map_read_sites
+            self.s
+                .flow
+                .map_read_sites
                 .insert((value_node(expr) as usize) as i64);
         }
         // **A value with a cleanup made here may die in this function**
@@ -7328,9 +7055,9 @@ impl<'a> Checker<'a> {
         ) || matches!(expr, Expr::Call { func, .. }
             if matches!(&**func, Expr::Variable(n, _) if self.parsed.text(*n) == "panic"))
             || matches!(expr, Expr::MethodCall { method, .. }
-                if self.parsed.text(*method) == "of" && self.unrolling.is_none())
+                if self.parsed.text(*method) == "of" && self.s.flow.unrolling.is_none())
             || matches!(expr, Expr::Field { name, .. }
-                if self.parsed.text(*name) == "default" && self.unrolling.is_none());
+                if self.parsed.text(*name) == "default" && self.s.flow.unrolling.is_none());
         // **A driver's parameters are each call site's own type** (ADR-296
         // D5): `db.prepare(query; id: 501)` is a row of what that call gave,
         // known where it is lowered, as `field.of(value)` is where it is
@@ -7344,9 +7071,9 @@ impl<'a> Checker<'a> {
             if matches!(&**base, Expr::Variable(n, _) if self
                 .s
                 .binding(self.parsed.text(*n))
-                .is_some_and(|l| self.unknown_bound.contains(&((l.id as usize) as i64)))));
+                .is_some_and(|l| self.s.flow.unknown_bound.contains(&((l.id as usize) as i64)))));
         if said || per_call || of_an_unknown {
-            self.unknown_said += 1;
+            self.s.flow.unknown_said += 1;
             return;
         }
         if open || structural {
@@ -7359,7 +7086,7 @@ impl<'a> Checker<'a> {
             .iter()
             .any(|f| f.span == *span && f.severity == Severity::Error)
         {
-            self.unknown_said += 1;
+            self.s.flow.unknown_said += 1;
             return;
         }
         let written = written(self.parsed, expr);
@@ -7367,7 +7094,7 @@ impl<'a> Checker<'a> {
             true => written.chars().take(57).collect::<String>() + "...",
             false => written,
         };
-        self.unknown_said += 1;
+        self.s.flow.unknown_said += 1;
         self.s.findings.push(Finding {
             severity: Severity::Error,
             span: *span,
@@ -7475,7 +7202,7 @@ impl<'a> Checker<'a> {
                     .binding(name)
                     .and_then(|local| local.empty_list.map(|n| n as usize))
                 {
-                    self.empty_lists.remove(&(at as i64));
+                    self.s.flow.empty_lists.remove(&(at as i64));
                 }
                 match self.s.lookup(name) {
                     Some(ty) => {
@@ -7715,8 +7442,8 @@ impl<'a> Checker<'a> {
                 if cond_ty.is_seen() {
                     self.s.stamped_condition = Some(span.at() as i64);
                 }
-                let choice = self.next_choice;
-                self.next_choice += 1;
+                let choice = self.s.flow.next_choice;
+                self.s.flow.next_choice += 1;
                 self.s.branch.push((choice, 0));
                 let from = self.s.taken_so_far();
                 let then = self.block(then_branch);
@@ -7783,9 +7510,9 @@ impl<'a> Checker<'a> {
                 // type arrives, that is what its parts are read from.
                 let typed = match (&on, &**value) {
                     (Ty::Unknown, Expr::Variable(name, _))
-                        if self.parsed.text(*name) == "error" && !self.caught_several =>
+                        if self.parsed.text(*name) == "error" && !self.s.flow.caught_several =>
                     {
-                        self.caught_one.clone().unwrap_or(Ty::Unknown)
+                        self.s.flow.caught_one.clone().unwrap_or(Ty::Unknown)
                     }
                     // Several: each arm's pattern names its member (D17, D18).
                     (on, _) if several_errors(on).is_some() => Ty::Unknown,
@@ -7861,8 +7588,8 @@ impl<'a> Checker<'a> {
                 let mut result: Option<Ty> = None;
                 let mut agree = true;
                 let mut answered: Vec<(Option<&Expr>, Ty)> = Vec::new();
-                let choice = self.next_choice;
-                self.next_choice += 1;
+                let choice = self.s.flow.next_choice;
+                self.s.flow.next_choice += 1;
                 // **An error, one of several, is taken apart by member**
                 // (ADR-280 D30, D17): an arm whose pattern names a member's
                 // variant reads its parts from that member.
@@ -8086,9 +7813,9 @@ impl<'a> Checker<'a> {
                 // question that can only gain by knowing.
                 let on = match (&on, &**value) {
                     (Ty::Unknown, Expr::Variable(name, _))
-                        if self.parsed.text(*name) == "error" && !self.caught_several =>
+                        if self.parsed.text(*name) == "error" && !self.s.flow.caught_several =>
                     {
-                        self.caught_one.clone().unwrap_or(Ty::Unknown)
+                        self.s.flow.caught_one.clone().unwrap_or(Ty::Unknown)
                     }
                     _ => on,
                 };
@@ -8137,7 +7864,8 @@ impl<'a> Checker<'a> {
                 // name is held for `call_on`, which has the argument's type.
                 // **And an empty map's first `insert`** (#543): its key and
                 // value types, the same way.
-                self.pushed_into = match (&**receiver, self.parsed.text(*method), args.len()) {
+                self.s.flow.pushed_into = match (&**receiver, self.parsed.text(*method), args.len())
+                {
                     (Expr::Variable(name, _), "push", 1)
                         if self
                             .s
@@ -8295,7 +8023,7 @@ impl<'a> Checker<'a> {
                     && matches!(&on, Ty::Named { name, .. }
                         if matches!(crate::contracts::ty::base(name), "HashMap" | "Map" | "BTreeMap"));
                 if reads_a_map {
-                    self.read_a_map = true;
+                    self.s.flow.read_a_map = true;
                 }
                 // **A receiver the method only reads is lent** (ADR-279 D5):
                 // `(name ?? "guest").len()` asks the answer and keeps nothing
@@ -8451,8 +8179,8 @@ impl<'a> Checker<'a> {
                             .a_reflected_field_has_two_members(&format!("{named}(…)"), span);
                         return Ty::Unknown;
                     }
-                    return match &self.unrolling {
-                        Some((_, field)) => field.ty.clone(),
+                    return match &self.s.flow.unrolling {
+                        Some(unrolling) => unrolling.field.ty.clone(),
                         None => Ty::Unknown,
                     };
                 }
@@ -8514,7 +8242,7 @@ impl<'a> Checker<'a> {
                 // The same carrying, for D2's once-only rule, and `None` where
                 // the receiver is a temporary.
                 let outer_named = std::mem::replace(
-                    &mut self.receiver_name,
+                    &mut self.s.flow.receiver_name,
                     match receiver.as_ref() {
                         Expr::Variable(name, _) => Some(self.parsed.text(*name).to_string()),
                         _ => None,
@@ -8549,7 +8277,7 @@ impl<'a> Checker<'a> {
                     self.s.an_update_block_returns_nothing(body, span);
                     self.an_update_block_reads_what_it_writes(params, body, span);
                 }
-                let outer_door = std::mem::replace(&mut self.at_a_write_door, at_a_door);
+                let outer_door = std::mem::replace(&mut self.s.flow.at_a_write_door, at_a_door);
                 // **And `access` holds one open too** (ADR-281 D10): `get` and
                 // `set` do not, because no code of the program's runs while the
                 // lock is open in either.
@@ -8610,8 +8338,8 @@ impl<'a> Checker<'a> {
                     && self.world.own.candidates("to_string").is_empty()
                 {
                     self.s.facts.text_as_is.insert(value_node(receiver));
-                    self.receiver_name = outer_named;
-                    self.at_a_write_door = outer_door;
+                    self.s.flow.receiver_name = outer_named;
+                    self.s.flow.at_a_write_door = outer_door;
                     self.s.inside_a_door = outer_inside;
                     return on;
                 }
@@ -8621,8 +8349,8 @@ impl<'a> Checker<'a> {
                 if let Some(result) =
                     self.a_called_field(&on, receiver, *method, args, outer_inside, span)
                 {
-                    self.receiver_name = outer_named;
-                    self.at_a_write_door = outer_door;
+                    self.s.flow.receiver_name = outer_named;
+                    self.s.flow.at_a_write_door = outer_door;
                     self.s.inside_a_door = outer_inside;
                     return result;
                 }
@@ -8644,8 +8372,8 @@ impl<'a> Checker<'a> {
                     (&a_run, self.parsed.text(*method), args.is_empty())
                 {
                     self.s.facts.owned_copies.insert(value_node(receiver));
-                    self.receiver_name = outer_named;
-                    self.at_a_write_door = outer_door;
+                    self.s.flow.receiver_name = outer_named;
+                    self.s.flow.at_a_write_door = outer_door;
                     self.s.inside_a_door = outer_inside;
                     return Ty::Named {
                         name: "Vec".to_string(),
@@ -8653,13 +8381,13 @@ impl<'a> Checker<'a> {
                         view: false,
                     };
                 }
-                self.last_resolved = None;
-                self.receiver_from_text = self.made_from_text(receiver);
+                self.s.flow.last_resolved = None;
+                self.s.flow.receiver_from_text = self.made_from_text(receiver);
                 let value = self.call_on(on, receiver, *method, args, &written, span);
-                self.receiver_from_text = false;
+                self.s.flow.receiver_from_text = false;
                 // **A copy of `std`'s is a copy whatever the receiver is**
                 // (ADR-293 D24): below, `.clone()` of a view is the view.
-                if let Some(key) = self.last_resolved.take() {
+                if let Some(key) = self.s.flow.last_resolved.take() {
                     let library = key.ends_with("::clone")
                         && self.world.library.functions.contains_key(&key)
                         && !self.world.own.functions.contains_key(&key);
@@ -8698,8 +8426,8 @@ impl<'a> Checker<'a> {
                         self.s.facts.counted.insert(value_node(receiver));
                     }
                 }
-                self.receiver_name = outer_named;
-                self.at_a_write_door = outer_door;
+                self.s.flow.receiver_name = outer_named;
+                self.s.flow.at_a_write_door = outer_door;
                 self.s.inside_a_door = outer_inside;
                 self.s.set_receiver = outer_receiver;
                 // **A walk over views of values that copy yields the values**
@@ -8894,8 +8622,8 @@ impl<'a> Checker<'a> {
                     // **`field.default`, its default as a `T?`** (ADR-331
                     // D5): `null` where it has none.
                     if field == "default" {
-                        return match &self.unrolling {
-                            Some((_, field)) => Ty::Nullable(Box::new(field.ty.clone())),
+                        return match &self.s.flow.unrolling {
+                            Some(unrolling) => Ty::Nullable(Box::new(unrolling.field.ty.clone())),
                             None => Ty::Unknown,
                         };
                     }
@@ -8986,7 +8714,7 @@ impl<'a> Checker<'a> {
                         self.a_mut_parameter_given_away(value, span, "put into a field");
                     }
                     if let Some(Expr::Closure { .. }) = &init.value {
-                        self.lambda_expected = declared
+                        self.s.flow.lambda_expected = declared
                             .as_ref()
                             .and_then(|d| d.iter().find(|f| f.name == field))
                             .map(|f| f.ty.clone());
@@ -8995,7 +8723,7 @@ impl<'a> Checker<'a> {
                         Some(value) => self.expr(value, span),
                         None => self.s.lookup(&field).unwrap_or(Ty::Unknown),
                     };
-                    self.lambda_expected = None;
+                    self.s.flow.lambda_expected = None;
                     if code_field {
                         let mut stored =
                             self.s.stored_frames.pop().unwrap_or_else(StoredCode::empty);
@@ -9097,7 +8825,9 @@ impl<'a> Checker<'a> {
                             let owns_it = matches!(&found, Ty::Named { name, view: false, .. }
                                 if name == "Vec" || name == "List")
                                 || (self.s.inside_an_action.is_some() && !found.is_a_view());
-                            if slice_element(&want).is_some() && owns_it && !self.inside_a_comptime
+                            if slice_element(&want).is_some()
+                                && owns_it
+                                && !self.s.flow.inside_a_comptime
                             {
                                 self.s
                                     .a_run_this_body_owns(&name, &field, &found.text(), span);
@@ -9114,7 +8844,7 @@ impl<'a> Checker<'a> {
                                 // (ADR-282 D12): asked as it would be without
                                 // the `?`.
                                 if views_into_nullable_text(&found, &want) {
-                                    self.field_either = self.either_field(&owner, &field);
+                                    self.s.flow.field_either = self.either_field(&owner, &field);
                                     let (o, f) = (owner.clone(), field.clone());
                                     self.expect_kept(
                                         &found,
@@ -9130,7 +8860,7 @@ impl<'a> Checker<'a> {
                                 }
                                 continue;
                             }
-                            self.field_either = self.either_field(&owner, &field);
+                            self.s.flow.field_either = self.either_field(&owner, &field);
                             self.expect_kept(
                                 &found,
                                 &want,
@@ -9294,7 +9024,7 @@ impl<'a> Checker<'a> {
             } => {
                 // **Its parameters are what the place it stands in says**
                 // (#497), as a callee's signature says for an argument.
-                let declared = self.lambda_expected.take();
+                let declared = self.s.flow.lambda_expected.take();
                 let given = match &declared {
                     Some(Ty::Fn { params: given, .. }) if given.len() == params.len() => {
                         given.clone()
@@ -9308,7 +9038,7 @@ impl<'a> Checker<'a> {
                         let ty = given.get(at).cloned().unwrap_or(Ty::Unknown);
                         let local = self.lambda_parameter(*p, mutable, ty, span);
                         if local.ty.is_unknown() {
-                            self.unknown_bound.insert(local.id as usize as i64);
+                            self.s.flow.unknown_bound.insert(local.id as usize as i64);
                         }
                         local
                     })
@@ -9339,7 +9069,7 @@ impl<'a> Checker<'a> {
 
             whole @ Expr::Unary { op, expr, .. } => {
                 if matches!(op, UnaryOp::Neg) {
-                    self.reaching = self.reached.take();
+                    self.s.flow.reaching = self.s.flow.reached.take();
                 }
                 // `&s` looks at a sequence without taking it (ADR-293 D19). Only
                 // a name directly under the `&`: `&f(s)` still hands `s` over.
@@ -9396,10 +9126,10 @@ impl<'a> Checker<'a> {
                     op,
                     BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Rem
                 );
-                let reach = self.reached.take().filter(|_| arithmetic);
-                self.reaching = reach.clone();
+                let reach = self.s.flow.reached.take().filter(|_| arithmetic);
+                self.s.flow.reaching = reach.clone();
                 let left = self.expr(lhs, span);
-                self.reaching = reach.clone();
+                self.s.flow.reaching = reach.clone();
                 let right = self.expr(rhs, span);
                 // **A `'…'` beside a byte is a byte** (ADR-320, Part I 2.6):
                 // `b[0] == 'a'` compares two `u8`s, as `x == 7` beside an
@@ -9690,7 +9420,7 @@ impl<'a> Checker<'a> {
                 Ty::Unknown
             }
             Expr::Break(_) | Expr::Continue(_) => {
-                if self.loops == 0 {
+                if self.s.flow.loops == 0 {
                     let word = match expr {
                         Expr::Break(_) => "break",
                         _ => "continue",
@@ -9702,9 +9432,9 @@ impl<'a> Checker<'a> {
             Expr::Coalesce {
                 value, fallback, ..
             } => {
-                let outer = std::mem::replace(&mut self.read_a_map, false);
+                let outer = std::mem::replace(&mut self.s.flow.read_a_map, false);
                 let left = self.expr(value, span);
-                let read_now = std::mem::replace(&mut self.read_a_map, outer);
+                let read_now = std::mem::replace(&mut self.s.flow.read_a_map, outer);
                 // **The left side alone** (D13): the fallback is still checked,
                 // and what it would take is not taken, because it never runs.
                 if self.nothing_to_fall_back_from(value, &left, expr, span) {
@@ -9722,7 +9452,10 @@ impl<'a> Checker<'a> {
                         self.s
                             .binding(self.parsed.text(*name))
                             .is_some_and(|local| {
-                                self.map_views.contains(&((local.id as usize) as i64))
+                                self.s
+                                    .flow
+                                    .map_views
+                                    .contains(&((local.id as usize) as i64))
                             })
                     }
                     _ => false,
@@ -9785,7 +9518,7 @@ impl<'a> Checker<'a> {
                         .s
                         .a_coalesce_that_may_lend(&self.world, &left, fallback, &other)
                     {
-                        Some(opened) => self.pending_coalesces.push(PendingCoalesce {
+                        Some(opened) => self.s.flow.pending_coalesces.push(PendingCoalesce {
                             key: value_node(expr),
                             left: value_node(value),
                             ty: left.clone(),
@@ -9966,7 +9699,7 @@ impl<'a> Checker<'a> {
             // text is a slice in some languages and a byte in others, and
             // Nikaia has not said. `?` is the absence of a claim (ADR-024 D1).
             Expr::Index { base, index, .. } => {
-                let writing = std::mem::replace(&mut self.writing_index, false);
+                let writing = std::mem::replace(&mut self.s.flow.writing_index, false);
                 let on = self.expr(base, span);
                 let key = self.expr(index, span);
                 // **An index of a mapping is a page fault**
@@ -10067,7 +9800,7 @@ impl<'a> Checker<'a> {
                     // that knows better says so.
                     ("HashMap" | "Map" | "BTreeMap", [keys, value]) => {
                         let (keys, value) = (keys.clone(), value.clone());
-                        self.read_a_map = !writing;
+                        self.s.flow.read_a_map = !writing;
                         self.a_map_key(&keys, &key, index, writing, span);
                         // **A map of `T?` reads one `T?`**
                         // ([ADR-293](../../docs/specification/adr/adr-293.md)
@@ -10124,10 +9857,10 @@ impl<'a> Checker<'a> {
                 // `throws` on the function around it (`NK2605`). The handler
                 // itself is ordinary code again - a failure raised inside one
                 // leaves the function like any other.
-                let outer = std::mem::replace(&mut self.caught, true);
+                let outer = std::mem::replace(&mut self.s.flow.caught, true);
                 // **And the lambda's own record of it** (ADR-277 D7): a
                 // `catch` in a lambda's body keeps a failure from leaving the
-                // lambda, which `self.caught` cannot say because it also holds
+                // lambda, which `self.s.flow.caught` cannot say because it also holds
                 // for a `catch` around the call the lambda is handed to. Put
                 // back at the same moment, so the handler's own calls count.
                 let lambda_outer = self
@@ -10144,13 +9877,13 @@ impl<'a> Checker<'a> {
                 // fails*, because what a handler's own failure does is
                 // [ADR-292](../../../docs/specification/adr/adr-292.md)'s
                 // question and this refusal does not need it answered.
-                let enclosing = self.guarded.replace(Guarded::nothing());
+                let enclosing = self.s.flow.guarded.replace(Guarded::nothing());
                 let answers = self.expr(expr, span);
-                let guarded = std::mem::replace(&mut self.guarded, enclosing);
-                if self.guarded.is_some() {
+                let guarded = std::mem::replace(&mut self.s.flow.guarded, enclosing);
+                if self.s.flow.guarded.is_some() {
                     self.guard_has_no_answer();
                 }
-                self.caught = outer;
+                self.s.flow.caught = outer;
                 if let (Some(handed), Some(was)) = (&mut self.s.handed_over, lambda_outer) {
                     handed.caught = was;
                 }
@@ -10184,8 +9917,8 @@ impl<'a> Checker<'a> {
                     .push(vec![local_free("error".to_string(), caught)]);
                 let arriving = self.several_arrive(expr);
                 let one = self.the_one_error(expr);
-                let several = std::mem::replace(&mut self.caught_several, arriving);
-                let single = std::mem::replace(&mut self.caught_one, one);
+                let several = std::mem::replace(&mut self.s.flow.caught_several, arriving);
+                let single = std::mem::replace(&mut self.s.flow.caught_one, one);
                 let from = self.s.taken_so_far();
                 let handled = self.block(handler);
                 // **A handler's value stands where the guarded one would**, so
@@ -10196,8 +9929,8 @@ impl<'a> Checker<'a> {
                     tail_of(handler).and_then(|tail| self.text_literal(&answers, tail, true));
                 self.s
                     .a_branch_that_leaves(from, self.s.block_exits(&self.world, handler), span);
-                self.caught_several = several;
-                self.caught_one = single;
+                self.s.flow.caught_several = several;
+                self.s.flow.caught_one = single;
                 self.s.scope.pop();
                 // **And so the `catch` is the guarded value's type**
                 // (0.0.230, issue #154 before it): where the handler leaves,
@@ -10705,7 +10438,12 @@ impl<'a> Checker<'a> {
                 self.s
                     .binding(self.parsed.text(*name))
                     .is_some_and(|local| {
-                        text(&local.ty) || self.text_paths.contains(&((local.id as usize) as i64))
+                        text(&local.ty)
+                            || self
+                                .s
+                                .flow
+                                .text_paths
+                                .contains(&((local.id as usize) as i64))
                     })
             }
             Expr::LitInterpolated { parts, .. } => crate::emit::interpolated_holes(parts)
@@ -10716,7 +10454,11 @@ impl<'a> Checker<'a> {
                             .binding(self.parsed.text(*name))
                             .is_some_and(|local| {
                                 !matches!(&local.ty, Ty::Named { name, .. } if name == "fs::Path")
-                                    || self.text_paths.contains(&((local.id as usize) as i64))
+                                    || self
+                                        .s
+                                        .flow
+                                        .text_paths
+                                        .contains(&((local.id as usize) as i64))
                             })
                     }
                     Expr::LitInt { .. } | Expr::LitStr { .. } => true,
@@ -10891,7 +10633,7 @@ impl<'a> Checker<'a> {
             self.an_update_block_reads_what_it_writes(params, body, span);
         }
         let outer_door = std::mem::replace(
-            &mut self.at_a_write_door,
+            &mut self.s.flow.at_a_write_door,
             matches!(door, MultiLock::Writing),
         );
         // Both kinds hold their locks open across the block, so both are one.
@@ -10915,7 +10657,7 @@ impl<'a> Checker<'a> {
             },
             span,
         );
-        self.at_a_write_door = outer_door;
+        self.s.flow.at_a_write_door = outer_door;
         self.s.inside_a_door = outer_inside;
         match door {
             // What a lambda hands back is not written down (ADR-288 D13) — but
@@ -11004,7 +10746,7 @@ impl<'a> Checker<'a> {
             // The evaluator reads it where it belongs, so anything that reaches
             // *here* is one written somewhere it does not — and the file a
             // program reads while it **runs** has a name of its own.
-            if self.parsed.text(*name) == ASSET && !self.inside_a_comptime {
+            if self.parsed.text(*name) == ASSET && !self.s.flow.inside_a_comptime {
                 self.s.an_asset_outside_a_comptime(span);
                 return Ty::Unknown;
             }
@@ -11241,7 +10983,7 @@ impl<'a> Checker<'a> {
         // The same walk the method path uses, so the same questions are asked
         // in both - or `takes(self.name)` slips past `NK1131` while
         // `x.takes(self.name)` does not.
-        let outer_paused = std::mem::take(&mut self.paused_args);
+        let outer_paused = std::mem::take(&mut self.s.flow.paused_args);
         let found = self.arguments_given(
             args,
             &expected,
@@ -11251,7 +10993,7 @@ impl<'a> Checker<'a> {
             resolved.as_ref().map(|(_, contract)| contract),
             span,
         );
-        let paused_here = std::mem::replace(&mut self.paused_args, outer_paused);
+        let paused_here = std::mem::replace(&mut self.s.flow.paused_args, outer_paused);
         // **A scope with a task that pauses polls it, and pauses itself**
         // (ADR-328 D10): its lambda paused because a task in it did.
         if resolved
@@ -11422,9 +11164,9 @@ impl<'a> Checker<'a> {
                 Some(declared) => declared.clone(),
                 None => Ty::named(ty),
             });
-        self.option_values = config.iter().map(|a| value_node(&a.value)).collect();
+        self.s.flow.option_values = config.iter().map(|a| value_node(&a.value)).collect();
         let result = self.arguments(&key, &name, &contract, args, &found, &passed, span);
-        self.option_values.clear();
+        self.s.flow.option_values.clear();
         // **What the arguments tell the signature**
         // ([ADR-295](../../docs/specification/adr/adr-295.md) D2). A free
         // function has no receiver, so ADR-288's binding had nothing to work
@@ -11471,7 +11213,10 @@ impl<'a> Checker<'a> {
             .filter(|&at| at < args.len())
             .collect();
         if !at.is_empty() && at.iter().all(|&at| self.number_shaped(&args[at])) {
-            self.open_calls.insert(value_node(&args[0]), at);
+            self.s.flow.open_calls.insert(
+                value_node(&args[0]),
+                at.into_iter().map(|at| at as i64).collect(),
+            );
         }
     }
 
@@ -11547,7 +11292,7 @@ impl<'a> Checker<'a> {
                     // (#455), as a `ref` parameter does (ADR-094 D1): the
                     // owned value fits the view, and the `&` is the
                     // compiler's to write.
-                    if let Some(value) = self.option_values.get(at).copied()
+                    if let Some(value) = self.s.flow.option_values.get(at).copied()
                         && option.ty.is_a_view()
                         && !found.is_a_view()
                         && found.fits(&option.ty.owned())
@@ -11608,11 +11353,11 @@ impl<'a> Checker<'a> {
                         value_node(receiver),
                         nikaia_std::tools::integers::integer(value, negative),
                     );
-                    if let Some(at) = self.literal_receivers.iter().position(|k| *k == key) {
-                        let pending = std::mem::take(&mut self.literal_receivers);
-                        self.literal_receivers = vec![pending[at]];
+                    if let Some(at) = self.s.flow.literal_receivers.iter().position(|k| *k == key) {
+                        let pending = std::mem::take(&mut self.s.flow.literal_receivers);
+                        self.s.flow.literal_receivers = vec![pending[at]];
                         self.literal_receivers_take(want);
-                        self.literal_receivers = pending
+                        self.s.flow.literal_receivers = pending
                             .into_iter()
                             .enumerate()
                             .filter(|(i, _)| *i != at)
@@ -12030,8 +11775,8 @@ impl<'a> Checker<'a> {
         // The position reads as text of its own, so a view is what needs
         // letting through.
         let either = match what {
-            "returns" => self.expected_either,
-            "field" => std::mem::take(&mut self.field_either),
+            "returns" => self.s.flow.expected_either,
+            "field" => std::mem::take(&mut self.s.flow.field_either),
             _ => false,
         };
         if either && *found == Ty::view("str") && *want == Ty::named("String") {
@@ -12194,7 +11939,7 @@ impl<'a> Checker<'a> {
         let Some(ty) = integer_named(want) else {
             return;
         };
-        for key in std::mem::take(&mut self.literal_receivers) {
+        for key in std::mem::take(&mut self.s.flow.literal_receivers) {
             let number = Constant::of(key.1);
             if number.fits(&ty) {
                 self.s.facts.unsigned_literals.insert(key.0, ty.clone());
@@ -12228,6 +11973,8 @@ impl<'a> Checker<'a> {
             return;
         }
         let waiting = self
+            .s
+            .flow
             .unsigned_slots
             .get(&(span.at() as i64))
             .and_then(|slots| {
@@ -12282,7 +12029,7 @@ impl<'a> Checker<'a> {
         // **Unless the walk may still show it is not negative** (D32): the
         // refusal waits for its answer.
         if let Some(at) = waiting
-            && let Some(slots) = self.unsigned_slots.get_mut(&(span.at() as i64))
+            && let Some(slots) = self.s.flow.unsigned_slots.get_mut(&(span.at() as i64))
         {
             slots[at].refusal = Some(finding);
             return;
@@ -12295,7 +12042,7 @@ impl<'a> Checker<'a> {
     /// taken as it is; one that is not is the slot's refusal, with the two
     /// ways to say it.
     fn unsigned_slots_proved(&mut self, parsed: &Parsed) {
-        let slots: Vec<UnsignedSlot> = std::mem::take(&mut self.unsigned_slots)
+        let slots: Vec<UnsignedSlot> = std::mem::take(&mut self.s.flow.unsigned_slots)
             .into_values()
             .flatten()
             .collect();
@@ -12380,11 +12127,11 @@ impl<'a> Checker<'a> {
         }
         // **Before the early return**, because the guard's question is asked of
         // exactly the calls this one declines to report: inside a `catch`,
-        // `self.caught` is what sends this function home, and a call that
+        // `self.s.flow.caught` is what sends this function home, and a call that
         // carries a `throws` is precisely what gives that `catch` something to
         // do ([ADR-308](../../../docs/specification/adr/adr-308.md)).
         if !contract.fails_with.is_empty() {
-            if let Some(guarded) = &mut self.guarded {
+            if let Some(guarded) = &mut self.s.flow.guarded {
                 guarded.fallible = true;
                 guarded.thrown.extend(contract.fails_with.iter().cloned());
             }
@@ -12400,7 +12147,7 @@ impl<'a> Checker<'a> {
             // inside the body handles the failure before the lambda returns,
             // so the lambda cannot fail and there is nothing for `NK2606` to
             // say — its own help names this `catch` as the way out. The
-            // question is `handed.caught`, not `self.caught`, because only the
+            // question is `handed.caught`, not `self.s.flow.caught`, because only the
             // first stops at the lambda's edge.
             if let Some(handed) = self.s.handed_over.as_mut().filter(|h| !h.caught) {
                 handed.fails = true;
@@ -12418,7 +12165,7 @@ impl<'a> Checker<'a> {
                 }
             }
         }
-        if contract.fails_with.is_empty() || self.throwing || self.caught {
+        if contract.fails_with.is_empty() || self.s.flow.throwing || self.s.flow.caught {
             return;
         }
         // A grammar action is not code inside a function, and its failure does
@@ -12489,7 +12236,7 @@ impl<'a> Checker<'a> {
     /// The caret is on the **call** rather than on the `catch`, because that is
     /// what the sentence is about: *this call brings something new in here*.
     fn newly_reaches_a_handler(&mut self, key: &str, span: &Span) {
-        if self.guarded.is_none() {
+        if self.s.flow.guarded.is_none() {
             return;
         }
         let Some(gained) = self.newly.throws.get(key) else {
@@ -12671,9 +12418,9 @@ impl<'a> Checker<'a> {
     fn method_propagates(&mut self, method: Ident, fails: bool, span: &Span) {
         let key = (span.at() as i64, self.parsed.text(method).to_string());
         if fails {
-            self.fallible_methods.insert(key);
+            self.s.flow.fallible_methods.insert(key);
         } else {
-            self.opaque_methods.insert(key);
+            self.s.flow.opaque_methods.insert(key);
         }
     }
 
@@ -12852,8 +12599,10 @@ impl<'a> Checker<'a> {
             return self.hands_over(receiver, ty, to, span);
         }
         let Some(&at) = self
+            .s
+            .flow
             .read_index
-            .get(&((value_node(value) as usize), span.at()))
+            .get(&(value_node(value), span.at() as i64))
         else {
             return;
         };
@@ -12861,8 +12610,8 @@ impl<'a> Checker<'a> {
             return;
         }
         let (path, seq) = (
-            self.s.reads_on_paths[at].path.clone(),
-            self.s.reads_on_paths[at].seq,
+            self.s.reads_on_paths[at as usize].path.clone(),
+            self.s.reads_on_paths[at as usize].seq,
         );
         self.s.hands_over_path(&self.world, path, ty, seq, to, span);
     }
@@ -12874,10 +12623,16 @@ impl<'a> Checker<'a> {
             return false;
         }
         let key = value_node(given);
-        let Some(at) = self.pending_coalesces.iter().position(|p| p.key == key) else {
+        let Some(at) = self
+            .s
+            .flow
+            .pending_coalesces
+            .iter()
+            .position(|p| p.key == key)
+        else {
             return false;
         };
-        let pending = self.pending_coalesces.remove(at);
+        let pending = self.s.flow.pending_coalesces.remove(at);
         self.s
             .facts
             .lent_coalesces
@@ -12890,6 +12645,8 @@ impl<'a> Checker<'a> {
     fn a_pending_coalesce_of_text_is_lent(&mut self, given: &Expr) -> bool {
         let key = value_node(given);
         let of_text = self
+            .s
+            .flow
             .pending_coalesces
             .iter()
             .any(|p| p.key == key && p.opened == ".as_deref()");
@@ -12899,16 +12656,18 @@ impl<'a> Checker<'a> {
     /// Every `??` of the statement just walked that no reading position lent
     /// is taken (ADR-279 D5).
     fn coalesces_not_lent_are_taken(&mut self) {
-        for pending in std::mem::take(&mut self.pending_coalesces) {
+        for pending in std::mem::take(&mut self.s.flow.pending_coalesces) {
             let Some(&at) = self
+                .s
+                .flow
                 .read_index
-                .get(&(pending.left as usize, pending.span.at()))
+                .get(&(pending.left, pending.span.at() as i64))
             else {
                 continue;
             };
             let (path, seq) = (
-                self.s.reads_on_paths[at].path.clone(),
-                self.s.reads_on_paths[at].seq,
+                self.s.reads_on_paths[at as usize].path.clone(),
+                self.s.reads_on_paths[at as usize].seq,
             );
             self.s.hands_over_path(
                 &self.world,
@@ -12923,12 +12682,15 @@ impl<'a> Checker<'a> {
 
     /// A read of a name, recorded once per expression and statement.
     fn a_read(&mut self, expr: &Expr, path: String, span: &Span) {
-        let key = (value_node(expr) as usize, span.at());
-        if self.read_index.contains_key(&key) {
+        let key = (value_node(expr), span.at() as i64);
+        if self.s.flow.read_index.contains_key(&key) {
             return;
         }
         self.s.read_seq += 1;
-        self.read_index.insert(key, self.s.reads_on_paths.len());
+        self.s
+            .flow
+            .read_index
+            .insert(key, self.s.reads_on_paths.len() as i64);
         let binding = self.s.binding(&path).map(|local| local.id);
         self.s.reads_on_paths.push(Read {
             path,
@@ -12945,22 +12707,28 @@ impl<'a> Checker<'a> {
         // Once per expression, as the read it extends: an argument walked a
         // second time would otherwise read `self.path.path`.
         if self
+            .s
+            .flow
             .read_index
-            .contains_key(&((value_node(expr) as usize), span.at()))
+            .contains_key(&(value_node(expr), span.at() as i64))
         {
             return;
         }
         let Some(&at) = self
+            .s
+            .flow
             .read_index
-            .get(&((value_node(base) as usize), span.at()))
+            .get(&(value_node(base), span.at() as i64))
         else {
             return;
         };
-        let read = &mut self.s.reads_on_paths[at];
+        let read = &mut self.s.reads_on_paths[at as usize];
         read.path.push('.');
         read.path.push_str(field);
-        self.read_index
-            .insert(((value_node(expr) as usize), span.at()), at);
+        self.s
+            .flow
+            .read_index
+            .insert((value_node(expr), span.at() as i64), at);
     }
 
     /// **The parts of a `mut` parameter an arm took out** (`NK2108`,
@@ -13134,9 +12902,9 @@ impl<'a> Checker<'a> {
     fn method_pauses(&mut self, method: Ident, pauses: bool, span: &Span) {
         let key = (span.at() as i64, self.parsed.text(method).to_string());
         if pauses {
-            self.pausing_methods.insert(key);
+            self.s.flow.pausing_methods.insert(key);
         } else {
-            self.settled_methods.insert(key);
+            self.s.flow.settled_methods.insert(key);
         }
     }
 
@@ -13171,7 +12939,7 @@ impl<'a> Checker<'a> {
     /// used to compile and count the failures as lines, because the entry said
     /// `-> i64` and nothing asked what a step of the receiver does.
     fn a_walk_of_a_failing_sequence(&mut self, method: Ident, span: &Span) {
-        if self.throwing || self.caught || self.s.inside_an_action.is_some() {
+        if self.s.flow.throwing || self.s.flow.caught || self.s.inside_an_action.is_some() {
             return;
         }
         let Some(function) = self.s.current.clone() else {
@@ -13269,7 +13037,7 @@ impl<'a> Checker<'a> {
 
         self.s.facts.fallible_loops.insert(span.at() as i64);
 
-        if self.throwing {
+        if self.s.flow.throwing {
             return;
         }
         self.s.findings.push(Finding {
@@ -13491,6 +13259,8 @@ impl<'a> Checker<'a> {
         {
             Some(crate::contracts::sync::Reached::Method) => match expr {
                 Expr::MethodCall { method, .. } | Expr::SafeMethod { method, .. } => self
+                    .s
+                    .flow
                     .pausing_methods
                     .contains(&((at as i64), self.parsed.text(*method).to_string())),
                 _ => false,
@@ -14189,7 +13959,7 @@ impl<'a> Checker<'a> {
         arms: &[ast::MatchArm],
         span: &Span,
     ) {
-        if !self.caught_several {
+        if !self.s.flow.caught_several {
             return;
         }
         if !matches!(value, Expr::Variable(name, _) if self.parsed.text(*name) == "error") {
@@ -14375,7 +14145,7 @@ impl<'a> Checker<'a> {
         bound: &str,
         span: &Span,
     ) -> Option<(Option<build_time::Value>, bool)> {
-        if !self.computes {
+        if !self.s.flow.computes {
             return Some((None, true));
         }
         let workshop = self.reads.workshop();
@@ -14537,10 +14307,10 @@ impl<'a> Checker<'a> {
             workshop,
             {
                 let mut bounds = workshop.bounds();
-                if let Some(steps) = self.raised.0 {
+                if let Some(steps) = self.s.flow.raised.0 {
                     bounds.steps = steps;
                 }
-                if let Some(bytes) = self.raised.1 {
+                if let Some(bytes) = self.s.flow.raised.1 {
                     bounds.bytes = bytes;
                 }
                 bounds
@@ -14748,6 +14518,8 @@ impl<'a> Checker<'a> {
         // (#497), as one bound by an annotated `let` does:
         // `let fs: Vec[fn(i64) -> i64] = [fn(x) { x * 2 }]`.
         let element = self
+            .s
+            .flow
             .lambda_expected
             .take()
             .and_then(|declared| match declared {
@@ -14758,10 +14530,11 @@ impl<'a> Checker<'a> {
             .iter()
             .map(|item| {
                 if matches!(item, Expr::Closure { .. }) {
-                    self.lambda_expected = element.clone().filter(|ty| matches!(ty, Ty::Fn { .. }));
+                    self.s.flow.lambda_expected =
+                        element.clone().filter(|ty| matches!(ty, Ty::Fn { .. }));
                 }
                 let found = self.expr(item, span);
-                self.lambda_expected = None;
+                self.s.flow.lambda_expected = None;
                 found
             })
             .collect();
@@ -15301,7 +15074,9 @@ impl<'a> Checker<'a> {
             entry.code_fails |= throws;
         }
         if throws {
-            self.fallible_methods
+            self.s
+                .flow
+                .fallible_methods
                 .insert(((span.at() as i64), self.parsed.text(method).to_string()));
         }
         Some((*result).unwrap_or_else(|| Ty::named("()")))
@@ -15858,7 +15633,7 @@ impl<'a> Checker<'a> {
     /// walk returns before a second file is looked at, which is every unit of
     /// every program in the corpus.
     fn instantiations_beside(&mut self) {
-        if self.harvesting || self.beside.is_empty() {
+        if self.s.flow.harvesting || self.beside.is_empty() {
             return;
         }
         let mine: BTreeSet<String> = self
@@ -15936,9 +15711,12 @@ impl<'a> Checker<'a> {
             let item = item.clone();
             for field in fields {
                 let before = self.s.findings.len();
-                let outer = self.unrolling.replace((on.clone(), field.clone()));
+                let outer = self.s.flow.unrolling.replace(CheckUnrolling {
+                    on: on.clone(),
+                    field: field.clone(),
+                });
                 self.function(&item.node, None);
-                self.unrolling = outer;
+                self.s.flow.unrolling = outer;
                 // **What the generic walk already said is not said again.**
                 // The same body was walked once with nothing known, and a
                 // message from that walk is about the **function** — a
@@ -16127,7 +15905,7 @@ impl<'a> Checker<'a> {
 
     fn bind_local(&mut self, local: Local) {
         if local.ty.is_unknown() {
-            self.unknown_bound.insert(local.id as usize as i64);
+            self.s.flow.unknown_bound.insert(local.id as usize as i64);
         }
         if let Some(frame) = self.s.scope.last_mut() {
             frame.push(local);
@@ -16255,7 +16033,10 @@ impl<'a> Checker<'a> {
                     // kept for the call to lower to the entry's pausing
                     // counterpart, which only the call knows.
                     if paused && !declared_here {
-                        self.paused_args.push((value_node(arg) as usize) as i64);
+                        self.s
+                            .flow
+                            .paused_args
+                            .push((value_node(arg) as usize) as i64);
                     }
                     // **The lambda as the type it was handed to, with what its
                     // body comes to where that type does not say** (ADR-293
@@ -16393,7 +16174,7 @@ impl<'a> Checker<'a> {
                     span,
                 );
                 if local.ty.is_unknown() {
-                    self.unknown_bound.insert(local.id as usize as i64);
+                    self.s.flow.unknown_bound.insert(local.id as usize as i64);
                 }
                 local
             })
@@ -16443,8 +16224,8 @@ impl<'a> Checker<'a> {
     /// of them is not reachable from inside it, so the count starts again at
     /// zero and the word for what stands in the way is carried for the message.
     fn enter_boundary(&mut self, what: &str) -> Boundary {
-        let loops = std::mem::replace(&mut self.loops, 0);
-        let barrier = self.barrier.replace(what.to_string());
+        let loops = std::mem::replace(&mut self.s.flow.loops, 0);
+        let barrier = self.s.flow.barrier.replace(what.to_string());
         // **And what a lambda was seen to do stops here too**
         // ([ADR-277](../../docs/specification/adr/adr-277.md) D7), for the same
         // reason the loop count does: what a body written *inside* this one
@@ -16458,7 +16239,7 @@ impl<'a> Checker<'a> {
         // D2, whose `NK2206` is the rule for a lambda).
         let promised = self.s.inside_a_sync_function.take();
         Boundary {
-            loops,
+            loops: loops as usize,
             barrier,
             handed,
             promised,
@@ -16469,8 +16250,8 @@ impl<'a> Checker<'a> {
     fn leave_boundary(&mut self, saved: Boundary) {
         self.s.inside_a_sync_function = saved.promised;
         self.s.handed_over = saved.handed;
-        self.loops = saved.loops;
-        self.barrier = saved.barrier;
+        self.s.flow.loops = saved.loops as i64;
+        self.s.flow.barrier = saved.barrier;
     }
 
     /// `NK2205`: a `set` whose argument reads the same container with `get`
@@ -16942,10 +16723,10 @@ impl<'a> Checker<'a> {
         // walk's refusal is off while the initialiser is read: the evaluator
         // answers it, and two walks over one expression must not both have an
         // opinion about the same call.
-        let outside = std::mem::replace(&mut self.inside_a_comptime, true);
+        let outside = std::mem::replace(&mut self.s.flow.inside_a_comptime, true);
         let walked_from = self.s.findings.len();
         let found = self.expr(value, span);
-        self.inside_a_comptime = outside;
+        self.s.flow.inside_a_comptime = outside;
         // **A name nothing declares is the one error** (ADR-287 D19, #380):
         // `comptime D = C + 1` above `comptime C = 1` in a body is `NK1117`,
         // because a body is read top to bottom. `NK1127` beside it - *can't be
@@ -16985,13 +16766,13 @@ impl<'a> Checker<'a> {
             None => match raised {
                 None => (None, true),
                 Some(raised) => {
-                    let outside = std::mem::replace(&mut self.raised, raised);
+                    let outside = std::mem::replace(&mut self.s.flow.raised, raised);
                     let outcome = match self.compiled_build_time_value(value, &found, &bound, span)
                     {
                         Some(outcome) => outcome,
                         None => self.build_time_value(value, &bound, span),
                     };
-                    self.raised = outside;
+                    self.s.flow.raised = outside;
                     outcome
                 }
             },
@@ -17349,13 +17130,13 @@ impl<'a> Checker<'a> {
             self.a_mut_parameter_given_away(value, span, "handed back");
         }
         if let Some(Expr::Closure { .. }) = value {
-            self.lambda_expected = self.s.expected.clone();
+            self.s.flow.lambda_expected = self.s.expected.clone();
         }
         let found = match value {
             Some(value) => self.expr(value, span),
             None => Ty::Tuple(Vec::new()),
         };
-        self.lambda_expected = None;
+        self.s.flow.lambda_expected = None;
         let Some(expected) = self.s.expected.clone() else {
             return;
         };
@@ -17410,7 +17191,7 @@ impl<'a> Checker<'a> {
             "break" => "leaves the innermost loop around it",
             _ => "starts the innermost loop's next turn",
         };
-        let (message, note, help) = match &self.barrier {
+        let (message, note, help) = match &self.s.flow.barrier {
             Some(what) => (
                 format!("`{word}` {does}, but the nearest loop is outside this {what}."),
                 format!(
@@ -17499,7 +17280,7 @@ impl<'a> Checker<'a> {
     /// inside another one's guarded expression. A no-op outside a guarded
     /// expression, which is most of a program.
     fn guard_has_no_answer(&mut self) {
-        if let Some(guarded) = &mut self.guarded {
+        if let Some(guarded) = &mut self.s.flow.guarded {
             guarded.unanswered = true;
         }
     }

@@ -790,4 +790,6 @@ pub struct CheckState {
     pub stored_code: collections::BTreeMap[String, CheckStoredCode],
     /// The stored code being walked, innermost last.
     pub stored_frames: Vec[CheckStoredCode],
+    /// Where the walk of the body stands (`check_flow.nika`).
+    pub flow: CheckFlow,
 }

@@ -1,0 +1,232 @@
+// crates/nikaia-std/src/tools/check_flow.nika
+//
+// **What the checker keeps while it walks one body** (ADR-294, #125, #558, C-3):
+// the flags and tables that say where the walk stands - inside a `catch`, in a
+// loop, at a write door - and what it has seen so far in the statement, the
+// function, the numbers whose type is still open. `CheckState` holds it as
+// `flow`; the Rust `Checker` holds what it looks at and does not own (the
+// parsed files, the newly gained contracts, what the build may read).
+//
+// **Positions are `i64`** (ADR-294 D7), and the tables that were hash maps are
+// ordered maps: nothing reads one in an order.
+
+use std::collections
+
+/// A constant integer the walk worked out: the number, whether the fold left
+/// the 65 bits every literal fits in, and the type an operand's declaration
+/// pinned (`fold.rs`'s `Constant`).
+pub struct CheckConstant {
+    pub value: Integer,
+    pub beyond: bool,
+    pub pinned: String?,
+}
+
+/// **A number no annotation typed** (ADR-285): one `let`, or several its uses
+/// joined, and what those uses asked of it.
+pub struct CheckOpenNumber {
+    /// The name, for the message.
+    pub name: String,
+    /// Whether it is the elements of the list `name` binds (D34) rather than
+    /// the name's own number.
+    pub element: bool,
+    /// The `let`, where the type is written and where a refusal points.
+    pub at: Span,
+    /// The entry this one was joined into, by the `let` it names; itself where
+    /// none.
+    pub joined: i64,
+    /// What the uses asked: the type, the statement, and whether the use is a
+    /// type standing beside it (`true`) or an index.
+    pub asks: Vec[(String, Span, bool)],
+    /// The numbers it is given as written, with the statement and whether it
+    /// is a bare literal.
+    pub given: Vec[(CheckConstant, Span, bool)],
+    /// What an operation over it comes to, where that folds.
+    pub derived: Vec[(CheckConstant, Span)],
+    /// The statements that give it a number, by the byte they start at, and
+    /// every literal in them.
+    pub written: Vec[(i64, Vec[(i64, Integer)], bool)],
+}
+
+/// A signed value put where an unsigned type is stated, until the walk proves
+/// it `>= 0` or refuses it.
+pub struct CheckUnsignedSlot {
+    pub node: i64,
+    pub found: Ty,
+    pub want: Ty,
+    pub into: String,
+    pub written: String,
+    pub span: Span,
+    /// The slot's own refusal, where `expect` would have written one.
+    pub refusal: CheckFinding?,
+}
+
+/// The concrete type an unrolling is over and the field this turn stands at.
+pub struct CheckUnrolling {
+    pub on: String,
+    pub field: FieldContract,
+}
+
+/// **What the walk of a body keeps beside the scope**: see the Rust `Checker`'s
+/// history for each field's reason; the comments here say what it is.
+pub struct CheckFlow {
+    /// The bounds the `comptime` being computed raised: steps and bytes.
+    pub raised: (u64?, u64?),
+    /// Whether this walk computes build-time values at all.
+    pub computes: bool,
+    /// The addresses of the values a call names after its `;` (#455).
+    pub option_values: Vec[i64],
+    /// The concrete type's name and the field the current unrolling stands at
+    /// (ADR-304 D7); `null` in the generic body.
+    pub unrolling: CheckUnrolling?,
+    /// This walk is one unit harvesting another's call sites (ADR-304 D2).
+    pub harvesting: bool,
+    /// Whether the walk is inside a `comptime` initialiser (ADR-310 D3).
+    pub inside_a_comptime: bool,
+    /// Numbers written as a method's receiver in this statement (#417).
+    pub literal_receivers: Vec[(i64, Integer)],
+    /// The function hands back text both kinds of which flow into its result.
+    pub expected_either: bool,
+    /// The same for the field whose value is being checked.
+    pub field_either: bool,
+    /// Whether it declared `throws`.
+    pub throwing: bool,
+    /// Whether the expression being walked is the guarded half of a `catch`.
+    pub caught: bool,
+    /// The handler being walked was handed an error that can be more than one
+    /// type (ADR-280 D18).
+    pub caught_several: bool,
+    /// The one error type arriving at the nearest `catch`, where exactly one does.
+    pub caught_one: Ty?,
+    /// What the guarded expression of the nearest `catch` turned out to hold.
+    pub guarded: CheckGuarded?,
+    /// How many loops are open around the statement, from the nearest boundary.
+    pub loops: i64,
+    /// The nearest boundary a jump may not cross (a lambda, a task, an
+    /// `overlap` branch).
+    pub barrier: String?,
+    /// Method calls whose callee's contract says it can fail, and the ones
+    /// where that could not be established.
+    pub fallible_methods: collections::BTreeSet[(i64, String)],
+    pub opaque_methods: collections::BTreeSet[(i64, String)],
+    /// The same pair for the calls whose callee pauses.
+    pub pausing_methods: collections::BTreeSet[(i64, String)],
+    pub settled_methods: collections::BTreeSet[(i64, String)],
+    /// The lambdas of the call being walked that paused and were handed to a
+    /// `std` entry (ADR-233 D1).
+    pub paused_args: Vec[i64],
+    /// The next number to give a choice: one per `if` and per `match`.
+    pub next_choice: i64,
+    /// Which read an expression is, by the expression's id (ADR-293 D1).
+    pub read_index: collections::BTreeMap[(i64, i64), i64],
+    /// `??`s that may lend their left side (ADR-279 D5).
+    pub pending_coalesces: Vec[CheckPendingCoalesce],
+    /// Set by an assignment whose target is an index (ADR-293 D27).
+    pub writing_index: bool,
+    /// Set where an `Index` read a map (ADR-293 D28).
+    pub read_a_map: bool,
+    /// Every read of a map, by the expression's id (ADR-293 D15).
+    pub map_read_sites: collections::BTreeSet[i64],
+    /// The bindings a `let` made of a map read (#297), by binding.
+    pub map_views: collections::BTreeSet[i64],
+    /// The ledger key the last method call resolved to (ADR-293 D24).
+    pub last_resolved: String?,
+    /// The name of the receiver of the method call being walked, where it is a
+    /// plain name (ADR-105 D2).
+    pub receiver_name: String?,
+    /// The receiver of the call being checked is a file's name the compiler
+    /// followed back to text (ADR-319 D5).
+    pub receiver_from_text: bool,
+    /// The bindings of a file's name made from text, by binding (D5).
+    pub text_paths: collections::BTreeSet[i64],
+    /// The `let`s whose value was an empty list and whose element type nothing
+    /// has said yet (ADR-135 D2), by the `let`'s byte.
+    pub empty_lists: collections::BTreeMap[i64, (String, Span)],
+    /// The numbers whose uses decide their type, by the `let` (ADR-285).
+    pub open_numbers: collections::BTreeMap[i64, CheckOpenNumber],
+    /// A list written in number literals: the binding and the entry of
+    /// `open_numbers` it names (ADR-285 D34).
+    pub open_elements: collections::BTreeMap[i64, i64],
+    /// The `fn` type the place a lambda stands in declares (#497).
+    pub lambda_expected: Ty?,
+    /// A generic call that hands back the number it was given (#497), by the
+    /// call's first argument.
+    pub open_calls: collections::BTreeMap[i64, Vec[i64]],
+    /// The `let`s whose value had no known type (#497), by binding.
+    pub unknown_bound: collections::BTreeSet[i64],
+    /// How many `NK1245`s this walk has said (or stood back for).
+    pub unknown_said: i64,
+    /// What such a list holds, where nothing can change it (D26).
+    pub list_constants: collections::BTreeMap[i64, Vec[CheckConstant]],
+    /// The statements an operation in has already overflowed, by the byte.
+    pub overflowed: collections::BTreeSet[i64],
+    /// The integer type a `let` states, on its way to the operands (D32).
+    pub reaching: String?,
+    /// What the expression being walked was handed of `reaching`.
+    pub reached: String?,
+    /// The names this function's body gives text of its own later on.
+    pub grown_text: collections::BTreeSet[String],
+    /// The conversions that do not narrow.
+    pub widening_casts: collections::BTreeSet[(i64, String)],
+    /// Signed values put where an unsigned type is stated, by the statement.
+    pub unsigned_slots: collections::BTreeMap[i64, Vec[CheckUnsignedSlot]],
+    /// Whether the lambda being walked is a write door's block (ADR-281 D12).
+    pub at_a_write_door: bool,
+    /// The name of an empty list a `push` is being walked on (#523).
+    pub pushed_into: String?,
+}
+
+impl CheckFlow {
+    /// The flow at the start of a body's walk.
+    pub fn start(computes: bool, harvesting: bool) -> CheckFlow {
+        return CheckFlow {
+            raised: (null, null),
+            computes: computes,
+            option_values: Vec(),
+            unrolling: null,
+            harvesting: harvesting,
+            inside_a_comptime: false,
+            literal_receivers: Vec(),
+            expected_either: false,
+            field_either: false,
+            throwing: false,
+            caught: false,
+            caught_several: false,
+            caught_one: null,
+            guarded: null,
+            loops: 0,
+            barrier: null,
+            fallible_methods: collections::BTreeSet(),
+            opaque_methods: collections::BTreeSet(),
+            pausing_methods: collections::BTreeSet(),
+            settled_methods: collections::BTreeSet(),
+            paused_args: Vec(),
+            next_choice: 0,
+            read_index: collections::BTreeMap(),
+            pending_coalesces: Vec(),
+            writing_index: false,
+            read_a_map: false,
+            map_read_sites: collections::BTreeSet(),
+            map_views: collections::BTreeSet(),
+            last_resolved: null,
+            receiver_name: null,
+            receiver_from_text: false,
+            text_paths: collections::BTreeSet(),
+            empty_lists: collections::BTreeMap(),
+            open_numbers: collections::BTreeMap(),
+            open_elements: collections::BTreeMap(),
+            lambda_expected: null,
+            open_calls: collections::BTreeMap(),
+            unknown_bound: collections::BTreeSet(),
+            unknown_said: 0,
+            list_constants: collections::BTreeMap(),
+            overflowed: collections::BTreeSet(),
+            reaching: null,
+            reached: null,
+            grown_text: collections::BTreeSet(),
+            widening_casts: collections::BTreeSet(),
+            unsigned_slots: collections::BTreeMap(),
+            at_a_write_door: false,
+            pushed_into: null,
+        }
+    }
+}

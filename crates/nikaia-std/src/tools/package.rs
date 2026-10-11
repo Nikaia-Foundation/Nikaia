@@ -11548,6 +11548,101 @@ fn index_key_type(state: &CheckState, world: &CheckWorld<'_>, index: &Expr) -> T
 }
 
 
+// --- check_flow.nika ---
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CheckConstant {
+    pub value: Integer,
+    pub beyond: bool,
+    pub pinned: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CheckOpenNumber {
+    pub name: String,
+    pub element: bool,
+    pub at: Span,
+    pub joined: i64,
+    pub asks: Vec<(String, Span, bool)>,
+    pub given: Vec<(CheckConstant, Span, bool)>,
+    pub derived: Vec<(CheckConstant, Span)>,
+    pub written: Vec<(i64, Vec<(i64, Integer)>, bool)>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CheckUnsignedSlot {
+    pub node: i64,
+    pub found: Ty,
+    pub want: Ty,
+    pub into: String,
+    pub written: String,
+    pub span: Span,
+    pub refusal: Option<CheckFinding>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CheckUnrolling {
+    pub on: String,
+    pub field: FieldContract,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CheckFlow {
+    pub raised: (Option<u64>, Option<u64>),
+    pub computes: bool,
+    pub option_values: Vec<i64>,
+    pub unrolling: Option<CheckUnrolling>,
+    pub harvesting: bool,
+    pub inside_a_comptime: bool,
+    pub literal_receivers: Vec<(i64, Integer)>,
+    pub expected_either: bool,
+    pub field_either: bool,
+    pub throwing: bool,
+    pub caught: bool,
+    pub caught_several: bool,
+    pub caught_one: Option<Ty>,
+    pub guarded: Option<CheckGuarded>,
+    pub loops: i64,
+    pub barrier: Option<String>,
+    pub fallible_methods: collections::BTreeSet<(i64, String)>,
+    pub opaque_methods: collections::BTreeSet<(i64, String)>,
+    pub pausing_methods: collections::BTreeSet<(i64, String)>,
+    pub settled_methods: collections::BTreeSet<(i64, String)>,
+    pub paused_args: Vec<i64>,
+    pub next_choice: i64,
+    pub read_index: collections::BTreeMap<(i64, i64), i64>,
+    pub pending_coalesces: Vec<CheckPendingCoalesce>,
+    pub writing_index: bool,
+    pub read_a_map: bool,
+    pub map_read_sites: collections::BTreeSet<i64>,
+    pub map_views: collections::BTreeSet<i64>,
+    pub last_resolved: Option<String>,
+    pub receiver_name: Option<String>,
+    pub receiver_from_text: bool,
+    pub text_paths: collections::BTreeSet<i64>,
+    pub empty_lists: collections::BTreeMap<i64, (String, Span)>,
+    pub open_numbers: collections::BTreeMap<i64, CheckOpenNumber>,
+    pub open_elements: collections::BTreeMap<i64, i64>,
+    pub lambda_expected: Option<Ty>,
+    pub open_calls: collections::BTreeMap<i64, Vec<i64>>,
+    pub unknown_bound: collections::BTreeSet<i64>,
+    pub unknown_said: i64,
+    pub list_constants: collections::BTreeMap<i64, Vec<CheckConstant>>,
+    pub overflowed: collections::BTreeSet<i64>,
+    pub reaching: Option<String>,
+    pub reached: Option<String>,
+    pub grown_text: collections::BTreeSet<String>,
+    pub widening_casts: collections::BTreeSet<(i64, String)>,
+    pub unsigned_slots: collections::BTreeMap<i64, Vec<CheckUnsignedSlot>>,
+    pub at_a_write_door: bool,
+    pub pushed_into: Option<String>,
+}
+
+impl CheckFlow {
+    pub fn start(computes: bool, harvesting: bool) -> CheckFlow { CheckFlow { raised: (None, None), computes, option_values: Vec::new(), unrolling: None, harvesting, inside_a_comptime: false, literal_receivers: Vec::new(), expected_either: false, field_either: false, throwing: false, caught: false, caught_several: false, caught_one: None, guarded: None, loops: 0, barrier: None, fallible_methods: collections::BTreeSet::new(), opaque_methods: collections::BTreeSet::new(), pausing_methods: collections::BTreeSet::new(), settled_methods: collections::BTreeSet::new(), paused_args: Vec::new(), next_choice: 0, read_index: collections::BTreeMap::new(), pending_coalesces: Vec::new(), writing_index: false, read_a_map: false, map_read_sites: collections::BTreeSet::new(), map_views: collections::BTreeSet::new(), last_resolved: None, receiver_name: None, receiver_from_text: false, text_paths: collections::BTreeSet::new(), empty_lists: collections::BTreeMap::new(), open_numbers: collections::BTreeMap::new(), open_elements: collections::BTreeMap::new(), lambda_expected: None, open_calls: collections::BTreeMap::new(), unknown_bound: collections::BTreeSet::new(), unknown_said: 0, list_constants: collections::BTreeMap::new(), overflowed: collections::BTreeSet::new(), reaching: None, reached: None, grown_text: collections::BTreeSet::new(), widening_casts: collections::BTreeSet::new(), unsigned_slots: collections::BTreeMap::new(), at_a_write_door: false, pushed_into: None } }
+}
+
+
 // --- check_grammar.nika ---
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -14362,6 +14457,7 @@ pub struct CheckState {
     pub methods: collections::BTreeMap<String, CheckMethodCalls>,
     pub stored_code: collections::BTreeMap<String, CheckStoredCode>,
     pub stored_frames: Vec<CheckStoredCode>,
+    pub flow: CheckFlow,
 }
 
 
@@ -40068,6 +40164,10 @@ pub mod check_facts {
     pub use super::{FactWrap, FactKeyForm, FactViewed, FactNarrowing, FactPausing, FactClaim, CheckFacts};
 }
 pub mod check_fields {}
+pub mod check_flow {
+    #[allow(unused_imports)]
+    pub use super::{CheckConstant, CheckOpenNumber, CheckUnsignedSlot, CheckUnrolling, CheckFlow};
+}
 pub mod check_grammar {}
 pub mod check_imports {}
 pub mod check_items {

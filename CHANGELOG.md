@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.814] — 2026-10-11
+
+**check: the checker's walk state is a Nikaia CheckFlow (#558, #125, C-3)**
+- `tools/check_flow.nika` holds the 49 fields of the Rust `Checker` that were still Rust-typed (flags of the walk, method sets, read index, open numbers, unsigned slots) as `CheckFlow`, held by `CheckState.flow`; positions are `i64`, hash maps are ordered maps. No change to what a program means.
+
 ## [0.0.813] — 2026-10-11
 
 **EmitState holds the hand-over tables the core needs (#558, step E5b).**

@@ -167,6 +167,7 @@ pub mod text {
     unused_assignments,
     unreachable_code,
     clippy::borrow_deref_ref,
+    clippy::type_complexity,
     clippy::explicit_counter_loop,
     clippy::clone_on_copy,
     clippy::manual_map,
