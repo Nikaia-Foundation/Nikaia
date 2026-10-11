@@ -11083,6 +11083,170 @@ fn a_parameter_binding(local: &CheckLocal) -> bool {
 }
 
 
+// --- check_facts.nika ---
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FactWrap {
+    Constructor,
+    Conversion,
+    Path,
+    PathView,
+    Widen(String),
+    Unsigned(String),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FactKeyForm {
+    Handed,
+    Lent,
+    AsIs,
+    Either,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FactViewed {
+    Text,
+    Plain,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FactNarrowing {
+    Integer,
+    FromFloat,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FactPausing {
+    Function(String),
+    Lent(String),
+    Method(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FactClaim {
+    pub held: Option<ClaimHeld>,
+    pub written: String,
+    pub left: Option<String>,
+    pub right: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CheckFacts {
+    pub comptime_values: collections::BTreeMap<i64, (String, String)>,
+    pub dsl_values: collections::BTreeMap<i64, (String, String)>,
+    pub with_types: collections::BTreeMap<i64, String>,
+    pub unrolled: collections::BTreeMap<(String, String), Vec<FieldContract>>,
+    pub walks_fields: collections::BTreeMap<String, String>,
+    pub unrolled_calls: collections::BTreeMap<i64, String>,
+    pub fallible_loops: collections::BTreeSet<i64>,
+    pub pausing_walks: collections::BTreeSet<(i64, String)>,
+    pub pausing_loops: collections::BTreeSet<i64>,
+    pub owned_loops: collections::BTreeSet<i64>,
+    pub copied_loop_bindings: collections::BTreeSet<(i64, String)>,
+    pub copied_view_bindings: collections::BTreeSet<(i64, String)>,
+    pub unsigned_literals: collections::BTreeMap<i64, String>,
+    pub number_lets: collections::BTreeMap<i64, String>,
+    pub changed_elements: collections::BTreeSet<i64>,
+    pub text_finds: collections::BTreeSet<i64>,
+    pub count_args: collections::BTreeSet<i64>,
+    pub path_methods: collections::BTreeMap<i64, bool>,
+    pub map_keys: collections::BTreeMap<(i64, bool), FactKeyForm>,
+    pub slice_indices: collections::BTreeSet<i64>,
+    pub list_indices: collections::BTreeSet<i64>,
+    pub copied_tuple_parts: collections::BTreeSet<(i64, String)>,
+    pub std_lengths: collections::BTreeSet<i64>,
+    pub sized_lengths: collections::BTreeSet<i64>,
+    pub char_codes: collections::BTreeSet<i64>,
+    pub arithmetic: collections::BTreeMap<i64, String>,
+    pub negations: collections::BTreeMap<i64, String>,
+    pub copied_slots: collections::BTreeSet<i64>,
+    pub owned_copies: collections::BTreeSet<i64>,
+    pub text_as_is: collections::BTreeSet<i64>,
+    pub lent_coalesces: collections::BTreeMap<i64, String>,
+    pub plain_reaches: collections::BTreeSet<i64>,
+    pub copied_jump_reads: collections::BTreeSet<i64>,
+    pub view_coalesces: collections::BTreeSet<i64>,
+    pub lent_map_fallbacks: collections::BTreeSet<i64>,
+    pub optional_fallbacks: collections::BTreeSet<i64>,
+    pub flat_reads: collections::BTreeSet<i64>,
+    pub copied_reads: collections::BTreeSet<i64>,
+    pub text_in_lists: collections::BTreeSet<i64>,
+    pub counted: collections::BTreeSet<i64>,
+    pub lent_bindings: collections::BTreeMap<i64, collections::BTreeSet<String>>,
+    pub taking_arms: collections::BTreeMap<i64, String>,
+    pub views_handed_on: collections::BTreeSet<i64>,
+    pub comptime_uses: collections::BTreeMap<i64, String>,
+    pub lent_scrutinees: collections::BTreeSet<i64>,
+    pub guards_inside_boxes: collections::BTreeMap<i64, collections::BTreeSet<String>>,
+    pub collected_into: collections::BTreeSet<i64>,
+    pub copied_walks: collections::BTreeSet<i64>,
+    pub filter_patterns: collections::BTreeSet<i64>,
+    pub kept_lambdas: collections::BTreeMap<i64, (bool, bool)>,
+    pub kept_hulls: collections::BTreeMap<i64, Vec<String>>,
+    pub kept_owned: collections::BTreeMap<i64, Vec<String>>,
+    pub field_calls: collections::BTreeMap<i64, bool>,
+    pub kept_calls: collections::BTreeMap<(i64, String), (bool, bool)>,
+    pub kept_args: collections::BTreeSet<i64>,
+    pub kept_functions: collections::BTreeMap<(i64, String), (bool, bool, i64)>,
+    pub fallible_methods: collections::BTreeSet<(i64, String)>,
+    pub future_lambdas: collections::BTreeSet<(i64, i64)>,
+    pub run_lambdas: collections::BTreeSet<(i64, i64)>,
+    pub sync_functions_run_async: collections::BTreeMap<(i64, i64), i64>,
+    pub pausing_lambdas: collections::BTreeMap<i64, FactPausing>,
+    pub paused_scopes: collections::BTreeSet<i64>,
+    pub witnessed_sets: collections::BTreeSet<i64>,
+    pub pausing_methods: collections::BTreeSet<(i64, String)>,
+    pub nullable_sites: collections::BTreeMap<i64, FactWrap>,
+    pub concatenations: collections::BTreeSet<i64>,
+    pub path_comparisons: collections::BTreeSet<i64>,
+    pub mixed_comparisons: collections::BTreeMap<i64, bool>,
+    pub path_holes: collections::BTreeMap<i64, Vec<bool>>,
+    pub flattened_reaches: collections::BTreeSet<i64>,
+    pub copied_reaches: collections::BTreeSet<i64>,
+    pub viewed_reaches: collections::BTreeMap<i64, FactViewed>,
+    pub lent_reaches: collections::BTreeSet<i64>,
+    pub held_reaches: collections::BTreeSet<i64>,
+    pub nullable_fields: collections::BTreeMap<(i64, String), FactWrap>,
+    pub nullable_args: collections::BTreeMap<i64, FactWrap>,
+    pub narrowing_casts: collections::BTreeMap<(i64, String), FactNarrowing>,
+    pub task_handles: collections::BTreeSet<(i64, String)>,
+    pub method_options: collections::BTreeMap<(i64, String), Vec<(String, String)>>,
+    pub lent_args: collections::BTreeSet<i64>,
+    pub lookup_keys: collections::BTreeSet<i64>,
+    pub boxed_members: collections::BTreeMap<String, collections::BTreeSet<String>>,
+    pub boxed_reads: collections::BTreeSet<i64>,
+    pub copied_bindings: collections::BTreeSet<(i64, String)>,
+    pub some_tails: collections::BTreeSet<i64>,
+    pub lent_options: collections::BTreeSet<i64>,
+    pub wrapped: collections::BTreeMap<i64, FactWrap>,
+    pub compared_views: collections::BTreeSet<(i64, String)>,
+    pub compared_numbers: collections::BTreeSet<(i64, String)>,
+    pub claims: collections::BTreeMap<(i64, i64), FactClaim>,
+    pub entries: collections::BTreeMap<String, Vec<PreconditionCheck>>,
+    pub reaches: collections::BTreeMap<(String, String), CallReach>,
+    pub published: collections::BTreeMap<String, Published>,
+    pub mut_args: collections::BTreeSet<i64>,
+    pub copied_args: collections::BTreeSet<i64>,
+    pub settle_fns: collections::BTreeMap<String, bool>,
+    pub settle_lets: collections::BTreeMap<i64, bool>,
+    pub lent_lets: collections::BTreeSet<i64>,
+    pub lent_returns: collections::BTreeSet<i64>,
+    pub compares: collections::BTreeSet<String>,
+    pub compares_totally: collections::BTreeSet<String>,
+    pub copies: collections::BTreeSet<String>,
+    pub viewed_numbers: collections::BTreeSet<(i64, String)>,
+    pub array_literals: collections::BTreeSet<i64>,
+    pub byte_literals: collections::BTreeSet<i64>,
+    pub owned_texts: collections::BTreeSet<i64>,
+    pub lent_list_reads: collections::BTreeSet<i64>,
+    pub view_fallbacks: collections::BTreeSet<i64>,
+}
+
+impl CheckFacts {
+    pub fn empty() -> CheckFacts { CheckFacts { comptime_values: collections::BTreeMap::new(), dsl_values: collections::BTreeMap::new(), with_types: collections::BTreeMap::new(), unrolled: collections::BTreeMap::new(), walks_fields: collections::BTreeMap::new(), unrolled_calls: collections::BTreeMap::new(), fallible_loops: collections::BTreeSet::new(), pausing_walks: collections::BTreeSet::new(), pausing_loops: collections::BTreeSet::new(), owned_loops: collections::BTreeSet::new(), copied_loop_bindings: collections::BTreeSet::new(), copied_view_bindings: collections::BTreeSet::new(), unsigned_literals: collections::BTreeMap::new(), number_lets: collections::BTreeMap::new(), changed_elements: collections::BTreeSet::new(), text_finds: collections::BTreeSet::new(), count_args: collections::BTreeSet::new(), path_methods: collections::BTreeMap::new(), map_keys: collections::BTreeMap::new(), slice_indices: collections::BTreeSet::new(), list_indices: collections::BTreeSet::new(), copied_tuple_parts: collections::BTreeSet::new(), std_lengths: collections::BTreeSet::new(), sized_lengths: collections::BTreeSet::new(), char_codes: collections::BTreeSet::new(), arithmetic: collections::BTreeMap::new(), negations: collections::BTreeMap::new(), copied_slots: collections::BTreeSet::new(), owned_copies: collections::BTreeSet::new(), text_as_is: collections::BTreeSet::new(), lent_coalesces: collections::BTreeMap::new(), plain_reaches: collections::BTreeSet::new(), copied_jump_reads: collections::BTreeSet::new(), view_coalesces: collections::BTreeSet::new(), lent_map_fallbacks: collections::BTreeSet::new(), optional_fallbacks: collections::BTreeSet::new(), flat_reads: collections::BTreeSet::new(), copied_reads: collections::BTreeSet::new(), text_in_lists: collections::BTreeSet::new(), counted: collections::BTreeSet::new(), lent_bindings: collections::BTreeMap::new(), taking_arms: collections::BTreeMap::new(), views_handed_on: collections::BTreeSet::new(), comptime_uses: collections::BTreeMap::new(), lent_scrutinees: collections::BTreeSet::new(), guards_inside_boxes: collections::BTreeMap::new(), collected_into: collections::BTreeSet::new(), copied_walks: collections::BTreeSet::new(), filter_patterns: collections::BTreeSet::new(), kept_lambdas: collections::BTreeMap::new(), kept_hulls: collections::BTreeMap::new(), kept_owned: collections::BTreeMap::new(), field_calls: collections::BTreeMap::new(), kept_calls: collections::BTreeMap::new(), kept_args: collections::BTreeSet::new(), kept_functions: collections::BTreeMap::new(), fallible_methods: collections::BTreeSet::new(), future_lambdas: collections::BTreeSet::new(), run_lambdas: collections::BTreeSet::new(), sync_functions_run_async: collections::BTreeMap::new(), pausing_lambdas: collections::BTreeMap::new(), paused_scopes: collections::BTreeSet::new(), witnessed_sets: collections::BTreeSet::new(), pausing_methods: collections::BTreeSet::new(), nullable_sites: collections::BTreeMap::new(), concatenations: collections::BTreeSet::new(), path_comparisons: collections::BTreeSet::new(), mixed_comparisons: collections::BTreeMap::new(), path_holes: collections::BTreeMap::new(), flattened_reaches: collections::BTreeSet::new(), copied_reaches: collections::BTreeSet::new(), viewed_reaches: collections::BTreeMap::new(), lent_reaches: collections::BTreeSet::new(), held_reaches: collections::BTreeSet::new(), nullable_fields: collections::BTreeMap::new(), nullable_args: collections::BTreeMap::new(), narrowing_casts: collections::BTreeMap::new(), task_handles: collections::BTreeSet::new(), method_options: collections::BTreeMap::new(), lent_args: collections::BTreeSet::new(), lookup_keys: collections::BTreeSet::new(), boxed_members: collections::BTreeMap::new(), boxed_reads: collections::BTreeSet::new(), copied_bindings: collections::BTreeSet::new(), some_tails: collections::BTreeSet::new(), lent_options: collections::BTreeSet::new(), wrapped: collections::BTreeMap::new(), compared_views: collections::BTreeSet::new(), compared_numbers: collections::BTreeSet::new(), claims: collections::BTreeMap::new(), entries: collections::BTreeMap::new(), reaches: collections::BTreeMap::new(), published: collections::BTreeMap::new(), mut_args: collections::BTreeSet::new(), copied_args: collections::BTreeSet::new(), settle_fns: collections::BTreeMap::new(), settle_lets: collections::BTreeMap::new(), lent_lets: collections::BTreeSet::new(), lent_returns: collections::BTreeSet::new(), compares: collections::BTreeSet::new(), compares_totally: collections::BTreeSet::new(), copies: collections::BTreeSet::new(), viewed_numbers: collections::BTreeSet::new(), array_literals: collections::BTreeSet::new(), byte_literals: collections::BTreeSet::new(), owned_texts: collections::BTreeSet::new(), lent_list_reads: collections::BTreeSet::new(), view_fallbacks: collections::BTreeSet::new() } }
+}
+
+
 // --- check_imports.nika ---
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -36531,6 +36695,10 @@ pub mod check_doors {}
 pub mod check_exprs {
     #[allow(unused_imports)]
     pub use super::{CheckKept};
+}
+pub mod check_facts {
+    #[allow(unused_imports)]
+    pub use super::{FactWrap, FactKeyForm, FactViewed, FactNarrowing, FactPausing, FactClaim, CheckFacts};
 }
 pub mod check_imports {}
 pub mod check_literals {

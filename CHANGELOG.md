@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.794] — 2026-10-10
+
+**`CheckFacts` is declared in Nikaia (`tools/check_facts.nika`, #558, #125).**
+- One struct for what the checker found out and the emitter reads: 108 tables keyed by node id (`i64`), with `FactWrap`, `FactKeyForm`, `FactViewed`, `FactNarrowing`, `FactPausing` and `FactClaim`; `CheckFacts::empty()`. Not used yet: the next package makes it `Checked.facts`. The dead table `held_across_a_pause` is not in it.
+
 ## [0.0.793] — 2026-10-10
 
 **A type variable two integer types are handed to, and a build-time run that stopped, are reported from Nikaia (`tools/check_widen.nika`, `tools/check_reports.nika`, ADR-285 D32, ADR-321 D1, #558, #125).**
