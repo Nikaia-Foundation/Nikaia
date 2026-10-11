@@ -1,0 +1,106 @@
+// crates/nikaia-std/src/tools/check_send.nika
+//
+// **What a task, or a call nothing describes, is handed** (ADR-312, ADR-303 D7,
+// ADR-281 D32; Part II 11.2), moved from the compiler's checker (ADR-294, #125,
+// #558, C-5d): `NK2501` for a task that takes what cannot cross a thread,
+// `NK2502` and `NK2503` for a call into code the compiler cannot see the end of.
+
+use std::collections
+
+/// The note every `NK25xx` carries, because it is the reason the code exists:
+/// the verdict may not depend on `user_parallelism`.
+fn same_at_both() -> String {
+    return "This is checked even when the program runs on one thread, so code stays correct when `user-parallelism` is turned on.".clone()
+}
+
+/// Whether the verdict is the lock's (ADR-281 D32).
+fn a_lock_refusal(verdict: ref Crossing) -> bool {
+    return match verdict {
+        Crossing::MayNot { why, .. } => match why {
+            Refusal::Lock => true,
+            else => false,
+        },
+        else => false,
+    }
+}
+
+impl CheckState {
+    /// **`NK2501`: everything a task takes has to be able to cross a thread.**
+    /// Over-approximate in the direction that costs nothing: every name the
+    /// body mentions is asked, and one that is not in scope says nothing.
+    pub fn crosses_into_a_task(ref mut self, world: ref CheckWorld, body: ref Expr, span: ref Span) sync {
+        let mut named: collections::BTreeSet[String] = collections::BTreeSet()
+        names_in(body, world.words, named)
+        for name in named {
+            self.a_name_crosses(world, name, span)
+        }
+    }
+
+    fn a_name_crosses(ref mut self, world: ref CheckWorld, name: ref String, span: ref Span) sync {
+        let ty = self.lookup(name) ?? return
+        let verdict = crossing(ty, Walking { own: world.own, library: world.library, into: Going::Ours })
+        if verdict.refused_part() == null {
+            return
+        }
+        let notes: Vec[String] = ["A task runs on its own thread, so everything it uses has to be able to move between threads.".clone(), verdict.note() ?? "".clone(), same_at_both()]
+        self.findings.push(check_refusal("NK2501", span, f"This task uses `{name}`, which can't be passed to a task.", notes, verdict.way_out()))
+    }
+
+    /// **`NK2502`, or `NK2503` where the refusal is a lock**: a value handed to
+    /// a call this compiler cannot see the end of may reach a thread that call
+    /// owns (ADR-303 D7). Positional arguments first, then the named ones.
+    pub fn crosses_into_an_unseen_call(ref mut self, world: ref CheckWorld, callee: ref String, args: ref Vec[Expr], found: ref Vec[Ty], config: ref Vec[ConfigArg], passed: ref Vec[(String, Ty)], span: ref Span, why: ref String) sync {
+        let mut at = 0
+        while at < args.len() && at < found.len() {
+            let (what, path) = names_the_argument(world, args[at], at)
+            self.a_value_crosses(world, callee, what, path, found[at], span, why)
+            at = at + 1
+        }
+        let mut named = 0
+        while named < config.len() && named < passed.len() {
+            let arg = config[named]
+            let label = f"`{world.words.resolve(arg.name)}`"
+            let path = dotted_path(world, arg.value)
+            self.a_value_crosses(world, callee, label, path, passed[named].1, span, why)
+            named = named + 1
+        }
+    }
+
+    fn a_value_crosses(ref mut self, world: ref CheckWorld, callee: ref String, what: String, path: String?, ty: ref Ty, span: ref Span, why: ref String) sync {
+        let verdict = crossing(ty, Walking { own: world.own, library: world.library, into: Going::Foreign })
+        if verdict.refused_part() == null {
+            return
+        }
+        if a_lock_refusal(verdict) {
+            self.reaches_a_lock(callee, what, path, verdict, span)
+            return
+        }
+        let notes: Vec[String] = [why.clone(), verdict.note() ?? "".clone(), same_at_both()]
+        self.findings.push(check_refusal("NK2502", span, f"{capitalised(what)} can't move to another thread, and `{callee}` might move it.", notes, verdict.way_out()))
+    }
+
+    /// **`NK2503`: a call into foreign code from which a lock is reachable**
+    /// through its arguments (ADR-281 D32, Part III 15.2): a refusal about the
+    /// call, not about the value.
+    fn reaches_a_lock(ref mut self, callee: ref String, what: ref String, path: ref String?, verdict: ref Crossing, span: ref Span) sync {
+        let part = verdict.refused_part() ?? return
+        let reached = reached_path(path, verdict.refused_at())
+        let mut note: String = f"What you pass is a `{part}`, and code that might keep a lock could deadlock."
+        let mut help: String = "Open the lock here and pass the value inside it, so the called code gets an ordinary value and no lock.".clone()
+        if reached != null {
+            let shown = reached ?? return
+            note = f"`{shown}` is a `{part}`, and code that might keep a lock could deadlock."
+            help = f"Pass it a copy of what it needs instead of the container:\n           {callee}({shown}.get())"
+        }
+        let notes: Vec[String] = [f"The compiler knows nothing about `{callee}`, so it can't see what it does with what you pass it.", note, same_at_both()]
+        self.findings.push(check_refusal("NK2503", span, f"`{callee}` could reach a lock through {what}.", notes, help))
+    }
+}
+
+/// The path the note and the way out print: the argument's own name with the
+/// field that decided it behind it, where both are there to be had.
+fn reached_path(path: ref String?, at: String?) -> String? {
+    let held = path ?? return null
+    let field = at ?? return held.clone()
+    return f"{held}.{field}"
+}

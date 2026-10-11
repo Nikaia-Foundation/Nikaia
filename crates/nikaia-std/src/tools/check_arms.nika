@@ -1,0 +1,187 @@
+// crates/nikaia-std/src/tools/check_arms.nika
+//
+// **Arms that meet at `T?`, and a lambda that ends in text** (ADR-282 D4,
+// ADR-279, ADR-285, #312, #435), moved from the compiler's checker (ADR-294,
+// #125, #558, C-5d).
+
+use std::collections
+
+/// One arm of a choice as the checker saw it: the value it ends in, where it
+/// has one, and the type that came out.
+pub struct CheckArm {
+    pub tail: ref Expr?,
+    pub ty: Ty,
+}
+
+fn an_arm_ends_in_null(arm: ref CheckArm) -> bool {
+    let tail = arm.tail ?? return false
+    return ends_in_null(tail)
+}
+
+fn an_arm_is_a_nullable(arm: ref CheckArm) -> bool {
+    return match arm.ty {
+        Ty::Nullable(_) => true,
+        else => false,
+    }
+}
+
+/// A number written down takes its type from where it stands (ADR-285).
+fn an_arm_is_a_number(arm: ref CheckArm) -> bool {
+    let tail = arm.tail ?? return false
+    return match tail {
+        Expr::LitInt { .. } => true,
+        Expr::LitFloat(_, _) => true,
+        Expr::Unary { op, expr, .. } => op == UnaryOp::Neg && a_written_number(expr),
+        else => false,
+    }
+}
+
+fn a_written_number(expr: ref Expr) -> bool {
+    return match expr {
+        Expr::LitInt { .. } => true,
+        Expr::LitFloat(_, _) => true,
+        else => false,
+    }
+}
+
+fn an_arm_is_a_text_literal(arm: ref CheckArm) -> bool {
+    let tail = arm.tail ?? return false
+    return match tail {
+        Expr::LitStr { .. } => true,
+        else => false,
+    }
+}
+
+/// A `String?` whose arm is not a literal: text of its own beside the arms.
+fn an_arm_is_owned_text(arm: ref CheckArm, text: ref Ty) -> bool {
+    if arm.ty == text {
+        return true
+    }
+    if an_arm_is_a_text_literal(arm) {
+        return false
+    }
+    return match arm.ty {
+        Ty::Nullable(inner) => inner == text,
+        else => false,
+    }
+}
+
+fn the_type_inside(ty: ref Ty) -> Ty {
+    return match ty {
+        Ty::Nullable(inner) => inner.clone(),
+        else => ty.clone(),
+    }
+}
+
+/// Whether the type seen so far, if any, is this one.
+fn the_plain_type_agrees(plain: ref Ty?, inner: ref Ty) -> bool {
+    let seen = plain ?? return true
+    return seen == inner
+}
+
+impl CheckState {
+    /// **Arms that meet at `T?`** because one of them is `null`: the plain ones
+    /// are `Some(…)` below, and the choice is a `T?`. Asked only where every
+    /// arm that is not `null` is a `T` or a `T?` of one `T`, so a choice this
+    /// cannot type stays unknown. Or because one of them is a `T?` already
+    /// (#435). A number takes its type from where it stands, and a text literal
+    /// takes `String` where its neighbours are text of their own (ADR-282 D4).
+    pub fn arms_meet_at_null(ref mut self, world: ref CheckWorld, arms: ref Vec[CheckArm]) -> Ty? sync {
+        let mut asked = false
+        for arm in arms {
+            if an_arm_ends_in_null(arm) || an_arm_is_a_nullable(arm) {
+                asked = true
+            }
+        }
+        if !asked {
+            return null
+        }
+        let text = a_string_type()
+        let mut literals_own = false
+        let mut all_literals = true
+        for arm in arms {
+            if an_arm_is_owned_text(arm, text) {
+                literals_own = true
+            }
+            if !(an_arm_ends_in_null(arm) || an_arm_is_a_text_literal(arm)) {
+                all_literals = false
+            }
+        }
+        literals_own = literals_own || all_literals
+        let mut plain: Ty? = null
+        let mut literals = false
+        for arm in arms {
+            if an_arm_ends_in_null(arm) || an_arm_is_a_number(arm) {
+                continue
+            }
+            if literals_own && an_arm_is_a_text_literal(arm) {
+                literals = true
+                continue
+            }
+            let inner = the_type_inside(arm.ty)
+            if inner.is_unknown() || arm.tail == null {
+                return null
+            }
+            if !the_plain_type_agrees(plain, inner) {
+                return null
+            }
+            if plain == null {
+                plain = inner
+            }
+        }
+        if literals {
+            if !the_plain_type_agrees(plain, text) {
+                return null
+            }
+            if plain == null {
+                plain = text.clone()
+            }
+        }
+        for arm in arms {
+            self.an_arm_beside_a_null(world, arm, literals, text)
+        }
+        return Ty::Nullable(plain ?? Ty::Unknown)
+    }
+
+    /// A plain arm is `Some` below, and a text literal among them a `String`.
+    fn an_arm_beside_a_null(ref mut self, world: ref CheckWorld, arm: ref CheckArm, literals: bool, text: ref Ty) sync {
+        let tail = arm.tail ?? return
+        if an_arm_is_a_nullable(arm) || ends_in_null_literal(tail) {
+            return
+        }
+        if literals && an_arm_is_a_text_literal(arm) {
+            self.text_literal(world, text, tail, true)
+        }
+        self.some_at_the_tails(tail)
+    }
+
+    /// **A lambda's text literal is built where its type keeps text**: the value
+    /// a lambda ends in is handed to whoever calls it, as a function's is
+    /// (ADR-282 D4).
+    pub fn a_lambdas_text_is_its_own(ref mut self, world: ref CheckWorld, want: ref Ty, value: ref Expr) sync {
+        match want {
+            Ty::Fn { result, .. } => {
+                match value {
+                    Expr::Closure { body, .. } => self.a_closure_ends_in(world, result, body),
+                    else => {},
+                }
+            },
+            else => {},
+        }
+    }
+
+    fn a_closure_ends_in(ref mut self, world: ref CheckWorld, result: ref Ty?, body: ref Block) sync {
+        let kept = result ?? return
+        let tail = block_tail(body)
+        if tail.len() == 1 {
+            self.text_literal(world, kept, tail[0], true)
+        }
+    }
+}
+
+fn ends_in_null_literal(expr: ref Expr) -> bool {
+    return match expr {
+        Expr::LitNull(_) => true,
+        else => false,
+    }
+}

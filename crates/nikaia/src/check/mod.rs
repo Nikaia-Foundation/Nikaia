@@ -39,7 +39,6 @@ use crate::contracts::ty::TyOps;
 use crate::contracts::{FieldContract, FnContract, Ledger, send, ty, ty::Ty};
 use crate::fold::Constant;
 use crate::parser::Parsed;
-use nikaia_std::tools::check_access::{dotted_path, names_the_argument};
 use nikaia_std::tools::check_consts::{self, CheckCrossing as Crossing};
 use nikaia_std::tools::check_flow::{
     CheckConstant, CheckFlow, CheckOpenNumber as OpenNumber, CheckUnrolling,
@@ -64,7 +63,7 @@ use nikaia_std::tools::check_state::{
     CheckKind as Kind, CheckLocal as Local, CheckPendingCoalesce as PendingCoalesce,
     CheckPromises as Promises, CheckRepeats as Repeats, CheckState, CheckWorld, a_body_never_ends,
 };
-use nikaia_std::tools::check_texts::{self, ends_in_null, ends_in_text};
+use nikaia_std::tools::check_texts::{self, ends_in_text};
 use nikaia_std::tools::check_widen::{
     self, an_integer_that_does_not_widen, names_a_path, number_where_no_number_is,
     views_into_nullable_text, views_into_text,
@@ -134,10 +133,6 @@ fn opened_text(opened: &str) -> &'static str {
     }
 }
 
-/// A binding that nothing here refuses a change to, with a number of its own.
-fn local_free(name: String, ty: Ty) -> Local {
-    Local::free(name, ty, a_new_binding() as i64)
-}
 use winnow_grammar::Symbol as Ident;
 
 /// The types Part I 2.2 offers, which is what an `as` may name
@@ -1070,20 +1065,8 @@ impl From<CheckConstant> for Constant {
     }
 }
 
-/// A number no other binding gets, for [`Local::id`].
-fn a_new_binding() -> usize {
-    static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-    NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-}
-
-/// What a walk past a boundary puts aside, and gives back on the way out.
-struct Boundary {
-    loops: usize,
-    barrier: Option<String>,
-    handed: Option<Handed>,
-    promised: Option<String>,
-}
-
+use nikaia_std::tools::check_arms::CheckArm;
+use nikaia_std::tools::check_binds::CheckBoundary as Boundary;
 struct Checker<'a> {
     /// **The checker's state that is Nikaia** (`tools/check_state.nika`, #558).
     s: CheckState,
@@ -2085,14 +2068,14 @@ impl<'a> Checker<'a> {
                 },
                 None => Ty::Unknown,
             };
-            frame.push(local_free("self".to_string(), ty));
+            frame.push(self.local_free("self".to_string(), ty));
         }
         for arg in args {
             let name = self.parsed.text(arg.name).to_string();
             self.s.nameable(&name, &arg.span, "a parameter");
             frame.push(Local {
                 written_mut: false,
-                id: a_new_binding() as i64,
+                id: self.a_new_binding(),
                 literal: None,
                 name,
                 ty: self.declared(&arg.ty, &arg.span).erase(&parameters),
@@ -2127,7 +2110,7 @@ impl<'a> Checker<'a> {
             self.a_computed_default(option);
         }
         for option in config {
-            frame.push(local_free(
+            frame.push(self.local_free(
                 self.parsed.text(option.name).to_string(),
                 // Not `declared`: an option has no span of its own, and a
                 // caret on the wrong line is worse than no message. Its default
@@ -2141,7 +2124,7 @@ impl<'a> Checker<'a> {
         // frame, `return args` was `NK1117` in every driver. Its type is the
         // statement's, which this checker does not see, so it is not guessed.
         if let Some(spread) = spread {
-            let local = local_free(self.parsed.text(*spread).to_string(), Ty::Unknown);
+            let local = self.local_free(self.parsed.text(*spread).to_string(), Ty::Unknown);
             self.s.flow.unknown_bound.insert(local.id as usize as i64);
             frame.push(local);
         }
@@ -3639,7 +3622,7 @@ impl<'a> Checker<'a> {
         let asked = self.s.flow.at_a_write_door && !mutable.contains(&name);
         Local {
             written_mut: false,
-            id: a_new_binding() as i64,
+            id: self.a_new_binding(),
             literal: None,
             name: self.parsed.text(name).to_string(),
             ty,
@@ -4895,103 +4878,7 @@ impl<'a> Checker<'a> {
     /// `u32`. A range that is not checked is `rustc` about the generated file
     /// the first time somebody writes one.
     fn constant_fits(&mut self, value: &Expr, want: Option<&Ty>, span: &Span) {
-        // **A type beside a value is a use of the numbers in it**
-        // ([ADR-285](../../docs/specification/adr/adr-285.md) D24), whether or
-        // not the value folds.
-        if let Some(want) = want {
-            self.number_asked(value, want, span, true);
-        }
-        // **Nothing beside it and an open number in it**: what it comes to is
-        // measured once that number's uses have decided its type, where the
-        // refusal names the one cause rather than each sum it reaches.
-        let mut open = Vec::new();
-        self.open_numbers_in(value, &mut open);
-        if want.is_none() && !open.is_empty() {
-            return;
-        }
-        // **Said already**, by the operation inside it that overflowed.
-        if self.s.flow.overflowed.contains(&(span.at() as i64)) {
-            return;
-        }
-        // The type it answers to: what stands beside it if that is an integer
-        // this language offers, and otherwise what an operand's declaration
-        // pinned. Neither, and there is nothing to measure against - which is
-        // the literal-alone case that must stay accepted (C.4).
-        let named = want.and_then(integer_named);
-        // **Before the fold**, which answers nothing for a `match` or an `if`
-        // whose branches hand back the literals.
-        if let Some(unsigned) = named.as_deref().filter(|n| matches!(*n, "u32" | "u64")) {
-            self.literals_are(value, unsigned, span);
-        }
-        // **And a list's elements take the element's type**: `let x:
-        // Vec[u32] = [4294967295, 7]` wrote `4294967295i64`, the widening of a
-        // number nothing asked, into a list of `u32` (found writing ADR-306's
-        // tests).
-        if let (Some(Ty::Named { name, args, .. }), Expr::ListLit { items, .. }) = (want, value)
-            && matches!(crate::contracts::ty::base(name), "Vec" | "List" | "Array")
-            && let Some(unsigned) = args
-                .first()
-                .and_then(integer_named)
-                .filter(|n| matches!(n.as_str(), "u32" | "u64"))
-        {
-            for item in items {
-                self.literals_are(item, &unsigned, span);
-            }
-        }
-        let Some(folded) = self.constant_of(value) else {
-            return;
-        };
-        let ty = match named.or(folded.pinned.clone()) {
-            Some(ty) => ty,
-            // **Nothing beside it and nothing pinning it**, which is the
-            // constant that decides its own type
-            // ([ADR-285](../../docs/specification/adr/adr-285.md) D22): it takes
-            // the first that holds it, so the only thing left to report here is
-            // a value no type holds at all. Reported against the wider one,
-            // because that is the one it fell out of.
-            None if !folded.fits("i64") => "i64".to_string(),
-            None => return,
-        };
-        let bare = matches!(value, Expr::LitInt { .. });
-        let before = self.s.findings.len();
-        self.a_number_that_does_not_fit(&folded, bare, &ty, span, None);
-        // **The use is the error, and the `comptime` that computed the value
-        // is shown beside it** ([ADR-287](../../docs/specification/adr/adr-287.md)
-        // D21): the number came from there.
-        if self.s.findings.len() > before
-            && let Some((name, at)) = self.an_open_comptime_in(value)
-            && let Some(finding) = self.s.findings.last_mut()
-        {
-            finding.labels.push(Label {
-                span: *span,
-                word: name.clone(),
-                text: format!("taken as a `{ty}` here"),
-                main: true,
-            });
-            finding.labels.push(Label {
-                span: at,
-                word: name.clone(),
-                text: format!("`{name}` is computed here"),
-                main: false,
-            });
-        }
-    }
-
-    /// The first integer `comptime` with no written type in `expr`, by name
-    /// and where it is declared.
-    fn an_open_comptime_in(&self, expr: &Expr) -> Option<(String, Span)> {
-        match expr {
-            Expr::Variable(name, _) => {
-                let local = self.s.binding(self.parsed.text(*name))?;
-                let at = self.s.open_comptimes.get(&((local.id as usize) as i64))?;
-                Some((local.name.clone(), *at))
-            }
-            Expr::Binary { lhs, rhs, .. } => self
-                .an_open_comptime_in(lhs)
-                .or_else(|| self.an_open_comptime_in(rhs)),
-            Expr::Unary { expr, .. } => self.an_open_comptime_in(expr),
-            _ => None,
-        }
+        self.s.constant_fits(&self.world, value, want, span);
     }
 
     /// `NK1116` for a number and the type it has to fit, where it does not;
@@ -5028,36 +4915,7 @@ impl<'a> Checker<'a> {
     /// `bind_with` decides; a declaration on the way pins the type, and that is
     /// what makes `let a: i32 = 2` then `a + a` arithmetic in an `i32`.
     fn constant_of(&self, expr: &Expr) -> Option<Constant> {
-        if let Some(element) = self.element_constant(expr) {
-            return Some(element);
-        }
-        crate::fold::constant_of(expr, &|name| {
-            let (ty, constant) = self.local(self.parsed.text(name))?;
-            let value = constant?;
-            // **An open number pins nothing yet**
-            // ([ADR-285](../../docs/specification/adr/adr-285.md) D25): its uses
-            // have not all been seen, and what it comes to is held to the type
-            // they decide once they have.
-            if self
-                .s
-                .binding(self.parsed.text(name))
-                .is_some_and(|local| local.open_number.is_some())
-            {
-                return Some(Constant::of(value));
-            }
-            Some(Constant {
-                // **A name pins, and a literal does not**
-                // ([ADR-285](../../docs/specification/adr/adr-285.md) D26). A
-                // declaration pins what it says; a bare `let` pins the type its
-                // own value took, which is the first that holds it - so
-                // `let a = 2000000000` is an `i32` and `a + a` is arithmetic in
-                // one, the same as in every language that has both widths. The
-                // way out is one word: `let a: i64 = …`.
-                pinned: integer_named(&ty)
-                    .or_else(|| Some(Constant::of(value).first_type().to_string())),
-                ..Constant::of(value)
-            })
-        })
+        self.s.constant_of(&self.world, expr).map(Constant::from)
     }
 
     /// The entry an open number was joined into
@@ -5088,16 +4946,6 @@ impl<'a> Checker<'a> {
             .map(|at| at as usize)
     }
 
-    /// **The constant an element of an immutable list of literals is**, where
-    /// the index folds (D34, D26).
-    fn element_constant(&self, expr: &Expr) -> Option<Constant> {
-        self.s
-            .element_constant(&self.world, expr, &|index| {
-                self.constant_of(index).map(Into::into)
-            })
-            .map(|found| Constant::of(found.value))
-    }
-
     /// **A value that is nothing but numbers**: literals and open numbers,
     /// joined by the operations [`Self::open_numbers_in`] walks. A `let` of one
     /// is an open number itself (D1).
@@ -5121,33 +4969,8 @@ impl<'a> Checker<'a> {
     /// **A number given to an open one**: its own value at the `let`, or one
     /// assigned to it later (D3).
     fn open_number_given(&mut self, number: usize, value: &Expr, span: &Span) {
-        let mut joined = vec![number];
-        self.open_numbers_in(value, &mut joined);
-        self.open_numbers_joined(&joined);
-        let pure = crate::fold::constant_of(value, &crate::fold::nothing_is_known);
-        let derived = match pure {
-            Some(_) => None,
-            None => self.constant_of(value),
-        };
-        let literals = nikaia_std::tools::check_numbers4::literals_in(value);
-        let Some(entry) = self.s.flow.open_numbers.get_mut(&(number as i64)) else {
-            return;
-        };
-        if let Some(folded) = &pure {
-            entry.given.push((
-                folded.clone().into(),
-                *span,
-                matches!(value, Expr::LitInt { .. }),
-            ));
-        }
-        if let Some(folded) = derived {
-            entry.derived.push((folded.into(), *span));
-        }
-        entry.written.push((
-            span.at() as i64,
-            literals,
-            pure.as_ref().is_some_and(crate::fold::wants_widening),
-        ));
+        self.s
+            .open_number_given(&self.world, number as i64, value, span);
     }
 
     /// **Every open number of a body, decided** once the body has been walked
@@ -5596,11 +5419,11 @@ impl<'a> Checker<'a> {
                 if let Some(task) = self.s.task_bindings.last_mut() {
                     task.push((name.clone(), bound.clone(), span.at() as i64));
                 }
-                let id = a_new_binding();
+                let id = self.a_new_binding();
                 if let Some((at, elements)) = element {
-                    self.s.flow.open_elements.insert(id as i64, at as i64);
+                    self.s.flow.open_elements.insert(id, at as i64);
                     if let Some(elements) = elements {
-                        self.s.flow.list_constants.insert(id as i64, elements);
+                        self.s.flow.list_constants.insert(id, elements);
                     }
                 }
                 // **And typed as one**: a `V?` read out of a map is an option
@@ -5613,7 +5436,7 @@ impl<'a> Checker<'a> {
                     (_, bound) => bound,
                 };
                 if of_a_map {
-                    self.s.flow.map_views.insert(id as i64);
+                    self.s.flow.map_views.insert(id);
                 }
                 // **A read through the brackets that jumps where nothing is
                 // there binds what the container holds, not a copy of it**:
@@ -5644,13 +5467,13 @@ impl<'a> Checker<'a> {
                 if matches!(&bound, Ty::Named { name, .. } if name == "fs::Path")
                     && self.made_from_text(value)
                 {
-                    self.s.flow.text_paths.insert(id as i64);
+                    self.s.flow.text_paths.insert(id);
                 }
                 if bound.is_unknown() || self.s.a_drivers_row(&self.world, value) {
-                    self.s.flow.unknown_bound.insert(id as i64);
+                    self.s.flow.unknown_bound.insert(id);
                 }
                 self.bind_local(Local {
-                    id: id as i64,
+                    id,
                     name,
                     ty: bound,
                     constant,
@@ -6033,7 +5856,7 @@ impl<'a> Checker<'a> {
                     frame.push(Local {
                         written_mut: false,
                         lent: lent && !copied && !a_view,
-                        ..local_free(name, element)
+                        ..self.local_free(name, element)
                     });
                 }
                 // **A range's binding is a use of the numbers it counts
@@ -6647,7 +6470,7 @@ impl<'a> Checker<'a> {
                     self.leave_boundary(saved);
                     let frame = match arm.binding {
                         Some(name) => {
-                            vec![local_free(self.parsed.text(name).to_string(), raced)]
+                            vec![self.local_free(self.parsed.text(name).to_string(), raced)]
                         }
                         None => Vec::new(),
                     };
@@ -6976,7 +6799,7 @@ impl<'a> Checker<'a> {
                         .map(|local| match parts.get(&local.name) {
                             Some(ty) => {
                                 let text = owned_text.contains(&local.name);
-                                let mut bound = local_free(local.name, ty.clone());
+                                let mut bound = self.local_free(local.name, ty.clone());
                                 bound.lent =
                                     lent_parts && (!self.s.copied(&self.world, ty) || text);
                                 bound
@@ -9163,9 +8986,8 @@ impl<'a> Checker<'a> {
                     _ => Ty::Unknown,
                 };
                 self.s.nothing_here_can_fail(&guarded, span);
-                self.s
-                    .scope
-                    .push(vec![local_free("error".to_string(), caught)]);
+                let error = self.local_free("error".to_string(), caught);
+                self.s.scope.push(vec![error]);
                 let arriving = self.several_arrive(expr);
                 let one = self.the_one_error(expr);
                 let several = std::mem::replace(&mut self.s.flow.caught_several, arriving);
@@ -9563,7 +9385,7 @@ impl<'a> Checker<'a> {
                         }
                         _ => Ty::Unknown,
                     };
-                    local_free(name, element)
+                    self.local_free(name, element)
                 })
                 .collect();
             self.s.scope.push(frame);
@@ -11490,8 +11312,7 @@ impl<'a> Checker<'a> {
     /// What is left is data that a move takes away, which is what the
     /// diagnostic is about.
     fn a_task_takes_these(&mut self, body: &Expr, span: &Span) {
-        let names: Vec<String> = send::names_used(self.parsed, body).into_iter().collect();
-        self.s.a_task_takes_these(&self.world, &names, span);
+        self.s.a_task_takes_these(&self.world, body, span);
     }
 
     /// **A key in the brackets of a map whose keys are owned**
@@ -11905,38 +11726,7 @@ impl<'a> Checker<'a> {
     /// every name the body mentions, including function and field names, and a
     /// name that is not in scope is not found and says nothing.
     fn crosses_into_a_task(&mut self, body: &Expr, span: &Span) {
-        for name in send::names_used(self.parsed, body) {
-            let Some(ty) = self.s.lookup(&name) else {
-                continue;
-            };
-            let crossing = send::crossing(
-                &ty,
-                self.world.own,
-                self.world.library,
-                send::Destination::Ours,
-            );
-            if crossing.refused().is_none() {
-                continue;
-            }
-            let notes = [
-                Some(
-                    "A task runs on its own thread, so everything it uses has to be able \
-                     to move between threads."
-                        .to_string(),
-                ),
-                crossing.note(),
-                Some(SAME_AT_BOTH.to_string()),
-            ];
-            self.s.findings.push(Finding {
-                severity: Severity::Error,
-                span: *span,
-                code: "NK2501".to_string(),
-                message: format!("This task uses `{name}`, which can't be passed to a task."),
-                notes: notes.into_iter().flatten().collect(),
-                help: crossing.way_out(),
-                labels: Vec::new(),
-            });
-        }
+        self.s.crosses_into_a_task(&self.world, body, span);
     }
 
     /// **What a task holds across a pause** ([ADR-055](../../docs/specification/adr/adr-055.md)
@@ -12110,136 +11900,16 @@ impl<'a> Checker<'a> {
         span: &Span,
         why: &str,
     ) {
-        let Arguments {
-            args,
-            found,
-            config,
-            passed,
-        } = handed;
-        let positional = args
-            .iter()
-            .zip(found)
-            .enumerate()
-            .map(|(at, (expr, ty))| (names_the_argument(&self.world, expr, at as i64), ty));
-        let named = config.iter().zip(passed).map(|(arg, (_, ty))| {
-            // The **option's** name in the headline, because that is what the
-            // caller wrote at the `;`; the path is the value behind it, because
-            // `state:` is not something a program can put a `.get()` on.
-            let name = self.parsed.text(arg.name).to_string();
-            (
-                (format!("`{name}`"), dotted_path(&self.world, &arg.value)),
-                ty,
-            )
-        });
-
-        for ((what, path), ty) in positional.chain(named).collect::<Vec<_>>() {
-            let crossing = send::crossing(
-                ty,
-                self.world.own,
-                self.world.library,
-                send::Destination::Foreign,
-            );
-            if crossing.refused().is_none() {
-                continue;
-            }
-            // **Which refusal it is decides which code it prints**
-            // ([ADR-281](../../docs/specification/adr/adr-281.md) D32). A lock
-            // reachable through an argument is `NK2503`, a refusal about the
-            // **call**; everything else is `NK2502`, about the value crossing.
-            if crossing.why() == Some(send::Refusal::Lock) {
-                self.reaches_a_lock(callee, &what, path.as_deref(), &crossing, span);
-                continue;
-            }
-            let notes = [
-                Some(why.to_string()),
-                crossing.note(),
-                Some(SAME_AT_BOTH.to_string()),
-            ];
-            self.s.findings.push(Finding {
-                severity: Severity::Error,
-                span: *span,
-                code: "NK2502".to_string(),
-                message: format!(
-                    "{} can't move to another thread, and `{callee}` might move it.",
-                    sentence(&what)
-                ),
-                notes: notes.into_iter().flatten().collect(),
-                help: crossing.way_out(),
-                labels: Vec::new(),
-            });
-        }
-    }
-
-    /// **A call into foreign code from which a lock is reachable** through its
-    /// arguments, transitively and through the fields of a struct
-    /// ([ADR-281](../../docs/specification/adr/adr-281.md) D32, Part III 15.2,
-    /// worked through in C.6): `NK2503`.
-    ///
-    /// D6 says the check **is** `NK2502`'s walk generalised and never a copy of
-    /// it, and this is that sentence built: the walk above is the only one,
-    /// asked once per argument, and what arrives here is its verdict with the
-    /// word `Lock` on it. Nothing is walked twice.
-    ///
-    /// **The difference from `NK2502` is what the refusal is about**, which is
-    /// why it is a second code rather than a second sentence. `NK2502` refuses
-    /// a **value** that may not cross being handed to a call that may start a
-    /// thread; this refuses the **call**, because foreign code touches only
-    /// what it reaches and a lock is what it must not be able to reach. A call
-    /// that can reach no lock is allowed without a word (15.2).
-    fn reaches_a_lock(
-        &mut self,
-        callee: &str,
-        what: &str,
-        path: Option<&str>,
-        crossing: &send::Crossing,
-        span: &Span,
-    ) {
-        let (part, at) = crossing.refused().expect("a lock is a refusal");
-        // The path the note and the way out print: the argument's own name with
-        // the field that decided it behind it, where both are there to be had.
-        // Where the argument is not a name - a literal, a call - there is no
-        // path to write and the note names the type instead.
-        let reached = path.map(|path| match at {
-            Some(field) => format!("{path}.{field}"),
-            None => path.to_string(),
-        });
-        let notes = [
-            Some(format!(
-                "The compiler knows nothing about `{callee}`, so it can't see what it does \
-                 with what you pass it."
-            )),
-            Some(match &reached {
-                Some(reached) => format!(
-                    "`{reached}` is a `{part}`, and code that might keep a lock could \
-                     deadlock."
-                ),
-                None => format!(
-                    "What you pass is a `{part}`, and code that might keep a lock could \
-                     deadlock."
-                ),
-            }),
-            Some(SAME_AT_BOTH.to_string()),
-        ];
-        self.s.findings.push(Finding {
-            severity: Severity::Error,
-            span: *span,
-            code: "NK2503".to_string(),
-            message: format!("`{callee}` could reach a lock through {what}."),
-            notes: notes.into_iter().flatten().collect(),
-            // 15.2's way out is keeping the lock out of the call's reach, and
-            // C.6 writes it as a line the program can be edited into.
-            help: Some(match &reached {
-                Some(reached) => format!(
-                    "Pass it a copy of what it needs instead of the container:\n\
-                     {:11}{callee}({reached}.get())",
-                    ""
-                ),
-                None => "Open the lock here and pass the value inside it, so the called code \
-                         gets an ordinary value and no lock."
-                    .to_string(),
-            }),
-            labels: Vec::new(),
-        });
+        self.s.crosses_into_an_unseen_call(
+            &self.world,
+            callee,
+            handed.args,
+            handed.found,
+            handed.config,
+            handed.passed,
+            span,
+            why,
+        );
     }
 
     /// **`NK1229`: a supervisor's child that would not start fresh**
@@ -13258,7 +12928,7 @@ impl<'a> Checker<'a> {
                 let frame = names
                     .iter()
                     .zip(params)
-                    .map(|(n, ty)| local_free(self.parsed.text(*n).to_string(), ty.clone()))
+                    .map(|(n, ty)| self.local_free(self.parsed.text(*n).to_string(), ty.clone()))
                     .collect();
                 self.s.scope.push(frame);
                 self.expr(&call, span);
@@ -13271,12 +12941,7 @@ impl<'a> Checker<'a> {
     /// value a lambda ends in is handed to whoever calls it, as a function's
     /// is (ADR-282 D4).
     fn a_lambdas_text_is_its_own(&mut self, want: &Ty, value: &Expr) {
-        if let (Ty::Fn { result, .. }, Expr::Closure { body, .. }) = (want, value)
-            && let Some(result) = result.as_ref()
-            && let Some(tail) = tail_of(body)
-        {
-            self.text_literal(result, tail, true);
-        }
+        self.s.a_lambdas_text_is_its_own(&self.world, want, value);
     }
 
     /// A tuple of text literals where a tuple with text is wanted
@@ -13409,87 +13074,14 @@ impl<'a> Checker<'a> {
     /// said *`match` arms have incompatible types* before the conversion
     /// could be reached.
     fn arms_meet_at_null(&mut self, arms: &[(Option<&Expr>, Ty)]) -> Option<Ty> {
-        // A block that ends in `null` is a `null` arm too: what it returns
-        // early is the function's, not the choice's.
-        let is_null = |arm: &Option<&Expr>| arm.is_some_and(ends_in_null);
-        if !arms
+        let arms: Vec<CheckArm<'_>> = arms
             .iter()
-            .any(|(arm, ty)| is_null(arm) || matches!(ty, Ty::Nullable(_)))
-        {
-            return None;
-        }
-        // **A number written down takes its type from where it stands**
-        // (ADR-285), so it agrees with whatever the other arms say, and
-        // `Some(1)` is resolved by the `T?` it goes into.
-        let a_number = |arm: &Option<&Expr>| {
-            matches!(arm, Some(Expr::LitInt { .. } | Expr::LitFloat(_, _)))
-                || matches!(arm, Some(Expr::Unary { op: crate::ast::UnaryOp::Neg, expr, .. })
-                    if matches!(&**expr, Expr::LitInt { .. } | Expr::LitFloat(_, _)))
-        };
-        // **And a text literal takes `String` where its neighbours are text
-        // of their own** (ADR-282 D4, as [`Checker::arms_meet_at_text`]
-        // reads it): `match e { A => "a", B => kind(b), C => null }` into a
-        // `String?` is one `T?`, where the literal's view kept the arms apart
-        // and the language below said *`match` arms have incompatible types*
-        // (found moving `sharing` into Nikaia, #125). A view arm that is not
-        // a literal keeps the disagreement.
-        let a_text_literal = |arm: &Option<&Expr>| matches!(arm, Some(Expr::LitStr { .. }));
-        let text = Ty::named("String");
-        let owned_beside = arms.iter().any(|(arm, ty)| {
-            (!a_text_literal(arm) && matches!(ty, Ty::Nullable(inner) if **inner == text))
-                || *ty == text
-        });
-        let literals_own = owned_beside
-            || arms
-                .iter()
-                .all(|(arm, _)| is_null(arm) || a_text_literal(arm));
-        let mut plain: Option<Ty> = None;
-        let mut literals = false;
-        for (arm, ty) in arms.iter().filter(|(arm, _)| !is_null(arm)) {
-            if a_number(arm) {
-                continue;
-            }
-            if literals_own && a_text_literal(arm) {
-                literals = true;
-                continue;
-            }
-            let inner = match ty {
-                Ty::Nullable(inner) => inner.as_ref().clone(),
-                other => other.clone(),
-            };
-            if inner.is_unknown() || arm.is_none() {
-                return None;
-            }
-            match &plain {
-                None => plain = Some(inner),
-                Some(seen) if *seen == inner => {}
-                Some(_) => return None,
-            }
-        }
-        if literals {
-            match &plain {
-                None => plain = Some(text.clone()),
-                Some(seen) if *seen == text => {}
-                Some(_) => return None,
-            }
-        }
-        for (arm, ty) in arms {
-            if let Some(arm) = arm
-                && !matches!(ty, Ty::Nullable(_))
-                && !matches!(arm, Expr::LitNull(_))
-            {
-                if literals && a_text_literal(&Some(*arm)) {
-                    self.text_literal(&text, arm, true);
-                }
-                self.some_at_the_tails(arm);
-            }
-        }
-        Some(Ty::Nullable(Box::new(plain.unwrap_or(Ty::Unknown))))
-    }
-
-    /// A plain arm beside a `null` is `Some` (`tools/check_texts.nika`).
-    fn some_at_the_tails(&mut self, arm: &Expr) {
-        self.s.some_at_the_tails(arm);
+            .map(|(tail, ty)| CheckArm {
+                tail: *tail,
+                ty: ty.clone(),
+            })
+            .collect();
+        self.s.arms_meet_at_null(&self.world, &arms)
     }
 
     fn arms_meet_at_text(&mut self, arms: &[(Option<&Expr>, Ty)], span: &Span) -> Option<Ty> {
@@ -14149,36 +13741,26 @@ impl<'a> Checker<'a> {
 
     // --- looking things up ---------------------------------------------------
 
+    /// A number no other binding gets, for [`Local::id`]: the state's own
+    /// counter, the one the Nikaia side takes from (`tools/check_state.nika`).
+    fn a_new_binding(&mut self) -> i64 {
+        self.s.a_new_binding()
+    }
+
+    /// A binding that nothing here refuses a change to, with a number of its own.
+    fn local_free(&mut self, name: String, ty: Ty) -> Local {
+        let id = self.a_new_binding();
+        Local::free(name, ty, id)
+    }
+
     /// Bind a name, with the constant it stands for where there is one
     /// (ADR-285 D29). Only [`Stmt::Let`] ever passes anything but `None`.
     fn bind_with(&mut self, name: String, ty: Ty, constant: Option<build_time::Integer>) {
-        self.bind_local(Local {
-            written_mut: false,
-            id: a_new_binding() as i64,
-            literal: None,
-            name,
-            ty,
-            constant,
-            lent: false,
-            changing: false,
-            built: None,
-            immutable: None,
-            empty_list: None,
-            open_number: None,
-        });
+        self.s.bind_with(name, ty, constant);
     }
 
     fn bind_local(&mut self, local: Local) {
-        if local.ty.is_unknown() {
-            self.s.flow.unknown_bound.insert(local.id as usize as i64);
-        }
-        if let Some(frame) = self.s.scope.last_mut() {
-            frame.push(local);
-        }
-    }
-
-    fn local(&self, name: &str) -> Option<(Ty, Option<build_time::Integer>)> {
-        self.s.binding(name).map(|local| (local.ty, local.constant))
+        self.s.bind_local(local);
     }
 
     fn resolve(&self, name: &str) -> Option<(String, FnContract)> {
@@ -14481,34 +14063,12 @@ impl<'a> Checker<'a> {
     /// of them is not reachable from inside it, so the count starts again at
     /// zero and the word for what stands in the way is carried for the message.
     fn enter_boundary(&mut self, what: &str) -> Boundary {
-        let loops = std::mem::replace(&mut self.s.flow.loops, 0);
-        let barrier = self.s.flow.barrier.replace(what.to_string());
-        // **And what a lambda was seen to do stops here too**
-        // ([ADR-277](../../docs/specification/adr/adr-277.md) D7), for the same
-        // reason the loop count does: what a body written *inside* this one
-        // does happens when its own callee runs it. `lambda` sets its own
-        // accumulator inside the walk and reads it back there.
-        let handed = self.s.handed_over.take();
-        // **And the enclosing `sync` stops here too.** What is inside this body
-        // is a body of its own - a lambda, an `overlap` branch, a `select` arm -
-        // and what *it* may do is said by its own type rather than by the
-        // declaration around it ([ADR-277](../../docs/specification/adr/adr-277.md)
-        // D2, whose `NK2206` is the rule for a lambda).
-        let promised = self.s.inside_a_sync_function.take();
-        Boundary {
-            loops: loops as usize,
-            barrier,
-            handed,
-            promised,
-        }
+        self.s.enter_boundary(what)
     }
 
     /// Back out of what [`Checker::enter_boundary`] went into.
     fn leave_boundary(&mut self, saved: Boundary) {
-        self.s.inside_a_sync_function = saved.promised;
-        self.s.handed_over = saved.handed;
-        self.s.flow.loops = saved.loops as i64;
-        self.s.flow.barrier = saved.barrier;
+        self.s.leave_boundary(&saved);
     }
 
     /// `NK2205`: a `set` whose argument reads the same container with `get`
@@ -14711,50 +14271,8 @@ impl<'a> Checker<'a> {
         value: &Expr,
         span: &Span,
     ) -> Ty {
-        if ty.is_some() {
-            self.s.findings.push(Finding {
-                severity: Severity::Error,
-                span: *span,
-                code: "NK1136".to_string(),
-                message: "A `let` that binds several names can't have a type.".to_string(),
-                notes: vec![
-                    "The names are taken apart by position, and one type can't say which \
-                     name it belongs to."
-                        .to_string(),
-                ],
-                help: Some(
-                    "Remove the type, or bind one name and read the parts from it.".to_string(),
-                ),
-                labels: Vec::new(),
-            });
-        }
-        let parts = match found {
-            Ty::Tuple(parts) if parts.len() == names.len() => parts.clone(),
-            _ => vec![Ty::Unknown; names.len()],
-        };
-        // **A tuple taken apart out of a place or a view is lent** (#465), as
-        // a `let` of one name over a place is (`lent_lets`): its parts are
-        // views of the tuple's, and a number, a `bool` or a `char` among them
-        // is read out of its view where it is bound, as a loop binding is.
-        let lent = self.s.facts.lent_lets.contains(&(span.at() as i64))
-            || matches!(value, Expr::Variable(name, _) if self.s.lent_here(self.parsed.text(*name)));
-        let frame = self.s.scope.len().saturating_sub(1);
-        for (name, part) in names.iter().zip(parts) {
-            let bound = self.parsed.text(*name).to_string();
-            self.s.nameable(&bound, span, "a `let`");
-            if lent && bound != "_" {
-                if a_copy_by_value(&part) {
-                    self.s
-                        .facts
-                        .copied_tuple_parts
-                        .insert(((span.at() as i64), bound.clone()));
-                } else {
-                    self.s.lent_lets.insert((bound.clone(), frame as i64));
-                }
-            }
-            self.bind_with(bound, part, None);
-        }
-        Ty::Tuple(Vec::new())
+        self.s
+            .tuple_let(&self.world, names, ty.is_some(), found, value, span)
     }
 
     /// **Every item-level `comptime`, in a frame that stays under the whole
@@ -15305,9 +14823,9 @@ impl<'a> Checker<'a> {
             true => Ty::Unknown,
             false => want.unwrap_or(found),
         };
-        let id = a_new_binding();
+        let id = self.a_new_binding();
         if open {
-            self.s.open_comptimes.insert(id as i64, *span);
+            self.s.open_comptimes.insert(id, *span);
         }
         // **What the name is worth is what was *evaluated*, not what folded.**
         // They were the same thing while the fold was the whole evaluator; with
@@ -15317,7 +14835,7 @@ impl<'a> Checker<'a> {
         // it had just been computed.
         self.bind_local(Local {
             written_mut: false,
-            id: id as i64,
+            id,
             literal: None,
             name: bound,
             ty: held,
@@ -15573,11 +15091,12 @@ impl<'a> Checker<'a> {
 
     /// The names a `match` arm brings into scope, all of them unknown: what a
     /// variant carries is not in the ledger yet.
-    fn pattern_bindings(&self, pattern: &MatchPattern) -> Vec<Local> {
-        pattern_names(&self.world, pattern)
-            .into_iter()
-            .map(|name| local_free(name, Ty::Unknown))
-            .collect()
+    fn pattern_bindings(&mut self, pattern: &MatchPattern) -> Vec<Local> {
+        let mut bound = Vec::new();
+        for name in pattern_names(&self.world, pattern) {
+            bound.push(self.local_free(name, Ty::Unknown));
+        }
+        bound
     }
 }
 

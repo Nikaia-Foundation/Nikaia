@@ -175,6 +175,10 @@ COMPILER_NIKA = {
     "emit_core_leaves.nika": "emit: the leaves of the core: keys, postfix bases, operands, string literals, f-strings, call options, guards, grammar entries, html templates, blocks and ifs (0.0.822)",
     "emit_core_reads.nika": "emit: the reads of the core: held receivers and indices, comparisons against a length, receivers, field calls, index reads, overlap and select (0.0.824)",
     "emit_core_match.nika": "emit: the match of the core: patterns as written, the boxed parts they look inside, arm bodies, matches! for yes-or-no, match over a sum (0.0.825)",
+    "check_send.nika": "check: what a task or a call nothing describes is handed (NK2501, NK2502, NK2503) (0.0.826)",
+    "check_numbers5.nika": "check: the constant a name or sum comes to and the type a number must fit (0.0.826)",
+    "check_binds.nika": "check: putting a name into scope, a tuple taken apart, the boundary a lambda or task crosses (0.0.826)",
+    "check_arms.nika": "check: arms that meet at T? and a lambda that ends in text (0.0.826)",
 }
 
 

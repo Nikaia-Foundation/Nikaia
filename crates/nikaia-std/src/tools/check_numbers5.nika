@@ -1,0 +1,235 @@
+// crates/nikaia-std/src/tools/check_numbers5.nika
+//
+// **What a constant integer expression comes to, and where a number must fit**
+// (ADR-285 D22, D25, D26, ADR-287 D21), moved from the compiler's checker
+// (ADR-294, #125, #558, C-5d): the fold with the checker's names read through
+// the scope, the `comptime` an expression leans on, the number a type beside a
+// value has to hold and what a number is given at its `let`.
+
+use std::collections
+
+/// The `comptime` a number came from, by name and where it is declared.
+pub struct CheckOpenComptime {
+    pub name: String,
+    pub at: Span,
+}
+
+/// The fold's answer as the checker keeps it: `None` where nothing is claimed.
+fn checked_constant(folded: ref Folded) -> CheckConstant? {
+    return match folded {
+        Folded::Value(c) => CheckConstant { value: c.value.clone(), beyond: false, pinned: pinned_or_none(c.pinned) },
+        Folded::Overflows(c) => CheckConstant { value: c.value.clone(), beyond: false, pinned: pinned_or_none(c.pinned) },
+        Folded::TooLarge(negative) => CheckConstant { value: integer(18446744073709551615, negative), beyond: true, pinned: null },
+        Folded::Nothing => null,
+    }
+}
+
+fn pinned_or_none(pinned: ref String) -> String? {
+    return null if pinned.is_empty()
+    return pinned.clone()
+}
+
+/// Whether the name is a list's.
+fn a_list_named(name: ref String) -> bool {
+    let base = base_name(name)
+    return base == "Vec" || base == "List" || base == "Array"
+}
+
+/// The integer type a type beside a value names, where it names one.
+fn named_beside(want: ref Ty?) -> String? sync {
+    let ty = want ?? return null
+    return integer_named(ty)
+}
+
+/// The integer type, where it is an unsigned one the literals are written for.
+fn an_unsigned(named: ref String?) -> String? {
+    let found = named ?? return null
+    return found.clone() if found == "u32" || found == "u64"
+    return null
+}
+
+impl CheckState {
+    /// **What a constant integer expression comes to**, and the type an
+    /// operand's declaration pinned. The arithmetic is `fold.nika`'s; what this
+    /// adds is a name resolved to what it is worth (ADR-285 D26). Only an
+    /// **immutable** `let` carries a value forward to be found here.
+    pub fn constant_of(ref self, world: ref CheckWorld, expr: ref Expr) -> CheckConstant? sync {
+        let element = self.element_constant(world, expr)
+        if element != null {
+            return element
+        }
+        let folded = constant_of(expr, fn(name) { self.a_name_folded(world, name) })
+        return checked_constant(folded)
+    }
+
+    fn a_name_folded(ref self, world: ref CheckWorld, name: winnow_grammar::Symbol) -> Folded sync {
+        let local = self.binding(world.words.resolve(name)) ?? return Folded::Nothing
+        let value = local.constant ?? return Folded::Nothing
+        // **An open number pins nothing yet** (ADR-285 D25): its uses have not
+        // all been seen, and what it comes to is held to the type they decide.
+        if local.open_number != null {
+            return Folded::Value(Constant { value: value.clone(), pinned: "".clone() })
+        }
+        // **A name pins, and a literal does not** (ADR-285 D26). A declaration
+        // pins what it says; a bare `let` pins the type its own value took,
+        // which is the first that holds it.
+        let declared = integer_named(local.ty)
+        if declared != null {
+            return Folded::Value(Constant { value: value.clone(), pinned: declared ?? return Folded::Nothing })
+        }
+        if integer_fits(value, "i32") {
+            return Folded::Value(Constant { value: value.clone(), pinned: "i32".clone() })
+        }
+        return Folded::Value(Constant { value: value.clone(), pinned: "i64".clone() })
+    }
+
+    /// The first integer `comptime` with no written type in `expr`, by name and
+    /// where it is declared.
+    pub fn an_open_comptime_in(ref self, world: ref CheckWorld, expr: ref Expr) -> CheckOpenComptime? sync {
+        return match expr {
+            Expr::Variable(name, _) => self.an_open_comptime_named(world, name),
+            Expr::Binary { lhs, rhs, .. } => self.an_open_comptime_either(world, lhs, rhs),
+            Expr::Unary { expr, .. } => self.an_open_comptime_in(world, expr),
+            else => null,
+        }
+    }
+
+    fn an_open_comptime_named(ref self, world: ref CheckWorld, name: winnow_grammar::Symbol) -> CheckOpenComptime? sync {
+        let local = self.binding(world.words.resolve(name)) ?? return null
+        let at = self.open_comptimes[local.id] ?? return null
+        return CheckOpenComptime { name: local.name.clone(), at: at.clone() }
+    }
+
+    fn an_open_comptime_either(ref self, world: ref CheckWorld, lhs: ref Expr, rhs: ref Expr) -> CheckOpenComptime? sync {
+        let first = self.an_open_comptime_in(world, lhs)
+        if first != null {
+            return first
+        }
+        return self.an_open_comptime_in(world, rhs)
+    }
+
+    /// **A number and the type it has to fit** (`NK1116`): a `let` with a
+    /// written type, a `return` against a declared result, an argument whose
+    /// parameter says what it takes - and a sum an operand's declaration typed.
+    /// A literal alone, with nothing beside it, stays accepted (Part III C.4).
+    pub fn constant_fits(ref mut self, world: ref CheckWorld, value: ref Expr, want: ref Ty?, span: ref Span) sync {
+        // **A type beside a value is a use of the numbers in it** (ADR-285
+        // D24), whether or not the value folds.
+        self.number_asked_beside(world, value, want, span)
+        // **Nothing beside it and an open number in it**: what it comes to is
+        // measured once that number's uses have decided its type.
+        let open = self.open_numbers_in(world, value)
+        if want == null && open.len() > 0 {
+            return
+        }
+        // **Said already**, by the operation inside it that overflowed.
+        let here = span.start as i64
+        if self.flow.overflowed.contains(here) {
+            return
+        }
+        let named = named_beside(want)
+        self.unsigned_literals_beside(world, value, want, named, span)
+        let folded = self.constant_of(world, value) ?? return
+        let ty = self.type_it_answers_to(named, folded) ?? return
+        let before = self.findings.len()
+        self.a_number_not_fitting(folded, a_lit_int(value), ty, span, null)
+        // **The use is the error, and the `comptime` that computed the value is
+        // shown beside it** (ADR-287 D21).
+        if self.findings.len() > before {
+            self.labelled_with_its_comptime(world, value, ty, span)
+        }
+    }
+
+    fn number_asked_beside(ref mut self, world: ref CheckWorld, value: ref Expr, want: ref Ty?, span: ref Span) sync {
+        let ty = want ?? return
+        self.number_asked(world, value, ty, span, true)
+    }
+
+    /// The unsigned literals of a value put where an unsigned integer, or a
+    /// list of them, is stated.
+    fn unsigned_literals_beside(ref mut self, world: ref CheckWorld, value: ref Expr, want: ref Ty?, named: ref String?, span: ref Span) sync {
+        let single = an_unsigned(named)
+        if single != null {
+            self.literals_are(value, single ?? return)
+        }
+        let ty = want ?? return
+        let unsigned = an_unsigned(number_list_element(ty)) ?? return
+        match ty {
+            Ty::Named { name, .. } => {
+                if a_list_named(name) {
+                    self.literals_are_in_a_list(value, unsigned)
+                }
+            },
+            else => {},
+        }
+    }
+
+    fn literals_are_in_a_list(ref mut self, value: ref Expr, unsigned: ref String) sync {
+        match value {
+            Expr::ListLit { items, .. } => {
+                for item in items {
+                    self.literals_are(item, unsigned)
+                }
+            },
+            else => {},
+        }
+    }
+
+    /// The type a folded number answers to: what stands beside it if that is an
+    /// integer this language offers, otherwise what an operand's declaration
+    /// pinned. **Neither** takes the first that holds it, so the only thing left
+    /// to report is a value no type holds at all, against the wider (ADR-285
+    /// D22).
+    fn type_it_answers_to(ref self, named: ref String?, folded: ref CheckConstant) -> String? sync {
+        if named != null {
+            return (named ?? return null).clone()
+        }
+        if folded.pinned != null {
+            return (folded.pinned ?? return null).clone()
+        }
+        if folded.beyond || !integer_fits(folded.value, "i64") {
+            return "i64".clone()
+        }
+        return null
+    }
+
+    fn labelled_with_its_comptime(ref mut self, world: ref CheckWorld, value: ref Expr, ty: ref String, span: ref Span) sync {
+        let found = self.an_open_comptime_in(world, value) ?? return
+        let mut finding = self.findings.pop() ?? return
+        finding.labels.push(CheckLabel { span: span.clone(), word: found.name.clone(), text: f"taken as a `{ty}` here", main: true })
+        finding.labels.push(CheckLabel { span: found.at.clone(), word: found.name.clone(), text: f"`{found.name}` is computed here", main: false })
+        self.findings.push(finding)
+    }
+
+    /// **A number given to an open one**: its own value at the `let`, or one
+    /// assigned to it later (D3).
+    pub fn open_number_given(ref mut self, world: ref CheckWorld, number: i64, value: ref Expr, span: ref Span) sync {
+        let mut joined: Vec[i64] = [number]
+        for at in self.open_numbers_in(world, value) {
+            joined.push(at)
+        }
+        self.open_numbers_joined(joined)
+        let pure = constant_of(value, fn(name) { Folded::Nothing })
+        let known = checked_constant(pure)
+        let mut derived: CheckConstant? = null
+        if known == null {
+            derived = self.constant_of(world, value)
+        }
+        let found = self.flow.open_numbers[number] ?? return
+        let mut entry = found.clone()
+        self.given_to(entry, known, derived, value, span)
+        entry.written.push((span.start as i64, literals_in(value), wants_widening(pure)))
+        self.flow.open_numbers.insert(number, entry)
+    }
+
+    fn given_to(ref self, mut entry: CheckOpenNumber, known: CheckConstant?, derived: CheckConstant?, value: ref Expr, span: ref Span) sync {
+        if known != null {
+            let folded = known ?? return
+            entry.given.push((folded, span.clone(), a_lit_int(value)))
+        }
+        if derived != null {
+            let folded = derived ?? return
+            entry.derived.push((folded, span.clone()))
+        }
+    }
+}

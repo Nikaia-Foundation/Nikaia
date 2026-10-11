@@ -145,25 +145,25 @@ impl CheckState {
     }
 
     /// **The constant an element of an immutable list of literals is**, where the
-    /// index folds (D34, D26); `fold` is the checker's fold of the index.
-    pub fn element_constant(ref self, world: ref CheckWorld, expr: ref Expr, fold: fn(ref Expr) -> CheckConstant? sync) -> CheckConstant? sync {
+    /// index folds (D34, D26); the index is folded by `constant_of`.
+    pub fn element_constant(ref self, world: ref CheckWorld, expr: ref Expr) -> CheckConstant? sync {
         return match expr {
-            Expr::Index { base, index, .. } => self.element_constant_in(world, base, index, fold),
+            Expr::Index { base, index, .. } => self.element_constant_in(world, base, index),
             else => null,
         }
     }
 
-    fn element_constant_in(ref self, world: ref CheckWorld, base: ref Expr, index: ref Expr, fold: fn(ref Expr) -> CheckConstant? sync) -> CheckConstant? sync {
+    fn element_constant_in(ref self, world: ref CheckWorld, base: ref Expr, index: ref Expr) -> CheckConstant? sync {
         return match base {
-            Expr::Variable(name, _) => self.element_of_a_name(world, name, index, fold),
+            Expr::Variable(name, _) => self.element_of_a_name(world, name, index),
             else => null,
         }
     }
 
-    fn element_of_a_name(ref self, world: ref CheckWorld, name: winnow_grammar::Symbol, index: ref Expr, fold: fn(ref Expr) -> CheckConstant? sync) -> CheckConstant? sync {
+    fn element_of_a_name(ref self, world: ref CheckWorld, name: winnow_grammar::Symbol, index: ref Expr) -> CheckConstant? sync {
         let local = self.binding(world.words.resolve(name)) ?? return null
         let elements = self.flow.list_constants[local.id] ?? return null
-        let at = fold(index) ?? return null
+        let at = self.constant_of(world, index) ?? return null
         if at.value.negative || at.value.magnitude >= elements.len() as u64 {
             return null
         }

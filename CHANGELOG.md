@@ -8,6 +8,14 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.826] — 2026-10-11
+
+**check: task crossings, the number fold, binding and boundary, arms at null are Nikaia (C-5d, #558, #125)**
+- tools/check_send.nika: NK2501 (crosses_into_a_task), NK2502/NK2503 (crosses_into_an_unseen_call, reaches_a_lock); a_task_takes_these reads the names itself
+- tools/check_numbers5.nika: constant_of (the fold with the scope's names), constant_fits, open_number_given, an_open_comptime_in; element_constant no longer takes a callback
+- tools/check_binds.nika: the binding counter (CheckState.next_binding is the one host ids come from too), bind_local, bind_with, tuple_let, enter_boundary, leave_boundary
+- tools/check_arms.nika: arms_meet_at_null and a_lambdas_text_is_its_own
+
 ## [0.0.825] — 2026-10-11
 
 **emit: the match of the core is Nikaia: patterns, boxed parts, arm bodies, match over a sum**

@@ -1,0 +1,129 @@
+// crates/nikaia-std/src/tools/check_binds.nika
+//
+// **Putting a name into scope, and a boundary the walk crosses** (ADR-285 D29,
+// ADR-277 D2, D7, #465, Part I 8.3), moved from the compiler's checker
+// (ADR-294, #125, #558, C-5d): a binding with the number the state hands out, a
+// `let` that takes a tuple apart, and what a lambda, a task or a branch puts
+// aside on the way in and gives back on the way out.
+
+use std::collections
+
+/// What a walk past a boundary puts aside, and gives back on the way out.
+pub struct CheckBoundary {
+    pub loops: i64,
+    pub barrier: String?,
+    pub handed: CheckHanded?,
+    pub promised: String?,
+}
+
+impl CheckState {
+    /// A number no other binding gets, for `CheckLocal::id`.
+    pub fn a_new_binding(ref mut self) -> i64 sync {
+        self.next_binding = self.next_binding + 1
+        return self.next_binding
+    }
+
+    /// Put a binding into the innermost frame.
+    pub fn bind_local(ref mut self, local: CheckLocal) sync {
+        if local.ty.is_unknown() {
+            self.flow.unknown_bound.insert(local.id)
+        }
+        if self.scope.len() > 0 {
+            let at = self.scope.len() - 1
+            self.scope[at].push(local)
+        }
+    }
+
+    /// Bind a name, with the constant it stands for where there is one (ADR-285
+    /// D29). Only a `let` ever passes anything but `None`.
+    pub fn bind_with(ref mut self, name: String, ty: Ty, constant: Integer?) sync {
+        let id = self.a_new_binding()
+        let mut local = CheckLocal::free(name, ty, id)
+        local.constant = constant
+        self.bind_local(local)
+    }
+
+    /// **`NK1136`: a `let` that binds several names can't have a type**, and
+    /// each name takes its part of the tuple. A tuple taken apart out of a place
+    /// or a view is lent (#465): its parts are views of the tuple's, and a
+    /// number, a `bool` or a `char` among them is read out of its view where it
+    /// is bound, as a loop binding is.
+    pub fn tuple_let(ref mut self, world: ref CheckWorld, names: ref Vec[winnow_grammar::Symbol], written: bool, found: ref Ty, value: ref Expr, span: ref Span) -> Ty sync {
+        if written {
+            self.findings.push(check_refusal("NK1136", span, "A `let` that binds several names can't have a type.".clone(), ["The names are taken apart by position, and one type can't say which name it belongs to.".clone()], "Remove the type, or bind one name and read the parts from it.".clone()))
+        }
+        let parts = binds_tuple_parts(found, names.len())
+        let at = span.start as i64
+        let lent = self.facts.lent_lets.contains(at) || self.a_tuple_over_a_lent_name(world, value)
+        let mut frame = 0
+        if self.scope.len() > 0 {
+            frame = self.scope.len() - 1
+        }
+        for index in 0..<names.len() {
+            let bound = world.words.resolve(names[index]).clone()
+            self.nameable(bound, span, "a `let`")
+            self.a_tuple_part_is_lent(lent, bound, parts[index], at, frame)
+            self.bind_with(bound, parts[index].clone(), null)
+        }
+        return Ty::Tuple([])
+    }
+
+    fn a_tuple_over_a_lent_name(ref self, world: ref CheckWorld, value: ref Expr) -> bool sync {
+        return match value {
+            Expr::Variable(name, _) => self.lent_here(world.words.resolve(name)),
+            else => false,
+        }
+    }
+
+    fn a_tuple_part_is_lent(ref mut self, lent: bool, bound: ref String, part: ref Ty, at: i64, frame: i64) sync {
+        if !lent || bound == "_" {
+            return
+        }
+        if a_copy_by_value(part) {
+            self.facts.copied_tuple_parts.insert((at, bound.clone()))
+        } else {
+            self.lent_lets.insert((bound.clone(), frame))
+        }
+    }
+
+    /// **Walk something the language below makes a function of its own**: a
+    /// lambda, a task, an `overlap` branch. A loop outside one of them is not
+    /// reachable from inside it, so the count starts again at zero and the word
+    /// for what stands in the way is carried for the message. What a lambda was
+    /// seen to do stops here too (ADR-277 D7), and so does the enclosing `sync`
+    /// (ADR-277 D2).
+    pub fn enter_boundary(ref mut self, what: ref String) -> CheckBoundary sync {
+        let saved = CheckBoundary { loops: self.flow.loops, barrier: self.flow.barrier?.clone(), handed: self.handed_over?.clone(), promised: self.inside_a_sync_function?.clone() }
+        self.flow.loops = 0
+        self.flow.barrier = what.clone()
+        self.handed_over = null
+        self.inside_a_sync_function = null
+        return saved
+    }
+
+    /// Back out of what `enter_boundary` went into.
+    pub fn leave_boundary(ref mut self, saved: ref CheckBoundary) sync {
+        self.inside_a_sync_function = saved.promised?.clone()
+        self.handed_over = saved.handed?.clone()
+        self.flow.loops = saved.loops
+        self.flow.barrier = saved.barrier?.clone()
+    }
+}
+
+/// The parts a tuple type has, or as many unknown ones where it is not a tuple
+/// of that many.
+fn binds_tuple_parts(found: ref Ty, count: i64) -> Vec[Ty] {
+    match found {
+        Ty::Tuple(parts) => {
+            if parts.len() == count {
+                return parts.clone()
+            }
+        },
+        else => {},
+    }
+    let mut unknown: Vec[Ty] = []
+    for index in 0..<count {
+        unknown.push(Ty::Unknown)
+    }
+    return unknown
+}
