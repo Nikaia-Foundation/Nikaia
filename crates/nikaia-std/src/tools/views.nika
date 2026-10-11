@@ -195,6 +195,20 @@ fn of_what(subject: ref String?, function: ref String) -> String {
     return f"`{owner}.{function}`"
 }
 
+// **The package's, not the file's** (B12, #580): a type another file declares
+// is in the package ledger with the cases or fields that hold a view, so a
+// result of that type is walked like one declared here. Only the walk of a
+// result (D25) asks for it: the stored-view scan keeps the file's own set.
+fn package_borrowing_types(asked: ref Asked, items: ref Vec[Spanned[Item]]) -> collections::BTreeSet[String] {
+    let mut borrowing = borrowing_types(asked.names, items)
+    for (name, described) in asked.own.types {
+        if described.tethered.len() > 0 {
+            borrowing.insert(name.clone())
+        }
+    }
+    return borrowing
+}
+
 // The structs and enums that hold a view, directly or through another such
 // type - the emitter's `borrowing_structs`.
 fn borrowing_types(names: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]]) -> collections::BTreeSet[String] {
@@ -2260,7 +2274,7 @@ pub struct ResultSource {
 /// The answer of D25 for every function of the unit that hands back a view,
 /// the ledger's `ref(..)` (#580 step 5).
 pub fn result_sources(asked: ref Asked, items: ref Vec[Spanned[Item]], own_buffer: fn(ref Expr) -> bool sync) -> Vec[ResultSource] {
-    let unit = Unit { borrowing: borrowing_types(asked.names, items), fields: view_fields(asked.names, items) }
+    let unit = Unit { borrowing: package_borrowing_types(asked, items), fields: view_fields(asked.names, items) }
     let mut known: collections::BTreeMap[String, ResultSrcKnown] = collections::BTreeMap()
     let mut ignored: Vec[Finding] = []
     rsrc_solve(unit, asked, items, own_buffer, known, ignored)
@@ -2282,7 +2296,7 @@ pub fn result_sources(asked: ref Asked, items: ref Vec[Spanned[Item]], own_buffe
 
 // The refusals of D25 and D26 over a unit: the fixpoint first, then one report.
 fn rsrc_findings(asked: ref Asked, items: ref Vec[Spanned[Item]], own_buffer: fn(ref Expr) -> bool sync, mut out: Vec[Finding]) {
-    let unit = Unit { borrowing: borrowing_types(asked.names, items), fields: view_fields(asked.names, items) }
+    let unit = Unit { borrowing: package_borrowing_types(asked, items), fields: view_fields(asked.names, items) }
     let mut known: collections::BTreeMap[String, ResultSrcKnown] = collections::BTreeMap()
     rsrc_solve(unit, asked, items, own_buffer, known, out)
 }

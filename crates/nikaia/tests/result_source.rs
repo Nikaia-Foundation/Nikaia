@@ -1033,3 +1033,106 @@ fn the_declaration_site_variant_names_the_declaration() {
     assert!(shown.contains("is declared without a body"), "{shown}");
     assert!(!says_a_lifetime(&shown), "{shown}");
 }
+
+// --- a result type another file declares (B12) -----------------------------------
+
+/// Write a two-file package and read it: `(directory, program)`.
+fn package(name: &str, files: &[(&str, &str)]) -> (std::path::PathBuf, nikaia::modules::Program) {
+    let dir = common::scratch_dir(&format!("result-source-{name}"));
+    for (file, contents) in files {
+        std::fs::write(dir.join(file), contents).expect("write the file");
+    }
+    let program =
+        nikaia::modules::Program::read(&dir.join("main.nika")).expect("the package reads");
+    (dir, program)
+}
+
+/// The result refusals of every file of a package.
+fn package_findings(program: &nikaia::modules::Program) -> Vec<Finding> {
+    let library = Ledger::parse(STD).expect("std's shipped ledger parses");
+    let packages = program.package_names();
+    program
+        .units
+        .iter()
+        .flat_map(|unit| {
+            check::check_program(&unit.parsed, &program.contracts, &library, &packages).findings
+        })
+        .filter(|f| f.code == "NK2302")
+        .collect()
+}
+
+/// Lower the package and compile it: an accepted package whose Rust `rustc`
+/// refuses is a compiler defect (Part III C.1).
+fn package_compiled(purpose: &str, dir: &std::path::Path, program: &nikaia::modules::Program) {
+    let lowered = program
+        .emit_reading(Build::default(), &common::reads())
+        .expect("the package lowers");
+    let file = dir.join("program.rs");
+    std::fs::write(&file, &lowered.rust).expect("write the Rust");
+    let out = common::compile(
+        &file,
+        &[
+            "--crate-type",
+            "bin",
+            "-o",
+            dir.join("program").to_str().expect("utf-8 path"),
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "the lowering of {purpose} does not compile:\n{}\n--- the Rust ---\n{}",
+        String::from_utf8_lossy(&out.stderr),
+        lowered.rust,
+    );
+}
+
+const HELPER: &str = "pub struct Txt { pub n: ref String }\n\
+     pub fn mk(x: ref String) -> Txt {\n    return Txt { n: x }\n}\n";
+
+/// **A struct of views another file declares is judged like one declared here**
+/// (B12): a result holding the views of `a` on one way out and of `b` on
+/// another is `NK2302`, not a rustc error about a file nobody wrote.
+#[test]
+fn a_foreign_struct_result_with_two_sources_stays_nk2302() {
+    let main = "fn hole(a: ref String, b: ref String) -> Txt {\n    if a.len() > 9 {\n        return Txt { n: a }\n    }\n    return mk(b)\n}\n\
+        fn main() {\n    let x = \"hello\".clone()\n    let y = \"hi\".clone()\n    let t = hole(x, y)\n    println(t.n)\n}\n";
+    let (dir, program) = package("xfile-two", &[("helper.nika", HELPER), ("main.nika", main)]);
+    let found = package_findings(&program);
+    assert_eq!(found.len(), 1, "{found:#?}");
+    assert!(
+        found[0].message.contains("whose data it gets"),
+        "{}",
+        found[0].message
+    );
+    assert!(!says_a_lifetime(&found[0].message), "{}", found[0].message);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// …and a struct of views of one parameter on every way out is accepted and compiles.
+#[test]
+fn a_foreign_struct_result_with_one_source_is_accepted() {
+    let main = "fn hole(a: ref String, b: ref String) -> Txt {\n    if b.len() > 9 {\n        return mk(a)\n    }\n    return Txt { n: a }\n}\n\
+        fn main() {\n    let x = \"hello\".clone()\n    let y = \"hi\".clone()\n    let t = hole(x, y)\n    println(t.n)\n}\n";
+    let (dir, program) = package("xfile-one", &[("helper.nika", HELPER), ("main.nika", main)]);
+    let found = package_findings(&program);
+    assert!(found.is_empty(), "{found:#?}");
+    package_compiled("xfile-one", &dir, &program);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A struct of another file that holds no view is no source: two view
+/// parameters beside it are accepted (the shape of `bt_named`) and compile.
+#[test]
+fn a_foreign_struct_without_views_is_accepted() {
+    let helper = "pub struct Pair { pub n: String, pub k: i64 }\n";
+    let main = "fn both(a: ref String, b: ref String) -> Pair {\n    return Pair { n: a.clone(), k: b.len() }\n}\n\
+        fn main() {\n    let x = \"hello\".clone()\n    let y = \"hi\".clone()\n    let t = both(x, y)\n    println(t.n)\n}\n";
+    let (dir, program) = package(
+        "xfile-plain",
+        &[("helper.nika", helper), ("main.nika", main)],
+    );
+    let found = package_findings(&program);
+    assert!(found.is_empty(), "{found:#?}");
+    package_compiled("xfile-plain", &dir, &program);
+    let _ = std::fs::remove_dir_all(dir);
+}

@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.841] — 2026-10-11
+
+**NK2302: a result of a struct another file declares is walked like one declared here (ADR-283 D25, #580 B12)**
+- The walk's set of types that hold a view is the package's (the ledger's tethered types), not the file's, so a function whose result is a struct of views declared in another file is judged by its ways out: two parameters reaching it is NK2302 instead of a rustc E0106, one is accepted and compiled, a struct of another file that holds no view is no source (bt_named). Tests: three two-file projects in result_source.rs.
+
 ## [0.0.840] — 2026-10-11
 
 **Package-wide trust: a map is keyed in every file when any file of the package reads an untrusted source (ADR-010 D9, #581 step 1)**

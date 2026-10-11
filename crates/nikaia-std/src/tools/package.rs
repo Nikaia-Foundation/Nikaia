@@ -47404,6 +47404,12 @@ fn of_what(subject: Option<&str>, function: &str) -> String {
     format!("`{}.{}`", owner, function)
 }
 
+fn package_borrowing_types(asked: &Asked<'_>, items: &[Spanned<Item>]) -> collections::BTreeSet<String> {
+    let mut borrowing = borrowing_types(asked.names, items);
+    for (name, described) in asked.own.types.iter() { if !described.tethered.is_empty() { borrowing.insert(name.to_owned()); } }
+    borrowing
+}
+
 fn borrowing_types(names: &winnow_grammar::InternerContext, items: &[Spanned<Item>]) -> collections::BTreeSet<String> {
     let mut types_of: Vec<(String, Vec<Type>)> = vec![];
     let mut borrowing: collections::BTreeSet<String> = collections::BTreeSet::new();
@@ -49031,7 +49037,7 @@ pub struct ResultSource {
 }
 
 pub fn result_sources(asked: &Asked<'_>, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool) -> Vec<ResultSource> {
-    let unit = Unit { borrowing: borrowing_types(asked.names, items), fields: view_fields(asked.names, items) };
+    let unit = Unit { borrowing: package_borrowing_types(asked, items), fields: view_fields(asked.names, items) };
     let mut known: collections::BTreeMap<String, ResultSrcKnown> = collections::BTreeMap::new();
     let mut ignored: Vec<Finding> = vec![];
     rsrc_solve(&unit, asked, items, own_buffer, &mut known, &mut ignored);
@@ -49046,7 +49052,7 @@ pub fn result_sources(asked: &Asked<'_>, items: &[Spanned<Item>], own_buffer: &i
 }
 
 fn rsrc_findings(asked: &Asked<'_>, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool, out: &mut Vec<Finding>) {
-    let unit = Unit { borrowing: borrowing_types(asked.names, items), fields: view_fields(asked.names, items) };
+    let unit = Unit { borrowing: package_borrowing_types(asked, items), fields: view_fields(asked.names, items) };
     let mut known: collections::BTreeMap<String, ResultSrcKnown> = collections::BTreeMap::new();
     rsrc_solve(&unit, asked, items, own_buffer, &mut known, out);
 }
