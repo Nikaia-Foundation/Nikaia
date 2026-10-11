@@ -1,0 +1,508 @@
+// crates/nikaia-std/src/tools/check_host.nika
+//
+// **What the checker asks of the compiler while it walks** (ADR-294, #125,
+// #558, C-4): the services that stay Rust because they are the parser's, the
+// interner's, the build's - reading a hole of an `f"..."` back as an expression,
+// the call a named function stands for, a symbol made, a build-time value
+// evaluated or compiled and run. `CheckHost` is what the Nikaia half of the
+// checker sees of them; `check/host.rs` implements it over the parsed files and
+// what the build may read. **Ids stay with the host**: an expression is known
+// here by `id_of`, a symbol is whatever the host's interner says.
+//
+// The seven functions below the checker's core that needed those services are
+// methods of `CheckState` here, generic over the host.
+
+use std::collections
+
+/// How the evaluator of a build-time value came out: a value, or the refusal
+/// the build gave, with a grammar's wall already in the checker's own words.
+pub enum CheckBuilt {
+    Value(BuildValue),
+    /// A shape the evaluator does not read. **Not an error by itself.**
+    Unevaluable,
+    NotAllowed { callee: String, because: String },
+    TooDeep { callee: String },
+    OutOfBounds { at: Integer, len: i64 },
+    Circular { ring: Vec[String] },
+    NotHere { what: String, why: String, way_out: String },
+    MayNotRead { path: String, why: Denied },
+    PathIsComputed,
+    GrammarWall { owner: String, rule: String, why: CheckWall },
+}
+
+/// How compiling a `comptime` and running it came out.
+pub enum CheckComputed {
+    Value(BuildValue),
+    /// A callee the ledger says may not run at build time, and why.
+    Forbidden { callee: String, because: String },
+    /// The run stopped as the program would, in its own words.
+    Stopped(String),
+    /// Nothing was compiled: the evaluator answers as before.
+    NotHere,
+}
+
+/// What `compiled_build_time_value` came to: whether it answered at all (the
+/// build-time evaluator answers where it did not), the value, and whether the
+/// reader was told what is wrong.
+pub struct CheckCompiled {
+    pub answered: bool,
+    pub value: BuildValue?,
+    pub said: bool,
+}
+
+/// Where a build-time run stopped: a byte of this file, or -1, and the name of
+/// the function of another file it stopped in.
+pub struct CheckPlace {
+    pub at: i64,
+    pub function: String?,
+}
+
+/// The services of the compiler the checker's core asks for.
+pub trait CheckHost {
+    /// The expression written in the hole `text` of a literal at byte `site`,
+    /// where it parses.
+    fn hole(ref self, site: u32, text: ref String) -> Expr? sync
+    /// The parameters and the call a named function stands for where a function
+    /// value is kept.
+    fn kept_call(ref self, name: winnow_grammar::Symbol, arity: i64) -> (Vec[winnow_grammar::Symbol], Expr) sync
+    /// A symbol for a name, in the interner of this file.
+    fn intern(ref self, text: ref String) -> winnow_grammar::Symbol sync
+    /// A hole with the method calls the tier pass wraps its nodes in, by id.
+    fn wrap_hole(ref self, hole: ref Expr, wraps: ref Vec[(i64, winnow_grammar::Symbol)]) -> Expr sync
+    /// The holes of a literal the emitter reads again, with the names a
+    /// template's `<for>` binds around each.
+    fn literal_holes(ref self, literal: ref Expr) -> Vec[Expr] sync
+    /// What an initialiser comes to, the names in `held` being what the scope
+    /// knows.
+    fn evaluate(ref self, value: ref Expr, held: ref collections::BTreeMap[String, BuildValue]) -> CheckBuilt sync
+    /// Compile an initialiser with the program's functions and run it.
+    fn compute_comptime(ref self, value: ref Expr, found: ref Ty, bound: ref String, known: ref collections::BTreeMap[String, BuildValue], steps: u64?, bytes: u64?) -> CheckComputed sync
+    /// Whether a grammar can be run anywhere (a workshop to build it in).
+    fn somewhere(ref self) -> bool sync
+    /// The text a literal in source stands for.
+    fn decoded(ref self, literal: ref String) -> String? sync
+    /// The file a build reads, by the rules every read keeps.
+    fn read(ref self, path: ref String) -> BtRead sync
+    /// `value` with each `asset("path")` replaced by the text read for it.
+    fn assets_read_in(ref self, value: ref Expr, read: ref collections::BTreeMap[String, String]) -> Expr sync
+    /// The name the `comptime` itself runs under.
+    fn value_fn(ref self) -> String sync
+    /// Where a run that stopped at `place` (`@<file>:<byte>`) stopped, seen
+    /// from file `here`.
+    fn place_of(ref self, place: ref String, here: i64) -> CheckPlace sync
+}
+
+/// What the build worked out a local is: the whole value, or the integer the
+/// fold left.
+fn host_known(local: ref CheckLocal) -> BuildValue? {
+    let built: BuildValue? = local.built?.clone()
+    if built != null {
+        return built
+    }
+    let number = local.constant ?? return null
+    return BuildValue::Int(number)
+}
+
+/// The line the run printed that says what it stopped for, or the whole text.
+fn host_stopped_line(said: ref String) -> String {
+    for line in said.lines() {
+        if line.contains("the program stopped") {
+            return line.clone()
+        }
+    }
+    return said.clone()
+}
+
+/// The text of the `asset` calls an initialiser holds and whether it has any
+/// call that is the build's, in the order they stand.
+struct HostCalls {
+    calls: bool,
+    assets: Vec[(String, bool)],
+}
+
+fn host_enum_names(view: ref ParsedView, mut out: collections::BTreeSet[String]) {
+    for item in view.items {
+        let named: String = match item.node {
+            Item::Enum { name, .. } => view.text(name),
+            else => "",
+        }
+        if named != "" {
+            out.insert(named)
+        }
+    }
+}
+
+fn host_grammar_names(view: ref ParsedView, mut out: collections::BTreeSet[String]) {
+    for item in view.items {
+        let named: String = match item.node {
+            Item::Grammar(def) => view.text(def.name),
+            else => "",
+        }
+        if named != "" {
+            out.insert(named)
+        }
+    }
+}
+
+/// Whether an initialiser runs a grammar of the program: `Json.value(..)` or
+/// `Json::value(..)`.
+fn host_runs_a_grammar(world: ref CheckWorld, value: ref Expr, grammars: ref collections::BTreeSet[String]) -> bool {
+    let mut runs = false
+    for expr in visited_in_expr(value) {
+        match expr {
+            Expr::Call { func, .. } => {
+                match func {
+                    Expr::Path(path, _) => {
+                        if path.len() > 0 && grammars.contains(world.words.resolve(path[0])) {
+                            runs = true
+                        }
+                    },
+                    else => {}
+                }
+            },
+            Expr::MethodCall { receiver, .. } => {
+                match receiver {
+                    Expr::Variable(name, _) => {
+                        if grammars.contains(world.words.resolve(name)) {
+                            runs = true
+                        }
+                    },
+                    else => {}
+                }
+            },
+            else => {}
+        }
+    }
+    return runs
+}
+
+fn host_calls_in[H: CheckHost](world: ref CheckWorld, host: ref H, value: ref Expr, enums: ref collections::BTreeSet[String]) -> HostCalls {
+    let mut found = HostCalls { calls: false, assets: [] }
+    for expr in visited_in_expr(value) {
+        match expr {
+            Expr::Call { func, args, .. } => {
+                match func {
+                    Expr::Variable(name, _) => {
+                        if world.words.resolve(name) == "asset" {
+                            let mut path: String = ""
+                            let mut literal = false
+                            if args.len() == 1 {
+                                match args[0] {
+                                    Expr::LitStr { text, .. } => {
+                                        let read = host.decoded(text)
+                                        if read != null {
+                                            path = read ?? ""
+                                            literal = true
+                                        }
+                                    },
+                                    else => {}
+                                }
+                            }
+                            found.assets.push((path, literal))
+                        } else {
+                            found.calls = true
+                        }
+                    },
+                    Expr::Path(path, _) => {
+                        if !(path.len() == 2 && enums.contains(world.words.resolve(path[0]))) {
+                            found.calls = true
+                        }
+                    },
+                    else => { found.calls = true },
+                }
+            },
+            Expr::MethodCall { .. } => { found.calls = true },
+            Expr::SafeMethod { .. } => { found.calls = true },
+            else => {}
+        }
+    }
+    return found
+}
+
+impl CheckState {
+    /// **`NK1175`: a file this build may not read** (ADR-310), with the way out
+    /// that can actually be taken.
+    pub fn a_file_this_build_may_not_read(ref mut self, path: ref String, why: ref Denied, span: ref Span) sync {
+        let note = why_not_read(why, path)
+        let way_out = way_out_of_a_read(why, path)
+        self.findings.push(check_refusal("NK1175", span, f"This build isn't allowed to read `{path}`.", [note], way_out))
+    }
+
+    /// **A `{..}` in a plain string that would have inserted a value** before
+    /// plain strings stopped doing so: a warning, only where the braces hold an
+    /// expression that resolves to something that is here.
+    pub fn unmarked_hole[H: CheckHost](ref mut self, world: ref CheckWorld, host: ref H, text: ref String, span: ref Span) sync {
+        if text.contains("{{") || text.contains("}}") {
+            let single = text.replace("{{", "{").replace("}}", "}")
+            self.warn_migration(span, "`{{{{` in a plain string is now two braces.".clone(), f"Braces in a plain string don't need escaping any more: write `\"{single}\"`.")
+            return
+        }
+        for hole in brace_groups(text) {
+            let found = host.hole(span.start, hole)
+            if found == null {
+                continue
+            }
+            let expr = found ?? continue
+            if !self.names_something_here(world, expr) {
+                continue
+            }
+            self.warn_migration(span, f"`{{{hole}}}` here is plain text now; it used to insert a value.", f"Write `f\"{text}\"` if you want the value to appear.")
+            return
+        }
+    }
+
+    /// **What the build worked out for an initialiser the evaluator reads**,
+    /// and the refusal it gave where it gave one.
+    pub fn build_time_value[H: CheckHost](ref mut self, host: ref H, value: ref Expr, bound: ref String, span: ref Span) -> (BuildValue?, bool) sync {
+        // **Read off the scope before the evaluation starts**: later bindings of
+        // a name go in after earlier ones, so the innermost is the one that
+        // answers.
+        let mut held: collections::BTreeMap[String, BuildValue] = collections::BTreeMap()
+        for frame in self.scope {
+            for local in frame {
+                let one = host_known(local)
+                if one == null {
+                    held.remove(local.name)
+                } else {
+                    held.insert(local.name.clone(), one ?? continue)
+                }
+            }
+        }
+        match host.evaluate(value, held) {
+            CheckBuilt::Value(built) => {
+                let some: BuildValue? = built
+                return (some, false)
+            },
+            CheckBuilt::Unevaluable => return (null, false),
+            CheckBuilt::NotAllowed { callee, because } => self.a_body_that_may_not_run_at_build_time(callee, because, span),
+            CheckBuilt::TooDeep { callee } => self.a_build_time_call_went_too_deep(callee, span),
+            CheckBuilt::OutOfBounds { at, len } => self.a_build_time_index_is_not_there(at, len, span),
+            CheckBuilt::Circular { ring } => self.a_constant_built_from_itself(bound, ring, span),
+            CheckBuilt::NotHere { what, why, way_out } => self.a_build_time_body_that_is_not_here(bound, what, why, way_out, span),
+            CheckBuilt::MayNotRead { path, why } => self.a_file_this_build_may_not_read(path, why, span),
+            CheckBuilt::PathIsComputed => self.a_path_that_is_not_a_literal(span),
+            CheckBuilt::GrammarWall { owner, rule, why } => self.a_grammar_that_did_not_run(owner, rule, why, span),
+        }
+        return (null, true)
+    }
+
+    /// **A `comptime` whose initialiser calls the program's own functions**,
+    /// compiled and run (ADR-321 D1): nothing where it does not apply, and the
+    /// evaluator answers as before.
+    ///
+    /// **The rule is asked first** (D2): each function the initialiser calls is
+    /// read off the ledger, and one that may not run is `NK1152` before
+    /// anything is compiled.
+    pub fn compiled_build_time_value[H: CheckHost](ref mut self, world: ref CheckWorld, host: ref H, value: ref Expr, found: ref Ty, bound: ref String, span: ref Span) -> CheckCompiled sync {
+        if !self.flow.computes {
+            return CheckCompiled { answered: true, value: null, said: true }
+        }
+        let nothing = CheckCompiled { answered: false, value: null, said: false }
+        // **Every file of the program** (Part I 9.1), this one among them; a
+        // check handed none is this file alone.
+        let mut here = world.here_at
+        if here < 0 {
+            here = 0
+        }
+        if !host.somewhere() {
+            return nothing
+        }
+        // **A grammar run is its own** (ADR-177): an initialiser that runs one
+        // is answered as before.
+        let mut grammars: collections::BTreeSet[String] = collections::BTreeSet()
+        let mut enums: collections::BTreeSet[String] = collections::BTreeSet()
+        if world.here_at < 0 {
+            host_grammar_names(world.here, grammars)
+            host_enum_names(world.here, enums)
+        }
+        for file in world.beside {
+            host_grammar_names(file, grammars)
+            host_enum_names(file, enums)
+        }
+        if host_runs_a_grammar(world, value, grammars) {
+            return nothing
+        }
+        // **A call somewhere in it**, which is what D1 compiles: an initialiser
+        // of literals alone is folded. A variant built is a value written down.
+        let seen = host_calls_in(world, host, value, enums)
+        if !seen.calls {
+            return nothing
+        }
+        // **The build reads, the run does not** (ADR-310): each file is read
+        // here, by the rules every read keeps, and its text stands where the
+        // `asset` did.
+        let mut read: collections::BTreeMap[String, String] = collections::BTreeMap()
+        for (path, literal) in seen.assets {
+            if !literal {
+                self.a_path_that_is_not_a_literal(span)
+                return CheckCompiled { answered: true, value: null, said: true }
+            }
+            let got = host.read(path)
+            if got.denied != null {
+                self.a_file_this_build_may_not_read(path, got.denied ?? continue, span)
+                return CheckCompiled { answered: true, value: null, said: true }
+            }
+            read.insert(path.clone(), got.text ?? "")
+        }
+        let rewritten = host.assets_read_in(value, read)
+        let mut outermost: collections::BTreeMap[String, BuildValue] = collections::BTreeMap()
+        if self.scope.len() > 0 {
+            for local in self.scope[0] {
+                let one = host_known(local)
+                if one != null {
+                    outermost.insert(local.name.clone(), one ?? continue)
+                }
+            }
+        }
+        match host.compute_comptime(rewritten, found, bound, outermost, self.flow.raised.0, self.flow.raised.1) {
+            CheckComputed::Value(computed) => return CheckCompiled { answered: true, value: computed, said: false },
+            CheckComputed::Forbidden { callee, because } => self.a_body_that_may_not_run_at_build_time(callee, because, span),
+            CheckComputed::Stopped(detail) => self.a_build_time_run_that_stopped(host, bound, detail, here, span),
+            CheckComputed::NotHere => return nothing,
+        }
+        return CheckCompiled { answered: true, value: null, said: true }
+    }
+
+    /// **A build-time run that stopped as the program would** (ADR-321 D1): the
+    /// same code stops the program the same way. In its own words, at the place
+    /// it stopped where the run named one.
+    pub fn a_build_time_run_that_stopped[H: CheckHost](ref mut self, host: ref H, bound: ref String, said: ref String, here: i64, span: ref Span) sync {
+        for line in said.lines() {
+            if line.starts_with("nikaia-build-time: ") {
+                let over = line.strip_prefix("nikaia-build-time: ") ?? ""
+                let value_fn = host.value_fn()
+                self.a_build_time_run_over_its_bound(bound, over, value_fn, span)
+                return
+            }
+        }
+        let line = host_stopped_line(said)
+        let mut place: String = ""
+        let mut why: String = line.clone()
+        let cut = line.find(": the program stopped: ")
+        if cut != null {
+            let at = cut ?? 0
+            place = line[0..<at].clone()
+            why = line[at + 23..<line.len()].clone()
+        }
+        let found = host.place_of(place, here)
+        self.a_build_time_run_that_stopped_at(bound, why, found.at, found.function, span)
+    }
+
+    /// **The reference the compiler writes for a lent part**: a part the arm
+    /// binds `ref` is a view already (#270), and a call that lends it hands it
+    /// on as it is. Decided after the arm, because whether a part is lent is
+    /// known only once the arm is walked; the arguments recorded meanwhile are
+    /// found again by their ids. Only where nothing in the arm binds the name
+    /// again.
+    pub fn a_lent_part_is_handed_on_as_it_is[H: CheckHost](ref mut self, world: ref CheckWorld, host: ref H, body: ref Expr, lent: ref collections::BTreeSet[String]) sync {
+        let mut is_block = false
+        let mut empty = false
+        match body {
+            Expr::Block(block, _) => {
+                is_block = true
+                empty = block.stmts.len() == 0
+            },
+            else => {}
+        }
+        if !is_block {
+            self.a_lent_part_in_an_expression_arm(world, body, lent)
+            return
+        }
+        if empty {
+            return
+        }
+        let mut named: collections::BTreeSet[i64] = collections::BTreeSet()
+        let mut bound_again = false
+        let mut pending: Vec[Expr] = []
+        for expr in visited_in_expr(body) {
+            match expr {
+                Expr::Variable(name, _) => {
+                    if lent.contains(world.words.resolve(name)) {
+                        named.insert(node_key(expr))
+                    }
+                },
+                Expr::Block(inner, _) => {
+                    if lent_binds_again(world, inner, lent) {
+                        bound_again = true
+                    }
+                },
+                Expr::LitInterpolated { .. } => pending.extend(host.literal_holes(expr)),
+                else => {}
+            }
+        }
+        // An `f"..."` hole is read again from its text, with the names it
+        // shares with the arm, so its calls are the arm's too.
+        let mut at = 0
+        while at < pending.len() {
+            let hole = pending[at].clone()
+            at = at + 1
+            for expr in visited_in_expr(hole) {
+                match expr {
+                    Expr::Variable(name, _) => {
+                        if lent.contains(world.words.resolve(name)) {
+                            named.insert(node_key(expr))
+                        }
+                    },
+                    Expr::Block(inner, _) => {
+                        if lent_binds_again(world, inner, lent) {
+                            bound_again = true
+                        }
+                    },
+                    Expr::LitInterpolated { .. } => pending.extend(host.literal_holes(expr)),
+                    else => {}
+                }
+            }
+        }
+        if bound_again || named.len() == 0 {
+            return
+        }
+        for id in named {
+            self.facts.lent_args.remove(id)
+        }
+    }
+
+    /// **The same for an arm that is an expression** (#456): it has no
+    /// statements of its own to find its arguments by, so each argument that
+    /// names a lent part is marked by its node.
+    fn a_lent_part_in_an_expression_arm(ref mut self, world: ref CheckWorld, body: ref Expr, lent: ref collections::BTreeSet[String]) sync {
+        let mut named: Vec[i64] = []
+        let mut bound_again = false
+        for expr in visited_in_expr(body) {
+            match expr {
+                Expr::Variable(name, _) => {
+                    if lent.contains(world.words.resolve(name)) {
+                        named.push(node_key(expr))
+                    }
+                },
+                Expr::Block(inner, _) => {
+                    if lent_binds_again(world, inner, lent) {
+                        bound_again = true
+                    }
+                },
+                else => {}
+            }
+        }
+        if !bound_again {
+            for id in named {
+                self.facts.views_handed_on.insert(id)
+            }
+        }
+    }
+}
+
+/// Whether a block binds one of the lent names again with a `let`.
+fn lent_binds_again(world: ref CheckWorld, block: ref Block, lent: ref collections::BTreeSet[String]) -> bool {
+    for stmt in block.stmts {
+        match stmt.node {
+            Stmt::Let { names, .. } => {
+                for name in names {
+                    if lent.contains(world.words.resolve(name)) {
+                        return true
+                    }
+                }
+            },
+            else => {}
+        }
+    }
+    return false
+}

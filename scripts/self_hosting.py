@@ -112,6 +112,7 @@ COMPILER_NIKA = {
     "bounds_matched.nika": "bounds: what a grammar alternative's bindings matched, and what a callee's ledger entry ensures (0.0.763)",
     "proofs_book.nika": "proofs: nikaia.proofs as text, read back and rendered (0.0.763)",
     "check_flow.nika": "check: what the checker keeps while it walks one body - the flags of the walk, the method sets, the read index, the open numbers and the unsigned slots (0.0.814)",
+    "check_host.nika": "check: the services the checker asks of the compiler (CheckHost) and the seven functions below the core that needed them (0.0.817)",
     "check_state.nika": "check: the records the checker's state holds - a name in scope, what was taken or read of a path, a way out, a body that repeats - and the questions each answers (0.0.774)",
     "check_walk.nika": "check: the expressions and the blocks an expression or a statement holds, for the checker's walks (0.0.774)",
     "check_decls.nika": "check: what the program declares - structs, enums, bounds, grammars - and what a type is called to the checker (0.0.775)",

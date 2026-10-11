@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.817] — 2026-10-11
+
+**check: `CheckHost` and the seven functions that needed the compiler (#558, #125, C-4)**
+- `tools/check_host.nika` declares `trait CheckHost` (a hole read back as an expression, the call a kept function stands for, a symbol, a build-time value evaluated, compiled and run, a file read) and moves `build_time_value`, `compiled_build_time_value`, `unmarked_hole`, `a_build_time_run_that_stopped`, `a_lent_part_is_handed_on_as_it_is` and `a_file_this_build_may_not_read` into `CheckState` as `[H: CheckHost]` methods; `check/host.rs` implements the trait over the parsed files and what the build may read. No change to what a program means.
+
 ## [0.0.816] — 2026-10-11
 
 **The emitter's core has a host: `EmitHost`, the walk baton and three moved methods (tools/emit_host.nika, emit/host.rs, #558, #125, E9 U0b).**

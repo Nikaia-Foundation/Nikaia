@@ -11774,6 +11774,380 @@ impl CheckState {
 }
 
 
+// --- check_host.nika ---
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum CheckBuilt {
+    Value(BuildValue),
+    Unevaluable,
+    NotAllowed { callee: String, because: String },
+    TooDeep { callee: String },
+    OutOfBounds { at: Integer, len: i64 },
+    Circular { ring: Vec<String> },
+    NotHere { what: String, why: String, way_out: String },
+    MayNotRead { path: String, why: Denied },
+    PathIsComputed,
+    GrammarWall { owner: String, rule: String, why: CheckWall },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum CheckComputed {
+    Value(BuildValue),
+    Forbidden { callee: String, because: String },
+    Stopped(String),
+    NotHere,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CheckCompiled {
+    pub answered: bool,
+    pub value: Option<BuildValue>,
+    pub said: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CheckPlace {
+    pub at: i64,
+    pub function: Option<String>,
+}
+
+pub trait CheckHost {
+    fn hole(&self, site: u32, text: &str) -> Option<Expr>;
+    fn kept_call(&self, name: winnow_grammar::Symbol, arity: i64) -> (Vec<winnow_grammar::Symbol>, Expr);
+    fn intern(&self, text: &str) -> winnow_grammar::Symbol;
+    fn wrap_hole(&self, hole: &Expr, wraps: &Vec<(i64, winnow_grammar::Symbol)>) -> Expr;
+    fn literal_holes(&self, literal: &Expr) -> Vec<Expr>;
+    fn evaluate(&self, value: &Expr, held: &collections::BTreeMap<String, BuildValue>) -> CheckBuilt;
+    fn compute_comptime(&self, value: &Expr, found: &Ty, bound: &str, known: &collections::BTreeMap<String, BuildValue>, steps: Option<u64>, bytes: Option<u64>) -> CheckComputed;
+    fn somewhere(&self) -> bool;
+    fn decoded(&self, literal: &str) -> Option<String>;
+    fn read(&self, path: &str) -> BtRead;
+    fn assets_read_in(&self, value: &Expr, read: &collections::BTreeMap<String, String>) -> Expr;
+    fn value_fn(&self) -> String;
+    fn place_of(&self, place: &str, here: i64) -> CheckPlace;
+}
+
+fn host_known(local: &CheckLocal) -> Option<BuildValue> {
+    let built: Option<BuildValue> = match local.built.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    };
+    if built.is_some() { return built; }
+    let number = match local.constant { Some(__nikaia_value) => __nikaia_value, None => return None };
+    Some(BuildValue::Int(number))
+}
+
+fn host_stopped_line(said: &str) -> String {
+    for line in said.lines() { if line.contains("the program stopped") { return line.to_owned(); } }
+    said.to_owned()
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct HostCalls {
+    calls: bool,
+    assets: Vec<(String, bool)>,
+}
+
+fn host_enum_names(view: &ParsedView<'_>, out: &mut collections::BTreeSet<String>) {
+    for item in view.items.iter() {
+        let named: String = match &item.node {
+            Item::Enum { name, .. } => { let name = *name; view.text(name) },
+            _ => String::from(""),
+        };
+        if named != "" { out.insert(named); }
+    }
+}
+
+fn host_grammar_names(view: &ParsedView<'_>, out: &mut collections::BTreeSet<String>) {
+    for item in view.items.iter() {
+        let named: String = match &item.node {
+            Item::Grammar(def) => view.text(def.name),
+            _ => String::from(""),
+        };
+        if named != "" { out.insert(named); }
+    }
+}
+
+fn host_runs_a_grammar(world: &CheckWorld<'_>, value: &Expr, grammars: &collections::BTreeSet<String>) -> bool {
+    let mut runs = false;
+    for expr in visited_in_expr(value) {
+        match expr {
+            Expr::Call { func, .. } => {
+                let func = nikaia_std::boxed::open(func);
+                match func {
+                    Expr::Path(path, _) => { if !path.is_empty() && grammars.contains(world.words.resolve(*nikaia_std::index::get(&path, 0))) { runs = true; } },
+                    _ => { },
+                }
+            },
+            Expr::MethodCall { receiver, .. } => {
+                let receiver = nikaia_std::boxed::open(receiver);
+                match receiver {
+                    Expr::Variable(name, _) => {
+                        let name = *name;
+                        if grammars.contains(world.words.resolve(name)) { runs = true; }
+                    },
+                    _ => { },
+                }
+            },
+            _ => { },
+        }
+    }
+    runs
+}
+
+fn host_calls_in<H: CheckHost>(world: &CheckWorld<'_>, host: &H, value: &Expr, enums: &collections::BTreeSet<String>) -> HostCalls {
+    let mut found = HostCalls { calls: false, assets: vec![] };
+    for expr in visited_in_expr(value) {
+        match expr {
+            Expr::Call { func, args, .. } => {
+                let func = nikaia_std::boxed::open(func);
+                match func {
+                    Expr::Variable(name, _) => {
+                        let name = *name;
+                        if world.words.resolve(name) == "asset" {
+                            let mut path: String = String::from("");
+                            let mut literal = false;
+                            if args.len() == 1 {
+                                match nikaia_std::index::get(&args, 0) {
+                                    Expr::LitStr { text, .. } => {
+                                        let read = host.decoded(text);
+                                        if read.is_some() {
+                                            path = nikaia_std::index::or(read, || "".into());
+                                            literal = true;
+                                        }
+                                    },
+                                    _ => { },
+                                }
+                            }
+                            found.assets.push((path, literal));
+                        } else { found.calls = true; }
+                    },
+                    Expr::Path(path, _) => { if !(path.len() == 2 && enums.contains(world.words.resolve(*nikaia_std::index::get(&path, 0)))) { found.calls = true; } },
+                    _ => { found.calls = true; },
+                }
+            },
+            Expr::MethodCall { .. } => { found.calls = true; },
+            Expr::SafeMethod { .. } => { found.calls = true; },
+            _ => { },
+        }
+    }
+    found
+}
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_file_this_build_may_not_read(&mut self, path: &str, why: &Denied, span: &Span) {
+        let note = why_not_read(why, path);
+        let way_out = way_out_of_a_read(why, path);
+        self.findings.push(check_refusal("NK1175", span, format!("This build isn't allowed to read `{}`.", path), vec![note], Some(way_out)));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn unmarked_hole<H: CheckHost>(&mut self, world: &CheckWorld<'_>, host: &H, text: &str, span: &Span) {
+        if text.contains("{{") || text.contains("}}") {
+            let single = text.replace("{{", "{").replace("}}", "}");
+            self.warn_migration(span, "`{{{{` in a plain string is now two braces.".to_owned(), format!("Braces in a plain string don't need escaping any more: write `\"{}\"`.", single));
+            return;
+        }
+        for hole in brace_groups(text) {
+            let found = host.hole(span.start, &hole);
+            if found.is_none() { continue; }
+            let expr = match found { Some(__nikaia_value) => __nikaia_value, None => continue };
+            if !self.names_something_here(world, &expr) { continue; }
+            self.warn_migration(span, format!("`{{{}}}` here is plain text now; it used to insert a value.", hole), format!("Write `f\"{}\"` if you want the value to appear.", text));
+            return;
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn build_time_value<H: CheckHost>(&mut self, host: &H, value: &Expr, bound: &str, span: &Span) -> (Option<BuildValue>, bool) {
+        let mut held: collections::BTreeMap<String, BuildValue> = collections::BTreeMap::new();
+        for frame in self.scope.iter() {
+            for local in frame.iter() {
+                let one = host_known(local);
+                if one.is_none() { held.remove(&local.name); } else { held.insert(local.name.to_owned(), match one { Some(__nikaia_value) => __nikaia_value, None => continue }); }
+            }
+        }
+        match host.evaluate(value, &held) {
+            CheckBuilt::Value(built) => {
+                let some: Option<BuildValue> = Some(built);
+                return (some, false);
+            },
+            CheckBuilt::Unevaluable => return (None, false),
+            CheckBuilt::NotAllowed { ref callee, ref because } => self.a_body_that_may_not_run_at_build_time(callee, because, span),
+            CheckBuilt::TooDeep { ref callee } => self.a_build_time_call_went_too_deep(callee, span),
+            CheckBuilt::OutOfBounds { at, len } => self.a_build_time_index_is_not_there(&at, len, span),
+            CheckBuilt::Circular { ref ring } => self.a_constant_built_from_itself(bound, ring, span),
+            CheckBuilt::NotHere { ref what, ref why, ref way_out } => self.a_build_time_body_that_is_not_here(bound, what, why, way_out, span),
+            CheckBuilt::MayNotRead { ref path, ref why } => self.a_file_this_build_may_not_read(path, why, span),
+            CheckBuilt::PathIsComputed => self.a_path_that_is_not_a_literal(span),
+            CheckBuilt::GrammarWall { ref owner, ref rule, ref why } => self.a_grammar_that_did_not_run(owner, rule, why, span),
+        }
+        (None, true)
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn compiled_build_time_value<H: CheckHost>(&mut self, world: &CheckWorld<'_>, host: &H, value: &Expr, found: &Ty, bound: &str, span: &Span) -> CheckCompiled {
+        if !self.flow.computes { return CheckCompiled { answered: true, value: None, said: true }; }
+        let nothing = CheckCompiled { answered: false, value: None, said: false };
+        let mut here = world.here_at;
+        if here < 0 { here = 0; }
+        if !host.somewhere() { return nothing; }
+        let mut grammars: collections::BTreeSet<String> = collections::BTreeSet::new();
+        let mut enums: collections::BTreeSet<String> = collections::BTreeSet::new();
+        if world.here_at < 0 {
+            host_grammar_names(&world.here, &mut grammars);
+            host_enum_names(&world.here, &mut enums);
+        }
+        for file in world.beside.iter() {
+            host_grammar_names(file, &mut grammars);
+            host_enum_names(file, &mut enums);
+        }
+        if host_runs_a_grammar(world, value, &grammars) { return nothing; }
+        let seen = host_calls_in(world, host, value, &enums);
+        if !seen.calls { return nothing; }
+        let mut read: collections::BTreeMap<String, String> = collections::BTreeMap::new();
+        for (path, literal) in seen.assets.iter() {
+            let literal = nikaia_std::num::value(literal);
+            if !literal {
+                self.a_path_that_is_not_a_literal(span);
+                return CheckCompiled { answered: true, value: None, said: true };
+            }
+            let got = host.read(path);
+            if got.denied.is_some() {
+                self.a_file_this_build_may_not_read(path, &match got.denied { Some(__nikaia_value) => __nikaia_value, None => continue }, span);
+                return CheckCompiled { answered: true, value: None, said: true };
+            }
+            read.insert(path.to_owned(), nikaia_std::index::or(got.text, || "".into()));
+        }
+        let rewritten = host.assets_read_in(value, &read);
+        let mut outermost: collections::BTreeMap<String, BuildValue> = collections::BTreeMap::new();
+        if !self.scope.is_empty() {
+            for local in (*nikaia_std::index::get(&self.scope, 0)).iter() {
+                let one = host_known(local);
+                if one.is_some() { outermost.insert(local.name.to_owned(), match one { Some(__nikaia_value) => __nikaia_value, None => continue }); }
+            }
+        }
+        match host.compute_comptime(&rewritten, found, bound, &outermost, self.flow.raised.0, self.flow.raised.1) {
+            CheckComputed::Value(computed) => return CheckCompiled { answered: true, value: Some(computed), said: false },
+            CheckComputed::Forbidden { ref callee, ref because } => self.a_body_that_may_not_run_at_build_time(callee, because, span),
+            CheckComputed::Stopped(ref detail) => self.a_build_time_run_that_stopped(host, bound, detail, here, span),
+            CheckComputed::NotHere => return nothing,
+        }
+        CheckCompiled { answered: true, value: None, said: true }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_build_time_run_that_stopped<H: CheckHost>(&mut self, host: &H, bound: &str, said: &str, here: i64, span: &Span) {
+        for line in said.lines() {
+            if line.starts_with("nikaia-build-time: ") {
+                let over = nikaia_std::index::or(line.strip_prefix("nikaia-build-time: "), || "");
+                let value_fn = host.value_fn();
+                self.a_build_time_run_over_its_bound(bound, over, &value_fn, span);
+                return;
+            }
+        }
+        let line = host_stopped_line(said);
+        let mut place: String = String::from("");
+        let mut why: String = line.to_owned();
+        let cut = nikaia_std::search::find(&line, &": the program stopped: ", 0);
+        if cut.is_some() {
+            let at = nikaia_std::index::or(cut, || 0);
+            place = nikaia_std::index::get(&line, nikaia_std::index::at(0..at)).to_owned();
+            why = nikaia_std::index::get(&line, nikaia_std::index::at(at + 23..)).to_owned();
+        }
+        let found = host.place_of(&place, here);
+        self.a_build_time_run_that_stopped_at(bound, &why, found.at, (found.function).as_deref(), span);
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_lent_part_is_handed_on_as_it_is<H: CheckHost>(&mut self, world: &CheckWorld<'_>, host: &H, body: &Expr, lent: &collections::BTreeSet<String>) {
+        let mut is_block = false;
+        let mut empty = false;
+        match body {
+            Expr::Block(block, _) => {
+                is_block = true;
+                empty = block.stmts.is_empty();
+            },
+            _ => { },
+        }
+        if !is_block {
+            self.a_lent_part_in_an_expression_arm(world, body, lent);
+            return;
+        }
+        if empty { return; }
+        let mut named: collections::BTreeSet<i64> = collections::BTreeSet::new();
+        let mut bound_again = false;
+        let mut pending: Vec<Expr> = vec![];
+        for expr in visited_in_expr(body) {
+            match expr {
+                Expr::Variable(name, _) => {
+                    let name = *name;
+                    if lent.contains(world.words.resolve(name)) { named.insert(node_key(expr)); }
+                },
+                Expr::Block(inner, _) => { if lent_binds_again(world, inner, lent) { bound_again = true; } },
+                Expr::LitInterpolated { .. } => pending.extend(host.literal_holes(expr)),
+                _ => { },
+            }
+        }
+        let mut at: i64 = 0;
+        while at < pending.len() as i64 {
+            let hole = (*nikaia_std::index::get(&pending, nikaia_std::index::at(at))).clone();
+            at = at + 1;
+            for expr in visited_in_expr(&hole) {
+                match expr {
+                    Expr::Variable(name, _) => {
+                        let name = *name;
+                        if lent.contains(world.words.resolve(name)) { named.insert(node_key(expr)); }
+                    },
+                    Expr::Block(inner, _) => { if lent_binds_again(world, inner, lent) { bound_again = true; } },
+                    Expr::LitInterpolated { .. } => pending.extend(host.literal_holes(expr)),
+                    _ => { },
+                }
+            }
+        }
+        if bound_again || named.is_empty() { return; }
+        for id in named.iter() {
+            let id = nikaia_std::num::value(id);
+            self.facts.lent_args.remove(&id);
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn a_lent_part_in_an_expression_arm(&mut self, world: &CheckWorld<'_>, body: &Expr, lent: &collections::BTreeSet<String>) {
+        let mut named: Vec<i64> = vec![];
+        let mut bound_again = false;
+        for expr in visited_in_expr(body) {
+            match expr {
+                Expr::Variable(name, _) => {
+                    let name = *name;
+                    if lent.contains(world.words.resolve(name)) { named.push(node_key(expr)); }
+                },
+                Expr::Block(inner, _) => { if lent_binds_again(world, inner, lent) { bound_again = true; } },
+                _ => { },
+            }
+        }
+        if !bound_again {
+            for id in named.iter() {
+                let id = nikaia_std::num::value(id);
+                self.facts.views_handed_on.insert(id);
+            }
+        }
+    }
+}
+
+fn lent_binds_again(world: &CheckWorld<'_>, block: &Block, lent: &collections::BTreeSet<String>) -> bool {
+    for stmt in block.stmts.iter() {
+        match &stmt.node {
+            Stmt::Let { names, .. } => { for name in names.iter() { if lent.contains(world.words.resolve(*name)) { return true; } } },
+            _ => { },
+        }
+    }
+    false
+}
+
+
 // --- check_imports.nika ---
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -40214,6 +40588,10 @@ pub mod check_flow {
     pub use super::{CheckConstant, CheckOpenNumber, CheckUnsignedSlot, CheckUnrolling, CheckFlow};
 }
 pub mod check_grammar {}
+pub mod check_host {
+    #[allow(unused_imports)]
+    pub use super::{CheckBuilt, CheckComputed, CheckCompiled, CheckPlace, CheckHost};
+}
 pub mod check_imports {}
 pub mod check_items {
     #[allow(unused_imports)]

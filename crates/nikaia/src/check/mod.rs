@@ -26,10 +26,11 @@
 // line is worth more than none at all.
 
 pub(crate) mod attributes;
+mod host;
 use crate::contracts::LedgerOps;
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::assets::{ASSET, Denied, Reads};
+use crate::assets::{ASSET, Reads};
 use crate::ast::{self, BinaryOp, Block, Expr, Item, MatchPattern, Span, Stmt, UnaryOp};
 use crate::build_time;
 use crate::contracts::SignatureOps;
@@ -91,30 +92,6 @@ impl CodeOps for Finding {
         let kept: &'static str = Box::leak(self.code.clone().into_boxed_str());
         codes.insert(kept);
         kept
-    }
-}
-
-/// What a grammar's wall is, as the report of it is given it.
-fn a_wall(why: &crate::grammar_run::Wall) -> CheckWall {
-    use crate::grammar_run::Wall;
-    match why {
-        Wall::Refused { detail } => CheckWall::Refused {
-            detail: detail.clone(),
-        },
-        Wall::NoCrossedForm { ty, because } => CheckWall::NoCrossedForm {
-            ty: ty.clone(),
-            because: because.clone(),
-        },
-        Wall::InsideAnother { grammar } => CheckWall::InsideAnother {
-            outer: grammar.clone(),
-        },
-        Wall::NowhereToBuild => CheckWall::NowhereToBuild,
-        Wall::DidNotBuild { detail } => CheckWall::DidNotBuild {
-            detail: detail.clone(),
-        },
-        Wall::Unreadable { detail } => CheckWall::Unreadable {
-            detail: detail.clone(),
-        },
     }
 }
 
@@ -1162,6 +1139,18 @@ enum Reached<'a> {
 
 impl<'a> Checker<'a> {
     // --- the shape of a program ---------------------------------------------
+
+    /// What the Nikaia half asks of the compiler (`tools/check_host.nika`).
+    fn host(&self) -> host::Host<'a> {
+        host::Host {
+            parsed: self.parsed,
+            beside: self.beside,
+            here: self.here,
+            reads: self.reads,
+            own: self.world.own,
+            library: self.world.library,
+        }
+    }
 
     fn collect_types(&mut self) {
         // **A generic struct another file of the package declares**
@@ -10307,32 +10296,8 @@ impl<'a> Checker<'a> {
     /// that is actually here** - a variable in scope, or a function a ledger
     /// knows. A name nobody declared is text, and text says nothing.
     fn unmarked_hole(&mut self, text: &str, span: &Span) {
-        if text.contains("{{") || text.contains("}}") {
-            self.s.warn_migration(
-                span,
-                "`{{{{` in a plain string is now two braces.".to_string(),
-                format!(
-                    "Braces in a plain string don't need escaping any more: write `\"{}\"`.",
-                    text.replace("{{", "{").replace("}}", "}")
-                ),
-            );
-            return;
-        }
-
-        for hole in brace_groups(text) {
-            let Ok(parsed) = self.parsed.hole(span.start, &hole) else {
-                continue;
-            };
-            if !self.s.names_something_here(&self.world, &parsed) {
-                continue;
-            }
-            self.s.warn_migration(
-                span,
-                format!("`{{{hole}}}` here is plain text now; it used to insert a value."),
-                format!("Write `f\"{text}\"` if you want the value to appear."),
-            );
-            return;
-        }
+        let host = self.host();
+        self.s.unmarked_hole(&self.world, &host, text, span);
     }
 
     /// Every expression a literal hides, walked where it stands.
@@ -14145,254 +14110,11 @@ impl<'a> Checker<'a> {
         bound: &str,
         span: &Span,
     ) -> Option<(Option<build_time::Value>, bool)> {
-        if !self.s.flow.computes {
-            return Some((None, true));
-        }
-        let workshop = self.reads.workshop();
-        // **Every file of the program** (Part I 9.1), this one among them; a
-        // check handed none is this file alone.
-        let mut files: Vec<&Parsed> = self.beside.to_vec();
-        let here = match self.here {
-            Some(here) => here,
-            None => {
-                files.insert(0, self.parsed);
-                0
-            }
-        };
-        if !workshop.somewhere() {
-            return None;
-        }
-        // **A grammar run is its own** (ADR-177; whether it joins this crate
-        // is ADR-321 §6's open question): an initialiser that runs one is
-        // answered as before. A program that merely declares a grammar is
-        // compiled with it.
-        let grammars: BTreeSet<String> = files
-            .iter()
-            .flat_map(|file| {
-                file.program
-                    .items
-                    .iter()
-                    .filter_map(|item| match &item.node {
-                        Item::Grammar(def) => Some(file.text(def.name).to_string()),
-                        _ => None,
-                    })
-            })
-            .collect();
-        let mut runs_a_grammar = false;
-        crate::emit::visit_expr(value, &mut |expr: &Expr| match expr {
-            Expr::Call { func, .. } => {
-                if let Expr::Path(path, _) = &**func
-                    && let Some(head) = path.first()
-                {
-                    runs_a_grammar |= grammars.contains(self.parsed.text(*head));
-                }
-            }
-            Expr::MethodCall { receiver, .. } => {
-                if let Expr::Variable(name, _) = &**receiver {
-                    runs_a_grammar |= grammars.contains(self.parsed.text(*name));
-                }
-            }
-            _ => {}
-        });
-        if runs_a_grammar {
-            return None;
-        }
-        // **A call somewhere in it**, which is what D1 compiles: an
-        // initialiser of literals alone is folded. A read of a file is not a
-        // call here: it is the build's, and what it read goes in as text.
-        //
-        // **Nor is a variant built** (`Shape::Num(1.5)`): it is a value
-        // written down, as a struct literal is, and what it carries is asked
-        // on its own.
-        let enums: BTreeSet<String> = files
-            .iter()
-            .flat_map(|file| {
-                file.program
-                    .items
-                    .iter()
-                    .filter_map(|item| match &item.node {
-                        Item::Enum { name, .. } => Some(file.text(*name).to_string()),
-                        _ => None,
-                    })
-            })
-            .collect();
-        let mut calls = false;
-        let mut assets: Vec<Option<String>> = Vec::new();
-        crate::emit::visit_expr(value, &mut |expr: &Expr| match expr {
-            Expr::Call { func, args, .. } => match &**func {
-                Expr::Variable(name, _) if self.parsed.text(*name) == crate::assets::ASSET => {
-                    assets.push(match args.as_slice() {
-                        [Expr::LitStr { text, .. }] => build_time::decoded(text),
-                        _ => None,
-                    })
-                }
-                Expr::Path(path, _)
-                    if path.len() == 2 && enums.contains(self.parsed.text(path[0])) => {}
-                _ => calls = true,
-            },
-            Expr::MethodCall { .. } | Expr::SafeMethod { .. } => calls = true,
-            _ => {}
-        });
-        if !calls {
-            return None;
-        }
-        // **The build reads, the run does not** (ADR-310): each file is read
-        // here, by the rules every read keeps, and its text stands where the
-        // `asset` did.
-        let mut read: BTreeMap<String, String> = BTreeMap::new();
-        for path in assets {
-            let Some(path) = path else {
-                self.s.a_path_that_is_not_a_literal(span);
-                return Some((None, true));
-            };
-            match self.reads.read(&path) {
-                Ok(text) => {
-                    read.insert(path, text);
-                }
-                Err(why) => {
-                    self.a_file_this_build_may_not_read(&path, &why, span);
-                    return Some((None, true));
-                }
-            }
-        }
-        let mut value = value.clone();
-        if !read.is_empty() {
-            let parsed = self.parsed;
-            crate::text_tiers::visit_expr_mut(
-                &mut value,
-                &mut |expr: &mut Expr| {
-                    if let Expr::Call { func, args, .. } = expr
-                        && matches!(&**func, Expr::Variable(name, _)
-                            if parsed.text(*name) == crate::assets::ASSET)
-                        && let [Expr::LitStr { text, .. }] = args.as_slice()
-                        && let Some(content) =
-                            build_time::decoded(text).and_then(|path| read.get(&path))
-                    {
-                        *expr = Expr::LitStr {
-                            text: build_time::written(content),
-                            id: crate::ast::NodeId::fresh(),
-                        };
-                    }
-                },
-                &mut |_, _| {},
-            );
-        }
-        let value = &value;
-        let outermost: BTreeMap<String, build_time::Value> = self
+        let host = self.host();
+        let done = self
             .s
-            .scope
-            .first()
-            .map(|frame| {
-                frame
-                    .iter()
-                    .filter_map(|local| {
-                        let value = local
-                            .built
-                            .clone()
-                            .or_else(|| local.constant.map(build_time::Value::Int))?;
-                        Some((local.name.clone(), value))
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
-        let known = |name: &str| outermost.get(name).cloned();
-        match crate::comptime_run::compute(
-            &files,
-            here,
-            bound,
-            value,
-            found,
-            &known,
-            self.world.library,
-            workshop,
-            {
-                let mut bounds = workshop.bounds();
-                if let Some(steps) = self.s.flow.raised.0 {
-                    bounds.steps = steps;
-                }
-                if let Some(bytes) = self.s.flow.raised.1 {
-                    bounds.bytes = bytes;
-                }
-                bounds
-            },
-            Some(self.world.own),
-        ) {
-            crate::comptime_run::Computed::Value(computed) => Some((Some(computed), false)),
-            crate::comptime_run::Computed::Forbidden { callee, because } => {
-                self.s
-                    .a_body_that_may_not_run_at_build_time(&callee, because, span);
-                Some((None, true))
-            }
-            crate::comptime_run::Computed::Stopped(detail) => {
-                self.a_build_time_run_that_stopped(bound, &detail, &files, here, span);
-                Some((None, true))
-            }
-            crate::comptime_run::Computed::NotHere => None,
-        }
-    }
-
-    /// **A build-time run that stopped as the program would**
-    /// ([ADR-321](../../docs/specification/adr/adr-321.md) D1): the same code
-    /// stops the program the same way. In its own words, at the place it
-    /// stopped where the run named one (`comptime_run::STOPPED_AT`).
-    fn a_build_time_run_that_stopped(
-        &mut self,
-        bound: &str,
-        said: &str,
-        files: &[&Parsed],
-        here: usize,
-        span: &Span,
-    ) {
-        if let Some(over) = said
-            .lines()
-            .find_map(|line| line.strip_prefix("nikaia-build-time: "))
-        {
-            return self.s.a_build_time_run_over_its_bound(
-                bound,
-                over,
-                crate::comptime_run::VALUE_FN,
-                span,
-            );
-        }
-        let line = said
-            .lines()
-            .find(|line| line.contains("the program stopped"))
-            .unwrap_or(said);
-        let (place, why) = match line.split_once(": the program stopped: ") {
-            Some((place, why)) => (Some(place), why),
-            None => (None, line),
-        };
-        // `@<file>:<byte>`: a place in this file is shown, and one in another
-        // is named by the function it is in.
-        let stopped = place
-            .and_then(|place| place.strip_prefix(crate::comptime_run::STOPPED_AT))
-            .and_then(|rest| rest.split_once(':'))
-            .and_then(|(unit, byte)| {
-                Some((unit.parse::<usize>().ok()?, byte.parse::<u32>().ok()?))
-            });
-        let at = stopped
-            .filter(|(unit, _)| *unit == here)
-            .map(|(_, byte)| byte);
-        let elsewhere = stopped
-            .filter(|(unit, _)| *unit != here)
-            .and_then(|(unit, byte)| {
-                let file = files.get(unit)?;
-                file.program.items.iter().find_map(|item| match &item.node {
-                    Item::Fn {
-                        name: Some(name), ..
-                    } if (item.span.start..item.span.end).contains(&byte) => {
-                        Some(file.text(*name).to_string())
-                    }
-                    _ => None,
-                })
-            });
-        self.s.a_build_time_run_that_stopped_at(
-            bound,
-            why,
-            at.map_or(-1, i64::from),
-            elsewhere.as_deref(),
-            span,
-        );
+            .compiled_build_time_value(&self.world, &host, value, found, bound, span);
+        done.answered.then_some((done.value, done.said))
     }
 
     fn build_time_value(
@@ -14401,74 +14123,7 @@ impl<'a> Checker<'a> {
         bound: &str,
         span: &Span,
     ) -> (Option<build_time::Value>, bool) {
-        let outcome = {
-            // A name outside the body: a `comptime` already evaluated, or a
-            // `let` whose value folded. Integers only, because that is what
-            // the scope records — a `bool` constant is not visible here yet
-            // and reaches the same `NK1127` it always did.
-            // **The whole value where the build has one**, and the fold's
-            // integer otherwise. `comptime BIG = ORIGIN.scaled(10)` needs
-            // `ORIGIN` to be a `Point` here and not the number it is not.
-            //
-            // **Read off the scope before the evaluation starts**, because
-            // it runs on a thread of its own (`BuildTime::evaluate`): later
-            // bindings of a name go in after earlier ones, so the innermost
-            // is the one that answers, as `binding` would.
-            let mut held: BTreeMap<&str, build_time::Value> = BTreeMap::new();
-            for local in self.s.scope.iter().flatten() {
-                let value = local
-                    .built
-                    .clone()
-                    .or_else(|| local.constant.map(build_time::Value::Int));
-                match value {
-                    Some(value) => held.insert(local.name.as_str(), value),
-                    None => held.remove(local.name.as_str()),
-                };
-            }
-            let known = |name: &str| -> Option<build_time::Value> { held.get(name).cloned() };
-            build_time::BuildTime::new(self.parsed, self.beside, self.world.own, self.reads, &known)
-                .evaluate(value)
-        };
-        match outcome {
-            Ok(value) => (Some(value), false),
-            Err(build_time::Refusal::Unevaluable) => (None, false),
-            Err(build_time::Refusal::NotAllowed { callee, because }) => {
-                self.s
-                    .a_body_that_may_not_run_at_build_time(&callee, &because, span);
-                (None, true)
-            }
-            Err(build_time::Refusal::TooDeep { callee }) => {
-                self.s.a_build_time_call_went_too_deep(&callee, span);
-                (None, true)
-            }
-            Err(build_time::Refusal::OutOfBounds { at, len }) => {
-                self.s
-                    .a_build_time_index_is_not_there(&at, len as i64, span);
-                (None, true)
-            }
-            Err(build_time::Refusal::Circular { ring }) => {
-                self.s.a_constant_built_from_itself(bound, &ring, span);
-                (None, true)
-            }
-            Err(build_time::Refusal::NotHere { what, why, way_out }) => {
-                self.s
-                    .a_build_time_body_that_is_not_here(bound, &what, &why, &way_out, span);
-                (None, true)
-            }
-            Err(build_time::Refusal::MayNotRead { path, why }) => {
-                self.a_file_this_build_may_not_read(&path, &why, span);
-                (None, true)
-            }
-            Err(build_time::Refusal::PathIsComputed) => {
-                self.s.a_path_that_is_not_a_literal(span);
-                (None, true)
-            }
-            Err(build_time::Refusal::GrammarWall { grammar, rule, why }) => {
-                self.s
-                    .a_grammar_that_did_not_run(&grammar, &rule, &a_wall(&why), span);
-                (None, true)
-            }
-        }
+        self.s.build_time_value(&self.host(), value, bound, span)
     }
 
     /// The table a `comptime` map crosses as, and whether the reader was told
@@ -15585,36 +15240,6 @@ impl<'a> Checker<'a> {
             }
             MatchPattern::Otherwise | MatchPattern::Literal(_) | MatchPattern::Range { .. } => {}
         }
-    }
-
-    /// **`NK1175`: a file this build may not read**
-    /// ([ADR-310](../../docs/specification/adr/adr-310.md) D4, D6).
-    ///
-    /// One claim and four reasons. The first is the one a project that never
-    /// intends to read anything still gets, and it costs nothing to keep: with
-    /// no list in effect the whole class is off, so *this build reads nothing
-    /// while building* is what happens rather than something somebody has to
-    /// promise.
-    ///
-    /// Each reason carries the way out that can actually be taken
-    /// ([Part III C.2](../../docs/specification/30-nikaia-tooling.md)), and the
-    /// three namings are why they differ: *add the flag* is not the answer to a
-    /// path missing from the list, and *add the line* is not the answer to a
-    /// build run with the reads switched off.
-    fn a_file_this_build_may_not_read(&mut self, path: &str, why: &Denied, span: &Span) {
-        let (note, way_out) = (
-            nikaia_std::tools::assets::why_not_read(why, path),
-            nikaia_std::tools::assets::way_out_of_a_read(why, path),
-        );
-        self.s.findings.push(Finding {
-            severity: Severity::Error,
-            span: *span,
-            code: "NK1175".to_string(),
-            message: format!("This build isn't allowed to read `{path}`."),
-            notes: vec![note],
-            help: Some(way_out),
-            labels: Vec::new(),
-        });
     }
 
     /// **The instantiations that stand in the program's other files**
@@ -17377,79 +17002,9 @@ impl<'a> Checker<'a> {
     /// found again by their ids. Only where nothing in the arm binds the name
     /// again.
     fn a_lent_part_is_handed_on_as_it_is(&mut self, body: &Expr, lent: &BTreeSet<String>) {
-        let Expr::Block(block, _) = body else {
-            self.a_lent_part_in_an_expression_arm(body, lent);
-            return;
-        };
-        if block.stmts.is_empty() {
-            return;
-        }
-        let mut named: BTreeSet<usize> = BTreeSet::new();
-        let mut bound_again = false;
-        let holes: std::cell::RefCell<Vec<Expr>> = std::cell::RefCell::new(Vec::new());
-        let parsed = self.parsed;
-        let mut look = |expr: &Expr| match expr {
-            Expr::Variable(name, _) if lent.contains(parsed.text(*name)) => {
-                named.insert(value_node(expr) as usize);
-            }
-            Expr::Block(inner, _) => {
-                bound_again |= inner.stmts.iter().any(|stmt| {
-                    matches!(&stmt.node, Stmt::Let { names, .. }
-                        if names.iter().any(|n| lent.contains(parsed.text(*n))))
-                });
-            }
-            // An `f"…"` hole is read again from its text, with the names it
-            // shares with the arm, so its calls are the arm's too.
-            Expr::LitInterpolated { .. } => holes.borrow_mut().extend(
-                crate::emit::literal_expressions_bound(parsed, expr)
-                    .into_iter()
-                    .map(|(hole, _)| hole),
-            ),
-            _ => {}
-        };
-        crate::emit::visit_expr(body, &mut look);
-        loop {
-            let Some(hole) = holes.borrow_mut().pop() else {
-                break;
-            };
-            crate::emit::visit_expr(&hole, &mut look);
-        }
-        if bound_again || named.is_empty() {
-            return;
-        }
+        let host = self.host();
         self.s
-            .facts
-            .lent_args
-            .retain(|id| !named.contains(&(*id as usize)));
-    }
-
-    /// **The same for an arm that is an expression** (#456): it has no
-    /// statements of its own to find its arguments by, so each argument that
-    /// names a lent part is marked by its node. Not where a block inside the
-    /// arm binds the name again, as for a block arm; an `f"…"` hole is read
-    /// again from its text, so its nodes are not these and keep the `&`.
-    fn a_lent_part_in_an_expression_arm(&mut self, body: &Expr, lent: &BTreeSet<String>) {
-        let parsed = self.parsed;
-        let mut named: Vec<usize> = Vec::new();
-        let mut bound_again = false;
-        crate::emit::visit_expr(body, &mut |expr: &Expr| match expr {
-            Expr::Variable(name, _) if lent.contains(parsed.text(*name)) => {
-                named.push(value_node(expr) as usize);
-            }
-            Expr::Block(inner, _) => {
-                bound_again |= inner.stmts.iter().any(|stmt| {
-                    matches!(&stmt.node, Stmt::Let { names, .. }
-                        if names.iter().any(|n| lent.contains(parsed.text(*n))))
-                });
-            }
-            _ => {}
-        });
-        if !bound_again {
-            self.s
-                .facts
-                .views_handed_on
-                .extend(named.into_iter().map(|n| n as i64));
-        }
+            .a_lent_part_is_handed_on_as_it_is(&self.world, &host, body, lent);
     }
 
     /// The names a `match` arm brings into scope, all of them unknown: what a
@@ -18565,16 +18120,6 @@ fn is_a_collection(ty: &Ty) -> bool {
 /// and this must not quietly paper over.
 fn is_text(ty: &Ty) -> bool {
     nikaia_std::tools::check_types::is_text_type(ty)
-}
-
-/// Every `{…}` group in a string, by the text between the braces.
-///
-/// An escape is skipped whole, so the `{` of a `\u{0041}` does not start one -
-/// the same rule the grammar's `F_TEXT_CHAR` follows, and for the same
-/// reason: a string keeps its escapes as written, so a scanner that does not
-/// know that reads `"\u{0041}"` as a hole named `0041`.
-fn brace_groups(text: &str) -> Vec<String> {
-    nikaia_std::tools::check_words::brace_groups(text)
 }
 
 /// **Whether an entry is another package's `sync` that was never promised**
