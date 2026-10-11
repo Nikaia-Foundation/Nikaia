@@ -3069,8 +3069,12 @@ impl<'p> Emitter<'p> {
             );
         }
         for arg in &method.args {
+            // **`mut` lowers to `&mut T` here as it does in the impl**
+            // (ADR-094 D3): a declaration that wrote the value would be a
+            // signature the impl disagrees with.
+            let reference = if arg.mutable && !foreign { "&mut " } else { "" };
             params.push(format!(
-                "{}: {}",
+                "{}: {reference}{}",
                 self.name(arg.name),
                 match foreign {
                     true => self.foreign_ty(&arg.ty),

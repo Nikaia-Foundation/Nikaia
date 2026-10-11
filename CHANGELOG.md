@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.815] — 2026-10-11
+
+**A trait method's `mut` parameter lowers to `&mut T` in the declaration (ADR-094 D3, #558, U0a).**
+- The declaration wrote `walk: Walk` while the impl wrote `walk: &mut Walk`; `trait_method` now writes the `&mut` too, so a `mut` parameter works through a trait end to end. No rule visible to programs changes. Test: `tests/trait_mut_parameter.rs`.
+
 ## [0.0.814] — 2026-10-11
 
 **check: the checker's walk state is a Nikaia CheckFlow (#558, #125, C-3)**
