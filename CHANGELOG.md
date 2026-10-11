@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.818] — 2026-10-11
+
+**The type group of the emitter is Nikaia: `ty`, `ty_counted`, the tethered wrapper and the extern pointer (tools/emit_core_types.nika, #558, #125, E9 U1a).**
+- `EmitState` gains `emit_core_ty`, `emit_core_ty_counted`, `emit_core_tether_wrapper` and `pointer_for`; `emit_settle_kind`, `emit_cleaned`, `emit_boxed_future` and `emit_counted_turn` are the small words that depend on the build. The Rust methods of those names are one-line stubs, and `written_name`, `a_list_read_as_a_slice` and the free `pointer_for` of `emit/mod.rs` are gone. Nothing calls back into the Rust emitter, so `EmitHost` is unchanged. `lower-std` is the oracle: the rest of `package.rs` is identical.
+- A test (`emit_deep_nesting.rs`) lowers a type, a chain of casts and an index nested 500 deep through the moved paths.
+
 ## [0.0.817] — 2026-10-11
 
 **check: `CheckHost` and the seven functions that needed the compiler (#558, #125, C-4)**

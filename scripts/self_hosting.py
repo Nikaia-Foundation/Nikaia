@@ -112,7 +112,7 @@ COMPILER_NIKA = {
     "bounds_matched.nika": "bounds: what a grammar alternative's bindings matched, and what a callee's ledger entry ensures (0.0.763)",
     "proofs_book.nika": "proofs: nikaia.proofs as text, read back and rendered (0.0.763)",
     "check_flow.nika": "check: what the checker keeps while it walks one body - the flags of the walk, the method sets, the read index, the open numbers and the unsigned slots (0.0.814)",
-    "check_host.nika": "check: the services the checker asks of the compiler (CheckHost) and the seven functions below the core that needed them (0.0.817)",
+    "check_host.nika": "check: the services the checker asks of the compiler (CheckHost) and the seven functions below the core that needed them (0.0.818)",
     "check_state.nika": "check: the records the checker's state holds - a name in scope, what was taken or read of a path, a way out, a body that repeats - and the questions each answers (0.0.774)",
     "check_walk.nika": "check: the expressions and the blocks an expression or a statement holds, for the checker's walks (0.0.774)",
     "check_decls.nika": "check: what the program declares - structs, enums, bounds, grammars - and what a type is called to the checker (0.0.775)",
@@ -162,6 +162,7 @@ COMPILER_NIKA = {
     "emit_keeps.nika": "emit: the keeps a function declares and hands, tethered types and the fields of a struct of views (0.0.810)",
     "emit_entry.nika": "emit: the program's own main, the main the runtime starts and the types that hold one handle per buffer (0.0.811)",
     "emit_host.nika": "emit: the host trait the emitter's core asks of the Rust side, and the first moved methods: a cast's operand, a bare range, an index (0.0.816)",
+    "emit_core_types.nika": "emit: how a type is written, the tethered wrapper, the pointer an extern parameter takes and the words that depend on user parallelism (0.0.818)",
 }
 
 

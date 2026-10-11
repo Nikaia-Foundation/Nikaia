@@ -18364,6 +18364,183 @@ fn call_fn_is_either(words: &winnow_grammar::InternerContext, name: Option<&winn
 }
 
 
+// --- emit_core_types.nika ---
+
+pub fn emit_settle_kind(overlaps: bool) -> String {
+    if overlaps { return String::from("nikaia_std::cleanup::Sent"); }
+    String::from("nikaia_std::cleanup::Local")
+}
+
+pub fn emit_cleaned(overlaps: bool) -> String {
+    if overlaps { return String::from("nikaia_std::cleanup::CleanedSend"); }
+    String::from("nikaia_std::cleanup::Cleaned")
+}
+
+pub fn emit_boxed_future(overlaps: bool) -> String {
+    if overlaps { return String::from("nikaia_std::func::SendBoxed"); }
+    String::from("nikaia_std::func::Boxed")
+}
+
+pub fn emit_counted_turn(counts_steps: bool, opening: Option<String>) -> Option<String> {
+    if !counts_steps { return opening; }
+    let step: String = String::from("nikaia_std::build_time::step();");
+    if opening.is_some() {
+        let rest = nikaia_std::index::or(opening, || "".into());
+        return Some(format!("{} {}", step, rest));
+    }
+    Some(step)
+}
+
+impl EmitState {
+    pub fn pointer_for(&self, world: &EmitWorld<'_>, callee: &str, ty: &Type) -> Option<EmitPointer> {
+        let name = world.words.resolve(ty.name);
+        if self.opaque_handles.contains_key(name) && !ty.is_view && !ty.is_slice {
+            let release = nikaia_std::index::or(self.opaque_handles.get(name), || "");
+            return Some(EmitPointer::Handle { give: release == callee });
+        }
+        if self.writes_a_run(world, ty) { return Some(EmitPointer::Run { mutable: ty.is_mut }); }
+        emit_pointer_for(ty)
+    }
+    pub fn emit_core_ty(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, crossings: bool, overlaps: bool, ty: &Type, lifetimes: EmitLifetimes) -> String { self.emit_core_ty_counted(world, walk, crossings, overlaps, ty, lifetimes, Count::Atomic) }
+    #[allow(clippy::too_many_arguments)]
+    pub fn emit_core_ty_counted(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, crossings: bool, overlaps: bool, ty: &Type, lifetimes: EmitLifetimes, count: Count) -> String {
+        let name = world.words.resolve(ty.name).to_owned();
+        self.emit_core_ty_named(world, walk, crossings, overlaps, ty, &name, lifetimes, count)
+    }
+    #[allow(clippy::too_many_arguments)]
+    fn emit_core_ty_named(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, crossings: bool, overlaps: bool, ty: &Type, name: &str, lifetimes: EmitLifetimes, count: Count) -> String {
+        let mut out: String = String::from("");
+        if (*ty.code).is_none() && (ty.is_tuple || !ty.generics.is_empty()) && walk.in_parameter {
+            walk.in_parameter = false;
+            let written = self.emit_core_ty_named(world, walk, crossings, overlaps, ty, name, lifetimes, count);
+            walk.in_parameter = true;
+            return written;
+        }
+        if ty.is_tuple {
+            let mut parts: Vec<String> = vec![];
+            for part in ty.generics.iter() { parts.push(self.emit_core_ty_counted(world, walk, crossings, overlaps, part, lifetimes, count)); }
+            return format!("({})", parts.join(", "));
+        }
+        let parameter = nikaia_std::index::or(walk.specialising.as_ref().map(|__nikaia_it| __nikaia_it.first.as_str()), || "").to_owned();
+        if walk.specialising.is_some() && ty.generics.is_empty() && (*ty.code).is_none() && name == parameter {
+            let on = nikaia_std::index::or(walk.specialising.as_ref().map(|__nikaia_it| __nikaia_it.second.as_str()), || "").to_owned();
+            let held = match walk.specialising.as_ref() {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            };
+            walk.specialising = None;
+            let written = self.emit_core_ty_named(world, walk, crossings, overlaps, ty, &on, lifetimes, count);
+            walk.specialising = held;
+            return written;
+        }
+        if (*ty.code).is_some() {
+            let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
+            let mut params: Vec<String> = vec![];
+            for part in ty.generics.iter() { params.push(a_list_read_as_a_slice(self.emit_core_ty_counted(world, walk, crossings, overlaps, part, lifetimes, count))); }
+            let mut outcome: String = String::from("()");
+            if (*code.result).is_some() {
+                let result = match (*code.result).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
+                let inner = self.emit_core_ty_counted(world, walk, crossings, overlaps, result, lifetimes, count);
+                if code.can_throw { outcome = format!("Result<{}, Box<dyn std::error::Error>>", inner); } else { outcome = inner; }
+            } else if code.can_throw { outcome = String::from("Result<(), Box<dyn std::error::Error>>"); }
+            let runs = walk.in_parameter && walk.code_parameter_runs;
+            if !runs {
+                if !code.is_sync {
+                    let future = emit_boxed_future(overlaps);
+                    outcome = format!("{}<{}>", future, outcome);
+                }
+                let mut crossing: String = String::from("");
+                if overlaps { crossing = String::from(" + Send + Sync"); }
+                let mut elided: Vec<String> = vec![];
+                for part in ty.generics.iter() { elided.push(a_list_read_as_a_slice(self.emit_core_ty_counted(world, walk, crossings, overlaps, part, EmitLifetimes::Elided, count))); }
+                return format!("nikaia_std::func::Kept<dyn Fn({}) -> {}{}>", elided.join(", "), outcome, crossing);
+            }
+            if code.is_sync {
+                let mut shape: String = format!(" -> {}", outcome);
+                if (*code.result).is_none() && !code.can_throw { shape = String::from(""); }
+                return format!("impl Fn({}){}", params.join(", "), shape);
+            }
+            if walk.code_parameter_runs { return format!("impl AsyncFn({}) -> {}", params.join(", "), outcome); }
+            return format!("impl Fn({}) -> std::pin::Pin<Box<dyn std::future::Future<Output = {}>>>", params.join(", "), outcome);
+        }
+        if name == "Seen" && ty.generics.len() == 1 {
+            let mut inner: Type = (*nikaia_std::index::get(&ty.generics, 0)).clone();
+            inner.is_nullable = ty.is_nullable || inner.is_nullable;
+            inner.is_view = ty.is_view || inner.is_view;
+            return self.emit_core_ty_counted(world, walk, crossings, overlaps, &inner, lifetimes, count);
+        }
+        if ty.is_nullable {
+            let mut inner: Type = ty.clone();
+            inner.is_nullable = false;
+            let written = self.emit_core_ty_named(world, walk, crossings, overlaps, &inner, name, lifetimes, count);
+            return format!("Option<{}>", written);
+        }
+        if self.writes_a_run(world, ty) {
+            let mut element: String = String::from("u8");
+            if !ty.generics.is_empty() { element = self.emit_core_ty_counted(world, walk, crossings, overlaps, nikaia_std::index::get(&ty.generics, 0), lifetimes, count); }
+            let reference = lifetimes.reference();
+            return format!("{}[{}]", reference, element);
+        }
+        if ty.either {
+            let params = lifetimes.params();
+            return format!("nikaia_std::either_text::EitherText<{}>", params);
+        }
+        if ty.is_view { out.push_str(&lifetimes.reference()); }
+        if ty.is_view && name == "fs::Path" && ty.generics.is_empty() {
+            out.push_str("std::path::Path");
+            return out;
+        }
+        if ty.is_view && name == "String" && ty.generics.is_empty() {
+            if walk.holding.is_some() { return String::from("nikaia_std::tether::Held"); }
+            out.push_str("str");
+            return out;
+        }
+        if name == "SharedMut" && !ty.generics.is_empty() {
+            let shared = self.written_name(world, crossings, walk.trusting, "Shared", count);
+            let locked = self.written_name(world, crossings, walk.trusting, "Locked", count);
+            let held = self.emit_core_ty_counted(world, walk, crossings, overlaps, nikaia_std::index::get(&ty.generics, 0), lifetimes, count);
+            out.push_str(&format!("{}<{}<{}>>", shared, locked, held));
+            return out;
+        }
+        if name == "Array" && ty.generics.len() == 2 && nikaia_std::index::get(&ty.generics, 1).count.is_some() {
+            let n = nikaia_std::index::or(nikaia_std::index::get(&ty.generics, 1).count, || 0);
+            let element = self.emit_core_ty_counted(world, walk, crossings, overlaps, nikaia_std::index::get(&ty.generics, 0), lifetimes, count);
+            out.push_str(&format!("[{}; {}]", element, n));
+            return out;
+        }
+        if walk.holding.is_some() && self.borrowing.contains(name) && ty.generics.is_empty() {
+            let width = nikaia_std::index::or(walk.holding, || 0);
+            let escaped = escaped_name(name);
+            out.push_str(&format!("nikaia_std::tether::Holding<__Views_{}, {}>", escaped, width));
+            return out;
+        }
+        out.push_str(&self.written_name(world, crossings, walk.trusting, name, count));
+        let mut params: Vec<String> = vec![];
+        if self.borrowing.contains(name) || self.tethered.contains(name) { params.push(lifetimes.params()); }
+        for part in ty.generics.iter() { params.push(self.emit_core_ty_counted(world, walk, crossings, overlaps, part, lifetimes, count)); }
+        if !params.is_empty() { out.push_str(&format!("<{}>", params.join(", "))); }
+        if self.cleaned_types.contains(name) {
+            let wrapper = emit_cleaned(overlaps);
+            return format!("{}<{}>", wrapper, out);
+        }
+        out
+    }
+    pub fn emit_core_tether_wrapper(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, crossings: bool, overlaps: bool, ty: &Type) -> String {
+        let any = self.emit_core_ty(world, walk, crossings, overlaps, ty, EmitLifetimes::Named);
+        let long = self.emit_core_ty(world, walk, crossings, overlaps, ty, EmitLifetimes::Long);
+        let shortened = self.emit_core_ty(world, walk, crossings, overlaps, ty, EmitLifetimes::Shortened);
+        let needle = format!("type Of<'a> = {};", any);
+        let mut found: i64 = -1;
+        for at in 0..walk.wrappers.len() as i64 { if found < 0 && (*nikaia_std::index::get(&walk.wrappers, (at) as usize)).contains(&needle) { found = at; } }
+        if found >= 0 { return format!("__Tethered{}", found); }
+        let n = walk.wrappers.len() as i64;
+        let text = format!("/// A value that carries the keep its views point into (ADR-283 D11), as a `Holding` over it.\n#[allow(non_camel_case_types)]\nenum __Tethered{} {{}}\n\nimpl nikaia_std::tether::Views for __Tethered{} {{\n    type Of<'a> = {};\n    fn shorten<'long: 's, 's>(x: &'s {}) -> &'s {} {{\n        x\n    }}\n}}\n", n, n, any, long, shortened);
+        walk.wrappers.push(text);
+        format!("__Tethered{}", n)
+    }
+}
+
+
 // --- emit_entry.nika ---
 
 impl EmitState {
@@ -40717,6 +40894,10 @@ pub mod emit_below {
 pub mod emit_calls {
     #[allow(unused_imports)]
     pub use super::{call_written_name, call_pausing_key, call_library_pauses, call_pauses, call_can_fail, call_callee_name, call_joined_throws, call_returns_either};
+}
+pub mod emit_core_types {
+    #[allow(unused_imports)]
+    pub use super::{emit_settle_kind, emit_cleaned, emit_boxed_future, emit_counted_turn};
 }
 pub mod emit_entry {}
 pub mod emit_exprs {

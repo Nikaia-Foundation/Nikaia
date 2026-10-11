@@ -1,0 +1,281 @@
+// crates/nikaia-std/src/tools/emit_core_types.nika
+//
+// **How the emitter writes a type** (ADR-294, #125, #558, E9 unit U1a): the
+// type group of `emit/mod.rs` - `ty`, `ty_counted`, the tethered wrapper, the
+// pointer an `extern` parameter takes and the small words that depend on the
+// build's user parallelism. Methods of `EmitState`; the build's settings arrive
+// as `crossings` (`Build::crossings_are_possible`) and `overlaps`
+// (`Build::overlaps_user_code`), the walk as `mut walk`. Nothing here calls back
+// into the Rust emitter, so there is no `EmitHost` in the signatures.
+
+/// The queues a settle point drains: at `user_parallelism = yes` only the one
+/// whose work may cross threads, so the settle point may too (ADR-297 D2).
+pub fn emit_settle_kind(overlaps: bool) -> String {
+    if overlaps {
+        return "nikaia_std::cleanup::Sent"
+    }
+    return "nikaia_std::cleanup::Local"
+}
+
+/// The wrapper a value with a cleanup is held in: the one whose parked work
+/// may move with its task where tasks run on threads (ADR-297 D1).
+pub fn emit_cleaned(overlaps: bool) -> String {
+    if overlaps {
+        return "nikaia_std::cleanup::CleanedSend"
+    }
+    return "nikaia_std::cleanup::Cleaned"
+}
+
+/// The future a kept function that may pause hands back: one that crosses
+/// threads where tasks run on them.
+pub fn emit_boxed_future(overlaps: bool) -> String {
+    if overlaps {
+        return "nikaia_std::func::SendBoxed"
+    }
+    return "nikaia_std::func::Boxed"
+}
+
+/// **A turn of a loop is a step of a build-time run** (ADR-321 D7): the count,
+/// in front of whatever else a loop's body opens with.
+pub fn emit_counted_turn(counts_steps: bool, opening: String?) -> String? {
+    if !counts_steps {
+        return opening
+    }
+    let step: String = "nikaia_std::build_time::step();"
+    if opening != null {
+        let rest = opening ?? ""
+        return f"{step} {rest}"
+    }
+    return step
+}
+
+impl EmitState {
+    /// Which shape a declared parameter takes at the C boundary, or `null`
+    /// where it is an ordinary value (ADR-302 D5, D7).
+    pub fn pointer_for(ref self, world: ref EmitWorld, callee: ref String, ty: ref Type) -> EmitPointer? {
+        let name = world.words.resolve(ty.name)
+        if self.opaque_handles.contains_key(name) && !ty.is_view && !ty.is_slice {
+            let release = self.opaque_handles.get(name) ?? ""
+            return EmitPointer::Handle { give: release == callee }
+        }
+        if self.writes_a_run(world, ty) {
+            return EmitPointer::Run { mutable: ty.is_mut }
+        }
+        return emit_pointer_for(ty)
+    }
+
+    /// A type, with the atomic floor for any `Shared` inside it.
+    pub fn emit_core_ty(ref self, world: ref EmitWorld, mut walk: EmitWalk, crossings: bool, overlaps: bool, ty: ref Type, lifetimes: EmitLifetimes) -> String {
+        return self.emit_core_ty_counted(world, walk, crossings, overlaps, ty, lifetimes, Count::Atomic)
+    }
+
+    /// The same, where the count a `Shared` in this position was given is
+    /// known. The count rides down through the arguments.
+    pub fn emit_core_ty_counted(ref self, world: ref EmitWorld, mut walk: EmitWalk, crossings: bool, overlaps: bool, ty: ref Type, lifetimes: EmitLifetimes, count: Count) -> String {
+        let name = world.words.resolve(ty.name).clone()
+        return self.emit_core_ty_named(world, walk, crossings, overlaps, ty, name, lifetimes, count)
+    }
+
+    /// The type, written under the name `name` instead of the one it carries:
+    /// a specialised copy writes the type its parameter stands for (ADR-304 D6)
+    /// without a new type being made to hold it.
+    fn emit_core_ty_named(ref self, world: ref EmitWorld, mut walk: EmitWalk, crossings: bool, overlaps: bool, ty: ref Type, name: ref String, lifetimes: EmitLifetimes, count: Count) -> String {
+        let mut out: String = ""
+
+        // A function inside a container is a value the container holds
+        // (Part I 5.3), so it is kept, even in a parameter the body only runs.
+        if ty.code == null && (ty.is_tuple || ty.generics.len() > 0) && walk.in_parameter {
+            walk.in_parameter = false
+            let written = self.emit_core_ty_named(world, walk, crossings, overlaps, ty, name, lifetimes, count)
+            walk.in_parameter = true
+            return written
+        }
+
+        // `(A, B)` in both languages, and the parts are the arguments.
+        if ty.is_tuple {
+            let mut parts: Vec[String] = []
+            for part in ty.generics {
+                parts.push(self.emit_core_ty_counted(world, walk, crossings, overlaps, part, lifetimes, count))
+            }
+            return f"({parts.join(", ")})"
+        }
+
+        // The parameter stands for the type, while a copy is written
+        // (ADR-304 D6). The walk's cell is let go before the recursion.
+        let parameter = (walk.specialising?.first ?? "").clone()
+        if walk.specialising != null && ty.generics.len() == 0 && ty.code == null && name == parameter {
+            let on = (walk.specialising?.second ?? "").clone()
+            let held = walk.specialising?.clone()
+            walk.specialising = null
+            let written = self.emit_core_ty_named(world, walk, crossings, overlaps, ty, on, lifetimes, count)
+            walk.specialising = held
+            return written
+        }
+
+        // A parameter that is code (ADR-277 D6, D11, D13).
+        if ty.code != null {
+            let code = ty.code ?? return ""
+            let mut params: Vec[String] = []
+            for part in ty.generics {
+                params.push(a_list_read_as_a_slice(self.emit_core_ty_counted(world, walk, crossings, overlaps, part, lifetimes, count)))
+            }
+            let mut outcome: String = "()"
+            if code.result != null {
+                let result = code.result ?? return ""
+                let inner = self.emit_core_ty_counted(world, walk, crossings, overlaps, result, lifetimes, count)
+                if code.can_throw {
+                    outcome = f"Result<{inner}, Box<dyn std::error::Error>>"
+                } else {
+                    outcome = inner
+                }
+            } else if code.can_throw {
+                outcome = "Result<(), Box<dyn std::error::Error>>"
+            }
+            let runs = walk.in_parameter && walk.code_parameter_runs
+            if !runs {
+                if !code.is_sync {
+                    let future = emit_boxed_future(overlaps)
+                    outcome = f"{future}<{outcome}>"
+                }
+                let mut crossing: String = ""
+                if overlaps {
+                    crossing = " + Send + Sync"
+                }
+                // What a kept function is handed is borrowed for the call
+                // alone: its parameters' references are elided.
+                let mut elided: Vec[String] = []
+                for part in ty.generics {
+                    elided.push(a_list_read_as_a_slice(self.emit_core_ty_counted(world, walk, crossings, overlaps, part, EmitLifetimes::Elided, count)))
+                }
+                return f"nikaia_std::func::Kept<dyn Fn({elided.join(", ")}) -> {outcome}{crossing}>"
+            }
+            if code.is_sync {
+                let mut shape: String = f" -> {outcome}"
+                if code.result == null && !code.can_throw {
+                    shape = ""
+                }
+                return f"impl Fn({params.join(", ")}){shape}"
+            }
+            if walk.code_parameter_runs {
+                return f"impl AsyncFn({params.join(", ")}) -> {outcome}"
+            }
+            return f"impl Fn({params.join(", ")}) -> std::pin::Pin<Box<dyn std::future::Future<Output = {outcome}>>>"
+        }
+
+        // `Seen[T]` is erased (ADR-281 D22): only with its argument.
+        if name == "Seen" && ty.generics.len() == 1 {
+            let mut inner: Type = ty.generics[0].clone()
+            inner.is_nullable = ty.is_nullable || inner.is_nullable
+            inner.is_view = ty.is_view || inner.is_view
+            return self.emit_core_ty_counted(world, walk, crossings, overlaps, inner, lifetimes, count)
+        }
+
+        // `T?` is an `Option<T>` (Part I 2.3): the `?` is peeled and the rest
+        // renders the type it is nullable of.
+        if ty.is_nullable {
+            let mut inner: Type = ty.clone()
+            inner.is_nullable = false
+            let written = self.emit_core_ty_named(world, walk, crossings, overlaps, inner, name, lifetimes, count)
+            return f"Option<{written}>"
+        }
+
+        // `ref Array[T]` is a run of elements somebody else keeps (ADR-184 D3).
+        if self.writes_a_run(world, ty) {
+            let mut element: String = "u8"
+            if ty.generics.len() > 0 {
+                element = self.emit_core_ty_counted(world, walk, crossings, overlaps, ty.generics[0], lifetimes, count)
+            }
+            let reference = lifetimes.reference()
+            return f"{reference}[{element}]"
+        }
+
+        // Text both kinds of which flow into a position (ADR-282 D14).
+        if ty.either {
+            let params = lifetimes.params()
+            return f"nikaia_std::either_text::EitherText<{params}>"
+        }
+        // A view is a borrow of the parser's input (ADR-283).
+        if ty.is_view {
+            out.push_str(lifetimes.reference())
+        }
+        // A view of a file's name is a `&std::path::Path` (ADR-319 D2).
+        if ty.is_view && name == "fs::Path" && ty.generics.len() == 0 {
+            out.push_str("std::path::Path")
+            return out
+        }
+        // A view of text is a `&str` (ADR-184 D2).
+        if ty.is_view && name == "String" && ty.generics.len() == 0 {
+            // Held, where the keeper drops entries (ADR-283 D12).
+            if walk.holding != null {
+                return "nikaia_std::tether::Held"
+            }
+            out.push_str("str")
+            return out
+        }
+        // `SharedMut[T]` is one name and two hulls (ADR-281 D1).
+        if name == "SharedMut" && ty.generics.len() > 0 {
+            let shared = self.written_name(world, crossings, walk.trusting, "Shared", count)
+            let locked = self.written_name(world, crossings, walk.trusting, "Locked", count)
+            let held = self.emit_core_ty_counted(world, walk, crossings, overlaps, ty.generics[0], lifetimes, count)
+            out.push_str(f"{shared}<{locked}<{held}>>")
+            return out
+        }
+        // `Array[T, N]` is `[T; N]` (ADR-152 D1, D2).
+        if name == "Array" && ty.generics.len() == 2 && ty.generics[1].count != null {
+            let n = ty.generics[1].count ?? 0
+            let element = self.emit_core_ty_counted(world, walk, crossings, overlaps, ty.generics[0], lifetimes, count)
+            out.push_str(f"[{element}; {n}]")
+            return out
+        }
+        // A struct of views in a keeper that drops entries is held (ADR-283 D14).
+        if walk.holding != null && self.borrowing.contains(name) && ty.generics.len() == 0 {
+            let width = walk.holding ?? 0
+            let escaped = escaped_name(name)
+            out.push_str(f"nikaia_std::tether::Holding<__Views_{escaped}, {width}>")
+            return out
+        }
+        out.push_str(self.written_name(world, crossings, walk.trusting, name, count))
+
+        let mut params: Vec[String] = []
+        // A struct that holds a view carries the input lifetime with it.
+        if self.borrowing.contains(name) || self.tethered.contains(name) {
+            params.push(lifetimes.params())
+        }
+        for part in ty.generics {
+            params.push(self.emit_core_ty_counted(world, walk, crossings, overlaps, part, lifetimes, count))
+        }
+        if params.len() > 0 {
+            out.push_str(f"<{params.join(", ")}>")
+        }
+        // A type with a cleanup that can pause is its value in a `Cleaned`
+        // (ADR-297 D1).
+        if self.cleaned_types.contains(name) {
+            let wrapper = emit_cleaned(overlaps)
+            return f"{wrapper}<{out}>"
+        }
+        return out
+    }
+
+    /// The `Views` type one tethered binding is held by (ADR-283 D11, ADR-218
+    /// D4), declared once per type: the value over any lifetime, and
+    /// `shorten`, which `rustc` only accepts where the type is covariant.
+    pub fn emit_core_tether_wrapper(ref self, world: ref EmitWorld, mut walk: EmitWalk, crossings: bool, overlaps: bool, ty: ref Type) -> String {
+        let any = self.emit_core_ty(world, walk, crossings, overlaps, ty, EmitLifetimes::Named)
+        let long = self.emit_core_ty(world, walk, crossings, overlaps, ty, EmitLifetimes::Long)
+        let shortened = self.emit_core_ty(world, walk, crossings, overlaps, ty, EmitLifetimes::Shortened)
+        let needle = f"type Of<'a> = {any};"
+        let mut found: i64 = -1
+        for at in 0..<walk.wrappers.len() {
+            if found < 0 && walk.wrappers[at].contains(ref needle) {
+                found = at
+            }
+        }
+        if found >= 0 {
+            return f"__Tethered{found}"
+        }
+        let n = walk.wrappers.len()
+        let text = f"/// A value that carries the keep its views point into (ADR-283 D11), as a `Holding` over it.\n#[allow(non_camel_case_types)]\nenum __Tethered{n} {{}}\n\nimpl nikaia_std::tether::Views for __Tethered{n} {{\n    type Of<'a> = {any};\n    fn shorten<'long: 's, 's>(x: &'s {long}) -> &'s {shortened} {{\n        x\n    }}\n}}\n"
+        walk.wrappers.push(text)
+        return f"__Tethered{n}"
+    }
+}

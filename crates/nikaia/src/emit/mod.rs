@@ -3014,23 +3014,7 @@ impl<'p> Emitter<'p> {
     /// where it is an ordinary value an `i32` is at both ends
     /// ([ADR-302](../../docs/specification/adr/adr-302.md) D5, D7).
     fn pointer_for(&self, callee: &str, ty: &Type) -> Option<Pointer> {
-        if let Some(release) = self.s.opaque_handles.get(self.text(ty.name))
-            && !ty.is_view
-            && !ty.is_slice
-        {
-            return Some(Pointer::Handle {
-                give: release == callee,
-            });
-        }
-        // **A run is an address beside a count and a view is one address**
-        // ([ADR-302](../../docs/specification/adr/adr-302.md) D5, D6), and
-        // which of the two a declaration wrote is [`Emitter::writes_a_run`]'s
-        // question since `ref Array[T]` became the spelling
-        // ([ADR-184](../../docs/specification/adr/adr-184.md) D3).
-        if self.writes_a_run(ty) {
-            return Some(Pointer::Run { mutable: ty.is_mut });
-        }
-        pointer_for(ty)
+        self.s.pointer_for(&self.world, callee, ty)
     }
 
     /// **Whether this written type is a run of elements somebody else keeps**
@@ -4732,28 +4716,6 @@ impl<'p> Emitter<'p> {
         self.expr(out, side, depth, flow)
     }
 
-    /// The name a type is written with below, which for one name depends on the
-    /// value and not only on the name.
-    ///
-    /// `Shared[T]` is `Rc<T>` or `Arc<T>`, and **which one is decided per value**
-    /// (ADR-037 D7): the atomic count is the floor at both settings of
-    /// `user_parallelism` (D6), and a value the analysis proves never crosses a
-    /// thread gets the plain one. So the count has to arrive from outside -
-    /// `map_name` above sees only a name and could not answer it.
-    ///
-    /// The **full path** and no `use`: `sharing::rust_name` already names both as
-    /// paths, two names as common as `Rc` and `Arc` are two a program may have of
-    /// its own, and nothing about the emitted file needs them shortened.
-    fn written_name(&self, name: &str, count: crate::contracts::sharing::Count) -> String {
-        self.s.written_name(
-            &self.world,
-            self.build.crossings_are_possible(),
-            self.walk(|w| w.trusting),
-            name,
-            count,
-        )
-    }
-
     /// Whether `owner::variant` is a variant of an enum this file declares.
     fn is_variant(&self, owner: &str, variant: &str) -> bool {
         self.s.is_variant(&self.world, owner, variant)
@@ -4788,7 +4750,16 @@ impl<'p> Emitter<'p> {
     /// decided gets, which is ADR-037 D6's answer and never a wrong one - only a
     /// slower one.
     fn ty(&self, ty: &Type, lifetimes: Lifetimes) -> String {
-        self.ty_counted(ty, lifetimes, crate::contracts::sharing::Count::Atomic)
+        self.nikaia(|walk| {
+            self.s.emit_core_ty(
+                &self.world,
+                walk,
+                self.build.crossings_are_possible(),
+                self.build.overlaps_user_code(),
+                ty,
+                lifetimes,
+            )
+        })
     }
 
     /// The same, where the count a `Shared` in this position was given is known.
@@ -4803,372 +4774,30 @@ impl<'p> Emitter<'p> {
         lifetimes: Lifetimes,
         count: crate::contracts::sharing::Count,
     ) -> String {
-        let mut out = String::new();
-
-        // **A function inside a container is a value the container holds**
-        // (Part I 5.3), so it is kept, even in a parameter the body only runs:
-        // `fs: ref Vec[fn(i64) -> i64]` is a list of kept functions, and the
-        // run shape - `impl AsyncFn` - is a bound, which a list's element
-        // cannot be. It was written as one, and `rustc` refused the call.
-        if ty.code.is_none()
-            && (ty.is_tuple || !ty.generics.is_empty())
-            && self.walk(|w| w.in_parameter)
-        {
-            let inside = self.walking(|w| std::mem::replace(&mut w.in_parameter, false));
-            let written = self.ty_counted(ty, lifetimes, count);
-            self.walking(|w| w.in_parameter = inside);
-            return written;
-        }
-
-        // `(A, B)` in both languages, and the parts are the arguments.
-        if ty.is_tuple {
-            let parts: Vec<String> = ty
-                .generics
-                .iter()
-                .map(|g| self.ty_counted(g, lifetimes, count))
-                .collect();
-            return format!("({})", parts.join(", "));
-        }
-
-        // **The parameter stands for the type, while a copy is written**
-        // ([ADR-304](../../docs/specification/adr/adr-304.md) D6). A specialised
-        // copy has no `T` left in its signature, so every position that wrote
-        // one writes the type instead — which is what makes the copy an
-        // ordinary function the language below compiles.
-        //
-        // **The borrow is taken and let go before the recursion**, because the
-        // call below reaches this line again and a `RefCell` held across it is
-        // a panic rather than a message.
-        let standing = self
-            .walk(|w| w.specialising.clone())
-            .map(|pair| (pair.first, pair.second));
-        if let Some((parameter, on)) = standing
-            && ty.generics.is_empty()
-            && ty.code.is_none()
-            && self.text(ty.name) == parameter
-        {
-            let concrete = crate::ast::Type {
-                name: self.parsed.interner.intern_string(&on),
-                ..ty.clone()
-            };
-            let held = self.walking(|w| w.specialising.take());
-            let written = self.ty_counted(&concrete, lifetimes, count);
-            self.walking(|w| w.specialising = held);
-            return written;
-        }
-
-        // **A parameter that is code**
-        // ([ADR-277](../../docs/specification/adr/adr-277.md) D6), lowered as
-        // D5's **run** case: a closure argument, which is what `std`'s own
-        // higher-order entries take and what costs nothing. The kept case — a
-        // boxed closure over a boxed future — is the step of that record that
-        // is not built, and `NK1142` is what a field or a result meets, so this
-        // is only ever reached in a parameter.
-        //
-        // `throws` puts the same `Result` on the closure's result that a
-        // `throws` function's own declaration puts on its (Kap 7.1), which is
-        // what makes a lambda that fails fit it.
-        if let Some(code) = &*ty.code {
-            let params: Vec<String> = ty
-                .generics
-                .iter()
-                .map(|g| a_list_read_as_a_slice(self.ty_counted(g, lifetimes, count)))
-                .collect();
-            let outcome = match (&*code.result, code.can_throw) {
-                (Some(r), false) => self.ty_counted(r, lifetimes, count),
-                (Some(r), true) => format!(
-                    "Result<{}, Box<dyn std::error::Error>>",
-                    self.ty_counted(r, lifetimes, count)
-                ),
-                (None, true) => "Result<(), Box<dyn std::error::Error>>".to_string(),
-                (None, false) => "()".to_string(),
-            };
-            // **The type decides the shape**
-            // ([ADR-277](../../docs/specification/adr/adr-277.md) D11), and
-            // nothing inferred stands behind it: a parameter whose type may
-            // pause — which is the **default**, since `sync` is what says
-            // otherwise — is a closure returning a **boxed future**, whether the
-            // callee runs it or keeps it. A reader can tell what a signature
-            // costs by reading it, and a library author who wants no box writes
-            // `sync`, which is what that word already promises.
-            //
-            // **The future is named rather than inferred**:
-            // `Pin<Box<dyn Future<Output = …>>>`, which is the shape a handler
-            // is taken in in practice and the one `|a| Box::pin(async move
-            // { … })` produces.
-            //
-            // D1's own reason for it was that Rust has no stable `async`
-            // closure, and that is **false**
-            // ([ADR-277](../../docs/specification/adr/adr-277.md) D13):
-            // `impl AsyncFn(A) -> R` compiles on this toolchain and costs 1.37
-            // ns/call against this shape's 11.99, on a 0.31 floor. What holds
-            // the shape up now is D1's second half alone - one spelling for a
-            // run parameter and a kept one, so a reader can tell what a
-            // signature costs by reading it - and whether that is worth 8.7× is
-            // a question on `docs/open-decisions.md`.
-            // **A parameter that may pause takes the shape its body needs,
-            // and the body's answer is `keeps`**
-            // ([ADR-277](../../docs/specification/adr/adr-277.md) D11).
-            //
-            // A **run** parameter is `impl AsyncFn(A) -> R`: no box, no dynamic
-            // call, and 1.37 ns/call against the boxed future's 11.99 on a 0.31
-            // floor (`benches/handler`). A **kept** one keeps the boxed
-            // closure, because `AsyncFn` is a *bound* and a value stored in a
-            // field needs a type.
-            //
-            // **One written type, two representations, chosen by an analysis of
-            // the body** — which is what `Shared[T]` already does per value
-            // ([ADR-037](../../docs/specification/adr/adr-037.md) D7), what
-            // [ADR-283](../../docs/specification/adr/adr-283.md) D2 does per
-            // construction site, and what
-            // [Part I 5.4](../../docs/specification/10-nikaia-light.md) C
-            // already says about this very construct: *the context of such a
-            // parameter is inferred, not written*.
-            //
-            // **`sync` is untouched** and still writes the plain closure: the
-            // word is an assertion about what the code may do
-            // ([ADR-288](../../docs/specification/adr/adr-288.md)), and a
-            // parameter that cannot pause has no future to hand back either
-            // way.
-            // **A kept function value is one shared closure**: a field, a
-            // result, a `let`, and a parameter the callee keeps. What may
-            // pause hands back a boxed future.
-            let runs = self.walk(|w| w.in_parameter) && self.walk(|w| w.code_parameter_runs);
-            if !runs {
-                let outcome = match code.is_sync {
-                    true => outcome,
-                    false => format!("{}<{outcome}>", self.boxed_future()),
-                };
-                // Where tasks run on threads, what a task takes crosses one.
-                let crossing = match self.build.overlaps_user_code() {
-                    true => " + Send + Sync",
-                    false => "",
-                };
-                // **What a kept function is handed is borrowed for the call
-                // alone**: its parameters' references are elided, which makes
-                // the closure take a borrow of any length. Written with the
-                // struct's `'a`, `node_of: fn(ref Expr) -> i64` in a struct
-                // that also holds a view took only what lives as long as that
-                // view, and a call with a local was a borrow `rustc` refused
-                // (found moving `text_tiers` into Nikaia, #125).
-                let params: Vec<String> = ty
-                    .generics
-                    .iter()
-                    .map(|g| a_list_read_as_a_slice(self.ty_counted(g, Lifetimes::Elided, count)))
-                    .collect();
-                return format!(
-                    "nikaia_std::func::Kept<dyn Fn({}) -> {outcome}{crossing}>",
-                    params.join(", ")
-                );
-            }
-            if code.is_sync {
-                let shape = match (&*code.result, code.can_throw) {
-                    (None, false) => String::new(),
-                    _ => format!(" -> {outcome}"),
-                };
-                return format!("impl Fn({}){shape}", params.join(", "));
-            }
-            if self.walk(|w| w.code_parameter_runs) {
-                return format!("impl AsyncFn({}) -> {outcome}", params.join(", "));
-            }
-            return format!(
-                "impl Fn({}) -> std::pin::Pin<Box<dyn std::future::Future<Output = {outcome}>>>",
-                params.join(", ")
-            );
-        }
-
-        // **`Seen[T]` is erased**
-        // ([ADR-281](../../docs/specification/adr/adr-281.md) D22): it is a type
-        // here and in the ledger and **not** one in the language below, so a
-        // `Seen[i64]` is an `i64`, a field declared `Seen[i64]` is an `i64`
-        // field, and a signature with `Seen` in it is one without. No counter,
-        // no marker, no check at run time, no bytes.
-        //
-        // Written where the name is read rather than at every position that
-        // takes a type, so that a `Vec[Seen[i64]]` and a `Seen[i64]?` come out
-        // right for the same reason `Shared` does one paragraph down.
-        //
-        // **Only with its argument.** A bare `Seen` is not the stamp - the stamp
-        // always says what it stamps - and a program may declare a type of that
-        // name; erasing it to itself recursed until the compiler's stack ran
-        // out, on `struct Seen { … }` and a parameter of it.
-        if self.text(ty.name) == crate::contracts::ty::SEEN
-            && let [inner] = ty.generics.as_slice()
-        {
-            let inner = inner.clone();
-            let inner = Type {
-                is_nullable: ty.is_nullable || inner.is_nullable,
-                is_view: ty.is_view || inner.is_view,
-                ..inner
-            };
-            return self.ty_counted(&inner, lifetimes, count);
-        }
-
-        // Part I 2.3: `T?` is an `Option<T>`, which is the mapping Part III 15.2
-        // writes the other way round. The `?` is peeled and the rest of this
-        // function renders the type it is nullable *of* - so `&str?` is an
-        // `Option<&'a str>` and the view still picks up its lifetime, which it
-        // would not if the wrapper were applied by name.
-        if ty.is_nullable {
-            let inner = Type {
-                is_nullable: false,
-                ..ty.clone()
-            };
-            return format!("Option<{}>", self.ty_counted(&inner, lifetimes, count));
-        }
-
-        // **`&[T]` is a view of a run of elements**
-        // ([ADR-179](../../docs/specification/adr/adr-179.md) D1), and Rust's
-        // own `&[T]` is what it lowers to: a fat pointer that carries its
-        // length, which is the half of it a `Vec` and an `Array` also carry and
-        // a declaration at the C boundary does not.
-        //
-        // **The boundary has its own writer** (`foreign_ty`), which turns the
-        // same type into an address beside a count
-        // ([ADR-302](../../docs/specification/adr/adr-302.md) D5, D6). Two
-        // writers for one spelling is the arrangement that record already
-        // chose, and this is the second half of it arriving.
-        // **`ref Array[T]` is the run's other spelling**
-        // ([ADR-184](../../docs/specification/adr/adr-184.md) D3): an `Array`
-        // under a `ref` with **one** argument carries no length in the type, so
-        // there is nothing to lay out inline and what it names is a run
-        // somebody else keeps. An `Array[T, N]` has two and is
-        // [ADR-152](../../docs/specification/adr/adr-152.md) D4's `[T; N]`,
-        // written further down.
-        if self.writes_a_run(ty) {
-            let element = match ty.generics.first() {
-                Some(element) => self.ty_counted(element, lifetimes, count),
-                None => "u8".to_string(),
-            };
-            return format!("{}[{element}]", lifetimes.reference());
-        }
-
-        // **Text both kinds of which flow into a position**
-        // ([ADR-282](../../docs/specification/adr/adr-282.md) D14): a view
-        // borrowed, text of its own owned, each where it is put in.
-        if ty.either {
-            return format!(
-                "nikaia_std::either_text::EitherText<{}>",
-                lifetimes.params()
-            );
-        }
-        // A view is a borrow of the parser's input, and that is where the
-        // lifetime comes from - the source never writes one (ADR-283).
-        if ty.is_view {
-            out.push_str(&lifetimes.reference());
-        }
-        // **A view of text is a `&str`**
-        // ([ADR-184](../../docs/specification/adr/adr-184.md) D2). Text is one
-        // type and `ref String` is what a program writes for a view of it; the
-        // language below spells that view with a noun of its own, and this is
-        // the one place the two names differ. `&String` would compile and would
-        // be the wrong thing: every `std` entry that takes text takes a `&str`,
-        // and a `&String` at a call is a borrow of a borrow at the first one
-        // that does not coerce.
-        // **A view of a file's name is a `&std::path::Path`**
-        // ([ADR-319](../../docs/specification/adr/adr-319.md) D2), which text
-        // lends without a copy - the same pairing as `ref String` and `&str`.
-        if ty.is_view && self.text(ty.name) == "fs::Path" && ty.generics.is_empty() {
-            out.push_str("std::path::Path");
-            return out;
-        }
-        if ty.is_view && self.text(ty.name) == "String" && ty.generics.is_empty() {
-            // **Held, where the keeper drops entries** (ADR-283 D12): a view
-            // that carries its own handle on the buffer it points into.
-            if self.walk(|w| w.holding.is_some()) {
-                return "nikaia_std::tether::Held".to_string();
-            }
-            out.push_str("str");
-            return out;
-        }
-        // **`SharedMut[T]` is one name and two hulls**
-        // ([ADR-281](../../../docs/specification/adr/adr-281.md) D1). It is
-        // expanded here and nowhere earlier, so the checker, the ledger and every
-        // message keep the name the source wrote. The two hulls are the ones the
-        // count already decides - `written_name` answers for each.
-        if self.text(ty.name) == SHARED_MUT
-            && let Some(held) = ty.generics.first()
-        {
-            // `out` already carries the `&` of a view, so the expansion is
-            // pushed rather than returned on its own.
-            out.push_str(&format!(
-                "{}<{}<{}>>",
-                self.written_name(SHARED, count),
-                self.written_name(LOCKED, count),
-                self.ty_counted(held, lifetimes, count)
-            ));
-            return out;
-        }
-        // **`Array[T, N]` is `[T; N]`**
-        // ([ADR-152](../../docs/specification/adr/adr-152.md) D1, D2): `N`
-        // elements inline, no allocation, and the layout C gives it.
-        //
-        // After the view, so `&Array[f64, 3]` is a borrow of the array rather
-        // than an array of borrows, and before the name is written, because the
-        // arguments do not go where a generic's do.
-        if self.text(ty.name) == ARRAY
-            && let [element, length] = ty.generics.as_slice()
-            && let Some(n) = length.count
-        {
-            out.push_str(&format!(
-                "[{}; {n}]",
-                self.ty_counted(element, lifetimes, count)
-            ));
-            return out;
-        }
-        // **A struct of views in a keeper that drops entries is held**
-        // ([ADR-283](../../docs/specification/adr/adr-283.md) D14): beside a
-        // handle on each buffer it points into, and read through them.
-        if let Some(width) = self.walk(|w| w.holding)
-            && self.s.borrowing.contains(self.text(ty.name))
-            && ty.generics.is_empty()
-        {
-            out.push_str(&format!(
-                "nikaia_std::tether::Holding<__Views_{}, {width}>",
-                self.name(ty.name)
-            ));
-            return out;
-        }
-        out.push_str(&self.written_name(self.text(ty.name), count));
-
-        let mut params: Vec<String> = ty
-            .generics
-            .iter()
-            .map(|g| self.ty_counted(g, lifetimes, count))
-            .collect();
-        // A struct that holds a view carries the input lifetime with it.
-        if self.borrows(ty.name) {
-            params.insert(0, lifetimes.params().to_string());
-        }
-        if !params.is_empty() {
-            out.push_str(&format!("<{}>", params.join(", ")));
-        }
-        // **A type with a cleanup that can pause is its value in a `Cleaned`**
-        // (ADR-297 D1), whose `Drop` parks the cleanup where the value dies.
-        if self.s.cleaned_types.contains(self.text(ty.name)) {
-            return format!("{}<{out}>", self.cleaned());
-        }
-
-        out
+        self.nikaia(|walk| {
+            self.s.emit_core_ty_counted(
+                &self.world,
+                walk,
+                self.build.crossings_are_possible(),
+                self.build.overlaps_user_code(),
+                ty,
+                lifetimes,
+                count,
+            )
+        })
     }
 
     /// The queues a settle point drains: at `user_parallelism = yes` only the
     /// one whose work may cross threads, so the settle point may too
     /// (ADR-297 D2).
-    fn settle_kind(&self) -> &'static str {
-        match self.build.overlaps_user_code() {
-            true => "nikaia_std::cleanup::Sent",
-            false => "nikaia_std::cleanup::Local",
-        }
+    fn settle_kind(&self) -> String {
+        nikaia_std::tools::emit_core_types::emit_settle_kind(self.build.overlaps_user_code())
     }
 
     /// The wrapper a value with a cleanup is held in: the one whose parked work
     /// may move with its task where tasks run on threads (ADR-297 D1).
-    fn cleaned(&self) -> &'static str {
-        match self.build.overlaps_user_code() {
-            true => "nikaia_std::cleanup::CleanedSend",
-            false => "nikaia_std::cleanup::Cleaned",
-        }
+    fn cleaned(&self) -> String {
+        nikaia_std::tools::emit_core_types::emit_cleaned(self.build.overlaps_user_code())
     }
 
     // --- Statements and expressions ---
@@ -5279,14 +4908,7 @@ impl<'p> Emitter<'p> {
     /// **A turn of a loop is a step of a build-time run** (ADR-321 D7): the
     /// count, in front of whatever else a loop's body opens with.
     fn a_counted_turn(&self, opening: Option<String>) -> Option<String> {
-        if !self.build.counts_steps {
-            return opening;
-        }
-        let step = "nikaia_std::build_time::step();".to_string();
-        Some(match opening {
-            Some(opening) => format!("{step} {opening}"),
-            None => step,
-        })
+        nikaia_std::tools::emit_core_types::emit_counted_turn(self.build.counts_steps, opening)
     }
 
     fn block(
@@ -11319,11 +10941,8 @@ impl<'p> Emitter<'p> {
 
     /// The future a kept function that may pause hands back: one that crosses
     /// threads where tasks run on them.
-    fn boxed_future(&self) -> &'static str {
-        match self.build.overlaps_user_code() {
-            true => "nikaia_std::func::SendBoxed",
-            false => "nikaia_std::func::Boxed",
-        }
+    fn boxed_future(&self) -> String {
+        nikaia_std::tools::emit_core_types::emit_boxed_future(self.build.overlaps_user_code())
     }
 
     /// **An `f"…"` with a file's name in it, as one name**
@@ -13359,14 +12978,6 @@ fn jumps(expr: &Expr) -> bool {
     nikaia_std::tools::emit_ops::jumps(expr)
 }
 
-/// **A list a function value only reads is a slice** (#458), as a
-/// function's own parameter is (`plain_list`): a `ref Vec[T]` parameter is
-/// written `&[T]`, and a function type that took `&Vec<T>` could not be
-/// handed it.
-fn a_list_read_as_a_slice(written: String) -> String {
-    nikaia_std::tools::emit_ops::a_list_read_as_a_slice(written)
-}
-
 /// Whether a `??`'s fallback ends in a jump: a jump itself, another `??`
 /// whose own fallback does - the chain `a ?? b ?? continue` is one fallback
 /// that may leave - or a block whose last statement does (#457).
@@ -13381,12 +12992,6 @@ fn jumps_at_the_end(expr: &Expr) -> bool {
 /// pointer to the first element and the length is a parameter of its own (D2),
 /// and one value is an address Rust writes for a `&` on its own.
 use nikaia_std::tools::emit_kinds::EmitPointer as Pointer;
-
-/// Which of the two a declared parameter is, or `None` where it is an ordinary
-/// value an `i32` is at both ends.
-fn pointer_for(ty: &Type) -> Option<Pointer> {
-    nikaia_std::tools::emit_kinds::emit_pointer_for(ty)
-}
 
 /// `const` or `mut`, the word Rust puts between the `*` and the type.
 fn pointing(mutable: bool) -> String {
@@ -14156,31 +13761,15 @@ impl Emitter<'_> {
     /// rather than trusted. The binding is a `Holding` over the task's keep,
     /// and nothing about it is `unsafe`.
     fn tether_wrapper(&self, ty: &Type) -> String {
-        let any = self.ty(ty, Lifetimes::Named);
-        let long = self.ty(ty, Lifetimes::Long);
-        let shortened = self.ty(ty, Lifetimes::Shortened);
-        let wrappers = self.walk(|w| w.wrappers.clone());
-        let position = wrappers
-            .iter()
-            .position(|w| w.contains(&format!("type Of<'a> = {any};")));
-        let n = match position {
-            Some(n) => n,
-            None => {
-                let n = wrappers.len();
-                let text = format!(
-                    "/// A value that carries the keep its views point into \
-                     (ADR-283 D11), as a `Holding` over it.\n\
-                     #[allow(non_camel_case_types)]\n\
-                     enum __Tethered{n} {{}}\n\n\
-                     impl nikaia_std::tether::Views for __Tethered{n} {{\n    \
-                     type Of<'a> = {any};\n    \
-                     fn shorten<'long: 's, 's>(x: &'s {long}) -> &'s {shortened} {{\n        x\n    }}\n}}\n"
-                );
-                self.walking(|w| w.wrappers.push(text));
-                n
-            }
-        };
-        format!("__Tethered{n}")
+        self.nikaia(|walk| {
+            self.s.emit_core_tether_wrapper(
+                &self.world,
+                walk,
+                self.build.crossings_are_possible(),
+                self.build.overlaps_user_code(),
+                ty,
+            )
+        })
     }
 
     /// The handle types, at the end of the unit.
