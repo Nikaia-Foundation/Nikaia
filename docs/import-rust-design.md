@@ -54,7 +54,7 @@ The command: `nikaia import rust <crate|file>` reads a crate and writes Nikaia. 
 | `Cell`, `RefCell` alone, `UnsafeCell`, atomics | — | R | interior mutability outside a lock. Atomics **[U]** |
 | `&T` / `&mut T` parameter | `ref T` / `mut x: T` | E | **[V]** `mut v: Vec[i64]` lowers to `&mut Vec<i64>`, and the caller sees the push |
 | `struct S<'a> { s: &'a str }` | `struct S { s: ref String }` | E | **[V]** runs (ADR-283 stored views) |
-| result tied by `'a` to one of ≥2 refs | — | D | **[V]** `NK2302` even when every `return` hands back `a`. Clone (P, cost) or a `Held` struct |
+| result tied by `'a` to one of ≥2 refs | — | D | **[V]** `NK2302` even when every `return` hands back `a`; accepted once ADR-283 D25 is built (decision B) |
 | `-> &mut T` | — | R | **[V]** `NK1158`, *`ref mut` only when talking to C* |
 | tuple struct `S(i64)` | named fields | P | **[V]** does not parse |
 | generics, bounds on own traits | `[T]`, `[T: Tr]` | E | Part I 4.6-4.7 |
@@ -93,7 +93,7 @@ The 19 entries of `docs/lowering-defects.md`: **none changes behaviour without a
 * a `Held` struct: more lines;
 * a refusal.
 
-There are 56 such functions in the compiler's remaining Rust (`mitigation-hurdles.md` §1). The report counts every clone the importer adds as a performance obligation.
+Decision B settles it: one source on every way out compiles (ADR-283 D25); the count is in `mitigation-hurdles.md` §1. The report counts every clone the importer adds as a performance obligation.
 
 **Partial import.** What is refused stays Rust. The Nikaia program calls it as a described path crate (`type = "rust", path = …` plus `contracts/`, **[V]** `examples/foreign-runtime/crossing`), and Rust calls the imported Nikaia as a module (ADR-290 D16). This is the strangler that self-hosting uses with its host traits. Its limit: a foreign type's methods are not described (ADR-290 §6).
 
@@ -112,11 +112,10 @@ Each topic below goes into its own decision round. Nothing here blocks the self-
 * *Risk:* a grammar for full Rust is the largest single cost in this plan. `syn` reopens a choice the ADR made.
 * *Recommendation:* D11/D13 apply. The front end is a grammar extending `rust.nika`, built only as far as the corpus needs. The measurement in step 3 becomes a diagnosis.
 
-**B. NK2302 precision** (mitigation-hurdles §1a, *recommended* there, not decided).
-* *Origin:* the self-hosting move. For the product it weighs more: Rust code with a lifetime on one of several references is common, and every such function becomes a clone or a refusal.
-* *Facts:* **[V]** the probe is refused.
-* *Risk:* a wrong inference is a rustc error (E0106/E0515), which is loud.
-* *Recommendation:* (a), with an ADR-283 D entry and Part I 6.6 made exact.
+**B. NK2302 precision** - **decided** (October 11, 2026): [ADR-283](specification/adr/adr-283.md) D25-D26, Part I 6.6, issue #580.
+* The result points into at most one parameter, read off the body. A Rust signature that ties the result to one of several references (`fn pick<'a>(a: &'a str, b: &str) -> &'a str`) imports without a clone once its body hands back only `a`.
+* One lifetime over several references (`fn longest<'a>(a: &'a str, b: &'a str) -> &'a str`) where the body returns either is `NK2302`: the importer refuses it, or splits it, or adds a `.clone()` and counts it as an obligation.
+* A trait method or a function type follows the elision (D26); one with no receiver and two references in a reference result is refused.
 
 **C. An order on types and std traits as bounds.**
 * *What it is:* `fn max<T: Ord>` and `xs.sort()` over structs.
@@ -128,10 +127,7 @@ Each topic below goes into its own decision round. Nothing here blocks the self-
 * *Facts:* the lowered type depends on whether the file builds the map (lowering defect D6). Rust's iteration order is unspecified, so a program that depends on it is already nondeterministic.
 * *Recommendation:* the importer maps to `BTreeMap` (an obligation: the order changes) until (b) is decided.
 
-**E. Explicit result sources `-> ref(world) String`** (mitigation §1b).
-* *Facts:* the Rust source carries exactly this information, and B recovers most of it without syntax.
-* *Risk:* it runs against ADR-283 D4.
-* *Recommendation:* not for the importer. Revisit only if B leaves measured refusals.
+**E. Explicit result sources `-> ref(world) String`** (mitigation §1b) - **rejected** in [ADR-283](specification/adr/adr-283.md) D25: a lifetime with a parameter's name, for an answer the body gives. The ledger keeps the spelling.
 
 **F. Messages that must name Rust.**
 * Part III C.2 rule 1: *"lifetime" … and Rust error codes never appear*. The importer's refusals are about Rust source and have to say `'a`, `dyn` and `unsafe`.

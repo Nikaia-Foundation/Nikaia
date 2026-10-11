@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.835 (Draft)
+**Version:** 0.0.836 (Draft)
 **Date:** 2026-10-11
 
 ---
@@ -2158,9 +2158,9 @@ use std::fs
     ```
 
 2.  **Returning a borrowed value from a function.** `fn first_word(s: ref String) -> ref String`
-    needs no annotation. Where the result could come from *several* inputs,
-    the compiler infers the connection, across function boundaries and through
-    the whole program (6.7).
+    needs no annotation. Where a function takes several, the compiler reads
+    off its body which one the result comes from, and a caller reads it off
+    the ledger (6.6, 6.7).
 
 **A borrow may not outlive its owner** (6.6).
 
@@ -2308,9 +2308,8 @@ not a list, or a struct's views are not text.
 place it is kept names a buffer. A view inside a struct carries the buffer it
 points into; a parameter written `ref String` does not. A function that stores
 such a parameter where nothing names its buffer is refused with `NK2302`
-(Part III, C.3): into a task, into a field of a subject that holds no view, into
-a result that may point into another buffer as well. Such a function puts the
-view in a struct and takes the struct:
+(Part III, C.3): into a task, or into a field of a subject that holds no view.
+Such a function puts the view in a struct and takes the struct:
 
 ```nika
 struct Reading { name: ref String, temp: i32 }
@@ -2324,8 +2323,39 @@ Handing a view back out of the buffer it came from is **not** this rule:
 `fn count(seq: ref String, k: i64) -> HashMap[ref String, Tally]` returns views
 of `seq`, and the result points into `seq` and nothing else. The same holds for
 a struct literal handed back: `fn make(name: ref String) -> Reading` returns a
-`Reading` that points into `name`, where `name` is the only view the function
-takes.
+`Reading` that points into `name`.
+
+**A result points into one parameter at most, and the body says which.** Every
+way out of the body - a `return`, the last expression - is followed back to the
+parameters whose views reach what it hands back: the receiver, a parameter
+written `ref`, and a parameter lowered as a view (6.5). A literal, a buffer the
+body made and a copy reach none. Where the ways out reach one parameter, the
+result points into it and nothing else: a caller keeps that argument, unchanged,
+while it uses the result, and every other argument is free when the call
+returns. Where they reach none, the result points into nothing a caller passed.
+Where they reach two - two ways out, one value that may be a view of either, or
+one value holding views of both - the function is refused with `NK2302`:
+
+```nika
+impl Checker {
+    fn label(ref self, world: ref World) -> ref String {
+        return world.names[self.at]     // points into `world`; `self` is free again
+    }
+}
+
+fn longest(a: ref String, b: ref String) -> ref String {
+    if a.len() >= b.len() {
+        return a
+    }
+    return b                            // NK2302: `a` here, `b` there
+}
+```
+
+The ledger (6.7) writes the answer, `-> ref(world) String`. A trait's method
+and a function type have no body: their result points into the receiver, or
+else into the one parameter that is a view, and one with no receiver and two
+views whose result holds a view is refused with `NK2302`. A method implementing
+a trait hands back views of what the trait's declaration names.
 
 Where the destination **already carries a buffer**, there is nothing to refuse.
 A method of a struct that holds a view has that struct's buffer in hand, so
@@ -2347,8 +2377,8 @@ buffer.
 ### 6.7. The Borrow Contract Ledger
 
 For every function whose signature involves a borrow, the compiler infers a
-**borrow contract**, such as "the result of `longest(a, b)` borrows from `a`
-or `b`." A contract is never written in the source. Contracts are stored in a
+**borrow contract**, such as "the result of `checker.label(world)` borrows
+from `world`." A contract is never written in the source. Contracts are stored in a
 generated file, **`nikaia.contracts`**, the ledger, which is committed
 alongside `nikaia.lock` (Part III, 13.5).
 

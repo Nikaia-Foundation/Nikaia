@@ -43,9 +43,22 @@ and it refuses with NK2302 (Part I 6.6).
   Higher cost: parser, checker and emitter `<'a>`.
 * (c) Keep it as it is. `.clone()`, `Held` structs and free functions with one view.
 
-**Owner decision:** (a) changes which programs compile (it accepts more), so it
-needs an ADR-283 D-entry and Part I 6.6's sentence made exact. Recommendation:
-(a). Measure the clones with callgrind before and after on one moved module.
+**Decided (October 11, 2026): (a), with a refusal where two parameters
+remain** - [ADR-283](specification/adr/adr-283.md) D25-D26, Part I 6.6, issue
+#580. The result points into at most one parameter, read off the body and
+written to the ledger (`-> ref(world) String`); two ways out that reach two
+parameters, a value that may be a view of either, or one holding views of both
+stay `NK2302`, at the function. (b) and union tethering (one lifetime over every
+view, which is what plain parameters lowered as views got) are rejected there;
+specialising per branch is rejected too.
+**The count, re-measured** (`viewfns`-style scan of 707307a): the "56" above
+could not be reproduced. In `check/` + `emit/`, 19 functions hand back a view
+that is not `'static` and take a receiver or two views: 17 reach one source on
+every way out (counting the moved shape, `self` = state, `world` = context), 2
+choose between state and world at run time (`payloads`, `options_of`), 0 at
+build time; 7 more hand back only literals. In all of `crates/nikaia/src`, 41,
+of which 4 choose at run time. In the moved `tools/*.nika`, 2 of the 34
+`(ref self, world) -> String` methods clone a view of `world` on a way out.
 
 ## 2. No lifetimes in the source
 
@@ -104,9 +117,9 @@ needed in any case.
 | rank | measure | kind | cost | effect on the ~22.5k lines | owner? |
 | ---: | :--- | :--- | :--- | :--- | :--- |
 | 1 | `rs2nika.py` draft + `--lint` + the rule list in CLAUDE.md | tooling / convention | done (prototype) | 10% of lines exact, 48-60% of draft lines pass unchanged; saves the syntax-gap cycles | no |
-| 2 | NK2302 precision (1a) | compiler, ADR-283 + Part I 6.6 | medium | 56 functions keep views instead of clones/`Held`; perf unmeasured | **yes** |
+| 2 | NK2302 precision (1a) | compiler, ADR-283 D25-D26 + Part I 6.6 | medium | decided; 17 of 19 view-returning functions in `check/`+`emit/` keep views; perf unmeasured | decided (#580) |
 | 3 | fix D1, D2, D3, D8, D14 (lowering defects) | compiler | small each | each removes a workaround that costs one build cycle when met | no (bugs) |
 | 4 | D15 refusal + D10/D11b checks | compiler | small | turns rustc errors into Nikaia messages | no |
 | 5 | `Symbol: Ord` (4a) | dependency | trivial | 6 maps, fewer allocations | **yes** (his crate) |
 | 6 | stable `HashMap` lowering in `tools` (3b) | compiler, ADR-010 D5 | small-medium | 10 type positions; only if callgrind shows it | **yes** |
-| 7 | explicit `ref(param)` results (1b) | language | high | the same 56 functions as rank 2 | **yes**, and against ADR-283 |
+| 7 | explicit `ref(param)` results (1b) | language | high | rejected (ADR-283 D25) | decided |

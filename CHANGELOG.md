@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.836] — 2026-10-11
+
+**NK2302: a result points into the one parameter its body hands back, decided (ADR-283 D25-D26, #580)**
+- ADR-283 D25: every way out of a body is followed back to the parameters whose views reach it (receiver and parameters lowered as views included); one parameter over all ways out is the result's source, written to the ledger as -> ref(p) T and tied alone in the lowering; none is 'static or the caller's keep; two (two ways out, a value that may be either, a value holding both) is NK2302 at the function. Union tethering, an explicit -> ref(param), lengthening a parameter's buffer, specialisation and an implicit copy are rejected; D8 now defers to D25.
+- ADR-283 D26: a trait method or a function type follows the elision (receiver, else the only view); no receiver and two views with a view result is NK2302 at the declaration; an impl hands back what the trait names.
+- Part I 6.5 item 2 and 6.7 no longer promise a result from several inputs; 6.6 states the rule with label/longest; Part III's NK2302 row gains the result case and its message. Not built: #580 holds the build order.
+
 ## [0.0.835] — 2026-10-11
 
 **emit: the flow of the core is Nikaia: Closure, Binary, Coalesce, TryCatch, Try, Return, Break, Throw, Spawn (#558, #125, E9 U8)**
