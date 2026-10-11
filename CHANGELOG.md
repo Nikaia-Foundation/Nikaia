@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.805] — 2026-10-11
+
+**The checker's walk holds no address, no `i128`, no closure boundary and no lazy cell (#558, #125, C-1).**
+- `open_calls` is keyed by a node id (the call's first argument), not an address; this file's place among `beside` is an index, not a pointer comparison; `Literals` and `literal_receivers` hold `Integer`, not `i128`; a walk past a boundary is `enter_boundary` / `leave_boundary`, not a closure; `fields_by_base` is built once with the walk; `barrier`, `reaching`, `reached` and `UnsignedSlot::into` are `String`.
+
 ## [0.0.804] — 2026-10-11
 
 **A lent parameter, a map's first write, a `comptime` asked for a type and a field holding code are Nikaia (`tools/check_fields.nika`, #558, #125).**

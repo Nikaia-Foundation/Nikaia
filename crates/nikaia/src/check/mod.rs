@@ -425,7 +425,7 @@ fn walked<'a>(
         literal_receivers: Vec::new(),
         at_a_write_door: false,
         pushed_into: None,
-        fields_by_base: std::cell::OnceCell::new(),
+        fields_by_base: fields_by_base(own, library),
         expected_either: false,
         field_either: false,
         throwing: false,
@@ -456,6 +456,7 @@ fn walked<'a>(
         lambda_expected: None,
         unknown_said: 0,
         open_calls: std::collections::HashMap::new(),
+        here: beside.iter().position(|other| std::ptr::eq(*other, parsed)),
         unknown_bound: BTreeSet::new(),
         list_constants: std::collections::HashMap::new(),
         overflowed: BTreeSet::new(),
@@ -852,7 +853,7 @@ struct UnsignedSlot {
     node: i64,
     found: Ty,
     want: Ty,
-    into: &'static str,
+    into: String,
     written: String,
     span: Span,
     /// The slot's own refusal, where `expect` would have written one.
@@ -1166,6 +1167,31 @@ fn a_new_binding() -> usize {
     NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
 }
 
+/// **The fields of every type in `own` and `library`, by the type's own name**
+/// ([`ty::base`]): what a cleanup or a teardown a type holds is asked through.
+/// Built once per walk, `own`'s before `library`'s and each in key order.
+fn fields_by_base(own: &Ledger, library: &Ledger) -> std::collections::HashMap<String, Vec<Ty>> {
+    let mut index: std::collections::HashMap<String, Vec<Ty>> = Default::default();
+    for (key, contract) in [own, library]
+        .into_iter()
+        .flat_map(|ledger| ledger.types.iter())
+    {
+        index
+            .entry(crate::contracts::ty::base(key).to_string())
+            .or_default()
+            .extend(contract.fields.iter().map(|f| f.ty.clone()));
+    }
+    index
+}
+
+/// What a walk past a boundary puts aside, and gives back on the way out.
+struct Boundary {
+    loops: usize,
+    barrier: Option<String>,
+    handed: Option<Handed>,
+    promised: Option<String>,
+}
+
 struct Checker<'a> {
     /// **The checker's state that is Nikaia** (`tools/check_state.nika`, #558).
     s: CheckState,
@@ -1225,7 +1251,7 @@ struct Checker<'a> {
     /// call hands back the receiver's own type (#417): the first integer type
     /// a use asks of the call is theirs, as it would be of `7 + 1`, and they
     /// keep the first type that holds them where nothing asks.
-    literal_receivers: Vec<(i64, i128)>,
+    literal_receivers: Vec<(i64, nikaia_std::tools::integers::Integer)>,
     /// The function being checked hands back text **both kinds** of which
     /// flow into its result ([ADR-282](../../docs/specification/adr/adr-282.md)
     /// D3): text of its own is moved in as it is, so it is not a view refused.
@@ -1297,7 +1323,7 @@ struct Checker<'a> {
     ///
     /// **A `catch` handler is deliberately not one of these** (D5): it lowers to
     /// a `match` arm, and a jump in one reaches the loop around it.
-    barrier: Option<&'static str>,
+    barrier: Option<String>,
     /// Method calls whose callee's contract says it can fail, and method calls
     /// where that could not be established - both as the pair
     /// [`Checked::fallible_methods`] is keyed by. The difference is the answer;
@@ -1387,7 +1413,9 @@ struct Checker<'a> {
     /// `hand(7)` for `fn hand[T](x: T) -> T` is as open as the `7`, so its
     /// value is the arguments' open number. Keyed by the call's arguments
     /// (`args.as_ptr()`), holding which of them bind the result.
-    open_calls: std::collections::HashMap<usize, Vec<usize>>,
+    open_calls: std::collections::HashMap<i64, Vec<usize>>,
+    /// Where this file stands among `beside`, where it does.
+    here: Option<usize>,
     /// **The `let`s whose value had no known type** (#497), by
     /// [`Local::id`]: that value was refused where it was made, or stood
     /// back for (an open part, a reflected field), so reading the name again
@@ -1408,9 +1436,9 @@ struct Checker<'a> {
     /// next expression walked, and handed on only through `+`, `-`, `*`, `/`,
     /// `%` and a negation, so a constant operation is measured in the type it
     /// is computed in (`an_operation_that_overflows`).
-    reaching: Option<&'static str>,
+    reaching: Option<String>,
     /// What the expression being walked was handed of [`Checker::reaching`].
-    reached: Option<&'static str>,
+    reached: Option<String>,
     /// The names this function's body gives text of its own later on, with
     /// `+` or an f-string ([`grown_text`]): a `let mut` of a literal under one
     /// of them holds owned text (0.0.232).
@@ -1440,7 +1468,7 @@ struct Checker<'a> {
     /// than by a scan of both ledgers per question - which was most of what
     /// checking a small program cost. `own`'s before `library`'s and each in
     /// key order, which is the order the scan visited them in.
-    fields_by_base: std::cell::OnceCell<std::collections::HashMap<String, Vec<Ty>>>,
+    fields_by_base: std::collections::HashMap<String, Vec<Ty>>,
 }
 
 /// One argument as [`Checker::the_compiler_writes_the_reference`] reads it:
@@ -1703,15 +1731,22 @@ impl<'a> Checker<'a> {
                         || self.world.library.types.get(name).is_some_and(|contract| contract.copies)))
     }
 
+    /// The other files of the program: `beside` without this one.
+    fn others(&self) -> impl Iterator<Item = &'a Parsed> + use<'a> {
+        let (beside, here) = (self.beside, self.here);
+        beside
+            .iter()
+            .enumerate()
+            .filter(move |(at, _)| Some(*at) != here)
+            .map(|(_, other)| *other)
+    }
+
     /// **What each type another file of the package declares is made of**
     /// (ADR-286 D1), read off its declaration: the fields of a struct, every
     /// payload of an enum's variants.
     fn parts_beside(&self) -> BTreeMap<String, Vec<Ty>> {
         let mut beside_parts: BTreeMap<String, Vec<Ty>> = BTreeMap::new();
-        for other in self.beside {
-            if std::ptr::eq(*other, self.parsed) {
-                continue;
-            }
+        for other in self.others() {
             for item in &other.program.items {
                 let (name, parts): (String, Vec<Ty>) = match &item.node {
                     Item::Struct {
@@ -1776,9 +1811,7 @@ impl<'a> Checker<'a> {
         // derives `Copy` for is still its own (found moving the compiler's
         // `sharing` into Nikaia, #125).
         let beside: Vec<String> = self
-            .beside
-            .iter()
-            .filter(|other| !std::ptr::eq(**other, self.parsed))
+            .others()
             .flat_map(|other| {
                 other
                     .program
@@ -4622,20 +4655,7 @@ impl<'a> Checker<'a> {
     /// The fields of every type called `base` in either ledger
     /// ([`Checker::fields_by_base`]).
     fn fields_of_base(&self, base: &str) -> &[Ty] {
-        let index = self.fields_by_base.get_or_init(|| {
-            let mut index: std::collections::HashMap<String, Vec<Ty>> = Default::default();
-            for (key, contract) in [self.world.own, self.world.library]
-                .into_iter()
-                .flat_map(|ledger| ledger.types.iter())
-            {
-                index
-                    .entry(crate::contracts::ty::base(key).to_string())
-                    .or_default()
-                    .extend(contract.fields.iter().map(|f| f.ty.clone()));
-            }
-            index
-        });
-        index.get(base).map_or(&[], Vec::as_slice)
+        self.fields_by_base.get(base).map_or(&[], Vec::as_slice)
     }
 
     fn cleanup_within(&self, ty: &Ty, seen: &mut BTreeSet<String>) -> Option<(String, bool)> {
@@ -5859,7 +5879,7 @@ impl<'a> Checker<'a> {
                     node: ((value_node(value) as usize) as i64),
                     found: found.clone(),
                     want: want.clone(),
-                    into,
+                    into: into.to_string(),
                     written: written(self.parsed, value),
                     span: *span,
                     refusal: None,
@@ -6173,9 +6193,9 @@ impl<'a> Checker<'a> {
                 }
             }
             Expr::Call { args, .. } => {
-                for &at in self
-                    .open_calls
-                    .get(&(args.as_ptr() as usize))
+                for &at in args
+                    .first()
+                    .and_then(|first| self.open_calls.get(&value_node(first)))
                     .into_iter()
                     .flatten()
                 {
@@ -6250,9 +6270,9 @@ impl<'a> Checker<'a> {
                 .binding(self.parsed.text(*name))
                 .is_some_and(|local| local.open_number.is_some()),
             Expr::Index { .. } => self.open_element_of(expr).is_some(),
-            Expr::Call { args, .. } => self
-                .open_calls
-                .get(&(args.as_ptr() as usize))
+            Expr::Call { args, .. } => args
+                .first()
+                .and_then(|first| self.open_calls.get(&value_node(first)))
                 .is_some_and(|at| at.iter().all(|&at| self.number_shaped(&args[at]))),
             Expr::If { .. } | Expr::Match { .. } => number_branches(expr).is_some_and(|tails| {
                 !tails.is_empty() && tails.iter().all(|tail| self.number_shaped(tail))
@@ -6462,7 +6482,7 @@ impl<'a> Checker<'a> {
                         .insert(member.at.at() as i64, written);
                     for (_, literals, widened) in &member.written {
                         let suffixed =
-                            *widened || literals.iter().any(|(_, v)| i32::try_from(*v).is_err());
+                            *widened || literals.iter().any(|(_, v)| !Constant::of(*v).fits("i32"));
                         if ty == "i64" || !suffixed {
                             continue;
                         }
@@ -6525,7 +6545,7 @@ impl<'a> Checker<'a> {
         op: BinaryOp,
         lhs: &Expr,
         rhs: &Expr,
-        reach: Option<&'static str>,
+        reach: Option<&str>,
         span: &Span,
     ) {
         if !matches!(
@@ -6673,7 +6693,9 @@ impl<'a> Checker<'a> {
                             name,
                             args,
                             view: false,
-                        } if args.is_empty() => INTEGERS.iter().copied().find(|n| *n == name),
+                        } if args.is_empty() => {
+                            INTEGERS.iter().find(|n| **n == name).map(|n| n.to_string())
+                        }
                         _ => None,
                     });
                 if let (Some(t), Expr::Closure { .. } | Expr::ListLit { .. }) = (ty, value) {
@@ -7520,7 +7542,10 @@ impl<'a> Checker<'a> {
                 else {
                     unreachable!("matched above")
                 };
-                let key = (value_node(receiver), crate::ast::int_value(value, negative));
+                let key = (
+                    value_node(receiver),
+                    nikaia_std::tools::integers::integer(value, negative),
+                );
                 let own = self.s.facts.unsigned_literals.get(&key.0).cloned();
                 let its_own = |ty: &Ty| {
                     own.as_deref()
@@ -7950,13 +7975,16 @@ impl<'a> Checker<'a> {
                         // Each branch is an `async` block of its own (ADR-292
                         // D2), so the boundary is per branch rather than per
                         // block.
-                        self.past_a_boundary("`overlap` branch", |me| match &stmt.node {
-                            Stmt::Expr(value) => me.expr(value, &stmt.span),
+                        let saved = self.enter_boundary("`overlap` branch");
+                        let ty = match &stmt.node {
+                            Stmt::Expr(value) => self.expr(value, &stmt.span),
                             other => {
-                                me.stmt(other, &stmt.span);
+                                self.stmt(other, &stmt.span);
                                 Ty::Unknown
                             }
-                        })
+                        };
+                        self.leave_boundary(saved);
+                        ty
                     })
                     .collect();
                 self.s.scope.pop();
@@ -7984,8 +8012,9 @@ impl<'a> Checker<'a> {
                 let mut result: Option<Ty> = None;
                 let mut agree = true;
                 for arm in arms {
-                    let raced =
-                        self.past_a_boundary("`select` arm", |me| me.expr(&arm.value, span));
+                    let saved = self.enter_boundary("`select` arm");
+                    let raced = self.expr(&arm.value, span);
+                    self.leave_boundary(saved);
                     let frame = match arm.binding {
                         Some(name) => {
                             vec![local_free(self.parsed.text(name).to_string(), raced)]
@@ -7993,7 +8022,9 @@ impl<'a> Checker<'a> {
                         None => Vec::new(),
                     };
                     self.s.scope.push(frame);
-                    let ty = self.past_a_boundary("`select` arm", |me| me.block(&arm.body));
+                    let saved = self.enter_boundary("`select` arm");
+                    let ty = self.block(&arm.body);
+                    self.leave_boundary(saved);
                     self.s.scope.pop();
                     if self.s.block_leaves(&self.world, &arm.body) {
                         continue;
@@ -9640,7 +9671,9 @@ impl<'a> Checker<'a> {
                 self.s.scope.push(frame);
                 // Part I 3.3: a lambda is a closure below, and a jump does not
                 // leave one.
-                self.past_a_boundary("lambda", |me| me.block(body));
+                let saved = self.enter_boundary("lambda");
+                self.block(body);
+                self.leave_boundary(saved);
                 self.s.scope.pop();
                 self.s.repeats.pop();
                 // And it is of the type the place declares.
@@ -9712,9 +9745,9 @@ impl<'a> Checker<'a> {
                     BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Rem
                 );
                 let reach = self.reached.take().filter(|_| arithmetic);
-                self.reaching = reach;
+                self.reaching = reach.clone();
                 let left = self.expr(lhs, span);
-                self.reaching = reach;
+                self.reaching = reach.clone();
                 let right = self.expr(rhs, span);
                 // **A `'…'` beside a byte is a byte** (ADR-320, Part I 2.6):
                 // `b[0] == 'a'` compares two `u8`s, as `x == 7` beside an
@@ -9733,7 +9766,7 @@ impl<'a> Checker<'a> {
                     false => right,
                 };
                 self.divisor_is_not_zero(*op, rhs, span);
-                self.an_operation_that_overflows(*op, lhs, rhs, reach, span);
+                self.an_operation_that_overflows(*op, lhs, rhs, reach.as_deref(), span);
                 // **The stamp sticks**
                 // ([ADR-281](../../docs/specification/adr/adr-281.md) D23):
                 // `stand + 100` is a `Seen[i64]` and `stand > 100` a
@@ -10583,7 +10616,9 @@ impl<'a> Checker<'a> {
                 let outer_inside = std::mem::replace(&mut self.s.inside_a_door, false);
                 // A task's body is an `async` block below (ADR-055 §6), which
                 // is a function too: `break` may not leave it either.
-                let value = self.past_a_boundary("task", |me| me.block(body));
+                let saved = self.enter_boundary("task");
+                let value = self.block(body);
+                self.leave_boundary(saved);
                 self.s.scope.pop();
                 self.s.inside_a_door = outer_inside;
                 let bound = self.s.task_bindings.pop().unwrap_or_default();
@@ -11818,7 +11853,7 @@ impl<'a> Checker<'a> {
             .filter(|&at| at < args.len())
             .collect();
         if !at.is_empty() && at.iter().all(|&at| self.number_shaped(&args[at])) {
-            self.open_calls.insert(args.as_ptr() as usize, at);
+            self.open_calls.insert(value_node(&args[0]), at);
         }
     }
 
@@ -11951,7 +11986,10 @@ impl<'a> Checker<'a> {
                         value, negative, ..
                     } = **receiver
                 {
-                    let key = (value_node(receiver), crate::ast::int_value(value, negative));
+                    let key = (
+                        value_node(receiver),
+                        nikaia_std::tools::integers::integer(value, negative),
+                    );
                     if let Some(at) = self.literal_receivers.iter().position(|k| *k == key) {
                         let pending = std::mem::take(&mut self.literal_receivers);
                         self.literal_receivers = vec![pending[at]];
@@ -12555,10 +12593,7 @@ impl<'a> Checker<'a> {
             return;
         };
         for key in std::mem::take(&mut self.literal_receivers) {
-            let number = Constant::of(nikaia_std::tools::integers::integer(
-                u64::try_from(key.1.unsigned_abs()).unwrap_or(u64::MAX),
-                key.1 < 0,
-            ));
+            let number = Constant::of(key.1);
             if number.fits(&ty) {
                 self.s.facts.unsigned_literals.insert(key.0, ty.clone());
             }
@@ -12698,7 +12733,7 @@ impl<'a> Checker<'a> {
                     _ => "A",
                 },
                 slot.found.text(),
-                an_or_a(into)
+                an_or_a(&into)
             ));
             finding.help = Some(format!(
                 "Write `{value} as {into}`, which stops the program on a negative value, or \
@@ -14871,12 +14906,13 @@ impl<'a> Checker<'a> {
         // **Every file of the program** (Part I 9.1), this one among them; a
         // check handed none is this file alone.
         let mut files: Vec<&Parsed> = self.beside.to_vec();
-        if !files.iter().any(|other| std::ptr::eq(*other, self.parsed)) {
-            files.insert(0, self.parsed);
-        }
-        let here = files
-            .iter()
-            .position(|other| std::ptr::eq(*other, self.parsed))?;
+        let here = match self.here {
+            Some(here) => here,
+            None => {
+                files.insert(0, self.parsed);
+                0
+            }
+        };
         if !workshop.somewhere() {
             return None;
         }
@@ -16373,10 +16409,7 @@ impl<'a> Checker<'a> {
             return;
         }
         let mut found: Vec<((String, String), Vec<FieldContract>)> = Vec::new();
-        for other in self.beside {
-            if std::ptr::eq(*other, self.parsed) {
-                continue;
-            }
+        for other in self.others() {
             found.extend(
                 instantiations_in(
                     other,
@@ -16948,16 +16981,16 @@ impl<'a> Checker<'a> {
         // as the one in `expr`: which of the two a lambda arrives through is
         // whether the callee's signature typed its parameters, and that has
         // nothing to do with what a `break` in it may reach.
-        let (tail, seen) = self.past_a_boundary("lambda", |me| {
-            me.s.handed_over = Some(Handed {
-                pauses: false,
-                fails: false,
-                caught: false,
-                promised,
-            });
-            let tail = me.block(body);
-            (tail, me.s.handed_over.take())
+        let saved = self.enter_boundary("lambda");
+        self.s.handed_over = Some(Handed {
+            pauses: false,
+            fails: false,
+            caught: false,
+            promised,
         });
+        let tail = self.block(body);
+        let seen = self.s.handed_over.take();
+        self.leave_boundary(saved);
         self.s.scope.pop();
         self.s.repeats.pop();
         let paused = seen.as_ref().is_some_and(|seen| seen.pauses);
@@ -16983,9 +17016,9 @@ impl<'a> Checker<'a> {
     /// block above and a closure or an `async` block below. A loop outside one
     /// of them is not reachable from inside it, so the count starts again at
     /// zero and the word for what stands in the way is carried for the message.
-    fn past_a_boundary<T>(&mut self, what: &'static str, walk: impl FnOnce(&mut Self) -> T) -> T {
+    fn enter_boundary(&mut self, what: &str) -> Boundary {
         let loops = std::mem::replace(&mut self.loops, 0);
-        let barrier = self.barrier.replace(what);
+        let barrier = self.barrier.replace(what.to_string());
         // **And what a lambda was seen to do stops here too**
         // ([ADR-277](../../docs/specification/adr/adr-277.md) D7), for the same
         // reason the loop count does: what a body written *inside* this one
@@ -16993,17 +17026,25 @@ impl<'a> Checker<'a> {
         // accumulator inside the walk and reads it back there.
         let handed = self.s.handed_over.take();
         // **And the enclosing `sync` stops here too.** What is inside this body
-        // is a body of its own — a lambda, an `overlap` branch, a `select` arm —
+        // is a body of its own - a lambda, an `overlap` branch, a `select` arm -
         // and what *it* may do is said by its own type rather than by the
         // declaration around it ([ADR-277](../../docs/specification/adr/adr-277.md)
         // D2, whose `NK2206` is the rule for a lambda).
         let promised = self.s.inside_a_sync_function.take();
-        let value = walk(self);
-        self.s.inside_a_sync_function = promised;
-        self.s.handed_over = handed;
-        self.loops = loops;
-        self.barrier = barrier;
-        value
+        Boundary {
+            loops,
+            barrier,
+            handed,
+            promised,
+        }
+    }
+
+    /// Back out of what [`Checker::enter_boundary`] went into.
+    fn leave_boundary(&mut self, saved: Boundary) {
+        self.s.inside_a_sync_function = saved.promised;
+        self.s.handed_over = saved.handed;
+        self.loops = saved.loops;
+        self.barrier = saved.barrier;
     }
 
     /// `NK2205`: a `set` whose argument reads the same container with `get`
@@ -17295,10 +17336,7 @@ impl<'a> Checker<'a> {
         // where it was `NK1117`, *isn't declared anywhere* (found moving the
         // compiler's `views` into Nikaia, #125). Its declared type, read in
         // its own file; its value is that file's to check.
-        for other in self.beside {
-            if std::ptr::eq(*other, self.parsed) {
-                continue;
-            }
+        for other in self.others() {
             for item in &other.program.items {
                 let Item::Comptime { name, ty, .. } = &item.node else {
                     continue;
@@ -17946,7 +17984,7 @@ impl<'a> Checker<'a> {
             "break" => "leaves the innermost loop around it",
             _ => "starts the innermost loop's next turn",
         };
-        let (message, note, help) = match self.barrier {
+        let (message, note, help) = match &self.barrier {
             Some(what) => (
                 format!("`{word}` {does}, but the nearest loop is outside this {what}."),
                 format!(
@@ -18519,7 +18557,7 @@ fn an_operation_of_one_type(op: BinaryOp) -> bool {
 }
 
 /// The integer literals of a value, each by its node and its value.
-type Literals = Vec<(i64, i128)>;
+type Literals = Vec<(i64, nikaia_std::tools::integers::Integer)>;
 
 /// Every integer literal in a value, by its node, for the suffix the emitter
 /// may owe it.
@@ -18528,8 +18566,8 @@ fn literals_in(expr: &Expr, out: &mut Literals) {
         Expr::LitInt {
             value, negative, ..
         } => out.push((
-            ((value_node(expr) as usize) as i64),
-            crate::ast::int_value(*value, *negative),
+            value_node(expr),
+            nikaia_std::tools::integers::integer(*value, *negative),
         )),
         Expr::Binary { lhs, rhs, .. } => {
             literals_in(lhs, out);
