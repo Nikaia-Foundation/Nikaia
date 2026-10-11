@@ -284,7 +284,7 @@ pub(crate) fn lowered_units(
     use crate::emit::{Lowered, Needs, SourceMap};
     let home = &units[entry].package;
     let beside: Vec<&Parsed> = units.iter().filter(|u| &u.package == home).collect();
-    let provenance = crate::contracts::trust::analyse(&units[entry], library).provenance;
+    let provenance = crate::contracts::trust::analyse_package(&beside, library).provenance;
     let needs = units.iter().fold(Needs::default(), |acc, unit| {
         acc.join(Needs::of(unit, build))
     });

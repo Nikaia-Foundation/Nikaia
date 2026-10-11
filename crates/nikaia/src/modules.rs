@@ -926,7 +926,15 @@ impl Program {
     ) -> Result<crate::emit::Lowered> {
         use crate::emit::{Lowered, Needs, SourceMap};
 
-        let trust = crate::contracts::trust::analyse(&self.units[0].parsed, std_ledger());
+        // **The package's trust, not the entry's** (ADR-010 D9, #581): a map is
+        // one type in every file, so a socket read in any file keys them all.
+        let package: Vec<&crate::parser::Parsed> = self
+            .units
+            .iter()
+            .filter(|u| u.package.is_none())
+            .map(|u| &u.parsed)
+            .collect();
+        let trust = crate::contracts::trust::analyse_package(&package, std_ledger());
         let needs = self.units.iter().fold(Needs::default(), |acc, u| {
             acc.join(crate::proofs::for_unit(
                 &u.path,

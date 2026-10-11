@@ -80,6 +80,26 @@ pub const UNRESOLVED: &str = "a method call this compiler could not resolve";
 
 /// The provenance of this program's input.
 pub fn analyse(parsed: &Parsed, library: &Ledger) -> Trust {
+    join(&[parsed], Some(parsed), library)
+}
+
+/// **The trust of a package: the join over all its files** (ADR-010 D9, #581).
+///
+/// A map's hasher is one type for the whole package, so the answer cannot
+/// depend on which file is asked: a socket read in one file makes every file's
+/// maps keyed, whatever order the files are in. The roots are the package's.
+pub fn analyse_package(package: &[&Parsed], library: &Ledger) -> Trust {
+    join(package, None, library)
+}
+
+/// One file's roots, with the provenance and the reasons of the **package**
+/// it is a file of: what `--trust` prints per file, and what the emitter
+/// writes for it, are the one answer.
+pub fn analyse_in(parsed: &Parsed, package: &[&Parsed], library: &Ledger) -> Trust {
+    join(package, Some(parsed), library)
+}
+
+fn join(package: &[&Parsed], only: Option<&Parsed>, library: &Ledger) -> Trust {
     let mut reasons: Vec<Reason> = Vec::new();
     let mut roots: Vec<Root> = Vec::new();
 
@@ -93,27 +113,32 @@ pub fn analyse(parsed: &Parsed, library: &Ledger) -> Trust {
             .and_then(|s| s.arguments().iter().position(|(param, _)| param == "root"))
             .map_or(-1, |at| at as i64)
     };
-    for seen in crate::foreign::seen(parsed, &root_at) {
-        let crate::foreign::Seen::Call { name, wrote, span } = seen else {
-            continue;
-        };
-        let Some((key, contract)) = library.lookup(&name) else {
-            continue;
-        };
-        if let Some(provenance) = contract.provenance
-            && !reasons.iter().any(|r| r.source == key)
-        {
-            reasons.push(Reason {
-                source: key.clone(),
-                provenance,
-            });
-        }
-        if let Some(wrote) = wrote {
-            roots.push(Root {
-                entry: key,
-                wrote,
-                span,
-            });
+    for file in package {
+        let own_file = only.is_none_or(|only| std::ptr::eq(*file, only));
+        for seen in crate::foreign::seen(file, &root_at) {
+            let crate::foreign::Seen::Call { name, wrote, span } = seen else {
+                continue;
+            };
+            let Some((key, contract)) = library.lookup(&name) else {
+                continue;
+            };
+            if let Some(provenance) = contract.provenance
+                && !reasons.iter().any(|r| r.source == key)
+            {
+                reasons.push(Reason {
+                    source: key.clone(),
+                    provenance,
+                });
+            }
+            if let Some(wrote) = wrote
+                && own_file
+            {
+                roots.push(Root {
+                    entry: key,
+                    wrote,
+                    span,
+                });
+            }
         }
     }
 
@@ -125,7 +150,7 @@ pub fn analyse(parsed: &Parsed, library: &Ledger) -> Trust {
     // **And one it could not resolve counts as untrusted** (ADR-010 D1: a
     // barrier widens, never the other way). A map that gets the keyed hash
     // needlessly is slower; the opposite is an attack.
-    let (_, checked) = Ledger::infer_package_checked(&[parsed], library);
+    let (_, checked) = Ledger::infer_package_checked(package, library);
     let mut unresolved = false;
     for calls in checked.iter().flat_map(|c| c.methods.values()) {
         unresolved |= calls.unresolved;

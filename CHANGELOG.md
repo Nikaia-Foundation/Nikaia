@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.840] — 2026-10-11
+
+**Package-wide trust: a map is keyed in every file when any file of the package reads an untrusted source (ADR-010 D9, #581 step 1)**
+- A project took the entry file's trust for every file, and tools each file's own: a socket read in a second file got the fixed seed in the entry's maps while --trust said keyed (a hash-flooding hole), and a method call on a type another file declares turned one tools file keyed (rustc E0308). The trust of a package is now the join over all its files, order independent: trust::analyse_package, used by the lowering of a project, of the tools package (asked once) and of a comptime's program; --trust prints each file's roots with the package's provenance. Not built: classes across files for private helpers, the boundary type parameter, the ledger maps key (#581 steps 2-11).
+
 ## [0.0.839] — 2026-10-11
 
 **NK2302: the ledger, the lowering and the message follow the one source (ADR-283 D25-D26, #580 steps 5-7)**

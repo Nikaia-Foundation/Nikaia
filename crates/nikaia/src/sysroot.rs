@@ -378,6 +378,10 @@ pub fn lower_tools_at(dir: &Path, build: crate::emit::Build) -> Result<String> {
     library.functions.extend(described.functions.clone());
     let units: Vec<&crate::parser::Parsed> = parsed.iter().collect();
     let own = crate::contracts::Ledger::infer_package(&units, &library);
+    // **The package's trust, asked once** (ADR-010 D9, #581): the join over all
+    // its files is one answer, and asking it per file reads the package again
+    // for each of them.
+    let provenance = crate::contracts::trust::analyse_package(&units, &library).provenance;
 
     let mut imports: Vec<String> = Vec::new();
     let mut bodies = String::new();
@@ -410,9 +414,10 @@ pub fn lower_tools_at(dir: &Path, build: crate::emit::Build) -> Result<String> {
             let source = std::fs::read_to_string(path).unwrap_or_default();
             anyhow::bail!("{}", every_refusal(path, &source, &refusals));
         }
-        let lowered =
-            crate::emit::emit_std_items_against_at(unit, &beside, &own, &described, build)
-                .map_err(|e| anyhow::anyhow!("{}: {e}", path.display()))?;
+        let lowered = crate::emit::emit_std_items_against_at(
+            unit, &beside, &own, &described, build, provenance,
+        )
+        .map_err(|e| anyhow::anyhow!("{}: {e}", path.display()))?;
         // **One preamble for the package**: a `use std::…` is the file's
         // import of a `std` module, and one namespace imports it once.
         let mut body = String::new();

@@ -2325,7 +2325,16 @@ pub fn explain(program: &modules::Program, settings: &Settings, want: Explain) -
             print!(
                 "{}",
                 crate::contracts::trust::render(
-                    &crate::contracts::trust::analyse(&unit.parsed, library),
+                    &crate::contracts::trust::analyse_in(
+                        &unit.parsed,
+                        &program
+                            .units
+                            .iter()
+                            .filter(|u| u.package == unit.package)
+                            .map(|u| &u.parsed)
+                            .collect::<Vec<_>>(),
+                        library,
+                    ),
                     &unit.path.display().to_string(),
                     &unit.source,
                 )

@@ -676,7 +676,10 @@ pub fn emit_std_against(
     let mut library = std_ledger().clone();
     library.types.extend(described.types.clone());
     library.functions.extend(described.functions.clone());
-    let trust = crate::contracts::trust::analyse(parsed, &library);
+    let package: Vec<&Parsed> = std::iter::once(parsed)
+        .chain(beside.iter().copied())
+        .collect();
+    let trust = crate::contracts::trust::analyse_package(&package, &library);
     Emitter::with_contracts(
         parsed,
         beside,
@@ -703,7 +706,14 @@ pub fn emit_std_items_against(
         target: Target::X86_64Linux,
         ..Build::default()
     };
-    emit_std_items_against_at(parsed, beside, own, described, build)
+    let mut library = std_ledger().clone();
+    library.types.extend(described.types.clone());
+    library.functions.extend(described.functions.clone());
+    let package: Vec<&Parsed> = std::iter::once(parsed)
+        .chain(beside.iter().copied())
+        .collect();
+    let provenance = crate::contracts::trust::analyse_package(&package, &library).provenance;
+    emit_std_items_against_at(parsed, beside, own, described, build, provenance)
 }
 
 /// The same at a given build, for the test that holds the package to lowering
@@ -714,16 +724,13 @@ pub fn emit_std_items_against_at(
     own: &crate::contracts::Ledger,
     described: &crate::contracts::Ledger,
     build: Build,
+    provenance: crate::contracts::Provenance,
 ) -> Result<Lowered> {
-    let mut library = std_ledger().clone();
-    library.types.extend(described.types.clone());
-    library.functions.extend(described.functions.clone());
-    let trust = crate::contracts::trust::analyse(parsed, &library);
     Emitter::with_contracts(
         parsed,
         beside,
         build,
-        trust.provenance,
+        provenance,
         own.clone(),
         described,
         &Reads::none(),
