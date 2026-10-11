@@ -60,6 +60,7 @@ use nikaia_std::tools::check_state::{
     CheckPendingCoalesce as PendingCoalesce, CheckPromises as Promises, CheckRead as Read,
     CheckRepeats as Repeats, CheckState, CheckWorld, a_body_never_ends,
 };
+use nikaia_std::tools::check_texts::{self, ends_in_null, ends_in_text};
 use nikaia_std::tools::check_widen::{
     self, an_integer_that_does_not_widen, binary_op_text, names_a_path, number_where_no_number_is,
     views_into_nullable_text, views_into_text,
@@ -252,22 +253,6 @@ pub struct StoredCode {
     pub resolved: BTreeSet<String>,
     pub unresolved: bool,
     pub free: BTreeSet<String>,
-}
-
-/// Which of the two spellings a member's view is taken with.
-///
-/// The one place the distinction is made, so that the checker's answer and the
-/// emitter's two accessors cannot come apart.
-fn viewed_as(ty: &Ty) -> Viewed {
-    match ty {
-        Ty::Named { name, args, .. }
-            if crate::contracts::ty::base(name) == crate::contracts::ty::TEXT
-                && args.is_empty() =>
-        {
-            Viewed::Text
-        }
-        _ => Viewed::Plain,
-    }
 }
 
 /// **What one call was handed**, positional and named, with the types found for
@@ -4244,10 +4229,7 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// **`x?.field` over a `T?`** (Part I 3.5): the result is a `U?` -
-    /// flattened, because a field that is *itself* nullable would otherwise
-    /// give a nullable of a nullable. Asked from the field read's own walk once
-    /// the receiver's type is known.
+    /// A field read through `?.` (`tools/check_fields.nika`).
     fn a_safe_field(
         &mut self,
         inner: &Ty,
@@ -4256,126 +4238,11 @@ impl<'a> Checker<'a> {
         expr: &Expr,
         span: &Span,
     ) -> Ty {
-        let Ty::Named { name: ty, .. } = inner else {
-            return Ty::Unknown;
-        };
-        // **A boxed field is read through its box here too**
-        // ([ADR-246](../../docs/specification/adr/adr-246.md) D2).
-        if self
-            .s
-            .facts
-            .boxed_members
-            .get(ty)
-            .is_some_and(|members| members.contains(&field))
-        {
-            self.s.facts.boxed_reads.insert(value_node(expr));
-        }
-        let Some(fields) = self.s.fields_of(&self.world, ty) else {
-            return Ty::Unknown;
-        };
-        match fields.iter().find(|f| f.name == field) {
-            Some(found) => {
-                let (ty, declared) = (ty.clone(), found.clone());
-                self.s.field_is_reachable(&ty, &declared, span);
-                // **The `and_then` case is the field that is already a
-                // `T?`**, and the emitter is told which by name: `map`
-                // over one would make an `Option<Option<T>>`, and that
-                // is a question about the declared type, which this
-                // module answers and the emitter cannot (ADR-288).
-                // **A view is taken of a place and never of a
-                // temporary** ([ADR-278](../../docs/specification/adr/adr-278.md)
-                // D1). Measured: the view of a temporary dies at the
-                // `;`, and binding it is `rustc`'s *temporary value
-                // dropped while borrowed* about a file nobody wrote
-                // (Part III C.1). A temporary has no next line to stay
-                // usable on, so leaving it owned keeps
-                // [ADR-278](../../docs/specification/adr/adr-278.md)
-                // D1's promise where it means anything.
-                let place = roots_in_a_binding(base);
-                match &declared.ty {
-                    // A field that is itself a `T?` flattens, and a
-                    // view of one is taken the same way one shape down.
-                    Ty::Nullable(inner) if place && crate::contracts::keeps::moves(inner) => {
-                        self.s
-                            .facts
-                            .viewed_reaches
-                            .insert(value_node(base), viewed_as(inner));
-                        self.s.facts.flattened_reaches.insert(value_node(base));
-                        Ty::Nullable(Box::new(inner.as_a_view()))
-                    }
-                    Ty::Nullable(_) => {
-                        self.s.facts.flattened_reaches.insert(value_node(base));
-                        declared.ty
-                    }
-                    // **A member that copies comes out of a view**
-                    // ([ADR-278](../../docs/specification/adr/adr-278.md)
-                    // D1, [ADR-278](../../docs/specification/adr/adr-278.md)
-                    // D1 and D2). A number, a `bool` and a `char` are
-                    // read through the receiver and copied, so the
-                    // reach leaves the receiver where it was and the
-                    // result's type is what it always was.
-                    //
-                    // **The other half is not here**, and it is the
-                    // representation rather than this walk: a member
-                    // that does **not** copy comes out as a *view* of
-                    // the receiver (D2) - which is not a **state**:
-                    // three of the four shapes a `?.` has are Borrowed
-                    // and the fourth is `NK2303`'s
-                    // ([ADR-278](../../docs/specification/adr/adr-278.md)
-                    // D1). What it waits on is one question about `??`,
-                    // on `docs/open-decisions.md`. So that reach lowers
-                    // exactly as it did, moving the receiver, and
-                    // [ADR-278](../../docs/specification/adr/adr-278.md)
-                    // D8's translation stays for it alone.
-                    plain if !crate::contracts::keeps::moves(plain) => {
-                        self.s.facts.copied_reaches.insert(value_node(base));
-                        Ty::Nullable(Box::new(plain.clone()))
-                    }
-                    // **And a member that does not copy comes out as a
-                    // view of the receiver**, which is
-                    // [ADR-278](../../docs/specification/adr/adr-278.md)
-                    // D2 and [ADR-278](../../docs/specification/adr/adr-278.md)
-                    // D1. Borrowed and not Tethered: the view points
-                    // into a place that outlives the statement, which
-                    // is what [ADR-283](../../docs/specification/adr/adr-283.md)
-                    // D2 calls the free case.
-                    plain if place => {
-                        let viewed = viewed_as(plain);
-                        self.s.facts.viewed_reaches.insert(value_node(base), viewed);
-                        self.s.facts.copied_reaches.insert(value_node(base));
-                        Ty::Nullable(Box::new(plain.as_a_view()))
-                    }
-                    plain => Ty::Nullable(Box::new(plain.clone())),
-                }
-            }
-            None => {
-                let ty = ty.clone();
-                self.s.no_such_field(&ty, &field, &fields, span);
-                Ty::Unknown
-            }
-        }
+        self.s
+            .a_safe_field(&self.world, inner, base, &field, expr, span)
     }
 
-    /// Part I 3.5: `?.` is for a value that may be absent.
-    ///
-    /// `"Ada"?.len` reaches through something that cannot be missing, and the
-    /// language below has no `map` on it - so this was `rustc`'s refusal about
-    /// the generated file (Part III, C.1). **`NK1121`**, and the way out is the
-    /// plain `.`, which is what the program meant.
-    ///
-    /// **Only where the receiver's type is known.** A receiver this checker
-    /// could not work out says nothing: refusing there would refuse a correct
-    /// program, which is the one thing it may never do (Part III, C.4).
-    ///
-    /// `member` is the field or the method, and `Member` says which: the way out
-    /// is the plain `.`, and a reader is owed it in the spelling they wrote
-    /// ([ADR-278](../../../docs/specification/adr/adr-278.md)).
-    ///
-    /// **A warning, `NK1217`, and the plain `.`**
-    /// ([ADR-279](../../../docs/specification/adr/adr-279.md) D13): a callee
-    /// that narrowed `-> User?` to `-> User` does not break the `?.` its callers
-    /// wrote. **Except through a list's index**, which stays `NK1121`: the line
-    /// promises a guard against a read past the end that it does not give.
+    /// `?.` over a value that is never absent (`tools/check_fields.nika`).
     fn reaches_through_a_plain_value(
         &mut self,
         on: &Ty,
@@ -4384,50 +4251,12 @@ impl<'a> Checker<'a> {
         reach: &Expr,
         span: &Span,
     ) {
-        if on.is_unknown() {
-            return;
-        }
-        let (what, plain) = match member {
-            Reached::Field(name) => ("field", format!(".{name}")),
-            Reached::Method(name) => ("method", format!(".{name}(…)")),
+        let (name, method) = match member {
+            Reached::Field(name) => (name, false),
+            Reached::Method(name) => (name, true),
         };
-        if let Expr::Index { base, index, .. } = receiver {
-            self.s.findings.push(Finding {
-                severity: Severity::Error,
-                span: *span,
-                code: "NK1121".to_string(),
-                message: format!(
-                    "`{}` always has a value, so `?.` guards nothing.",
-                    written(self.parsed, receiver)
-                ),
-                notes: vec![
-                    "A list read never comes back empty: an index that does not fit stops \
-                     the program, and `?.` only passes over a `null`."
-                        .to_string(),
-                ],
-                help: Some(format!(
-                    "Check the length first: `if {} < {}.len()`, then write `{plain}`.",
-                    written(self.parsed, index),
-                    written(self.parsed, base)
-                )),
-                labels: Vec::new(),
-            });
-            return;
-        }
-        self.s.facts.plain_reaches.insert(value_node(reach));
-        self.s.findings.push(Finding {
-            severity: Severity::Warning,
-            span: *span,
-            code: "NK1217".to_string(),
-            message: format!("You don't need `?.` here: a `{on}` is never absent."),
-            notes: vec![format!(
-                "`?.` is for a value that may be missing: it reaches the {what} when \
-                 there's something there and gives `null` otherwise. A type without `?` \
-                 always has a value, so this is the plain `{plain}`."
-            )],
-            help: Some(format!("Write `{plain}`.")),
-            labels: Vec::new(),
-        });
+        self.s
+            .reaches_through_a_plain_value(&self.world, on, receiver, name, method, reach, span);
     }
 
     /// **An option's default that is computed rather than written** (ADR-318
@@ -4614,24 +4443,7 @@ impl<'a> Checker<'a> {
         });
     }
 
-    /// **`NK1211`: `??` after a value that is never absent**
-    /// ([ADR-279](../../docs/specification/adr/adr-279.md) D12, #342).
-    ///
-    /// `xs[2] ?? return false` over a `Vec[i64]`, or `x ?? 0` over an `i64`:
-    /// the left side always has a value, so `??` has nothing to replace, and
-    /// the line reached `rustc` as *mismatched types* or *`i64: Or` is not
-    /// satisfied* (Part III C.1). `NK1121`'s counterpart for `?.`.
-    ///
-    /// **The type decides, not the shape**: an index into a list of `T?` is a
-    /// `T?`, and `??` after it replaces a `null` element. **Only where the left
-    /// side's type is known** (C.4): a type this checker could not work out, or
-    /// a type variable, is left alone.
-    ///
-    /// **A warning, `NK1216`, where the left side is not a list's index**
-    /// ([ADR-279](../../docs/specification/adr/adr-279.md) D13): the answer is
-    /// the left side and the fallback never runs, so a callee that narrowed
-    /// `-> User?` to `-> User` does not break its callers. Whether it was one,
-    /// and so the line is its left side alone.
+    /// `??` over a value that is never absent (`tools/check_fields.nika`).
     fn nothing_to_fall_back_from(
         &mut self,
         value: &Expr,
@@ -4639,48 +4451,8 @@ impl<'a> Checker<'a> {
         coalesce: &Expr,
         span: &Span,
     ) -> bool {
-        let never_absent = match left.unseen() {
-            Ty::Named { name, .. } => crate::contracts::ty::base(&name) != "Option",
-            Ty::Tuple(_) => true,
-            _ => false,
-        };
-        if !never_absent {
-            return false;
-        }
-        let shown = written(self.parsed, value);
-        let index = matches!(value, Expr::Index { .. });
-        if !index {
-            self.s.facts.plain_reaches.insert(value_node(coalesce));
-        }
-        self.s.findings.push(Finding {
-            severity: match index {
-                true => Severity::Error,
-                false => Severity::Warning,
-            },
-            span: *span,
-            code: if index { "NK1211" } else { "NK1216" }.to_string(),
-            message: format!("`{shown}` always has a value, so `??` has nothing to replace."),
-            notes: vec![match index {
-                true => "A list read never comes back empty: an index that does not fit \
-                         stops the program, and `??` only replaces a `null`."
-                    .to_string(),
-                false => format!(
-                    "`??` replaces a `null`, and a value of type `{}` is never `null`: \
-                     only a type written with `?` can be.",
-                    left.unseen()
-                ),
-            }],
-            help: Some(match (index, value) {
-                (true, Expr::Index { base, index, .. }) => format!(
-                    "Check the length first: `if {} < {}.len()`.",
-                    written(self.parsed, index),
-                    written(self.parsed, base)
-                ),
-                _ => "Remove `??` and what follows it.".to_string(),
-            }),
-            labels: Vec::new(),
-        });
-        !index
+        self.s
+            .nothing_to_fall_back_from(&self.world, value, left, coalesce, span)
     }
 
     /// The entry call itself: the input is an expression like any other, and
@@ -11606,28 +11378,7 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// **A `??` whose left side is a view and whose fallback owns** (`NK1185`,
-    /// [ADR-278](../../docs/specification/adr/adr-278.md) D20).
-    ///
-    /// `user?.name` is a view of `user` where `name` does not copy
-    /// ([ADR-278](../../docs/specification/adr/adr-278.md) D17), and
-    /// `?? "nobody".to_owned()` asks the operator to hand back one value that is
-    /// both. There are only three ways to do that and the language has ruled
-    /// two of them out:
-    ///
-    /// * an **owned** result copies the borrowed branch, and a
-    ///   compiler-inserted copy is what
-    ///   [ADR-283](../../docs/specification/adr/adr-283.md) D3 bans outright;
-    /// * a **view** result needs the fallback to be one — which `"nobody"`
-    ///   already is and `"nobody".to_owned()` is not;
-    /// * so the third is to say so here, in this language's words, rather than
-    ///   let `rustc` say *expected `String`, found `&String`* about a file
-    ///   nobody wrote ([Part III C.1](../../docs/specification/30-nikaia-tooling.md)).
-    ///
-    /// **Both sides have to be known**, which is
-    /// [C.4](../../docs/specification/30-nikaia-tooling.md): a `??` over
-    /// something this checker could not type claims nothing, exactly as the
-    /// result type does one line down.
+    /// `NK1185` (`tools/check_fields.nika`).
     fn a_fallback_that_owns_what_the_left_side_views(
         &mut self,
         viewed: &Ty,
@@ -11635,70 +11386,13 @@ impl<'a> Checker<'a> {
         written: &Expr,
         span: &Span,
     ) {
-        if !viewed.is_a_view() || fallback.is_a_view() {
-            return;
-        }
-        // **`.clone()` and `.to_owned()` by name**, which no ledger describes
-        // and which this compiler already reads this way one file over
-        // (`contracts::tether::makes_a_buffer`): both hand back owned text.
-        // Without it the one spelling the whole question is about -
-        // `?? "nobody".to_owned()` - types as `?` and walks past the refusal
-        // into `rustc`'s *expected `String`, found `&str`* about a file nobody
-        // wrote (Part III C.1).
-        //
-        // **`.to_string()` is not among them**
-        // ([ADR-282](../../docs/specification/adr/adr-282.md) D8): the text
-        // form of text is the text itself, so a view stays a view and a
-        // literal a literal, and the call is typed as its receiver above
-        // (`text_as_is`). Of anything else it is text of its own - a number's
-        // text form is built - and is refused here as any owned text is.
-        let names_a_copy = match written {
-            Expr::MethodCall {
-                receiver, method, ..
-            } => match self.parsed.text(*method) {
-                "clone" | "to_owned" => true,
-                "to_string" => !self.s.facts.text_as_is.contains(&value_node(receiver)),
-                _ => false,
-            },
-            _ => false,
-        };
-        let owned = match names_a_copy {
-            true => Ty::named(crate::contracts::ty::TEXT),
-            false => fallback.clone(),
-        };
-        // **A type of this package that copies is a copy here too**, as a
-        // number is: `k ?? Kind::B` for a `k: ref Kind?` is `index::or`'s
-        // copy of it (found writing ADR-293's tests).
-        if !matches!(owned, Ty::Named { .. })
-            || !crate::contracts::keeps::moves(&owned)
-            || !self.s.takes_away(&self.world, &owned)
-        {
-            return;
-        }
-        let fallback = &owned;
-        self.s.findings.push(Finding {
-            severity: Severity::Error,
-            span: *span,
-            code: "NK1185".to_string(),
-            message: format!(
-                "The two sides of `??` don't match: the left is a `{viewed}`, the fallback a \
-                 `{fallback}`."
-            ),
-            notes: vec![
-                "A view and the value it points into are different types, and `??` has to \
-                 give back one type."
-                    .to_string(),
-                "Nikaia never makes a copy behind your back, so it can't make the two agree \
-                 on its own."
-                    .to_string(),
-            ],
-            help: Some(format!(
-                "Make the fallback a view too - a text literal already is one, so \
-                 `?? \"…\"` works and costs nothing - or, if you need a `{fallback}`, \
-                 put the value in a name of its own first."
-            )),
-            labels: Vec::new(),
-        });
+        self.s.a_fallback_that_owns_what_the_left_side_views(
+            &self.world,
+            viewed,
+            fallback,
+            written,
+            span,
+        );
     }
 
     /// `NK1185` (`tools/check_exprs.nika`).
@@ -16343,37 +16037,11 @@ impl<'a> Checker<'a> {
             .or_else(|| number_where_no_number_is(want, value))
     }
 
-    /// **A list of tuple literals builds each tuple's text where the list is
-    /// kept**, as one tuple does (`tuple_literal`): `[("a", 1), ("b", 2)]`
-    /// for a `Vec[(String, i64)]` was `NK1103`, a list of `(ref String, ?)`.
+    /// A list of tuple literals where a list of tuples with text is wanted
+    /// (`tools/check_texts.nika`).
     fn list_of_tuple_literals(&mut self, found: &Ty, want: &Ty, value: &Expr) -> Option<Ty> {
-        let (
-            Ty::Named {
-                name,
-                args,
-                view: false,
-            },
-            Ty::Named { args: founds, .. },
-            Expr::ListLit { items, .. },
-        ) = (want, found, value)
-        else {
-            return None;
-        };
-        let ([wanted @ Ty::Tuple(_)], [element]) = (args.as_slice(), founds.as_slice()) else {
-            return None;
-        };
-        if name != "Vec" || items.is_empty() {
-            return None;
-        }
-        let mut built = None;
-        for item in items {
-            built = Some(self.tuple_literal(element, wanted, item)?);
-        }
-        built.map(|element| Ty::Named {
-            name: name.clone(),
-            args: vec![element],
-            view: false,
-        })
+        self.s
+            .list_of_tuple_literals(&self.world, found, want, value)
     }
 
     /// **`collect()` builds what the place it goes into declares**
@@ -16584,33 +16252,10 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// **A tuple's text literals are built where the tuple is kept**, part by
-    /// part: `return (1, "x")` for a `(i64, String)` is the program it reads
-    /// as. The parts that are not literals keep the type they were found to
-    /// have, so a view among them is still refused.
+    /// A tuple of text literals where a tuple with text is wanted
+    /// (`tools/check_texts.nika`).
     fn tuple_literal(&mut self, found: &Ty, want: &Ty, value: &Expr) -> Option<Ty> {
-        let (Ty::Tuple(wants), Ty::Tuple(founds), Expr::Tuple(parts, _)) = (want, found, value)
-        else {
-            return None;
-        };
-        if wants.len() != parts.len() || founds.len() != parts.len() {
-            return None;
-        }
-        let mut built = false;
-        let mut answered = Vec::with_capacity(parts.len());
-        for ((want, found), part) in wants.iter().zip(founds).zip(parts) {
-            match self
-                .text_literal(want, part, true)
-                .or_else(|| self.tuple_literal(found, want, part))
-            {
-                Some(ty) => {
-                    built = true;
-                    answered.push(ty);
-                }
-                None => answered.push(found.clone()),
-            }
-        }
-        built.then_some(Ty::Tuple(answered))
+        self.s.tuple_literal(&self.world, found, want, value)
     }
 
     /// **A text literal where a `String` is wanted is a `String`**
@@ -16719,85 +16364,10 @@ impl<'a> Checker<'a> {
         Some((*result).unwrap_or_else(|| Ty::named("()")))
     }
 
+    /// A text literal where `String` is wanted, built as text of its own
+    /// (`tools/check_texts.nika`).
     fn text_literal(&mut self, want: &Ty, value: &Expr, owned: bool) -> Option<Ty> {
-        let text = Ty::named("String");
-        match (want, value) {
-            (Ty::Nullable(inner), _) => self.text_literal(inner, value, owned),
-            // `"x".to_string()` is `"x"` (ADR-282 D8), so it is built where it
-            // is kept exactly as the literal is.
-            (
-                _,
-                Expr::MethodCall {
-                    receiver,
-                    method,
-                    args,
-                    ..
-                },
-            ) if args.is_empty()
-                && self.parsed.text(*method) == "to_string"
-                && matches!(receiver.as_ref(), Expr::LitStr { .. }) =>
-            {
-                self.text_literal(want, receiver, owned)
-            }
-            // **A `'…'` is a `u8` where a byte is wanted** (ADR-320, Part I
-            // 2.6): one ASCII character is either, and the use decides.
-            (
-                Ty::Named {
-                    name,
-                    args,
-                    view: false,
-                },
-                Expr::LitChar(written, _),
-            ) if name == "u8" && args.is_empty() && a_byte(written) => {
-                self.s.facts.byte_literals.insert(value_node(value));
-                Some(Ty::named("u8"))
-            }
-            (_, Expr::LitStr { .. }) if *want == text => {
-                if owned {
-                    self.s.facts.owned_texts.insert(value_node(value));
-                }
-                Some(text)
-            }
-            // **A choice between literals is a literal in each arm**: the use
-            // reaches through `if`, `match` and a block to the value each one
-            // ends in, so `-> String { match r { A => "a" B => "b" } }` is the
-            // program it reads as. Only where **every** arm ends in text this
-            // answers, for the list's reason below.
-            (
-                _,
-                Expr::If {
-                    then_branch,
-                    else_branch: Some(else_branch),
-                    ..
-                },
-            ) => {
-                let arms = [tail_of(then_branch), tail_of(else_branch)];
-                self.every_arm(want, &arms, owned)
-            }
-            (_, Expr::Match { arms, .. }) => {
-                let arms: Vec<Option<&Expr>> = arms.iter().map(|arm| Some(&arm.body)).collect();
-                self.every_arm(want, &arms, owned)
-            }
-            (_, Expr::Block(block, _)) => self.every_arm(want, &[tail_of(block)], owned),
-            (
-                Ty::Named {
-                    name,
-                    args,
-                    view: false,
-                },
-                Expr::ListLit { items, .. },
-            ) if name == "Vec" && args.as_slice() == [text.clone()] && !items.is_empty() => {
-                let all_text = items.iter().all(|item| matches!(item, Expr::LitStr { .. }));
-                if !all_text {
-                    return None;
-                }
-                for item in items {
-                    self.text_literal(&text, item, true);
-                }
-                Some(want.clone())
-            }
-            _ => None,
-        }
+        self.s.text_literal(&self.world, want, value, owned)
     }
 
     /// **Arms that disagree only because some are text literals and some are
@@ -16896,45 +16466,9 @@ impl<'a> Checker<'a> {
         Some(Ty::Nullable(Box::new(plain.unwrap_or(Ty::Unknown))))
     }
 
-    /// **A plain arm is `Some(…)` where its value is made** (#410): an arm
-    /// that is itself an `if`, a `match` or a block is written below as one,
-    /// and a wrap around it never reached the values its branches hand back -
-    /// `if c { if d { a } else { b } } else { null }` lowered its inner
-    /// branches as `String` where the choice is a `String?`. So the wrap goes
-    /// to each branch's last value, and to the arm itself only where it is
-    /// none of the three.
+    /// A plain arm beside a `null` is `Some` (`tools/check_texts.nika`).
     fn some_at_the_tails(&mut self, arm: &Expr) {
-        match arm {
-            Expr::If {
-                then_branch,
-                else_branch: Some(otherwise),
-                ..
-            } => {
-                for block in [then_branch, otherwise] {
-                    match tail_of(block) {
-                        Some(tail) => self.some_at_the_tails(tail),
-                        None => {
-                            self.s.facts.some_tails.insert(value_node(arm));
-                            return;
-                        }
-                    }
-                }
-            }
-            Expr::Block(block, _) if tail_of(block).is_some() => {
-                if let Some(tail) = tail_of(block) {
-                    self.some_at_the_tails(tail);
-                }
-            }
-            Expr::Match { arms, .. } => {
-                for each in arms {
-                    self.some_at_the_tails(&each.body);
-                }
-            }
-            Expr::LitNull(_) => {}
-            _ => {
-                self.s.facts.some_tails.insert(value_node(arm));
-            }
-        }
+        self.s.some_at_the_tails(arm);
     }
 
     fn arms_meet_at_text(&mut self, arms: &[(Option<&Expr>, Ty)], span: &Span) -> Option<Ty> {
@@ -16959,22 +16493,6 @@ impl<'a> Checker<'a> {
             }
         }
         Some(text)
-    }
-
-    /// [`Checker::text_literal`] for each arm of a choice, and an answer only
-    /// where every arm gave one. Asked of all of them first and recorded after,
-    /// so an `if` with one literal arm and one view records nothing: half a
-    /// construction would be a `String` beside a `&str` below.
-    fn every_arm(&mut self, want: &Ty, arms: &[Option<&Expr>], owned: bool) -> Option<Ty> {
-        let texts = |arm: &Option<&Expr>| arm.is_some_and(ends_in_text);
-        if arms.is_empty() || !arms.iter().all(texts) {
-            return None;
-        }
-        let mut answered = None;
-        for arm in arms.iter().flatten() {
-            answered = self.text_literal(want, arm, owned);
-        }
-        answered
     }
 
     /// **A literal takes the array type where the use asks for one**
@@ -19762,10 +19280,9 @@ fn number_branches(expr: &Expr) -> Option<Vec<&Expr>> {
 }
 
 /// **Whether a `'…'` as written is one ASCII character**, which is what makes
-/// it a byte as well as a scalar (Part I 2.6).
+/// it a byte as well as a scalar (Part I 2.6; `tools/check_texts.nika`).
 pub fn a_byte(written: &str) -> bool {
-    crate::build_time::decoded(written)
-        .is_some_and(|text| text.chars().count() == 1 && text.is_ascii())
+    check_texts::literal_is_a_byte(written)
 }
 
 /// The byte a `'…'` that [`a_byte`] took is, as the language below writes one.
@@ -19823,36 +19340,6 @@ fn tail_of(block: &Block) -> Option<&Expr> {
     match block.stmts.last().map(|s| &s.node) {
         Some(Stmt::Expr(value)) => Some(value),
         _ => None,
-    }
-}
-
-/// `null`, or a block whose last value is `null`.
-fn ends_in_null(expr: &Expr) -> bool {
-    match expr {
-        Expr::LitNull(_) => true,
-        Expr::Block(block, _) => tail_of(block).is_some_and(ends_in_null),
-        _ => false,
-    }
-}
-
-/// Whether every way out of an expression is a text literal
-/// ([ADR-282](../../docs/specification/adr/adr-282.md) D4): the literal itself,
-/// or an `if`, a `match` or a block whose every arm ends in one.
-fn ends_in_text(expr: &Expr) -> bool {
-    match expr {
-        Expr::LitStr { .. } => true,
-        Expr::If {
-            then_branch,
-            else_branch: Some(else_branch),
-            ..
-        } => [tail_of(then_branch), tail_of(else_branch)]
-            .iter()
-            .all(|arm| arm.is_some_and(ends_in_text)),
-        Expr::Match { arms, .. } => {
-            !arms.is_empty() && arms.iter().all(|arm| ends_in_text(&arm.body))
-        }
-        Expr::Block(block, _) => tail_of(block).is_some_and(ends_in_text),
-        _ => false,
     }
 }
 

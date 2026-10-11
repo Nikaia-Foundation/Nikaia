@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.798] — 2026-10-10
+
+**Field reads through `?.`, a `?.` or `??` over a value never absent, and text built where `String` is wanted are Nikaia (`tools/check_fields.nika`, `tools/check_texts.nika`, #558, #125).**
+- `a_safe_field`, `reaches_through_a_plain_value` (`NK1121`, `NK1217`), `nothing_to_fall_back_from` (`NK1211`, `NK1216`) and `a_fallback_that_owns_what_the_left_side_views` (`NK1185`) write `CheckState.facts` directly. `text_literal`, `tuple_literal`, `list_of_tuple_literals`, `some_at_the_tails`, `ends_in_text`, `ends_in_null` and `a_byte` build text and bytes where a position asks for them.
+
 ## [0.0.797] — 2026-10-10
 
 **The checker's facts are one Nikaia struct, `CheckFacts`, the emitter reads (#558, #125).**

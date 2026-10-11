@@ -1,0 +1,190 @@
+// crates/nikaia-std/src/tools/check_fields.nika
+//
+// **What a field read or a `?.` / `??` over a plain value leaves for the
+// emitter, and says** (ADR-293, ADR-279 D13, #558, #125), moved from the
+// compiler's checker: it writes `CheckState.facts` directly. A `?.` over a
+// field reaches through a value that may be absent (`a_safe_field`), a `?.` or
+// `??` over a value that never is gets `NK1121`/`NK1217` and `NK1211`/`NK1216`,
+// and a `??` whose left side is a view and whose fallback owns gets `NK1185`.
+
+use std::collections
+
+fn fact_key(expr: ref Expr) -> i64 sync {
+    return id_of(expr) as i64
+}
+
+/// What a reach is a view of: text, or anything else.
+fn viewed_of(ty: ref Ty) -> FactViewed sync {
+    return match ty {
+        Ty::Named { name, args, .. } => if args.len() == 0 && type_last_segment(name) == "String" { FactViewed::Text } else { FactViewed::Plain },
+        else => FactViewed::Plain,
+    }
+}
+
+/// The name of a named type, and an empty one for any other.
+fn named_or_empty(ty: ref Ty) -> String sync {
+    return match ty {
+        Ty::Named { name, .. } => name.clone(),
+        else => "",
+    }
+}
+
+/// What `?.` over a field gives: `T?` of a view where the base is a place,
+/// and the facts the emitter writes it by.
+fn viewed_nullable(plain: ref Ty) -> Ty sync {
+    return Ty::Nullable(plain.as_a_view())
+}
+
+impl CheckState {
+    /// **A field read through `?.`** (ADR-293 D5): the type it comes to, and
+    /// the facts for the emitter - whether the base is flattened, copied or
+    /// lent as a view.
+    pub fn a_safe_field(ref mut self, world: ref CheckWorld, inner: ref Ty, base: ref Expr, field: ref String, expr: ref Expr, span: ref Span) -> Ty sync {
+        let ty = named_or_empty(inner)
+        if ty.is_empty() {
+            return Ty::Unknown
+        }
+        if self.facts.boxed_members.contains_key(ty) {
+            let members = self.facts.boxed_members[ty]?.clone() ?? collections::BTreeSet()
+            if members.contains(field) {
+                self.facts.boxed_reads.insert(fact_key(expr))
+            }
+        }
+        let fields = self.fields_of(world, ty) ?? return Ty::Unknown
+        let mut found: FieldContract? = null
+        for each in fields {
+            if found == null && each.name == field {
+                found = each.clone()
+            }
+        }
+        if found == null {
+            self.no_such_field(ty, field, fields, span)
+            return Ty::Unknown
+        }
+        let declared = found ?? return Ty::Unknown
+        self.field_is_reachable(ty, declared, span)
+        let place = roots_in_a_binding(base)
+        let key = fact_key(base)
+        match declared.ty {
+            Ty::Nullable(held) => {
+                if place && moves(held) {
+                    self.facts.viewed_reaches.insert(key, viewed_of(held))
+                    self.facts.flattened_reaches.insert(key)
+                    return viewed_nullable(held)
+                }
+                self.facts.flattened_reaches.insert(key)
+                return declared.ty.clone()
+            },
+            else => {
+                if !moves(declared.ty) {
+                    self.facts.copied_reaches.insert(key)
+                    return Ty::Nullable(declared.ty.clone())
+                }
+                if place {
+                    self.facts.viewed_reaches.insert(key, viewed_of(declared.ty))
+                    self.facts.copied_reaches.insert(key)
+                    return viewed_nullable(declared.ty)
+                }
+                return Ty::Nullable(declared.ty.clone())
+            },
+        }
+    }
+
+    /// **`?.` over a value that is never absent** (`NK1121` over an index,
+    /// `NK1217` otherwise). `what` is `field` or `method`, `plain` the plain
+    /// spelling, `shown` the receiver, and `index` and `list` the pieces of an
+    /// index read where the receiver is one.
+    pub fn reaches_through_a_plain_value(ref mut self, world: ref CheckWorld, on: ref Ty, receiver: ref Expr, member: ref String, method: bool, reach: ref Expr, span: ref Span) sync {
+        if on.is_unknown() {
+            return
+        }
+        let mut what: String = "field"
+        let mut plain: String = f".{member}"
+        if method {
+            what = "method"
+            plain = f".{member}(…)"
+        }
+        let pieces = match receiver {
+            Expr::Index { base, index, .. } => [written_expression(world.words, base), written_expression(world.words, index)],
+            else => [],
+        }
+        if pieces.len() == 2 {
+            let message = f"`{written_expression(world.words, receiver)}` always has a value, so `?.` guards nothing."
+            let note = "A list read never comes back empty: an index that does not fit stops the program, and `?.` only passes over a `null`."
+            self.findings.push(check_refusal("NK1121", span, message, [note.clone()], f"Check the length first: `if {pieces[1]} < {pieces[0]}.len()`, then write `{plain}`."))
+            return
+        }
+        self.facts.plain_reaches.insert(fact_key(reach))
+        let note = f"`?.` is for a value that may be missing: it reaches the {what} when there's something there and gives `null` otherwise. A type without `?` always has a value, so this is the plain `{plain}`."
+        self.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: "NK1217", message: f"You don't need `?.` here: a `{on.text()}` is never absent.", notes: [note], help: f"Write `{plain}`.", labels: [] })
+    }
+
+    /// **`??` over a value that is never absent** (`NK1211` over an index,
+    /// `NK1216` otherwise). True where it is the warning, which the emitter
+    /// is told by `plain_reaches`.
+    pub fn nothing_to_fall_back_from(ref mut self, world: ref CheckWorld, value: ref Expr, left: ref Ty, coalesce: ref Expr, span: ref Span) -> bool sync {
+        let seen = left.unseen()
+        let never_absent = match seen {
+            Ty::Named { name, .. } => type_last_segment(name) != "Option",
+            Ty::Tuple(_) => true,
+            else => false,
+        }
+        if !never_absent {
+            return false
+        }
+        let shown = written_expression(world.words, value)
+        let pieces = match value {
+            Expr::Index { base, index, .. } => [written_expression(world.words, base), written_expression(world.words, index)],
+            else => [],
+        }
+        let index = pieces.len() == 2
+        if !index {
+            self.facts.plain_reaches.insert(fact_key(coalesce))
+        }
+        let message = f"`{shown}` always has a value, so `??` has nothing to replace."
+        if index {
+            let note = "A list read never comes back empty: an index that does not fit stops the program, and `??` only replaces a `null`."
+            self.findings.push(check_refusal("NK1211", span, message, [note.clone()], f"Check the length first: `if {pieces[1]} < {pieces[0]}.len()`."))
+            return false
+        }
+        let note = f"`??` replaces a `null`, and a value of type `{seen.text()}` is never `null`: only a type written with `?` can be."
+        self.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: "NK1216", message: message, notes: [note], help: "Remove `??` and what follows it.", labels: [] })
+        return true
+    }
+
+    /// `NK1185`: a `??` whose left side is a view and whose fallback owns what
+    /// the left side views. A fallback that names a copy (`.clone()`,
+    /// `.to_owned()`, a `to_string()` of something not text already) is text.
+    pub fn a_fallback_that_owns_what_the_left_side_views(ref mut self, world: ref CheckWorld, viewed: ref Ty, fallback: ref Ty, written: ref Expr, span: ref Span) sync {
+        if !viewed.is_a_view() || fallback.is_a_view() {
+            return
+        }
+        let mut names_a_copy = false
+        match written {
+            Expr::MethodCall { receiver, method, .. } => {
+                let word = world.words.resolve(method).clone()
+                if word == "clone" || word == "to_owned" {
+                    names_a_copy = true
+                } else if word == "to_string" {
+                    names_a_copy = !self.facts.text_as_is.contains(fact_key(receiver))
+                }
+            },
+            else => {},
+        }
+        let mut owned = fallback.clone()
+        if names_a_copy {
+            owned = Ty::Named { name: "String", args: [], view: false }
+        }
+        let a_name = match owned {
+            Ty::Named { .. } => true,
+            else => false,
+        }
+        if !a_name || !moves(owned) || !self.takes_away(world, owned) {
+            return
+        }
+        let message = f"The two sides of `??` don't match: the left is a `{viewed.text()}`, the fallback a `{owned.text()}`."
+        let notes: Vec[String] = ["A view and the value it points into are different types, and `??` has to give back one type.".clone(), "Nikaia never makes a copy behind your back, so it can't make the two agree on its own.".clone()]
+        let help = f"Make the fallback a view too - a text literal already is one, so `?? \"…\"` works and costs nothing - or, if you need a `{owned.text()}`, put the value in a name of its own first."
+        self.findings.push(check_refusal("NK1185", span, message, notes, help))
+    }
+}

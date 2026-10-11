@@ -13,7 +13,7 @@ pub fn a_number_name(name: ref String) -> bool {
 }
 
 /// A name's last segment: `fs::Root` is `Root`.
-fn type_last_segment(name: ref String) -> String {
+pub fn type_last_segment(name: ref String) -> String {
     let parts: Vec[ref String] = name.split("::").collect()
     return parts[parts.len() - 1].clone()
 }

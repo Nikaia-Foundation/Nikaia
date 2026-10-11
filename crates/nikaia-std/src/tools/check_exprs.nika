@@ -10,7 +10,7 @@
 // `written_expression` over the file's names.
 
 /// Whether a type is exactly `String`, held.
-fn a_plain_string(ty: ref Ty) -> bool {
+pub fn a_plain_string(ty: ref Ty) -> bool {
     return match ty {
         Ty::Named { name, args, view } => !view && args.len() == 0 && name == "String",
         else => false,

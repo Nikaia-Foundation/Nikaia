@@ -144,6 +144,8 @@ COMPILER_NIKA = {
     "emit_calls.nika": "emit: whether a call pauses or can fail, the errors a set of branches throws, and whether a function returns an Either (0.0.792)",
     "check_facts.nika": "check: the facts the checker leaves for the emitter, one struct (0.0.794)",
     "emit_out.nika": "emit: the text being written and the map of where each run of it came from (0.0.796)",
+    "check_fields.nika": "check: a field read through ?., a ?. or ?? over a value never absent (0.0.798)",
+    "check_texts.nika": "check: text and bytes built where a typed position asks for them (0.0.798)",
 }
 
 

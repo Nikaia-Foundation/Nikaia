@@ -1,0 +1,333 @@
+// crates/nikaia-std/src/tools/check_texts.nika
+//
+// **Text built where a typed position asks for it** (ADR-282 D4, ADR-152, #558,
+// #125), moved from the compiler's checker: a text literal standing where
+// `String` is wanted is built as text of its own, through the arms of an `if`,
+// a `match` or a block, inside a `Vec[String]` literal and inside tuples and
+// lists of tuples; a `'a'` where a `u8` is wanted is a byte. The facts go
+// straight into `CheckState.facts`.
+
+fn text_key(expr: ref Expr) -> i64 sync {
+    return id_of(expr) as i64
+}
+
+/// The `char` code an ASCII byte has, and nothing above: a `'…'` is a byte only
+/// where it is one character of ASCII.
+fn ascii_scalar(n: i64) -> scalar? sync {
+    if n < 0 || n > 127 {
+        return null
+    }
+    return (n as u8) as scalar
+}
+
+/// Whether a `'…'` written as `written` is one ASCII byte.
+pub fn literal_is_a_byte(written: ref String) -> bool sync {
+    let text = decoded(written) fn(n) { ascii_scalar(n) } ?? return false
+    return text.chars().count() == 1 && text.len() == 1
+}
+
+/// The last expression of a block, as a list of none or one.
+fn block_tail(block: ref Block) -> Vec[ref Expr] sync {
+    if block.stmts.len() == 0 {
+        return []
+    }
+    return match block.stmts[block.stmts.len() - 1].node {
+        Stmt::Expr(value) => [value],
+        else => [],
+    }
+}
+
+/// Whether an expression's value is a text literal at every end.
+pub fn ends_in_text(expr: ref Expr) -> bool sync {
+    return match expr {
+        Expr::LitStr { .. } => true,
+        Expr::If { then_branch, else_branch, .. } => if else_branch == null { false } else { both_tails_text(then_branch, else_branch ?? return false) },
+        Expr::Match { arms, .. } => all_arms_text(arms),
+        Expr::Block(block, _) => tail_is_text(block),
+        else => false,
+    }
+}
+
+fn both_tails_text(first: ref Block, second: ref Block) -> bool sync {
+    return tail_is_text(first) && tail_is_text(second)
+}
+
+fn tail_is_text(block: ref Block) -> bool sync {
+    let tail = block_tail(block)
+    return tail.len() == 1 && ends_in_text(tail[0])
+}
+
+fn all_arms_text(arms: ref Vec[MatchArm]) -> bool sync {
+    if arms.len() == 0 {
+        return false
+    }
+    for arm in arms {
+        if !ends_in_text(arm.body) {
+            return false
+        }
+    }
+    return true
+}
+
+/// Whether an expression's value is `null` at its end.
+pub fn ends_in_null(expr: ref Expr) -> bool sync {
+    return match expr {
+        Expr::LitNull(_) => true,
+        Expr::Block(block, _) => tail_is_null(block),
+        else => false,
+    }
+}
+
+fn tail_is_null(block: ref Block) -> bool sync {
+    let tail = block_tail(block)
+    return tail.len() == 1 && ends_in_null(tail[0])
+}
+
+fn a_string_type() -> Ty sync {
+    return Ty::Named { name: "String", args: [], view: false }
+}
+
+/// A name the method of a call is written as.
+fn method_word(world: ref CheckWorld, expr: ref Expr) -> String sync {
+    return match expr {
+        Expr::MethodCall { method, args, .. } => if args.len() == 0 { world.words.resolve(method).clone() } else { "" },
+        else => "",
+    }
+}
+
+/// The receiver of a method call, as a list of none or one.
+fn receiver_of(expr: ref Expr) -> Vec[ref Expr] sync {
+    return match expr {
+        Expr::MethodCall { receiver, .. } => [receiver],
+        else => [],
+    }
+}
+
+fn a_text_literal_expr(expr: ref Expr) -> bool sync {
+    return match expr {
+        Expr::LitStr { .. } => true,
+        else => false,
+    }
+}
+
+impl CheckState {
+    /// **A text literal where `String` is wanted is built as text of its own**
+    /// (ADR-282 D4). The type it comes to, or nothing where this is not that
+    /// case. `owned` is whether the position keeps what it is given.
+    pub fn text_literal(ref mut self, world: ref CheckWorld, want: ref Ty, value: ref Expr, owned: bool) -> Ty? sync {
+        match want {
+            Ty::Nullable(inner) => return self.text_literal(world, inner, value, owned),
+            else => {},
+        }
+        if method_word(world, value) == "to_string" {
+            let receiver = receiver_of(value)
+            if receiver.len() == 1 && a_text_literal_expr(receiver[0]) {
+                return self.text_literal(world, want, receiver[0], owned)
+            }
+        }
+        match value {
+            Expr::LitChar(written, _) => {
+                let u8_wanted = match want {
+                    Ty::Named { name, args, view } => !view && name == "u8" && args.len() == 0,
+                    else => false,
+                }
+                if u8_wanted && literal_is_a_byte(written) {
+                    self.facts.byte_literals.insert(text_key(value))
+                    return Ty::Named { name: "u8", args: [], view: false }
+                }
+            },
+            Expr::LitStr { .. } => {
+                if a_plain_string(want) {
+                    if owned {
+                        self.facts.owned_texts.insert(text_key(value))
+                    }
+                    return a_string_type()
+                }
+            },
+            Expr::If { then_branch, else_branch, .. } => {
+                if else_branch != null {
+                    let otherwise = else_branch ?? return null
+                    let first = block_tail(then_branch)
+                    let second = block_tail(otherwise)
+                    if first.len() == 1 && second.len() == 1 && ends_in_text(first[0]) && ends_in_text(second[0]) {
+                        self.text_literal(world, want, first[0], owned)
+                        return self.text_literal(world, want, second[0], owned)
+                    }
+                    return null
+                }
+            },
+            Expr::Match { arms, .. } => {
+                if !all_arms_text(arms) {
+                    return null
+                }
+                let mut answered: Ty? = null
+                for arm in arms {
+                    answered = self.text_literal(world, want, arm.body, owned)
+                }
+                return answered
+            },
+            Expr::Block(block, _) => {
+                let ends = block_tail(block)
+                if ends.len() == 1 && ends_in_text(ends[0]) {
+                    return self.text_literal(world, want, ends[0], owned)
+                }
+                return null
+            },
+            Expr::ListLit { items, .. } => {
+                let a_list_of_text = match want {
+                    Ty::Named { name, args, view } => !view && name == "Vec" && args.len() == 1 && a_plain_string(args[0]),
+                    else => false,
+                }
+                if a_list_of_text && items.len() > 0 {
+                    for item in items {
+                        if !a_text_literal_expr(item) {
+                            return null
+                        }
+                    }
+                    let text = a_string_type()
+                    for item in items {
+                        self.text_literal(world, text, item, true)
+                    }
+                    return want.clone()
+                }
+            },
+            else => {},
+        }
+        return null
+    }
+
+    /// **A plain arm beside a `null` is `Some`** (ADR-279): every end of the
+    /// arm that is not `null` is recorded.
+    pub fn some_at_the_tails(ref mut self, arm: ref Expr) sync {
+        match arm {
+            Expr::If { then_branch, else_branch, .. } => {
+                if else_branch != null {
+                    for block in [then_branch, else_branch ?? return] {
+                        let tail = block_tail(block)
+                        if tail.len() == 1 {
+                            self.some_at_the_tails(tail[0])
+                        } else {
+                            self.facts.some_tails.insert(text_key(arm))
+                            return
+                        }
+                    }
+                    return
+                }
+                self.facts.some_tails.insert(text_key(arm))
+            },
+            Expr::Block(block, _) => {
+                let tail = block_tail(block)
+                if tail.len() == 1 {
+                    self.some_at_the_tails(tail[0])
+                } else {
+                    self.facts.some_tails.insert(text_key(arm))
+                }
+            },
+            Expr::Match { arms, .. } => {
+                for each in arms {
+                    self.some_at_the_tails(each.body)
+                }
+            },
+            Expr::LitNull(_) => {},
+            else => {
+                self.facts.some_tails.insert(text_key(arm))
+            },
+        }
+    }
+
+    /// **A tuple of text literals where a tuple with text is wanted**: the
+    /// tuple type it comes to, where any part was built.
+    pub fn tuple_literal(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr) -> Ty? sync {
+        let wants: Vec[Ty] = match want {
+            Ty::Tuple(parts) => parts.clone(),
+            else => return null,
+        }
+        let founds: Vec[Ty] = match found {
+            Ty::Tuple(parts) => parts.clone(),
+            else => return null,
+        }
+        let parts = literal_tuple_parts(value)
+        if wants.len() != parts.len() || founds.len() != parts.len() {
+            return null
+        }
+        let mut built = false
+        let mut answered: Vec[Ty] = []
+        let mut at = 0
+        while at < parts.len() {
+            let mut got = self.text_literal(world, wants[at], parts[at], true)
+            if got == null {
+                got = self.tuple_literal(world, founds[at], wants[at], parts[at])
+            }
+            if got != null {
+                built = true
+                answered.push(got ?? Ty::Unknown)
+            } else {
+                answered.push(founds[at].clone())
+            }
+            at = at + 1
+        }
+        if !built {
+            return null
+        }
+        return Ty::Tuple(answered)
+    }
+
+    /// **A list of tuple literals where a list of tuples with text is wanted.**
+    pub fn list_of_tuple_literals(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr) -> Ty? sync {
+        let name = match want {
+            Ty::Named { name, view, .. } => if view { return null } else { name.clone() },
+            else => return null,
+        }
+        let wanted_args = named_arguments(want)
+        let found_args = named_arguments(found)
+        let items = list_items(value)
+        if name != "Vec" || items.len() == 0 || wanted_args.len() != 1 || found_args.len() != 1 {
+            return null
+        }
+        let a_tuple = match wanted_args[0] {
+            Ty::Tuple(_) => true,
+            else => false,
+        }
+        if !a_tuple {
+            return null
+        }
+        let mut built: Ty? = null
+        for item in items {
+            built = self.tuple_literal(world, found_args[0], wanted_args[0], item)
+            if built == null {
+                return null
+            }
+        }
+        let element = built ?? return null
+        return Ty::Named { name: name, args: [element], view: false }
+    }
+}
+
+fn literal_tuple_parts(value: ref Expr) -> Vec[ref Expr] sync {
+    return match value {
+        Expr::Tuple(parts, _) => refs_of(parts),
+        else => [],
+    }
+}
+
+fn list_items(value: ref Expr) -> Vec[ref Expr] sync {
+    return match value {
+        Expr::ListLit { items, .. } => refs_of(items),
+        else => [],
+    }
+}
+
+fn named_arguments(ty: ref Ty) -> Vec[Ty] sync {
+    return match ty {
+        Ty::Named { args, .. } => args.clone(),
+        else => [],
+    }
+}
+
+fn refs_of(items: ref Vec[Expr]) -> Vec[ref Expr] sync {
+    let mut out: Vec[ref Expr] = []
+    for item in items {
+        out.push(item)
+    }
+    return out
+}
