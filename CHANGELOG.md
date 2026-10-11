@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.830] — 2026-10-11
+
+**emit: the calls of the core are Nikaia: call, call_inner, method_call, the MethodCall arm (#558, #125, E9 U6)**
+- New tools/emit_core_calls.nika: call (attributes of a walked type, ADR-269 D20 precondition checks), call_inner (assert, kept function values, grammar entries, variants with a boxed part, .await and ?), method_call and the MethodCall arm of expr_as_written as emit_core_* of EmitState. The Rust methods are one-line stubs; the dead Rust is deleted. EmitHost gains user_parallelism, parallelism, written and held_buffers.
+
 ## [0.0.829] — 2026-10-11
 
 **emit: the arguments and the call of the core are Nikaia: args, called (#558, #125, E9 U5)**

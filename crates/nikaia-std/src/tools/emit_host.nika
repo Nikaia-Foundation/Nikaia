@@ -42,6 +42,23 @@ pub trait EmitHost {
     /// `Build::crossings_are_possible`: values may cross threads, or the program
     /// is called from C.
     fn crossings_are_possible(ref self) -> bool sync
+
+    /// `Build::user_parallelism` is `yes`.
+    fn user_parallelism(ref self) -> bool sync
+
+    /// What the runtime is asked to do, as `winnow_grammar::rt` names it:
+    /// `Parallelism::Off` or `Parallelism::Auto` (`Build::parallelism`).
+    fn parallelism(ref self) -> String sync
+
+    /// An expression as the program wrote it (`check::written`), which is what
+    /// the prover's reaches are keyed by (`prove::call_key`).
+    fn written(ref self, expr: ref Expr) -> String sync
+
+    /// The buffers whose keeps hold the values a method call puts into the
+    /// keeper rooted at `root`, by argument, each padded to the keeper's widest
+    /// value (ADR-283 D12, D15); `null` where the plan holds none. A set cannot
+    /// be walked in Nikaia.
+    fn held_buffers(ref self, walk: ref EmitWalk, function: ref String, statement: i64, root: ref String) -> Vec[(i64, Vec[i64])]? sync
 }
 
 impl EmitState {

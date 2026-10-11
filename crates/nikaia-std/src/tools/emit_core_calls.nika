@@ -1,0 +1,948 @@
+// crates/nikaia-std/src/tools/emit_core_calls.nika
+//
+// **The calls of the emitter's core** (ADR-294, #125, #558, E9 unit U6): `call`
+// (the anonymous constructor, the attributes of a walked type, the precondition
+// checks of ADR-269 D20), `call_inner` (an `assert`, a kept function value, a
+// grammar entry, a variant with a boxed part, the `.await` and the `?` around
+// the call), `method_call` (the conversions `truncating_*` and `checked_*`, the
+// door of a stamped value, `drain`, `par_iter`, a lambda that pauses, the held
+// values, the keep, `.await` and `?`) and the `MethodCall` arm of
+// `expr_as_written`. Methods of `EmitState`, `emit_core_*[H: EmitHost]`; the
+// Rust method of the same name is a one-line stub. `expr` stays a host method
+// until U10.
+
+use std::collections
+
+/// The failure text of one precondition check, written in front of a call that
+/// does not prove it (ADR-269 D20).
+fn emit_call_failed_check(check: ref PreconditionCheck) -> String {
+    let mut shown: String = "None"
+    if check.message != null {
+        let text = check.message?.clone() ?? ""
+        shown = f"Some(&{rust_string(text)})"
+    }
+    let mut operands: String = ""
+    for (name, value) in check.operands {
+        operands.push_str(f"({rust_string(name)}, (&&nikaia_std::abort::Operand(&{value})).shown()), ")
+    }
+    return f"if !{check.rust} {{ nikaia_std::abort::assertion_failed({rust_string(check.written)}, {shown}, &[{operands}]) }} "
+}
+
+/// Whether a claim is held before the program runs, which costs nothing when it
+/// does (ADR-269 D4, D5).
+fn emit_call_claim_held(claim: ref FactClaim) -> bool {
+    let held = claim.held ?? return false
+    return match held {
+        ClaimHeld::Proved => true,
+        ClaimHeld::Precondition(_, _) => true,
+        else => false,
+    }
+}
+
+/// The owner of a method's function: everything before the last `::`.
+fn emit_call_owner(function: ref String) -> String? {
+    let parts: Vec[ref String] = function.split("::").collect()
+    if parts.len() < 2 {
+        return null
+    }
+    let mut owner: Vec[String] = []
+    let mut n = 0
+    for part in parts {
+        if n < parts.len() - 1 {
+            owner.push(part.clone())
+        }
+        n += 1
+    }
+    return owner.join("::")
+}
+
+/// The value of the option `wanted` a call passed, as a list of none or one.
+fn emit_call_option_named(world: ref EmitWorld, config: ref Vec[ConfigArg], wanted: ref String) -> Vec[Expr] {
+    let mut found: Vec[Expr] = []
+    for a in config {
+        if found.len() == 0 && emit_text(world, a.name) == wanted {
+            found.push(a.value.clone())
+        }
+    }
+    return found
+}
+
+/// Which hull constructor a name is: the three types whose hull a program
+/// writes by calling their name (ADR-281 D2).
+fn emit_call_is_a_hull(name: ref String) -> bool {
+    return name == "Shared" || name == "SharedMut" || name == "Locked"
+}
+
+/// Whether a call is the constructor of a hull.
+fn emit_call_builds_a_hull(world: ref EmitWorld, arg: ref Expr) -> bool {
+    return match arg {
+        Expr::Call { func, .. } => match func {
+            Expr::Variable(name, _) => emit_call_is_a_hull(emit_text(world, name)),
+            else => false,
+        },
+        else => false,
+    }
+}
+
+/// The pausing entry the lambda that ends the arguments is handed to, as a kind
+/// (1 a function, 2 a function lending its receiver, 3 a method) and its name;
+/// kind 0 where there is none.
+fn emit_call_pausing_entry(facts: ref CheckFacts, args: ref Vec[Expr]) -> (i64, String) {
+    if args.len() == 0 {
+        return (0, "".clone())
+    }
+    let last = args[args.len() - 1].clone()
+    let key = match last {
+        Expr::Closure { .. } => node_key(last),
+        else => -1,
+    }
+    if key < 0 || !facts.pausing_lambdas.contains_key(key) {
+        return (0, "".clone())
+    }
+    let entry = facts.pausing_lambdas.get(key) ?? return (0, "".clone())
+    return match entry.clone() {
+        FactPausing::Function(name) => (1, name),
+        FactPausing::Lent(name) => (2, name),
+        FactPausing::Method(name) => (3, name),
+    }
+}
+
+/// Whether the receiver is the name `self`.
+fn emit_call_on_self(world: ref EmitWorld, receiver: ref Expr?) -> bool {
+    let on = receiver ?? return false
+    return match on {
+        Expr::Variable(name, _) => emit_text(world, name) == "self",
+        else => false,
+    }
+}
+
+/// The receiver of the `?.` the walk of a copy is at, when it is a name.
+fn emit_call_named(world: ref EmitWorld, receiver: ref Expr, wanted: ref String) -> bool {
+    return match receiver {
+        Expr::Variable(name, _) => emit_text(world, name) == wanted,
+        else => false,
+    }
+}
+
+impl EmitWalk {
+    /// The type the walk of a copy is specialised to, where it is.
+    fn specialised_to(ref self) -> String? {
+        let pair = self.specialising ?? return null
+        return pair.second.clone()
+    }
+
+    /// The parameter the walk of a copy is specialised on, where it is.
+    fn specialised_on(ref self) -> String? {
+        let pair = self.specialising ?? return null
+        return pair.first.clone()
+    }
+}
+
+impl EmitState {
+    /// A call. `Stats(temp)` is the anonymous constructor of Kap 4.2 - Rust has
+    /// no such thing, so the declaration decides: a name that is a struct is a
+    /// call to the `new` its `impl` provides.
+    pub fn emit_core_call[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, func: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        // **`T::attribute(X)` on the type this copy is of** (ADR-331 D6): its own
+        // attributes, as a field's are read.
+        match func {
+            Expr::Path(segments, _) => {
+                if segments.len() == 2 {
+                    let member = emit_text(world, segments[1])
+                    let walked = walk.specialised_on()
+                    let on = walk.specialised_to()
+                    if (member == "attribute" || member == "attributes") && walked != null && on != null && (walked ?? "") == emit_text(world, segments[0]) {
+                        let contract = self.type_contract(world, on ?? "")
+                        let mut texts: Vec[String] = []
+                        if contract != null {
+                            let held = contract ?? return
+                            texts = held.attributes.clone()
+                        }
+                        out.push(self.attributes_read(world, member, args, texts))
+                        return
+                    }
+                }
+            },
+            else => {},
+        }
+        // **A call to a function with a precondition** reaches its checked entry
+        // unless the prover saw this call prove it, or check it here with the
+        // call's arguments in place of the parameters, so that a failure names
+        // the caller (ADR-269 D20). A function of this file with a checked entry,
+        // or one of another package whose ledger states a precondition: that
+        // package was lowered with the two entries (ADR-269 D18, D20).
+        let callee = self.emit_call_checked_callee(world, func)
+        if callee != null {
+            let mut written: Vec[String] = []
+            for arg in args {
+                written.push(host.written(arg))
+            }
+            let key = (callee ?? "", written.join(", "))
+            if self.facts.reaches.contains_key(key) {
+                let reach = self.facts.reaches.get(key) ?? return
+                match reach.clone() {
+                    CallReach::Proved => {
+                        self.emit_core_call_inner(world, walk, out, host, func, args, config, true, depth, flow, scope)
+                        return
+                    },
+                    CallReach::Checked(checks) => {
+                        // `(check, call).1`: an expression in every position the
+                        // call could stand in, which a block at the start of a
+                        // statement is not.
+                        if checks.len() == 1 {
+                            out.push("(")
+                        } else {
+                            out.push("({ ")
+                        }
+                        for check in checks {
+                            out.push(emit_call_failed_check(check))
+                        }
+                        if checks.len() == 1 {
+                            out.push(", ")
+                        } else {
+                            out.push("}, ")
+                        }
+                        self.emit_core_call_inner(world, walk, out, host, func, args, config, true, depth, flow, scope)
+                        out.push(").1")
+                        return
+                    },
+                    CallReach::Through => {},
+                }
+            }
+        }
+        self.emit_core_call_inner(world, walk, out, host, func, args, config, false, depth, flow, scope)
+    }
+
+    /// The callee that has a checked entry, where the call goes to one.
+    fn emit_call_checked_callee(ref self, world: ref EmitWorld, func: ref Expr) -> String? {
+        return match func {
+            Expr::Variable(name, _) => if self.facts.entries.contains_key(emit_text(world, name)) { emit_text(world, name) } else { null },
+            Expr::Path(segments, _) => self.emit_call_required(unaliased_in(world.aliases, emit_arg_joined(world, segments))),
+            else => null,
+        }
+    }
+
+    fn emit_call_required(ref self, qualified: String) -> String? {
+        let contract = self.own_contracts.functions.get(qualified) ?? return null
+        if contract.requires.len() == 0 {
+            return null
+        }
+        return qualified.clone()
+    }
+
+    /// An `assert`: a claim checked here unless it was proved (ADR-269 D2, D4).
+    /// `true` where it has been written.
+    fn emit_call_assert[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, func: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
+        if args.len() != 1 {
+            return false
+        }
+        match func {
+            Expr::Variable(name, _) => {
+                if emit_text(world, name) != "assert" {
+                    return false
+                }
+            },
+            else => return false,
+        }
+        let condition = args[0].clone()
+        let at = (flow.statement, node_key(condition))
+        if !self.facts.claims.contains_key(at) {
+            return false
+        }
+        let claim = self.facts.claims.get(at) ?? return false
+        // **A claim held before the program runs costs nothing when it does**
+        // (ADR-269 D4, D5): a precondition is checked by the calls that do not
+        // prove it, and every other claim here.
+        if emit_call_claim_held(claim) {
+            out.push("()")
+            return true
+        }
+        out.push("if !(")
+        host.expr(walk, out, condition, depth, flow, scope)
+        out.push(f") {{ nikaia_std::abort::assertion_failed({rust_string(claim.written)}, ")
+        let message = emit_call_option_named(world, config, "message")
+        if message.len() > 0 {
+            out.push("Some(&(")
+            host.expr(walk, out, message[0], depth, flow, scope)
+            out.push(")), ")
+        } else {
+            out.push("None, ")
+        }
+        out.push("&[")
+        match condition {
+            Expr::Binary { lhs, rhs, .. } => {
+                self.emit_call_operand(walk, out, host, claim.left, lhs, depth, flow, scope)
+                self.emit_call_operand(walk, out, host, claim.right, rhs, depth, flow, scope)
+            },
+            else => {},
+        }
+        out.push("]) }")
+        return true
+    }
+
+    /// One operand of a failed claim, by the label the prover gave it.
+    fn emit_call_operand[H: EmitHost](ref self, mut walk: EmitWalk, mut out: EmitOut, host: ref H, label: ref String?, operand: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        if label == null {
+            return
+        }
+        let shown = label ?? return
+        out.push(f"({rust_string(shown)}, (&&nikaia_std::abort::Operand(&(")
+        host.expr(walk, out, operand, depth, flow, scope)
+        out.push("))).shown()), ")
+    }
+
+    /// A call, past `call`'s precondition check: to the unchecked entry where
+    /// `unchecked` says so (ADR-269 D20).
+    pub fn emit_core_call_inner[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, func: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg], unchecked: bool, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        // **An `assert` is a claim checked here** (ADR-269 D2, D4) unless it was
+        // proved, and the failure is written with what only this compiler knew -
+        // the claim as written and its operands by name.
+        if self.emit_call_assert(world, walk, out, host, func, args, config, depth, flow, scope) {
+            return
+        }
+        // **A kept function value called by name** is the closure it holds,
+        // awaited where its type may pause and propagated where it may fail.
+        if self.emit_call_kept(world, walk, out, host, func, args, depth, flow, scope) {
+            return
+        }
+        // **A grammar is entered by an ordinary call** (ADR-296 D24), through a
+        // **path** since ADR-140 D3: `Json::value(input)`, where `Json` names a
+        // grammar in this file and `value` one of its `entry` rules. First,
+        // because it is not a call to anything the recursion graph or the ledger
+        // knows.
+        if self.emit_call_grammar(world, walk, out, host, func, args, depth, flow, scope) {
+            return
+        }
+        // **A variant with a boxed part is built with the part in its box**
+        // (ADR-246 D3). The mask is `args`' to read, so every other thing an
+        // argument is written with still happens inside the box.
+        if self.emit_call_boxed_variant(world, walk, out, host, func, args, depth, flow, scope) {
+            return
+        }
+        let pausing = call_pausing_key(world.words, world.aliases, self.own_contracts, world.library, func)
+        if pausing != null && flow.in_lambda {
+            let callee = pausing ?? ""
+            throw EmitRefused { message: f"This lambda calls `{callee}`, which can pause, but the compiler knows nothing about what the lambda is passed to, so it can't let it pause. Call `{callee}` outside the lambda and pass in the value.", at: flow.statement }
+        }
+        // **A call to a code parameter whose type may pause** (ADR-277 D11). It
+        // hands back a boxed future, so it is awaited - and it is never *boxed*
+        // here: a parameter is not a name the recursion graph knows, and what it
+        // holds is already behind a pointer.
+        let awaits_a_parameter = self.emit_call_awaits_a_parameter(func, scope)
+        // **A call of a `sync(f)` function** (ADR-288 D31): awaited where the
+        // caller can pause, and driven once where it cannot - the checker has
+        // then proved the lambda handed to it does not pause, so neither does the
+        // call.
+        let decided = pausing == null && self.decided_by_its_lambda(world, func)
+        let settled = decided && (flow.in_lambda || !self.lowered_pausing(scope.function))
+        if settled {
+            out.push("nikaia_std::rt::exec::settled(")
+        }
+        let boxed = pausing != null && self.closes_a_pausing_cycle(scope.function, pausing ?? "")
+        if boxed {
+            out.push("Box::pin(")
+        }
+        // **A handle is made at the call and nowhere else** (ADR-302 D11, D12).
+        // The declaration hands back the address C returned; the hull goes on
+        // here, where the claim the declaration made can be checked - or, where
+        // it said `?`, where `None` is C's own `NULL`.
+        let handle = self.handle_from(world, func) ?? ""
+        let hull = handle != ""
+        if hull {
+            if self.handle_from_may_be_null(world, func) {
+                out.push(f"{handle}::maybe(")
+            } else {
+                out.push(f"{handle}::from_c(\"{self.called_name(world, func)}\", ")
+            }
+        }
+        self.emit_core_called(world, walk, out, host, func, args, config, unchecked, depth, flow, scope)
+        if hull {
+            out.push(")")
+        }
+        if boxed {
+            out.push(")")
+        }
+        // **ADR-055 D2: the `.await` goes before the `?`**, and the order is not a
+        // choice: the future is what can fail, so it has to be driven before
+        // there is a `Result` to propagate. `f().await?` and never `f()?.await`.
+        if pausing != null || awaits_a_parameter || (decided && !settled) {
+            out.push(".await")
+        }
+        if settled {
+            out.push(")")
+        }
+        // ADR-023 D8: `throws` propagates on its own, so a call to something that
+        // can fail is where the failure leaves - and in the language below that
+        // is spelled `?`. Three conditions: the enclosing function must be
+        // `throws`, the call must not be the guarded half of a `catch`, and the
+        // callee's contract must **say** it can fail. A lambda's body is emitted
+        // with `Flow::PLAIN`, so a fallible call inside one never takes a `?` from
+        // the function around it.
+        if flow.can_throw && !flow.caught && call_can_fail(world.words, self.own_contracts, world.library, self.described, func) {
+            out.push("?")
+        }
+    }
+
+    fn emit_call_awaits_a_parameter(ref self, func: ref Expr, scope: ref EmitScope) -> bool {
+        return match func {
+            Expr::Variable(name, _) => scope.awaited.contains(name),
+            else => false,
+        }
+    }
+
+    /// A kept function value called by name. `true` where it has been written.
+    fn emit_call_kept[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, func: ref Expr, args: ref Vec[Expr], depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
+        match func {
+            Expr::Variable(name, _) => {
+                let key = (flow.statement, emit_text(world, name))
+                if !self.facts.kept_calls.contains_key(key) {
+                    return false
+                }
+                let kept = self.facts.kept_calls.get(key) ?? return false
+                let pauses = kept.0
+                let fails = kept.1
+                out.push(f"{escaped_name(emit_text(world, name))}(")
+                let mut at = 0
+                for arg in args {
+                    if at > 0 {
+                        out.push(", ")
+                    }
+                    at += 1
+                    host.expr(walk, out, arg, depth, flow, scope)
+                }
+                out.push(")")
+                if pauses {
+                    out.push(".await")
+                }
+                if fails && flow.can_throw && !flow.caught {
+                    out.push("?")
+                }
+                return true
+            },
+            else => return false,
+        }
+    }
+
+    /// A grammar entered by a call: this file's (ADR-296 D24) or a package's
+    /// `pub grammar`, entered by its path (ADR-296 D25, #520). `true` where it
+    /// has been written.
+    fn emit_call_grammar[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, func: ref Expr, args: ref Vec[Expr], depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
+        match func {
+            Expr::Path(segments, _) => {
+                if args.len() != 1 {
+                    return false
+                }
+                if segments.len() == 2 && self.grammars.contains_key(emit_text(world, segments[0])) {
+                    let parallelism = host.parallelism()
+                    self.emit_core_grammar_entry(world, walk, out, host, segments[0], segments[1], args[0], parallelism, depth, flow, scope)
+                    return true
+                }
+                if segments.len() != 3 {
+                    return false
+                }
+                let package = emit_text(world, segments[0])
+                let book = emit_text(world, segments[1])
+                let rule = emit_text(world, segments[2])
+                if !self.a_package_grammar_entry(f"{package}::{book}::{rule}") {
+                    return false
+                }
+                let mut question: String = "?"
+                if flow.caught {
+                    question = ""
+                }
+                // **A `par_fold` entry is driven in pieces** (#521), as its own file
+                // drives it, with this build's parallelism.
+                let mut pieces = false
+                let contract = self.own_contracts.functions.get(f"{package}::{book}::{rule}")
+                if contract != null {
+                    let held = contract ?? return false
+                    pieces = held.pieces
+                }
+                if pieces {
+                    out.push("nikaia_std::grammar::parse_pieces(&*")
+                    host.expr(walk, out, args[0], depth, flow, scope)
+                    // Spelled out: this file has no `par_fold` of its own, so the
+                    // two names are not imported here.
+                    let parallelism = host.parallelism()
+                    out.push(f", |source| {package}::{book}::parse_{rule}_pieces(source, &winnow_grammar::ParseContext::<()>::default(), winnow_grammar::rt::{parallelism})){question}")
+                    return true
+                }
+                out.push("nikaia_std::grammar::parse(&*")
+                host.expr(walk, out, args[0], depth, flow, scope)
+                out.push(f", {package}::{book}::parse_{rule}()){question}")
+                return true
+            },
+            else => return false,
+        }
+    }
+
+    /// A variant with a boxed part, or one that holds a hull. `true` where it
+    /// has been written.
+    fn emit_call_boxed_variant[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, func: ref Expr, args: ref Vec[Expr], depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
+        match func {
+            Expr::Path(segments, _) => {
+                if segments.len() < 2 {
+                    return false
+                }
+                let owner = emit_text(world, segments[segments.len() - 2])
+                let variant = emit_text(world, segments[segments.len() - 1])
+                let mut mask: Vec[bool] = []
+                let mut any = false
+                for at in 0..<args.len() {
+                    let boxed = self.is_boxed(owner, boxed_member(variant, at, ""))
+                    mask.push(boxed)
+                    if boxed {
+                        any = true
+                    }
+                }
+                let mut holds_a_hull = false
+                if self.is_variant(world, owner, variant) {
+                    for arg in args {
+                        if emit_call_builds_a_hull(world, arg) {
+                            holds_a_hull = true
+                        }
+                    }
+                }
+                if !any && !holds_a_hull {
+                    return false
+                }
+                walk.boxed_args = mask
+                let mut counts: Vec[Count] = []
+                for at in 0..<args.len() {
+                    counts.push(self.count_at(host.crossings_are_possible(), "<field>", variant_slot(owner, variant, at)))
+                }
+                walk.variant_counts = counts
+                let mut names: Vec[String] = []
+                for s in segments {
+                    names.push(emit_text(world, s))
+                }
+                out.push(self.path(world, walk.trusting, names))
+                out.push("(")
+                self.emit_core_args(world, walk, out, host, variant, args, [], depth, flow, scope)
+                walk.boxed_args = null
+                walk.variant_counts = null
+                out.push(")")
+                return true
+            },
+            else => return false,
+        }
+    }
+
+    // --- Method calls ---
+
+    /// The method call every written method call and every `?.` method call
+    /// lowers to, so what a call lowers to is written once: the truncating
+    /// conversion, the `len` that becomes an `i64`, `collect`'s turbofish, the
+    /// arguments, Kap 5.1's deferred parameters, ADR-055 D2's `.await` and
+    /// ADR-023 D8's `?`. `receiver` is `null` for the safe form, where the
+    /// receiver is the name the enclosing `match` already bound.
+    pub fn emit_core_method_call[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, receiver: ref Expr?, method: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        let name = emit_text(world, method)
+        // **`text.chars().collect()` is a list of characters asked for at its
+        // size** (`nikaia_std::list::chars`): the same list, without the growing a
+        // `collect` over `Chars` does. Only where nothing declares another thing
+        // to build.
+        if self.emit_call_chars(world, walk, out, host, receiver, name, args, depth, flow, scope) {
+            return
+        }
+        // **A grammar is entered by an ordinary call** (ADR-296 D24); the dot is
+        // gone (ADR-140 D3). `NK1147` is what a program meets; this is here so
+        // that a caller who lowers without checking gets the same sentence.
+        if receiver != null && args.len() == 1 {
+            let on = receiver ?? return
+            match on {
+                Expr::Variable(named, _) => {
+                    let written = emit_text(world, named)
+                    if self.grammars.contains_key(written) {
+                        throw EmitRefused { message: f"A grammar's rules are reached with `::`, not a dot. Write `{written}::{name}(…)`.", at: flow.statement }
+                    }
+                },
+                else => {},
+            }
+        }
+        // **A method of a file's name is `std`'s function** (ADR-319 D3): Rust's
+        // `Path` has methods by these names that compare whole components, so the
+        // call is written to `nikaia_std::fs::path`, which compares the bytes.
+        if receiver != null {
+            let on = receiver ?? return
+            if self.facts.path_methods.contains_key(node_key(on)) {
+                let known_text = self.facts.path_methods.get(node_key(on)) ?? return
+                // **`to_text` on a name made from text cannot fail** (ADR-319 D5),
+                // and the checker said where.
+                let mut written = name.clone()
+                if name == "to_text" && known_text {
+                    written = "text_of"
+                }
+                out.push(f"nikaia_std::fs::path::{written}(&(")
+                host.expr(walk, out, on, depth, flow, scope)
+                out.push(")")
+                if args.len() > 0 {
+                    out.push(", ")
+                    self.emit_core_args(world, walk, out, host, name, args, [], depth, flow, scope)
+                }
+                out.push(")")
+                if flow.can_throw && !flow.caught && self.method_can_fail(flow.statement, name) {
+                    out.push("?")
+                }
+                return
+            }
+        }
+        // **`x.truncating_i32()` is Rust's `as`** (ADR-285 D13): the operation the
+        // name says, bare and parenthesised by whoever needs it.
+        let truncated = truncating(name)
+        if truncated != null {
+            self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, true)
+            let into = truncated ?? ""
+            out.push(f" as {into}")
+            return
+        }
+        // **`x.checked_i32()` is Rust's `try_from`, kept or not** (ADR-315): the
+        // number where the destination holds it, `None` where it does not. A call
+        // around the receiver, so nothing about precedence is left to decide.
+        let checked_to = checked(name)
+        if checked_to != null {
+            let target = checked_to ?? ""
+            out.push(f"{target}::try_from(")
+            if receiver != null {
+                // An argument: nothing binds looser than the call's own
+                // parentheses, so it needs none of its own.
+                let expr = receiver ?? return
+                self.emit_core_nested(world, walk, out, host, expr, 0, depth, flow, scope)
+            } else {
+                self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)
+            }
+            out.push(").ok()")
+            return
+        }
+        // **D5's one door for a stamped value** (ADR-281): `kasse.set(neu; after:
+        // stand)` is written `set_after(neu, stand)`. Two questions and not one:
+        // the type checker's, that this receiver is a lock (`witnessed_sets`); and
+        // this file's, that the `after:` is written *here*.
+        let mut witness: Vec[Expr] = []
+        if name == "set" && self.facts.witnessed_sets.contains(flow.statement) {
+            witness = emit_call_option_named(world, config, "after")
+        }
+        // **The text form of text is the text** (ADR-282 D8): nothing is called,
+        // and whether it is lent, built or handed over is decided around it as for
+        // any other text.
+        if receiver != null && name == "to_string" && args.len() == 0 {
+            let text = receiver ?? return
+            if self.facts.text_as_is.contains(node_key(text)) {
+                self.emit_core_postfix_base(world, walk, out, host, text, depth, flow, scope)
+                return
+            }
+        }
+        // **A list of text asked for a view of text** (`text_in_lists`): compared
+        // element by element, which a `String` and a `str` can be. The value lent
+        // with `&` whichever text it is (#375).
+        if receiver != null && name == "contains" && args.len() == 1 {
+            let list = receiver ?? return
+            if self.facts.text_in_lists.contains(node_key(list)) {
+                out.push("nikaia_std::list::contains(&")
+                host.expr(walk, out, list, depth, flow, scope)
+                out.push(", &")
+                host.expr(walk, out, args[0], depth, flow, scope)
+                out.push(")")
+                return
+            }
+        }
+        // **Where the container stays the caller's, `drain` empties it** (#564,
+        // ADR-094 D3, D4): `drain(..)` neither takes the elements away nor hands
+        // out owned ones, and leaves the list empty in the caller's hands.
+        if name == "drain" && args.len() == 0 && receiver != null {
+            let on = receiver ?? return
+            if self.stays_the_callers(world, scope.function, on) {
+                self.emit_core_postfix_base(world, walk, out, host, on, depth, flow, scope)
+                out.push(".drain(..)")
+                return
+            }
+        }
+        let mut copies = walk.reached_copy
+        if receiver != null {
+            let on = receiver ?? return
+            copies = self.facts.owned_copies.contains(node_key(on))
+        }
+        let mut written = name.clone()
+        if name == "drain" && args.len() == 0 {
+            written = "into_iter"
+        } else if name == "clone" && args.len() == 0 && copies {
+            // **A copy is `to_owned` below** (ADR-293 D24): `.clone()` of a `&str`
+            // or a `&[T]` is the reference, and a read-only `String` parameter
+            // *is* a `&str` (ADR-282 D5).
+            written = "to_owned"
+        } else if name == "set" && witness.len() > 0 {
+            written = "set_after"
+        }
+        let mut length = is_length(name, args)
+        if !length && receiver != null {
+            let on = receiver ?? return
+            length = self.is_counted(on, name, args)
+        }
+        // **ADR-055 D6, the method half.** A recursive `async fn` is an infinitely
+        // sized future, and a call that closes a cycle of pausing functions puts
+        // it behind a pointer. `pausing_reach` draws an edge to **every** pausing
+        // method of that name, so the same widening answers the question here.
+        let boxed = self.method_closes_a_pausing_cycle(scope.function, name)
+        if boxed {
+            out.push("Box::pin(")
+        }
+        // **`par_iter()` walks the list on every core at `yes`, and is the list's
+        // `iter()` at `no`** (ADR-235 D1).
+        if name == "par_iter" && args.len() == 0 && emit_candidates(self.own_contracts, "par_iter").len() == 0 {
+            if host.user_parallelism() {
+                out.push("nikaia_std::par::iter(&")
+                self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)
+                out.push(")")
+            } else {
+                self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)
+                out.push(".iter()")
+            }
+            if boxed {
+                out.push(")")
+            }
+            return
+        }
+        // **A lambda that pauses, handed to a `std` entry** (ADR-233 D1, D2): the
+        // entry's counterpart in `nikaia_std::seq`, which takes the `async`
+        // closure the lambda is written as.
+        let (kind, entry) = emit_call_pausing_entry(self.facts, args)
+        if kind == 1 {
+            out.push(f"nikaia_std::seq::{entry}(")
+            self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)
+            out.push(", ")
+        } else if kind == 2 {
+            out.push(f"nikaia_std::seq::{entry}(&mut ")
+            self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)
+            out.push(", ")
+        } else if kind == 3 {
+            self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)
+            out.push(f".{entry}(")
+        } else {
+            self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)
+            out.push(f".{written}")
+        }
+        // Nikaia's `collect` builds a List; Rust's needs to be told what to build,
+        // and with no types here that is `Vec<_>`. **Except over a sequence whose
+        // step pauses** (ADR-172 D5), **and except where the place it goes
+        // declares what it builds** (ADR-293 D25).
+        let mut declared = false
+        if receiver != null {
+            let on = receiver ?? return
+            declared = self.facts.collected_into.contains(node_key(on))
+        }
+        if name == "collect" && args.len() == 0 && !declared && !self.method_pauses(flow.statement, name) {
+            out.push("::<Vec<_>>")
+        }
+        if kind == 0 {
+            out.push("(")
+        }
+        let takes = self.takes_a_handle(world, name)
+        // **Views put into a keeper that drops entries are held** (ADR-283 D12),
+        // each value with a handle on every buffer it points into - as many as the
+        // keeper's widest value needs, so that every element is one type (D15).
+        self.emit_call_hold(world, walk, host, receiver, scope, flow)
+        self.emit_core_args(world, walk, out, host, name, args, takes, depth, flow, scope)
+        walk.hold_args = null
+        // **And a method that takes a keep is given one** (D2).
+        let keeping = keeping_method_key(self.own_contracts, emit_call_owner(scope.function), emit_call_on_self(world, receiver), name)
+        if keeping != null {
+            let key = keeping ?? ""
+            let found = self.keep_handed(walk, scope.function, flow.statement, key)
+            if found != null {
+                if args.len() > 0 {
+                    out.push(", ")
+                }
+                out.push(found ?? "")
+            }
+        }
+        if witness.len() > 0 {
+            // The witness is an **argument** of the door and not an option of it,
+            // so it is written where the signature puts it - after the value, and
+            // never through `dsl_parameters`. **The `&` is written here rather than
+            // looked up**, and that is the one place this file decides a reference
+            // for itself: the checker has already said this call is the door, and
+            // the door's witness is `seen: &$T` in the ledger, always.
+            out.push(", &")
+            // Parenthesised exactly where a postfix would be: `&` binds tighter
+            // than every binary operator.
+            self.emit_core_postfix_base(world, walk, out, host, witness[0], depth, flow, scope)
+        } else {
+            self.emit_core_dsl_parameters(world, walk, out, host, name, args.len(), config, depth, flow, scope)
+            self.emit_core_method_options(world, walk, out, host, method, args.len(), config, depth, flow, scope)
+        }
+        out.push(")")
+        // **What hands back an element of a held list reads it through its
+        // handle** (ADR-283 D17), as the brackets and a `for` do.
+        if (name == "iter" || name == "first" || name == "last" || name == "get") && receiver != null {
+            let on = receiver ?? return
+            if self.reads_through_handle(world, walk, scope.function, on) {
+                out.push(".map(|held| held.get())")
+            }
+        }
+        // **Before the `.await`**, because it is the future that is boxed and not
+        // what awaiting it comes to.
+        if boxed {
+            out.push(")")
+        }
+        // **A walk of a pausing sequence that has no pausing form** (ADR-172 D5,
+        // ADR-234). Every walk `Seq` has today has one; an entry added without one
+        // is refused here with a line, rather than left to `rustc`.
+        let walked = (flow.statement, name.clone())
+        if self.facts.pausing_walks.contains(walked) {
+            throw EmitRefused { message: f"`{name}` can't be used on a sequence whose steps pause. Write a `for x in … {{ … }}` loop instead, and do the work inside it.", at: flow.statement }
+        }
+        if self.method_pauses(flow.statement, name) {
+            if flow.in_lambda {
+                throw EmitRefused { message: f"This lambda calls `{name}`, which can pause, but the compiler knows nothing about what the lambda is passed to, so it can't let it pause. Call `{name}` outside the lambda and pass in the value.", at: flow.statement }
+            }
+            out.push(".await")
+        }
+        let fails = self.method_can_fail(flow.statement, name)
+        if flow.can_throw && !flow.caught && fails {
+            out.push("?")
+        }
+        // **A length that can fail is already an `i64`** (`fs::File::len`, #546):
+        // it is the system's answer, read by `std` and converted there, and a cast
+        // here would land on the `Result` a `catch` matches on.
+        if length && !fails {
+            out.push(" as i64")
+        }
+    }
+
+    /// `text.chars().collect()`, asked for at its size. `true` where it has been
+    /// written.
+    fn emit_call_chars[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, receiver: ref Expr?, name: ref String, args: ref Vec[Expr], depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
+        if receiver == null || name != "collect" || args.len() != 0 {
+            return false
+        }
+        let on = receiver ?? return false
+        match on {
+            Expr::MethodCall { receiver: text, method: chars, args: none, .. } => {
+                if none.len() != 0 || emit_text(world, chars) != "chars" || self.facts.collected_into.contains(node_key(on)) {
+                    return false
+                }
+                out.push("nikaia_std::list::chars(")
+                self.emit_core_postfix_base(world, walk, out, host, text, depth, flow, scope)
+                out.push(".chars())")
+                return true
+            },
+            else => return false,
+        }
+    }
+
+    /// The buffers whose keeps hold the values put by this method call, by
+    /// argument, into `walk` (ADR-283 D12, D15).
+    fn emit_call_hold[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, host: ref H, receiver: ref Expr?, scope: ref EmitScope, flow: EmitFlow) sync {
+        walk.hold_args = null
+        let on = receiver ?? return
+        let root = root_of(world.words, on) ?? return
+        let held = host.held_buffers(walk, scope.function, flow.statement, root)
+        if held == null {
+            return
+        }
+        let mut by_arg: collections::BTreeMap[i64, Vec[i64]] = collections::BTreeMap()
+        for (arg, keeps) in (held ?? []) {
+            by_arg.insert(arg, keeps.clone())
+        }
+        walk.hold_args = by_arg
+    }
+
+    /// The `MethodCall` arm of `expr_as_written` (and the `?.` that is a plain
+    /// call, ADR-279 D13): the forms that are not the call itself, then the call.
+    pub fn emit_core_method_arm[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        let name = emit_text(world, method)
+        // **`s.find(needle; from:)` on text is `std`'s search** (ADR-320 D6): the
+        // language below's `str::find` takes one argument and answers a `usize`.
+        if name == "find" && self.facts.text_finds.contains(node_key(receiver)) {
+            out.push("nikaia_std::search::find(&")
+            self.emit_core_nested(world, walk, out, host, receiver, 255, depth, flow, scope)
+            out.push(", &")
+            if args.len() > 0 {
+                self.emit_core_nested(world, walk, out, host, args[0], 255, depth, flow, scope)
+            } else {
+                out.push("\"\"")
+            }
+            out.push(", ")
+            let from = emit_call_option_named(world, config, "from")
+            if from.len() > 0 {
+                host.expr(walk, out, from[0], depth, flow, scope)
+            } else {
+                out.push("0")
+            }
+            out.push(")")
+            return
+        }
+        // **`field.of(value)` is the field read a program would have written by
+        // hand** (ADR-304 D2, D5's *at run time: nothing*): `value.name`, with no
+        // descriptor and no dispatch left. **A field that holds a function is
+        // called through the field**: `(button.on_click)(4)`, awaited where it may
+        // pause.
+        if self.emit_core_a_field_call(world, walk, out, host, receiver, false, method, args, depth, flow, scope) {
+            return
+        }
+        // **`variant.is(value)` is the pattern test a program would have written
+        // by hand**: `matches!(value, Op::Add { .. })`, which fits a variant of
+        // every shape.
+        let variant = walk.reflected(world, receiver, method, "is")
+        let on = walk.specialised_to()
+        if variant != null && args.len() > 0 && on != null {
+            out.push("matches!(")
+            host.expr(walk, out, args[0], depth, flow, scope)
+            let owner = on ?? ""
+            let written = escaped_name(variant ?? "")
+            out.push(f", {owner}::{written} {{ .. }})")
+            return
+        }
+        // **`field.attribute(X)` is the value the attribute came to** (ADR-331 D6):
+        // a literal per turn, `Some(...)` or `None`; `.attributes(X)` the list of
+        // them in written order.
+        let wanted: Vec[String] = ["attribute", "attributes"]
+        for each in wanted {
+            let field = walk.reflected(world, receiver, method, each)
+            let owner = walk.specialised_to()
+            if field != null && owner != null {
+                // A field's, or a variant's where the walk is over `T::variants`.
+                let texts = self.emit_call_attributes_of(world, owner ?? "", field ?? "")
+                out.push(self.attributes_read(world, each, args, texts))
+                return
+            }
+        }
+        let field = walk.reflected(world, receiver, method, "of")
+        if field != null && args.len() > 0 {
+            self.emit_core_postfix_base(world, walk, out, host, args[0], depth, flow, scope)
+            let written = escaped_name(field ?? "")
+            out.push(f".{written}")
+            return
+        }
+        // **`error.full()` in a handler a named channel reached** (ADR-280 D10).
+        // Part I 7.1 writes it as an ordinary call, and it is one - but the
+        // envelope was opened at the binding, so the two halves of the long form
+        // are `error` and the site beside it rather than one value with a method
+        // on it.
+        if flow.caught_named && name == "full" && args.len() == 0 && emit_call_named(world, receiver, "error") {
+            out.push("__nikaia_site.full_of(&error)")
+            return
+        }
+        self.emit_core_method_call(world, walk, out, host, receiver, method, args, config, depth, flow, scope)
+        // **Views of values that copy are the values** (ADR-231 D1).
+        if self.facts.copied_walks.contains(node_key(node)) {
+            out.push(".copied()")
+        }
+    }
+
+    /// The attributes a field of `owner` carries, or a variant of it.
+    fn emit_call_attributes_of(ref self, world: ref EmitWorld, owner: ref String, field: ref String) -> Vec[String] {
+        let found = self.field_contract(world, owner, field)
+        if found != null {
+            let held = found ?? return []
+            return held.attributes.clone()
+        }
+        let contract = self.type_contract(world, owner) ?? return []
+        for variant in contract.variants {
+            if variant.name == field {
+                return variant.attributes.clone()
+            }
+        }
+        return []
+    }
+}

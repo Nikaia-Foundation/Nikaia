@@ -35,7 +35,6 @@ use crate::ast::{
     BinaryOp, Block, Expr, FoldSpec, FrameAttr, GrammarDef, GrammarRule, Item, Pattern, Repeat,
     SelectArm, Span, Spanned, Stmt, Type, UnaryOp, VariantFields,
 };
-use crate::check::PausingEntry;
 use crate::parser::Parsed;
 use crate::{refused, refused_at};
 
@@ -1217,20 +1216,6 @@ const C_STRING: &str = "CStr";
 fn base(name: &str) -> &str {
     crate::contracts::ty::base(name)
 }
-
-const SHARED: &str = "Shared";
-/// Part I 6.3's lock, whose shape is decided per value
-/// ([ADR-281](../../../docs/specification/adr/adr-281.md)).
-const LOCKED: &str = "Locked";
-
-/// The shared mutable type, which is **one name here and two hulls below**
-/// ([ADR-281](../../../docs/specification/adr/adr-281.md) D1).
-///
-/// It is a name the checker carries and only this module expands, which is the
-/// whole of D1: a name that resolved away early would put a spelling nobody wrote
-/// into every message about it ([ADR-281](../../../docs/specification/adr/adr-281.md)
-/// D9 named that as what one name buys).
-const SHARED_MUT: &str = "SharedMut";
 
 /// Whose the one error type in a function's set is
 /// ([ADR-280](../../docs/specification/adr/adr-280.md) D9, D13).
@@ -2932,20 +2917,6 @@ impl<'p> Emitter<'p> {
             return format!("*{} {}", pointing(ty.is_mut), self.foreign_ty(&pointed));
         }
         self.ty(ty, Lifetimes::Elided)
-    }
-
-    /// **The hull a call's result needs**, where the callee is a foreign
-    /// declaration handing back a handle
-    /// ([ADR-302](../../docs/specification/adr/adr-302.md) D11, D12): the
-    /// handle's name, and whether the declaration said it **may be absent**.
-    fn handle_from(&self, func: &Expr) -> Option<(String, bool)> {
-        let handle = self.s.handle_from(&self.world, func)?;
-        Some((handle, self.s.handle_from_may_be_null(&self.world, func)))
-    }
-
-    /// The callee as the source wrote it, for a message that names it.
-    fn called_name(&self, func: &Expr) -> String {
-        self.s.called_name(&self.world, func)
     }
 
     /// The handle a type names, where it names one
@@ -6126,12 +6097,6 @@ impl<'p> Emitter<'p> {
         self.s.copied_in_place(flow.function, name)
     }
 
-    /// Whether `place` is a `mut` parameter of the function being emitted, or
-    /// a field of one: a value that stays the caller's (ADR-094 D3).
-    fn stays_the_callers(&self, place: &Expr, flow: Flow<'_>) -> bool {
-        self.s.stays_the_callers(&self.world, flow.function, place)
-    }
-
     fn index_expr(&self, out: &mut Out, index: &Expr, depth: usize, flow: Flow<'_>) -> Result<()> {
         let (flow, scope) = flow.to_emit();
         let crossed = self.nikaia(|walk| {
@@ -6500,109 +6465,7 @@ impl<'p> Emitter<'p> {
                     .plain_reaches
                     .contains(&crate::check::value_node(expr)) =>
             {
-                // **`s.find(needle; from:)` on text is `std`'s search**
-                // (ADR-320 D6): the language below's `str::find` takes one
-                // argument and answers a `usize`.
-                if self.text(*method) == "find"
-                    && self
-                        .s
-                        .facts
-                        .text_finds
-                        .contains(&crate::check::value_node(receiver))
-                {
-                    out.push("nikaia_std::search::find(&");
-                    self.nested(out, receiver, u8::MAX, depth, flow)?;
-                    out.push(", &");
-                    match args.first() {
-                        Some(needle) => self.nested(out, needle, u8::MAX, depth, flow)?,
-                        None => out.push("\"\""),
-                    }
-                    out.push(", ");
-                    match config.iter().find(|c| self.text(c.name) == "from") {
-                        Some(from) => self.expr(out, &from.value, depth, flow)?,
-                        None => out.push("0"),
-                    }
-                    out.push(")");
-                    return Ok(());
-                }
-                // **`field.of(value)` is the field read a program would have
-                // written by hand** ([ADR-304](../../docs/specification/adr/adr-304.md)
-                // D2, D5's *at run time: nothing*): `value.name`, with no
-                // descriptor and no dispatch left.
-                // **A field that holds a function is called through the
-                // field**: `(button.on_click)(4)`, awaited where it may pause.
-                if self.a_field_call(out, receiver, false, *method, args, depth, flow)? {
-                    return Ok(());
-                }
-                // **`variant.is(value)` is the pattern test a program would
-                // have written by hand**: `matches!(value, Op::Add { .. })`,
-                // which fits a variant of every shape.
-                if let Some(variant) = self.reflected(receiver, *method, "is")
-                    && let (Some(value), Some((_, on))) = (
-                        args.first(),
-                        self.walk(|w| w.specialising.clone().map(|pair| ((), pair.second))),
-                    )
-                {
-                    out.push("matches!(");
-                    self.expr(out, value, depth, flow)?;
-                    out.push(&format!(", {on}::{} {{ .. }})", escaped(&variant)));
-                    return Ok(());
-                }
-                // **`field.attribute(X)` is the value the attribute came to**
-                // (ADR-331 D6): a literal per turn, `Some(…)` or `None`;
-                // `.attributes(X)` the list of them in written order.
-                for wanted in ["attribute", "attributes"] {
-                    if let Some(field) = self.reflected(receiver, *method, wanted)
-                        && let Some((_, on)) =
-                            self.walk(|w| w.specialising.clone().map(|pair| ((), pair.second)))
-                    {
-                        // A field's, or a variant's where the walk is over
-                        // `T::variants`.
-                        let texts = match self.field_contract(&on, &field) {
-                            Some(f) => f.attributes,
-                            None => self
-                                .type_contract(&on)
-                                .and_then(|c| c.variants.into_iter().find(|v| v.name == field))
-                                .map(|v| v.attributes)
-                                .unwrap_or_default(),
-                        };
-                        out.push(&self.attributes_read(wanted, args, &texts));
-                        return Ok(());
-                    }
-                }
-                if let Some(field) = self.reflected(receiver, *method, "of")
-                    && let Some(value) = args.first()
-                {
-                    self.postfix_base(out, value, depth, flow)?;
-                    out.push(&format!(".{}", escaped(&field)));
-                    return Ok(());
-                }
-                // **`error.full()` in a handler a named channel reached**
-                // ([ADR-280](../../docs/specification/adr/adr-280.md) D10). Part
-                // I 7.1 writes it as an ordinary call, and it is one — but the
-                // envelope was opened at the binding, so the two halves of the
-                // long form are `error` and the site beside it rather than one
-                // value with a method on it.
-                let long_form = flow.caught_named
-                    && self.text(*method) == "full"
-                    && args.is_empty()
-                    && matches!(receiver.as_ref(), Expr::Variable(name, _) if self.text(*name) == CAUGHT);
-                match long_form {
-                    true => out.push(&format!("{SITE}.full_of(&{CAUGHT})")),
-                    false => {
-                        self.method_call(out, Some(receiver), *method, args, config, depth, flow)?;
-                        // **Views of values that copy are the values**
-                        // (ADR-231 D1).
-                        if self
-                            .s
-                            .facts
-                            .copied_walks
-                            .contains(&crate::check::value_node(expr))
-                        {
-                            out.push(".copied()");
-                        }
-                    }
-                }
+                self.method_arm(out, expr, receiver, *method, args, config, depth, flow)?
             }
             // Part I 3.5 onto a **method**
             // ([ADR-278](../../../docs/specification/adr/adr-278.md)): the call
@@ -8181,447 +8044,15 @@ impl<'p> Emitter<'p> {
         depth: usize,
         flow: Flow<'_>,
     ) -> Result<()> {
-        // **`T::attribute(X)` on the type this copy is of** (ADR-331 D6): its
-        // own attributes, as a field's are read.
-        if let Expr::Path(segments, _) = func
-            && let [parameter, member] = segments.as_slice()
-            && matches!(self.text(*member), "attribute" | "attributes")
-            && let Some((walked, on)) =
-                self.walk(|w| w.specialising.clone().map(|pair| (pair.first, pair.second)))
-            && walked == self.text(*parameter)
-        {
-            let texts = self
-                .type_contract(&on)
-                .map(|c| c.attributes)
-                .unwrap_or_default();
-            out.push(&self.attributes_read(self.text(*member), args, &texts));
-            return Ok(());
-        }
-        // **A call to a function with a precondition** reaches its checked
-        // entry unless the prover saw this call prove it, or check it here
-        // with the call's arguments in place of the parameters, so that a
-        // failure names the caller
-        // ([ADR-269](../../docs/specification/adr/adr-269.md) D20). The
-        // arguments of a checked call are ones the prover reads, so reading
-        // them once more changes nothing.
-        // A function of this file with a checked entry, or one of another
-        // package whose ledger states a precondition: that package was
-        // lowered with the two entries (ADR-269 D18, D20).
-        let callee = match func {
-            Expr::Variable(name, _) if self.s.facts.entries.contains_key(self.text(*name)) => {
-                Some(self.text(*name).to_string())
-            }
-            Expr::Path(segments, _) => {
-                let qualified = self.parsed.unaliased(
-                    &segments
-                        .iter()
-                        .map(|s| self.text(*s))
-                        .collect::<Vec<_>>()
-                        .join("::"),
-                );
-                self.s
-                    .own_contracts
-                    .functions
-                    .get(&qualified)
-                    .is_some_and(|c| !c.requires.is_empty())
-                    .then_some(qualified)
-            }
-            _ => None,
-        };
-        if let Some(callee) = callee
-            && let Some(reach) =
-                self.s
-                    .facts
-                    .reaches
-                    .get(&crate::prove::call_key(self.parsed, &callee, args))
-        {
-            match reach {
-                crate::prove::Reach::Proved => {
-                    return self.call_inner(out, func, args, config, depth, flow, true);
-                }
-                crate::prove::Reach::Checked(checks) => {
-                    // `(check, call).1`: an expression in every position the
-                    // call could stand in, which a block at the start of a
-                    // statement is not.
-                    out.push(if checks.len() == 1 { "(" } else { "({ " });
-                    for check in checks {
-                        out.push(&failed_check(check));
-                    }
-                    out.push(if checks.len() == 1 { ", " } else { "}, " });
-                    self.call_inner(out, func, args, config, depth, flow, true)?;
-                    out.push(").1");
-                    return Ok(());
-                }
-                crate::prove::Reach::Through => {}
-            }
-        }
-        self.call_inner(out, func, args, config, depth, flow, false)
-    }
-
-    /// A call, past [`Self::call`]'s precondition check: to the unchecked
-    /// entry where `unchecked` says so (ADR-269 D20).
-    #[allow(clippy::too_many_arguments)]
-    fn call_inner(
-        &self,
-        out: &mut Out,
-        func: &Expr,
-        args: &[Expr],
-        config: &[crate::ast::ConfigArg],
-        depth: usize,
-        flow: Flow<'_>,
-        unchecked: bool,
-    ) -> Result<()> {
-        // **An `assert` is a claim checked here** (ADR-269 D2, D4) unless it
-        // was proved, and the failure is
-        // written with what only this compiler knew - the claim as written
-        // and its operands by name. The condition changes nothing (D3), which
-        // is what makes reading an operand a second time, for the message,
-        // the same value it compared.
-        if let ([condition], Expr::Variable(name, _)) = (args, func)
-            && self.text(*name) == crate::check::ASSERT
-            && let Some(claim) = self
-                .s
-                .facts
-                .claims
-                .get(&((flow.statement as i64), crate::check::value_node(condition)))
-        {
-            // **A claim held before the program runs costs nothing when it
-            // does** ([ADR-269](../../docs/specification/adr/adr-269.md) D4,
-            // D5): a precondition is checked by the calls that do not prove
-            // it, and every other claim here.
-            if matches!(
-                claim.held,
-                Some(crate::prove::Held::Proved | crate::prove::Held::Precondition(..))
-            ) {
-                out.push("()");
-                return Ok(());
-            }
-            out.push("if !(");
-            self.expr(out, condition, depth, flow)?;
-            out.push(&format!(
-                ") {{ nikaia_std::abort::assertion_failed({:?}, ",
-                claim.written
-            ));
-            match config.iter().find(|c| self.text(c.name) == "message") {
-                Some(message) => {
-                    out.push("Some(&(");
-                    self.expr(out, &message.value, depth, flow)?;
-                    out.push(")), ");
-                }
-                None => out.push("None, "),
-            }
-            out.push("&[");
-            if let Expr::Binary { lhs, rhs, .. } = condition {
-                let shown = [(&claim.left, lhs), (&claim.right, rhs)];
-                for (label, operand) in shown {
-                    let Some(label) = label else { continue };
-                    out.push(&format!("({label:?}, (&&nikaia_std::abort::Operand(&("));
-                    self.expr(out, operand, depth, flow)?;
-                    out.push("))).shown()), ");
-                }
-            }
-            out.push("]) }");
-            return Ok(());
-        }
-        // **A kept function value called by name** is the closure it holds,
-        // awaited where its type may pause and propagated where it may fail.
-        if let Expr::Variable(name, _) = func {
-            let key = (flow.statement as i64, self.text(*name).to_string());
-            if let Some((pauses, fails)) = self.s.facts.kept_calls.get(&key).copied() {
-                out.push(&format!("{}(", self.name(*name)));
-                for (at, arg) in args.iter().enumerate() {
-                    if at > 0 {
-                        out.push(", ");
-                    }
-                    self.expr(out, arg, depth, flow)?;
-                }
-                out.push(")");
-                if pauses {
-                    out.push(".await");
-                }
-                if fails && flow.throws && !flow.caught {
-                    out.push("?");
-                }
-                return Ok(());
-            }
-        }
-        // ADR-055 D6: a recursive `async fn` is an infinitely sized future, and
-        // Rust says so rather than guessing - so a call that closes a cycle
-        // through pausing functions puts the future behind a pointer.
-        // `pausing_reach` is computed once per unit (see that function for why
-        // it over-approximates), and the emitter only looks names up in it: it
-        // still resolves nothing (ADR-296 D17).
-        // **A grammar is entered by an ordinary call**
-        // ([ADR-296](../../docs/specification/adr/adr-296.md) D24), through a
-        // **path** since [ADR-140](../../docs/specification/adr/adr-140.md) D3:
-        // `Json::value(input)`, where `Json` names a grammar in this file and
-        // `value` one of its `entry` rules. First, because it is not a call to
-        // anything the recursion graph or the ledger knows.
-        if let Expr::Path(segments, _) = func
-            && let [grammar, rule] = segments.as_slice()
-            && self.s.grammars.contains_key(self.text(*grammar))
-            && args.len() == 1
-        {
-            return self.grammar_entry(out, *grammar, *rule, &args[0], depth, flow);
-        }
-        // **A package's `pub grammar`, entered by its path** (ADR-296 D25,
-        // #520): `lib::Nums::number(input)` is the entry the package's ledger
-        // records - a `ParseError` its failure and the text its one input -
-        // and its crate's parser is driven as a grammar of this file's is.
-        if let Expr::Path(segments, _) = func
-            && let [package, grammar, rule] = segments.as_slice()
-            && args.len() == 1
-            && self.a_package_grammar_entry(&format!(
-                "{}::{}::{}",
-                self.text(*package),
-                self.text(*grammar),
-                self.text(*rule)
-            ))
-        {
-            let question = match flow.caught {
-                false => "?",
-                true => "",
-            };
-            let (package, grammar, rule) =
-                (self.text(*package), self.text(*grammar), self.text(*rule));
-            // **A `par_fold` entry is driven in pieces** (#521), as its own
-            // file drives it, with this build's parallelism.
-            let pieces = self
-                .s
-                .own_contracts
-                .functions
-                .get(&format!("{package}::{grammar}::{rule}"))
-                .is_some_and(|contract| contract.pieces);
-            if pieces {
-                out.push("nikaia_std::grammar::parse_pieces(&*");
-                self.expr(out, &args[0], depth, flow)?;
-                // Spelled out: this file has no `par_fold` of its own, so the
-                // two names are not imported here.
-                out.push(&format!(
-                    ", |source| {package}::{grammar}::parse_{rule}_pieces(source, \
-                     &winnow_grammar::ParseContext::<()>::default(), winnow_grammar::rt::{})){question}",
-                    self.build.parallelism()
-                ));
-                return Ok(());
-            }
-            out.push("nikaia_std::grammar::parse(&*");
-            self.expr(out, &args[0], depth, flow)?;
-            out.push(&format!(
-                ", {package}::{grammar}::parse_{rule}()){question}"
-            ));
-            return Ok(());
-        }
-        // **A variant with a boxed part is built with the part in its box**
-        // ([ADR-246](../../docs/specification/adr/adr-246.md) D3). The mask
-        // is `args`' to read, so every other thing an argument is written
-        // with still happens inside the box.
-        if let Expr::Path(segments, _) = func
-            && let [.., owner, variant] = segments.as_slice()
-        {
-            let (owner, variant) = (self.text(*owner), self.text(*variant));
-            let mask: Vec<bool> = (0..args.len())
-                .map(|at| {
-                    self.is_boxed(owner, &crate::check::boxed_member(variant, Some(at), None))
-                })
-                .collect();
-            let holds_a_hull = self.is_variant(owner, variant)
-                && args.iter().any(|arg| {
-                    matches!(arg, Expr::Call { func, .. }
-                        if matches!(func.as_ref(), Expr::Variable(name, _)
-                            if matches!(self.text(*name), SHARED | SHARED_MUT | LOCKED)))
-                });
-            if mask.iter().any(|b| *b) || holds_a_hull {
-                self.walking(|w| w.boxed_args = Some(mask));
-                let counts = (0..args.len())
-                    .map(|at| self.count_at(SHARED_FIELDS, &variant_slot(owner, variant, at)))
-                    .collect();
-                self.walking(|w| w.variant_counts = Some(counts));
-                out.push(&self.path(&segments.iter().map(|s| self.text(*s)).collect::<Vec<_>>()));
-                out.push("(");
-                let written = self.args(out, variant, args, &[], depth, flow);
-                self.walking(|w| w.boxed_args = None);
-                self.walking(|w| w.variant_counts = None);
-                written?;
-                out.push(")");
-                return Ok(());
-            }
-        }
-        let pausing = self.pausing_key(func);
-        if let Some(key) = pausing.as_deref().filter(|_| flow.in_lambda) {
-            return Err(pausing_in_a_lambda(flow.statement, key));
-        }
-        // **A call to a code parameter whose type may pause**
-        // ([ADR-277](../../docs/specification/adr/adr-277.md) D11). It hands back
-        // a boxed future, so it is awaited — and it is never *boxed* here: a
-        // parameter is not a name the recursion graph knows, and what it holds
-        // is already behind a pointer.
-        let awaits_a_parameter =
-            matches!(func, Expr::Variable(name, _) if flow.awaited.contains(name));
-        // **A call of a `sync(f)` function** (ADR-288 D31): awaited where the
-        // caller can pause, and driven once where it cannot - the checker has
-        // then proved the lambda handed to it does not pause, so neither does
-        // the call.
-        let decided = pausing.is_none() && self.decided_by_its_lambda(func);
-        let settled = decided && (flow.in_lambda || !self.lowered_pausing(flow.function));
-        if settled {
-            out.push("nikaia_std::rt::exec::settled(");
-        }
-        let boxed = pausing
-            .as_deref()
-            .is_some_and(|key| self.closes_a_pausing_cycle(flow.function, key));
-        if boxed {
-            out.push("Box::pin(");
-        }
-
-        // **A handle is made at the call and nowhere else**
-        // ([ADR-302](../../docs/specification/adr/adr-302.md) D11, D12). The
-        // declaration hands back the address C returned; the hull goes on here,
-        // where the claim the declaration made can be checked — or, where it
-        // said `?`, where `None` is C's own `NULL`.
-        let hull = self.handle_from(func);
-        if let Some((handle, absent)) = &hull {
-            out.push(&match absent {
-                true => format!("{handle}::maybe("),
-                false => format!("{handle}::from_c(\"{}\", ", self.called_name(func)),
-            });
-        }
-
-        self.called(out, func, args, config, depth, flow, unchecked)?;
-
-        if hull.is_some() {
-            out.push(")");
-        }
-
-        if boxed {
-            out.push(")");
-        }
-
-        // **ADR-055 D2: the `.await` goes before the `?`**, and the order is not
-        // a choice: the future is what can fail, so it has to be driven before
-        // there is a `Result` to propagate. `f().await?` and never `f()?.await`.
-        if pausing.is_some() || awaits_a_parameter || (decided && !settled) {
-            out.push(".await");
-        }
-        if settled {
-            out.push(")");
-        }
-
-        // ADR-023 D8: `throws` propagates on its own, so a call to something
-        // that can fail is where the failure leaves - and in the language below
-        // that is spelled `?`. This is the written-call twin of the `?` a
-        // fallible loop's step gets above: the same rule, one line earlier
-        // (ADR-025 D1).
-        //
-        // Three conditions, and each removes a way of being wrong. The
-        // enclosing function must be `throws`, or there is nowhere for the `?`
-        // to go - and `NK2605` has already refused the program where it is
-        // not, so this is not a silent choice. The call must not be the
-        // guarded half of a `catch`, which wants the `Result` itself. And the
-        // callee's contract must **say** it can fail, so nothing is added on a
-        // guess: a call no ledger describes is left exactly as it was.
-        //
-        // A lambda's body is emitted with `Flow::PLAIN`, so a fallible call
-        // inside one never takes a `?` from the function around it - which is
-        // right, because its `return` leaves the lambda and not the function.
-        if flow.throws && !flow.caught && self.can_fail(func) {
-            out.push("?");
-        }
-        Ok(())
-    }
-
-    /// The call itself, without ADR-023 D8's propagation.
-    #[allow(clippy::too_many_arguments)]
-    fn called(
-        &self,
-        out: &mut Out,
-        func: &Expr,
-        args: &[Expr],
-        config: &[crate::ast::ConfigArg],
-        depth: usize,
-        flow: Flow<'_>,
-        unchecked: bool,
-    ) -> Result<()> {
         let (flow, scope) = flow.to_emit();
         let crossed = self.nikaia(|walk| {
-            self.s.emit_core_called(
+            self.s.emit_core_call(
                 &self.world,
                 walk,
                 out,
                 self,
                 func,
                 args,
-                config,
-                unchecked,
-                depth as i64,
-                flow,
-                &scope,
-            )
-        });
-        self.crossed(crossed)
-    }
-
-    /// ADR-296 D5: the shadow struct a call to a DSL driver builds.
-    ///
-    /// A `;` at a call site means options everywhere else, and the callee's
-    /// declaration is what tells the two apart: a driver said
-    /// `...args: Self::dsl`, so what stands after its `;` is a DSL's deferred
-    /// parameters and becomes one value rather than one argument each.
-    ///
-    /// A struct literal names its fields, so a call may write them in any
-    /// order - the body's order decides the type's fields and nothing else.
-    fn dsl_parameters(
-        &self,
-        out: &mut Out,
-        callee: &str,
-        args: usize,
-        config: &[crate::ast::ConfigArg],
-        depth: usize,
-        flow: Flow<'_>,
-    ) -> Result<()> {
-        let (flow, scope) = flow.to_emit();
-        let crossed = self.nikaia(|walk| {
-            self.s.emit_core_dsl_parameters(
-                &self.world,
-                walk,
-                out,
-                self,
-                callee,
-                args as i64,
-                config,
-                depth as i64,
-                flow,
-                &scope,
-            )
-        });
-        self.crossed(crossed)
-    }
-
-    /// Kap 5.1 at a **method** call: the options become positional, in the order
-    /// the declaration gives, and one that was left out becomes its default.
-    ///
-    /// The same thing `call` does from `options_of`, off the checker's answer
-    /// instead ([ADR-288](../../../docs/specification/adr/adr-288.md)) — and a
-    /// DSL driver is not this: what stands after *its* `;` is the typed spread
-    /// of [ADR-296](../../../docs/specification/adr/adr-296.md) D5, which
-    /// `dsl_parameters` has already written as one value.
-    fn method_options(
-        &self,
-        out: &mut Out,
-        method: Symbol,
-        args: usize,
-        config: &[crate::ast::ConfigArg],
-        depth: usize,
-        flow: Flow<'_>,
-    ) -> Result<()> {
-        let (flow, scope) = flow.to_emit();
-        let crossed = self.nikaia(|walk| {
-            self.s.emit_core_method_options(
-                &self.world,
-                walk,
-                out,
-                self,
-                method,
-                args as i64,
                 config,
                 depth as i64,
                 flow,
@@ -8712,38 +8143,6 @@ impl<'p> Emitter<'p> {
             )
         });
         self.crossed(crossed)
-    }
-
-    /// Whether a call from `caller` to `callee` closes a cycle of pausing
-    /// functions, and so needs its future behind a pointer (ADR-055 D6).
-    ///
-    /// **The question is about the call and not about the callee.** A recursive
-    /// `countdown` boxes the call it makes to itself; the call `main` makes to it
-    /// holds that future exactly once and is finite, so it pays no allocation.
-    /// Asking it the other way - boxing every call to anything recursive - was
-    /// the first version, and it charged every caller for its callee's shape.
-    ///
-    /// `A -> A` beside `B -> B` where `B` also calls `A` is what makes "both are
-    /// in a cycle" the wrong test: nothing about `B -> A` is recursive. So the
-    /// test is that the callee can reach the caller again, which is what closing
-    /// a cycle *is*.
-    fn closes_a_pausing_cycle(&self, caller: &str, callee: &str) -> bool {
-        self.s.closes_a_pausing_cycle(caller, callee)
-    }
-
-    /// The same, for a call whose callee this emitter cannot name
-    /// ([ADR-055](../../docs/specification/adr/adr-055.md) D6, the method
-    /// half).
-    ///
-    /// `stats.add(5)` names `add` and says nothing about what `stats` is
-    /// ([ADR-288](../../docs/specification/adr/adr-288.md)), so the candidates
-    /// are **every** pausing key ending in that name — the same widening
-    /// `pausing_reach` draws its edges with, asked here at the call. Where the
-    /// two readings differ this takes the wider, for that function's own
-    /// reason: a box nobody needed costs one allocation, and a box that was
-    /// needed and is missing is a program that does not compile.
-    fn method_closes_a_pausing_cycle(&self, caller: &str, method: &str) -> bool {
-        self.s.method_closes_a_pausing_cycle(caller, method)
     }
 
     /// Whether a type named here holds a view, and so carries the input lifetime
@@ -8951,26 +8350,6 @@ impl<'p> Emitter<'p> {
         self.s.lambda_decides(key)
     }
 
-    /// Whether the function under `key` is lowered as an `async fn`.
-    fn lowered_pausing(&self, key: &str) -> bool {
-        self.s.lowered_pausing(key)
-    }
-
-    /// Whether a call names an own function written `sync(f)`.
-    fn decided_by_its_lambda(&self, func: &Expr) -> bool {
-        self.s.decided_by_its_lambda(&self.world, func)
-    }
-
-    fn pausing_key(&self, func: &Expr) -> Option<String> {
-        nikaia_std::tools::emit_calls::call_pausing_key(
-            &self.parsed.interner,
-            &self.parsed.aliases,
-            &self.s.own_contracts,
-            self.world.library,
-            func,
-        )
-    }
-
     /// Whether a bare name in **value** position is a type's anonymous
     /// constructor ([ADR-140](../../docs/specification/adr/adr-140.md) D2).
     ///
@@ -8979,30 +8358,6 @@ impl<'p> Emitter<'p> {
     /// the reason the call path gives.
     fn constructs_by_name(&self, name: &str) -> bool {
         self.s.constructs_by_name(&self.world, name)
-    }
-
-    /// Whether the contracts say a call by name can fail (Kap 7.1).
-    ///
-    /// The same resolution `options_of` uses, and for the same reason: the
-    /// callee's contract is the fact, and this unit's own comes before `std`'s
-    /// because a local name shadows nothing in a library. `false` where the
-    /// callee cannot be resolved - which is the emitter *not guessing* rather
-    /// than an answer, and is safe here because the checker has already
-    /// reported every resolvable fallible call the function did not declare
-    /// (`NK2605`); a call nothing describes reaches `rustc` as before.
-    ///
-    /// A **method** call is not asked here, because the answer is not the
-    /// emitter's to work out: `stats.add(5)` names `add` and only the type
-    /// checker knows what it goes to (ADR-288). `method_can_fail` reads the
-    /// answer the checker handed over instead.
-    fn can_fail(&self, func: &Expr) -> bool {
-        nikaia_std::tools::emit_calls::call_can_fail(
-            &self.parsed.interner,
-            &self.s.own_contracts,
-            self.world.library,
-            &self.s.described,
-            func,
-        )
     }
 
     /// Whether the checker said this conversion narrows, and which kind it is.
@@ -9060,40 +8415,6 @@ impl<'p> Emitter<'p> {
         self.crossed(crossed)
     }
 
-    fn method_can_fail(&self, flow: Flow<'_>, method: Symbol) -> bool {
-        self.s
-            .method_can_fail(flow.statement as i64, self.text(method))
-    }
-
-    /// Whether the checker said this method call pauses (ADR-055 D2).
-    ///
-    /// [`Emitter::method_can_fail`]'s twin, and a lookup for the same reason:
-    /// the answer was computed once by the one type checker this compiler has,
-    /// and `false` here is the emitter leaving the call as it was rather than
-    /// guessing at it.
-    fn method_pauses(&self, flow: Flow<'_>, method: Symbol) -> bool {
-        self.s
-            .method_pauses(flow.statement as i64, self.text(method))
-    }
-
-    /// The options a call by name has, from the contract that declares them.
-    ///
-    /// This unit's own first, then `std`'s - the order every other name
-    /// resolution here uses. `None` where the callee has none, and where the
-    /// callee cannot be resolved at all: an unresolvable call has no options to
-    /// fill in, and the type checker is what says so in Nikaia's words.
-    /// **What `.attribute(X)` or `.attributes(X)` comes to** over the values
-    /// `texts` (ADR-331 D6): `Some(…)` or `None`, or the list. Typed where it
-    /// is empty: nothing else on the line says what it would hold.
-    fn attributes_read(&self, wanted: &str, args: &[Expr], texts: &[String]) -> String {
-        self.s.attributes_read(&self.world, wanted, args, texts)
-    }
-
-    /// A type's contract, from this package's ledger or a dependency's.
-    fn type_contract(&self, owner: &str) -> Option<crate::contracts::TypeContract> {
-        self.s.type_contract(&self.world, owner)
-    }
-
     /// **A reflected field's contract**, from this package's ledger or a
     /// dependency's: what `.attribute(X)` and `.default` read (ADR-331 D5-D6).
     fn field_contract(&self, owner: &str, field: &str) -> Option<crate::contracts::FieldContract> {
@@ -9129,16 +8450,6 @@ impl<'p> Emitter<'p> {
     /// threads where tasks run on them.
     fn boxed_future(&self) -> String {
         nikaia_std::tools::emit_core_types::emit_boxed_future(self.build.overlaps_user_code())
-    }
-
-    /// One arm's pattern. Every shape is one the language below spells the
-    /// same way, so this is a transcription rather than a translation - a bare
-    /// name binds here because it binds there, and the rule is drawn once.
-    /// **Whether a member is boxed below**
-    /// ([ADR-246](../../docs/specification/adr/adr-246.md) D1), by the
-    /// owner's last segment: a qualified name reaches the same type.
-    fn is_boxed(&self, owner: &str, member: &str) -> bool {
-        self.s.is_boxed(owner, member)
     }
 
     /// **A field of a struct literal**, which may be a variant's written as a
@@ -9181,497 +8492,54 @@ impl<'p> Emitter<'p> {
         depth: usize,
         flow: Flow<'_>,
     ) -> Result<()> {
-        // **`text.chars().collect()` is a list of characters asked for at its
-        // size** (`nikaia_std::list::chars`): the same list, without the
-        // growing a `collect` over `Chars` does. Only where nothing declares
-        // another thing to build.
-        if let Some(Expr::MethodCall {
-            receiver: text,
-            method: chars,
-            args: none,
-            ..
-        }) = receiver
-            && self.text(method) == "collect"
-            && args.is_empty()
-            && none.is_empty()
-            && self.text(*chars) == "chars"
-            && !self
-                .s
-                .facts
-                .collected_into
-                .contains(&(crate::check::value_node(receiver.unwrap())))
-        {
-            out.push("nikaia_std::list::chars(");
-            self.postfix_base(out, text, depth, flow)?;
-            out.push(".chars())");
-            return Ok(());
-        }
-        // **`x.truncating_i32()` is Rust's `as`** (ADR-285 D13): the
-        // operation the name says. It is a name and not the operator
-        // because keeping the low digits is said rather than assumed,
-        // exactly as wrapping is (D2) - and since D4 made `as i32`
-        // checked, this is the only way left to ask for truncation.
-        //
-        // Bare, and parenthesised by whoever needs it: `as` sits between
-        // the unary operators and the binary ones in Rust's precedence
-        // while a method call sits above all of them, so
-        // `-x.truncating_i32()` and `x.truncating_i32().abs()` both need
-        // the conversion to happen first. [`Emitter::emits_as_cast`] is
-        // where that is decided, for the same reason a written `as`
-        // decides it there - **a parenthesis nobody needs is a warning
-        // about the generated file** (`let n = (big as i32);` is
-        // "unnecessary parentheses around assigned value"), and Part III
-        // C.1 says a reader must not meet one.
-        // **A grammar is entered by an ordinary call**
-        // ([ADR-296](../../docs/specification/adr/adr-296.md) D24):
-        // `Json.value(input)`, where `Json` names a grammar in this file and
-        // `value` one of its `entry` rules. It is a method call in the grammar
-        // of this language and nothing else could have been — a grammar name is
-        // not a value, so there is no receiver to resolve and no ambiguity to
-        // settle.
-        if let Some(Expr::Variable(name, _)) = receiver
-            && self.s.grammars.contains_key(self.text(*name))
-            && args.len() == 1
-        {
-            // **The dot is gone** (ADR-140 D3). `NK1147` is what a program
-            // meets; this is here so that a caller who lowers without
-            // checking gets the same sentence rather than a method call on
-            // a name that is not a value.
-            return Err(refused_at!(
-                flow.statement,
-                "A grammar's rules are reached with `::`, not a dot. Write `{}::{}(…)`.",
-                self.text(*name),
-                self.text(method)
-            ));
-        }
-        // **A method of a file's name is `std`'s function**
-        // ([ADR-319](../../docs/specification/adr/adr-319.md) D3): Rust's
-        // `Path` has methods by these names that compare whole components,
-        // so the call is written to `nikaia_std::fs::path`, which compares
-        // the bytes.
-        if let Some(on) = receiver
-            && let Some(known_text) = self.s.facts.path_methods.get(&crate::check::value_node(on))
-        {
-            let name = self.text(method).to_string();
-            // **`to_text` on a name made from text cannot fail** (ADR-319
-            // D5), and the checker said where.
-            let known = name == "to_text" && *known_text;
-            let written = match known {
-                true => "text_of",
-                false => name.as_str(),
-            };
-            out.push(&format!("nikaia_std::fs::path::{written}(&("));
-            self.expr(out, on, depth, flow)?;
-            out.push(")");
-            if !args.is_empty() {
-                out.push(", ");
-                self.args(out, &name, args, &[], depth, flow)?;
-            }
-            out.push(")");
-            if flow.throws && !flow.caught && self.method_can_fail(flow, method) {
-                out.push("?");
-            }
-            return Ok(());
-        }
-        if let Some(into) = truncating(self.text(method)) {
-            self.receiver(out, receiver, depth, flow, true)?;
-            out.push(&format!(" as {into}"));
-            return Ok(());
-        }
-        // **`x.checked_i32()` is Rust's `try_from`, kept or not**
-        // ([ADR-315](../../docs/specification/adr/adr-315.md)): the number
-        // where the destination holds it, `None` where it does not. A call
-        // around the receiver, so nothing about precedence is left to decide.
-        if let Some(into) = checked(self.text(method)) {
-            out.push(&format!("{into}::try_from("));
-            match receiver {
-                // An argument: nothing binds looser than the call's own
-                // parentheses, so it needs none of its own.
-                Some(expr) => self.nested(out, expr, 0, depth, flow)?,
-                None => self.receiver(out, receiver, depth, flow, false)?,
-            }
-            out.push(").ok()");
-            return Ok(());
-        }
-        // **`len` hands back an `i64`** (ADR-285 D1), and Rust's hands
-        // back a `usize`. Parenthesised where it has to be and nowhere
-        // else, exactly as the conversion above is.
-        //
-        // A name and not a rule, because what it encodes is a fact about
-        // *Rust's* library rather than about this language: four entries
-        // in `std.contracts` return a length, `len` is what all four are
-        // called, and `the_four_lengths_are_i64` in `tests/contracts.rs`
-        // is what keeps the two from drifting apart.
-        // **`xs.drain()` is the written form of taking the elements away**
-        // ([ADR-094](../../docs/specification/adr/adr-094.md) D4). Since a
-        // `for` lends, a body that hands an element to a callee which *keeps*
-        // it has to say so — and what it says is this. Below, that is
-        // `into_iter`: D4's words are *"removing a name from scope"*, which is
-        // consuming the container rather than emptying one somebody still
-        // holds, and Rust spells the first `into_iter` and the second `drain`.
-        //
-        // A name and not a rule, for `len`'s reason one paragraph down: it
-        // encodes a fact about *Rust's* library rather than about this
-        // language.
-        // **D5's one door for a stamped value**
-        // ([ADR-281](../../docs/specification/adr/adr-281.md)).
-        // `kasse.set(neu; after: stand)` is written `set_after(neu, stand)`:
-        // the compare and the store happen while the lock is open **once**,
-        // which is the whole of what the door is for and what a `get` followed
-        // by a `set` cannot do.
-        //
-        // Two questions and not one. The type checker's, that this receiver is
-        // a lock (`witnessed_sets`, ADR-288); and this file's, that the `after:`
-        // is written *here* — because the set is keyed by the statement, and a
-        // statement may hold a second `set` that carries none.
-        let witness = match self.text(method) == "set"
-            && self
-                .s
-                .facts
-                .witnessed_sets
-                .contains(&(flow.statement as i64))
-        {
-            true => config
-                .iter()
-                .find(|a| self.text(a.name) == "after")
-                .map(|a| &a.value),
-            false => None,
-        };
-        // **The text form of text is the text** (ADR-282 D8): nothing is
-        // called, and whether it is lent, built or handed over is decided
-        // around it as for any other text.
-        if let Some(text) = receiver.filter(|receiver| {
-            self.text(method) == "to_string"
-                && args.is_empty()
-                && self
-                    .s
-                    .facts
-                    .text_as_is
-                    .contains(&crate::check::value_node(receiver))
-        }) {
-            return self.postfix_base(out, text, depth, flow);
-        }
-        // **A list of text asked for a view of text** (`check::Checked::
-        // text_in_lists`): compared element by element, which a `String` and
-        // a `str` can be.
-        if let Some(list) = receiver.filter(|receiver| {
-            self.text(method) == "contains"
-                && args.len() == 1
-                && self
-                    .s
-                    .facts
-                    .text_in_lists
-                    .contains(&crate::check::value_node(receiver))
-        }) {
-            // The value lent with `&` whichever text it is (#375): `&str`,
-            // `String` and their references compare with each other.
-            out.push("nikaia_std::list::contains(&");
-            self.expr(out, list, depth, flow)?;
-            out.push(", &");
-            self.expr(out, &args[0], depth, flow)?;
-            out.push(")");
-            return Ok(());
-        }
-        // **Where the container stays the caller's, `drain` empties it**
-        // (#564, [ADR-094](../../docs/specification/adr/adr-094.md) D3, D4): a
-        // `mut` parameter is lowered as `&mut T`, and `into_iter` over it
-        // neither takes the elements away nor hands out owned ones - what a
-        // body that stores them needs. `drain(..)` does both, and leaves the
-        // list empty in the caller's hands, which is what taking the elements
-        // away from something somebody still holds means.
-        if self.text(method) == "drain"
-            && args.is_empty()
-            && let Some(receiver) = receiver
-            && self.stays_the_callers(receiver, flow)
-        {
-            self.postfix_base(out, receiver, depth, flow)?;
-            out.push(".drain(..)");
-            return Ok(());
-        }
-        let copies = match receiver {
-            Some(receiver) => self
-                .s
-                .facts
-                .owned_copies
-                .contains(&crate::check::value_node(receiver)),
-            None => self.walk(|w| w.reached_copy),
-        };
-        let written = match self.text(method) {
-            "drain" if args.is_empty() => "into_iter",
-            // **A copy is `to_owned` below** (ADR-293 D24): `.clone()` of a
-            // `&str` or a `&[T]` is the reference, and a read-only `String`
-            // parameter *is* a `&str` (ADR-282 D5).
-            "clone" if args.is_empty() && copies => "to_owned",
-            "set" if witness.is_some() => "set_after",
-            other => other,
-        };
-        let length = is_length(self.text(method), args)
-            || receiver.is_some_and(|receiver| self.is_counted(receiver, method, args));
-        // **ADR-055 D6, the method half.** A recursive `async fn` is an
-        // infinitely sized future, and a call that closes a cycle of pausing
-        // functions puts it behind a pointer. `call` has asked this since D6's
-        // first sharp edge; a *method* could not be asked, because the emitter
-        // cannot name its callee — `stats.add(5)` names `add` and only the type
-        // checker knows what it goes to (ADR-288). It does not have to name it:
-        // `pausing_reach` already draws an edge to **every** pausing method of
-        // that name, which is the over-approximation its own note describes, so
-        // the same widening answers the question here. Boxing a call that did
-        // not need it costs one allocation; missing one is `rustc`'s *recursion
-        // in an async fn requires boxing*, about a file nobody wrote (C.1).
-        let boxed = self.method_closes_a_pausing_cycle(flow.function, self.text(method));
-        if boxed {
-            out.push("Box::pin(");
-        }
-        // **`par_iter()` walks the list on every core at `yes`, and is the
-        // list's `iter()` at `no`**
-        // ([ADR-235](../../docs/specification/adr/adr-235.md) D1). What the
-        // lambdas handed to it may do is the checker's, at both settings, so
-        // the program means the same at each.
-        if self.text(method) == "par_iter"
-            && args.is_empty()
-            && self.s.own_contracts.candidates("par_iter").is_empty()
-        {
-            match self.build.user_parallelism {
-                UserParallelism::Yes => {
-                    out.push("nikaia_std::par::iter(&");
-                    self.receiver(out, receiver, depth, flow, false)?;
-                    out.push(")");
-                }
-                UserParallelism::No => {
-                    self.receiver(out, receiver, depth, flow, false)?;
-                    out.push(".iter()");
-                }
-            }
-            if boxed {
-                out.push(")");
-            }
-            return Ok(());
-        }
-        // **A lambda that pauses, handed to a `std` entry**
-        // ([ADR-233](../../docs/specification/adr/adr-233.md) D1, D2): the
-        // entry's counterpart in `nikaia_std::seq`, which takes the `async`
-        // closure the lambda is written as. The checker says which, because it
-        // is the receiver's type that decides.
-        let pausing = args
-            .last()
-            .filter(|arg| matches!(arg, Expr::Closure { .. }))
-            .and_then(|arg| {
-                self.s
-                    .facts
-                    .pausing_lambdas
-                    .get(&crate::check::value_node(arg))
-            })
-            .cloned();
-        match &pausing {
-            Some(PausingEntry::Function(name)) => {
-                out.push(&format!("nikaia_std::seq::{name}("));
-                self.receiver(out, receiver, depth, flow, false)?;
-                out.push(", ");
-            }
-            Some(PausingEntry::Lent(name)) => {
-                out.push(&format!("nikaia_std::seq::{name}(&mut "));
-                self.receiver(out, receiver, depth, flow, false)?;
-                out.push(", ");
-            }
-            Some(PausingEntry::Method(name)) => {
-                self.receiver(out, receiver, depth, flow, false)?;
-                out.push(&format!(".{name}("));
-            }
-            None => {
-                self.receiver(out, receiver, depth, flow, false)?;
-                out.push(&format!(".{written}"));
-            }
-        }
-        // Nikaia's `collect` builds a List; Rust's needs to be told
-        // what to build, and with no types here that is `Vec<_>`.
-        //
-        // **Except over a sequence whose step pauses**
-        // ([ADR-172](../../docs/specification/adr/adr-172.md) D5), where the
-        // walk is `std`'s own `async fn` and has nothing to be told: an
-        // `Iterator::collect` never pauses, so the site pausing is exactly the
-        // difference. Guessed from the method's name alone this would have
-        // been a turbofish on a method that takes no type at all.
-        //
-        // **And except where the place it goes declares what it builds**
-        // ([ADR-293](../../docs/specification/adr/adr-293.md) D25): a map, a
-        // set or text, which the language below's own `collect`
-        // builds when nothing overrides the type it reads off that place.
-        let declared = receiver.is_some_and(|receiver| {
-            self.s
-                .facts
-                .collected_into
-                .contains(&crate::check::value_node(receiver))
-        });
-        if self.text(method) == "collect"
-            && args.is_empty()
-            && !declared
-            && !self.method_pauses(flow, method)
-        {
-            out.push("::<Vec<_>>");
-        }
-        if pausing.is_none() {
-            out.push("(");
-        }
-        let takes = self.takes_a_handle(self.text(method));
-        // **Views put into a keeper that drops entries are held** (ADR-283 D12),
-        // each value with a handle on every buffer it points into - as many as
-        // the keeper's widest value needs, so that every element is one type
-        // (ADR-283 D15).
-        let held = receiver
-            .and_then(|receiver| crate::contracts::keep::root_of(self.parsed, receiver))
-            .and_then(|root| {
-                let plan = self.keep_plan(flow.function)?;
-                let by_arg = plan.holds.get(&(flow.statement as i64, root.clone()))?;
-                let width = plan.widths.get(&root).copied().unwrap_or(1);
-                Some(
-                    by_arg
-                        .iter()
-                        .map(|(arg, buffers)| {
-                            let mut keeps: Vec<i64> = buffers.iter().copied().collect();
-                            while (keeps.len() as i64) < width {
-                                keeps.push(keeps[keeps.len() - 1]);
-                            }
-                            (*arg, keeps)
-                        })
-                        .collect(),
-                )
-            });
-        self.walking(|w| w.hold_args = held);
-        let written_args = self.args(out, self.text(method), args, &takes, depth, flow);
-        self.walking(|w| w.hold_args = None);
-        written_args?;
-        // **And a method that takes a keep is given one** (D2).
-        let keeping = crate::contracts::keep::keeping_method_key(
-            &self.s.own_contracts,
-            flow.function.rsplit_once("::").map(|(t, _)| t),
-            matches!(receiver, Some(Expr::Variable(n, _)) if self.text(*n) == "self"),
-            self.text(method),
-        );
-        if let Some(keep) = keeping.and_then(|key| self.keep_argument(flow, &key)) {
-            if !args.is_empty() {
-                out.push(", ");
-            }
-            out.push(&keep);
-        }
-        match witness {
-            // The witness is an **argument** of the door and not an option of
-            // it, so it is written where the signature puts it — after the
-            // value, and never through `dsl_parameters`.
-            //
-            // **The `&` is written here rather than looked up**, and that is
-            // the one place this file decides a reference for itself. `lends`
-            // withholds its claim on every *method* argument, because the
-            // emitter cannot resolve a receiver
-            // ([ADR-288](../../docs/specification/adr/adr-288.md)) — and this
-            // position needs no resolving: the checker has already said this
-            // call is the door, and the door's witness is `seen: &$T` in the
-            // ledger, always. A written `&` is `NK1137` before it gets here.
-            Some(seen) => {
-                out.push(", &");
-                // Parenthesised exactly where a postfix would be: `&` binds
-                // tighter than every binary operator, so `&a + b` is `(&a) + b`
-                // and a witness that is an expression would mean something
-                // else. A name gets no parentheses, which is where every
-                // witness anybody writes lands.
-                self.postfix_base(out, seen, depth, flow)?;
-            }
-            None => {
-                self.dsl_parameters(out, self.text(method), args.len(), config, depth, flow)?;
-                self.method_options(out, method, args.len(), config, depth, flow)?;
-            }
-        }
-        out.push(")");
-        // **What hands back an element of a held list reads it through its
-        // handle** (ADR-283 D17), as the brackets and a `for` do.
-        if matches!(self.text(method), "iter" | "first" | "last" | "get")
-            && receiver.is_some_and(|r| self.reads_through_handle(flow, r))
-        {
-            out.push(HELD_READ);
-        }
-
-        // ADR-023 D8, the method half. The same three conditions the
-        // call by name is given in `call` below, and the same rule -
-        // only the last question is asked of a different source,
-        // because the emitter cannot ask it itself. The enclosing
-        // function must be `throws`, or there is nowhere for the `?` to
-        // go, and `NK2605` has already refused the program where it is
-        // not. The call must not be the guarded half of a `catch`,
-        // which wants the `Result`. And the callee must be one the
-        // checker established can fail.
-        // ADR-055 D2, the method half, and **before the `?`** for the
-        // reason `call` gives: the future is what can fail, so it has
-        // to be driven before there is a `Result` to propagate.
-        // **Before the `.await`**, because it is the future that is boxed and
-        // not what awaiting it comes to.
-        if boxed {
-            out.push(")");
-        }
-
-        // **A walk of a pausing sequence that has no pausing form**
-        // ([ADR-172](../../docs/specification/adr/adr-172.md) D5,
-        // [ADR-234](../../docs/specification/adr/adr-234.md)). Every walk `Seq`
-        // has today has one; an entry added without one is refused here with a
-        // line, rather than left to `rustc` about a method the generated file's
-        // receiver does not have (Part III, C.1).
-        if self
-            .s
-            .facts
-            .pausing_walks
-            .contains(&((flow.statement as i64), self.text(method).to_string()))
-        {
-            let name = self.text(method);
-            return Err(refused_at!(
-                flow.statement,
-                "`{name}` can't be used on a sequence whose steps pause. Write a \
-                 `for x in … {{ … }}` loop instead, and do the work inside it."
-            ));
-        }
-        if self.method_pauses(flow, method) {
-            if flow.in_lambda {
-                return Err(pausing_in_a_lambda(flow.statement, self.text(method)));
-            }
-            out.push(".await");
-        }
-
-        let fails = self.method_can_fail(flow, method);
-        if flow.throws && !flow.caught && fails {
-            out.push("?");
-        }
-        // **A length that can fail is already an `i64`** (`fs::File::len`, #546):
-        // it is the system's answer, read by `std` and converted there, and a
-        // cast here would land on the `Result` a `catch` matches on.
-        if length && !fails {
-            out.push(" as i64");
-        }
-        Ok(())
-    }
-
-    /// The receiver of a [`Emitter::method_call`]: the expression, or the name
-    /// a `?.` already bound.
-    ///
-    /// `tight` is for the one caller that needs the conversion to bind tighter
-    /// than everything around it - `x.truncating_i32()` is Rust's `as`, which
-    /// sits below the unary operators in its precedence.
-    fn receiver(
-        &self,
-        out: &mut Out,
-        receiver: Option<&Expr>,
-        depth: usize,
-        flow: Flow<'_>,
-        tight: bool,
-    ) -> Result<()> {
         let (flow, scope) = flow.to_emit();
         let crossed = self.nikaia(|walk| {
-            self.s.emit_core_receiver(
+            self.s.emit_core_method_call(
                 &self.world,
                 walk,
                 out,
                 self,
                 receiver,
+                method,
+                args,
+                config,
                 depth as i64,
                 flow,
                 &scope,
-                tight,
+            )
+        });
+        self.crossed(crossed)
+    }
+
+    /// The `MethodCall` arm of `expr_as_written`, and the `?.` that is a plain
+    /// call (ADR-279 D13).
+    #[allow(clippy::too_many_arguments)]
+    fn method_arm(
+        &self,
+        out: &mut Out,
+        node: &Expr,
+        receiver: &Expr,
+        method: Symbol,
+        args: &[Expr],
+        config: &[crate::ast::ConfigArg],
+        depth: usize,
+        flow: Flow<'_>,
+    ) -> Result<()> {
+        let (flow, scope) = flow.to_emit();
+        let crossed = self.nikaia(|walk| {
+            self.s.emit_core_method_arm(
+                &self.world,
+                walk,
+                out,
+                self,
+                node,
+                receiver,
+                method,
+                args,
+                config,
+                depth as i64,
+                flow,
+                &scope,
             )
         });
         self.crossed(crossed)
@@ -9752,13 +8620,6 @@ impl<'p> Emitter<'p> {
         self.s.ends_in_a_cast(&self.world, expr)
     }
 
-    /// **`std`'s count of a sequence**, which counts in `usize` below and is
-    /// an `i64` here, as a length is (Part I 2.2): the checker says which
-    /// `count()` resolved to it, so a program's own `count` is left alone.
-    fn is_counted(&self, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr]) -> bool {
-        self.s.is_counted(receiver, self.text(method), args)
-    }
-
     /// An operand of an operator, parenthesised only where it binds looser
     /// than the position it stands in.
     fn nested(
@@ -9778,93 +8639,6 @@ impl<'p> Emitter<'p> {
                 self,
                 expr,
                 needs as i64,
-                depth as i64,
-                flow,
-                &scope,
-            )
-        });
-        self.crossed(crossed)
-    }
-
-    fn args(
-        &self,
-        out: &mut Out,
-        // The callee as the source wrote it. Part I 2.3's wrap at an argument
-        // is keyed by it, because a statement may hold several calls and one
-        // call several arguments (`check::Checked::nullable_args`).
-        callee: &str,
-        args: &[Expr],
-        // Which positional parameters of the callee take a **handle** on a shared
-        // value by value, where a ledger describes the callee. Empty where nothing
-        // does or nothing is known, which is almost every call.
-        takes_a_handle: &[bool],
-        depth: usize,
-        flow: Flow<'_>,
-    ) -> Result<()> {
-        let (flow, scope) = flow.to_emit();
-        let crossed = self.nikaia(|walk| {
-            self.s.emit_core_args(
-                &self.world,
-                walk,
-                out,
-                self,
-                callee,
-                args,
-                takes_a_handle,
-                depth as i64,
-                flow,
-                &scope,
-            )
-        });
-        self.crossed(crossed)
-    }
-
-    /// Which of a callee's positional parameters take a handle on a shared value
-    /// **by value**, where a ledger describes the callee.
-    ///
-    /// Resolved the way `contracts::sharing::Analysis::parameters` resolves it -
-    /// this program's own ledger first, then `std`'s, by name and then by suffix
-    /// (ADR-296 D17) - so that the duplication written here and the duplication
-    /// `--sharing` names are the same call's.
-    ///
-    /// A `&Shared[T]` parameter answers **no**, which is ADR-312 D1's correction:
-    /// lending the inner value out hands no handle on.
-    fn takes_a_handle(&self, callee: &str) -> Vec<bool> {
-        self.s.takes_a_handle(&self.world, callee)
-    }
-
-    /// Whether a ledger key is a grammar entry another package offers: what
-    /// `contracts` records for every `entry rule` - one input, `input`, and a
-    /// `ParseError` its one failure (#520).
-    fn a_package_grammar_entry(&self, key: &str) -> bool {
-        self.s.a_package_grammar_entry(key)
-    }
-
-    /// `Measurements.file(data)` - the whole of what a user writes to run a
-    /// grammar. Everything the parallel form needs is already in the grammar
-    /// (ADR-296): the frame says where the input may be cut, the `par_fold`
-    /// says how the pieces combine. What is left is choosing the executor, and
-    /// that is the build's decision, not the program's.
-    fn grammar_entry(
-        &self,
-        out: &mut Out,
-        grammar: Symbol,
-        entry: Symbol,
-        input: &Expr,
-        depth: usize,
-        flow: Flow<'_>,
-    ) -> Result<()> {
-        let (flow, scope) = flow.to_emit();
-        let crossed = self.nikaia(|walk| {
-            self.s.emit_core_grammar_entry(
-                &self.world,
-                walk,
-                out,
-                self,
-                grammar,
-                entry,
-                input,
-                self.build.parallelism(),
                 depth as i64,
                 flow,
                 &scope,
@@ -9991,12 +8765,6 @@ fn only_literals(index: &Expr) -> bool {
     nikaia_std::tools::emit_ops::only_literals(index)
 }
 
-/// `xs.len()` - the four `std` entries that hand back a length, by the name all
-/// four of them have ([ADR-285](../../../docs/specification/adr/adr-285.md) D1).
-fn is_length(method: &str, args: &[Expr]) -> bool {
-    nikaia_std::tools::emit_ops::is_length(method, args)
-}
-
 fn precedence(op: BinaryOp) -> u8 {
     nikaia_std::tools::emit_ops::precedence(op) as u8
 }
@@ -10108,30 +8876,6 @@ fn fold_callees(
         }
     }
     names
-}
-
-/// **A lambda whose body pauses, which this lowering cannot write.**
-///
-/// **What is left of it is a callee nothing describes.** A lambda that pauses
-/// is written as an `async` closure where the parameter is declared in this
-/// language ([ADR-277](../../../docs/specification/adr/adr-277.md) D11), and
-/// handed to the counterpart in `nikaia_std::seq` where it is one of `std`'s
-/// entries ([ADR-233](../../../docs/specification/adr/adr-233.md)) - every one
-/// of them: `map`, `filter`, a list's `map`, `sort_by_key`, `or_insert_with`,
-/// `and_modify`, and the four doors, where a pause is `NK2202` by the
-/// language's own rule, and `par_iter()`'s walks, where it is `NK2209`
-/// ([ADR-235](../../../docs/specification/adr/adr-235.md)). What reaches this
-/// is a lambda handed to a method whose receiver the checker could not
-/// resolve, so there is no signature to say what shape the lambda takes, and a
-/// plain closure holding an `.await` is a `rustc` error about a file nobody
-/// wrote (Part III, C.1).
-fn pausing_in_a_lambda(at: usize, callee: &str) -> anyhow::Error {
-    refused_at!(
-        at,
-        "This lambda calls `{callee}`, which can pause, but the compiler knows nothing \
-         about what the lambda is passed to, so it can't let it pause. Call `{callee}` \
-         outside the lambda and pass in the value."
-    )
 }
 
 /// Whether an expression names a **place** — something that already exists and
@@ -10288,29 +9032,6 @@ pub(crate) fn names_borrowing(ty: &Type, borrowing: &HashSet<Symbol>) -> bool {
             .is_some_and(|result| names_borrowing(result, borrowing));
     }
     borrowing.contains(&ty.name) || ty.generics.iter().any(|g| names_borrowing(g, borrowing))
-}
-
-/// The type a `truncating_` method converts to, if the name is one
-/// ([ADR-285](../../../docs/specification/adr/adr-285.md) D13).
-///
-/// The target is **in the name** rather than inferred, for the reason the
-/// `wrapping_` names have their own entry per type: there is one method per
-/// destination, and the ledger has to be able to write its signature down.
-///
-/// The list is closed and matches the ledger's entries. A name this does not
-/// recognise is an ordinary method call, so a program that writes
-/// `truncating_u8` is refused by the type checker for the method not existing
-/// rather than quietly emitting a conversion nobody described.
-fn truncating(method: &str) -> Option<String> {
-    nikaia_std::tools::emit_text::truncating(method)
-}
-
-/// The type a `checked_` conversion converts to, if the name is one
-/// ([ADR-315](../../../docs/specification/adr/adr-315.md)): the four
-/// `truncating_` has. `checked_add` and the arithmetic are Rust's own methods
-/// and lower as any method does.
-fn checked(method: &str) -> Option<String> {
-    nikaia_std::tools::emit_text::checked(method)
 }
 
 /// Walk every expression in a block, including the ones inside statements.
@@ -10588,15 +9309,6 @@ impl Emitter<'_> {
         self.nikaia(|walk| {
             self.s
                 .write_keep_prelude(walk, out, function, at as i64, depth as i64)
-        })
-    }
-
-    /// The keep a call to `callee` is given in this statement, where the
-    /// callee takes one.
-    fn keep_argument(&self, flow: Flow<'_>, callee: &str) -> Option<String> {
-        self.walk(|w| {
-            self.s
-                .keep_handed(w, flow.function, flow.statement as i64, callee)
         })
     }
 

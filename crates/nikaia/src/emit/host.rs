@@ -237,6 +237,46 @@ impl EmitHost for Emitter<'_> {
         self.build.crossings_are_possible()
     }
 
+    fn user_parallelism(&self) -> bool {
+        matches!(self.build.user_parallelism, super::UserParallelism::Yes)
+    }
+
+    fn parallelism(&self) -> String {
+        self.build.parallelism().to_string()
+    }
+
+    fn written(&self, expr: &Expr) -> String {
+        crate::check::written(self.parsed, expr)
+    }
+
+    fn held_buffers(
+        &self,
+        walk: &EmitWalk,
+        function: &str,
+        statement: i64,
+        root: &str,
+    ) -> Option<Vec<(i64, Vec<i64>)>> {
+        let plans = &self.s.keep_plans;
+        let plan = match plans.get(function) {
+            Some(plan) => plan,
+            None => plans.get(walk.keep_function.as_str())?,
+        };
+        let by_arg = plan.holds.get(&(statement, root.to_string()))?;
+        let width = plan.widths.get(root).copied().unwrap_or(1);
+        Some(
+            by_arg
+                .iter()
+                .map(|(arg, buffers)| {
+                    let mut keeps: Vec<i64> = buffers.iter().copied().collect();
+                    while (keeps.len() as i64) < width {
+                        keeps.push(keeps[keeps.len() - 1]);
+                    }
+                    (*arg, keeps)
+                })
+                .collect(),
+        )
+    }
+
     fn names_read(&self, expr: &Expr) -> Vec<String> {
         let mut names = Vec::new();
         crate::contracts::sync::visit_expr(self.parsed, expr, &mut |each| {
