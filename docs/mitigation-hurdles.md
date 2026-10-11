@@ -94,6 +94,20 @@ mentions are left in `check/` + `emit/` (10 type positions).
 **Recommendation:** (a) now. Take up (b) only if a callgrind count on a moved
 module shows the maps matter.
 
+**Decided (October 11, 2026), neither (b) nor (c) as written** -
+[ADR-010](specification/adr/adr-010.md) D9, Part III 17.1, issue #581. The
+owner: the type is fixed only once all the information is there, and at a
+package boundary both variants stay possible, as with generics. So: one hasher
+per class of maps a value passes between, decided after the whole package is
+read; a map in a `pub` signature or type is a hidden type parameter
+(`nikaia_std::hash::Fast` / `Keyed`, default `Keyed`) that each use fills; the
+ledger gains `maps`. No special rule for `tools`. **The mechanism, re-checked
+(probes in #581):** D6 is not *whether the file builds one*. `tools` is lowered
+with each file's own trust analysis, where a method call on a type another
+file declares is unresolved and so untrusted; a project uses the entry file's
+analysis for every file, so a socket read in another file gets the fixed seed.
+(a) stays the convention until #581 is built and its callgrind count is in.
+
 ## 4. `Symbol` is not `Ord`
 
 **What it is.** `winnow_grammar::Symbol` is an interned name, a `u32` handle.
@@ -123,5 +137,5 @@ needed in any case.
 | 3 | fix D1, D2, D3, D8, D14 (lowering defects) | compiler | small each | each removes a workaround that costs one build cycle when met | no (bugs) |
 | 4 | D15 refusal + D10/D11b checks | compiler | small | turns rustc errors into Nikaia messages | no |
 | 5 | `Symbol: Ord` (4a) | dependency | trivial | 6 maps, fewer allocations | **yes** (his crate) |
-| 6 | stable `HashMap` lowering in `tools` (3b) | compiler, ADR-010 D5 | small-medium | 10 type positions; only if callgrind shows it | **yes** |
+| 6 | one `HashMap` type per class, a type parameter at the boundary (3) | compiler, ADR-010 D9 + Part III 17.1 | medium | decided (#581); `tools` may use `HashMap` where callgrind shows it | decided (#581) |
 | 7 | explicit `ref(param)` results (1b) | language | high | rejected (ADR-283 D25) | decided |

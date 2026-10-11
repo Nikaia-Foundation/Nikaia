@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.837 (Draft)
+**Version:** 0.0.838 (Draft)
 **Date:** 2026-10-11
 
 ---
@@ -1371,9 +1371,11 @@ The standard library provides types for groups of values.
 
     A map's hash function follows where its keys came from. Keys derived from
     data a remote peer supplied are hashed with a random per-run key. Keys from
-    data the program supplied are hashed with the fast function. User code does
-    not configure this; Part III, 17.1 names the cases where a program decides
-    it. **The iteration order of a map is not guaranteed** and may differ
+    data the program supplied are hashed with the fast function. Maps that one
+    value passes between are hashed the same way, decided for the whole
+    package, and a map in a `pub` signature or type is hashed as each use's
+    map is. User code does not configure this; Part III, 17.1 names the cases
+    where a program decides it. **The iteration order of a map is not guaranteed** and may differ
     between runs.
 
 **A list is written `[1, 2, 3]`.** The elements are expressions, a trailing

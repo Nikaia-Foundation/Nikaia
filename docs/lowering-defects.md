@@ -18,7 +18,7 @@ before the 40 s `lower-std` (no false hits on today's `tools/*.nika`).
 | D3 | `set.insert(..)` as an arm value: `bool` against `()` | verified | d03_insert_tail.nika |
 | D4 | a `for` over `Vec[Symbol]` yields `ref Symbol` | verified (as a checker type) | probe_symkey.nika |
 | D5 | `(A, B)?` does not parse | by design; message does not name the way out | d05_tuple_opt.nika |
-| D6 | `HashSet`/`HashMap` fields lower to `TrustedSet`/`TrustedMap` | verified: the type depends on whether the file builds one | probe_hash.nika |
+| D6 | `HashSet`/`HashMap` fields lower to `TrustedSet`/`TrustedMap` | verified: the type follows each file's own trust analysis; decided in ADR-010 D9, build #581 | probe_hash.nika |
 | D7 | `x.len() as i64` writes `(x.len() as i64) as i64` | verified (clippy) | d07_len_cast.nika |
 | D8 | `get(x.span.start as i64)` lowers to `&x.span.start as i64` | verified | d08_u32_key.nika |
 | D9 | `Type?` parameter lowers to `Option<&Type>` | not reproduced as named; same root cause as D1 (`&Option<T>`) | d09_opt_param.nika, probe_tools.nika |
@@ -126,9 +126,10 @@ Workaround: `n.clone()` (a copy of the handle).
 In `tools`, a struct with `seen: collections::HashSet[String]` lowers to `collections::HashSet<String>` when nothing in the file builds one. Once the same file writes `collections::HashSet()`, the field lowers to `collections::TrustedSet<String>` (the provenance rule, ADR-010 D5). The Rust adapter that builds or reads the struct then needs a type it cannot predict. In a user program this is the intended rule.
 Workaround (the plan's): `BTreeSet`/`BTreeMap`.
 
-### To build (an owner decision, see the mitigation table)
-1. Decide whether a field's declared `HashMap` keeps one lowered type in `tools` (the default hasher, or always `TrustedMap`), independent of where it is built.
-2. A test: the field's Rust type is the same whether or not the file builds the map.
+**The mechanism, re-checked:** `tools` is lowered with each file's own trust analysis (`sysroot.rs` `lower_tools_at`). A method call on a value whose type another file declares is unresolved there and counts as untrusted, so that file writes `HashMap::new()` into a field its declaring file wrote as `TrustedMap` (rustc E0308). A project uses the entry file's analysis for all files.
+
+### To build
+Decided: [ADR-010](specification/adr/adr-010.md) D9, Part III 17.1. The build order and tests are #581.
 
 ## D7. `x.len() as i64` writes a doubled cast
 

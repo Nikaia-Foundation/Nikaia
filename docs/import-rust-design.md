@@ -47,7 +47,7 @@ The command: `nikaia import rust <crate|file>` reads a crate and writes Nikaia. 
 | `Result<T,E>` returned, `?` | `-> T throws`, an error enum + `impl Error` | E | Part I 7.1 |
 | `Result` stored as a value | — | P | a program never holds a `Result` (ADR-290 D21): rewritten as an enum |
 | `Vec`, `BTreeMap/Set` | `Vec[T]`, `collections::BTree*` | E | |
-| `HashMap/Set` | `collections::HashMap` | D | the lowered type moves with the file (lowering defect D6), and iteration order differs |
+| `HashMap/Set` | `collections::HashMap` | P | decision D: the hasher is the keys' trust's, so iteration order may differ; a custom `S` is dropped; a `pub` signature gains a hidden hasher parameter (default `Keyed`, std's own) |
 | `Box<T>` | `T` | E | the compiler boxes (ADR-246) |
 | `Rc<T>`/`Arc<T>` | `Shared[T]` | P | Part III 15.2. `Weak`, `ptr_eq`, `get_mut` **[U]** |
 | `Rc<RefCell<T>>`, `Arc<Mutex<T>>` | `SharedMut[T]` | P | the four doors. A `Seen` stamp refuses blind writes, and a lock inside a lock or I/O under a lock is refused (Part I 6.3, Part II 12.2-12.3) |
@@ -123,9 +123,9 @@ Each topic below goes into its own decision round. Nothing here blocks the self-
 * *Risk:* if this is decided *for the importer*, it breaks the CLAUDE.md rule. If it is not, the importer refuses most generic Rust.
 * *Recommendation:* the importer refuses with a code. The language question gets its own record and is argued from what Nikaia is for.
 
-**D. A stable `HashMap` lowering** (mitigation §3b).
-* *Facts:* the lowered type depends on whether the file builds the map (lowering defect D6). Rust's iteration order is unspecified, so a program that depends on it is already nondeterministic.
-* *Recommendation:* the importer maps to `BTreeMap` (an obligation: the order changes) until (b) is decided.
+**D. A stable `HashMap` lowering** (mitigation §3) - **decided** (October 11, 2026): [ADR-010](specification/adr/adr-010.md) D9, Part III 17.1, issue #581.
+* One hasher per class of maps a value passes between, decided after the whole package is read; a map in a `pub` signature or type is a hidden type parameter each use fills (`nikaia_std::hash::Fast` or `Keyed`, default `Keyed`).
+* For the importer: Rust `HashMap<K, V>` imports as `collections::HashMap[K, V]` (P: the hasher follows the keys' trust, so iteration order may change; Rust's `RandomState` order already changed from run to run, so a test that depends on it was not deterministic before). `HashMap<K, V, S>` with a hasher of the crate's choice drops `S` (P) until `hasher:` ([ADR-316](specification/adr/adr-316.md) D4) is built. A `pub` function or type of the round trip gains the hidden parameter; with its default it is the original's `HashMap<K, V>`, so the API diff shows no change for callers that name none.
 
 **E. Explicit result sources `-> ref(world) String`** (mitigation §1b) - **rejected** in [ADR-283](specification/adr/adr-283.md) D25: a lifetime with a parameter's name, for an answer the body gives. The ledger keeps the spelling.
 

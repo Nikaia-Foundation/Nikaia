@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.838] — 2026-10-11
+
+**One map, one hasher: decided per package, a type parameter at the package boundary, decided (ADR-010 D9, #581)**
+- ADR-010 D9: maps a value passes between (initialised, assigned, passed, returned, stored, compared, the arms of one if/match) are one class and one type; a class is keyed where any key reaching it is untrusted or it holds a barrier, decided after every file of the package is read, so no file order and no file that builds or fills a map changes it.
+- At a package's boundary a map in a pub signature or pub type is a hidden type parameter each use fills, as a generic's; Rust sees nikaia_std::hash::Fast / Keyed, default Keyed. Trait method signatures, described crates and bindings are fixed keyed. Rejected: per-file or entry-file trust, a run-time seed in one map type, the keyed floor at every public position (ADR-037 D8's reason does not hold for a package compiled with its consumer), a rule for tools only.
+- Part III 17.1 states the rule, 13.5 gains the ledger key maps (a permission key; absent = keyed), C.3 gains NK1246 (two different hasher: choices in one class; specified ahead of hasher:). Part I 4.5 gains one sentence. Not built: #581 holds the build order; today a project takes the entry file's trust for every file and tools takes each file's own.
+
 ## [0.0.837] — 2026-10-11
 
 **NK2302: a result points into the one parameter its body hands back, checked (ADR-283 D25-D26, #580 steps 1-4)**
