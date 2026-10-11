@@ -15996,6 +15996,38 @@ pub fn dsl_name(words: &winnow_grammar::InternerContext, package: Option<winnow_
     format!("{}::{}", words.resolve(held), words.resolve(target))
 }
 
+pub fn error_kind(declared: &collections::BTreeSet<String>, library: &Ledger, name: &str) -> i64 {
+    if name == "?" { return 0; }
+    if declared.contains(name) { return 1; }
+    if library.types.contains_key(name) { return 2; }
+    0
+}
+
+pub fn sum_member_type(declared: &collections::BTreeSet<String>, library: &Ledger, name: &str, params: &str) -> String {
+    if error_kind(declared, library, name) == 0 { return name.to_owned(); }
+    format!("nikaia_std::error::Thrown<{}{}>", name, params)
+}
+
+pub fn member_of(words: &winnow_grammar::InternerContext, declared: &collections::BTreeSet<String>, library: &Ledger, pattern: &MatchPattern) -> Option<String> {
+    let path = match match_path(pattern) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    if path.len() < 2 { return None; }
+    let mut parts: Vec<String> = vec![];
+    for at in 0..path.len() as i64 - 1 { parts.push(words.resolve(*nikaia_std::index::get(&path, (at) as usize)).to_owned()); }
+    let member = parts.join("::");
+    if error_kind(declared, library, &member) == 0 { return None; }
+    Some(member)
+}
+
+fn match_path(pattern: &MatchPattern) -> Option<Vec<winnow_grammar::Symbol>> {
+    match pattern {
+        MatchPattern::Path(path) => { return Some(path.to_owned()); },
+        MatchPattern::Tuple { path, .. } => { return Some(path.to_owned()); },
+        MatchPattern::Named { path, .. } => { return Some(path.to_owned()); },
+        _ => { },
+    }
+    None
+}
+
 
 // --- emit_locals.nika ---
 
@@ -16331,6 +16363,44 @@ pub fn binds_a_part(part: &MatchPattern) -> bool {
         MatchPattern::Path(one) => one.len() == 1,
         MatchPattern::Otherwise => true,
         _ => false,
+    }
+}
+
+
+// --- emit_out.nika ---
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EmitMapEntry {
+    pub start: i64,
+    pub end: i64,
+    pub source: Span,
+    pub unit: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EmitOut {
+    pub buf: String,
+    pub entries: Vec<EmitMapEntry>,
+}
+
+impl EmitOut {
+    pub fn empty() -> EmitOut { EmitOut { buf: String::from(""), entries: vec![] } }
+    pub fn push(&mut self, text: &str) { self.buf.push_str(text); }
+    pub fn mark(&self) -> i64 { self.buf.len() as i64 }
+    pub fn record(&mut self, span: &Span, start: i64) {
+        let end = self.buf.len() as i64;
+        self.entries.push(EmitMapEntry { start, end, source: Span { start: span.start, end: span.end }, unit: 0 });
+    }
+    pub fn shift_entries(&mut self, at: i64, by: i64) {
+        for k in 0..self.entries.len() as i64 {
+            if nikaia_std::index::get(&self.entries, (k) as usize).start >= at { self.entries[nikaia_std::index::at(k)].start += by; }
+            if nikaia_std::index::get(&self.entries, (k) as usize).end >= at { self.entries[nikaia_std::index::at(k)].end += by; }
+        }
+    }
+    pub fn append(&mut self, other: EmitOut) {
+        let offset = self.buf.len() as i64;
+        self.buf.push_str(&other.buf);
+        for entry in other.entries.iter() { self.entries.push(EmitMapEntry { start: entry.start + offset, end: entry.end + offset, source: entry.source, unit: entry.unit }); }
     }
 }
 
@@ -36815,7 +36885,7 @@ pub mod emit_calls {
 }
 pub mod emit_items {
     #[allow(unused_imports)]
-    pub use super::{foreign_params, opaque_handles, foreign_results, foreign_traits, declared_errors, sum_name, sum_variant, variant_slot, dsl_name};
+    pub use super::{foreign_params, opaque_handles, foreign_results, foreign_traits, declared_errors, sum_name, sum_variant, variant_slot, dsl_name, error_kind, sum_member_type, member_of};
 }
 pub mod emit_locals {
     #[allow(unused_imports)]
@@ -36824,6 +36894,10 @@ pub mod emit_locals {
 pub mod emit_ops {
     #[allow(unused_imports)]
     pub use super::{precedence, binary_op, unary_op, repeat_suffix, pointing, jumps, jumps_at_the_end, a_number, only_literals, a_negation_inside, is_length, is_count, a_list_read_as_a_slice, frame_attribute, is_a_place, binds_a_part};
+}
+pub mod emit_out {
+    #[allow(unused_imports)]
+    pub use super::{EmitMapEntry, EmitOut};
 }
 pub mod emit_reach {
     #[allow(unused_imports)]

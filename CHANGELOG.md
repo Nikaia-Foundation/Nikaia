@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.796] — 2026-10-11
+
+**The emitter's output buffer and its error-name questions are Nikaia (tools/emit_out.nika, emit_items.nika, #558, step E2).**
+- `EmitOut` (the buffer and the entries of the source map: start, end, span, unit) with `push`, `mark`, `record`, `append` and `shift_entries`; `Out` in `emit` is that type, and `SourceMap` is built from its entries once, when a module is done. `take_lend` and `insert_after_first_brace` stay Rust (`std` has no `String::pop` or `insert_str` entry). `error_kind`, `member_of` and `sum_member_type` read the declared errors and the library ledger.
+
 ## [0.0.795] — 2026-10-11
 
 **Out records a span with a mark and a record, not a closure (emit, #558, step E1).**

@@ -1,0 +1,73 @@
+// crates/nikaia-std/src/tools/emit_out.nika
+//
+// **The text the emitter writes and where each part of it came from**, moved
+// from `emit/mod.rs` (ADR-294, #125, #558): the buffer, and one entry for every
+// run of it that a source span wrote. Entries are kept in the order they were
+// recorded, so "innermost first" survives an `append`. The compiler's
+// `SourceMap` is built from them once, when the module is done.
+//
+// Not here: taking a `&` back off the end of the buffer and inserting text
+// after the first `{` - `std` has no `String::pop` or `String::insert_str`
+// entry - which the emitter does on `buf` and then tells `shift_entries`.
+
+/// One run of the generated text and the source span that wrote it.
+pub struct EmitMapEntry {
+    pub start: i64,
+    pub end: i64,
+    pub source: Span,
+    pub unit: i64,
+}
+
+/// The generated text so far, and the map of it.
+pub struct EmitOut {
+    pub buf: String,
+    pub entries: Vec[EmitMapEntry],
+}
+
+impl EmitOut {
+    /// An empty buffer and an empty map.
+    pub fn empty() -> EmitOut {
+        return EmitOut { buf: "", entries: [] }
+    }
+
+    pub fn push(ref mut self, text: ref String) {
+        self.buf.push_str(text)
+    }
+
+    /// Where what is about to be written starts.
+    pub fn mark(ref self) -> i64 {
+        return self.buf.len()
+    }
+
+    /// Record that everything written since `start` came from `span`. Called
+    /// only after the writing succeeded. The emitter writes one module at a
+    /// time and does not know which: the driver stamps the unit when it joins
+    /// them.
+    pub fn record(ref mut self, span: ref Span, start: i64) {
+        let end = self.buf.len()
+        self.entries.push(EmitMapEntry { start: start, end: end, source: Span { start: span.start, end: span.end }, unit: 0 })
+    }
+
+    /// Text of its own was put in at `at`, `by` bytes long: every entry that
+    /// starts or ends at or after it moves along.
+    pub fn shift_entries(ref mut self, at: i64, by: i64) {
+        for k in 0..<self.entries.len() {
+            if self.entries[k].start >= at {
+                self.entries[k].start += by
+            }
+            if self.entries[k].end >= at {
+                self.entries[k].end += by
+            }
+        }
+    }
+
+    /// Append a scratch buffer, moving its map entries into place. Order is
+    /// preserved, so "innermost first" survives.
+    pub fn append(ref mut self, other: EmitOut) {
+        let offset = self.buf.len()
+        self.buf.push_str(other.buf)
+        for entry in other.entries {
+            self.entries.push(EmitMapEntry { start: entry.start + offset, end: entry.end + offset, source: entry.source, unit: entry.unit })
+        }
+    }
+}

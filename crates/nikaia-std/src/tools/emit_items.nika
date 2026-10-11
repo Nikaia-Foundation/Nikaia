@@ -125,3 +125,62 @@ pub fn dsl_name(words: ref winnow_grammar::InternerContext, package: winnow_gram
     let held = package ?? return words.resolve(target).clone()
     return f"{words.resolve(held)}::{words.resolve(target)}"
 }
+
+/// What an error name is: 0 where it is nothing the emitter can name, 1 where
+/// the unit declares an `impl Error` for it, 2 where a ledger describes the
+/// type (ADR-280 D9). The unnamed error is no name.
+pub fn error_kind(declared: ref collections::BTreeSet[String], library: ref Ledger, name: ref String) -> i64 {
+    if name == "?" {
+        return 0
+    }
+    if declared.contains(name) {
+        return 1
+    }
+    if library.types.contains_key(name) {
+        return 2
+    }
+    return 0
+}
+
+/// The type a member of a generated error sum is held as: in the envelope
+/// where it is a name, as it is written where not.
+pub fn sum_member_type(declared: ref collections::BTreeSet[String], library: ref Ledger, name: ref String, params: ref String) -> String {
+    if error_kind(declared, library, name) == 0 {
+        return name.clone()
+    }
+    return f"nikaia_std::error::Thrown<{name}{params}>"
+}
+
+/// The error a `match` arm's pattern names, written `Error::Variant`: the path
+/// without its last segment, if that names an error.
+pub fn member_of(words: ref winnow_grammar::InternerContext, declared: ref collections::BTreeSet[String], library: ref Ledger, pattern: ref MatchPattern) -> String? {
+    let path = match_path(pattern) ?? return null
+    if path.len() < 2 {
+        return null
+    }
+    let mut parts: Vec[String] = []
+    for at in 0..<path.len() - 1 {
+        parts.push(words.resolve(path[at]).clone())
+    }
+    let member = parts.join("::")
+    if error_kind(declared, library, member) == 0 {
+        return null
+    }
+    return member
+}
+
+fn match_path(pattern: ref MatchPattern) -> Vec[winnow_grammar::Symbol]? {
+    match pattern {
+        MatchPattern::Path(path) => {
+            return path.clone()
+        },
+        MatchPattern::Tuple { path, .. } => {
+            return path.clone()
+        },
+        MatchPattern::Named { path, .. } => {
+            return path.clone()
+        },
+        else => {},
+    }
+    return null
+}

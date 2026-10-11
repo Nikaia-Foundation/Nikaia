@@ -143,6 +143,7 @@ COMPILER_NIKA = {
     "check_exprs.nika": "check: eight reports about one expression, said in its own words (0.0.791)",
     "emit_calls.nika": "emit: whether a call pauses or can fail, the errors a set of branches throws, and whether a function returns an Either (0.0.792)",
     "check_facts.nika": "check: the facts the checker leaves for the emitter, one struct (0.0.794)",
+    "emit_out.nika": "emit: the text being written and the map of where each run of it came from (0.0.796)",
 }
 
 
