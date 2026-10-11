@@ -75,6 +75,17 @@ Ir 420,568,668 -> 420,646,650 (a rerun of the same binary moves 20,000 to
 allocation is below the run-to-run spread; the Bcm rise is the same 1,700 on two
 unrelated inputs, which points at the layout of the two binaries and not at these
 functions. No gain is claimed.
+**Closed** (#580 step 9, 0.0.841): a result whose struct another file declares is
+walked like one declared in the file (the package's types that hold a view, from
+the ledger), so it is `NK2302` or accepted and compiled, never a rustc error.
+Over-refusals of existing code, measured over `tools/*.nika` (`lower-std`),
+`tests/`, `examples/` and `benches/`: none from a local touched by a method call
+or a `mut` parameter (the imprecision stays, nothing needs it tightened). One from
+another cause: `world.words.resolve(..)` with a second view parameter, because
+the fields of a type another file declares are unknown to the walk and its method
+calls count as touching every argument; the workaround is to pass the field
+(`words: ref winnow_grammar::InternerContext`). Making the walk read those fields
+from the ledger is not built.
 
 ## 2. No lifetimes in the source
 
