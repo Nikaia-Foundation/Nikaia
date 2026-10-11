@@ -40,30 +40,6 @@ use crate::contracts::SignatureOps;
 use crate::parser::Parsed;
 use crate::{refused, refused_at};
 
-/// One branch of an `overlap { … }`, where the schedule and the written order
-/// differ and the results have to be put back (ADR-292 D2, D6).
-const BRANCH: &str = "__nikaia_branch_";
-
-/// The name a `select` arm's winning value arrives under, where it has to be
-/// unwrapped before the arm's own binding sees it (ADR-292 D12).
-const WINNER: &str = "__nikaia_won";
-
-/// What the variants of `std`'s `Race<n>` are called, in written order.
-///
-/// **Ordinals and not letters**, so the generated `match` reads as the source
-/// does: `Race2::Second(_)` is the second arm of the block (Part III C.1).
-const ORDINALS: [&str; MOST_BRANCHES] = [
-    "First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh", "Eighth",
-];
-
-/// How many branches an `overlap` block may have.
-///
-/// `std` writes one vehicle per arity, because the branches have different types
-/// and a tuple of futures is what that means in the language below. Eight is
-/// what is written; a block with more is refused **with its reason** rather than
-/// miscompiled, which is the only thing a limit owes a reader.
-const MOST_BRANCHES: usize = 8;
-
 /// The machine a program is built for (ADR-037 D1).
 ///
 /// It decides what `std` can offer and what a panic does. It decides nothing
@@ -1292,9 +1268,6 @@ const STORED: &str = "__nikaia_stored";
 /// one severity down. A block with a `let` in it is a block the lint has
 /// nothing to say about.
 const ARM_VALUE: &str = "__nikaia_value";
-
-/// The name a failure is bound to where an arm takes it apart itself.
-const ARM_FAILED: &str = "__nikaia_failed";
 
 /// The name a **pausing** sequence is bound to for the length of its loop
 /// ([ADR-172](../../docs/specification/adr/adr-172.md) D1).
@@ -5022,86 +4995,22 @@ impl<'p> Emitter<'p> {
         depth: usize,
         flow: Flow<'_>,
     ) -> Result<Option<()>> {
-        let a_length = |e: &Expr| {
-            matches!(e, Expr::MethodCall { method, args, .. }
-                if args.is_empty() && self.text(*method) == "len")
-        };
-        let (counter, length, counter_first) = match (lhs, rhs) {
-            (c, l) if a_length(l) && !a_length(c) && self.never_negative(flow, c) => (c, l, true),
-            (l, c) if a_length(l) && !a_length(c) && self.never_negative(flow, c) => (c, l, false),
-            _ => return Ok(None),
-        };
-        let written = {
-            let mut s_buf = Out::empty();
-            let s = &mut s_buf;
-            self.nested(s, length, u8::MAX, depth, flow)?;
-            s_buf
-        };
-        let Some(bare) = written.buf.strip_suffix(" as i64").or_else(|| {
-            written
-                .buf
-                .strip_prefix('(')
-                .and_then(|b| b.strip_suffix(" as i64)"))
-        }) else {
-            return Ok(None);
-        };
-        // **Empty or not is asked as such**: `xs.len() > 0` is `clippy`'s
-        // `len_zero` about a file nobody wrote, and `!xs.is_empty()` is what
-        // a person writes.
-        if let (
-            Expr::LitInt {
-                value,
-                negative: false,
-                ..
-            },
-            Some(receiver),
-        ) = (counter, bare.strip_suffix(".len()"))
-        {
-            // The comparison as `length op n`.
-            let op = match (counter_first, op) {
-                (false, op) => *op,
-                (true, BinaryOp::Lt) => BinaryOp::Gt,
-                (true, BinaryOp::Le) => BinaryOp::Ge,
-                (true, BinaryOp::Gt) => BinaryOp::Lt,
-                (true, BinaryOp::Ge) => BinaryOp::Le,
-                (true, op) => *op,
-            };
-            let empty = match (op, *value) {
-                (BinaryOp::Eq | BinaryOp::Le, 0) | (BinaryOp::Lt, 1) => Some(true),
-                (BinaryOp::Ne | BinaryOp::Gt, 0) | (BinaryOp::Ge, 1) => Some(false),
-                _ => None,
-            };
-            if let Some(empty) = empty {
-                let not = if empty { "" } else { "!" };
-                out.push(&format!("{not}{receiver}.is_empty()"));
-                return Ok(Some(()));
-            }
-        }
-        // A literal is written as it is: Rust gives it the length's type, and
-        // a cast on it is `clippy`'s `unnecessary_cast` about a file nobody
-        // wrote.
-        let counter = match counter {
-            Expr::LitInt {
-                value,
-                negative: false,
-                ..
-            } => value.to_string(),
-            _ => {
-                let counted = {
-                    let mut s_buf = Out::empty();
-                    let s = &mut s_buf;
-                    self.expr(s, counter, depth, flow)?;
-                    s_buf
-                };
-                format!("(({}) as usize)", counted.buf)
-            }
-        };
-        let (left, right) = match counter_first {
-            true => (counter, bare.to_string()),
-            false => (bare.to_string(), counter),
-        };
-        out.push(&format!("{left} {} {right}", binary_op(*op)));
-        Ok(Some(()))
+        let (flow, scope) = flow.to_emit();
+        let crossed = self.nikaia(|walk| {
+            self.s.emit_core_against_a_length(
+                &self.world,
+                walk,
+                out,
+                self,
+                *op,
+                lhs,
+                rhs,
+                depth as i64,
+                flow,
+                &scope,
+            )
+        });
+        Ok(self.crossed(crossed)?.then_some(()))
     }
 
     /// `let mut xs = []` and, right after it, `xs.resize(n, v)` with `std`'s
@@ -5171,161 +5080,22 @@ impl<'p> Emitter<'p> {
         tail: Tail,
         flow: Flow<'_>,
     ) -> Result<()> {
-        self.hold_owned_receiver(out, stmt, depth, flow)?;
-        self.hold_indices_read_from_the_target(out, stmt, depth, flow)?;
-        if self.s.facts.held_reaches.is_empty() {
-            return Ok(());
-        }
-        let (value, holdable) = match stmt {
-            Stmt::Let { value, .. } | Stmt::Assign { value, .. } => (value, true),
-            Stmt::Expr(value) => (value, tail == Tail::Statement),
-            Stmt::Return(Some(value)) => (value, false),
-            _ => return Ok(()),
-        };
-        let (receivers, walked) =
-            nikaia_std::tools::emit_core_below::emit_held_in(value, false, false);
-        let found = receivers
-            .into_iter()
-            .zip(walked.safe)
-            .filter(|(receiver, _)| {
-                self.s
-                    .facts
-                    .held_reaches
-                    .contains(&crate::check::value_node(receiver))
-            });
-        for (receiver, safe) in found {
-            if !safe || !holdable {
-                return Err(refused_at!(
-                    span.at(),
-                    "This `?.` returns a view of a value that's gone at the end of this \
-                     line. Put the value in a `let` on the line before, and use `?.` on \
-                     that name."
-                ));
-            }
-            let name = format!("__nikaia_held_{}", self.walk(|w| w.held.len()));
-            out.push(&format!("let {name} = "));
-            self.expr(out, receiver, depth, flow)?;
-            out.push(&format!(";\n{}", "    ".repeat(depth)));
-            self.walking(|w| w.held.insert(crate::check::value_node(receiver), name));
-        }
-        Ok(())
-    }
-
-    /// **An index that reads what the write borrows is worked out first**
-    /// (#570). `v[v.len() - 1] = x` and `v[v.len() - 1] += 1` lowered to a
-    /// write that borrows `v` mutably with `v.len()` inside its arguments:
-    /// `rustc`'s E0502 about a file nobody wrote. The index is bound before the
-    /// statement, `let __nikaia_held_0 = v.len() as i64 - 1;`, which is what a
-    /// reader would write by hand and what the position was going to be.
-    ///
-    /// Only an index of a list that names the root of the place written, and
-    /// not a literal and not a key of a map.
-    fn hold_indices_read_from_the_target(
-        &self,
-        out: &mut Out,
-        stmt: &Stmt,
-        depth: usize,
-        flow: Flow<'_>,
-    ) -> Result<()> {
-        let Stmt::Assign { target, .. } = stmt else {
-            return Ok(());
-        };
-        let mut chain: Vec<&Expr> = Vec::new();
-        let mut at = target;
-        let root = loop {
-            match at {
-                Expr::Index { base, index, .. } => {
-                    chain.push(index);
-                    at = base;
-                }
-                Expr::Field { base, .. } => at = base,
-                Expr::Variable(name, _) => break self.text(*name),
-                _ => return Ok(()),
-            }
-        };
-        // Evaluated in the order they are written: the innermost base first.
-        for index in chain.into_iter().rev() {
-            if only_literals(index) || self.map_key(index, true).is_some() {
-                continue;
-            }
-            let mut mentions = false;
-            crate::contracts::sync::visit_expr(self.parsed, index, &mut |expr| {
-                if let Expr::Variable(name, _) = expr
-                    && self.text(*name) == root
-                {
-                    mentions = true;
-                }
-            });
-            if !mentions {
-                continue;
-            }
-            let key = crate::check::value_node(index);
-            self.walking(|w| w.held.remove(&key));
-            let name = format!("__nikaia_held_{}", self.walk(|w| w.held.len()));
-            out.push(&format!("let {name} = "));
-            self.index_expr(out, index, depth, flow)?;
-            out.push(&format!(";\n{}", "    ".repeat(depth)));
-            self.walking(|w| w.held.insert(key, name));
-        }
-        Ok(())
-    }
-
-    /// **A view cut from a call's result outlives the statement only if the
-    /// result does** (#559). `let v = f().trim_start()` hands back a view of
-    /// the `String` `f()` made, and that value dies at the `;` - `rustc`'s
-    /// E0716 about a file nobody wrote. So the call is bound first,
-    /// `let __nikaia_held_0 = f();`, and the chain reads the binding. Nothing is
-    /// copied and nothing runs that did not run: the receiver is the first thing
-    /// the chain evaluates.
-    ///
-    /// Only for a `let`, whose name outlives the statement, and only where a
-    /// method of the chain is one of text's views (`tools/tiers.nika`).
-    fn hold_owned_receiver(
-        &self,
-        out: &mut Out,
-        stmt: &Stmt,
-        depth: usize,
-        flow: Flow<'_>,
-    ) -> Result<()> {
-        let Stmt::Let { value, .. } = stmt else {
-            return Ok(());
-        };
-        // A chain that ends in text of its own holds nothing of the receiver.
-        if let Expr::MethodCall { method, .. } = value
-            && nikaia_std::tools::tiers::owns_its_text(self.text(*method))
-        {
-            return Ok(());
-        }
-        let mut viewed = false;
-        let mut at = value;
-        while let Expr::MethodCall {
-            receiver, method, ..
-        } = at
-        {
-            viewed |= nikaia_std::tools::tiers::views_what_it_is_called_on(self.text(*method));
-            at = receiver;
-        }
-        let base = match at {
-            Expr::Try(inner, _) => inner.as_ref(),
-            other => other,
-        };
-        if !viewed
-            || crate::check::value_node(at) == crate::check::value_node(value)
-            || !matches!(base, Expr::Call { .. })
-        {
-            return Ok(());
-        }
-        // A statement written twice (a scratch pass, then the real one) holds
-        // the same receiver twice: the second time it is written out again, not
-        // read back from the first.
-        let key = crate::check::value_node(at);
-        self.walking(|w| w.held.remove(&key));
-        let name = format!("__nikaia_held_{}", self.walk(|w| w.held.len()));
-        out.push(&format!("let {name} = "));
-        self.expr(out, at, depth, flow)?;
-        out.push(&format!(";\n{}", "    ".repeat(depth)));
-        self.walking(|w| w.held.insert(key, name));
-        Ok(())
+        let (flow, scope) = flow.to_emit();
+        let crossed = self.nikaia(|walk| {
+            self.s.emit_core_hold_temporaries(
+                &self.world,
+                walk,
+                out,
+                self,
+                stmt,
+                span,
+                depth as i64,
+                tail,
+                flow,
+                &scope,
+            )
+        });
+        self.crossed(crossed)
     }
 
     /// A statement, and the map a `let` of [`Emitter::trusted_lets`] makes
@@ -9511,20 +9281,6 @@ impl<'p> Emitter<'p> {
         self.crossed(crossed)
     }
 
-    /// Whether a branch of an `overlap` can fail out of itself
-    /// ([ADR-292](../../../docs/specification/adr/adr-292.md) D5).
-    ///
-    /// **The guarded half of a `catch` does not count**, which is the whole
-    /// reason this is its own walk rather than [`visit_expr`]: D5 says
-    /// per-branch handling is a `catch` inside the branch, so a branch that
-    /// catches its own failure hands back a value and fails nothing. The
-    /// handler *is* walked — a `throw` in one leaves the branch like any other
-    /// failure.
-    fn branch_can_fail(&self, value: &Expr, flow: Flow<'_>) -> bool {
-        self.s
-            .branch_can_fail(&self.world, flow.statement as i64, value)
-    }
-
     /// **`overlap { … }`** — Part I 8.1.2,
     /// [ADR-292](../../../docs/specification/adr/adr-292.md) D2 and D6.
     ///
@@ -9550,214 +9306,20 @@ impl<'p> Emitter<'p> {
     /// two differ the tuple is rebuilt, which costs a move per branch and is
     /// visible in the emitted Rust as the permutation it is.
     fn overlap(&self, out: &mut Out, block: &Block, depth: usize, flow: Flow<'_>) -> Result<()> {
-        if block.stmts.len() < 2 {
-            return Err(refused_at!(
-                flow.statement,
-                "An `overlap` block needs at least two branches to run at the same time."
-            ));
-        }
-        if block.stmts.len() > MOST_BRANCHES {
-            return Err(refused_at!(
-                flow.statement,
-                "This `overlap` block has {} branches, but at most {MOST_BRANCHES} are \
-                 supported.",
-                block.stmts.len()
-            ));
-        }
-
-        // D6: the branches that can pause, in written order among themselves,
-        // then the ones that cannot. `sort_by_key` is stable, so written order
-        // survives inside each half - which is what makes the schedule
-        // reproducible rather than merely correct.
-        let mut order: Vec<usize> = (0..block.stmts.len()).collect();
-        order.sort_by_key(|&at| !self.branch_pauses(&block.stmts[at], flow));
-
-        // **D5: a branch whose failure is uncaught fails the block, and the
-        // first in written order wins.** The `?`s below are written in written
-        // order, and `?` returns at the first `Err` - so the rule is the
-        // language below's own control flow rather than a comparison this
-        // compiler makes. Per-branch handling is a `catch` inside the branch,
-        // which `branch_can_fail` does not count.
-        //
-        // All or none: a branch that cannot fail is wrapped in `Ok` too, so the
-        // vehicle sees one shape and the `?`s line up. The error type is named
-        // rather than inferred, because an `async` block with a `?` in it and
-        // nothing to infer from is *"type annotations needed"* about a file
-        // nobody wrote (Part III, C.1).
-        //
-        // **Or handled at the block itself**
-        // ([ADR-292](../../docs/specification/adr/adr-292.md) D18): a `catch`
-        // written on the block is where the failure stops, so the branches are
-        // wrapped for it exactly as they are for a `throws` function - and the
-        // outcome stays a `Result` for the handler to take apart.
-        let fallible = (flow.throws || flow.handled_here)
-            && block.stmts.iter().any(|stmt| match &stmt.node {
-                Stmt::Expr(value) => self.branch_can_fail(value, flow.at(stmt.span.at())),
-                _ => false,
-            });
-
-        // **Whose channel the branches travel in**
-        // ([ADR-292](../../docs/specification/adr/adr-292.md) D19). Where the
-        // failure leaves the function, it is the function's, as
-        // [ADR-292](../../docs/specification/adr/adr-292.md) D17 made it. Where a
-        // `catch` on the block handles it, the function may not be `throws` at
-        // all — so it is the set the **branches** throw, which is also what the
-        // handler binds.
-        let joined = flow.handled_here.then(|| {
-            self.joined_throws(
-                nikaia_std::tools::emit_core_below::emit_branch_values(block).into_iter(),
+        let (flow, scope) = flow.to_emit();
+        let crossed = self.nikaia(|walk| {
+            self.s.emit_core_overlap(
+                &self.world,
+                walk,
+                out,
+                self,
+                block,
+                depth as i64,
+                flow,
+                &scope,
             )
         });
-        let channel = match &joined {
-            None => flow.channel.to_string(),
-            // `main` has no parameters to borrow from and a block's outcome is
-            // bound where it is written, so an error carrying a view can only be
-            // `'static` here — [ADR-283](../../docs/specification/adr/adr-283.md)
-            // D9's derivation, one position over.
-            Some(set) => self.channel_of(set, Lifetimes::Elided, false),
-        };
-
-        // **Each branch settles what it parks, where a value with a cleanup
-        // may die in this function** ([ADR-297](../../docs/specification/adr/adr-297.md)
-        // D3, [ADR-292](../../docs/specification/adr/adr-292.md) D10): the
-        // branches run at once in one task, so each gets a queue of its own. A
-        // cleanup that fails joins **its branch's** error where the branch's
-        // channel is the box, which is where such a failure travels; elsewhere
-        // what the branch parked goes to the function's settle point.
-        let own_queue = self.s.facts.settle_fns.get(flow.function).map(|&failing| {
-            let kind = self.settle_kind();
-            match failing && fallible && channel == "Box<dyn std::error::Error>" {
-                true => format!("nikaia_std::cleanup::branch_after::<{kind}, _, _, _>"),
-                false => format!("nikaia_std::cleanup::branch::<{kind}, _, _>"),
-            }
-        });
-
-        let pad = "    ".repeat(depth);
-        let inner = "    ".repeat(depth + 1);
-        let reordered = order.iter().enumerate().any(|(at, &from)| at != from);
-        let bound = reordered || fallible;
-
-        if bound {
-            out.push("{\n");
-            out.push(&inner);
-            out.push(&format!(
-                "// ADR-292 D6: started in this order, answered in the written one.\n{inner}"
-            ));
-            out.push("let (");
-            for (at, _) in order.iter().enumerate() {
-                if at > 0 {
-                    out.push(", ");
-                }
-                out.push(&format!("{BRANCH}{at}"));
-            }
-            out.push(") = ");
-        }
-
-        out.push(&format!(
-            "nikaia_std::task::overlap{}(\n",
-            block.stmts.len()
-        ));
-        let body = "    ".repeat(depth + 1 + usize::from(bound));
-        for &from in &order {
-            let stmt = &block.stmts[from];
-            out.push(&body);
-            out.push("async { ");
-            // A branch's own statement, as an expression. `Flow::PLAIN` for the
-            // reason a lambda's body gets it: a `return` inside a branch would
-            // leave the branch, and `catch` is how D5 says a branch handles its
-            // own failure.
-            let inside = Flow {
-                statement: stmt.span.at(),
-                throws: fallible,
-                origin: flow.origin,
-                // A branch is still inside this function, so a nested vehicle
-                // in one names the same channel
-                // ([ADR-292](../../docs/specification/adr/adr-292.md) D17).
-                channel: flow.channel,
-                ..Flow::PLAIN
-            };
-            match &stmt.node {
-                Stmt::Expr(value) => {
-                    if let Some(wrapper) = &own_queue {
-                        out.push(&format!("{wrapper}(async {{ "));
-                    }
-                    if fallible {
-                        // **The enclosing function's channel**
-                        // ([ADR-292](../../docs/specification/adr/adr-292.md)
-                        // D2), because the `?` below converts into it.
-                        out.push(&format!("Ok::<_, {channel}>("));
-                    }
-                    {
-                        let st = out.mark();
-                        self.expr(out, value, depth + 1, inside)?;
-                        out.record(&stmt.span, st);
-                    }
-                    if fallible {
-                        out.push(")");
-                    }
-                    match &own_queue {
-                        Some(wrapper) if wrapper.contains("branch_after") => {
-                            out.push(&format!(" }}, &{:?}).await", flow.origin));
-                        }
-                        Some(_) => out.push(" }).await"),
-                        None => {}
-                    }
-                }
-                _ => {
-                    return Err(refused_at!(
-                        flow.statement,
-                        "Each branch of an `overlap` has to be an expression."
-                    ));
-                }
-            }
-            out.push(" },\n");
-        }
-        out.push(&"    ".repeat(depth + usize::from(bound)));
-        out.push(")");
-
-        if bound {
-            out.push(&format!(".await;\n{inner}"));
-            // **The branches become one outcome in `std`**
-            // ([ADR-292](../../docs/specification/adr/adr-292.md) D18) — `combine<n>` takes them in
-            // written order and answers the first `Err` among them
-            // ([ADR-292](../../docs/specification/adr/adr-292.md) D5). A `?`
-            // per branch written here would leave the *function* instead, which
-            // is what a `catch` on the block cannot allow; and one function that
-            // sees every outcome is where
-            // [ADR-292](../../docs/specification/adr/adr-292.md)'s `secondary`
-            // list goes the day the later failures stop being dropped.
-            if fallible {
-                out.push(&format!("nikaia_std::task::combine{}(", block.stmts.len()));
-            } else {
-                out.push("(");
-            }
-            // Written order out of start order: branch `written` was handed
-            // over at `order.iter().position(…)`, so that is the name it came
-            // back under. Where nothing was reordered the two are the same, and
-            // this still writes the tuple out because the combination hangs off
-            // it.
-            for written in 0..block.stmts.len() {
-                if written > 0 {
-                    out.push(", ");
-                }
-                let at = order
-                    .iter()
-                    .position(|&from| from == written)
-                    .expect("every branch is handed over exactly once");
-                out.push(&format!("{BRANCH}{at}"));
-            }
-            out.push(")");
-            // **And the `?` is one, on the block** — unless the handler is
-            // right here, in which case the `match` around this is what takes
-            // the outcome apart.
-            if fallible && !flow.handled_here {
-                out.push("?");
-            }
-            out.push(&format!("\n{pad}}}"));
-        } else {
-            out.push(".await");
-        }
-        Ok(())
+        self.crossed(crossed)
     }
 
     /// **`select { … }`** — Part II 12.4,
@@ -9786,144 +9348,20 @@ impl<'p> Emitter<'p> {
         depth: usize,
         flow: Flow<'_>,
     ) -> Result<()> {
-        if arms.len() < 2 {
-            return Err(refused_at!(
-                flow.statement,
-                "A `select` needs at least two arms to choose between."
-            ));
-        }
-        if arms.len() > MOST_BRANCHES {
-            return Err(refused_at!(
-                flow.statement,
-                "This `select` has {} arms, but at most {MOST_BRANCHES} are supported.",
-                arms.len()
-            ));
-        }
-
-        // The same all-or-none the `overlap` above writes, and for the same
-        // reason: the vehicle sees one shape and the error type is named rather
-        // than inferred, because an `async` block with a `?` in it and nothing
-        // to infer from is *"type annotations needed"* about a file nobody
-        // wrote (Part III, C.1).
-        //
-        // **Or handled at the block** ([ADR-292](../../docs/specification/adr/adr-292.md)
-        // D1), exactly as an `overlap`'s is.
-        let fallible = (flow.throws || flow.handled_here)
-            && arms
-                .iter()
-                .any(|arm| self.branch_can_fail(&arm.value, flow.at(arm.at as usize)));
-
-        // Whose channel the arms travel in (D2): the function's where the
-        // failure leaves it, the **arms'** own set where a `catch` on the block
-        // is what handles it.
-        let joined = flow
-            .handled_here
-            .then(|| self.joined_throws(arms.iter().map(|arm| &arm.value)));
-        let channel = match &joined {
-            None => flow.channel.to_string(),
-            Some(set) => self.channel_of(set, Lifetimes::Elided, false),
-        };
-
-        let pad = "    ".repeat(depth);
-        let inner = "    ".repeat(depth + 1);
-        out.push(&format!("match nikaia_std::task::race{}(\n", arms.len()));
-        for arm in arms {
-            out.push(&inner);
-            out.push("async { ");
-            // `Flow::PLAIN` for the reason an `overlap` branch gets it: a
-            // `return` written inside the *raced expression* would leave that
-            // block. What an arm's **body** does is the function's, and the body
-            // is emitted below with the flow it was called with.
-            let inside = Flow {
-                statement: arm.at as usize,
-                throws: fallible,
-                origin: flow.origin,
-                // As an `overlap`'s branch does.
-                channel: channel.as_str(),
-                ..Flow::PLAIN
-            };
-            if fallible {
-                // The same as an `overlap`'s, one construct over
-                // ([ADR-292](../../docs/specification/adr/adr-292.md) D17).
-                out.push(&format!("Ok::<_, {channel}>("));
-            }
-            self.expr(out, &arm.value, depth + 1, inside)?;
-            if fallible {
-                out.push(")");
-            }
-            out.push(" },\n");
-        }
-        out.push(&format!("{pad}).await {{\n"));
-
-        for (at, arm) in arms.iter().enumerate() {
-            let bound = match (fallible, arm.binding) {
-                (true, _) => WINNER.to_string(),
-                (false, Some(name)) => self.text(name).to_string(),
-                (false, None) => "_".to_string(),
-            };
-            out.push(&format!(
-                "{inner}nikaia_std::task::Race{}::{}({bound}) => ",
-                arms.len(),
-                ORDINALS[at]
-            ));
-            // **The winner's `?`, at the top of the arm that won.** A `_` arm
-            // still propagates, because an arm that ignores a value does not
-            // ignore a failure.
-            //
-            // **Unless the handler is right here**
-            // ([ADR-292](../../docs/specification/adr/adr-292.md) D18): a `?`
-            // would leave the *function*, and what the `catch` around this
-            // `match` takes apart is the block's own outcome. So the failure is
-            // taken apart here instead, and the arm's value becomes the `Ok`
-            // half — which is what makes the whole `match` a `Result`.
-            if fallible && flow.handled_here {
-                let name = match arm.binding {
-                    Some(name) => self.text(name).to_string(),
-                    None => "_".to_string(),
-                };
-                out.push(&format!(
-                    "match {WINNER} {{\n{inner}    Err({ARM_FAILED}) => Err({ARM_FAILED}),\n{inner}    Ok({name}) => {{ let {ARM_VALUE} = "
-                ));
-                {
-                    let st = out.mark();
-                    self.block_opening_with(out, &arm.body, depth + 2, flow, Tail::Value, None)?;
-                    out.record(
-                        &Span {
-                            start: arm.at,
-                            end: arm.at,
-                        },
-                        st,
-                    );
-                }
-                out.push(&format!("; Ok({ARM_VALUE}) }},\n{inner}}}\n"));
-                continue;
-            }
-            let opening = fallible.then(|| match arm.binding {
-                Some(name) => format!("let {} = {WINNER}?;", self.text(name)),
-                None => format!("{WINNER}?;"),
-            });
-            {
-                let st = out.mark();
-                self.block_opening_with(
-                    out,
-                    &arm.body,
-                    depth + 1,
-                    flow,
-                    Tail::Value,
-                    opening.as_deref(),
-                )?;
-                out.record(
-                    &Span {
-                        start: arm.at,
-                        end: arm.at,
-                    },
-                    st,
-                );
-            }
-            out.push("\n");
-        }
-        out.push(&format!("{pad}}}"));
-        Ok(())
+        let (flow, scope) = flow.to_emit();
+        let crossed = self.nikaia(|walk| {
+            self.s.emit_core_select(
+                &self.world,
+                walk,
+                out,
+                self,
+                arms,
+                depth as i64,
+                flow,
+                &scope,
+            )
+        });
+        self.crossed(crossed)
     }
 
     /// Whether a call from `caller` to `callee` closes a cycle of pausing
@@ -10026,19 +9464,6 @@ impl<'p> Emitter<'p> {
         self.s.error_channel(
             &self.world,
             key,
-            lifetimes == Lifetimes::Elided,
-            &lifetimes.params(),
-            &Lifetimes::Static.params(),
-            borrows,
-        )
-    }
-
-    /// [`Emitter::error_channel`] asked of the **set** rather than of a
-    /// function ([ADR-292](../../docs/specification/adr/adr-292.md) D19).
-    fn channel_of(&self, throws: &[String], lifetimes: Lifetimes, borrows: bool) -> String {
-        self.s.channel_of(
-            &self.world,
-            throws,
             lifetimes == Lifetimes::Elided,
             &lifetimes.params(),
             &Lifetimes::Static.params(),
@@ -10264,31 +9689,6 @@ impl<'p> Emitter<'p> {
         format!("crate::{name}")
     }
 
-    /// **The set of error types a joining block can fail with**
-    /// ([ADR-292](../../docs/specification/adr/adr-292.md) D19): the union of
-    /// its branches', in the ledger's own order, which is sorted.
-    ///
-    /// A `catch` written on an `overlap` handles what the **branches** threw,
-    /// and the enclosing function may not be `throws` at all — so the channel
-    /// the branches are wrapped in and the one the handler binds are this set's
-    /// and not the function's.
-    ///
-    /// **It resolves no more than the two askers above already did**
-    /// ([ADR-296](../../docs/specification/adr/adr-296.md) D17): a branch's
-    /// callee by the name the source wrote, and that callee's `throws` column
-    /// off a ledger. A branch whose callee no ledger knows contributes the
-    /// absence of a claim, which makes the set the box — the safe direction.
-    fn joined_throws<'e>(&self, branches: impl Iterator<Item = &'e Expr>) -> Vec<String> {
-        let branches: Vec<&Expr> = branches.collect();
-        nikaia_std::tools::emit_calls::call_joined_throws(
-            &self.parsed.interner,
-            &self.parsed.aliases,
-            &self.s.own_contracts,
-            self.world.library,
-            &branches,
-        )
-    }
-
     fn caught_channel_is_named(&self, expr: &Expr) -> bool {
         self.s.caught_channel_is_named(&self.world, expr)
     }
@@ -10455,48 +9855,23 @@ impl<'p> Emitter<'p> {
         depth: usize,
         flow: Flow<'_>,
     ) -> Result<bool> {
-        let Some(pauses) = self
-            .s
-            .facts
-            .field_calls
-            .get(&crate::check::value_node(receiver))
-            .copied()
-        else {
-            return Ok(false);
-        };
-        // **Inside a lambda, as a pausing function is**
-        // ([ADR-230](../../docs/specification/adr/adr-230.md) D3):
-        // the closure below is synchronous, and an `.await` in it
-        // was `rustc`'s error about a file nobody wrote.
-        if pauses && flow.in_lambda {
-            let named = match receiver {
-                Expr::Variable(name, _) => {
-                    format!("{}.{}", self.text(*name), self.text(method))
-                }
-                _ => self.text(method).to_string(),
-            };
-            return Err(pausing_in_a_lambda(flow.statement, &named));
-        }
-        out.push("(");
-        match reached {
-            true => out.push(REACHED),
-            false => self.postfix_base(out, receiver, depth, flow)?,
-        }
-        out.push(&format!(".{})(", self.name(method)));
-        for (at, arg) in args.iter().enumerate() {
-            if at > 0 {
-                out.push(", ");
-            }
-            self.expr(out, arg, depth, flow)?;
-        }
-        out.push(")");
-        if pauses {
-            out.push(".await");
-        }
-        if flow.throws && !flow.caught && self.method_can_fail(flow, method) {
-            out.push("?");
-        }
-        Ok(true)
+        let (flow, scope) = flow.to_emit();
+        let crossed = self.nikaia(|walk| {
+            self.s.emit_core_a_field_call(
+                &self.world,
+                walk,
+                out,
+                self,
+                receiver,
+                reached,
+                method,
+                args,
+                depth as i64,
+                flow,
+                &scope,
+            )
+        });
+        self.crossed(crossed)
     }
 
     fn method_can_fail(&self, flow: Flow<'_>, method: Symbol) -> bool {
@@ -11491,28 +10866,21 @@ impl<'p> Emitter<'p> {
         flow: Flow<'_>,
         tight: bool,
     ) -> Result<()> {
-        // **An element the call changes is written as the place it is**
-        // (`check::Checked::changed_elements`).
-        let flow = match receiver {
-            Some(expr)
-                if self
-                    .s
-                    .facts
-                    .changed_elements
-                    .contains(&crate::check::value_node(expr)) =>
-            {
-                flow.place()
-            }
-            _ => flow,
-        };
-        match (receiver, tight) {
-            (Some(expr), true) => self.nested(out, expr, u8::MAX, depth, flow),
-            (Some(expr), false) => self.postfix_base(out, expr, depth, flow),
-            (None, _) => {
-                out.push(REACHED);
-                Ok(())
-            }
-        }
+        let (flow, scope) = flow.to_emit();
+        let crossed = self.nikaia(|walk| {
+            self.s.emit_core_receiver(
+                &self.world,
+                walk,
+                out,
+                self,
+                receiver,
+                depth as i64,
+                flow,
+                &scope,
+                tight,
+            )
+        });
+        self.crossed(crossed)
     }
 
     /// **A read through the brackets** (ADR-293 D4): `*get(&base, at(i))`,
@@ -11527,178 +10895,22 @@ impl<'p> Emitter<'p> {
         flow: Flow<'_>,
         deref: bool,
     ) -> Result<()> {
-        let slicing = self.slices(index);
-        if deref && !slicing {
-            out.push("*");
-        }
-        // **An index proved inside is read without its check**
-        // ([ADR-306](../../docs/specification/adr/adr-306.md) D5): the proof
-        // is the argument the `unsafe` stands on, and `proven::read` is the
-        // one operation it licenses.
-        if !slicing
-            && self
-                .s
-                .proven_indices
-                .contains(&((crate::check::value_node(base) as usize) as i64))
-            && self.map_key(index, false).is_none()
-        {
-            out.push("unsafe { nikaia_std::proven::read(");
-            match base {
-                Expr::Index {
-                    base: inner,
-                    index: at,
-                    ..
-                } if !self.slices(at)
-                    && self.map_key(at, false).is_none()
-                    && !self.reads_through_handle(flow, inner) =>
-                {
-                    self.index_read(out, inner, at, depth, flow, false)?;
-                }
-                _ => {
-                    out.push("&");
-                    self.postfix_base(out, base, depth, flow)?;
-                }
-            }
-            out.push(", (");
-            match only_literals(index) {
-                true => self.index_expr(out, index, depth, flow.inferred())?,
-                false => self.index_expr(out, index, depth, flow)?,
-            }
-            out.push(") as usize) }");
-            if self.reads_through_handle(flow, base) {
-                out.push(".get()");
-            }
-            return Ok(());
-        }
-        // **A read of a read is handed the reference it already is**
-        // (0.0.238): `d[i][j]` over a list of lists was
-        // `get(&(*get(&d, i)), j)`, a borrow of a deref - what `clippy`
-        // refuses in a `std` written in Nikaia (`tools/spelling.nika`), and
-        // noise in every program. The inner read answers a `&T` before its
-        // `*`, which is what the outer one takes; a map's read (a `T?`), a
-        // run and a read through a handle keep the long way round.
-        match base {
-            Expr::Index {
-                base: inner,
-                index: at,
-                ..
-            } if !self.slices(at)
-                && self.map_key(at, false).is_none()
-                && !self.reads_through_handle(flow, inner) =>
-            {
-                out.push("nikaia_std::index::get(");
-                self.index_read(out, inner, at, depth, flow, false)?;
-            }
-            _ => {
-                out.push("nikaia_std::index::get(&");
-                self.postfix_base(out, base, depth, flow)?;
-            }
-        }
-        out.push(", ");
-        // **The literal exception belongs to the read as well**, and
-        // it was missing here: `xs[0]` as a *read* went through
-        // `at(…)` whatever was in the brackets, and `at`'s `I` has
-        // nothing to infer itself from. Alone that survived, because
-        // an integer literal defaults late and `usize` is what every
-        // `At` for a number answers with — but a **field read on the
-        // element** needs the type *before* the defaulting, so
-        // `rows[1].a` was `cannot infer type` about the generated
-        // file, for both an `Array` and a `Vec`. That is [Part III
-        // C.1](../../docs/specification/30-nikaia-tooling.md)'s
-        // class and the very thing the paragraph above says this
-        // exception exists to prevent.
-        //
-        // **And a range written in literals is in the
-        // exception**, which it was not while the `*` above stood
-        // over one. `at` cannot settle a bare `1..=2`: `At` is
-        // implemented for a `RangeInclusive` of every signed type
-        // and each answers the same `RangeInclusive<usize>`, so
-        // there is nothing to infer `I` *from* and what came back
-        // was `cannot infer type` about the generated file. Handed
-        // over as written it settles itself, because
-        // `RangeInclusive<usize>` is the only one of them that is a
-        // `SliceIndex<[V]>` — which is what the exception says
-        // everywhere else it applies.
-        //
-        // **Except where it counts from the end.** `xs[-2..-1]` is
-        // an index out of bounds and says so at run time
-        // ([ADR-285](../../../docs/specification/adr/adr-285.md)
-        // D1) — but only if it reaches run time, and handed over as
-        // written it does not: `-2` against a `usize` is *the trait
-        // `Neg` is not implemented for `usize`*, about a type the
-        // program never named. So a range with a negation in it
-        // goes back through the conversion, **widened**, because an
-        // `i64` is the one width this language indexes with and
-        // `at` has nothing else to read it off.
-        let counts_down = slicing && a_negation_inside(index);
-        // **A key the map keeps nothing of is lent** (ADR-293 D27),
-        // and a key is not a position, so `at` does not see it.
-        let key = self.map_key(index, false);
-        // **`xs[a..<xs.len()]` is the language below's `a..`** (#527): the
-        // form `xs[a..]` comes to, and the base is read once.
-        if slicing
-            && key.is_none()
-            && let Expr::Range {
-                start,
-                end,
-                inclusive: false,
-                ..
-            } = index
-            && let Expr::MethodCall {
-                receiver,
-                method,
-                args,
-                ..
-            } = &**end
-            && args.is_empty()
-            && self.text(*method) == "len"
-            && **receiver == *base
-        {
-            // A start in literals is handed over as written, for the reason
-            // a range in literals is (below): `at` has nothing to infer from.
-            match only_literals(start) {
-                true => {
-                    self.expr(out, start, depth, flow.inferred())?;
-                    out.push("..)");
-                }
-                false => {
-                    out.push("nikaia_std::index::at(");
-                    self.expr(out, start, depth, flow)?;
-                    out.push("..))");
-                }
-            }
-            if self.reads_through_handle(flow, base) {
-                out.push(".get()");
-            }
-            return Ok(());
-        }
-        match (key, only_literals(index) && !counts_down) {
-            (Some(form), _) => self.key(out, form, index, depth, flow)?,
-            (None, true) => self.index_expr(out, index, depth, flow.inferred())?,
-            (None, false) if !slicing && self.never_negative(flow, index) => {
-                out.push("(");
-                self.index_expr(out, index, depth, flow)?;
-                out.push(") as usize");
-            }
-            (None, false) => {
-                out.push("nikaia_std::index::at(");
-                let flow = match counts_down {
-                    true => flow.widened(),
-                    false => flow,
-                };
-                self.index_expr(out, index, depth, flow)?;
-                out.push(")");
-            }
-        }
-        out.push(")");
-        // **A held struct is read through its handle** (ADR-283
-        // D4): what the brackets answer is then the struct, over
-        // no longer than the read, exactly as for a list of plain
-        // structs.
-        if self.reads_through_handle(flow, base) {
-            out.push(".get()");
-        }
-        Ok(())
+        let (flow, scope) = flow.to_emit();
+        let crossed = self.nikaia(|walk| {
+            self.s.emit_core_index_read(
+                &self.world,
+                walk,
+                out,
+                self,
+                base,
+                index,
+                deref,
+                depth as i64,
+                flow,
+                &scope,
+            )
+        });
+        self.crossed(crossed)
     }
 
     /// The thing a `.` or a `[` is applied to, parenthesised where it binds
@@ -12477,16 +11689,6 @@ use nikaia_std::tools::emit_kinds::EmitPointer as Pointer;
 /// `const` or `mut`, the word Rust puts between the `*` and the type.
 fn pointing(mutable: bool) -> String {
     nikaia_std::tools::emit_ops::pointing(mutable)
-}
-
-/// Whether a written index **counts from the end**
-/// ([ADR-285](../../../docs/specification/adr/adr-285.md) D1).
-///
-/// One reader: a range. A negative one is an access out of bounds and reports
-/// as one at run time — and it has to *reach* run time, which handed over as
-/// written it does not, because the `usize` the slice wants has no negation.
-fn a_negation_inside(index: &Expr) -> bool {
-    nikaia_std::tools::emit_ops::a_negation_inside(index)
 }
 
 fn only_literals(index: &Expr) -> bool {

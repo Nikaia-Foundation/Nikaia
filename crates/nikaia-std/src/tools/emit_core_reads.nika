@@ -1,0 +1,804 @@
+// crates/nikaia-std/src/tools/emit_core_reads.nika
+//
+// **The reads of the emitter's core** (ADR-294, #125, #558, E9 unit U3): what
+// is held before a statement so that the borrow checker below sees a value that
+// lives long enough (`?.` receivers, an owned receiver under a view, an index
+// that reads what the write borrows), a comparison against a length, the
+// receiver of a method call, a call of a field that holds a function, a read
+// through the brackets, and the two constructs that run branches at once,
+// `overlap` and `select`. Methods of `EmitState`, `emit_core_*[H: EmitHost]`;
+// the Rust method of the same name is a one-line stub. `expr` and
+// `block_opening_with` stay host methods until U10.
+
+/// Whether `expr` is a call of `len` with nothing in the parentheses.
+fn emit_read_a_length(world: ref EmitWorld, expr: ref Expr) -> bool {
+    return match expr {
+        Expr::MethodCall { method, args, .. } => args.len() == 0 && emit_text(world, method) == "len",
+        else => false,
+    }
+}
+
+/// Whether the expression is a call (through a `?` or not).
+fn emit_read_a_call(expr: ref Expr) -> bool {
+    return match expr {
+        Expr::Try(inner, _) => emit_read_is_call(inner),
+        else => emit_read_is_call(expr),
+    }
+}
+
+fn emit_read_is_call(expr: ref Expr) -> bool {
+    return match expr {
+        Expr::Call { .. } => true,
+        else => false,
+    }
+}
+
+/// The name a place written through fields and brackets starts from.
+fn emit_read_root(world: ref EmitWorld, place: ref Expr) -> String? {
+    return match place {
+        Expr::Index { base, .. } => emit_read_root(world, base),
+        Expr::Field { base, .. } => emit_read_root(world, base),
+        Expr::Variable(name, _) => emit_text(world, name),
+        else => null,
+    }
+}
+
+/// The comparison `length op n` turned around when the counter was written first.
+fn emit_read_turned(op: BinaryOp, counter_first: bool) -> BinaryOp {
+    if !counter_first {
+        return op
+    }
+    return match op {
+        BinaryOp::Lt => BinaryOp::Gt,
+        BinaryOp::Le => BinaryOp::Ge,
+        BinaryOp::Gt => BinaryOp::Lt,
+        BinaryOp::Ge => BinaryOp::Le,
+        else => op,
+    }
+}
+
+/// Whether `length op n` asks if a list is empty (`Some(true)`), not empty
+/// (`Some(false)`), or neither (`None`).
+fn emit_read_emptiness(op: BinaryOp, n: u64) -> bool? {
+    let is_zero = n == 0
+    let is_one = n == 1
+    let empty = match op {
+        BinaryOp::Eq => is_zero,
+        BinaryOp::Le => is_zero,
+        BinaryOp::Lt => is_one,
+        else => false,
+    }
+    if empty {
+        return true
+    }
+    let full = match op {
+        BinaryOp::Ne => is_zero,
+        BinaryOp::Gt => is_zero,
+        BinaryOp::Ge => is_one,
+        else => false,
+    }
+    if full {
+        return false
+    }
+    return null
+}
+
+impl EmitState {
+    /// `i < xs.len()` for a counter `i` that is never negative, written as
+    /// `(i as usize) < xs.len()`; `false` and nothing written where the
+    /// comparison is not that.
+    pub fn emit_core_against_a_length[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, op: BinaryOp, lhs: ref Expr, rhs: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
+        let mut counter_first = true
+        if emit_read_a_length(world, rhs) && !emit_read_a_length(world, lhs) && walk.never_negative(world, scope.function, lhs) {
+            counter_first = true
+        } else if emit_read_a_length(world, lhs) && !emit_read_a_length(world, rhs) && walk.never_negative(world, scope.function, rhs) {
+            counter_first = false
+        } else {
+            return false
+        }
+        let counter = if counter_first { lhs } else { rhs }
+        let length = if counter_first { rhs } else { lhs }
+        let mut written = EmitOut::empty()
+        self.emit_core_nested(world, walk, written, host, length, 255, depth, flow, scope)
+        let mut bare: String = ""
+        let mut stripped = false
+        if written.buf.ends_with(" as i64") {
+            bare = (written.buf.strip_suffix(" as i64") ?? "").clone()
+            stripped = true
+        } else if written.buf.starts_with("(") && written.buf.ends_with(" as i64)") {
+            let inner = (written.buf.strip_prefix("(") ?? "").clone()
+            bare = (inner.strip_suffix(" as i64)") ?? "").clone()
+            stripped = true
+        }
+        if !stripped {
+            return false
+        }
+        // **Empty or not is asked as such**: `xs.len() > 0` is `clippy`'s
+        // `len_zero` about a file nobody wrote, and `!xs.is_empty()` is what
+        // a person writes.
+        match counter {
+            Expr::LitInt { value, negative, .. } => {
+                if !negative && bare.ends_with(".len()") {
+                    let receiver = (bare.strip_suffix(".len()") ?? "").clone()
+                    let empty = emit_read_emptiness(emit_read_turned(op, counter_first), value)
+                    if empty != null {
+                        let mut not: String = "!"
+                        if empty ?? false {
+                            not = "".clone()
+                        }
+                        out.push(f"{not}{receiver}.is_empty()")
+                        return true
+                    }
+                }
+            },
+            else => {}
+        }
+        // A literal is written as it is: Rust gives it the length's type, and
+        // a cast on it is `clippy`'s `unnecessary_cast` about a file nobody
+        // wrote.
+        let mut counted: String = ""
+        match counter {
+            Expr::LitInt { value, negative, .. } => {
+                if !negative {
+                    counted = f"{value}"
+                } else {
+                    counted = self.emit_read_counted(world, walk, host, counter, depth, flow, scope)
+                }
+            },
+            else => {
+                counted = self.emit_read_counted(world, walk, host, counter, depth, flow, scope)
+            }
+        }
+        let symbol = binary_op(op)
+        if counter_first {
+            out.push(f"{counted} {symbol} {bare}")
+        } else {
+            out.push(f"{bare} {symbol} {counted}")
+        }
+        return true
+    }
+
+    /// A counter as the `usize` a length is compared with: `((n) as usize)`.
+    fn emit_read_counted[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, host: ref H, counter: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) -> String sync throws {
+        let mut scratch = EmitOut::empty()
+        host.expr(walk, scratch, counter, depth, flow, scope)
+        return f"(({scratch.buf}) as usize)"
+    }
+
+    /// **A `?.` view out of a temporary is held for the rest of the block**
+    /// (ADR-278 D21): the receiver is bound first, `let __nikaia_held_0 =
+    /// find(1);`, and the reach reads the binding. Only where binding it first
+    /// changes nothing about what runs (D2); there the program is refused, with
+    /// the `let` it can write.
+    pub fn emit_core_hold_temporaries[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, stmt: ref Stmt, span: ref Span, depth: i64, tail: EmitTail, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        self.emit_core_hold_owned_receiver(world, walk, out, host, stmt, depth, flow, scope)
+        self.emit_core_hold_indices_read_from_the_target(world, walk, out, host, stmt, depth, flow, scope)
+        if self.facts.held_reaches.is_empty() {
+            return
+        }
+        match stmt {
+            Stmt::Let { value, .. } => self.emit_core_hold_found(world, walk, out, host, value, true, span, depth, flow, scope),
+            Stmt::Assign { value, .. } => self.emit_core_hold_found(world, walk, out, host, value, true, span, depth, flow, scope),
+            Stmt::Expr(value) => {
+                let statement = match tail {
+                    EmitTail::Statement => true,
+                    else => false,
+                }
+                self.emit_core_hold_found(world, walk, out, host, value, statement, span, depth, flow, scope)
+            },
+            Stmt::Return(value) => {
+                let held = value ?? return
+                self.emit_core_hold_found(world, walk, out, host, held, false, span, depth, flow, scope)
+            },
+            else => {}
+        }
+    }
+
+    /// The receivers of `?.` in `value` the checker marked as held reaches,
+    /// each bound to a name before the statement.
+    fn emit_core_hold_found[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, value: ref Expr, holdable: bool, span: ref Span, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        let (receivers, walked) = emit_held_in(value, false, false)
+        let mut k = 0
+        for receiver in receivers {
+            let safe = walked.safe[k]
+            k += 1
+            if !self.facts.held_reaches.contains(node_key(receiver)) {
+                continue
+            }
+            if !safe || !holdable {
+                throw EmitRefused { message: "This `?.` returns a view of a value that's gone at the end of this line. Put the value in a `let` on the line before, and use `?.` on that name.".clone(), at: span.start as i64 }
+            }
+            let name = f"__nikaia_held_{walk.held.len()}"
+            out.push(f"let {name} = ")
+            host.expr(walk, out, receiver, depth, flow, scope)
+            out.push(f";\n{"    ".repeat(depth)}")
+            walk.held.insert(node_key(receiver), name)
+        }
+    }
+
+    /// **An index that reads what the write borrows is worked out first**
+    /// (#570). `v[v.len() - 1] = x` lowered to a write that borrows `v` mutably
+    /// with `v.len()` inside its arguments: `rustc`'s E0502 about a file nobody
+    /// wrote. The index is bound before the statement. Only an index of a list
+    /// that names the root of the place written, and not a literal and not a key
+    /// of a map.
+    pub fn emit_core_hold_indices_read_from_the_target[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, stmt: ref Stmt, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        match stmt {
+            Stmt::Assign { target, .. } => {
+                let root = emit_read_root(world, target) ?? return
+                self.emit_core_hold_chain(world, walk, out, host, target, root, depth, flow, scope)
+            },
+            else => {}
+        }
+    }
+
+    /// The indices of a place, the innermost base first - the order they are
+    /// evaluated in.
+    fn emit_core_hold_chain[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, at: ref Expr, root: ref String, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        match at {
+            Expr::Field { base, .. } => self.emit_core_hold_chain(world, walk, out, host, base, root, depth, flow, scope),
+            Expr::Index { base, index, .. } => {
+                self.emit_core_hold_chain(world, walk, out, host, base, root, depth, flow, scope)
+                if only_literals(index) || self.map_key(index, true) != null {
+                    return
+                }
+                let mut mentions = false
+                for name in host.names_read(index) {
+                    if name == root {
+                        mentions = true
+                    }
+                }
+                if !mentions {
+                    return
+                }
+                let key = node_key(index)
+                walk.held.remove(key)
+                let name = f"__nikaia_held_{walk.held.len()}"
+                out.push(f"let {name} = ")
+                self.emit_core_index_expr(world, walk, out, host, index, depth, flow, scope)
+                out.push(f";\n{"    ".repeat(depth)}")
+                walk.held.insert(key, name)
+            },
+            else => {}
+        }
+    }
+
+    /// **A view cut from a call's result outlives the statement only if the
+    /// result does** (#559). `let v = f().trim_start()` hands back a view of the
+    /// `String` `f()` made, and that value dies at the `;` - `rustc`'s E0716. So
+    /// the call is bound first, and the chain reads the binding. Only for a
+    /// `let`, and only where a method of the chain is one of text's views.
+    pub fn emit_core_hold_owned_receiver[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, stmt: ref Stmt, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        match stmt {
+            Stmt::Let { value, .. } => {
+                // A chain that ends in text of its own holds nothing of the receiver.
+                let owns = match value {
+                    Expr::MethodCall { method, .. } => owns_its_text(emit_text(world, method)),
+                    else => false,
+                }
+                if owns {
+                    return
+                }
+                self.emit_core_hold_chain_base(world, walk, out, host, value, node_key(value), false, depth, flow, scope)
+            },
+            else => {}
+        }
+    }
+
+    /// Walks down the receivers of a chain; at its base, binds the base first
+    /// where a method on the way views what it is called on.
+    fn emit_core_hold_chain_base[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, at: ref Expr, whole: i64, viewed: bool, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        match at {
+            Expr::MethodCall { receiver, method, .. } => {
+                let views = viewed || views_what_it_is_called_on(emit_text(world, method))
+                self.emit_core_hold_chain_base(world, walk, out, host, receiver, whole, views, depth, flow, scope)
+            },
+            else => {
+                if !viewed || node_key(at) == whole || !emit_read_a_call(at) {
+                    return
+                }
+                // A statement written twice (a scratch pass, then the real one)
+                // holds the same receiver twice: the second time it is written
+                // out again, not read back from the first.
+                let key = node_key(at)
+                walk.held.remove(key)
+                let name = f"__nikaia_held_{walk.held.len()}"
+                out.push(f"let {name} = ")
+                host.expr(walk, out, at, depth, flow, scope)
+                out.push(f";\n{"    ".repeat(depth)}")
+                walk.held.insert(key, name)
+            }
+        }
+    }
+
+    /// The receiver of a method call: the expression, or the name a `?.` already
+    /// bound. `tight` is for the one caller that needs the conversion to bind
+    /// tighter than everything around it - `x.truncating_i32()` is Rust's `as`,
+    /// which sits below the unary operators in its precedence.
+    pub fn emit_core_receiver[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, receiver: ref Expr?, depth: i64, flow: EmitFlow, scope: ref EmitScope, tight: bool) sync throws {
+        if receiver == null {
+            out.push("__nikaia_it")
+            return
+        }
+        let expr = receiver ?? return
+        // **An element the call changes is written as the place it is**
+        // (`check::Checked::changed_elements`).
+        let inside = if self.facts.changed_elements.contains(node_key(expr)) { flow.place() } else { flow }
+        if tight {
+            self.emit_core_nested(world, walk, out, host, expr, 255, depth, inside, scope)
+            return
+        }
+        self.emit_core_postfix_base(world, walk, out, host, expr, depth, inside, scope)
+    }
+
+    /// **A call of a field that holds a function**, written through the field:
+    /// `(button.on_click)(4)`, awaited where it may pause - `false`, and nothing
+    /// written, where the checker recorded no such call. `reached` is the safe
+    /// form's (#533): the field is read off the name the enclosing `match` bound,
+    /// and `receiver` only keys the record.
+    pub fn emit_core_a_field_call[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, receiver: ref Expr, reached: bool, method: winnow_grammar::Symbol, args: ref Vec[Expr], depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
+        if !self.facts.field_calls.contains_key(node_key(receiver)) {
+            return false
+        }
+        let pauses = self.facts.field_calls.get(node_key(receiver)) ?? return false
+        // **Inside a lambda, as a pausing function is** (ADR-230 D3): the
+        // closure below is synchronous, and an `.await` in it was `rustc`'s
+        // error about a file nobody wrote.
+        if pauses && flow.in_lambda {
+            let named = match receiver {
+                Expr::Variable(name, _) => f"{emit_text(world, name)}.{emit_text(world, method)}",
+                else => emit_text(world, method),
+            }
+            throw EmitRefused { message: f"This lambda calls `{named}`, which can pause, but the compiler knows nothing about what the lambda is passed to, so it can't let it pause. Call `{named}` outside the lambda and pass in the value.", at: flow.statement }
+        }
+        out.push("(")
+        if reached {
+            out.push("__nikaia_it")
+        } else {
+            self.emit_core_postfix_base(world, walk, out, host, receiver, depth, flow, scope)
+        }
+        out.push(f".{escaped_name(emit_text(world, method))})(")
+        let mut n = 0
+        for arg in args {
+            if n > 0 {
+                out.push(", ")
+            }
+            n += 1
+            host.expr(walk, out, arg, depth, flow, scope)
+        }
+        out.push(")")
+        if pauses {
+            out.push(".await")
+        }
+        if flow.can_throw && !flow.caught && self.method_can_fail(flow.statement, emit_text(world, method)) {
+            out.push("?")
+        }
+        return true
+    }
+
+    /// Whether `base` is a read of a list that the read of `base` can be handed
+    /// as the reference it already is.
+    fn emit_read_nested(ref self, world: ref EmitWorld, walk: ref EmitWalk, function: ref String, base: ref Expr) -> bool {
+        return match base {
+            Expr::Index { base: inner, index: at, .. } => !self.slices(at) && self.map_key(at, false) == null && !self.reads_through_handle(world, walk, function, inner),
+            else => false,
+        }
+    }
+
+    /// **A read through the brackets** (ADR-293 D4): `*get(&base, at(i))`, or
+    /// without the `*` where `deref` is off - which is how a read that is itself
+    /// the base of a read is written (0.0.238).
+    pub fn emit_core_index_read[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, base: ref Expr, index: ref Expr, deref: bool, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        let slicing = self.slices(index)
+        if deref && !slicing {
+            out.push("*")
+        }
+        let nested = self.emit_read_nested(world, walk, scope.function, base)
+        // **An index proved inside is read without its check** (ADR-306 D5): the
+        // proof is the argument the `unsafe` stands on, and `proven::read` is the
+        // one operation it licenses.
+        if !slicing && self.proven_indices.contains(node_key(base)) && self.map_key(index, false) == null {
+            out.push("unsafe { nikaia_std::proven::read(")
+            if nested {
+                self.emit_read_inner(world, walk, out, host, base, depth, flow, scope)
+            } else {
+                out.push("&")
+                self.emit_core_postfix_base(world, walk, out, host, base, depth, flow, scope)
+            }
+            out.push(", (")
+            if only_literals(index) {
+                self.emit_core_index_expr(world, walk, out, host, index, depth, flow.inferred(), scope)
+            } else {
+                self.emit_core_index_expr(world, walk, out, host, index, depth, flow, scope)
+            }
+            out.push(") as usize) }")
+            if self.reads_through_handle(world, walk, scope.function, base) {
+                out.push(".get()")
+            }
+            return
+        }
+        // **A read of a read is handed the reference it already is** (0.0.238):
+        // `d[i][j]` over a list of lists was `get(&(*get(&d, i)), j)`, a borrow of
+        // a deref. The inner read answers a `&T` before its `*`, which is what the
+        // outer one takes; a map's read (a `T?`), a run and a read through a
+        // handle keep the long way round.
+        if nested {
+            out.push("nikaia_std::index::get(")
+            self.emit_read_inner(world, walk, out, host, base, depth, flow, scope)
+        } else {
+            out.push("nikaia_std::index::get(&")
+            self.emit_core_postfix_base(world, walk, out, host, base, depth, flow, scope)
+        }
+        out.push(", ")
+        // **The literal exception belongs to the read as well**: `xs[0]` as a
+        // read went through `at(..)` whatever was in the brackets, and `at`'s `I`
+        // has nothing to infer itself from. A range written in literals is in the
+        // exception, and one that counts from the end goes back through the
+        // conversion, widened (an `i64` is the one width this language indexes
+        // with).
+        let counts_down = slicing && a_negation_inside(index)
+        // **A key the map keeps nothing of is lent** (ADR-293 D27), and a key is
+        // not a position, so `at` does not see it.
+        let key = self.map_key(index, false)
+        // **`xs[a..<xs.len()]` is the language below's `a..`** (#527): the form
+        // `xs[a..]` comes to, and the base is read once.
+        if slicing && key == null {
+            match index {
+                Expr::Range { start, end, inclusive, .. } => {
+                    if !inclusive && emit_read_ends_in_len(world, end, base) {
+                        // A start in literals is handed over as written, for the
+                        // reason a range in literals is: `at` has nothing to infer
+                        // from.
+                        if only_literals(start) {
+                            host.expr(walk, out, start, depth, flow.inferred(), scope)
+                            out.push("..)")
+                        } else {
+                            out.push("nikaia_std::index::at(")
+                            host.expr(walk, out, start, depth, flow, scope)
+                            out.push("..))")
+                        }
+                        if self.reads_through_handle(world, walk, scope.function, base) {
+                            out.push(".get()")
+                        }
+                        return
+                    }
+                },
+                else => {}
+            }
+        }
+        if key != null {
+            let form = key ?? return
+            self.emit_core_key(world, walk, out, host, form, index, depth, flow, scope)
+        } else if only_literals(index) && !counts_down {
+            self.emit_core_index_expr(world, walk, out, host, index, depth, flow.inferred(), scope)
+        } else if !slicing && walk.never_negative(world, scope.function, index) {
+            out.push("(")
+            self.emit_core_index_expr(world, walk, out, host, index, depth, flow, scope)
+            out.push(") as usize")
+        } else {
+            out.push("nikaia_std::index::at(")
+            if counts_down {
+                self.emit_core_index_expr(world, walk, out, host, index, depth, flow.widened(), scope)
+            } else {
+                self.emit_core_index_expr(world, walk, out, host, index, depth, flow, scope)
+            }
+            out.push(")")
+        }
+        out.push(")")
+        // **A held struct is read through its handle** (ADR-283 D4): what the
+        // brackets answer is then the struct, over no longer than the read,
+        // exactly as for a list of plain structs.
+        if self.reads_through_handle(world, walk, scope.function, base) {
+            out.push(".get()")
+        }
+    }
+
+    /// The read a nested read is made of: `base` is an index read, and its own
+    /// base and key are read without the `*`.
+    fn emit_read_inner[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, base: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        match base {
+            Expr::Index { base: inner, index: at, .. } => self.emit_core_index_read(world, walk, out, host, inner, at, false, depth, flow, scope),
+            else => {}
+        }
+    }
+
+    /// The ordinal a `Race<n>` variant is called: ordinals and not letters, so
+    /// the generated `match` reads as the source does.
+    fn emit_read_ordinal(ref self, at: i64) -> String {
+        let all: Vec[String] = ["First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh", "Eighth"]
+        return all[at].clone()
+    }
+
+    /// The channel the branches of a block travel in where a `catch` on the
+    /// block handles the failure: the set the **branches** throw (ADR-292 D19).
+    fn emit_read_joined_channel(ref self, world: ref EmitWorld, branches: ref Vec[ref Expr]) -> String {
+        let joined = call_joined_throws(world.words, world.aliases, self.own_contracts, world.library, branches)
+        return self.channel_of(world, joined, true, "'_", "'static", false)
+    }
+
+    /// **`overlap { .. }`** - Part I 8.1.2, ADR-292 D2 and D6. Each statement is a
+    /// branch, each branch an `async` block, and `task::overlap<n>` polls all of
+    /// them in one pass. The branches that can pause are handed over first (D6),
+    /// and the value goes back into written order (D2).
+    pub fn emit_core_overlap[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, block: ref Block, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        let count = block.stmts.len()
+        if count < 2 {
+            throw EmitRefused { message: "An `overlap` block needs at least two branches to run at the same time.".clone(), at: flow.statement }
+        }
+        if count > 8 {
+            throw EmitRefused { message: f"This `overlap` block has {count} branches, but at most 8 are supported.", at: flow.statement }
+        }
+        // D6: the branches that can pause, in written order among themselves,
+        // then the ones that cannot.
+        let mut pauses: Vec[bool] = []
+        let mut any_fails = false
+        for stmt in block.stmts {
+            pauses.push(self.branch_pauses(world, stmt.node, stmt.span.start as i64))
+            match stmt.node {
+                Stmt::Expr(value) => {
+                    if self.branch_can_fail(world, stmt.span.start as i64, value) {
+                        any_fails = true
+                    }
+                },
+                else => {}
+            }
+        }
+        let mut order: Vec[i64] = []
+        for k in 0..<count {
+            if pauses[k] {
+                order.push(k)
+            }
+        }
+        for k in 0..<count {
+            if !pauses[k] {
+                order.push(k)
+            }
+        }
+        // **D5: a branch whose failure is uncaught fails the block, and the first
+        // in written order wins.** All or none: a branch that cannot fail is
+        // wrapped in `Ok` too. **Or handled at the block itself** (D18).
+        let fallible = (flow.can_throw || flow.handled_here) && any_fails
+        // **Whose channel the branches travel in** (D19): the function's where
+        // the failure leaves it, the set the branches throw where a `catch` on
+        // the block handles it.
+        let mut channel = scope.channel.clone()
+        if flow.handled_here {
+            let branches = emit_branch_values(block)
+            channel = self.emit_read_joined_channel(world, branches)
+        }
+        // **Each branch settles what it parks, where a value with a cleanup may
+        // die in this function** (ADR-297 D3, ADR-292 D10).
+        let mut queued = false
+        let mut wrapper: String = ""
+        if self.facts.settle_fns.contains_key(scope.function) {
+            queued = true
+            let failing = self.facts.settle_fns.get(scope.function) ?? false
+            let kind = emit_settle_kind(host.overlaps_user_code())
+            if failing && fallible && channel == "Box<dyn std::error::Error>" {
+                wrapper = f"nikaia_std::cleanup::branch_after::<{kind}, _, _, _>"
+            } else {
+                wrapper = f"nikaia_std::cleanup::branch::<{kind}, _, _>"
+            }
+        }
+        let pad = "    ".repeat(depth)
+        let inner = "    ".repeat(depth + 1)
+        let mut reordered = false
+        for at in 0..<count {
+            if order[at] != at {
+                reordered = true
+            }
+        }
+        let bound = reordered || fallible
+        if bound {
+            out.push("{\n")
+            out.push(inner)
+            out.push(f"// ADR-292 D6: started in this order, answered in the written one.\n{inner}")
+            out.push("let (")
+            for at in 0..<count {
+                if at > 0 {
+                    out.push(", ")
+                }
+                out.push(f"__nikaia_branch_{at}")
+            }
+            out.push(") = ")
+        }
+        out.push(f"nikaia_std::task::overlap{count}(\n")
+        let mut extra = 0
+        if bound {
+            extra = 1
+        }
+        let body = "    ".repeat(depth + 1 + extra)
+        for from in order {
+            let mut k = 0
+            for stmt in block.stmts {
+                if k == from {
+                    self.emit_read_branch(world, walk, out, host, stmt, body, fallible, queued, wrapper, channel, depth, flow, scope)
+                }
+                k += 1
+            }
+        }
+        out.push("    ".repeat(depth + extra))
+        out.push(")")
+        if !bound {
+            out.push(".await")
+            return
+        }
+        out.push(f".await;\n{inner}")
+        // **The branches become one outcome in `std`** (ADR-292 D18): `combine<n>`
+        // takes them in written order and answers the first `Err` among them
+        // (D5).
+        if fallible {
+            out.push(f"nikaia_std::task::combine{count}(")
+        } else {
+            out.push("(")
+        }
+        // Written order out of start order: branch `written` was handed over at
+        // the position `order` has it, so that is the name it came back under.
+        for written in 0..<count {
+            if written > 0 {
+                out.push(", ")
+            }
+            let mut at = 0
+            for position in 0..<count {
+                if order[position] == written {
+                    at = position
+                }
+            }
+            out.push(f"__nikaia_branch_{at}")
+        }
+        out.push(")")
+        // **And the `?` is one, on the block** - unless the handler is right
+        // here, in which case the `match` around this takes the outcome apart.
+        if fallible && !flow.handled_here {
+            out.push("?")
+        }
+        out.push(f"\n{pad}}}")
+    }
+
+    /// One branch of an `overlap`, as an `async` block.
+    fn emit_read_branch[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, stmt: ref Spanned[Stmt], body: ref String, fallible: bool, queued: bool, wrapper: ref String, channel: ref String, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        out.push(body)
+        out.push("async { ")
+        // A branch's own statement, as an expression. A plain flow for the reason
+        // a lambda's body gets one: a `return` inside a branch would leave the
+        // branch, and `catch` is how D5 says a branch handles its own failure. A
+        // branch is still inside this function, so a nested vehicle in one names
+        // the same channel (ADR-292 D17).
+        let inside = EmitFlow::plain() with { can_throw: fallible, statement: stmt.span.start as i64 }
+        let inside_scope = EmitScope::plain() with { origin: scope.origin.clone(), channel: scope.channel.clone() }
+        match stmt.node {
+            Stmt::Expr(value) => {
+                if queued {
+                    out.push(f"{wrapper}(async {{ ")
+                }
+                if fallible {
+                    // **The enclosing function's channel** (ADR-292 D2), because
+                    // the `?` below converts into it.
+                    out.push(f"Ok::<_, {channel}>(")
+                }
+                let st = out.mark()
+                host.expr(walk, out, value, depth + 1, inside, inside_scope)
+                out.record(stmt.span, st)
+                if fallible {
+                    out.push(")")
+                }
+                if queued {
+                    if wrapper.contains("branch_after") {
+                        out.push(f" }}, &\"{scope.origin}\").await")
+                    } else {
+                        out.push(" }).await")
+                    }
+                }
+            },
+            else => {
+                throw EmitRefused { message: "Each branch of an `overlap` has to be an expression.".clone(), at: flow.statement }
+            }
+        }
+        out.push(" },\n")
+    }
+
+    /// **`select { .. }`** - Part II 12.4, ADR-292 D12 and D13. Each arm's
+    /// expression becomes an `async` block, `task::race<n>` polls all of them in
+    /// one pass, and what comes back says **which** arm won; the construct
+    /// lowers to a `match` over a sum. The losers are cancelled by being dropped
+    /// (D2), and nothing here writes that.
+    pub fn emit_core_select[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, arms: ref Vec[SelectArm], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        let count = arms.len()
+        if count < 2 {
+            throw EmitRefused { message: "A `select` needs at least two arms to choose between.".clone(), at: flow.statement }
+        }
+        if count > 8 {
+            throw EmitRefused { message: f"This `select` has {count} arms, but at most 8 are supported.", at: flow.statement }
+        }
+        // The same all-or-none the `overlap` writes (D1), and handled at the
+        // block exactly as an `overlap`'s is.
+        let mut any_fails = false
+        let values = emit_arm_values(arms)
+        for arm in arms {
+            if self.branch_can_fail(world, arm.at as i64, arm.value) {
+                any_fails = true
+            }
+        }
+        let fallible = (flow.can_throw || flow.handled_here) && any_fails
+        // Whose channel the arms travel in (D2): the function's where the failure
+        // leaves it, the **arms'** own set where a `catch` on the block handles it.
+        let mut channel = scope.channel.clone()
+        if flow.handled_here {
+            channel = self.emit_read_joined_channel(world, values)
+        }
+        let pad = "    ".repeat(depth)
+        let inner = "    ".repeat(depth + 1)
+        out.push(f"match nikaia_std::task::race{count}(\n")
+        for arm in arms {
+            out.push(inner)
+            out.push("async { ")
+            // A plain flow for the reason an `overlap` branch gets one: a `return`
+            // written inside the *raced expression* would leave that block. What
+            // an arm's **body** does is the function's, and the body is emitted
+            // below with the flow it was called with.
+            let inside = EmitFlow::plain() with { can_throw: fallible, statement: arm.at as i64 }
+            let inside_scope = EmitScope::plain() with { origin: scope.origin.clone(), channel: channel.clone() }
+            if fallible {
+                out.push(f"Ok::<_, {channel}>(")
+            }
+            host.expr(walk, out, arm.value, depth + 1, inside, inside_scope)
+            if fallible {
+                out.push(")")
+            }
+            out.push(" },\n")
+        }
+        out.push(f"{pad}).await {{\n")
+        let mut at = 0
+        for arm in arms {
+            let mut named: String = "_"
+            if arm.binding != null {
+                named = emit_text(world, arm.binding ?? return)
+            }
+            let mut bound = named.clone()
+            if fallible {
+                bound = "__nikaia_won".clone()
+            }
+            out.push(f"{inner}nikaia_std::task::Race{count}::{self.emit_read_ordinal(at)}({bound}) => ")
+            at += 1
+            // **The winner's `?`, at the top of the arm that won.** A `_` arm
+            // still propagates, because an arm that ignores a value does not
+            // ignore a failure. **Unless the handler is right here** (D18): a `?`
+            // would leave the *function*, and what the `catch` around this
+            // `match` takes apart is the block's own outcome. So the failure is
+            // taken apart here instead, and the arm's value becomes the `Ok` half.
+            if fallible && flow.handled_here {
+                out.push(f"match __nikaia_won {{\n{inner}    Err(__nikaia_failed) => Err(__nikaia_failed),\n{inner}    Ok({named}) => {{ let __nikaia_value = ")
+                let st = out.mark()
+                host.block_opening_with(walk, out, arm.body, depth + 2, flow, scope, EmitTail::Value, null)
+                out.record(Span { start: arm.at, end: arm.at }, st)
+                out.push(f"; Ok(__nikaia_value) }},\n{inner}}}\n")
+                continue
+            }
+            let mut opening: String? = null
+            if fallible {
+                if arm.binding != null {
+                    opening = f"let {named} = __nikaia_won?;"
+                } else {
+                    opening = "__nikaia_won?;".clone()
+                }
+            }
+            let st = out.mark()
+            host.block_opening_with(walk, out, arm.body, depth + 1, flow, scope, EmitTail::Value, opening)
+            out.record(Span { start: arm.at, end: arm.at }, st)
+            out.push("\n")
+        }
+        out.push(f"{pad}}}")
+    }
+}
+
+/// Whether `end` is `base.len()`: the second half of `xs[a..<xs.len()]`.
+fn emit_read_ends_in_len(world: ref EmitWorld, end: ref Expr, base: ref Expr) -> bool {
+    return match end {
+        Expr::MethodCall { receiver, method, args, .. } => args.len() == 0 && emit_text(world, method) == "len" && emit_read_same(receiver, base),
+        else => false,
+    }
+}
+
+fn emit_read_same(a: ref Expr, b: ref Expr) -> bool {
+    return a == b
+}

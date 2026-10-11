@@ -27,6 +27,9 @@ pub trait EmitHost {
     /// The names of the variables read anywhere in `expr`, string holes
     /// included, in the order the walk meets them (`sync::visit_expr`).
     fn names_read(ref self, expr: ref Expr) -> Vec[String] sync
+
+    /// `Build::overlaps_user_code`: user code may run on more than one thread.
+    fn overlaps_user_code(ref self) -> bool sync
 }
 
 impl EmitState {

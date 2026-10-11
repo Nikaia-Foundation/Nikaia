@@ -105,8 +105,11 @@ impl Emitter<'_> {
     }
 
     /// The result of a crossing into Nikaia, as the Rust side raises it.
-    pub(super) fn crossed(&self, result: Crossing) -> Result<()> {
-        let Err(error) = result else { return Ok(()) };
+    pub(super) fn crossed<T>(&self, result: Result<T, Box<dyn std::error::Error>>) -> Result<T> {
+        let error = match result {
+            Ok(value) => return Ok(value),
+            Err(error) => error,
+        };
         if let Some(stashed) = self.failed.borrow_mut().take() {
             return Err(stashed);
         }
@@ -205,6 +208,10 @@ impl EmitHost for Emitter<'_> {
         let mut wrapped = hole.clone();
         crate::text_tiers::wrap_hole(&mut wrapped, &wraps);
         wrapped
+    }
+
+    fn overlaps_user_code(&self) -> bool {
+        self.build.overlaps_user_code()
     }
 
     fn names_read(&self, expr: &Expr) -> Vec<String> {
