@@ -238,3 +238,47 @@ fn said_about(said: &str, message: &str, line: usize) -> bool {
     assert!(said.contains('^'), "a caret:\n{said}");
     true
 }
+
+/// **A refusal raised under a crossing into Nikaia keeps its line** (E9): the
+/// index and its range are written by `emit_core_index_expr` and
+/// `emit_core_bare_range`, which call back into the Rust emitter for the
+/// expression inside. The refusal made there is stashed and returned whole by
+/// the stub, so the line and the caret survive the trip both ways.
+#[test]
+fn a_refusal_under_an_index_keeps_its_line() {
+    let said = nikaia(
+        "fn a() -> i64 { return 1 }\n\
+         \n\
+         fn main() {\n\
+         \x20   let xs = [1, 2, 3]\n\
+         \x20   let x = xs[overlap {\n\
+         \x20       a()\n\
+         \x20   }]\n\
+         \x20   println(f\"{x}\")\n\
+         }\n",
+        "under-index",
+    );
+    assert!(said.contains("at least two branches"), "{said}");
+    assert!(said.contains(":5:"), "the line it is about:\n{said}");
+    assert!(said.contains('^'), "a caret under it:\n{said}");
+}
+
+/// The same under the bounds of a range inside the brackets.
+#[test]
+fn a_refusal_under_a_slice_bound_keeps_its_line() {
+    let said = nikaia(
+        "fn a() -> i64 { return 1 }\n\
+         \n\
+         fn main() {\n\
+         \x20   let xs = [1, 2, 3]\n\
+         \x20   let x = xs[0..overlap {\n\
+         \x20       a()\n\
+         \x20   }]\n\
+         \x20   println(f\"{x.len()}\")\n\
+         }\n",
+        "under-slice",
+    );
+    assert!(said.contains("at least two branches"), "{said}");
+    assert!(said.contains(":5:"), "the line it is about:\n{said}");
+    assert!(said.contains('^'), "a caret under it:\n{said}");
+}

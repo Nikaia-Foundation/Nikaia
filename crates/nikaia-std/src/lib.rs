@@ -163,8 +163,12 @@ pub mod text {
 /// (`unused_assignments`), and a `while true { … return … }` followed by the
 /// `return` that ends the function (`unreachable_code`). Both are valid
 /// Nikaia, so a move should not have to write around them.
+///
+/// **And `unused_variables`** for the parameters every `emit_core_*` method
+/// takes alike (`world`, `scope`, ..., E9) whether or not its body reads them.
 #[allow(
     unused_assignments,
+    unused_variables,
     unreachable_code,
     clippy::borrow_deref_ref,
     clippy::type_complexity,

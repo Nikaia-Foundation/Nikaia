@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.816] — 2026-10-11
+
+**The emitter's core has a host: `EmitHost`, the walk baton and three moved methods (tools/emit_host.nika, emit/host.rs, #558, #125, E9 U0b).**
+- `trait EmitHost` (`expr` for now) is implemented by the Rust `Emitter`; `EmitState` gains `emit_core_operand`, `emit_core_bare_range` and `emit_core_index_expr`, and the Rust methods of those names are one-line stubs. The walk is a baton (`w: RefCell<Option<EmitWalk>>`), `Flow` converts to `EmitFlow` + `EmitScope` only at the crossing, a refusal raised by Rust code under a crossing is stashed and returned whole (it keeps its line), and `Build::for_emit()` fills `EmitBuild`. The `unused_variables` lint is allowed on `tools` for the parameters every core method takes alike. Output unchanged: `package.rs` is byte-identical under the previous compiler.
+
 ## [0.0.815] — 2026-10-11
 
 **A trait method's `mut` parameter lowers to `&mut T` in the declaration (ADR-094 D3, #558, U0a).**

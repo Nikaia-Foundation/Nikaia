@@ -1,0 +1,55 @@
+// crates/nikaia-std/src/tools/emit_host.nika
+//
+// **The host of the emitter's core** (ADR-294, #125, #558, E9, units U0b..U10):
+// what the part of the lowering that has moved to Nikaia asks of the part that
+// has not. `EmitHost` is implemented by the Rust `Emitter` (`emit/host.rs`);
+// the moved methods are `emit_core_*[H: EmitHost]` of `EmitState`, and the
+// Rust method of the same name is a one-line stub. A callee that has moved is
+// `self.emit_core_*`, one that has not is `host.<name>`; the trait shrinks
+// until U10 deletes it.
+//
+// The walk is passed as `mut walk`, the output as `mut out`; the flow is the
+// pair `EmitFlow` (by value) and `EmitScope` (by reference).
+
+/// What the core asks of the Rust side. Every method may refuse.
+pub trait EmitHost {
+    /// `Emitter::expr`: an expression, written to `out`.
+    fn expr(ref self, mut walk: EmitWalk, mut out: EmitOut, node: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws
+}
+
+impl EmitState {
+    /// A cast's operand, through the view a `for` binding is (ADR-182 D1):
+    /// inside the checked conversion and not around it.
+    pub fn emit_core_operand[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, viewed: bool, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        if !viewed {
+            host.expr(walk, out, node, depth, flow, scope)
+            return
+        }
+        out.push("nikaia_std::num::value(")
+        host.expr(walk, out, node, depth, flow, scope)
+        out.push(")")
+    }
+
+    /// A range as the language below writes one, `a..b`, for the two places
+    /// that walk or slice it where it stands (ADR-293 D18).
+    pub fn emit_core_bare_range[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        match node {
+            Expr::Range { start, end, inclusive, .. } => {
+                host.expr(walk, out, start, depth, flow, scope)
+                if inclusive {
+                    out.push("..=")
+                } else {
+                    out.push("..")
+                }
+                host.expr(walk, out, end, depth, flow, scope)
+            },
+            else => host.expr(walk, out, node, depth, flow, scope),
+        }
+    }
+
+    /// What stands inside brackets: a range there is a slice, and stays the
+    /// language below's own (ADR-293 D18).
+    pub fn emit_core_index_expr[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        self.emit_core_bare_range(world, walk, out, host, node, depth, flow, scope)
+    }
+}

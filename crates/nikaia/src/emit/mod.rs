@@ -26,6 +26,7 @@ use std::collections::{HashMap, HashSet};
 
 use anyhow::{Result, anyhow};
 
+mod host;
 pub mod template;
 use winnow_grammar::Symbol;
 
@@ -261,6 +262,24 @@ impl Build {
     /// there at all. `user_parallelism` has no say in it; the *target* does.
     pub fn overlaps_operations(self) -> bool {
         self.target.has_runtime()
+    }
+
+    /// The build's settings as the core asks about them, all plain values
+    /// (`tools/emit_kinds.nika`).
+    // The first caller is the type unit (U1a), which reads these in Nikaia.
+    #[allow(dead_code)]
+    pub(crate) fn for_emit(self) -> nikaia_std::tools::emit_kinds::EmitBuild {
+        nikaia_std::tools::emit_kinds::EmitBuild {
+            overlaps_user_code: self.overlaps_user_code(),
+            user_parallelism: self.user_parallelism == UserParallelism::Yes,
+            crossings_are_possible: self.crossings_are_possible(),
+            counts_steps: self.counts_steps,
+            parallelism: self.parallelism().to_string(),
+            reentrancy: self.reentrancy_check == ReentrancyCheck::Yes,
+            leaves_values: self.leaves_values,
+            called_from_c: self.called_from_c,
+            has_runtime: self.overlaps_operations(),
+        }
     }
 }
 
@@ -1070,7 +1089,10 @@ struct Emitter<'p> {
     s: EmitState,
     /// The places the walk writes to as it goes, borrowed briefly and never
     /// across a call back into the emitter.
-    w: std::cell::RefCell<EmitWalk>,
+    /// The walk is a baton (`host.rs`): `None` while it is out on a crossing.
+    w: std::cell::RefCell<Option<EmitWalk>>,
+    /// An error raised by Rust code under a crossing (`host.rs`).
+    failed: std::cell::RefCell<Option<anyhow::Error>>,
     /// What the emitter looks at and does not own.
     world: EmitWorld<'p>,
 }
@@ -2052,7 +2074,8 @@ impl<'p> Emitter<'p> {
             parsed,
             build,
             s: state,
-            w: std::cell::RefCell::new(EmitWalk::fresh()),
+            w: std::cell::RefCell::new(Some(EmitWalk::fresh())),
+            failed: std::cell::RefCell::new(None),
             world: EmitWorld {
                 words: &parsed.interner,
                 aliases: &parsed.aliases,
@@ -2079,12 +2102,20 @@ impl<'p> Emitter<'p> {
     /// Reads the walk's places. The borrow ends when `f` returns, so nothing
     /// held here can meet a write made by a call back into the emitter.
     fn walk<R>(&self, f: impl FnOnce(&EmitWalk) -> R) -> R {
-        f(&self.w.borrow())
+        f(self
+            .w
+            .borrow()
+            .as_ref()
+            .expect("the walk is out on a crossing"))
     }
 
     /// Writes the walk's places, briefly: `f` calls nothing of the emitter's.
     fn walking<R>(&self, f: impl FnOnce(&mut EmitWalk) -> R) -> R {
-        f(&mut self.w.borrow_mut())
+        f(self
+            .w
+            .borrow_mut()
+            .as_mut()
+            .expect("the walk is out on a crossing"))
     }
 
     fn text(&self, sym: Symbol) -> &str {
@@ -5228,13 +5259,21 @@ impl<'p> Emitter<'p> {
         depth: usize,
         flow: Flow<'_>,
     ) -> Result<()> {
-        if !viewed {
-            return self.expr(out, expr, depth, flow);
-        }
-        out.push("nikaia_std::num::value(");
-        self.expr(out, expr, depth, flow)?;
-        out.push(")");
-        Ok(())
+        let (flow, scope) = flow.to_emit();
+        let crossed = self.nikaia(|walk| {
+            self.s.emit_core_operand(
+                &self.world,
+                walk,
+                out,
+                self,
+                expr,
+                viewed,
+                depth as i64,
+                flow,
+                &scope,
+            )
+        });
+        self.crossed(crossed)
     }
 
     /// **A turn of a loop is a step of a build-time run** (ADR-321 D7): the
@@ -6960,18 +6999,20 @@ impl<'p> Emitter<'p> {
     /// that walk or slice it where it stands
     /// ([ADR-293](../../docs/specification/adr/adr-293.md) D18).
     fn bare_range(&self, out: &mut Out, expr: &Expr, depth: usize, flow: Flow<'_>) -> Result<()> {
-        let Expr::Range {
-            start,
-            end,
-            inclusive,
-            ..
-        } = expr
-        else {
-            return self.expr(out, expr, depth, flow);
-        };
-        self.expr(out, start, depth, flow)?;
-        out.push(if *inclusive { "..=" } else { ".." });
-        self.expr(out, end, depth, flow)
+        let (flow, scope) = flow.to_emit();
+        let crossed = self.nikaia(|walk| {
+            self.s.emit_core_bare_range(
+                &self.world,
+                walk,
+                out,
+                self,
+                expr,
+                depth as i64,
+                flow,
+                &scope,
+            )
+        });
+        self.crossed(crossed)
     }
 
     /// What stands inside brackets: a range there is a **slice**, and stays
@@ -7002,7 +7043,20 @@ impl<'p> Emitter<'p> {
     }
 
     fn index_expr(&self, out: &mut Out, index: &Expr, depth: usize, flow: Flow<'_>) -> Result<()> {
-        self.bare_range(out, index, depth, flow)
+        let (flow, scope) = flow.to_emit();
+        let crossed = self.nikaia(|walk| {
+            self.s.emit_core_index_expr(
+                &self.world,
+                walk,
+                out,
+                self,
+                index,
+                depth as i64,
+                flow,
+                &scope,
+            )
+        });
+        self.crossed(crossed)
     }
 
     fn expr(&self, out: &mut Out, expr: &Expr, depth: usize, flow: Flow<'_>) -> Result<()> {

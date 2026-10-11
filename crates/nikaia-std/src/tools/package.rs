@@ -18287,6 +18287,51 @@ impl EmitWalk {
 }
 
 
+// --- emit_host.nika ---
+
+pub trait EmitHost {
+    fn expr(&self, walk: &mut EmitWalk, out: &mut EmitOut, node: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>>;
+}
+
+impl EmitState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn emit_core_operand<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, viewed: bool, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+        if !viewed {
+            host.expr(walk, out, node, depth, flow, scope)?;
+            return Ok(());
+        }
+        out.push("nikaia_std::num::value(");
+        host.expr(walk, out, node, depth, flow, scope)?;
+        out.push(")");
+        Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn emit_core_bare_range<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+        match node {
+            Expr::Range { start, end, inclusive, .. } => {
+                let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end); let inclusive = *inclusive;
+                host.expr(walk, out, start, depth, flow, scope)?;
+                if inclusive { out.push("..="); } else { out.push(".."); }
+                host.expr(walk, out, end, depth, flow, scope)?;
+            },
+            _ => host.expr(walk, out, node, depth, flow, scope)?,
+        }
+        Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn emit_core_index_expr<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+        self.emit_core_bare_range(world, walk, out, host, node, depth, flow, scope)?;
+        Ok(())
+    }
+}
+
+
 // --- emit_items.nika ---
 
 pub fn foreign_params(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>]) -> collections::BTreeMap<String, Vec<Type>> {
@@ -40299,6 +40344,10 @@ pub mod emit_entry {}
 pub mod emit_exprs {
     #[allow(unused_imports)]
     pub use super::{emit_around, emit_around_value};
+}
+pub mod emit_host {
+    #[allow(unused_imports)]
+    pub use super::{EmitHost};
 }
 pub mod emit_items {
     #[allow(unused_imports)]

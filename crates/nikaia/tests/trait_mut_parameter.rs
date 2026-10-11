@@ -45,13 +45,9 @@ fn a_mut_parameter_of_a_trait_method_is_a_mutable_borrow_in_both() {
     let parsed = parse_to_ast(SOURCE).expect("the source parses");
     let own = Ledger::infer(&parsed);
     let library = Ledger::parse(STD).expect("std ships a ledger");
-    let found = nikaia::check::check_program(
-        &parsed,
-        &own,
-        &library,
-        &std::collections::BTreeSet::new(),
-    )
-    .findings;
+    let found =
+        nikaia::check::check_program(&parsed, &own, &library, &std::collections::BTreeSet::new())
+            .findings;
     assert!(found.is_empty(), "{found:#?}");
     let rust = emit_program(&parsed, Build::default())
         .expect("the source lowers")
