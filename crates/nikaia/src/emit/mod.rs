@@ -706,10 +706,15 @@ impl Out {
         self.buf.push_str(text);
     }
 
-    /// Record that everything `f` writes came from `span`.
-    fn from<R>(&mut self, span: &Span, f: impl FnOnce(&mut Out) -> Result<R>) -> Result<R> {
-        let start = self.buf.len();
-        let value = f(self)?;
+    /// Where what is about to be written starts: the first half of recording
+    /// that it came from a span, `record` the second.
+    fn mark(&self) -> usize {
+        self.buf.len()
+    }
+
+    /// Record that everything written since `start` came from `span`. Called
+    /// only after the writing succeeded.
+    fn record(&mut self, span: &Span, start: usize) {
         self.map.entries.push(MapEntry {
             generated: start..self.buf.len(),
             source: *span,
@@ -717,11 +722,8 @@ impl Out {
             // `SourceMap::placed` stamps it when the driver joins them.
             unit: 0,
         });
-        Ok(value)
     }
 
-    /// Render into a buffer of its own, so the caller can decide what to do
-    /// with the result before committing to it.
     /// **Takes back a `&` just written**, where what follows is already the
     /// reference it asked for (0.0.250): `&*get(&v, i)` is `get(&v, i)`, and
     /// the long form is what `clippy` refuses in `std`. Not `&&`, which is the
@@ -733,12 +735,6 @@ impl Out {
             return true;
         }
         false
-    }
-
-    fn scratch(f: impl FnOnce(&mut Out) -> Result<()>) -> Result<Out> {
-        let mut out = Out::default();
-        f(&mut out)?;
-        Ok(out)
     }
 
     /// Insert text just inside the first `{`, moving the map entries after it.
@@ -3043,10 +3039,11 @@ impl<'p> Emitter<'p> {
                     .collect();
                 for on in copies {
                     *self.specialising.borrow_mut() = Some((self.walked_parameter(&item.node), on));
-                    let written =
-                        out.from(&item.span, |out| self.item(out, &item.node, &item.span));
+                    let st = out.mark();
+                    let written = self.item(&mut out, &item.node, &item.span);
                     *self.specialising.borrow_mut() = None;
                     written?;
+                    out.record(&item.span, st);
                     out.push("\n");
                 }
                 continue;
@@ -3068,15 +3065,20 @@ impl<'p> Emitter<'p> {
                     .collect();
                 for on in copies {
                     *self.specialising.borrow_mut() = Some((self.walked_parameter(&item.node), on));
-                    let written =
-                        out.from(&item.span, |out| self.item(out, &item.node, &item.span));
+                    let st = out.mark();
+                    let written = self.item(&mut out, &item.node, &item.span);
                     *self.specialising.borrow_mut() = None;
                     written?;
+                    out.record(&item.span, st);
                     out.push("\n");
                 }
                 continue;
             }
-            out.from(&item.span, |out| self.item(out, &item.node, &item.span))?;
+            {
+                let st = out.mark();
+                self.item(&mut out, &item.node, &item.span)?;
+                out.record(&item.span, st);
+            }
             out.push("\n");
         }
         self.tether_wrappers(&mut out);
@@ -3141,10 +3143,11 @@ impl<'p> Emitter<'p> {
                     .collect();
                 for on in copies {
                     *self.specialising.borrow_mut() = Some((self.walked_parameter(&item.node), on));
-                    let written =
-                        out.from(&item.span, |out| self.item(out, &item.node, &item.span));
+                    let st = out.mark();
+                    let written = self.item(&mut out, &item.node, &item.span);
                     *self.specialising.borrow_mut() = None;
                     written?;
+                    out.record(&item.span, st);
                     out.push("\n");
                 }
                 continue;
@@ -3166,15 +3169,20 @@ impl<'p> Emitter<'p> {
                     .collect();
                 for on in copies {
                     *self.specialising.borrow_mut() = Some((self.walked_parameter(&item.node), on));
-                    let written =
-                        out.from(&item.span, |out| self.item(out, &item.node, &item.span));
+                    let st = out.mark();
+                    let written = self.item(&mut out, &item.node, &item.span);
                     *self.specialising.borrow_mut() = None;
                     written?;
+                    out.record(&item.span, st);
                     out.push("\n");
                 }
                 continue;
             }
-            out.from(&item.span, |out| self.item(out, &item.node, &item.span))?;
+            {
+                let st = out.mark();
+                self.item(&mut out, &item.node, &item.span)?;
+                out.record(&item.span, st);
+            }
             out.push("\n");
         }
         self.tether_wrappers(&mut out);
@@ -3598,7 +3606,8 @@ impl<'p> Emitter<'p> {
                     out.push(&format!("impl{declares} {target_name}{applied} {{\n"));
                     for method in methods {
                         let carries = self.carries_input.get(&method.span.at());
-                        out.from(&method.span, |out| {
+                        {
+                            let st = out.mark();
                             out.push("    ");
                             self.function(
                                 out,
@@ -3610,8 +3619,9 @@ impl<'p> Emitter<'p> {
                                     target: &target_name,
                                     declared_by: None,
                                 }),
-                            )
-                        })?;
+                            )?;
+                            out.record(&method.span, st);
+                        }
                     }
                     out.push("}\n");
                     let key = format!("{target_name}::cleanup");
@@ -3639,7 +3649,8 @@ impl<'p> Emitter<'p> {
                 out.push(&format!("{head} {{\n"));
                 for method in methods {
                     let carries = self.carries_input.get(&method.span.at());
-                    out.from(&method.span, |out| {
+                    {
+                        let st = out.mark();
                         out.push("    ");
                         self.function(
                             out,
@@ -3651,8 +3662,9 @@ impl<'p> Emitter<'p> {
                                 target: &target_name,
                                 declared_by: trait_name.map(|t| self.text(t)),
                             }),
-                        )
-                    })?;
+                        )?;
+                        out.record(&method.span, st);
+                    }
                 }
                 out.push("}\n");
                 Ok(())
@@ -3676,10 +3688,12 @@ impl<'p> Emitter<'p> {
                 let vis = if *is_public { "pub " } else { "" };
                 out.push(&format!("{vis}trait {} {{\n", self.name(*name)));
                 for method in methods {
-                    out.from(&method.span, |out| {
+                    {
+                        let st = out.mark();
                         out.push("    ");
-                        self.trait_method(out, &method.node, method.node.is_sync, false)
-                    })?;
+                        self.trait_method(out, &method.node, method.node.is_sync, false)?;
+                        out.record(&method.span, st);
+                    }
                 }
                 out.push("}\n");
                 Ok(())
@@ -3773,17 +3787,20 @@ impl<'p> Emitter<'p> {
                 // ([ADR-302](../../docs/specification/adr/adr-302.md) D7). It
                 // is written before the declarations, because they name it.
                 for handle in opaque {
-                    out.from(&handle.span, |out| {
+                    {
+                        let st = out.mark();
                         self.opaque_type(out, &handle.node);
-                        Ok(())
-                    })?;
+                        out.record(&handle.span, st);
+                    }
                 }
                 out.push("unsafe extern \"C\" {\n");
                 for declaration in declarations {
-                    out.from(&declaration.span, |out| {
+                    {
+                        let st = out.mark();
                         out.push("    ");
-                        self.trait_method(out, &declaration.node, true, true)
-                    })?;
+                        self.trait_method(out, &declaration.node, true, true)?;
+                        out.record(&declaration.span, st);
+                    }
                 }
                 out.push("}\n");
                 Ok(())
@@ -4217,7 +4234,8 @@ impl<'p> Emitter<'p> {
         out.push(&format!("impl{params} {target}{params} {{\n"));
         for method in methods {
             let carries = self.carries_input.get(&method.span.at());
-            out.from(&method.span, |out| {
+            {
+                let st = out.mark();
                 out.push("    ");
                 self.function(
                     out,
@@ -4229,8 +4247,9 @@ impl<'p> Emitter<'p> {
                         target,
                         declared_by: None,
                     }),
-                )
-            })?;
+                )?;
+                out.record(&method.span, st);
+            }
         }
         out.push("}\n");
 
@@ -4941,7 +4960,12 @@ impl<'p> Emitter<'p> {
             // a failing call end the block and not the function - and what
             // died in it is settled before the function hands its value back.
             Some(&failing) => {
-                let body = Out::scratch(|inner| self.function_body(inner, body, depth, declared))?;
+                let body = {
+                    let mut inner_buf = Out::default();
+                    let inner = &mut inner_buf;
+                    self.function_body(inner, body, depth, declared)?;
+                    inner_buf
+                };
                 let settle = match failing {
                     true => "nikaia_std::cleanup::settle_after",
                     false => "nikaia_std::cleanup::settle_with",
@@ -5059,7 +5083,8 @@ impl<'p> Emitter<'p> {
                 return body_block(out);
             }
             // Inside the body's own brace, so there is one block and not two.
-            let mut written = Out::scratch(body_block)?;
+            let mut written = Out::default();
+            body_block(&mut written)?;
             written.insert_after_first_brace(&format!(" {}", first.join(" ")));
             out.append(written);
             return Ok(());
@@ -5119,7 +5144,8 @@ impl<'p> Emitter<'p> {
             // (ADR-283), and before the `Ok(` a tail is wrapped in: a `let`
             // inside it would not be Rust.
             self.write_keep_prelude(out, key, stmt.span.at(), depth + 1);
-            out.from(&stmt.span, |out| {
+            {
+                let st = out.mark();
                 match (wrap, binds) {
                     (true, true) => out.push(&format!("let {ARM_VALUE} = ")),
                     (true, false) => out.push("Ok("),
@@ -5131,8 +5157,8 @@ impl<'p> Emitter<'p> {
                     (true, false) => out.push(")"),
                     (false, _) => {}
                 }
-                Ok(())
-            })?;
+                out.record(&stmt.span, st);
+            }
             out.push("\n");
             i += 1;
         }
@@ -5200,7 +5226,11 @@ impl<'p> Emitter<'p> {
             .collect();
         for rule in &def.rules {
             out.push("\n");
-            out.from(&rule.span, |out| self.grammar_rule(out, rule))?;
+            {
+                let st = out.mark();
+                self.grammar_rule(out, rule)?;
+                out.record(&rule.span, st);
+            }
         }
         // **`list(item, sep)` is a rule the backend is given** (Part II
         // 10.8, issue #165 closed at 0.0.249): the backend has no
@@ -5289,7 +5319,14 @@ impl<'p> Emitter<'p> {
     }
 
     fn pattern(&self, out: &mut Out, pattern: &Spanned<Pattern>) -> Result<()> {
-        out.from(&pattern.span, |out| match &pattern.node {
+        let st = out.mark();
+        self.pattern_body(out, pattern)?;
+        out.record(&pattern.span, st);
+        Ok(())
+    }
+
+    fn pattern_body(&self, out: &mut Out, pattern: &Spanned<Pattern>) -> Result<()> {
+        match &pattern.node {
             Pattern::Seq(parts) => self.patterns(out, parts, " "),
             Pattern::Choice(parts) => self.patterns(out, parts, " | "),
             Pattern::Bind { name, pat } => {
@@ -5373,7 +5410,7 @@ impl<'p> Emitter<'p> {
                 Ok(())
             }
             Pattern::Fold(spec) => self.fold(out, spec),
-        })
+        }
     }
 
     fn patterns(
@@ -6390,8 +6427,12 @@ impl<'p> Emitter<'p> {
             && !flow.in_lambda
             && (!fails || propagates)
         {
-            let inner =
-                Out::scratch(|inner| self.block_plain(inner, block, depth, flow, tail, opening))?;
+            let inner = {
+                let mut inner_buf = Out::default();
+                let inner = &mut inner_buf;
+                self.block_plain(inner, block, depth, flow, tail, opening)?;
+                inner_buf
+            };
             let kind = self.settle_kind();
             let settle = match fails {
                 true => format!(
@@ -6441,11 +6482,13 @@ impl<'p> Emitter<'p> {
             // it declared (ADR-283 D10) are declared again by the rendering
             // that is kept - `println(d())` alone in `main` lost its keep.
             let declared = self.preluded.borrow().clone();
-            let rendered = Out::scratch(|scratch| {
-                scratch.from(&only.span, |s| {
-                    self.stmt(s, &only.node, &only.span, depth, tail, flow)
-                })
-            })?;
+            let rendered = {
+                let mut rendered = Out::default();
+                let st = rendered.mark();
+                self.stmt(&mut rendered, &only.node, &only.span, depth, tail, flow)?;
+                rendered.record(&only.span, st);
+                rendered
+            };
             if !rendered.buf.contains('\n') {
                 out.push("{ ");
                 out.append(rendered);
@@ -6483,36 +6526,59 @@ impl<'p> Emitter<'p> {
             if i < last
                 && let Some((fill, length)) = self.filled_at_once(stmt, &block.stmts[i + 1])
             {
-                let declared = Out::scratch(|scratch| {
-                    scratch.from(&stmt.span, |s| {
-                        self.stmt(s, &stmt.node, &stmt.span, depth + 1, tail.at(i, last), flow)
-                    })
-                })?;
+                let declared = {
+                    let mut declared = Out::default();
+                    let st = declared.mark();
+                    self.stmt(
+                        &mut declared,
+                        &stmt.node,
+                        &stmt.span,
+                        depth + 1,
+                        tail.at(i, last),
+                        flow,
+                    )?;
+                    declared.record(&stmt.span, st);
+                    declared
+                };
                 if let Some(head) = declared.buf.strip_suffix("vec![];") {
                     let next = &block.stmts[i + 1];
                     let flow = flow.at(next.span.at());
-                    let value = Out::scratch(|v| self.expr(v, fill, depth + 1, flow))?;
-                    let count = Out::scratch(|c| match only_literals(length) {
-                        true => self.expr(c, length, depth + 1, flow.inferred()),
-                        false => {
-                            c.push("nikaia_std::count::of(");
-                            self.expr(c, length, depth + 1, flow)?;
-                            c.push(")");
-                            Ok(())
-                        }
-                    })?;
+                    let value = {
+                        let mut v_buf = Out::default();
+                        let v = &mut v_buf;
+                        self.expr(v, fill, depth + 1, flow)?;
+                        v_buf
+                    };
+                    let count = {
+                        let mut c_buf = Out::default();
+                        let c = &mut c_buf;
+                        let done = match only_literals(length) {
+                            true => self.expr(c, length, depth + 1, flow.inferred()),
+                            false => {
+                                c.push("nikaia_std::count::of(");
+                                self.expr(c, length, depth + 1, flow)?;
+                                c.push(")");
+                                Ok(())
+                            }
+                        };
+                        done?;
+                        c_buf
+                    };
                     out.push(&inner_pad);
-                    out.from(&stmt.span, |o| {
-                        o.push(&format!("{head}vec![{}; {}];", value.buf, count.buf));
-                        Ok(())
-                    })?;
+                    {
+                        let st = out.mark();
+                        out.push(&format!("{head}vec![{}; {}];", value.buf, count.buf));
+                        out.record(&stmt.span, st);
+                    }
                     out.push("\n");
                     i += 2;
                     continue;
                 }
             }
             out.push(&inner_pad);
-            out.from(&stmt.span, |out| {
+            {
+                let st = out.mark();
+
                 self.stmt(
                     out,
                     &stmt.node,
@@ -6520,8 +6586,9 @@ impl<'p> Emitter<'p> {
                     depth + 1,
                     tail.at(i, last),
                     flow,
-                )
-            })?;
+                )?;
+                out.record(&stmt.span, st);
+            }
             out.push("\n");
             i += 1;
         }
@@ -6570,7 +6637,12 @@ impl<'p> Emitter<'p> {
             (l, c) if a_length(l) && !a_length(c) && self.never_negative(flow, c) => (c, l, false),
             _ => return Ok(None),
         };
-        let written = Out::scratch(|s| self.nested(s, length, u8::MAX, depth, flow))?;
+        let written = {
+            let mut s_buf = Out::default();
+            let s = &mut s_buf;
+            self.nested(s, length, u8::MAX, depth, flow)?;
+            s_buf
+        };
         let Some(bare) = written.buf.strip_suffix(" as i64").or_else(|| {
             written
                 .buf
@@ -6621,7 +6693,12 @@ impl<'p> Emitter<'p> {
                 ..
             } => value.to_string(),
             _ => {
-                let counted = Out::scratch(|s| self.expr(s, counter, depth, flow))?;
+                let counted = {
+                    let mut s_buf = Out::default();
+                    let s = &mut s_buf;
+                    self.expr(s, counter, depth, flow)?;
+                    s_buf
+                };
                 format!("(({}) as usize)", counted.buf)
             }
         };
@@ -9209,8 +9286,13 @@ impl<'p> Emitter<'p> {
                         if before.is_empty()
                             && after.is_empty()
                             && matches!(value, Expr::Variable(v, _) if self.text(*v) == self.text(field.name))
-                            && Out::scratch(|inner| self.expr(inner, value, depth, flow))?.buf
-                                == self.name(field.name)
+                            && {
+                                let mut inner_buf = Out::default();
+                                let inner = &mut inner_buf;
+                                self.expr(inner, value, depth, flow)?;
+                                inner_buf
+                            }
+                            .buf == self.name(field.name)
                         {
                             continue;
                         }
@@ -11303,7 +11385,11 @@ impl<'p> Emitter<'p> {
                         // D2), because the `?` below converts into it.
                         out.push(&format!("Ok::<_, {channel}>("));
                     }
-                    out.from(&stmt.span, |out| self.expr(out, value, depth + 1, inside))?;
+                    {
+                        let st = out.mark();
+                        self.expr(out, value, depth + 1, inside)?;
+                        out.record(&stmt.span, st);
+                    }
                     if fallible {
                         out.push(")");
                     }
@@ -11496,15 +11582,17 @@ impl<'p> Emitter<'p> {
                 out.push(&format!(
                     "match {WINNER} {{\n{inner}    Err({ARM_FAILED}) => Err({ARM_FAILED}),\n{inner}    Ok({name}) => {{ let {ARM_VALUE} = "
                 ));
-                out.from(
-                    &Span {
-                        start: arm.at,
-                        end: arm.at,
-                    },
-                    |out| {
-                        self.block_opening_with(out, &arm.body, depth + 2, flow, Tail::Value, None)
-                    },
-                )?;
+                {
+                    let st = out.mark();
+                    self.block_opening_with(out, &arm.body, depth + 2, flow, Tail::Value, None)?;
+                    out.record(
+                        &Span {
+                            start: arm.at,
+                            end: arm.at,
+                        },
+                        st,
+                    );
+                }
                 out.push(&format!("; Ok({ARM_VALUE}) }},\n{inner}}}\n"));
                 continue;
             }
@@ -11512,22 +11600,24 @@ impl<'p> Emitter<'p> {
                 Some(name) => format!("let {} = {WINNER}?;", self.text(name)),
                 None => format!("{WINNER}?;"),
             });
-            out.from(
-                &Span {
-                    start: arm.at,
-                    end: arm.at,
-                },
-                |out| {
-                    self.block_opening_with(
-                        out,
-                        &arm.body,
-                        depth + 1,
-                        flow,
-                        Tail::Value,
-                        opening.as_deref(),
-                    )
-                },
-            )?;
+            {
+                let st = out.mark();
+                self.block_opening_with(
+                    out,
+                    &arm.body,
+                    depth + 1,
+                    flow,
+                    Tail::Value,
+                    opening.as_deref(),
+                )?;
+                out.record(
+                    &Span {
+                        start: arm.at,
+                        end: arm.at,
+                    },
+                    st,
+                );
+            }
             out.push("\n");
         }
         out.push(&format!("{pad}}}"));

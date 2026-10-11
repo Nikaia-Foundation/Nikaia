@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.795] — 2026-10-11
+
+**Out records a span with a mark and a record, not a closure (emit, #558, step E1).**
+- `Out::from` and `Out::scratch` took a closure; every site now writes `let st = out.mark(); <body>?; out.record(span, st)` (a span is recorded only after the body succeeded, never truncated on an error). The six sites that reset `specialising` keep the order: reset, `?`, record. Nothing a program means changes; the emitter's output and source map are the same. Prepares `Out` as a Nikaia struct (a closure that captures the emitter is not expressible).
+
 ## [0.0.794] — 2026-10-10
 
 **`CheckFacts` is declared in Nikaia (`tools/check_facts.nika`, #558, #125).**
