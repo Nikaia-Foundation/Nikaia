@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.839] — 2026-10-11
+
+**NK2302: the ledger, the lowering and the message follow the one source (ADR-283 D25-D26, #580 steps 5-7)**
+- The ledger writes the source a result points into, the lowering ties that parameter alone (`'static` for none, the keep's for a body-made buffer), and the message puts a caret under every way out.
+
 ## [0.0.838] — 2026-10-11
 
 **One map, one hasher: decided per package, a type parameter at the package boundary, decided (ADR-010 D9, #581)**

@@ -34,13 +34,13 @@
 10-nikaia-light.md #69 compiles
 10-nikaia-light.md #70 compiles
 10-nikaia-light.md #73 compiles
-10-nikaia-light.md #76 compiles
 10-nikaia-light.md #77 compiles
-10-nikaia-light.md #86 compiles
+10-nikaia-light.md #78 compiles
 10-nikaia-light.md #87 compiles
 10-nikaia-light.md #88 compiles
 10-nikaia-light.md #89 compiles
-10-nikaia-light.md #92 compiles
+10-nikaia-light.md #90 compiles
+10-nikaia-light.md #93 compiles
 20-nikaia-advance.md #4 compiles
 20-nikaia-advance.md #5 compiles
 20-nikaia-advance.md #10 refused
