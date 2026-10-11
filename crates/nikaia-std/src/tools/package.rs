@@ -11255,6 +11255,227 @@ impl CheckFacts {
 }
 
 
+// --- check_fallible.nika ---
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CheckCleanup {
+    pub owner: String,
+    pub fails: bool,
+}
+
+fn check_base(name: &str) -> String {
+    let parts: Vec<&str> = name.split("::").collect::<Vec<_>>();
+    (*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_owned()
+}
+
+fn check_implements_in(ledger: &Ledger, teardown: &str, base: &str) -> bool {
+    let types = match *nikaia_std::index::get(&ledger.implementations, teardown) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    for one in types.iter() { if check_base(one) == base { return true; } }
+    false
+}
+
+fn check_cleanup_in(ledger: &Ledger, name: &str, base: &str, qualified: bool) -> Option<String> {
+    let types = match *nikaia_std::index::get(&ledger.implementations, "Cleanup") { Some(__nikaia_value) => __nikaia_value, None => return None };
+    for one in types.iter() {
+        let tail = format!("::{}", one);
+        let mut hit = false;
+        if qualified { hit = one == name || name.ends_with(&tail); } else { hit = check_base(one) == base; }
+        if hit { return Some(one.to_owned()); }
+    }
+    None
+}
+
+fn check_cleanup_fails(ledger: &Ledger, owner: &str) -> bool {
+    let key = format!("{}::cleanup", owner);
+    let contract = match *nikaia_std::index::get(&ledger.functions, &key) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    !contract.fails_with.is_empty()
+}
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn method_options(&mut self, world: &CheckWorld<'_>, method: winnow_grammar::Symbol, contract: &FnContract, span: &Span) {
+        let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
+        if signature.config.is_empty() { return; }
+        let mut options: Vec<(String, String)> = vec![];
+        for option in signature.config.iter() { options.push((option.name.to_owned(), option.default.to_owned())); }
+        let key = (span.start as i64, world.words.resolve(method).to_owned());
+        self.facts.method_options.insert(key, options);
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn method_propagates(&mut self, world: &CheckWorld<'_>, method: winnow_grammar::Symbol, fails: bool, span: &Span) {
+        let key = (span.start as i64, world.words.resolve(method).to_owned());
+        if fails { let added = self.flow.fallible_methods.insert(key); } else { let added = self.flow.opaque_methods.insert(key); }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn method_pauses(&mut self, world: &CheckWorld<'_>, method: winnow_grammar::Symbol, pauses: bool, span: &Span) {
+        let key = (span.start as i64, world.words.resolve(method).to_owned());
+        if pauses { let added = self.flow.pausing_methods.insert(key); } else { let added = self.flow.settled_methods.insert(key); }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_walk_of_a_failing_sequence(&mut self, world: &CheckWorld<'_>, method: winnow_grammar::Symbol, span: &Span) {
+        if self.flow.throwing || self.flow.caught || self.inside_an_action.is_some() { return; }
+        let function = match self.current.as_deref() { Some(__nikaia_value) => __nikaia_value, None => return }.to_owned();
+        let name = world.words.resolve(method).to_owned();
+        self.findings.push(check_refusal("NK2701", span, format!("This function can fail, because a step of what `{}` walks can fail.", name), vec![format!("`{}` asks the sequence for every element, and this sequence reads as it goes, so a read can fail.", name)], Some(format!("Add `throws` to `{}`, or handle it at the call: `… catch {{ … }}`.", function))));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn pausing_step(&mut self, over: &Ty, span: &Span) {
+        let pauses = match over {
+            Ty::Seq { pauses, .. } => { let pauses = *pauses; pauses },
+            _ => false,
+        };
+        if pauses {
+            let added = self.facts.pausing_loops.insert(span.start as i64);
+            self.a_call_that_may_pause("a step of this `for`", true, false, span);
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn fallible_step(&mut self, world: &CheckWorld<'_>, over: &Ty, bindings: i64, span: &Span) {
+        let mut name: String = String::from("");
+        match over {
+            Ty::Named { name: written, .. } => {
+                if !self.iterates_fallibly(world, written) { return; }
+                name = format!("`{}`", written);
+            },
+            Ty::Seq { can_throw, item, .. } => {
+                let item = nikaia_std::boxed::open(item); let can_throw = *can_throw;
+                if !can_throw { return; }
+                name = match item {
+                    Ty::Unknown => "a sequence".to_owned(),
+                    _ => format!("a sequence of `{}`", item.text()),
+                };
+            },
+            _ => return,
+        }
+        if bindings != 1 {
+            self.findings.push(check_refusal("NK2701", span, format!("A `for` over {} gives one value at a time, but you're binding {}.", name, bindings), vec![format!("Each turn of {} can fail, and the loop variable is what's left once that's checked.", name)], Some("Bind one name and take the pair apart inside the loop.".to_owned())));
+            return;
+        }
+        let added = self.facts.fallible_loops.insert(span.start as i64);
+        if self.flow.throwing { return; }
+        self.findings.push(check_refusal("NK2701", span, "This function can fail, because a turn of this loop can fail.".to_owned(), vec![format!("{} reads as it goes, and a read can fail, so the failure passes through this function like a failing call's would.", capitalised(&name))], Some("Add `throws` to this function, or handle the failure inside the loop.".to_owned())));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn walks_a_failing_sequence(&self, on: &Ty, contract: &FnContract) -> bool {
+        let can_fail = match on {
+            Ty::Seq { can_throw, .. } => { let can_throw = *can_throw; can_throw },
+            _ => false,
+        };
+        if !can_fail || !walks_by_value(contract) { return false; }
+        let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return true };
+        let result = match signature.result.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return true };
+        !matches!(result, Ty::Seq { .. })
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn seen_through(&self, world: &CheckWorld<'_>, ty: &Ty) -> Option<Ty> {
+        let name = match ty {
+            Ty::Named { name, .. } => name.to_owned(),
+            _ => return None,
+        };
+        let key = format!("{}::deref", name);
+        let found = match resolve_method(world, &key) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let bound = receiver_bindings(&found.contract, ty);
+        let signature = match found.contract.signature { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let result = match signature.result { Some(__nikaia_value) => __nikaia_value, None => return None };
+        Some(substitute(&result, &bound))
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn fits_through_deref(&self, world: &CheckWorld<'_>, found: &Ty, want: &Ty) -> bool {
+        if found.fits(want) { return true; }
+        let seen = match self.seen_through(world, found) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        seen.fits(want)
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn fields_of_base(&self, world: &CheckWorld<'_>, base: &str) -> Vec<Ty> {
+        nikaia_std::index::or(match *nikaia_std::index::get(&world.fields_by_base, base) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || vec![].into())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn cleanup_of(&self, world: &CheckWorld<'_>, ty: &Ty) -> Option<CheckCleanup> {
+        let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
+        self.cleanup_within(world, ty, &mut seen)
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn cleanup_within(&self, world: &CheckWorld<'_>, ty: &Ty, seen: &mut collections::BTreeSet<String>) -> Option<CheckCleanup> {
+        let mut held: Vec<Ty> = vec![];
+        match ty.unseen() {
+            Ty::Named { ref name, ref args, view } => {
+                if view { return None; }
+                let base = check_base(name);
+                if !seen.insert(base.to_owned()) { return None; }
+                let qualified = name.contains("::");
+                let declared_here = !qualified && world.own.types.contains_key(name);
+                let mut owner = check_cleanup_in(world.own, name, &base, qualified);
+                if owner.is_none() && !declared_here { owner = check_cleanup_in(world.library, name, &base, qualified); }
+                if owner.is_some() {
+                    let found = match owner { Some(__nikaia_value) => __nikaia_value, None => return None };
+                    let fails = check_cleanup_fails(world.own, &found) || check_cleanup_fails(world.library, &found);
+                    return Some(CheckCleanup { owner: found, fails });
+                }
+                held = args.to_owned();
+                for field in self.fields_of_base(world, &base) { held.push(field); }
+            },
+            Ty::Nullable(ref inner) => {
+                let inner = nikaia_std::boxed::open(inner);
+                held.push(inner.clone());
+            },
+            Ty::Tuple(ref parts) => { held = parts.to_owned(); },
+            _ => return None,
+        }
+        let mut any = false;
+        let mut owner: String = String::from("");
+        let mut fails = false;
+        for inner in held.iter() {
+            let found = self.cleanup_within(world, inner, seen);
+            if found.is_some() {
+                let one = match found { Some(__nikaia_value) => __nikaia_value, None => return None };
+                if !any {
+                    any = true;
+                    owner = one.owner.to_owned();
+                }
+                fails = fails || one.fails;
+            }
+        }
+        if !any { return None; }
+        Some(CheckCleanup { owner, fails })
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn tears_down(&self, world: &CheckWorld<'_>, ty: &Ty, seen: &mut collections::BTreeSet<String>) -> Option<String> {
+        let name = match ty {
+            Ty::Named { name, view, .. } => {
+                let view = *view;
+                if view { return None; }
+                name.to_owned()
+            },
+            _ => return None,
+        };
+        let base = check_base(&name);
+        if !seen.insert(base.to_owned()) { return None; }
+        for teardown in ["Drop", "Cleanup"] { if check_implements_in(world.own, teardown, &base) || check_implements_in(world.library, teardown, &base) { return Some(format!("`impl {} for {}`", teardown, base)); } }
+        for field in self.fields_of_base(world, &base) {
+            let how = self.tears_down(world, &field, seen);
+            if how.is_some() { return Some(format!("through its `{}` field, {}", field.text(), nikaia_std::index::or(how.as_deref(), || ""))); }
+        }
+        None
+    }
+}
+
+
 // --- check_fields.nika ---
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -13847,6 +14068,405 @@ impl CheckState {
             why = not_promised_note(callee);
         }
         self.findings.push(check_refusal("NK2202", span, format!("`{}` is `sync`, but it calls `{}`, which {}.", caller, callee, pauses), vec!["A `sync` function promises never to pause or do I/O.".to_owned(), why], Some(format!("Remove `sync` from `{}`, or move the call out of it.", caller))));
+    }
+}
+
+
+// --- check_places.nika ---
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn members_named(members: &[Ty]) -> String {
+    let mut names: Vec<String> = vec![];
+    for member in members.iter() { names.push(format!("`{}`", member.text())); }
+    names.join(", ")
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn a_root_is_one_of_two(wanted: &[(String, Ty)]) -> String {
+    for one in wanted.iter() {
+        let text = one.1.text();
+        let mut bare: String = text.to_owned();
+        if text.starts_with("ref ") { bare = nikaia_std::index::or(text.strip_prefix("ref "), || "").to_owned(); }
+        if one.0 == "root" && bare == "fs::Root" { return ". The root is either `fs::Root::Dir(store)`, which keeps the path inside `store`, or `fs::Root::Anywhere`, which checks nothing and says so where a reviewer will look".to_owned(); }
+    }
+    "".to_owned()
+}
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn no_door(&mut self, written: &str, shape: &str, wanted: &str, span: &Span) { self.findings.push(check_refusal("NK1124", span, format!("Write `{}` like this: `{}`.", written, shape), vec![wanted.to_owned()], None)); }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_field_whose_code_is_not_seen(&mut self, owner: &str, field: &str) {
+        let key = format!("{}.{}", owner, field);
+        let mut stored = CheckStoredCode::empty();
+        if self.stored_code.contains_key(&key) {
+            stored = nikaia_std::index::or(match *nikaia_std::index::get(&self.stored_code, &key) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || CheckStoredCode::empty());
+        }
+        stored.unresolved = true;
+        self.stored_code.insert(key, stored);
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn stamped_through(&self, contract: &FnContract, given: &[Ty], result: Ty) -> Ty {
+        let mut any_seen = false;
+        for one in given.iter() { if one.is_seen() { any_seen = true; } }
+        if result.is_seen() || !any_seen { return result; }
+        let mut reaches_a_lock = !contract.touches_known;
+        for touch in contract.touches.iter() { if touch.names_a_lock() { reaches_a_lock = true; } }
+        if reaches_a_lock { return result; }
+        Ty::Named { name: SEEN.to_owned(), args: vec![result.unseen()], view: false }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_jump_with_nowhere_to_go(&mut self, word: &str, span: &Span) {
+        let mut does: String = String::from("starts the innermost loop's next turn");
+        if word == "break" { does = "leaves the innermost loop around it".to_owned(); }
+        if self.flow.barrier.is_some() {
+            let what = nikaia_std::index::or(self.flow.barrier.as_deref(), || "").to_owned();
+            self.findings.push(check_refusal("NK1132", span, format!("`{}` {}, but the nearest loop is outside this {}.", word, does, what), vec![format!("{} runs as a function of its own, and `{}` can't jump out of a function.", with_article(&what), word)], Some(format!("Decide inside the {} and act on the answer outside it: return a `bool` and test it in the loop.", what))));
+            return;
+        }
+        self.findings.push(check_refusal("NK1132", span, format!("`{}` {}, but this isn't inside a loop.", word, does), vec!["It only works inside a `while` or a `for`.".to_owned()], Some("To leave the function instead, write `return`.".to_owned())));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn arguments_of(&self, on: &Ty) -> collections::BTreeMap<String, Ty> {
+        let mut bound: collections::BTreeMap<String, Ty> = collections::BTreeMap::new();
+        match on {
+            Ty::Named { name, args, .. } => {
+                let order = match *nikaia_std::index::get(&self.struct_parameters, name) { Some(__nikaia_value) => __nikaia_value, None => return bound };
+                let mut at: i64 = 0;
+                while at < order.len() as i64 && at < args.len() as i64 {
+                    if !(*nikaia_std::index::get(&args, nikaia_std::index::at(at))).is_unknown() { bound.insert((*nikaia_std::index::get(&order, nikaia_std::index::at(at))).to_owned(), (*nikaia_std::index::get(&args, nikaia_std::index::at(at))).clone()); }
+                    at = at + 1;
+                }
+            },
+            _ => { },
+        }
+        bound
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn an_owned_place(&self, world: &CheckWorld<'_>, value: &Expr, on: &Ty) -> bool {
+        let a_name = matches!(on, Ty::Named { .. });
+        if on.is_a_view() || !a_name { return false; }
+        let mut root = value;
+        let mut walking = true;
+        while walking {
+            match root {
+                Expr::Field { base, .. } => {
+                    let base = nikaia_std::boxed::open(base);
+                    root = base;
+                },
+                _ => { walking = false; },
+            }
+        }
+        match root {
+            Expr::Variable(name, _) => {
+                let name = *name;
+                let word = world.words.resolve(name).to_owned();
+                let local = match self.binding(&word) { Some(__nikaia_value) => __nikaia_value, None => return false };
+                !local.lent && !local.ty.is_a_view() && !self.lent_here(&word)
+            },
+            _ => false,
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn decided_by_this_argument(&self, signature: &Signature, wanted: &[(String, Ty)], at: i64) -> bool {
+        if at >= wanted.len() as i64 { return false; }
+        let name = match &nikaia_std::index::get(&wanted, nikaia_std::index::at(at)).1 {
+            Ty::Var { name, view } => {
+                let view = *view;
+                if view { return false; }
+                name.to_owned()
+            },
+            _ => return false,
+        };
+        if signature.takes_a_receiver() { return false; }
+        let mark = format!("${}", name);
+        let mut other: i64 = 0;
+        while other < wanted.len() as i64 {
+            if other != at && nikaia_std::index::get(&wanted, nikaia_std::index::at(other)).1.text().contains(&mark) { return false; }
+            other = other + 1;
+        }
+        true
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn kept_arguments_are_its_own(&mut self, world: &CheckWorld<'_>, args: &[Expr], params: &[Ty]) {
+        let mut at: i64 = 0;
+        while at < args.len() as i64 && at < params.len() as i64 {
+            let built = self.text_literal(world, nikaia_std::index::get(&params, nikaia_std::index::at(at)), nikaia_std::index::get(&args, nikaia_std::index::at(at)), true);
+            at = at + 1;
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_match_over_several_error_types(&mut self, world: &CheckWorld<'_>, value: &Expr, arms: &[MatchArm], span: &Span) {
+        if !self.flow.caught_several { return; }
+        let is_error = match value {
+            Expr::Variable(name, _) => { let name = *name; world.words.resolve(name) == "error" },
+            _ => false,
+        };
+        if !is_error { return; }
+        let mut caught = false;
+        for arm in arms.iter() { if arm.guard.is_none() && catches_everything(&arm.pattern) { caught = true; } }
+        if !caught { self.a_case_is_missing("else", span); }
+    }
+}
+
+
+// --- check_reads.nika ---
+
+fn check_counts_first(key: &str) -> bool { key == "Seq::take" || key == "Seq::skip" || key == "Seq::step_by" || key == "Seq::nth" || key == "Vec::chunks" || key == "Vec::windows" || key == "Vec::insert" || key == "Vec::remove" || key == "Vec::swap_remove" || key == "Vec::truncate" || key == "Vec::resize" || key == "str::splitn" }
+
+fn check_numeric(name: &str) -> bool { name == "i32" || name == "i64" || name == "f64" || name == "u8" || name == "u32" || name == "u64" }
+
+fn check_owned_text(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { name, .. } => {
+            let parts: Vec<&str> = name.split("::").collect::<Vec<_>>();
+            let last = *nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1));
+            last == "String" || last == "str"
+        },
+        _ => false,
+    }
+}
+
+fn check_view_of_a_type(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { view, .. } => { let view = *view; view && !check_owned_text(ty) },
+        _ => false,
+    }
+}
+
+fn check_copied(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { name, view, .. } => { let view = *view; !view && (a_number_name(name) || name == "char" || name == "scalar" || name == "bool") },
+        _ => false,
+    }
+}
+
+fn check_number_by_form(side: &Expr) -> bool {
+    match side {
+        Expr::LitInt { .. } => true,
+        Expr::LitFloat(_, _) => true,
+        Expr::LitChar(_, _) => true,
+        Expr::Unary { op, expr, .. } => { let expr = nikaia_std::boxed::open(expr); *op == UnaryOp::Neg && check_number_literal(expr) },
+        _ => false,
+    }
+}
+
+fn check_number_literal(side: &Expr) -> bool { matches!(side, Expr::LitInt { .. } | Expr::LitFloat(_, _)) }
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn counts_in_usize(&mut self, key: &str, args: &[Expr]) { if check_counts_first(key) && !args.is_empty() { let added = self.facts.count_args.insert(id_of(nikaia_std::index::get(&args, 0)) as i64); } }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_map_read_kept(&mut self, world: &CheckWorld<'_>, found: &Ty, want: &Ty, value: &Expr, span: &Span) {
+        let node = id_of(value) as i64;
+        if !self.flow.map_read_sites.contains(&node) { return; }
+        let inner = match want {
+            Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); inner.clone() },
+            _ => return,
+        };
+        let read = match found {
+            Ty::Nullable(read) => { let read = nikaia_std::boxed::open(read); read.clone() },
+            _ => return,
+        };
+        if inner.is_a_view() || inner.is_unknown() || read.is_a_view() || read.is_unknown() { return; }
+        if self.copied(world, &inner) || !self.takes_away(world, &inner) {
+            let added = self.facts.copied_reads.insert(node);
+            return;
+        }
+        self.findings.push(check_refusal("NK1102", span, format!("This keeps a `{}` of its own, and a map's read is a view of what the map keeps.", want.text()), vec!["Nikaia never makes a copy behind your back, so the copy is written where it happens.".to_owned()], Some("Write `?.clone()` after the read: `m[k]?.clone()`.".to_owned())));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_map_read_assigned(&mut self, world: &CheckWorld<'_>, into: &Ty, value: &Expr, span: &Span) {
+        match value {
+            Expr::Coalesce { value: read, fallback, .. } => {
+                let read = nikaia_std::boxed::open(read); let fallback = nikaia_std::boxed::open(fallback);
+                let node = id_of(read) as i64;
+                if !self.jumps(world, fallback) || !self.flow.map_read_sites.contains(&node) || into.is_a_view() || into.is_unknown() { return; }
+                if self.copied(world, into) || !self.takes_away(world, into) {
+                    let added = self.facts.copied_reads.insert(node);
+                    return;
+                }
+                self.findings.push(check_refusal("NK1102", span, format!("This keeps a `{}` of its own, and a map's read is a view of what the map keeps.", into.text()), vec!["Nikaia never makes a copy behind your back, so the copy is written where it happens.".to_owned()], Some("Write `?.clone()` after the read: `m[k]?.clone()`.".to_owned())));
+            },
+            _ => { },
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_view_that_copies(&self, world: &CheckWorld<'_>, ty: &Ty) -> bool {
+        if copies_as_a_view(ty) { return true; }
+        match ty {
+            Ty::Named { name, args, view } => {
+                let view = *view;
+                if view && args.is_empty() {
+                    if self.copies_in_the_package.contains(name) { return true; }
+                    let contract = match *nikaia_std::index::get(&world.library.types, name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+                    return contract.copies;
+                }
+                false
+            },
+            _ => false,
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_cast_over_a_lent_binding(&mut self, world: &CheckWorld<'_>, operand: &Expr, span: &Span) {
+        match operand {
+            Expr::Variable(name, _) => {
+                let name = *name;
+                let written = world.words.resolve(name).to_owned();
+                let local = match self.binding(&written) { Some(__nikaia_value) => __nikaia_value, None => return };
+                if local.lent { let added = self.facts.viewed_numbers.insert((span.start as i64, written.to_owned())); }
+            },
+            _ => { },
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn a_lent_name(&self, world: &CheckWorld<'_>, side: &Expr) -> bool {
+        match side {
+            Expr::Variable(name, _) => {
+                let name = *name;
+                let local = match self.binding(world.words.resolve(name)) { Some(__nikaia_value) => __nikaia_value, None => return false };
+                local.lent
+            },
+            _ => false,
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn a_side_is_a_view(&self, world: &CheckWorld<'_>, side: &Expr, ty: &Ty) -> bool { copies_as_a_view(ty) || check_view_of_a_type(ty) || self.a_lent_name(world, side) && (check_copied(ty) || check_owned_text(ty)) || self.a_side_is_lent(world, side, ty) }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn a_side_is_lent(&self, world: &CheckWorld<'_>, side: &Expr, ty: &Ty) -> bool {
+        if ty.is_unknown() { return false; }
+        !ty.is_a_view() && !check_owned_text(ty) && self.a_lent_parameter(world, side) || self.a_lent_let(world, side)
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn a_side_is_a_value(&self, world: &CheckWorld<'_>, side: &Expr, ty: &Ty) -> bool { !ty.is_unknown() && !ty.is_a_view() && !self.a_lent_name(world, side) && !self.a_side_is_lent(world, side, ty) }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_view_compared_with_a_value(&mut self, world: &CheckWorld<'_>, lhs: &Expr, left: &Ty, rhs: &Expr, right: &Ty, at: &Span) {
+        let read_left = self.a_side_is_a_view(world, lhs, left) && self.a_side_is_a_value(world, rhs, right);
+        let read_right = self.a_side_is_a_view(world, rhs, right) && self.a_side_is_a_value(world, lhs, left);
+        let number_left = left.is_unknown() && self.a_lent_name(world, lhs) && self.a_number_beside(world, rhs, right);
+        let number_right = right.is_unknown() && self.a_lent_name(world, rhs) && self.a_number_beside(world, lhs, left);
+        let here = at.start as i64;
+        if number_left { let added = self.facts.compared_numbers.insert((here, "lhs".to_owned())); }
+        if number_right { let added = self.facts.compared_numbers.insert((here, "rhs".to_owned())); }
+        if read_left { let added = self.facts.compared_views.insert((here, "lhs".to_owned())); }
+        if read_right { let added = self.facts.compared_views.insert((here, "rhs".to_owned())); }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn a_number_beside(&self, world: &CheckWorld<'_>, side: &Expr, ty: &Ty) -> bool { check_copied(ty) && self.a_side_is_a_value(world, side, ty) || check_number_by_form(side) }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_lookup_key_lent(&mut self, world: &CheckWorld<'_>, key: &str, args: &[Expr], found: &[Ty]) {
+        if !is_a_lookup(key) || !world.library.functions.contains_key(key) { return; }
+        if args.len() != 1 || found.len() != 1 { return; }
+        let given = nikaia_std::index::get(&args, 0);
+        let ty = nikaia_std::index::get(&found, 0);
+        let a_string = matches!(given, Expr::LitStr { .. });
+        if ty.is_a_view() || a_string { return; }
+        if moves(&ty) && (self.a_lent_name(world, &given) || self.a_lent_let(world, &given)) { return; }
+        let mut a_number = matches!(given, Expr::LitInt { .. } | Expr::LitFloat(_, _));
+        match given {
+            Expr::Variable(name, _) => {
+                let name = *name;
+                let local = self.binding(world.words.resolve(name));
+                if local.is_some() { a_number = a_number || match local { Some(__nikaia_value) => __nikaia_value, None => return }.constant.is_some(); }
+            },
+            _ => { },
+        }
+        let node = id_of(&given) as i64;
+        if ty.is_unknown() && !a_number {
+            let added = self.facts.lookup_keys.insert(node);
+            return;
+        }
+        let added = self.facts.lent_args.insert(node);
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_read(&mut self, expr: &Expr, path: &str, span: &Span) {
+        let key = (id_of(expr) as i64, span.start as i64);
+        if self.flow.read_index.contains_key(&key) { return; }
+        self.read_seq = self.read_seq + 1;
+        self.flow.read_index.insert(key, self.reads_on_paths.len() as i64);
+        let binding = self.binding(path).as_ref().map(|__nikaia_it| __nikaia_it.id);
+        self.reads_on_paths.push(CheckRead { path: path.to_owned(), at: span.start as i64, choices: self.branch.to_owned(), seq: self.read_seq, binding });
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn parts_taken_out_of_a_mut_parameter(&mut self, world: &CheckWorld<'_>, path: &str, body: &Expr, subject: &Ty, parts: &collections::BTreeMap<String, Ty>, handed_from: i64) {
+        for repeat in self.repeats.iter() { if repeat.what == "lambda" { return; } }
+        if self.scope.is_empty() { return; }
+        let frame = (*nikaia_std::index::get(&self.scope, nikaia_std::index::at(self.scope.len() as i64 - 1))).to_owned();
+        let mut found: Vec<(String, i64)> = vec![];
+        for (name, _) in parts.iter() {
+            for local in frame.iter() {
+                if local.name == *name {
+                    found.push((name.to_owned(), local.id));
+                    break;
+                }
+            }
+        }
+        let mut any = false;
+        for (part, binding) in found.iter() {
+            let binding = nikaia_std::num::value(binding);
+            let mut at = handed_from;
+            while at < self.handed.len() as i64 {
+                if nikaia_std::index::or(nikaia_std::index::get(&self.handed, nikaia_std::index::at(at)).binding, || -1) == binding { break; }
+                at = at + 1;
+            }
+            if at >= self.handed.len() as i64 { continue; }
+            any = true;
+            self.parts_out.push(CheckPartOut { subject: path.to_owned(), part: part.to_owned(), binding, handed: at });
+        }
+        if !any { return; }
+        let node = id_of(body) as i64;
+        let placeholder = match self.a_placeholder(&world.here, subject) { Some(__nikaia_value) => __nikaia_value, None => return };
+        self.facts.taking_arms.insert(node, placeholder);
+        let mut kept: collections::BTreeSet<(i64, String)> = collections::BTreeSet::new();
+        for one in self.facts.copied_bindings.iter() { if one.0 != node { let added = kept.insert(one.clone()); } }
+        self.facts.copied_bindings = kept;
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn record_cast(&mut self, from: &Ty, into: &Ty, span: &Span) {
+        let from_name = match from {
+            Ty::Named { name, .. } => name.to_owned(),
+            _ => return,
+        };
+        let into_name = match into {
+            Ty::Named { name, .. } => name.to_owned(),
+            _ => return,
+        };
+        let fits_i64 = from_name == "i32" && into_name == "i64";
+        let fits_from_u8 = from_name == "u8" && (into_name == "i32" || into_name == "i64" || into_name == "u32" || into_name == "u64");
+        let fits_from_u32 = from_name == "u32" && (into_name == "i64" || into_name == "u64");
+        let always_fits = from_name == into_name || into_name == "f64" || fits_i64 || fits_from_u8 || fits_from_u32;
+        let checked = check_numeric(&from_name) && check_numeric(&into_name) && !always_fits;
+        let at = (span.start as i64, into_name.to_owned());
+        if !checked { let added = self.flow.widening_casts.insert(at); } else if from_name == "f64" { self.facts.narrowing_casts.insert(at, FactNarrowing::FromFloat); } else { self.facts.narrowing_casts.insert(at, FactNarrowing::Integer); }
     }
 }
 
@@ -40759,6 +41379,10 @@ pub mod check_facts {
     #[allow(unused_imports)]
     pub use super::{FactWrap, FactKeyForm, FactViewed, FactNarrowing, FactPausing, FactClaim, CheckFacts};
 }
+pub mod check_fallible {
+    #[allow(unused_imports)]
+    pub use super::{CheckCleanup};
+}
 pub mod check_fields {}
 pub mod check_flow {
     #[allow(unused_imports)]
@@ -40799,6 +41423,11 @@ pub mod check_pauses {
     #[allow(unused_imports)]
     pub use super::{CheckPause};
 }
+pub mod check_places {
+    #[allow(unused_imports)]
+    pub use super::{members_named, a_root_is_one_of_two};
+}
+pub mod check_reads {}
 pub mod check_refusals {
     #[allow(unused_imports)]
     pub use super::{left_out_text};

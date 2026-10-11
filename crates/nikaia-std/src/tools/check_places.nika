@@ -1,0 +1,212 @@
+// crates/nikaia-std/src/tools/check_places.nika
+//
+// **Small questions about a place, a jump and a lock's door** - moved from the
+// compiler's checker (ADR-294, #125, #558, C-5a): a `break` with no loop
+// (`NK1132`), a door written wrong (`NK1124`), a `match` over a place this
+// function owns (ADR-291), what a value's type arguments bind, the stamp a
+// lock's value passes on (ADR-281 D22), and the `match` over a `catch`'s error
+// (`NK1151`, ADR-280 D18).
+
+use std::collections
+
+/// The members, as a message names them: `` `ConfigError`, `io::IoError` ``.
+pub fn members_named(members: ref Vec[Ty]) -> String sync {
+    let mut names: Vec[String] = []
+    for member in members {
+        names.push(f"`{member.text()}`")
+    }
+    return names.join(", ")
+}
+
+/// What an `fs::Root` parameter is, where the signature has one: the root is
+/// either `fs::Root::Dir(store)` or `fs::Root::Anywhere`.
+pub fn a_root_is_one_of_two(wanted: ref Vec[(String, Ty)]) -> String sync {
+    for one in wanted {
+        let text = one.1.text()
+        let mut bare: String = text.clone()
+        if text.starts_with("ref ") {
+            bare = (text.strip_prefix("ref ") ?? "").clone()
+        }
+        if one.0 == "root" && bare == "fs::Root" {
+            return ". The root is either `fs::Root::Dir(store)`, which keeps the path inside `store`, or `fs::Root::Anywhere`, which checks nothing and says so where a reviewer will look".clone()
+        }
+    }
+    return "".clone()
+}
+
+impl CheckState {
+    /// The one message shape for a door written wrong.
+    pub fn no_door(ref mut self, written: ref String, shape: ref String, wanted: ref String, span: ref Span) sync {
+        self.findings.push(check_refusal("NK1124", span, f"Write `{written}` like this: `{shape}`.", [wanted.clone()], null))
+    }
+
+    /// A function field code is put into where the lock column cannot read it
+    /// (ADR-230 D1): undecided, never quiet.
+    pub fn a_field_whose_code_is_not_seen(ref mut self, owner: ref String, field: ref String) sync {
+        let key = f"{owner}.{field}"
+        let mut stored = CheckStoredCode::empty()
+        if self.stored_code.contains_key(key) {
+            stored = self.stored_code[key]?.clone() ?? CheckStoredCode::empty()
+        }
+        stored.unresolved = true
+        self.stored_code.insert(key, stored)
+    }
+
+    /// **A value that came out of a lock passes the stamp on** (ADR-281 D22): a
+    /// callee that touches a lock, or that nothing describes, does not.
+    pub fn stamped_through(ref self, contract: ref FnContract, given: ref Vec[Ty], result: Ty) -> Ty sync {
+        let mut any_seen = false
+        for one in given {
+            if one.is_seen() {
+                any_seen = true
+            }
+        }
+        if result.is_seen() || !any_seen {
+            return result
+        }
+        let mut reaches_a_lock = !contract.touches_known
+        for touch in contract.touches {
+            if touch.names_a_lock() {
+                reaches_a_lock = true
+            }
+        }
+        if reaches_a_lock {
+            return result
+        }
+        return Ty::Named { name: SEEN.clone(), args: [result.unseen()], view: false }
+    }
+
+    /// **`NK1132`: a `break` or a `continue` with no loop to act on.** Two shapes
+    /// and one code: there is no loop, or there is one and a function boundary
+    /// stands between.
+    pub fn a_jump_with_nowhere_to_go(ref mut self, word: ref String, span: ref Span) sync {
+        let mut does: String = "starts the innermost loop's next turn"
+        if word == "break" {
+            does = "leaves the innermost loop around it".clone()
+        }
+        if self.flow.barrier != null {
+            let what = (self.flow.barrier ?? "").clone()
+            self.findings.push(check_refusal("NK1132", span, f"`{word}` {does}, but the nearest loop is outside this {what}.", [f"{with_article(what)} runs as a function of its own, and `{word}` can't jump out of a function."], f"Decide inside the {what} and act on the answer outside it: return a `bool` and test it in the loop."))
+            return
+        }
+        self.findings.push(check_refusal("NK1132", span, f"`{word}` {does}, but this isn't inside a loop.", ["It only works inside a `while` or a `for`.".clone()], "To leave the function instead, write `return`.".clone()))
+    }
+
+    /// What a value's own type arguments bind its declaration's parameters to:
+    /// `Pair[i64]` against `struct Pair[T]` gives `T = i64`, positionally.
+    pub fn arguments_of(ref self, on: ref Ty) -> collections::BTreeMap[String, Ty] sync {
+        let mut bound: collections::BTreeMap[String, Ty] = collections::BTreeMap()
+        match on {
+            Ty::Named { name, args, .. } => {
+                let order = self.struct_parameters[name] ?? return bound
+                let mut at = 0
+                while at < order.len() && at < args.len() {
+                    if !args[at].is_unknown() {
+                        bound.insert(order[at].clone(), args[at].clone())
+                    }
+                    at = at + 1
+                }
+            }
+            else => {}
+        }
+        return bound
+    }
+
+    /// **Whether a `match` is over a place this function owns**: a name, or a
+    /// field of one, that is not itself a view. Only there can a part be lent and
+    /// the whole stay.
+    pub fn an_owned_place(ref self, world: ref CheckWorld, value: ref Expr, on: ref Ty) -> bool sync {
+        let a_name = match on {
+            Ty::Named { .. } => true,
+            else => false,
+        }
+        if on.is_a_view() || !a_name {
+            return false
+        }
+        let mut root = value
+        let mut walking = true
+        while walking {
+            match root {
+                Expr::Field { base, .. } => {
+                    root = base
+                }
+                else => {
+                    walking = false
+                }
+            }
+        }
+        return match root {
+            Expr::Variable(name, _) => {
+                let word = world.words.resolve(name).clone()
+                let local = self.binding(word) ?? return false
+                !local.lent && !local.ty.is_a_view() && !self.lent_here(word)
+            }
+            else => false,
+        }
+    }
+
+    /// Whether parameter `at` is a by-value type variable that nothing else in
+    /// the signature binds: no receiver, and no other parameter names it.
+    pub fn decided_by_this_argument(ref self, signature: ref Signature, wanted: ref Vec[(String, Ty)], at: i64) -> bool sync {
+        if at >= wanted.len() {
+            return false
+        }
+        let name = match wanted[at].1 {
+            Ty::Var { name, view } => {
+                if view {
+                    return false
+                }
+                name.clone()
+            }
+            else => return false,
+        }
+        if signature.takes_a_receiver() {
+            return false
+        }
+        let mark = f"${name}"
+        let mut other = 0
+        while other < wanted.len() {
+            if other != at && wanted[other].1.text().contains(ref mark) {
+                return false
+            }
+            other = other + 1
+        }
+        return true
+    }
+
+    /// **A kept function takes its arguments by value**, so a text literal handed
+    /// to one where it keeps text is built there (ADR-282 D4).
+    pub fn kept_arguments_are_its_own(ref mut self, world: ref CheckWorld, args: ref Vec[Expr], params: ref Vec[Ty]) sync {
+        let mut at = 0
+        while at < args.len() && at < params.len() {
+            let built = self.text_literal(world, params[at], args[at], true)
+            at = at + 1
+        }
+    }
+
+    /// **`NK1151` for a `match` over a `catch`'s error** (ADR-280 D18): the
+    /// variants within one error type are closed and the set of error types is
+    /// open, so a handler that names variants of two of them has covered no set
+    /// at all; `else` is what says the rest.
+    pub fn a_match_over_several_error_types(ref mut self, world: ref CheckWorld, value: ref Expr, arms: ref Vec[MatchArm], span: ref Span) sync {
+        if !self.flow.caught_several {
+            return
+        }
+        let is_error = match value {
+            Expr::Variable(name, _) => world.words.resolve(name) == "error",
+            else => false,
+        }
+        if !is_error {
+            return
+        }
+        let mut caught = false
+        for arm in arms {
+            if arm.guard == null && catches_everything(arm.pattern) {
+                caught = true
+            }
+        }
+        if !caught {
+            self.a_case_is_missing("else", span)
+        }
+    }
+}

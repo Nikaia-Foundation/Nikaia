@@ -61,9 +61,8 @@ pub use nikaia_std::tools::check_state::{
 };
 use nikaia_std::tools::check_state::{
     CheckGive as Give, CheckGuarded as Guarded, CheckHanded as Handed, CheckImmutable as Immutable,
-    CheckKind as Kind, CheckLocal as Local, CheckPartOut as PartOut,
-    CheckPendingCoalesce as PendingCoalesce, CheckPromises as Promises, CheckRead as Read,
-    CheckRepeats as Repeats, CheckState, CheckWorld, a_body_never_ends,
+    CheckKind as Kind, CheckLocal as Local, CheckPendingCoalesce as PendingCoalesce,
+    CheckPromises as Promises, CheckRepeats as Repeats, CheckState, CheckWorld, a_body_never_ends,
 };
 use nikaia_std::tools::check_texts::{self, ends_in_null, ends_in_text};
 use nikaia_std::tools::check_widen::{
@@ -1376,11 +1375,7 @@ impl<'a> Checker<'a> {
     /// view of each `Symbol`, and handing one to `resolve` was refused as a
     /// mismatch although the handle is a `u32` the ledger says copies.
     fn a_view_that_copies(&self, ty: &Ty) -> bool {
-        copies_as_a_view(ty)
-            || matches!(ty, Ty::Named { name, args, view: true }
-                if args.is_empty()
-                    && (self.s.copies_in_the_package.contains(name)
-                        || self.world.library.types.get(name).is_some_and(|contract| contract.copies)))
+        self.s.a_view_that_copies(&self.world, ty)
     }
 
     /// The other files of the program: `beside` without this one.
@@ -2351,37 +2346,7 @@ impl<'a> Checker<'a> {
     /// overflowing, there is no sensible point to stop at, and every language
     /// does it this way. That is a written limit and not a check.
     fn record_cast(&mut self, from: &Ty, into: &Ty, span: &Span) {
-        let (Ty::Named { name: from, .. }, Ty::Named { name: into, .. }) = (from, into) else {
-            return;
-        };
-        let (from, into_name) = (from.as_str(), into.as_str());
-        const NUMERIC: [&str; 6] = ["i32", "i64", "f64", "u8", "u32", "u64"];
-        let always_fits = from == into_name
-            || into_name == "f64"
-            || matches!(
-                (from, into_name),
-                ("i32", "i64") | ("u8", "i32" | "i64" | "u32" | "u64") | ("u32", "i64" | "u64")
-            );
-        let checked = NUMERIC.contains(&from) && NUMERIC.contains(&into_name) && !always_fits;
-
-        let at = (span.at() as i64, into.clone());
-        match (from, checked) {
-            (_, false) => {
-                self.s.flow.widening_casts.insert(at);
-            }
-            // Out of a floating-point number: silent three ways - it stops at the
-            // limit in both directions and turns "not a number" into zero - and
-            // `try_from` does not exist for it, so `std` carries the test.
-            ("f64", true) => {
-                self.s
-                    .facts
-                    .narrowing_casts
-                    .insert(at, Narrowing::FromFloat);
-            }
-            (_, true) => {
-                self.s.facts.narrowing_casts.insert(at, Narrowing::Integer);
-            }
-        }
+        self.s.record_cast(from, into, span);
     }
 
     /// **`NK1117` for a function nothing declares** (0.0.244).
@@ -2410,43 +2375,7 @@ impl<'a> Checker<'a> {
     /// entries, where the key is a known value that is not already a view.
     /// `m.get(k)` over a map keyed by numbers was `rustc`'s *mismatched types*.
     fn a_lookup_key_lent(&mut self, key: &str, args: &[Expr], found: &[Ty]) {
-        if !is_a_lookup(key) || !self.world.library.functions.contains_key(key) {
-            return;
-        }
-        let ([given], [ty]) = (args, found) else {
-            return;
-        };
-        if ty.is_a_view() || matches!(given, Expr::LitStr { .. }) {
-            return;
-        }
-        // **A name that is a view below whatever its type says** - a `let`
-        // bound to a map read beside a jump - is a reference already (found
-        // moving `describe`'s draft into Nikaia, #125).
-        if crate::contracts::keeps::moves(ty)
-            && (matches!(given, Expr::Variable(name, _)
-                if self.s.binding(self.parsed.text(*name)).is_some_and(|local| local.lent))
-                // Or a part of a tuple taken apart out of a place (#465).
-                || self.s.a_lent_let(&self.world, given))
-        {
-            return;
-        }
-        // **A number is lent as it is**, typed or not (0.0.246): a literal, or
-        // a name a literal folded into, can never be a view, and through
-        // `AsKey` the language below had no type to give it but its default -
-        // `s.contains(4)` on a `HashSet[i64]` asked for an `i32`'s key. A plain
-        // `&` lets the collection's own key type say what the number is.
-        let a_number = matches!(given, Expr::LitInt { .. } | Expr::LitFloat(_, _))
-            || matches!(given, Expr::Variable(name, _)
-                if self.s.binding(self.parsed.text(*name)).is_some_and(|l| l.constant.is_some()));
-        // **A key of no known type** - `let k = 1` has none until something
-        // pins it - is written through `AsKey`, which lends a number and
-        // passes a view through, since the `&` alone would be wrong for the
-        // second.
-        if ty.is_unknown() && !a_number {
-            self.s.facts.lookup_keys.insert(value_node(given));
-            return;
-        }
-        self.s.facts.lent_args.insert(value_node(given));
+        self.s.a_lookup_key_lent(&self.world, key, args, found);
     }
 
     /// `NK1105` for text of its own given to a name bound to a literal
@@ -3118,109 +3047,8 @@ impl<'a> Checker<'a> {
         right: &Ty,
         at: &Span,
     ) {
-        // **A name a `for` lends is a view below whatever its type says**
-        // (`Local::lent`, the question `a_cast_over_a_lent_binding` asks for
-        // the same reason): the checker types `c` in `for c in word` as the
-        // element, and the language below binds a `&char`.
-        let lent = |side: &Expr| -> bool {
-            matches!(side, Expr::Variable(name, _)
-                if self.s.binding(self.parsed.text(*name)).is_some_and(|local| local.lent))
-        };
-        let copied = |ty: &Ty| -> bool {
-            matches!(ty, Ty::Named { name, view: false, .. }
-                if is_number(name) || matches!(name.as_str(), "char" | "scalar" | "bool"))
-        };
-        // **And a view of any other named type**, read the same way: `*op ==
-        // UnaryOp::Neg` is `PartialEq::eq(&*op, …)` below and moves nothing,
-        // where `op == UnaryOp::Neg` compared a `&UnaryOp` with a `UnaryOp` -
-        // found moving `fold` into Nikaia (issue #171). Text is left
-        // alone: the language below compares a `&str` with a `String` as it is.
-        let a_view_of_a_type = |ty: &Ty| {
-            matches!(ty, Ty::Named { name, view: true, .. }
-                if !matches!(ty::base(name), "String" | "str"))
-        };
-        // **And a lent `String`**: `for one in words` over a `Vec[String]`
-        // binds a `&String` below, and `&String == String` has no impl there,
-        // where `&str == String` does - so the view of owned text is read as
-        // well (found moving `describe`'s signature reading into Nikaia, #124).
-        let owned_text = |ty: &Ty| matches!(ty, Ty::Named { name, .. } if matches!(ty::base(name), "String" | "str"));
-        // **And a parameter the function is lent** of a type that is not
-        // text: `k: Kind` that the body only reads is a `&Kind` below, and
-        // `k == Kind::A` compared a reference with a value - `rustc`'s *can't
-        // compare `&Kind` with `Kind`* (found moving `sharing`'s classes into
-        // Nikaia, #125). Two such parameters are two references and agree.
-        let a_lent_parameter = |side: &Expr, ty: &Ty| {
-            !ty.is_unknown() && !ty.is_a_view() && !owned_text(ty) && self.a_lent_parameter(side)
-        };
-        // **And a `let` over a place** (#461): `let held = xs[at]` over a
-        // `Vec[String]` is a view below (`Checked::lent_lets`) though its type
-        // here is the value's, and `made != held` compared a `String` with a
-        // `&String` (found moving the prover's `foreign_contract` into Nikaia,
-        // #436).
-        let a_lent_let =
-            |side: &Expr, ty: &Ty| !ty.is_unknown() && self.s.a_lent_let(&self.world, side);
-        let is_view = |side: &Expr, ty: &Ty| {
-            copies_as_a_view(ty)
-                || a_view_of_a_type(ty)
-                || (lent(side) && (copied(ty) || owned_text(ty)))
-                || a_lent_parameter(side, ty)
-                || a_lent_let(side, ty)
-        };
-        let is_value = |side: &Expr, ty: &Ty| {
-            !ty.is_unknown()
-                && !ty.is_a_view()
-                && !lent(side)
-                && !a_lent_parameter(side, ty)
-                && !a_lent_let(side, ty)
-        };
-        let read_left = is_view(lhs, left) && is_value(rhs, right);
-        let read_right = is_view(rhs, right) && is_value(lhs, left);
-        // **And a lent name whose type is not known here, beside a number**
-        // (#531): `let n = m["a"] ?? panic(…)` over a map whose element type
-        // the language below decides from `m["a"] = 7`. The other side says it
-        // is a number, and whether `n` arrived as one or as a view of one is
-        // not this checker's to know - so it is read as the number either is.
-        // A literal has no type of its own here (`Unknown`), so it is asked by
-        // its form.
-        let a_number = |side: &Expr, ty: &Ty| {
-            (copied(ty) && is_value(side, ty))
-                || matches!(
-                    side,
-                    Expr::LitInt { .. } | Expr::LitFloat(_, _) | Expr::LitChar(_, _)
-                )
-                || matches!(side, Expr::Unary { op: UnaryOp::Neg, expr, .. }
-                    if matches!(**expr, Expr::LitInt { .. } | Expr::LitFloat(_, _)))
-        };
-        let unknown = |side: &Expr, ty: &Ty| lent(side) && ty.is_unknown();
-        let number_left = unknown(lhs, left) && a_number(rhs, right);
-        let number_right = unknown(rhs, right) && a_number(lhs, left);
-        if number_left {
-            self.s
-                .facts
-                .compared_numbers
-                .insert(((at.at() as i64), "lhs".to_string()));
-        }
-        if number_right {
-            self.s
-                .facts
-                .compared_numbers
-                .insert(((at.at() as i64), "rhs".to_string()));
-        }
-        // **By the operator's own span and the side**: a statement may hold
-        // two comparisons of one name, `a == b && Op::Not != a`, and only the
-        // second reads `a` (ADR-081 D1's key, for its reason).
-        if read_left {
-            self.s
-                .facts
-                .compared_views
-                .insert(((at.at() as i64), "lhs".to_string()));
-        }
-        if read_right {
-            self.s
-                .facts
-                .compared_views
-                .insert(((at.at() as i64), "rhs".to_string()));
-        }
+        self.s
+            .a_view_compared_with_a_value(&self.world, lhs, left, rhs, right, at);
     }
 
     /// **An `impl` of a trait nothing declares** (0.0.231).
@@ -3989,73 +3817,9 @@ impl<'a> Checker<'a> {
     /// the value, and dies nowhere. The type named is the one with the
     /// cleanup; the answer fails where any cleanup it holds can.
     fn cleanup_of(&self, ty: &Ty) -> Option<(String, bool)> {
-        self.cleanup_within(ty, &mut BTreeSet::new())
-    }
-
-    /// The fields of every type called `base` in either ledger
-    /// ([`CheckWorld::fields_by_base`]).
-    fn fields_of_base(&self, base: &str) -> &[Ty] {
-        self.world
-            .fields_by_base
-            .get(base)
-            .map_or(&[], Vec::as_slice)
-    }
-
-    fn cleanup_within(&self, ty: &Ty, seen: &mut BTreeSet<String>) -> Option<(String, bool)> {
-        let held: Vec<Ty> = match ty.unseen() {
-            Ty::Named {
-                name,
-                args,
-                view: false,
-            } => {
-                let base = crate::contracts::ty::base(&name).to_string();
-                if !seen.insert(base.clone()) {
-                    return None;
-                }
-                // **A name is its own type before it is another's** (#120): a
-                // `File` this program declares is not `fs::File`, and an
-                // `http::File` is not either. Only a name nobody here declares
-                // and nobody qualified is matched by its last segment.
-                let qualified = name.contains("::");
-                let declared_here = !qualified && self.world.own.types.contains_key(name.as_str());
-                let owner = [self.world.own, self.world.library]
-                    .into_iter()
-                    .take(match declared_here {
-                        true => 1,
-                        false => 2,
-                    })
-                    .find_map(|ledger| {
-                        ledger
-                            .implementations
-                            .get("Cleanup")?
-                            .iter()
-                            .find(|t| match qualified {
-                                true => *t == &name || name.ends_with(&format!("::{t}")),
-                                false => crate::contracts::ty::base(t) == base,
-                            })
-                            .cloned()
-                    });
-                if let Some(owner) = owner {
-                    let fails = [self.world.own, self.world.library]
-                        .into_iter()
-                        .any(|ledger| {
-                            ledger
-                                .functions
-                                .get(&format!("{owner}::cleanup"))
-                                .is_some_and(|contract| !contract.fails_with.is_empty())
-                        });
-                    return Some((owner, fails));
-                }
-                let fields = self.fields_of_base(&base).iter().cloned();
-                args.into_iter().chain(fields).collect()
-            }
-            Ty::Nullable(inner) => vec![*inner],
-            Ty::Tuple(parts) => parts,
-            _ => return None,
-        };
-        held.iter()
-            .filter_map(|inner| self.cleanup_within(inner, seen))
-            .reduce(|(owner, fails), (_, more)| (owner, fails || more))
+        self.s
+            .cleanup_of(&self.world, ty)
+            .map(|held| (held.owner, held.fails))
     }
 
     /// **A value with a cleanup may die in the function being walked**
@@ -5131,13 +4895,7 @@ impl<'a> Checker<'a> {
     /// the emitter by the **entry** the call resolved to - so a method of the
     /// program's own that happens to be called `take` is not converted.
     fn counts_in_usize(&mut self, key: &str, args: &[Expr]) {
-        for (entry, at) in COUNTS {
-            if *entry == key
-                && let Some(arg) = args.get(*at)
-            {
-                self.s.facts.count_args.insert(value_node(arg));
-            }
-        }
+        self.s.counts_in_usize(key, args);
     }
 
     /// **A map's read kept where a `T?` of its own is wanted**
@@ -5147,33 +4905,8 @@ impl<'a> Checker<'a> {
     /// is refused with the copy to write, where it reached `rustc` as
     /// *mismatched types* about a file nobody wrote.
     fn a_map_read_kept(&mut self, found: &Ty, want: &Ty, value: &Expr, span: &Span) {
-        if !self.s.flow.map_read_sites.contains(&value_node(value)) {
-            return;
-        }
-        let (Ty::Nullable(inner), Ty::Nullable(read)) = (want, found) else {
-            return;
-        };
-        if inner.is_a_view() || inner.is_unknown() || read.is_a_view() || read.is_unknown() {
-            return;
-        }
-        if self.s.copied(&self.world, inner) || !self.s.takes_away(&self.world, inner) {
-            self.s.facts.copied_reads.insert(value_node(value));
-            return;
-        }
-        self.s.findings.push(Finding {
-            severity: Severity::Error,
-            span: *span,
-            code: "NK1102".to_string(),
-            message: format!(
-                "This keeps a `{want}` of its own, and a map's read is a view of what the map keeps."
-            ),
-            notes: vec![
-                "Nikaia never makes a copy behind your back, so the copy is written where it happens."
-                    .to_string(),
-            ],
-            help: Some("Write `?.clone()` after the read: `m[k]?.clone()`.".to_string()),
-            labels: Vec::new(),
-        });
+        self.s
+            .a_map_read_kept(&self.world, found, want, value, span);
     }
 
     /// Part I 2.3: record where the emitter has to write the `Some(…)`.
@@ -5275,39 +5008,7 @@ impl<'a> Checker<'a> {
     /// `let k: Kind? = m[1]` follows - where it reached `rustc` as *mismatched
     /// types*.
     fn a_map_read_assigned(&mut self, into: &Ty, value: &Expr, span: &Span) {
-        let Expr::Coalesce {
-            value: read,
-            fallback,
-            ..
-        } = value
-        else {
-            return;
-        };
-        if !self.s.jumps(&self.world, fallback)
-            || !self.s.flow.map_read_sites.contains(&value_node(read))
-            || into.is_a_view()
-            || into.is_unknown()
-        {
-            return;
-        }
-        if self.s.copied(&self.world, into) || !self.s.takes_away(&self.world, into) {
-            self.s.facts.copied_reads.insert(value_node(read));
-            return;
-        }
-        self.s.findings.push(Finding {
-            severity: Severity::Error,
-            span: *span,
-            code: "NK1102".to_string(),
-            message: format!(
-                "This keeps a `{into}` of its own, and a map's read is a view of what the map keeps."
-            ),
-            notes: vec![
-                "Nikaia never makes a copy behind your back, so the copy is written where it happens."
-                    .to_string(),
-            ],
-            help: Some("Write `?.clone()` after the read: `m[k]?.clone()`.".to_string()),
-            labels: Vec::new(),
-        });
+        self.s.a_map_read_assigned(&self.world, into, value, span);
     }
 
     fn wraps_into_nullable(&mut self, found: &Ty, want: &Ty, value: &Expr, span: &Span) {
@@ -10637,15 +10338,7 @@ impl<'a> Checker<'a> {
 
     /// The one message shape for a door written wrong.
     fn no_door(&mut self, door: MultiLock, wanted: &str, span: &Span) {
-        self.s.findings.push(Finding {
-            severity: Severity::Error,
-            span: *span,
-            code: "NK1124".to_string(),
-            message: format!("Write `{}` like this: `{}`.", door.written(), door.shape()),
-            notes: vec![wanted.to_string()],
-            help: None,
-            labels: Vec::new(),
-        });
+        self.s.no_door(door.written(), door.shape(), wanted, span);
     }
 
     /// `Shared(x)`, `SharedMut(x)` and `Locked(x)` make a hull
@@ -11624,36 +11317,11 @@ impl<'a> Checker<'a> {
     /// What a type seen through (`deref` in its ledger) hands out, with the
     /// receiver's own arguments bound: `&$T` of a `Shared[$T]`.
     fn seen_through(&self, ty: &Ty) -> Option<Ty> {
-        let Ty::Named { name, .. } = ty else {
-            return None;
-        };
-        let (_, contract) = self.method(&format!("{name}::deref"))?;
-        let result = contract.signature.as_ref()?.result.as_ref()?;
-        let bound = bindings(&contract, ty);
-        Some(ty::substitute(result, &bound))
+        self.s.seen_through(&self.world, ty)
     }
 
     fn fits_through_deref(&self, found: &Ty, want: &Ty) -> bool {
-        if found.fits(want) {
-            return true;
-        }
-        let Ty::Named { name, .. } = found else {
-            return false;
-        };
-        let Some((_, contract)) = self.method(&format!("{name}::deref")) else {
-            return false;
-        };
-        // The receiver's own arguments bind the signature's variables, exactly
-        // as they do for any other method (ADR-288), so `(&Shared[$T]) -> &$T`
-        // answers with what *this* `Shared` holds rather than with a variable.
-        let Some(signature) = contract.signature.as_ref() else {
-            return false;
-        };
-        let Some(result) = signature.result.as_ref() else {
-            return false;
-        };
-        let bound = bindings(&contract, found);
-        ty::substitute(result, &bound).fits(want)
+        self.s.fits_through_deref(&self.world, found, want)
     }
 
     /// **An open number put where no number fits** (#554): `let n = 12` and
@@ -11866,11 +11534,7 @@ impl<'a> Checker<'a> {
     /// A function field code is put into where the lock column cannot read it
     /// (ADR-230 D1): undecided, never quiet.
     fn a_field_whose_code_is_not_seen(&mut self, owner: &str, field: &str) {
-        self.s
-            .stored_code
-            .entry(format!("{owner}.{field}"))
-            .or_insert_with(StoredCode::empty)
-            .unresolved = true;
+        self.s.a_field_whose_code_is_not_seen(owner, field);
     }
 
     /// Whether a struct's field is text both kinds of which flow into
@@ -12319,32 +11983,7 @@ impl<'a> Checker<'a> {
     /// (ADR-297 D12): an `impl Drop` or an `impl Cleanup` in any ledger this
     /// build reads, on the type or on the type of one of its fields.
     fn tears_down(&self, ty: &Ty, seen: &mut BTreeSet<String>) -> Option<String> {
-        let Ty::Named {
-            name, view: false, ..
-        } = ty
-        else {
-            return None;
-        };
-        let base = crate::contracts::ty::base(name).to_string();
-        if !seen.insert(base.clone()) {
-            return None;
-        }
-        for teardown in ["Drop", "Cleanup"] {
-            let written = [self.world.own, self.world.library]
-                .into_iter()
-                .any(|ledger| {
-                    ledger.implementations.get(teardown).is_some_and(|types| {
-                        types.iter().any(|t| crate::contracts::ty::base(t) == base)
-                    })
-                });
-            if written {
-                return Some(format!("`impl {teardown} for {base}`"));
-            }
-        }
-        self.fields_of_base(&base).iter().find_map(|field| {
-            self.tears_down(field, seen)
-                .map(|how| format!("through its `{}` field, {how}", field.text()))
-        })
+        self.s.tears_down(&self.world, ty, seen)
     }
 
     /// Where a method call stands in ADR-023 D8's propagation, for the emitter
@@ -12363,30 +12002,11 @@ impl<'a> Checker<'a> {
     /// leaves an option out still gets its default — which is the half the
     /// emitter could not work out on its own either.
     fn method_options(&mut self, method: Ident, contract: &FnContract, span: &Span) {
-        let Some(signature) = contract.signature.as_ref() else {
-            return;
-        };
-        if signature.config.is_empty() {
-            return;
-        }
-        let options = signature
-            .config
-            .iter()
-            .map(|option| (option.name.clone(), option.default.clone()))
-            .collect();
-        self.s.facts.method_options.insert(
-            ((span.at() as i64), self.parsed.text(method).to_string()),
-            options,
-        );
+        self.s.method_options(&self.world, method, contract, span);
     }
 
     fn method_propagates(&mut self, method: Ident, fails: bool, span: &Span) {
-        let key = (span.at() as i64, self.parsed.text(method).to_string());
-        if fails {
-            self.s.flow.fallible_methods.insert(key);
-        } else {
-            self.s.flow.opaque_methods.insert(key);
-        }
+        self.s.method_propagates(&self.world, method, fails, span);
     }
 
     /// **What a task takes with it** (Part I 8.3, `NK2101`).
@@ -12647,23 +12267,7 @@ impl<'a> Checker<'a> {
 
     /// A read of a name, recorded once per expression and statement.
     fn a_read(&mut self, expr: &Expr, path: String, span: &Span) {
-        let key = (value_node(expr), span.at() as i64);
-        if self.s.flow.read_index.contains_key(&key) {
-            return;
-        }
-        self.s.read_seq += 1;
-        self.s
-            .flow
-            .read_index
-            .insert(key, self.s.reads_on_paths.len() as i64);
-        let binding = self.s.binding(&path).map(|local| local.id);
-        self.s.reads_on_paths.push(Read {
-            path,
-            at: span.at() as i64,
-            choices: self.s.branch.clone(),
-            seq: self.s.read_seq,
-            binding,
-        });
+        self.s.a_read(expr, &path, span);
     }
 
     /// `p.name` extends the read of `p` it stands on: what is read is the part
@@ -12712,59 +12316,14 @@ impl<'a> Checker<'a> {
         parts: &BTreeMap<String, Ty>,
         handed_from: usize,
     ) {
-        if self.s.repeats.iter().any(|r| r.what == "lambda") {
-            return;
-        }
-        let Some(frame) = self.s.scope.last() else {
-            return;
-        };
-        let found: Vec<(String, i64)> = parts
-            .keys()
-            .filter_map(|name| {
-                let local = frame.iter().find(|local| local.name == *name)?;
-                Some((name.clone(), local.id))
-            })
-            .collect();
-        let mut any = false;
-        for (part, binding) in found {
-            let Some(at) = self.s.handed[handed_from..]
-                .iter()
-                .position(|taken| taken.binding == Some(binding))
-            else {
-                continue;
-            };
-            any = true;
-            self.s.parts_out.push(PartOut {
-                subject: path.to_string(),
-                part,
-                binding,
-                handed: (handed_from + at) as i64,
-            });
-        }
-        if !any {
-            return;
-        }
-        let at = value_node(body);
-        // The guard and a pattern that looks inside a box keep the arm as it
-        // was: both are read before the arm opens anything.
-        if let Some(placeholder) = self.a_placeholder(subject) {
-            self.s.facts.taking_arms.insert(at, placeholder);
-            // The parts are values here, not references: nothing to copy out.
-            self.s
-                .facts
-                .copied_bindings
-                .retain(|(pattern, _)| *pattern != at);
-        }
-    }
-
-    /// **What stands in a place while a part of it is out** (ADR-094 D7: the
-    /// lowering's choice, and not observable): a value of the subject's type
-    /// that costs nothing to make - a variant of an `enum` whose parts all have
-    /// a default, or a `struct` of such parts - written as the language below
-    /// reads it. `None` where the type has none, and the arm is lowered as it
-    /// was.
-    fn a_placeholder(&self, subject: &Ty) -> Option<String> {
-        self.s.a_placeholder(&self.world.here, subject)
+        self.s.parts_taken_out_of_a_mut_parameter(
+            &self.world,
+            path,
+            body,
+            subject,
+            parts,
+            handed_from as i64,
+        );
     }
 
     /// **`NK2104`: two branches of an `overlap` meet on something**
@@ -12865,12 +12424,7 @@ impl<'a> Checker<'a> {
     /// including the ones nothing could be established about - `false` there is
     /// "there is no answer", and it lands in the set that *removes* the pair.
     fn method_pauses(&mut self, method: Ident, pauses: bool, span: &Span) {
-        let key = (span.at() as i64, self.parsed.text(method).to_string());
-        if pauses {
-            self.s.flow.pausing_methods.insert(key);
-        } else {
-            self.s.flow.settled_methods.insert(key);
-        }
+        self.s.method_pauses(&self.world, method, pauses, span);
     }
 
     /// Whether this method call is an **eager** walk of a sequence whose step
@@ -12879,17 +12433,7 @@ impl<'a> Checker<'a> {
     /// Asked twice — once for the `?` the emitter writes and once for the
     /// refusal — so it is one sentence rather than two that have to agree.
     fn walks_a_failing_sequence(&self, on: &Ty, contract: &FnContract) -> bool {
-        matches!(
-            on,
-            Ty::Seq {
-                can_throw: true,
-                ..
-            }
-        ) && walks_by_value(contract)
-            && !matches!(
-                contract.signature.as_ref().and_then(|s| s.result.as_ref()),
-                Some(Ty::Seq { .. })
-            )
+        self.s.walks_a_failing_sequence(on, contract)
     }
 
     /// `NK2701` for a **walk** rather than for a loop
@@ -12904,26 +12448,8 @@ impl<'a> Checker<'a> {
     /// used to compile and count the failures as lines, because the entry said
     /// `-> i64` and nothing asked what a step of the receiver does.
     fn a_walk_of_a_failing_sequence(&mut self, method: Ident, span: &Span) {
-        if self.s.flow.throwing || self.s.flow.caught || self.s.inside_an_action.is_some() {
-            return;
-        }
-        let Some(function) = self.s.current.clone() else {
-            return;
-        };
-        let name = self.parsed.text(method).to_string();
-        self.s.findings.push(Finding {
-            severity: Severity::Error,
-            span: *span,
-            code: "NK2701".to_string(),
-            message: format!("This function can fail, because a step of what `{name}` walks can fail."),
-            notes: vec![format!(
-                "`{name}` asks the sequence for every element, and this sequence reads as it goes, so a read can fail."
-            )],
-            help: Some(format!(
-                "Add `throws` to `{function}`, or handle it at the call: `… catch {{ … }}`."
-            )),
-            labels: Vec::new(),
-        });
+        self.s
+            .a_walk_of_a_failing_sequence(&self.world, method, span);
     }
 
     /// A loop over something whose step **pauses**
@@ -12940,13 +12466,7 @@ impl<'a> Checker<'a> {
     /// it would be `rustc` refusing a correct program about a file nobody wrote
     /// (Part III, C.1 and C.4).
     fn pausing_step(&mut self, over: &Ty, span: &Span) {
-        if matches!(over, Ty::Seq { pauses: true, .. }) {
-            self.s.facts.pausing_loops.insert(span.at() as i64);
-            // A lambda around the loop pauses with it, and a door around it
-            // is held across the wait (ADR-233 D1, D3).
-            self.s
-                .a_call_that_may_pause("a step of this `for`", true, false, span);
-        }
+        self.s.pausing_step(over, span);
     }
 
     /// A loop over something whose step can fail (ADR-025 D1).
@@ -12955,71 +12475,8 @@ impl<'a> Checker<'a> {
     /// enclosing function must declare `throws`, and the emitter has to make
     /// the step propagate. This records the second and reports the first.
     fn fallible_step(&mut self, over: &Ty, bindings: usize, span: &Span) {
-        // **Two spellings of one claim, and they are the same claim.**
-        // `[type."io::Lines"] iterates = "throws"` says it of a named type, and
-        // [ADR-105](../../docs/specification/adr/adr-105.md) D1's `throws` after
-        // a `Seq[T]` says it of the sequence a signature hands back — *`throws`
-        // on a `Seq` is the one spelling of a step can fail*, which is that
-        // record's §3. The second is the one a produced sequence can use,
-        // because it has no name in the `types` table to hang a column on.
-        // The name a message uses is the **ledger's** for a named type and a
-        // description for a `Seq`, because D4 says a program cannot write
-        // `Seq[String]` — and a message that names a spelling its reader has no
-        // way to type is the shape Part III C.1 is about.
-        let name = match over {
-            Ty::Named { name, .. } if self.s.iterates_fallibly(&self.world, name) => {
-                format!("`{name}`")
-            }
-            Ty::Seq {
-                can_throw: true,
-                item,
-                ..
-            } => match &**item {
-                Ty::Unknown => "a sequence".to_string(),
-                item => format!("a sequence of `{item}`"),
-            },
-            _ => return,
-        };
-        let name = &name;
-
-        // A stream of pairs does not exist in `std`, and taking one apart while
-        // also unwrapping a failure is a shape to design rather than to guess
-        // at (ADR-025 §7).
-        if bindings != 1 {
-            self.s.findings.push(Finding {
-                severity: Severity::Error,
-                span: *span,
-                code: "NK2701".to_string(),
-                message: format!("A `for` over {name} gives one value at a time, but you're binding {bindings}."),
-                notes: vec![format!(
-                    "Each turn of {name} can fail, and the loop variable is what's left once that's checked."
-                )],
-                help: Some("Bind one name and take the pair apart inside the loop.".to_string()),
-                labels: Vec::new(),
-            });
-            return;
-        }
-
-        self.s.facts.fallible_loops.insert(span.at() as i64);
-
-        if self.s.flow.throwing {
-            return;
-        }
-        self.s.findings.push(Finding {
-            severity: Severity::Error,
-            span: *span,
-            code: "NK2701".to_string(),
-            message: "This function can fail, because a turn of this loop can fail.".to_string(),
-            notes: vec![format!(
-                "{} reads as it goes, and a read can fail, so the failure passes through \
-                 this function like a failing call's would.",
-                sentence(name)
-            )],
-            help: Some(
-                "Add `throws` to this function, or handle the failure inside the loop.".to_string(),
-            ),
-            labels: Vec::new(),
-        });
+        self.s
+            .fallible_step(&self.world, over, bindings as i64, span);
     }
 
     // --- crossing a thread (ADR-005 §1 Group B, `NK25xx`) -------------------
@@ -13924,19 +13381,8 @@ impl<'a> Checker<'a> {
         arms: &[ast::MatchArm],
         span: &Span,
     ) {
-        if !self.s.flow.caught_several {
-            return;
-        }
-        if !matches!(value, Expr::Variable(name, _) if self.parsed.text(*name) == "error") {
-            return;
-        }
-        let caught = arms
-            .iter()
-            .filter(|arm| arm.guard.is_none())
-            .any(|arm| catches_everything(&arm.pattern));
-        if !caught {
-            self.s.a_case_is_missing("else", span);
-        }
+        self.s
+            .a_match_over_several_error_types(&self.world, value, arms, span);
     }
 
     /// **`NK1205`: a variant matched on a `T?`** (issue #180): `match
@@ -15441,16 +14887,8 @@ impl<'a> Checker<'a> {
     /// come to a value, and a field read or an index is already taken apart by
     /// the lowering that wrote it.
     fn a_cast_over_a_lent_binding(&mut self, operand: &Expr, span: &Span) {
-        let Expr::Variable(name, _) = operand else {
-            return;
-        };
-        let name = self.parsed.text(*name).to_string();
-        if self.s.binding(&name).is_some_and(|local| local.lent) {
-            self.s
-                .facts
-                .viewed_numbers
-                .insert(((span.at() as i64), name));
-        }
+        self.s
+            .a_cast_over_a_lent_binding(&self.world, operand, span);
     }
 
     /// **A `let` whose declared type is a number and whose value is a `for`
@@ -15735,22 +15173,14 @@ impl<'a> Checker<'a> {
         wanted: &[(String, Ty)],
         at: usize,
     ) -> bool {
-        let Some((_, Ty::Var { name, view: false })) = wanted.get(at) else {
-            return false;
-        };
-        !signature.takes_a_receiver()
-            && wanted
-                .iter()
-                .enumerate()
-                .all(|(other, (_, ty))| other == at || !ty.text().contains(&format!("${name}")))
+        self.s
+            .decided_by_this_argument(signature, wanted, at as i64)
     }
 
     /// **A kept function takes its arguments by value**, so a text literal
     /// handed to one where it keeps text is built there (ADR-282 D4).
     fn kept_arguments_are_its_own(&mut self, args: &[Expr], params: &[Ty]) {
-        for (arg, want) in args.iter().zip(params) {
-            self.text_literal(want, arg, true);
-        }
+        self.s.kept_arguments_are_its_own(&self.world, args, params);
     }
 
     /// Whether `expr` names a parameter of the function being walked that is
@@ -15911,15 +15341,7 @@ impl<'a> Checker<'a> {
     /// wrong answer that way costs a refusal that is not raised, and the wrong
     /// answer the other way refuses a program (C.4).
     fn stamped_through(&self, contract: &FnContract, given: &[Ty], result: Ty) -> Ty {
-        if result.is_seen() || !given.iter().any(|ty| ty.is_seen()) {
-            return result;
-        }
-        let reaches_a_lock =
-            !contract.touches_known || contract.touches.iter().any(|t| t.names_a_lock());
-        match reaches_a_lock {
-            true => result,
-            false => Ty::seen(result.unseen()),
-        }
+        self.s.stamped_through(contract, given, result)
     }
 
     /// **`NK2207`: an `update` block that assigns to its `mut v` without
@@ -16812,42 +16234,7 @@ impl<'a> Checker<'a> {
     /// that *looks* right, and without this it would be refused by `rustc`
     /// about the emitted file (Part III, C.1).
     fn a_jump_with_nowhere_to_go(&mut self, word: &str, span: &Span) {
-        let does = match word {
-            "break" => "leaves the innermost loop around it",
-            _ => "starts the innermost loop's next turn",
-        };
-        let (message, note, help) = match &self.s.flow.barrier {
-            Some(what) => (
-                format!("`{word}` {does}, but the nearest loop is outside this {what}."),
-                format!(
-                    "{} runs as a function of its own, and `{word}` can't jump out of a \
-                     function.",
-                    an(what)
-                ),
-                format!(
-                    "Decide inside the {what} and act on the answer outside it: return a \
-                     `bool` and test it in the loop."
-                ),
-            ),
-            None => (
-                format!("`{word}` {does}, but this isn't inside a loop."),
-                "It only works inside a `while` or a `for`.".to_string(),
-                match word {
-                    "break" => "To leave the function instead, write `return`.",
-                    _ => "To leave the function instead, write `return`.",
-                }
-                .to_string(),
-            ),
-        };
-        self.s.findings.push(Finding {
-            severity: Severity::Error,
-            span: *span,
-            code: "NK1132".to_string(),
-            message,
-            notes: vec![note],
-            help: Some(help),
-            labels: Vec::new(),
-        });
+        self.s.a_jump_with_nowhere_to_go(word, span);
     }
 
     /// Note where a method call in the function being walked went (ADR-288).
@@ -16922,18 +16309,7 @@ impl<'a> Checker<'a> {
     /// parameter it fills. Empty for every type that declares none, which is
     /// every type written today.
     fn arguments_of(&self, on: &Ty) -> BTreeMap<String, Ty> {
-        let Ty::Named { name, args, .. } = on else {
-            return BTreeMap::new();
-        };
-        let Some(order) = self.s.struct_parameters.get(name) else {
-            return BTreeMap::new();
-        };
-        order
-            .iter()
-            .cloned()
-            .zip(args.iter().cloned())
-            .filter(|(_, arg)| !arg.is_unknown())
-            .collect()
+        self.s.arguments_of(on)
     }
 
     /// **Whether a `match` is over a place this function owns**: a name, or a
@@ -16941,21 +16317,7 @@ impl<'a> Checker<'a> {
     /// and the whole stay: a temporary is gone after the `match` anyway, and a
     /// view's parts are views already.
     fn an_owned_place(&self, value: &Expr, on: &Ty) -> bool {
-        if on.is_a_view() || !matches!(on, Ty::Named { .. }) {
-            return false;
-        }
-        let mut root = value;
-        while let Expr::Field { base, .. } = root {
-            root = base;
-        }
-        let Expr::Variable(name, _) = root else {
-            return false;
-        };
-        let name = self.parsed.text(*name);
-        self.s
-            .binding(name)
-            .is_some_and(|local| !local.lent && !local.ty.is_a_view())
-            && !self.s.lent_here(name)
+        self.s.an_owned_place(&self.world, value, on)
     }
 
     /// **The parts an arm only reads are lent** (ADR-291): a part
@@ -17029,25 +16391,6 @@ impl<'a> Checker<'a> {
 /// Read off the signature rather than off a list of names: every `Seq` entry
 /// writes `(Seq[$T], …)` and a container's writes `(&Vec[$T], …)`, so the file
 /// that describes the method is what says whether the walk keeps it.
-/// The ledger entries whose argument at a position is a count the language
-/// below takes in `usize` ([ADR-293](../../docs/specification/adr/adr-293.md)
-/// D5). The entry and not the method's name, which is what `emit::is_count`
-/// has to go by.
-const COUNTS: &[(&str, usize)] = &[
-    ("Seq::take", 0),
-    ("Seq::skip", 0),
-    ("Seq::step_by", 0),
-    ("Seq::nth", 0),
-    ("Vec::chunks", 0),
-    ("Vec::windows", 0),
-    ("Vec::insert", 0),
-    ("Vec::remove", 0),
-    ("Vec::swap_remove", 0),
-    ("Vec::truncate", 0),
-    ("Vec::resize", 0),
-    ("str::splitn", 0),
-];
-
 /// **What a sequence entry's result is as a whole**
 /// ([ADR-293](../../docs/specification/adr/adr-293.md) D17): a word the entry
 /// writes on its result, where every sequence handed in has it too.
@@ -17447,11 +16790,7 @@ fn several_errors(ty: &Ty) -> Option<&[Ty]> {
 
 /// The members, as a message names them: `` `ConfigError`, `io::IoError` ``.
 fn members_named(members: &[Ty]) -> String {
-    members
-        .iter()
-        .map(|m| format!("`{}`", m.text()))
-        .collect::<Vec<_>>()
-        .join(", ")
+    nikaia_std::tools::check_places::members_named(members)
 }
 
 /// The value a block ends in: its last statement, where that is an expression.
@@ -17717,15 +17056,6 @@ fn nearest<'n>(name: &str, among: &[&'n str]) -> Option<&'n str> {
     among.iter().copied().find(|n| *n == found)
 }
 
-/// `a` or `an` in front of a word, which may be spelled in backticks.
-///
-/// Small and here because the alternative is worse: the three boundaries a
-/// jump may not cross are named in one place, and carrying the article beside
-/// each of them means the next one is added in two places or in one.
-fn an(what: &str) -> String {
-    nikaia_std::tools::check_words::with_article(what)
-}
-
 /// Every `a` or `an` in front of a word in backticks, chosen by that word
 /// (`check_words::article`): `a `i64`` becomes `an `i64``, and `an `u8`` `a
 /// `u8``. Only the article directly before a backtick, so prose and code
@@ -17791,16 +17121,7 @@ type LoopNames = Vec<(String, String)>;
 /// **Empty for every other missing argument**, which is what keeps this from
 /// being a habit: the parameter has to be named `root` *and* typed `fs::Root`.
 fn a_root_is_one_of_two(wanted: &[(String, Ty)]) -> String {
-    let is_a_root = wanted
-        .iter()
-        .any(|(name, ty)| name == "root" && ty.text().trim_start_matches("ref ") == "fs::Root");
-    match is_a_root {
-        false => String::new(),
-        true => ". The root is either `fs::Root::Dir(store)`, which keeps the path inside \
-                 `store`, or `fs::Root::Anywhere`, which checks nothing and says so where a \
-                 reviewer will look"
-            .to_string(),
-    }
+    nikaia_std::tools::check_places::a_root_is_one_of_two(wanted)
 }
 
 /// A clause as the start of a sentence: its first letter upper case.

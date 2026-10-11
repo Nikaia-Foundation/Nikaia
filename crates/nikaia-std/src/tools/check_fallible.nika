@@ -1,0 +1,311 @@
+// crates/nikaia-std/src/tools/check_fallible.nika
+//
+// **What a method call or a loop may do to the function around it, and what a
+// type does when it dies** - moved from the compiler's checker (ADR-294, #125,
+// #558, C-5a): the options a method call leaves out, the sets a call is
+// recorded in as failing or pausing, a `for` or a walk whose step can fail or
+// pause (ADR-025 D1, ADR-172 D1), a `deref` seen through (ADR-288), and the
+// cleanup or teardown a type holds (ADR-297 D1, D12).
+
+use std::collections
+
+/// The type that has a cleanup, and whether any cleanup it holds can fail.
+pub struct CheckCleanup {
+    pub owner: String,
+    pub fails: bool,
+}
+
+/// What stands after the last `::` of a name.
+fn check_base(name: ref String) -> String {
+    let parts: Vec[ref String] = name.split("::").collect()
+    return parts[parts.len() - 1].clone()
+}
+
+/// Whether a ledger has an `impl <teardown>` for a type whose base is `base`.
+fn check_implements_in(ledger: ref Ledger, teardown: ref String, base: ref String) -> bool {
+    let types = ledger.implementations[teardown] ?? return false
+    for one in types {
+        if check_base(one) == base {
+            return true
+        }
+    }
+    return false
+}
+
+/// The type in a ledger that has a cleanup and is the one `name` stands for:
+/// a qualified name by its whole, any other by its last segment.
+fn check_cleanup_in(ledger: ref Ledger, name: ref String, base: ref String, qualified: bool) -> String? {
+    let types = ledger.implementations["Cleanup"] ?? return null
+    for one in types {
+        let tail = f"::{one}"
+        let mut hit = false
+        if qualified {
+            hit = one == name || name.ends_with(ref tail)
+        } else {
+            hit = check_base(one) == base
+        }
+        if hit {
+            return one.clone()
+        }
+    }
+    return null
+}
+
+/// Whether the cleanup of `owner`, in a ledger, can fail.
+fn check_cleanup_fails(ledger: ref Ledger, owner: ref String) -> bool {
+    let key = f"{owner}::cleanup"
+    let contract = ledger.functions[key] ?? return false
+    return contract.fails_with.len() > 0
+}
+
+impl CheckState {
+    /// **The options a method call leaves out, from the contract** and not from
+    /// the call, so a call that leaves an option out still gets its default,
+    /// which is the half the emitter could not work out on its own either.
+    pub fn method_options(ref mut self, world: ref CheckWorld, method: winnow_grammar::Symbol, contract: ref FnContract, span: ref Span) sync {
+        let signature = contract.signature ?? return
+        if signature.config.len() == 0 {
+            return
+        }
+        let mut options: Vec[(String, String)] = []
+        for option in signature.config {
+            options.push((option.name.clone(), option.default.clone()))
+        }
+        let key = (span.start as i64, world.words.resolve(method).clone())
+        self.facts.method_options.insert(key, options)
+    }
+
+    /// Where a method call stands in ADR-023 D8's propagation, for the emitter.
+    pub fn method_propagates(ref mut self, world: ref CheckWorld, method: winnow_grammar::Symbol, fails: bool, span: ref Span) sync {
+        let key = (span.start as i64, world.words.resolve(method).clone())
+        if fails {
+            let added = self.flow.fallible_methods.insert(key)
+        } else {
+            let added = self.flow.opaque_methods.insert(key)
+        }
+    }
+
+    /// The same, for the `.await`: a call can fail without pausing and pause
+    /// without failing, and the two sets are narrowed independently.
+    pub fn method_pauses(ref mut self, world: ref CheckWorld, method: winnow_grammar::Symbol, pauses: bool, span: ref Span) sync {
+        let key = (span.start as i64, world.words.resolve(method).clone())
+        if pauses {
+            let added = self.flow.pausing_methods.insert(key)
+        } else {
+            let added = self.flow.settled_methods.insert(key)
+        }
+    }
+
+    /// **`NK2701` for a walk rather than for a loop** (ADR-025 D1): the same
+    /// rule and code as a `for` over the same sequence, a step that can fail
+    /// fails the function around it.
+    pub fn a_walk_of_a_failing_sequence(ref mut self, world: ref CheckWorld, method: winnow_grammar::Symbol, span: ref Span) sync {
+        if self.flow.throwing || self.flow.caught || self.inside_an_action != null {
+            return
+        }
+        let function = (self.current ?? return).clone()
+        let name = world.words.resolve(method).clone()
+        self.findings.push(check_refusal("NK2701", span, f"This function can fail, because a step of what `{name}` walks can fail.", [f"`{name}` asks the sequence for every element, and this sequence reads as it goes, so a read can fail."], f"Add `throws` to `{function}`, or handle it at the call: `… catch {{ … }}`."))
+    }
+
+    /// A loop over something whose step **pauses** (ADR-172 D1): nothing is
+    /// reported, the emitter writes the loop as one that gives its thread up.
+    pub fn pausing_step(ref mut self, over: ref Ty, span: ref Span) sync {
+        let pauses = match over {
+            Ty::Seq { pauses, .. } => pauses,
+            else => false,
+        }
+        if pauses {
+            let added = self.facts.pausing_loops.insert(span.start as i64)
+            // A lambda around the loop pauses with it, and a door around it is
+            // held across the wait (ADR-233 D1, D3).
+            self.a_call_that_may_pause("a step of this `for`", true, false, span)
+        }
+    }
+
+    /// A loop over something whose step can fail (ADR-025 D1): the enclosing
+    /// function must declare `throws`, and the emitter has to make the step
+    /// propagate. This records the second and reports the first.
+    pub fn fallible_step(ref mut self, world: ref CheckWorld, over: ref Ty, bindings: i64, span: ref Span) sync {
+        // **Two spellings of one claim**: `iterates = "throws"` on a named
+        // type, and `throws` after a `Seq[T]`. The name a message uses is the
+        // ledger's for a named type and a description for a `Seq`.
+        let mut name: String = ""
+        match over {
+            Ty::Named { name: written, .. } => {
+                if !self.iterates_fallibly(world, written) {
+                    return
+                }
+                name = f"`{written}`"
+            }
+            Ty::Seq { can_throw, item, .. } => {
+                if !can_throw {
+                    return
+                }
+                name = match item {
+                    Ty::Unknown => "a sequence".clone(),
+                    else => f"a sequence of `{item.text()}`",
+                }
+            }
+            else => return,
+        }
+        // A stream of pairs does not exist in `std`, and taking one apart while
+        // also unwrapping a failure is a shape to design rather than to guess
+        // at (ADR-025 §7).
+        if bindings != 1 {
+            self.findings.push(check_refusal("NK2701", span, f"A `for` over {name} gives one value at a time, but you're binding {bindings}.", [f"Each turn of {name} can fail, and the loop variable is what's left once that's checked."], "Bind one name and take the pair apart inside the loop.".clone()))
+            return
+        }
+        let added = self.facts.fallible_loops.insert(span.start as i64)
+        if self.flow.throwing {
+            return
+        }
+        self.findings.push(check_refusal("NK2701", span, "This function can fail, because a turn of this loop can fail.".clone(), [f"{capitalised(name)} reads as it goes, and a read can fail, so the failure passes through this function like a failing call's would."], "Add `throws` to this function, or handle the failure inside the loop.".clone()))
+    }
+
+    /// Whether this method call is an **eager** walk of a sequence whose step
+    /// can fail (ADR-025 D1).
+    pub fn walks_a_failing_sequence(ref self, on: ref Ty, contract: ref FnContract) -> bool sync {
+        let can_fail = match on {
+            Ty::Seq { can_throw, .. } => can_throw,
+            else => false,
+        }
+        if !can_fail || !walks_by_value(contract) {
+            return false
+        }
+        let signature = contract.signature ?? return true
+        let result = signature.result ?? return true
+        return match result {
+            Ty::Seq { .. } => false,
+            else => true,
+        }
+    }
+
+    /// What a type seen through (`deref` in its ledger) hands out, with the
+    /// receiver's own arguments bound: `&$T` of a `Shared[$T]`.
+    pub fn seen_through(ref self, world: ref CheckWorld, ty: ref Ty) -> Ty? sync {
+        let name = match ty {
+            Ty::Named { name, .. } => name.clone(),
+            else => return null,
+        }
+        let key = f"{name}::deref"
+        let found = resolve_method(world, key) ?? return null
+        let bound = receiver_bindings(found.contract, ty)
+        let signature = found.contract.signature ?? return null
+        let result = signature.result ?? return null
+        return substitute(result, bound)
+    }
+
+    /// Whether `found` fits `want` as it is or seen through its `deref`.
+    pub fn fits_through_deref(ref self, world: ref CheckWorld, found: ref Ty, want: ref Ty) -> bool sync {
+        if found.fits(want) {
+            return true
+        }
+        let seen = self.seen_through(world, found) ?? return false
+        return seen.fits(want)
+    }
+
+    /// The fields of every type called `base` in either ledger.
+    pub fn fields_of_base(ref self, world: ref CheckWorld, base: ref String) -> Vec[Ty] sync {
+        return world.fields_by_base[base]?.clone() ?? []
+    }
+
+    /// **Whether a type's values have a cleanup**, and whether it can fail
+    /// (ADR-297 D1): an `impl Cleanup` for it in any ledger this build reads, or
+    /// for what it holds, in a field, an element or a nullable. A view is not
+    /// the value, and dies nowhere.
+    pub fn cleanup_of(ref self, world: ref CheckWorld, ty: ref Ty) -> CheckCleanup? sync {
+        let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
+        return self.cleanup_within(world, ty, seen)
+    }
+
+    pub fn cleanup_within(ref self, world: ref CheckWorld, ty: ref Ty, mut seen: collections::BTreeSet[String]) -> CheckCleanup? sync {
+        let mut held: Vec[Ty] = []
+        match ty.unseen() {
+            Ty::Named { name, args, view } => {
+                if view {
+                    return null
+                }
+                let base = check_base(name)
+                if !seen.insert(base.clone()) {
+                    return null
+                }
+                // **A name is its own type before it is another's** (#120): a
+                // `File` this program declares is not `fs::File`. Only a name
+                // nobody here declares and nobody qualified is matched by its
+                // last segment.
+                let qualified = name.contains("::")
+                let declared_here = !qualified && world.own.types.contains_key(name)
+                let mut owner = check_cleanup_in(world.own, name, base, qualified)
+                if owner == null && !declared_here {
+                    owner = check_cleanup_in(world.library, name, base, qualified)
+                }
+                if owner != null {
+                    let found = owner ?? return null
+                    let fails = check_cleanup_fails(world.own, found) || check_cleanup_fails(world.library, found)
+                    return CheckCleanup { owner: found, fails: fails }
+                }
+                held = args.clone()
+                for field in self.fields_of_base(world, base) {
+                    held.push(field)
+                }
+            }
+            Ty::Nullable(inner) => {
+                held.push(inner.clone())
+            }
+            Ty::Tuple(parts) => {
+                held = parts.clone()
+            }
+            else => return null,
+        }
+        let mut any = false
+        let mut owner: String = ""
+        let mut fails = false
+        for inner in held {
+            let found = self.cleanup_within(world, inner, seen)
+            if found != null {
+                let one = found ?? return null
+                if !any {
+                    any = true
+                    owner = one.owner.clone()
+                }
+                fails = fails || one.fails
+            }
+        }
+        if !any {
+            return null
+        }
+        return CheckCleanup { owner: owner, fails: fails }
+    }
+
+    /// **Whether a type's teardown does something**, and what says so (ADR-297
+    /// D12): an `impl Drop` or an `impl Cleanup` in any ledger this build reads,
+    /// on the type or on the type of one of its fields.
+    pub fn tears_down(ref self, world: ref CheckWorld, ty: ref Ty, mut seen: collections::BTreeSet[String]) -> String? sync {
+        let name = match ty {
+            Ty::Named { name, view, .. } => {
+                if view {
+                    return null
+                }
+                name.clone()
+            }
+            else => return null,
+        }
+        let base = check_base(name)
+        if !seen.insert(base.clone()) {
+            return null
+        }
+        for teardown in ["Drop", "Cleanup"] {
+            if check_implements_in(world.own, teardown, base) || check_implements_in(world.library, teardown, base) {
+                return f"`impl {teardown} for {base}`"
+            }
+        }
+        for field in self.fields_of_base(world, base) {
+            let how = self.tears_down(world, field, seen)
+            if how != null {
+                return f"through its `{field.text()}` field, {how ?? ""}"
+            }
+        }
+        return null
+    }
+}

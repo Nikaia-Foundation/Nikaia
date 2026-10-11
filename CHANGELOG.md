@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.819] — 2026-10-11
+
+**check: the fallible and pausing walks, cleanups, reads and views below the core are Nikaia (#558, #125, C-5a)**
+- `tools/check_fallible.nika` (a method call or a loop that can fail or pause: `method_options`, `method_propagates`, `method_pauses`, `fallible_step`, `pausing_step`, the walk of a failing sequence, `seen_through`, `fits_through_deref`, and the cleanup and teardown a type holds), `check_reads.nika` (a view compared with a value, a lookup key lent, a map read kept or assigned, `a_read`, the parts a `mut` parameter gave away, `record_cast`) and `check_places.nika` (a `break` with no loop, a door written wrong, the stamp a lock passes on, `arguments_of`, `an_owned_place`, the `match` over several error types) are `CheckState` methods; the Rust methods are one-line stubs and the dead ones are gone. No change to what a program means.
+
 ## [0.0.818] — 2026-10-11
 
 **The type group of the emitter is Nikaia: `ty`, `ty_counted`, the tethered wrapper and the extern pointer (tools/emit_core_types.nika, #558, #125, E9 U1a).**
