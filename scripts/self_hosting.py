@@ -148,6 +148,8 @@ COMPILER_NIKA = {
     "check_texts.nika": "check: text and bytes built where a typed position asks for them (0.0.798)",
     "check_numbers2.nika": "check: two number types in one operation, array literals and collect by use (0.0.799)",
     "emit_state.nika": "emit: what the emitter looks at, what it works out first, and the places the walk writes to (0.0.800)",
+    "emit_sums.nika": "emit: the error names the emitter can write, the generated error sums and the failure channel of a function (0.0.801)",
+    "emit_types.nika": "emit: boxed members, types that carry a view, extern handles, field defaults and shared-handle arguments (0.0.801)",
 }
 
 

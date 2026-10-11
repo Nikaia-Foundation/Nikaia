@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.801] — 2026-10-11
+
+**The error sums and what the emitter asks of a type are methods of EmitState (tools/emit_sums.nika, emit_types.nika, #558, step E4).**
+- `EmitState` answers which error names the emitter can write, writes the generated sums (ADR-280 D15) and names a function's failure channel; which members of a variant are boxed, which types carry a view, which `extern` types are handles, what a type's fields default to and which arguments of a callee are shared handles. The `Emitter` methods of those names pass `world` and read the result.
+
 ## [0.0.800] — 2026-10-11
 
 **The emitter's state is three Nikaia structs (tools/emit_state.nika, #558, step E3).**

@@ -1,0 +1,323 @@
+// crates/nikaia-std/src/tools/emit_types.nika
+//
+// **What the emitter asks of a type and of a callee's contract**, moved from
+// `emit/mod.rs` (ADR-294, #125, #558, step E4): which members of a variant are
+// boxed, which types carry a view, which `extern` types are handles, what a
+// type's fields default to, and which arguments of a callee are shared handles.
+// Methods of `EmitState`; `EmitWorld` is the file's names and `std`'s ledger.
+
+use std::collections
+
+/// The last segment of a path: `a::b::c` is `c`.
+pub fn emit_base(name: ref String) -> String {
+    let mut last: String = name.clone()
+    for part in name.split("::") {
+        last = part.clone()
+    }
+    return last
+}
+
+fn emit_segments(world: ref EmitWorld, path: ref Vec[winnow_grammar::Symbol]) -> Vec[String] {
+    let mut out: Vec[String] = []
+    for symbol in path {
+        out.push(world.words.resolve(symbol).clone())
+    }
+    return out
+}
+
+/// The contract of the type `owner` or of the library type whose key ends in
+/// `::owner`: this unit's own first.
+fn emit_type_contract(own: ref Ledger, library: ref Ledger, owner: ref String) -> TypeContract? {
+    let found = own.types.get(owner)
+    if found != null {
+        return found?.clone()
+    }
+    let suffix = f"::{owner}"
+    for key in library.types.keys() {
+        if key == owner || key.ends_with(ref suffix) {
+            let contract = library.types.get(key) ?? continue
+            return contract.clone()
+        }
+    }
+    return null
+}
+
+impl EmitState {
+    /// Whether the member `member` of `owner` is built in a box (ADR-246).
+    pub fn is_boxed(ref self, owner: ref String, member: ref String) -> bool {
+        let bare = emit_base(owner)
+        let members = self.facts.boxed_members.get(bare) ?? return false
+        return members.contains(member)
+    }
+
+    /// As `is_boxed`, for a named field: of a struct, or of a variant written
+    /// `Type::Variant`.
+    pub fn is_boxed_field(ref self, owner: ref String, field: ref String) -> bool {
+        let parts: Vec[String] = owner.split("::").collect()
+        if parts.len() >= 2 {
+            let ty = parts[parts.len() - 2].clone()
+            let variant = parts[parts.len() - 1].clone()
+            if self.facts.boxed_members.contains_key(ty) {
+                return self.is_boxed(ty, boxed_member(variant, -1, field))
+            }
+        }
+        return self.is_boxed(owner, field)
+    }
+
+    /// The type of a member, in a `Box` where it is boxed.
+    pub fn boxed_ty(ref self, owner: ref String, member: ref String, lowered: String) -> String {
+        if self.is_boxed(owner, member) {
+            return f"Box<{lowered}>"
+        }
+        return lowered
+    }
+
+    /// Whether the part `at` of the variant a pattern's path names is boxed.
+    pub fn boxed_part(ref self, world: ref EmitWorld, path: ref Vec[winnow_grammar::Symbol], at: i64) -> bool {
+        if path.len() < 2 {
+            return false
+        }
+        let names = emit_segments(world, path)
+        let owner = names[names.len() - 2].clone()
+        let variant = names[names.len() - 1].clone()
+        return self.facts.boxed_members.contains_key(owner) && self.is_boxed(owner, boxed_member(variant, at, ""))
+    }
+
+    /// Whether a pattern reaches into a boxed part, other than by binding the
+    /// whole of it.
+    pub fn looks_inside_a_box(ref self, world: ref EmitWorld, pattern: ref MatchPattern) -> bool {
+        return match pattern {
+            MatchPattern::Tuple { path, parts } => self.looks_inside_parts(world, path, parts),
+            MatchPattern::Or(alternatives) => self.looks_inside_any(world, alternatives),
+            else => false,
+        }
+    }
+
+    fn looks_inside_parts(ref self, world: ref EmitWorld, path: ref Vec[winnow_grammar::Symbol], parts: ref Vec[MatchPattern]) -> bool {
+        for at in 0..<parts.len() {
+            if self.boxed_part(world, path, at) && !binds_a_part(parts[at]) {
+                return true
+            }
+            if self.looks_inside_a_box(world, parts[at]) {
+                return true
+            }
+        }
+        return false
+    }
+
+    fn looks_inside_any(ref self, world: ref EmitWorld, alternatives: ref Vec[MatchPattern]) -> bool {
+        for alternative in alternatives {
+            if self.looks_inside_a_box(world, alternative) {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// Whether a name is a type that holds a view or carries a tether.
+    pub fn borrows(ref self, world: ref EmitWorld, name: winnow_grammar::Symbol) -> bool {
+        let text = world.words.resolve(name)
+        return self.borrowing.contains(text) || self.tethered.contains(text)
+    }
+
+    /// Whether a type carries a view anywhere in it: a view, a type that
+    /// borrows, or a function type's result that does.
+    pub fn carries_a_view(ref self, world: ref EmitWorld, ty: ref Type) -> bool {
+        let code = ty.code ?? return self.carries_a_written_view(world, ty)
+        let result = code.result ?? return false
+        return self.carries_a_view(world, result)
+    }
+
+    fn carries_a_written_view(ref self, world: ref EmitWorld, ty: ref Type) -> bool {
+        if ty.is_view || self.borrows(world, ty.name) {
+            return true
+        }
+        for inner in ty.generics {
+            if self.carries_a_view(world, inner) {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// Whether a struct of this name is declared in this file or beside it.
+    pub fn declares_a_struct(ref self, name: ref String) -> bool {
+        return self.structs.contains(name) || self.structs_beside.contains(name)
+    }
+
+    /// Which arguments of `callee` are handles to a shared value: its contract
+    /// in this unit's ledger or `std`'s, by name or by the last segment.
+    pub fn takes_a_handle(ref self, world: ref EmitWorld, callee: ref String) -> Vec[bool] {
+        let mut found = self.handles_in(self.own_contracts, callee)
+        if found == null {
+            found = self.handles_in(world.library, callee)
+        }
+        return found ?? []
+    }
+
+    fn handles_in(ref self, ledger: ref Ledger, callee: ref String) -> Vec[bool]? {
+        let suffix = f"::{callee}"
+        let mut found: String = callee.clone()
+        let mut have = ledger.functions.contains_key(callee)
+        if !have {
+            for key in ledger.functions.keys() {
+                if key.ends_with(ref suffix) {
+                    found = key.clone()
+                    have = true
+                    break
+                }
+            }
+        }
+        if !have {
+            return null
+        }
+        let held = ledger.functions.get(found) ?? return null
+        let signature = held.signature?.clone() ?? return null
+        let mut out: Vec[bool] = []
+        for argument in call_arguments(signature) {
+            out.push(emit_a_handle(argument.1))
+        }
+        return out
+    }
+
+    /// As `takes_a_handle`, for a call's callee: a struct's constructor is
+    /// its `new`.
+    pub fn takes_a_handle_at(ref self, world: ref EmitWorld, func: ref Expr) -> Vec[bool] {
+        let name = call_written_name(world.words, func) ?? return []
+        if self.declares_a_struct(name) {
+            return self.takes_a_handle(world, f"{name}::new")
+        }
+        return self.takes_a_handle(world, name)
+    }
+
+    /// Whether the argument `at` of the `extern` function `callee` is a size
+    /// (a `usize`).
+    pub fn takes_a_size(ref self, world: ref EmitWorld, callee: ref String, at: i64) -> bool {
+        let params = self.foreign_params.get(callee) ?? return false
+        if at < 0 || at >= params.len() {
+            return false
+        }
+        let ty = params[at].clone()
+        return !ty.is_view && !ty.is_slice && world.words.resolve(ty.name) == "usize"
+    }
+
+    /// The name of an `extern` type that is a handle (a declared opaque type,
+    /// or `CStr`), if the type is one.
+    pub fn handle_named(ref self, world: ref EmitWorld, ty: ref Type) -> String? {
+        if ty.is_view || ty.is_slice {
+            return null
+        }
+        let name = world.words.resolve(ty.name).clone()
+        if self.opaque_handles.contains_key(name) || emit_base(name) == "CStr" {
+            return name
+        }
+        return null
+    }
+
+    /// The handle an `extern` function hands back, by the function's name.
+    pub fn handle_from(ref self, world: ref EmitWorld, func: ref Expr) -> String? {
+        match func {
+            Expr::Variable(name, _) => {
+                let declared = self.foreign_results.get(world.words.resolve(name)) ?? return null
+                return self.handle_named(world, declared)
+            },
+            else => {},
+        }
+        return null
+    }
+
+    /// Whether that handle may be null (the result is a `T?`).
+    pub fn handle_from_may_be_null(ref self, world: ref EmitWorld, func: ref Expr) -> bool {
+        match func {
+            Expr::Variable(name, _) => {
+                let declared = self.foreign_results.get(world.words.resolve(name)) ?? return false
+                return declared.is_nullable
+            },
+            else => {},
+        }
+        return false
+    }
+
+    /// What a pointer to this `extern` type points at.
+    pub fn pointed_at(ref self, world: ref EmitWorld, ty: ref Type) -> String {
+        if emit_base(world.words.resolve(ty.name)) == "CStr" {
+            return "core::ffi::c_char"
+        }
+        return "core::ffi::c_void"
+    }
+
+    /// Whether an `extern` parameter of this type is written as a run.
+    pub fn writes_a_run(ref self, world: ref EmitWorld, ty: ref Type) -> bool {
+        return ty.is_slice || (ty.is_view && world.words.resolve(ty.name) == "Array" && ty.generics.len() == 1)
+    }
+
+    /// The name a call's callee is written with where it is a variable.
+    pub fn called_name(ref self, world: ref EmitWorld, func: ref Expr) -> String {
+        match func {
+            Expr::Variable(name, _) => {
+                return world.words.resolve(name).clone()
+            },
+            else => {},
+        }
+        return ""
+    }
+
+    /// The `#[derive]` line of a struct or an enum.
+    pub fn derives(ref self, world: ref EmitWorld, name: winnow_grammar::Symbol) -> String {
+        let text = world.words.resolve(name).clone()
+        let mut parts: Vec[String] = ["Debug", "Clone"]
+        if self.facts.copies.contains(text) {
+            parts.push("Copy")
+        }
+        if self.facts.compares.contains(text) {
+            parts.push("PartialEq")
+            if self.facts.compares_totally.contains(text) {
+                parts.push("Eq")
+            }
+        }
+        return f"#[derive({parts.join(", ")})]\n"
+    }
+
+    /// The contract of `owner`'s field `field`.
+    pub fn field_contract(ref self, world: ref EmitWorld, owner: ref String, field: ref String) -> FieldContract? {
+        let contract = emit_type_contract(self.own_contracts, world.library, owner) ?? return null
+        for candidate in contract.fields {
+            if candidate.name == field {
+                return candidate.clone()
+            }
+        }
+        return null
+    }
+
+    /// The contract of the type `owner`.
+    pub fn type_contract(ref self, world: ref EmitWorld, owner: ref String) -> TypeContract? {
+        return emit_type_contract(self.own_contracts, world.library, owner)
+    }
+
+    /// The fields of `owner` that have a default: the name, the default as it
+    /// is written, and the type.
+    pub fn field_defaults(ref self, world: ref EmitWorld, owner: ref String) -> Vec[(String, String, Ty)] {
+        let contract = emit_type_contract(self.own_contracts, world.library, owner) ?? return []
+        let mut out: Vec[(String, String, Ty)] = []
+        for field in contract.fields {
+            if field.default.len() != 0 {
+                out.push((field.name.clone(), field.default.clone(), field.ty.clone()))
+            }
+        }
+        return out
+    }
+}
+
+fn emit_a_handle(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Named { name, view, .. } => emit_a_handle_name(name, view),
+        else => false,
+    }
+}
+
+fn emit_a_handle_name(name: ref String, view: bool) -> bool {
+    if view {
+        return false
+    }
+    return name == "Shared" || name == "SharedMut"
+}

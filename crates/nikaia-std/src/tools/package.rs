@@ -17330,6 +17330,123 @@ impl EmitWalk {
 }
 
 
+// --- emit_sums.nika ---
+
+fn sum_input_lifetime() -> String { String::from("'a") }
+
+impl EmitState {
+    pub fn sum_of(&self, key: &str) -> Option<String> {
+        let contract = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let found = match self.sums.get(&contract.fails_with) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        Some(found.to_owned())
+    }
+    pub fn sum_members(&self, sum: &str) -> Option<Vec<String>> {
+        for members in self.sums.keys() {
+            let name = match self.sums.get(members) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            if name == sum { return Some(members.to_owned()); }
+        }
+        None
+    }
+    pub fn name_of_error(&self, world: &EmitWorld<'_>, name: &str) -> i64 { error_kind(&self.declared_errors, world.library, name) }
+    pub fn named_error_of(&self, world: &EmitWorld<'_>, thrown: &[String]) -> i64 {
+        if thrown.len() != 1 { return 0; }
+        self.name_of_error(world, nikaia_std::index::get(&thrown, 0))
+    }
+    pub fn named_error(&self, world: &EmitWorld<'_>, key: &str) -> i64 {
+        let contract = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return 0 };
+        self.named_error_of(world, &contract.fails_with)
+    }
+    pub fn borrows_named(&self, world: &EmitWorld<'_>, name: &str) -> bool {
+        if self.tethered.contains(name) || self.borrowing.contains(name) { return true; }
+        let contract = match world.library.types.get(name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        !contract.tethered.is_empty()
+    }
+    pub fn error_sums(&self, world: &EmitWorld<'_>) -> collections::BTreeMap<Vec<String>, String> {
+        let mut out: collections::BTreeMap<Vec<String>, String> = collections::BTreeMap::new();
+        for key in self.own_contracts.functions.keys() {
+            let contract = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let members = &contract.fails_with;
+            if members.len() < 2 { continue; }
+            let mut all_named = true;
+            for member in members.iter() { if self.name_of_error(world, member) == 0 { all_named = false; } }
+            if all_named { out.insert(members.to_owned(), sum_name(&members)); }
+        }
+        out
+    }
+    fn sum_member_held(&self, world: &EmitWorld<'_>, member: &str, params: &str) -> String {
+        if self.borrows_named(world, member) { return sum_member_type(&self.declared_errors, world.library, member, params); }
+        sum_member_type(&self.declared_errors, world.library, member, "")
+    }
+    pub fn write_error_sums(&self, world: &EmitWorld<'_>, out: &mut EmitOut) {
+        if !self.entry { return; }
+        for members in self.sums.keys() {
+            let name = match self.sums.get(members) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let mut borrows = false;
+            for member in members.iter() { if self.borrows_named(world, member) { borrows = true; } }
+            let mut decl: String = String::from("");
+            let mut params: String = String::from("");
+            if borrows {
+                decl = format!("<{}>", sum_input_lifetime());
+                params = format!("<{}>", sum_input_lifetime());
+            }
+            out.push(&format!("// The failure channel of every function in this file that fails in exactly\n// these ways ([ADR-280](docs/specification/adr/adr-280.md) D15). A program never\n// writes this name: a `catch` matches on the **members'** variants.\n//\n// `non_camel_case_types` is allowed rather than avoided: the name is spelled\n// so that nothing a program declares collides with it, and a warning about\n// this file is a defect here ([Part III C.1](docs/specification/30-nikaia-tooling.md)).\n#[derive(Debug)]\n#[allow(non_camel_case_types)]\nenum {}{} {{\n", name, decl));
+            for member in members.iter() {
+                let variant = sum_variant(member);
+                let held = self.sum_member_held(world, member, &params);
+                out.push(&format!("    {}({}),\n", variant, held));
+            }
+            out.push("}\n");
+            for member in members.iter() {
+                let variant = sum_variant(member);
+                let held = self.sum_member_held(world, member, &params);
+                out.push(&format!("impl{} From<{}> for {}{} {{\n    fn from(error: {}) -> {}{} {{ {}::{}(error) }}\n}}\n", decl, held, name, params, held, name, params, name, variant));
+                if self.name_of_error(world, member) == 2 { out.push(&format!("impl{} From<{}> for {}{} {{\n    fn from(error: {}) -> {}{} {{ {}::{}(nikaia_std::error::Thrown::from(error)) }}\n}}\n", decl, member, name, params, member, name, params, name, variant)); }
+            }
+            out.push(&format!("impl{} std::fmt::Display for {}{} {{\n    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {{\n        match self {{\n", decl, name, params));
+            for member in members.iter() {
+                let variant = sum_variant(member);
+                out.push(&format!("            {}::{}(e) => e.fmt(f),\n", name, variant));
+            }
+            out.push(&format!("        }}\n    }}\n}}\nimpl{} std::error::Error for {}{} {{}}\n", decl, name, params));
+            out.push(&format!("impl{} {}{} {{\n    #[allow(dead_code)]\n    fn message(&self) -> String {{ self.to_string() }}\n}}\n", decl, name, params));
+            out.push(&format!("impl{} nikaia_std::error::Full for {}{} {{\n    fn full(&self) -> String {{\n        match self {{\n", decl, name, params));
+            for member in members.iter() {
+                let variant = sum_variant(member);
+                let mut held: String = String::from("nikaia_std::error::Full::full(e)");
+                if self.name_of_error(world, member) != 0 { held = String::from("e.full()"); }
+                out.push(&format!("            {}::{}(e) => {},\n", name, variant, held));
+            }
+            out.push("        }\n    }\n}\n\n");
+        }
+    }
+    pub fn channel_of(&self, world: &EmitWorld<'_>, thrown: &[String], elided: bool, params: &str, static_params: &str, borrows: bool) -> String {
+        let sum = self.sums.get(thrown);
+        if sum.is_some() {
+            let mut shown: String = String::from("");
+            let mut any = false;
+            for member in thrown.iter() { if self.borrows_named(world, member) { any = true; } }
+            if any { shown = self.channel_params(elided, params, static_params, borrows); }
+            return format!("crate::{}{}", nikaia_std::index::or(sum, || ""), shown);
+        }
+        let kind = self.named_error_of(world, thrown);
+        if kind == 0 { return String::from("Box<dyn std::error::Error>"); }
+        let name = (*nikaia_std::index::get(&thrown, 0)).to_owned();
+        if kind == 2 { return format!("nikaia_std::error::Thrown<{}>", name); }
+        let mut shown: String = String::from("");
+        if self.borrows_named(world, &name) { shown = self.channel_params(elided, params, static_params, borrows); }
+        format!("nikaia_std::error::Thrown<{}{}>", name, shown)
+    }
+    fn channel_params(&self, elided: bool, params: &str, static_params: &str, borrows: bool) -> String {
+        if elided && !borrows { return format!("<{}>", static_params); }
+        format!("<{}>", params)
+    }
+    pub fn error_channel(&self, world: &EmitWorld<'_>, key: &str, elided: bool, params: &str, static_params: &str, borrows: bool) -> String {
+        let contract = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return String::from("Box<dyn std::error::Error>") };
+        self.channel_of(world, &contract.fails_with, elided, params, static_params, borrows)
+    }
+}
+
+
 // --- emit_text.nika ---
 
 pub fn rust_string(text: &str) -> String {
@@ -17473,6 +17590,216 @@ fn plain_named(written: &str, args: &[Ty], view: bool) -> String {
     }
     if name == "str" { return String::from("String"); }
     format!("{}{}", name, inner)
+}
+
+
+// --- emit_types.nika ---
+
+pub fn emit_base(name: &str) -> String {
+    let mut last: String = name.to_owned();
+    for part in name.split("::") { last = part.to_owned(); }
+    last
+}
+
+fn emit_segments(world: &EmitWorld<'_>, path: &[winnow_grammar::Symbol]) -> Vec<String> {
+    let mut out: Vec<String> = vec![];
+    for symbol in path.iter() { out.push(world.words.resolve(*symbol).to_owned()); }
+    out
+}
+
+fn emit_type_contract(own: &Ledger, library: &Ledger, owner: &str) -> Option<TypeContract> {
+    let found = own.types.get(owner);
+    if found.is_some() {
+        return match found {
+            Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+            None => None,
+        };
+    }
+    let suffix = format!("::{}", owner);
+    for key in library.types.keys() {
+        if key == owner || key.ends_with(&suffix) {
+            let contract = match library.types.get(key) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            return Some(contract.clone());
+        }
+    }
+    None
+}
+
+impl EmitState {
+    pub fn is_boxed(&self, owner: &str, member: &str) -> bool {
+        let bare = emit_base(owner);
+        let members = match self.facts.boxed_members.get(&bare) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        members.contains(member)
+    }
+    pub fn is_boxed_field(&self, owner: &str, field: &str) -> bool {
+        let parts: Vec<&str> = owner.split("::").collect::<Vec<_>>();
+        if parts.len() >= 2 {
+            let ty = (*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 2))).to_owned();
+            let variant = (*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_owned();
+            if self.facts.boxed_members.contains_key(&ty) { return self.is_boxed(&ty, &boxed_member(&variant, -1, field)); }
+        }
+        self.is_boxed(owner, field)
+    }
+    pub fn boxed_ty(&self, owner: &str, member: &str, lowered: String) -> String {
+        if self.is_boxed(owner, member) { return format!("Box<{}>", lowered); }
+        lowered
+    }
+    pub fn boxed_part(&self, world: &EmitWorld<'_>, path: &[winnow_grammar::Symbol], at: i64) -> bool {
+        if path.len() < 2 { return false; }
+        let names = emit_segments(world, path);
+        let owner = (*nikaia_std::index::get(&names, nikaia_std::index::at(names.len() as i64 - 2))).to_owned();
+        let variant = (*nikaia_std::index::get(&names, nikaia_std::index::at(names.len() as i64 - 1))).to_owned();
+        self.facts.boxed_members.contains_key(&owner) && self.is_boxed(&owner, &boxed_member(&variant, at, ""))
+    }
+    pub fn looks_inside_a_box(&self, world: &EmitWorld<'_>, pattern: &MatchPattern) -> bool {
+        match pattern {
+            MatchPattern::Tuple { path, parts } => self.looks_inside_parts(world, path, parts),
+            MatchPattern::Or(alternatives) => self.looks_inside_any(world, alternatives),
+            _ => false,
+        }
+    }
+    fn looks_inside_parts(&self, world: &EmitWorld<'_>, path: &[winnow_grammar::Symbol], parts: &[MatchPattern]) -> bool {
+        for at in 0..parts.len() as i64 {
+            if self.boxed_part(world, path, at) && !binds_a_part(nikaia_std::index::get(&parts, nikaia_std::index::at(at))) { return true; }
+            if self.looks_inside_a_box(world, nikaia_std::index::get(&parts, nikaia_std::index::at(at))) { return true; }
+        }
+        false
+    }
+    fn looks_inside_any(&self, world: &EmitWorld<'_>, alternatives: &[MatchPattern]) -> bool {
+        for alternative in alternatives.iter() { if self.looks_inside_a_box(world, alternative) { return true; } }
+        false
+    }
+    pub fn borrows(&self, world: &EmitWorld<'_>, name: winnow_grammar::Symbol) -> bool {
+        let text = world.words.resolve(name);
+        self.borrowing.contains(text) || self.tethered.contains(text)
+    }
+    pub fn carries_a_view(&self, world: &EmitWorld<'_>, ty: &Type) -> bool {
+        let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return self.carries_a_written_view(world, ty) };
+        let result = match (*code.result).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+        self.carries_a_view(world, result)
+    }
+    fn carries_a_written_view(&self, world: &EmitWorld<'_>, ty: &Type) -> bool {
+        if ty.is_view || self.borrows(world, ty.name) { return true; }
+        for inner in ty.generics.iter() { if self.carries_a_view(world, inner) { return true; } }
+        false
+    }
+    pub fn declares_a_struct(&self, name: &str) -> bool { self.structs.contains(name) || self.structs_beside.contains(name) }
+    pub fn takes_a_handle(&self, world: &EmitWorld<'_>, callee: &str) -> Vec<bool> {
+        let mut found = self.handles_in(&self.own_contracts, callee);
+        if found.is_none() { found = self.handles_in(world.library, callee); }
+        nikaia_std::index::or(found, || vec![].into())
+    }
+    fn handles_in(&self, ledger: &Ledger, callee: &str) -> Option<Vec<bool>> {
+        let suffix = format!("::{}", callee);
+        let mut found: String = callee.to_owned();
+        let mut have = ledger.functions.contains_key(callee);
+        if !have {
+            for key in ledger.functions.keys() {
+                if key.ends_with(&suffix) {
+                    found = key.to_owned();
+                    have = true;
+                    break;
+                }
+            }
+        }
+        if !have { return None; }
+        let held = match ledger.functions.get(&found) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let signature = match match held.signature.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        } { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let mut out: Vec<bool> = vec![];
+        for argument in call_arguments(&signature) { out.push(emit_a_handle(&argument.1)); }
+        Some(out)
+    }
+    pub fn takes_a_handle_at(&self, world: &EmitWorld<'_>, func: &Expr) -> Vec<bool> {
+        let name = match call_written_name(world.words, func) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
+        if self.declares_a_struct(&name) { return self.takes_a_handle(world, &format!("{}::new", name)); }
+        self.takes_a_handle(world, &name)
+    }
+    pub fn takes_a_size(&self, world: &EmitWorld<'_>, callee: &str, at: i64) -> bool {
+        let params = match self.foreign_params.get(callee) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        if at < 0 || at >= params.len() as i64 { return false; }
+        let ty = (*nikaia_std::index::get(&params, nikaia_std::index::at(at))).clone();
+        !ty.is_view && !ty.is_slice && world.words.resolve(ty.name) == "usize"
+    }
+    pub fn handle_named(&self, world: &EmitWorld<'_>, ty: &Type) -> Option<String> {
+        if ty.is_view || ty.is_slice { return None; }
+        let name = world.words.resolve(ty.name).to_owned();
+        if self.opaque_handles.contains_key(&name) || emit_base(&name) == "CStr" { return Some(name); }
+        None
+    }
+    pub fn handle_from(&self, world: &EmitWorld<'_>, func: &Expr) -> Option<String> {
+        match func {
+            Expr::Variable(name, _) => {
+                let name = *name;
+                let declared = match self.foreign_results.get(world.words.resolve(name)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                return self.handle_named(world, &declared);
+            },
+            _ => { },
+        }
+        None
+    }
+    pub fn handle_from_may_be_null(&self, world: &EmitWorld<'_>, func: &Expr) -> bool {
+        match func {
+            Expr::Variable(name, _) => {
+                let name = *name;
+                let declared = match self.foreign_results.get(world.words.resolve(name)) { Some(__nikaia_value) => __nikaia_value, None => return false };
+                return declared.is_nullable;
+            },
+            _ => { },
+        }
+        false
+    }
+    pub fn pointed_at(&self, world: &EmitWorld<'_>, ty: &Type) -> String {
+        if emit_base(world.words.resolve(ty.name)) == "CStr" { return String::from("core::ffi::c_char"); }
+        String::from("core::ffi::c_void")
+    }
+    pub fn writes_a_run(&self, world: &EmitWorld<'_>, ty: &Type) -> bool { ty.is_slice || ty.is_view && world.words.resolve(ty.name) == "Array" && ty.generics.len() == 1 }
+    pub fn called_name(&self, world: &EmitWorld<'_>, func: &Expr) -> String {
+        match func {
+            Expr::Variable(name, _) => {
+                let name = *name;
+                return world.words.resolve(name).to_owned();
+            },
+            _ => { },
+        }
+        String::from("")
+    }
+    pub fn derives(&self, world: &EmitWorld<'_>, name: winnow_grammar::Symbol) -> String {
+        let text = world.words.resolve(name).to_owned();
+        let mut parts: Vec<String> = vec![String::from("Debug"), String::from("Clone")];
+        if self.facts.copies.contains(&text) { parts.push(String::from("Copy")); }
+        if self.facts.compares.contains(&text) {
+            parts.push(String::from("PartialEq"));
+            if self.facts.compares_totally.contains(&text) { parts.push(String::from("Eq")); }
+        }
+        format!("#[derive({})]\n", parts.join(", "))
+    }
+    pub fn field_contract(&self, world: &EmitWorld<'_>, owner: &str, field: &str) -> Option<FieldContract> {
+        let contract = match emit_type_contract(&self.own_contracts, world.library, owner) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        for candidate in contract.fields.iter() { if candidate.name == field { return Some(candidate.clone()); } }
+        None
+    }
+    pub fn type_contract(&self, world: &EmitWorld<'_>, owner: &str) -> Option<TypeContract> { emit_type_contract(&self.own_contracts, world.library, owner) }
+    pub fn field_defaults(&self, world: &EmitWorld<'_>, owner: &str) -> Vec<(String, String, Ty)> {
+        let contract = match emit_type_contract(&self.own_contracts, world.library, owner) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
+        let mut out: Vec<(String, String, Ty)> = vec![];
+        for field in contract.fields.iter() { if !field.default.is_empty() { out.push((field.name.to_owned(), field.default.to_owned(), field.ty.clone())); } }
+        out
+    }
+}
+
+fn emit_a_handle(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { name, view, .. } => { let view = *view; emit_a_handle_name(name, view) },
+        _ => false,
+    }
+}
+
+fn emit_a_handle_name(name: &str, view: bool) -> bool {
+    if view { return false; }
+    name == "Shared" || name == "SharedMut"
 }
 
 
@@ -37716,9 +38043,14 @@ pub mod emit_state {
     #[allow(unused_imports)]
     pub use super::{EmitPair, EmitWorld, EmitState, EmitWalk};
 }
+pub mod emit_sums {}
 pub mod emit_text {
     #[allow(unused_imports)]
     pub use super::{rust_string, rust_format_escape, top_level_parts, format_of, truncating, checked, held_literal, plain_rust_spelling};
+}
+pub mod emit_types {
+    #[allow(unused_imports)]
+    pub use super::{emit_base};
 }
 pub mod emit_walk {
     #[allow(unused_imports)]

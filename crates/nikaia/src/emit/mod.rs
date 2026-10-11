@@ -1375,13 +1375,6 @@ enum Named<'a> {
     Library(&'a str),
 }
 
-/// **The generated sum of a set of error types**
-/// ([ADR-280](../../docs/specification/adr/adr-280.md) D15), named from its
-/// members in the ledger's order, so the name is a function of the set.
-pub(crate) fn sum_name(members: &[String]) -> String {
-    nikaia_std::tools::emit_items::sum_name(members)
-}
-
 /// A member's variant in the sum.
 pub(crate) fn sum_variant(member: &str) -> String {
     nikaia_std::tools::emit_items::sum_variant(member)
@@ -2183,7 +2176,7 @@ impl<'p> Emitter<'p> {
                 library,
             },
         };
-        made.s.sums = made.error_sums();
+        made.s.sums = made.s.error_sums(&made.world);
         made
     }
 
@@ -2740,22 +2733,7 @@ impl<'p> Emitter<'p> {
     /// `impl` over `PartialEq`, and `compares_totally` is a subset by
     /// construction.
     fn derives(&self, name: winnow_grammar::Symbol) -> String {
-        let name = self.text(name);
-        let mut parts = vec!["Debug", "Clone"];
-        // **`Copy` where every part is one**
-        // ([ADR-294](../../../docs/specification/adr/adr-294.md) D9.1): the
-        // Rust below may copy it, which a Rust reader of a type Nikaia declares
-        // needs, and nothing this language says about the value changes.
-        if self.s.facts.copies.contains(name) {
-            parts.push("Copy");
-        }
-        if self.s.facts.compares.contains(name) {
-            parts.push("PartialEq");
-            if self.s.facts.compares_totally.contains(name) {
-                parts.push("Eq");
-            }
-        }
-        format!("#[derive({})]\n", parts.join(", "))
+        self.s.derives(&self.world, name)
     }
 
     fn item(&self, out: &mut Out, item: &Item, span: &Span) -> Result<()> {
@@ -3301,20 +3279,13 @@ impl<'p> Emitter<'p> {
     /// ([ADR-302](../../docs/specification/adr/adr-302.md) D11, D12): the
     /// handle's name, and whether the declaration said it **may be absent**.
     fn handle_from(&self, func: &Expr) -> Option<(String, bool)> {
-        let Expr::Variable(name, _) = func else {
-            return None;
-        };
-        let declared = self.s.foreign_results.get(self.text(*name))?;
-        let handle = self.handle_named(declared)?;
-        Some((handle.to_string(), declared.is_nullable))
+        let handle = self.s.handle_from(&self.world, func)?;
+        Some((handle, self.s.handle_from_may_be_null(&self.world, func)))
     }
 
     /// The callee as the source wrote it, for a message that names it.
     fn called_name(&self, func: &Expr) -> String {
-        match func {
-            Expr::Variable(name, _) => self.text(*name).to_string(),
-            _ => String::new(),
-        }
+        self.s.called_name(&self.world, func)
     }
 
     /// The handle a type names, where it names one
@@ -3324,24 +3295,14 @@ impl<'p> Emitter<'p> {
     ///
     /// `None` for a view or a slice of one: what a `&T` at the boundary is is
     /// D1's pointer, and the handle is what it points at.
-    fn handle_named(&self, ty: &Type) -> Option<&str> {
-        if ty.is_view || ty.is_slice {
-            return None;
-        }
-        let name = self.text(ty.name);
-        match self.s.opaque_handles.contains_key(name) || base(name) == C_STRING {
-            true => Some(name),
-            false => None,
-        }
+    fn handle_named(&self, ty: &Type) -> Option<String> {
+        self.s.handle_named(&self.world, ty)
     }
 
     /// What the address inside a handle points at, which is the one thing this
     /// language never looks through.
-    fn pointed_at(&self, ty: &Type) -> &'static str {
-        match base(self.text(ty.name)) == C_STRING {
-            true => "core::ffi::c_char",
-            false => "core::ffi::c_void",
-        }
+    fn pointed_at(&self, ty: &Type) -> String {
+        self.s.pointed_at(&self.world, ty)
     }
 
     /// Which shape a declared parameter takes at the C boundary, or `None`
@@ -3379,7 +3340,7 @@ impl<'p> Emitter<'p> {
     /// stays here because a ledger written before 0.0.134 still carries it and
     /// a description is read back through the same tree.
     fn writes_a_run(&self, ty: &Type) -> bool {
-        ty.is_slice || (ty.is_view && self.text(ty.name) == ARRAY && ty.generics.len() == 1)
+        self.s.writes_a_run(&self.world, ty)
     }
 
     /// Whether an `extern "C"` declaration takes this position in `size_t`
@@ -3389,11 +3350,7 @@ impl<'p> Emitter<'p> {
     /// it is a fact about *Rust's* library that nothing in this compiler can
     /// derive, where a foreign declaration is written in this very file.
     fn takes_a_size(&self, callee: &str, at: usize) -> bool {
-        self.s
-            .foreign_params
-            .get(callee)
-            .and_then(|params| params.get(at))
-            .is_some_and(|ty| !ty.is_view && !ty.is_slice && self.text(ty.name) == "usize")
+        self.s.takes_a_size(&self.world, callee, at as i64)
     }
 
     /// One method of a `trait`: a signature and a `;`.
@@ -11239,7 +11196,7 @@ impl<'p> Emitter<'p> {
     /// package's ledger for the types another file declares
     /// ([`Emitter::tethered`]).
     fn borrows(&self, name: Symbol) -> bool {
-        self.s.borrowing.contains(self.text(name)) || self.s.tethered.contains(self.text(name))
+        self.s.borrows(&self.world, name)
     }
 
     /// Whether a written type **carries** a view: it is one, it names a struct
@@ -11253,13 +11210,7 @@ impl<'p> Emitter<'p> {
     /// `'static`* — is about the **lifetime** in the signature rather than about
     /// the `&`, so it is this question it wants answered.
     fn carries_a_view(&self, ty: &Type) -> bool {
-        // A function type carries what its result does ([`holds_view`]).
-        if let Some(code) = &*ty.code {
-            return (*code.result)
-                .as_ref()
-                .is_some_and(|result| self.carries_a_view(result));
-        }
-        ty.is_view || self.borrows(ty.name) || ty.generics.iter().any(|g| self.carries_a_view(g))
+        self.s.carries_a_view(&self.world, ty)
     }
 
     /// The **one error type** a function's failures can be, where the ledger
@@ -11288,25 +11239,11 @@ impl<'p> Emitter<'p> {
     /// throw — and no ledger key to look it up under
     /// ([ADR-292](../../docs/specification/adr/adr-292.md) D19).
     fn named_error_of<'t>(&'t self, throws: &'t [String]) -> Option<Named<'t>> {
-        let [one] = throws else {
-            return None;
-        };
-        if one == crate::contracts::UNNAMED_ERROR {
-            return None;
+        match self.s.named_error_of(&self.world, throws) {
+            1 => Some(Named::Own(throws[0].as_str())),
+            2 => Some(Named::Library(throws[0].as_str())),
+            _ => None,
         }
-        if self.s.declared_errors.contains(one) {
-            return Some(Named::Own(one.as_str()));
-        }
-        // **A type a ledger describes is a name too**
-        // ([ADR-280](../../docs/specification/adr/adr-280.md) D9). `io::IoError`
-        // is not this unit's to declare and is every bit as nameable: `std`
-        // publishes it, the generated file reaches it through the prelude, and
-        // a program that reads a file has it as its whole set.
-        self.world
-            .library
-            .types
-            .contains_key(one)
-            .then_some(Named::Library(one.as_str()))
     }
 
     /// The type a function's failures travel in.
@@ -11317,51 +11254,27 @@ impl<'p> Emitter<'p> {
     /// type with a lifetime, and a function with nothing to borrow from can
     /// only write `'static` for it.
     fn error_channel(&self, key: &str, lifetimes: Lifetimes, borrows: bool) -> String {
-        match self.s.own_contracts.functions.get(key) {
-            Some(contract) => self.channel_of(&contract.fails_with, lifetimes, borrows),
-            None => "Box<dyn std::error::Error>".to_string(),
-        }
+        self.s.error_channel(
+            &self.world,
+            key,
+            lifetimes == Lifetimes::ELIDED,
+            lifetimes.params,
+            Lifetimes::STATIC.params,
+            borrows,
+        )
     }
 
     /// [`Emitter::error_channel`] asked of the **set** rather than of a
     /// function ([ADR-292](../../docs/specification/adr/adr-292.md) D19).
     fn channel_of(&self, throws: &[String], lifetimes: Lifetimes, borrows: bool) -> String {
-        // **A set of two or more is the generated sum**
-        // ([ADR-280](../../docs/specification/adr/adr-280.md) D15), where every
-        // member of it is a name.
-        if let Some(sum) = self.s.sums.get(throws) {
-            let params = match throws.iter().any(|m| self.borrows_named(m)) {
-                false => String::new(),
-                true => match lifetimes == Lifetimes::ELIDED && !borrows {
-                    true => format!("<{}>", Lifetimes::STATIC.params),
-                    false => format!("<{}>", lifetimes.params),
-                },
-            };
-            return format!("{}{params}", Self::sum_path(sum));
-        }
-        match self.named_error_of(throws) {
-            None => "Box<dyn std::error::Error>".to_string(),
-            // **A library's error travels in an envelope too**
-            // ([ADR-280](../../docs/specification/adr/adr-280.md) D13). It was
-            // bare ([ADR-280](../../docs/specification/adr/adr-280.md) D13)
-            // because no `throw` of this program raised it, and the envelope
-            // says *no site recorded* for exactly that. What it carries is the
-            // **list**: a caller that propagates a failure that joined others
-            // has to be able to hand it on, and a bare channel could not take
-            // one — `rustc` refused the file. Measured before it was decided
-            // (`benches/envelope`): one word on the `Result`, and no time.
-            Some(Named::Library(name)) => format!("nikaia_std::error::Thrown<{name}>"),
-            Some(Named::Own(name)) => {
-                let params = match self.borrows_named(name) {
-                    false => String::new(),
-                    true => match lifetimes == Lifetimes::ELIDED && !borrows {
-                        true => format!("<{}>", Lifetimes::STATIC.params),
-                        false => format!("<{}>", lifetimes.params),
-                    },
-                };
-                format!("nikaia_std::error::Thrown<{name}{params}>")
-            }
-        }
+        self.s.channel_of(
+            &self.world,
+            throws,
+            lifetimes == Lifetimes::ELIDED,
+            lifetimes.params,
+            Lifetimes::STATIC.params,
+            borrows,
+        )
     }
 
     /// [`Emitter::borrows`] for a type named as text rather than as a `Symbol`.
@@ -11380,47 +11293,6 @@ impl<'p> Emitter<'p> {
             || ty.generics.iter().any(|g| self.names_borrowing(g))
     }
 
-    fn borrows_named(&self, name: &str) -> bool {
-        self.s.tethered.contains(name)
-            || self.s.borrowing.contains(name)
-            // **A library's type answers from the library's ledger**
-            // ([ADR-280](../../docs/specification/adr/adr-280.md)): the two sets
-            // above are this package's, and a type another one declares is
-            // described where it is declared.
-            || self
-                .world
-                .library
-                .types
-                .get(name)
-                .is_some_and(|contract| !contract.tethered.is_empty())
-    }
-
-    /// Every distinct error **set of two or more named members** in this unit,
-    /// and the name of the type that stands for it
-    /// ([ADR-280](../../docs/specification/adr/adr-280.md) D15).
-    ///
-    /// **Per set and not per function**, which is what makes propagation free:
-    /// two functions that fail the same way get the same type, so a `?` between
-    /// them converts nothing. Keyed by the members in the ledger's own order,
-    /// which is sorted, so the name is a function of the set and of nothing
-    /// else.
-    fn error_sums(&self) -> std::collections::BTreeMap<Vec<String>, String> {
-        let mut out = std::collections::BTreeMap::new();
-        for contract in self.s.own_contracts.functions.values() {
-            let members = &contract.fails_with;
-            if members.len() < 2 {
-                continue;
-            }
-            // One member this compiler cannot name is the whole set unnamed:
-            // a sum with a hole in it is the box by another spelling.
-            if members.iter().any(|m| self.name_of_error(m).is_none()) {
-                continue;
-            }
-            out.insert(members.clone(), sum_name(members));
-        }
-        out
-    }
-
     /// The generated sums, written into the file
     /// ([ADR-280](../../docs/specification/adr/adr-280.md) D15).
     ///
@@ -11428,122 +11300,7 @@ impl<'p> Emitter<'p> {
     /// converts on its own, and `Display`/`Error` so that the sum can still go
     /// into the opaque channel where a caller has one.
     fn write_error_sums(&self, out: &mut Out) {
-        // **Once, at the crate root.** A module is its own file below, so a sum
-        // written into each of them would be a different type per file and a
-        // failure could not cross one. Every mention of it is written
-        // `crate::…` for the same reason ([`Emitter::sum_path`]).
-        if !self.s.entry {
-            return;
-        }
-        for (members, name) in &self.s.sums {
-            let members: &[String] = members;
-            let borrows = members.iter().any(|m| self.borrows_named(m));
-            // **One lifetime for the whole sum**, and it is the members' own: a
-            // member that carries a view carries the buffer's lifetime, and a
-            // sum of such a member has it too
-            // ([ADR-283](../../docs/specification/adr/adr-283.md) D1).
-            let (decl, params) = match borrows {
-                true => (format!("<{INPUT_LIFETIME}>"), format!("<{INPUT_LIFETIME}>")),
-                false => (String::new(), String::new()),
-            };
-            let of = |m: &str| match self.borrows_named(m) {
-                true => params.clone(),
-                false => String::new(),
-            };
-
-            out.push(&format!(
-                "// The failure channel of every function in this file that \
-                 fails in exactly\n// these ways \
-                 ([ADR-280](docs/specification/adr/adr-280.md) D15). A program \
-                 never\n// writes this name: a `catch` matches on the \
-                 **members'** variants.\n\
-                 //\n\
-                 // `non_camel_case_types` is allowed rather than avoided: the \
-                 name is spelled\n// so that nothing a program declares \
-                 collides with it, and a warning about\n// this file is a \
-                 defect here ([Part III C.1](docs/specification/30-nikaia-tooling.md)).\n\
-                 #[derive(Debug)]\n\
-                 #[allow(non_camel_case_types)]\n\
-                 enum {name}{decl} {{\n"
-            ));
-            for member in members {
-                out.push(&format!(
-                    "    {}({}),\n",
-                    Self::sum_variant(member),
-                    self.sum_member_type(member, &of(member))
-                ));
-            }
-            out.push("}\n");
-
-            for member in members {
-                out.push(&format!(
-                    "impl{decl} From<{}> for {name}{params} {{\n\
-                     \x20   fn from(error: {}) -> {name}{params} {{ {name}::{}(error) }}\n\
-                     }}\n",
-                    self.sum_member_type(member, &of(member)),
-                    self.sum_member_type(member, &of(member)),
-                    Self::sum_variant(member)
-                ));
-                // **A `?` straight from `std` hands a library's error bare**,
-                // and the member is its envelope (ADR-280 D13): put on here,
-                // with no site, as `From<E> for Thrown<E>` puts it on.
-                if matches!(self.name_of_error(member), Some(Named::Library(_))) {
-                    out.push(&format!(
-                        "impl{decl} From<{member}> for {name}{params} {{\n\
-                         \x20   fn from(error: {member}) -> {name}{params} {{ \
-                         {name}::{}(nikaia_std::error::Thrown::from(error)) }}\n\
-                         }}\n",
-                        Self::sum_variant(member)
-                    ));
-                }
-            }
-
-            out.push(&format!(
-                "impl{decl} std::fmt::Display for {name}{params} {{\n\
-                 \x20   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {{\n\
-                 \x20       match self {{\n"
-            ));
-            for member in members {
-                out.push(&format!(
-                    "            {name}::{}(e) => e.fmt(f),\n",
-                    Self::sum_variant(member)
-                ));
-            }
-            out.push(&format!(
-                "        }}\n\x20   }}\n}}\n\
-                 impl{decl} std::error::Error for {name}{params} {{}}\n"
-            ));
-            // **`error.message()` on an error, one of several**
-            // ([ADR-280](../../docs/specification/adr/adr-280.md) D30): the
-            // member's message, which is what its `Display` writes.
-            out.push(&format!(
-                "impl{decl} {name}{params} {{\n\
-                 \x20   #[allow(dead_code)]\n\
-                 \x20   fn message(&self) -> String {{ self.to_string() }}\n\
-                 }}\n"
-            ));
-
-            // **The long form asks the member** (D2): a member the program
-            // declares carries its envelope and therefore its site, and a
-            // library's says there is none. The sum adds nothing of its own,
-            // because it is not where anything was raised.
-            out.push(&format!(
-                "impl{decl} nikaia_std::error::Full for {name}{params} {{\n\
-                 \x20   fn full(&self) -> String {{\n\
-                 \x20       match self {{\n"
-            ));
-            for member in members {
-                let held = match self.name_of_error(member) {
-                    Some(_) => "e.full()",
-                    None => "nikaia_std::error::Full::full(e)",
-                };
-                out.push(&format!(
-                    "            {name}::{}(e) => {held},\n",
-                    Self::sum_variant(member)
-                ));
-            }
-            out.push("        }\n    }\n}\n\n");
-        }
+        self.s.write_error_sums(&self.world, out)
     }
 
     /// The sum an expression a `catch` guards fails in, where it is one.
@@ -11560,7 +11317,12 @@ impl<'p> Emitter<'p> {
         if let Some(set) = joined {
             return self.s.sums.get(&set).map(String::as_str);
         }
-        self.sum_of(&self.callee_name(expr)?)
+        let contract = self
+            .s
+            .own_contracts
+            .functions
+            .get(&self.callee_name(expr)?)?;
+        self.s.sums.get(&contract.fails_with).map(String::as_str)
     }
 
     /// `match error { … }` in a handler whose error travels in a **sum**
@@ -11698,46 +11460,21 @@ impl<'p> Emitter<'p> {
     /// The generated sum a function's failures travel in, where its set has
     /// one ([ADR-280](../../docs/specification/adr/adr-280.md) D15).
     /// The members of a generated sum, by the name it is written with.
-    fn sum_members(&self, sum: &str) -> Option<&[String]> {
-        self.s
-            .sums
-            .iter()
-            .find(|(_, name)| name.as_str() == sum)
-            .map(|(members, _)| members.as_slice())
+    fn sum_members(&self, sum: &str) -> Option<Vec<String>> {
+        self.s.sum_members(sum)
     }
 
-    fn sum_of(&self, key: &str) -> Option<&str> {
-        let contract = self.s.own_contracts.functions.get(key)?;
-        self.s.sums.get(&contract.fails_with).map(String::as_str)
+    fn sum_of(&self, key: &str) -> Option<String> {
+        self.s.sum_of(key)
     }
 
     /// Whose one error type a **member** of a set is, asked of the name alone.
     fn name_of_error<'n>(&'n self, name: &'n str) -> Option<Named<'n>> {
-        match nikaia_std::tools::emit_items::error_kind(
-            &self.s.declared_errors,
-            self.world.library,
-            name,
-        ) {
+        match self.s.name_of_error(&self.world, name) {
             1 => Some(Named::Own(name)),
             2 => Some(Named::Library(name)),
             _ => None,
         }
-    }
-
-    /// What one member of a sum carries: its own single-member channel
-    /// ([ADR-280](../../docs/specification/adr/adr-280.md) D16).
-    ///
-    /// A type this unit declares is one the program `throw`s, so it keeps the
-    /// envelope and its site; a library's arrives from a call and travels bare
-    /// ([ADR-280](../../docs/specification/adr/adr-280.md) D13). The sum changes
-    /// neither — it only says which of them this failure was.
-    fn sum_member_type(&self, name: &str, params: &str) -> String {
-        nikaia_std::tools::emit_items::sum_member_type(
-            &self.s.declared_errors,
-            self.world.library,
-            name,
-            params,
-        )
     }
 
     /// The variant a member is written as: its name with the module flattened,
@@ -12028,7 +11765,7 @@ impl<'p> Emitter<'p> {
 
     /// Whether a struct of this name is declared in this file or beside it.
     fn declares_a_struct(&self, name: &str) -> bool {
-        self.s.structs.contains(name) || self.s.structs_beside.contains(name)
+        self.s.declares_a_struct(name)
     }
 
     /// Whether a bare name in **value** position is a type's anonymous
@@ -12214,42 +11951,13 @@ impl<'p> Emitter<'p> {
 
     /// A type's contract, from this package's ledger or a dependency's.
     fn type_contract(&self, owner: &str) -> Option<crate::contracts::TypeContract> {
-        let suffix = format!("::{owner}");
-        self.s
-            .own_contracts
-            .types
-            .get(owner)
-            .or_else(|| {
-                self.world
-                    .library
-                    .types
-                    .iter()
-                    .find(|(key, _)| *key == owner || key.ends_with(&suffix))
-                    .map(|(_, contract)| contract)
-            })
-            .cloned()
+        self.s.type_contract(&self.world, owner)
     }
 
     /// **A reflected field's contract**, from this package's ledger or a
     /// dependency's: what `.attribute(X)` and `.default` read (ADR-331 D5-D6).
     fn field_contract(&self, owner: &str, field: &str) -> Option<crate::contracts::FieldContract> {
-        let suffix = format!("::{owner}");
-        self.s
-            .own_contracts
-            .types
-            .get(owner)
-            .or_else(|| {
-                self.world
-                    .library
-                    .types
-                    .iter()
-                    .find(|(key, _)| *key == owner || key.ends_with(&suffix))
-                    .map(|(_, contract)| contract)
-            })?
-            .fields
-            .iter()
-            .find(|f| f.name == field)
-            .cloned()
+        self.s.field_contract(&self.world, owner, field)
     }
 
     /// **An attribute's value in the language below** (ADR-331 D6):
@@ -12277,24 +11985,7 @@ impl<'p> Emitter<'p> {
     /// **The fields of `owner` that have a default** (ADR-331 D5): name,
     /// value and type, from this package's ledger or a dependency's.
     fn field_defaults(&self, owner: &str) -> Vec<(String, String, crate::contracts::ty::Ty)> {
-        let suffix = format!("::{owner}");
-        let contract = self.s.own_contracts.types.get(owner).or_else(|| {
-            self.world
-                .library
-                .types
-                .iter()
-                .find(|(key, _)| *key == owner || key.ends_with(&suffix))
-                .map(|(_, contract)| contract)
-        });
-        contract
-            .map(|c| {
-                c.fields
-                    .iter()
-                    .filter(|f| !f.default.is_empty())
-                    .map(|f| (f.name.clone(), f.default.clone(), f.ty.clone()))
-                    .collect()
-            })
-            .unwrap_or_default()
+        self.s.field_defaults(&self.world, owner)
     }
 
     fn options_of(&self, func: &Expr) -> Option<&[crate::contracts::ConfigContract]> {
@@ -12464,33 +12155,19 @@ impl<'p> Emitter<'p> {
     /// ([ADR-246](../../docs/specification/adr/adr-246.md) D1), by the
     /// owner's last segment: a qualified name reaches the same type.
     fn is_boxed(&self, owner: &str, member: &str) -> bool {
-        let owner = owner.rsplit("::").next().unwrap_or(owner);
-        self.s
-            .facts
-            .boxed_members
-            .get(owner)
-            .is_some_and(|members| members.contains(member))
+        self.s.is_boxed(owner, member)
     }
 
     /// **A field of a struct literal**, which may be a variant's written as a
     /// struct: `Expr::Neg { inner: … }` is the variant `Neg` of `Expr`, and its
     /// member is `Neg.inner`.
     fn is_boxed_field(&self, owner: &str, field: &str) -> bool {
-        if let Some((ty, variant)) = owner.rsplit_once("::") {
-            let ty = ty.rsplit("::").next().unwrap_or(ty);
-            if self.s.facts.boxed_members.contains_key(ty) {
-                return self.is_boxed(ty, &crate::check::boxed_member(variant, None, Some(field)));
-            }
-        }
-        self.is_boxed(owner, field)
+        self.s.is_boxed_field(owner, field)
     }
 
     /// A member's lowered type, in its box where it has one.
     fn boxed_ty(&self, owner: &str, member: &str, lowered: String) -> String {
-        match self.is_boxed(owner, member) {
-            true => format!("Box<{lowered}>"),
-            false => lowered,
-        }
+        self.s.boxed_ty(owner, member, lowered)
     }
 
     /// **An arm, with each name bound out of a box taken out of it first**
@@ -12774,28 +12451,13 @@ impl<'p> Emitter<'p> {
     /// variant's tuple at `at` is behind a box, and what the pattern writes
     /// there is not a name.
     fn boxed_part(&self, path: &[Symbol], at: usize) -> bool {
-        let [.., owner, variant] = path else {
-            return false;
-        };
-        self.s.facts.boxed_members.contains_key(self.text(*owner))
-            && self.is_boxed(
-                self.text(*owner),
-                &crate::check::boxed_member(self.text(*variant), Some(at), None),
-            )
+        self.s.boxed_part(&self.world, path, at as i64)
     }
 
     /// Whether any arm's pattern looks inside a boxed part, at any depth the
     /// lowering reaches.
     fn looks_inside_a_box(&self, pattern: &MatchPattern) -> bool {
-        match pattern {
-            MatchPattern::Tuple { path, parts } => parts.iter().enumerate().any(|(at, part)| {
-                (self.boxed_part(path, at) && !binds_a_part(part)) || self.looks_inside_a_box(part)
-            }),
-            MatchPattern::Or(alternatives) => {
-                alternatives.iter().any(|a| self.looks_inside_a_box(a))
-            }
-            _ => false,
-        }
+        self.s.looks_inside_a_box(&self.world, pattern)
     }
 
     /// The pattern as written, in one of two modes, collecting into `nests` -
@@ -14277,57 +13939,12 @@ impl<'p> Emitter<'p> {
     /// A `&Shared[T]` parameter answers **no**, which is ADR-312 D1's correction:
     /// lending the inner value out hands no handle on.
     fn takes_a_handle(&self, callee: &str) -> Vec<bool> {
-        let suffix = format!("::{callee}");
-        let contract = [&self.s.own_contracts, self.world.library]
-            .into_iter()
-            .find_map(|ledger| {
-                ledger.functions.get(callee).or_else(|| {
-                    ledger
-                        .functions
-                        .iter()
-                        .find(|(key, _)| key.ends_with(&suffix))
-                        .map(|(_, contract)| contract)
-                })
-            });
-        contract
-            .and_then(|contract| contract.signature.as_ref())
-            .map(|signature| {
-                signature
-                    .arguments()
-                    .iter()
-                    .map(|(_, ty)| {
-                        // `SharedMut[T]` is a count around a lock
-                        // ([ADR-281](../../../docs/specification/adr/adr-281.md)
-                        // D1), so a handle on one is handed on the same way.
-                        matches!(
-                            ty,
-                            crate::contracts::ty::Ty::Named { name, view: false, .. }
-                                if name == SHARED || name == SHARED_MUT
-                        )
-                    })
-                    .collect()
-            })
-            .unwrap_or_default()
+        self.s.takes_a_handle(&self.world, callee)
     }
 
     /// The same, for the callee a `Call` names.
     fn takes_a_handle_at(&self, func: &Expr) -> Vec<bool> {
-        let name = match func {
-            Expr::Variable(name, _) => self.text(*name).to_string(),
-            Expr::Path(segments, _) => segments
-                .iter()
-                .map(|s| self.text(*s))
-                .collect::<Vec<_>>()
-                .join("::"),
-            _ => return Vec::new(),
-        };
-        // Part I 4.2's anonymous constructor is reached as `Type(…)` and recorded
-        // as `Type::new`, which is the one place the call's spelling and the
-        // ledger's key differ.
-        match self.declares_a_struct(&name) {
-            true => self.takes_a_handle(&format!("{name}::new")),
-            false => self.takes_a_handle(&name),
-        }
+        self.s.takes_a_handle_at(&self.world, func)
     }
 
     /// Whether a ledger key is a grammar entry another package offers: what

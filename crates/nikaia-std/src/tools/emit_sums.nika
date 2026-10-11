@@ -1,0 +1,218 @@
+// crates/nikaia-std/src/tools/emit_sums.nika
+//
+// **The errors a function can fail with, as the emitter names them**, moved
+// from `emit/mod.rs` (ADR-294, #125, #558, step E4): which error names the
+// emitter can write (the unit declares an `impl Error` for it, or a ledger
+// describes the type), the generated sum for each set of two or more
+// (ADR-280 D15), and the failure channel a function's `Result` carries. Methods
+// of `EmitState`, which holds the contracts and the tables; `EmitWorld` is the
+// file's names and `std`'s ledger.
+
+use std::collections
+
+/// The lifetime the input's views carry.
+fn sum_input_lifetime() -> String {
+    return "'a"
+}
+
+impl EmitState {
+    /// The generated sum a function's failures are, if they are a set of two or
+    /// more the emitter can name.
+    pub fn sum_of(ref self, key: ref String) -> String? {
+        let contract = self.own_contracts.functions.get(key) ?? return null
+        let found = self.sums.get(contract.fails_with) ?? return null
+        return found.clone()
+    }
+
+    /// The members of the sum of that name.
+    pub fn sum_members(ref self, sum: ref String) -> Vec[String]? {
+        for members in self.sums.keys() {
+            let name = self.sums.get(members) ?? continue
+            if name == sum {
+                return members.clone()
+            }
+        }
+        return null
+    }
+
+    /// What an error name is: 0 nothing the emitter can name, 1 the unit's own,
+    /// 2 a library's (ADR-280 D9).
+    pub fn name_of_error(ref self, world: ref EmitWorld, name: ref String) -> i64 {
+        return error_kind(self.declared_errors, world.library, name)
+    }
+
+    /// As `name_of_error`, for a set of failures: only a set of exactly one
+    /// names anything.
+    pub fn named_error_of(ref self, world: ref EmitWorld, thrown: ref Vec[String]) -> i64 {
+        if thrown.len() != 1 {
+            return 0
+        }
+        return self.name_of_error(world, thrown[0])
+    }
+
+    /// As `named_error_of`, for the function `key`.
+    pub fn named_error(ref self, world: ref EmitWorld, key: ref String) -> i64 {
+        let contract = self.own_contracts.functions.get(key) ?? return 0
+        return self.named_error_of(world, contract.fails_with)
+    }
+
+    /// Whether a type carries a view, so a mention of it takes a lifetime: a
+    /// struct of this package that holds one, one that is tethered, or a
+    /// library's that the library records a tether for.
+    pub fn borrows_named(ref self, world: ref EmitWorld, name: ref String) -> bool {
+        if self.tethered.contains(name) || self.borrowing.contains(name) {
+            return true
+        }
+        let contract = world.library.types.get(name) ?? return false
+        return contract.tethered.len() != 0
+    }
+
+    /// Every set of two or more failures a function can end with, whose members
+    /// the emitter can all name, and the sum it is.
+    pub fn error_sums(ref self, world: ref EmitWorld) -> collections::BTreeMap[Vec[String], String] {
+        let mut out: collections::BTreeMap[Vec[String], String] = collections::BTreeMap()
+        for key in self.own_contracts.functions.keys() {
+            let contract = self.own_contracts.functions.get(key) ?? continue
+            let members = contract.fails_with
+            if members.len() < 2 {
+                continue
+            }
+            // One member this compiler cannot name is the whole set unnamed: a
+            // sum with a hole in it is the box by another spelling.
+            let mut all_named = true
+            for member in members {
+                if self.name_of_error(world, member) == 0 {
+                    all_named = false
+                }
+            }
+            if all_named {
+                out.insert(members.clone(), sum_name(members))
+            }
+        }
+        return out
+    }
+
+    /// The type a member of a sum is held as, with the lifetime parameters of
+    /// the sum where the member carries a view.
+    fn sum_member_held(ref self, world: ref EmitWorld, member: ref String, params: ref String) -> String {
+        if self.borrows_named(world, member) {
+            return sum_member_type(self.declared_errors, world.library, member, params)
+        }
+        return sum_member_type(self.declared_errors, world.library, member, "")
+    }
+
+    /// Write every generated sum, once, at the crate root: a module is its own
+    /// file below, so a sum written into each of them would be a different type
+    /// per file and a failure could not cross one.
+    pub fn write_error_sums(ref self, world: ref EmitWorld, mut out: EmitOut) {
+        if !self.entry {
+            return
+        }
+        for members in self.sums.keys() {
+            let name = self.sums.get(members) ?? continue
+            let mut borrows = false
+            for member in members {
+                if self.borrows_named(world, member) {
+                    borrows = true
+                }
+            }
+            // One lifetime for the whole sum, and it is the members' own
+            // (ADR-283 D1).
+            let mut decl: String = ""
+            let mut params: String = ""
+            if borrows {
+                decl = f"<{sum_input_lifetime()}>"
+                params = f"<{sum_input_lifetime()}>"
+            }
+            out.push(f"// The failure channel of every function in this file that fails in exactly\n// these ways ([ADR-280](docs/specification/adr/adr-280.md) D15). A program never\n// writes this name: a `catch` matches on the **members'** variants.\n//\n// `non_camel_case_types` is allowed rather than avoided: the name is spelled\n// so that nothing a program declares collides with it, and a warning about\n// this file is a defect here ([Part III C.1](docs/specification/30-nikaia-tooling.md)).\n#[derive(Debug)]\n#[allow(non_camel_case_types)]\nenum {name}{decl} {{\n")
+            for member in members {
+                let variant = sum_variant(member)
+                let held = self.sum_member_held(world, member, params)
+                out.push(f"    {variant}({held}),\n")
+            }
+            out.push("}\n")
+            for member in members {
+                let variant = sum_variant(member)
+                let held = self.sum_member_held(world, member, params)
+                out.push(f"impl{decl} From<{held}> for {name}{params} {{\n    fn from(error: {held}) -> {name}{params} {{ {name}::{variant}(error) }}\n}}\n")
+                // A `?` straight from `std` hands a library's error bare, and
+                // the member is its envelope (ADR-280 D13): put on here, with no
+                // site, as `From<E> for Thrown<E>` puts it on.
+                if self.name_of_error(world, member) == 2 {
+                    out.push(f"impl{decl} From<{member}> for {name}{params} {{\n    fn from(error: {member}) -> {name}{params} {{ {name}::{variant}(nikaia_std::error::Thrown::from(error)) }}\n}}\n")
+                }
+            }
+            out.push(f"impl{decl} std::fmt::Display for {name}{params} {{\n    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {{\n        match self {{\n")
+            for member in members {
+                let variant = sum_variant(member)
+                out.push(f"            {name}::{variant}(e) => e.fmt(f),\n")
+            }
+            out.push(f"        }}\n    }}\n}}\nimpl{decl} std::error::Error for {name}{params} {{}}\n")
+            // `error.message()` on an error, one of several (ADR-280 D30).
+            out.push(f"impl{decl} {name}{params} {{\n    #[allow(dead_code)]\n    fn message(&self) -> String {{ self.to_string() }}\n}}\n")
+            // The long form asks the member (D2): a member the program declares
+            // carries its envelope and therefore its site, and a library's says
+            // there is none.
+            out.push(f"impl{decl} nikaia_std::error::Full for {name}{params} {{\n    fn full(&self) -> String {{\n        match self {{\n")
+            for member in members {
+                let variant = sum_variant(member)
+                let mut held: String = "nikaia_std::error::Full::full(e)"
+                if self.name_of_error(world, member) != 0 {
+                    held = "e.full()"
+                }
+                out.push(f"            {name}::{variant}(e) => {held},\n")
+            }
+            out.push("        }\n    }\n}\n\n")
+        }
+    }
+
+    /// The type a function's `Result` carries its failure in, from the set of
+    /// failures: the generated sum for two or more, the envelope for one the
+    /// emitter can name, a box otherwise. `elided` is whether the lifetimes in
+    /// hand are the elided ones, `params` and `static_params` the parameter
+    /// lists of the lifetimes in hand and of `'static`, and `borrows` whether
+    /// the function's own signature carries a view.
+    pub fn channel_of(ref self, world: ref EmitWorld, thrown: ref Vec[String], elided: bool, params: ref String, static_params: ref String, borrows: bool) -> String {
+        let sum = self.sums.get(thrown)
+        if sum != null {
+            let mut shown: String = ""
+            let mut any = false
+            for member in thrown {
+                if self.borrows_named(world, member) {
+                    any = true
+                }
+            }
+            if any {
+                shown = self.channel_params(elided, params, static_params, borrows)
+            }
+            return f"crate::{sum ?? ""}{shown}"
+        }
+        let kind = self.named_error_of(world, thrown)
+        if kind == 0 {
+            return "Box<dyn std::error::Error>"
+        }
+        let name = thrown[0].clone()
+        // A library's error travels in an envelope too (ADR-280 D13).
+        if kind == 2 {
+            return f"nikaia_std::error::Thrown<{name}>"
+        }
+        let mut shown: String = ""
+        if self.borrows_named(world, name) {
+            shown = self.channel_params(elided, params, static_params, borrows)
+        }
+        return f"nikaia_std::error::Thrown<{name}{shown}>"
+    }
+
+    fn channel_params(ref self, elided: bool, params: ref String, static_params: ref String, borrows: bool) -> String {
+        if elided && !borrows {
+            return f"<{static_params}>"
+        }
+        return f"<{params}>"
+    }
+
+    /// The failure channel of the function `key`.
+    pub fn error_channel(ref self, world: ref EmitWorld, key: ref String, elided: bool, params: ref String, static_params: ref String, borrows: bool) -> String {
+        let contract = self.own_contracts.functions.get(key) ?? return "Box<dyn std::error::Error>"
+        return self.channel_of(world, contract.fails_with, elided, params, static_params, borrows)
+    }
+}
