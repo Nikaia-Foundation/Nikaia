@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.824] — 2026-10-11
+
+**emit: the reads of the core are Nikaia: held receivers and indices, comparisons against a length, receivers, field calls, index reads, overlap, select**
+- tools/emit_core_reads.nika: hold_temporaries (owned receivers, `?.` receivers, indices read from the target), against_a_length, receiver, a_field_call, index_read, overlap and select as emit_core_* of EmitState; the Rust methods are one-line stubs and the dead Rust is deleted. EmitHost gains overlaps_user_code.
+
 ## [0.0.823] — 2026-10-11
 
 **check: the number knot, kept lambdas and a few field readers are Nikaia (#558, #125, C-5c)**
