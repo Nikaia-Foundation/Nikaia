@@ -17299,6 +17299,243 @@ fn match_path(pattern: &MatchPattern) -> Option<Vec<winnow_grammar::Symbol>> {
 }
 
 
+// --- emit_kinds.nika ---
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EmitTail {
+    Statement,
+    Value,
+    Return,
+}
+
+impl EmitTail {
+    pub fn is_value(self) -> bool { !matches!(self, EmitTail::Statement) }
+    pub fn at(self, i: i64, last: i64) -> EmitTail {
+        if i == last { return self; }
+        EmitTail::Statement
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EmitLifetimes {
+    Named,
+    Elided,
+    Inner,
+    Static,
+    Shared,
+    Kept,
+    Shortened,
+    Long,
+    Each,
+    StaticIn,
+    SharedIn,
+    KeptIn,
+    ShortenedIn,
+    LongIn,
+    EachIn,
+    OfInputEach,
+    OfInputElided,
+    OfInputStatic,
+    OfInputShared,
+    OfInputKept,
+    OfInputShortened,
+    OfInputLong,
+}
+
+impl EmitLifetimes {
+    pub fn reference(self) -> String {
+        match self {
+            EmitLifetimes::Named => String::from("&'a "),
+            EmitLifetimes::Elided => String::from("&"),
+            EmitLifetimes::Inner => String::from("&"),
+            EmitLifetimes::Static => String::from("&'static "),
+            EmitLifetimes::Shared => String::from("&'p "),
+            EmitLifetimes::Kept => String::from("&'k "),
+            EmitLifetimes::Shortened => String::from("&'s "),
+            EmitLifetimes::Long => String::from("&'long "),
+            EmitLifetimes::Each => String::from("&'e "),
+            EmitLifetimes::StaticIn => String::from("&'static "),
+            EmitLifetimes::SharedIn => String::from("&'p "),
+            EmitLifetimes::KeptIn => String::from("&'k "),
+            EmitLifetimes::ShortenedIn => String::from("&'s "),
+            EmitLifetimes::LongIn => String::from("&'long "),
+            EmitLifetimes::EachIn => String::from("&'e "),
+            _ => String::from("&'a "),
+        }
+    }
+    pub fn params(self) -> String {
+        match self {
+            EmitLifetimes::Named => String::from("'a"),
+            EmitLifetimes::Elided => String::from("'_"),
+            EmitLifetimes::Inner => String::from("'a"),
+            EmitLifetimes::Static => String::from("'static"),
+            EmitLifetimes::Shared => String::from("'p"),
+            EmitLifetimes::Kept => String::from("'k"),
+            EmitLifetimes::Shortened => String::from("'s"),
+            EmitLifetimes::Long => String::from("'long"),
+            EmitLifetimes::Each => String::from("'e"),
+            EmitLifetimes::StaticIn => String::from("'a"),
+            EmitLifetimes::SharedIn => String::from("'a"),
+            EmitLifetimes::KeptIn => String::from("'a"),
+            EmitLifetimes::ShortenedIn => String::from("'a"),
+            EmitLifetimes::LongIn => String::from("'a"),
+            EmitLifetimes::EachIn => String::from("'a"),
+            EmitLifetimes::OfInputEach => String::from("'e"),
+            EmitLifetimes::OfInputElided => String::from("'_"),
+            EmitLifetimes::OfInputStatic => String::from("'static"),
+            EmitLifetimes::OfInputShared => String::from("'p"),
+            EmitLifetimes::OfInputKept => String::from("'k"),
+            EmitLifetimes::OfInputShortened => String::from("'s"),
+            EmitLifetimes::OfInputLong => String::from("'long"),
+        }
+    }
+    pub fn over_the_input(self) -> EmitLifetimes {
+        match self {
+            EmitLifetimes::Elided => EmitLifetimes::Inner,
+            EmitLifetimes::Static => EmitLifetimes::StaticIn,
+            EmitLifetimes::Shared => EmitLifetimes::SharedIn,
+            EmitLifetimes::Kept => EmitLifetimes::KeptIn,
+            EmitLifetimes::Shortened => EmitLifetimes::ShortenedIn,
+            EmitLifetimes::Long => EmitLifetimes::LongIn,
+            EmitLifetimes::Each => EmitLifetimes::EachIn,
+            EmitLifetimes::Inner => EmitLifetimes::Inner,
+            EmitLifetimes::StaticIn => EmitLifetimes::StaticIn,
+            EmitLifetimes::SharedIn => EmitLifetimes::SharedIn,
+            EmitLifetimes::KeptIn => EmitLifetimes::KeptIn,
+            EmitLifetimes::ShortenedIn => EmitLifetimes::ShortenedIn,
+            EmitLifetimes::LongIn => EmitLifetimes::LongIn,
+            EmitLifetimes::EachIn => EmitLifetimes::EachIn,
+            _ => EmitLifetimes::Named,
+        }
+    }
+    pub fn of_the_input(self) -> EmitLifetimes {
+        match self {
+            EmitLifetimes::Elided => EmitLifetimes::OfInputElided,
+            EmitLifetimes::Static => EmitLifetimes::OfInputStatic,
+            EmitLifetimes::Shared => EmitLifetimes::OfInputShared,
+            EmitLifetimes::Kept => EmitLifetimes::OfInputKept,
+            EmitLifetimes::Shortened => EmitLifetimes::OfInputShortened,
+            EmitLifetimes::Long => EmitLifetimes::OfInputLong,
+            EmitLifetimes::OfInputElided => EmitLifetimes::OfInputElided,
+            EmitLifetimes::OfInputStatic => EmitLifetimes::OfInputStatic,
+            EmitLifetimes::OfInputShared => EmitLifetimes::OfInputShared,
+            EmitLifetimes::OfInputKept => EmitLifetimes::OfInputKept,
+            EmitLifetimes::OfInputShortened => EmitLifetimes::OfInputShortened,
+            EmitLifetimes::OfInputLong => EmitLifetimes::OfInputLong,
+            EmitLifetimes::OfInputEach => EmitLifetimes::OfInputEach,
+            EmitLifetimes::Each => EmitLifetimes::OfInputEach,
+            _ => EmitLifetimes::Named,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EmitPointer {
+    Run { mutable: bool },
+    Reference { mutable: bool },
+    Handle { give: bool },
+}
+
+pub fn emit_pointer_for(ty: &Type) -> Option<EmitPointer> {
+    if ty.is_slice { return Some(EmitPointer::Run { mutable: ty.is_mut }); }
+    if ty.is_view { return Some(EmitPointer::Reference { mutable: ty.is_mut }); }
+    None
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EmitNamed {
+    Own(String),
+    Library(String),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct EmitMethod {
+    pub receiver: Option<Receiver>,
+    pub returns_value: bool,
+    pub args: Vec<FnArg>,
+}
+
+impl EmitMethod {
+    pub fn mutates_in_place(&self) -> bool {
+        if self.returns_value { return false; }
+        let receiver = match self.receiver { Some(__nikaia_value) => __nikaia_value, None => return false };
+        receiver.is_ref && receiver.is_mut
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EmitRefused {
+    pub message: String,
+    pub at: Option<i64>,
+}
+
+impl EmitRefused {
+    fn message(&self) -> String { self.message.to_owned() }
+}
+impl std::fmt::Display for EmitRefused {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message())
+    }
+}
+impl std::error::Error for EmitRefused {}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EmitBuild {
+    pub overlaps_user_code: bool,
+    pub user_parallelism: bool,
+    pub crossings_are_possible: bool,
+    pub counts_steps: bool,
+    pub parallelism: String,
+    pub reentrancy: bool,
+    pub leaves_values: bool,
+    pub called_from_c: bool,
+    pub has_runtime: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EmitFlow {
+    pub can_throw: bool,
+    pub caught: bool,
+    pub caught_named: bool,
+    pub in_a_place: bool,
+    pub arms_are_statements: bool,
+    pub statement: i64,
+    pub handled_here: bool,
+    pub in_lambda: bool,
+    pub widen: bool,
+    pub inferred: bool,
+    pub in_loop: bool,
+}
+
+impl EmitFlow {
+    pub fn plain() -> EmitFlow { EmitFlow { can_throw: false, caught: false, caught_named: false, in_a_place: false, arms_are_statements: false, statement: -1, handled_here: false, in_lambda: false, widen: false, inferred: false, in_loop: false } }
+    pub fn inside_a_loop(self) -> EmitFlow { EmitFlow { in_loop: true, ..self } }
+    pub fn guarded(self) -> EmitFlow { EmitFlow { caught: true, ..self } }
+    pub fn joined_here(self) -> EmitFlow { EmitFlow { caught: true, handled_here: true, ..self } }
+    pub fn place(self) -> EmitFlow { EmitFlow { in_a_place: true, ..self } }
+    pub fn handling(self, named: bool) -> EmitFlow { EmitFlow { caught_named: named, ..self } }
+    pub fn at(self, statement: i64) -> EmitFlow { EmitFlow { statement: statement, ..self } }
+    pub fn widened(self) -> EmitFlow { EmitFlow { widen: true, ..self } }
+    pub fn inferred(self) -> EmitFlow { EmitFlow { inferred: true, ..self } }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct EmitScope {
+    pub origin: String,
+    pub function: String,
+    pub channel: String,
+    pub caught_sum: Option<String>,
+    pub caught_member: Option<String>,
+    pub bound: String,
+    pub changed: Vec<winnow_grammar::Symbol>,
+    pub awaited: Vec<winnow_grammar::Symbol>,
+}
+
+impl EmitScope {
+    pub fn plain() -> EmitScope { EmitScope { origin: String::from(""), function: String::from(""), channel: String::from("Box<dyn std::error::Error>"), caught_sum: None, caught_member: None, bound: String::from(""), changed: vec![], awaited: vec![] } }
+}
+
+
 // --- emit_locals.nika ---
 
 #[derive(Debug, Clone, PartialEq)]
@@ -38734,6 +38971,10 @@ pub mod emit_exprs {
 pub mod emit_items {
     #[allow(unused_imports)]
     pub use super::{foreign_params, opaque_handles, foreign_results, foreign_traits, declared_errors, sum_name, sum_variant, variant_slot, dsl_name, error_kind, sum_member_type, member_of};
+}
+pub mod emit_kinds {
+    #[allow(unused_imports)]
+    pub use super::{EmitTail, EmitLifetimes, EmitPointer, emit_pointer_for, EmitNamed, EmitMethod, EmitRefused, EmitBuild, EmitFlow, EmitScope};
 }
 pub mod emit_locals {
     #[allow(unused_imports)]

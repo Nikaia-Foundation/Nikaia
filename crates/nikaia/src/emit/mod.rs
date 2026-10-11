@@ -31,8 +31,8 @@ use winnow_grammar::Symbol;
 
 use crate::assets::Reads;
 use crate::ast::{
-    BinaryOp, Block, Expr, FnArg, FoldSpec, FrameAttr, GrammarDef, GrammarRule, Item, MatchPattern,
-    Pattern, Receiver, Repeat, SelectArm, Span, Spanned, Stmt, Type, UnaryOp, VariantFields,
+    BinaryOp, Block, Expr, FoldSpec, FrameAttr, GrammarDef, GrammarRule, Item, MatchPattern,
+    Pattern, Repeat, SelectArm, Span, Spanned, Stmt, Type, UnaryOp, VariantFields,
 };
 use crate::check::PausingEntry;
 use crate::contracts::SignatureOps;
@@ -397,106 +397,7 @@ const INPUT_LIFETIME: &str = "'a";
 
 /// How a view's lifetime is spelled here. The source never says either way
 /// (ADR-283); the position does.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct Lifetimes {
-    /// What a `&` becomes.
-    reference: &'static str,
-    /// What a type that holds a view is parameterised with.
-    params: &'static str,
-}
-
-impl Lifetimes {
-    /// Inside the grammar module and on the structs it builds, where `'a` is
-    /// the input's lifetime and has to be named to tie the two together.
-    const NAMED: Lifetimes = Lifetimes {
-        reference: "&'a ",
-        params: "'a",
-    };
-    /// In a free function's signature, which declares no lifetime of its own.
-    const ELIDED: Lifetimes = Lifetimes {
-        reference: "&",
-        params: "'_",
-    };
-    /// In a method of an `impl` that does declare `'a`: the reference itself is
-    /// still elided, because a borrow of the subject need not live as long as
-    /// what the subject points into.
-    const INNER: Lifetimes = Lifetimes {
-        reference: "&",
-        params: "'a",
-    };
-    /// **In the result of a function with nothing to borrow from.**
-    ///
-    /// `fn name() -> &str { "Ada" }` has no reference among its arguments and no
-    /// receiver, so there is no lifetime for Rust's elision to take - and
-    /// `-> &str` is *"missing lifetime specifier"* about a file nobody wrote
-    /// (Part III, C.1).
-    ///
-    /// **`'static` is the only lifetime that can be written there**, which is
-    /// what makes this a derivation rather than a choice: a view handed back by
-    /// a function that borrowed nothing can only point at something that
-    /// outlives the program. And it is safe to write even where the body cannot
-    /// honour it - `rustc` still checks the body, and refuses the Nikaia line
-    /// through [ADR-300](../../../docs/specification/adr/adr-300.md) rather than
-    /// the generated one. So this never accepts a wrong program and never
-    /// refuses a right one.
-    const STATIC: Lifetimes = Lifetimes {
-        reference: "&'static ",
-        params: "'static",
-    };
-    /// **Every view a free function is handed, and its result, where more than
-    /// one parameter is lowered as a view**
-    /// ([ADR-283](../../../docs/specification/adr/adr-283.md) D24): the result
-    /// borrows from the caller's arguments, and with two of them Rust's
-    /// elision has no one lifetime to give it, so the one they share is named.
-    const SHARED: Lifetimes = Lifetimes {
-        reference: "&'p ",
-        params: "'p",
-    };
-    /// **The keep a tethered function is given**
-    /// ([ADR-283](../../../docs/specification/adr/adr-283.md) D10): its views
-    /// point into the caller's keep, and live as long as it.
-    const KEPT: Lifetimes = Lifetimes {
-        reference: "&'k ",
-        params: "'k",
-    };
-    /// The same inside an `impl` that already names `'a`: the subject's buffer
-    /// and the keep are one lifetime, because the subject is what keeps.
-    const KEPT_BY_THE_SUBJECT: Lifetimes = Lifetimes {
-        reference: "&'a ",
-        params: "'a",
-    };
-    /// A tethered value read through its handle, for as long as it is borrowed
-    /// (ADR-283 D11).
-    const SHORTENED: Lifetimes = Lifetimes {
-        reference: "&'s ",
-        params: "'s",
-    };
-    /// What a `Views` type's `shorten` is handed: the value over the longer
-    /// of its two lifetimes ([ADR-218](../../../docs/specification/adr/adr-218.md) D4).
-    const LONG: Lifetimes = Lifetimes {
-        reference: "&'long ",
-        params: "'long",
-    };
-    /// What a `Views` type is over any lifetime, `Of<'a>`.
-    const ANY: Lifetimes = Lifetimes {
-        reference: "&'a ",
-        params: "'a",
-    };
-
-    /// The same, with the reference named: a view **of the input buffer** and
-    /// not of whatever the caller lends for the call.
-    ///
-    /// One parameter at a time, for the parameters `views::carried` says the
-    /// subject's own buffer already covers. Nothing else about the position
-    /// changes, which is why this is derived from the position rather than being
-    /// a fourth constant.
-    const fn of_the_input(self) -> Lifetimes {
-        Lifetimes {
-            reference: "&'a ",
-            params: self.params,
-        }
-    }
-}
+use nikaia_std::tools::emit_kinds::EmitLifetimes as Lifetimes;
 
 // --- The output, and the way back ---
 
@@ -1185,20 +1086,7 @@ struct Emitter<'p> {
 
 /// What an `impl` says about a method. Enough to adapt a `&mut self` method to
 /// the monoid a `par_fold` needs, and never more than the declaration states.
-#[derive(Debug, Clone)]
-struct Method {
-    receiver: Option<Receiver>,
-    returns_value: bool,
-    args: Vec<FnArg>,
-}
-
-impl Method {
-    /// A method that mutates its subject and yields nothing - the shape that
-    /// has to be threaded to become a fold's step or merge.
-    fn mutates_in_place(&self) -> bool {
-        !self.returns_value && self.receiver.is_some_and(|r| r.is_ref && r.is_mut)
-    }
-}
+use nikaia_std::tools::emit_kinds::EmitMethod as Method;
 
 /// How `Self::dsl` is spelled in the source, and what it becomes below.
 ///
@@ -1453,31 +1341,7 @@ const ABORT_TABLE: &str = "__NIKAIA_SITES";
 /// statement and always means what the source meant - ADR-296 D17's "the
 /// lowering is syntactic and never guesses a meaning", applied to the one place
 /// it had been guessing.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Tail {
-    /// Not a value position. The last statement is a statement like any other,
-    /// and keeps its semicolon.
-    Statement,
-    /// The last statement is the block's **value**, and that value is handed to
-    /// the expression around the block - not to whoever called the function.
-    Value,
-    /// The last statement is the **function's** (or the lambda's) return value.
-    /// Only here may a `return x` be written as `x`.
-    Return,
-}
-
-impl Tail {
-    /// Whether the last statement is the block's value at all - which is what
-    /// decides the semicolon, and what ADR-292's grouping may not take.
-    fn is_value(self) -> bool {
-        !matches!(self, Tail::Statement)
-    }
-
-    /// What the statement at `i` of a block whose last index is `last` is.
-    fn at(self, i: usize, last: usize) -> Self {
-        if i == last { self } else { Tail::Statement }
-    }
-}
+use nikaia_std::tools::emit_kinds::EmitTail as Tail;
 
 /// Which type a method belongs to, and which trait declared it.
 ///
@@ -2559,7 +2423,7 @@ impl<'p> Emitter<'p> {
         // `main` has no parameters, so there is nothing to borrow from and an
         // error carrying a view can only be `'static` — D9's derivation, one
         // position over.
-        let channel = self.error_channel(MAIN, Lifetimes::ELIDED, false);
+        let channel = self.error_channel(MAIN, Lifetimes::Elided, false);
         let ret = if throws {
             format!(" -> Result<(), {channel}>")
         } else {
@@ -2717,7 +2581,7 @@ impl<'p> Emitter<'p> {
                                     self.boxed_ty(
                                         enum_name,
                                         &member,
-                                        self.ty_counted(t, Lifetimes::NAMED, count),
+                                        self.ty_counted(t, Lifetimes::Named, count),
                                     )
                                 })
                                 .collect();
@@ -2739,7 +2603,7 @@ impl<'p> Emitter<'p> {
                                         self.boxed_ty(
                                             enum_name,
                                             &member,
-                                            self.ty(&f.ty, Lifetimes::NAMED)
+                                            self.ty(&f.ty, Lifetimes::Named)
                                         )
                                     )
                                 })
@@ -2779,7 +2643,7 @@ impl<'p> Emitter<'p> {
                     let slot = format!("{}.{}", self.text(*name), self.text(field.name));
                     let lowered = self.ty_counted(
                         &field.ty,
-                        Lifetimes::NAMED,
+                        Lifetimes::Named,
                         self.count_at(SHARED_FIELDS, &slot),
                     );
                     out.push(&format!(
@@ -2804,7 +2668,7 @@ impl<'p> Emitter<'p> {
                     out,
                     item,
                     0,
-                    Lifetimes::ELIDED,
+                    Lifetimes::Elided,
                     self.s.carries_input.get(&(span.at() as i64)),
                     None,
                 )
@@ -2823,9 +2687,9 @@ impl<'p> Emitter<'p> {
                     String::new()
                 };
                 let lifetimes = if borrows {
-                    Lifetimes::INNER
+                    Lifetimes::Inner
                 } else {
-                    Lifetimes::ELIDED
+                    Lifetimes::Elided
                 };
                 let target_name = self.text(target.name).to_string();
 
@@ -2861,7 +2725,7 @@ impl<'p> Emitter<'p> {
                     target
                         .generics
                         .iter()
-                        .map(|g| self.ty(g, Lifetimes::ELIDED)),
+                        .map(|g| self.ty(g, Lifetimes::Elided)),
                 );
                 let applied = angled(&target_parts);
                 // **`impl Cleanup for T` is the type's own `cleanup` and a
@@ -3172,7 +3036,7 @@ impl<'p> Emitter<'p> {
             };
             return format!("*{} {}", pointing(ty.is_mut), self.foreign_ty(&pointed));
         }
-        self.ty(ty, Lifetimes::ELIDED)
+        self.ty(ty, Lifetimes::Elided)
     }
 
     /// **The hull a call's result needs**, where the callee is a foreign
@@ -3301,7 +3165,7 @@ impl<'p> Emitter<'p> {
                 self.name(arg.name),
                 match foreign {
                     true => self.foreign_ty(&arg.ty),
-                    false => self.ty(&arg.ty, Lifetimes::ELIDED),
+                    false => self.ty(&arg.ty, Lifetimes::Elided),
                 }
             ));
         }
@@ -3312,7 +3176,7 @@ impl<'p> Emitter<'p> {
             params.push(format!(
                 "{}: {}",
                 self.name(option.name),
-                self.ty(&option.ty, Lifetimes::ELIDED)
+                self.ty(&option.ty, Lifetimes::Elided)
             ));
         }
         let returned = match &method.ret_type {
@@ -3333,7 +3197,7 @@ impl<'p> Emitter<'p> {
             }
             Some(ty) => match foreign {
                 true => self.foreign_ty(ty),
-                false => self.ty(ty, Lifetimes::ELIDED),
+                false => self.ty(ty, Lifetimes::Elided),
             },
             None => "()".to_string(),
         };
@@ -3561,7 +3425,7 @@ impl<'p> Emitter<'p> {
         // there is to borrow from; with two, which buffer is ADR-283's
         // question and already its refusal.
         let inner_views = match (lifetimes, receiver, kept, ret_type) {
-            (Lifetimes::ELIDED, None, None, Some(ty))
+            (Lifetimes::Elided, None, None, Some(ty))
                 if self.carries_a_view(ty) && carries_input.is_none_or(|set| set.is_empty()) =>
             {
                 let carrying: Vec<_> = args
@@ -3596,7 +3460,7 @@ impl<'p> Emitter<'p> {
                 return kept;
             }
             if inner_views == Some(name) {
-                return Lifetimes::NAMED;
+                return Lifetimes::Named;
             }
             let viewed = args.iter().any(|a| a.name == name && a.ty.is_view);
             match (
@@ -3606,10 +3470,7 @@ impl<'p> Emitter<'p> {
                 (true, true) => lifetimes.of_the_input(),
                 // **A struct parameter that carries a view parameter's buffer**
                 // is written over it: `s: &mut Summary<'a>, name: &'a str`.
-                (true, false) => Lifetimes {
-                    reference: lifetimes.reference,
-                    params: "'a",
-                },
+                (true, false) => lifetimes.over_the_input(),
                 (false, _) => lifetimes,
             }
         };
@@ -3638,7 +3499,7 @@ impl<'p> Emitter<'p> {
         };
         // **Two or more of them and a view handed back** (D24): they and the
         // result share one named lifetime, `'p`.
-        let shared = lifetimes == Lifetimes::ELIDED
+        let shared = lifetimes == Lifetimes::Elided
             && receiver.is_none()
             && kept.is_none()
             && inner_views.is_none()
@@ -3748,7 +3609,7 @@ impl<'p> Emitter<'p> {
                         self.walking(|w| std::mem::replace(&mut w.code_parameter_runs, runs));
                     let inside = self.walking(|w| std::mem::replace(&mut w.in_parameter, true));
                     let position = match shared {
-                        true => Lifetimes::SHARED,
+                        true => Lifetimes::Shared,
                         false => how(a.name),
                     };
                     let written = self.ty_counted(&a.ty, position, self.count_at(&key, name));
@@ -3840,7 +3701,7 @@ impl<'p> Emitter<'p> {
         if let Some(kept) = kept {
             params.push(format!(
                 "{KEEP_PARAM}: {}nikaia_std::tether::Keep",
-                kept.reference
+                kept.reference()
             ));
         }
 
@@ -3873,12 +3734,12 @@ impl<'p> Emitter<'p> {
                 .collect(),
         };
         let declared: Vec<String> = match kept {
-            Some(Lifetimes::KEPT) => std::iter::once("'k".to_string()).chain(declared).collect(),
+            Some(Lifetimes::Kept) => std::iter::once("'k".to_string()).chain(declared).collect(),
             _ => declared,
         };
         // **The buffer a struct parameter carries is named on the function**
         // where no `impl` names it already.
-        let declared: Vec<String> = match lifetimes == Lifetimes::ELIDED
+        let declared: Vec<String> = match lifetimes == Lifetimes::Elided
             && (carries_input.is_some_and(|set| !set.is_empty()) || inner_views.is_some())
         {
             true => std::iter::once("'a".to_string()).chain(declared).collect(),
@@ -3930,7 +3791,7 @@ impl<'p> Emitter<'p> {
                 // handed back by a function that borrowed nothing has to say
                 // `'static`, because there is nothing for Rust's elision to take
                 // and `-> &str` is a message about the generated file
-                // (`Lifetimes::STATIC`).
+                // (`Lifetimes::Static`).
                 //
                 // A receiver counts as something to borrow from, and so does any
                 // parameter that is a view or holds one. Where either is there,
@@ -3947,7 +3808,7 @@ impl<'p> Emitter<'p> {
                 // elision it needs.
                 //
                 // **And only where the position declares no lifetime of its
-                // own**, which is `Lifetimes::ELIDED` and is D9's own case: *a
+                // own**, which is `Lifetimes::Elided` and is D9's own case: *a
                 // free function's signature*. Inside an `impl` that declares
                 // `'a` the result is the subject's `'a`, and `'static` there
                 // says the value outlives the program — which is a promise the
@@ -3965,23 +3826,23 @@ impl<'p> Emitter<'p> {
                         .iter()
                         .enumerate()
                         .any(|(at, a)| self.carries_a_view(&a.ty) || lowered_as_a_view(at, a));
-                let widens = lifetimes == Lifetimes::ELIDED
+                let widens = lifetimes == Lifetimes::Elided
                     && self.carries_a_view(ty)
                     && !borrows_from_something;
                 let result = match (widens, kept) {
-                    _ if shared => Lifetimes::SHARED,
+                    _ if shared => Lifetimes::Shared,
                     (_, Some(kept))
                         if self.tethered_position(&key, crate::contracts::tether::RESULT) =>
                     {
                         kept
                     }
-                    (true, _) => Lifetimes::STATIC,
-                    (false, _) if inner_views.is_some() => Lifetimes::NAMED,
+                    (true, _) => Lifetimes::Static,
+                    (false, _) if inner_views.is_some() => Lifetimes::Named,
                     // **A published parameter's `'e` is the one lifetime there
                     // is** (ADR-282 D23): the elision does not read one out of
                     // an `impl` bound, so it is named.
                     (false, _)
-                        if lifetimes == Lifetimes::ELIDED
+                        if lifetimes == Lifetimes::Elided
                             && receiver.is_none()
                             && !self.walk(|w| w.either_prelude.is_empty())
                             && !args.iter().any(|a| {
@@ -3989,10 +3850,7 @@ impl<'p> Emitter<'p> {
                                     && !(a.ty.either && a.ty.generics.is_empty())
                             }) =>
                     {
-                        Lifetimes {
-                            reference: "&'e ",
-                            params: "'e",
-                        }
+                        Lifetimes::Each
                     }
                     (false, _) => lifetimes,
                 };
@@ -4330,7 +4188,7 @@ impl<'p> Emitter<'p> {
             // A value-returning `throws` function ends in its value; one that
             // returns nothing ends in the `Ok(())` below, so its last statement
             // is a statement like any other.
-            let here = tail.at(i, last);
+            let here = tail.at(i as i64, last as i64);
             // **A tail that is a `throw` is not wrapped**
             // ([ADR-292](../../docs/specification/adr/adr-292.md) D20): it writes
             // its own `Err(…)` and leaves, so an `Ok(` around it is
@@ -4445,7 +4303,7 @@ impl<'p> Emitter<'p> {
                 let ty = rule.ret_type.as_ref()?;
                 Some((
                     self.text(rule.name).to_string(),
-                    self.ty(ty, Lifetimes::NAMED),
+                    self.ty(ty, Lifetimes::Named),
                 ))
             })
             .collect();
@@ -4495,7 +4353,7 @@ impl<'p> Emitter<'p> {
         // (ADR-296 D25).
         let vis = if rule.is_entry { "pub " } else { "" };
         let ret = match &rule.ret_type {
-            Some(ty) => format!(" -> {}", self.ty(ty, Lifetimes::NAMED)),
+            Some(ty) => format!(" -> {}", self.ty(ty, Lifetimes::Named)),
             None => String::new(),
         };
         // The label sits between the return type and the `=`, in both
@@ -4601,7 +4459,7 @@ impl<'p> Emitter<'p> {
                 if !generics.is_empty() {
                     let params: Vec<String> = generics
                         .iter()
-                        .map(|g| self.ty(g, Lifetimes::NAMED))
+                        .map(|g| self.ty(g, Lifetimes::Named))
                         .collect();
                     out.push(&format!("<{}>", params.join(", ")));
                 }
@@ -4749,7 +4607,7 @@ impl<'p> Emitter<'p> {
                     is_slice: false,
                     either: false,
                 },
-                Lifetimes::NAMED,
+                Lifetimes::Named,
             );
             out.push(&format!(
                 "|mut a: {owner}, b| {{ a.{}({by_view}b); a }}",
@@ -5281,7 +5139,7 @@ impl<'p> Emitter<'p> {
                 let params: Vec<String> = ty
                     .generics
                     .iter()
-                    .map(|g| a_list_read_as_a_slice(self.ty_counted(g, Lifetimes::ELIDED, count)))
+                    .map(|g| a_list_read_as_a_slice(self.ty_counted(g, Lifetimes::Elided, count)))
                     .collect();
                 return format!(
                     "nikaia_std::func::Kept<dyn Fn({}) -> {outcome}{crossing}>",
@@ -5367,19 +5225,22 @@ impl<'p> Emitter<'p> {
                 Some(element) => self.ty_counted(element, lifetimes, count),
                 None => "u8".to_string(),
             };
-            return format!("{}[{element}]", lifetimes.reference);
+            return format!("{}[{element}]", lifetimes.reference());
         }
 
         // **Text both kinds of which flow into a position**
         // ([ADR-282](../../docs/specification/adr/adr-282.md) D14): a view
         // borrowed, text of its own owned, each where it is put in.
         if ty.either {
-            return format!("nikaia_std::either_text::EitherText<{}>", lifetimes.params);
+            return format!(
+                "nikaia_std::either_text::EitherText<{}>",
+                lifetimes.params()
+            );
         }
         // A view is a borrow of the parser's input, and that is where the
         // lifetime comes from - the source never writes one (ADR-283).
         if ty.is_view {
-            out.push_str(lifetimes.reference);
+            out.push_str(&lifetimes.reference());
         }
         // **A view of text is a `&str`**
         // ([ADR-184](../../docs/specification/adr/adr-184.md) D2). Text is one
@@ -5462,7 +5323,7 @@ impl<'p> Emitter<'p> {
             .collect();
         // A struct that holds a view carries the input lifetime with it.
         if self.borrows(ty.name) {
-            params.insert(0, lifetimes.params.to_string());
+            params.insert(0, lifetimes.params().to_string());
         }
         if !params.is_empty() {
             out.push_str(&format!("<{}>", params.join(", ")));
@@ -5763,7 +5624,7 @@ impl<'p> Emitter<'p> {
                         &stmt.node,
                         &stmt.span,
                         depth + 1,
-                        tail.at(i, last),
+                        tail.at(i as i64, last as i64),
                         flow,
                     )?;
                     declared.record(&stmt.span, st);
@@ -5813,7 +5674,7 @@ impl<'p> Emitter<'p> {
                     &stmt.node,
                     &stmt.span,
                     depth + 1,
-                    tail.at(i, last),
+                    tail.at(i as i64, last as i64),
                     flow,
                 )?;
                 out.record(&stmt.span, st);
@@ -6362,7 +6223,7 @@ impl<'p> Emitter<'p> {
                 self.walking(|w| w.holding = holding);
                 let annotation = match ty {
                     Some(_) if put.is_some() || packed => String::new(),
-                    Some(ty) => format!(": {}", self.ty_counted(ty, Lifetimes::ELIDED, count)),
+                    Some(ty) => format!(": {}", self.ty_counted(ty, Lifetimes::Elided, count)),
                     // **A number its uses typed is written with the type**
                     // ([ADR-285](../../docs/specification/adr/adr-285.md) D27):
                     // this compiler decided it, and the language below's own
@@ -8452,7 +8313,7 @@ impl<'p> Emitter<'p> {
                 }
             }
             Expr::Cast { expr, ty, .. } => {
-                let into = self.ty(ty, Lifetimes::ELIDED);
+                let into = self.ty(ty, Lifetimes::Elided);
                 // **A `for` lends, and `as` does not see through a view**
                 // ([ADR-182](../../docs/specification/adr/adr-182.md) D1).
                 // The checker says which operands those are, because which name is
@@ -10655,7 +10516,7 @@ impl<'p> Emitter<'p> {
             // bound where it is written, so an error carrying a view can only be
             // `'static` here — [ADR-283](../../docs/specification/adr/adr-283.md)
             // D9's derivation, one position over.
-            Some(set) => self.channel_of(set, Lifetimes::ELIDED, false),
+            Some(set) => self.channel_of(set, Lifetimes::Elided, false),
         };
 
         // **Each branch settles what it parks, where a value with a cleanup
@@ -10862,7 +10723,7 @@ impl<'p> Emitter<'p> {
             .then(|| self.joined_throws(arms.iter().map(|arm| &arm.value)));
         let channel = match &joined {
             None => flow.channel.to_string(),
-            Some(set) => self.channel_of(set, Lifetimes::ELIDED, false),
+            Some(set) => self.channel_of(set, Lifetimes::Elided, false),
         };
 
         let pad = "    ".repeat(depth);
@@ -11067,9 +10928,9 @@ impl<'p> Emitter<'p> {
         self.s.error_channel(
             &self.world,
             key,
-            lifetimes == Lifetimes::ELIDED,
-            lifetimes.params,
-            Lifetimes::STATIC.params,
+            lifetimes == Lifetimes::Elided,
+            &lifetimes.params(),
+            &Lifetimes::Static.params(),
             borrows,
         )
     }
@@ -11080,9 +10941,9 @@ impl<'p> Emitter<'p> {
         self.s.channel_of(
             &self.world,
             throws,
-            lifetimes == Lifetimes::ELIDED,
-            lifetimes.params,
-            Lifetimes::STATIC.params,
+            lifetimes == Lifetimes::Elided,
+            &lifetimes.params(),
+            &Lifetimes::Static.params(),
             borrows,
         )
     }
@@ -13853,31 +13714,12 @@ fn jumps_at_the_end(expr: &Expr) -> bool {
 /// Two shapes, because C's two are a run of elements and one value: a run is a
 /// pointer to the first element and the length is a parameter of its own (D2),
 /// and one value is an address Rust writes for a `&` on its own.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Pointer {
-    /// `&[T]` and `&mut [T]`: `.as_ptr()`, `.as_mut_ptr()`.
-    Run { mutable: bool },
-    /// `&T` and `&mut T`: a plain `&`, which Rust coerces to `*const T`.
-    Reference { mutable: bool },
-    /// **An opaque handle** (D3), passed as the address by value.
-    ///
-    /// `give` is true for the type's own **release** function and false for
-    /// every other declaration: that one call *is* the cleanup, so the handle
-    /// goes with it and Rust's own move is what keeps it from being released
-    /// twice. Everywhere else the caller keeps the handle, because a C function
-    /// that is handed one does not take it — `fileno(f)` reads it and `f` is
-    /// still the caller's to close.
-    Handle { give: bool },
-}
+use nikaia_std::tools::emit_kinds::EmitPointer as Pointer;
 
 /// Which of the two a declared parameter is, or `None` where it is an ordinary
 /// value an `i32` is at both ends.
 fn pointer_for(ty: &Type) -> Option<Pointer> {
-    match (ty.is_slice, ty.is_view) {
-        (true, _) => Some(Pointer::Run { mutable: ty.is_mut }),
-        (false, true) => Some(Pointer::Reference { mutable: ty.is_mut }),
-        (false, false) => None,
-    }
+    nikaia_std::tools::emit_kinds::emit_pointer_for(ty)
 }
 
 /// `const` or `mut`, the word Rust puts between the `*` and the type.
@@ -14624,9 +14466,9 @@ impl Emitter<'_> {
         if !crate::contracts::keep::takes_a_keep(contract) {
             return None;
         }
-        Some(match lifetimes.params {
-            "'a" => Lifetimes::KEPT_BY_THE_SUBJECT,
-            _ => Lifetimes::KEPT,
+        Some(match lifetimes.params().as_str() {
+            "'a" => Lifetimes::Named,
+            _ => Lifetimes::Kept,
         })
     }
 
@@ -14677,9 +14519,9 @@ impl Emitter<'_> {
     /// rather than trusted. The binding is a `Holding` over the task's keep,
     /// and nothing about it is `unsafe`.
     fn tether_wrapper(&self, ty: &Type) -> String {
-        let any = self.ty(ty, Lifetimes::ANY);
-        let long = self.ty(ty, Lifetimes::LONG);
-        let shortened = self.ty(ty, Lifetimes::SHORTENED);
+        let any = self.ty(ty, Lifetimes::Named);
+        let long = self.ty(ty, Lifetimes::Long);
+        let shortened = self.ty(ty, Lifetimes::Shortened);
         let wrappers = self.walk(|w| w.wrappers.clone());
         let position = wrappers
             .iter()

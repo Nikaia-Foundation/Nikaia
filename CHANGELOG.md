@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.807] — 2026-10-11
+
+**The emitter's small kinds are Nikaia: Tail, Lifetimes, Pointer, Method, and the halves Flow splits into (tools/emit_kinds.nika, #558, step E6).**
+- `EmitTail`, `EmitLifetimes` (the ten spellings and the ones derived from them), `EmitPointer`, `EmitMethod` and `EmitNamed` replace the Rust types of those names, which `emit` imports under the old names. `EmitRefused` (with `impl Error`), `EmitBuild` (the build's settings as booleans), `EmitFlow` (the flags, `Copy`) and `EmitScope` (the owned text and lists) are declared for the move of the walk; Rust's `Flow` is not converted yet.
+
 ## [0.0.806] — 2026-10-11
 
 **A field in a struct pattern takes a pattern (ADR-291 D25, #573).**

@@ -1,0 +1,340 @@
+// crates/nikaia-std/src/tools/emit_kinds.nika
+//
+// **The small kinds the emitter passes around**, declared in Nikaia
+// (ADR-294, #125, #558, step E6) so that the code that uses them can move:
+// where a body's last statement stands, the lifetimes a type is written with,
+// how a call hands a pointer to C, whether an error name is the unit's own or a
+// library's, what an `impl` says about a method, a refusal with its place, the
+// build's settings as booleans, and the two halves `Flow` splits into.
+
+/// Where a statement stands in the body it is in (ADR-296 D17's "the lowering
+/// never guesses a meaning"): not a value position, a value, or a value that
+/// may be a `return`.
+pub enum EmitTail {
+    Statement,
+    Value,
+    Return,
+}
+
+impl EmitTail {
+    /// The last statement is the value of what surrounds it.
+    pub fn is_value(self) -> bool {
+        return match self {
+            EmitTail::Statement => false,
+            else => true,
+        }
+    }
+
+    /// The same, for the statement `i` of a block whose last is `last`: only
+    /// the last keeps it.
+    pub fn at(self, i: i64, last: i64) -> EmitTail {
+        if i == last {
+            return self
+        }
+        return EmitTail::Statement
+    }
+}
+
+/// The lifetimes a type is written with: how a reference is spelled and what
+/// the parameters of a type carry.
+pub enum EmitLifetimes {
+    /// `&'a ` and `'a`.
+    Named,
+    /// `&` and `'_`.
+    Elided,
+    /// `&` and `'a`.
+    Inner,
+    /// `&'static ` and `'static`.
+    Static,
+    /// `&'p ` and `'p`.
+    Shared,
+    /// `&'k ` and `'k`.
+    Kept,
+    /// `&'s ` and `'s`.
+    Shortened,
+    /// `&'long ` and `'long`.
+    Long,
+    /// `&'e ` and `'e`.
+    Each,
+    /// `&'static ` and `'a`.
+    StaticIn,
+    /// `&'p ` and `'a`.
+    SharedIn,
+    /// `&'k ` and `'a`.
+    KeptIn,
+    /// `&'s ` and `'a`.
+    ShortenedIn,
+    /// `&'long ` and `'a`.
+    LongIn,
+    /// `&'e ` and `'a`.
+    EachIn,
+    /// `&'a ` and `'e`.
+    OfInputEach,
+    /// `&'a ` and `'_`.
+    OfInputElided,
+    /// `&'a ` and `'static`.
+    OfInputStatic,
+    /// `&'a ` and `'p`.
+    OfInputShared,
+    /// `&'a ` and `'k`.
+    OfInputKept,
+    /// `&'a ` and `'s`.
+    OfInputShortened,
+    /// `&'a ` and `'long`.
+    OfInputLong,
+}
+
+impl EmitLifetimes {
+    /// How a reference is spelled.
+    pub fn reference(self) -> String {
+        return match self {
+            EmitLifetimes::Named => "&'a ",
+            EmitLifetimes::Elided => "&",
+            EmitLifetimes::Inner => "&",
+            EmitLifetimes::Static => "&'static ",
+            EmitLifetimes::Shared => "&'p ",
+            EmitLifetimes::Kept => "&'k ",
+            EmitLifetimes::Shortened => "&'s ",
+            EmitLifetimes::Long => "&'long ",
+            EmitLifetimes::Each => "&'e ",
+            EmitLifetimes::StaticIn => "&'static ",
+            EmitLifetimes::SharedIn => "&'p ",
+            EmitLifetimes::KeptIn => "&'k ",
+            EmitLifetimes::ShortenedIn => "&'s ",
+            EmitLifetimes::LongIn => "&'long ",
+            EmitLifetimes::EachIn => "&'e ",
+            else => "&'a ",
+        }
+    }
+
+    /// What the parameters of a type carry.
+    pub fn params(self) -> String {
+        return match self {
+            EmitLifetimes::Named => "'a",
+            EmitLifetimes::Elided => "'_",
+            EmitLifetimes::Inner => "'a",
+            EmitLifetimes::Static => "'static",
+            EmitLifetimes::Shared => "'p",
+            EmitLifetimes::Kept => "'k",
+            EmitLifetimes::Shortened => "'s",
+            EmitLifetimes::Long => "'long",
+            EmitLifetimes::Each => "'e",
+            EmitLifetimes::StaticIn => "'a",
+            EmitLifetimes::SharedIn => "'a",
+            EmitLifetimes::KeptIn => "'a",
+            EmitLifetimes::ShortenedIn => "'a",
+            EmitLifetimes::LongIn => "'a",
+            EmitLifetimes::EachIn => "'a",
+            EmitLifetimes::OfInputEach => "'e",
+            EmitLifetimes::OfInputElided => "'_",
+            EmitLifetimes::OfInputStatic => "'static",
+            EmitLifetimes::OfInputShared => "'p",
+            EmitLifetimes::OfInputKept => "'k",
+            EmitLifetimes::OfInputShortened => "'s",
+            EmitLifetimes::OfInputLong => "'long",
+        }
+    }
+
+    /// The same reference, over the input's own lifetime parameter `'a`.
+    pub fn over_the_input(self) -> EmitLifetimes {
+        return match self {
+            EmitLifetimes::Elided => EmitLifetimes::Inner,
+            EmitLifetimes::Static => EmitLifetimes::StaticIn,
+            EmitLifetimes::Shared => EmitLifetimes::SharedIn,
+            EmitLifetimes::Kept => EmitLifetimes::KeptIn,
+            EmitLifetimes::Shortened => EmitLifetimes::ShortenedIn,
+            EmitLifetimes::Long => EmitLifetimes::LongIn,
+            EmitLifetimes::Each => EmitLifetimes::EachIn,
+            EmitLifetimes::Inner => EmitLifetimes::Inner,
+            EmitLifetimes::StaticIn => EmitLifetimes::StaticIn,
+            EmitLifetimes::SharedIn => EmitLifetimes::SharedIn,
+            EmitLifetimes::KeptIn => EmitLifetimes::KeptIn,
+            EmitLifetimes::ShortenedIn => EmitLifetimes::ShortenedIn,
+            EmitLifetimes::LongIn => EmitLifetimes::LongIn,
+            EmitLifetimes::EachIn => EmitLifetimes::EachIn,
+            else => EmitLifetimes::Named,
+        }
+    }
+
+    /// The same parameters, with a reference spelled over the input's buffer.
+    pub fn of_the_input(self) -> EmitLifetimes {
+        return match self {
+            EmitLifetimes::Elided => EmitLifetimes::OfInputElided,
+            EmitLifetimes::Static => EmitLifetimes::OfInputStatic,
+            EmitLifetimes::Shared => EmitLifetimes::OfInputShared,
+            EmitLifetimes::Kept => EmitLifetimes::OfInputKept,
+            EmitLifetimes::Shortened => EmitLifetimes::OfInputShortened,
+            EmitLifetimes::Long => EmitLifetimes::OfInputLong,
+            EmitLifetimes::OfInputElided => EmitLifetimes::OfInputElided,
+            EmitLifetimes::OfInputStatic => EmitLifetimes::OfInputStatic,
+            EmitLifetimes::OfInputShared => EmitLifetimes::OfInputShared,
+            EmitLifetimes::OfInputKept => EmitLifetimes::OfInputKept,
+            EmitLifetimes::OfInputShortened => EmitLifetimes::OfInputShortened,
+            EmitLifetimes::OfInputLong => EmitLifetimes::OfInputLong,
+            EmitLifetimes::OfInputEach => EmitLifetimes::OfInputEach,
+            EmitLifetimes::Each => EmitLifetimes::OfInputEach,
+            else => EmitLifetimes::Named,
+        }
+    }
+}
+
+/// How a call makes the address an `extern` declaration takes (ADR-302 D5).
+pub enum EmitPointer {
+    /// `&[T]` and `&mut [T]`: `.as_ptr()`, `.as_mut_ptr()`.
+    Run { mutable: bool },
+    /// `&T` and `&mut T`: a plain `&`, which Rust coerces to `*const T`.
+    Reference { mutable: bool },
+    /// An opaque handle (D3), passed as the address by value; `give` is true
+    /// for the type's own release function.
+    Handle { give: bool },
+}
+
+/// Which of the first two a declared parameter is, or `null` where it is an
+/// ordinary value.
+pub fn emit_pointer_for(ty: ref Type) -> EmitPointer? {
+    if ty.is_slice {
+        return EmitPointer::Run { mutable: ty.is_mut }
+    }
+    if ty.is_view {
+        return EmitPointer::Reference { mutable: ty.is_mut }
+    }
+    return null
+}
+
+/// An error name the emitter can write: the unit declares it, or a ledger
+/// describes the type.
+pub enum EmitNamed {
+    Own(String),
+    Library(String),
+}
+
+/// What an `impl` says about a method: enough to adapt a `&mut self` method to
+/// the monoid a `par_fold` needs, and never more than the declaration states.
+pub struct EmitMethod {
+    pub receiver: Receiver?,
+    pub returns_value: bool,
+    pub args: Vec[FnArg],
+}
+
+impl EmitMethod {
+    /// A method that mutates its subject and yields nothing - the shape that
+    /// has to be threaded to become a fold's step or merge.
+    pub fn mutates_in_place(ref self) -> bool {
+        if self.returns_value {
+            return false
+        }
+        let receiver = self.receiver ?? return false
+        return receiver.is_ref && receiver.is_mut
+    }
+}
+
+/// The compiler refuses the program: what it says, and the statement it is
+/// about where there is one.
+pub struct EmitRefused {
+    pub message: String,
+    pub at: i64?,
+}
+
+impl Error for EmitRefused {
+    fn message(ref self) -> String {
+        return self.message.clone()
+    }
+}
+
+/// The build's settings as the emitter asks about them, all booleans. The Rust
+/// `Build` fills it once.
+pub struct EmitBuild {
+    /// User code may run on more than one thread, on a target that has them.
+    pub overlaps_user_code: bool,
+    /// `--user-parallelism=yes`.
+    pub user_parallelism: bool,
+    /// Values may cross threads, or the program is called from C.
+    pub crossings_are_possible: bool,
+    /// The build counts steps.
+    pub counts_steps: bool,
+    /// What the runtime is asked to do: `Parallelism::Off` or `Auto`.
+    pub parallelism: String,
+    /// The reentrancy check is on.
+    pub reentrancy: bool,
+    /// The build keeps values a function leaves.
+    pub leaves_values: bool,
+    /// The program is called from C.
+    pub called_from_c: bool,
+    /// The target has an async runtime.
+    pub has_runtime: bool,
+}
+
+/// What surrounds the statements being emitted, the parts that are flags: 11
+/// booleans and the statement they are about. Passed by value; `Copy`.
+pub struct EmitFlow {
+    pub can_throw: bool,
+    pub caught: bool,
+    pub caught_named: bool,
+    pub in_a_place: bool,
+    pub arms_are_statements: bool,
+    pub statement: i64,
+    pub handled_here: bool,
+    pub in_lambda: bool,
+    pub widen: bool,
+    pub inferred: bool,
+    pub in_loop: bool,
+}
+
+impl EmitFlow {
+    /// Nothing around: no statement, no flag.
+    pub fn plain() -> EmitFlow {
+        return EmitFlow { can_throw: false, caught: false, caught_named: false, in_a_place: false, arms_are_statements: false, statement: -1, handled_here: false, in_lambda: false, widen: false, inferred: false, in_loop: false }
+    }
+
+    pub fn inside_a_loop(self) -> EmitFlow {
+        return self with { in_loop: true }
+    }
+
+    pub fn guarded(self) -> EmitFlow {
+        return self with { caught: true }
+    }
+
+    pub fn joined_here(self) -> EmitFlow {
+        return self with { caught: true, handled_here: true }
+    }
+
+    pub fn place(self) -> EmitFlow {
+        return self with { in_a_place: true }
+    }
+
+    pub fn handling(self, named: bool) -> EmitFlow {
+        return self with { caught_named: named }
+    }
+
+    pub fn at(self, statement: i64) -> EmitFlow {
+        return self with { statement: statement }
+    }
+
+    pub fn widened(self) -> EmitFlow {
+        return self with { widen: true }
+    }
+
+    pub fn inferred(self) -> EmitFlow {
+        return self with { inferred: true }
+    }
+}
+
+/// What surrounds the statements being emitted, the parts that are text and
+/// lists, owned. Passed by reference; a derived one is `scope.clone() with {..}`.
+pub struct EmitScope {
+    pub origin: String,
+    pub function: String,
+    pub channel: String,
+    pub caught_sum: String?,
+    pub caught_member: String?,
+    pub bound: String,
+    pub changed: Vec[winnow_grammar::Symbol],
+    pub awaited: Vec[winnow_grammar::Symbol],
+}
+
+impl EmitScope {
+    /// Nothing around: the opaque channel, no names.
+    pub fn plain() -> EmitScope {
+        return EmitScope { origin: "", function: "", channel: "Box<dyn std::error::Error>", caught_sum: null, caught_member: null, bound: "", changed: [], awaited: [] }
+    }
+}
