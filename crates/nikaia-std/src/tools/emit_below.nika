@@ -1,0 +1,518 @@
+// crates/nikaia-std/src/tools/emit_below.nika
+//
+// **The questions the emitter's walk asks that read nothing but the file's
+// names, its items and the tables of `EmitState`**, moved from `emit/mod.rs`
+// (ADR-294, #125, #558, step E7): whether a call enters one of the file's
+// grammars, whether a function of the file takes or holds text of both kinds,
+// whether a name is a variant, which count a shared allocation gets, and
+// whether a call opens a paused scope or is decided by its lambda. Methods of
+// `EmitState`; `EmitWorld` is the file's names and items.
+
+use std::collections
+
+/// Whether a rule is a `par_fold`: the only body the backend generates a piece
+/// driver for.
+fn emit_is_a_par_fold(rule: ref GrammarRule) -> bool {
+    for alt in rule.alts {
+        match alt.pattern.node {
+            Pattern::Fold(spec) => {
+                if spec.parallel {
+                    return true
+                }
+            },
+            Pattern::Bind { pat, .. } => {
+                match pat.node {
+                    Pattern::Fold(spec) => {
+                        if spec.parallel {
+                            return true
+                        }
+                    },
+                    else => {},
+                }
+            },
+            else => {},
+        }
+    }
+    return false
+}
+
+/// The function `item` is, when it is one called `own` whose parameter `at`
+/// takes text of both kinds: `1` when it does, `0` when it does not, `-1` when
+/// the item is no such function.
+fn emit_either_at(world: ref EmitWorld, item: ref Item, own: ref String, at: i64) -> i64 {
+    match item {
+        Item::Fn { name, args, .. } => {
+            let called = name ?? return -1
+            if world.words.resolve(called) != own {
+                return -1
+            }
+            if at < args.len() && args[at].ty.either {
+                return 1
+            }
+            return 0
+        },
+        else => {},
+    }
+    return -1
+}
+
+/// The text a path is written with, joined with `::`, or a variable's name;
+/// nothing else is a name.
+fn emit_callee_text(world: ref EmitWorld, func: ref Expr) -> String? {
+    match func {
+        Expr::Variable(name, _) => {
+            return world.words.resolve(name).clone()
+        },
+        Expr::Path(segments, _) => {
+            let mut parts: Vec[String] = []
+            for segment in segments {
+                parts.push(world.words.resolve(segment).clone())
+            }
+            return parts.join("::")
+        },
+        else => {},
+    }
+    return null
+}
+
+impl EmitState {
+    /// Whether `receiver.method(..)` enters a grammar: a receiver naming one of
+    /// this file's grammars and a method naming one of its entries
+    /// (ADR-296 D24, D25).
+    pub fn enters_a_grammar(ref self, world: ref EmitWorld, receiver: ref Expr, method: winnow_grammar::Symbol) -> bool {
+        match receiver {
+            Expr::Variable(name, _) => {
+                let def = self.grammars.get(world.words.resolve(name)) ?? return false
+                for rule in def.rules {
+                    if rule.is_entry && rule.name == method {
+                        return true
+                    }
+                }
+                return false
+            },
+            else => {},
+        }
+        return false
+    }
+
+    /// Whether the expression is the entry of a grammar written as a path call
+    /// with one argument (ADR-185 D2).
+    fn emit_enters_by_path(ref self, world: ref EmitWorld, expr: ref Expr) -> bool {
+        match expr {
+            Expr::Call { func, args, .. } => {
+                match func {
+                    Expr::Path(segments, _) => {
+                        return segments.len() == 2 && self.grammars.contains_key(world.words.resolve(segments[0])) && args.len() == 1
+                    },
+                    else => {},
+                }
+            },
+            else => {},
+        }
+        return false
+    }
+
+    /// Whether this statement enters a grammar (ADR-185 D2): the one lowering
+    /// that leaves a temporary borrowing a local behind.
+    pub fn a_tail_that_enters_a_grammar(ref self, world: ref EmitWorld, stmt: ref Stmt) -> bool {
+        let mut inside: Vec[ref Expr] = []
+        match stmt {
+            Stmt::Expr(expr) => {
+                inside = visited_in_expr(expr)
+            },
+            Stmt::Return(value) => {
+                let expr = value ?? return false
+                inside = visited_in_expr(expr)
+            },
+            else => {},
+        }
+        for expr in inside {
+            if self.emit_enters_by_path(world, expr) {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// Whether the expression enters a rule that is a `par_fold`.
+    fn emit_enters_a_parallel_rule(ref self, world: ref EmitWorld, expr: ref Expr) -> bool {
+        match expr {
+            Expr::Call { func, .. } => {
+                match func {
+                    Expr::Path(segments, _) => {
+                        if segments.len() != 2 {
+                            return false
+                        }
+                        let def = self.grammars.get(world.words.resolve(segments[0])) ?? return false
+                        for rule in def.rules {
+                            if rule.is_entry && rule.name == segments[1] && emit_is_a_par_fold(rule) {
+                                return true
+                            }
+                        }
+                    },
+                    else => {},
+                }
+            },
+            else => {},
+        }
+        return false
+    }
+
+    /// Whether any grammar entry in the program reaches a parallel rule, which
+    /// decides whether the piece driver's names are in the preamble.
+    pub fn uses_driver(ref self, world: ref EmitWorld) -> bool {
+        for item in world.items {
+            match item.node {
+                Item::Fn { body, .. } => {
+                    for expr in visited_in_block(body) {
+                        if self.emit_enters_a_parallel_rule(world, expr) {
+                            return true
+                        }
+                    }
+                },
+                else => {},
+            }
+        }
+        return false
+    }
+
+    /// Whether parameter `at` of what `callee` names is text both kinds of
+    /// which flow into (ADR-282 D14): a function of this unit by name, or a
+    /// method by its name where every method of that name agrees.
+    pub fn either_param(ref self, world: ref EmitWorld, callee: ref String, at: i64) -> bool {
+        let own = emit_base(callee)
+        let mut seen = 0
+        for item in world.items {
+            match item.node {
+                Item::Impl { methods, .. } => {
+                    for method in methods {
+                        let found = emit_either_at(world, method.node, own, at)
+                        if found == 0 {
+                            return false
+                        }
+                        if found == 1 {
+                            seen += 1
+                        }
+                    }
+                },
+                else => {
+                    let found = emit_either_at(world, item.node, own, at)
+                    if found == 0 {
+                        return false
+                    }
+                    if found == 1 {
+                        seen += 1
+                    }
+                },
+            }
+        }
+        return seen > 0
+    }
+
+    /// Whether a struct's field is text both kinds of which flow into
+    /// (ADR-282 D14).
+    pub fn either_field(ref self, world: ref EmitWorld, owner: ref String, field: winnow_grammar::Symbol) -> bool {
+        let wanted = world.words.resolve(field)
+        let own = emit_base(owner)
+        for item in world.items {
+            match item.node {
+                Item::Struct { name, fields, .. } => {
+                    if world.words.resolve(name) == own {
+                        for each in fields {
+                            if each.ty.either && world.words.resolve(each.name) == wanted {
+                                return true
+                            }
+                        }
+                    }
+                },
+                else => {},
+            }
+        }
+        return false
+    }
+
+    /// Whether `variant` is a variant of the enum `owner`: one this file
+    /// declares, or one another unit of the package declares, which its entry
+    /// in the package's ledger says.
+    pub fn is_variant(ref self, world: ref EmitWorld, owner: ref String, variant: ref String) -> bool {
+        for item in world.items {
+            match item.node {
+                Item::Enum { name, variants, .. } => {
+                    if world.words.resolve(name) == owner {
+                        for each in variants {
+                            if world.words.resolve(each.name) == variant {
+                                return true
+                            }
+                        }
+                    }
+                },
+                else => {},
+            }
+        }
+        let entry = self.own_contracts.types.get(owner) ?? return false
+        for each in entry.variants {
+            if each.name == variant {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// Whether `task::scope(..)` is called with a body the checker found
+    /// pausing.
+    pub fn opens_a_paused_scope(ref self, world: ref EmitWorld, func: ref Expr, args: ref Vec[Expr]) -> bool {
+        match func {
+            Expr::Path(_, _) => {},
+            else => { return false },
+        }
+        let name = emit_callee_text(world, func) ?? return false
+        if unaliased_in(world.aliases, name) != "task::scope" || args.len() == 0 {
+            return false
+        }
+        return self.facts.paused_scopes.contains(node_key(args[0]))
+    }
+
+    /// Whether the callee is decided by its lambda alone.
+    pub fn decided_by_its_lambda(ref self, world: ref EmitWorld, func: ref Expr) -> bool {
+        let name = emit_callee_text(world, func) ?? return false
+        return self.lambda_decides(unaliased_in(world.aliases, name))
+    }
+
+    /// What a shared allocation at `value` of `function` is counted with.
+    /// `crossings` is whether the build can have a value cross a thread: at one
+    /// user thread every count is plain (ADR-312 D10), also where the analysis
+    /// has no entry.
+    pub fn count_at(ref self, crossings: bool, function: ref String, value: ref String) -> Count {
+        if !crossings {
+            return Count::Plain
+        }
+        let key = f"{function}::{value}"
+        let found = self.shared.get(key) ?? return Count::Atomic
+        return found.clone()
+    }
+
+    /// Whether any of the expressions can fail where the branch is.
+    fn emit_any_can_fail(ref self, world: ref EmitWorld, statement: i64, all: ref Vec[Expr]) -> bool {
+        for each in all {
+            if self.branch_can_fail(world, statement, each) {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// Whether any option passed at a call can fail where the branch is.
+    fn emit_config_can_fail(ref self, world: ref EmitWorld, statement: i64, config: ref Vec[ConfigArg]) -> bool {
+        for each in config {
+            if self.branch_can_fail(world, statement, each.value) {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// A method call, or one that may not happen, whose failure is the
+    /// branch's: a grammar entry propagates on its own (ADR-296 D25).
+    fn emit_method_can_fail(ref self, world: ref EmitWorld, statement: i64, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg]) -> bool {
+        return self.enters_a_grammar(world, receiver, method)
+            || self.method_can_fail(statement, world.words.resolve(method))
+            || self.branch_can_fail(world, statement, receiver)
+            || self.emit_any_can_fail(world, statement, args)
+            || self.emit_config_can_fail(world, statement, config)
+    }
+
+    /// Whether a block's statement can fail: a value it binds has a cleanup
+    /// that can (ADR-297 D4), or the value it is can.
+    fn emit_block_can_fail(ref self, world: ref EmitWorld, statement: i64, block: ref Block) -> bool {
+        for stmt in block.stmts {
+            let at = stmt.span.start as i64
+            if self.facts.settle_lets.get(at) ?? false {
+                return true
+            }
+            match stmt.node {
+                Stmt::Expr(value) => {
+                    if self.branch_can_fail(world, statement, value) {
+                        return true
+                    }
+                },
+                Stmt::Let { value, .. } => {
+                    if self.branch_can_fail(world, statement, value) {
+                        return true
+                    }
+                },
+                else => {},
+            }
+        }
+        return false
+    }
+
+    /// Whether the guarded half of a `catch` can fail; the handler is not
+    /// counted.
+    fn emit_handler_can_fail(ref self, world: ref EmitWorld, statement: i64, handler: ref Block) -> bool {
+        for stmt in handler.stmts {
+            match stmt.node {
+                Stmt::Expr(value) => {
+                    if self.branch_can_fail(world, statement, value) {
+                        return true
+                    }
+                },
+                else => {},
+            }
+        }
+        return false
+    }
+
+    /// Whether a branch of a joining block can fail, so that its failure is
+    /// the block's.
+    pub fn branch_can_fail(ref self, world: ref EmitWorld, statement: i64, value: ref Expr) -> bool {
+        match value {
+            Expr::Call { func, args, config, .. } => {
+                return call_can_fail(world.words, self.own_contracts, world.library, self.described, func)
+                    || self.emit_any_can_fail(world, statement, args)
+                    || self.emit_config_can_fail(world, statement, config)
+            },
+            Expr::MethodCall { receiver, method, args, config, .. } => {
+                return self.emit_method_can_fail(world, statement, receiver, method, args, config)
+            },
+            Expr::SafeMethod { receiver, method, args, config, .. } => {
+                return self.emit_method_can_fail(world, statement, receiver, method, args, config)
+            },
+            Expr::TryCatch { handler, .. } => return self.emit_handler_can_fail(world, statement, handler),
+            Expr::Throw(_, _) => return true,
+            Expr::Block(block, _) => return self.emit_block_can_fail(world, statement, block),
+            Expr::Try(inner, _) => return self.branch_can_fail(world, statement, inner),
+            Expr::Unary { expr, .. } => return self.branch_can_fail(world, statement, expr),
+            Expr::Binary { lhs, rhs, .. } => {
+                return self.branch_can_fail(world, statement, lhs) || self.branch_can_fail(world, statement, rhs)
+            },
+            Expr::Coalesce { value, fallback, .. } => {
+                return self.branch_can_fail(world, statement, value) || self.branch_can_fail(world, statement, fallback)
+            },
+            Expr::Field { base, .. } => return self.branch_can_fail(world, statement, base),
+            Expr::SafeField { base, .. } => return self.branch_can_fail(world, statement, base),
+            Expr::Index { base, index, .. } => {
+                return self.branch_can_fail(world, statement, base) || self.branch_can_fail(world, statement, index)
+            },
+            else => {},
+        }
+        return false
+    }
+}
+
+impl EmitState {
+    /// A path as the language below writes it: `Vec::new` of a type the build
+    /// maps is its `default`, every segment is mapped, and the head is read
+    /// through the file's aliases (ADR-286 D12) - once, on the joined path,
+    /// because an alias is this file's name for a package and the head segment
+    /// is where one can stand.
+    pub fn path(ref self, world: ref EmitWorld, trusting: bool, segments: ref Vec[String]) -> String {
+        if segments.len() == 2 && segments[1] == "new" {
+            let chosen = self.map_name(trusting, segments[0])
+            if chosen != segments[0] {
+                return f"{chosen}::default"
+            }
+        }
+        let mut mapped: Vec[String] = []
+        for segment in segments {
+            mapped.push(self.map_name(trusting, segment))
+        }
+        let joined = mapped.join("::")
+        return unaliased_in(world.aliases, joined)
+    }
+
+    /// A type name as the language below writes it: a shared handle by the count
+    /// it was given, and the lock inside it by the same count (ADR-281 D7) -
+    /// always the cheap one at one user thread (D2).
+    pub fn written_name(ref self, world: ref EmitWorld, crossings: bool, trusting: bool, name: ref String, count: Count) -> String {
+        if name == "Shared" {
+            return rust_name(count)
+        }
+        if name == "Locked" {
+            if !crossings {
+                return lock_name(Count::Plain)
+            }
+            return lock_name(count)
+        }
+        let mapped = self.mapped_path(trusting, name)
+        return unaliased_in(world.aliases, mapped)
+    }
+
+    /// The names a constructor of a sharing type is written with: one for a
+    /// shared handle or a lock, both for a shared and locked one.
+    pub fn hull_new(ref self, world: ref EmitWorld, crossings: bool, trusting: bool, name: ref String, count: Count) -> Vec[String]? {
+        if name == "Shared" {
+            return [self.written_name(world, crossings, trusting, "Shared", count)]
+        }
+        if name == "Locked" {
+            return [self.written_name(world, crossings, trusting, "Locked", count)]
+        }
+        if name == "SharedMut" {
+            return [self.written_name(world, crossings, trusting, "Shared", count), self.written_name(world, crossings, trusting, "Locked", count)]
+        }
+        return null
+    }
+
+    /// The value `attributes(T)` or `attribute(T)` is, from the attribute lines
+    /// the checker kept for the type the first argument names.
+    pub fn attributes_read(ref self, world: ref EmitWorld, wanted: ref String, args: ref Vec[Expr], texts: ref Vec[String]) -> String {
+        let mut written: String = ""
+        if args.len() > 0 {
+            written = emit_callee_text(world, args[0]) ?? ""
+        }
+        let asked = unaliased_in(world.aliases, written)
+        let mut values: Vec[String] = []
+        for text in texts {
+            let parts: Vec[String] = text.split(" { ").collect()
+            if parts[0] == asked {
+                values.push(self.attribute_in_rust(world, text))
+            }
+        }
+        if wanted == "attribute" {
+            if values.len() > 0 {
+                return f"Some({values[0]})"
+            }
+            return f"None::<{asked}>"
+        }
+        if values.len() > 0 {
+            let joined = values.join(", ")
+            return f"vec![{joined}]"
+        }
+        return f"Vec::<{asked}>::new()"
+    }
+}
+
+/// Whether a bound is one the language below does not carry: `Struct` and
+/// `Enum`, when the file declares no trait of that name.
+pub fn emit_is_a_shape_bound(world: ref EmitWorld, bound: ref String) -> bool {
+    if bound != "Struct" && bound != "Enum" {
+        return false
+    }
+    for item in world.items {
+        match item.node {
+            Item::Trait { name, .. } => {
+                if escaped_name(world.words.resolve(name)) == bound {
+                    return false
+                }
+            },
+            else => {},
+        }
+    }
+    return true
+}
+
+/// A generic parameter as it is declared: its name and the bounds that travel.
+pub fn emit_bounded(world: ref EmitWorld, param: ref GenericParam) -> String {
+    let name = escaped_name(world.words.resolve(param.name))
+    let mut bounds: Vec[String] = []
+    for bound in param.bounds {
+        let written = escaped_name(world.words.resolve(bound))
+        if !emit_is_a_shape_bound(world, written) {
+            bounds.push(written)
+        }
+    }
+    if bounds.len() == 0 {
+        return name
+    }
+    let joined = bounds.join(" + ")
+    return f"{name}: {joined}"
+}

@@ -16800,6 +16800,334 @@ pub fn is_whole(name: &str) -> bool { name == "i8" || name == "i16" || name == "
 fn uncrossable(ty: &Ty, because: &str) -> Option<Uncrossable> { Some(Uncrossable { ty: ty.text(), because: because.to_owned() }) }
 
 
+// --- emit_below.nika ---
+
+fn emit_is_a_par_fold(rule: &GrammarRule) -> bool {
+    for alt in rule.alts.iter() {
+        match &alt.pattern.node {
+            Pattern::Fold(spec) => { if spec.parallel { return true; } },
+            Pattern::Bind { pat, .. } => {
+                let pat = nikaia_std::boxed::open(pat);
+                match &pat.node {
+                    Pattern::Fold(spec) => { if spec.parallel { return true; } },
+                    _ => { },
+                }
+            },
+            _ => { },
+        }
+    }
+    false
+}
+
+fn emit_either_at(world: &EmitWorld<'_>, item: &Item, own: &str, at: i64) -> i64 {
+    match item {
+        Item::Fn { name, args, .. } => {
+            let name = *name;
+            let called = match name { Some(__nikaia_value) => __nikaia_value, None => return -1 };
+            if world.words.resolve(called) != own { return -1; }
+            if at < args.len() as i64 && nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.either { return 1; }
+            return 0;
+        },
+        _ => { },
+    }
+    -1
+}
+
+fn emit_callee_text(world: &EmitWorld<'_>, func: &Expr) -> Option<String> {
+    match func {
+        Expr::Variable(name, _) => {
+            let name = *name;
+            return Some(world.words.resolve(name).to_owned());
+        },
+        Expr::Path(segments, _) => {
+            let mut parts: Vec<String> = vec![];
+            for segment in segments.iter() { parts.push(world.words.resolve(*segment).to_owned()); }
+            return Some(parts.join("::"));
+        },
+        _ => { },
+    }
+    None
+}
+
+impl EmitState {
+    pub fn enters_a_grammar(&self, world: &EmitWorld<'_>, receiver: &Expr, method: winnow_grammar::Symbol) -> bool {
+        match receiver {
+            Expr::Variable(name, _) => {
+                let name = *name;
+                let def = match self.grammars.get(world.words.resolve(name)) { Some(__nikaia_value) => __nikaia_value, None => return false };
+                for rule in def.rules.iter() { if rule.is_entry && rule.name == method { return true; } }
+                return false;
+            },
+            _ => { },
+        }
+        false
+    }
+    fn emit_enters_by_path(&self, world: &EmitWorld<'_>, expr: &Expr) -> bool {
+        match expr {
+            Expr::Call { func, args, .. } => {
+                let func = nikaia_std::boxed::open(func);
+                match func {
+                    Expr::Path(segments, _) => { return segments.len() == 2 && self.grammars.contains_key(world.words.resolve(*nikaia_std::index::get(&segments, 0))) && args.len() == 1; },
+                    _ => { },
+                }
+            },
+            _ => { },
+        }
+        false
+    }
+    pub fn a_tail_that_enters_a_grammar(&self, world: &EmitWorld<'_>, stmt: &Stmt) -> bool {
+        let mut inside: Vec<&Expr> = vec![];
+        match stmt {
+            Stmt::Expr(expr) => { inside = visited_in_expr(expr); },
+            Stmt::Return(value) => {
+                let expr = match value { Some(__nikaia_value) => __nikaia_value, None => return false };
+                inside = visited_in_expr(expr);
+            },
+            _ => { },
+        }
+        for expr in inside.iter() {
+            let expr = *expr;
+            if self.emit_enters_by_path(world, expr) { return true; }
+        }
+        false
+    }
+    fn emit_enters_a_parallel_rule(&self, world: &EmitWorld<'_>, expr: &Expr) -> bool {
+        match expr {
+            Expr::Call { func, .. } => {
+                let func = nikaia_std::boxed::open(func);
+                match func {
+                    Expr::Path(segments, _) => {
+                        if segments.len() != 2 { return false; }
+                        let def = match self.grammars.get(world.words.resolve(*nikaia_std::index::get(&segments, 0))) { Some(__nikaia_value) => __nikaia_value, None => return false };
+                        for rule in def.rules.iter() { if rule.is_entry && rule.name == *nikaia_std::index::get(&segments, 1) && emit_is_a_par_fold(rule) { return true; } }
+                    },
+                    _ => { },
+                }
+            },
+            _ => { },
+        }
+        false
+    }
+    pub fn uses_driver(&self, world: &EmitWorld<'_>) -> bool {
+        for item in world.items.iter() {
+            match &item.node {
+                Item::Fn { body, .. } => { for expr in visited_in_block(body) { if self.emit_enters_a_parallel_rule(world, expr) { return true; } } },
+                _ => { },
+            }
+        }
+        false
+    }
+    pub fn either_param(&self, world: &EmitWorld<'_>, callee: &str, at: i64) -> bool {
+        let own = emit_base(callee);
+        let mut seen = 0;
+        for item in world.items.iter() {
+            match &item.node {
+                Item::Impl { methods, .. } => {
+                    for method in methods.iter() {
+                        let found = emit_either_at(world, &method.node, &own, at);
+                        if found == 0 { return false; }
+                        if found == 1 { seen += 1; }
+                    }
+                },
+                _ => {
+                    let found = emit_either_at(world, &item.node, &own, at);
+                    if found == 0 { return false; }
+                    if found == 1 { seen += 1; }
+                },
+            }
+        }
+        seen > 0
+    }
+    pub fn either_field(&self, world: &EmitWorld<'_>, owner: &str, field: winnow_grammar::Symbol) -> bool {
+        let wanted = world.words.resolve(field);
+        let own = emit_base(owner);
+        for item in world.items.iter() {
+            match &item.node {
+                Item::Struct { name, fields, .. } => {
+                    let name = *name;
+                    if world.words.resolve(name) == own { for each in fields.iter() { if each.ty.either && world.words.resolve(each.name) == wanted { return true; } } }
+                },
+                _ => { },
+            }
+        }
+        false
+    }
+    pub fn is_variant(&self, world: &EmitWorld<'_>, owner: &str, variant: &str) -> bool {
+        for item in world.items.iter() {
+            match &item.node {
+                Item::Enum { name, variants, .. } => {
+                    let name = *name;
+                    if world.words.resolve(name) == owner { for each in variants.iter() { if world.words.resolve(each.name) == variant { return true; } } }
+                },
+                _ => { },
+            }
+        }
+        let entry = match self.own_contracts.types.get(owner) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        for each in entry.variants.iter() { if each.name == variant { return true; } }
+        false
+    }
+    pub fn opens_a_paused_scope(&self, world: &EmitWorld<'_>, func: &Expr, args: &[Expr]) -> bool {
+        match func {
+            Expr::Path(_, _) => { },
+            _ => { return false; },
+        }
+        let name = match emit_callee_text(world, func) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        if unaliased_in(world.aliases, &name) != "task::scope" || args.is_empty() { return false; }
+        self.facts.paused_scopes.contains(&node_key(nikaia_std::index::get(&args, 0)))
+    }
+    pub fn decided_by_its_lambda(&self, world: &EmitWorld<'_>, func: &Expr) -> bool {
+        let name = match emit_callee_text(world, func) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        self.lambda_decides(&unaliased_in(world.aliases, &name))
+    }
+    pub fn count_at(&self, crossings: bool, function: &str, value: &str) -> Count {
+        if !crossings { return Count::Plain; }
+        let key = format!("{}::{}", function, value);
+        let found = match self.shared.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return Count::Atomic };
+        found.clone()
+    }
+    fn emit_any_can_fail(&self, world: &EmitWorld<'_>, statement: i64, all: &[Expr]) -> bool {
+        for each in all.iter() { if self.branch_can_fail(world, statement, each) { return true; } }
+        false
+    }
+    fn emit_config_can_fail(&self, world: &EmitWorld<'_>, statement: i64, config: &[ConfigArg]) -> bool {
+        for each in config.iter() { if self.branch_can_fail(world, statement, &each.value) { return true; } }
+        false
+    }
+    fn emit_method_can_fail(&self, world: &EmitWorld<'_>, statement: i64, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg]) -> bool { self.enters_a_grammar(world, receiver, method) || self.method_can_fail(statement, world.words.resolve(method)) || self.branch_can_fail(world, statement, receiver) || self.emit_any_can_fail(world, statement, args) || self.emit_config_can_fail(world, statement, config) }
+    fn emit_block_can_fail(&self, world: &EmitWorld<'_>, statement: i64, block: &Block) -> bool {
+        for stmt in block.stmts.iter() {
+            let at = stmt.span.start as i64;
+            if nikaia_std::index::or(self.facts.settle_lets.get(&at), || false) { return true; }
+            match &stmt.node {
+                Stmt::Expr(value) => { if self.branch_can_fail(world, statement, value) { return true; } },
+                Stmt::Let { value, .. } => { if self.branch_can_fail(world, statement, value) { return true; } },
+                _ => { },
+            }
+        }
+        false
+    }
+    fn emit_handler_can_fail(&self, world: &EmitWorld<'_>, statement: i64, handler: &Block) -> bool {
+        for stmt in handler.stmts.iter() {
+            match &stmt.node {
+                Stmt::Expr(value) => { if self.branch_can_fail(world, statement, value) { return true; } },
+                _ => { },
+            }
+        }
+        false
+    }
+    pub fn branch_can_fail(&self, world: &EmitWorld<'_>, statement: i64, value: &Expr) -> bool {
+        match value {
+            Expr::Call { func, args, config, .. } => {
+                let func = nikaia_std::boxed::open(func);
+                return call_can_fail(world.words, &self.own_contracts, world.library, &self.described, func) || self.emit_any_can_fail(world, statement, args) || self.emit_config_can_fail(world, statement, config);
+            },
+            Expr::MethodCall { receiver, method, args, config, .. } => {
+                let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+                return self.emit_method_can_fail(world, statement, receiver, method, args, config);
+            },
+            Expr::SafeMethod { receiver, method, args, config, .. } => {
+                let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+                return self.emit_method_can_fail(world, statement, receiver, method, args, config);
+            },
+            Expr::TryCatch { handler, .. } => return self.emit_handler_can_fail(world, statement, handler),
+            Expr::Throw(_, _) => return true,
+            Expr::Block(block, _) => return self.emit_block_can_fail(world, statement, block),
+            Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); return self.branch_can_fail(world, statement, inner) },
+            Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); return self.branch_can_fail(world, statement, expr) },
+            Expr::Binary { lhs, rhs, .. } => {
+                let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
+                return self.branch_can_fail(world, statement, lhs) || self.branch_can_fail(world, statement, rhs);
+            },
+            Expr::Coalesce { value, fallback, .. } => {
+                let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback);
+                return self.branch_can_fail(world, statement, value) || self.branch_can_fail(world, statement, fallback);
+            },
+            Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); return self.branch_can_fail(world, statement, base) },
+            Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); return self.branch_can_fail(world, statement, base) },
+            Expr::Index { base, index, .. } => {
+                let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
+                return self.branch_can_fail(world, statement, base) || self.branch_can_fail(world, statement, index);
+            },
+            _ => { },
+        }
+        false
+    }
+}
+
+impl EmitState {
+    pub fn path(&self, world: &EmitWorld<'_>, trusting: bool, segments: &[String]) -> String {
+        if segments.len() == 2 && *nikaia_std::index::get(&segments, 1) == "new" {
+            let chosen = self.map_name(trusting, nikaia_std::index::get(&segments, 0));
+            if chosen != *nikaia_std::index::get(&segments, 0) { return format!("{}::default", chosen); }
+        }
+        let mut mapped: Vec<String> = vec![];
+        for segment in segments.iter() { mapped.push(self.map_name(trusting, segment)); }
+        let joined = mapped.join("::");
+        unaliased_in(world.aliases, &joined)
+    }
+    pub fn written_name(&self, world: &EmitWorld<'_>, crossings: bool, trusting: bool, name: &str, count: Count) -> String {
+        if name == "Shared" { return rust_name(count); }
+        if name == "Locked" {
+            if !crossings { return lock_name(Count::Plain); }
+            return lock_name(count);
+        }
+        let mapped = self.mapped_path(trusting, name);
+        unaliased_in(world.aliases, &mapped)
+    }
+    pub fn hull_new(&self, world: &EmitWorld<'_>, crossings: bool, trusting: bool, name: &str, count: Count) -> Option<Vec<String>> {
+        if name == "Shared" { return Some(vec![self.written_name(world, crossings, trusting, "Shared", count)]); }
+        if name == "Locked" { return Some(vec![self.written_name(world, crossings, trusting, "Locked", count)]); }
+        if name == "SharedMut" { return Some(vec![self.written_name(world, crossings, trusting, "Shared", count), self.written_name(world, crossings, trusting, "Locked", count)]); }
+        None
+    }
+    pub fn attributes_read(&self, world: &EmitWorld<'_>, wanted: &str, args: &[Expr], texts: &[String]) -> String {
+        let mut written: String = String::from("");
+        if !args.is_empty() { written = nikaia_std::index::or(emit_callee_text(world, nikaia_std::index::get(&args, 0)), || "".into()); }
+        let asked = unaliased_in(world.aliases, &written);
+        let mut values: Vec<String> = vec![];
+        for text in texts.iter() {
+            let parts: Vec<&str> = text.split(" { ").collect::<Vec<_>>();
+            if *nikaia_std::index::get(&parts, 0) == asked { values.push(self.attribute_in_rust(world, text)); }
+        }
+        if wanted == "attribute" {
+            if !values.is_empty() { return format!("Some({})", *nikaia_std::index::get(&values, 0)); }
+            return format!("None::<{}>", asked);
+        }
+        if !values.is_empty() {
+            let joined = values.join(", ");
+            return format!("vec![{}]", joined);
+        }
+        format!("Vec::<{}>::new()", asked)
+    }
+}
+
+pub fn emit_is_a_shape_bound(world: &EmitWorld<'_>, bound: &str) -> bool {
+    if bound != "Struct" && bound != "Enum" { return false; }
+    for item in world.items.iter() {
+        match &item.node {
+            Item::Trait { name, .. } => {
+                let name = *name;
+                if escaped_name(world.words.resolve(name)) == bound { return false; }
+            },
+            _ => { },
+        }
+    }
+    true
+}
+
+pub fn emit_bounded(world: &EmitWorld<'_>, param: &GenericParam) -> String {
+    let name = escaped_name(world.words.resolve(param.name));
+    let mut bounds: Vec<String> = vec![];
+    for bound in param.bounds.iter() {
+        let written = escaped_name(world.words.resolve(*bound));
+        if !emit_is_a_shape_bound(world, &written) { bounds.push(written); }
+    }
+    if bounds.is_empty() { return name; }
+    let joined = bounds.join(" + ");
+    format!("{}: {}", name, joined)
+}
+
+
 // --- emit_calls.nika ---
 
 pub fn call_written_name(words: &winnow_grammar::InternerContext, func: &Expr) -> Option<String> {
@@ -17293,6 +17621,173 @@ fn match_path(pattern: &MatchPattern) -> Option<Vec<winnow_grammar::Symbol>> {
         MatchPattern::Path(path) => { return Some(path.to_owned()); },
         MatchPattern::Tuple { path, .. } => { return Some(path.to_owned()); },
         MatchPattern::Named { path, .. } => { return Some(path.to_owned()); },
+        _ => { },
+    }
+    None
+}
+
+
+// --- emit_keeps.nika ---
+
+fn emit_keep_numbered(at: i64, lent: bool) -> String {
+    if lent { return format!("&__keep_{}", at); }
+    format!("__keep_{}", at)
+}
+
+pub fn emit_keep_expr(keep: &KeepAt, lent: bool) -> String {
+    match keep {
+        KeepAt::Param => return String::from("__keep"),
+        KeepAt::Frame => {
+            if lent { return String::from("&__keep_frame"); }
+            return String::from("__keep_frame");
+        },
+        KeepAt::Local(at) => { let at = *at; return emit_keep_numbered(at, lent) },
+        KeepAt::Element(at) => { let at = *at; return emit_keep_numbered(at, lent) },
+        KeepAt::Task => return String::from("(&*__keep_task)"),
+    }
+}
+
+fn emit_is_element(keep: &KeepAt, at: i64) -> bool {
+    match keep {
+        KeepAt::Element(held) => { let held = *held; held == at },
+        _ => false,
+    }
+}
+
+impl EmitState {
+    fn keep_plan_key(&self, walk: &EmitWalk, function: &str) -> Option<String> {
+        if self.keep_plans.contains_key(function) { return Some(function.to_owned()); }
+        if self.keep_plans.contains_key(&walk.keep_function) { return Some(walk.keep_function.to_owned()); }
+        None
+    }
+    pub fn keep_prelude(&self, walk: &EmitWalk, function: &str, at: i64) -> Option<String> {
+        let key = match self.keep_plan_key(walk, function) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let plan = match self.keep_plans.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let mut lines: Vec<String> = vec![];
+        if plan.first == at {
+            if plan.frame_keep { lines.push(String::from("let __keep_frame = nikaia_std::tether::Keep::new();")); }
+            if plan.task_keep { lines.push(String::from("let __keep_task = std::sync::Arc::new(nikaia_std::tether::Keep::new());")); }
+        }
+        if plan.local_keeps.contains(&at) { lines.push(format!("let __keep_{} = nikaia_std::tether::Keep::new();", at)); }
+        let mut element = false;
+        for (_, keep) in plan.puts.iter() { if emit_is_element(keep, at) { element = true; } }
+        for (_, keep) in plan.calls.iter() { if emit_is_element(keep, at) { element = true; } }
+        if element { lines.push(format!("let __keep_{} = std::sync::Arc::new(nikaia_std::tether::Keep::new());", at)); }
+        if lines.is_empty() { return None; }
+        Some(lines.join(" "))
+    }
+    pub fn argument_keep(&self, walk: &EmitWalk, function: &str, statement: i64, callee: &str, i: i64) -> Option<String> {
+        let key = match self.keep_plan_key(walk, function) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let plan = match self.keep_plans.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let keep = match plan.calls.get(&(statement, format!("{}#{}", callee, i))) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        Some(emit_keep_expr(&keep, true))
+    }
+    pub fn keep_argument(&self, walk: &EmitWalk, function: &str, statement: i64, callee: &str) -> Option<String> {
+        let key = match self.keep_plan_key(walk, function) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let plan = match self.keep_plans.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let keep = match plan.calls.get(&(statement, callee.to_owned())) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        Some(emit_keep_expr(&keep, true))
+    }
+    pub fn kept_lifetimes(&self, key: &str, lifetimes: EmitLifetimes) -> Option<EmitLifetimes> {
+        let contract = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        if !takes_a_keep(&contract) { return None; }
+        if lifetimes.params() == "'a" { return Some(EmitLifetimes::Named); }
+        Some(EmitLifetimes::Kept)
+    }
+    pub fn tethered_position(&self, key: &str, position: &str) -> bool {
+        let contract = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        for held in contract.views.iter() { if held.position == position && held.state == State::Tethered { return true; } }
+        false
+    }
+    pub fn reads_through_handle(&self, world: &EmitWorld<'_>, walk: &EmitWalk, function: &str, expr: &Expr) -> bool {
+        match expr {
+            Expr::Variable(name, _) => {
+                let name = *name;
+                let key = match self.keep_plan_key(walk, function) { Some(__nikaia_value) => __nikaia_value, None => return false };
+                let plan = match self.keep_plans.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return false };
+                return plan.struct_keepers.contains(world.words.resolve(name));
+            },
+            _ => { },
+        }
+        false
+    }
+    pub fn names_borrowing(&self, world: &EmitWorld<'_>, ty: &Type) -> bool {
+        let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return self.names_borrowing_written(world, ty) };
+        let result = match (*code.result).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+        self.names_borrowing(world, result)
+    }
+    fn names_borrowing_written(&self, world: &EmitWorld<'_>, ty: &Type) -> bool {
+        if self.borrowing.contains(world.words.resolve(ty.name)) { return true; }
+        for inner in ty.generics.iter() { if self.names_borrowing(world, inner) { return true; } }
+        false
+    }
+    pub fn held_field_carries_view(&self, world: &EmitWorld<'_>, walk: &EmitWalk, function: &str, keeper: &Expr, field: winnow_grammar::Symbol) -> bool {
+        match keeper {
+            Expr::Variable(held, _) => {
+                let held = *held;
+                let key = match self.keep_plan_key(walk, function) { Some(__nikaia_value) => __nikaia_value, None => return true };
+                let plan = match self.keep_plans.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return true };
+                let owner = match plan.keeper_structs.get(world.words.resolve(held)) { Some(__nikaia_value) => __nikaia_value, None => return true };
+                let wanted = world.words.resolve(field);
+                for item in world.items.iter() {
+                    match &item.node {
+                        Item::Struct { name, fields, .. } => {
+                            let name = *name;
+                            if world.words.resolve(name) == owner { for each in fields.iter() { if world.words.resolve(each.name) == wanted { return holds_view(&each.ty) || self.names_borrowing(world, &each.ty); } } }
+                        },
+                        _ => { },
+                    }
+                }
+                return true;
+            },
+            _ => { },
+        }
+        true
+    }
+}
+
+fn emit_returned_by(world: &EmitWorld<'_>, wanted: &str) -> Option<Type> {
+    for item in world.items.iter() {
+        match &item.node {
+            Item::Fn { name, ret_type, .. } => {
+                let name = *name;
+                let called = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
+                if world.words.resolve(called) == wanted {
+                    let result = match ret_type { Some(__nikaia_value) => __nikaia_value, None => continue };
+                    return Some(result.clone());
+                }
+            },
+            _ => { },
+        }
+    }
+    None
+}
+
+pub fn emit_tethered_type(world: &EmitWorld<'_>, ty: Option<&Type>, value: &Expr) -> Option<Type> {
+    if ty.is_some() {
+        return match ty {
+            Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+            None => None,
+        };
+    }
+    match value {
+        Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); return emit_tethered_call(world, inner) },
+        _ => return emit_tethered_call(world, value),
+    }
+}
+
+fn emit_tethered_call(world: &EmitWorld<'_>, call: &Expr) -> Option<Type> {
+    match call {
+        Expr::Call { func, .. } => {
+            let func = nikaia_std::boxed::open(func);
+            match func {
+                Expr::Variable(name, _) => {
+                    let name = *name;
+                    return emit_returned_by(world, world.words.resolve(name));
+                },
+                _ => { },
+            }
+        },
         _ => { },
     }
     None
@@ -38970,6 +39465,10 @@ pub mod dump {
     #[allow(unused_imports)]
     pub use super::{VariantShape, FieldShape, Shapes, Uncrossable, dump, is_whole};
 }
+pub mod emit_below {
+    #[allow(unused_imports)]
+    pub use super::{emit_is_a_shape_bound, emit_bounded};
+}
 pub mod emit_calls {
     #[allow(unused_imports)]
     pub use super::{call_written_name, call_pausing_key, call_library_pauses, call_pauses, call_can_fail, call_callee_name, call_joined_throws, call_returns_either};
@@ -38981,6 +39480,10 @@ pub mod emit_exprs {
 pub mod emit_items {
     #[allow(unused_imports)]
     pub use super::{foreign_params, opaque_handles, foreign_results, foreign_traits, declared_errors, sum_name, sum_variant, variant_slot, dsl_name, error_kind, sum_member_type, member_of};
+}
+pub mod emit_keeps {
+    #[allow(unused_imports)]
+    pub use super::{emit_keep_expr, emit_tethered_type};
 }
 pub mod emit_kinds {
     #[allow(unused_imports)]

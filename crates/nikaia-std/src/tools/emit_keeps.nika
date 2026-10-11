@@ -1,0 +1,242 @@
+// crates/nikaia-std/src/tools/emit_keeps.nika
+//
+// **What the emitter writes and asks for a function's keeps and tethers**,
+// moved from `emit/mod.rs` (ADR-294, #125, #558, step E7): where a keep is
+// named in the Rust, which lines declare the keeps before a statement, which
+// keep a call is handed, whether a field of a struct of views carries a view,
+// and which lifetimes a function that takes a keep is written with. Methods of
+// `EmitState`; the plans are `buffers.nika`'s, found by the function's key or
+// else by the function being written.
+
+use std::collections
+
+/// The name of a keep that stands at a statement: `__keep_3`, or `&__keep_3`
+/// where it is lent.
+fn emit_keep_numbered(at: i64, lent: bool) -> String {
+    if lent {
+        return f"&__keep_{at}"
+    }
+    return f"__keep_{at}"
+}
+
+/// How a keep is named in the Rust, owned or lent.
+pub fn emit_keep_expr(keep: ref KeepAt, lent: bool) -> String {
+    match keep {
+        KeepAt::Param => return "__keep",
+        KeepAt::Frame => {
+            if lent {
+                return "&__keep_frame"
+            }
+            return "__keep_frame"
+        },
+        KeepAt::Local(at) => return emit_keep_numbered(at, lent),
+        KeepAt::Element(at) => return emit_keep_numbered(at, lent),
+        KeepAt::Task => return "(&*__keep_task)",
+    }
+}
+
+/// Whether a keep is the element keep of the statement `at`.
+fn emit_is_element(keep: ref KeepAt, at: i64) -> bool {
+    return match keep {
+        KeepAt::Element(held) => held == at,
+        else => false,
+    }
+}
+
+impl EmitState {
+    /// The key a function's plan is under: the function's own, or else the
+    /// one being written.
+    fn keep_plan_key(ref self, walk: ref EmitWalk, function: ref String) -> String? {
+        if self.keep_plans.contains_key(function) {
+            return function.clone()
+        }
+        if self.keep_plans.contains_key(walk.keep_function) {
+            return walk.keep_function.clone()
+        }
+        return null
+    }
+
+    /// The lines that declare the keeps of the statement `at`, where a
+    /// function has any.
+    pub fn keep_prelude(ref self, walk: ref EmitWalk, function: ref String, at: i64) -> String? {
+        let key = self.keep_plan_key(walk, function) ?? return null
+        let plan = self.keep_plans.get(key) ?? return null
+        let mut lines: Vec[String] = []
+        if plan.first == at {
+            if plan.frame_keep {
+                lines.push("let __keep_frame = nikaia_std::tether::Keep::new();")
+            }
+            if plan.task_keep {
+                lines.push("let __keep_task = std::sync::Arc::new(nikaia_std::tether::Keep::new());")
+            }
+        }
+        if plan.local_keeps.contains(at) {
+            lines.push(f"let __keep_{at} = nikaia_std::tether::Keep::new();")
+        }
+        let mut element = false
+        for (_, keep) in plan.puts {
+            if emit_is_element(keep, at) {
+                element = true
+            }
+        }
+        for (_, keep) in plan.calls {
+            if emit_is_element(keep, at) {
+                element = true
+            }
+        }
+        if element {
+            lines.push(f"let __keep_{at} = std::sync::Arc::new(nikaia_std::tether::Keep::new());")
+        }
+        if lines.len() == 0 {
+            return null
+        }
+        return lines.join(" ")
+    }
+
+    /// The keep argument `i` of a call to `callee` at the statement is lent.
+    pub fn argument_keep(ref self, walk: ref EmitWalk, function: ref String, statement: i64, callee: ref String, i: i64) -> String? {
+        let key = self.keep_plan_key(walk, function) ?? return null
+        let plan = self.keep_plans.get(key) ?? return null
+        let keep = plan.calls.get((statement, f"{callee}#{i}")) ?? return null
+        return emit_keep_expr(keep, true)
+    }
+
+    /// The keep a call to `callee` at the statement is handed.
+    pub fn keep_argument(ref self, walk: ref EmitWalk, function: ref String, statement: i64, callee: ref String) -> String? {
+        let key = self.keep_plan_key(walk, function) ?? return null
+        let plan = self.keep_plans.get(key) ?? return null
+        let keep = plan.calls.get((statement, callee.clone())) ?? return null
+        return emit_keep_expr(keep, true)
+    }
+
+    /// The lifetimes a function that takes a keep is written with, where the
+    /// function is one.
+    pub fn kept_lifetimes(ref self, key: ref String, lifetimes: EmitLifetimes) -> EmitLifetimes? {
+        let contract = self.own_contracts.functions.get(key) ?? return null
+        if !takes_a_keep(contract) {
+            return null
+        }
+        if lifetimes.params() == "'a" {
+            return EmitLifetimes::Named
+        }
+        return EmitLifetimes::Kept
+    }
+
+    /// Whether the view at `position` of the function is tethered.
+    pub fn tethered_position(ref self, key: ref String, position: ref String) -> bool {
+        let contract = self.own_contracts.functions.get(key) ?? return false
+        for held in contract.views {
+            if held.position == position && held.state == State::Tethered {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// Whether the expression is a name the function's plan reads through a
+    /// handle.
+    pub fn reads_through_handle(ref self, world: ref EmitWorld, walk: ref EmitWalk, function: ref String, expr: ref Expr) -> bool {
+        match expr {
+            Expr::Variable(name, _) => {
+                let key = self.keep_plan_key(walk, function) ?? return false
+                let plan = self.keep_plans.get(key) ?? return false
+                return plan.struct_keepers.contains(world.words.resolve(name))
+            },
+            else => {},
+        }
+        return false
+    }
+
+    /// Whether a type names a struct that holds a view.
+    pub fn names_borrowing(ref self, world: ref EmitWorld, ty: ref Type) -> bool {
+        let code = ty.code ?? return self.names_borrowing_written(world, ty)
+        let result = code.result ?? return false
+        return self.names_borrowing(world, result)
+    }
+
+    fn names_borrowing_written(ref self, world: ref EmitWorld, ty: ref Type) -> bool {
+        if self.borrowing.contains(world.words.resolve(ty.name)) {
+            return true
+        }
+        for inner in ty.generics {
+            if self.names_borrowing(world, inner) {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// Whether the field of the struct a keeper name stands for carries a view;
+    /// it does where nothing says it does not.
+    pub fn held_field_carries_view(ref self, world: ref EmitWorld, walk: ref EmitWalk, function: ref String, keeper: ref Expr, field: winnow_grammar::Symbol) -> bool {
+        match keeper {
+            Expr::Variable(held, _) => {
+                let key = self.keep_plan_key(walk, function) ?? return true
+                let plan = self.keep_plans.get(key) ?? return true
+                let owner = plan.keeper_structs.get(world.words.resolve(held)) ?? return true
+                let wanted = world.words.resolve(field)
+                for item in world.items {
+                    match item.node {
+                        Item::Struct { name, fields, .. } => {
+                            if world.words.resolve(name) == owner {
+                                for each in fields {
+                                    if world.words.resolve(each.name) == wanted {
+                                        return holds_view(each.ty) || self.names_borrowing(world, each.ty)
+                                    }
+                                }
+                            }
+                        },
+                        else => {},
+                    }
+                }
+                return true
+            },
+            else => {},
+        }
+        return true
+    }
+}
+
+/// The result type of the function of the file called `wanted`.
+fn emit_returned_by(world: ref EmitWorld, wanted: ref String) -> Type? {
+    for item in world.items {
+        match item.node {
+            Item::Fn { name, ret_type, .. } => {
+                let called = name ?? continue
+                if world.words.resolve(called) == wanted {
+                    let result = ret_type ?? continue
+                    return result.clone()
+                }
+            },
+            else => {},
+        }
+    }
+    return null
+}
+
+/// The type a tethered `let` holds: the one written, or else the result type
+/// of the function the value calls.
+pub fn emit_tethered_type(world: ref EmitWorld, ty: ref Type?, value: ref Expr) -> Type? {
+    if ty != null {
+        return ty?.clone()
+    }
+    match value {
+        Expr::Try(inner, _) => return emit_tethered_call(world, inner),
+        else => return emit_tethered_call(world, value),
+    }
+}
+
+fn emit_tethered_call(world: ref EmitWorld, call: ref Expr) -> Type? {
+    match call {
+        Expr::Call { func, .. } => {
+            match func {
+                Expr::Variable(name, _) => {
+                    return emit_returned_by(world, world.words.resolve(name))
+                },
+                else => {},
+            }
+        },
+        else => {},
+    }
+    return null
+}

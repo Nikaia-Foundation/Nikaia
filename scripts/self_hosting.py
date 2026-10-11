@@ -154,6 +154,8 @@ COMPILER_NIKA = {
     "emit_misc.nika": "emit: method pauses and failures, pausing cycles, boxed bindings, shape walks, handle types and reserved names (0.0.802)",
     "check_grammar.nika": "check: the type a grammar pattern's result has, and the names a rule's pattern binds (0.0.803)",
     "emit_kinds.nika": "emit: where a statement stands, lifetimes, pointers, methods, refusals, the build and the two halves of the flow (0.0.807)",
+    "emit_below.nika": "emit: grammar entries, text of both kinds, variants, paused scopes, whether a branch can fail, paths and written names (0.0.810)",
+    "emit_keeps.nika": "emit: the keeps a function declares and hands, tethered types and the fields of a struct of views (0.0.810)",
 }
 
 

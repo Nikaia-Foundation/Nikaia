@@ -2490,34 +2490,7 @@ impl<'p> Emitter<'p> {
     /// the preamble was not, and `rustc` answered *"use of undeclared type
     /// `ParseContext`"* about the generated file.
     fn uses_driver(&self) -> bool {
-        let mut found = false;
-        let mut parallel = |grammar: &Symbol, entry: &Symbol| {
-            if let Some(def) = self.s.grammars.get(self.text(*grammar)) {
-                let rule = def.rules.iter().find(|r| r.is_entry && r.name == *entry);
-                if rule.map(|r| par_fold_of(r).is_some()).unwrap_or(false) {
-                    found = true;
-                }
-            }
-        };
-        for item in &self.parsed.program.items {
-            if let Item::Fn { body, .. } = &item.node {
-                visit_block(body, &mut |e| {
-                    // **A grammar is entered through a path**
-                    // ([ADR-140](../../docs/specification/adr/adr-140.md) D3),
-                    // so this reads the shape the entry has rather than the one
-                    // it used to have. Missing it emitted a `parse_…_pieces`
-                    // call with `ParseContext` and `Parallelism` undeclared —
-                    // `rustc` about a file nobody wrote (Part III C.1).
-                    if let Expr::Call { func, .. } = e
-                        && let Expr::Path(segments, _) = func.as_ref()
-                        && let [grammar, rule] = segments.as_slice()
-                    {
-                        parallel(grammar, rule);
-                    }
-                });
-            }
-        }
-        found
+        self.s.uses_driver(&self.world)
     }
 
     /// **What a declared type derives** ([ADR-204](../../../docs/specification/adr/adr-204.md)
@@ -3242,48 +3215,8 @@ impl<'p> Emitter<'p> {
         Ok(())
     }
 
-    /// A type parameter with its bounds: `T`, or `T: Summarize + Clone`
-    /// ([ADR-295](../../docs/specification/adr/adr-295.md) D7).
-    ///
-    /// **A shape bound does not travel** ([`crate::types::SHAPE_BOUNDS`],
-    /// [ADR-304](../../docs/specification/adr/adr-304.md) D2): `Struct` and
-    /// `Enum` are answered by a **declaration** rather than by an `impl`, and
-    /// the language below has no trait by either name — so one written into the
-    /// generated file would come back as *cannot find trait `Struct` in this
-    /// scope*, about a file nobody wrote
-    /// ([Part III C.1](../../docs/specification/30-nikaia-tooling.md)).
-    ///
-    /// **Two names and not types**, which is why this does not break
-    /// [ADR-296](../../docs/specification/adr/adr-296.md) D17: the emitter is
-    /// reading a word of this language, as it already reads `sync` and
-    /// `throws`, and not asking what a value's type is.
-    /// Whether this bound is one of [`crate::types::SHAPE_BOUNDS`] **and** the
-    /// program did not declare a `trait` by that name.
-    ///
-    /// A program that writes `trait Struct { … }` has an ordinary trait, and
-    /// the bound is its own — so it travels, and the `impl` that answers it
-    /// travels with it. Checking the declaration here is the same order every
-    /// other reader of the two names takes.
-    fn is_a_shape_bound(&self, bound: &str) -> bool {
-        crate::types::SHAPE_BOUNDS.contains(&bound)
-            && !self.parsed.program.items.iter().any(|item| {
-                matches!(&item.node, crate::ast::Item::Trait { name, .. }
-                    if self.name(*name) == bound)
-            })
-    }
-
     fn bounded(&self, param: &crate::ast::GenericParam) -> String {
-        let name = self.name(param.name);
-        let bounds: Vec<String> = param
-            .bounds
-            .iter()
-            .map(|b| self.name(*b).into_owned())
-            .filter(|bound| !self.is_a_shape_bound(bound))
-            .collect();
-        match bounds.is_empty() {
-            true => name.into_owned(),
-            false => format!("{name}: {}", bounds.join(" + ")),
-        }
+        nikaia_std::tools::emit_below::emit_bounded(&self.world, param)
     }
 
     /// A function or a method. Kap 4.2: a `pub fn` with no name is the
@@ -4274,23 +4207,7 @@ impl<'p> Emitter<'p> {
     /// what has to know is the writer of the `Ok(` around it and this emitter
     /// has no types ([ADR-288](../../docs/specification/adr/adr-288.md)).
     fn a_tail_that_enters_a_grammar(&self, stmt: &Stmt) -> bool {
-        let mut found = false;
-        let mut look = |expr: &Expr| {
-            if let Expr::Call { func, args, .. } = expr
-                && let Expr::Path(segments, _) = func.as_ref()
-                && let [grammar, _] = segments.as_slice()
-                && self.s.grammars.contains_key(self.text(*grammar))
-                && args.len() == 1
-            {
-                found = true;
-            }
-        };
-        match stmt {
-            Stmt::Expr(expr) => visit_expr(expr, &mut look),
-            Stmt::Return(Some(expr)) => visit_expr(expr, &mut look),
-            _ => {}
-        }
-        found
+        self.s.a_tail_that_enters_a_grammar(&self.world, stmt)
     }
 
     // --- Grammars ---
@@ -4818,35 +4735,9 @@ impl<'p> Emitter<'p> {
     /// `new` exists only for the default one - so the trusted map is built with
     /// `default`, which is what every `HashMap<_, _, S>` is built with.
     fn path(&self, segments: &[&str]) -> String {
-        if let [container, "new"] = segments {
-            let chosen = self.map_name(container);
-            if chosen != *container {
-                return format!("{chosen}::default");
-            }
-        }
-        // `unaliased` on the joined path, because an alias is this file's name
-        // for a *package* and the head segment is where one can stand
-        // ([ADR-286](../../../docs/specification/adr/adr-286.md) D12). Resolved
-        // here rather than emitted as a Rust `use … as …`: every file's items are
-        // in one crate root, so a Rust alias there would be the whole program's.
-        self.parsed.unaliased(
-            &segments
-                .iter()
-                .map(|s| self.map_name(s))
-                .collect::<Vec<_>>()
-                .join("::"),
-        )
-    }
-
-    /// `HashMap` under the name the provenance of this program's input picked
-    /// (ADR-010 D5).
-    ///
-    /// Trusted keys get a fast, fixed-seed hash; untrusted keys keep the keyed,
-    /// randomly seeded one `std` gives every map by default. Nothing else about
-    /// the map changes - same table, same API, same full-content equality - so
-    /// this is a name and not a translation.
-    fn map_name(&self, name: &str) -> String {
-        self.s.map_name(self.walk(|w| w.trusting), name)
+        let segments: Vec<String> = segments.iter().map(|s| s.to_string()).collect();
+        self.s
+            .path(&self.world, self.walk(|w| w.trusting), &segments)
     }
 
     /// **One side of a text `+`**, where a side read out of a list is handed
@@ -4869,18 +4760,6 @@ impl<'p> Emitter<'p> {
         self.expr(out, side, depth, flow)
     }
 
-    /// The same, for a name that may carry its module
-    /// ([ADR-313](../../docs/specification/adr/adr-313.md) D3).
-    ///
-    /// `collections::HashMap` is the spelling a program writes once `HashMap`
-    /// is outside the prelude, and the question this answers is about the
-    /// **type** and not about the prefix: the prefix rides through untouched,
-    /// so the annotation and the constructor cannot disagree about which hash a
-    /// map got.
-    fn mapped_path(&self, name: &str) -> String {
-        self.s.mapped_path(self.walk(|w| w.trusting), name)
-    }
-
     /// The name a type is written with below, which for one name depends on the
     /// value and not only on the name.
     ///
@@ -4894,47 +4773,18 @@ impl<'p> Emitter<'p> {
     /// paths, two names as common as `Rc` and `Arc` are two a program may have of
     /// its own, and nothing about the emitted file needs them shortened.
     fn written_name(&self, name: &str, count: crate::contracts::sharing::Count) -> String {
-        match name {
-            SHARED => crate::contracts::sharing::rust_name(count),
-            // **The same question, the same answer**
-            // ([ADR-281](../../../docs/specification/adr/adr-281.md) D7): a lock
-            // is only reachable from two places through a shared handle, so the
-            // count that handle was given decides the lock inside it. The count
-            // rides down through the arguments already (`ty_counted`), which is
-            // exactly the thread this needs.
-            //
-            // **And at one user thread it is always the cheap shape** (D2).
-            // Nothing a user writes can cross there, so the safe shape buys
-            // nothing and costs what `user_parallelism = no` exists to save -
-            // and the cheap one keeps the diagnostic, which is the only failure
-            // reachable at that setting.
-            LOCKED => {
-                crate::contracts::sharing::lock_name(match self.build.crossings_are_possible() {
-                    false => crate::contracts::sharing::Count::Plain,
-                    true => count,
-                })
-            }
-            // `unaliased`, for the reason [`Emitter::path`] gives: a type may be
-            // written with this file's own name for the package that declares it
-            // ([ADR-286](../../../docs/specification/adr/adr-286.md) D12).
-            _ => self.parsed.unaliased(&self.mapped_path(name)),
-        }
+        self.s.written_name(
+            &self.world,
+            self.build.crossings_are_possible(),
+            self.walk(|w| w.trusting),
+            name,
+            count,
+        )
     }
 
     /// Whether `owner::variant` is a variant of an enum this file declares.
     fn is_variant(&self, owner: &str, variant: &str) -> bool {
-        self.parsed.program.items.iter().any(|item| {
-            matches!(&item.node, Item::Enum { name, variants, .. }
-                if self.text(*name) == owner
-                    && variants.iter().any(|v| self.text(v.name) == variant))
-        })
-        // ...or another unit of the package declares (`ledger.nika` reading
-        // `ty.nika`'s `State`), which its entry in the package's ledger says.
-        || self
-            .s.own_contracts
-            .types
-            .get(owner)
-            .is_some_and(|entry| entry.variants.iter().any(|v| v.name == variant))
+        self.s.is_variant(&self.world, owner, variant)
     }
 
     /// What `Shared(x)`, `SharedMut(x)` and `Locked(x)` allocate, outermost first
@@ -4943,33 +4793,20 @@ impl<'p> Emitter<'p> {
     /// Two for the shared mutable type, because it is one name and two hulls; one
     /// for the other two; `None` for a call that is not a hull's.
     fn hull_new(&self, name: &str, count: crate::contracts::sharing::Count) -> Option<Vec<String>> {
-        match name {
-            SHARED => Some(vec![self.written_name(SHARED, count)]),
-            LOCKED => Some(vec![self.written_name(LOCKED, count)]),
-            SHARED_MUT => Some(vec![
-                self.written_name(SHARED, count),
-                self.written_name(LOCKED, count),
-            ]),
-            _ => None,
-        }
+        self.s.hull_new(
+            &self.world,
+            self.build.crossings_are_possible(),
+            self.walk(|w| w.trusting),
+            name,
+            count,
+        )
     }
 
     /// The count the analysis gave the `Shared` written at one position, with the
     /// atomic floor where it has no answer (ADR-037 D6).
     fn count_at(&self, function: &str, value: &str) -> crate::contracts::sharing::Count {
-        // **At one user thread every count is plain**
-        // ([ADR-312](../../../docs/specification/adr/adr-312.md) D10), including at
-        // a position the analysis has no entry for. Without this the *floor* would
-        // answer for such a position, and the floor is the atomic count - which at
-        // `no` is exactly what that switch exists not to pay.
-        if !self.build.crossings_are_possible() {
-            return crate::contracts::sharing::Count::Plain;
-        }
         self.s
-            .shared
-            .get(&format!("{function}::{value}"))
-            .copied()
-            .unwrap_or(crate::contracts::sharing::Count::Atomic)
+            .count_at(self.build.crossings_are_possible(), function, value)
     }
 
     /// A type, with the atomic floor for any `Shared` inside it.
@@ -7108,43 +6945,13 @@ impl<'p> Emitter<'p> {
     /// method by its name - where every method of that name here agrees, so a
     /// name two types use differently is never wrapped for the wrong one.
     fn either_param(&self, callee: &str, at: usize) -> bool {
-        let own = callee.rsplit("::").next().unwrap_or(callee);
-        let mut found = Vec::new();
-        let mut look = |item: &Item| {
-            if let Item::Fn {
-                name: Some(n),
-                args,
-                ..
-            } = item
-                && self.text(*n) == own
-            {
-                found.push(args.get(at).is_some_and(|a| a.ty.either));
-            }
-        };
-        for item in &self.parsed.program.items {
-            match &item.node {
-                Item::Impl { methods, .. } => methods.iter().for_each(|m| look(&m.node)),
-                node => look(node),
-            }
-        }
-        !found.is_empty() && found.iter().all(|e| *e)
+        self.s.either_param(&self.world, callee, at as i64)
     }
 
     /// Whether a struct's field is text both kinds of which flow into
     /// ([ADR-282](../../docs/specification/adr/adr-282.md) D14).
     fn either_field(&self, owner: &str, field: Symbol) -> bool {
-        let wanted = self.text(field);
-        let owner = owner.rsplit("::").next().unwrap_or(owner);
-        self.parsed
-            .program
-            .items
-            .iter()
-            .any(|item| match &item.node {
-                Item::Struct { name, fields, .. } if self.text(*name) == owner => fields
-                    .iter()
-                    .any(|f| f.ty.either && self.text(f.name) == wanted),
-                _ => false,
-            })
+        self.s.either_field(&self.world, owner, field)
     }
 
     /// Whether the function being written hands back text both kinds of
@@ -9492,19 +9299,6 @@ impl<'p> Emitter<'p> {
         Ok(())
     }
 
-    /// Whether `receiver.method(…)` **enters a grammar**: a receiver naming one
-    /// of this file's grammars and a method naming one of its entries
-    /// ([ADR-296](../../docs/specification/adr/adr-296.md) D24, D25).
-    fn enters_a_grammar(&self, receiver: &Expr, method: Symbol) -> bool {
-        let Expr::Variable(name, _) = receiver else {
-            return false;
-        };
-        self.s
-            .grammars
-            .get(self.text(*name))
-            .is_some_and(|def| def.rules.iter().any(|r| r.is_entry && r.name == method))
-    }
-
     /// A call. `Stats(temp)` is the anonymous constructor of Kap 4.2 - Rust has
     /// no such thing, so the declaration decides: a name that is a struct is a
     /// call to the `new` its `impl` provides.
@@ -10371,69 +10165,8 @@ impl<'p> Emitter<'p> {
     /// handler *is* walked — a `throw` in one leaves the branch like any other
     /// failure.
     fn branch_can_fail(&self, value: &Expr, flow: Flow<'_>) -> bool {
-        match value {
-            Expr::Call { func, args, config, .. } => {
-                self.can_fail(func)
-                    || args.iter().any(|a| self.branch_can_fail(a, flow))
-                    || config.iter().any(|a| self.branch_can_fail(&a.value, flow))
-            }
-            Expr::MethodCall {
-                receiver,
-                method,
-                args,
-                config, ..
-            }
-            // A call that may not happen may still fail when it does, so the
-            // branch it is in can fail.
-            | Expr::SafeMethod {
-                receiver,
-                method,
-                args,
-                config, ..
-            } => {
-                // **A grammar entry propagates on its own** (Kap 7.1, and
-                // [ADR-296](../../docs/specification/adr/adr-296.md) D25's
-                // `throws`): it is an ordinary call now, and this is the arm
-                // ordinary calls are in — which is what that record meant.
-                self.enters_a_grammar(receiver, *method)
-                    || self.method_can_fail(flow, *method)
-                    || self.branch_can_fail(receiver, flow)
-                    || args.iter().any(|a| self.branch_can_fail(a, flow))
-                    || config.iter().any(|a| self.branch_can_fail(&a.value, flow))
-            }
-            // The guarded half is handled here; the handler is not.
-            Expr::TryCatch { handler, .. } => handler.stmts.iter().any(
-                |stmt| matches!(&stmt.node, Stmt::Expr(value) if self.branch_can_fail(value, flow)),
-            ),
-            Expr::Throw(_, _) => true,
-            // **A branch written as a block** fails where a statement in it
-            // can, and where a value it binds has a cleanup that can
-            // ([ADR-297](../../docs/specification/adr/adr-297.md) D4): the
-            // branch is where that failure belongs.
-            Expr::Block(block, _) => block.stmts.iter().any(|stmt| {
-                self.s.facts.settle_lets.get(&(stmt.span.at() as i64)) == Some(&true)
-                    || match &stmt.node {
-                        Stmt::Expr(value) | Stmt::Let { value, .. } => {
-                            self.branch_can_fail(value, flow)
-                        }
-                        _ => false,
-                    }
-            }),
-            Expr::Try(inner, _) | Expr::Unary { expr: inner, .. } => self.branch_can_fail(inner, flow),
-            Expr::Binary { lhs, rhs, .. } => {
-                self.branch_can_fail(lhs, flow) || self.branch_can_fail(rhs, flow)
-            }
-            Expr::Coalesce { value, fallback, .. } => {
-                self.branch_can_fail(value, flow) || self.branch_can_fail(fallback, flow)
-            }
-            Expr::Field { base, .. } | Expr::SafeField { base, .. } => {
-                self.branch_can_fail(base, flow)
-            }
-            Expr::Index { base, index, .. } => {
-                self.branch_can_fail(base, flow) || self.branch_can_fail(index, flow)
-            }
-            _ => false,
-        }
+        self.s
+            .branch_can_fail(&self.world, flow.statement as i64, value)
     }
 
     /// **`overlap { … }`** — Part I 8.1.2,
@@ -10962,13 +10695,7 @@ impl<'p> Emitter<'p> {
     /// Whether a type names a struct that holds a view
     /// ([`Emitter::borrowing`]).
     fn names_borrowing(&self, ty: &Type) -> bool {
-        if let Some(code) = &*ty.code {
-            return (*code.result)
-                .as_ref()
-                .is_some_and(|result| self.names_borrowing(result));
-        }
-        self.s.borrowing.contains(self.text(ty.name))
-            || ty.generics.iter().any(|g| self.names_borrowing(g))
+        self.s.names_borrowing(&self.world, ty)
     }
 
     /// The generated sums, written into the file
@@ -11349,35 +11076,12 @@ impl<'p> Emitter<'p> {
     /// Whether a call is `task::scope` with a task that pauses, which the
     /// scope polls itself (ADR-328 D10).
     fn opens_a_paused_scope(&self, func: &Expr, args: &[Expr]) -> bool {
-        let Expr::Path(segments, _) = func else {
-            return false;
-        };
-        let name = segments
-            .iter()
-            .map(|s| self.text(*s))
-            .collect::<Vec<_>>()
-            .join("::");
-        self.parsed.unaliased(&name) == "task::scope"
-            && args.first().is_some_and(|body| {
-                self.s
-                    .facts
-                    .paused_scopes
-                    .contains(&crate::check::value_node(body))
-            })
+        self.s.opens_a_paused_scope(&self.world, func, args)
     }
 
     /// Whether a call names an own function written `sync(f)`.
     fn decided_by_its_lambda(&self, func: &Expr) -> bool {
-        let name = match func {
-            Expr::Variable(name, _) => self.text(*name).to_string(),
-            Expr::Path(segments, _) => segments
-                .iter()
-                .map(|s| self.text(*s))
-                .collect::<Vec<_>>()
-                .join("::"),
-            _ => return false,
-        };
-        self.lambda_decides(&self.parsed.unaliased(&name))
+        self.s.decided_by_its_lambda(&self.world, func)
     }
 
     fn pausing_key(&self, func: &Expr) -> Option<String> {
@@ -11535,27 +11239,7 @@ impl<'p> Emitter<'p> {
     /// `texts` (ADR-331 D6): `Some(…)` or `None`, or the list. Typed where it
     /// is empty: nothing else on the line says what it would hold.
     fn attributes_read(&self, wanted: &str, args: &[Expr], texts: &[String]) -> String {
-        let asked = match args.first() {
-            Some(Expr::Variable(name, _)) => self.text(*name).to_string(),
-            Some(Expr::Path(segments, _)) => segments
-                .iter()
-                .map(|s| self.text(*s))
-                .collect::<Vec<_>>()
-                .join("::"),
-            _ => String::new(),
-        };
-        let asked = self.parsed.unaliased(&asked);
-        let values: Vec<String> = texts
-            .iter()
-            .filter(|text| text.split(" { ").next() == Some(asked.as_str()))
-            .map(|text| self.attribute_in_rust(text))
-            .collect();
-        match (wanted, values.is_empty()) {
-            ("attribute", false) => format!("Some({})", values[0]),
-            ("attribute", true) => format!("None::<{asked}>"),
-            (_, false) => format!("vec![{}]", values.join(", ")),
-            (_, true) => format!("Vec::<{asked}>::new()"),
-        }
+        self.s.attributes_read(&self.world, wanted, args, texts)
     }
 
     /// A type's contract, from this package's ledger or a dependency's.
@@ -11567,13 +11251,6 @@ impl<'p> Emitter<'p> {
     /// dependency's: what `.attribute(X)` and `.default` read (ADR-331 D5-D6).
     fn field_contract(&self, owner: &str, field: &str) -> Option<crate::contracts::FieldContract> {
         self.s.field_contract(&self.world, owner, field)
-    }
-
-    /// **An attribute's value in the language below** (ADR-331 D6):
-    /// `Name { value: "createdAt", case: Case::Camel }` with each field
-    /// written as its type holds it.
-    fn attribute_in_rust(&self, written: &str) -> String {
-        self.s.attribute_in_rust(&self.world, written)
     }
 
     /// **The fields of `owner` that have a default** (ADR-331 D5): name,
@@ -14341,8 +14018,6 @@ const KEEP_PARAM: &str = "__keep";
 /// A held struct's element, read through its handle (ADR-283 D17): appended to
 /// what walks such a keeper.
 const HELD_READ: &str = ".map(|held| held.get())";
-/// The keep declared first in a function's body (D2).
-const KEEP_FRAME: &str = "__keep_frame";
 /// The keep a function's tasks share (D3).
 const KEEP_TASK: &str = "__keep_task";
 
@@ -14361,59 +14036,14 @@ impl Emitter<'_> {
     /// How a keep is reached where a buffer is put into it or a call is given
     /// it.
     fn keep_expr(keep: nikaia_std::tools::buffers::KeepAt, lent: bool) -> String {
-        use nikaia_std::tools::buffers::KeepAt;
-        match keep {
-            KeepAt::Param => KEEP_PARAM.to_string(),
-            KeepAt::Frame => match lent {
-                true => format!("&{KEEP_FRAME}"),
-                false => KEEP_FRAME.to_string(),
-            },
-            KeepAt::Local(at) | KeepAt::Element(at) => match lent {
-                true => format!("&__keep_{at}"),
-                false => format!("__keep_{at}"),
-            },
-            // **The task's keep, borrowed here** (ADR-218 D4): what is cut
-            // from it lives as long as this function's handle, and what leaves
-            // with a task is found in it again by its `Holding`.
-            KeepAt::Task => format!("(&*{KEEP_TASK})"),
-        }
+        nikaia_std::tools::emit_keeps::emit_keep_expr(&keep, lent)
     }
 
     /// The keeps declared before one statement: the function's own, before
     /// its first statement, and one per call or buffer that needs a keep of
     /// its own.
     fn keep_prelude(&self, function: &str, at: usize) -> Option<String> {
-        use nikaia_std::tools::buffers::KeepAt;
-        let plan = self.keep_plan(function)?;
-        let mut lines = Vec::new();
-        if plan.first == at as i64 {
-            if plan.frame_keep {
-                lines.push(format!(
-                    "let {KEEP_FRAME} = nikaia_std::tether::Keep::new();"
-                ));
-            }
-            if plan.task_keep {
-                lines.push(format!(
-                    "let {KEEP_TASK} = std::sync::Arc::new(nikaia_std::tether::Keep::new());"
-                ));
-            }
-        }
-        if plan.local_keeps.contains(&(at as i64)) {
-            lines.push(format!(
-                "let __keep_{at} = nikaia_std::tether::Keep::new();"
-            ));
-        }
-        let element = plan
-            .puts
-            .values()
-            .chain(plan.calls.values())
-            .any(|keep| *keep == KeepAt::Element(at as i64));
-        if element {
-            lines.push(format!(
-                "let __keep_{at} = std::sync::Arc::new(nikaia_std::tether::Keep::new());"
-            ));
-        }
-        (!lines.is_empty()).then(|| lines.join(" "))
+        self.walk(|w| self.s.keep_prelude(w, function, at as i64))
     }
 
     /// Declare the keeps a statement needs, once.
@@ -14436,23 +14066,19 @@ impl Emitter<'_> {
     /// the keep this function is given where the view leaves through its
     /// result (`contracts::keep::Source::Argument`).
     fn argument_keep(&self, flow: Flow<'_>, callee: &str, i: usize) -> Option<String> {
-        let plan = self.keep_plan(flow.function)?;
-        let keep = plan
-            .calls
-            .get(&(flow.statement as i64, format!("{callee}#{i}")))
-            .copied()?;
-        Some(Self::keep_expr(keep, true))
+        self.walk(|w| {
+            self.s
+                .argument_keep(w, flow.function, flow.statement as i64, callee, i as i64)
+        })
     }
 
     /// The keep a call to `callee` is given in this statement, where the
     /// callee takes one.
     fn keep_argument(&self, flow: Flow<'_>, callee: &str) -> Option<String> {
-        let plan = self.keep_plan(flow.function)?;
-        let keep = plan
-            .calls
-            .get(&(flow.statement as i64, callee.to_string()))
-            .copied()?;
-        Some(Self::keep_expr(keep, true))
+        self.walk(|w| {
+            self.s
+                .keep_argument(w, flow.function, flow.statement as i64, callee)
+        })
     }
 
     /// The ledger key a written callee resolves to, the way the keep plan
@@ -14470,54 +14096,18 @@ impl Emitter<'_> {
     /// The lifetimes a function that takes a keep writes its tethered
     /// positions with, where it takes one.
     fn kept_lifetimes(&self, key: &str, lifetimes: Lifetimes) -> Option<Lifetimes> {
-        let contract = self.s.own_contracts.functions.get(key)?;
-        if !crate::contracts::keep::takes_a_keep(contract) {
-            return None;
-        }
-        Some(match lifetimes.params().as_str() {
-            "'a" => Lifetimes::Named,
-            _ => Lifetimes::Kept,
-        })
+        self.s.kept_lifetimes(key, lifetimes)
     }
 
     /// Whether this position of a function is one its views leave through.
     fn tethered_position(&self, key: &str, position: &str) -> bool {
-        self.s.own_contracts.functions.get(key).is_some_and(|c| {
-            c.views.iter().any(|h| {
-                h.position == position && h.state == crate::contracts::tether::State::Tethered
-            })
-        })
+        self.s.tethered_position(key, position)
     }
 
     /// The type a task's tethered binding holds, as the source wrote it: the
     /// `let`'s annotation, or the declared result of the function it calls.
     fn tethered_type(&self, ty: Option<&Type>, value: &Expr) -> Option<Type> {
-        if let Some(ty) = ty {
-            return Some(ty.clone());
-        }
-        let call = match value {
-            Expr::Try(inner, _) => inner.as_ref(),
-            other => other,
-        };
-        let Expr::Call { func, .. } = call else {
-            return None;
-        };
-        let Expr::Variable(name, _) = func.as_ref() else {
-            return None;
-        };
-        let wanted = self.text(*name);
-        self.parsed
-            .program
-            .items
-            .iter()
-            .find_map(|item| match &item.node {
-                Item::Fn {
-                    name: Some(n),
-                    ret_type: Some(ret),
-                    ..
-                } if self.text(*n) == wanted => Some(ret.clone()),
-                _ => None,
-            })
+        nikaia_std::tools::emit_keeps::emit_tethered_type(&self.world, ty, value)
     }
 
     /// The `Views` type one tethered binding is held by (D3, and
@@ -14576,41 +14166,20 @@ impl Emitter<'_> {
     /// Whether the field of a held struct being written holds a view, which
     /// is then found again in the element's keeps before it is stored.
     fn held_field_carries_view(&self, flow: Flow<'_>, keeper: &Expr, field: Symbol) -> bool {
-        let Expr::Variable(keeper, _) = keeper else {
-            return true;
-        };
-        let Some(name) = self
-            .keep_plan(flow.function)
-            .and_then(|p| p.keeper_structs.get(self.text(*keeper)))
-        else {
-            return true;
-        };
-        let wanted = self.text(field);
-        self.parsed
-            .program
-            .items
-            .iter()
-            .find_map(|item| match &item.node {
-                Item::Struct {
-                    name: n, fields, ..
-                } if self.text(*n) == name => fields
-                    .iter()
-                    .find(|f| self.text(f.name) == wanted)
-                    .map(|f| holds_view(&f.ty) || self.names_borrowing(&f.ty)),
-                _ => None,
-            })
-            .unwrap_or(true)
+        self.walk(|w| {
+            self.s
+                .held_field_carries_view(&self.world, w, flow.function, keeper, field)
+        })
     }
 
     /// Whether `expr` names a keeper whose elements are structs of views held
     /// one handle per buffer, so that an element is read through the handle
     /// ([ADR-283](../../docs/specification/adr/adr-283.md) D17).
     fn reads_through_handle(&self, flow: Flow<'_>, expr: &Expr) -> bool {
-        let Expr::Variable(name, _) = expr else {
-            return false;
-        };
-        self.keep_plan(flow.function)
-            .is_some_and(|p| p.struct_keepers.contains(self.text(*name)))
+        self.walk(|w| {
+            self.s
+                .reads_through_handle(&self.world, w, flow.function, expr)
+        })
     }
 
     /// **What `tether` needs to hold a struct of views**, once per struct, at
