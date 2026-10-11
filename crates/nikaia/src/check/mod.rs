@@ -433,7 +433,6 @@ fn walked<'a>(
         guarded: None,
         loops: 0,
         barrier: None,
-        current: None,
         fallible_methods: BTreeSet::new(),
         pausing_methods: BTreeSet::new(),
         settled_methods: BTreeSet::new(),
@@ -459,7 +458,6 @@ fn walked<'a>(
         open_calls: std::collections::HashMap::new(),
         unknown_bound: BTreeSet::new(),
         list_constants: std::collections::HashMap::new(),
-        open_comptimes: BTreeMap::new(),
         overflowed: BTreeSet::new(),
         reaching: None,
         reached: None,
@@ -585,6 +583,8 @@ fn walked<'a>(
             stored_code: BTreeMap::new(),
             stored_frames: Vec::new(),
             rule_results: BTreeMap::new(),
+            current: None,
+            open_comptimes: BTreeMap::new(),
             next_binding: 1 << 40,
             handed_over: None,
             in_parallel: None,
@@ -1298,12 +1298,6 @@ struct Checker<'a> {
     /// **A `catch` handler is deliberately not one of these** (D5): it lowers to
     /// a `match` arm, and a jump in one reaches the loop around it.
     barrier: Option<&'static str>,
-    /// The function being walked, by the name the ledger records it under.
-    ///
-    /// `None` inside a grammar action, a `test` or a `bench` - code that
-    /// belongs to no function a caller can name, and whose method calls
-    /// therefore have nowhere to be recorded.
-    current: Option<String>,
     /// Method calls whose callee's contract says it can fail, and method calls
     /// where that could not be established - both as the pair
     /// [`Checked::fallible_methods`] is keyed by. The difference is the answer;
@@ -1406,10 +1400,6 @@ struct Checker<'a> {
     /// **What such a list holds, where nothing can change it**: an immutable
     /// `let`'s elements, so `xs[0] + xs[1]` is measured as `a + b` is (D26).
     list_constants: std::collections::HashMap<i64, Vec<Constant>>,
-    /// **The integer `comptime`s without a written type**, by their binding
-    /// ([`Local::id`]): open numbers each use takes in its own type
-    /// ([ADR-287](../../docs/specification/adr/adr-287.md) D21).
-    open_comptimes: BTreeMap<i64, Span>,
     /// **The statements an operation in has already overflowed**, by the byte
     /// they start at: one refusal for one cause (`an_operation_that_overflows`).
     overflowed: BTreeSet<i64>,
@@ -2162,6 +2152,7 @@ impl<'a> Checker<'a> {
             // where that is said instead: an action's failure leaves the parser
             // rather than travelling to a caller.
             let outer_current = self
+                .s
                 .current
                 .replace(format!("{named}::{}", self.parsed.text(rule.name)));
             for alt in &rule.alts {
@@ -2206,7 +2197,7 @@ impl<'a> Checker<'a> {
                 }
                 self.s.expected = outer;
             }
-            self.current = outer_current;
+            self.s.current = outer_current;
         }
     }
 
@@ -2377,12 +2368,12 @@ impl<'a> Checker<'a> {
             Some(target) => format!("{target}::{own_name}"),
             None => own_name,
         };
-        let outer_current = self.current.replace(key);
+        let outer_current = self.s.current.replace(key);
         let outer_sync = match is_sync {
             true => self
                 .s
                 .inside_a_sync_function
-                .replace(self.current.clone().unwrap_or_default()),
+                .replace(self.s.current.clone().unwrap_or_default()),
             false => self.s.inside_a_sync_function.take(),
         };
 
@@ -2500,6 +2491,7 @@ impl<'a> Checker<'a> {
         let outer_throwing = std::mem::replace(&mut self.throwing, *throws);
 
         let keeps: Vec<String> = self
+            .s
             .current
             .as_ref()
             .and_then(|key| self.world.own.functions.get(key))
@@ -2642,7 +2634,7 @@ impl<'a> Checker<'a> {
         self.throwing = outer_throwing;
         self.s.type_parameters = outer_declared;
         self.s.borrowing_self = outer_borrowing;
-        self.current = outer_current;
+        self.s.current = outer_current;
         self.s.inside_a_sync_function = outer_sync;
         self.s.run_code = outer_run_code;
     }
@@ -4708,7 +4700,7 @@ impl<'a> Checker<'a> {
     /// every analysis reads - one that pauses, and one that fails where the
     /// function says `throws` and the cleanup can fail.
     fn a_settle_in_this_function(&mut self, fails: bool) {
-        let Some(current) = self.current.clone() else {
+        let Some(current) = self.s.current.clone() else {
             return;
         };
         // **Whether the function's settle point can fail it**: only where a
@@ -4756,7 +4748,7 @@ impl<'a> Checker<'a> {
             }
             _ => "holds",
         };
-        if fails && !self.throwing && !self.caught && self.current.is_some() {
+        if fails && !self.throwing && !self.caught && self.s.current.is_some() {
             self.s.findings.push(Finding {
                 severity: Severity::Error,
                 span: *span,
@@ -6070,7 +6062,7 @@ impl<'a> Checker<'a> {
         match expr {
             Expr::Variable(name, _) => {
                 let local = self.s.binding(self.parsed.text(*name))?;
-                let at = self.open_comptimes.get(&((local.id as usize) as i64))?;
+                let at = self.s.open_comptimes.get(&((local.id as usize) as i64))?;
                 Some((local.name.clone(), *at))
             }
             Expr::Binary { lhs, rhs, .. } => self
@@ -6317,44 +6309,10 @@ impl<'a> Checker<'a> {
         self.comptimes_asked(value, &ty);
     }
 
-    /// **Each integer `comptime` in a value a use asks a type of is written in
-    /// it** ([ADR-287](../../docs/specification/adr/adr-287.md) D21), through
-    /// the operations of one type [`Self::open_numbers_in`] walks.
+    /// A `comptime` binding used where a type is asked
+    /// (`tools/check_fields.nika`).
     fn comptimes_asked(&mut self, expr: &Expr, ty: &str) {
-        match expr {
-            Expr::Variable(name, _) => {
-                let Some(local) = self.s.binding(self.parsed.text(*name)) else {
-                    return;
-                };
-                let Some(value) = &local.constant else {
-                    return;
-                };
-                if !self
-                    .open_comptimes
-                    .contains_key(&((local.id as usize) as i64))
-                {
-                    return;
-                }
-                let digits = nikaia_std::tools::integers::integer_text(value);
-                let written = match value.negative {
-                    true => format!("({digits}{ty})"),
-                    false => format!("{digits}{ty}"),
-                };
-                self.s.facts.comptime_uses.insert(value_node(expr), written);
-            }
-            Expr::Binary { op, lhs, rhs, .. } if an_operation_of_one_type(*op) => {
-                self.comptimes_asked(lhs, ty);
-                if !matches!(op, BinaryOp::Shl | BinaryOp::Shr) {
-                    self.comptimes_asked(rhs, ty);
-                }
-            }
-            Expr::Unary {
-                op: UnaryOp::Neg | UnaryOp::Not,
-                expr,
-                ..
-            } => self.comptimes_asked(expr, ty),
-            _ => {}
-        }
+        self.s.comptimes_asked(&self.world, expr, ty);
     }
 
     /// **One operation, one type**: the open numbers on both sides of it are
@@ -7100,10 +7058,7 @@ impl<'a> Checker<'a> {
                             .collect(),
                     };
                     for owner in owners {
-                        let code = self.fields_seen(&owner).is_some_and(|d| {
-                            d.iter()
-                                .any(|f| f.name == field && matches!(f.ty, Ty::Fn { .. }))
-                        });
+                        let code = self.s.a_field_holds_code(&self.world, &owner, &field);
                         if code {
                             self.a_field_whose_code_is_not_seen(&owner, &field);
                         }
@@ -7642,7 +7597,7 @@ impl<'a> Checker<'a> {
             || matches!(expr, Expr::Variable(n, _) if self
                 .s
                 .binding(self.parsed.text(*n))
-                .is_some_and(|l| self.open_comptimes.contains_key(&((l.id as usize) as i64))))
+                .is_some_and(|l| self.s.open_comptimes.contains_key(&((l.id as usize) as i64))))
             || self.s.a_member_of_an_open_argument(&self.world, expr)
             // `xs ?? 0` and `xs ?? return` over a `T?` nothing typed: the
             // number's uses, or the jump, leave the type to what the left side
@@ -11463,7 +11418,7 @@ impl<'a> Checker<'a> {
                 .facts
                 .kept_calls
                 .insert(((span.at() as i64), name), (!is_sync, throws));
-            if let Some(current) = &self.current {
+            if let Some(current) = &self.s.current {
                 let entry = self
                     .s
                     .methods
@@ -12846,7 +12801,7 @@ impl<'a> Checker<'a> {
         }
         // A `test` or a `bench` body is the other place with no function to
         // name, and there `current` is still `None`.
-        let Some(function) = self.current.clone() else {
+        let Some(function) = self.s.current.clone() else {
             return;
         };
         self.s.findings.push(Finding {
@@ -13651,7 +13606,7 @@ impl<'a> Checker<'a> {
         if self.throwing || self.caught || self.s.inside_an_action.is_some() {
             return;
         }
-        let Some(function) = self.current.clone() else {
+        let Some(function) = self.s.current.clone() else {
             return;
         };
         let name = self.parsed.text(method).to_string();
@@ -15808,7 +15763,7 @@ impl<'a> Checker<'a> {
         // column, and asked here where a lock is already open.
         if let Ty::Named { name: owner, .. } = on {
             let key = format!("{owner}.{}", self.parsed.text(method));
-            if let Some(current) = &self.current
+            if let Some(current) = &self.s.current
                 && self.s.task_bindings.is_empty()
             {
                 self.s
@@ -15831,7 +15786,7 @@ impl<'a> Checker<'a> {
             .facts
             .field_calls
             .insert(value_node(receiver), !is_sync);
-        if let Some(current) = &self.current {
+        if let Some(current) = &self.s.current {
             let entry = self
                 .s
                 .methods
@@ -17858,7 +17813,7 @@ impl<'a> Checker<'a> {
         };
         let id = a_new_binding();
         if open {
-            self.open_comptimes.insert(id as i64, *span);
+            self.s.open_comptimes.insert(id as i64, *span);
         }
         // **What the name is worth is what was *evaluated*, not what folded.**
         // They were the same thing while the fold was the whole evaluator; with
@@ -18046,7 +18001,7 @@ impl<'a> Checker<'a> {
                 None => frame.unresolved = true,
             }
         }
-        let Some(current) = &self.current else {
+        let Some(current) = &self.s.current else {
             return;
         };
         // **Which side of a `spawn` this call is on** (ADR-281 D29). The stack
@@ -18109,34 +18064,6 @@ impl<'a> Checker<'a> {
             .zip(args.iter().cloned())
             .filter(|(_, arg)| !arg.is_unknown())
             .collect()
-    }
-
-    /// [`Checker::fields_of`] without the copy, for a question asked of every
-    /// `struct` in the program: an assignment into `a.b.c = …` asks it once per
-    /// declared type, and a copy each time made that quadratic in the program's
-    /// size ([ADR-294](../../docs/specification/adr/adr-294.md)).
-    fn fields_seen(&self, name: &str) -> Option<&[FieldContract]> {
-        if let Some(fields) = self.s.structs.get(name) {
-            return Some(fields.as_slice()).filter(|f| !f.is_empty());
-        }
-        // A type of **another file of this program**, by the qualified name a
-        // caller writes: `pool::Conn`. By the exact key and never by suffix,
-        // which is the difference from the library below - two modules may each
-        // declare a `Conn`, and a suffix match would answer with whichever came
-        // first. `std` has no such ambiguity and a value's type does not carry
-        // the module a library writes in front of it, which is why that one is
-        // matched the other way (ADR-296 D17).
-        if let Some(contract) = self.world.own.types.get(name) {
-            return Some(contract.fields.as_slice()).filter(|f| !f.is_empty());
-        }
-        let suffix = format!("::{name}");
-        self.world
-            .library
-            .types
-            .iter()
-            .find(|(key, _)| *key == name || key.ends_with(&suffix))
-            .map(|(_, contract)| contract.fields.as_slice())
-            .filter(|f| !f.is_empty())
     }
 
     /// **Whether a `match` is over a place this function owns**: a name, or a
@@ -18807,31 +18734,10 @@ fn gives_back(body: &Expr, name: &str, parsed: &Parsed) -> bool {
 }
 
 impl Checker<'_> {
-    /// [`copies`], and a type the library says copies: a
-    /// `winnow_grammar::Symbol` bound out of a lent `match` is copied out at
-    /// the head of the arm, as a number is.
-    /// Whether `given` names a parameter the function being checked is lent,
-    /// by the same answer its declaration is written off.
+    /// A name that is a parameter the function only lends on
+    /// (`tools/check_fields.nika`).
     fn a_lent_parameter(&self, given: &Expr) -> bool {
-        let Expr::Variable(name, _) = given else {
-            return false;
-        };
-        let name = self.parsed.text(*name);
-        let Some(contract) = self
-            .current
-            .as_ref()
-            .and_then(|key| self.world.own.functions.get(key))
-        else {
-            return false;
-        };
-        let Some(at) = contract
-            .signature
-            .as_ref()
-            .and_then(|s| s.params.iter().position(|(param, _)| param == name))
-        else {
-            return false;
-        };
-        crate::contracts::keeps::lends_in(contract, at, &[self.world.library])
+        self.s.a_lent_parameter(&self.world, given)
     }
 }
 
@@ -18850,49 +18756,9 @@ fn is_a_view_of_a_string(ty: &Ty) -> bool {
 /// A view of a value that copies read as the value, and anything else as it is
 /// ([ADR-233](../../docs/specification/adr/adr-233.md) D4).
 impl Checker<'_> {
-    /// **An empty map's first `m[k] = v`** (#543, ADR-135 D2's rule for a
-    /// map): its key and value types, as a first `insert` gives them. The key
-    /// is asked by its form, a text literal or a name, because the `Index` arm
-    /// has walked it already and a second walk would record its reads twice.
+    /// An empty map written to for the first time (`tools/check_fields.nika`).
     fn a_map_first_written(&mut self, target: &Expr, found: &Ty) {
-        let Expr::Index { base, index, .. } = target else {
-            return;
-        };
-        let Expr::Variable(name, _) = &**base else {
-            return;
-        };
-        let name = self.parsed.text(*name).to_string();
-        let open = self.s.binding(&name).is_some_and(|local| {
-            matches!(&local.ty, Ty::Named { name, args, .. }
-                if a_map(name)
-                    && matches!(args.as_slice(), [] | [Ty::Unknown, Ty::Unknown]))
-        });
-        if !open || found.is_unknown() {
-            return;
-        }
-        let key = match &**index {
-            Expr::LitStr { .. } => Ty::Named {
-                name: ty::TEXT.to_string(),
-                args: Vec::new(),
-                view: false,
-            },
-            Expr::Variable(key, _) => match self.s.lookup(self.parsed.text(*key)) {
-                Some(ty) if !ty.is_unknown() => value_of_a_copy(ty),
-                _ => return,
-            },
-            _ => return,
-        };
-        let value = value_of_a_copy(found.clone());
-        if let Some(local) = self
-            .s
-            .scope
-            .iter_mut()
-            .rev()
-            .find_map(|frame| frame.iter_mut().rev().find(|local| local.name == name))
-            && let Ty::Named { args, .. } = &mut local.ty
-        {
-            *args = vec![key, value];
-        }
+        self.s.a_map_first_written(&self.world, target, found);
     }
 }
 

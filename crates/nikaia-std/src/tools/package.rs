@@ -11401,6 +11401,145 @@ impl CheckState {
     }
 }
 
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn an_operation_in_one_type(op: &BinaryOp) -> bool { !(*op == BinaryOp::Eq || *op == BinaryOp::Ne || *op == BinaryOp::Lt || *op == BinaryOp::Le || *op == BinaryOp::Gt || *op == BinaryOp::Ge || *op == BinaryOp::And || *op == BinaryOp::Or) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn a_map_name(name: &str) -> bool {
+    let base = type_last_segment(name);
+    base == "HashMap" || base == "BTreeMap" || base == "Map"
+}
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_lent_parameter(&self, world: &CheckWorld<'_>, given: &Expr) -> bool {
+        let name = match given {
+            Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_owned() },
+            _ => return false,
+        };
+        let key = match self.current.as_deref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let contract = match match *nikaia_std::index::get(&world.own.functions, key) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        } { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let signature = match match contract.signature.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        } { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let mut at: i64 = -1;
+        let mut scan: i64 = 0;
+        while scan < signature.params.len() as i64 {
+            if at < 0 && nikaia_std::index::get(&signature.params, nikaia_std::index::at(scan)).0 == name { at = scan; }
+            scan = scan + 1;
+        }
+        if at < 0 { return false; }
+        lends_in(&contract, at, &vec![world.library])
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_map_first_written(&mut self, world: &CheckWorld<'_>, target: &Expr, found: &Ty) {
+        let base_name = match target {
+            Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); match base {
+                Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_owned() },
+                _ => return,
+            } },
+            _ => return,
+        };
+        let index_key = match target {
+            Expr::Index { index, .. } => { let index = nikaia_std::boxed::open(index); index_key_type(self, world, index) },
+            _ => return,
+        };
+        let local = match self.binding(&base_name) { Some(__nikaia_value) => __nikaia_value, None => return };
+        let open = match local.ty {
+            Ty::Named { ref name, ref args, .. } => a_map_name(name) && (args.is_empty() || args.len() == 2 && (*nikaia_std::index::get(&args, 0)).is_unknown() && (*nikaia_std::index::get(&args, 1)).is_unknown()),
+            _ => false,
+        };
+        if !open || found.is_unknown() || index_key.is_unknown() { return; }
+        let value = value_of_a_copy(found);
+        let mut frame = self.scope.len() as i64;
+        while frame > 0 {
+            frame = frame - 1;
+            let mut at = (*nikaia_std::index::get(&self.scope, nikaia_std::index::at(frame))).len() as i64;
+            while at > 0 {
+                at = at - 1;
+                if nikaia_std::index::get(nikaia_std::index::get(&self.scope, nikaia_std::index::at(frame)), nikaia_std::index::at(at)).name == base_name {
+                    let held = named_or_empty(&nikaia_std::index::get(nikaia_std::index::get(&self.scope, nikaia_std::index::at(frame)), nikaia_std::index::at(at)).ty);
+                    if !held.is_empty() { self.scope[nikaia_std::index::at(frame)][nikaia_std::index::at(at)].ty = Ty::Named { name: held, args: vec![index_key, value], view: false }; }
+                    return;
+                }
+            }
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn comptimes_asked(&mut self, world: &CheckWorld<'_>, expr: &Expr, ty: &str) {
+        match expr {
+            Expr::Variable(name, _) => {
+                let name = *name;
+                let local = match self.binding(world.words.resolve(name)) { Some(__nikaia_value) => __nikaia_value, None => return };
+                let value = match local.constant { Some(__nikaia_value) => __nikaia_value, None => return };
+                if !self.open_comptimes.contains_key(&local.id) { return; }
+                let digits = integer_text(&value);
+                let mut written = format!("{}{}", digits, ty);
+                if value.negative { written = format!("({}{})", digits, ty); }
+                self.facts.comptime_uses.insert(fact_key(expr), written);
+            },
+            Expr::Binary { op, lhs, rhs, .. } => {
+                let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
+                if an_operation_in_one_type(op) {
+                    self.comptimes_asked(world, lhs, ty);
+                    if *op != BinaryOp::Shl && *op != BinaryOp::Shr { self.comptimes_asked(world, rhs, ty); }
+                }
+            },
+            Expr::Unary { op, expr, .. } => {
+                let expr = nikaia_std::boxed::open(expr);
+                if *op == UnaryOp::Neg || *op == UnaryOp::Not { self.comptimes_asked(world, expr, ty); }
+            },
+            _ => { },
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_field_holds_code(&self, world: &CheckWorld<'_>, owner: &str, field: &str) -> bool {
+        let fields = self.fields_seen(world, owner);
+        for each in fields.iter() { if each.name == field { return matches!(each.ty, Ty::Fn { .. }); } }
+        false
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn fields_seen(&self, world: &CheckWorld<'_>, name: &str) -> Vec<FieldContract> {
+        if self.structs.contains_key(name) {
+            return nikaia_std::index::or(match *nikaia_std::index::get(&self.structs, name) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || vec![].into());
+        }
+        if world.own.types.contains_key(name) {
+            let contract = match match *nikaia_std::index::get(&world.own.types, name) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            } { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
+            return contract.fields.to_owned();
+        }
+        let suffix = format!("::{}", name);
+        for (key, contract) in world.library.types.iter() { if key == name || key.ends_with(&suffix) { return contract.fields.to_owned(); } }
+        vec![]
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn index_key_type(state: &CheckState, world: &CheckWorld<'_>, index: &Expr) -> Ty {
+    match index {
+        Expr::LitStr { .. } => Ty::Named { name: String::from("String"), args: vec![], view: false },
+        Expr::Variable(key, _) => { let key = *key; value_of_a_copy(&nikaia_std::index::or(state.lookup(world.words.resolve(key)), || Ty::Unknown)) },
+        _ => Ty::Unknown,
+    }
+}
+
 
 // --- check_grammar.nika ---
 
@@ -13589,6 +13728,8 @@ pub struct CheckState {
     pub facts: CheckFacts,
     pub rule_results: collections::BTreeMap<String, Ty>,
     pub next_binding: i64,
+    pub current: Option<String>,
+    pub open_comptimes: collections::BTreeMap<i64, Span>,
     pub methods: collections::BTreeMap<String, CheckMethodCalls>,
     pub stored_code: collections::BTreeMap<String, CheckStoredCode>,
     pub stored_frames: Vec<CheckStoredCode>,

@@ -188,3 +188,160 @@ impl CheckState {
         self.findings.push(check_refusal("NK1185", span, message, notes, help))
     }
 }
+
+/// Whether a binary operator computes in one type: not a comparison, not
+/// `&&` or `||`.
+fn an_operation_in_one_type(op: ref BinaryOp) -> bool sync {
+    return !(op == BinaryOp::Eq || op == BinaryOp::Ne || op == BinaryOp::Lt || op == BinaryOp::Le || op == BinaryOp::Gt || op == BinaryOp::Ge || op == BinaryOp::And || op == BinaryOp::Or)
+}
+
+/// A map type's name, by its last segment.
+fn a_map_name(name: ref String) -> bool sync {
+    let base = type_last_segment(name)
+    return base == "HashMap" || base == "BTreeMap" || base == "Map"
+}
+
+impl CheckState {
+    /// **A name that is a parameter the function only lends on** (ADR-288):
+    /// whether the contract of the function being walked lends at its position.
+    pub fn a_lent_parameter(ref self, world: ref CheckWorld, given: ref Expr) -> bool sync {
+        let name = match given {
+            Expr::Variable(name, _) => world.words.resolve(name).clone(),
+            else => return false,
+        }
+        let key = self.current ?? return false
+        let contract = world.own.functions[key]?.clone() ?? return false
+        let signature = contract.signature?.clone() ?? return false
+        let mut at: i64 = -1
+        let mut scan = 0
+        while scan < signature.params.len() {
+            if at < 0 && signature.params[scan].0 == name {
+                at = scan
+            }
+            scan = scan + 1
+        }
+        if at < 0 {
+            return false
+        }
+        return lends_in(contract, at, [world.library])
+    }
+
+    /// **An empty map written to for the first time** (`m["k"] = v`): its
+    /// key and value types are what the write gives, where both are known.
+    pub fn a_map_first_written(ref mut self, world: ref CheckWorld, target: ref Expr, found: ref Ty) sync {
+        let base_name = match target {
+            Expr::Index { base, .. } => match base {
+                Expr::Variable(name, _) => world.words.resolve(name).clone(),
+                else => return,
+            },
+            else => return,
+        }
+        let index_key = match target {
+            Expr::Index { index, .. } => index_key_type(self, world, index),
+            else => return,
+        }
+        let local = self.binding(base_name) ?? return
+        let open = match local.ty {
+            Ty::Named { name, args, .. } => a_map_name(name) && (args.len() == 0 || (args.len() == 2 && args[0].is_unknown() && args[1].is_unknown())),
+            else => false,
+        }
+        if !open || found.is_unknown() || index_key.is_unknown() {
+            return
+        }
+        let value = value_of_a_copy(found)
+        let mut frame = self.scope.len()
+        while frame > 0 {
+            frame = frame - 1
+            let mut at = self.scope[frame].len()
+            while at > 0 {
+                at = at - 1
+                if self.scope[frame][at].name == base_name {
+                    let held = named_or_empty(self.scope[frame][at].ty)
+                    if !held.is_empty() {
+                        self.scope[frame][at].ty = Ty::Named { name: held, args: [index_key, value], view: false }
+                    }
+                    return
+                }
+            }
+        }
+    }
+
+    /// **A `comptime` binding used where a type is asked**: the use is written
+    /// with the type's suffix (`3u8`), by the node (ADR-287). `ty` is the suffix.
+    pub fn comptimes_asked(ref mut self, world: ref CheckWorld, expr: ref Expr, ty: ref String) sync {
+        match expr {
+            Expr::Variable(name, _) => {
+                let local = self.binding(world.words.resolve(name)) ?? return
+                let value = local.constant ?? return
+                if !self.open_comptimes.contains_key(local.id) {
+                    return
+                }
+                let digits = integer_text(value)
+                let mut written = f"{digits}{ty}"
+                if value.negative {
+                    written = f"({digits}{ty})"
+                }
+                self.facts.comptime_uses.insert(fact_key(expr), written)
+            },
+            Expr::Binary { op, lhs, rhs, .. } => {
+                if an_operation_in_one_type(op) {
+                    self.comptimes_asked(world, lhs, ty)
+                    if op != BinaryOp::Shl && op != BinaryOp::Shr {
+                        self.comptimes_asked(world, rhs, ty)
+                    }
+                }
+            },
+            Expr::Unary { op, expr, .. } => {
+                if op == UnaryOp::Neg || op == UnaryOp::Not {
+                    self.comptimes_asked(world, expr, ty)
+                }
+            },
+            else => {},
+        }
+    }
+
+    /// Whether a declared type has a field of the name that holds code
+    /// (ADR-230 D1): what a field whose code is not seen is asked about.
+    pub fn a_field_holds_code(ref self, world: ref CheckWorld, owner: ref String, field: ref String) -> bool sync {
+        let fields = self.fields_seen(world, owner)
+        for each in fields {
+            if each.name == field {
+                return match each.ty {
+                    Ty::Fn { .. } => true,
+                    else => false,
+                }
+            }
+        }
+        return false
+    }
+
+    /// The declared fields of a type by the name a value's type carries: the
+    /// program's own, another file's by the exact qualified name, or `std`'s by
+    /// the last segment (ADR-296 D17). Empty where there are none.
+    pub fn fields_seen(ref self, world: ref CheckWorld, name: ref String) -> Vec[FieldContract] sync {
+        if self.structs.contains_key(name) {
+            return self.structs[name]?.clone() ?? []
+        }
+        if world.own.types.contains_key(name) {
+            let contract = world.own.types[name]?.clone() ?? return []
+            return contract.fields.clone()
+        }
+        let suffix = f"::{name}"
+        for (key, contract) in world.library.types {
+            if key == name || key.ends_with(ref suffix) {
+                return contract.fields.clone()
+            }
+        }
+        return []
+    }
+}
+
+/// The type a map's index key gives: text for a literal, the type of a
+/// variable that is known; `?` otherwise.
+fn index_key_type(state: ref CheckState, world: ref CheckWorld, index: ref Expr) -> Ty sync {
+    return match index {
+        Expr::LitStr { .. } => Ty::Named { name: "String", args: [], view: false },
+        Expr::Variable(key, _) => value_of_a_copy(state.lookup(world.words.resolve(key)) ?? Ty::Unknown),
+        else => Ty::Unknown,
+    }
+}

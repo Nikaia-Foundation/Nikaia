@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.804] — 2026-10-11
+
+**A lent parameter, a map's first write, a `comptime` asked for a type and a field holding code are Nikaia (`tools/check_fields.nika`, #558, #125).**
+- `a_lent_parameter`, `a_map_first_written`, `comptimes_asked`, `a_field_holds_code` and `fields_seen` are methods of `CheckState`; `current` and `open_comptimes` moved from the `Checker` into it. Left in Rust: `grown_text`, `a_kept_lambda_takes_these`, `a_kept_lambdas_hulls` and `walks_the_fields_of` (they walk a block through the emitter's `visit_block`), `hands_over` (it reads `read_index`).
+
 ## [0.0.803] — 2026-10-11
 
 **The checker's method and stored-code tables and the grammar pattern types are Nikaia (`tools/check_state.nika`, `tools/check_grammar.nika`, #558, #125).**

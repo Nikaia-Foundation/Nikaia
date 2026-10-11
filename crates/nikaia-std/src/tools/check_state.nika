@@ -770,6 +770,10 @@ pub struct CheckState {
     pub rule_results: collections::BTreeMap[String, Ty],
     /// The id the next binding made here gets (above every id the host gives).
     pub next_binding: i64,
+    /// The key of the function (or rule) being walked.
+    pub current: String?,
+    /// The `comptime` bindings whose use may still name a type, by binding id.
+    pub open_comptimes: collections::BTreeMap[i64, Span],
     /// What each function calls through a method.
     pub methods: collections::BTreeMap[String, CheckMethodCalls],
     /// What code stored in a function field reaches.
