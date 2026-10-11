@@ -2367,28 +2367,7 @@ impl<'p> Emitter<'p> {
     /// its name, because a wrapper that guessed at a signature would be worse
     /// than no wrapper at all.
     fn user_main(&self) -> Option<bool> {
-        if !self.s.entry {
-            return None;
-        }
-        self.parsed
-            .program
-            .items
-            .iter()
-            .find_map(|item| match &item.node {
-                Item::Fn {
-                    name: Some(name),
-                    receiver: None,
-                    args,
-                    config,
-                    spread: None,
-                    ret_type: None,
-                    can_throw: throws,
-                    ..
-                } if self.text(*name) == MAIN && args.is_empty() && config.is_empty() => {
-                    Some(*throws)
-                }
-                _ => None,
-            })
+        self.s.user_main(&self.world)
     }
 
     /// The `fn main` Rust runs: ADR-303 D4, as five lines of generated code.
@@ -2406,78 +2385,9 @@ impl<'p> Emitter<'p> {
     /// operator's runtime configuration file (ADR-303 D5 has four settings and
     /// this is not one of them).
     fn entry_point(&self, out: &mut Out) {
-        let Some(throws) = self.user_main() else {
-            return;
-        };
-        let user_code = match self.build.user_parallelism {
-            UserParallelism::No => "Sequential",
-            UserParallelism::Yes => "Concurrent",
-        };
-        // **The runtime's `main` declares the program's own channel**
-        // ([ADR-280](../../docs/specification/adr/adr-280.md) D9): it hands
-        // `__nikaia_main`'s outcome straight back, so the two have to agree.
-        // `Result<(), E>` is a `Termination` for any `E: Debug`, which every
-        // envelope is.
-        //
-        // `main` has no parameters, so there is nothing to borrow from and an
-        // error carrying a view can only be `'static` — D9's derivation, one
-        // position over.
+        let concurrent = matches!(self.build.user_parallelism, UserParallelism::Yes);
         let channel = self.error_channel(MAIN, Lifetimes::Elided, false);
-        let ret = if throws {
-            format!(" -> Result<(), {channel}>")
-        } else {
-            String::new()
-        };
-
-        for line in [
-            "",
-            "// ADR-303 D4: the runtime is running before the program's first",
-            "// statement, so an operation inside it costs no thread wake-up. What",
-            "// starts is what `user_parallelism` allows (ADR-037 D2): the I/O",
-            "// worker always, a pool for user code only at `yes`.",
-        ] {
-            out.push(line);
-            out.push("\n");
-        }
-        out.push(&format!("fn main(){ret} {{\n"));
-        // **Before anything else** (ADR-300 D10): the hook has to be in place
-        // before a line that can abort runs, and the first of those is inside
-        // the runtime's own start. The table is defined at the end of this file
-        // (`abort_table`), which Rust allows and which is what keeps the line
-        // numbers in it true - a table written above the program would move
-        // every line it names.
-        out.push(&format!(
-            "    nikaia_std::abort::report_in_nikaia_terms({ABORT_TABLE});\n"
-        ));
-        // **A `main` that cannot pause starts the runtime on demand**
-        // ([ADR-270](../../docs/specification/adr/adr-270.md) D8 step 1): it
-        // has no operation that needs the I/O workers, and starting them put a
-        // second thread in the process, which makes every allocation take the
-        // allocator's locks. `rt::handle` still starts it if something asks.
-        let start = match (self.pauses(MAIN), self.build.user_parallelism) {
-            (false, UserParallelism::No) => "on_demand",
-            _ => "start",
-        };
-        out.push(&format!(
-            "    let nikaia_runtime = nikaia_std::rt::{start}(nikaia_std::rt::UserCode::{user_code});\n"
-        ));
-        // **ADR-055 D3: `main` is what the executor drives.** Where the
-        // program's own entry can pause it is an `async fn` (D1), so the one
-        // place a future is driven from the outside is here - `block_on` is the
-        // boundary between a program that can pause and an operating system
-        // that cannot.
-        //
-        // A `main` the ledger says is `sync` is a plain call, and writing
-        // `block_on` around it would be driving something that is not a future.
-        match self.pauses(MAIN) {
-            true => out.push(&format!(
-                "    let outcome = nikaia_std::rt::exec::block_on({PROGRAM_MAIN}());\n"
-            )),
-            false => out.push(&format!("    let outcome = {PROGRAM_MAIN}();\n")),
-        }
-        out.push("    nikaia_runtime.finish();\n");
-        out.push("    outcome\n");
-        out.push("}\n");
+        out.push(&self.s.entry_point(&self.world, concurrent, &channel));
     }
 
     /// Whether any grammar entry in the program reaches a **parallel** rule,
@@ -10688,16 +10598,6 @@ impl<'p> Emitter<'p> {
         )
     }
 
-    /// [`Emitter::borrows`] for a type named as text rather than as a `Symbol`.
-    ///
-    /// The ledger's `throws` column carries names, and a name interned by
-    /// another parse is not this one's `Symbol`.
-    /// Whether a type names a struct that holds a view
-    /// ([`Emitter::borrowing`]).
-    fn names_borrowing(&self, ty: &Type) -> bool {
-        self.s.names_borrowing(&self.world, ty)
-    }
-
     /// The generated sums, written into the file
     /// ([ADR-280](../../docs/specification/adr/adr-280.md) D15).
     ///
@@ -14191,59 +14091,7 @@ impl Emitter<'_> {
     /// into a `Holding` (`Hold`). Written by the compiler, and none of it
     /// `unsafe`.
     fn held_structs(&self, out: &mut Out) {
-        // Only a unit that holds anything one handle per buffer pays for it.
-        if self
-            .s
-            .keep_plans
-            .values()
-            .all(|p| p.element_keepers.is_empty() && !p.task_keep)
-        {
-            return;
-        }
-        for item in &self.parsed.program.items {
-            let Item::Struct {
-                name,
-                generics,
-                fields,
-                ..
-            } = &item.node
-            else {
-                continue;
-            };
-            if !self.s.borrowing.contains(self.text(*name)) || !generics.is_empty() {
-                continue;
-            }
-            let ty = self.name(*name);
-            let rebased = fields
-                .iter()
-                .map(|field| {
-                    let field_name = self.name(field.name);
-                    match holds_view(&field.ty) || self.names_borrowing(&field.ty) {
-                        true => format!(
-                            "{field_name}: nikaia_std::tether::Rebase::rebase(self.{field_name}, keeps)"
-                        ),
-                        false => format!("{field_name}: self.{field_name}"),
-                    }
-                })
-                .collect::<Vec<_>>()
-                .join(", ");
-            out.push(&format!(
-                "\n/// `{ty}` held one handle per buffer (ADR-283).\n\
-                 #[allow(non_camel_case_types)]\n\
-                 enum __Views_{ty} {{}}\n\n\
-                 impl nikaia_std::tether::Views for __Views_{ty} {{\n    \
-                 type Of<'a> = {ty}<'a>;\n    \
-                 fn shorten<'long: 's, 's>(x: &'s {ty}<'long>) -> &'s {ty}<'s> {{\n        x\n    }}\n}}\n\n\
-                 impl<'a> nikaia_std::tether::Rebase<'a> for {ty}<'_> {{\n    \
-                 type At = {ty}<'a>;\n    \
-                 fn rebase<const N: usize>(self, keeps: &nikaia_std::tether::Keeps<'a, N>) -> {ty}<'a> {{\n        \
-                 {ty} {{ {rebased} }}\n    }}\n}}\n\n\
-                 impl<const N: usize> nikaia_std::tether::Hold<N> for {ty}<'_> {{\n    \
-                 type Held = nikaia_std::tether::Holding<__Views_{ty}, N>;\n    \
-                 fn hold(self, keeps: [std::sync::Arc<nikaia_std::tether::Keep>; N]) -> Self::Held {{\n        \
-                 nikaia_std::tether::Holding::new(keeps, move |keeps| nikaia_std::tether::Rebase::rebase(self, &keeps))\n    }}\n}}\n"
-            ));
-        }
+        out.push(&self.s.held_structs(&self.world));
     }
 }
 

@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.811] — 2026-10-11
+
+**The emitter's entry point, the program's own main and the held structs are Nikaia (tools/emit_entry.nika, #558, step E8).**
+- `user_main`, `entry_point` and `held_structs` are methods of `EmitState` that hand back the text; the Rust `Emitter` writes it. Output unchanged.
+
 ## [0.0.810] — 2026-10-11
 
 **The questions the emitter's walk asks of the file and of its keeps are Nikaia (tools/emit_below.nika, tools/emit_keeps.nika, #558, step E7).**

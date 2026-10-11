@@ -1,0 +1,115 @@
+// crates/nikaia-std/src/tools/emit_entry.nika
+//
+// **The text the emitter writes around the program rather than for a statement
+// of it**, moved from `emit/mod.rs` (ADR-294, #125, #558, step E8): the `main`
+// the runtime starts, which `main` of the program that is, and the types that
+// hold one handle per buffer. Methods of `EmitState` that hand back the text;
+// the Rust `Emitter` writes it.
+
+use std::collections
+
+impl EmitState {
+    /// The program's own `main`, if this file carries one the runtime can
+    /// wrap: `Some(throws)` for the plain shape - `fn main()` or
+    /// `fn main() throws`, no receiver, no parameters, no returned value - and
+    /// `None` for anything else. A `main` this does not recognise is emitted as
+    /// written and keeps its name.
+    pub fn user_main(ref self, world: ref EmitWorld) -> bool? {
+        if !self.entry {
+            return null
+        }
+        for item in world.items {
+            match item.node {
+                Item::Fn { name, receiver, args, config, spread, ret_type, can_throw, .. } => {
+                    let called = name ?? continue
+                    if world.words.resolve(called) == "main" && receiver == null && args.len() == 0 && config.len() == 0 && spread == null && ret_type == null {
+                        return can_throw
+                    }
+                },
+                else => {},
+            }
+        }
+        return null
+    }
+
+    /// The `fn main` Rust runs (ADR-303 D4), as the lines of generated code.
+    /// `channel` is the failure channel of the program's `main`, `concurrent`
+    /// whether user code may run on a pool.
+    pub fn entry_point(ref self, world: ref EmitWorld, concurrent: bool, channel: ref String) -> String {
+        let fails = self.user_main(world) ?? return ""
+        let mut user_code: String = "Sequential"
+        if concurrent {
+            user_code = "Concurrent"
+        }
+        let mut ret: String = ""
+        if fails {
+            ret = f" -> Result<(), {channel}>"
+        }
+        let mut start: String = "start"
+        if !call_pauses(self.own_contracts, "main") && !concurrent {
+            start = "on_demand"
+        }
+        let mut text: String = "\n// ADR-303 D4: the runtime is running before the program's first\n// statement, so an operation inside it costs no thread wake-up. What\n// starts is what `user_parallelism` allows (ADR-037 D2): the I/O\n// worker always, a pool for user code only at `yes`.\n"
+        text = f"{text}fn main(){ret} {{\n"
+        text = f"{text}    nikaia_std::abort::report_in_nikaia_terms(__NIKAIA_SITES);\n"
+        text = f"{text}    let nikaia_runtime = nikaia_std::rt::{start}(nikaia_std::rt::UserCode::{user_code});\n"
+        if call_pauses(self.own_contracts, "main") {
+            text = f"{text}    let outcome = nikaia_std::rt::exec::block_on(__nikaia_main());\n"
+        } else {
+            text = f"{text}    let outcome = __nikaia_main();\n"
+        }
+        text = f"{text}    nikaia_runtime.finish();\n    outcome\n}}\n"
+        return text
+    }
+
+    /// The types that hold one handle per buffer (ADR-283): for each struct of
+    /// the file that holds a view and has no type parameters, the `Views`,
+    /// `Rebase` and `Hold` implementations. Nothing, unless some plan keeps an
+    /// element or a task's keep.
+    pub fn held_structs(ref self, world: ref EmitWorld) -> String {
+        let mut pays = false
+        for (_, plan) in self.keep_plans {
+            if plan.element_keepers.len() > 0 || plan.task_keep {
+                pays = true
+            }
+        }
+        if !pays {
+            return ""
+        }
+        let mut text: String = ""
+        for item in world.items {
+            match item.node {
+                Item::Struct { name, generics, fields, .. } => {
+                    let bare = world.words.resolve(name)
+                    if self.borrowing.contains(bare) && generics.len() == 0 {
+                        text = f"{text}{self.emit_held_struct(world, escaped_name(bare), fields)}"
+                    }
+                },
+                else => {},
+            }
+        }
+        return text
+    }
+
+    fn emit_held_struct(ref self, world: ref EmitWorld, ty: String, fields: ref Vec[FieldDef]) -> String {
+        let mut parts: Vec[String] = []
+        for field in fields {
+            let field_name = escaped_name(world.words.resolve(field.name))
+            if holds_view(field.ty) || self.names_borrowing(world, field.ty) {
+                parts.push(f"{field_name}: nikaia_std::tether::Rebase::rebase(self.{field_name}, keeps)")
+            } else {
+                parts.push(f"{field_name}: self.{field_name}")
+            }
+        }
+        let rebased = parts.join(", ")
+        let mut text: String = f"\n/// `{ty}` held one handle per buffer (ADR-283).\n"
+        text = f"{text}#[allow(non_camel_case_types)]\nenum __Views_{ty} {{}}\n\n"
+        text = f"{text}impl nikaia_std::tether::Views for __Views_{ty} {{\n    type Of<'a> = {ty}<'a>;\n"
+        text = f"{text}    fn shorten<'long: 's, 's>(x: &'s {ty}<'long>) -> &'s {ty}<'s> {{\n        x\n    }}\n}}\n\n"
+        text = f"{text}impl<'a> nikaia_std::tether::Rebase<'a> for {ty}<'_> {{\n    type At = {ty}<'a>;\n"
+        text = f"{text}    fn rebase<const N: usize>(self, keeps: &nikaia_std::tether::Keeps<'a, N>) -> {ty}<'a> {{\n        {ty} {{ {rebased} }}\n    }}\n}}\n\n"
+        text = f"{text}impl<const N: usize> nikaia_std::tether::Hold<N> for {ty}<'_> {{\n    type Held = nikaia_std::tether::Holding<__Views_{ty}, N>;\n"
+        text = f"{text}    fn hold(self, keeps: [std::sync::Arc<nikaia_std::tether::Keep>; N]) -> Self::Held {{\n        nikaia_std::tether::Holding::new(keeps, move |keeps| nikaia_std::tether::Rebase::rebase(self, &keeps))\n    }}\n}}\n"
+        return text
+    }
+}

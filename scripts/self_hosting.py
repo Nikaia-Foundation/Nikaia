@@ -156,6 +156,7 @@ COMPILER_NIKA = {
     "emit_kinds.nika": "emit: where a statement stands, lifetimes, pointers, methods, refusals, the build and the two halves of the flow (0.0.807)",
     "emit_below.nika": "emit: grammar entries, text of both kinds, variants, paused scopes, whether a branch can fail, paths and written names (0.0.810)",
     "emit_keeps.nika": "emit: the keeps a function declares and hands, tethered types and the fields of a struct of views (0.0.810)",
+    "emit_entry.nika": "emit: the program's own main, the main the runtime starts and the types that hold one handle per buffer (0.0.811)",
 }
 
 

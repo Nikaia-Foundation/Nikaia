@@ -17272,6 +17272,76 @@ fn call_fn_is_either(words: &winnow_grammar::InternerContext, name: Option<&winn
 }
 
 
+// --- emit_entry.nika ---
+
+impl EmitState {
+    pub fn user_main(&self, world: &EmitWorld<'_>) -> Option<bool> {
+        if !self.entry { return None; }
+        for item in world.items.iter() {
+            match &item.node {
+                Item::Fn { name, receiver, args, config, spread, ret_type, can_throw, .. } => {
+                    let can_throw = *can_throw; let name = *name; let spread = *spread;
+                    let called = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
+                    if world.words.resolve(called) == "main" && receiver.is_none() && args.is_empty() && config.is_empty() && spread.is_none() && ret_type.is_none() { return Some(can_throw); }
+                },
+                _ => { },
+            }
+        }
+        None
+    }
+    pub fn entry_point(&self, world: &EmitWorld<'_>, concurrent: bool, channel: &str) -> String {
+        let fails = match self.user_main(world) { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
+        let mut user_code: String = String::from("Sequential");
+        if concurrent { user_code = String::from("Concurrent"); }
+        let mut ret: String = String::from("");
+        if fails { ret = format!(" -> Result<(), {}>", channel); }
+        let mut start: String = String::from("start");
+        if !call_pauses(&self.own_contracts, "main") && !concurrent { start = String::from("on_demand"); }
+        let mut text: String = String::from("\n// ADR-303 D4: the runtime is running before the program's first\n// statement, so an operation inside it costs no thread wake-up. What\n// starts is what `user_parallelism` allows (ADR-037 D2): the I/O\n// worker always, a pool for user code only at `yes`.\n");
+        text = format!("{}fn main(){} {{\n", text, ret);
+        text = format!("{}    nikaia_std::abort::report_in_nikaia_terms(__NIKAIA_SITES);\n", text);
+        text = format!("{}    let nikaia_runtime = nikaia_std::rt::{}(nikaia_std::rt::UserCode::{});\n", text, start, user_code);
+        if call_pauses(&self.own_contracts, "main") { text = format!("{}    let outcome = nikaia_std::rt::exec::block_on(__nikaia_main());\n", text); } else { text = format!("{}    let outcome = __nikaia_main();\n", text); }
+        text = format!("{}    nikaia_runtime.finish();\n    outcome\n}}\n", text);
+        text
+    }
+    pub fn held_structs(&self, world: &EmitWorld<'_>) -> String {
+        let mut pays = false;
+        for (_, plan) in self.keep_plans.iter() { if !plan.element_keepers.is_empty() || plan.task_keep { pays = true; } }
+        if !pays { return String::from(""); }
+        let mut text: String = String::from("");
+        for item in world.items.iter() {
+            match &item.node {
+                Item::Struct { name, generics, fields, .. } => {
+                    let name = *name;
+                    let bare = world.words.resolve(name);
+                    if self.borrowing.contains(bare) && generics.is_empty() { text = format!("{}{}", text, self.emit_held_struct(world, escaped_name(bare), fields)); }
+                },
+                _ => { },
+            }
+        }
+        text
+    }
+    fn emit_held_struct(&self, world: &EmitWorld<'_>, ty: String, fields: &[FieldDef]) -> String {
+        let mut parts: Vec<String> = vec![];
+        for field in fields.iter() {
+            let field_name = escaped_name(world.words.resolve(field.name));
+            if holds_view(&field.ty) || self.names_borrowing(world, &field.ty) { parts.push(format!("{}: nikaia_std::tether::Rebase::rebase(self.{}, keeps)", field_name, field_name)); } else { parts.push(format!("{}: self.{}", field_name, field_name)); }
+        }
+        let rebased = parts.join(", ");
+        let mut text: String = format!("\n/// `{}` held one handle per buffer (ADR-283).\n", ty);
+        text = format!("{}#[allow(non_camel_case_types)]\nenum __Views_{} {{}}\n\n", text, ty);
+        text = format!("{}impl nikaia_std::tether::Views for __Views_{} {{\n    type Of<'a> = {}<'a>;\n", text, ty, ty);
+        text = format!("{}    fn shorten<'long: 's, 's>(x: &'s {}<'long>) -> &'s {}<'s> {{\n        x\n    }}\n}}\n\n", text, ty, ty);
+        text = format!("{}impl<'a> nikaia_std::tether::Rebase<'a> for {}<'_> {{\n    type At = {}<'a>;\n", text, ty, ty);
+        text = format!("{}    fn rebase<const N: usize>(self, keeps: &nikaia_std::tether::Keeps<'a, N>) -> {}<'a> {{\n        {} {{ {} }}\n    }}\n}}\n\n", text, ty, ty, rebased);
+        text = format!("{}impl<const N: usize> nikaia_std::tether::Hold<N> for {}<'_> {{\n    type Held = nikaia_std::tether::Holding<__Views_{}, N>;\n", text, ty, ty);
+        text = format!("{}    fn hold(self, keeps: [std::sync::Arc<nikaia_std::tether::Keep>; N]) -> Self::Held {{\n        nikaia_std::tether::Holding::new(keeps, move |keeps| nikaia_std::tether::Rebase::rebase(self, &keeps))\n    }}\n}}\n", text);
+        text
+    }
+}
+
+
 // --- emit_exprs.nika ---
 
 fn emit_candidates(ledger: &Ledger, method: &str) -> Vec<FnContract> {
@@ -39473,6 +39543,7 @@ pub mod emit_calls {
     #[allow(unused_imports)]
     pub use super::{call_written_name, call_pausing_key, call_library_pauses, call_pauses, call_can_fail, call_callee_name, call_joined_throws, call_returns_either};
 }
+pub mod emit_entry {}
 pub mod emit_exprs {
     #[allow(unused_imports)]
     pub use super::{emit_around, emit_around_value};
