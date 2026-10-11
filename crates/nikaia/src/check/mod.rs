@@ -39,7 +39,7 @@ use crate::contracts::ty::TyOps;
 use crate::contracts::{FieldContract, FnContract, Ledger, send, ty, ty::Ty};
 use crate::fold::Constant;
 use crate::parser::Parsed;
-use nikaia_std::tools::check_access::{dotted_path, names_the_argument, variants_named};
+use nikaia_std::tools::check_access::{dotted_path, names_the_argument};
 use nikaia_std::tools::check_consts::{self, CheckCrossing as Crossing};
 use nikaia_std::tools::check_flow::{
     CheckConstant, CheckFlow, CheckOpenNumber as OpenNumber, CheckUnrolling,
@@ -53,8 +53,8 @@ use nikaia_std::tools::check_patterns::pattern_names;
 use nikaia_std::tools::check_reports::CheckWall;
 use nikaia_std::tools::check_scope::{resolve_call, resolve_method};
 use nikaia_std::tools::check_shapes::{
-    an_element_beneath, catches_everything, constructed, element_below, is_fixed, is_growable,
-    roots_in_a_binding, rust_constant_type, slice_element,
+    an_element_beneath, constructed, element_below, is_fixed, is_growable, roots_in_a_binding,
+    rust_constant_type, slice_element,
 };
 pub use nikaia_std::tools::check_state::{
     CheckFinding as Finding, CheckLabel as Label, CheckSeverity as Severity,
@@ -1978,22 +1978,8 @@ impl<'a> Checker<'a> {
     /// a pausing one is refused as a call in an action is. What the function
     /// hands back, where its signature says.
     fn a_named_fold_part_that_may_pause(&mut self, part: &Expr, span: &Span) -> Option<Ty> {
-        let name = match part {
-            Expr::Variable(name, _) => self.parsed.text(*name).to_string(),
-            Expr::Path(parts, _) => parts
-                .iter()
-                .map(|p| self.parsed.text(*p))
-                .collect::<Vec<_>>()
-                .join("::"),
-            _ => return None,
-        };
-        let (key, contract) = self.resolve(&name)?;
-        self.s.a_pausing_call_in_an_action(&key, &contract, span);
-        contract
-            .signature
-            .as_ref()
-            .map(|signature| signature.result_or_unit())
-            .filter(|result| !result.is_unknown())
+        self.s
+            .a_named_fold_part_that_may_pause(&self.world, part, span)
     }
 
     fn function(&mut self, item: &Item, target: Option<&str>) {
@@ -2603,57 +2589,7 @@ impl<'a> Checker<'a> {
     /// an `|`. A pattern that looks inside a box *inside* that part, or does
     /// so in one alternative of several, is still refused by name.
     fn a_pattern_inside_a_box(&mut self, pattern: &MatchPattern, span: &Span) {
-        self.a_pattern_inside_a_box_at(pattern, span, Depth::Arm);
-    }
-
-    fn a_pattern_inside_a_box_at(&mut self, pattern: &MatchPattern, span: &Span, at: Depth) {
-        match pattern {
-            MatchPattern::Tuple { path, parts } => {
-                let written: Vec<&str> = path.iter().map(|s| self.parsed.text(*s)).collect();
-                for (index, part) in parts.iter().enumerate() {
-                    if !self.boxed_part(path, index) || binds_a_part(part) {
-                        self.a_pattern_inside_a_box_at(part, span, at);
-                        continue;
-                    }
-                    let why = match at {
-                        Depth::Arm => {
-                            // One level is lowered; what is inside that part
-                            // has to bind its own boxed parts by name.
-                            self.a_pattern_inside_a_box_at(part, span, Depth::InsideABox);
-                            continue;
-                        }
-                        Depth::InsideABox => "inside a part that is itself behind a pointer",
-                        Depth::InAlternative => "in one alternative of an `|` pattern",
-                    };
-                    let owner = written.join("::");
-                    self.s.findings.push(Finding {
-                        severity: Severity::Error,
-                        span: *span,
-                        code: "NK1193".to_string(),
-                        message: format!(
-                            "This pattern looks inside part {index} of `{owner}`, which holds \
-                             its own type, {why}, and patterns can't look that far yet."
-                        ),
-                        notes: vec![
-                            "A part that holds its own type is stored behind a pointer. A \
-                             pattern can look inside one such part per arm, outside an `|`."
-                                .to_string(),
-                        ],
-                        help: Some(
-                            "Bind the part to a name here, and `match` on that name inside the arm."
-                                .to_string(),
-                        ),
-                        labels: Vec::new(),
-                    });
-                }
-            }
-            MatchPattern::Or(alternatives) => {
-                for alternative in alternatives {
-                    self.a_pattern_inside_a_box_at(alternative, span, Depth::InAlternative);
-                }
-            }
-            _ => {}
-        }
+        self.s.a_pattern_inside_a_box(&self.world, pattern, span);
     }
 
     /// **A guard that reads a name bound inside a boxed part**
@@ -2700,109 +2636,19 @@ impl<'a> Checker<'a> {
     /// `Expr::Add(a, b)`, which the arm opens and a guard reads through the
     /// box.
     fn boxed_names(&self, pattern: &MatchPattern) -> Vec<String> {
-        let mut out = Vec::new();
-        if let MatchPattern::Tuple { path, parts } = pattern {
-            for (at, part) in parts.iter().enumerate() {
-                match part {
-                    MatchPattern::Path(one) if one.len() == 1 && self.boxed_part(path, at) => {
-                        out.push(self.parsed.text(one[0]).to_string());
-                    }
-                    MatchPattern::Tuple { .. } if !self.boxed_part(path, at) => {
-                        out.extend(self.boxed_names(part));
-                    }
-                    _ => {}
-                }
-            }
-        }
-        out
+        self.s.boxed_names(&self.world, pattern)
     }
 
     /// The types of the names bound inside the boxed parts a pattern looks
     /// into, where the variant says them: each part is typed by the path its
     /// own pattern names, which is the boxed type.
     fn typed_inside_boxes(&self, pattern: &MatchPattern, out: &mut BTreeMap<String, Ty>) {
-        match pattern {
-            MatchPattern::Tuple { path, parts } => {
-                for (at, part) in parts.iter().enumerate() {
-                    match self.boxed_part(path, at) && !binds_a_part(part) {
-                        true => {
-                            let owner = match part {
-                                MatchPattern::Tuple { path, .. }
-                                | MatchPattern::Named { path, .. }
-                                    if path.len() >= 2 =>
-                                {
-                                    Some(self.parsed.text(path[path.len() - 2]).to_string())
-                                }
-                                _ => None,
-                            };
-                            if let Some(owner) = owner {
-                                out.extend(self.s.pattern_parts(
-                                    &self.world,
-                                    part,
-                                    &Ty::named(owner),
-                                ));
-                            }
-                        }
-                        false => self.typed_inside_boxes(part, out),
-                    }
-                }
-            }
-            MatchPattern::Or(alternatives) => {
-                for alternative in alternatives {
-                    self.typed_inside_boxes(alternative, out);
-                }
-            }
-            _ => {}
-        }
+        self.s.typed_inside_boxes(&self.world, pattern, out);
     }
 
     /// The names a pattern binds inside the boxed parts it looks into.
     fn names_inside_boxes(&self, pattern: &MatchPattern, out: &mut Vec<String>) {
-        match pattern {
-            MatchPattern::Tuple { path, parts } => {
-                for (at, part) in parts.iter().enumerate() {
-                    match self.boxed_part(path, at) && !binds_a_part(part) {
-                        true => out.extend(pattern_names(&self.world, part)),
-                        false => self.names_inside_boxes(part, out),
-                    }
-                }
-            }
-            MatchPattern::Or(alternatives) => {
-                for alternative in alternatives {
-                    self.names_inside_boxes(alternative, out);
-                }
-            }
-            _ => {}
-        }
-    }
-
-    /// **Whether part `at` of a variant's tuple is behind a box**
-    /// ([ADR-246](../../docs/specification/adr/adr-246.md) D1).
-    fn boxed_part(&self, path: &[winnow_grammar::Symbol], at: usize) -> bool {
-        let written: Vec<&str> = path.iter().map(|s| self.parsed.text(*s)).collect();
-        let [.., owner, variant] = written.as_slice() else {
-            return false;
-        };
-        self.s
-            .facts
-            .boxed_members
-            .get(*owner)
-            .is_some_and(|members| members.contains(&boxed_member(variant, Some(at), None)))
-    }
-
-    /// **Whether an arm's pattern looks inside a boxed part**: such an arm is
-    /// lowered with a guard (ADR-246 D5), and like any guarded arm it covers
-    /// no variant on its own (`NK1151`).
-    fn looks_inside_a_box(&self, pattern: &MatchPattern) -> bool {
-        match pattern {
-            MatchPattern::Tuple { path, parts } => parts.iter().enumerate().any(|(at, part)| {
-                (self.boxed_part(path, at) && !binds_a_part(part)) || self.looks_inside_a_box(part)
-            }),
-            MatchPattern::Or(alternatives) => {
-                alternatives.iter().any(|a| self.looks_inside_a_box(a))
-            }
-            _ => false,
-        }
+        self.s.names_inside_boxes(&self.world, pattern, out);
     }
 
     /// Whether a call is to the **prelude's `assert`**
@@ -5216,14 +5062,8 @@ impl<'a> Checker<'a> {
 
     /// The entry an open number was joined into
     /// ([ADR-285](../../docs/specification/adr/adr-285.md) D23).
-    fn open_root(&self, mut at: usize) -> usize {
-        while let Some(number) = self.s.flow.open_numbers.get(&(at as i64)) {
-            if number.joined as usize == at {
-                break;
-            }
-            at = number.joined as usize;
-        }
-        at
+    fn open_root(&self, at: usize) -> usize {
+        self.s.open_root(at as i64) as usize
     }
 
     /// **The open numbers a value is made of**: a name bound to one, through
@@ -5454,145 +5294,7 @@ impl<'a> Checker<'a> {
     /// **Every open number of a body, decided** once the body has been walked
     /// ([ADR-285](../../docs/specification/adr/adr-285.md) D24, D25, D27).
     fn numbers_typed_by_their_uses(&mut self) {
-        let numbers = std::mem::take(&mut self.s.flow.open_numbers);
-        let root = |mut at: usize| loop {
-            let joined = numbers[&(at as i64)].joined as usize;
-            if joined == at {
-                return at;
-            }
-            at = joined;
-        };
-        let mut groups: BTreeMap<usize, Vec<&OpenNumber>> = BTreeMap::new();
-        for (at, number) in &numbers {
-            groups.entry(root(*at as usize)).or_default().push(number);
-        }
-        for (head, members) in groups {
-            let head = &numbers[&(head as i64)];
-            let mut beside: Vec<(String, Span)> = Vec::new();
-            let mut indexed = false;
-            for (ty, at, stands_beside) in members.iter().flat_map(|m| &m.asks) {
-                match stands_beside {
-                    true => beside.push((ty.clone(), *at)),
-                    false => indexed = true,
-                }
-            }
-            beside.sort_by_key(|(_, at)| at.start);
-            let mut types: Vec<&(String, Span)> = Vec::new();
-            for ask in &beside {
-                if !types.iter().any(|(ty, _)| *ty == ask.0) {
-                    types.push(ask);
-                }
-            }
-            // **Two uses that ask two types** (D2): the language below would
-            // say *mismatched types* about the generated file.
-            if let [(first, _), (second, at), ..] = types.as_slice() {
-                let (first, second, at) = (first.clone(), second.clone(), *at);
-                self.a_number_asked_for_two_types(head, &first, &second, &at);
-                continue;
-            }
-            let decided = match types.first() {
-                Some((ty, _)) => Some(ty.clone()),
-                None if indexed => Some("i64".to_string()),
-                None => None,
-            };
-            // **Where no use asks, the first type that holds what it is given**
-            // (D3, ADR-285 D21) - `i32`, else `i64`.
-            let held = decided.clone().unwrap_or_else(|| {
-                let small = members
-                    .iter()
-                    .flat_map(|m| &m.given)
-                    .all(|(value, _, _)| Constant::from(value.clone()).fits("i32"));
-                match small {
-                    true => "i32".to_string(),
-                    false => "i64".to_string(),
-                }
-            });
-            let why = decided.as_ref().map(|ty| match head.element {
-                false => format!(
-                    "`{}` is {} `{ty}` because of how it is used",
-                    head.name,
-                    an_or_a(ty)
-                ),
-                true => format!(
-                    "the elements of `{}` are `{ty}`s because of how they are used",
-                    head.name
-                ),
-            });
-            // What it is given first; what an operation over it comes to only
-            // where that held, so one cause is one refusal.
-            let before = self.s.findings.len();
-            for member in &members {
-                for (value, at, bare) in &member.given {
-                    self.a_number_that_does_not_fit(
-                        &value.clone().into(),
-                        *bare,
-                        &held,
-                        at,
-                        why.clone(),
-                    );
-                }
-            }
-            if self.s.findings.len() == before {
-                for (value, at) in members.iter().flat_map(|m| &m.derived) {
-                    if self.s.findings.iter().skip(before).any(|f| f.span == *at) {
-                        continue;
-                    }
-                    self.a_number_that_does_not_fit(
-                        &value.clone().into(),
-                        false,
-                        &held,
-                        at,
-                        why.clone(),
-                    );
-                }
-            }
-            // **The type is written** (D4), and a literal the emitter would
-            // otherwise give an `i64`'s suffix is given this one.
-            if let Some(ty) = decided {
-                for member in &members {
-                    // A list's elements: the list is written with the type
-                    // (D34), so the language below infers nothing either.
-                    let written = match member.element {
-                        false => ty.clone(),
-                        true => format!("Vec<{ty}>"),
-                    };
-                    self.s
-                        .facts
-                        .number_lets
-                        .insert(member.at.at() as i64, written);
-                    for (_, literals, widened) in &member.written {
-                        let suffixed =
-                            *widened || literals.iter().any(|(_, v)| !Constant::of(*v).fits("i32"));
-                        if ty == "i64" || !suffixed {
-                            continue;
-                        }
-                        for literal in literals {
-                            self.s.facts.unsigned_literals.insert(literal.0, ty.clone());
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    /// `NK1200`: one number, two uses, two types
-    /// ([ADR-285](../../docs/specification/adr/adr-285.md) D24).
-    fn a_number_asked_for_two_types(
-        &mut self,
-        number: &OpenNumber,
-        first: &str,
-        second: &str,
-        at: &Span,
-    ) {
-        self.s
-            .findings
-            .push(check_widen::a_number_asked_for_two_types(
-                &number.name,
-                number.element,
-                first,
-                second,
-                at,
-            ));
+        self.s.numbers_typed_by_their_uses();
     }
 
     /// ADR-285 D29.5: a division whose divisor is a constant zero is refused
@@ -11561,19 +11263,7 @@ impl<'a> Checker<'a> {
     /// **The integer type a use asks of a call on a number written as its
     /// receiver is the number's** (#417), where the number is one of it.
     fn literal_receivers_take(&mut self, want: &Ty) {
-        let want = match want {
-            Ty::Nullable(inner) => inner.as_ref(),
-            other => other,
-        };
-        let Some(ty) = integer_named(want) else {
-            return;
-        };
-        for key in std::mem::take(&mut self.s.flow.literal_receivers) {
-            let number = Constant::of(key.1);
-            if number.fits(&ty) {
-                self.s.facts.unsigned_literals.insert(key.0, ty.clone());
-            }
-        }
+        self.s.literal_receivers_take(want);
     }
 
     /// Report only when both sides are known and they disagree.
@@ -12273,31 +11963,7 @@ impl<'a> Checker<'a> {
     /// `p.name` extends the read of `p` it stands on: what is read is the part
     /// ([ADR-293](../../docs/specification/adr/adr-293.md) D32).
     fn a_read_of_a_part(&mut self, base: &Expr, expr: &Expr, field: &str, span: &Span) {
-        // Once per expression, as the read it extends: an argument walked a
-        // second time would otherwise read `self.path.path`.
-        if self
-            .s
-            .flow
-            .read_index
-            .contains_key(&(value_node(expr), span.at() as i64))
-        {
-            return;
-        }
-        let Some(&at) = self
-            .s
-            .flow
-            .read_index
-            .get(&(value_node(base), span.at() as i64))
-        else {
-            return;
-        };
-        let read = &mut self.s.reads_on_paths[at as usize];
-        read.path.push('.');
-        read.path.push_str(field);
-        self.s
-            .flow
-            .read_index
-            .insert((value_node(expr), span.at() as i64), at);
+        self.s.a_read_of_a_part(base, expr, field, span);
     }
 
     /// **The parts of a `mut` parameter an arm took out** (`NK2108`,
@@ -13442,85 +13108,8 @@ impl<'a> Checker<'a> {
     }
 
     fn a_match_that_misses_a_case(&mut self, on: &Ty, arms: &[ast::MatchArm], span: &Span) {
-        // **A guarded arm covers nothing** (
-        // [ADR-291](../../docs/specification/adr/adr-291.md) D11): the pattern
-        // says which values reach it and the guard says which of those it
-        // takes, so the rest of them reach the arms below. Rust reads it the
-        // same way, which is what keeps this compiler's answer and the
-        // backend's from disagreeing.
-        let catches_everything = arms
-            .iter()
-            .filter(|arm| arm.guard.is_none())
-            .any(|arm| catches_everything(&arm.pattern));
-        if catches_everything {
-            return;
-        }
-        // **Where the type is not known, nothing is claimed** (D3), which is
-        // [Part III C.4](../../../docs/specification/30-nikaia-tooling.md): a
-        // refusal on a guess is a correct program refused.
-        let Ty::Named { name, .. } = on else {
-            return;
-        };
-        // **An error, one of several**, is a handler's, whose `match` always
-        // needs `else` and is told so by its own rule (ADR-280 D4).
-        if several_errors(on).is_some() {
-            return;
-        }
-
-        // **`bool` is the case that is neither** an enum nor open-ended: `true`
-        // and `false` are two arms and a complete `match`, which no enum map
-        // knows. Without this, a program Rust accepts would be refused here.
-        if name == "bool" {
-            let mut seen = BTreeSet::new();
-            for arm in arms {
-                if let MatchPattern::Literal(Expr::LitBool(value, _)) = &arm.pattern {
-                    seen.insert(*value);
-                }
-            }
-            if !seen.contains(&true) || !seen.contains(&false) {
-                let missing: Vec<String> = [true, false]
-                    .into_iter()
-                    .filter(|value| !seen.contains(value))
-                    .map(|value| value.to_string())
-                    .collect();
-                self.s.a_case_is_missing(&missing.join("`, `"), span);
-            }
-            return;
-        }
-
-        // An **enum**, from the map `NK1135` and the variant rule already read.
-        let Some(variants) = self.s.enums.get(name).cloned() else {
-            // Every other known type: the set is not enumerable in arms, so
-            // `else` is what says the rest.
-            self.s.a_case_is_missing("else", span);
-            return;
-        };
-        // **An or-pattern names every variant in it**
-        // ([ADR-291](../../docs/specification/adr/adr-291.md) D10, and
-        // [ADR-291](../../docs/specification/adr/adr-291.md)'s question
-        // answered by building it): `Op::Plus | Op::Minus => …` is two cases
-        // covered by one arm. A **guarded** arm names none, for the reason
-        // above.
-        let mut named: BTreeSet<String> = BTreeSet::new();
-        //
-        // **Nor does one that looks inside a boxed part**
-        // ([ADR-246](../../docs/specification/adr/adr-246.md) D5): it is
-        // lowered with a guard, and `Expr::Add(Expr::Num(n), b)` is not every
-        // `Add`.
-        for arm in arms
-            .iter()
-            .filter(|arm| arm.guard.is_none() && !self.looks_inside_a_box(&arm.pattern))
-        {
-            variants_named(&self.world, &arm.pattern, &mut named);
-        }
-        let missing: Vec<String> = variants
-            .iter()
-            .filter(|variant| !named.contains(*variant))
-            .map(|variant| format!("{name}::{variant}"))
-            .collect();
-        if !missing.is_empty() {
-            self.s.a_case_is_missing(&missing.join("`, `"), span);
-        }
+        self.s
+            .a_match_that_misses_a_case(&self.world, on, arms, span);
     }
 
     /// **The interpreter, and the two refusals it can raise**
@@ -14096,19 +13685,7 @@ impl<'a> Checker<'a> {
     /// The function type of `on`'s field called `method`, where `on` is a
     /// struct with such a field and no method of that name.
     fn a_field_that_is_code(&self, on: &Ty, method: Ident) -> Option<Ty> {
-        let Ty::Named { name, .. } = on else {
-            return None;
-        };
-        let method = self.parsed.text(method);
-        if self.resolve(&format!("{name}::{method}")).is_some() {
-            return None;
-        }
-        self.s
-            .fields_of(&self.world, name)?
-            .into_iter()
-            .find(|field| field.name == method)
-            .map(|field| field.ty)
-            .filter(|ty| matches!(ty, Ty::Fn { .. }))
+        self.s.a_field_that_is_code(&self.world, on, method)
     }
 
     /// **A call of a field that holds a function**, `button.on_click(4)`:
@@ -17448,25 +17025,6 @@ fn is_text(ty: &Ty) -> bool {
 /// *may pause* that is not a pause.
 fn unpromised(contract: &FnContract) -> bool {
     contract.sync_claim == crate::contracts::Sync::Unpromised
-}
-
-/// Where a pattern stands, for what the lowering of a boxed part reaches
-/// (ADR-246 D5).
-#[derive(Clone, Copy)]
-enum Depth {
-    /// The arm's own pattern.
-    Arm,
-    /// Inside a boxed part the arm looks into.
-    InsideABox,
-    /// One alternative of an `|`.
-    InAlternative,
-}
-
-/// Whether a pattern at a part binds it whole - a name, or `_` - rather than
-/// asking it a question.
-fn binds_a_part(part: &MatchPattern) -> bool {
-    matches!(part, MatchPattern::Path(one) if one.len() == 1)
-        || matches!(part, MatchPattern::Otherwise)
 }
 
 /// The whole-number types an operation may be written unchecked in

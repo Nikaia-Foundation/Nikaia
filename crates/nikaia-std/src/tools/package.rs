@@ -9835,6 +9835,197 @@ pub fn element_of(ty: &Ty) -> Ty {
 }
 
 
+// --- check_boxes.nika ---
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CheckDepth {
+    Arm,
+    InsideABox,
+    InAlternative,
+}
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_pattern_inside_a_box(&mut self, world: &CheckWorld<'_>, pattern: &MatchPattern, span: &Span) { self.a_pattern_inside_a_box_at(world, pattern, span, CheckDepth::Arm); }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn a_pattern_inside_a_box_at(&mut self, world: &CheckWorld<'_>, pattern: &MatchPattern, span: &Span, at: CheckDepth) {
+        match pattern {
+            MatchPattern::Tuple { path, parts } => {
+                let mut written: Vec<String> = vec![];
+                for symbol in path.iter() { written.push(world.words.resolve(*symbol).to_owned()); }
+                for index in 0..parts.len() as i64 {
+                    let part = nikaia_std::index::get(&parts, nikaia_std::index::at(index));
+                    if !self.boxed_part(world, path, index) || binds_a_part(&part) { self.a_pattern_inside_a_box_at(world, &part, span, at); } else {
+                        let mut why: String = String::from("");
+                        let mut reported = true;
+                        match at {
+                            CheckDepth::Arm => {
+                                self.a_pattern_inside_a_box_at(world, &part, span, CheckDepth::InsideABox);
+                                reported = false;
+                            },
+                            CheckDepth::InsideABox => { why = String::from("inside a part that is itself behind a pointer"); },
+                            CheckDepth::InAlternative => { why = String::from("in one alternative of an `|` pattern"); },
+                        }
+                        if reported {
+                            let owner = written.join("::");
+                            self.findings.push(check_refusal("NK1193", span, format!("This pattern looks inside part {} of `{}`, which holds its own type, {}, and patterns can't look that far yet.", index, owner, why), vec!["A part that holds its own type is stored behind a pointer. A pattern can look inside one such part per arm, outside an `|`.".to_owned()], Some("Bind the part to a name here, and `match` on that name inside the arm.".to_owned())));
+                        }
+                    }
+                }
+            },
+            MatchPattern::Or(alternatives) => { for alternative in alternatives.iter() { self.a_pattern_inside_a_box_at(world, alternative, span, CheckDepth::InAlternative); } },
+            _ => { },
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn boxed_names(&self, world: &CheckWorld<'_>, pattern: &MatchPattern) -> Vec<String> {
+        let mut out: Vec<String> = vec![];
+        match pattern {
+            MatchPattern::Tuple { path, parts } => {
+                for at in 0..parts.len() as i64 {
+                    let part = nikaia_std::index::get(&parts, nikaia_std::index::at(at));
+                    match part {
+                        MatchPattern::Path(one) => { if one.len() == 1 && self.boxed_part(world, path, at) { out.push(world.words.resolve(*nikaia_std::index::get(&one, 0)).to_owned()); } },
+                        MatchPattern::Tuple { .. } => { if !self.boxed_part(world, path, at) { for name in self.boxed_names(world, &part) { out.push(name); } } },
+                        _ => { },
+                    }
+                }
+            },
+            _ => { },
+        }
+        out
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn typed_inside_boxes(&self, world: &CheckWorld<'_>, pattern: &MatchPattern, out: &mut collections::BTreeMap<String, Ty>) {
+        match pattern {
+            MatchPattern::Tuple { path, parts } => {
+                for at in 0..parts.len() as i64 {
+                    let part = nikaia_std::index::get(&parts, nikaia_std::index::at(at));
+                    if self.boxed_part(world, path, at) && !binds_a_part(&part) {
+                        let mut owner: String = String::from("");
+                        match part {
+                            MatchPattern::Tuple { path, .. } => { if path.len() >= 2 { owner = world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 2))).to_owned(); } },
+                            MatchPattern::Named { path, .. } => { if path.len() >= 2 { owner = world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 2))).to_owned(); } },
+                            _ => { },
+                        }
+                        if !owner.is_empty() {
+                            let on = Ty::Named { name: owner, args: vec![], view: false };
+                            let typed = self.pattern_parts(world, &part, &on);
+                            for (name, ty) in typed.iter() { out.insert(name.to_owned(), ty.clone()); }
+                        }
+                    } else { self.typed_inside_boxes(world, &part, out); }
+                }
+            },
+            MatchPattern::Or(alternatives) => { for alternative in alternatives.iter() { self.typed_inside_boxes(world, alternative, out); } },
+            _ => { },
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn names_inside_boxes(&self, world: &CheckWorld<'_>, pattern: &MatchPattern, out: &mut Vec<String>) {
+        match pattern {
+            MatchPattern::Tuple { path, parts } => {
+                for at in 0..parts.len() as i64 {
+                    let part = nikaia_std::index::get(&parts, nikaia_std::index::at(at));
+                    if self.boxed_part(world, path, at) && !binds_a_part(&part) { for name in pattern_names(world, &part) { out.push(name); } } else { self.names_inside_boxes(world, &part, out); }
+                }
+            },
+            MatchPattern::Or(alternatives) => { for alternative in alternatives.iter() { self.names_inside_boxes(world, alternative, out); } },
+            _ => { },
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn boxed_part(&self, world: &CheckWorld<'_>, path: &[winnow_grammar::Symbol], at: i64) -> bool {
+        if path.len() < 2 { return false; }
+        let owner = world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 2))).to_owned();
+        let variant = world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 1))).to_owned();
+        if !self.facts.boxed_members.contains_key(&owner) { return false; }
+        let members = nikaia_std::index::or(match *nikaia_std::index::get(&self.facts.boxed_members, &owner) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || collections::BTreeSet::new().into());
+        members.contains(&boxed_member(&variant, at, ""))
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn looks_inside_a_box(&self, world: &CheckWorld<'_>, pattern: &MatchPattern) -> bool {
+        match pattern {
+            MatchPattern::Tuple { path, parts } => {
+                for at in 0..parts.len() as i64 {
+                    let part = nikaia_std::index::get(&parts, nikaia_std::index::at(at));
+                    if self.boxed_part(world, path, at) && !binds_a_part(&part) { return true; }
+                    if self.looks_inside_a_box(world, &part) { return true; }
+                }
+            },
+            MatchPattern::Or(alternatives) => { for alternative in alternatives.iter() { if self.looks_inside_a_box(world, alternative) { return true; } } },
+            _ => { },
+        }
+        false
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_match_that_misses_a_case(&mut self, world: &CheckWorld<'_>, on: &Ty, arms: &[MatchArm], span: &Span) {
+        for arm in arms.iter() { if arm.guard.is_none() && catches_everything(&arm.pattern) { return; } }
+        let mut name: String = String::from("");
+        match on {
+            Ty::Named { name: written, args, view } => {
+                let view = *view;
+                if written == "Error" && args.len() > 1 && !view { return; }
+                name = written.to_owned();
+            },
+            _ => return,
+        }
+        if name == "bool" {
+            let mut has_true = false;
+            let mut has_false = false;
+            for arm in arms.iter() {
+                match &arm.pattern {
+                    MatchPattern::Literal(literal) => {
+                        match literal {
+                            Expr::LitBool(value, _) => {
+                                let value = *value;
+                                if value { has_true = true; } else { has_false = true; }
+                            },
+                            _ => { },
+                        }
+                    },
+                    _ => { },
+                }
+            }
+            if !has_true || !has_false {
+                let mut missing: Vec<String> = vec![];
+                if !has_true { missing.push("true".to_owned()); }
+                if !has_false { missing.push("false".to_owned()); }
+                let text = missing.join("`, `");
+                self.a_case_is_missing(&text, span);
+            }
+            return;
+        }
+        if !self.enums.contains_key(&name) {
+            self.a_case_is_missing("else", span);
+            return;
+        }
+        let variants = nikaia_std::index::or(match *nikaia_std::index::get(&self.enums, &name) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || collections::BTreeSet::new().into());
+        let mut named: collections::BTreeSet<String> = collections::BTreeSet::new();
+        for arm in arms.iter() { if arm.guard.is_none() && !self.looks_inside_a_box(world, &arm.pattern) { variants_named(world, &arm.pattern, &mut named); } }
+        let mut missing: Vec<String> = vec![];
+        for variant in variants.iter() { if !named.contains(variant) { missing.push(format!("{}::{}", name, variant)); } }
+        if !missing.is_empty() {
+            let text = missing.join("`, `");
+            self.a_case_is_missing(&text, span);
+        }
+    }
+}
+
+
 // --- check_buildtime.nika ---
 
 impl CheckState {
@@ -13839,6 +14030,209 @@ fn named_arguments_of(ty: &Ty) -> Vec<Ty> {
     match ty {
         Ty::Named { args, .. } => args.to_owned(),
         _ => vec![],
+    }
+}
+
+
+// --- check_numbers3.nika ---
+
+fn check_finding_of(found: &Finding) -> CheckFinding {
+    let mut severity = CheckSeverity::Error;
+    if found.warning { severity = CheckSeverity::Warning; }
+    CheckFinding { severity, span: found.span.clone(), code: found.code.to_owned(), message: found.message.to_owned(), notes: found.notes.to_owned(), help: match found.help.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, labels: vec![] }
+}
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn open_root(&self, start: i64) -> i64 {
+        let mut at = start;
+        while self.flow.open_numbers.contains_key(&at) {
+            let joined = nikaia_std::index::or((*nikaia_std::index::get(&self.flow.open_numbers, &at)).as_ref().map(|__nikaia_it| __nikaia_it.joined), || at.into());
+            if joined == at { break; }
+            at = joined;
+        }
+        at
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn a_number_not_fitting(&mut self, value: &CheckConstant, bare: bool, ty: &str, span: &Span, why: Option<String>) {
+        let found = a_number_that_does_not_fit(&value.value, value.beyond, bare, ty, span.clone(), why);
+        if found.is_some() {
+            let said = match found { Some(__nikaia_value) => __nikaia_value, None => return };
+            self.findings.push(check_finding_of(&said));
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn numbers_typed_by_their_uses(&mut self) {
+        if self.flow.open_numbers.is_empty() { return; }
+        let mut groups: collections::BTreeMap<i64, Vec<(i64, CheckOpenNumber)>> = collections::BTreeMap::new();
+        for (at, number) in self.flow.open_numbers.iter() {
+            let at = nikaia_std::num::value(at);
+            let head = self.open_root(at);
+            let mut members: Vec<(i64, CheckOpenNumber)> = vec![];
+            if groups.contains_key(&head) {
+                members = nikaia_std::index::or(match *nikaia_std::index::get(&groups, &head) {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                }, || vec![].into());
+            }
+            members.push((at, number.clone()));
+            groups.insert(head, members);
+        }
+        self.flow.open_numbers = collections::BTreeMap::new();
+        for (head_at, members) in groups.iter() {
+            let head_at = nikaia_std::num::value(head_at);
+            let mut head = nikaia_std::index::get(&members, 0).1.clone();
+            for member in members.iter() { if member.0 == head_at { head = member.1.clone(); } }
+            let mut beside: Vec<(String, Span)> = vec![];
+            let mut indexed = false;
+            for member in members.iter() {
+                for ask in member.1.asks.iter() {
+                    if ask.2 {
+                        let mut place = beside.len() as i64;
+                        while place > 0 && nikaia_std::index::get(&beside, nikaia_std::index::at(place - 1)).1.start > ask.1.start { place = place - 1; }
+                        beside.insert(nikaia_std::count::of(place), (ask.0.to_owned(), ask.1.clone()));
+                    } else { indexed = true; }
+                }
+            }
+            let mut types: Vec<(String, Span)> = vec![];
+            for ask in beside.iter() {
+                let mut seen = false;
+                for one in types.iter() { if one.0 == ask.0 { seen = true; } }
+                if !seen { types.push((ask.0.to_owned(), ask.1.clone())); }
+            }
+            if types.len() >= 2 {
+                self.findings.push(a_number_asked_for_two_types(&head.name, head.element, &nikaia_std::index::get(&types, 0).0, &nikaia_std::index::get(&types, 1).0, &nikaia_std::index::get(&types, 1).1));
+                continue;
+            }
+            let mut decided: Option<String> = None;
+            if !types.is_empty() { decided = Some(nikaia_std::index::get(&types, 0).0.to_owned()); } else if indexed { decided = Some("i64".to_owned()); }
+            let mut held: String = String::from("i32");
+            if decided.is_some() { held = nikaia_std::index::or(decided.as_deref(), || "").to_owned(); } else { for member in members.iter() { for given in member.1.given.iter() { if given.0.beyond || !integer_fits(&given.0.value, "i32") { held = String::from("i64"); } } } }
+            let mut why: Option<String> = None;
+            if decided.is_some() {
+                let ty = nikaia_std::index::or(decided.as_deref(), || "").to_owned();
+                if head.element { why = Some(format!("the elements of `{}` are `{}`s because of how they are used", head.name, ty)); } else { why = Some(format!("`{}` is {} `{}` because of how it is used", head.name, an_or_a(&ty), ty)); }
+            }
+            let before = self.findings.len() as i64;
+            for member in members.iter() {
+                for given in member.1.given.iter() {
+                    self.a_number_not_fitting(&given.0, given.2, &held, &given.1, match why.as_ref() {
+                        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                        None => None,
+                    });
+                }
+            }
+            if (self.findings.len() as i64) == before {
+                for member in members.iter() {
+                    for derived in member.1.derived.iter() {
+                        let mut reported = false;
+                        for at in before..self.findings.len() as i64 { if nikaia_std::index::get(&self.findings, nikaia_std::index::at(at)).span.start == derived.1.start && nikaia_std::index::get(&self.findings, nikaia_std::index::at(at)).span.end == derived.1.end { reported = true; } }
+                        if !reported {
+                            self.a_number_not_fitting(&derived.0, false, &held, &derived.1, match why.as_ref() {
+                                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                                None => None,
+                            });
+                        }
+                    }
+                }
+            }
+            if decided.is_some() {
+                let ty = nikaia_std::index::or(decided.as_deref(), || "").to_owned();
+                for member in members.iter() {
+                    let mut written: String = ty.to_owned();
+                    if member.1.element { written = format!("Vec<{}>", ty); }
+                    self.facts.number_lets.insert(member.1.at.start as i64, written);
+                    for put in member.1.written.iter() {
+                        let mut suffixed = put.2;
+                        for literal in put.1.iter() { if !integer_fits(&literal.1, "i32") { suffixed = true; } }
+                        if ty != "i64" && suffixed { for literal in put.1.iter() { self.facts.unsigned_literals.insert(literal.0, ty.to_owned()); } }
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+// --- check_parts.nika ---
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_read_of_a_part(&mut self, base: &Expr, expr: &Expr, field: &str, span: &Span) {
+        let own = (id_of(expr) as i64, span.start as i64);
+        if self.flow.read_index.contains_key(&own) { return; }
+        let under = (id_of(base) as i64, span.start as i64);
+        if !self.flow.read_index.contains_key(&under) { return; }
+        let at = match self.flow.read_index.get(&under) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => return };
+        self.reads_on_paths[nikaia_std::index::at(at)].path = format!("{}.{}", nikaia_std::index::get(&self.reads_on_paths, nikaia_std::index::at(at)).path, field);
+        self.flow.read_index.insert(own, at);
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_named_fold_part_that_may_pause(&mut self, world: &CheckWorld<'_>, part: &Expr, span: &Span) -> Option<Ty> {
+        let mut name: String = String::from("");
+        match part {
+            Expr::Variable(written, _) => {
+                let written = *written;
+                name = world.words.resolve(written).to_owned();
+            },
+            Expr::Path(parts, _) => {
+                let mut texts: Vec<String> = vec![];
+                for one in parts.iter() { texts.push(world.words.resolve(*one).to_owned()); }
+                name = texts.join("::");
+            },
+            _ => return None,
+        }
+        let found = match resolve_call(world, &name) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        self.a_pausing_call_in_an_action(&found.key, &found.contract, span);
+        let signature = match found.contract.signature { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let result = signature.result_or_unit();
+        if result.is_unknown() { return None; }
+        Some(result)
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_field_that_is_code(&self, world: &CheckWorld<'_>, on: &Ty, method: winnow_grammar::Symbol) -> Option<Ty> {
+        let mut name: String = String::from("");
+        match on {
+            Ty::Named { name: written, .. } => { name = written.to_owned(); },
+            _ => return None,
+        }
+        let method = world.words.resolve(method).to_owned();
+        if resolve_call(world, &format!("{}::{}", name, method)).is_some() { return None; }
+        let fields = match self.fields_of(world, &name) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        for field in fields.iter() {
+            if field.name == method {
+                return match &field.ty {
+                    Ty::Fn { .. } => Some(field.ty.clone()),
+                    _ => None,
+                };
+            }
+        }
+        None
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn literal_receivers_take(&mut self, want: &Ty) {
+        let mut wanted: Ty = want.clone();
+        match want {
+            Ty::Nullable(inner) => {
+                let inner = nikaia_std::boxed::open(inner);
+                wanted = inner.clone();
+            },
+            _ => { },
+        }
+        let ty = match integer_named(&wanted) { Some(__nikaia_value) => __nikaia_value, None => return };
+        let keys = self.flow.literal_receivers.to_owned();
+        self.flow.literal_receivers = vec![];
+        for key in keys.iter() { if integer_fits(&key.1, &ty) { self.facts.unsigned_literals.insert(key.0, ty.to_owned()); } }
     }
 }
 
@@ -41724,6 +42118,10 @@ pub mod check_boundary {
     #[allow(unused_imports)]
     pub use super::{element_of};
 }
+pub mod check_boxes {
+    #[allow(unused_imports)]
+    pub use super::{CheckDepth};
+}
 pub mod check_buildtime {}
 pub mod check_buildtime2 {}
 pub mod check_calls {
@@ -41783,6 +42181,8 @@ pub mod check_numbers {
     pub use super::{a_number_that_does_not_fit};
 }
 pub mod check_numbers2 {}
+pub mod check_numbers3 {}
+pub mod check_parts {}
 pub mod check_patterns {
     #[allow(unused_imports)]
     pub use super::{pattern_names};

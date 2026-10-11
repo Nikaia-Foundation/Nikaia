@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.821] — 2026-10-11
+
+**check: patterns and boxes, small part questions and the open numbers are Nikaia (#558, #125, C-5b)**
+- `tools/check_boxes.nika` (what a pattern asks of a boxed part, `NK1193`, and the `match` that misses a case, `NK1151`; `CheckDepth`), `check_parts.nika` (a read extended by a field, a fold part that may pause, a field that holds code, the integer a number receiver takes) and `check_numbers3.nika` (the open numbers of a body decided by their uses, `NK1200`, `NK1116`) are `CheckState` methods; the Rust methods are one-line stubs and the dead ones are gone. No change to what a program means.
+
 ## [0.0.820] — 2026-10-11
 
 **The questions below the emitter's core are Nikaia: the `?.` holds, `resize` fills, the options of a call, what a `catch` guards, the keeps a statement declares (tools/emit_core_below.nika, #558, #125, E9 U1b).**

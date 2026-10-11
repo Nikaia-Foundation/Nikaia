@@ -1,0 +1,102 @@
+// crates/nikaia-std/src/tools/check_parts.nika
+//
+// **Four small questions about a part of a value** - moved from the compiler's
+// checker (ADR-294, #125, #558, C-5b): a read extended by a field (ADR-293
+// D32), a name in a fold that may pause, the function type of a field that
+// holds code, and the integer type a call on a number's receiver takes (#417).
+
+use std::collections
+
+impl CheckState {
+    /// `p.name` extends the read of `p` it stands on: what is read is the part
+    /// (ADR-293 D32).
+    pub fn a_read_of_a_part(ref mut self, base: ref Expr, expr: ref Expr, field: ref String, span: ref Span) sync {
+        // Once per expression, as the read it extends: an argument walked a
+        // second time would otherwise read `self.path.path`.
+        let own = (id_of(expr) as i64, span.start as i64)
+        if self.flow.read_index.contains_key(own) {
+            return
+        }
+        let under = (id_of(base) as i64, span.start as i64)
+        if !self.flow.read_index.contains_key(under) {
+            return
+        }
+        let at = self.flow.read_index.get(under) ?? return
+        self.reads_on_paths[at].path = f"{self.reads_on_paths[at].path}.{field}"
+        self.flow.read_index.insert(own, at)
+    }
+
+    /// `Summary::merge` or `Summary` in a fold: a function the fold calls, so
+    /// a pausing one is refused as a call in an action is. What the function
+    /// hands back, where its signature says.
+    pub fn a_named_fold_part_that_may_pause(ref mut self, world: ref CheckWorld, part: ref Expr, span: ref Span) -> Ty? sync {
+        let mut name: String = ""
+        match part {
+            Expr::Variable(written, _) => {
+                name = world.words.resolve(written).clone()
+            }
+            Expr::Path(parts, _) => {
+                let mut texts: Vec[String] = []
+                for one in parts {
+                    texts.push(world.words.resolve(one).clone())
+                }
+                name = texts.join("::")
+            }
+            else => return null
+        }
+        let found = resolve_call(world, name) ?? return null
+        self.a_pausing_call_in_an_action(found.key, found.contract, span)
+        let signature = found.contract.signature ?? return null
+        let result = signature.result_or_unit()
+        if result.is_unknown() {
+            return null
+        }
+        return result
+    }
+
+    /// The function type of `on`'s field called `method`, where `on` is a
+    /// struct with such a field and no method of that name.
+    pub fn a_field_that_is_code(ref self, world: ref CheckWorld, on: ref Ty, method: winnow_grammar::Symbol) -> Ty? sync {
+        let mut name: String = ""
+        match on {
+            Ty::Named { name: written, .. } => {
+                name = written.clone()
+            }
+            else => return null
+        }
+        let method = world.words.resolve(method).clone()
+        if resolve_call(world, f"{name}::{method}") != null {
+            return null
+        }
+        let fields = self.fields_of(world, name) ?? return null
+        for field in fields {
+            if field.name == method {
+                return match field.ty {
+                    Ty::Fn { .. } => field.ty.clone(),
+                    else => null,
+                }
+            }
+        }
+        return null
+    }
+
+    /// **The integer type a use asks of a call on a number written as its
+    /// receiver is the number's** (#417), where the number is one of it.
+    pub fn literal_receivers_take(ref mut self, want: ref Ty) sync {
+        let mut wanted: Ty = want.clone()
+        match want {
+            Ty::Nullable(inner) => {
+                wanted = inner.clone()
+            }
+            else => {}
+        }
+        let ty = integer_named(wanted) ?? return
+        let keys = self.flow.literal_receivers.clone()
+        self.flow.literal_receivers = []
+        for key in keys {
+            if integer_fits(key.1, ty) {
+                self.facts.unsigned_literals.insert(key.0, ty.clone())
+            }
+        }
+    }
+}
