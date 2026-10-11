@@ -11194,6 +11194,89 @@ impl CheckState {
 }
 
 
+// --- check_core_pilot.nika ---
+
+pub fn check_specialised(function: &str, on: &str) -> String {
+    let tail: String = on.replace("::", "__");
+    format!("{}__{}", function, tail)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_core_grammar_call<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, key: &str, args: &[Expr], span: &Span) -> Ty {
+    for arg in args.iter() { host.expr(state, arg, span); }
+    let contract = match match *nikaia_std::index::get(&world.own.functions, key) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
+    if !contract.fails_with.is_empty() && state.flow.guarded.is_some() {
+        let held: Option<CheckGuarded> = match state.flow.guarded.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        };
+        let mut guarded = nikaia_std::index::or(held, || CheckGuarded::nothing());
+        guarded.fallible = true;
+        for thrown in contract.fails_with.iter() { guarded.thrown.insert(thrown.to_owned()); }
+        state.flow.guarded = Some(guarded);
+    }
+    let signature = match contract.signature { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
+    nikaia_std::index::or(signature.result, || Ty::Unknown)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_core_a_compound_write_to_a_map_slot<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, target: &Expr, span: &Span) {
+    match target {
+        Expr::Index { base, index, .. } => {
+            let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
+            let read = host.expr(state, target, span);
+            let nullable = matches!(read, Ty::Nullable(_));
+            if !nullable { return; }
+            let slot = format!("{}[{}]", host.written(base), host.written(index));
+            let notes: Vec<String> = vec!["A missing key is normal, not a bug, so this line has to say what a missing key counts as.".to_owned()];
+            let help: String = format!("Write it out with a fallback for a missing key: `{} = ({} ?? 0) + 1`.", slot, slot);
+            state.findings.push(check_refusal("NK1162", span, format!("`{}` reads the map before writing it, and the key might not be there yet.", slot), notes, Some(help)));
+        },
+        _ => return,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_core_an_instantiation<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, name: &str, args: &[Expr], span: &Span) {
+    if !state.walks_fields.contains_key(name) { return; }
+    if args.is_empty() { return; }
+    let before = state.findings.len() as i64;
+    let given = host.expr(state, nikaia_std::index::get(&args, 0), span);
+    state.findings.truncate(nikaia_std::count::of(before));
+    let on: String = match given {
+        Ty::Named { ref name, .. } => name.to_owned(),
+        _ => return,
+    };
+    let fields = match state.shape_of(&world.here, world, &on) { Some(__nikaia_value) => __nikaia_value, None => return };
+    state.facts.unrolled_calls.insert(span.start as i64, check_specialised(name, &on));
+    state.facts.unrolled.insert((name.to_owned(), on.to_owned()), fields);
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_core_a_mut_parameter_given_away<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, value: &Expr, span: &Span, what: &str) {
+    let name: String = match value {
+        Expr::Variable(symbol, _) => { let symbol = *symbol; world.words.resolve(symbol).to_owned() },
+        _ => return,
+    };
+    let local = match state.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return };
+    if !local.changing { return; }
+    let ty = host.expr(state, value, span);
+    if ty.is_unknown() || state.copied(world, &ty) { return; }
+    let mut way: String = "".to_owned();
+    if what == "handed back" { way = " to return".to_owned(); }
+    let notes: Vec<String> = vec![format!("`mut {}` is passed as `ref mut`, so the caller's `{}` is changed in place and stays the caller's. Giving it away would take it from them.", name, ty.text())];
+    let help: String = format!("Write `{}.clone()` for a copy{}, or drop the `mut` if the function is meant to use up its value.", name, way);
+    state.findings.push(check_refusal("NK1131", span, format!("You can't give away `{}` here: a `mut` parameter is only borrowed.", name), notes, Some(help)));
+}
+
+
 // --- check_decls.nika ---
 
 impl CheckState {
@@ -12894,6 +12977,9 @@ pub trait CheckHost {
     fn assets_read_in(&self, value: &Expr, read: &collections::BTreeMap<String, String>) -> Expr;
     fn value_fn(&self) -> String;
     fn place_of(&self, place: &str, here: i64) -> CheckPlace;
+    fn expr(&self, state: &mut CheckState, node: &Expr, span: &Span) -> Ty;
+    fn block(&self, state: &mut CheckState, block: &Block) -> Ty;
+    fn written(&self, value: &Expr) -> String;
 }
 
 fn host_known(local: &CheckLocal) -> Option<BuildValue> {
@@ -45473,6 +45559,10 @@ pub mod check_calls {
 pub mod check_consts {
     #[allow(unused_imports)]
     pub use super::{rust_value, rust_array_type, CheckCrossing, CheckTable, unwritable_in, written_below};
+}
+pub mod check_core_pilot {
+    #[allow(unused_imports)]
+    pub use super::{check_specialised, check_core_grammar_call, check_core_a_compound_write_to_a_map_slot, check_core_an_instantiation, check_core_a_mut_parameter_given_away};
 }
 pub mod check_decls {
     #[allow(unused_imports)]

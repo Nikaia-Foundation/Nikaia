@@ -158,7 +158,7 @@ impl Checker<'_> {
                 self.the_mark(attribute, place);
                 continue;
             }
-            let Some(fields) = self.s.fields_of(&self.world, &name) else {
+            let Some(fields) = self.s.fields_of(self.world, &name) else {
                 self.an_attribute_nothing_declares(&name, &attribute.span);
                 continue;
             };
@@ -399,7 +399,7 @@ impl Checker<'_> {
             }
         };
         let name = self.parsed.unaliased(&written);
-        if self.s.fields_of(&self.world, &name).is_none() {
+        if self.s.fields_of(self.world, &name).is_none() {
             self.an_attribute_nothing_declares(&name, span);
             return None;
         }

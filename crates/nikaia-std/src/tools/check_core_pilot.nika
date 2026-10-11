@@ -1,0 +1,118 @@
+// crates/nikaia-std/src/tools/check_core_pilot.nika
+//
+// **The first four functions of the checker's core that moved** (ADR-294, #125,
+// #558, C-6, U-c0): `grammar_call`, `a_compound_write_to_a_map_slot`,
+// `an_instantiation` and `a_mut_parameter_given_away`. They are the pilot of
+// the form every later unit takes: a free function over the state
+// (`mut state: CheckState`, which lowers to `&mut CheckState`), the world, and
+// a host `H: CheckHost`; what has not moved yet is asked of the host
+// (`host.expr` is the hub the walk comes back through), what has is called as
+// `check_core_*`, and what is below the core is a method of the state.
+
+use std::collections
+
+/// The name of the copy of `function` that is specialised on the type `on`:
+/// the emitter writes the same name at the call and at the definition.
+pub fn check_specialised(function: ref String, on: ref String) -> String {
+    let tail: String = on.replace("::", "__")
+    return f"{function}__{tail}"
+}
+
+/// **A call of a grammar's entry rule** (ADR-308 D2): its arguments are walked,
+/// whether it can fail comes from the contract (a rule past a commit point is
+/// an entry in the ledger with `throws = ["?"]`, ADR-023 D9), and what it comes
+/// to is the contract's result.
+pub fn check_core_grammar_call[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, key: ref String, args: ref Vec[Expr], span: ref Span) -> Ty sync {
+    for arg in args {
+        host.expr(state, arg, span)
+    }
+    let contract = world.own.functions[key]?.clone() ?? return Ty::Unknown
+    if contract.fails_with.len() > 0 && state.flow.guarded != null {
+        let held: CheckGuarded? = state.flow.guarded?.clone()
+        let mut guarded = held ?? CheckGuarded::nothing()
+        guarded.fallible = true
+        for thrown in contract.fails_with {
+            guarded.thrown.insert(thrown.clone())
+        }
+        state.flow.guarded = guarded
+    }
+    let signature = contract.signature ?? return Ty::Unknown
+    return signature.result ?? Ty::Unknown
+}
+
+/// **`NK1162`: a compound assignment to a map's slot** (ADR-080 D2). It reads
+/// the slot and writes it, and the read is a `T?`, so the form has to say what
+/// an absent key counts as. A sequence is untouched: `xs[i] += 1` reads a `T`
+/// (D3).
+pub fn check_core_a_compound_write_to_a_map_slot[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, target: ref Expr, span: ref Span) sync {
+    match target {
+        Expr::Index { base, index, .. } => {
+            // Only where the read is nullable, which is only a map. Where the
+            // container's type is not known, nothing is claimed.
+            let read = host.expr(state, target, span)
+            let nullable = match read {
+                Ty::Nullable(_) => true,
+                else => false,
+            }
+            if !nullable {
+                return
+            }
+            let slot = f"{host.written(base)}[{host.written(index)}]"
+            let notes: Vec[String] = ["A missing key is normal, not a bug, so this line has to say what a missing key counts as.".clone()]
+            let help: String = f"Write it out with a fallback for a missing key: `{slot} = ({slot} ?? 0) + 1`."
+            state.findings.push(check_refusal("NK1162", span, f"`{slot}` reads the map before writing it, and the key might not be there yet.", notes, help))
+        }
+        else => return,
+    }
+}
+
+/// **A call that is an instantiation of a function the program walks the
+/// fields of** (ADR-304): the type of its first argument decides the copy, and
+/// the fields it is unrolled over are kept for the emitter.
+pub fn check_core_an_instantiation[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, name: ref String, args: ref Vec[Expr], span: ref Span) sync {
+    if !state.walks_fields.contains_key(name) {
+        return
+    }
+    if args.len() == 0 {
+        return
+    }
+    // Walked with the walk switched off, because the argument is walked again
+    // by the ordinary path and a message said twice is two problems to a reader.
+    let before = state.findings.len()
+    let given = host.expr(state, args[0], span)
+    state.findings.truncate(before)
+    let on: String = match given {
+        Ty::Named { name, .. } => name.clone(),
+        else => return,
+    }
+    let fields = state.shape_of(world.here, world, on) ?? return
+    state.facts.unrolled_calls.insert(span.start as i64, check_specialised(name, on))
+    state.facts.unrolled.insert((name.clone(), on.clone()), fields)
+}
+
+/// **`NK1131`: a `mut` parameter given away whole** (issue #161, Part I 6.6).
+/// It is passed as `ref mut`, so the function borrows it as a method borrows
+/// `ref self`, and giving it away is a field of a borrowed subject's shape one
+/// position over.
+pub fn check_core_a_mut_parameter_given_away[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr, span: ref Span, what: ref String) sync {
+    let name: String = match value {
+        Expr::Variable(symbol, _) => world.words.resolve(symbol).clone(),
+        else => return,
+    }
+    // `Local::changing`: a `let` of the same name is a binding of its own.
+    let local = state.binding(name) ?? return
+    if !local.changing {
+        return
+    }
+    let ty = host.expr(state, value, span)
+    if ty.is_unknown() || state.copied(world, ty) {
+        return
+    }
+    let mut way: String = "".clone()
+    if what == "handed back" {
+        way = " to return".clone()
+    }
+    let notes: Vec[String] = [f"`mut {name}` is passed as `ref mut`, so the caller's `{ty.text()}` is changed in place and stays the caller's. Giving it away would take it from them."]
+    let help: String = f"Write `{name}.clone()` for a copy{way}, or drop the `mut` if the function is meant to use up its value."
+    state.findings.push(check_refusal("NK1131", span, f"You can't give away `{name}` here: a `mut` parameter is only borrowed.", notes, help))
+}

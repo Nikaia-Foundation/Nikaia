@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.828] — 2026-10-11
+
+**check: the core's scaffolding (baton, core.rs, the hubs expr and block) and the pilot grammar_call, a_compound_write_to_a_map_slot, an_instantiation, a_mut_parameter_given_away (C-6, U-c0, #558, #125)**
+- checker: Checker.s is a baton that panics while the state is out, Checker.world a reference, check/core.rs crosses into Nikaia with a heap spare, CheckHost gains expr, block and written; four core functions moved to check_core_pilot.nika; a deep-nesting test; NodeId::fresh sites use ast::fresh_id
+
 ## [0.0.827] — 2026-10-11
 
 **check: the leaves below the core: sequences asked for what they are not, cleanup moves, bounds, buffers, C entry points, members nothing writes down, arithmetic on declared types (C-5e, #558, #125)**

@@ -184,6 +184,7 @@ COMPILER_NIKA = {
     "check_arith.nika": "check: arithmetic on something that has none, a value of no known type (NK1191, NK1245) (0.0.827)",
     "check_extern.nika": "check: what crosses to C: entry points, extern structs and enums (NK1237-NK1240, NK1145) (0.0.827)",
     "check_members.nika": "check: a member nothing writes down (NK1171) (0.0.827)",
+    "check_core_pilot.nika": "check: the pilot of the core: grammar_call, NK1162, instantiations, NK1131 (U-c0) (0.0.828)",
 }
 
 

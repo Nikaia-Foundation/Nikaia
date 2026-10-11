@@ -250,4 +250,18 @@ impl CheckHost for Host<'_> {
             function,
         }
     }
+
+    fn written(&self, value: &Expr) -> String {
+        super::written_by(self.parsed, value)
+    }
+
+    /// Code below the core never walks an expression: the hubs are the core's
+    /// host's (`core::Core`), until the dispatcher moves (U-c7, U-c11).
+    fn expr(&self, _state: &mut CheckState, _node: &Expr, _span: &Span) -> Ty {
+        unreachable!("the hub `expr` is asked of the core's host, not of the services")
+    }
+
+    fn block(&self, _state: &mut CheckState, _block: &Block) -> Ty {
+        unreachable!("the hub `block` is asked of the core's host, not of the services")
+    }
 }

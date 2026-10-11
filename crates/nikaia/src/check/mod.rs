@@ -26,6 +26,7 @@
 // line is worth more than none at all.
 
 pub(crate) mod attributes;
+mod core;
 mod host;
 use crate::contracts::LedgerOps;
 use std::collections::{BTreeMap, BTreeSet};
@@ -40,6 +41,7 @@ use crate::contracts::{FieldContract, FnContract, Ledger, send, ty, ty::Ty};
 use crate::fold::Constant;
 use crate::parser::Parsed;
 use nikaia_std::tools::check_consts::{self, CheckCrossing as Crossing};
+use nikaia_std::tools::check_core_pilot;
 use nikaia_std::tools::check_flow::{
     CheckConstant, CheckFlow, CheckOpenNumber as OpenNumber, CheckUnrolling,
     CheckUnsignedSlot as UnsignedSlot,
@@ -387,147 +389,96 @@ fn walked<'a>(
     harvesting: bool,
     computes: bool,
 ) -> Checked {
+    let world = CheckWorld {
+        words: &parsed.interner,
+        own,
+        library,
+        here: parsed_view_of(parsed),
+        beside: beside.iter().map(|other| parsed_view_of(other)).collect(),
+        here_at: beside
+            .iter()
+            .position(|other| std::ptr::eq(*other, parsed))
+            .map_or(-1, |at| at as i64),
+        fields_by_base: check_items::fields_by_base(own, library),
+    };
+    let mut s = core::hollow();
+    s.flow = CheckFlow::start(computes, harvesting);
+    s.grammars = parsed
+        .program
+        .items
+        .iter()
+        .filter_map(|item| match &item.node {
+            Item::Grammar(def) => Some((
+                parsed.text(def.name).to_string(),
+                def.rules
+                    .iter()
+                    .filter(|r| r.is_entry)
+                    .map(|r| parsed.text(r.name).to_string())
+                    .collect(),
+            )),
+            _ => None,
+        })
+        .collect();
+    s.std_in_scope = parsed
+        .program
+        .items
+        .iter()
+        .filter_map(|item| match &item.node {
+            Item::Import { path, .. } if path.len() == 2 => {
+                (parsed.text(path[0]) == "std").then(|| parsed.text(path[1]).to_string())
+            }
+            _ => None,
+        })
+        .collect();
+    // The distinct prefixes first and the tests after, because there are a
+    // few dozen modules and some thousand keys: the test per key built a
+    // `format!` and an owned prefix for every one of them.
+    s.std_modules = library
+        .functions
+        .keys()
+        .chain(library.types.keys())
+        .filter_map(|key| key.split_once("::").map(|(prefix, _)| prefix))
+        .collect::<BTreeSet<&str>>()
+        .into_iter()
+        .filter(|prefix| {
+            !library.types.contains_key(*prefix)
+                && !library.functions.contains_key(&format!("{prefix}::new"))
+        })
+        .map(str::to_string)
+        .collect();
+    s.modules = modules.clone();
+    s.opaque_handles = parsed
+        .program
+        .items
+        .iter()
+        .filter_map(|item| match &item.node {
+            Item::Extern { opaque, .. } => Some(opaque),
+            _ => None,
+        })
+        .flatten()
+        .map(|h| parsed.text(h.node.name).to_string())
+        .collect();
+    s.foreign_names = parsed
+        .program
+        .items
+        .iter()
+        .filter_map(|item| match &item.node {
+            Item::Extern { declarations, .. } => Some(declarations),
+            _ => None,
+        })
+        .flatten()
+        .map(|d| parsed.text(d.node.name).to_string())
+        .collect();
+    s.dsl_drivers = crate::dsl::drivers(parsed).into_iter().collect();
     let mut checker = Checker {
         newly,
         parsed,
         beside,
         reads,
         here: beside.iter().position(|other| std::ptr::eq(*other, parsed)),
-        world: CheckWorld {
-            words: &parsed.interner,
-            own,
-            library,
-            here: parsed_view_of(parsed),
-            beside: beside.iter().map(|other| parsed_view_of(other)).collect(),
-            here_at: beside
-                .iter()
-                .position(|other| std::ptr::eq(*other, parsed))
-                .map_or(-1, |at| at as i64),
-            fields_by_base: check_items::fields_by_base(own, library),
-        },
-        s: CheckState {
-            flow: CheckFlow::start(computes, harvesting),
-            findings: Vec::new(),
-            structs: BTreeMap::new(),
-            copies_in_the_package: BTreeSet::new(),
-            enums: BTreeMap::new(),
-            enum_payloads: BTreeMap::new(),
-            variant_parts: BTreeMap::new(),
-            variant_owner: BTreeMap::new(),
-            walks_fields: BTreeMap::new(),
-            grammars: parsed
-                .program
-                .items
-                .iter()
-                .filter_map(|item| match &item.node {
-                    Item::Grammar(def) => Some((
-                        parsed.text(def.name).to_string(),
-                        def.rules
-                            .iter()
-                            .filter(|r| r.is_entry)
-                            .map(|r| parsed.text(r.name).to_string())
-                            .collect(),
-                    )),
-                    _ => None,
-                })
-                .collect(),
-            scope: Vec::new(),
-            std_in_scope: parsed
-                .program
-                .items
-                .iter()
-                .filter_map(|item| match &item.node {
-                    Item::Import { path, .. } if path.len() == 2 => {
-                        (parsed.text(path[0]) == "std").then(|| parsed.text(path[1]).to_string())
-                    }
-                    _ => None,
-                })
-                .collect(),
-            // The distinct prefixes first and the tests after, because there are a
-            // few dozen modules and some thousand keys: the test per key built a
-            // `format!` and an owned prefix for every one of them.
-            std_modules: library
-                .functions
-                .keys()
-                .chain(library.types.keys())
-                .filter_map(|key| key.split_once("::").map(|(prefix, _)| prefix))
-                .collect::<BTreeSet<&str>>()
-                .into_iter()
-                .filter(|prefix| {
-                    !library.types.contains_key(*prefix)
-                        && !library.functions.contains_key(&format!("{prefix}::new"))
-                })
-                .map(str::to_string)
-                .collect(),
-            expected: None,
-            type_parameters: BTreeMap::new(),
-            struct_parameters: BTreeMap::new(),
-            borrowing_self: false,
-            enclosing: BTreeMap::new(),
-            subject_arguments: Vec::new(),
-            declared_bounds: BTreeMap::new(),
-            modules: modules.clone(),
-            opaque_handles: parsed
-                .program
-                .items
-                .iter()
-                .filter_map(|item| match &item.node {
-                    Item::Extern { opaque, .. } => Some(opaque),
-                    _ => None,
-                })
-                .flatten()
-                .map(|h| parsed.text(h.node.name).to_string())
-                .collect(),
-            foreign_names: parsed
-                .program
-                .items
-                .iter()
-                .filter_map(|item| match &item.node {
-                    Item::Extern { declarations, .. } => Some(declarations),
-                    _ => None,
-                })
-                .flatten()
-                .map(|d| parsed.text(d.node.name).to_string())
-                .collect(),
-            run_code: BTreeSet::new(),
-            dsl_drivers: crate::dsl::drivers(parsed).into_iter().collect(),
-            said_rings: BTreeSet::new(),
-            computing_default: false,
-            set_receiver: None,
-            stamped_condition: None,
-            inside_a_door: false,
-            inside_an_action: None,
-            inside_a_sync_function: None,
-            moved_into_a_task: Vec::new(),
-            walked: Vec::new(),
-            branch: Vec::new(),
-            reads_on_paths: Vec::new(),
-            lent_lets: BTreeSet::new(),
-            handed: Vec::new(),
-            read_at: Vec::new(),
-            written_at: Vec::new(),
-            parts_out: Vec::new(),
-            gives: Vec::new(),
-            ways_out: Vec::new(),
-            reading_only: false,
-            read_seq: 0,
-            task_bindings: Vec::new(),
-            changed: Vec::new(),
-            said_mut: BTreeSet::new(),
-            facts: CheckFacts::empty(),
-            methods: BTreeMap::new(),
-            stored_code: BTreeMap::new(),
-            stored_frames: Vec::new(),
-            rule_results: BTreeMap::new(),
-            current: None,
-            open_comptimes: BTreeMap::new(),
-            next_binding: 1 << 40,
-            handed_over: None,
-            in_parallel: None,
-            scoped_task: false,
-            inside_unsafe: false,
-            repeats: Vec::new(),
-        },
+        world: &world,
+        s: core::Baton::new(s),
+        spares: Vec::new(),
     };
     checker.collect_types();
     checker.program();
@@ -666,21 +617,22 @@ fn walked<'a>(
         .collect();
     // The same subtraction, for the same reason: a checked conversion written on
     // a widening one does not compile.
-    checker
-        .s
+    let state = &mut *checker.s;
+    state
         .facts
         .narrowing_casts
-        .retain(|at, _| !checker.s.flow.widening_casts.contains(at));
+        .retain(|at, _| !state.flow.widening_casts.contains(at));
     finished(checker)
 }
 
 /// What the walk found: the state's findings go into the table the emitter reads.
 fn finished(checker: Checker<'_>) -> Checked {
+    let state = checker.s.into_state();
     Checked {
-        findings: checker.s.findings,
-        facts: checker.s.facts,
-        methods: checker.s.methods,
-        stored_code: checker.s.stored_code,
+        findings: state.findings,
+        facts: state.facts,
+        methods: state.methods,
+        stored_code: state.stored_code,
     }
 }
 
@@ -1022,7 +974,26 @@ fn walks_the_fields_of(
 /// **A dependency's type is named by its path**, `lib::User`, and `::` has no
 /// place in a function's name below: `describe__lib__User`.
 pub(crate) fn specialised(function: &str, on: &str) -> String {
-    format!("{function}__{}", on.replace("::", "__"))
+    nikaia_std::tools::check_core_pilot::check_specialised(function, on)
+}
+
+/// The value as the author wrote it, where this compiler can say so: a literal,
+/// a name, a negation, and an ellipsis for the rest. `CheckHost::written`.
+pub(super) fn written_by(parsed: &Parsed, value: &Expr) -> String {
+    match value {
+        Expr::LitInt {
+            value, negative, ..
+        } => crate::ast::int_value(*value, *negative).to_string(),
+        Expr::LitBool(yes, _) => yes.to_string(),
+        Expr::LitStr { text, .. } => format!("{text:?}"),
+        Expr::Variable(name, _) => parsed.text(*name).to_string(),
+        Expr::Unary {
+            op: UnaryOp::Neg,
+            expr,
+            ..
+        } => format!("-{}", written_by(parsed, expr)),
+        _ => "…".to_string(),
+    }
 }
 
 /// The members Part II 10.3 writes: a `struct`'s fields under `[T: Struct]`,
@@ -1069,9 +1040,12 @@ use nikaia_std::tools::check_arms::CheckArm;
 use nikaia_std::tools::check_binds::CheckBoundary as Boundary;
 struct Checker<'a> {
     /// **The checker's state that is Nikaia** (`tools/check_state.nika`, #558).
-    s: CheckState,
-    /// What it looks at and does not own: the names, and the two ledgers.
-    world: CheckWorld<'a>,
+    s: core::Baton,
+    /// What it looks at and does not own: the names, and the two ledgers. A
+    /// reference, so the moved code can be handed it while the checker is lent.
+    world: &'a CheckWorld<'a>,
+    /// States with nothing in them, for the crossings into Nikaia (`core.rs`).
+    spares: Vec<Box<CheckState>>,
     /// What each callee has **newly** gained since the committed ledger
     /// ([ADR-308](../../docs/specification/adr/adr-308.md) D11). Empty where
     /// there is nothing to compare, which says nothing.
@@ -1329,17 +1303,17 @@ impl<'a> Checker<'a> {
                 _ => {}
             }
         }
-        self.s.collect_library_enums(&self.world);
+        self.s.collect_library_enums(self.world);
         for item in &self.parsed.program.items {
             match &item.node {
-                Item::Fn { .. } => self.s.bounds_declared_by(&self.world, &item.node, None),
+                Item::Fn { .. } => self.s.bounds_declared_by(self.world, &item.node, None),
                 Item::Impl {
                     target, methods, ..
                 } => {
                     let target = self.parsed.text(target.name).to_string();
                     for method in methods {
                         self.s
-                            .bounds_declared_by(&self.world, &method.node, Some(&target));
+                            .bounds_declared_by(self.world, &method.node, Some(&target));
                     }
                 }
                 _ => {}
@@ -1358,7 +1332,7 @@ impl<'a> Checker<'a> {
     /// view of each `Symbol`, and handing one to `resolve` was refused as a
     /// mismatch although the handle is a `u32` the ledger says copies.
     fn a_view_that_copies(&self, ty: &Ty) -> bool {
-        self.s.a_view_that_copies(&self.world, ty)
+        self.s.a_view_that_copies(self.world, ty)
     }
 
     /// The other files of the program: `beside` without this one.
@@ -1582,6 +1556,7 @@ impl<'a> Checker<'a> {
                 _ => None,
             })
             .collect();
+        let mut compared: Vec<(String, bool)> = Vec::new();
         for name in declared {
             let parts: Vec<Ty> = match self.s.enum_payloads.get(&name) {
                 Some(held) => held.clone(),
@@ -1595,8 +1570,12 @@ impl<'a> Checker<'a> {
             if !parts.iter().all(|ty| asking.of(ty)) {
                 continue;
             }
+            let totally = parts.iter().all(|ty| asking.totally(ty));
+            compared.push((name, totally));
+        }
+        for (name, totally) in compared {
             self.s.facts.compares.insert(name.clone());
-            if parts.iter().all(|ty| asking.totally(ty)) {
+            if totally {
                 self.s.facts.compares_totally.insert(name);
             }
         }
@@ -1714,7 +1693,7 @@ impl<'a> Checker<'a> {
                     }
                     if trait_name.is_some_and(|t| self.parsed.text(t) == "Cleanup") {
                         self.s.a_cleanup_shaped(
-                            &self.world,
+                            self.world,
                             self.parsed.text(target.name),
                             methods,
                             &item.span,
@@ -1776,10 +1755,9 @@ impl<'a> Checker<'a> {
                 Item::Grammar(grammar) => self.grammar(grammar),
                 // **A `use` brings no name in, for `std` as for a package**
                 // ([ADR-140](../../docs/specification/adr/adr-140.md) D5).
-                Item::Import { path, .. } => {
-                    self.s
-                        .an_import_that_brings_a_name_in(&self.world, path, &item.span)
-                }
+                Item::Import { path, .. } => self
+                    .s
+                    .an_import_that_brings_a_name_in(self.world, path, &item.span),
                 _ => {}
             }
         }
@@ -1798,7 +1776,7 @@ impl<'a> Checker<'a> {
         for rule in &grammar.rules {
             for alt in &rule.alts {
                 self.s
-                    .a_name_the_page_does_not_have(&self.world, &alt.pattern);
+                    .a_name_the_page_does_not_have(self.world, &alt.pattern);
             }
         }
         for rule in &grammar.rules {
@@ -1824,7 +1802,7 @@ impl<'a> Checker<'a> {
                     .iter()
                     .map(|r| self.parsed.text(r.name).to_string())
                     .collect();
-                let frame = self.s.bindings_of(&self.world, &alt.pattern.node, &rules);
+                let frame = self.s.bindings_of(self.world, &alt.pattern.node, &rules);
                 // **A fold's lambdas first, and in the pattern's own frame**
                 // ([ADR-296](../../../docs/specification/adr/adr-296.md)),
                 // because a fold may stand beside a binding in a sequence:
@@ -1962,7 +1940,7 @@ impl<'a> Checker<'a> {
     /// hands back, where its signature says.
     fn a_named_fold_part_that_may_pause(&mut self, part: &Expr, span: &Span) -> Option<Ty> {
         self.s
-            .a_named_fold_part_that_may_pause(&self.world, part, span)
+            .a_named_fold_part_that_may_pause(self.world, part, span)
     }
 
     fn function(&mut self, item: &Item, target: Option<&str>) {
@@ -2007,7 +1985,7 @@ impl<'a> Checker<'a> {
             for named in sync_by {
                 let named = self.parsed.text(*named).to_string();
                 self.s
-                    .a_lambda_the_promise_names(&self.world, &key, &named, args, &at);
+                    .a_lambda_the_promise_names(self.world, &key, &named, args, &at);
             }
         }
         if let Some(span) = body.stmts.first().map(|s| s.span) {
@@ -2018,11 +1996,9 @@ impl<'a> Checker<'a> {
             None => own_name,
         };
         let outer_current = self.s.current.replace(key);
+        let current_name = self.s.current.clone().unwrap_or_default();
         let outer_sync = match is_sync {
-            true => self
-                .s
-                .inside_a_sync_function
-                .replace(self.s.current.clone().unwrap_or_default()),
+            true => self.s.inside_a_sync_function.replace(current_name),
             false => self.s.inside_a_sync_function.take(),
         };
 
@@ -2181,7 +2157,7 @@ impl<'a> Checker<'a> {
             && !a_body_never_ends(body)
             && let Some(Stmt::Expr(value)) = body.stmts.last().map(|s| &s.node)
             && let Some(at) = tail_span
-            && !self.s.hands_back_a_view_of_the_subject(&self.world, value)
+            && !self.s.hands_back_a_view_of_the_subject(self.world, value)
         {
             self.a_field_of_a_borrowed_subject(value, &at, "handed back");
             self.a_field_of_a_lent_place_handed_back(value, &at);
@@ -2220,7 +2196,7 @@ impl<'a> Checker<'a> {
             // `return` form are one program, and one of the two answering
             // differently would be a spelling that decides a refusal.
             let lending = matches!(body.stmts.last().map(|s| &s.node), Some(Stmt::Expr(value))
-                if self.s.hands_back_a_view_of_the_subject(&self.world, value));
+                if self.s.hands_back_a_view_of_the_subject(self.world, value));
             if lending {
                 self.s.facts.lent_returns.insert(span.at() as i64);
             }
@@ -2329,7 +2305,7 @@ impl<'a> Checker<'a> {
     /// knows declares one is asked first, so what is left is certain (C.4).
     fn a_function_nothing_declares(&mut self, name: &str, span: &Span) {
         self.s
-            .a_function_nothing_declares(&self.world.here, &self.world, name, span)
+            .a_function_nothing_declares(&self.world.here, self.world, name, span)
     }
 
     /// **A lookup's key is lent** (0.0.235, issue #169).
@@ -2344,7 +2320,7 @@ impl<'a> Checker<'a> {
     /// entries, where the key is a known value that is not already a view.
     /// `m.get(k)` over a map keyed by numbers was `rustc`'s *mismatched types*.
     fn a_lookup_key_lent(&mut self, key: &str, args: &[Expr], found: &[Ty]) {
-        self.s.a_lookup_key_lent(&self.world, key, args, found);
+        self.s.a_lookup_key_lent(self.world, key, args, found);
     }
 
     /// `NK1105` for text of its own given to a name bound to a literal
@@ -2357,7 +2333,7 @@ impl<'a> Checker<'a> {
         span: &Span,
     ) -> bool {
         self.s
-            .owned_text_into_a_literal_binding(&self.world, target, found, into, span)
+            .owned_text_into_a_literal_binding(self.world, target, found, into, span)
     }
 
     /// **`NK1191`: an arithmetic operator on something that has none**
@@ -2390,14 +2366,7 @@ impl<'a> Checker<'a> {
     ) {
         let [(left_expr, left), (right_expr, right)] = sides;
         self.s.arithmetic_on_something_that_has_none(
-            &self.world,
-            op,
-            left_expr,
-            left,
-            right_expr,
-            right,
-            compound,
-            span,
+            self.world, op, left_expr, left, right_expr, right, compound, span,
         );
     }
 
@@ -2449,7 +2418,7 @@ impl<'a> Checker<'a> {
     /// an `|`. A pattern that looks inside a box *inside* that part, or does
     /// so in one alternative of several, is still refused by name.
     fn a_pattern_inside_a_box(&mut self, pattern: &MatchPattern, span: &Span) {
-        self.s.a_pattern_inside_a_box(&self.world, pattern, span);
+        self.s.a_pattern_inside_a_box(self.world, pattern, span);
     }
 
     /// **A guard that reads a name bound inside a boxed part**
@@ -2496,19 +2465,19 @@ impl<'a> Checker<'a> {
     /// `Expr::Add(a, b)`, which the arm opens and a guard reads through the
     /// box.
     fn boxed_names(&self, pattern: &MatchPattern) -> Vec<String> {
-        self.s.boxed_names(&self.world, pattern)
+        self.s.boxed_names(self.world, pattern)
     }
 
     /// The types of the names bound inside the boxed parts a pattern looks
     /// into, where the variant says them: each part is typed by the path its
     /// own pattern names, which is the boxed type.
     fn typed_inside_boxes(&self, pattern: &MatchPattern, out: &mut BTreeMap<String, Ty>) {
-        self.s.typed_inside_boxes(&self.world, pattern, out);
+        self.s.typed_inside_boxes(self.world, pattern, out);
     }
 
     /// The names a pattern binds inside the boxed parts it looks into.
     fn names_inside_boxes(&self, pattern: &MatchPattern, out: &mut Vec<String>) {
-        self.s.names_inside_boxes(&self.world, pattern, out);
+        self.s.names_inside_boxes(self.world, pattern, out);
     }
 
     /// Whether a call is to the **prelude's `assert`**
@@ -2754,7 +2723,7 @@ impl<'a> Checker<'a> {
         at: &Span,
     ) {
         self.s
-            .a_view_compared_with_a_value(&self.world, lhs, left, rhs, right, at);
+            .a_view_compared_with_a_value(self.world, lhs, left, rhs, right, at);
     }
 
     /// **An `impl` of a trait nothing declares** (0.0.231).
@@ -2778,7 +2747,7 @@ impl<'a> Checker<'a> {
     /// C.4](../../docs/specification/30-nikaia-tooling.md)).
     fn a_trait_nothing_declares(&mut self, written: &str, span: &Span) {
         self.s
-            .a_trait_nothing_declares(&self.world.here, &self.world, written, span)
+            .a_trait_nothing_declares(&self.world.here, self.world, written, span)
     }
 
     /// **`NK1181`: nothing declares the head of this path.**
@@ -2804,7 +2773,7 @@ impl<'a> Checker<'a> {
     /// absent key had to be ruled out first.
     fn a_head_nothing_declares(&mut self, head: &str, written: &str, span: &Span) {
         self.s
-            .a_head_nothing_declares(&self.world.here, &self.world, head, written, span)
+            .a_head_nothing_declares(&self.world.here, self.world, head, written, span)
     }
 
     /// **`x?.m(…)` over a `T?`** (Part I 3.5): the call happens only where
@@ -2929,7 +2898,7 @@ impl<'a> Checker<'a> {
         span: &Span,
     ) -> Ty {
         self.s
-            .a_safe_field(&self.world, inner, base, &field, expr, span)
+            .a_safe_field(self.world, inner, base, &field, expr, span)
     }
 
     /// `?.` over a value that is never absent (`tools/check_fields.nika`).
@@ -2946,7 +2915,7 @@ impl<'a> Checker<'a> {
             Reached::Method(name) => (name, true),
         };
         self.s
-            .reaches_through_a_plain_value(&self.world, on, receiver, name, method, reach, span);
+            .reaches_through_a_plain_value(self.world, on, receiver, name, method, reach, span);
     }
 
     /// **An option's default that is computed rather than written** (ADR-318
@@ -3142,7 +3111,7 @@ impl<'a> Checker<'a> {
         span: &Span,
     ) -> bool {
         self.s
-            .nothing_to_fall_back_from(&self.world, value, left, coalesce, span)
+            .nothing_to_fall_back_from(self.world, value, left, coalesce, span)
     }
 
     /// The entry call itself: the input is an expression like any other, and
@@ -3156,28 +3125,9 @@ impl<'a> Checker<'a> {
     /// one line ([ADR-308](../../docs/specification/adr/adr-308.md) D9); that
     /// line is gone with it.
     fn grammar_call(&mut self, key: &str, args: &[Expr], span: &Span) -> Ty {
-        for arg in args {
-            self.expr(arg, span);
-        }
-        let fallible = self
-            .world
-            .own
-            .functions
-            .get(key)
-            .is_some_and(|c| !c.fails_with.is_empty());
-        if fallible && let Some(guarded) = &mut self.s.flow.guarded {
-            guarded.fallible = true;
-            guarded
-                .thrown
-                .extend(self.world.own.functions[key].fails_with.iter().cloned());
-        }
-        self.world
-            .own
-            .functions
-            .get(key)
-            .and_then(|c| c.signature.as_ref())
-            .and_then(|s| s.result.clone())
-            .unwrap_or(Ty::Unknown)
+        self.nikaia(|state, world, host| {
+            check_core_pilot::check_core_grammar_call(state, world, host, key, args, span)
+        })
     }
 
     /// **The compiler writes the reference at the call, and a written one is
@@ -3496,8 +3446,7 @@ impl<'a> Checker<'a> {
         ty: Ty,
         span: &Span,
     ) -> Local {
-        self.s
-            .lambda_parameter(&self.world, name, mutable, ty, span)
+        self.s.lambda_parameter(self.world, name, mutable, ty, span)
     }
 
     /// **Whether a type's values have a cleanup**, and whether it can fail
@@ -3508,7 +3457,7 @@ impl<'a> Checker<'a> {
     /// cleanup; the answer fails where any cleanup it holds can.
     fn cleanup_of(&self, ty: &Ty) -> Option<(String, bool)> {
         self.s
-            .cleanup_of(&self.world, ty)
+            .cleanup_of(self.world, ty)
             .map(|held| (held.owner, held.fails))
     }
 
@@ -3721,7 +3670,7 @@ impl<'a> Checker<'a> {
         let Expr::Field { .. } = value else {
             return;
         };
-        let Some(path) = self.s.place_path(&self.world, value) else {
+        let Some(path) = self.s.place_path(self.world, value) else {
             return;
         };
         let Some((root, _)) = path.split_once('.') else {
@@ -3762,40 +3711,11 @@ impl<'a> Checker<'a> {
     /// `Box { items: out }` was `rustc`'s *mismatched types* about a file
     /// nobody wrote.
     fn a_mut_parameter_given_away(&mut self, value: &Expr, span: &Span, what: &str) {
-        let Expr::Variable(name, _) = value else {
-            return;
-        };
-        let name = self.parsed.text(*name).to_string();
-        // `Local::changing`: a `let` of the same name is a binding of its own.
-        if !self.s.binding(&name).is_some_and(|local| local.changing) {
-            return;
-        }
-        let ty = self.expr(value, span);
-        if ty.is_unknown() || self.s.copied(&self.world, &ty) {
-            return;
-        }
-        self.s.findings.push(Finding {
-            severity: Severity::Error,
-            span: *span,
-            code: "NK1131".to_string(),
-            message: format!(
-                "You can't give away `{name}` here: a `mut` parameter is only borrowed."
-            ),
-            notes: vec![format!(
-                "`mut {name}` is passed as `ref mut`, so the caller's `{}` is changed in \
-                 place and stays the caller's. Giving it away would take it from them.",
-                ty.text()
-            )],
-            help: Some(format!(
-                "Write `{name}.clone()` for a copy{}, or drop the `mut` if the function is \
-                 meant to use up its value.",
-                match what {
-                    "handed back" => " to return",
-                    _ => "",
-                }
-            )),
-            labels: Vec::new(),
-        });
+        self.nikaia(|state, world, host| {
+            check_core_pilot::check_core_a_mut_parameter_given_away(
+                state, world, host, value, span, what,
+            )
+        })
     }
 
     /// **What a method call is**, asked of a receiver whose type is already in
@@ -4002,7 +3922,7 @@ impl<'a> Checker<'a> {
             // asked again on the trait and everything about it - arity,
             // argument types, `sync`, `throws` - is answered from the
             // declaration, exactly as it would be from a written-down receiver.
-            if let Some(bound) = self.s.bound_that_answers(&self.world, name, entry) {
+            if let Some(bound) = self.s.bound_that_answers(self.world, name, entry) {
                 return self.call_on(bound, receiver, method, args, entry, span);
             }
             // **A `Seen[T]` is the `T` it stamps** (ADR-281 D26, #497): the
@@ -4059,7 +3979,7 @@ impl<'a> Checker<'a> {
                 .as_ref()
                 .and_then(|s| s.params.first())
                 .is_some_and(|(_, ty)| {
-                    matches!(ty, Ty::Seq { .. }) || self.s.takes_away(&self.world, ty)
+                    matches!(ty, Ty::Seq { .. }) || self.s.takes_away(self.world, ty)
                 });
             if contract.mutates || takes {
                 self.s.changed.push(name);
@@ -4084,7 +4004,7 @@ impl<'a> Checker<'a> {
             && let Some(name) = self.s.flow.receiver_name.clone()
         {
             self.s
-                .hands_over_name(&self.world, &name, "taken by `map`", span);
+                .hands_over_name(self.world, &name, "taken by `map`", span);
         }
         // **And `close` takes the value**: nothing of it is left to clean up
         // afterwards, and nothing of it to read.
@@ -4092,7 +4012,7 @@ impl<'a> Checker<'a> {
             && let Some(name) = self.s.flow.receiver_name.clone()
         {
             self.s
-                .hands_over_name(&self.world, &name, "closed by `close`", span);
+                .hands_over_name(self.world, &name, "closed by `close`", span);
         }
         // ADR-023 D8: the failure leaves at the call, and the emitter
         // is what writes that. Recorded whether or not the function
@@ -4397,7 +4317,7 @@ impl<'a> Checker<'a> {
         // A method's own parameters carry bounds exactly as a free function's
         // do, and one written call is one rule (ADR-278).
         self.s
-            .a_bound_the_argument_does_not_meet(&self.world, &key, &bound, span);
+            .a_bound_the_argument_does_not_meet(self.world, &key, &bound, span);
         let result = ty::substitute(&result, &bound);
         let result = shape_through(&contract, &on, &found, result);
         let result =
@@ -4510,7 +4430,7 @@ impl<'a> Checker<'a> {
         span: &Span,
     ) {
         self.s
-            .a_sequence_that_cannot_do_this(&self.world, on, method, contract, found, span);
+            .a_sequence_that_cannot_do_this(self.world, on, method, contract, found, span);
     }
 
     /// **A count the language below takes in `usize`**
@@ -4528,8 +4448,7 @@ impl<'a> Checker<'a> {
     /// is refused with the copy to write, where it reached `rustc` as
     /// *mismatched types* about a file nobody wrote.
     fn a_map_read_kept(&mut self, found: &Ty, want: &Ty, value: &Expr, span: &Span) {
-        self.s
-            .a_map_read_kept(&self.world, found, want, value, span);
+        self.s.a_map_read_kept(self.world, found, want, value, span);
     }
 
     /// Part I 2.3: record where the emitter has to write the `Some(…)`.
@@ -4608,19 +4527,19 @@ impl<'a> Checker<'a> {
     /// The operands of a computation widen to the type it is computed in
     /// (`tools/check_numbers2.nika`).
     fn widen_operands(&mut self, value: &Expr, into: &str, span: &Span) -> bool {
-        self.s.widen_operands(&self.world, value, into, span)
+        self.s.widen_operands(self.world, value, into, span)
     }
 
     /// `NK1215` for a bit operation computed in a narrower type
     /// (`tools/check_exprs.nika`).
     fn narrow_by_width(&mut self, value: &Expr, into: &str, span: &Span) -> bool {
-        self.s.narrow_by_width(&self.world, value, into, span)
+        self.s.narrow_by_width(self.world, value, into, span)
     }
 
     /// A list literal whose elements widen (`tools/check_numbers2.nika`).
     fn widened_elements(&mut self, found: &Ty, want: &Ty, value: &Expr, span: &Span) -> Option<Ty> {
         self.s
-            .widened_elements(&self.world, found, want, value, span)
+            .widened_elements(self.world, found, want, value, span)
     }
 
     /// **A map's read, past a jump, assigned to a place that owns its value**
@@ -4631,7 +4550,7 @@ impl<'a> Checker<'a> {
     /// `let k: Kind? = m[1]` follows - where it reached `rustc` as *mismatched
     /// types*.
     fn a_map_read_assigned(&mut self, into: &Ty, value: &Expr, span: &Span) {
-        self.s.a_map_read_assigned(&self.world, into, value, span);
+        self.s.a_map_read_assigned(self.world, into, value, span);
     }
 
     fn wraps_into_nullable(&mut self, found: &Ty, want: &Ty, value: &Expr, span: &Span) {
@@ -4672,7 +4591,7 @@ impl<'a> Checker<'a> {
     /// `u32`. A range that is not checked is `rustc` about the generated file
     /// the first time somebody writes one.
     fn constant_fits(&mut self, value: &Expr, want: Option<&Ty>, span: &Span) {
-        self.s.constant_fits(&self.world, value, want, span);
+        self.s.constant_fits(self.world, value, want, span);
     }
 
     /// `NK1116` for a number and the type it has to fit, where it does not;
@@ -4709,7 +4628,7 @@ impl<'a> Checker<'a> {
     /// `bind_with` decides; a declaration on the way pins the type, and that is
     /// what makes `let a: i32 = 2` then `a + a` arithmetic in an `i32`.
     fn constant_of(&self, expr: &Expr) -> Option<Constant> {
-        self.s.constant_of(&self.world, expr).map(Constant::from)
+        self.s.constant_of(self.world, expr).map(Constant::from)
     }
 
     /// The entry an open number was joined into
@@ -4726,7 +4645,7 @@ impl<'a> Checker<'a> {
     fn open_numbers_in(&self, expr: &Expr, out: &mut Vec<usize>) {
         out.extend(
             self.s
-                .open_numbers_in(&self.world, expr)
+                .open_numbers_in(self.world, expr)
                 .into_iter()
                 .map(|at| at as usize),
         );
@@ -4736,7 +4655,7 @@ impl<'a> Checker<'a> {
     /// `xs[i]`, and not a slice of it.
     fn open_element_of(&self, expr: &Expr) -> Option<usize> {
         self.s
-            .open_element_of(&self.world, expr)
+            .open_element_of(self.world, expr)
             .map(|at| at as usize)
     }
 
@@ -4744,13 +4663,13 @@ impl<'a> Checker<'a> {
     /// joined by the operations [`Self::open_numbers_in`] walks. A `let` of one
     /// is an open number itself (D1).
     fn number_shaped(&self, expr: &Expr) -> bool {
-        self.s.number_shaped(&self.world, expr)
+        self.s.number_shaped(self.world, expr)
     }
 
     /// **A use asks the open numbers in a value for a type** (D2): a type
     /// standing beside it (`beside`), or an index, which takes any integer.
     fn number_asked(&mut self, value: &Expr, want: &Ty, at: &Span, beside: bool) {
-        self.s.number_asked(&self.world, value, want, at, beside);
+        self.s.number_asked(self.world, value, want, at, beside);
     }
 
     /// **One operation, one type**: the open numbers on both sides of it are
@@ -4764,7 +4683,7 @@ impl<'a> Checker<'a> {
     /// assigned to it later (D3).
     fn open_number_given(&mut self, number: usize, value: &Expr, span: &Span) {
         self.s
-            .open_number_given(&self.world, number as i64, value, span);
+            .open_number_given(self.world, number as i64, value, span);
     }
 
     /// **Every open number of a body, decided** once the body has been walked
@@ -4874,7 +4793,7 @@ impl<'a> Checker<'a> {
     }
 
     fn divisor_is_not_zero(&mut self, op: BinaryOp, rhs: &Expr, span: &Span) {
-        self.s.divisor_is_not_zero(&self.world, op, rhs, span);
+        self.s.divisor_is_not_zero(self.world, op, rhs, span);
     }
 
     // --- statements ---------------------------------------------------------
@@ -4964,9 +4883,8 @@ impl<'a> Checker<'a> {
                     self.s.facts.lent_lets.insert(span.at() as i64);
                     for name in names {
                         let name = self.parsed.text(*name).to_string();
-                        self.s
-                            .lent_lets
-                            .insert((name, self.s.scope.len().saturating_sub(1) as i64));
+                        let depth = self.s.scope.len().saturating_sub(1) as i64;
+                        self.s.lent_lets.insert((name, depth));
                     }
                 } else if bound.iter().any(|n| *n != "_") {
                     let to = format!("bound to `{}` by a `let`", bound.join("`, `"));
@@ -4991,14 +4909,13 @@ impl<'a> Checker<'a> {
                 // rename and stays a move, which is the one shape that
                 // separates this rule from `for`'s.
                 if matches!(value, Expr::Field { .. } | Expr::Index { .. })
-                    && self.s.takes_away(&self.world, &found)
+                    && self.s.takes_away(self.world, &found)
                 {
                     self.s.facts.lent_lets.insert(span.at() as i64);
                     for name in names {
                         let name = self.parsed.text(*name).to_string();
-                        self.s
-                            .lent_lets
-                            .insert((name, self.s.scope.len().saturating_sub(1) as i64));
+                        let depth = self.s.scope.len().saturating_sub(1) as i64;
+                        self.s.lent_lets.insert((name, depth));
                     }
                 }
                 // **A tuple of names takes the value apart**
@@ -5216,7 +5133,7 @@ impl<'a> Checker<'a> {
                 // view below whatever its type says, as a `for` binding is.
                 let read_through_a_jump = matches!(value, Expr::Coalesce { value: read, fallback, .. }
                     if matches!(**read, Expr::Index { .. })
-                        && self.s.jumps(&self.world, fallback));
+                        && self.s.jumps(self.world, fallback));
                 // **Unless what it reads is a number, a `bool` or a `char`**
                 // (#456): then the value is read out of the view where it is
                 // bound, as a loop binding's is, and the name is the value in
@@ -5229,7 +5146,7 @@ impl<'a> Checker<'a> {
                         if (matches!(**read, Expr::Index { .. })
                             || matches!(&**read, Expr::MethodCall { method, .. }
                                 if self.parsed.text(*method) == "get"))
-                            && self.s.leaves(&self.world, fallback));
+                            && self.s.leaves(self.world, fallback));
                 if copied_read {
                     self.s.facts.copied_jump_reads.insert(value_node(value));
                 }
@@ -5239,7 +5156,7 @@ impl<'a> Checker<'a> {
                 {
                     self.s.flow.text_paths.insert(id);
                 }
-                if bound.is_unknown() || self.s.a_drivers_row(&self.world, value) {
+                if bound.is_unknown() || self.s.a_drivers_row(self.world, value) {
                     self.s.flow.unknown_bound.insert(id);
                 }
                 self.bind_local(Local {
@@ -5319,7 +5236,7 @@ impl<'a> Checker<'a> {
                             .collect(),
                     };
                     for owner in owners {
-                        let code = self.s.a_field_holds_code(&self.world, &owner, &field);
+                        let code = self.s.a_field_holds_code(self.world, &owner, &field);
                         if code {
                             self.a_field_whose_code_is_not_seen(&owner, &field);
                         }
@@ -5331,11 +5248,12 @@ impl<'a> Checker<'a> {
                 // walking it records a read this must not be confused with.
                 // **And a part of one** (ADR-293 D32): `p.name = …` gives back
                 // what `xs.push(p.name)` took.
-                if let Some(path) = self.s.place_path(&self.world, target) {
+                if let Some(path) = self.s.place_path(self.world, target) {
+                    let choices = self.s.branch.clone();
                     self.s.gives.push(Give {
                         path: path.clone(),
                         at: span.at() as i64,
-                        choices: self.s.branch.clone(),
+                        choices,
                     });
                     self.s.written_at.push((path, span.at() as i64));
                 }
@@ -5345,10 +5263,10 @@ impl<'a> Checker<'a> {
                 // `mut`: writing it directly is `NK2204`'s, one message for one
                 // mistake, and `mut` would not be the way out.
                 let shared = matches!(target, Expr::Variable(_, _))
-                    && self.s.rooted_at(&self.world, target).and_then(|root| self.s.binding(&root)).is_some_and(
+                    && self.s.rooted_at(self.world, target).and_then(|root| self.s.binding(&root)).is_some_and(
                         |local| matches!(&local.ty, Ty::Named { name, .. } if name == SHARED_MUT),
                     );
-                if let Some(root) = self.s.rooted_at(&self.world, target).filter(|_| !shared) {
+                if let Some(root) = self.s.rooted_at(self.world, target).filter(|_| !shared) {
                     let how = match target {
                         Expr::Variable(_, _) => "changed here",
                         _ => "one of its parts is changed here",
@@ -5545,11 +5463,10 @@ impl<'a> Checker<'a> {
                     span,
                     "A `while` loop repeats while a `bool` is `true`.",
                 );
-                self.s.repeats.push(Repeats::a_loop(
-                    &self.parsed.interner,
-                    self.s.scope.len() as i64,
-                    body,
-                ));
+                let depth = self.s.scope.len() as i64;
+                self.s
+                    .repeats
+                    .push(Repeats::a_loop(&self.parsed.interner, depth, body));
                 self.s.scope.push(Vec::new());
                 // **The body and not the condition.** A `break` written in the
                 // condition is bound to this very loop in the language below,
@@ -5579,7 +5496,7 @@ impl<'a> Checker<'a> {
                 // ([ADR-105](../../docs/specification/adr/adr-105.md) D2). A
                 // container is walked by view and as often as one likes, which
                 // is why the record is keyed on the type being a `Seq`.
-                self.s.a_sequence_is_walked(iter, &over, span, &self.world);
+                self.s.a_sequence_is_walked(iter, &over, span, self.world);
                 let elements = elements_of(&over, bindings.len());
                 // **A name that holds a sequence is handed over, not lent**
                 // (ADR-293 D19): the emitter writes no `.iter()` for it, and the
@@ -5720,11 +5637,10 @@ impl<'a> Checker<'a> {
                     self.s
                         .nameable(&local.name.clone(), span, "a `for` binding");
                 }
-                self.s.repeats.push(Repeats::a_loop(
-                    &self.parsed.interner,
-                    self.s.scope.len() as i64,
-                    body,
-                ));
+                let depth = self.s.scope.len() as i64;
+                self.s
+                    .repeats
+                    .push(Repeats::a_loop(&self.parsed.interner, depth, body));
                 self.s.scope.push(frame);
                 self.s.flow.loops += 1;
                 self.block(body);
@@ -5861,7 +5777,7 @@ impl<'a> Checker<'a> {
     /// `panic`, of a reflected field's `of` in a generic body, and not again
     /// where a part inside was already refused: one cause, one refusal.
     fn a_value_of_no_known_type(&mut self, expr: &Expr, span: &Span) {
-        self.s.a_value_of_no_known_type(&self.world, expr, span);
+        self.s.a_value_of_no_known_type(self.world, expr, span);
     }
 
     fn value_of(&mut self, expr: &Expr, span: &Span) -> Ty {
@@ -5965,9 +5881,9 @@ impl<'a> Checker<'a> {
                     // **A function or a type's constructor named as a value**
                     // (#502, #507): `xs.map(double)`, `par_fold(M, Summary, …)`
                     // - what its declaration says it takes and gives.
-                    None if self.s.function_as_a_value(&self.world, name).is_some() => self
+                    None if self.s.function_as_a_value(self.world, name).is_some() => self
                         .s
-                        .function_as_a_value(&self.world, name)
+                        .function_as_a_value(self.world, name)
                         .unwrap_or(Ty::Unknown),
                     None => {
                         // **The specific message wins.** A free `a`, `b` or `c`
@@ -5978,7 +5894,7 @@ impl<'a> Checker<'a> {
                         // general refusal would be a second finding about one
                         // mistake.
                         if !self.s.withdrawn_automatic_name(name, span) {
-                            self.s.nothing_declares_it(&self.world, expr, span);
+                            self.s.nothing_declares_it(self.world, expr, span);
                         }
                         Ty::Unknown
                     }
@@ -5995,7 +5911,7 @@ impl<'a> Checker<'a> {
                 // `1brc.nika` wrote it, against a type declaring an anonymous
                 // constructor and no `new`.
                 self.s
-                    .a_constructor_written_as_new(&self.world, &names.join("::"), span);
+                    .a_constructor_written_as_new(self.world, &names.join("::"), span);
                 match names.as_slice() {
                     [ty, variant] if self.s.is_variant(ty, variant) => Ty::named(*ty),
                     // **A method named as a value** is a function whose first
@@ -6003,11 +5919,11 @@ impl<'a> Checker<'a> {
                     [ty, method]
                         if self
                             .s
-                            .function_as_a_value(&self.world, &format!("{ty}::{method}"))
+                            .function_as_a_value(self.world, &format!("{ty}::{method}"))
                             .is_some() =>
                     {
                         self.s
-                            .function_as_a_value(&self.world, &format!("{ty}::{method}"))
+                            .function_as_a_value(self.world, &format!("{ty}::{method}"))
                             .unwrap_or(Ty::Unknown)
                     }
                     // **A `std` enum's case is a value of that enum** (#507):
@@ -6145,7 +6061,7 @@ impl<'a> Checker<'a> {
                     let ty = self.block(&arm.body);
                     self.leave_boundary(saved);
                     self.s.scope.pop();
-                    if self.s.block_leaves(&self.world, &arm.body) {
+                    if self.s.block_leaves(self.world, &arm.body) {
                         continue;
                     }
                     // An arm of no known type is an open number beside the
@@ -6192,24 +6108,18 @@ impl<'a> Checker<'a> {
                 // after it on any path (found moving `types` into Nikaia,
                 // #125). A name from outside the loop is the loop rule's, which
                 // counts the hand-over itself.
-                self.s.a_branch_that_leaves(
-                    from,
-                    self.s.block_exits(&self.world, then_branch)
-                        || self.s.block_leaves(&self.world, then_branch),
-                    span,
-                );
+                let leaves = self.s.block_exits(self.world, then_branch)
+                    || self.s.block_leaves(self.world, then_branch);
+                self.s.a_branch_that_leaves(from, leaves, span);
                 self.s.branch.pop();
                 let branches = match else_branch {
                     Some(otherwise) => {
                         self.s.branch.push((choice, 1));
                         let from = self.s.taken_so_far();
                         let other = self.block(otherwise);
-                        self.s.a_branch_that_leaves(
-                            from,
-                            self.s.block_exits(&self.world, otherwise)
-                                || self.s.block_leaves(&self.world, otherwise),
-                            span,
-                        );
+                        let leaves = self.s.block_exits(self.world, otherwise)
+                            || self.s.block_leaves(self.world, otherwise);
+                        self.s.a_branch_that_leaves(from, leaves, span);
                         self.s.branch.pop();
                         // Only when both arms agree is there something to say
                         // - or when they meet at text (ADR-282 D4).
@@ -6217,8 +6127,8 @@ impl<'a> Checker<'a> {
                         // `let t = if c { name } else { return }` is the other
                         // arm's type, as a `match` arm that returns is.
                         let leaves = |block: &Block| {
-                            self.s.block_exits(&self.world, block)
-                                || self.s.block_leaves(&self.world, block)
+                            self.s.block_exits(self.world, block)
+                                || self.s.block_leaves(self.world, block)
                         };
                         if then == other || (leaves(otherwise) && !leaves(then_branch)) {
                             then
@@ -6263,7 +6173,7 @@ impl<'a> Checker<'a> {
                 // (#576): below it is a `&mut`, so the arms bind references,
                 // and an arm that takes a part, or reads a number it binds,
                 // works on the value instead.
-                let mut_subject = self.s.a_mut_parameter_place(&self.world, value);
+                let mut_subject = self.s.a_mut_parameter_place(self.world, value);
                 // The parameter itself is the `&mut` the arms bind through; a
                 // field of one is a place the arms bind out of.
                 let through_the_reference =
@@ -6290,7 +6200,7 @@ impl<'a> Checker<'a> {
                 };
                 let typed = match through_a_view
                     && !typed.is_a_view()
-                    && self.s.takes_away(&self.world, &typed)
+                    && self.s.takes_away(self.world, &typed)
                 {
                     true => {
                         self.s.facts.lent_scrutinees.insert(value_node(value));
@@ -6313,13 +6223,14 @@ impl<'a> Checker<'a> {
                 // `&V` below whatever type it has here.
                 let lent_name = matches!(&**value, Expr::Variable(name, _)
                     if self.s.binding(self.parsed.text(*name)).is_some_and(|local| local.lent))
-                    || self.s.a_lent_let(&self.world, value);
-                let typed =
-                    match lent_name && !typed.is_a_view() && self.s.takes_away(&self.world, &typed)
-                    {
-                        true => view_of(&typed),
-                        false => typed,
-                    };
+                    || self.s.a_lent_let(self.world, value);
+                let typed = match lent_name
+                    && !typed.is_a_view()
+                    && self.s.takes_away(self.world, &typed)
+                {
+                    true => view_of(&typed),
+                    false => typed,
+                };
                 // **A `match` is a condition too** (ADR-281 D25).
                 let outer_condition = self.s.stamped_condition;
                 if on.is_seen() {
@@ -6364,7 +6275,7 @@ impl<'a> Checker<'a> {
                     // D1), asked before the body is walked so that the body's
                     // scope is one this checker can stand behind.
                     self.s
-                        .an_or_pattern_that_binds_unevenly(&self.world, &arm.pattern, span);
+                        .an_or_pattern_that_binds_unevenly(self.world, &arm.pattern, span);
                     // **And a pattern that names a variant the type does not
                     // have**, which the exhaustiveness check below cannot say:
                     // it reads which variants were *covered*, and a misspelling
@@ -6387,12 +6298,12 @@ impl<'a> Checker<'a> {
                     // `sync` - found moving the template splitter into Nikaia,
                     // where it made an `Error`'s `message` a future.
                     let parts = match (lendable, typed.is_a_view()) {
-                        (true, _) => self.s.pattern_parts(&self.world, &arm.pattern, &typed),
+                        (true, _) => self.s.pattern_parts(self.world, &arm.pattern, &typed),
                         (false, true) => self
                             .s
-                            .pattern_parts(&self.world, &arm.pattern, &typed)
+                            .pattern_parts(self.world, &arm.pattern, &typed)
                             .into_iter()
-                            .map(|(name, ty)| match self.s.copied(&self.world, &ty) {
+                            .map(|(name, ty)| match self.s.copied(self.world, &ty) {
                                 true => (name, ty),
                                 false => (name, view_of(&ty)),
                             })
@@ -6404,7 +6315,7 @@ impl<'a> Checker<'a> {
                         // unknown, a method on what it bound resolved to
                         // nothing, and the function around it was inferred to
                         // pause - found moving `fold` into Nikaia.
-                        (false, false) => self.s.pattern_parts(&self.world, &arm.pattern, &typed),
+                        (false, false) => self.s.pattern_parts(self.world, &arm.pattern, &typed),
                     };
                     // **A number bound out of a value the `match` was lent**
                     // is copied out at the head of the arm (0.0.236): the
@@ -6423,10 +6334,10 @@ impl<'a> Checker<'a> {
                     // => n` over a `ref Expr` handed back a `&i64`.
                     if typed.is_a_view() || through_the_reference {
                         let at = value_node(&arm.body);
-                        let mut parts = self.s.pattern_parts(&self.world, &arm.pattern, &typed);
+                        let mut parts = self.s.pattern_parts(self.world, &arm.pattern, &typed);
                         self.typed_inside_boxes(&arm.pattern, &mut parts);
                         for (name, ty) in parts {
-                            if self.s.copied(&self.world, &ty) || ty.is_a_view() {
+                            if self.s.copied(self.world, &ty) || ty.is_a_view() {
                                 self.s.facts.copied_bindings.insert((at, name));
                             }
                         }
@@ -6449,7 +6360,7 @@ impl<'a> Checker<'a> {
                     let owned_text: BTreeSet<String> = match lent_parts {
                         true => self
                             .s
-                            .pattern_parts(&self.world, &arm.pattern, &typed)
+                            .pattern_parts(self.world, &arm.pattern, &typed)
                             .into_iter()
                             .filter(|(_, ty)| {
                                 matches!(ty, Ty::Named { name, view: false, .. }
@@ -6466,8 +6377,7 @@ impl<'a> Checker<'a> {
                             Some(ty) => {
                                 let text = owned_text.contains(&local.name);
                                 let mut bound = self.local_free(local.name, ty.clone());
-                                bound.lent =
-                                    lent_parts && (!self.s.copied(&self.world, ty) || text);
+                                bound.lent = lent_parts && (!self.s.copied(self.world, ty) || text);
                                 bound
                             }
                             None => local,
@@ -6515,8 +6425,8 @@ impl<'a> Checker<'a> {
                         changed_from,
                         through_the_reference,
                     );
-                    self.s
-                        .a_branch_that_leaves(from, self.s.exits(&self.world, &arm.body), span);
+                    let leaves = self.s.exits(self.world, &arm.body);
+                    self.s.a_branch_that_leaves(from, leaves, span);
                     if let Some(subject) = &mut_subject {
                         self.parts_taken_out_of_a_mut_parameter(
                             subject,
@@ -6535,7 +6445,7 @@ impl<'a> Checker<'a> {
                     // beside an arm that hands back a `&str` and the `match` is
                     // a `&str`. The language below reads the jumping arm as the
                     // `!` it is and agrees by construction.
-                    if self.s.leaves(&self.world, &arm.body) {
+                    if self.s.leaves(self.world, &arm.body) {
                         continue;
                     }
                     answered.push((Some(&arm.body), ty.clone()));
@@ -6657,7 +6567,7 @@ impl<'a> Checker<'a> {
                 // and neither of these reaches the door: a grammar rule is not
                 // a lock, and a `T?` receiver is answered before the call is.
                 // A value that nothing walks is a mistake nothing reports.
-                if let Some(entered) = self.s.grammar_entry(&self.world, receiver, *method) {
+                if let Some(entered) = self.s.grammar_entry(self.world, receiver, *method) {
                     if let Some(at) = witness {
                         self.expr(&config[at].value, span);
                     }
@@ -6772,7 +6682,7 @@ impl<'a> Checker<'a> {
                 if matches!(receiver.as_ref(), Expr::Coalesce { .. })
                     && self
                         .s
-                        .only_reads_its_receiver(&self.world, self.parsed.text(*method))
+                        .only_reads_its_receiver(self.world, self.parsed.text(*method))
                 {
                     self.a_pending_coalesce_is_lent(receiver);
                 }
@@ -7005,7 +6915,7 @@ impl<'a> Checker<'a> {
                 // ([ADR-281](../../docs/specification/adr/adr-281.md) D35):
                 // `mapped.lines()` walks pages that are not there yet.
                 self.s
-                    .io_inside_a_door(&self.world, &on, &format!("`{written}`"), span);
+                    .io_inside_a_door(self.world, &on, &format!("`{written}`"), span);
                 // **`update`'s block is a write door's**
                 // ([ADR-281](../../docs/specification/adr/adr-281.md) D12), and
                 // that is where a parameter without `mut` is refused. Set
@@ -7032,7 +6942,7 @@ impl<'a> Checker<'a> {
                 // where **every** candidate for the name agrees — one that does
                 // not is a name this compiler cannot resolve, and refusing on
                 // it would refuse a correct program (C.4).
-                if let Some(root) = self.s.rooted_at(&self.world, receiver) {
+                if let Some(root) = self.s.rooted_at(self.world, receiver) {
                     let name = self.parsed.text(*method);
                     let candidates: Vec<_> = self
                         .world
@@ -7062,7 +6972,7 @@ impl<'a> Checker<'a> {
                     }
                 }
                 self.s
-                    .a_copy_under_another_name(&self.world, receiver, *method, args, span);
+                    .a_copy_under_another_name(self.world, receiver, *method, args, span);
                 // **The text form of text is the text** (ADR-282 D8): a view
                 // stays a view and a literal stays a literal, and whoever keeps
                 // it asks for text of its own as anywhere else - by building a
@@ -7310,7 +7220,7 @@ impl<'a> Checker<'a> {
                 // (#497): `db.host` on a `Shared[Connection]` is the
                 // connection's field, as a method on it already is.
                 let on = match &on {
-                    Ty::Named { name, .. } if self.s.fields_of(&self.world, name).is_none() => {
+                    Ty::Named { name, .. } if self.s.fields_of(self.world, name).is_none() => {
                         self.seen_through(&on).unwrap_or(on)
                     }
                     _ => on,
@@ -7371,7 +7281,7 @@ impl<'a> Checker<'a> {
                     self.s.a_reflected_field_has_two_members(&held, span);
                     return Ty::Unknown;
                 }
-                let Some(fields) = self.s.fields_of(&self.world, ty) else {
+                let Some(fields) = self.s.fields_of(self.world, ty) else {
                     // `NK1126` where the type is a parameter: nothing will ever
                     // describe `T`, so a field on one is refused here rather
                     // than by `rustc` about the generated file.
@@ -7402,7 +7312,7 @@ impl<'a> Checker<'a> {
                 // `unaliased`, the same as a type: `h::Request(path: …)` builds
                 // `http::Request` (ADR-286 D12).
                 let name = self.parsed.unaliased(self.parsed.text(*name));
-                let declared = self.s.fields_of(&self.world, &name);
+                let declared = self.s.fields_of(self.world, &name);
                 // **A struct literal naming nothing this compiler declares**
                 // ([ADR-096](../../docs/specification/adr/adr-096.md), `NK1135`),
                 // and it is the silence that let
@@ -7420,7 +7330,7 @@ impl<'a> Checker<'a> {
                 // build can see that package is a question with a message of its
                 // own (ADR-286 D11).
                 if declared.is_none() && !name.contains("::") && !self.declares_a_type(&name) {
-                    self.s.a_struct_nothing_declares(&self.world, &name, span);
+                    self.s.a_struct_nothing_declares(self.world, &name, span);
                 }
                 // **What a generic struct's literal binds**
                 // ([ADR-295](../../docs/specification/adr/adr-295.md) D2).
@@ -7508,7 +7418,7 @@ impl<'a> Checker<'a> {
                                 let to = format!("stored in `{name}.{field}`");
                                 match &init.value {
                                     Some(value) => self.hands_over(value, &found, &to, span),
-                                    None => self.s.hands_over_name(&self.world, &field, &to, span),
+                                    None => self.s.hands_over_name(self.world, &field, &to, span),
                                 }
                             }
                             let owner = name.clone();
@@ -7695,7 +7605,7 @@ impl<'a> Checker<'a> {
                         .a_with_over_something_else(&name, &Copyable::AView, span);
                     return Ty::named(name);
                 }
-                let Some(declared) = self.s.fields_of(&self.world, &name) else {
+                let Some(declared) = self.s.fields_of(self.world, &name) else {
                     self.s
                         .a_with_over_something_else(&name, &Copyable::NotAStruct, span);
                     return found;
@@ -7787,9 +7697,8 @@ impl<'a> Checker<'a> {
                     self.s
                         .nameable(&local.name.clone(), span, "a lambda's argument");
                 }
-                self.s
-                    .repeats
-                    .push(Repeats::a_lambda(self.s.scope.len() as i64));
+                let depth = self.s.scope.len() as i64;
+                self.s.repeats.push(Repeats::a_lambda(depth));
                 self.s.scope.push(frame);
                 // Part I 3.3: a lambda is a closure below, and a jump does not
                 // leave one.
@@ -8208,8 +8117,8 @@ impl<'a> Checker<'a> {
                 // Nikaia, #125). A block that ends in a jump is one (#457).
                 let from = self.s.taken_so_far();
                 let other = self.expr(fallback, span);
-                self.s
-                    .a_branch_that_leaves(from, self.s.leaves(&self.world, fallback), span);
+                let leaves = self.s.leaves(self.world, fallback);
+                self.s.a_branch_that_leaves(from, leaves, span);
                 // **A name on the left of `??` is taken where the answer is
                 // kept and lent where it is only read** (ADR-279 D5), which is
                 // the rule an argument follows (ADR-094 D1). Which one is known
@@ -8231,11 +8140,11 @@ impl<'a> Checker<'a> {
                 // view of the left side wherever it stands - a `let` binds a
                 // view, as `let found = m[k]` does.
                 let lent_and_jumps = matches!(&**value, Expr::Variable(_, _) | Expr::Field { .. })
-                    && self.s.jumps(&self.world, fallback)
-                    && matches!(&left, Ty::Nullable(inner) if self.s.takes_away(&self.world, &inner.unseen()))
+                    && self.s.jumps(self.world, fallback)
+                    && matches!(&left, Ty::Nullable(inner) if self.s.takes_away(self.world, &inner.unseen()))
                     && self
                         .s
-                        .rooted_at(&self.world, value)
+                        .rooted_at(self.world, value)
                         .is_some_and(|root| self.s.lent_here(&root));
                 if lent_and_jumps {
                     let text = matches!(&left, Ty::Nullable(inner)
@@ -8256,7 +8165,7 @@ impl<'a> Checker<'a> {
                 if matches!(&**value, Expr::Variable(_, _) | Expr::Field { .. }) {
                     match self
                         .s
-                        .a_coalesce_that_may_lend(&self.world, &left, fallback, &other)
+                        .a_coalesce_that_may_lend(self.world, &left, fallback, &other)
                     {
                         Some(opened) => self.s.flow.pending_coalesces.push(PendingCoalesce {
                             key: value_node(expr),
@@ -8444,8 +8353,7 @@ impl<'a> Checker<'a> {
                 let key = self.expr(index, span);
                 // **An index of a mapping is a page fault**
                 // ([ADR-281](../../docs/specification/adr/adr-281.md) D35).
-                self.s
-                    .io_inside_a_door(&self.world, &on, "this index", span);
+                self.s.io_inside_a_door(self.world, &on, "this index", span);
                 // A type seen through is indexed as what it holds (#497):
                 // `data[0..<7]` on an `fs::Mapped` is a slice of its text.
                 let on = match self.seen_through(&on) {
@@ -8666,8 +8574,8 @@ impl<'a> Checker<'a> {
                 // positions): `read() catch { "" }`.
                 let literal =
                     tail_of(handler).and_then(|tail| self.text_literal(&answers, tail, true));
-                self.s
-                    .a_branch_that_leaves(from, self.s.block_exits(&self.world, handler), span);
+                let leaves = self.s.block_exits(self.world, handler);
+                self.s.a_branch_that_leaves(from, leaves, span);
                 self.s.flow.caught_several = several;
                 self.s.flow.caught_one = single;
                 self.s.scope.pop();
@@ -8680,7 +8588,7 @@ impl<'a> Checker<'a> {
                 // `NK1125`. A handler whose value is known to be something
                 // else keeps the old answer, which claims nothing.
                 let handled = literal.unwrap_or(handled);
-                match self.s.block_leaves(&self.world, handler)
+                match self.s.block_leaves(self.world, handler)
                     || handled.is_unknown()
                     || handled.fits(&answers)
                 {
@@ -8710,7 +8618,7 @@ impl<'a> Checker<'a> {
                 // A task is handed nothing, so a parameter has nothing to be
                 // bound from. Refused rather than dropped: `spawn fn (x) { … }`
                 // reads as though `x` arrives from somewhere.
-                self.s.a_task_takes_no_arguments(&self.world, params, span);
+                self.s.a_task_takes_no_arguments(self.world, params, span);
                 // **What the task takes with it** (`NK2101`), read off the body
                 // before it is walked: a name the body binds for itself is the
                 // task's own, and the frame pushed below is what keeps the two
@@ -8723,7 +8631,7 @@ impl<'a> Checker<'a> {
                         // already refused the list that is not empty.
                         mutable: Vec::new(),
                         body: body.clone(),
-                        id: crate::ast::NodeId::fresh(),
+                        id: crate::ast::fresh_id(),
                     },
                     span,
                 );
@@ -8863,7 +8771,7 @@ impl<'a> Checker<'a> {
         at: &Span,
     ) {
         self.s
-            .a_bit_operation_beside_a_comparison(&self.world, op, lhs, rhs, at);
+            .a_bit_operation_beside_a_comparison(self.world, op, lhs, rhs, at);
     }
 
     /// `NK1102` for a type variable two integer types are handed to
@@ -8877,7 +8785,7 @@ impl<'a> Checker<'a> {
         span: &Span,
     ) {
         self.s
-            .one_type_variable_two_integer_types(&self.world, key, wanted, given, found, span);
+            .one_type_variable_two_integer_types(self.world, key, wanted, given, found, span);
     }
 
     /// `x op= value` over two integer types (`tools/check_numbers2.nika`).
@@ -8891,7 +8799,7 @@ impl<'a> Checker<'a> {
         span: &Span,
     ) {
         self.s
-            .a_compound_over_two_integer_types(&self.world, op, target, into, value, found, span);
+            .a_compound_over_two_integer_types(self.world, op, target, into, value, found, span);
     }
 
     /// A comparison of two integer types (`tools/check_numbers2.nika`).
@@ -8920,7 +8828,7 @@ impl<'a> Checker<'a> {
     /// or without its parts, or a struct written out: a value that stands for
     /// itself, and that the language below can lend as a constant.
     fn a_value_written_out(&self, written: &Expr) -> bool {
-        self.s.a_value_written_out(&self.world, written)
+        self.s.a_value_written_out(self.world, written)
     }
 
     /// `NK1185` (`tools/check_fields.nika`).
@@ -8932,11 +8840,7 @@ impl<'a> Checker<'a> {
         span: &Span,
     ) {
         self.s.a_fallback_that_owns_what_the_left_side_views(
-            &self.world,
-            viewed,
-            fallback,
-            written,
-            span,
+            self.world, viewed, fallback, written, span,
         );
     }
 
@@ -8949,7 +8853,7 @@ impl<'a> Checker<'a> {
         span: &Span,
     ) {
         self.s
-            .a_fallback_beside_what_a_map_holds(&self.world, read, held, fallback, span);
+            .a_fallback_beside_what_a_map_holds(self.world, read, held, fallback, span);
     }
 
     /// `NK1184` for an escape in a literal that nothing names
@@ -8985,7 +8889,7 @@ impl<'a> Checker<'a> {
     /// knows. A name nobody declared is text, and text says nothing.
     fn unmarked_hole(&mut self, text: &str, span: &Span) {
         let host = self.host();
-        self.s.unmarked_hole(&self.world, &host, text, span);
+        self.s.unmarked_hole(self.world, &host, text, span);
     }
 
     /// Every expression a literal hides, walked where it stands.
@@ -9189,7 +9093,7 @@ impl<'a> Checker<'a> {
     /// `NK1201` (`tools/check_exprs.nika`).
     fn a_collection_in_a_hole(&mut self, hole: &Expr, held: &Ty, spec: Option<&str>, span: &Span) {
         self.s
-            .a_collection_in_a_hole(&self.world, hole, held, spec, span);
+            .a_collection_in_a_hole(self.world, hole, held, spec, span);
     }
 
     /// `f(a, b)`, `Stats(first)`, `io::read_to_string()`, `write(p, d; append: true)`.
@@ -9245,7 +9149,7 @@ impl<'a> Checker<'a> {
                 // **number** is not such a type: a literal carries no type on
                 // purpose (Part I 2.4), and reading that absence as "might be a
                 // lock" would hand `rustc` a program about a trait bound.
-                None if found.is_unknown() && !self.s.is_a_number(&self.world, lock) => {
+                None if found.is_unknown() && !self.s.is_a_number(self.world, lock) => {
                     held.push(Ty::Unknown)
                 }
                 None => {
@@ -9350,7 +9254,7 @@ impl<'a> Checker<'a> {
     /// It runs at the positions a **program** writes a type, and the message
     /// carries the replacement.
     fn declared(&mut self, ty: &ast::Type, span: &Span) -> Ty {
-        self.s.spelling(&self.world, ty, span);
+        self.s.spelling(self.world, ty, span);
         Ty::from_ast(self.parsed, ty)
     }
 
@@ -9458,11 +9362,11 @@ impl<'a> Checker<'a> {
                 .facts
                 .kept_calls
                 .insert(((span.at() as i64), name), (!is_sync, throws));
-            if let Some(current) = &self.s.current {
+            if let Some(current) = self.s.current.clone() {
                 let entry = self
                     .s
                     .methods
-                    .entry(current.clone())
+                    .entry(current)
                     .or_insert_with(MethodCalls::empty);
                 entry.code_pauses |= !is_sync;
                 entry.code_fails |= throws;
@@ -9505,15 +9409,14 @@ impl<'a> Checker<'a> {
         // ([ADR-140](../../docs/specification/adr/adr-140.md) D2), so a written
         // `Type::new` is the other spelling and is refused — in `std` as in a
         // `.nika` file, which is the whole of what D2 evens out.
-        self.s
-            .a_constructor_written_as_new(&self.world, &name, span);
+        self.s.a_constructor_written_as_new(self.world, &name, span);
 
         // **What needs no `use` is the list on Part I's first page**
         // ([ADR-313](../../docs/specification/adr/adr-313.md) D1), and these two
         // are the halves of the rule: a name that lives in a module written
         // without it, and a module used without being introduced.
         self.s
-            .a_std_name_without_its_module(&self.world, &name, span);
+            .a_std_name_without_its_module(self.world, &name, span);
         self.s.a_module_used_before_it_is_introduced(&name, span);
         // **The head of a call path is one of five things, as a value's is**
         // ([ADR-286](../../docs/specification/adr/adr-286.md) D31, #488):
@@ -9536,9 +9439,9 @@ impl<'a> Checker<'a> {
             }
         }
         self.s
-            .a_prelude_name_with_a_module_in_front(&self.world, &name, span);
+            .a_prelude_name_with_a_module_in_front(self.world, &name, span);
         self.s
-            .a_constructor_nothing_describes(&self.world, &name, args, span);
+            .a_constructor_nothing_describes(self.world, &name, args, span);
 
         // **A grammar is entered by an ordinary call**
         // ([ADR-296](../../docs/specification/adr/adr-296.md) D24), through a
@@ -9575,7 +9478,7 @@ impl<'a> Checker<'a> {
         // file nobody wrote ([Part III C.1](../../docs/specification/30-nikaia-tooling.md)).
         if !config.is_empty() && args.is_empty() && self.declares_a_type(&name) {
             self.s
-                .a_literal_written_like_a_call(&self.world, &name, config, span);
+                .a_literal_written_like_a_call(self.world, &name, config, span);
             for option in config {
                 self.expr(&option.value, span);
             }
@@ -9826,7 +9729,7 @@ impl<'a> Checker<'a> {
         // …and what the arguments tell a **bound** (ADR-295 D16), which is the
         // same binding read for the other question a type parameter raises.
         self.s
-            .a_bound_the_argument_does_not_meet(&self.world, &key, &bound, span);
+            .a_bound_the_argument_does_not_meet(self.world, &key, &bound, span);
         let result = constructed.unwrap_or_else(|| ty::substitute(&result, &bound));
         self.stamped_through(&contract, &found, result)
     }
@@ -10205,7 +10108,7 @@ impl<'a> Checker<'a> {
             // ([ADR-281](../../docs/specification/adr/adr-281.md) D2) - the word
             // goes here, at the call, where it used to have to go somewhere else.
             if becomes_shared(found, want) {
-                let value = given.get(at).and_then(|arg| names_of(&self.world, arg));
+                let value = given.get(at).and_then(|arg| names_of(self.world, arg));
                 self.s.findings.push(Finding {
                     severity: Severity::Error,
                     span: *span,
@@ -10304,11 +10207,11 @@ impl<'a> Checker<'a> {
     /// What a type seen through (`deref` in its ledger) hands out, with the
     /// receiver's own arguments bound: `&$T` of a `Shared[$T]`.
     fn seen_through(&self, ty: &Ty) -> Option<Ty> {
-        self.s.seen_through(&self.world, ty)
+        self.s.seen_through(self.world, ty)
     }
 
     fn fits_through_deref(&self, found: &Ty, want: &Ty) -> bool {
-        self.s.fits_through_deref(&self.world, found, want)
+        self.s.fits_through_deref(self.world, found, want)
     }
 
     /// **An open number put where no number fits** (#554): `let n = 12` and
@@ -10327,7 +10230,7 @@ impl<'a> Checker<'a> {
         message: &dyn Fn(&str, &str) -> String,
     ) -> bool {
         self.s.an_open_number_where_none_fits(
-            &self.world,
+            self.world,
             found,
             want,
             value,
@@ -10451,12 +10354,7 @@ impl<'a> Checker<'a> {
             } || (at == 0 && is_a_lookup(key));
             let kept = !lent;
             let Some(found) = found.get(at) else { continue };
-            if generic
-                && kept
-                && self
-                    .s
-                    .a_view_of_what_does_not_copy(&self.world, found, want)
-            {
+            if generic && kept && self.s.a_view_of_what_does_not_copy(self.world, found, want) {
                 self.s.a_view_kept_whole(key, name, found, want, span);
                 continue;
             }
@@ -10851,14 +10749,7 @@ impl<'a> Checker<'a> {
             return;
         };
         self.s.a_cleanup_that_moved(
-            &self.world,
-            key,
-            param,
-            moved.now,
-            &moved.ty,
-            want,
-            given,
-            span,
+            self.world, key, param, moved.now, &moved.ty, want, given, span,
         );
     }
 
@@ -10878,11 +10769,11 @@ impl<'a> Checker<'a> {
     /// leaves an option out still gets its default — which is the half the
     /// emitter could not work out on its own either.
     fn method_options(&mut self, method: Ident, contract: &FnContract, span: &Span) {
-        self.s.method_options(&self.world, method, contract, span);
+        self.s.method_options(self.world, method, contract, span);
     }
 
     fn method_propagates(&mut self, method: Ident, fails: bool, span: &Span) {
-        self.s.method_propagates(&self.world, method, fails, span);
+        self.s.method_propagates(self.world, method, fails, span);
     }
 
     /// **What a task takes with it** (Part I 8.3, `NK2101`).
@@ -10905,7 +10796,7 @@ impl<'a> Checker<'a> {
     /// What is left is data that a move takes away, which is what the
     /// diagnostic is about.
     fn a_task_takes_these(&mut self, body: &Expr, span: &Span) {
-        self.s.a_task_takes_these(&self.world, body, span);
+        self.s.a_task_takes_these(self.world, body, span);
     }
 
     /// **A key in the brackets of a map whose keys are owned**
@@ -10995,7 +10886,7 @@ impl<'a> Checker<'a> {
                     if self.s.binding(self.parsed.text(*name)).is_some_and(|local| local.lent))
                 // A `let` over a place, or a part of a tuple taken apart out
                 // of one (#465), is a view below too.
-                || self.s.a_lent_let(&self.world, index)
+                || self.s.a_lent_let(self.world, index)
                 || (!matches!(found, Ty::Named { name, .. } if matches!(ty::base(name), "String" | "str"))
                     && self.a_lent_parameter(index))
             {
@@ -11046,7 +10937,7 @@ impl<'a> Checker<'a> {
             self.s.reads_on_paths[at as usize].path.clone(),
             self.s.reads_on_paths[at as usize].seq,
         );
-        self.s.hands_over_path(&self.world, path, ty, seq, to, span);
+        self.s.hands_over_path(self.world, path, ty, seq, to, span);
     }
 
     /// **A `??` in a position that only reads it lends its left side**
@@ -11089,7 +10980,7 @@ impl<'a> Checker<'a> {
     /// Every `??` of the statement just walked that no reading position lent
     /// is taken (ADR-279 D5).
     fn coalesces_not_lent_are_taken(&mut self) {
-        self.s.coalesces_not_lent_are_taken(&self.world);
+        self.s.coalesces_not_lent_are_taken(self.world);
     }
 
     /// A read of a name, recorded once per expression and statement.
@@ -11120,7 +11011,7 @@ impl<'a> Checker<'a> {
         handed_from: usize,
     ) {
         self.s.parts_taken_out_of_a_mut_parameter(
-            &self.world,
+            self.world,
             path,
             body,
             subject,
@@ -11227,7 +11118,7 @@ impl<'a> Checker<'a> {
     /// including the ones nothing could be established about - `false` there is
     /// "there is no answer", and it lands in the set that *removes* the pair.
     fn method_pauses(&mut self, method: Ident, pauses: bool, span: &Span) {
-        self.s.method_pauses(&self.world, method, pauses, span);
+        self.s.method_pauses(self.world, method, pauses, span);
     }
 
     /// Whether this method call is an **eager** walk of a sequence whose step
@@ -11252,7 +11143,7 @@ impl<'a> Checker<'a> {
     /// `-> i64` and nothing asked what a step of the receiver does.
     fn a_walk_of_a_failing_sequence(&mut self, method: Ident, span: &Span) {
         self.s
-            .a_walk_of_a_failing_sequence(&self.world, method, span);
+            .a_walk_of_a_failing_sequence(self.world, method, span);
     }
 
     /// A loop over something whose step **pauses**
@@ -11279,7 +11170,7 @@ impl<'a> Checker<'a> {
     /// the step propagate. This records the second and reports the first.
     fn fallible_step(&mut self, over: &Ty, bindings: usize, span: &Span) {
         self.s
-            .fallible_step(&self.world, over, bindings as i64, span);
+            .fallible_step(self.world, over, bindings as i64, span);
     }
 
     // --- crossing a thread (ADR-005 §1 Group B, `NK25xx`) -------------------
@@ -11319,7 +11210,7 @@ impl<'a> Checker<'a> {
     /// every name the body mentions, including function and field names, and a
     /// name that is not in scope is not found and says nothing.
     fn crosses_into_a_task(&mut self, body: &Expr, span: &Span) {
-        self.s.crosses_into_a_task(&self.world, body, span);
+        self.s.crosses_into_a_task(self.world, body, span);
     }
 
     /// **What a task holds across a pause** ([ADR-055](../../docs/specification/adr/adr-055.md)
@@ -11494,7 +11385,7 @@ impl<'a> Checker<'a> {
         why: &str,
     ) {
         self.s.crosses_into_an_unseen_call(
-            &self.world,
+            self.world,
             callee,
             handed.args,
             handed.found,
@@ -11510,28 +11401,28 @@ impl<'a> Checker<'a> {
     /// function is called again for every attempt, so a `mut` binding it
     /// captures carries one attempt's changes into the next.
     fn a_child_that_keeps_state(&mut self, body: &Expr, span: &Span) {
-        self.s.a_child_that_keeps_state(&self.world, body, span);
+        self.s.a_child_that_keeps_state(self.world, body, span);
     }
 
     /// **What an entry point may be** ([ADR-284](../../docs/specification/adr/adr-284.md)
     /// D4, D5): `extern` before a function with a body exports it to C, and four
     /// shapes are refused at the declaration.
     fn an_entry_point(&mut self, item: &Item, span: &Span, of_a_trait: bool) {
-        self.s.an_entry_point(&self.world, item, span, of_a_trait);
+        self.s.an_entry_point(self.world, item, span, of_a_trait);
     }
 
     /// **What a `pub extern struct` may hold**
     /// ([ADR-284](../../docs/specification/adr/adr-284.md) D14, D15): it is
     /// `pub`, it is not generic, and every field is a C value.
     fn an_extern_struct(&mut self, item: &Item, span: &Span) {
-        self.s.an_extern_struct(&self.world, item, span);
+        self.s.an_extern_struct(self.world, item, span);
     }
 
     /// **What a `pub extern enum` may hold**
     /// ([ADR-284](../../docs/specification/adr/adr-284.md) D32): it is `pub`,
     /// and every field of every variant is a C value, as an `extern` struct's.
     fn an_extern_enum(&mut self, item: &Item, span: &Span) {
-        self.s.an_extern_enum(&self.world, item, span);
+        self.s.an_extern_enum(self.world, item, span);
     }
 
     /// Whether any ledger or this unit declares a **type** by this name.
@@ -11541,7 +11432,7 @@ impl<'a> Checker<'a> {
     /// (Part III 15.2), so a described foreign type has an entry and no fields,
     /// and it is declared.
     fn declares_a_type(&self, name: &str) -> bool {
-        self.s.declares_a_type(&self.world, name)
+        self.s.declares_a_type(self.world, name)
     }
 
     /// **`NK1162`: `m[k] += 1` on a map**
@@ -11556,33 +11447,11 @@ impl<'a> Checker<'a> {
     /// **A sequence is untouched**: `xs[i] += 1` reads a `T` and writes a `T`,
     /// because a list has a value at every index it has at all (D3).
     fn a_compound_write_to_a_map_slot(&mut self, target: &Expr, span: &Span) {
-        let Expr::Index { base, index, .. } = target else {
-            return;
-        };
-        // **Only where the read is nullable**, which is only a map. Where the
-        // container's type is not known, nothing is claimed
-        // ([Part III C.4](../../../docs/specification/30-nikaia-tooling.md)).
-        if !matches!(self.expr(target, span), Ty::Nullable(_)) {
-            return;
-        }
-        let slot = format!("{}[{}]", self.written(base), self.written(index));
-        self.s.findings.push(Finding {
-            severity: Severity::Error,
-            span: *span,
-            code: "NK1162".to_string(),
-            message: format!(
-                "`{slot}` reads the map before writing it, and the key might not be there yet."
-            ),
-            notes: vec![
-                "A missing key is normal, not a bug, so this line has to say what a \
-                 missing key counts as."
-                    .to_string(),
-            ],
-            help: Some(format!(
-                "Write it out with a fallback for a missing key: `{slot} = ({slot} ?? 0) + 1`."
-            )),
-            labels: Vec::new(),
-        });
+        self.nikaia(|state, world, host| {
+            check_core_pilot::check_core_a_compound_write_to_a_map_slot(
+                state, world, host, target, span,
+            )
+        })
     }
 
     /// Whether more than one error **type** can arrive at a handler
@@ -11592,7 +11461,7 @@ impl<'a> Checker<'a> {
     /// the outermost call and only one by name, because that is what a `catch`
     /// guards in every program in the tree.
     fn several_arrive(&self, guarded: &Expr) -> bool {
-        self.s.several_arrive(&self.world, guarded)
+        self.s.several_arrive(self.world, guarded)
     }
 
     /// The **one** error type a guarded expression can fail with, where exactly
@@ -11607,7 +11476,7 @@ impl<'a> Checker<'a> {
     /// ([ADR-024](../../docs/specification/adr/adr-024.md) D1), which names no
     /// type and therefore no cases.
     fn the_one_error(&self, expr: &Expr) -> Option<Ty> {
-        self.s.the_one_error(&self.world, expr)
+        self.s.the_one_error(self.world, expr)
     }
 
     /// **`NK1151` for a `match` over a `catch`'s error**
@@ -11631,7 +11500,7 @@ impl<'a> Checker<'a> {
         span: &Span,
     ) {
         self.s
-            .a_match_over_several_error_types(&self.world, value, arms, span);
+            .a_match_over_several_error_types(self.world, value, arms, span);
     }
 
     /// **`NK1205`: a variant matched on a `T?`** (issue #180): `match
@@ -11648,17 +11517,17 @@ impl<'a> Checker<'a> {
         span: &Span,
     ) {
         self.s
-            .a_variant_matched_on_a_nullable(&self.world, on, value, arms, span);
+            .a_variant_matched_on_a_nullable(self.world, on, value, arms, span);
     }
 
     /// `NK1206` (`tools/check_exprs.nika`).
     fn a_loop_over_a_nullable(&mut self, over: &Ty, iter: &Expr, span: &Span) {
-        self.s.a_loop_over_a_nullable(&self.world, over, iter, span);
+        self.s.a_loop_over_a_nullable(self.world, over, iter, span);
     }
 
     fn a_match_that_misses_a_case(&mut self, on: &Ty, arms: &[ast::MatchArm], span: &Span) {
         self.s
-            .a_match_that_misses_a_case(&self.world, on, arms, span);
+            .a_match_that_misses_a_case(self.world, on, arms, span);
     }
 
     /// **The interpreter, and the two refusals it can raise**
@@ -11697,7 +11566,7 @@ impl<'a> Checker<'a> {
         let host = self.host();
         let done = self
             .s
-            .compiled_build_time_value(&self.world, &host, value, found, bound, span);
+            .compiled_build_time_value(self.world, &host, value, found, bound, span);
         done.answered.then_some((done.value, done.said))
     }
 
@@ -11707,7 +11576,8 @@ impl<'a> Checker<'a> {
         bound: &str,
         span: &Span,
     ) -> (Option<build_time::Value>, bool) {
-        self.s.build_time_value(&self.host(), value, bound, span)
+        let host = self.host();
+        self.s.build_time_value(&host, value, bound, span)
     }
 
     /// The table a `comptime` map crosses as, and whether the reader was told
@@ -11721,7 +11591,7 @@ impl<'a> Checker<'a> {
     ) -> (Option<(String, String)>, bool) {
         let (parsed, beside) = (self.parsed, self.beside);
         let table = self.s.a_table_that_crosses(
-            &self.world,
+            self.world,
             bound,
             want,
             pairs,
@@ -11965,7 +11835,7 @@ impl<'a> Checker<'a> {
         span: &Span,
     ) {
         self.s
-            .a_length_that_fits_its_buffer(&self.world, written, wanted, given, found, span);
+            .a_length_that_fits_its_buffer(self.world, written, wanted, given, found, span);
     }
 
     /// **A literal takes the use's type, whichever literal it is**: an array
@@ -11987,13 +11857,13 @@ impl<'a> Checker<'a> {
     /// (`tools/check_texts.nika`).
     fn list_of_tuple_literals(&mut self, found: &Ty, want: &Ty, value: &Expr) -> Option<Ty> {
         self.s
-            .list_of_tuple_literals(&self.world, found, want, value)
+            .list_of_tuple_literals(self.world, found, want, value)
     }
 
     /// A `collect` that builds what its position asks
     /// (`tools/check_numbers2.nika`).
     fn collect_by_use(&mut self, found: &Ty, want: &Ty, value: &Expr) -> Option<Ty> {
-        self.s.collect_by_use(&self.world, found, want, value)
+        self.s.collect_by_use(self.world, found, want, value)
     }
 
     /// **A hull a kept lambda captures, it captures a handle of** (ADR-230
@@ -12001,7 +11871,7 @@ impl<'a> Checker<'a> {
     /// outside is still there on the next line. Asked wherever a lambda is
     /// kept - a field, a `let`, and a parameter the callee keeps (#536).
     fn a_kept_lambdas_hulls(&mut self, value: &Expr) {
-        self.s.a_kept_lambdas_hulls(&self.world, value);
+        self.s.a_kept_lambdas_hulls(self.world, value);
     }
 
     /// **What a kept lambda captures, it takes** (Part I 8.3, ADR-328 D7, #95
@@ -12012,7 +11882,7 @@ impl<'a> Checker<'a> {
     /// `kept_owned`: no copy.
     fn a_kept_lambda_takes_these(&mut self, value: &Expr, pauses: bool, span: &Span) {
         self.s
-            .a_kept_lambda_takes_these(&self.world, value, pauses, span);
+            .a_kept_lambda_takes_these(self.world, value, pauses, span);
     }
 
     /// **A lambda where a function value is kept** is one shared closure
@@ -12087,13 +11957,13 @@ impl<'a> Checker<'a> {
     /// value a lambda ends in is handed to whoever calls it, as a function's
     /// is (ADR-282 D4).
     fn a_lambdas_text_is_its_own(&mut self, want: &Ty, value: &Expr) {
-        self.s.a_lambdas_text_is_its_own(&self.world, want, value);
+        self.s.a_lambdas_text_is_its_own(self.world, want, value);
     }
 
     /// A tuple of text literals where a tuple with text is wanted
     /// (`tools/check_texts.nika`).
     fn tuple_literal(&mut self, found: &Ty, want: &Ty, value: &Expr) -> Option<Ty> {
-        self.s.tuple_literal(&self.world, found, want, value)
+        self.s.tuple_literal(self.world, found, want, value)
     }
 
     /// **A text literal where a `String` is wanted is a `String`**
@@ -12121,7 +11991,7 @@ impl<'a> Checker<'a> {
     /// The function type of `on`'s field called `method`, where `on` is a
     /// struct with such a field and no method of that name.
     fn a_field_that_is_code(&self, on: &Ty, method: Ident) -> Option<Ty> {
-        self.s.a_field_that_is_code(&self.world, on, method)
+        self.s.a_field_that_is_code(self.world, on, method)
     }
 
     /// **A call of a field that holds a function**, `button.on_click(4)`:
@@ -12155,12 +12025,12 @@ impl<'a> Checker<'a> {
         // column, and asked here where a lock is already open.
         if let Ty::Named { name: owner, .. } = on {
             let key = format!("{owner}.{}", self.parsed.text(method));
-            if let Some(current) = &self.s.current
+            if let Some(current) = self.s.current.clone()
                 && self.s.task_bindings.is_empty()
             {
                 self.s
                     .methods
-                    .entry(current.clone())
+                    .entry(current)
                     .or_insert_with(MethodCalls::empty)
                     .fields_called
                     .insert(key.clone());
@@ -12178,11 +12048,11 @@ impl<'a> Checker<'a> {
             .facts
             .field_calls
             .insert(value_node(receiver), !is_sync);
-        if let Some(current) = &self.s.current {
+        if let Some(current) = self.s.current.clone() {
             let entry = self
                 .s
                 .methods
-                .entry(current.clone())
+                .entry(current)
                 .or_insert_with(MethodCalls::empty);
             entry.code_pauses |= !is_sync;
             entry.code_fails |= throws;
@@ -12199,7 +12069,7 @@ impl<'a> Checker<'a> {
     /// A text literal where `String` is wanted, built as text of its own
     /// (`tools/check_texts.nika`).
     fn text_literal(&mut self, want: &Ty, value: &Expr, owned: bool) -> Option<Ty> {
-        self.s.text_literal(&self.world, want, value, owned)
+        self.s.text_literal(self.world, want, value, owned)
     }
 
     /// **Arms that disagree only because some are text literals and some are
@@ -12227,7 +12097,7 @@ impl<'a> Checker<'a> {
                 ty: ty.clone(),
             })
             .collect();
-        self.s.arms_meet_at_null(&self.world, &arms)
+        self.s.arms_meet_at_null(self.world, &arms)
     }
 
     fn arms_meet_at_text(&mut self, arms: &[(Option<&Expr>, Ty)], span: &Span) -> Option<Ty> {
@@ -12263,7 +12133,7 @@ impl<'a> Checker<'a> {
 
 impl<'a> Checker<'a> {
     fn unwritable_field(&self, ty: &Ty) -> Option<(String, String)> {
-        match self.s.unwritable_field(&self.world, ty).as_slice() {
+        match self.s.unwritable_field(self.world, ty).as_slice() {
             [field, held] => Some((field.clone(), held.clone())),
             _ => None,
         }
@@ -12273,12 +12143,9 @@ impl<'a> Checker<'a> {
     /// (`tools/check_consts.nika`).
     fn unwritable_in(&self, value: &build_time::Value) -> Option<(String, String)> {
         let (parsed, beside) = (self.parsed, self.beside);
-        match check_consts::unwritable_in(
-            &self.s,
-            &self.world,
-            value,
-            &|ty: &str, variant: &str| payload_of(parsed, beside, ty, variant),
-        )
+        match check_consts::unwritable_in(&self.s, self.world, value, &|ty: &str, variant: &str| {
+            payload_of(parsed, beside, ty, variant)
+        })
         .as_slice()
         {
             [name, held] => Some((name.clone(), held.clone())),
@@ -12292,7 +12159,7 @@ impl<'a> Checker<'a> {
         let (parsed, beside) = (self.parsed, self.beside);
         check_consts::written_below(
             &self.s,
-            &self.world,
+            self.world,
             value,
             want,
             &|ty: &str, variant: &str| payload_of(parsed, beside, ty, variant),
@@ -12315,7 +12182,7 @@ impl<'a> Checker<'a> {
         span: &Span,
     ) {
         self.s
-            .a_member_nothing_writes_down(&self.world, head, member, method, span);
+            .a_member_nothing_writes_down(self.world, head, member, method, span);
     }
 
     /// **`NK1171`: `X::y`, where `X` is a type this program declares and `y` is
@@ -12341,7 +12208,7 @@ impl<'a> Checker<'a> {
     /// nothing.
     fn a_member_this_type_does_not_have(&mut self, ty: &str, member: &str, span: &Span) {
         self.s
-            .a_member_this_type_does_not_have(&self.world, ty, member, span);
+            .a_member_this_type_does_not_have(self.world, ty, member, span);
     }
 
     /// The same question asked of a `match` arm's pattern
@@ -12354,7 +12221,7 @@ impl<'a> Checker<'a> {
         span: &Span,
     ) {
         self.s
-            .a_pattern_naming_a_member_a_type_does_not_have(&self.world, pattern, span);
+            .a_pattern_naming_a_member_a_type_does_not_have(self.world, pattern, span);
     }
 
     /// **The instantiations that stand in the program's other files**
@@ -12509,37 +12376,10 @@ impl<'a> Checker<'a> {
         })
     }
 
-    /// What a shape walk is unrolled over: a `struct`'s fields, or an
-    /// `enum`'s variants, each a name and nothing a turn has to type.
-    fn shape_of(&self, on: &str) -> Option<Vec<FieldContract>> {
-        self.s.shape_of(&self.world.here, &self.world, on)
-    }
-
     fn an_instantiation(&mut self, name: &str, args: &[Expr], span: &Span) {
-        if !self.s.walks_fields.contains_key(name) {
-            return;
-        }
-        let Some(first) = args.first() else {
-            return;
-        };
-        // **Walked with the walk switched off**, because the argument is walked
-        // again by the ordinary path below and a message said twice is two
-        // problems to a reader.
-        let before = self.s.findings.len();
-        let given = self.expr(first, span);
-        self.s.findings.truncate(before);
-        let Ty::Named { name: on, .. } = &given else {
-            return;
-        };
-        let Some(fields) = self.shape_of(on) else {
-            return;
-        };
-        let (on, name) = (on.clone(), name.to_string());
-        self.s
-            .facts
-            .unrolled_calls
-            .insert(span.at() as i64, specialised(&name, &on));
-        self.s.facts.unrolled.insert((name, on), fields);
+        self.nikaia(|state, world, host| {
+            check_core_pilot::check_core_an_instantiation(state, world, host, name, args, span)
+        })
     }
 
     /// **A cast whose operand is a `for` binding**
@@ -12556,8 +12396,7 @@ impl<'a> Checker<'a> {
     /// come to a value, and a field read or an index is already taken apart by
     /// the lowering that wrote it.
     fn a_cast_over_a_lent_binding(&mut self, operand: &Expr, span: &Span) {
-        self.s
-            .a_cast_over_a_lent_binding(&self.world, operand, span);
+        self.s.a_cast_over_a_lent_binding(self.world, operand, span);
     }
 
     /// **A `let` whose declared type is a number and whose value is a `for`
@@ -12639,7 +12478,7 @@ impl<'a> Checker<'a> {
     }
 
     fn resolve(&self, name: &str) -> Option<(String, FnContract)> {
-        resolve_call(&self.world, name).map(|found| (found.key, found.contract))
+        resolve_call(self.world, name).map(|found| (found.key, found.contract))
     }
 
     /// Walk a call's arguments, telling a lambda what it will be handed.
@@ -12839,7 +12678,7 @@ impl<'a> Checker<'a> {
     /// **A kept function takes its arguments by value**, so a text literal
     /// handed to one where it keeps text is built there (ADR-282 D4).
     fn kept_arguments_are_its_own(&mut self, args: &[Expr], params: &[Ty]) {
-        self.s.kept_arguments_are_its_own(&self.world, args, params);
+        self.s.kept_arguments_are_its_own(self.world, args, params);
     }
 
     /// Whether `expr` names a parameter of the function being walked that is
@@ -12894,9 +12733,8 @@ impl<'a> Checker<'a> {
             })
             .collect();
 
-        self.s
-            .repeats
-            .push(Repeats::a_lambda(self.s.scope.len() as i64));
+        let depth = self.s.scope.len() as i64;
+        self.s.repeats.push(Repeats::a_lambda(depth));
         self.s.scope.push(frame);
         // The other door into a lambda's body, and it needs the same boundary
         // as the one in `expr`: which of the two a lambda arrives through is
@@ -13002,7 +12840,7 @@ impl<'a> Checker<'a> {
         span: &Span,
     ) {
         self.s
-            .an_update_block_reads_what_it_writes(&self.world, params, body, span);
+            .an_update_block_reads_what_it_writes(self.world, params, body, span);
     }
 
     /// `NK2204`: an assignment straight into a `SharedMut`
@@ -13032,6 +12870,7 @@ impl<'a> Checker<'a> {
             return;
         };
         let bound = self.parsed.text(*bound).to_string();
+        let written = self.written(value);
         self.s.findings.push(Finding {
             severity: Severity::Error,
             span: *span,
@@ -13042,7 +12881,7 @@ impl<'a> Checker<'a> {
             notes: vec![
                 "Changing shared state goes through a method that takes the lock.".to_string(),
             ],
-            help: Some(format!("Write `{bound}.set({})`.", self.written(value))),
+            help: Some(format!("Write `{bound}.set({written})`.")),
             labels: Vec::new(),
         });
     }
@@ -13056,20 +12895,7 @@ impl<'a> Checker<'a> {
     /// would be worse than one that quotes nothing, and the shape the
     /// specification's own example writes (`kasse = 42`) is a literal.
     fn written(&self, value: &Expr) -> String {
-        match value {
-            Expr::LitInt {
-                value, negative, ..
-            } => crate::ast::int_value(*value, *negative).to_string(),
-            Expr::LitBool(yes, _) => yes.to_string(),
-            Expr::LitStr { text, .. } => format!("{text:?}"),
-            Expr::Variable(name, _) => self.parsed.text(*name).to_string(),
-            Expr::Unary {
-                op: UnaryOp::Neg,
-                expr,
-                ..
-            } => format!("-{}", self.written(expr)),
-            _ => "…".to_string(),
-        }
+        written_by(self.parsed, value)
     }
 
     /// **A `let` that binds several names at once**
@@ -13103,7 +12929,7 @@ impl<'a> Checker<'a> {
         span: &Span,
     ) -> Ty {
         self.s
-            .tuple_let(&self.world, names, ty.is_some(), found, value, span)
+            .tuple_let(self.world, names, ty.is_some(), found, value, span)
     }
 
     /// **Every item-level `comptime`, in a frame that stays under the whole
@@ -13187,7 +13013,7 @@ impl<'a> Checker<'a> {
         bounds: &[crate::ast::ConfigArg],
         span: &Span,
     ) -> Option<(Option<u64>, Option<u64>)> {
-        let raised = self.s.raised_bounds(&self.world, bounds, span)?;
+        let raised = self.s.raised_bounds(self.world, bounds, span)?;
         Some((raised.steps, raised.ram))
     }
 
@@ -13219,14 +13045,14 @@ impl<'a> Checker<'a> {
         let call = Expr::Call {
             func: Box::new(Expr::Path(
                 vec![target, self.parsed.interner.intern_string(&entry)],
-                crate::ast::NodeId::fresh(),
+                crate::ast::fresh_id(),
             )),
             args: vec![Expr::LitStr {
                 text: build_time::written(content.trim()),
-                id: crate::ast::NodeId::fresh(),
+                id: crate::ast::fresh_id(),
             }],
             config: Vec::new(),
-            id: crate::ast::NodeId::fresh(),
+            id: crate::ast::fresh_id(),
         };
         // Recorded under the statement, as a `comptime`'s is, and moved to the
         // block's own node: two blocks in one statement are two values.
@@ -13443,7 +13269,7 @@ impl<'a> Checker<'a> {
             // types Part I 2.2 offers and cannot know a `Point`, where a
             // `Value::Struct` names the very type the declaration did.
             (Some(want), _, _) => rust_constant_type(self.world.library, want)
-                .or_else(|| self.s.declared_below(&self.world, want))
+                .or_else(|| self.s.declared_below(self.world, want))
                 .or_else(|| match &evaluated {
                     Some(build_time::Value::Struct { name, .. })
                         if matches!(want, Ty::Named { name: wanted, args, view: false }
@@ -13649,7 +13475,7 @@ impl<'a> Checker<'a> {
         // a place inside a borrowed subject, handed back where the function
         // declares a view, is a view *of* the subject and not a move out of it.
         let lending =
-            value.is_some_and(|value| self.s.hands_back_a_view_of_the_subject(&self.world, value));
+            value.is_some_and(|value| self.s.hands_back_a_view_of_the_subject(self.world, value));
         if lending {
             self.s.facts.lent_returns.insert(span.at() as i64);
         }
@@ -13663,7 +13489,7 @@ impl<'a> Checker<'a> {
                 ..
             },
         ) = value
-            && self.s.hands_back_a_view_of_the_subject(&self.world, inner)
+            && self.s.hands_back_a_view_of_the_subject(self.world, inner)
         {
             self.s.the_caller_writes_no_reference(
                 written,
@@ -13760,7 +13586,7 @@ impl<'a> Checker<'a> {
                 None => frame.unresolved = true,
             }
         }
-        let Some(current) = &self.s.current else {
+        let Some(current) = self.s.current.clone() else {
             return;
         };
         // **Which side of a `spawn` this call is on** (ADR-281 D29). The stack
@@ -13770,7 +13596,7 @@ impl<'a> Checker<'a> {
         let entry = self
             .s
             .methods
-            .entry(current.clone())
+            .entry(current)
             .or_insert_with(MethodCalls::empty);
         match key {
             Some(key) => {
@@ -13800,7 +13626,7 @@ impl<'a> Checker<'a> {
     }
 
     fn method(&self, key: &str) -> Option<(String, FnContract)> {
-        resolve_method(&self.world, key).map(|found| (found.key, found.contract))
+        resolve_method(self.world, key).map(|found| (found.key, found.contract))
     }
 
     /// The fields of a type, when something knows them.
@@ -13819,7 +13645,7 @@ impl<'a> Checker<'a> {
     /// and the whole stay: a temporary is gone after the `match` anyway, and a
     /// view's parts are views already.
     fn an_owned_place(&self, value: &Expr, on: &Ty) -> bool {
-        self.s.an_owned_place(&self.world, value, on)
+        self.s.an_owned_place(self.world, value, on)
     }
 
     /// **The parts an arm only reads are lent** (ADR-291): a part
@@ -13840,7 +13666,7 @@ impl<'a> Checker<'a> {
                 let taken = self.s.handed[from as usize..].iter().any(|taken| {
                     taken.path == **name || taken.path.starts_with(&format!("{name}."))
                 }) || self.s.changed[changed_from..].iter().any(|n| n == *name);
-                self.s.takes_away(&self.world, ty) && !taken && !gives_back(body, name, self.parsed)
+                self.s.takes_away(self.world, ty) && !taken && !gives_back(body, name, self.parsed)
             })
             .map(|(name, _)| name.clone())
             .collect();
@@ -13868,14 +13694,14 @@ impl<'a> Checker<'a> {
     fn a_lent_part_is_handed_on_as_it_is(&mut self, body: &Expr, lent: &BTreeSet<String>) {
         let host = self.host();
         self.s
-            .a_lent_part_is_handed_on_as_it_is(&self.world, &host, body, lent);
+            .a_lent_part_is_handed_on_as_it_is(self.world, &host, body, lent);
     }
 
     /// The names a `match` arm brings into scope, all of them unknown: what a
     /// variant carries is not in the ledger yet.
     fn pattern_bindings(&mut self, pattern: &MatchPattern) -> Vec<Local> {
         let mut bound = Vec::new();
-        for name in pattern_names(&self.world, pattern) {
+        for name in pattern_names(self.world, pattern) {
             bound.push(self.local_free(name, Ty::Unknown));
         }
         bound
@@ -14279,7 +14105,7 @@ impl Checker<'_> {
     /// A name that is a parameter the function only lends on
     /// (`tools/check_fields.nika`).
     fn a_lent_parameter(&self, given: &Expr) -> bool {
-        self.s.a_lent_parameter(&self.world, given)
+        self.s.a_lent_parameter(self.world, given)
     }
 }
 
@@ -14300,7 +14126,7 @@ fn is_a_view_of_a_string(ty: &Ty) -> bool {
 impl Checker<'_> {
     /// An empty map written to for the first time (`tools/check_fields.nika`).
     fn a_map_first_written(&mut self, target: &Expr, found: &Ty) {
-        self.s.a_map_first_written(&self.world, target, found);
+        self.s.a_map_first_written(self.world, target, found);
     }
 }
 

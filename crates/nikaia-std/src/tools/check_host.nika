@@ -90,6 +90,18 @@ pub trait CheckHost {
     /// Where a run that stopped at `place` (`@<file>:<byte>`) stopped, seen
     /// from file `here`.
     fn place_of(ref self, place: ref String, here: i64) -> CheckPlace sync
+    /// **The expression, walked** (U-c0): the hub the core comes back through
+    /// until the dispatcher itself is Nikaia (U-c11). Only the host the core
+    /// runs under answers it.
+    fn expr(ref self, mut state: CheckState, node: ref Expr, span: ref Span) -> Ty sync
+    /// **A block, walked** (U-c0): the second hub, until `stmt` and `block` move
+    /// (U-c7).
+    fn block(ref self, mut state: CheckState, block: ref Block) -> Ty sync
+    /// The value as the author wrote it, where this compiler can say so: a
+    /// literal, a name, a negation, and an ellipsis for the rest. A query that
+    /// stays Rust until `written` moves (C-5e): the text of a string literal is
+    /// Rust's `Debug`.
+    fn written(ref self, value: ref Expr) -> String sync
 }
 
 /// What the build worked out a local is: the whole value, or the integer the
