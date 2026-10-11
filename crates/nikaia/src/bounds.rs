@@ -100,14 +100,14 @@ impl OverflowChecks {
 /// starts at).
 #[derive(Debug, Default)]
 pub struct Proven {
-    pub indices: HashSet<usize>,
-    pub arithmetic: HashSet<usize>,
+    pub indices: HashSet<i64>,
+    pub arithmetic: HashSet<i64>,
     /// Of the `nonnegative` asked, the values proved `>= 0` where they stand
     /// (ADR-285 D32), by node.
-    pub nonnegative: HashSet<usize>,
+    pub nonnegative: HashSet<i64>,
     /// Of the negations asked, those proved to stay inside their type
     /// (ADR-314 D5), by node.
-    pub negations: HashSet<usize>,
+    pub negations: HashSet<i64>,
 }
 
 /// **What each callee the ledgers describe ensures**
@@ -130,31 +130,31 @@ fn ensured(ledgers: &[&crate::contracts::Ledger]) -> BTreeMap<String, Ensured> {
 /// the byte an operator starts at.
 pub struct Sites<'a> {
     /// The receivers of the `x.len()` calls that count a `std` list, text or
-    /// map ([`crate::check::Checked::std_lengths`]): only those are numbers
+    /// map ([`crate::check::CheckFacts::std_lengths`]): only those are numbers
     /// of a proof, because a `len()` a program writes for its own type may
     /// say anything.
-    pub lengths: &'a BTreeSet<usize>,
-    /// Of `lengths`, those below 2^60 ([`crate::check::Checked::sized_lengths`]).
-    pub sized: &'a BTreeSet<usize>,
-    /// [`crate::check::Checked::char_codes`] (ADR-314 D2).
-    pub char_codes: &'a BTreeSet<usize>,
+    pub lengths: &'a BTreeSet<i64>,
+    /// Of `lengths`, those below 2^60 ([`crate::check::CheckFacts::sized_lengths`]).
+    pub sized: &'a BTreeSet<i64>,
+    /// [`crate::check::CheckFacts::char_codes`] (ADR-314 D2).
+    pub char_codes: &'a BTreeSet<i64>,
     /// Every `+`, `-` and `*` whose two sides are one whole-number type, with
-    /// that type ([`crate::check::Checked::arithmetic`]): only those may be
+    /// that type ([`crate::check::CheckFacts::arithmetic`]): only those may be
     /// proved.
-    pub arithmetic: &'a BTreeMap<usize, String>,
-    /// [`crate::check::Checked::negations`] (ADR-314 D5).
-    pub negations: &'a BTreeMap<usize, String>,
+    pub arithmetic: &'a BTreeMap<i64, String>,
+    /// [`crate::check::CheckFacts::negations`] (ADR-314 D5).
+    pub negations: &'a BTreeMap<i64, String>,
 }
 
 impl<'a> Sites<'a> {
     /// The checker's tables, as [`proven`] reads them.
-    pub fn of(checked: &'a crate::check::Checked) -> Sites<'a> {
+    pub fn of(facts: &'a crate::check::CheckFacts) -> Sites<'a> {
         Sites {
-            lengths: &checked.std_lengths,
-            sized: &checked.sized_lengths,
-            char_codes: &checked.char_codes,
-            arithmetic: &checked.arithmetic,
-            negations: &checked.negations,
+            lengths: &facts.std_lengths,
+            sized: &facts.sized_lengths,
+            char_codes: &facts.char_codes,
+            arithmetic: &facts.arithmetic,
+            negations: &facts.negations,
         }
     }
 }
@@ -166,7 +166,7 @@ pub fn proven(
     parsed: &Parsed,
     sites: &Sites<'_>,
     ledgers: &[&crate::contracts::Ledger],
-    nonnegative: &BTreeSet<usize>,
+    nonnegative: &BTreeSet<i64>,
 ) -> Proven {
     let Sites {
         lengths,
@@ -214,19 +214,19 @@ pub fn proven(
         changing_methods,
     };
     let context = BoundsContext {
-        lengths: lengths.iter().map(|n| *n as i64).collect(),
-        sized: sized.iter().map(|n| *n as i64).collect(),
-        char_codes: char_codes.iter().map(|n| *n as i64).collect(),
+        lengths: lengths.iter().copied().collect(),
+        sized: sized.iter().copied().collect(),
+        char_codes: char_codes.iter().copied().collect(),
         ensured: ensured(ledgers),
         arithmetic: arithmetic
             .iter()
-            .map(|(at, ty)| (*at as i64, ty.clone()))
+            .map(|(at, ty)| ((*at), ty.clone()))
             .collect(),
-        nonnegative: nonnegative.iter().map(|n| *n as i64).collect(),
+        nonnegative: nonnegative.iter().copied().collect(),
         given: BTreeMap::new(),
         negations: negations
             .iter()
-            .map(|(at, ty)| (*at as i64, ty.clone()))
+            .map(|(at, ty)| ((*at), ty.clone()))
             .collect(),
         classes: BTreeMap::new(),
         text_lengths: BTreeMap::new(),
@@ -248,11 +248,8 @@ pub fn proven(
         else {
             continue;
         };
-        out.indices.extend(
-            nika::basic_indices(body, &parsed.interner)
-                .into_iter()
-                .map(|n| n as usize),
-        );
+        out.indices
+            .extend(nika::basic_indices(body, &parsed.interner));
         // **The aggressive walk** (`tools/bounds_walk.nika`), with the
         // solver asked about the arena it grows.
         let function = name.map(|n| parsed.text(n).to_string()).unwrap_or_default();
@@ -272,14 +269,10 @@ pub fn proven(
                 },
             )
         });
-        out.indices
-            .extend(walked.indices.into_iter().map(|n| n as usize));
-        out.arithmetic
-            .extend(walked.arithmetic.into_iter().map(|n| n as usize));
-        out.nonnegative
-            .extend(walked.nonnegative.into_iter().map(|n| n as usize));
-        out.negations
-            .extend(walked.negations.into_iter().map(|n| n as usize));
+        out.indices.extend(walked.indices);
+        out.arithmetic.extend(walked.arithmetic);
+        out.nonnegative.extend(walked.nonnegative);
+        out.negations.extend(walked.negations);
     }
     // **A grammar's actions, walked like a function's body**
     // ([ADR-314](../../docs/specification/adr/adr-314.md) D1), from what each
@@ -333,14 +326,10 @@ pub fn proven(
                         )
                     },
                 );
-                out.indices
-                    .extend(walked.indices.into_iter().map(|n| n as usize));
-                out.arithmetic
-                    .extend(walked.arithmetic.into_iter().map(|n| n as usize));
-                out.nonnegative
-                    .extend(walked.nonnegative.into_iter().map(|n| n as usize));
-                out.negations
-                    .extend(walked.negations.into_iter().map(|n| n as usize));
+                out.indices.extend(walked.indices);
+                out.arithmetic.extend(walked.arithmetic);
+                out.nonnegative.extend(walked.nonnegative);
+                out.negations.extend(walked.negations);
             }
         }
     }

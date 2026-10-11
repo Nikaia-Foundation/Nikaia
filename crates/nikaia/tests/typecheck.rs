@@ -934,7 +934,7 @@ fn the_checker_says_which_method_calls_can_fail() {
         // No allowlist: a build given none reads nothing (ADR-310 D4).
         &nikaia::assets::Reads::none(),
     )
-    .methods;
+    .fallible_methods;
 
     let names: Vec<&str> = fallible.iter().map(|(_, name)| name.as_str()).collect();
     assert_eq!(
@@ -947,7 +947,7 @@ fn the_checker_says_which_method_calls_can_fail() {
     // statement there writes `add` twice and one of the two cannot fail, so the
     // pair is removed rather than guessed at.
     let at = fallible.iter().next().expect("one entry").0;
-    let line = source[..at].lines().count();
+    let line = source[..at as usize].lines().count();
     assert_eq!(
         source.lines().nth(line - 1).unwrap_or_default().trim(),
         "fn one_of_them(a: A) -> i64 throws { return a.add(1) }",

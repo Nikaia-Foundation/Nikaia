@@ -35,6 +35,7 @@ fn held(source: &str) -> BTreeSet<String> {
     let own = Ledger::infer(&parsed);
     let library = Ledger::parse(STD).expect("std ships a ledger");
     nikaia::check::check_program(&parsed, &own, &library, &BTreeSet::new())
+        .facts
         .held_across_a_pause
         .into_iter()
         .map(|(_, name)| name)

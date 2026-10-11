@@ -161,6 +161,7 @@ fn a_described_type_that_copies_is_a_part_that_copies() {
     .expect("parses");
     let copied = |ledger: &Ledger| {
         check_program(&parsed, &Ledger::empty(), ledger, &Default::default())
+            .facts
             .copies
             .contains("Held")
     };

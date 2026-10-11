@@ -31,6 +31,7 @@ fn held(source: &str) -> Vec<nikaia::prove::Held> {
     let own = Ledger::infer(&parsed);
     let library = Ledger::parse(STD).expect("std's ledger");
     nikaia::check::check(&parsed, &own, &library)
+        .facts
         .claims
         .into_values()
         .filter_map(|c| c.held)

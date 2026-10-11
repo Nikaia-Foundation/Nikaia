@@ -725,4 +725,6 @@ pub struct CheckState {
     pub changed: Vec[String],
     /// The bindings (by where they are declared) already said to need `mut`.
     pub said_mut: collections::BTreeSet[i64],
+    /// What the emitter reads (`check_facts.nika`).
+    pub facts: CheckFacts,
 }

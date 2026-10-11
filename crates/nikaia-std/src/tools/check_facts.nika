@@ -64,6 +64,8 @@ pub struct FactClaim {
 }
 
 pub struct CheckFacts {
+    /// What a task binds and still holds at a pause (ADR-055 D6): seen by the tests.
+    pub held_across_a_pause: collections::BTreeSet[(i64, String)],
     pub comptime_values: collections::BTreeMap[i64, (String, String)],
     pub dsl_values: collections::BTreeMap[i64, (String, String)],
     pub with_types: collections::BTreeMap[i64, String],
@@ -177,6 +179,7 @@ pub struct CheckFacts {
 impl CheckFacts {
     pub fn empty() -> CheckFacts {
         return CheckFacts {
+            held_across_a_pause: collections::BTreeSet(),
             comptime_values: collections::BTreeMap(),
             dsl_values: collections::BTreeMap(),
             with_types: collections::BTreeMap(),

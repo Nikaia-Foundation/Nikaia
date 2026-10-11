@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.797] — 2026-10-10
+
+**The checker's facts are one Nikaia struct, `CheckFacts`, the emitter reads (#558, #125).**
+- `Checked` is `{findings, facts, methods, stored_code}`: the 109 tables are `CheckFacts` (`tools/check_facts.nika`), filled as `CheckState.facts`, keyed by `i64` (`value_node` is an `i64`). `Propagation` is gone: `propagation_against` returns `CheckFacts`. The emitter holds one `facts` field in place of 102 copies; `bounds::Sites` and the proofs' sets are `i64`. `Wrap`, `KeyForm`, `Viewed`, `Narrowing`, `PausingEntry` and `Claim` are the `Fact*` types of the struct, with owned strings. `held_across_a_pause` stays in the struct: five tests read it.
+
 ## [0.0.796] — 2026-10-11
 
 **The emitter's output buffer and its error-name questions are Nikaia (tools/emit_out.nika, emit_items.nika, #558, step E2).**

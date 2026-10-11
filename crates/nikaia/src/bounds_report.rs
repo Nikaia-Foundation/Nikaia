@@ -54,16 +54,16 @@ pub fn report(
     let checked = crate::check::check(parsed, own, library);
     let proven = crate::bounds::proven(
         parsed,
-        &crate::bounds::Sites::of(&checked),
+        &crate::bounds::Sites::of(&checked.facts),
         &[own, library],
         &std::collections::BTreeSet::new(),
     );
     let mut walk = Walk {
         parsed,
         source,
-        lists: &checked.list_indices,
-        arithmetic: &checked.arithmetic,
-        negations: &checked.negations,
+        lists: &checked.facts.list_indices,
+        arithmetic: &checked.facts.arithmetic,
+        negations: &checked.facts.negations,
         proven: &proven,
         seen: HashSet::new(),
         sites: Vec::new(),
@@ -136,9 +136,9 @@ pub fn report(
 struct Walk<'a> {
     parsed: &'a Parsed,
     source: &'a str,
-    lists: &'a BTreeSet<usize>,
-    arithmetic: &'a BTreeMap<usize, String>,
-    negations: &'a BTreeMap<usize, String>,
+    lists: &'a BTreeSet<i64>,
+    arithmetic: &'a BTreeMap<i64, String>,
+    negations: &'a BTreeMap<i64, String>,
     proven: &'a crate::bounds::Proven,
     /// Index nodes already listed: an index read in a statement is listed once.
     seen: HashSet<usize>,
@@ -169,9 +169,9 @@ impl Walk<'_> {
             op: Some(op @ (BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul)),
             value,
         } = stmt
-            && self.arithmetic.contains_key(&span.at())
+            && self.arithmetic.contains_key(&(span.at() as i64))
         {
-            let proved = self.proven.arithmetic.contains(&span.at());
+            let proved = self.proven.arithmetic.contains(&(span.at() as i64));
             let text = format!(
                 "{} {}= {}",
                 crate::check::written(self.parsed, target),
@@ -189,7 +189,7 @@ impl Walk<'_> {
         let mut found: Vec<Site> = Vec::new();
         visit_stmt(self.parsed, stmt, &mut |expr| match expr {
             Expr::Index { base, index, .. } if self.lists.contains(&value_node(base)) => {
-                if !self.seen.insert(value_node(base)) {
+                if !self.seen.insert(value_node(base) as usize) {
                     return;
                 }
                 let proved = self.proven.indices.contains(&value_node(base));
@@ -207,8 +207,8 @@ impl Walk<'_> {
                 rhs,
                 span,
                 ..
-            } if self.arithmetic.contains_key(&span.at()) => {
-                let proved = self.proven.arithmetic.contains(&span.at());
+            } if self.arithmetic.contains_key(&(span.at() as i64)) => {
+                let proved = self.proven.arithmetic.contains(&(span.at() as i64));
                 found.push(Site {
                     line: self.line(span.at()),
                     text: crate::check::written(self.parsed, expr),

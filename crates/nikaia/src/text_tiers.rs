@@ -172,7 +172,7 @@ pub fn refine(parsed: &mut Parsed) {
                 .iter()
                 .map(|wrap| {
                     (
-                        crate::check::value_node(&wrap.value),
+                        crate::check::value_node(&wrap.value) as usize,
                         hand_number(&wrap.hand) as usize,
                     )
                 })
@@ -536,7 +536,7 @@ fn wrap_item(item: &mut Item, wraps: &BTreeMap<usize, usize>, into: [winnow_gram
         visit_block_mut(
             block,
             &mut |expr| {
-                if let Some(hand) = wraps.get(&crate::check::value_node(expr)) {
+                if let Some(hand) = wraps.get(&(crate::check::value_node(expr) as usize)) {
                     wrapped(expr, into[*hand]);
                 }
             },
@@ -623,7 +623,7 @@ pub fn wrap_hole(hole: &mut Expr, wraps: &[(usize, winnow_grammar::Symbol)]) {
         hole,
         &mut |expr| {
             let id = crate::check::value_node(expr);
-            if let Some((_, method)) = wraps.iter().find(|(wanted, _)| *wanted == id) {
+            if let Some((_, method)) = wraps.iter().find(|(wanted, _)| *wanted == (id as usize)) {
                 wrapped(expr, *method);
             }
         },

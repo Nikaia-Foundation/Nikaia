@@ -213,7 +213,7 @@ fn a_wrapped_hole_keeps_its_ids_and_the_wrapper_takes_a_new_one() {
     let parsed = parse_to_ast("fn main() {}").expect("parse failed");
     let (mut hole, _) = parse_expression_from(&parsed.interner, "a + b", 0).expect("parse");
     let before = ids_in(&format!("{hole:#?}"));
-    let node = nikaia::check::value_node(&hole);
+    let node = nikaia::check::value_node(&hole) as usize;
     let wrap = parsed.interner.intern_string("into_either");
     nikaia::text_tiers::wrap_hole(&mut hole, &[(node, wrap)]);
 
