@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.808] — 2026-10-11
+
+**The grammars, the keep plans and the methods are tables of EmitState (#558, step E5).**
+- `EmitState` holds the grammars by name, the buffer plans (`buffers.nika`'s `BufferPlan`, as the Nikaia pass hands them back, with `i64` places and `KeepAt`) and what each `impl` says about its methods, by `Type::method` and by the bare name where only one `impl` declares it. The `Emitter` no longer holds them.
+
 ## [0.0.807] — 2026-10-11
 
 **The emitter's small kinds are Nikaia: Tail, Lifetimes, Pointer, Method, and the halves Flow splits into (tools/emit_kinds.nika, #558, step E6).**

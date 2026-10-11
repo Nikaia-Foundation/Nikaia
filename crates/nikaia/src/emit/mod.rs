@@ -1061,19 +1061,10 @@ use nikaia_std::tools::emit_state::{EmitPair, EmitState, EmitWalk, EmitWorld};
 struct Emitter<'p> {
     parsed: &'p Parsed,
     build: Build,
-    grammars: HashMap<Symbol, &'p GrammarDef>,
-    /// **Where each buffer lives**, per function
-    /// ([ADR-283](../../docs/specification/adr/adr-283.md)): the keep plan,
-    /// computed once over the unit against the package's ledger.
-    keep_plans: HashMap<String, crate::contracts::keep::Plan>,
     /// ADR-292: whether two statements that meet on nothing may overlap.
-    /// What the program's `impl` blocks declare, which is what makes the fold
-    /// adapter of D2 a lookup rather than a guess.
-    methods: HashMap<(Symbol, Symbol), Method>,
     /// The same, by method name alone, for the places where the receiver's type
     /// is not written down. `None` marks a name two impls disagree about - and
     /// an ambiguous name is left alone rather than resolved by preference.
-    by_name: HashMap<Symbol, Option<Method>>,
     /// What is worked out before the first line is written
     /// (`tools/emit_state.nika`).
     s: EmitState,
@@ -1792,17 +1783,20 @@ impl<'p> Emitter<'p> {
         described: &crate::contracts::Ledger,
         reads: &Reads,
     ) -> Self {
-        let mut grammars = HashMap::new();
+        let mut grammars: std::collections::BTreeMap<String, GrammarDef> =
+            std::collections::BTreeMap::new();
         let mut structs = HashSet::new();
-        let mut methods = HashMap::new();
-        let mut by_name: HashMap<Symbol, Option<Method>> = HashMap::new();
+        let mut methods: std::collections::BTreeMap<String, Method> =
+            std::collections::BTreeMap::new();
+        let mut by_name: std::collections::BTreeMap<String, Option<Method>> =
+            std::collections::BTreeMap::new();
         let mut uses_std = false;
         let mut fails = false;
 
         for item in &parsed.program.items {
             match &item.node {
                 Item::Grammar(def) => {
-                    grammars.insert(def.name, def);
+                    grammars.insert(parsed.text(def.name).to_string(), def.clone());
                 }
                 Item::Struct { name, .. } => {
                     structs.insert(*name);
@@ -1833,9 +1827,12 @@ impl<'p> Emitter<'p> {
                             returns_value: ret_type.is_some(),
                             args: args.clone(),
                         };
-                        methods.insert((target.name, *name), info.clone());
+                        methods.insert(
+                            format!("{}::{}", parsed.text(target.name), parsed.text(*name)),
+                            info.clone(),
+                        );
                         by_name
-                            .entry(*name)
+                            .entry(parsed.text(*name).to_string())
                             .and_modify(|known| {
                                 // Two impls, one name: nothing here can tell
                                 // them apart, so neither is used.
@@ -1940,6 +1937,16 @@ impl<'p> Emitter<'p> {
                 })
                 .collect(),
             fold_callees: fold_callees(parsed, &grammars).into_iter().collect(),
+            by_name: by_name
+                .into_iter()
+                .filter_map(|(name, method)| Some((name, method?)))
+                .collect(),
+            grammars,
+            methods,
+            keep_plans: crate::contracts::keep::buffer_plans(parsed, &own_contracts, library)
+                .into_iter()
+                .map(|plan| (plan.key.clone(), plan))
+                .collect(),
             structs: structs
                 .into_iter()
                 .map(|s| parsed.text(s).to_string())
@@ -2014,17 +2021,9 @@ impl<'p> Emitter<'p> {
             entry: true,
             sums: std::collections::BTreeMap::new(),
         };
-        let keep_plans = crate::contracts::keep::plans(parsed, &state.own_contracts, library)
-            .into_iter()
-            .map(|plan| (plan.key.clone(), plan))
-            .collect();
         let mut made = Self {
             parsed,
             build,
-            grammars,
-            keep_plans,
-            methods,
-            by_name,
             s: state,
             w: std::cell::RefCell::new(EmitWalk::fresh()),
             world: EmitWorld {
@@ -2493,7 +2492,7 @@ impl<'p> Emitter<'p> {
     fn uses_driver(&self) -> bool {
         let mut found = false;
         let mut parallel = |grammar: &Symbol, entry: &Symbol| {
-            if let Some(def) = self.grammars.get(grammar) {
+            if let Some(def) = self.s.grammars.get(self.text(*grammar)) {
                 let rule = def.rules.iter().find(|r| r.is_entry && r.name == *entry);
                 if rule.map(|r| par_fold_of(r).is_some()).unwrap_or(false) {
                     found = true;
@@ -4276,7 +4275,7 @@ impl<'p> Emitter<'p> {
             if let Expr::Call { func, args, .. } = expr
                 && let Expr::Path(segments, _) = func.as_ref()
                 && let [grammar, _] = segments.as_slice()
-                && self.grammars.contains_key(grammar)
+                && self.s.grammars.contains_key(self.text(*grammar))
                 && args.len() == 1
             {
                 found = true;
@@ -4552,9 +4551,9 @@ impl<'p> Emitter<'p> {
             let on_accumulator =
                 matches!(&**receiver, Expr::Variable(name, _) if name == accumulator);
             let mutates = self
+                .s
                 .by_name
-                .get(method)
-                .and_then(|m| m.as_ref())
+                .get(self.text(*method))
                 .is_some_and(Method::mutates_in_place);
 
             // **Changed in place, not threaded** (`winnow-grammar` ADR 24
@@ -4586,7 +4585,10 @@ impl<'p> Emitter<'p> {
     fn fold_merge(&self, out: &mut Out, merge: &Expr) -> Result<()> {
         if let Expr::Path(segments, _) = merge
             && let [owner, name] = segments.as_slice()
-            && let Some(method) = self.methods.get(&(*owner, *name))
+            && let Some(method) =
+                self.s
+                    .methods
+                    .get(&format!("{}::{}", self.text(*owner), self.text(*name)))
             && method.mutates_in_place()
             && method.args.len() == 1
         {
@@ -6208,18 +6210,18 @@ impl<'p> Emitter<'p> {
                 let plan = self.keep_plan(flow.function);
                 // **A buffer whose views outlive this scope goes into a keep**
                 // (ADR-283 D9), and the binding is where it now lives.
-                let put = plan.and_then(|p| p.puts.get(&span.at())).copied();
+                let put = plan.and_then(|p| p.puts.get(&(span.at() as i64))).copied();
                 // **A binding a task takes with it is packed with the task's
                 // keep** (D3), and every use of it reads through the handle.
                 let packed = plan
                     .and_then(|p| p.tethered.get(bound))
-                    .filter(|at| **at == span.at())
+                    .filter(|at| **at == span.at() as i64)
                     .is_some();
                 // **A keeper that drops entries holds each text view with its
                 // own handle** (D4): `ref String` is `Held` in its type.
                 let holding = plan
                     .filter(|p| p.element_keepers.contains(bound))
-                    .map(|p| p.widths.get(bound).copied().unwrap_or(1) as i64);
+                    .map(|p| p.widths.get(bound).copied().unwrap_or(1));
                 self.walking(|w| w.holding = holding);
                 let annotation = match ty {
                     Some(_) if put.is_some() || packed => String::new(),
@@ -6265,9 +6267,9 @@ impl<'p> Emitter<'p> {
                     // `Holding` finds them in, whether the task's keep is this
                     // function's or a caller's handed in (ADR-218 D4).
                     let put = match keep {
-                        crate::contracts::keep::KeepAt::Element(_)
-                        | crate::contracts::keep::KeepAt::Task
-                        | crate::contracts::keep::KeepAt::Param => "put_viewed",
+                        nikaia_std::tools::buffers::KeepAt::Element(_)
+                        | nikaia_std::tools::buffers::KeepAt::Task
+                        | nikaia_std::tools::buffers::KeepAt::Param => "put_viewed",
                         _ => "put",
                     };
                     out.push(&format!(
@@ -6603,13 +6605,13 @@ impl<'p> Emitter<'p> {
                 // the old value still point into the old one.
                 let reput = self
                     .keep_plan(flow.function)
-                    .and_then(|p| p.reputs.get(&span.at()))
+                    .and_then(|p| p.reputs.get(&(span.at() as i64)))
                     .copied();
                 if let Some(keep) = reput {
                     let put = match keep {
-                        crate::contracts::keep::KeepAt::Element(_)
-                        | crate::contracts::keep::KeepAt::Task
-                        | crate::contracts::keep::KeepAt::Param => "put_viewed",
+                        nikaia_std::tools::buffers::KeepAt::Element(_)
+                        | nikaia_std::tools::buffers::KeepAt::Task
+                        | nikaia_std::tools::buffers::KeepAt::Param => "put_viewed",
                         _ => "put",
                     };
                     out.push(&format!("{}.{put}(", Self::keep_expr(keep, false)));
@@ -7502,7 +7504,7 @@ impl<'p> Emitter<'p> {
                 package: None,
                 context: None,
                 ..
-            } if self.grammars.contains_key(target)
+            } if self.s.grammars.contains_key(self.text(*target))
                 && self
                     .s
                     .facts
@@ -9493,8 +9495,9 @@ impl<'p> Emitter<'p> {
         let Expr::Variable(name, _) = receiver else {
             return false;
         };
-        self.grammars
-            .get(name)
+        self.s
+            .grammars
+            .get(self.text(*name))
             .is_some_and(|def| def.rules.iter().any(|r| r.is_entry && r.name == method))
     }
 
@@ -9688,7 +9691,7 @@ impl<'p> Emitter<'p> {
         // anything the recursion graph or the ledger knows.
         if let Expr::Path(segments, _) = func
             && let [grammar, rule] = segments.as_slice()
-            && self.grammars.contains_key(grammar)
+            && self.s.grammars.contains_key(self.text(*grammar))
             && args.len() == 1
         {
             return self.grammar_entry(out, *grammar, *rule, &args[0], depth, flow);
@@ -11269,7 +11272,7 @@ impl<'p> Emitter<'p> {
         let a_grammar = name
             .split("::")
             .next()
-            .is_some_and(|head| self.grammars.keys().any(|g| self.text(*g) == head));
+            .is_some_and(|head| self.s.grammars.contains_key(head));
         !a_grammar && self.named_error(&name).is_some()
     }
 
@@ -12184,7 +12187,7 @@ impl<'p> Emitter<'p> {
         // not a value, so there is no receiver to resolve and no ambiguity to
         // settle.
         if let Some(Expr::Variable(name, _)) = receiver
-            && self.grammars.contains_key(name)
+            && self.s.grammars.contains_key(self.text(*name))
             && args.len() == 1
         {
             // **The dot is gone** (ADR-140 D3). `NK1147` is what a program
@@ -12475,20 +12478,17 @@ impl<'p> Emitter<'p> {
             .and_then(|receiver| crate::contracts::keep::root_of(self.parsed, receiver))
             .and_then(|root| {
                 let plan = self.keep_plan(flow.function)?;
-                let by_arg = plan.holds.get(&(flow.statement, root.clone()))?;
+                let by_arg = plan.holds.get(&(flow.statement as i64, root.clone()))?;
                 let width = plan.widths.get(&root).copied().unwrap_or(1);
                 Some(
                     by_arg
                         .iter()
                         .map(|(arg, buffers)| {
-                            let mut keeps: Vec<usize> = buffers.iter().copied().collect();
-                            while keeps.len() < width {
+                            let mut keeps: Vec<i64> = buffers.iter().copied().collect();
+                            while (keeps.len() as i64) < width {
                                 keeps.push(keeps[keeps.len() - 1]);
                             }
-                            (
-                                *arg as i64,
-                                keeps.into_iter().map(|k| k as i64).collect::<Vec<_>>(),
-                            )
+                            (*arg, keeps)
                         })
                         .collect(),
                 )
@@ -13506,7 +13506,7 @@ impl<'p> Emitter<'p> {
             true => "",
         };
         let name = self.text(grammar);
-        let def = self.grammars.get(&grammar).ok_or_else(|| {
+        let def = self.s.grammars.get(name).ok_or_else(|| {
             refused_at!(
                 flow.statement,
                 "There's no grammar called `{name}` in this file."
@@ -13779,7 +13779,10 @@ fn binary_op(op: BinaryOp) -> String {
 /// grammar this unit declares. By name, because the step's receiver is the
 /// accumulator, whose type this emitter does not know (ADR-296 D17) - and a
 /// method of another type with the same name gains a hint, nothing more.
-fn fold_callees(parsed: &Parsed, grammars: &HashMap<Symbol, &GrammarDef>) -> HashSet<String> {
+fn fold_callees(
+    parsed: &Parsed,
+    grammars: &std::collections::BTreeMap<String, GrammarDef>,
+) -> HashSet<String> {
     fn steps<'a>(pattern: &'a Pattern, found: &mut Vec<&'a Expr>) {
         match pattern {
             Pattern::Fold(spec) => found.push(&spec.step),
@@ -14341,10 +14344,11 @@ const KEEP_TASK: &str = "__keep_task";
 
 impl Emitter<'_> {
     /// The keep plan of the function being written.
-    fn keep_plan(&self, function: &str) -> Option<&crate::contracts::keep::Plan> {
-        match self.keep_plans.get(function) {
+    fn keep_plan(&self, function: &str) -> Option<&nikaia_std::tools::buffers::BufferPlan> {
+        match self.s.keep_plans.get(function) {
             Some(plan) => Some(plan),
             None => self
+                .s
                 .keep_plans
                 .get(self.walk(|w| w.keep_function.clone()).as_str()),
         }
@@ -14352,8 +14356,8 @@ impl Emitter<'_> {
 
     /// How a keep is reached where a buffer is put into it or a call is given
     /// it.
-    fn keep_expr(keep: crate::contracts::keep::KeepAt, lent: bool) -> String {
-        use crate::contracts::keep::KeepAt;
+    fn keep_expr(keep: nikaia_std::tools::buffers::KeepAt, lent: bool) -> String {
+        use nikaia_std::tools::buffers::KeepAt;
         match keep {
             KeepAt::Param => KEEP_PARAM.to_string(),
             KeepAt::Frame => match lent {
@@ -14375,10 +14379,10 @@ impl Emitter<'_> {
     /// its first statement, and one per call or buffer that needs a keep of
     /// its own.
     fn keep_prelude(&self, function: &str, at: usize) -> Option<String> {
-        use crate::contracts::keep::KeepAt;
+        use nikaia_std::tools::buffers::KeepAt;
         let plan = self.keep_plan(function)?;
         let mut lines = Vec::new();
-        if plan.first == Some(at) {
+        if plan.first == at as i64 {
             if plan.frame_keep {
                 lines.push(format!(
                     "let {KEEP_FRAME} = nikaia_std::tether::Keep::new();"
@@ -14390,7 +14394,7 @@ impl Emitter<'_> {
                 ));
             }
         }
-        if plan.local_keeps.contains(&at) {
+        if plan.local_keeps.contains(&(at as i64)) {
             lines.push(format!(
                 "let __keep_{at} = nikaia_std::tether::Keep::new();"
             ));
@@ -14399,7 +14403,7 @@ impl Emitter<'_> {
             .puts
             .values()
             .chain(plan.calls.values())
-            .any(|keep| *keep == KeepAt::Element(at));
+            .any(|keep| *keep == KeepAt::Element(at as i64));
         if element {
             lines.push(format!(
                 "let __keep_{at} = std::sync::Arc::new(nikaia_std::tether::Keep::new());"
@@ -14431,7 +14435,7 @@ impl Emitter<'_> {
         let plan = self.keep_plan(flow.function)?;
         let keep = plan
             .calls
-            .get(&(flow.statement, format!("{callee}#{i}")))
+            .get(&(flow.statement as i64, format!("{callee}#{i}")))
             .copied()?;
         Some(Self::keep_expr(keep, true))
     }
@@ -14442,7 +14446,7 @@ impl Emitter<'_> {
         let plan = self.keep_plan(flow.function)?;
         let keep = plan
             .calls
-            .get(&(flow.statement, callee.to_string()))
+            .get(&(flow.statement as i64, callee.to_string()))
             .copied()?;
         Some(Self::keep_expr(keep, true))
     }
@@ -14616,6 +14620,7 @@ impl Emitter<'_> {
     fn held_structs(&self, out: &mut Out) {
         // Only a unit that holds anything one handle per buffer pays for it.
         if self
+            .s
             .keep_plans
             .values()
             .all(|p| p.element_keepers.is_empty() && !p.task_keep)

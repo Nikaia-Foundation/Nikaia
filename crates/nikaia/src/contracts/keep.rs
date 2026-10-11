@@ -281,7 +281,7 @@ pub fn plans(parsed: &Parsed, ledger: &Ledger, library: &Ledger) -> Vec<Plan> {
 }
 
 /// The same, as Nikaia hands them back.
-pub(super) fn buffer_plans(
+pub(crate) fn buffer_plans(
     parsed: &Parsed,
     ledger: &Ledger,
     library: &Ledger,

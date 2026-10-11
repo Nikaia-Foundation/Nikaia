@@ -89,6 +89,16 @@ pub struct EmitState {
     pub foreign_results: collections::BTreeMap[String, Type],
     /// The `let`s whose value is trusted input, by the start of the statement.
     pub trusted_lets: collections::BTreeSet[i64],
+    /// The grammars this file declares, by name.
+    pub grammars: collections::BTreeMap[String, GrammarDef],
+    /// Where each function's buffers live and what is written for them
+    /// (`buffers.nika`), by the ledger key.
+    pub keep_plans: collections::BTreeMap[String, BufferPlan],
+    /// What each `impl` says about its methods, by `Type::method`.
+    pub methods: collections::BTreeMap[String, EmitMethod],
+    /// The same, by the method's name alone, for the names only one `impl`
+    /// declares.
+    pub by_name: collections::BTreeMap[String, EmitMethod],
     /// The file imports from `std`.
     pub uses_std: bool,
     /// The file is `std` itself.
