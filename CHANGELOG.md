@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.800] — 2026-10-11
+
+**The emitter's state is three Nikaia structs (tools/emit_state.nika, #558, step E3).**
+- `EmitWorld` (the file's names, aliases and items, and `std`'s ledger), `EmitState` (the checker's `CheckFacts`, the ledgers and the tables derived from the items, read-only from the first line written) and `EmitWalk` (the 19 `Cell`s and `RefCell`s the walk writes to, as plain fields). The Rust `Emitter` holds `s`, `w: RefCell<EmitWalk>` and `world`; every access to the walk goes through `walk` and `walking`, which end the borrow when the closure returns. Tables keyed by a `Symbol` are keyed by its name (`Symbol` is not `Ord`). The parsed file, the build's settings, the grammars, the keep plans and the method table stay Rust fields.
+
 ## [0.0.799] — 2026-10-10
 
 **Two number types in one operation, array literals and `collect` by use are Nikaia (`tools/check_numbers2.nika`, #558, #125).**

@@ -1,0 +1,151 @@
+// crates/nikaia-std/src/tools/emit_state.nika
+//
+// **What the emitter knows and keeps while it writes** (ADR-294, #125, #558,
+// the coordinator's design): three structs, apart so that none of them holds a
+// view the others might keep (`NK2302`).
+//
+// - `EmitWorld`: what the emitter looks at and does not own, the file's names,
+//   its aliases and items, and `std`'s ledger. Passed to every question that
+//   needs a name read back.
+// - `EmitState`: what is worked out before the first line is written and is
+//   read from then on - the checker's facts, the ledgers, the tables derived
+//   from the items. The Rust `Emitter` holds it as one field.
+// - `EmitWalk`: the places the walk writes to as it goes - the 19 cells the
+//   Rust emitter keeps in `Cell`s and `RefCell`s, as plain fields. The Rust
+//   `Emitter` holds it behind one `RefCell`, borrowed briefly and never across
+//   a call back into the emitter.
+//
+// What stays in Rust beside them: the parsed file, the build's settings, the
+// grammars (references into the items), the keep plans and the method table.
+
+use std::collections
+
+/// Two names that go together: the parameter a copy of a function is
+/// specialised on and the type it is specialised to, or the binding a walk over
+/// a shape is at and its field.
+pub struct EmitPair {
+    pub first: String,
+    pub second: String,
+}
+
+/// What the emitter looks at and does not own.
+pub struct EmitWorld {
+    /// The names of the file, to read an identifier back.
+    pub words: ref winnow_grammar::InternerContext,
+    /// The file's `use x as y` aliases.
+    pub aliases: ref collections::BTreeMap[String, String],
+    /// The file's items.
+    pub items: ref Vec[Spanned[Item]],
+    /// `std`'s contracts, as `std` ships them.
+    pub library: ref Ledger,
+}
+
+/// What is worked out before the first line is written.
+pub struct EmitState {
+    /// What the checker found out about the program (`check_facts.nika`).
+    pub facts: CheckFacts,
+    /// This unit's own contracts, inferred from the source.
+    pub own_contracts: Ledger,
+    /// A described crate's contracts (ADR-290).
+    pub described: Ledger,
+    /// The structs and enums that hold a view, and so take a lifetime.
+    pub borrowing: collections::BTreeSet[String],
+    /// The types that carry a tether, by name, this package's and the ones beside it.
+    pub tethered: collections::BTreeSet[String],
+    /// The symbols of the views a method's statement carries in from its
+    /// input, by the start of the method.
+    pub carries_input: collections::BTreeMap[i64, collections::BTreeSet[String]],
+    /// The names a `fold`'s or a `par_fold`'s step calls directly (#433).
+    pub fold_callees: collections::BTreeSet[String],
+    /// The structs this file declares.
+    pub structs: collections::BTreeSet[String],
+    /// The structs the files beside it declare, by name.
+    pub structs_beside: collections::BTreeSet[String],
+    /// The index nodes whose check the build drops, proved.
+    pub proven_indices: collections::BTreeSet[i64],
+    /// The arithmetic nodes whose overflow check the build drops, with the type.
+    pub proven_arithmetic: collections::BTreeMap[i64, String],
+    /// The negations whose overflow check the build drops, with the type.
+    pub proven_negations: collections::BTreeMap[i64, String],
+    /// The types that implement `Cleanup`.
+    pub cleaned_types: collections::BTreeSet[String],
+    /// What each shared allocation is counted with.
+    pub shared: collections::BTreeMap[String, Count],
+    /// The functions a `comptime` calls, which the build runs.
+    pub built_at_build_time: collections::BTreeSet[String],
+    /// The pausing functions each pausing function reaches (`emit_reach.nika`).
+    pub pausing_reach: collections::BTreeMap[String, collections::BTreeSet[String]],
+    /// The types this unit and the ones beside it declare an `impl Error` for.
+    pub declared_errors: collections::BTreeSet[String],
+    /// The generated sum of each set of errors, by the set.
+    pub sums: collections::BTreeMap[Vec[String], String],
+    /// The names of the `dsl` drivers this file uses.
+    pub dsl_drivers: collections::BTreeSet[String],
+    /// Each `extern` function's parameter types.
+    pub foreign_params: collections::BTreeMap[String, Vec[Type]],
+    /// Each `extern` handle and the function that releases it.
+    pub opaque_handles: collections::BTreeMap[String, String],
+    /// Each `extern` function's result type.
+    pub foreign_results: collections::BTreeMap[String, Type],
+    /// The `let`s whose value is trusted input, by the start of the statement.
+    pub trusted_lets: collections::BTreeSet[i64],
+    /// The file imports from `std`.
+    pub uses_std: bool,
+    /// The file is `std` itself.
+    pub is_std: bool,
+    /// Some function in the file can throw.
+    pub fails: bool,
+    /// The whole input is trusted.
+    pub trusted_input: bool,
+    /// The file is the entry of the package.
+    pub entry: bool,
+}
+
+/// The places the walk writes to as it goes.
+pub struct EmitWalk {
+    /// A reach was read through a copy.
+    pub reached_copy: bool,
+    /// The lines an `Either` parameter needs before the body.
+    pub either_prelude: Vec[String],
+    /// The walk is inside the arguments of a call that keeps them.
+    pub in_a_kept_call: bool,
+    /// The walk is inside a parameter.
+    pub in_parameter: bool,
+    /// The Rust type of each rule of the grammar being written.
+    pub grammar_rule_types: collections::BTreeMap[String, String],
+    /// The statements whose keeps have been declared.
+    pub preluded: collections::BTreeSet[i64],
+    /// The wrapper functions a tether needs, written after the items.
+    pub wrappers: Vec[String],
+    /// The width of the buffer being held, while it is.
+    pub holding: i64?,
+    /// The held arguments of the call being written, by position.
+    pub hold_args: collections::BTreeMap[i64, Vec[i64]]?,
+    /// The key of the function being written.
+    pub keep_function: String,
+    /// The locals that are never negative, by function.
+    pub nonnegative: collections::BTreeMap[String, collections::BTreeSet[String]],
+    /// The parameter a copy of a function is specialised on, and the type.
+    pub specialising: EmitPair?,
+    /// The binding and the field a walk over a shape is at.
+    pub at_field: EmitPair?,
+    /// A parameter that is code runs.
+    pub code_parameter_runs: bool,
+    /// The held values of the statement, by node, and the name each is bound to.
+    pub held: collections::BTreeMap[i64, String],
+    /// Which arguments of the call being written are boxed.
+    pub boxed_args: Vec[bool]?,
+    /// What each variant's allocation is counted with.
+    pub variant_counts: Vec[Count]?,
+    /// What the hull's allocation is counted with.
+    pub hull_count: Count?,
+    /// The value being written is trusted.
+    pub trusting: bool,
+}
+
+impl EmitWalk {
+    /// Nothing written yet.
+    pub fn fresh() -> EmitWalk {
+        return EmitWalk { reached_copy: false, either_prelude: [], in_a_kept_call: false, in_parameter: false, grammar_rule_types: collections::BTreeMap(), preluded: collections::BTreeSet(), wrappers: [], holding: null, hold_args: null, keep_function: "", nonnegative: collections::BTreeMap(), specialising: null, at_field: null, code_parameter_runs: false, held: collections::BTreeMap(), boxed_args: null, variant_counts: null, hull_count: null, trusting: false }
+    }
+}

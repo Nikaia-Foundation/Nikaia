@@ -17254,6 +17254,82 @@ fn reach_set_for(reaches: &collections::BTreeMap<String, collections::BTreeSet<S
 }
 
 
+// --- emit_state.nika ---
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EmitPair {
+    pub first: String,
+    pub second: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct EmitWorld<'a> {
+    pub words: &'a winnow_grammar::InternerContext,
+    pub aliases: &'a collections::BTreeMap<String, String>,
+    pub items: &'a Vec<Spanned<Item>>,
+    pub library: &'a Ledger,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct EmitState {
+    pub facts: CheckFacts,
+    pub own_contracts: Ledger,
+    pub described: Ledger,
+    pub borrowing: collections::BTreeSet<String>,
+    pub tethered: collections::BTreeSet<String>,
+    pub carries_input: collections::BTreeMap<i64, collections::BTreeSet<String>>,
+    pub fold_callees: collections::BTreeSet<String>,
+    pub structs: collections::BTreeSet<String>,
+    pub structs_beside: collections::BTreeSet<String>,
+    pub proven_indices: collections::BTreeSet<i64>,
+    pub proven_arithmetic: collections::BTreeMap<i64, String>,
+    pub proven_negations: collections::BTreeMap<i64, String>,
+    pub cleaned_types: collections::BTreeSet<String>,
+    pub shared: collections::BTreeMap<String, Count>,
+    pub built_at_build_time: collections::BTreeSet<String>,
+    pub pausing_reach: collections::BTreeMap<String, collections::BTreeSet<String>>,
+    pub declared_errors: collections::BTreeSet<String>,
+    pub sums: collections::BTreeMap<Vec<String>, String>,
+    pub dsl_drivers: collections::BTreeSet<String>,
+    pub foreign_params: collections::BTreeMap<String, Vec<Type>>,
+    pub opaque_handles: collections::BTreeMap<String, String>,
+    pub foreign_results: collections::BTreeMap<String, Type>,
+    pub trusted_lets: collections::BTreeSet<i64>,
+    pub uses_std: bool,
+    pub is_std: bool,
+    pub fails: bool,
+    pub trusted_input: bool,
+    pub entry: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EmitWalk {
+    pub reached_copy: bool,
+    pub either_prelude: Vec<String>,
+    pub in_a_kept_call: bool,
+    pub in_parameter: bool,
+    pub grammar_rule_types: collections::BTreeMap<String, String>,
+    pub preluded: collections::BTreeSet<i64>,
+    pub wrappers: Vec<String>,
+    pub holding: Option<i64>,
+    pub hold_args: Option<collections::BTreeMap<i64, Vec<i64>>>,
+    pub keep_function: String,
+    pub nonnegative: collections::BTreeMap<String, collections::BTreeSet<String>>,
+    pub specialising: Option<EmitPair>,
+    pub at_field: Option<EmitPair>,
+    pub code_parameter_runs: bool,
+    pub held: collections::BTreeMap<i64, String>,
+    pub boxed_args: Option<Vec<bool>>,
+    pub variant_counts: Option<Vec<Count>>,
+    pub hull_count: Option<Count>,
+    pub trusting: bool,
+}
+
+impl EmitWalk {
+    pub fn fresh() -> EmitWalk { EmitWalk { reached_copy: false, either_prelude: vec![], in_a_kept_call: false, in_parameter: false, grammar_rule_types: collections::BTreeMap::new(), preluded: collections::BTreeSet::new(), wrappers: vec![], holding: None, hold_args: None, keep_function: String::from(""), nonnegative: collections::BTreeMap::new(), specialising: None, at_field: None, code_parameter_runs: false, held: collections::BTreeMap::new(), boxed_args: None, variant_counts: None, hull_count: None, trusting: false } }
+}
+
+
 // --- emit_text.nika ---
 
 pub fn rust_string(text: &str) -> String {
@@ -37635,6 +37711,10 @@ pub mod emit_out {
 pub mod emit_reach {
     #[allow(unused_imports)]
     pub use super::{pausing_reach};
+}
+pub mod emit_state {
+    #[allow(unused_imports)]
+    pub use super::{EmitPair, EmitWorld, EmitState, EmitWalk};
 }
 pub mod emit_text {
     #[allow(unused_imports)]

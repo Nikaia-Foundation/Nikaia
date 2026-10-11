@@ -977,8 +977,8 @@ impl Needs {
                 .iter()
                 .any(|i| matches!(i.node, Item::Grammar(_))),
             driver: emitter.uses_driver(),
-            std: emitter.uses_std,
-            fails: emitter.fails,
+            std: emitter.s.uses_std,
+            fails: emitter.s.fails,
             foreign_traits: foreign_traits(parsed),
         }
     }
@@ -1161,203 +1161,16 @@ fn angled(parts: &[String]) -> String {
     }
 }
 
+use nikaia_std::tools::emit_state::{EmitPair, EmitState, EmitWalk, EmitWorld};
+
 struct Emitter<'p> {
-    /// What the checker found out (`tools/check_facts.nika`), by the id of
-    /// the node each fact is about.
-    facts: crate::check::CheckFacts,
     parsed: &'p Parsed,
     build: Build,
-    /// Structs that hold a view into the input, and so need the input lifetime
-    /// wherever they are named.
-    ///
-    /// Read through [`Emitter::borrows`] and not directly: this half is what
-    /// *this file* declares, and a package is several files (Part I, 9.1).
-    borrowing: HashSet<Symbol>,
-    /// The other half: the types the **package's** ledger records a `tethered`
-    /// field for (`contracts::TypeContract`).
-    ///
-    /// `examples/inventory` is why. `Entry` is declared in `stock.nika` and
-    /// named in `page.nika`, and each file is emitted from its own `Parsed`
-    /// (`emit_module_body_ordered`) - so the syntactic set above is empty in the
-    /// file that writes `Vec[Entry]`, and the lifetime went unwritten there.
-    /// Rust's elision covered it in a plain `fn` and stops covering it in an
-    /// `async fn` (E0726), which is how a latent defect became a message about
-    /// the generated file (Part III, C.1).
-    ///
-    /// The ledger is the right place to read it from because a package has
-    /// exactly one (Part III, 13.5) and its keys for the package's own types are
-    /// unqualified - the same name the source writes.
-    tethered: std::collections::BTreeSet<String>,
-    /// The view parameters written as views of the *input* buffer rather than of
-    /// whatever the caller lends for the call, by the byte their method starts
-    /// at (`views::carried`).
-    ///
-    /// A parameter written `&str` says only "a view, for this call". Where the
-    /// method stores it into its subject, and the subject already carries the
-    /// input buffer, the view it stores is a view of **that** buffer - so the
-    /// parameter is written with the input lifetime and the signature says what
-    /// the body does. Where nothing names the buffer, `views::check` refuses the
-    /// program instead (`NK2302`), so this set is never a guess.
-    carries_input: HashMap<usize, HashSet<Symbol>>,
     grammars: HashMap<Symbol, &'p GrammarDef>,
-    /// **What a `fold`'s or a `par_fold`'s step calls directly**, by name
-    /// (#433): the step is the loop body over the input, so what it calls runs
-    /// once per item, and is written `#[inline]`.
-    fold_callees: HashSet<String>,
-    /// Declared struct names: `Stats(x)` is a call to a constructor, and only
-    /// the declarations say which names are types.
-    structs: HashSet<Symbol>,
-    /// The structs the other files of the package declare (Part I 9.1): one
-    /// namespace, so `Spanned(node, span)` is the constructor there too (#560).
-    structs_beside: HashSet<String>,
-    /// [`check::Checked::list_indices`], kept only where [`crate::bounds`]
-    /// proved the position inside: the indexes written without their check
-    /// ([ADR-306](../../docs/specification/adr/adr-306.md) D5).
-    proven_indices: std::collections::HashSet<i64>,
-    /// [`check::Checked::arithmetic`], kept only where [`crate::bounds`]
-    /// proved the operation stays inside its type: written `<T>::wrapping_*`
-    /// ([ADR-306](../../docs/specification/adr/adr-306.md) D10).
-    proven_arithmetic: std::collections::HashMap<i64, String>,
-    /// [`check::Checked::negations`], kept only where [`crate::bounds`]
-    /// proved the operand is not the type's least value: written
-    /// `<T>::wrapping_neg` (ADR-314 D5).
-    proven_negations: std::collections::HashMap<i64, String>,
-    /// Whether the `?.` being written copies the view it reached, which is
-    /// `owned_copies` asked of the receiver the `match` bound.
-    reached_copy: std::cell::Cell<bool>,
-    /// The first lines of the function body being written: a published
-    /// parameter both kinds of text flow into, taken as it goes in
-    /// (ADR-282 D23).
-    either_prelude: std::cell::RefCell<Vec<String>>,
-    /// Set while the call a kept named function stands for is written, whose
-    /// callee is that same name.
-    in_a_kept_call: std::cell::RefCell<bool>,
-    /// Set while a parameter's type is written, where a function type the
-    /// callee only runs is a closure argument rather than a kept value.
-    in_parameter: std::cell::RefCell<bool>,
-    /// The rules of the grammar being written and the type each hands back,
-    /// lowered - for `list(item, sep)`, whose element type is the item rule's
-    /// ([`LIST_RULE`]).
-    grammar_rule_types: std::cell::RefCell<std::collections::BTreeMap<String, String>>,
     /// **Where each buffer lives**, per function
     /// ([ADR-283](../../docs/specification/adr/adr-283.md)): the keep plan,
     /// computed once over the unit against the package's ledger.
     keep_plans: HashMap<String, crate::contracts::keep::Plan>,
-    /// The statements whose keeps are already declared, because a `throws`
-    /// body declares them before its `Ok(` rather than inside it.
-    preluded: std::cell::RefCell<HashSet<usize>>,
-    /// The handle types a task's tethered values are packed in (D3), written
-    /// once at the end of the unit.
-    wrappers: std::cell::RefCell<Vec<String>>,
-    /// Writing a keeper whose views are held one handle per buffer (D4): `ref
-    /// String` is `Held` while this is set, and a struct of views a `Holding`
-    /// with this many keeps ([ADR-283](../../docs/specification/adr/adr-283.md)).
-    holding: std::cell::RefCell<Option<usize>>,
-    /// The arguments of the call being written that are held (D4): argument
-    /// position and the buffer statements whose keeps hold it, one per keep
-    /// its element carries.
-    hold_args: std::cell::RefCell<Option<std::collections::BTreeMap<usize, Vec<usize>>>>,
-    /// The function being written, for the keep plan: a lambda's body is
-    /// written with a flow of its own (`Flow::PLAIN`), and its statements are
-    /// still the function's to the plan that walked them.
-    keep_function: std::cell::RefCell<String>,
-    /// **The counters of each function that are never negative**, by its key
-    /// ([ADR-270](../../docs/specification/adr/adr-270.md) D8 step 1): a
-    /// local that starts at a non-negative literal and is only ever given or
-    /// added one, and the binding of a range that starts at one. Indexed and
-    /// compared with a length as the `usize` it is, so no sign is tested and
-    /// the optimiser sees one unsigned value in the loop's test and the read.
-    nonnegative: std::cell::RefCell<HashMap<String, HashSet<Symbol>>>,
-    /// **This program's types with a cleanup that can pause** (ADR-297 D1):
-    /// written as `Cleaned<T>`, whose `Drop` parks it.
-    cleaned_types: std::collections::BTreeSet<String>,
-    /// Which reference count each `Shared` value got, by the slot key
-    /// `function::value` ([ADR-037](../../../docs/specification/adr/adr-037.md)
-    /// D7).
-    ///
-    /// **Per value and not per type**, which is why `map_name` cannot answer it:
-    /// `Shared[T]` is one atomic count at both settings of `user_parallelism`
-    /// (D6), and a value the analysis proves never crosses a thread gets a plain
-    /// one instead. That is a question about where a particular handle goes, so
-    /// it is computed by `contracts::sharing` over the whole unit and looked up
-    /// here - the same arrangement `fallible_loops` and `fallible_methods` have,
-    /// and for the same reason.
-    ///
-    /// A count belongs to the **allocation**, so every position of one
-    /// union-find class carries the same answer and the types a call writes on
-    /// both sides of it agree by construction. A slot this map does not have gets
-    /// the atomic floor.
-    shared: std::collections::BTreeMap<String, crate::contracts::sharing::Count>,
-    /// **The functions the build runs** (#446): `built_at_build_time`.
-    built_at_build_time: HashSet<String>,
-    /// **The copy being written**, while one is: the concrete type the
-    /// parameter stands for, and the parameter's own name.
-    ///
-    /// A `RefCell` because the emitter is `&self` everywhere — it writes rather
-    /// than decides, and this is the one place it carries a position down a
-    /// walk it does not own.
-    specialising: std::cell::RefCell<Option<(String, String)>>,
-    /// The field this unrolled turn stands at: the binding the `for` wrote, and
-    /// the field's own name.
-    at_field: std::cell::RefCell<Option<(String, String)>>,
-    /// Whether the code parameter being written is one the body **runs**
-    /// ([ADR-277](../../docs/specification/adr/adr-277.md) D11).
-    ///
-    /// Set around the one `ty_counted` call that writes a parameter's type, for
-    /// the reason `specialising` above is a cell: the type writer takes a type
-    /// and this is a fact about the **position**. Run is the absence of
-    /// `keeps`, read off the contract the declaration writer already has in
-    /// hand for `lends`.
-    code_parameter_runs: std::cell::RefCell<bool>,
-    /// The receivers held before the statement being written, by address, and
-    /// the name each is held under.
-    held: std::cell::RefCell<HashMap<usize, String>>,
-    /// Which of the arguments `args` is writing go into a boxed part of a
-    /// variant ([ADR-246](../../docs/specification/adr/adr-246.md) D3): set
-    /// around one call by `call` and read by `args`, as `hold_args` is.
-    boxed_args: std::cell::RefCell<Option<Vec<bool>>>,
-    /// **The count each part of a variant was given**, set around one call by
-    /// `call` and read by `args` as `boxed_args` is (0.0.244, issue #158
-    /// issue #158): a `Shared(…)` written straight into a part takes the part's
-    /// count, or the two would be an `Rc` and an `Arc` of one value.
-    variant_counts: std::cell::RefCell<Option<Vec<crate::contracts::sharing::Count>>>,
-    /// The count the next hull written takes, where its position decided it.
-    hull_count: std::cell::Cell<Option<crate::contracts::sharing::Count>>,
-    /// ADR-055 D6: what each pausing function can reach, over the pausing ones
-    /// ([`pausing_reach`]).
-    ///
-    /// A recursive `async fn` is an infinitely sized future, so a call that
-    /// closes a cycle has to put one behind a pointer - and *which* calls those
-    /// are is this map's question: a call from `f` to `g` closes one exactly
-    /// where `g` reaches `f` again. Read through
-    /// [`Emitter::closes_a_pausing_cycle`].
-    pausing_reach: std::collections::BTreeMap<String, std::collections::BTreeSet<String>>,
-    /// This unit's own contracts, and `std`'s. A call's options come from the
-    /// declaration, and a declaration is what a ledger records (Kap 5.1).
-    own_contracts: crate::contracts::Ledger,
-    library: &'static crate::contracts::Ledger,
-    /// **The described crates' boundary**
-    /// ([ADR-290](../../docs/specification/adr/adr-290.md) D20). Asked one
-    /// question, whether a call into one can fail - and deliberately not
-    /// merged into `library`, whose `sync = false` means *await it*: a
-    /// described function that may block is an ordinary Rust call.
-    described: crate::contracts::Ledger,
-    /// The types **this unit declares and gives an `impl Error`**
-    /// ([ADR-280](../../docs/specification/adr/adr-280.md) D9).
-    ///
-    /// What is thrown implements `Error` and the `impl` line says so (Part I
-    /// 7.1, `NK1161`), so this is the set a failure channel may be named after:
-    /// a name here resolves in the generated file, and one another package
-    /// declares does not.
-    declared_errors: std::collections::BTreeSet<String>,
-    /// Every distinct error set of two or more named members in this unit, and
-    /// the type that stands for it
-    /// ([ADR-280](../../docs/specification/adr/adr-280.md) D15).
-    ///
-    /// Held rather than derived per question, because a `catch` deep inside a
-    /// body needs the **name** and a name computed on the spot has nowhere to
-    /// live.
-    sums: std::collections::BTreeMap<Vec<String>, String>,
     /// ADR-292: whether two statements that meet on nothing may overlap.
     /// What the program's `impl` blocks declare, which is what makes the fold
     /// adapter of D2 a lookup rather than a guess.
@@ -1366,60 +1179,14 @@ struct Emitter<'p> {
     /// is not written down. `None` marks a name two impls disagree about - and
     /// an ambiguous name is left alone rather than resolved by preference.
     by_name: HashMap<Symbol, Option<Method>>,
-    /// Whether the program imports anything from `std`. Kept because a
-    /// **grammar** module's glob needs to know whether there is anything to
-    /// re-export; the preamble no longer asks (see [`emit_std`]).
-    uses_std: bool,
-    /// Whether this *is* `std`, the one program that may not import the prelude.
-    is_std: bool,
-    fails: bool,
-    /// ADR-010: nobody outside the program chose the bytes its maps are keyed
-    /// by, so a map may have the fast hash.
-    trusted_input: bool,
-    /// **The `let`s whose map keeps the fast hash in a program that reads
-    /// untrusted input** (ADR-010 D1, #431), by statement:
-    /// [`crate::contracts::trust::trusted_maps`].
-    trusted_lets: std::collections::BTreeSet<usize>,
-    /// Set while one of those is written.
-    trusting: std::cell::Cell<bool>,
-    /// ADR-296 D5: the functions that accept a DSL's deferred parameters, by
-    /// name. A `;` at a call means options everywhere else, and this is what
-    /// says which calls mean the other thing.
-    dsl_drivers: HashSet<String>,
-    /// **What an `extern "C"` declaration takes, by name and position**
-    /// ([ADR-302](../../docs/specification/adr/adr-302.md) D5).
-    ///
-    /// A declaration says `&[u8]` and C wants a pointer, so the *call* is where
-    /// the pointer is made — `bytes.as_ptr()` rather than `bytes`. It is read
-    /// from this file's own items rather than handed over by the checker, which
-    /// is the one place that arrangement works: the emitter resolves a free
-    /// call by name already ([ADR-296](../../docs/specification/adr/adr-296.md)
-    /// D2), and a foreign declaration is a name in this very file.
-    foreign_params: std::collections::BTreeMap<String, Vec<Type>>,
-    /// **The opaque handles this file declares, and what releases each**
-    /// ([ADR-302](../../docs/specification/adr/adr-302.md) D7).
-    ///
-    /// A handle is **lent** to every declaration but one: it is the address by
-    /// value, and the caller keeps the value so its `cleanup` still runs at the
-    /// end of its scope. The exception is the type's own release function,
-    /// which takes it — that call *is* the cleanup, and a handle given away
-    /// must not be released twice.
-    opaque_handles: std::collections::BTreeMap<String, String>,
-    /// What each `extern "C"` declaration hands back, by the name a call writes
-    /// ([ADR-302](../../docs/specification/adr/adr-302.md) D12). A handle needs
-    /// its hull put on at the call, and whether the declaration said `?`
-    /// decides which one.
-    foreign_results: std::collections::BTreeMap<String, Type>,
-    /// Whether these items are the crate root - the one file that may carry
-    /// the program's entry point.
-    ///
-    /// [ADR-303](../../../docs/specification/adr/adr-303.md) D4 starts the
-    /// runtime before the first statement the user wrote, and the way to do
-    /// that is to write the `fn main` Rust runs and call the program's own
-    /// `main` from inside it. That may only happen once per program, so a
-    /// module's items are emitted with this `false` and a `main` in them is
-    /// left exactly as written.
-    entry: bool,
+    /// What is worked out before the first line is written
+    /// (`tools/emit_state.nika`).
+    s: EmitState,
+    /// The places the walk writes to as it goes, borrowed briefly and never
+    /// across a call back into the emitter.
+    w: std::cell::RefCell<EmitWalk>,
+    /// What the emitter looks at and does not own.
+    world: EmitWorld<'p>,
 }
 
 /// What an `impl` says about a method. Enough to adapt a `&mut self` method to
@@ -2284,9 +2051,7 @@ impl<'p> Emitter<'p> {
         // ADR-055 D6, before `own_contracts` is moved into place.
         let reach = pausing_reach(parsed, &own_contracts);
 
-        let mut made = Self {
-            parsed,
-            build,
+        let state = EmitState {
             described: described.clone(),
             borrowing: borrowing_structs_beside(
                 parsed,
@@ -2295,13 +2060,10 @@ impl<'p> Emitter<'p> {
                         .chain(beside.iter().copied())
                         .collect::<Vec<_>>(),
                 ),
-            ),
-            // **A type another file of the package declares answers too**
-            // (Part I 9.1): the ledger records a tether for a struct's fields
-            // and for nothing an `enum` carries, so an error enum holding a
-            // view, declared beside this file, is read from its declaration.
-            // The generated sum is written once, at the entry, and names its
-            // members wherever they are declared.
+            )
+            .into_iter()
+            .map(|s| parsed.text(s).to_string())
+            .collect(),
             tethered: tethered_types(&own_contracts)
                 .into_iter()
                 .chain(beside.iter().flat_map(|other| {
@@ -2310,18 +2072,27 @@ impl<'p> Emitter<'p> {
                         .map(|s| other.text(s).to_string())
                 }))
                 .collect(),
-            // **An error another file of the package declares is the
-            // package's own** (Part I 9.1, ADR-294): its `impl Error` is in
-            // that file, and a function here that throws it travels in its
-            // envelope, as one written beside the `impl` does.
             declared_errors: std::iter::once(parsed)
                 .chain(beside.iter().copied())
                 .flat_map(declared_errors)
                 .collect(),
-            carries_input: crate::views::carried(parsed, &own_contracts, library),
-            fold_callees: fold_callees(parsed, &grammars),
-            grammars,
-            structs,
+            carries_input: crate::views::carried(parsed, &own_contracts, library)
+                .into_iter()
+                .map(|(at, symbols)| {
+                    (
+                        at as i64,
+                        symbols
+                            .into_iter()
+                            .map(|s| parsed.text(s).to_string())
+                            .collect(),
+                    )
+                })
+                .collect(),
+            fold_callees: fold_callees(parsed, &grammars).into_iter().collect(),
+            structs: structs
+                .into_iter()
+                .map(|s| parsed.text(s).to_string())
+                .collect(),
             structs_beside: beside
                 .iter()
                 .flat_map(|other| {
@@ -2335,8 +2106,6 @@ impl<'p> Emitter<'p> {
                         })
                 })
                 .collect(),
-            methods,
-            by_name,
             uses_std,
             is_std: false,
             fails,
@@ -2346,8 +2115,10 @@ impl<'p> Emitter<'p> {
                 crate::contracts::Provenance::Untrusted => {
                     crate::contracts::trust::trusted_maps(parsed, library)
                 }
-            },
-            trusting: std::cell::Cell::new(false),
+            }
+            .into_iter()
+            .map(|at| at as i64)
+            .collect(),
             proven_indices: propagation
                 .list_indices
                 .iter()
@@ -2376,38 +2147,15 @@ impl<'p> Emitter<'p> {
                 .map(|(at, ty)| (*at, ty.clone()))
                 .collect(),
             facts: propagation,
-            either_prelude: std::cell::RefCell::new(Vec::new()),
-            in_a_kept_call: std::cell::RefCell::new(false),
-            in_parameter: std::cell::RefCell::new(false),
-            grammar_rule_types: std::cell::RefCell::new(std::collections::BTreeMap::new()),
             cleaned_types: own_contracts
                 .implementations
                 .get("Cleanup")
                 .cloned()
                 .unwrap_or_default(),
             shared,
-            keep_plans: crate::contracts::keep::plans(parsed, &own_contracts, library)
-                .into_iter()
-                .map(|plan| (plan.key.clone(), plan))
-                .collect(),
-            preluded: std::cell::RefCell::new(HashSet::new()),
-            wrappers: std::cell::RefCell::new(Vec::new()),
-            holding: std::cell::RefCell::new(None),
-            hold_args: std::cell::RefCell::new(None),
-            keep_function: std::cell::RefCell::new(String::new()),
-            nonnegative: std::cell::RefCell::new(HashMap::new()),
-            built_at_build_time: built_at_build_time(parsed),
-            specialising: std::cell::RefCell::new(None),
-            at_field: std::cell::RefCell::new(None),
-            code_parameter_runs: std::cell::RefCell::new(false),
-            reached_copy: std::cell::Cell::new(false),
-            held: std::cell::RefCell::new(HashMap::new()),
-            boxed_args: std::cell::RefCell::new(None),
-            variant_counts: std::cell::RefCell::new(None),
-            hull_count: std::cell::Cell::new(None),
+            built_at_build_time: built_at_build_time(parsed).into_iter().collect(),
             pausing_reach: reach,
             own_contracts,
-            library,
             dsl_drivers: crate::dsl::drivers(parsed).into_iter().collect(),
             foreign_params: foreign_params(parsed),
             opaque_handles: opaque_handles(parsed),
@@ -2415,21 +2163,51 @@ impl<'p> Emitter<'p> {
             entry: true,
             sums: std::collections::BTreeMap::new(),
         };
-        // After the rest, because it reads three of the fields above.
-        made.sums = made.error_sums();
+        let keep_plans = crate::contracts::keep::plans(parsed, &state.own_contracts, library)
+            .into_iter()
+            .map(|plan| (plan.key.clone(), plan))
+            .collect();
+        let mut made = Self {
+            parsed,
+            build,
+            grammars,
+            keep_plans,
+            methods,
+            by_name,
+            s: state,
+            w: std::cell::RefCell::new(EmitWalk::fresh()),
+            world: EmitWorld {
+                words: &parsed.interner,
+                aliases: &parsed.aliases,
+                items: &parsed.program.items,
+                library,
+            },
+        };
+        made.s.sums = made.error_sums();
         made
     }
 
     /// The same, said of a module rather than of the crate root.
     fn for_entry(mut self, entry: bool) -> Self {
-        self.entry = entry;
+        self.s.entry = entry;
         self
     }
 
     /// This is `std` itself - see [`emit_std`].
     fn for_std(mut self) -> Self {
-        self.is_std = true;
+        self.s.is_std = true;
         self
+    }
+
+    /// Reads the walk's places. The borrow ends when `f` returns, so nothing
+    /// held here can meet a write made by a call back into the emitter.
+    fn walk<R>(&self, f: impl FnOnce(&EmitWalk) -> R) -> R {
+        f(&self.w.borrow())
+    }
+
+    /// Writes the walk's places, briefly: `f` calls nothing of the emitter's.
+    fn walking<R>(&self, f: impl FnOnce(&mut EmitWalk) -> R) -> R {
+        f(&mut self.w.borrow_mut())
     }
 
     fn text(&self, sym: Symbol) -> &str {
@@ -2468,16 +2246,17 @@ impl<'p> Emitter<'p> {
         // has no copies, and the generic original still may not be written —
         // its body holds a loop over a shape. Part II 10.3's own block is that
         // shape, and it reached `rustc` until this line read the right map.
-        self.facts.walks_fields.contains_key(&name).then_some(name)
+        self.s
+            .facts
+            .walks_fields
+            .contains_key(&name)
+            .then_some(name)
     }
 
     /// The concrete type the parameter stands for, while a copy is being
     /// written.
     fn standing_for(&self) -> Option<String> {
-        self.specialising
-            .borrow()
-            .as_ref()
-            .map(|(_, on)| on.clone())
+        self.walk(|w| w.specialising.as_ref().map(|pair| pair.second.clone()))
     }
 
     /// The fields a `for` over `T::fields` walks, where this is one
@@ -2487,7 +2266,8 @@ impl<'p> Emitter<'p> {
     /// because that is where the shape is named — and answered from the
     /// checker's table, which is the only thing that knows which copy this is.
     fn unrolls_here(&self, iter: &Expr) -> Option<Vec<crate::contracts::FieldContract>> {
-        let (name, on) = self.specialising.borrow().clone()?;
+        let pair = self.walk(|w| w.specialising.clone())?;
+        let (name, on) = (pair.first, pair.second);
         let Expr::Path(segments, _) = iter else {
             return None;
         };
@@ -2498,7 +2278,8 @@ impl<'p> Emitter<'p> {
         if *parameter != name || !matches!(member.as_str(), "fields" | "variants") {
             return None;
         }
-        self.facts
+        self.s
+            .facts
             .unrolled
             .get(&(self.enclosing_shape_walk()?, on))
             .cloned()
@@ -2510,9 +2291,11 @@ impl<'p> Emitter<'p> {
     /// the function's own name is looked up the way the copy was chosen: there
     /// is exactly one entry per (function, type) and the type is in hand.
     fn enclosing_shape_walk(&self) -> Option<String> {
-        let (parameter, on) = self.specialising.borrow().clone()?;
+        let pair = self.walk(|w| w.specialising.clone())?;
+        let (parameter, on) = (pair.first, pair.second);
         let _ = parameter;
-        self.facts
+        self.s
+            .facts
             .unrolled
             .keys()
             .find(|(_, held)| *held == on)
@@ -2528,7 +2311,8 @@ impl<'p> Emitter<'p> {
     /// member has to be the one asked for, so an ordinary `x.name` on a struct
     /// called `field` is untouched.
     fn reflected(&self, base: &Expr, member: Symbol, wanted: &str) -> Option<String> {
-        let (bound, field) = self.at_field.borrow().clone()?;
+        let pair = self.walk(|w| w.at_field.clone())?;
+        let (bound, field) = (pair.first, pair.second);
         let Expr::Variable(name, _) = base else {
             return None;
         };
@@ -2565,6 +2349,7 @@ impl<'p> Emitter<'p> {
             // program is built, so there is no run-time reading to rule out.
             if let Some(name) = self.walks_a_shape(&item.node) {
                 let copies: Vec<String> = self
+                    .s
                     .facts
                     .unrolled
                     .keys()
@@ -2572,10 +2357,16 @@ impl<'p> Emitter<'p> {
                     .map(|(_, on)| on.clone())
                     .collect();
                 for on in copies {
-                    *self.specialising.borrow_mut() = Some((self.walked_parameter(&item.node), on));
+                    let walked = self.walked_parameter(&item.node);
+                    self.walking(|w| {
+                        w.specialising = Some(EmitPair {
+                            first: walked,
+                            second: on,
+                        })
+                    });
                     let st = out.mark();
                     let written = self.item(&mut out, &item.node, &item.span);
-                    *self.specialising.borrow_mut() = None;
+                    self.walking(|w| w.specialising = None);
                     written?;
                     out.record(&item.span, st);
                     out.push("\n");
@@ -2592,6 +2383,7 @@ impl<'p> Emitter<'p> {
             // out.
             if let Some(name) = self.walks_a_shape(&item.node) {
                 let copies: Vec<String> = self
+                    .s
                     .facts
                     .unrolled
                     .keys()
@@ -2599,10 +2391,16 @@ impl<'p> Emitter<'p> {
                     .map(|(_, on)| on.clone())
                     .collect();
                 for on in copies {
-                    *self.specialising.borrow_mut() = Some((self.walked_parameter(&item.node), on));
+                    let walked = self.walked_parameter(&item.node);
+                    self.walking(|w| {
+                        w.specialising = Some(EmitPair {
+                            first: walked,
+                            second: on,
+                        })
+                    });
                     let st = out.mark();
                     let written = self.item(&mut out, &item.node, &item.span);
-                    *self.specialising.borrow_mut() = None;
+                    self.walking(|w| w.specialising = None);
                     written?;
                     out.record(&item.span, st);
                     out.push("\n");
@@ -2621,7 +2419,7 @@ impl<'p> Emitter<'p> {
         Ok(Lowered {
             rust: out.buf,
             map: SourceMap::from_entries(out.entries),
-            published: self.facts.published.clone(),
+            published: self.s.facts.published.clone(),
         })
     }
 
@@ -2646,10 +2444,10 @@ impl<'p> Emitter<'p> {
         // Always, except in `std` itself, which is the prelude - see
         // [`emit_std`] and [`Needs::preamble`], the copy of this that a program
         // of several files uses.
-        if !self.is_std {
+        if !self.s.is_std {
             out.push("#[allow(unused_imports)]\npub use nikaia_std::prelude::*;\n");
         }
-        if self.fails {
+        if self.s.fails {
             // Kap 7.1: `error.full()` is a method on whatever a `catch` bound, so
             // the trait has to be in scope even in a program that imports no `std`
             // module of its own - `throw` needs `std` whether or not the source
@@ -2671,6 +2469,7 @@ impl<'p> Emitter<'p> {
             // program is built, so there is no run-time reading to rule out.
             if let Some(name) = self.walks_a_shape(&item.node) {
                 let copies: Vec<String> = self
+                    .s
                     .facts
                     .unrolled
                     .keys()
@@ -2678,10 +2477,16 @@ impl<'p> Emitter<'p> {
                     .map(|(_, on)| on.clone())
                     .collect();
                 for on in copies {
-                    *self.specialising.borrow_mut() = Some((self.walked_parameter(&item.node), on));
+                    let walked = self.walked_parameter(&item.node);
+                    self.walking(|w| {
+                        w.specialising = Some(EmitPair {
+                            first: walked,
+                            second: on,
+                        })
+                    });
                     let st = out.mark();
                     let written = self.item(&mut out, &item.node, &item.span);
-                    *self.specialising.borrow_mut() = None;
+                    self.walking(|w| w.specialising = None);
                     written?;
                     out.record(&item.span, st);
                     out.push("\n");
@@ -2698,6 +2503,7 @@ impl<'p> Emitter<'p> {
             // out.
             if let Some(name) = self.walks_a_shape(&item.node) {
                 let copies: Vec<String> = self
+                    .s
                     .facts
                     .unrolled
                     .keys()
@@ -2705,10 +2511,16 @@ impl<'p> Emitter<'p> {
                     .map(|(_, on)| on.clone())
                     .collect();
                 for on in copies {
-                    *self.specialising.borrow_mut() = Some((self.walked_parameter(&item.node), on));
+                    let walked = self.walked_parameter(&item.node);
+                    self.walking(|w| {
+                        w.specialising = Some(EmitPair {
+                            first: walked,
+                            second: on,
+                        })
+                    });
                     let st = out.mark();
                     let written = self.item(&mut out, &item.node, &item.span);
-                    *self.specialising.borrow_mut() = None;
+                    self.walking(|w| w.specialising = None);
                     written?;
                     out.record(&item.span, st);
                     out.push("\n");
@@ -2745,7 +2557,7 @@ impl<'p> Emitter<'p> {
         Ok(Lowered {
             rust: out.buf,
             map: SourceMap::from_entries(out.entries),
-            published: self.facts.published.clone(),
+            published: self.s.facts.published.clone(),
         })
     }
 
@@ -2758,7 +2570,7 @@ impl<'p> Emitter<'p> {
     /// its name, because a wrapper that guessed at a signature would be worse
     /// than no wrapper at all.
     fn user_main(&self) -> Option<bool> {
-        if !self.entry {
+        if !self.s.entry {
             return None;
         }
         self.parsed
@@ -2934,12 +2746,12 @@ impl<'p> Emitter<'p> {
         // ([ADR-294](../../../docs/specification/adr/adr-294.md) D9.1): the
         // Rust below may copy it, which a Rust reader of a type Nikaia declares
         // needs, and nothing this language says about the value changes.
-        if self.facts.copies.contains(name) {
+        if self.s.facts.copies.contains(name) {
             parts.push("Copy");
         }
-        if self.facts.compares.contains(name) {
+        if self.s.facts.compares.contains(name) {
             parts.push("PartialEq");
-            if self.facts.compares_totally.contains(name) {
+            if self.s.facts.compares_totally.contains(name) {
                 parts.push("Eq");
             }
         }
@@ -2961,7 +2773,7 @@ impl<'p> Emitter<'p> {
                     out.push("#[repr(C)]\n");
                 }
                 let vis = if *is_public { "pub " } else { "" };
-                let params = if self.borrowing.contains(name) {
+                let params = if self.s.borrowing.contains(self.text(*name)) {
                     format!("<{INPUT_LIFETIME}>")
                 } else {
                     String::new()
@@ -3036,7 +2848,7 @@ impl<'p> Emitter<'p> {
                 // The input lifetime first and the type parameters after it,
                 // which is the order Rust wants them in (ADR-295 D3).
                 let mut parts: Vec<String> = Vec::new();
-                if self.borrowing.contains(name) {
+                if self.s.borrowing.contains(self.text(*name)) {
                     parts.push(INPUT_LIFETIME.to_string());
                 }
                 parts.extend(generics.iter().map(|g| self.bounded(g)));
@@ -3066,7 +2878,7 @@ impl<'p> Emitter<'p> {
                 Ok(())
             }
             Item::Fn { name, .. } => {
-                if name.is_some_and(|name| self.built_at_build_time.contains(self.text(name))) {
+                if name.is_some_and(|name| self.s.built_at_build_time.contains(self.text(name))) {
                     out.push("#[allow(dead_code)]\n");
                 }
                 self.function(
@@ -3074,7 +2886,7 @@ impl<'p> Emitter<'p> {
                     item,
                     0,
                     Lifetimes::ELIDED,
-                    self.carries_input.get(&span.at()),
+                    self.s.carries_input.get(&(span.at() as i64)),
                     None,
                 )
             }
@@ -3142,7 +2954,7 @@ impl<'p> Emitter<'p> {
                 if is_cleanup {
                     out.push(&format!("impl{declares} {target_name}{applied} {{\n"));
                     for method in methods {
-                        let carries = self.carries_input.get(&method.span.at());
+                        let carries = self.s.carries_input.get(&(method.span.at() as i64));
                         {
                             let st = out.mark();
                             out.push("    ");
@@ -3185,7 +2997,7 @@ impl<'p> Emitter<'p> {
                 };
                 out.push(&format!("{head} {{\n"));
                 for method in methods {
-                    let carries = self.carries_input.get(&method.span.at());
+                    let carries = self.s.carries_input.get(&(method.span.at() as i64));
                     {
                         let st = out.mark();
                         out.push("    ");
@@ -3255,7 +3067,7 @@ impl<'p> Emitter<'p> {
                 // one (`emit_std`), so `use std::text` has to be the import
                 // itself, or `text::parse_i64` below it names nothing and
                 // `rustc` says so about the generated file.
-                if self.is_std
+                if self.s.is_std
                     && alias.is_none()
                     && let [first, module] = path.split("::").collect::<Vec<_>>()[..]
                     && first == "std"
@@ -3283,8 +3095,12 @@ impl<'p> Emitter<'p> {
             // D2): a package's crate is what another package reads.
             Item::Comptime { name, public, .. } => {
                 let bound = self.name(*name);
-                let Some((below, written)) =
-                    self.facts.comptime_values.get(&(span.at() as i64)).cloned()
+                let Some((below, written)) = self
+                    .s
+                    .facts
+                    .comptime_values
+                    .get(&(span.at() as i64))
+                    .cloned()
                 else {
                     return Err(refused_at!(
                         span.at(),
@@ -3488,7 +3304,7 @@ impl<'p> Emitter<'p> {
         let Expr::Variable(name, _) = func else {
             return None;
         };
-        let declared = self.foreign_results.get(self.text(*name))?;
+        let declared = self.s.foreign_results.get(self.text(*name))?;
         let handle = self.handle_named(declared)?;
         Some((handle.to_string(), declared.is_nullable))
     }
@@ -3513,7 +3329,7 @@ impl<'p> Emitter<'p> {
             return None;
         }
         let name = self.text(ty.name);
-        match self.opaque_handles.contains_key(name) || base(name) == C_STRING {
+        match self.s.opaque_handles.contains_key(name) || base(name) == C_STRING {
             true => Some(name),
             false => None,
         }
@@ -3532,7 +3348,7 @@ impl<'p> Emitter<'p> {
     /// where it is an ordinary value an `i32` is at both ends
     /// ([ADR-302](../../docs/specification/adr/adr-302.md) D5, D7).
     fn pointer_for(&self, callee: &str, ty: &Type) -> Option<Pointer> {
-        if let Some(release) = self.opaque_handles.get(self.text(ty.name))
+        if let Some(release) = self.s.opaque_handles.get(self.text(ty.name))
             && !ty.is_view
             && !ty.is_slice
         {
@@ -3573,7 +3389,8 @@ impl<'p> Emitter<'p> {
     /// it is a fact about *Rust's* library that nothing in this compiler can
     /// derive, where a foreign declaration is written in this very file.
     fn takes_a_size(&self, callee: &str, at: usize) -> bool {
-        self.foreign_params
+        self.s
+            .foreign_params
             .get(callee)
             .and_then(|params| params.get(at))
             .is_some_and(|ty| !ty.is_view && !ty.is_slice && self.text(ty.name) == "usize")
@@ -3772,7 +3589,7 @@ impl<'p> Emitter<'p> {
     ) -> Result<()> {
         out.push(&format!("impl{params} {target}{params} {{\n"));
         for method in methods {
-            let carries = self.carries_input.get(&method.span.at());
+            let carries = self.s.carries_input.get(&(method.span.at() as i64));
             {
                 let st = out.mark();
                 out.push("    ");
@@ -3814,7 +3631,7 @@ impl<'p> Emitter<'p> {
         // The parameters written as views of the input buffer rather than of
         // the call (`Emitter::carries_input`). `None` where there is no such
         // parameter, which is almost every function.
-        carries_input: Option<&HashSet<Symbol>>,
+        carries_input: Option<&std::collections::BTreeSet<String>>,
         // The type this is a method of, where it is one. It is what makes the
         // ledger key - `Counter::record` rather than `record` - and the key is
         // what a `Shared` position looks its count up by (`contracts::sharing`).
@@ -3897,13 +3714,16 @@ impl<'p> Emitter<'p> {
                 // **Lent**, by the declaration's own test below: a parameter
                 // handed over is one lifetime, which the elision names.
                 let lent = |at: usize| {
-                    self.own_contracts.functions.get(&key).is_some_and(|c| {
-                        crate::contracts::keeps::lends_in(c, at, &[self.library, &self.described])
-                            && !c
-                                .signature
-                                .as_ref()
-                                .and_then(|s| s.params.get(at))
-                                .is_some_and(|(_, ty)| ty.is_a_view())
+                    self.s.own_contracts.functions.get(&key).is_some_and(|c| {
+                        crate::contracts::keeps::lends_in(
+                            c,
+                            at,
+                            &[self.world.library, &self.s.described],
+                        ) && !c
+                            .signature
+                            .as_ref()
+                            .and_then(|s| s.params.get(at))
+                            .is_some_and(|(_, ty)| ty.is_a_view())
                     })
                 };
                 match carrying.as_slice() {
@@ -3921,7 +3741,10 @@ impl<'p> Emitter<'p> {
                 return Lifetimes::NAMED;
             }
             let viewed = args.iter().any(|a| a.name == name && a.ty.is_view);
-            match (carries_input.is_some_and(|set| set.contains(&name)), viewed) {
+            match (
+                carries_input.is_some_and(|set| set.contains(self.text(name))),
+                viewed,
+            ) {
                 (true, true) => lifetimes.of_the_input(),
                 // **A struct parameter that carries a view parameter's buffer**
                 // is written over it: `s: &mut Summary<'a>, name: &'a str`.
@@ -3937,7 +3760,7 @@ impl<'p> Emitter<'p> {
         // written here, in the declaration, and at the call — one answer read
         // twice (`contracts::keeps::lends`), because the two disagreeing is a
         // `&&T` or a moved value in the language below.
-        let lent = self.own_contracts.functions.get(&key);
+        let lent = self.s.own_contracts.functions.get(&key);
         // **A parameter lowered as a view** ([ADR-283](../../docs/specification/adr/adr-283.md)
         // D24): one the body changes (`&mut`), or one it only reads, which is
         // a `&` below whatever its written type says (Part I 6.5).
@@ -3951,7 +3774,7 @@ impl<'p> Emitter<'p> {
                         || crate::contracts::keeps::lends_in(
                             c,
                             at,
-                            &[self.library, &self.described],
+                            &[self.world.library, &self.s.described],
                         )
                 })
         };
@@ -4030,7 +3853,7 @@ impl<'p> Emitter<'p> {
                     false => "&mut ",
                 }
             } else if lent.is_some_and(|c| {
-                crate::contracts::keeps::lends_in(c, at, &[self.library, &self.described])
+                crate::contracts::keeps::lends_in(c, at, &[self.world.library, &self.s.described])
             }) && !written_as_a_view
             {
                 match shared {
@@ -4063,15 +3886,16 @@ impl<'p> Emitter<'p> {
                     // callee - the two have to agree or one parameter gets two
                     // shapes.
                     let runs = lent.is_none_or(|c| !c.keeps.iter().any(|k| k == name));
-                    let held = self.code_parameter_runs.replace(runs);
-                    let inside = self.in_parameter.replace(true);
+                    let held =
+                        self.walking(|w| std::mem::replace(&mut w.code_parameter_runs, runs));
+                    let inside = self.walking(|w| std::mem::replace(&mut w.in_parameter, true));
                     let position = match shared {
                         true => Lifetimes::SHARED,
                         false => how(a.name),
                     };
                     let written = self.ty_counted(&a.ty, position, self.count_at(&key, name));
-                    *self.in_parameter.borrow_mut() = inside;
-                    *self.code_parameter_runs.borrow_mut() = held;
+                    self.walking(|w| w.in_parameter = inside);
+                    self.walking(|w| w.code_parameter_runs = held);
                     written
                 }
             };
@@ -4181,7 +4005,7 @@ impl<'p> Emitter<'p> {
             .flatten()
             .map(|length| format!("const {length}: usize"))
             .collect();
-        let declared: Vec<String> = match self.specialising.borrow().is_some() {
+        let declared: Vec<String> = match self.walk(|w| w.specialising.is_some()) {
             true => dsl.clone().into_iter().chain(open).collect(),
             false => generics
                 .iter()
@@ -4211,7 +4035,7 @@ impl<'p> Emitter<'p> {
             true => declared,
             false => std::iter::once("'e".to_string()).chain(declared).collect(),
         };
-        *self.either_prelude.borrow_mut() = either_first;
+        self.walking(|w| w.either_prelude = either_first);
 
         // Kap 7.1: `throws` becomes a `Result` in the emitted Rust, over
         // `Box<dyn Error>` because Nikaia's own error types are not lowered
@@ -4301,7 +4125,7 @@ impl<'p> Emitter<'p> {
                     (false, _)
                         if lifetimes == Lifetimes::ELIDED
                             && receiver.is_none()
-                            && !self.either_prelude.borrow().is_empty()
+                            && !self.walk(|w| w.either_prelude.is_empty())
                             && !args.iter().any(|a| {
                                 self.carries_a_view(&a.ty)
                                     && !(a.ty.either && a.ty.generics.is_empty())
@@ -4379,7 +4203,8 @@ impl<'p> Emitter<'p> {
             .and_then(|owner| owner.declared_by)
             .map(|t| format!("{t}::{name}"))
             .is_some_and(|key| {
-                self.own_contracts
+                self.s
+                    .own_contracts
                     .functions
                     .get(&key)
                     .is_some_and(|c| !c.sync_claim.is_sync())
@@ -4398,7 +4223,7 @@ impl<'p> Emitter<'p> {
         // `describe__User` is a copy's name ([ADR-304](../../docs/specification/adr/adr-304.md)
         // D2) and Rust's own lint would ask the author to rename a function
         // they wrote as `describe`.
-        if self.specialising.borrow().is_some() {
+        if self.walk(|w| w.specialising.is_some()) {
             out.push("#[allow(non_snake_case)]\n");
             out.push(&pad);
         }
@@ -4415,7 +4240,7 @@ impl<'p> Emitter<'p> {
         // it too big for its heuristic - at 319 instructions a row, and 300
         // with the hint. Only a hint, and only here: every function `#[inline]`
         // would bloat the code and the build.
-        if self.fold_callees.contains(&name) {
+        if self.s.fold_callees.contains(&name) {
             out.push("#[inline]\n");
             out.push(&pad);
         }
@@ -4426,7 +4251,7 @@ impl<'p> Emitter<'p> {
         // caller - a function value, another package, the language below -
         // reaches the first. A copy made per type is reached by name from the
         // call that made it, so it checks at the top of its body instead.
-        let checks = self.facts.entries.get(&key).filter(|c| !c.is_empty());
+        let checks = self.s.facts.entries.get(&key).filter(|c| !c.is_empty());
         let copy = self.standing_for().is_some();
         let signature = |name: &str| {
             format!(
@@ -4492,7 +4317,7 @@ impl<'p> Emitter<'p> {
             key: &key,
             channel: &channel,
         };
-        match self.facts.settle_fns.get(&key) {
+        match self.s.facts.settle_fns.get(&key) {
             // **A body where a value with a cleanup may die ends at a settle
             // point** ([ADR-297](../../docs/specification/adr/adr-297.md) D2):
             // the body runs to its end as a block of its own - a `return` and
@@ -4557,10 +4382,13 @@ impl<'p> Emitter<'p> {
             key,
             channel,
         } = declared;
-        *self.keep_function.borrow_mut() = key.to_string();
-        self.nonnegative
-            .borrow_mut()
-            .insert(key.to_string(), nonnegative_locals(self.parsed, body));
+        self.walking(|w| w.keep_function = key.to_string());
+        let locals: std::collections::BTreeSet<String> =
+            nikaia_std::tools::emit_locals::nonnegative_locals(self.world.words, body)
+                .into_iter()
+                .map(|s| self.text(s).to_string())
+                .collect();
+        self.walking(|w| w.nonnegative.insert(key.to_string(), locals));
         let flow = Flow {
             changed: &[],
             awaited,
@@ -4601,7 +4429,7 @@ impl<'p> Emitter<'p> {
         };
 
         // A published parameter taken as it goes in (ADR-282 D23), first.
-        let mut first = std::mem::take(&mut *self.either_prelude.borrow_mut());
+        let mut first = self.walking(|w| std::mem::take(&mut w.either_prelude));
         // **A call is a step of a build-time run**, and the function is on its
         // path while it runs (ADR-321 D7).
         if self.build.counts_steps {
@@ -4613,7 +4441,7 @@ impl<'p> Emitter<'p> {
         if !throws {
             // The function's own settle point stands around the body, so the
             // body is not settled a second time as a block (ADR-297 D2).
-            let settled = self.facts.settle_fns.contains_key(key);
+            let settled = self.s.facts.settle_fns.contains_key(key);
             let body_block = |out: &mut Out| match settled {
                 true => self.block_plain(out, body, depth, flow, tail, None),
                 false => self.block(out, body, depth, flow, tail),
@@ -4752,7 +4580,7 @@ impl<'p> Emitter<'p> {
         out.push("grammar! {\n");
         out.push(&format!("    grammar {} {{\n", self.text(def.name)));
 
-        *self.grammar_rule_types.borrow_mut() = def
+        let types = def
             .rules
             .iter()
             .filter_map(|rule| {
@@ -4763,6 +4591,7 @@ impl<'p> Emitter<'p> {
                 ))
             })
             .collect();
+        self.walking(|w| w.grammar_rule_types = types);
         for rule in &def.rules {
             out.push("\n");
             {
@@ -4890,7 +4719,8 @@ impl<'p> Emitter<'p> {
                     ..
                 } = &args[0].node
                     && none.is_empty()
-                    && let Some(ty) = self.grammar_rule_types.borrow().get(self.text(*item))
+                    && let Some(ty) =
+                        self.walk(|w| w.grammar_rule_types.get(self.text(*item)).cloned())
                 {
                     out.push(&format!("<{ty}>"));
                 }
@@ -5294,7 +5124,7 @@ impl<'p> Emitter<'p> {
     /// the map changes - same table, same API, same full-content equality - so
     /// this is a name and not a translation.
     fn map_name<'n>(&self, name: &'n str) -> &'n str {
-        match (name, self.trusted_input || self.trusting.get()) {
+        match (name, self.s.trusted_input || self.walk(|w| w.trusting)) {
             ("HashMap", true) => "TrustedMap",
             ("HashSet", true) => "TrustedSet",
             _ => name,
@@ -5386,7 +5216,7 @@ impl<'p> Emitter<'p> {
         // ...or another unit of the package declares (`ledger.nika` reading
         // `ty.nika`'s `State`), which its entry in the package's ledger says.
         || self
-            .own_contracts
+            .s.own_contracts
             .types
             .get(owner)
             .is_some_and(|entry| entry.variants.iter().any(|v| v.name == variant))
@@ -5420,7 +5250,8 @@ impl<'p> Emitter<'p> {
         if !self.build.crossings_are_possible() {
             return crate::contracts::sharing::Count::Plain;
         }
-        self.shared
+        self.s
+            .shared
             .get(&format!("{function}::{value}"))
             .copied()
             .unwrap_or(crate::contracts::sharing::Count::Atomic)
@@ -5457,11 +5288,11 @@ impl<'p> Emitter<'p> {
         // cannot be. It was written as one, and `rustc` refused the call.
         if ty.code.is_none()
             && (ty.is_tuple || !ty.generics.is_empty())
-            && *self.in_parameter.borrow()
+            && self.walk(|w| w.in_parameter)
         {
-            let inside = self.in_parameter.replace(false);
+            let inside = self.walking(|w| std::mem::replace(&mut w.in_parameter, false));
             let written = self.ty_counted(ty, lifetimes, count);
-            *self.in_parameter.borrow_mut() = inside;
+            self.walking(|w| w.in_parameter = inside);
             return written;
         }
 
@@ -5484,7 +5315,9 @@ impl<'p> Emitter<'p> {
         // **The borrow is taken and let go before the recursion**, because the
         // call below reaches this line again and a `RefCell` held across it is
         // a panic rather than a message.
-        let standing = self.specialising.borrow().clone();
+        let standing = self
+            .walk(|w| w.specialising.clone())
+            .map(|pair| (pair.first, pair.second));
         if let Some((parameter, on)) = standing
             && ty.generics.is_empty()
             && ty.code.is_none()
@@ -5494,9 +5327,9 @@ impl<'p> Emitter<'p> {
                 name: self.parsed.interner.intern_string(&on),
                 ..ty.clone()
             };
-            let held = self.specialising.replace(None);
+            let held = self.walking(|w| w.specialising.take());
             let written = self.ty_counted(&concrete, lifetimes, count);
-            *self.specialising.borrow_mut() = held;
+            self.walking(|w| w.specialising = held);
             return written;
         }
 
@@ -5576,7 +5409,7 @@ impl<'p> Emitter<'p> {
             // **A kept function value is one shared closure**: a field, a
             // result, a `let`, and a parameter the callee keeps. What may
             // pause hands back a boxed future.
-            let runs = *self.in_parameter.borrow() && *self.code_parameter_runs.borrow();
+            let runs = self.walk(|w| w.in_parameter) && self.walk(|w| w.code_parameter_runs);
             if !runs {
                 let outcome = match code.is_sync {
                     true => outcome,
@@ -5611,7 +5444,7 @@ impl<'p> Emitter<'p> {
                 };
                 return format!("impl Fn({}){shape}", params.join(", "));
             }
-            if *self.code_parameter_runs.borrow() {
+            if self.walk(|w| w.code_parameter_runs) {
                 return format!("impl AsyncFn({}) -> {outcome}", params.join(", "));
             }
             return format!(
@@ -5715,7 +5548,7 @@ impl<'p> Emitter<'p> {
         if ty.is_view && self.text(ty.name) == "String" && ty.generics.is_empty() {
             // **Held, where the keeper drops entries** (ADR-283 D12): a view
             // that carries its own handle on the buffer it points into.
-            if self.holding.borrow().is_some() {
+            if self.walk(|w| w.holding.is_some()) {
                 return "nikaia_std::tether::Held".to_string();
             }
             out.push_str("str");
@@ -5759,8 +5592,8 @@ impl<'p> Emitter<'p> {
         // **A struct of views in a keeper that drops entries is held**
         // ([ADR-283](../../docs/specification/adr/adr-283.md) D14): beside a
         // handle on each buffer it points into, and read through them.
-        if let Some(width) = *self.holding.borrow()
-            && self.borrowing.contains(&ty.name)
+        if let Some(width) = self.walk(|w| w.holding)
+            && self.s.borrowing.contains(self.text(ty.name))
             && ty.generics.is_empty()
         {
             out.push_str(&format!(
@@ -5785,7 +5618,7 @@ impl<'p> Emitter<'p> {
         }
         // **A type with a cleanup that can pause is its value in a `Cleaned`**
         // (ADR-297 D1), whose `Drop` parks the cleanup where the value dies.
-        if self.cleaned_types.contains(self.text(ty.name)) {
+        if self.s.cleaned_types.contains(self.text(ty.name)) {
             return format!("{}<{out}>", self.cleaned());
         }
 
@@ -5956,7 +5789,8 @@ impl<'p> Emitter<'p> {
             .stmts
             .iter()
             .filter_map(|stmt| {
-                self.facts
+                self.s
+                    .facts
                     .settle_lets
                     .get(&(stmt.span.at() as i64))
                     .copied()
@@ -6025,7 +5859,7 @@ impl<'p> Emitter<'p> {
             // **A try that is thrown away leaves nothing behind**: the keeps
             // it declared (ADR-283 D10) are declared again by the rendering
             // that is kept - `println(d())` alone in `main` lost its keep.
-            let declared = self.preluded.borrow().clone();
+            let declared = self.walk(|w| w.preluded.clone());
             let rendered = {
                 let mut rendered = Out::empty();
                 let st = rendered.mark();
@@ -6039,7 +5873,7 @@ impl<'p> Emitter<'p> {
                 out.push(" }");
                 return Ok(());
             }
-            *self.preluded.borrow_mut() = declared;
+            self.walking(|w| w.preluded = declared);
         }
 
         let pad = "    ".repeat(depth);
@@ -6146,11 +5980,11 @@ impl<'p> Emitter<'p> {
     fn never_negative(&self, flow: Flow<'_>, expr: &Expr) -> bool {
         match expr {
             Expr::LitInt { negative, .. } => !negative,
-            Expr::Variable(name, _) => self
-                .nonnegative
-                .borrow()
-                .get(flow.function)
-                .is_some_and(|set| set.contains(name)),
+            Expr::Variable(name, _) => self.walk(|w| {
+                w.nonnegative
+                    .get(flow.function)
+                    .is_some_and(|set| set.contains(self.text(*name)))
+            }),
             Expr::Binary {
                 op: BinaryOp::Add | BinaryOp::Mul,
                 lhs,
@@ -6287,7 +6121,7 @@ impl<'p> Emitter<'p> {
             && self.text(*method) == "resize"
             && args.len() == 2
             && config.is_empty()
-            && self.own_contracts.candidates("resize").is_empty()
+            && self.s.own_contracts.candidates("resize").is_empty()
             && !args.iter().any(|a| mentions_symbol(a, *name));
         filled.then(|| (&args[1], &args[0]))
     }
@@ -6350,7 +6184,7 @@ impl<'p> Emitter<'p> {
     ) -> Result<()> {
         self.hold_owned_receiver(out, stmt, depth, flow)?;
         self.hold_indices_read_from_the_target(out, stmt, depth, flow)?;
-        if self.facts.held_reaches.is_empty() {
+        if self.s.facts.held_reaches.is_empty() {
             return Ok(());
         }
         let (value, holdable) = match stmt {
@@ -6371,13 +6205,11 @@ impl<'p> Emitter<'p> {
                      that name."
                 ));
             }
-            let name = format!("__nikaia_held_{}", self.held.borrow().len());
+            let name = format!("__nikaia_held_{}", self.walk(|w| w.held.len()));
             out.push(&format!("let {name} = "));
             self.expr(out, receiver, depth, flow)?;
             out.push(&format!(";\n{}", "    ".repeat(depth)));
-            self.held
-                .borrow_mut()
-                .insert(crate::check::value_node(receiver) as usize, name);
+            self.walking(|w| w.held.insert(crate::check::value_node(receiver), name));
         }
         Ok(())
     }
@@ -6431,12 +6263,12 @@ impl<'p> Emitter<'p> {
                 continue;
             }
             let key = crate::check::value_node(index);
-            self.held.borrow_mut().remove(&(key as usize));
-            let name = format!("__nikaia_held_{}", self.held.borrow().len());
+            self.walking(|w| w.held.remove(&key));
+            let name = format!("__nikaia_held_{}", self.walk(|w| w.held.len()));
             out.push(&format!("let {name} = "));
             self.index_expr(out, index, depth, flow)?;
             out.push(&format!(";\n{}", "    ".repeat(depth)));
-            self.held.borrow_mut().insert(key as usize, name);
+            self.walking(|w| w.held.insert(key, name));
         }
         Ok(())
     }
@@ -6490,12 +6322,12 @@ impl<'p> Emitter<'p> {
         // the same receiver twice: the second time it is written out again, not
         // read back from the first.
         let key = crate::check::value_node(at);
-        self.held.borrow_mut().remove(&(key as usize));
-        let name = format!("__nikaia_held_{}", self.held.borrow().len());
+        self.walking(|w| w.held.remove(&key));
+        let name = format!("__nikaia_held_{}", self.walk(|w| w.held.len()));
         out.push(&format!("let {name} = "));
         self.expr(out, at, depth, flow)?;
         out.push(&format!(";\n{}", "    ".repeat(depth)));
-        self.held.borrow_mut().insert(key as usize, name);
+        self.walking(|w| w.held.insert(key, name));
         Ok(())
     }
 
@@ -6512,6 +6344,7 @@ impl<'p> Emitter<'p> {
         match expr {
             Expr::SafeMethod { receiver, args, .. } => {
                 let held = self
+                    .s
                     .facts
                     .held_reaches
                     .contains(&crate::check::value_node(receiver))
@@ -6594,10 +6427,11 @@ impl<'p> Emitter<'p> {
         tail: Tail,
         flow: Flow<'_>,
     ) -> Result<()> {
-        let trusted = matches!(stmt, Stmt::Let { .. }) && self.trusted_lets.contains(&span.at());
-        let outer = self.trusting.replace(trusted);
+        let trusted =
+            matches!(stmt, Stmt::Let { .. }) && self.s.trusted_lets.contains(&(span.at() as i64));
+        let outer = self.walking(|w| std::mem::replace(&mut w.trusting, trusted));
         let written = self.a_stmt(out, stmt, span, depth, tail, flow);
-        self.trusting.set(outer);
+        self.walking(|w| w.trusting = outer);
         written
     }
 
@@ -6641,13 +6475,13 @@ impl<'p> Emitter<'p> {
                         .collect();
                     out.push(&format!("let {mutable}({}) = ", bound.join(", ")));
                     let (before, after) = Self::around_value(
-                        self.facts.nullable_sites.get(&(span.at() as i64)),
+                        self.s.facts.nullable_sites.get(&(span.at() as i64)),
                         value,
                     );
                     out.push(before);
                     // **Out of a place, the tuple is lent** (#465), as one
                     // name's `let` over a place is.
-                    if mutable.is_empty() && self.facts.lent_lets.contains(&(span.at() as i64)) {
+                    if mutable.is_empty() && self.s.facts.lent_lets.contains(&(span.at() as i64)) {
                         out.push("&");
                     }
                     self.expr(out, value, depth, flow)?;
@@ -6656,6 +6490,7 @@ impl<'p> Emitter<'p> {
                     // A number among its parts is read out of its view.
                     for name in names {
                         if self
+                            .s
                             .facts
                             .copied_tuple_parts
                             .contains(&((span.at() as i64), self.text(*name).to_string()))
@@ -6686,8 +6521,8 @@ impl<'p> Emitter<'p> {
                 // own handle** (D4): `ref String` is `Held` in its type.
                 let holding = plan
                     .filter(|p| p.element_keepers.contains(bound))
-                    .map(|p| p.widths.get(bound).copied().unwrap_or(1));
-                *self.holding.borrow_mut() = holding;
+                    .map(|p| p.widths.get(bound).copied().unwrap_or(1) as i64);
+                self.walking(|w| w.holding = holding);
                 let annotation = match ty {
                     Some(_) if put.is_some() || packed => String::new(),
                     Some(ty) => format!(": {}", self.ty_counted(ty, Lifetimes::ELIDED, count)),
@@ -6696,12 +6531,12 @@ impl<'p> Emitter<'p> {
                     // this compiler decided it, and the language below's own
                     // inference is not asked a second time - which is what left
                     // `v[i].push(x)` over a bare `let i = 0` without an answer.
-                    None => match self.facts.number_lets.get(&(span.at() as i64)) {
+                    None => match self.s.facts.number_lets.get(&(span.at() as i64)) {
                         Some(ty) => format!(": {ty}"),
                         None => String::new(),
                     },
                 };
-                *self.holding.borrow_mut() = None;
+                self.walking(|w| w.holding = None);
                 if packed {
                     let Some(held) = self.tethered_type(ty.as_ref(), value) else {
                         return Err(refused_at!(
@@ -6756,7 +6591,7 @@ impl<'p> Emitter<'p> {
                 // stays the compiler's, because it is one a program cannot observe
                 // - the same value, possibly absent (ADR-281 D2's own line).
                 let (before, after) =
-                    Self::around_value(self.facts.nullable_sites.get(&(span.at() as i64)), value);
+                    Self::around_value(self.s.facts.nullable_sites.get(&(span.at() as i64)), value);
                 out.push(&format!("let {mutable}{}{annotation} = ", escaped(bound)));
                 out.push(before);
                 // **A `let` over a place is a view of it**
@@ -6772,7 +6607,7 @@ impl<'p> Emitter<'p> {
                 // owns what it is given. So this is narrower than `for`'s rule
                 // by exactly one shape, and that shape is the reason both are
                 // written here rather than in one test.
-                if self.facts.lent_lets.contains(&(span.at() as i64)) {
+                if self.s.facts.lent_lets.contains(&(span.at() as i64)) {
                     out.push("&");
                 }
                 // **A `let` whose annotation is a number and whose value is a
@@ -6784,6 +6619,7 @@ impl<'p> Emitter<'p> {
                 // take, because there is no borrow in it.
                 let viewed = match value {
                     Expr::Variable(name, _) => self
+                        .s
                         .facts
                         .viewed_numbers
                         .contains(&((flow.statement as i64), self.text(*name).to_string())),
@@ -6804,8 +6640,12 @@ impl<'p> Emitter<'p> {
             // refused as `NK1127` and never arrives.
             Stmt::Comptime { name, .. } => {
                 let bound = self.text(*name);
-                let Some((below, written)) =
-                    self.facts.comptime_values.get(&(span.at() as i64)).cloned()
+                let Some((below, written)) = self
+                    .s
+                    .facts
+                    .comptime_values
+                    .get(&(span.at() as i64))
+                    .cloned()
                 else {
                     return Err(refused_at!(
                         span.at(),
@@ -6839,7 +6679,7 @@ impl<'p> Emitter<'p> {
                     unreachable!("matched as an index")
                 };
                 let (before, after) =
-                    Self::around_value(self.facts.nullable_sites.get(&(span.at() as i64)), value);
+                    Self::around_value(self.s.facts.nullable_sites.get(&(span.at() as i64)), value);
                 // **The value first, and then the write**
                 // ([ADR-293](../../../docs/specification/adr/adr-293.md) D2).
                 // Since D1 a read is `index::get(&m, …)`, so the written-out
@@ -6864,6 +6704,7 @@ impl<'p> Emitter<'p> {
                 // **A position proved inside is written without its check**
                 // (ADR-306 D5), as it is read.
                 if self
+                    .s
                     .proven_indices
                     .contains(&((crate::check::value_node(base) as usize) as i64))
                     && self.map_key(index, true).is_none()
@@ -6931,7 +6772,7 @@ impl<'p> Emitter<'p> {
                     .held_element(flow, element)
                     .expect("matched as a held element");
                 let (before, after) =
-                    Self::around_value(self.facts.nullable_sites.get(&(span.at() as i64)), value);
+                    Self::around_value(self.s.facts.nullable_sites.get(&(span.at() as i64)), value);
                 out.push(&format!("{{ let {STORED} = "));
                 out.push(before);
                 self.expr(out, value, depth, flow)?;
@@ -6975,8 +6816,9 @@ impl<'p> Emitter<'p> {
                 target: Expr::Index { base, index, .. },
                 op: Some(op),
                 value,
-            } if self.facts.copied_slots.contains(&(span.at() as i64))
+            } if self.s.facts.copied_slots.contains(&(span.at() as i64))
                 && self
+                    .s
                     .proven_indices
                     .contains(&((crate::check::value_node(base) as usize) as i64))
                 && self.map_key(index, true).is_none() =>
@@ -6998,7 +6840,7 @@ impl<'p> Emitter<'p> {
                     Ok(())
                 };
                 out.push(&format!("let {STORED} = "));
-                match (self.proven_arithmetic.get(&(span.at() as i64)), op) {
+                match (self.s.proven_arithmetic.get(&(span.at() as i64)), op) {
                     (Some(ty), BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul) => {
                         let name = match op {
                             BinaryOp::Add => "wrapping_add",
@@ -7028,8 +6870,8 @@ impl<'p> Emitter<'p> {
                 target: target @ Expr::Variable(_, _),
                 op: Some(op @ (BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul)),
                 value,
-            } if self.proven_arithmetic.contains_key(&(span.at() as i64)) => {
-                let ty = &self.proven_arithmetic[&(span.at() as i64)];
+            } if self.s.proven_arithmetic.contains_key(&(span.at() as i64)) => {
+                let ty = &self.s.proven_arithmetic[&(span.at() as i64)];
                 let name = match op {
                     BinaryOp::Add => "wrapping_add",
                     BinaryOp::Sub => "wrapping_sub",
@@ -7044,7 +6886,7 @@ impl<'p> Emitter<'p> {
             }
             Stmt::Assign { target, op, value } => {
                 let (before, after) =
-                    Self::around_value(self.facts.nullable_sites.get(&(span.at() as i64)), value);
+                    Self::around_value(self.s.facts.nullable_sites.get(&(span.at() as i64)), value);
                 // **A `mut` parameter assigned whole is written through**
                 // (ADR-094 D3, #576): below it is a `&mut T`, and `n = n + 1`
                 // is the caller's value changed, `*n = *n + 1`.
@@ -7186,11 +7028,13 @@ impl<'p> Emitter<'p> {
                         .map(|b| self.text(*b).to_string())
                         .unwrap_or_default();
                     for field in fields {
-                        let outer = self
-                            .at_field
-                            .replace(Some((bound.clone(), field.name.clone())));
+                        let pair = EmitPair {
+                            first: bound.clone(),
+                            second: field.name.clone(),
+                        };
+                        let outer = self.walking(|w| w.at_field.replace(pair));
                         let written = self.block(out, body, depth, flow, Tail::Statement);
-                        *self.at_field.borrow_mut() = outer;
+                        self.walking(|w| w.at_field = outer);
                         written?;
                     }
                     return Ok(());
@@ -7214,11 +7058,12 @@ impl<'p> Emitter<'p> {
                 // the `?` below is: which sequences pause is a claim in the
                 // ledger about a *type*, and this emitter has none
                 // ([ADR-288](../../docs/specification/adr/adr-288.md)).
-                if self.facts.pausing_loops.contains(&(span.at() as i64)) {
+                if self.s.facts.pausing_loops.contains(&(span.at() as i64)) {
                     // ADR-025 D1's `?`, unchanged: a step that can fail fails
                     // the enclosing function, and the checker has already made
                     // `throws` be there (`NK2701`).
                     let unwrap = self
+                        .s
                         .facts
                         .fallible_loops
                         .contains(&(span.at() as i64))
@@ -7278,7 +7123,7 @@ impl<'p> Emitter<'p> {
                 // (ADR-293 D19): it is walked by value, and a range walks a copy
                 // of itself. The checker says which loops those are.
                 let lends =
-                    is_a_place(iter) && !self.facts.owned_loops.contains(&(span.at() as i64));
+                    is_a_place(iter) && !self.s.facts.owned_loops.contains(&(span.at() as i64));
                 match iter {
                     // **A range written into the `for` stays the language
                     // below's own** (ADR-293 D18): it is walked once, where it
@@ -7320,6 +7165,7 @@ impl<'p> Emitter<'p> {
                 // does not declare `throws` (`NK2701`), so the `?` always has
                 // somewhere to go.
                 let unwrap = self
+                    .s
                     .facts
                     .fallible_loops
                     .contains(&(span.at() as i64))
@@ -7332,7 +7178,8 @@ impl<'p> Emitter<'p> {
                 let copied = bindings
                     .iter()
                     .filter(|b| {
-                        self.facts
+                        self.s
+                            .facts
                             .copied_loop_bindings
                             .contains(&((span.at() as i64), self.text(**b).to_string()))
                     })
@@ -7344,7 +7191,8 @@ impl<'p> Emitter<'p> {
                         bindings
                             .iter()
                             .filter(|b| {
-                                self.facts
+                                self.s
+                                    .facts
                                     .copied_view_bindings
                                     .contains(&((span.at() as i64), self.text(**b).to_string()))
                             })
@@ -7471,7 +7319,7 @@ impl<'p> Emitter<'p> {
                 if either {
                     out.push("nikaia_std::either_text::either(");
                 }
-                if tail == Tail::Return && self.facts.lent_returns.contains(&(span.at() as i64)) {
+                if tail == Tail::Return && self.s.facts.lent_returns.contains(&(span.at() as i64)) {
                     out.push("&");
                 }
                 self.expr(out, expr, depth, flow)?;
@@ -7573,14 +7421,14 @@ impl<'p> Emitter<'p> {
         flow: Flow<'_>,
     ) -> Result<()> {
         let (before, after) =
-            Self::around_value(self.facts.nullable_sites.get(&(span.at() as i64)), value);
+            Self::around_value(self.s.facts.nullable_sites.get(&(span.at() as i64)), value);
         out.push(before);
         // `null` is no text of either kind (ADR-282 D5), and goes as `None`.
         let either = self.returns_either(flow.function) && !matches!(value, Expr::LitNull(_));
         if either {
             out.push("nikaia_std::either_text::either(");
         }
-        if self.facts.lent_returns.contains(&(span.at() as i64)) {
+        if self.s.facts.lent_returns.contains(&(span.at() as i64)) {
             out.push("&");
         }
         self.expr(out, value, depth, flow)?;
@@ -7650,6 +7498,7 @@ impl<'p> Emitter<'p> {
     fn slices(&self, index: &Expr) -> bool {
         matches!(index, Expr::Range { .. })
             || self
+                .s
                 .facts
                 .slice_indices
                 .contains(&crate::check::value_node(index))
@@ -7659,7 +7508,8 @@ impl<'p> Emitter<'p> {
     /// map's keys are owned ([ADR-293](../../docs/specification/adr/adr-293.md)
     /// D1).
     fn map_key(&self, index: &Expr, written: bool) -> Option<crate::check::KeyForm> {
-        self.facts
+        self.s
+            .facts
             .map_keys
             .get(&(crate::check::value_node(index), written))
             .copied()
@@ -7722,7 +7572,8 @@ impl<'p> Emitter<'p> {
     /// Whether `name` is a parameter of the function being emitted that it
     /// changes in place - a `mut` parameter, lowered as `&mut T` (ADR-094 D3).
     fn changes_in_place(&self, flow: Flow<'_>, name: &str) -> bool {
-        self.own_contracts
+        self.s
+            .own_contracts
             .functions
             .get(flow.function)
             .and_then(|c| c.signature.as_ref())
@@ -7735,7 +7586,8 @@ impl<'p> Emitter<'p> {
     /// (#576). A parameter of any other type is read through methods and
     /// handed on, which the language below dereferences itself.
     fn copied_in_place(&self, flow: Flow<'_>, name: &str) -> bool {
-        self.own_contracts
+        self.s
+            .own_contracts
             .functions
             .get(flow.function)
             .and_then(|c| c.signature.as_ref())
@@ -7766,16 +7618,13 @@ impl<'p> Emitter<'p> {
     fn expr(&self, out: &mut Out, expr: &Expr, depth: usize, flow: Flow<'_>) -> Result<()> {
         // **A receiver bound before the statement** reads as its name
         // (`hold_owned_receiver`).
-        if let Some(name) = self
-            .held
-            .borrow()
-            .get(&((crate::check::value_node(expr)) as usize))
-        {
-            out.push(name);
+        if let Some(name) = self.walk(|w| w.held.get(&(crate::check::value_node(expr))).cloned()) {
+            out.push(&name);
             return Ok(());
         }
         // **A plain arm beside a `null` is `Some`** (`check::Checked::some_tails`).
         if self
+            .s
             .facts
             .some_tails
             .contains(&(crate::check::value_node(expr)))
@@ -7786,7 +7635,7 @@ impl<'p> Emitter<'p> {
             return Ok(());
         }
         // **And a plain value in a nullable slot** (`check::Checked::wrapped`).
-        if let Some(how) = self.facts.wrapped.get(&(crate::check::value_node(expr))) {
+        if let Some(how) = self.s.facts.wrapped.get(&(crate::check::value_node(expr))) {
             let (before, after) = Self::around_value(Some(how), expr);
             out.push(before);
             self.expr_as_written(out, expr, depth, flow)?;
@@ -7798,9 +7647,9 @@ impl<'p> Emitter<'p> {
         // through the brackets is `*get(…)`, whose `*` would take the whole
         // chain, so it is held in parentheses.
         let shape = crate::check::value_node(expr);
-        if self.facts.copied_reads.contains(&shape) {
+        if self.s.facts.copied_reads.contains(&shape) {
             let held =
-                matches!(expr, Expr::Index { .. }) && !self.facts.flat_reads.contains(&shape);
+                matches!(expr, Expr::Index { .. }) && !self.s.facts.flat_reads.contains(&shape);
             if held {
                 out.push("(");
             }
@@ -7826,6 +7675,7 @@ impl<'p> Emitter<'p> {
         // ([ADR-293](../../docs/specification/adr/adr-293.md) D14).
         if matches!(expr, Expr::MethodCall { .. })
             && self
+                .s
                 .facts
                 .flat_reads
                 .contains(&crate::check::value_node(expr))
@@ -7854,6 +7704,7 @@ impl<'p> Emitter<'p> {
             } => {
                 let v = crate::ast::int_value(*value, *negative);
                 match self
+                    .s
                     .facts
                     .unsigned_literals
                     .get(&crate::check::value_node(expr))
@@ -7868,6 +7719,7 @@ impl<'p> Emitter<'p> {
             }
             Expr::LitChar(c, _)
                 if self
+                    .s
                     .facts
                     .byte_literals
                     .contains(&crate::check::value_node(expr)) =>
@@ -7925,15 +7777,16 @@ impl<'p> Emitter<'p> {
                 out.push(&self.path(&[self.text(*name), "new"]))
             }
             Expr::Variable(name, _)
-                if !*self.in_a_kept_call.borrow()
+                if !self.walk(|w| w.in_a_kept_call)
                     && self
+                        .s
                         .facts
                         .kept_functions
                         .contains_key(&((flow.statement as i64), self.text(*name).to_string())) =>
             {
                 // **A named function where a function value is kept** is the
                 // closure that calls it, written as the checker typed it.
-                let (pauses, fails, arity) = self.facts.kept_functions
+                let (pauses, fails, arity) = self.s.facts.kept_functions
                     [&(flow.statement as i64, self.text(*name).to_string())];
                 let (names, call) =
                     crate::check::kept_function_call(self.parsed, *name, arity as usize);
@@ -7957,9 +7810,9 @@ impl<'p> Emitter<'p> {
                     true => "{ Ok(",
                     false => "{ ",
                 });
-                let outer = self.in_a_kept_call.replace(true);
+                let outer = self.walking(|w| std::mem::replace(&mut w.in_a_kept_call, true));
                 let written = self.expr(out, &call, depth, inside);
-                *self.in_a_kept_call.borrow_mut() = outer;
+                self.walking(|w| w.in_a_kept_call = outer);
                 written?;
                 out.push(match fails {
                     true => ") }",
@@ -7974,11 +7827,12 @@ impl<'p> Emitter<'p> {
             // that type** (ADR-287 D21, `Checked::comptime_uses`).
             Expr::Variable(_, _)
                 if self
+                    .s
                     .facts
                     .comptime_uses
                     .contains_key(&crate::check::value_node(expr)) =>
             {
-                out.push(&self.facts.comptime_uses[&crate::check::value_node(expr)]);
+                out.push(&self.s.facts.comptime_uses[&crate::check::value_node(expr)]);
             }
             Expr::Variable(name, _)
                 if !flow.in_a_place && self.copied_in_place(flow, self.text(*name)) =>
@@ -8014,13 +7868,14 @@ impl<'p> Emitter<'p> {
                 ..
             } if self.grammars.contains_key(target)
                 && self
+                    .s
                     .facts
                     .dsl_values
                     .contains_key(&crate::check::value_node(expr)) =>
             {
                 // Not an `if let` guard: the toolchain floor (1.88) has none.
                 let (below, written) =
-                    self.facts.dsl_values[&crate::check::value_node(expr)].clone();
+                    self.s.facts.dsl_values[&crate::check::value_node(expr)].clone();
                 out.push(&format!(
                     "{{ const __NIKAIA_DSL: {below} = {written}; __NIKAIA_DSL }}"
                 ));
@@ -8106,6 +7961,7 @@ impl<'p> Emitter<'p> {
                 ..
             } if matches!(expr, Expr::MethodCall { .. })
                 || self
+                    .s
                     .facts
                     .plain_reaches
                     .contains(&crate::check::value_node(expr)) =>
@@ -8115,6 +7971,7 @@ impl<'p> Emitter<'p> {
                 // argument and answers a `usize`.
                 if self.text(*method) == "find"
                     && self
+                        .s
                         .facts
                         .text_finds
                         .contains(&crate::check::value_node(receiver))
@@ -8147,8 +8004,10 @@ impl<'p> Emitter<'p> {
                 // have written by hand**: `matches!(value, Op::Add { .. })`,
                 // which fits a variant of every shape.
                 if let Some(variant) = self.reflected(receiver, *method, "is")
-                    && let (Some(value), Some((_, on))) =
-                        (args.first(), self.specialising.borrow().clone())
+                    && let (Some(value), Some((_, on))) = (
+                        args.first(),
+                        self.walk(|w| w.specialising.clone().map(|pair| ((), pair.second))),
+                    )
                 {
                     out.push("matches!(");
                     self.expr(out, value, depth, flow)?;
@@ -8160,7 +8019,8 @@ impl<'p> Emitter<'p> {
                 // `.attributes(X)` the list of them in written order.
                 for wanted in ["attribute", "attributes"] {
                     if let Some(field) = self.reflected(receiver, *method, wanted)
-                        && let Some((_, on)) = self.specialising.borrow().clone()
+                        && let Some((_, on)) =
+                            self.walk(|w| w.specialising.clone().map(|pair| ((), pair.second)))
                     {
                         // A field's, or a variant's where the walk is over
                         // `T::variants`.
@@ -8200,6 +8060,7 @@ impl<'p> Emitter<'p> {
                         // **Views of values that copy are the values**
                         // (ADR-231 D1).
                         if self
+                            .s
                             .facts
                             .copied_walks
                             .contains(&crate::check::value_node(expr))
@@ -8231,6 +8092,7 @@ impl<'p> Emitter<'p> {
                 ..
             } => {
                 let flattens = self
+                    .s
                     .facts
                     .flattened_reaches
                     .contains(&crate::check::value_node(receiver));
@@ -8242,6 +8104,7 @@ impl<'p> Emitter<'p> {
                 // (Part III C.1). What comes out is the **call's** result, so
                 // nothing about the reach needs the state that is not built.
                 let lent = match self
+                    .s
                     .facts
                     .lent_reaches
                     .contains(&crate::check::value_node(receiver))
@@ -8250,11 +8113,11 @@ impl<'p> Emitter<'p> {
                     false => "",
                 };
                 out.push("match ");
-                let held = self
-                    .held
-                    .borrow()
-                    .get(&((crate::check::value_node(receiver.as_ref())) as usize))
-                    .cloned();
+                let held = self.walk(|w| {
+                    w.held
+                        .get(&(crate::check::value_node(receiver.as_ref())))
+                        .cloned()
+                });
                 match held {
                     Some(name) => out.push(&name),
                     // A map's read is not lent (0.0.246), so nothing follows
@@ -8278,10 +8141,11 @@ impl<'p> Emitter<'p> {
                 // call's is (ADR-293 D24): the receiver the rewrite reads is the
                 // one this `match` bound.
                 let copy = self
+                    .s
                     .facts
                     .owned_copies
                     .contains(&crate::check::value_node(receiver));
-                let held_copy = self.reached_copy.replace(copy);
+                let held_copy = self.walking(|w| std::mem::replace(&mut w.reached_copy, copy));
                 let written =
                     match self.a_field_call(out, receiver, true, *method, args, depth + 1, flow) {
                         Ok(true) => Ok(()),
@@ -8290,7 +8154,7 @@ impl<'p> Emitter<'p> {
                         }
                         Err(error) => Err(error),
                     };
-                self.reached_copy.set(held_copy);
+                self.walking(|w| w.reached_copy = held_copy);
                 written?;
                 if !flattens {
                     out.push(")");
@@ -8344,6 +8208,7 @@ impl<'p> Emitter<'p> {
                 // A field reached through a view is matched by reference
                 // (`check::Checked::lent_scrutinees`).
                 if self
+                    .s
                     .facts
                     .lent_scrutinees
                     .contains(&(crate::check::value_node(value)))
@@ -8365,6 +8230,7 @@ impl<'p> Emitter<'p> {
                     if arm.guard.is_none()
                         && !self.looks_inside_a_box(&arm.pattern)
                         && let Some(stand_in) = self
+                            .s
                             .facts
                             .taking_arms
                             .get(&crate::check::value_node(&arm.body))
@@ -8418,6 +8284,7 @@ impl<'p> Emitter<'p> {
                     // does not, as for any pattern), and the arm takes it
                     // apart before anything else.
                     let lent = self
+                        .s
                         .facts
                         .lent_bindings
                         .get(&crate::check::value_node(&arm.body));
@@ -8436,6 +8303,7 @@ impl<'p> Emitter<'p> {
                     // copied out - and answers the guard where it fits and
                     // `false` where it does not.
                     let reads_inside = self
+                        .s
                         .facts
                         .guards_inside_boxes
                         .get(&crate::check::value_node(&arm.body));
@@ -8538,6 +8406,7 @@ impl<'p> Emitter<'p> {
             // them.
             Expr::ListLit { items, .. } => {
                 let array = self
+                    .s
                     .facts
                     .array_literals
                     .contains(&crate::check::value_node(expr));
@@ -8556,6 +8425,7 @@ impl<'p> Emitter<'p> {
             Expr::Field { base, name, .. } | Expr::SafeField { base, name, .. }
                 if matches!(expr, Expr::Field { .. })
                     || self
+                        .s
                         .facts
                         .plain_reaches
                         .contains(&crate::check::value_node(expr)) =>
@@ -8569,7 +8439,8 @@ impl<'p> Emitter<'p> {
                 }
                 // **`field.default` is its default as a `T?`** (ADR-331 D5).
                 if let Some(field) = self.reflected(base, *name, "default")
-                    && let Some((_, on)) = self.specialising.borrow().clone()
+                    && let Some((_, on)) =
+                        self.walk(|w| w.specialising.clone().map(|pair| ((), pair.second)))
                 {
                     let written = match self.field_contract(&on, &field) {
                         Some(f) if !f.default.is_empty() => held_literal(
@@ -8587,6 +8458,7 @@ impl<'p> Emitter<'p> {
                 // `(*base.field)` is a place that behaves as the unboxed field
                 // would - read, lent, moved out of an owned value, assigned.
                 let boxed = self
+                    .s
                     .facts
                     .boxed_reads
                     .contains(&crate::check::value_node(expr));
@@ -8629,6 +8501,7 @@ impl<'p> Emitter<'p> {
             Expr::SafeField { base, name, .. } => {
                 let field = self.text(*name).to_string();
                 let flattens = self
+                    .s
                     .facts
                     .flattened_reaches
                     .contains(&crate::check::value_node(base));
@@ -8647,6 +8520,7 @@ impl<'p> Emitter<'p> {
                 // whose type this compiler could not work out is claimed
                 // nothing about (Part III C.4). Both lower exactly as they did.
                 let copies = self
+                    .s
                     .facts
                     .copied_reaches
                     .contains(&crate::check::value_node(base));
@@ -8656,6 +8530,7 @@ impl<'p> Emitter<'p> {
                 // took `a.b` out of a lent `a` - *cannot move out of `a.b`* -
                 // and handed back a view of the value it had just moved.
                 let viewed = self
+                    .s
                     .facts
                     .viewed_reaches
                     .contains_key(&crate::check::value_node(base));
@@ -8674,6 +8549,7 @@ impl<'p> Emitter<'p> {
                 // **A boxed field is reached through its box**
                 // ([ADR-246](../../docs/specification/adr/adr-246.md) D2).
                 let place = match self
+                    .s
                     .facts
                     .boxed_reads
                     .contains(&crate::check::value_node(expr))
@@ -8682,7 +8558,8 @@ impl<'p> Emitter<'p> {
                     false => format!("__nikaia_it.{field}"),
                 };
                 let reach = match (
-                    self.facts
+                    self.s
+                        .facts
                         .viewed_reaches
                         .get(&crate::check::value_node(base)),
                     flattens,
@@ -8762,6 +8639,7 @@ impl<'p> Emitter<'p> {
                     // a `ref T?` is below - so a lend in front of it is
                     // already there, and is taken.
                     if self
+                        .s
                         .facts
                         .flat_reads
                         .contains(&crate::check::value_node(expr))
@@ -8813,6 +8691,7 @@ impl<'p> Emitter<'p> {
                 // generated file, which is the very thing this closes.
                 let viewed = match expr.as_ref() {
                     Expr::Variable(name, _) => self
+                        .s
                         .facts
                         .viewed_numbers
                         .contains(&((flow.statement as i64), self.text(*name).to_string())),
@@ -8858,7 +8737,7 @@ impl<'p> Emitter<'p> {
                 // `http::Request` (ADR-286 D12).
                 let owner = self.parsed.unaliased(self.text(*name));
                 // A value with a cleanup is made in its `Cleaned` (ADR-297 D1).
-                let cleaned = self.cleaned_types.contains(&owner);
+                let cleaned = self.s.cleaned_types.contains(&owner);
                 if cleaned {
                     out.push(&format!("{}::new(", self.cleaned()));
                 }
@@ -8870,7 +8749,7 @@ impl<'p> Emitter<'p> {
                     out.push(&self.name(field.name));
                     // Part I 2.3: a plain value in a field the struct declares
                     // nullable, by the value's id.
-                    let how = self.facts.nullable_fields.get(&(
+                    let how = self.s.facts.nullable_fields.get(&(
                         crate::check::value_node(expr),
                         self.text(field.name).to_string(),
                     ));
@@ -8976,6 +8855,7 @@ impl<'p> Emitter<'p> {
                 base, fields, at, ..
             } => {
                 let Some(owner) = self
+                    .s
                     .facts
                     .with_types
                     .get(&crate::check::value_node(expr))
@@ -9037,6 +8917,7 @@ impl<'p> Emitter<'p> {
                 // **A lambda where a function value is kept** is one shared
                 // closure, and it takes what it captures with it.
                 let kept = self
+                    .s
                     .facts
                     .kept_lambdas
                     .get(&crate::check::value_node(expr))
@@ -9046,6 +8927,7 @@ impl<'p> Emitter<'p> {
                     // (ADR-230 D4): cloned in a block around the closure, so
                     // the name outside is not moved into it.
                     let hulls = self
+                        .s
                         .facts
                         .kept_hulls
                         .get(&crate::check::value_node(expr))
@@ -9055,6 +8937,7 @@ impl<'p> Emitter<'p> {
                     // call** (#95 step 6): moved behind an `Arc` here, and each
                     // call's future holds a count of it rather than a copy.
                     let owned = self
+                        .s
                         .facts
                         .kept_owned
                         .get(&crate::check::value_node(expr))
@@ -9146,6 +9029,7 @@ impl<'p> Emitter<'p> {
                 // language below's own `async` closure, handed to the entry's
                 // counterpart. Its body is an ordinary body that pauses.
                 let pauses = self
+                    .s
                     .facts
                     .pausing_lambdas
                     .contains_key(&crate::check::value_node(expr));
@@ -9155,6 +9039,7 @@ impl<'p> Emitter<'p> {
                 // **`filter` is handed a reference to its item** (ADR-231 D2):
                 // where the item copies, the pattern takes it out.
                 let pattern = self
+                    .s
                     .facts
                     .filter_patterns
                     .contains(&crate::check::value_node(expr));
@@ -9232,7 +9117,8 @@ impl<'p> Emitter<'p> {
                 // written without its check.
                 if let (UnaryOp::Neg, Some(ty)) = (
                     op,
-                    self.proven_negations
+                    self.s
+                        .proven_negations
                         .get(&((crate::check::value_node(whole) as usize) as i64)),
                 ) {
                     out.push(&format!("<{ty}>::wrapping_neg("));
@@ -9279,7 +9165,7 @@ impl<'p> Emitter<'p> {
                 // **A file's name compares its bytes** (ADR-319 D3), against
                 // a name or against text.
                 if matches!(op, BinaryOp::Eq | BinaryOp::Ne)
-                    && self.facts.path_comparisons.contains(&(at.at() as i64))
+                    && self.s.facts.path_comparisons.contains(&(at.at() as i64))
                 {
                     if matches!(op, BinaryOp::Ne) {
                         out.push("!");
@@ -9294,7 +9180,7 @@ impl<'p> Emitter<'p> {
                 // **A `u64` and a signed integer compare as numbers**
                 // (ADR-285 D32): a sign test and a compare, the sides in the
                 // order they were written.
-                if let Some(unsigned_left) = self.facts.mixed_comparisons.get(&(at.at() as i64)) {
+                if let Some(unsigned_left) = self.s.facts.mixed_comparisons.get(&(at.at() as i64)) {
                     out.push(match unsigned_left {
                         true => "nikaia_std::num::unsigned_with_signed(",
                         false => "nikaia_std::num::signed_with_unsigned(",
@@ -9312,7 +9198,7 @@ impl<'p> Emitter<'p> {
                     });
                     return Ok(());
                 }
-                if self.facts.concatenations.contains(&(at.at() as i64)) {
+                if self.s.facts.concatenations.contains(&(at.at() as i64)) {
                     out.push("nikaia_std::concat::plus(");
                     self.concatenated(out, lhs, depth, flow)?;
                     out.push(", ");
@@ -9354,7 +9240,7 @@ impl<'p> Emitter<'p> {
                 // **An operation proved to stay inside its type** is written
                 // without its check, naming the type the proof was about
                 // ([ADR-306](../../docs/specification/adr/adr-306.md) D10).
-                if let Some(ty) = self.proven_arithmetic.get(&(at.at() as i64))
+                if let Some(ty) = self.s.proven_arithmetic.get(&(at.at() as i64))
                     && !flow.widen
                     && !flow.inferred
                 {
@@ -9377,7 +9263,8 @@ impl<'p> Emitter<'p> {
                 // **A view compared with a value is read** (0.0.238,
                 // `check::Checked::compared_views`).
                 let read = |side: &str| {
-                    self.facts
+                    self.s
+                        .facts
                         .compared_views
                         .contains(&((at.at() as i64), side.to_string()))
                 };
@@ -9386,7 +9273,8 @@ impl<'p> Emitter<'p> {
                 // `check::Checked::compared_numbers`): `num::value` is the
                 // identity on a number and reads one out of a view.
                 let number = |side: &str| {
-                    self.facts
+                    self.s
+                        .facts
                         .compared_numbers
                         .contains(&((at.at() as i64), side.to_string()))
                 };
@@ -9448,6 +9336,7 @@ impl<'p> Emitter<'p> {
             // (ADR-279 D13): the fallback never runs and is not written.
             Expr::Coalesce { value, .. }
                 if self
+                    .s
                     .facts
                     .plain_reaches
                     .contains(&crate::check::value_node(expr)) =>
@@ -9462,6 +9351,7 @@ impl<'p> Emitter<'p> {
                 // **A loan on the left is opened, and the answer is a view**
                 // ([ADR-279](../../docs/specification/adr/adr-279.md) D10).
                 if let Some(opened) = self
+                    .s
                     .facts
                     .lent_coalesces
                     .get(&crate::check::value_node(expr))
@@ -9471,6 +9361,7 @@ impl<'p> Emitter<'p> {
                 // **A number read past a jump is read out of the view**
                 // (#456, `Checked::copied_jump_reads`).
                 let copied = self
+                    .s
                     .facts
                     .copied_jump_reads
                     .contains(&crate::check::value_node(expr));
@@ -9490,11 +9381,12 @@ impl<'p> Emitter<'p> {
             Expr::Coalesce {
                 value, fallback, ..
             } if self
+                .s
                 .facts
                 .lent_coalesces
                 .contains_key(&crate::check::value_node(expr)) =>
             {
-                let opened = self.facts.lent_coalesces[&crate::check::value_node(expr)].clone();
+                let opened = self.s.facts.lent_coalesces[&crate::check::value_node(expr)].clone();
                 out.push("nikaia_std::index::or(");
                 self.expr(out, value, depth, flow)?;
                 out.push(&opened);
@@ -9569,7 +9461,7 @@ impl<'p> Emitter<'p> {
                         Expr::Path(segments, _) if segments.len() == 2 => {
                             let owner = self.text(segments[0]);
                             let key = format!("{owner}::{}", self.text(segments[1]));
-                            self.own_contracts
+                            self.s.own_contracts
                                 .functions
                                 .get(&key)
                                 .and_then(|contract| contract.signature.as_ref())
@@ -9591,8 +9483,9 @@ impl<'p> Emitter<'p> {
                     || a_declared_variant
                     || a_declared_constructor
                     || a_struct_written
-                    || matches!(&**fallback, Expr::LitStr { .. } if self.facts.view_fallbacks.contains(&crate::check::value_node(fallback)))
+                    || matches!(&**fallback, Expr::LitStr { .. } if self.s.facts.view_fallbacks.contains(&crate::check::value_node(fallback)))
                     || self
+                        .s
                         .facts
                         .view_coalesces
                         .contains(&crate::check::value_node(expr));
@@ -9600,6 +9493,7 @@ impl<'p> Emitter<'p> {
                 // first option that has a value, which is the language
                 // below's `or_else`, and the answer is an option still.
                 if self
+                    .s
                     .facts
                     .optional_fallbacks
                     .contains(&crate::check::value_node(expr))
@@ -9615,6 +9509,7 @@ impl<'p> Emitter<'p> {
                 // **A list's optional text is lent** (#342): the read is a
                 // place, and `&` in front of it borrows the element.
                 if self
+                    .s
                     .facts
                     .lent_list_reads
                     .contains(&crate::check::value_node(expr))
@@ -9627,6 +9522,7 @@ impl<'p> Emitter<'p> {
                 // (`check::Checked::lent_map_fallbacks`): the answer is a
                 // view, and so is the fallback.
                 if self
+                    .s
                     .facts
                     .lent_map_fallbacks
                     .contains(&crate::check::value_node(expr))
@@ -9913,6 +9809,7 @@ impl<'p> Emitter<'p> {
                 // for the task half. Unconditional (D2): a line further down may
                 // not decide what a line further up does to a cleanup point.
                 let handles: Vec<&str> = self
+                    .s
                     .facts
                     .task_handles
                     .iter()
@@ -9982,7 +9879,8 @@ impl<'p> Emitter<'p> {
         if let Expr::Path(segments, _) = func
             && let [parameter, member] = segments.as_slice()
             && matches!(self.text(*member), "attribute" | "attributes")
-            && let Some((walked, on)) = self.specialising.borrow().clone()
+            && let Some((walked, on)) =
+                self.walk(|w| w.specialising.clone().map(|pair| (pair.first, pair.second)))
             && walked == self.text(*parameter)
         {
             let texts = self
@@ -10003,7 +9901,7 @@ impl<'p> Emitter<'p> {
         // package whose ledger states a precondition: that package was
         // lowered with the two entries (ADR-269 D18, D20).
         let callee = match func {
-            Expr::Variable(name, _) if self.facts.entries.contains_key(self.text(*name)) => {
+            Expr::Variable(name, _) if self.s.facts.entries.contains_key(self.text(*name)) => {
                 Some(self.text(*name).to_string())
             }
             Expr::Path(segments, _) => {
@@ -10014,7 +9912,8 @@ impl<'p> Emitter<'p> {
                         .collect::<Vec<_>>()
                         .join("::"),
                 );
-                self.own_contracts
+                self.s
+                    .own_contracts
                     .functions
                     .get(&qualified)
                     .is_some_and(|c| !c.requires.is_empty())
@@ -10024,7 +9923,8 @@ impl<'p> Emitter<'p> {
         };
         if let Some(callee) = callee
             && let Some(reach) =
-                self.facts
+                self.s
+                    .facts
                     .reaches
                     .get(&crate::prove::call_key(self.parsed, &callee, args))
         {
@@ -10073,6 +9973,7 @@ impl<'p> Emitter<'p> {
         if let ([condition], Expr::Variable(name, _)) = (args, func)
             && self.text(*name) == crate::check::ASSERT
             && let Some(claim) = self
+                .s
                 .facts
                 .claims
                 .get(&((flow.statement as i64), crate::check::value_node(condition)))
@@ -10119,7 +10020,7 @@ impl<'p> Emitter<'p> {
         // awaited where its type may pause and propagated where it may fail.
         if let Expr::Variable(name, _) = func {
             let key = (flow.statement as i64, self.text(*name).to_string());
-            if let Some((pauses, fails)) = self.facts.kept_calls.get(&key).copied() {
+            if let Some((pauses, fails)) = self.s.facts.kept_calls.get(&key).copied() {
                 out.push(&format!("{}(", self.name(*name)));
                 for (at, arg) in args.iter().enumerate() {
                     if at > 0 {
@@ -10179,6 +10080,7 @@ impl<'p> Emitter<'p> {
             // **A `par_fold` entry is driven in pieces** (#521), as its own
             // file drives it, with this build's parallelism.
             let pieces = self
+                .s
                 .own_contracts
                 .functions
                 .get(&format!("{package}::{grammar}::{rule}"))
@@ -10222,17 +10124,16 @@ impl<'p> Emitter<'p> {
                             if matches!(self.text(*name), SHARED | SHARED_MUT | LOCKED)))
                 });
             if mask.iter().any(|b| *b) || holds_a_hull {
-                *self.boxed_args.borrow_mut() = Some(mask);
-                *self.variant_counts.borrow_mut() = Some(
-                    (0..args.len())
-                        .map(|at| self.count_at(SHARED_FIELDS, &variant_slot(owner, variant, at)))
-                        .collect(),
-                );
+                self.walking(|w| w.boxed_args = Some(mask));
+                let counts = (0..args.len())
+                    .map(|at| self.count_at(SHARED_FIELDS, &variant_slot(owner, variant, at)))
+                    .collect();
+                self.walking(|w| w.variant_counts = Some(counts));
                 out.push(&self.path(&segments.iter().map(|s| self.text(*s)).collect::<Vec<_>>()));
                 out.push("(");
                 let written = self.args(out, variant, args, &[], depth, flow);
-                *self.boxed_args.borrow_mut() = None;
-                *self.variant_counts.borrow_mut() = None;
+                self.walking(|w| w.boxed_args = None);
+                self.walking(|w| w.variant_counts = None);
                 written?;
                 out.push(")");
                 return Ok(());
@@ -10338,7 +10239,7 @@ impl<'p> Emitter<'p> {
         // copy is the checker's answer: this emitter has no types
         // ([ADR-288](../../docs/specification/adr/adr-288.md)), so the name is
         // handed over keyed by the byte the call stands at.
-        if let Some(copy) = self.facts.unrolled_calls.get(&(flow.statement as i64)) {
+        if let Some(copy) = self.s.facts.unrolled_calls.get(&(flow.statement as i64)) {
             // **Only the call to the walking function**: the key is the
             // statement, and `println(describe(u))` holds two calls.
             let walker = matches!(func, Expr::Variable(name, _)
@@ -10366,8 +10267,7 @@ impl<'p> Emitter<'p> {
             && let [build] = args
             && let Some(hulls) = self.hull_new(
                 SHARED_MUT,
-                self.hull_count
-                    .take()
+                self.walking(|w| w.hull_count.take())
                     .unwrap_or_else(|| self.count_at(flow.function, flow.bound)),
             )
             && let [handle, lock] = hulls.as_slice()
@@ -10414,8 +10314,7 @@ impl<'p> Emitter<'p> {
             if let [held] = args
                 && let Some(hulls) = self.hull_new(
                     text,
-                    self.hull_count
-                        .take()
+                    self.walking(|w| w.hull_count.take())
                         .unwrap_or_else(|| self.count_at(flow.function, flow.bound)),
                 )
             {
@@ -10438,7 +10337,11 @@ impl<'p> Emitter<'p> {
                 // **A file's name is written as its bytes** (ADR-319 D4): an
                 // `f"…"` with one in it, or the name itself.
                 if let [given] = args
-                    && let Some(names) = self.facts.path_holes.get(&crate::check::value_node(given))
+                    && let Some(names) = self
+                        .s
+                        .facts
+                        .path_holes
+                        .get(&crate::check::value_node(given))
                 {
                     let (to_err, newline) = (text.starts_with('e'), text.ends_with("ln"));
                     out.push("nikaia_std::fs::path::print(&(");
@@ -10488,7 +10391,12 @@ impl<'p> Emitter<'p> {
             // **Read off the library rather than from a list of three names**,
             // because `std` gaining a type with a constructor should not need
             // an edit here: the entry `Name::new` *is* the fact.
-            if self.library.functions.contains_key(&format!("{text}::new")) {
+            if self
+                .world
+                .library
+                .functions
+                .contains_key(&format!("{text}::new"))
+            {
                 // **Through `path`**, because one name below depends on more
                 // than the name: a **trusted** map is `TrustedMap::default()`
                 // and not `TrustedMap::new()`, since `new` exists only for the
@@ -10523,7 +10431,7 @@ impl<'p> Emitter<'p> {
                 // ledger keeps a type that lives in one: `collections::HashMap`
                 // and its `::new` beside it.
                 let key = format!("{module}::{name}::new");
-                if self.library.functions.contains_key(&key) {
+                if self.world.library.functions.contains_key(&key) {
                     out.push(&format!("{module}::{}", self.path(&[&name, "new"])));
                     out.push("(");
                     let takes = self.takes_a_handle(&key);
@@ -10558,7 +10466,7 @@ impl<'p> Emitter<'p> {
                     .join("::"),
             );
             let key = format!("{qualified}::new");
-            if self.own_contracts.functions.contains_key(&key) {
+            if self.s.own_contracts.functions.contains_key(&key) {
                 out.push(&format!("{qualified}::new("));
                 let takes = self.takes_a_handle(&key);
                 self.args(out, &key, args, &takes, depth, flow)?;
@@ -10676,6 +10584,7 @@ impl<'p> Emitter<'p> {
                 match config.iter().find(|a| self.text(a.name) == option.name) {
                     Some(passed) => {
                         if self
+                            .s
                             .facts
                             .lent_options
                             .contains(&(crate::check::value_node(&passed.value)))
@@ -10743,7 +10652,7 @@ impl<'p> Emitter<'p> {
         depth: usize,
         flow: Flow<'_>,
     ) -> Result<()> {
-        if config.is_empty() || !self.dsl_drivers.contains(callee) {
+        if config.is_empty() || !self.s.dsl_drivers.contains(callee) {
             return Ok(());
         }
         let names: Vec<String> = config
@@ -10783,10 +10692,11 @@ impl<'p> Emitter<'p> {
         flow: Flow<'_>,
     ) -> Result<()> {
         let name = self.text(method).to_string();
-        if self.dsl_drivers.contains(&name) {
+        if self.s.dsl_drivers.contains(&name) {
             return Ok(());
         }
         let Some(options) = self
+            .s
             .facts
             .method_options
             .get(&((flow.statement as i64), name))
@@ -10858,7 +10768,7 @@ impl<'p> Emitter<'p> {
             // ([ADR-297](../../docs/specification/adr/adr-297.md) D4): the
             // branch is where that failure belongs.
             Expr::Block(block, _) => block.stmts.iter().any(|stmt| {
-                self.facts.settle_lets.get(&(stmt.span.at() as i64)) == Some(&true)
+                self.s.facts.settle_lets.get(&(stmt.span.at() as i64)) == Some(&true)
                     || match &stmt.node {
                         Stmt::Expr(value) | Stmt::Let { value, .. } => {
                             self.branch_can_fail(value, flow)
@@ -10980,7 +10890,7 @@ impl<'p> Emitter<'p> {
         // cleanup that fails joins **its branch's** error where the branch's
         // channel is the box, which is where such a failure travels; elsewhere
         // what the branch parked goes to the function's settle point.
-        let own_queue = self.facts.settle_fns.get(flow.function).map(|&failing| {
+        let own_queue = self.s.facts.settle_fns.get(flow.function).map(|&failing| {
             let kind = self.settle_kind();
             match failing && fallible && channel == "Box<dyn std::error::Error>" {
                 true => format!("nikaia_std::cleanup::branch_after::<{kind}, _, _, _>"),
@@ -11296,7 +11206,8 @@ impl<'p> Emitter<'p> {
     /// test is that the callee can reach the caller again, which is what closing
     /// a cycle *is*.
     fn closes_a_pausing_cycle(&self, caller: &str, callee: &str) -> bool {
-        self.pausing_reach
+        self.s
+            .pausing_reach
             .get(callee)
             .is_some_and(|seen| seen.contains(caller))
     }
@@ -11314,7 +11225,8 @@ impl<'p> Emitter<'p> {
     /// needed and is missing is a program that does not compile.
     fn method_closes_a_pausing_cycle(&self, caller: &str, method: &str) -> bool {
         let suffix = format!("::{method}");
-        self.pausing_reach
+        self.s
+            .pausing_reach
             .iter()
             .filter(|(key, _)| key.ends_with(&suffix))
             .any(|(_, seen)| seen.contains(caller))
@@ -11327,7 +11239,7 @@ impl<'p> Emitter<'p> {
     /// package's ledger for the types another file declares
     /// ([`Emitter::tethered`]).
     fn borrows(&self, name: Symbol) -> bool {
-        self.borrowing.contains(&name) || self.tethered.contains(self.text(name))
+        self.s.borrowing.contains(self.text(name)) || self.s.tethered.contains(self.text(name))
     }
 
     /// Whether a written type **carries** a view: it is one, it names a struct
@@ -11367,7 +11279,7 @@ impl<'p> Emitter<'p> {
     /// needs the generated sum that is not built, and a type another package
     /// declares is not this unit's to name in a signature.
     fn named_error(&self, key: &str) -> Option<Named<'_>> {
-        self.named_error_of(&self.own_contracts.functions.get(key)?.fails_with)
+        self.named_error_of(&self.s.own_contracts.functions.get(key)?.fails_with)
     }
 
     /// [`Emitter::named_error`] asked of the **set** rather than of a function.
@@ -11382,7 +11294,7 @@ impl<'p> Emitter<'p> {
         if one == crate::contracts::UNNAMED_ERROR {
             return None;
         }
-        if self.declared_errors.contains(one) {
+        if self.s.declared_errors.contains(one) {
             return Some(Named::Own(one.as_str()));
         }
         // **A type a ledger describes is a name too**
@@ -11390,7 +11302,8 @@ impl<'p> Emitter<'p> {
         // is not this unit's to declare and is every bit as nameable: `std`
         // publishes it, the generated file reaches it through the prelude, and
         // a program that reads a file has it as its whole set.
-        self.library
+        self.world
+            .library
             .types
             .contains_key(one)
             .then_some(Named::Library(one.as_str()))
@@ -11404,7 +11317,7 @@ impl<'p> Emitter<'p> {
     /// type with a lifetime, and a function with nothing to borrow from can
     /// only write `'static` for it.
     fn error_channel(&self, key: &str, lifetimes: Lifetimes, borrows: bool) -> String {
-        match self.own_contracts.functions.get(key) {
+        match self.s.own_contracts.functions.get(key) {
             Some(contract) => self.channel_of(&contract.fails_with, lifetimes, borrows),
             None => "Box<dyn std::error::Error>".to_string(),
         }
@@ -11416,7 +11329,7 @@ impl<'p> Emitter<'p> {
         // **A set of two or more is the generated sum**
         // ([ADR-280](../../docs/specification/adr/adr-280.md) D15), where every
         // member of it is a name.
-        if let Some(sum) = self.sums.get(throws) {
+        if let Some(sum) = self.s.sums.get(throws) {
             let params = match throws.iter().any(|m| self.borrows_named(m)) {
                 false => String::new(),
                 true => match lifetimes == Lifetimes::ELIDED && !borrows {
@@ -11455,14 +11368,27 @@ impl<'p> Emitter<'p> {
     ///
     /// The ledger's `throws` column carries names, and a name interned by
     /// another parse is not this one's `Symbol`.
+    /// Whether a type names a struct that holds a view
+    /// ([`Emitter::borrowing`]).
+    fn names_borrowing(&self, ty: &Type) -> bool {
+        if let Some(code) = &*ty.code {
+            return (*code.result)
+                .as_ref()
+                .is_some_and(|result| self.names_borrowing(result));
+        }
+        self.s.borrowing.contains(self.text(ty.name))
+            || ty.generics.iter().any(|g| self.names_borrowing(g))
+    }
+
     fn borrows_named(&self, name: &str) -> bool {
-        self.tethered.contains(name)
-            || self.borrowing.iter().any(|sym| self.text(*sym) == name)
+        self.s.tethered.contains(name)
+            || self.s.borrowing.contains(name)
             // **A library's type answers from the library's ledger**
             // ([ADR-280](../../docs/specification/adr/adr-280.md)): the two sets
             // above are this package's, and a type another one declares is
             // described where it is declared.
             || self
+                .world
                 .library
                 .types
                 .get(name)
@@ -11480,7 +11406,7 @@ impl<'p> Emitter<'p> {
     /// else.
     fn error_sums(&self) -> std::collections::BTreeMap<Vec<String>, String> {
         let mut out = std::collections::BTreeMap::new();
-        for contract in self.own_contracts.functions.values() {
+        for contract in self.s.own_contracts.functions.values() {
             let members = &contract.fails_with;
             if members.len() < 2 {
                 continue;
@@ -11506,10 +11432,10 @@ impl<'p> Emitter<'p> {
         // written into each of them would be a different type per file and a
         // failure could not cross one. Every mention of it is written
         // `crate::…` for the same reason ([`Emitter::sum_path`]).
-        if !self.entry {
+        if !self.s.entry {
             return;
         }
-        for (members, name) in &self.sums {
+        for (members, name) in &self.s.sums {
             let members: &[String] = members;
             let borrows = members.iter().any(|m| self.borrows_named(m));
             // **One lifetime for the whole sum**, and it is the members' own: a
@@ -11632,7 +11558,7 @@ impl<'p> Emitter<'p> {
             _ => None,
         };
         if let Some(set) = joined {
-            return self.sums.get(&set).map(String::as_str);
+            return self.s.sums.get(&set).map(String::as_str);
         }
         self.sum_of(&self.callee_name(expr)?)
     }
@@ -11763,8 +11689,8 @@ impl<'p> Emitter<'p> {
     fn member_of(&self, pattern: &crate::ast::MatchPattern) -> Option<String> {
         nikaia_std::tools::emit_items::member_of(
             &self.parsed.interner,
-            &self.declared_errors,
-            self.library,
+            &self.s.declared_errors,
+            self.world.library,
             pattern,
         )
     }
@@ -11773,20 +11699,25 @@ impl<'p> Emitter<'p> {
     /// one ([ADR-280](../../docs/specification/adr/adr-280.md) D15).
     /// The members of a generated sum, by the name it is written with.
     fn sum_members(&self, sum: &str) -> Option<&[String]> {
-        self.sums
+        self.s
+            .sums
             .iter()
             .find(|(_, name)| name.as_str() == sum)
             .map(|(members, _)| members.as_slice())
     }
 
     fn sum_of(&self, key: &str) -> Option<&str> {
-        let contract = self.own_contracts.functions.get(key)?;
-        self.sums.get(&contract.fails_with).map(String::as_str)
+        let contract = self.s.own_contracts.functions.get(key)?;
+        self.s.sums.get(&contract.fails_with).map(String::as_str)
     }
 
     /// Whose one error type a **member** of a set is, asked of the name alone.
     fn name_of_error<'n>(&'n self, name: &'n str) -> Option<Named<'n>> {
-        match nikaia_std::tools::emit_items::error_kind(&self.declared_errors, self.library, name) {
+        match nikaia_std::tools::emit_items::error_kind(
+            &self.s.declared_errors,
+            self.world.library,
+            name,
+        ) {
             1 => Some(Named::Own(name)),
             2 => Some(Named::Library(name)),
             _ => None,
@@ -11802,8 +11733,8 @@ impl<'p> Emitter<'p> {
     /// neither — it only says which of them this failure was.
     fn sum_member_type(&self, name: &str, params: &str) -> String {
         nikaia_std::tools::emit_items::sum_member_type(
-            &self.declared_errors,
-            self.library,
+            &self.s.declared_errors,
+            self.world.library,
             name,
             params,
         )
@@ -11831,7 +11762,7 @@ impl<'p> Emitter<'p> {
     /// A code parameter `function` takes whole and does not keep: a
     /// method's, which `lends.nika` never lends (#463).
     fn a_code_parameter_taken_whole(&self, function: &str, name: &str) -> bool {
-        let Some(contract) = self.own_contracts.functions.get(function) else {
+        let Some(contract) = self.s.own_contracts.functions.get(function) else {
             return false;
         };
         let Some(signature) = &contract.signature else {
@@ -11848,7 +11779,7 @@ impl<'p> Emitter<'p> {
                     && !crate::contracts::keeps::lends_in(
                         contract,
                         at,
-                        &[self.library, &self.described],
+                        &[self.world.library, &self.s.described],
                     )
             })
     }
@@ -11862,10 +11793,10 @@ impl<'p> Emitter<'p> {
                     .is_some_and(|(name, _)| s.mutable.iter().any(|m| m == name))
             })
         };
-        match self.own_contracts.functions.get(callee) {
+        match self.s.own_contracts.functions.get(callee) {
             Some(contract) => changes(contract),
             None => {
-                let candidates = self.own_contracts.candidates(callee);
+                let candidates = self.s.own_contracts.candidates(callee);
                 !candidates.is_empty() && candidates.iter().all(|(_, contract)| changes(contract))
             }
         }
@@ -11884,10 +11815,10 @@ impl<'p> Emitter<'p> {
                         && !contract.keeps.iter().any(|kept| kept == name)
                 })
         };
-        match self.own_contracts.functions.get(callee) {
+        match self.s.own_contracts.functions.get(callee) {
             Some(contract) => runs(contract),
             None => {
-                let candidates = self.own_contracts.candidates(callee);
+                let candidates = self.s.own_contracts.candidates(callee);
                 !candidates.is_empty() && candidates.iter().all(|(_, contract)| runs(contract))
             }
         }
@@ -11941,8 +11872,8 @@ impl<'p> Emitter<'p> {
         nikaia_std::tools::emit_calls::call_joined_throws(
             &self.parsed.interner,
             &self.parsed.aliases,
-            &self.own_contracts,
-            self.library,
+            &self.s.own_contracts,
+            self.world.library,
             &branches,
         )
     }
@@ -11991,7 +11922,7 @@ impl<'p> Emitter<'p> {
     /// makes it `async` - and an `async fn` that never awaits finishes on its
     /// first poll, while a plain `fn` that needed to pause does not compile.
     fn pauses(&self, key: &str) -> bool {
-        nikaia_std::tools::emit_calls::call_pauses(&self.own_contracts, key)
+        nikaia_std::tools::emit_calls::call_pauses(&self.s.own_contracts, key)
     }
 
     /// Whether a call to a **library** entry pauses (ADR-055 §6 step 3), and
@@ -12015,7 +11946,7 @@ impl<'p> Emitter<'p> {
     /// what made `std`'s pausing entries `async fn`, and this is the line that
     /// reads them.
     fn library_pauses(&self, key: &str) -> Option<String> {
-        nikaia_std::tools::emit_calls::call_library_pauses(self.library, key)
+        nikaia_std::tools::emit_calls::call_library_pauses(self.world.library, key)
     }
 
     /// Whether a call to this callee carries an `.await` (ADR-055 D2).
@@ -12039,7 +11970,8 @@ impl<'p> Emitter<'p> {
     /// way an own entry says `Sync::From`, since the inference never writes it
     /// ([ADR-288](../../docs/specification/adr/adr-288.md) D31).
     fn lambda_decides(&self, key: &str) -> bool {
-        self.own_contracts
+        self.s
+            .own_contracts
             .functions
             .get(key)
             .is_some_and(|contract| matches!(contract.sync_claim, crate::contracts::Sync::From(_)))
@@ -12063,7 +11995,8 @@ impl<'p> Emitter<'p> {
             .join("::");
         self.parsed.unaliased(&name) == "task::scope"
             && args.first().is_some_and(|body| {
-                self.facts
+                self.s
+                    .facts
                     .paused_scopes
                     .contains(&crate::check::value_node(body))
             })
@@ -12087,15 +12020,15 @@ impl<'p> Emitter<'p> {
         nikaia_std::tools::emit_calls::call_pausing_key(
             &self.parsed.interner,
             &self.parsed.aliases,
-            &self.own_contracts,
-            self.library,
+            &self.s.own_contracts,
+            self.world.library,
             func,
         )
     }
 
     /// Whether a struct of this name is declared in this file or beside it.
     fn declares_a_struct(&self, name: &str) -> bool {
-        self.structs.iter().any(|s| self.text(*s) == name) || self.structs_beside.contains(name)
+        self.s.structs.contains(name) || self.s.structs_beside.contains(name)
     }
 
     /// Whether a bare name in **value** position is a type's anonymous
@@ -12107,11 +12040,15 @@ impl<'p> Emitter<'p> {
     fn constructs_by_name(&self, name: &str) -> bool {
         if self.declares_a_struct(name) {
             return self
+                .s
                 .own_contracts
                 .functions
                 .contains_key(&format!("{name}::new"));
         }
-        self.library.functions.contains_key(&format!("{name}::new"))
+        self.world
+            .library
+            .functions
+            .contains_key(&format!("{name}::new"))
     }
 
     /// Whether the contracts say a call by name can fail (Kap 7.1).
@@ -12131,9 +12068,9 @@ impl<'p> Emitter<'p> {
     fn can_fail(&self, func: &Expr) -> bool {
         nikaia_std::tools::emit_calls::call_can_fail(
             &self.parsed.interner,
-            &self.own_contracts,
-            self.library,
-            &self.described,
+            &self.s.own_contracts,
+            self.world.library,
+            &self.s.described,
             func,
         )
     }
@@ -12146,7 +12083,8 @@ impl<'p> Emitter<'p> {
     /// in one statement where one of them widens - which leaves the conversion
     /// exactly as it was rather than guessing at it.
     fn narrows(&self, statement: usize, into: &str) -> Option<crate::check::Narrowing> {
-        self.facts
+        self.s
+            .facts
             .narrowing_casts
             .get(&((statement as i64), into.to_string()))
             .copied()
@@ -12178,6 +12116,7 @@ impl<'p> Emitter<'p> {
         flow: Flow<'_>,
     ) -> Result<bool> {
         let Some(pauses) = self
+            .s
             .facts
             .field_calls
             .get(&crate::check::value_node(receiver))
@@ -12221,7 +12160,8 @@ impl<'p> Emitter<'p> {
     }
 
     fn method_can_fail(&self, flow: Flow<'_>, method: Symbol) -> bool {
-        self.facts
+        self.s
+            .facts
             .fallible_methods
             .contains(&((flow.statement as i64), self.text(method).to_string()))
     }
@@ -12233,7 +12173,8 @@ impl<'p> Emitter<'p> {
     /// and `false` here is the emitter leaving the call as it was rather than
     /// guessing at it.
     fn method_pauses(&self, flow: Flow<'_>, method: Symbol) -> bool {
-        self.facts
+        self.s
+            .facts
             .pausing_methods
             .contains(&((flow.statement as i64), self.text(method).to_string()))
     }
@@ -12274,11 +12215,13 @@ impl<'p> Emitter<'p> {
     /// A type's contract, from this package's ledger or a dependency's.
     fn type_contract(&self, owner: &str) -> Option<crate::contracts::TypeContract> {
         let suffix = format!("::{owner}");
-        self.own_contracts
+        self.s
+            .own_contracts
             .types
             .get(owner)
             .or_else(|| {
-                self.library
+                self.world
+                    .library
                     .types
                     .iter()
                     .find(|(key, _)| *key == owner || key.ends_with(&suffix))
@@ -12291,11 +12234,13 @@ impl<'p> Emitter<'p> {
     /// dependency's: what `.attribute(X)` and `.default` read (ADR-331 D5-D6).
     fn field_contract(&self, owner: &str, field: &str) -> Option<crate::contracts::FieldContract> {
         let suffix = format!("::{owner}");
-        self.own_contracts
+        self.s
+            .own_contracts
             .types
             .get(owner)
             .or_else(|| {
-                self.library
+                self.world
+                    .library
                     .types
                     .iter()
                     .find(|(key, _)| *key == owner || key.ends_with(&suffix))
@@ -12333,8 +12278,9 @@ impl<'p> Emitter<'p> {
     /// value and type, from this package's ledger or a dependency's.
     fn field_defaults(&self, owner: &str) -> Vec<(String, String, crate::contracts::ty::Ty)> {
         let suffix = format!("::{owner}");
-        let contract = self.own_contracts.types.get(owner).or_else(|| {
-            self.library
+        let contract = self.s.own_contracts.types.get(owner).or_else(|| {
+            self.world
+                .library
                 .types
                 .iter()
                 .find(|(key, _)| *key == owner || key.ends_with(&suffix))
@@ -12363,11 +12309,12 @@ impl<'p> Emitter<'p> {
         };
 
         let contract = self
+            .s
             .own_contracts
             .functions
             .get(&name)
-            .or_else(|| self.own_contracts.functions.get(&format!("{name}::new")))
-            .or_else(|| self.library.lookup(&name).map(|(_, c)| c))?;
+            .or_else(|| self.s.own_contracts.functions.get(&format!("{name}::new")))
+            .or_else(|| self.world.library.lookup(&name).map(|(_, c)| c))?;
 
         let config = &contract.signature.as_ref()?.config;
         (!config.is_empty()).then_some(config.as_slice())
@@ -12387,6 +12334,7 @@ impl<'p> Emitter<'p> {
             // the program had being copied.
             Expr::LitStr { text: literal, .. } => {
                 match self
+                    .s
                     .facts
                     .owned_texts
                     .contains(&crate::check::value_node(expr))
@@ -12404,7 +12352,7 @@ impl<'p> Emitter<'p> {
                 // **A file's name in a hole** (ADR-319 D4): the parts are
                 // joined in the platform's encoding, a name by its bytes and
                 // anything else by its text.
-                if let Some(names) = self.facts.path_holes.get(&crate::check::value_node(expr)) {
+                if let Some(names) = self.s.facts.path_holes.get(&crate::check::value_node(expr)) {
                     return self.joined_name(out, parts, names, depth, flow);
                 }
                 // A malformed literal never gets here: the grammar refuses it
@@ -12517,7 +12465,8 @@ impl<'p> Emitter<'p> {
     /// owner's last segment: a qualified name reaches the same type.
     fn is_boxed(&self, owner: &str, member: &str) -> bool {
         let owner = owner.rsplit("::").next().unwrap_or(owner);
-        self.facts
+        self.s
+            .facts
             .boxed_members
             .get(owner)
             .is_some_and(|members| members.contains(member))
@@ -12529,7 +12478,7 @@ impl<'p> Emitter<'p> {
     fn is_boxed_field(&self, owner: &str, field: &str) -> bool {
         if let Some((ty, variant)) = owner.rsplit_once("::") {
             let ty = ty.rsplit("::").next().unwrap_or(ty);
-            if self.facts.boxed_members.contains_key(ty) {
+            if self.s.facts.boxed_members.contains_key(ty) {
                 return self.is_boxed(ty, &crate::check::boxed_member(variant, None, Some(field)));
             }
         }
@@ -12612,6 +12561,7 @@ impl<'p> Emitter<'p> {
         // `check::Checked::copied_bindings`).
         let at = crate::check::value_node(body);
         let copied: Vec<&String> = self
+            .s
             .facts
             .copied_bindings
             .range((at, String::new())..)
@@ -12731,7 +12681,7 @@ impl<'p> Emitter<'p> {
         let owner_of = |path: &[Symbol]| -> Option<(String, Option<String>)> {
             match path {
                 [.., owner, variant]
-                    if self.facts.boxed_members.contains_key(self.text(*owner)) =>
+                    if self.s.facts.boxed_members.contains_key(self.text(*owner)) =>
                 {
                     Some((
                         self.text(*owner).to_string(),
@@ -12798,6 +12748,7 @@ impl<'p> Emitter<'p> {
         flow: Flow<'_>,
     ) -> Result<()> {
         let lent = self
+            .s
             .facts
             .lent_bindings
             .get(&crate::check::value_node(body));
@@ -12826,7 +12777,7 @@ impl<'p> Emitter<'p> {
         let [.., owner, variant] = path else {
             return false;
         };
-        self.facts.boxed_members.contains_key(self.text(*owner))
+        self.s.facts.boxed_members.contains_key(self.text(*owner))
             && self.is_boxed(
                 self.text(*owner),
                 &crate::check::boxed_member(self.text(*variant), Some(at), None),
@@ -12983,6 +12934,7 @@ impl<'p> Emitter<'p> {
             && none.is_empty()
             && self.text(*chars) == "chars"
             && !self
+                .s
                 .facts
                 .collected_into
                 .contains(&(crate::check::value_node(receiver.unwrap())))
@@ -13036,7 +12988,7 @@ impl<'p> Emitter<'p> {
         // so the call is written to `nikaia_std::fs::path`, which compares
         // the bytes.
         if let Some(on) = receiver
-            && let Some(known_text) = self.facts.path_methods.get(&crate::check::value_node(on))
+            && let Some(known_text) = self.s.facts.path_methods.get(&crate::check::value_node(on))
         {
             let name = self.text(method).to_string();
             // **`to_text` on a name made from text cannot fail** (ADR-319
@@ -13111,7 +13063,11 @@ impl<'p> Emitter<'p> {
         // is written *here* — because the set is keyed by the statement, and a
         // statement may hold a second `set` that carries none.
         let witness = match self.text(method) == "set"
-            && self.facts.witnessed_sets.contains(&(flow.statement as i64))
+            && self
+                .s
+                .facts
+                .witnessed_sets
+                .contains(&(flow.statement as i64))
         {
             true => config
                 .iter()
@@ -13126,6 +13082,7 @@ impl<'p> Emitter<'p> {
             self.text(method) == "to_string"
                 && args.is_empty()
                 && self
+                    .s
                     .facts
                     .text_as_is
                     .contains(&crate::check::value_node(receiver))
@@ -13139,6 +13096,7 @@ impl<'p> Emitter<'p> {
             self.text(method) == "contains"
                 && args.len() == 1
                 && self
+                    .s
                     .facts
                     .text_in_lists
                     .contains(&crate::check::value_node(receiver))
@@ -13170,10 +13128,11 @@ impl<'p> Emitter<'p> {
         }
         let copies = match receiver {
             Some(receiver) => self
+                .s
                 .facts
                 .owned_copies
                 .contains(&crate::check::value_node(receiver)),
-            None => self.reached_copy.get(),
+            None => self.walk(|w| w.reached_copy),
         };
         let written = match self.text(method) {
             "drain" if args.is_empty() => "into_iter",
@@ -13208,7 +13167,7 @@ impl<'p> Emitter<'p> {
         // the program means the same at each.
         if self.text(method) == "par_iter"
             && args.is_empty()
-            && self.own_contracts.candidates("par_iter").is_empty()
+            && self.s.own_contracts.candidates("par_iter").is_empty()
         {
             match self.build.user_parallelism {
                 UserParallelism::Yes => {
@@ -13235,7 +13194,8 @@ impl<'p> Emitter<'p> {
             .last()
             .filter(|arg| matches!(arg, Expr::Closure { .. }))
             .and_then(|arg| {
-                self.facts
+                self.s
+                    .facts
                     .pausing_lambdas
                     .get(&crate::check::value_node(arg))
             })
@@ -13275,7 +13235,8 @@ impl<'p> Emitter<'p> {
         // set or text, which the language below's own `collect`
         // builds when nothing overrides the type it reads off that place.
         let declared = receiver.is_some_and(|receiver| {
-            self.facts
+            self.s
+                .facts
                 .collected_into
                 .contains(&crate::check::value_node(receiver))
         });
@@ -13308,18 +13269,21 @@ impl<'p> Emitter<'p> {
                             while keeps.len() < width {
                                 keeps.push(keeps[keeps.len() - 1]);
                             }
-                            (*arg, keeps)
+                            (
+                                *arg as i64,
+                                keeps.into_iter().map(|k| k as i64).collect::<Vec<_>>(),
+                            )
                         })
                         .collect(),
                 )
             });
-        *self.hold_args.borrow_mut() = held;
+        self.walking(|w| w.hold_args = held);
         let written_args = self.args(out, self.text(method), args, &takes, depth, flow);
-        *self.hold_args.borrow_mut() = None;
+        self.walking(|w| w.hold_args = None);
         written_args?;
         // **And a method that takes a keep is given one** (D2).
         let keeping = crate::contracts::keep::keeping_method_key(
-            &self.own_contracts,
+            &self.s.own_contracts,
             flow.function.rsplit_once("::").map(|(t, _)| t),
             matches!(receiver, Some(Expr::Variable(n, _)) if self.text(*n) == "self"),
             self.text(method),
@@ -13391,6 +13355,7 @@ impl<'p> Emitter<'p> {
         // line, rather than left to `rustc` about a method the generated file's
         // receiver does not have (Part III, C.1).
         if self
+            .s
             .facts
             .pausing_walks
             .contains(&((flow.statement as i64), self.text(method).to_string()))
@@ -13441,6 +13406,7 @@ impl<'p> Emitter<'p> {
         let flow = match receiver {
             Some(expr)
                 if self
+                    .s
                     .facts
                     .changed_elements
                     .contains(&crate::check::value_node(expr)) =>
@@ -13481,6 +13447,7 @@ impl<'p> Emitter<'p> {
         // one operation it licenses.
         if !slicing
             && self
+                .s
                 .proven_indices
                 .contains(&((crate::check::value_node(base) as usize) as i64))
             && self.map_key(index, false).is_none()
@@ -13747,6 +13714,7 @@ impl<'p> Emitter<'p> {
         self.text(method) == "count"
             && args.is_empty()
             && self
+                .s
                 .facts
                 .counted
                 .contains(&crate::check::value_node(receiver))
@@ -13816,17 +13784,16 @@ impl<'p> Emitter<'p> {
     ) -> Result<()> {
         // **This call's mask and no other's**: taken here, so a call written
         // inside one of these arguments does not see it.
-        let boxed_mask = self.boxed_args.borrow_mut().take();
-        let part_counts = self.variant_counts.borrow_mut().take();
+        let boxed_mask = self.walking(|w| w.boxed_args.take());
+        let part_counts = self.walking(|w| w.variant_counts.take());
         for (i, arg) in args.iter().enumerate() {
             if i > 0 {
                 out.push(", ");
             }
-            self.hull_count.set(
-                part_counts
-                    .as_ref()
-                    .and_then(|counts| counts.get(i).copied()),
-            );
+            let count = part_counts
+                .as_ref()
+                .and_then(|counts| counts.get(i).copied());
+            self.walking(|w| w.hull_count = count);
             // **A part of a variant that is boxed is built in its box**
             // ([ADR-246](../../docs/specification/adr/adr-246.md) D3), around
             // everything else this argument is written with.
@@ -13841,6 +13808,7 @@ impl<'p> Emitter<'p> {
             // be (`check::Checked::lookup_keys`).
             if i == 0
                 && self
+                    .s
                     .facts
                     .lookup_keys
                     .contains(&crate::check::value_node(arg))
@@ -13867,7 +13835,10 @@ impl<'p> Emitter<'p> {
             // Found by the argument's id (`check::Checked::nullable_args`),
             // which says which call and which parameter it is.
             let (before, after) = Self::around_value(
-                self.facts.nullable_args.get(&crate::check::value_node(arg)),
+                self.s
+                    .facts
+                    .nullable_args
+                    .get(&crate::check::value_node(arg)),
                 arg,
             );
             // **A count the language below wants in `usize`**
@@ -13892,6 +13863,7 @@ impl<'p> Emitter<'p> {
             let wants_a_size = is_count(callee, i)
                 || self.takes_a_size(callee, i)
                 || self
+                    .s
                     .facts
                     .count_args
                     .contains(&crate::check::value_node(arg));
@@ -13904,16 +13876,16 @@ impl<'p> Emitter<'p> {
             // refused the program rather than letting a `&&T` reach the
             // language below.
             let node = crate::check::value_node(arg);
-            let lend = self.facts.lent_args.contains(&node)
+            let lend = self.s.facts.lent_args.contains(&node)
                 // **A literal is a view already** (ADR-282 D5): lent to a
                 // `&str` it is written as it is, and a `&` in front of it would
                 // be a `&&str` the language below has to see through.
-                && !matches!(arg, Expr::LitStr { .. } if !self.facts.owned_texts.contains(&crate::check::value_node(arg)));
+                && !matches!(arg, Expr::LitStr { .. } if !self.s.facts.owned_texts.contains(&crate::check::value_node(arg)));
             // **And `&mut` for a parameter the callee declared `mut`** (D3),
             // which is the one of the three states the *author* wrote rather
             // than the inference. The two maps are disjoint by construction:
             // `lends` withholds its claim on a `mut` position.
-            let change = self.facts.mut_args.contains(&node);
+            let change = self.s.facts.mut_args.contains(&node);
             // **A lambda handed to a parameter whose type may pause**
             // ([ADR-277](../../docs/specification/adr/adr-277.md) D11): a
             // closure that returns a **boxed future**, which is what a callee
@@ -13931,10 +13903,12 @@ impl<'p> Emitter<'p> {
             // word.
             let future = matches!(arg, Expr::Closure { .. })
                 && self
+                    .s
                     .facts
                     .future_lambdas
                     .contains(&((flow.statement as i64), (i as i64)))
                 && !self
+                    .s
                     .facts
                     .kept_lambdas
                     .contains_key(&crate::check::value_node(arg));
@@ -13949,6 +13923,7 @@ impl<'p> Emitter<'p> {
             // language and not something that moves, so `keeps::lends` withholds
             // its claim and `mut_args` never names the position.
             let pointer = self
+                .s
                 .foreign_params
                 .get(callee)
                 .and_then(|params| params.get(i))
@@ -13993,7 +13968,7 @@ impl<'p> Emitter<'p> {
                 _ => None,
             };
             let inside_the_option = lend
-                .then(|| match self.own_contracts.functions.get(callee) {
+                .then(|| match self.s.own_contracts.functions.get(callee) {
                     Some(contract) => contract
                         .signature
                         .as_ref()
@@ -14001,6 +13976,7 @@ impl<'p> Emitter<'p> {
                         .and_then(|(_, ty)| opening_of(ty)),
                     None => {
                         let openings: Vec<Option<&'static str>> = self
+                            .s
                             .own_contracts
                             .candidates(callee)
                             .iter()
@@ -14028,6 +14004,7 @@ impl<'p> Emitter<'p> {
             let a_map_read = matches!(arg, Expr::Index { index, .. }
                     if self.map_key( index, false).is_some())
                 || self
+                    .s
                     .facts
                     .flat_reads
                     .contains(&crate::check::value_node(arg));
@@ -14079,7 +14056,7 @@ impl<'p> Emitter<'p> {
                 } else if lend
                     // **A part an expression arm binds as a view** is one
                     // already (#456, `Checked::views_handed_on`).
-                    && !self.facts.views_handed_on.contains(&crate::check::value_node(arg))
+                    && !self.s.facts.views_handed_on.contains(&crate::check::value_node(arg))
                 {
                     out.push("&");
                 }
@@ -14149,6 +14126,7 @@ impl<'p> Emitter<'p> {
                     // `move`, for the reason it always had - the future
                     // outlives the closure body it is made in.
                     let runs = self
+                        .s
                         .facts
                         .run_lambdas
                         .contains(&((flow.statement as i64), (i as i64)));
@@ -14170,11 +14148,11 @@ impl<'p> Emitter<'p> {
                     }
                 }
                 _ => {
-                    let held = self
-                        .hold_args
-                        .borrow()
-                        .as_ref()
-                        .and_then(|h| h.get(&i).cloned());
+                    let held = self.walk(|w| {
+                        w.hold_args
+                            .as_ref()
+                            .and_then(|h| h.get(&(i as i64)).cloned())
+                    });
                     match held {
                         // **Held by the keeps of the buffers it points into**
                         // (ADR-283 D12, ADR-283 D14): a view of text becomes a
@@ -14196,6 +14174,7 @@ impl<'p> Emitter<'p> {
                             // A kept value handed to a parameter that only
                             // runs it: the closure it holds.
                             if self
+                                .s
                                 .facts
                                 .kept_args
                                 .contains(&crate::check::value_node(arg))
@@ -14204,10 +14183,11 @@ impl<'p> Emitter<'p> {
                             }
                             // **A view of a value that copies, where the value
                             // is wanted** (ADR-233 D4): copied out of it.
-                            if self.facts.copied_args.contains(&node) {
+                            if self.s.facts.copied_args.contains(&node) {
                                 out.push("*");
                                 self.postfix_base(out, arg, depth, inside)?
                             } else if let Some(arity) = self
+                                .s
                                 .facts
                                 .sync_functions_run_async
                                 .get(&((flow.statement as i64), (i as i64)))
@@ -14298,7 +14278,7 @@ impl<'p> Emitter<'p> {
     /// lending the inner value out hands no handle on.
     fn takes_a_handle(&self, callee: &str) -> Vec<bool> {
         let suffix = format!("::{callee}");
-        let contract = [&self.own_contracts, self.library]
+        let contract = [&self.s.own_contracts, self.world.library]
             .into_iter()
             .find_map(|ledger| {
                 ledger.functions.get(callee).or_else(|| {
@@ -14354,7 +14334,7 @@ impl<'p> Emitter<'p> {
     /// `contracts` records for every `entry rule` - one input, `input`, and a
     /// `ParseError` its one failure (#520).
     fn a_package_grammar_entry(&self, key: &str) -> bool {
-        self.own_contracts.functions.get(key).is_some_and(|contract| {
+        self.s.own_contracts.functions.get(key).is_some_and(|contract| {
             contract.fails_with == [crate::contracts::PARSE_ERROR]
                 && contract.signature.as_ref().is_some_and(|signature| {
                     matches!(signature.params.as_slice(), [(name, _)] if name == crate::contracts::INPUT)
@@ -15243,7 +15223,9 @@ impl Emitter<'_> {
     fn keep_plan(&self, function: &str) -> Option<&crate::contracts::keep::Plan> {
         match self.keep_plans.get(function) {
             Some(plan) => Some(plan),
-            None => self.keep_plans.get(self.keep_function.borrow().as_str()),
+            None => self
+                .keep_plans
+                .get(self.walk(|w| w.keep_function.clone()).as_str()),
         }
     }
 
@@ -15307,11 +15289,11 @@ impl Emitter<'_> {
 
     /// Declare the keeps a statement needs, once.
     fn write_keep_prelude(&self, out: &mut Out, function: &str, at: usize, depth: usize) {
-        if self.preluded.borrow().contains(&at) {
+        if self.walk(|w| w.preluded.contains(&(at as i64))) {
             return;
         }
         if let Some(prelude) = self.keep_prelude(function, at) {
-            self.preluded.borrow_mut().insert(at);
+            self.walking(|w| w.preluded.insert(at as i64));
             out.push(&prelude);
             out.push("\n");
             out.push(&"    ".repeat(depth));
@@ -15349,16 +15331,17 @@ impl Emitter<'_> {
     fn keeping_callee(&self, func: &Expr) -> Option<String> {
         let name = crate::contracts::keep::callee_name(self.parsed, func)?;
         let (key, contract) = self
+            .s
             .own_contracts
             .lookup(&name)
-            .or_else(|| self.library.lookup(&name))?;
+            .or_else(|| self.world.library.lookup(&name))?;
         crate::contracts::keep::takes_a_keep(contract).then_some(key)
     }
 
     /// The lifetimes a function that takes a keep writes its tethered
     /// positions with, where it takes one.
     fn kept_lifetimes(&self, key: &str, lifetimes: Lifetimes) -> Option<Lifetimes> {
-        let contract = self.own_contracts.functions.get(key)?;
+        let contract = self.s.own_contracts.functions.get(key)?;
         if !crate::contracts::keep::takes_a_keep(contract) {
             return None;
         }
@@ -15370,7 +15353,7 @@ impl Emitter<'_> {
 
     /// Whether this position of a function is one its views leave through.
     fn tethered_position(&self, key: &str, position: &str) -> bool {
-        self.own_contracts.functions.get(key).is_some_and(|c| {
+        self.s.own_contracts.functions.get(key).is_some_and(|c| {
             c.views.iter().any(|h| {
                 h.position == position && h.state == crate::contracts::tether::State::Tethered
             })
@@ -15418,7 +15401,7 @@ impl Emitter<'_> {
         let any = self.ty(ty, Lifetimes::ANY);
         let long = self.ty(ty, Lifetimes::LONG);
         let shortened = self.ty(ty, Lifetimes::SHORTENED);
-        let mut wrappers = self.wrappers.borrow_mut();
+        let wrappers = self.walk(|w| w.wrappers.clone());
         let position = wrappers
             .iter()
             .position(|w| w.contains(&format!("type Of<'a> = {any};")));
@@ -15426,7 +15409,7 @@ impl Emitter<'_> {
             Some(n) => n,
             None => {
                 let n = wrappers.len();
-                wrappers.push(format!(
+                let text = format!(
                     "/// A value that carries the keep its views point into \
                      (ADR-283 D11), as a `Holding` over it.\n\
                      #[allow(non_camel_case_types)]\n\
@@ -15434,7 +15417,8 @@ impl Emitter<'_> {
                      impl nikaia_std::tether::Views for __Tethered{n} {{\n    \
                      type Of<'a> = {any};\n    \
                      fn shorten<'long: 's, 's>(x: &'s {long}) -> &'s {shortened} {{\n        x\n    }}\n}}\n"
-                ));
+                );
+                self.walking(|w| w.wrappers.push(text));
                 n
             }
         };
@@ -15443,9 +15427,9 @@ impl Emitter<'_> {
 
     /// The handle types, at the end of the unit.
     fn tether_wrappers(&self, out: &mut Out) {
-        for wrapper in self.wrappers.borrow().iter() {
+        for wrapper in self.walk(|w| w.wrappers.clone()) {
             out.push("\n");
-            out.push(wrapper);
+            out.push(&wrapper);
         }
         self.held_structs(out);
     }
@@ -15483,7 +15467,7 @@ impl Emitter<'_> {
                 } if self.text(*n) == name => fields
                     .iter()
                     .find(|f| self.text(f.name) == wanted)
-                    .map(|f| holds_view(&f.ty) || names_borrowing(&f.ty, &self.borrowing)),
+                    .map(|f| holds_view(&f.ty) || self.names_borrowing(&f.ty)),
                 _ => None,
             })
             .unwrap_or(true)
@@ -15527,7 +15511,7 @@ impl Emitter<'_> {
             else {
                 continue;
             };
-            if !self.borrowing.contains(name) || !generics.is_empty() {
+            if !self.s.borrowing.contains(self.text(*name)) || !generics.is_empty() {
                 continue;
             }
             let ty = self.name(*name);
@@ -15535,7 +15519,7 @@ impl Emitter<'_> {
                 .iter()
                 .map(|field| {
                     let field_name = self.name(field.name);
-                    match holds_view(&field.ty) || names_borrowing(&field.ty, &self.borrowing) {
+                    match holds_view(&field.ty) || self.names_borrowing(&field.ty) {
                         true => format!(
                             "{field_name}: nikaia_std::tether::Rebase::rebase(self.{field_name}, keeps)"
                         ),
