@@ -312,12 +312,18 @@ pub struct MatchArm {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct PatternField {
+    pub name: winnow_grammar::Symbol,
+    pub pat: MatchPattern,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum MatchPattern {
     Otherwise,
     Literal(Expr),
     Path(Vec<winnow_grammar::Symbol>),
     Tuple { path: Vec<winnow_grammar::Symbol>, parts: Vec<MatchPattern> },
-    Named { path: Vec<winnow_grammar::Symbol>, bindings: Vec<winnow_grammar::Symbol>, rest: bool },
+    Named { path: Vec<winnow_grammar::Symbol>, fields: Vec<PatternField>, rest: bool },
     Or(Vec<MatchPattern>),
     Range { start: Expr, end: Expr },
 }
@@ -1956,7 +1962,7 @@ fn bind_pattern(pattern: &MatchPattern, words: &winnow_grammar::InternerContext,
     match pattern {
         MatchPattern::Path(segments) => bind_all(segments, words, seen),
         MatchPattern::Tuple { parts, .. } => { for p in parts.iter() { bind_pattern(p, words, seen); } },
-        MatchPattern::Named { bindings, .. } => bind_all(bindings, words, seen),
+        MatchPattern::Named { fields, .. } => { for field in fields.iter() { bind_pattern(&field.pat, words, seen); } },
         MatchPattern::Or(alternatives) => { for p in alternatives.iter() { bind_pattern(p, words, seen); } },
         _ => { },
     }
@@ -9579,6 +9585,7 @@ impl CheckState {
                 for alternative in alternatives.iter() { self.an_or_pattern_that_binds_unevenly(world, alternative, span); }
             },
             MatchPattern::Tuple { parts, .. } => { for part in parts.iter() { self.an_or_pattern_that_binds_unevenly(world, part, span); } },
+            MatchPattern::Named { fields, .. } => { for field in fields.iter() { self.an_or_pattern_that_binds_unevenly(world, &field.pat, span); } },
             _ => { },
         }
     }
@@ -12598,17 +12605,17 @@ impl CheckState {
                     }
                 }
             },
-            MatchPattern::Named { path, bindings, .. } => {
+            MatchPattern::Named { path, fields, .. } => {
                 let key = self.pattern_variant(world, path, &owner);
-                let fields = nikaia_std::index::or(match *nikaia_std::index::get(&self.structs, &key) {
+                let declared = nikaia_std::index::or(match *nikaia_std::index::get(&self.structs, &key) {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                     None => None,
                 }, || vec![].into());
-                for binding in bindings.iter() {
-                    let name = world.words.resolve(*binding).to_owned();
-                    for field in fields.iter() {
+                for each in fields.iter() {
+                    let name = world.words.resolve(each.name).to_owned();
+                    for field in declared.iter() {
                         if field.name == name {
-                            out.insert(name.to_owned(), field.ty.clone());
+                            self.bind_a_part(world, &each.pat, &field.ty, &mut out);
                             break;
                         }
                     }
@@ -12644,7 +12651,7 @@ pub fn pattern_names(world: &CheckWorld<'_>, pattern: &MatchPattern) -> Vec<Stri
     match pattern {
         MatchPattern::Path(segments) => if segments.len() == 1 { vec![world.words.resolve(*nikaia_std::index::get(&segments, 0)).to_owned()] } else { vec![] },
         MatchPattern::Tuple { parts, .. } => names_of_parts(world, parts),
-        MatchPattern::Named { bindings, .. } => names_of_bindings(world, bindings),
+        MatchPattern::Named { fields, .. } => names_of_fields(world, fields),
         MatchPattern::Or(alternatives) => if !alternatives.is_empty() { pattern_names(world, nikaia_std::index::get(&alternatives, 0)) } else { vec![] },
         _ => vec![],
     }
@@ -12660,9 +12667,9 @@ fn names_of_parts(world: &CheckWorld<'_>, parts: &[MatchPattern]) -> Vec<String>
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn names_of_bindings(world: &CheckWorld<'_>, bindings: &[winnow_grammar::Symbol]) -> Vec<String> {
+fn names_of_fields(world: &CheckWorld<'_>, fields: &[PatternField]) -> Vec<String> {
     let mut out: Vec<String> = vec![];
-    for binding in bindings.iter() { out.push(world.words.resolve(*binding).to_owned()); }
+    for field in fields.iter() { for name in pattern_names(world, &field.pat) { out.push(name); } }
     out
 }
 
@@ -17545,14 +17552,14 @@ impl EmitState {
                     if boxed && self.binds_one_name(nikaia_std::index::get(&parts, nikaia_std::index::at(at))) { out.extend(self.single_binding(world, nikaia_std::index::get(&parts, nikaia_std::index::at(at)))); } else { out.extend(self.boxed_bindings(world, nikaia_std::index::get(&parts, nikaia_std::index::at(at)))); }
                 }
             },
-            MatchPattern::Named { path, bindings, .. } => {
+            MatchPattern::Named { path, fields, .. } => {
                 let (owner, variant) = self.boxed_owner(world, path);
                 if owner.is_empty() { return out; }
-                for binding in bindings.iter() {
-                    let field = world.words.resolve(*binding).to_owned();
+                for each in fields.iter() {
+                    let field = world.words.resolve(each.name).to_owned();
                     let mut member = field.to_owned();
                     if !variant.is_empty() { member = boxed_member(&variant, -1, &field); }
-                    if self.is_boxed(&owner, &member) { out.push(escaped_name(&field)); }
+                    if self.is_boxed(&owner, &member) && self.binds_one_name(&each.pat) { out.extend(self.single_binding(world, &each.pat)); } else { out.extend(self.boxed_bindings(world, &each.pat)); }
                 }
             },
             MatchPattern::Or(alternatives) => { if !alternatives.is_empty() { out.extend(self.boxed_bindings(world, nikaia_std::index::get(&alternatives, 0))); } },
@@ -38498,7 +38505,7 @@ pub mod assets {
 }
 pub mod ast {
     #[allow(unused_imports)]
-    pub use super::{Span, Spanned, Attribute, Program, Item, Block, Stmt, Expr, id_of, node_key, fresh_id, numbered_id, FPart, Type, ExternMember, OpaqueType, Code, EnumVariant, VariantFields, SelectArm, MatchArm, MatchPattern, GenericParam, TraitMethod, FnArg, ConfigArg, ConfigParam, FieldDef, FieldDefault, AsmBinding, FieldInit, UnaryOp, BinaryOp, GrammarDef, GrammarRule, FrameAttr, GrammarAlt, Pattern, Repeat, FoldSpec, Receiver, FnParams, ConfigZone, LONGEST_SOURCE, offset};
+    pub use super::{Span, Spanned, Attribute, Program, Item, Block, Stmt, Expr, id_of, node_key, fresh_id, numbered_id, FPart, Type, ExternMember, OpaqueType, Code, EnumVariant, VariantFields, SelectArm, MatchArm, PatternField, MatchPattern, GenericParam, TraitMethod, FnArg, ConfigArg, ConfigParam, FieldDef, FieldDefault, AsmBinding, FieldInit, UnaryOp, BinaryOp, GrammarDef, GrammarRule, FrameAttr, GrammarAlt, Pattern, Repeat, FoldSpec, Receiver, FnParams, ConfigZone, LONGEST_SOURCE, offset};
 }
 pub mod boundaries {
     #[allow(unused_imports)]

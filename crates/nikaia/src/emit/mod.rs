@@ -12156,7 +12156,6 @@ impl<'p> Emitter<'p> {
                 .collect::<Vec<_>>()
                 .join("::")
         };
-        let names = |b: &[Symbol]| b.iter().map(bound).collect::<Vec<_>>().join(", ");
         match pattern {
             // Rust's own catch-all, which is what the arm was before
             // ([ADR-291](../../docs/specification/adr/adr-291.md) D18).
@@ -12189,17 +12188,43 @@ impl<'p> Emitter<'p> {
                 }
                 out.push(")");
             }
+            // **A field takes a pattern** (ADR-291 D25), written as Rust writes
+            // it: a binding of the field's own name is the shorthand, any
+            // other pattern follows `field: `. Where the names are not wanted
+            // (`Names::Wild`) the shorthand fields are the rest.
             MatchPattern::Named {
                 path: p,
-                bindings,
+                fields,
                 rest,
             } => {
-                let inside = match (bindings.is_empty(), rest, names_as) {
-                    (true, _, _) | (_, _, Names::Wild) => "..".to_string(),
-                    (false, true, _) => format!("{}, ..", names(bindings)),
-                    (false, false, _) => names(bindings),
-                };
-                out.push(&format!("{} {{ {inside} }}", path(p)));
+                out.push(&format!("{} {{ ", path(p)));
+                let mut first = true;
+                let mut open = *rest;
+                for field in fields {
+                    let shorthand = matches!(&field.pat, MatchPattern::Path(one)
+                        if one.len() == 1 && self.text(one[0]) == self.text(field.name));
+                    if shorthand && matches!(names_as, Names::Wild) {
+                        open = true;
+                        continue;
+                    }
+                    if !first {
+                        out.push(", ");
+                    }
+                    first = false;
+                    if shorthand {
+                        out.push(&bound(&field.name));
+                    } else {
+                        out.push(&format!("{}: ", self.text(field.name)));
+                        self.pattern_written(out, &field.pat, names_as, nests, depth, flow)?;
+                    }
+                }
+                if open || first {
+                    if !first {
+                        out.push(", ");
+                    }
+                    out.push("..");
+                }
+                out.push(" }");
             }
             MatchPattern::Or(alternatives) => {
                 for (i, alternative) in alternatives.iter().enumerate() {

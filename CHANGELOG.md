@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.806] — 2026-10-11
+
+**A field in a struct pattern takes a pattern (ADR-291 D25, #573).**
+- `Point { x: 0, y }`, `Move { x: px, .. }`, `Shape::Circle { center: Point { x, .. }, .. }` and `E::Bin { op: Op::Add, l, r }` parse, check and lower as Rust writes them; `field` alone is `field: field`. `MatchPattern::Named` holds `fields: Vec[PatternField]` (a name and a pattern) in place of the names. The type of each part is read from the field's declared type, the binding-set rule (`NK1155`) and the lending of a part only read apply to the sub-pattern, and the emitter writes `field: pattern`.
+
 ## [0.0.805] — 2026-10-11
 
 **The checker's walk holds no address, no `i128`, no closure boundary and no lazy cell (#558, #125, C-1).**

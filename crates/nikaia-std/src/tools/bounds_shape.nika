@@ -229,7 +229,11 @@ fn bind_pattern(pattern: ref MatchPattern, words: ref winnow_grammar::InternerCo
                 bind_pattern(p, words, seen)
             }
         },
-        MatchPattern::Named { bindings, .. } => bind_all(bindings, words, seen),
+        MatchPattern::Named { fields, .. } => {
+            for field in fields {
+                bind_pattern(field.pat, words, seen)
+            }
+        },
         MatchPattern::Or(alternatives) => {
             for p in alternatives {
                 bind_pattern(p, words, seen)

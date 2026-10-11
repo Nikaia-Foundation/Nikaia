@@ -79,14 +79,14 @@ impl CheckState {
                     }
                 }
             }
-            MatchPattern::Named { path, bindings, .. } => {
+            MatchPattern::Named { path, fields, .. } => {
                 let key = self.pattern_variant(world, path, owner)
-                let fields = self.structs[key]?.clone() ?? []
-                for binding in bindings {
-                    let name = world.words.resolve(binding).clone()
-                    for field in fields {
+                let declared = self.structs[key]?.clone() ?? []
+                for each in fields {
+                    let name = world.words.resolve(each.name).clone()
+                    for field in declared {
                         if field.name == name {
-                            out.insert(name.clone(), field.ty.clone())
+                            self.bind_a_part(world, each.pat, field.ty, out)
                             break
                         }
                     }
@@ -150,7 +150,7 @@ pub fn pattern_names(world: ref CheckWorld, pattern: ref MatchPattern) -> Vec[St
     return match pattern {
         MatchPattern::Path(segments) => if segments.len() == 1 { [world.words.resolve(segments[0]).clone()] } else { [] },
         MatchPattern::Tuple { parts, .. } => names_of_parts(world, parts),
-        MatchPattern::Named { bindings, .. } => names_of_bindings(world, bindings),
+        MatchPattern::Named { fields, .. } => names_of_fields(world, fields),
         MatchPattern::Or(alternatives) => if alternatives.len() > 0 { pattern_names(world, alternatives[0]) } else { [] },
         else => [],
     }
@@ -166,10 +166,12 @@ fn names_of_parts(world: ref CheckWorld, parts: ref Vec[MatchPattern]) -> Vec[St
     return out
 }
 
-fn names_of_bindings(world: ref CheckWorld, bindings: ref Vec[winnow_grammar::Symbol]) -> Vec[String] sync {
+fn names_of_fields(world: ref CheckWorld, fields: ref Vec[PatternField]) -> Vec[String] sync {
     let mut out: Vec[String] = []
-    for binding in bindings {
-        out.push(world.words.resolve(binding).clone())
+    for field in fields {
+        for name in pattern_names(world, field.pat) {
+            out.push(name)
+        }
     }
     return out
 }

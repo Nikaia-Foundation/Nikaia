@@ -1015,6 +1015,13 @@ pub struct MatchArm {
     pub body: Expr,
 }
 
+/// One field of a struct pattern and the pattern it is matched against
+/// (ADR-291 D25).
+pub struct PatternField {
+    pub name: winnow_grammar::Symbol,
+    pub pat: MatchPattern,
+}
+
 /// What an arm matches. Deliberately small: every shape here is one the
 /// language it lowers to spells the same way, so the lowering stays name for
 /// name (ADR-296 D17) and no pattern means something different in the two.
@@ -1049,11 +1056,14 @@ pub enum MatchPattern {
         path: Vec[winnow_grammar::Symbol],
         parts: Vec[MatchPattern],
     },
-    /// `Message::Move { x, y }` - shorthand only, because a rename is a `let`
-    /// in the arm and needs no syntax of its own.
+    /// `Message::Move { x, y }`, `Move { x: px, .. }`, `Point { x: 0, y }`
+    /// ([ADR-291](../../../docs/specification/adr/adr-291.md) D10, D25).
+    ///
+    /// **A field takes a pattern**, as a tuple's part does: `field: pattern`,
+    /// and `field` alone is `field: field`, a binding of the field's own name.
     Named {
         path: Vec[winnow_grammar::Symbol],
-        bindings: Vec[winnow_grammar::Symbol],
+        fields: Vec[PatternField],
         /// `..` for the fields this pattern does not name
         /// ([ADR-291](../../../docs/specification/adr/adr-291.md) D10).
         rest: bool,

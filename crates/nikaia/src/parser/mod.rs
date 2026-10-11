@@ -3395,14 +3395,29 @@ grammar! {
           | path:pattern_path "(" parts:match_part_list ")" -> {
                 MatchPattern::Tuple { path, parts }
             }
-          | path:pattern_path "{" bindings:ident_list rest:named_rest? "}" -> {
-                MatchPattern::Named { path, bindings, rest: rest.is_some() }
+          | path:pattern_path "{" fields:pattern_fields rest:named_rest? "}" -> {
+                MatchPattern::Named { path, fields, rest: rest.is_some() }
             }
           // `Point { .. }` - every field, none of them named.
           | path:pattern_path "{" ".." "}" -> {
-                MatchPattern::Named { path, bindings: Vec::new(), rest: true }
+                MatchPattern::Named { path, fields: Vec::new(), rest: true }
             }
           | path:pattern_path -> { MatchPattern::Path(path) }
+
+        // **A field takes a pattern** (ADR-291 D25): `x: px`, `x: 0`,
+        // `center: Point { x, .. }`; a field alone is `field: field`.
+        rule pattern_fields -> Vec<PatternField> =
+            head:pattern_field tail:pattern_field_tail* -> {
+                let mut fields = vec![head];
+                fields.extend(tail);
+                fields
+            }
+
+        rule pattern_field_tail -> PatternField = "," f:pattern_field -> { f }
+
+        rule pattern_field -> PatternField =
+            name:NAME ":" pat:match_part -> { PatternField { name, pat } }
+          | name:NAME -> { PatternField { name, pat: MatchPattern::Path(vec![name]) } }
 
         // `, ..` - the fields this pattern does not name (D1).
         rule named_rest = "," ".."

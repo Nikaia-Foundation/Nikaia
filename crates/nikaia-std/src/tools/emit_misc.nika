@@ -174,19 +174,21 @@ impl EmitState {
                     }
                 }
             },
-            MatchPattern::Named { path, bindings, .. } => {
+            MatchPattern::Named { path, fields, .. } => {
                 let (owner, variant) = self.boxed_owner(world, path)
                 if owner.len() == 0 {
                     return out
                 }
-                for binding in bindings {
-                    let field = world.words.resolve(binding).clone()
+                for each in fields {
+                    let field = world.words.resolve(each.name).clone()
                     let mut member = field.clone()
                     if variant.len() > 0 {
                         member = boxed_member(variant, -1, field)
                     }
-                    if self.is_boxed(owner, member) {
-                        out.push(escaped_name(field))
+                    if self.is_boxed(owner, member) && self.binds_one_name(each.pat) {
+                        out.extend(self.single_binding(world, each.pat))
+                    } else {
+                        out.extend(self.boxed_bindings(world, each.pat))
                     }
                 }
             },
