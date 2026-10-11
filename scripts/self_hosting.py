@@ -146,6 +146,7 @@ COMPILER_NIKA = {
     "emit_out.nika": "emit: the text being written and the map of where each run of it came from (0.0.796)",
     "check_fields.nika": "check: a field read through ?., a ?. or ?? over a value never absent (0.0.798)",
     "check_texts.nika": "check: text and bytes built where a typed position asks for them (0.0.798)",
+    "check_numbers2.nika": "check: two number types in one operation, array literals and collect by use (0.0.799)",
 }
 
 

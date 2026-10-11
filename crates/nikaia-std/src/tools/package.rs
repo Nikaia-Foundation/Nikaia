@@ -11973,6 +11973,291 @@ pub fn a_number_that_does_not_fit(value: &Integer, beyond: bool, bare: bool, ty:
 }
 
 
+// --- check_numbers2.nika ---
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn number_key(expr: &Expr) -> i64 { id_of(expr) as i64 }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn held_name(ty: &Ty) -> Option<String> {
+    match ty {
+        Ty::Named { name, args, view } => { let view = *view; if !view && args.is_empty() { Some(name.to_owned()) } else { None } },
+        _ => None,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn bare_name(ty: &Ty) -> String {
+    match ty {
+        Ty::Named { name, args, .. } => if args.is_empty() { name.to_owned() } else { String::from("") },
+        _ => String::from(""),
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn an_offered_number(name: &str) -> bool { name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f64" }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn number_article(name: &str) -> String {
+    if name.starts_with("i") { return String::from("an"); }
+    String::from("a")
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn a_type_named(ty: &Ty, wanted: &str, viewed: bool) -> bool {
+    match ty {
+        Ty::Named { name, args, view } => { let view = *view; name == wanted && args.is_empty() && view == viewed },
+        _ => false,
+    }
+}
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn two_number_types(&mut self, op: BinaryOp, lhs: &Expr, left: &Ty, rhs: &Expr, right: &Ty, at: &Span) -> Option<String> {
+        if op == BinaryOp::Shl || op == BinaryOp::Shr { return None; }
+        let held_left = held_name(left);
+        let held_right = held_name(right);
+        if held_left.is_some() && held_right.is_some() && !is_a_literal(lhs) && !is_a_literal(rhs) {
+            let l = nikaia_std::index::or(held_left.as_deref(), || "").to_owned();
+            let r = nikaia_std::index::or(held_right.as_deref(), || "").to_owned();
+            if l != r {
+                let common = common_integer(&l, &r);
+                if common.is_some() {
+                    let joined = nikaia_std::index::or(common.as_deref(), || "").to_owned();
+                    if l != joined { self.facts.wrapped.insert(number_key(lhs), FactWrap::Widen(joined.to_owned())); }
+                    if r != joined { self.facts.wrapped.insert(number_key(rhs), FactWrap::Widen(joined.to_owned())); }
+                    return Some(joined);
+                }
+            }
+        }
+        let l = bare_name(&value_of_a_copy(&left.unseen()));
+        let r = bare_name(&value_of_a_copy(&right.unseen()));
+        if l.is_empty() || r.is_empty() || l == r || !an_offered_number(&l) || !an_offered_number(&r) { return None; }
+        let message = format!("You're mixing {} `{}` and {} `{}` in one operation.", number_article(&l), l, number_article(&r), r);
+        let mut note: String = String::from("An integer and a floating-point number never mix on their own: the conversion can change the value.");
+        if common_integer(&l, &r).is_none() && l != "f64" && r != "f64" { note = format!("Two integer types mix where one holds every value of both, and no type holds every `{}` and every `{}`.", l, r); }
+        let help = format!("Convert one side with `as`: `… as {}` or `… as {}`, whichever the result should be.", l, r);
+        self.findings.push(check_refusal("NK1199", at, message, vec![note], Some(help)));
+        None
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn two_integer_types_compared(&mut self, lhs: &Expr, left: &Ty, rhs: &Expr, right: &Ty, at: &Span) {
+        if is_a_literal(lhs) || is_a_literal(rhs) { return; }
+        let l = match an_integer_named(left) { Some(__nikaia_value) => __nikaia_value, None => return };
+        let r = match an_integer_named(right) { Some(__nikaia_value) => __nikaia_value, None => return };
+        if l == r { return; }
+        let mut into: String = String::from("i64");
+        let mut mixed = false;
+        let common = common_integer(&l, &r);
+        if common.is_some() { into = nikaia_std::index::or(common.as_deref(), || "").to_owned(); } else { mixed = true; }
+        if l != into && l != "u64" { self.facts.wrapped.insert(number_key(lhs), FactWrap::Widen(into.to_owned())); }
+        if r != into && r != "u64" { self.facts.wrapped.insert(number_key(rhs), FactWrap::Widen(into.to_owned())); }
+        if mixed { self.facts.mixed_comparisons.insert(at.start as i64, l == "u64"); }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn a_compound_over_two_integer_types(&mut self, world: &CheckWorld<'_>, op: BinaryOp, target: &Expr, into: &Ty, value: &Expr, found: &Ty, span: &Span) {
+        let x = match an_integer_named(into) { Some(__nikaia_value) => __nikaia_value, None => return };
+        let v = match an_integer_named(found) { Some(__nikaia_value) => __nikaia_value, None => return };
+        if x == v || is_a_literal(value) { return; }
+        let common = common_integer(&x, &v);
+        if common.is_none() {
+            self.two_number_types(op, target, into, value, found, span);
+            return;
+        }
+        let joined = nikaia_std::index::or(common.as_deref(), || "").to_owned();
+        if joined == x {
+            if !self.narrow_by_width(world, value, &joined, span) && !self.widen_operands(world, value, &joined, span) { self.facts.wrapped.insert(number_key(value), FactWrap::Widen(joined.to_owned())); }
+            return;
+        }
+        let shown = written_expression(world.words, target);
+        let message = format!("This `{}=` computes in `{}`, but `{}` holds `{}`.", binary_op_text(op), joined, shown, x);
+        let note = format!("Two integer types compute in the one that holds every value of both, and a `{}` does not fit every `{}`.", joined, x);
+        let help = format!("Convert the value with `as {}`, which stops the program where it does not fit, or make `{}` a `{}`.", x, shown, joined);
+        self.findings.push(check_refusal("NK1105", span, message, vec![note], Some(help)));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn widen_operands(&mut self, world: &CheckWorld<'_>, value: &Expr, into: &str, within: &Span) -> bool {
+        match value {
+            Expr::Binary { op, lhs, rhs, span, .. } => {
+                let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
+                if *op == BinaryOp::Add || *op == BinaryOp::Sub || *op == BinaryOp::Mul || *op == BinaryOp::Div || *op == BinaryOp::Rem {
+                    let key = span.start as i64;
+                    if self.facts.arithmetic.contains_key(&key) { self.facts.arithmetic.insert(key, into.to_owned()); }
+                    self.widen_operand(world, lhs, into, within);
+                    self.widen_operand(world, rhs, into, within);
+                    return true;
+                }
+                return false;
+            },
+            Expr::Unary { op, expr, .. } => {
+                let expr = nikaia_std::boxed::open(expr);
+                if *op == UnaryOp::Neg {
+                    self.widen_operand(world, expr, into, within);
+                    return true;
+                }
+                return false;
+            },
+            _ => return false,
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn widen_operand(&mut self, world: &CheckWorld<'_>, side: &Expr, into: &str, span: &Span) {
+        if self.narrow_by_width(world, side, into, span) || self.widen_operands(world, side, into, span) { return; }
+        let literal_int = matches!(side, Expr::LitInt { .. });
+        if literal_int {
+            self.facts.unsigned_literals.insert(number_key(side), into.to_owned());
+            return;
+        }
+        if is_a_literal(side) { return; }
+        self.facts.wrapped.insert(number_key(side), FactWrap::Widen(into.to_owned()));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn widened_elements(&mut self, world: &CheckWorld<'_>, found: &Ty, want: &Ty, value: &Expr, span: &Span) -> Option<Ty> {
+        let from = match found {
+            Ty::Named { name, .. } => name.to_owned(),
+            _ => return None,
+        };
+        let into = match want {
+            Ty::Named { name, .. } => name.to_owned(),
+            _ => return None,
+        };
+        let from_args = named_arguments_of(found);
+        let into_args = named_arguments_of(want);
+        let items = items_of(value);
+        let base = type_last_segment(&from);
+        if !(base == "Vec" || base == "List" || base == "Array") || from != into { return None; }
+        if from_args.is_empty() || into_args.is_empty() || !is_a_list_literal(value) { return None; }
+        let widened = match widened_into(nikaia_std::index::get(&from_args, 0), nikaia_std::index::get(&into_args, 0)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        for item in items.iter() {
+            let item = *item;
+            if is_a_literal(item) { continue; }
+            if !self.narrow_by_width(world, item, &widened, span) && !self.widen_operands(world, item, &widened, span) { self.facts.wrapped.insert(number_key(item), FactWrap::Widen(widened.to_owned())); }
+        }
+        Some(want.clone())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn array_literal(&mut self, found: &Ty, want: &Ty, value: &Expr, span: &Span) -> Option<Ty> {
+        if !is_a_list_literal(value) { return None; }
+        let name = match want {
+            Ty::Named { name, .. } => name.to_owned(),
+            _ => return None,
+        };
+        let wanted = named_arguments_of(want);
+        let items = items_of(value);
+        let mut has_count = false;
+        let mut count: i64 = 0;
+        if name == "Array" && wanted.len() == 2 {
+            match *nikaia_std::index::get(&wanted, 1) {
+                Ty::Count(n) => {
+                    has_count = true;
+                    count = n;
+                },
+                _ => return None,
+            }
+        } else if name == "Vec" && wanted.len() == 1 && holds_an_array(nikaia_std::index::get(&wanted, 0)) { has_count = false; } else { return None; }
+        if has_count {
+            if (items.len() as i64) != count {
+                self.findings.push(a_list_the_wrong_length_for_its_array(items.len() as i64, count, span, false));
+                return Some(want.clone());
+            }
+            self.facts.array_literals.insert(number_key(value));
+        }
+        let mut held = Ty::Unknown;
+        let found_args = named_arguments_of(found);
+        if !found_args.is_empty() { held = (*nikaia_std::index::get(&found_args, 0)).clone(); }
+        let mut agreed: Option<Ty> = None;
+        for item in items.iter() {
+            let item = *item;
+            let inner = self.array_literal(&held, nikaia_std::index::get(&wanted, 0), item, span);
+            if agreed.is_none() && inner.is_some() { agreed = inner; }
+        }
+        let element = nikaia_std::index::or(agreed.as_ref(), || &held).clone();
+        if has_count { return Some(Ty::Named { name, args: vec![element, Ty::Count(count)], view: false }); }
+        Some(Ty::Named { name, args: vec![element], view: false })
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn collect_by_use(&mut self, world: &CheckWorld<'_>, found: &Ty, want: &Ty, value: &Expr) -> Option<Ty> {
+        let receiver = collect_receiver(value);
+        if receiver.len() != 1 || !a_collect_call(world, value) { return None; }
+        let made = named_arguments_of(found);
+        let found_name = match found {
+            Ty::Named { name, .. } => name.to_owned(),
+            _ => return None,
+        };
+        if made.len() != 1 || type_last_segment(&found_name) != "Vec" { return None; }
+        let wanted_name = match want {
+            Ty::Named { name, view, .. } => { let view = *view; if view { return None; } else { name.to_owned() } },
+            _ => return None,
+        };
+        let parts = named_arguments_of(want);
+        let base = type_last_segment(&wanted_name);
+        let item = (*nikaia_std::index::get(&made, 0)).clone();
+        let mut fits = false;
+        if (base == "HashMap" || base == "BTreeMap" || base == "TrustedMap") && parts.len() == 2 { fits = item.fits(&Ty::Tuple(vec![(*nikaia_std::index::get(&parts, 0)).clone(), (*nikaia_std::index::get(&parts, 1)).clone()])); } else if (base == "HashSet" || base == "BTreeSet" || base == "TrustedSet") && parts.len() == 1 { fits = item.fits(nikaia_std::index::get(&parts, 0)); } else if base == "String" && parts.is_empty() { fits = a_type_named(&item, "char", false) || a_type_named(&item, "scalar", false) || a_type_named(&item, "str", true) || a_type_named(&item, "String", false); }
+        if !fits { return None; }
+        self.facts.collected_into.insert(number_key(*nikaia_std::index::get(&receiver, 0)));
+        Some(want.clone())
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn a_collect_call(world: &CheckWorld<'_>, value: &Expr) -> bool {
+    match value {
+        Expr::MethodCall { method, args, .. } => { let method = *method; args.is_empty() && world.words.resolve(method) == "collect" },
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn collect_receiver(value: &Expr) -> Vec<&Expr> {
+    match value {
+        Expr::MethodCall { receiver, .. } => { let receiver = nikaia_std::boxed::open(receiver); vec![receiver] },
+        _ => vec![],
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn is_a_list_literal(value: &Expr) -> bool { matches!(value, Expr::ListLit { .. }) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn items_of(value: &Expr) -> Vec<&Expr> {
+    let mut out: Vec<&Expr> = vec![];
+    match value {
+        Expr::ListLit { items, .. } => { for item in items.iter() { out.push(item); } },
+        _ => { },
+    }
+    out
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn named_arguments_of(ty: &Ty) -> Vec<Ty> {
+    match ty {
+        Ty::Named { args, .. } => args.to_owned(),
+        _ => vec![],
+    }
+}
+
+
 // --- check_patterns.nika ---
 
 impl CheckState {
@@ -37230,6 +37515,7 @@ pub mod check_numbers {
     #[allow(unused_imports)]
     pub use super::{a_number_that_does_not_fit};
 }
+pub mod check_numbers2 {}
 pub mod check_patterns {
     #[allow(unused_imports)]
     pub use super::{pattern_names};

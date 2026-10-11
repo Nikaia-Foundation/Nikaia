@@ -1,0 +1,369 @@
+// crates/nikaia-std/src/tools/check_numbers2.nika
+//
+// **Two number types in one operation, a list literal that is an array, and a
+// `collect` that builds what its position asks** (Part I 2.2, ADR-285 D32,
+// ADR-152 D4, #558, #125), moved from the compiler's checker: they write
+// `CheckState.facts` directly. Where two integer types meet, the one that holds
+// both is the type the operation is computed in and each narrower side is
+// wrapped to widen (`wrapped`); where none does, the mix is `NK1199`.
+
+use std::collections
+
+fn number_key(expr: ref Expr) -> i64 sync {
+    return id_of(expr) as i64
+}
+
+/// The name of a held, unviewed type with no arguments.
+fn held_name(ty: ref Ty) -> String? sync {
+    return match ty {
+        Ty::Named { name, args, view } => if !view && args.len() == 0 { name.clone() } else { null },
+        else => null,
+    }
+}
+
+/// The name of a type with no arguments, viewed or not.
+fn bare_name(ty: ref Ty) -> String sync {
+    return match ty {
+        Ty::Named { name, args, .. } => if args.len() == 0 { name.clone() } else { "" },
+        else => "",
+    }
+}
+
+fn an_offered_number(name: ref String) -> bool sync {
+    return name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f64"
+}
+
+/// `an i32`, `a u64`: only an `i` is said with a vowel.
+fn number_article(name: ref String) -> String sync {
+    if name.starts_with("i") {
+        return "an"
+    }
+    return "a"
+}
+
+/// Whether a type is exactly the named one.
+fn a_type_named(ty: ref Ty, wanted: ref String, viewed: bool) -> bool sync {
+    return match ty {
+        Ty::Named { name, args, view } => name == wanted && args.len() == 0 && view == viewed,
+        else => false,
+    }
+}
+
+impl CheckState {
+    /// **Two sides of one operation of different number types** (Part I 2.2): the
+    /// type it is computed in where one holds both (each narrower side is
+    /// wrapped to widen), or nothing, and then `NK1199` for a mix no type holds.
+    pub fn two_number_types(ref mut self, op: BinaryOp, lhs: ref Expr, left: ref Ty, rhs: ref Expr, right: ref Ty, at: ref Span) -> String? sync {
+        if op == BinaryOp::Shl || op == BinaryOp::Shr {
+            return null
+        }
+        let held_left = held_name(left)
+        let held_right = held_name(right)
+        if held_left != null && held_right != null && !is_a_literal(lhs) && !is_a_literal(rhs) {
+            let l = (held_left ?? "").clone()
+            let r = (held_right ?? "").clone()
+            if l != r {
+                let common = common_integer(l, r)
+                if common != null {
+                    let joined = (common ?? "").clone()
+                    if l != joined {
+                        self.facts.wrapped.insert(number_key(lhs), FactWrap::Widen(joined.clone()))
+                    }
+                    if r != joined {
+                        self.facts.wrapped.insert(number_key(rhs), FactWrap::Widen(joined.clone()))
+                    }
+                    return joined
+                }
+            }
+        }
+        let l = bare_name(value_of_a_copy(left.unseen()))
+        let r = bare_name(value_of_a_copy(right.unseen()))
+        if l.is_empty() || r.is_empty() || l == r || !an_offered_number(l) || !an_offered_number(r) {
+            return null
+        }
+        let message = f"You're mixing {number_article(l)} `{l}` and {number_article(r)} `{r}` in one operation."
+        let mut note: String = "An integer and a floating-point number never mix on their own: the conversion can change the value."
+        if common_integer(l, r) == null && l != "f64" && r != "f64" {
+            note = f"Two integer types mix where one holds every value of both, and no type holds every `{l}` and every `{r}`."
+        }
+        let help = f"Convert one side with `as`: `… as {l}` or `… as {r}`, whichever the result should be."
+        self.findings.push(check_refusal("NK1199", at, message, [note], help))
+        return null
+    }
+
+    /// **A comparison of two integer types** (ADR-285 D32): each side that is
+    /// narrower than the type both go to is wrapped to widen; where none holds
+    /// both, they go to `i64` and the comparison says whether the left is the
+    /// `u64` one.
+    pub fn two_integer_types_compared(ref mut self, lhs: ref Expr, left: ref Ty, rhs: ref Expr, right: ref Ty, at: ref Span) sync {
+        if is_a_literal(lhs) || is_a_literal(rhs) {
+            return
+        }
+        let l = an_integer_named(left) ?? return
+        let r = an_integer_named(right) ?? return
+        if l == r {
+            return
+        }
+        let mut into: String = "i64"
+        let mut mixed = false
+        let common = common_integer(l, r)
+        if common != null {
+            into = (common ?? "").clone()
+        } else {
+            mixed = true
+        }
+        if l != into && l != "u64" {
+            self.facts.wrapped.insert(number_key(lhs), FactWrap::Widen(into.clone()))
+        }
+        if r != into && r != "u64" {
+            self.facts.wrapped.insert(number_key(rhs), FactWrap::Widen(into.clone()))
+        }
+        if mixed {
+            self.facts.mixed_comparisons.insert(at.start as i64, l == "u64")
+        }
+    }
+
+    /// **`x op= value` over two integer types** (ADR-285 D32): the value is
+    /// widened where `x`'s type is the common one; where the common type is
+    /// wider than `x`'s, the result does not fit `x` (`NK1105`); where there is
+    /// none, it is the operator's `NK1199`.
+    pub fn a_compound_over_two_integer_types(ref mut self, world: ref CheckWorld, op: BinaryOp, target: ref Expr, into: ref Ty, value: ref Expr, found: ref Ty, span: ref Span) sync {
+        let x = an_integer_named(into) ?? return
+        let v = an_integer_named(found) ?? return
+        if x == v || is_a_literal(value) {
+            return
+        }
+        let common = common_integer(x, v)
+        if common == null {
+            self.two_number_types(op, target, into, value, found, span)
+            return
+        }
+        let joined = (common ?? "").clone()
+        if joined == x {
+            if !self.narrow_by_width(world, value, joined, span) && !self.widen_operands(world, value, joined, span) {
+                self.facts.wrapped.insert(number_key(value), FactWrap::Widen(joined.clone()))
+            }
+            return
+        }
+        let shown = written_expression(world.words, target)
+        let message = f"This `{binary_op_text(op)}=` computes in `{joined}`, but `{shown}` holds `{x}`."
+        let note = f"Two integer types compute in the one that holds every value of both, and a `{joined}` does not fit every `{x}`."
+        let help = f"Convert the value with `as {x}`, which stops the program where it does not fit, or make `{shown}` a `{joined}`."
+        self.findings.push(check_refusal("NK1105", span, message, [note], help))
+    }
+
+    /// **The operands of a computation widen to the type it is computed in**
+    /// (ADR-285 D32): an arithmetic operation names the type, each side is
+    /// wrapped. True where `value` is one.
+    pub fn widen_operands(ref mut self, world: ref CheckWorld, value: ref Expr, into: ref String, within: ref Span) -> bool sync {
+        match value {
+            Expr::Binary { op, lhs, rhs, span, .. } => {
+                if op == BinaryOp::Add || op == BinaryOp::Sub || op == BinaryOp::Mul || op == BinaryOp::Div || op == BinaryOp::Rem {
+                    let key = span.start as i64
+                    if self.facts.arithmetic.contains_key(key) {
+                        self.facts.arithmetic.insert(key, into.clone())
+                    }
+                    self.widen_operand(world, lhs, into, within)
+                    self.widen_operand(world, rhs, into, within)
+                    return true
+                }
+                return false
+            },
+            Expr::Unary { op, expr, .. } => {
+                if op == UnaryOp::Neg {
+                    self.widen_operand(world, expr, into, within)
+                    return true
+                }
+                return false
+            },
+            else => return false,
+        }
+    }
+
+    /// One operand of a computation that widens.
+    fn widen_operand(ref mut self, world: ref CheckWorld, side: ref Expr, into: ref String, span: ref Span) sync {
+        if self.narrow_by_width(world, side, into, span) || self.widen_operands(world, side, into, span) {
+            return
+        }
+        let literal_int = match side {
+            Expr::LitInt { .. } => true,
+            else => false,
+        }
+        if literal_int {
+            self.facts.unsigned_literals.insert(number_key(side), into.clone())
+            return
+        }
+        if is_a_literal(side) {
+            return
+        }
+        self.facts.wrapped.insert(number_key(side), FactWrap::Widen(into.clone()))
+    }
+
+    /// **A list literal whose elements widen to the list's element type**
+    /// (ADR-285 D32): `[a, b]` of `u32`s where a `Vec[i64]` is wanted.
+    pub fn widened_elements(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr, span: ref Span) -> Ty? sync {
+        let from = match found {
+            Ty::Named { name, .. } => name.clone(),
+            else => return null,
+        }
+        let into = match want {
+            Ty::Named { name, .. } => name.clone(),
+            else => return null,
+        }
+        let from_args = named_arguments_of(found)
+        let into_args = named_arguments_of(want)
+        let items = items_of(value)
+        let base = type_last_segment(from)
+        if !(base == "Vec" || base == "List" || base == "Array") || from != into {
+            return null
+        }
+        if from_args.len() == 0 || into_args.len() == 0 || !is_a_list_literal(value) {
+            return null
+        }
+        let widened = widened_into(from_args[0], into_args[0]) ?? return null
+        for item in items {
+            if is_a_literal(item) {
+                continue
+            }
+            if !self.narrow_by_width(world, item, widened, span) && !self.widen_operands(world, item, widened, span) {
+                self.facts.wrapped.insert(number_key(item), FactWrap::Widen(widened.clone()))
+            }
+        }
+        return want.clone()
+    }
+
+    /// **A list literal where an `Array[T, N]` is wanted** (ADR-152 D4), and
+    /// the array it is: `NK1157` where the length is wrong. It descends with the
+    /// literal, so a `Vec` of arrays is walked through.
+    pub fn array_literal(ref mut self, found: ref Ty, want: ref Ty, value: ref Expr, span: ref Span) -> Ty? sync {
+        if !is_a_list_literal(value) {
+            return null
+        }
+        let name = match want {
+            Ty::Named { name, .. } => name.clone(),
+            else => return null,
+        }
+        let wanted = named_arguments_of(want)
+        let items = items_of(value)
+        let mut has_count = false
+        let mut count = 0
+        if name == "Array" && wanted.len() == 2 {
+            match wanted[1] {
+                Ty::Count(n) => {
+                    has_count = true
+                    count = n
+                },
+                else => return null,
+            }
+        } else if name == "Vec" && wanted.len() == 1 && holds_an_array(wanted[0]) {
+            has_count = false
+        } else {
+            return null
+        }
+        if has_count {
+            if items.len() != count {
+                self.findings.push(a_list_the_wrong_length_for_its_array(items.len(), count, span, false))
+                return want.clone()
+            }
+            self.facts.array_literals.insert(number_key(value))
+        }
+        let mut held = Ty::Unknown
+        let found_args = named_arguments_of(found)
+        if found_args.len() > 0 {
+            held = found_args[0].clone()
+        }
+        let mut agreed: Ty? = null
+        for item in items {
+            let inner = self.array_literal(held, wanted[0], item, span)
+            if agreed == null && inner != null {
+                agreed = inner
+            }
+        }
+        let element = (agreed ?? held).clone()
+        if has_count {
+            return Ty::Named { name: name, args: [element, Ty::Count(count)], view: false }
+        }
+        return Ty::Named { name: name, args: [element], view: false }
+    }
+
+    /// **A `collect` that builds what its position asks** (ADR-293 D25): a map,
+    /// a set or text, which the language below's own `collect` builds when
+    /// nothing overrides the type it reads off the place.
+    pub fn collect_by_use(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr) -> Ty? sync {
+        let receiver = collect_receiver(value)
+        if receiver.len() != 1 || !a_collect_call(world, value) {
+            return null
+        }
+        let made = named_arguments_of(found)
+        let found_name = match found {
+            Ty::Named { name, .. } => name.clone(),
+            else => return null,
+        }
+        if made.len() != 1 || type_last_segment(found_name) != "Vec" {
+            return null
+        }
+        let wanted_name = match want {
+            Ty::Named { name, view, .. } => if view { return null } else { name.clone() },
+            else => return null,
+        }
+        let parts = named_arguments_of(want)
+        let base = type_last_segment(wanted_name)
+        let item = made[0].clone()
+        let mut fits = false
+        if (base == "HashMap" || base == "BTreeMap" || base == "TrustedMap") && parts.len() == 2 {
+            fits = item.fits(Ty::Tuple([parts[0].clone(), parts[1].clone()]))
+        } else if (base == "HashSet" || base == "BTreeSet" || base == "TrustedSet") && parts.len() == 1 {
+            fits = item.fits(parts[0])
+        } else if base == "String" && parts.len() == 0 {
+            fits = a_type_named(item, "char", false) || a_type_named(item, "scalar", false) || a_type_named(item, "str", true) || a_type_named(item, "String", false)
+        }
+        if !fits {
+            return null
+        }
+        self.facts.collected_into.insert(number_key(receiver[0]))
+        return want.clone()
+    }
+}
+
+/// Whether an expression is a `.collect()` call with no arguments.
+fn a_collect_call(world: ref CheckWorld, value: ref Expr) -> bool sync {
+    return match value {
+        Expr::MethodCall { method, args, .. } => args.len() == 0 && world.words.resolve(method) == "collect",
+        else => false,
+    }
+}
+
+/// The receiver of a method call, as a list of none or one.
+fn collect_receiver(value: ref Expr) -> Vec[ref Expr] sync {
+    return match value {
+        Expr::MethodCall { receiver, .. } => [receiver],
+        else => [],
+    }
+}
+
+fn is_a_list_literal(value: ref Expr) -> bool sync {
+    return match value {
+        Expr::ListLit { .. } => true,
+        else => false,
+    }
+}
+
+fn items_of(value: ref Expr) -> Vec[ref Expr] sync {
+    let mut out: Vec[ref Expr] = []
+    match value {
+        Expr::ListLit { items, .. } => {
+            for item in items {
+                out.push(item)
+            }
+        },
+        else => {},
+    }
+    return out
+}
+
+fn named_arguments_of(ty: ref Ty) -> Vec[Ty] sync {
+    return match ty {
+        Ty::Named { args, .. } => args.clone(),
+        else => [],
+    }
+}

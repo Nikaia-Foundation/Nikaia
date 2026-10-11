@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.799] — 2026-10-10
+
+**Two number types in one operation, array literals and `collect` by use are Nikaia (`tools/check_numbers2.nika`, #558, #125).**
+- `two_number_types` (`NK1199`), `two_integer_types_compared`, `a_compound_over_two_integer_types` (`NK1105`), `widen_operands`, `widen_operand`, `widened_elements`, `array_literal` (`NK1157`) and `collect_by_use` write `CheckState.facts` directly.
+
 ## [0.0.798] — 2026-10-10
 
 **Field reads through `?.`, a `?.` or `??` over a value never absent, and text built where `String` is wanted are Nikaia (`tools/check_fields.nika`, `tools/check_texts.nika`, #558, #125).**

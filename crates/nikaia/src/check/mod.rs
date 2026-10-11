@@ -62,7 +62,7 @@ use nikaia_std::tools::check_state::{
 };
 use nikaia_std::tools::check_texts::{self, ends_in_null, ends_in_text};
 use nikaia_std::tools::check_widen::{
-    self, an_integer_that_does_not_widen, binary_op_text, names_a_path, number_where_no_number_is,
+    self, an_integer_that_does_not_widen, names_a_path, number_where_no_number_is,
     views_into_nullable_text, views_into_text,
 };
 use nikaia_std::tools::check_with::CheckCopyable as Copyable;
@@ -6086,40 +6086,10 @@ impl<'a> Checker<'a> {
         Some(how)
     }
 
-    /// **A stated type reaches through `+`, `-`, `*`, `/`, `%` and a negation
-    /// to the operands** ([ADR-285](../../../docs/specification/adr/adr-285.md)
-    /// D32): `let t: i64 = x * y` over two `i32`s is `i64::from(x) *
-    /// i64::from(y)`, computed in `i64`. It stops at anything else - a name, a
-    /// call, an index, a bit operator - which is widened as it is. A literal
-    /// among the operands is of the stated type. Whether `value` was such an
-    /// operation, and so taken apart.
+    /// The operands of a computation widen to the type it is computed in
+    /// (`tools/check_numbers2.nika`).
     fn widen_operands(&mut self, value: &Expr, into: &str, span: &Span) -> bool {
-        match value {
-            Expr::Binary {
-                op: BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Rem,
-                lhs,
-                rhs,
-                span: at,
-                ..
-            } => {
-                if let Some(named) = self.s.facts.arithmetic.get_mut(&(at.at() as i64)) {
-                    *named = into.to_string();
-                }
-                for side in [lhs, rhs] {
-                    self.widen_operand(side, into, span);
-                }
-                true
-            }
-            Expr::Unary {
-                op: UnaryOp::Neg,
-                expr,
-                ..
-            } => {
-                self.widen_operand(expr, into, span);
-                true
-            }
-            _ => false,
-        }
+        self.s.widen_operands(&self.world, value, into, span)
     }
 
     /// `NK1215` for a bit operation computed in a narrower type
@@ -6128,68 +6098,10 @@ impl<'a> Checker<'a> {
         self.s.narrow_by_width(&self.world, value, into, span)
     }
 
-    /// One operand of [`Checker::widen_operands`].
-    fn widen_operand(&mut self, side: &Expr, into: &str, span: &Span) {
-        if self.narrow_by_width(side, into, span) || self.widen_operands(side, into, span) {
-            return;
-        }
-        match side {
-            Expr::LitInt { .. } => {
-                self.s
-                    .facts
-                    .unsigned_literals
-                    .insert(value_node(side), into.to_string());
-            }
-            _ if is_literal(side) => {}
-            _ => {
-                self.s
-                    .facts
-                    .wrapped
-                    .insert(value_node(side), Wrap::Widen(into.to_string()));
-            }
-        }
-    }
-
-    /// **A list's elements widen into the element type a slot states**
-    /// ([ADR-285](../../../docs/specification/adr/adr-285.md) D32): `let xs:
-    /// Vec[i64] = [a, b]` over `u32` names holds `i64::from(a)`. The list is then
-    /// the stated type. A literal among them already took the list's type and
-    /// is left as written.
+    /// A list literal whose elements widen (`tools/check_numbers2.nika`).
     fn widened_elements(&mut self, found: &Ty, want: &Ty, value: &Expr, span: &Span) -> Option<Ty> {
-        let (
-            Ty::Named {
-                name: from,
-                args: a,
-                ..
-            },
-            Ty::Named {
-                name: into,
-                args: b,
-                ..
-            },
-        ) = (found, want)
-        else {
-            return None;
-        };
-        let Expr::ListLit { items, .. } = value else {
-            return None;
-        };
-        let list = |n: &str| matches!(crate::contracts::ty::base(n), "Vec" | "List" | "Array");
-        if !list(from) || from != into {
-            return None;
-        }
-        let widened = widened_into(a.first()?, b.first()?)?;
-        for item in items.iter().filter(|item| !is_literal(item)) {
-            if !self.narrow_by_width(item, widened, span)
-                && !self.widen_operands(item, widened, span)
-            {
-                self.s
-                    .facts
-                    .wrapped
-                    .insert(value_node(item), Wrap::Widen(widened.to_string()));
-            }
-        }
-        Some(want.clone())
+        self.s
+            .widened_elements(&self.world, found, want, value, span)
     }
 
     /// **A map's read, past a jump, assigned to a place that owns its value**
@@ -11139,10 +11051,7 @@ impl<'a> Checker<'a> {
             .one_type_variable_two_integer_types(&self.world, key, wanted, given, found, span);
     }
 
-    /// **`x op= value` over two integer types** (D32): the value is widened
-    /// where `x`'s type is the common one; where the common type is wider
-    /// than `x`'s, the result does not fit `x` (`NK1105`); where there is none,
-    /// it is the operator's `NK1199`.
+    /// `x op= value` over two integer types (`tools/check_numbers2.nika`).
     fn a_compound_over_two_integer_types(
         &mut self,
         op: BinaryOp,
@@ -11152,210 +11061,30 @@ impl<'a> Checker<'a> {
         found: &Ty,
         span: &Span,
     ) {
-        let integer = |ty: &Ty| match ty {
-            Ty::Named {
-                name,
-                args,
-                view: false,
-            } if args.is_empty() && INTEGERS.contains(&name.as_str()) => Some(name.clone()),
-            _ => None,
-        };
-        let (Some(x), Some(v)) = (integer(into), integer(found)) else {
-            return;
-        };
-        if x == v || is_literal(value) {
-            return;
-        }
-        match common_integer(&x, &v) {
-            Some(common) if common == x => {
-                if !self.narrow_by_width(value, common, span)
-                    && !self.widen_operands(value, common, span)
-                {
-                    self.s
-                        .facts
-                        .wrapped
-                        .insert(value_node(value), Wrap::Widen(common.to_string()));
-                }
-            }
-            Some(common) => {
-                let shown = written(self.parsed, target);
-                self.s.findings.push(Finding {
-                    severity: Severity::Error,
-                    span: *span,
-                    code: "NK1105".to_string(),
-                    message: format!(
-                        "This `{}=` computes in `{common}`, but `{shown}` holds `{x}`.",
-                        binary_op_text(op)
-                    ),
-                    notes: vec![format!(
-                        "Two integer types compute in the one that holds every value of both, \
-                         and a `{common}` does not fit every `{x}`."
-                    )],
-                    help: Some(format!(
-                        "Convert the value with `as {x}`, which stops the program where it does \
-                         not fit, or make `{shown}` a `{common}`."
-                    )),
-                    labels: Vec::new(),
-                });
-            }
-            None => {
-                self.two_number_types(op, [(target, into), (value, found)], span);
-            }
-        }
+        self.s
+            .a_compound_over_two_integer_types(&self.world, op, target, into, value, found, span);
     }
 
-    /// **Two integer types compare as numbers, every pair**
-    /// ([ADR-285](../../docs/specification/adr/adr-285.md) D32). Where they
-    /// have a common type the narrower side is widened into it; a `u64` and a
-    /// signed type have none, and the comparison is recorded for the emitter,
-    /// the signed side widened to `i64`. Not where a side is a literal, which
-    /// takes the other side's type, or a view.
+    /// A comparison of two integer types (`tools/check_numbers2.nika`).
     fn two_integer_types_compared(
         &mut self,
         [(lhs, left), (rhs, right)]: [(&Expr, &Ty); 2],
         at: &Span,
     ) {
-        let integer = |side: &Expr, ty: &Ty| match ty {
-            Ty::Named {
-                name,
-                args,
-                view: false,
-            } if args.is_empty() && !is_literal(side) && INTEGERS.contains(&name.as_str()) => {
-                Some(name.clone())
-            }
-            _ => None,
-        };
-        let (Some(l), Some(r)) = (integer(lhs, left), integer(rhs, right)) else {
-            return;
-        };
-        if l == r {
-            return;
-        }
-        let (into, unsigned_left) = match common_integer(&l, &r) {
-            Some(common) => (common, None),
-            None => ("i64", Some(l == "u64")),
-        };
-        for (side, ty) in [(lhs, &l), (rhs, &r)] {
-            if ty != into && ty != "u64" {
-                self.s
-                    .facts
-                    .wrapped
-                    .insert(value_node(side), Wrap::Widen(into.to_string()));
-            }
-        }
-        if let Some(unsigned_left) = unsigned_left {
-            self.s
-                .facts
-                .mixed_comparisons
-                .insert(at.at() as i64, unsigned_left);
-        }
+        self.s.two_integer_types_compared(lhs, left, rhs, right, at);
     }
 
-    /// **`NK1199`: two number types in one operation**
-    /// ([ADR-285](../../docs/specification/adr/adr-285.md) D3). No two of them
-    /// mix silently, and the conversion is written with `as`; a shift's count
-    /// is the one side that may be any integer. Only where both sides are known
-    /// (Part III C.4).
-    ///
-    /// **Two integer types with a common type are not two**
-    /// ([ADR-285](../../docs/specification/adr/adr-285.md) D32): the operation
-    /// is computed in the common type, the narrower side is recorded to be
-    /// widened, and the common type is the answer. Not where a side is a
-    /// literal, which takes the other side's type, or a view, which would be
-    /// widened through a reference.
+    /// Two sides of one operation of different number types
+    /// (`tools/check_numbers2.nika`).
     fn two_number_types(
         &mut self,
         op: BinaryOp,
         [(lhs, left), (rhs, right)]: [(&Expr, &Ty); 2],
         at: &Span,
     ) -> Option<&'static str> {
-        if matches!(op, BinaryOp::Shl | BinaryOp::Shr) {
-            return None;
-        }
-        let plain =
-            |side: &Expr, ty: &Ty| !is_literal(side) && matches!(ty, Ty::Named { view: false, .. });
-        if plain(lhs, left)
-            && plain(rhs, right)
-            && let (
-                Ty::Named {
-                    name: l, args: la, ..
-                },
-                Ty::Named {
-                    name: r, args: ra, ..
-                },
-            ) = (left, right)
-            && la.is_empty()
-            && ra.is_empty()
-            && l != r
-            && let Some(common) = common_integer(l, r)
-        {
-            for (side, ty) in [(lhs, l), (rhs, r)] {
-                if ty != common {
-                    self.s
-                        .facts
-                        .wrapped
-                        .insert(value_node(side), Wrap::Widen(common.to_string()));
-                }
-            }
-            return Some(common);
-        }
-        let (
-            Ty::Named {
-                name: l, args: la, ..
-            },
-            Ty::Named {
-                name: r, args: ra, ..
-            },
-        ) = (
-            value_of_a_copy(left.unseen()),
-            value_of_a_copy(right.unseen()),
-        )
-        else {
-            return None;
-        };
-        if l == r
-            || !la.is_empty()
-            || !ra.is_empty()
-            || !OFFERED_NUMBERS.contains(&l.as_str())
-            || !OFFERED_NUMBERS.contains(&r.as_str())
-        {
-            return None;
-        }
-        self.s.findings.push(Finding {
-            severity: Severity::Error,
-            span: *at,
-            code: "NK1199".to_string(),
-            // The article as the name is said: "an eye-sixty-four", "a
-            // you-sixty-four" - NK1116's rule.
-            message: {
-                let a = |t: &str| match t.starts_with('i') {
-                    true => "an",
-                    false => "a",
-                };
-                format!(
-                    "You're mixing {} `{l}` and {} `{r}` in one operation.",
-                    a(&l),
-                    a(&r)
-                )
-            },
-            notes: vec![
-                match common_integer(&l, &r).is_none() && l != "f64" && r != "f64" {
-                    true => format!(
-                        "Two integer types mix where one holds every value of both, and no type \
-                     holds every `{l}` and every `{r}`."
-                    ),
-                    false => "An integer and a floating-point number never mix on their own: the \
-                          conversion can change the value."
-                        .to_string(),
-                },
-            ],
-            help: Some(format!(
-                "Convert one side with `as`: `… as {l}` or `… as {r}`, whichever the \
-                 result should be."
-            )),
-            labels: Vec::new(),
-        });
-        None
+        self.s
+            .two_number_types(op, lhs, left, rhs, right, at)
+            .map(|common| a_static_integer(&common))
     }
 
     /// Whether an expression is a variant of an enum this file declares, with
@@ -16044,62 +15773,10 @@ impl<'a> Checker<'a> {
             .list_of_tuple_literals(&self.world, found, want, value)
     }
 
-    /// **`collect()` builds what the place it goes into declares**
-    /// ([ADR-293](../../docs/specification/adr/adr-293.md) D25): a map from
-    /// pairs, a set from items, text from characters or pieces of text. The ledger says `Vec[$T]`, which is what it builds where nothing
-    /// says otherwise; where a `let`, a field or a result declares another
-    /// container the items fit, that is the value's type, and the language
-    /// below is told nothing more - its own `collect` builds the declared type.
+    /// A `collect` that builds what its position asks
+    /// (`tools/check_numbers2.nika`).
     fn collect_by_use(&mut self, found: &Ty, want: &Ty, value: &Expr) -> Option<Ty> {
-        let Expr::MethodCall {
-            receiver,
-            method,
-            args,
-            ..
-        } = value
-        else {
-            return None;
-        };
-        if self.parsed.text(*method) != "collect" || !args.is_empty() {
-            return None;
-        }
-        let Ty::Named {
-            name, args: made, ..
-        } = found
-        else {
-            return None;
-        };
-        let [item] = made.as_slice() else {
-            return None;
-        };
-        if ty::base(name) != "Vec" {
-            return None;
-        }
-        let Ty::Named {
-            name: wanted,
-            args: parts,
-            view: false,
-        } = want
-        else {
-            return None;
-        };
-        let fits = match (ty::base(wanted), parts.as_slice()) {
-            ("HashMap" | "BTreeMap" | "TrustedMap", [key, value]) => {
-                item.fits(&Ty::Tuple(vec![key.clone(), value.clone()]))
-            }
-            ("HashSet" | "BTreeSet" | "TrustedSet", [element]) => item.fits(element),
-            ("String", []) => {
-                (*item == Ty::named("char") || *item == Ty::named("scalar"))
-                    || *item == Ty::view("str")
-                    || *item == Ty::named("String")
-            }
-            _ => false,
-        };
-        if !fits {
-            return None;
-        }
-        self.s.facts.collected_into.insert(value_node(receiver));
-        Some(want.clone())
+        self.s.collect_by_use(&self.world, found, want, value)
     }
 
     /// **A hull a kept lambda captures, it captures a handle of** (ADR-230
@@ -16495,107 +16172,10 @@ impl<'a> Checker<'a> {
         Some(text)
     }
 
-    /// **A literal takes the array type where the use asks for one**
-    /// ([ADR-152](../../docs/specification/adr/adr-152.md) D4), and hands back
-    /// the array it is.
-    ///
-    /// This is [ADR-135](../../docs/specification/adr/adr-135.md) D2's rule for
-    /// the **empty** list extended to a full one: the literal takes the type its
-    /// use gives it, and a use that asks for `Array[f64, 3]` gets an array
-    /// rather than a `Vec`.
-    ///
-    /// **Asked after the literal has been walked** rather than before it, which
-    /// is what keeps it one function instead of a second argument threaded
-    /// through every expression that has a type: `[1.0, 2.0]` holds two `f64`
-    /// whichever container it turns out to be, so the walk answers the elements
-    /// and this answers only the container.
-    ///
-    /// **And it hands back the array of what the elements *agreed* on** rather
-    /// than the one the use asked for, which is what leaves the element
-    /// question with its caller: `[1, 2]` where an `Array[&str, 2]` is wanted
-    /// comes back `Array[i64, 2]` and is refused by the `let`, the argument or
-    /// the field in that position's own words, under the code that position
-    /// always used. One message, and no code of its own for a mismatch that is
-    /// not new.
-    ///
-    /// **And it descends with the literal.** The first reading of *the use* read
-    /// the type it was given whole, which refused
-    /// `let grid: Vec[Array[f64, 2]] = [[1.0, 2.0], [3.0, 4.0]]` — a correct
-    /// program, which is [Part III
-    /// C.4](../../docs/specification/30-nikaia-tooling.md)'s class. So a
-    /// `Vec[T]` is walked *through* where an array is what it holds, and an
-    /// array's own elements are walked the same way.
-    ///
-    /// `None` where the use asks for anything else, and the caller keeps the
-    /// `Vec` the walk produced.
+    /// A list literal where an `Array[T, N]` is wanted
+    /// (`tools/check_numbers2.nika`).
     fn array_literal(&mut self, found: &Ty, want: &Ty, value: &Expr, span: &Span) -> Option<Ty> {
-        let (
-            Ty::Named {
-                name, args: wanted, ..
-            },
-            Expr::ListLit { items, .. },
-        ) = (want, value)
-        else {
-            return None;
-        };
-        // **`Array[T, N]` is the container this is about**, and `Vec[T]` is here
-        // only to be walked *through*: `Vec[Array[f64, 2]]` asks for an array
-        // one level down, and a rule that read the type it was given whole
-        // refused `[[1.0, 2.0], [3.0, 4.0]]` — a correct program, which is the
-        // one thing this may not do (Part III, C.4).
-        //
-        // A `Vec` is walked only where an array is somewhere inside it, so a
-        // list of anything else reaches this and leaves it untouched.
-        let (element, count) = match (name.as_str(), wanted.as_slice()) {
-            (ty::ARRAY, [element, Ty::Count(n)]) => (element, Some(*n)),
-            ("Vec", [element]) if holds_an_array(element) => (element, None),
-            _ => return None,
-        };
-        // **The length is part of the type** (D4), so a literal that does not
-        // match `N` is refused naming both numbers - and `want` goes back, so
-        // that the caller's own fit stays quiet about a type it would otherwise
-        // report a second time in numbers the reader has to compare by eye.
-        if let Some(n) = count {
-            if items.len() as i64 != n {
-                self.s
-                    .findings
-                    .push(check_widen::a_list_the_wrong_length_for_its_array(
-                        items.len() as i64,
-                        n,
-                        span,
-                        false,
-                    ));
-                return Some(want.clone());
-            }
-            self.s.facts.array_literals.insert(value_node(value));
-        }
-        // What the walk agreed this container's elements are - `Vec[E]`'s `E`,
-        // and `Unknown` where they said nothing, which is the silence every
-        // unanswered question here keeps (Part III, C.4).
-        let held = match found {
-            Ty::Named { args, .. } => args.first().cloned().unwrap_or(Ty::Unknown),
-            _ => Ty::Unknown,
-        };
-        // **And an element that is itself an array takes its own shape, one
-        // level down.** Every element of one literal is the same type, so the
-        // first answer is the argument — but all of them are walked, because
-        // each one's length is its own refusal and each one's byte is its own
-        // line for the emitter.
-        let mut agreed: Option<Ty> = None;
-        for item in items {
-            if let Some(inner) = self.array_literal(&held, element, item, span) {
-                agreed.get_or_insert(inner);
-            }
-        }
-        let agreed = agreed.unwrap_or(held);
-        Some(Ty::Named {
-            name: name.clone(),
-            args: match count {
-                Some(n) => vec![agreed, Ty::Count(n)],
-                None => vec![agreed],
-            },
-            view: false,
-        })
+        self.s.array_literal(found, want, value, span)
     }
 }
 
@@ -19820,16 +19400,6 @@ fn from_arguments(contract: &FnContract, found: &[Ty]) -> BTreeMap<String, Ty> {
 /// are the ones after it - `Signature::arguments` already draws that line.
 fn expected_arguments(contract: &FnContract) -> Vec<Ty> {
     nikaia_std::tools::check_calls::expected_arguments(contract)
-}
-
-/// Whether an `Array[T, N]` is anywhere inside a type.
-///
-/// What it guards is the walk **through** a container in
-/// [`Checker::array_literal`]: a `Vec[T]` is opened only where an array is what
-/// it holds, so a list of anything else reaches that rule and leaves it
-/// untouched ([ADR-152](../../docs/specification/adr/adr-152.md) D4).
-fn holds_an_array(ty: &Ty) -> bool {
-    nikaia_std::tools::check_types::holds_an_array(ty)
 }
 
 /// Whether handing a value of this type out takes nothing away.
