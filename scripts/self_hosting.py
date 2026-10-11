@@ -195,6 +195,7 @@ COMPILER_NIKA = {
     "check_may_fail.nika": "check: a written call to something that can fail (NK2605, NK2402) (0.0.X) (0.0.833)",
     "check_references.nika": "check: who writes the reference at a call (NK1137), a lent coalesce, a name given back (0.0.X) (0.0.833)",
     "check_expect.nika": "check: expect, expect_kept (0.0.834)",
+    "emit_core_flow.nika": "emit: the flow of the core: Closure, Binary, Coalesce, TryCatch, Try, Return, Break, Throw, Spawn (0.0.835)",
 }
 
 

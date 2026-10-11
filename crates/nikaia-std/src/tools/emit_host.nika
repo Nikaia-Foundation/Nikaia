@@ -41,6 +41,20 @@ pub trait EmitHost {
     /// has no `String::pop` entry.
     fn take_lend(ref self, mut out: EmitOut) -> bool sync
 
+    /// Whether a constant sum takes the first type that holds it (ADR-285 D22):
+    /// `fold::constant_of` and `fold::wants_widening`.
+    fn wants_widening(ref self, node: ref Expr) -> bool sync
+
+    /// Whether `block` mentions `name` anywhere (`order::block_mentions`).
+    fn block_mentions(ref self, block: ref Block, name: ref String) -> bool sync
+
+    /// The type of the error a `throw` raises (`throws::error_type`).
+    fn error_type(ref self, node: ref Expr) -> String? sync
+
+    /// The handles a task started at the statement `statement` names
+    /// (`Checked::task_handles`); a set cannot be walked in Nikaia.
+    fn task_handles(ref self, statement: i64) -> Vec[String] sync
+
     /// `Build::overlaps_user_code`: user code may run on more than one thread.
     fn overlaps_user_code(ref self) -> bool sync
 

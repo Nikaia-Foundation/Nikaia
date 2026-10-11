@@ -245,6 +245,31 @@ impl EmitHost for Emitter<'_> {
         super::OutText::take_lend(out)
     }
 
+    fn wants_widening(&self, node: &Expr) -> bool {
+        matches!(
+            crate::fold::constant_of(node, &crate::fold::nothing_is_known),
+            Some(folded) if crate::fold::wants_widening(&folded)
+        )
+    }
+
+    fn block_mentions(&self, block: &Block, name: &str) -> bool {
+        crate::contracts::order::block_mentions(self.parsed, block, name)
+    }
+
+    fn error_type(&self, node: &Expr) -> Option<String> {
+        crate::contracts::throws::error_type(self.parsed, node)
+    }
+
+    fn task_handles(&self, statement: i64) -> Vec<String> {
+        self.s
+            .facts
+            .task_handles
+            .iter()
+            .filter(|(at, _)| *at == statement)
+            .map(|(_, name)| name.clone())
+            .collect()
+    }
+
     fn overlaps_user_code(&self) -> bool {
         self.build.overlaps_user_code()
     }

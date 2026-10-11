@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.835] — 2026-10-11
+
+**emit: the flow of the core is Nikaia: Closure, Binary, Coalesce, TryCatch, Try, Return, Break, Throw, Spawn (#558, #125, E9 U8)**
+- New tools/emit_core_flow.nika: the arms of expr_as_written for Closure, Binary, Coalesce (its four arms in their original order), TryCatch, Try, Return, Break/Continue, Throw and Spawn as emit_core_* of EmitState, one function per variant. The arms in the Rust match are one-line stubs through Emitter::cross; the dead Rust (CAUGHT, SITE, Named, concatenated, is_variant, against_a_length, named_error*, caught_sum, caught_channel_is_named, sum_of, name_of_error, ends_in_a_cast, a_number, jumps_at_the_end, precedence, the Flow combinators) is deleted. EmitHost gains wants_widening, block_mentions, error_type and task_handles. emit_deep_nesting covers a binary chain 500 deep.
+
 ## [0.0.834] — 2026-10-11
 
 **check: expect and expect_kept are Nikaia (C-5g, #558, #125)**

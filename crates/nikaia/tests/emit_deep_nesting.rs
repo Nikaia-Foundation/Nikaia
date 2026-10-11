@@ -93,3 +93,12 @@ fn a_method_chain_deep_lowers() {
         "chain",
     );
 }
+
+#[test]
+fn a_binary_chain_deep_lowers() {
+    let chain = format!("a{}", " + a".repeat(DEPTH));
+    lowers(
+        &format!("fn main() {{\n    let a = 1\n    let b = {chain}\n    println(f\"{{b}}\")\n}}\n"),
+        "binary",
+    );
+}
