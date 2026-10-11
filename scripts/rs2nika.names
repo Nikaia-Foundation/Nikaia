@@ -1,0 +1,4 @@
+# Rust name in the compiler    Nikaia name in tools/*.nika    (R47; extend when a builder finds one)
+value_node node_key
+contracts::base type_last_segment
+contracts::TEXT "String"
