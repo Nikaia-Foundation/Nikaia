@@ -164,6 +164,9 @@ pub mod text {
 /// `return` that ends the function (`unreachable_code`). Both are valid
 /// Nikaia, so a move should not have to write around them.
 ///
+/// **And `unreachable_patterns`**, for the `else` a `match` over a struct's one
+/// pattern must still write (`emit_core_below.nika`'s `SelectArm`).
+///
 /// **And `unused_variables`** for the parameters every `emit_core_*` method
 /// takes alike (`world`, `scope`, ..., E9) whether or not its body reads them.
 #[allow(
@@ -196,7 +199,8 @@ pub mod text {
     clippy::redundant_field_names,
     clippy::unnecessary_get_then_check,
     clippy::collapsible_match,
-    clippy::comparison_to_empty
+    clippy::comparison_to_empty,
+    unreachable_patterns
 )]
 pub mod tools {
     // **One package, one file** ([ADR-294](../../../docs/specification/adr/adr-294.md)):

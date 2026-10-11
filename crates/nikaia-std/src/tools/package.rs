@@ -18984,6 +18984,373 @@ fn call_fn_is_either(words: &winnow_grammar::InternerContext, name: Option<&winn
 }
 
 
+// --- emit_core_below.nika ---
+
+fn emit_is_a_variable(expr: &Expr) -> bool { matches!(expr, Expr::Variable(_, _)) }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EmitHeldFound {
+    pub safe: Vec<bool>,
+    pub called: bool,
+}
+
+fn emit_held_all(items: &[Expr], lazy: bool, called: bool) -> (Vec<&Expr>, EmitHeldFound) {
+    let mut found: Vec<&Expr> = vec![];
+    let mut flags: Vec<bool> = vec![];
+    let mut ran = called;
+    for item in items.iter() {
+        let (more, after) = emit_held_in(item, lazy, ran);
+        found.extend(more);
+        flags.extend(after.safe);
+        ran = after.called;
+    }
+    (found, EmitHeldFound { safe: flags, called: ran })
+}
+
+pub fn emit_held_in(expr: &Expr, lazy: bool, called: bool) -> (Vec<&Expr>, EmitHeldFound) {
+    let mut found: Vec<&Expr> = vec![];
+    let mut flags: Vec<bool> = vec![];
+    let mut ran = called;
+    match expr {
+        Expr::SafeMethod { receiver, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver);
+            if !emit_is_a_variable(receiver) {
+                found.push(receiver);
+                flags.push(!lazy && !ran);
+            }
+            let (inner, after) = emit_held_in(receiver, lazy, ran);
+            found.extend(inner);
+            flags.extend(after.safe);
+            let (rest, last) = emit_held_all(args, lazy, after.called);
+            found.extend(rest);
+            flags.extend(last.safe);
+            ran = true;
+        },
+        Expr::Call { func, args, .. } => {
+            let func = nikaia_std::boxed::open(func);
+            let (inner, after) = emit_held_in(func, lazy, ran);
+            found.extend(inner);
+            flags.extend(after.safe);
+            let (rest, last) = emit_held_all(args, lazy, after.called);
+            found.extend(rest);
+            flags.extend(last.safe);
+            ran = true;
+        },
+        Expr::MethodCall { receiver, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver);
+            let (inner, after) = emit_held_in(receiver, lazy, ran);
+            found.extend(inner);
+            flags.extend(after.safe);
+            let (rest, last) = emit_held_all(args, lazy, after.called);
+            found.extend(rest);
+            flags.extend(last.safe);
+            ran = true;
+        },
+        Expr::Coalesce { value, fallback, .. } => {
+            let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback);
+            let (inner, after) = emit_held_in(value, lazy, ran);
+            found.extend(inner);
+            flags.extend(after.safe);
+            let (rest, last) = emit_held_in(fallback, true, after.called);
+            found.extend(rest);
+            flags.extend(last.safe);
+            ran = last.called;
+        },
+        Expr::Binary { lhs, rhs, op, .. } => {
+            let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
+            let (inner, after) = emit_held_in(lhs, lazy, ran);
+            found.extend(inner);
+            flags.extend(after.safe);
+            let short = matches!(op, BinaryOp::And | BinaryOp::Or);
+            let (rest, last) = emit_held_in(rhs, lazy || short, after.called);
+            found.extend(rest);
+            flags.extend(last.safe);
+            ran = last.called;
+        },
+        Expr::Match { value, arms, .. } => {
+            let value = nikaia_std::boxed::open(value);
+            let (inner, after) = emit_held_in(value, lazy, ran);
+            found.extend(inner);
+            flags.extend(after.safe);
+            ran = after.called;
+            for arm in arms.iter() {
+                let (rest, last) = emit_held_in(&arm.body, true, ran);
+                found.extend(rest);
+                flags.extend(last.safe);
+                ran = last.called;
+            }
+        },
+        Expr::If { cond, .. } => { let cond = nikaia_std::boxed::open(cond); return emit_held_in(cond, lazy, called) },
+        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); return emit_held_in(base, lazy, called) },
+        Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); return emit_held_in(base, lazy, called) },
+        Expr::Index { base, index, .. } => {
+            let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
+            let (inner, after) = emit_held_in(base, lazy, ran);
+            found.extend(inner);
+            flags.extend(after.safe);
+            let (rest, last) = emit_held_in(index, lazy, after.called);
+            found.extend(rest);
+            flags.extend(last.safe);
+            ran = last.called;
+        },
+        Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); return emit_held_in(expr, lazy, called) },
+        Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); return emit_held_in(inner, lazy, called) },
+        Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); return emit_held_in(expr, lazy, called) },
+        Expr::Tuple(parts, _) => return emit_held_all(parts, lazy, called),
+        Expr::ListLit { items, .. } => return emit_held_all(items, lazy, called),
+        Expr::StructLit { fields, .. } => {
+            for field in fields.iter() {
+                let value = match field.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
+                let (rest, last) = emit_held_in(value, lazy, ran);
+                found.extend(rest);
+                flags.extend(last.safe);
+                ran = last.called;
+            }
+        },
+        _ => { },
+    }
+    (found, EmitHeldFound { safe: flags, called: ran })
+}
+
+fn emit_text(world: &EmitWorld<'_>, name: winnow_grammar::Symbol) -> String { world.words.resolve(name).to_owned() }
+
+fn emit_declared_empty(world: &EmitWorld<'_>, declared: &Stmt) -> Option<String> {
+    match declared {
+        Stmt::Let { names, mutable, value, .. } => { let mutable = *mutable; emit_empty_list_named(world, names, mutable, value) },
+        _ => None,
+    }
+}
+
+fn emit_empty_list_named(world: &EmitWorld<'_>, names: &[winnow_grammar::Symbol], mutable: bool, value: &Expr) -> Option<String> {
+    if !mutable || names.len() != 1 { return None; }
+    match value {
+        Expr::ListLit { items, .. } => if items.is_empty() { Some(emit_text(world, *nikaia_std::index::get(&names, 0))) } else { None },
+        _ => None,
+    }
+}
+
+fn emit_mentions(world: &EmitWorld<'_>, expr: &Expr, name: &str) -> bool {
+    for each in visited_in_expr(expr) {
+        match each {
+            Expr::Variable(v, _) => {
+                let v = *v;
+                if emit_text(world, v) == name { return true; }
+            },
+            _ => { },
+        }
+    }
+    false
+}
+
+pub fn emit_filled_at_once(world: &EmitWorld<'_>, own: &Ledger, declared: &Stmt, next: &Stmt) -> bool {
+    let name = match emit_declared_empty(world, declared) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    match next {
+        Stmt::Expr(inner) => emit_resizes(world, own, &name, inner),
+        _ => false,
+    }
+}
+
+fn emit_resizes(world: &EmitWorld<'_>, own: &Ledger, name: &str, call: &Expr) -> bool {
+    match call {
+        Expr::MethodCall { receiver, method, args, config, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            let mut on_it = false;
+            match receiver {
+                Expr::Variable(r, _) => {
+                    let r = *r;
+                    on_it = emit_text(world, r) == name;
+                },
+                _ => { },
+            }
+            if !on_it || emit_text(world, method) != "resize" || args.len() != 2 || !config.is_empty() { return false; }
+            if !ledger_candidates(own, "resize").is_empty() { return false; }
+            for arg in args.iter() { if emit_mentions(world, arg, name) { return false; } }
+            return true;
+        },
+        _ => return false,
+    }
+}
+
+pub fn emit_resize_args(next: &Stmt) -> Vec<&Expr> {
+    let mut out: Vec<&Expr> = vec![];
+    match next {
+        Stmt::Expr(inner) => {
+            match inner {
+                Expr::MethodCall { args, .. } => { if args.len() == 2 { for arg in args.iter() { out.push(arg); } } },
+                _ => { },
+            }
+        },
+        _ => { },
+    }
+    out
+}
+
+pub fn emit_branch_values(block: &Block) -> Vec<&Expr> {
+    let mut out: Vec<&Expr> = vec![];
+    for stmt in block.stmts.iter() {
+        match &stmt.node {
+            Stmt::Expr(value) => out.push(value),
+            _ => { },
+        }
+    }
+    out
+}
+
+fn emit_arm_values(arms: &[SelectArm]) -> Vec<&Expr> {
+    let mut out: Vec<&Expr> = vec![];
+    for arm in arms.iter() {
+        match arm {
+            SelectArm { value, .. } => out.push(value),
+            _ => { },
+        }
+    }
+    out
+}
+
+fn emit_written_callee(world: &EmitWorld<'_>, func: &Expr) -> Option<String> {
+    match func {
+        Expr::Variable(name, _) => { let name = *name; Some(emit_text(world, name)) },
+        Expr::Path(_, _) => Some(unaliased_in(world.aliases, &nikaia_std::index::or(call_written_name(world.words, func), || "".into()))),
+        _ => None,
+    }
+}
+
+fn emit_ledger_takes_a_keep(ledger: &Ledger, name: &str) -> bool {
+    let contract = match ledger.functions.get(name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    takes_a_keep(&contract)
+}
+
+impl EmitWalk {
+    pub fn reflected(&self, world: &EmitWorld<'_>, base: &Expr, member: winnow_grammar::Symbol, wanted: &str) -> Option<String> {
+        let pair = match self.at_field.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
+        match base {
+            Expr::Variable(name, _) => { let name = *name; if emit_text(world, name) == pair.first && emit_text(world, member) == wanted { Some(pair.second.to_owned()) } else { None } },
+            _ => None,
+        }
+    }
+}
+
+impl EmitState {
+    pub fn options_of(&self, world: &EmitWorld<'_>, func: &Expr) -> Vec<ConfigContract> {
+        let name = match call_written_name(world.words, func) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
+        let constructor = format!("{}::new", name);
+        if self.own_contracts.functions.contains_key(&name) {
+            let found = match self.own_contracts.functions.get(&name) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
+            return emit_config_of(&found);
+        }
+        if self.own_contracts.functions.contains_key(&constructor) {
+            let found = match self.own_contracts.functions.get(&constructor) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
+            return emit_config_of(&found);
+        }
+        if world.library.functions.contains_key(&name) {
+            let found = match world.library.functions.get(&name) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
+            return emit_config_of(&found);
+        }
+        vec![]
+    }
+    fn emit_joined_set(&self, world: &EmitWorld<'_>, expr: &Expr) -> Option<Vec<String>> {
+        match expr {
+            Expr::Overlap(block, _) => Some(call_joined_throws(world.words, world.aliases, &self.own_contracts, world.library, &emit_branch_values(block))),
+            Expr::Select(arms, _) => Some(call_joined_throws(world.words, world.aliases, &self.own_contracts, world.library, &emit_arm_values(arms))),
+            _ => None,
+        }
+    }
+    pub fn caught_channel_is_named(&self, world: &EmitWorld<'_>, expr: &Expr) -> bool {
+        let joined = self.emit_joined_set(world, expr);
+        if joined.is_some() { return self.named_error_of(world, &match joined { Some(__nikaia_value) => __nikaia_value, None => return false }) != 0; }
+        let name = match call_callee_name(world.words, world.aliases, expr) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let parts: Vec<&str> = name.splitn(2, "::").collect::<Vec<_>>();
+        let a_grammar = self.grammars.contains_key(*nikaia_std::index::get(&parts, 0));
+        if a_grammar { return false; }
+        self.named_error(world, &name) != 0
+    }
+    pub fn caught_sum(&self, world: &EmitWorld<'_>, expr: &Expr) -> Option<String> {
+        let joined = self.emit_joined_set(world, expr);
+        if joined.is_some() {
+            let sum = match self.sums.get(&match joined { Some(__nikaia_value) => __nikaia_value, None => return None }) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            return Some(sum.to_owned());
+        }
+        let name = match call_callee_name(world.words, world.aliases, expr) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let contract = match self.own_contracts.functions.get(&name) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let sum = match self.sums.get(&contract.fails_with) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        Some(sum.to_owned())
+    }
+    pub fn branch_pauses(&self, world: &EmitWorld<'_>, stmt: &Stmt, at: i64) -> bool {
+        match stmt {
+            Stmt::Expr(value) => {
+                for each in visited_in_expr(value) {
+                    match each {
+                        Expr::Call { func, .. } => {
+                            let func = nikaia_std::boxed::open(func);
+                            let key = call_pausing_key(world.words, world.aliases, &self.own_contracts, world.library, func);
+                            if key.is_some() { return true; }
+                        },
+                        Expr::MethodCall { method, .. } => {
+                            let method = *method;
+                            if self.method_pauses(at, world.words.resolve(method)) { return true; }
+                        },
+                        Expr::SafeMethod { method, .. } => {
+                            let method = *method;
+                            if self.method_pauses(at, world.words.resolve(method)) { return true; }
+                        },
+                        _ => { },
+                    }
+                }
+                return false;
+            },
+            _ => return false,
+        }
+    }
+    pub fn write_keep_prelude(&self, walk: &mut EmitWalk, out: &mut EmitOut, function: &str, at: i64, depth: i64) {
+        if walk.preluded.contains(&at) { return; }
+        let prelude = match self.keep_prelude(&walk, function, at) { Some(__nikaia_value) => __nikaia_value, None => return };
+        walk.preluded.insert(at);
+        out.push(&prelude);
+        out.push("\n");
+        for _ in 0..depth { out.push("    "); }
+    }
+    pub fn keeping_callee(&self, world: &EmitWorld<'_>, func: &Expr) -> Option<String> {
+        let name = match emit_written_callee(world, func) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        if self.own_contracts.functions.contains_key(&name) {
+            if emit_ledger_takes_a_keep(&self.own_contracts, &name) { return Some(name); }
+            return None;
+        }
+        if emit_ledger_takes_a_keep(world.library, &name) { return Some(name); }
+        None
+    }
+    pub fn map_key(&self, index: &Expr, written: bool) -> Option<FactKeyForm> {
+        let form = match self.facts.map_keys.get(&(node_key(index), written)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        Some(form.clone())
+    }
+    pub fn stays_the_callers(&self, world: &EmitWorld<'_>, function: &str, place: &Expr) -> bool {
+        match place {
+            Expr::Variable(name, _) => { let name = *name; self.changes_in_place(function, &emit_text(world, name)) },
+            Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); self.stays_the_callers(world, function, base) },
+            _ => false,
+        }
+    }
+    pub fn emit_core_guard_reopening<H: EmitHost>(&self, world: &EmitWorld<'_>, host: &H, pattern: &MatchPattern, guard: &Expr) -> String {
+        let boxed = self.boxed_bindings(world, pattern);
+        let mut read: Vec<String> = vec![];
+        for each in host.names_read(guard) {
+            let name = escaped_name(&each);
+            if boxed.contains(&name) && !read.contains(&name) { read.push(name); }
+        }
+        let mut out: String = String::from("");
+        for name in read.iter() { out.push_str(&format!("let {} = nikaia_std::boxed::peek(&{}); ", name, name)); }
+        out
+    }
+}
+
+fn emit_config_of(contract: &FnContract) -> Vec<ConfigContract> {
+    let signature = match match contract.signature.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
+    signature.config.to_owned()
+}
+
+
 // --- emit_core_types.nika ---
 
 pub fn emit_settle_kind(overlaps: bool) -> String {
@@ -19462,6 +19829,7 @@ impl EmitWalk {
 
 pub trait EmitHost {
     fn expr(&self, walk: &mut EmitWalk, out: &mut EmitOut, node: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>>;
+    fn names_read(&self, expr: &Expr) -> Vec<String>;
 }
 
 impl EmitState {
@@ -41523,6 +41891,10 @@ pub mod emit_below {
 pub mod emit_calls {
     #[allow(unused_imports)]
     pub use super::{call_written_name, call_pausing_key, call_library_pauses, call_pauses, call_can_fail, call_callee_name, call_joined_throws, call_returns_either};
+}
+pub mod emit_core_below {
+    #[allow(unused_imports)]
+    pub use super::{EmitHeldFound, emit_held_in, emit_filled_at_once, emit_resize_args, emit_branch_values};
 }
 pub mod emit_core_types {
     #[allow(unused_imports)]

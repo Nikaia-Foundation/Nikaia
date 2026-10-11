@@ -1,0 +1,467 @@
+// crates/nikaia-std/src/tools/emit_core_below.nika
+//
+// **What the emitter's core asks of the tree before it writes** (ADR-294,
+// #125, #558, E9 unit U1b): the small questions below `expr` that had real
+// Rust left - which `?.` receivers a statement holds first, whether `let xs = []`
+// and `xs.resize(n, v)` are one allocation, which options a call fills in, which
+// sum or named channel a `catch` guards, which branch of an `overlap` pauses,
+// the keeps a statement declares, how a map key goes into brackets and what a
+// reflected read stands for. Methods of `EmitState` (and of `EmitWalk` where
+// they read the walk); a function that hands back references into the tree is
+// free, with every reference parameter one lifetime. Only `guard_reopening`
+// calls back (`EmitHost::names_read`).
+
+use std::collections
+
+fn emit_is_a_variable(expr: ref Expr) -> bool {
+    return match expr {
+        Expr::Variable(_, _) => true,
+        else => false,
+    }
+}
+
+/// What a `?.` walk finds below one node: the receivers, for each whether
+/// holding it first is safe, and whether a call ran by the end of the node.
+pub struct EmitHeldFound {
+    pub safe: Vec[bool],
+    pub called: bool,
+}
+
+fn emit_held_all(items: ref Vec[Expr], lazy: bool, called: bool) -> (Vec[ref Expr], EmitHeldFound) {
+    let mut found: Vec[ref Expr] = []
+    let mut flags: Vec[bool] = []
+    let mut ran = called
+    for item in items {
+        let (more, after) = emit_held_in(item, lazy, ran)
+        found.extend(more)
+        flags.extend(after.safe)
+        ran = after.called
+    }
+    return (found, EmitHeldFound { safe: flags, called: ran })
+}
+
+/// The receivers of `?.` in `expr` that are not a plain name, in the order they
+/// run, one flag each for whether holding it first changes nothing about what
+/// runs (not lazy, and no call ran before it in the statement), and whether a
+/// call has run by the end of `expr`. The caller keeps the receivers the
+/// checker marked as held reaches.
+pub fn emit_held_in(expr: ref Expr, lazy: bool, called: bool) -> (Vec[ref Expr], EmitHeldFound) {
+    let mut found: Vec[ref Expr] = []
+    let mut flags: Vec[bool] = []
+    let mut ran = called
+    match expr {
+        Expr::SafeMethod { receiver, args, .. } => {
+            if !emit_is_a_variable(receiver) {
+                found.push(receiver)
+                flags.push(!lazy && !ran)
+            }
+            let (inner, after) = emit_held_in(receiver, lazy, ran)
+            found.extend(inner)
+            flags.extend(after.safe)
+            let (rest, last) = emit_held_all(args, lazy, after.called)
+            found.extend(rest)
+            flags.extend(last.safe)
+            ran = true
+        },
+        Expr::Call { func, args, .. } => {
+            let (inner, after) = emit_held_in(func, lazy, ran)
+            found.extend(inner)
+            flags.extend(after.safe)
+            let (rest, last) = emit_held_all(args, lazy, after.called)
+            found.extend(rest)
+            flags.extend(last.safe)
+            ran = true
+        },
+        Expr::MethodCall { receiver, args, .. } => {
+            let (inner, after) = emit_held_in(receiver, lazy, ran)
+            found.extend(inner)
+            flags.extend(after.safe)
+            let (rest, last) = emit_held_all(args, lazy, after.called)
+            found.extend(rest)
+            flags.extend(last.safe)
+            ran = true
+        },
+        Expr::Coalesce { value, fallback, .. } => {
+            let (inner, after) = emit_held_in(value, lazy, ran)
+            found.extend(inner)
+            flags.extend(after.safe)
+            let (rest, last) = emit_held_in(fallback, true, after.called)
+            found.extend(rest)
+            flags.extend(last.safe)
+            ran = last.called
+        },
+        Expr::Binary { lhs, rhs, op, .. } => {
+            let (inner, after) = emit_held_in(lhs, lazy, ran)
+            found.extend(inner)
+            flags.extend(after.safe)
+            let short = match op {
+                BinaryOp::And => true,
+                BinaryOp::Or => true,
+                else => false,
+            }
+            let (rest, last) = emit_held_in(rhs, lazy || short, after.called)
+            found.extend(rest)
+            flags.extend(last.safe)
+            ran = last.called
+        },
+        Expr::Match { value, arms, .. } => {
+            let (inner, after) = emit_held_in(value, lazy, ran)
+            found.extend(inner)
+            flags.extend(after.safe)
+            ran = after.called
+            for arm in arms {
+                let (rest, last) = emit_held_in(arm.body, true, ran)
+                found.extend(rest)
+                flags.extend(last.safe)
+                ran = last.called
+            }
+        },
+        Expr::If { cond, .. } => return emit_held_in(cond, lazy, called),
+        Expr::Field { base, .. } => return emit_held_in(base, lazy, called),
+        Expr::SafeField { base, .. } => return emit_held_in(base, lazy, called),
+        Expr::Index { base, index, .. } => {
+            let (inner, after) = emit_held_in(base, lazy, ran)
+            found.extend(inner)
+            flags.extend(after.safe)
+            let (rest, last) = emit_held_in(index, lazy, after.called)
+            found.extend(rest)
+            flags.extend(last.safe)
+            ran = last.called
+        },
+        Expr::Unary { expr, .. } => return emit_held_in(expr, lazy, called),
+        Expr::Try(inner, _) => return emit_held_in(inner, lazy, called),
+        Expr::Cast { expr, .. } => return emit_held_in(expr, lazy, called),
+        Expr::Tuple(parts, _) => return emit_held_all(parts, lazy, called),
+        Expr::ListLit { items, .. } => return emit_held_all(items, lazy, called),
+        Expr::StructLit { fields, .. } => {
+            for field in fields {
+                let value = field.value ?? continue
+                let (rest, last) = emit_held_in(value, lazy, ran)
+                found.extend(rest)
+                flags.extend(last.safe)
+                ran = last.called
+            }
+        },
+        // A block, a lambda, a string's holes: statements of their own, or
+        // code this walk cannot hold anything for.
+        else => {},
+    }
+    return (found, EmitHeldFound { safe: flags, called: ran })
+}
+
+/// The text a name is read back as in `words`.
+fn emit_text(world: ref EmitWorld, name: winnow_grammar::Symbol) -> String {
+    return world.words.resolve(name).clone()
+}
+
+/// The name of the empty list a statement declares with `let mut xs = []`.
+fn emit_declared_empty(world: ref EmitWorld, declared: ref Stmt) -> String? {
+    return match declared {
+        Stmt::Let { names, mutable, value, .. } => emit_empty_list_named(world, names, mutable, value),
+        else => null,
+    }
+}
+
+fn emit_empty_list_named(world: ref EmitWorld, names: ref Vec[winnow_grammar::Symbol], mutable: bool, value: ref Expr) -> String? {
+    if !mutable || names.len() != 1 {
+        return null
+    }
+    return match value {
+        Expr::ListLit { items, .. } => if items.len() == 0 { emit_text(world, names[0]) } else { null },
+        else => null,
+    }
+}
+
+/// Whether `expr` reads the name `name` anywhere in it.
+fn emit_mentions(world: ref EmitWorld, expr: ref Expr, name: ref String) -> bool {
+    for each in visited_in_expr(expr) {
+        match each {
+            Expr::Variable(v, _) => {
+                if emit_text(world, v) == name {
+                    return true
+                }
+            },
+            else => {},
+        }
+    }
+    return false
+}
+
+/// Whether `declared` is `let mut xs = []` and `next` is `xs.resize(n, v)` with
+/// `std`'s `resize`: one allocation of a known length, `vec![v; n]`.
+pub fn emit_filled_at_once(world: ref EmitWorld, own: ref Ledger, declared: ref Stmt, next: ref Stmt) -> bool {
+    let name = emit_declared_empty(world, declared) ?? return false
+    return match next {
+        Stmt::Expr(inner) => emit_resizes(world, own, name, inner),
+        else => false,
+    }
+}
+
+fn emit_resizes(world: ref EmitWorld, own: ref Ledger, name: ref String, call: ref Expr) -> bool {
+    match call {
+        Expr::MethodCall { receiver, method, args, config, .. } => {
+            let mut on_it = false
+            match receiver {
+                Expr::Variable(r, _) => {
+                    on_it = emit_text(world, r) == name
+                },
+                else => {},
+            }
+            if !on_it || emit_text(world, method) != "resize" || args.len() != 2 || config.len() != 0 {
+                return false
+            }
+            if ledger_candidates(own, "resize").len() != 0 {
+                return false
+            }
+            for arg in args {
+                if emit_mentions(world, arg, name) {
+                    return false
+                }
+            }
+            return true
+        },
+        else => return false,
+    }
+}
+
+/// The arguments of a `resize(n, v)` statement, length first: empty for any other statement.
+pub fn emit_resize_args(next: ref Stmt) -> Vec[ref Expr] {
+    let mut out: Vec[ref Expr] = []
+    match next {
+        Stmt::Expr(inner) => {
+            match inner {
+                Expr::MethodCall { args, .. } => {
+                    if args.len() == 2 {
+                        for arg in args {
+                            out.push(arg)
+                        }
+                    }
+                },
+                else => {},
+            }
+        },
+        else => {},
+    }
+    return out
+}
+
+/// The expressions an `overlap`'s statements are.
+pub fn emit_branch_values(block: ref Block) -> Vec[ref Expr] {
+    let mut out: Vec[ref Expr] = []
+    for stmt in block.stmts {
+        match stmt.node {
+            Stmt::Expr(value) => out.push(value),
+            else => {},
+        }
+    }
+    return out
+}
+
+/// The expressions a `select`'s arms start.
+fn emit_arm_values(arms: ref Vec[SelectArm]) -> Vec[ref Expr] {
+    let mut out: Vec[ref Expr] = []
+    for arm in arms {
+        match arm {
+            SelectArm { value, .. } => out.push(value),
+            else => {},
+        }
+    }
+    return out
+}
+
+/// The name a call's callee is written as, with the file's aliases resolved
+/// on a path.
+fn emit_written_callee(world: ref EmitWorld, func: ref Expr) -> String? {
+    return match func {
+        Expr::Variable(name, _) => emit_text(world, name),
+        Expr::Path(_, _) => unaliased_in(world.aliases, call_written_name(world.words, func) ?? ""),
+        else => null,
+    }
+}
+
+/// Whether the function the ledger holds under `name` takes a keep.
+fn emit_ledger_takes_a_keep(ledger: ref Ledger, name: ref String) -> bool {
+    let contract = ledger.functions.get(name) ?? return false
+    return takes_a_keep(contract)
+}
+
+impl EmitWalk {
+    /// **The field this unrolled turn stands at**, where `base.member` is a
+    /// read of the loop's own binding (ADR-304 D2): `null` everywhere else.
+    pub fn reflected(ref self, world: ref EmitWorld, base: ref Expr, member: winnow_grammar::Symbol, wanted: ref String) -> String? {
+        let pair = self.at_field ?? return null
+        return match base {
+            Expr::Variable(name, _) => if emit_text(world, name) == pair.first && emit_text(world, member) == wanted { pair.second.clone() } else { null },
+            else => null,
+        }
+    }
+}
+
+impl EmitState {
+    /// The options a call by name has, from the contract that declares them:
+    /// this unit's own first, then its constructor's, then `std`'s. Empty where
+    /// the callee has none, and where it cannot be resolved at all.
+    pub fn options_of(ref self, world: ref EmitWorld, func: ref Expr) -> Vec[ConfigContract] {
+        let name = call_written_name(world.words, func) ?? return []
+        let constructor = f"{name}::new"
+        if self.own_contracts.functions.contains_key(name) {
+            let found = self.own_contracts.functions.get(name) ?? return []
+            return emit_config_of(found)
+        }
+        if self.own_contracts.functions.contains_key(constructor) {
+            let found = self.own_contracts.functions.get(constructor) ?? return []
+            return emit_config_of(found)
+        }
+        if world.library.functions.contains_key(name) {
+            let found = world.library.functions.get(name) ?? return []
+            return emit_config_of(found)
+        }
+        return []
+    }
+
+    /// The set of errors a `catch` guards, where it guards a joining block
+    /// (ADR-292 D19): the union of its branches'.
+    fn emit_joined_set(ref self, world: ref EmitWorld, expr: ref Expr) -> Vec[String]? {
+        return match expr {
+            Expr::Overlap(block, _) => call_joined_throws(world.words, world.aliases, self.own_contracts, world.library, emit_branch_values(block)),
+            Expr::Select(arms, _) => call_joined_throws(world.words, world.aliases, self.own_contracts, world.library, emit_arm_values(arms)),
+            else => null,
+        }
+    }
+
+    /// Whether the channel a `catch` guards is a named error's. Only the
+    /// outermost call, and only a call by name.
+    pub fn caught_channel_is_named(ref self, world: ref EmitWorld, expr: ref Expr) -> bool {
+        let joined = self.emit_joined_set(world, expr)
+        if joined != null {
+            return self.named_error_of(world, joined ?? return false) != 0
+        }
+        let name = call_callee_name(world.words, world.aliases, expr) ?? return false
+        // A call of this program's hands its failure in an envelope whoever
+        // declared the error (ADR-280 D13); a call of `std`'s hands it bare,
+        // and so does a grammar's entry rule (ADR-296 D24).
+        let parts: Vec[ref String] = name.splitn(2, "::").collect()
+        let a_grammar = self.grammars.contains_key(parts[0])
+        if a_grammar {
+            return false
+        }
+        return self.named_error(world, name) != 0
+    }
+
+    /// The sum an expression a `catch` guards fails in, where it is one.
+    pub fn caught_sum(ref self, world: ref EmitWorld, expr: ref Expr) -> String? {
+        let joined = self.emit_joined_set(world, expr)
+        if joined != null {
+            let sum = self.sums.get(joined ?? return null) ?? return null
+            return sum.clone()
+        }
+        let name = call_callee_name(world.words, world.aliases, expr) ?? return null
+        let contract = self.own_contracts.functions.get(name) ?? return null
+        let sum = self.sums.get(contract.fails_with) ?? return null
+        return sum.clone()
+    }
+
+    /// Whether a **branch of an `overlap`** can pause (ADR-292 D6): a free
+    /// call by the key it resolves to, a method call by what the checker said
+    /// about the statement it stands in (`at`).
+    pub fn branch_pauses(ref self, world: ref EmitWorld, stmt: ref Stmt, at: i64) -> bool {
+        match stmt {
+            Stmt::Expr(value) => {
+                for each in visited_in_expr(value) {
+                    match each {
+                        Expr::Call { func, .. } => {
+                            let key = call_pausing_key(world.words, world.aliases, self.own_contracts, world.library, func)
+                            if key != null {
+                                return true
+                            }
+                        },
+                        Expr::MethodCall { method, .. } => {
+                            if self.method_pauses(at, world.words.resolve(method)) {
+                                return true
+                            }
+                        },
+                        Expr::SafeMethod { method, .. } => {
+                            if self.method_pauses(at, world.words.resolve(method)) {
+                                return true
+                            }
+                        },
+                        else => {},
+                    }
+                }
+                return false
+            },
+            else => return false,
+        }
+    }
+
+    /// Declare the keeps a statement needs, once.
+    pub fn write_keep_prelude(ref self, mut walk: EmitWalk, mut out: EmitOut, function: ref String, at: i64, depth: i64) {
+        if walk.preluded.contains(at) {
+            return
+        }
+        let prelude = self.keep_prelude(walk, function, at) ?? return
+        walk.preluded.insert(at)
+        out.push(prelude)
+        out.push("\n")
+        for _ in 0..<depth {
+            out.push("    ")
+        }
+    }
+
+    /// The ledger key a written callee resolves to, the way the keep plan
+    /// resolved it, where the callee takes a keep.
+    pub fn keeping_callee(ref self, world: ref EmitWorld, func: ref Expr) -> String? {
+        let name = emit_written_callee(world, func) ?? return null
+        if self.own_contracts.functions.contains_key(name) {
+            if emit_ledger_takes_a_keep(self.own_contracts, name) {
+                return name
+            }
+            return null
+        }
+        if emit_ledger_takes_a_keep(world.library, name) {
+            return name
+        }
+        return null
+    }
+
+    /// How the checker said this key goes into a map's brackets, where the
+    /// map's keys are owned (ADR-293 D1).
+    pub fn map_key(ref self, index: ref Expr, written: bool) -> FactKeyForm? {
+        let form = self.facts.map_keys.get((node_key(index), written)) ?? return null
+        return form.clone()
+    }
+
+    /// Whether `place` is a `mut` parameter of `function`, or a field of one: a
+    /// value that stays the caller's (ADR-094 D3).
+    pub fn stays_the_callers(ref self, world: ref EmitWorld, function: ref String, place: ref Expr) -> bool {
+        return match place {
+            Expr::Variable(name, _) => self.changes_in_place(function, emit_text(world, name)),
+            Expr::Field { base, .. } => self.stays_the_callers(world, function, base),
+            else => false,
+        }
+    }
+
+    /// **The boxed parts a guard reads, read through the box** (ADR-246 D5
+    /// item 2): the guard runs before the arm opens them, so each name it reads
+    /// is bound again to a view of what its box holds.
+    pub fn emit_core_guard_reopening[H: EmitHost](ref self, world: ref EmitWorld, host: ref H, pattern: ref MatchPattern, guard: ref Expr) -> String {
+        let boxed = self.boxed_bindings(world, pattern)
+        let mut read: Vec[String] = []
+        for each in host.names_read(guard) {
+            let name = escaped_name(each)
+            if boxed.contains(ref name) && !read.contains(ref name) {
+                read.push(name)
+            }
+        }
+        let mut out: String = ""
+        for name in read {
+            out.push_str(f"let {name} = nikaia_std::boxed::peek(&{name}); ")
+        }
+        return out
+    }
+}
+
+fn emit_config_of(contract: ref FnContract) -> Vec[ConfigContract] {
+    let signature = contract.signature?.clone() ?? return []
+    return signature.config.clone()
+}

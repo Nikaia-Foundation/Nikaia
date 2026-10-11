@@ -15,6 +15,10 @@
 pub trait EmitHost {
     /// `Emitter::expr`: an expression, written to `out`.
     fn expr(ref self, mut walk: EmitWalk, mut out: EmitOut, node: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws
+
+    /// The names of the variables read anywhere in `expr`, string holes
+    /// included, in the order the walk meets them (`sync::visit_expr`).
+    fn names_read(ref self, expr: ref Expr) -> Vec[String] sync
 }
 
 impl EmitState {

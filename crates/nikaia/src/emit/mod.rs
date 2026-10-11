@@ -2172,12 +2172,7 @@ impl<'p> Emitter<'p> {
     /// member has to be the one asked for, so an ordinary `x.name` on a struct
     /// called `field` is untouched.
     fn reflected(&self, base: &Expr, member: Symbol, wanted: &str) -> Option<String> {
-        let pair = self.walk(|w| w.at_field.clone())?;
-        let (bound, field) = (pair.first, pair.second);
-        let Expr::Variable(name, _) = base else {
-            return None;
-        };
-        (self.text(*name) == bound && self.text(member) == wanted).then_some(field)
+        self.walk(|w| w.reflected(&self.world, base, member, wanted))
     }
 
     /// The type parameter a shape walk stands on — the `T` of
@@ -5238,35 +5233,19 @@ impl<'p> Emitter<'p> {
         declared: &'s Spanned<Stmt>,
         next: &'s Spanned<Stmt>,
     ) -> Option<(&'s Expr, &'s Expr)> {
-        let Stmt::Let {
-            names,
-            mutable: true,
-            value: Expr::ListLit { items, .. },
-            ..
-        } = &declared.node
-        else {
+        use nikaia_std::tools::emit_core_below as below;
+        if !below::emit_filled_at_once(
+            &self.world,
+            &self.s.own_contracts,
+            &declared.node,
+            &next.node,
+        ) {
             return None;
-        };
-        let ([name], true) = (names.as_slice(), items.is_empty()) else {
-            return None;
-        };
-        let Stmt::Expr(Expr::MethodCall {
-            receiver,
-            method,
-            args,
-            config,
-            ..
-        }) = &next.node
-        else {
-            return None;
-        };
-        let filled = matches!(&**receiver, Expr::Variable(r, _) if r == name)
-            && self.text(*method) == "resize"
-            && args.len() == 2
-            && config.is_empty()
-            && self.s.own_contracts.candidates("resize").is_empty()
-            && !args.iter().any(|a| mentions_symbol(a, *name));
-        filled.then(|| (&args[1], &args[0]))
+        }
+        match below::emit_resize_args(&next.node).as_slice() {
+            [length, fill] => Some((fill, length)),
+            _ => None,
+        }
     }
 
     /// Whether a **branch of an `overlap`** can pause
@@ -5282,20 +5261,9 @@ impl<'p> Emitter<'p> {
     /// It was ADR-292's, for the pair the compiler chose to overlap; D1
     /// withdrew that and D6 asks the same question about a branch the
     /// programmer chose.
-    fn branch_pauses(&self, stmt: &Spanned<Stmt>, flow: Flow<'_>) -> bool {
-        let Stmt::Expr(value) = &stmt.node else {
-            return false;
-        };
-        let flow = flow.at(stmt.span.at());
-        let mut pauses = false;
-        visit_expr(value, &mut |expr| match expr {
-            Expr::Call { func, .. } => pauses |= self.pausing_key(func).is_some(),
-            Expr::MethodCall { method, .. } | Expr::SafeMethod { method, .. } => {
-                pauses |= self.method_pauses(flow, *method)
-            }
-            _ => {}
-        });
-        pauses
+    fn branch_pauses(&self, stmt: &Spanned<Stmt>, _flow: Flow<'_>) -> bool {
+        self.s
+            .branch_pauses(&self.world, &stmt.node, stmt.span.at() as i64)
     }
 
     /// `tail` says what this statement is in the position of ([`Tail`]):
@@ -5336,9 +5304,17 @@ impl<'p> Emitter<'p> {
             Stmt::Return(Some(value)) => (value, false),
             _ => return Ok(()),
         };
-        let mut found = Vec::new();
-        let mut called = false;
-        self.held_in(value, false, &mut called, &mut found);
+        let (receivers, walked) =
+            nikaia_std::tools::emit_core_below::emit_held_in(value, false, false);
+        let found = receivers
+            .into_iter()
+            .zip(walked.safe)
+            .filter(|(receiver, _)| {
+                self.s
+                    .facts
+                    .held_reaches
+                    .contains(&crate::check::value_node(receiver))
+            });
         for (receiver, safe) in found {
             if !safe || !holdable {
                 return Err(refused_at!(
@@ -5472,91 +5448,6 @@ impl<'p> Emitter<'p> {
         out.push(&format!(";\n{}", "    ".repeat(depth)));
         self.walking(|w| w.held.insert(key, name));
         Ok(())
-    }
-
-    /// The receivers of held reaches in `expr`, in the order they run, each
-    /// with whether holding it first is safe: not lazy, and no call ran before
-    /// it in this statement.
-    fn held_in<'e>(
-        &self,
-        expr: &'e Expr,
-        lazy: bool,
-        called: &mut bool,
-        found: &mut Vec<(&'e Expr, bool)>,
-    ) {
-        match expr {
-            Expr::SafeMethod { receiver, args, .. } => {
-                let held = self
-                    .s
-                    .facts
-                    .held_reaches
-                    .contains(&crate::check::value_node(receiver))
-                    && !matches!(receiver.as_ref(), Expr::Variable(_, _));
-                if held {
-                    found.push((receiver, !lazy && !*called));
-                }
-                self.held_in(receiver, lazy, called, found);
-                for arg in args {
-                    self.held_in(arg, lazy, called, found);
-                }
-                *called = true;
-            }
-            Expr::Call { func, args, .. } => {
-                self.held_in(func, lazy, called, found);
-                for arg in args {
-                    self.held_in(arg, lazy, called, found);
-                }
-                *called = true;
-            }
-            Expr::MethodCall { receiver, args, .. } => {
-                self.held_in(receiver, lazy, called, found);
-                for arg in args {
-                    self.held_in(arg, lazy, called, found);
-                }
-                *called = true;
-            }
-            Expr::Coalesce {
-                value, fallback, ..
-            } => {
-                self.held_in(value, lazy, called, found);
-                self.held_in(fallback, true, called, found);
-            }
-            Expr::Binary { lhs, rhs, op, .. } => {
-                self.held_in(lhs, lazy, called, found);
-                let short = matches!(op, crate::ast::BinaryOp::And | crate::ast::BinaryOp::Or);
-                self.held_in(rhs, lazy || short, called, found);
-            }
-            Expr::Match { value, arms, .. } => {
-                self.held_in(value, lazy, called, found);
-                for arm in arms {
-                    self.held_in(&arm.body, true, called, found);
-                }
-            }
-            Expr::If { cond, .. } => self.held_in(cond, lazy, called, found),
-            Expr::Field { base, .. } | Expr::SafeField { base, .. } => {
-                self.held_in(base, lazy, called, found)
-            }
-            Expr::Index { base, index, .. } => {
-                self.held_in(base, lazy, called, found);
-                self.held_in(index, lazy, called, found);
-            }
-            Expr::Unary { expr, .. } | Expr::Try(expr, _) | Expr::Cast { expr, .. } => {
-                self.held_in(expr, lazy, called, found)
-            }
-            Expr::Tuple(parts, _) | Expr::ListLit { items: parts, .. } => {
-                for part in parts {
-                    self.held_in(part, lazy, called, found);
-                }
-            }
-            Expr::StructLit { fields, .. } => {
-                for value in fields.iter().filter_map(|f| f.value.as_ref()) {
-                    self.held_in(value, lazy, called, found);
-                }
-            }
-            // A block, a lambda, a string's holes: statements of their own, or
-            // code this walk cannot hold anything for.
-            _ => {}
-        }
     }
 
     /// A statement, and the map a `let` of [`Emitter::trusted_lets`] makes
@@ -6576,11 +6467,7 @@ impl<'p> Emitter<'p> {
     /// map's keys are owned ([ADR-293](../../docs/specification/adr/adr-293.md)
     /// D1).
     fn map_key(&self, index: &Expr, written: bool) -> Option<crate::check::KeyForm> {
-        self.s
-            .facts
-            .map_keys
-            .get(&(crate::check::value_node(index), written))
-            .copied()
+        self.s.map_key(index, written)
     }
 
     /// A key, handed over as it is or lent with a `&`.
@@ -6657,11 +6544,7 @@ impl<'p> Emitter<'p> {
     /// Whether `place` is a `mut` parameter of the function being emitted, or
     /// a field of one: a value that stays the caller's (ADR-094 D3).
     fn stays_the_callers(&self, place: &Expr, flow: Flow<'_>) -> bool {
-        match place {
-            Expr::Variable(name, _) => self.changes_in_place(flow, self.text(*name)),
-            Expr::Field { base, .. } => self.stays_the_callers(base, flow),
-            _ => false,
-        }
+        self.s.stays_the_callers(&self.world, flow.function, place)
     }
 
     fn index_expr(&self, out: &mut Out, index: &Expr, depth: usize, flow: Flow<'_>) -> Result<()> {
@@ -8672,7 +8555,7 @@ impl<'p> Emitter<'p> {
                     true => self.caught_sum(expr),
                     false => None,
                 };
-                let flow = flow.handling(named).catching(sum);
+                let flow = flow.handling(named).catching(sum.as_deref());
                 // **The envelope is opened as the handler's first statement**
                 // ([ADR-292](../../docs/specification/adr/adr-292.md) D20), and
                 // not as a block wrapped around it. A block holding one
@@ -9622,7 +9505,8 @@ impl<'p> Emitter<'p> {
         // so the options become positional here, in the order the *declaration*
         // gives - which is the only order there is, and the reason this needs
         // the callee's contract rather than the call alone.
-        if let Some(options) = self.options_of(func) {
+        let options = self.options_of(func);
+        if !options.is_empty() {
             for (n, option) in options.iter().enumerate() {
                 // **The comma belongs *between* arguments**, and a call whose
                 // arguments are all options has nothing before the first one
@@ -9864,9 +9748,11 @@ impl<'p> Emitter<'p> {
         // `catch` on the block handles it, the function may not be `throws` at
         // all — so it is the set the **branches** throw, which is also what the
         // handler binds.
-        let joined = flow
-            .handled_here
-            .then(|| self.joined_throws(Self::branch_values(block)));
+        let joined = flow.handled_here.then(|| {
+            self.joined_throws(
+                nikaia_std::tools::emit_core_below::emit_branch_values(block).into_iter(),
+            )
+        });
         let channel = match &joined {
             None => flow.channel.to_string(),
             // `main` has no parameters to borrow from and a block's outcome is
@@ -10320,21 +10206,8 @@ impl<'p> Emitter<'p> {
     /// The same question [`Emitter::caught_channel_is_named`] asks, one channel
     /// over, and answered the same way: only the outermost call, and only a
     /// call by name.
-    fn caught_sum(&self, expr: &Expr) -> Option<&str> {
-        let joined = match expr {
-            Expr::Overlap(block, _) => Some(self.joined_throws(Self::branch_values(block))),
-            Expr::Select(arms, _) => Some(self.joined_throws(arms.iter().map(|arm| &arm.value))),
-            _ => None,
-        };
-        if let Some(set) = joined {
-            return self.s.sums.get(&set).map(String::as_str);
-        }
-        let contract = self
-            .s
-            .own_contracts
-            .functions
-            .get(&self.callee_name(expr)?)?;
-        self.s.sums.get(&contract.fails_with).map(String::as_str)
+    fn caught_sum(&self, expr: &Expr) -> Option<String> {
+        self.s.caught_sum(&self.world, expr)
     }
 
     /// `match error { … }` in a handler whose error travels in a **sum**
@@ -10536,25 +10409,6 @@ impl<'p> Emitter<'p> {
         format!("crate::{name}")
     }
 
-    /// Whether what a `catch` guards fails through a **named** channel.
-    ///
-    /// Only the outermost call, and only a call by name: a `catch` guards one
-    /// call in every program in the tree, and a guess about a shape nobody
-    /// writes would be a guess in the lowering. A `false` where the answer was
-    /// yes is today's lowering, unchanged.
-    /// The name a call resolves to, where the expression is one.
-    ///
-    /// The same walk `caught_channel_is_named` and `caught_sum` each did for
-    /// themselves, written once because a third asker arrived
-    /// ([ADR-292](../../docs/specification/adr/adr-292.md) D19).
-    fn callee_name(&self, expr: &Expr) -> Option<String> {
-        nikaia_std::tools::emit_calls::call_callee_name(
-            &self.parsed.interner,
-            &self.parsed.aliases,
-            expr,
-        )
-    }
-
     /// **The set of error types a joining block can fail with**
     /// ([ADR-292](../../docs/specification/adr/adr-292.md) D19): the union of
     /// its branches', in the ledger's own order, which is sorted.
@@ -10580,38 +10434,8 @@ impl<'p> Emitter<'p> {
         )
     }
 
-    /// The expressions an `overlap`'s statements are, for [`Emitter::joined_throws`].
-    fn branch_values(block: &Block) -> impl Iterator<Item = &Expr> + use<'_> {
-        block.stmts.iter().filter_map(|stmt| match &stmt.node {
-            Stmt::Expr(value) => Some(value),
-            _ => None,
-        })
-    }
-
     fn caught_channel_is_named(&self, expr: &Expr) -> bool {
-        // **A joining block answers from its own set**
-        // ([ADR-292](../../docs/specification/adr/adr-292.md) D19).
-        let joined = match expr {
-            Expr::Overlap(block, _) => Some(self.joined_throws(Self::branch_values(block))),
-            Expr::Select(arms, _) => Some(self.joined_throws(arms.iter().map(|arm| &arm.value))),
-            _ => None,
-        };
-        if let Some(set) = joined {
-            return self.named_error_of(&set).is_some();
-        }
-        let Some(name) = self.callee_name(expr) else {
-            return false;
-        };
-        // A call of this program's hands its failure in an envelope whoever
-        // declared the error (ADR-280 D13); a call of `std`'s hands it bare,
-        // which `named_error` says by knowing no contract for it - and so does
-        // a grammar's entry rule, whose contract is in the ledger (ADR-296 D24)
-        // and whose body is the grammar's, which returns the parse's error.
-        let a_grammar = name
-            .split("::")
-            .next()
-            .is_some_and(|head| self.s.grammars.contains_key(head));
-        !a_grammar && self.named_error(&name).is_some()
+        self.s.caught_channel_is_named(&self.world, expr)
     }
 
     /// Whether a function of **this program** can pause, and is therefore an
@@ -10866,27 +10690,8 @@ impl<'p> Emitter<'p> {
         self.s.field_defaults(&self.world, owner)
     }
 
-    fn options_of(&self, func: &Expr) -> Option<&[crate::contracts::ConfigContract]> {
-        let name = match func {
-            Expr::Variable(name, _) => self.text(*name).to_string(),
-            Expr::Path(segments, _) => segments
-                .iter()
-                .map(|s| self.text(*s))
-                .collect::<Vec<_>>()
-                .join("::"),
-            _ => return None,
-        };
-
-        let contract = self
-            .s
-            .own_contracts
-            .functions
-            .get(&name)
-            .or_else(|| self.s.own_contracts.functions.get(&format!("{name}::new")))
-            .or_else(|| self.world.library.lookup(&name).map(|(_, c)| c))?;
-
-        let config = &contract.signature.as_ref()?.config;
-        (!config.is_empty()).then_some(config.as_slice())
+    fn options_of(&self, func: &Expr) -> Vec<crate::contracts::ConfigContract> {
+        self.s.options_of(&self.world, func)
     }
 
     /// A string literal. Which of the two it is decides what comes out, and
@@ -11193,20 +10998,8 @@ impl<'p> Emitter<'p> {
     /// item 2): the guard runs before the arm opens them, so each name it
     /// reads is bound again to a view of what its box holds.
     fn guard_reopening(&self, pattern: &MatchPattern, guard: &Expr) -> String {
-        let mut boxed = Vec::new();
-        self.boxed_bindings(pattern, &mut boxed);
-        let mut read: Vec<String> = Vec::new();
-        crate::contracts::sync::visit_expr(self.parsed, guard, &mut |expr| {
-            if let Expr::Variable(name, _) = expr {
-                let name = self.name(*name).to_string();
-                if boxed.contains(&name) && !read.contains(&name) {
-                    read.push(name);
-                }
-            }
-        });
-        read.iter()
-            .map(|name| format!("let {name} = nikaia_std::boxed::peek(&{name}); "))
-            .collect()
+        self.s
+            .emit_core_guard_reopening(&self.world, self, pattern, guard)
     }
 
     /// The guard, with the boxed parts it reads opened for it.
@@ -13683,24 +13476,12 @@ impl Emitter<'_> {
         nikaia_std::tools::emit_keeps::emit_keep_expr(&keep, lent)
     }
 
-    /// The keeps declared before one statement: the function's own, before
-    /// its first statement, and one per call or buffer that needs a keep of
-    /// its own.
-    fn keep_prelude(&self, function: &str, at: usize) -> Option<String> {
-        self.walk(|w| self.s.keep_prelude(w, function, at as i64))
-    }
-
     /// Declare the keeps a statement needs, once.
     fn write_keep_prelude(&self, out: &mut Out, function: &str, at: usize, depth: usize) {
-        if self.walk(|w| w.preluded.contains(&(at as i64))) {
-            return;
-        }
-        if let Some(prelude) = self.keep_prelude(function, at) {
-            self.walking(|w| w.preluded.insert(at as i64));
-            out.push(&prelude);
-            out.push("\n");
-            out.push(&"    ".repeat(depth));
-        }
+        self.nikaia(|walk| {
+            self.s
+                .write_keep_prelude(walk, out, function, at as i64, depth as i64)
+        })
     }
 
     /// **The keep an argument made in the call goes into**
@@ -13728,13 +13509,7 @@ impl Emitter<'_> {
     /// The ledger key a written callee resolves to, the way the keep plan
     /// resolved it.
     fn keeping_callee(&self, func: &Expr) -> Option<String> {
-        let name = crate::contracts::keep::callee_name(self.parsed, func)?;
-        let (key, contract) = self
-            .s
-            .own_contracts
-            .lookup(&name)
-            .or_else(|| self.world.library.lookup(&name))?;
-        crate::contracts::keep::takes_a_keep(contract).then_some(key)
+        self.s.keeping_callee(&self.world, func)
     }
 
     /// The lifetimes a function that takes a keep writes its tethered
@@ -13835,17 +13610,6 @@ enum Names<'a> {
 /// asking it a question.
 fn binds_a_part(part: &MatchPattern) -> bool {
     nikaia_std::tools::emit_ops::binds_a_part(part)
-}
-
-/// Whether `expr` reads the name `name` anywhere in it.
-fn mentions_symbol(expr: &Expr, name: Symbol) -> bool {
-    let mut found = false;
-    visit_expr(expr, &mut |e| {
-        if let Expr::Variable(v, _) = e {
-            found |= *v == name;
-        }
-    });
-    found
 }
 
 /// **The counters of a function body that are never negative**

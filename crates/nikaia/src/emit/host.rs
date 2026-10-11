@@ -167,4 +167,14 @@ impl EmitHost for Emitter<'_> {
             )
         })
     }
+
+    fn names_read(&self, expr: &Expr) -> Vec<String> {
+        let mut names = Vec::new();
+        crate::contracts::sync::visit_expr(self.parsed, expr, &mut |each| {
+            if let Expr::Variable(name, _) = each {
+                names.push(self.text(*name).to_string());
+            }
+        });
+        names
+    }
 }

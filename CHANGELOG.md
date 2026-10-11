@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.820] — 2026-10-11
+
+**The questions below the emitter's core are Nikaia: the `?.` holds, `resize` fills, the options of a call, what a `catch` guards, the keeps a statement declares (tools/emit_core_below.nika, #558, #125, E9 U1b).**
+- `emit_held_in` (the receivers of `?.` and whether holding each first is safe, returned as values and not threaded through `&mut`), `emit_filled_at_once`, `options_of`, `caught_channel_is_named`, `caught_sum`, `branch_pauses`, `write_keep_prelude`, `keeping_callee`, `map_key`, `stays_the_callers`, `EmitWalk::reflected` and `emit_core_guard_reopening` move to Nikaia; the Rust methods of those names are one-line stubs and `held_in`, `branch_values`, `callee_name`, `keep_prelude` and `mentions_symbol` are gone. `EmitHost` gains `names_read` (the names a guard reads, string holes included), the one thing the guard's reopening needs from Rust. `unreachable_patterns` is allowed on `tools` for the `else` a one-pattern `match` over a struct must write. `held_element` stays Rust: it is a destructure and an adapter call, and a `Vec[ref Expr]` result cannot borrow from a walk handed in by closure. Output unchanged: `package.rs` is byte-identical under the previous compiler.
+
 ## [0.0.819] — 2026-10-11
 
 **check: the fallible and pausing walks, cleanups, reads and views below the core are Nikaia (#558, #125, C-5a)**
