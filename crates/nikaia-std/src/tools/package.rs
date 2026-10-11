@@ -10478,7 +10478,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn a_table_that_crosses(&mut self, world: &CheckWorld<'_>, bound: &str, want: &Ty, pairs: &[BuildValue], span: &Span, payloads: impl Fn(&str, &str) -> Option<Vec<Ty>>, float_text: impl Fn(f64) -> String) -> CheckTable {
+    pub fn a_table_that_crosses(&mut self, world: &CheckWorld<'_>, bound: &str, want: &Ty, pairs: &[BuildValue], span: &Span, payloads: &impl Fn(&str, &str) -> Option<Vec<Ty>>, float_text: &impl Fn(f64) -> String) -> CheckTable {
         let args = type_arguments(want);
         if args.len() != 2 { return no_table(false); }
         if !a_str_view_key(nikaia_std::index::get(&args, 0)) {
@@ -11443,7 +11443,7 @@ impl CheckState {
             scan = scan + 1;
         }
         if at < 0 { return false; }
-        lends_in(&contract, at, &vec![world.library])
+        lends_in_own(&contract, at, &vec![world.library])
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -19672,7 +19672,7 @@ impl GrCursor {
         }
         out
     }
-    fn quoted(&mut self, char_of: impl Fn(i64) -> Option<scalar>) -> String {
+    fn quoted(&mut self, char_of: &impl Fn(i64) -> Option<scalar>) -> String {
         self.expect('"');
         let mut written: String = String::from("");
         if self.failed { return written; }
@@ -22703,19 +22703,25 @@ fn type_text(contract: &TypeContract) -> String {
 
 const COPIED: [&str; 19] = ["i8", "i16", "i32", "i64", "isize", "usize", "u8", "u16", "u32", "u64", "f32", "f64", "bool", "char", "scalar", "Duration", "Shared", "SharedMut", "Locked"];
 
-pub fn lends_in(contract: &FnContract, at: i64, copying: &[&Ledger]) -> bool {
+pub fn lends_in(contract: &FnContract, at: i64, copying: &[&Ledger]) -> bool { lends_with(contract, at, copying, false) }
+
+pub fn lends_in_own(contract: &FnContract, at: i64, copying: &[&Ledger]) -> bool { lends_with(contract, at, copying, true) }
+
+fn lends_with(contract: &FnContract, at: i64, copying: &[&Ledger], own: bool) -> bool {
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
     let mut position: i64 = 0;
     for (name, ty) in signature.params.iter() {
         if position == at {
             if nikaia_std::list::contains(&signature.mutable, &name) || name == "self" { return false; }
             if ty.is_a_view() { return true; }
-            return !signature.takes_a_receiver() && moves(ty) && !a_ledger_copies(ty, copying) && !nikaia_std::list::contains(&contract.keeps, &name);
+            return (!signature.takes_a_receiver() || own && a_function_value(ty)) && moves(ty) && !a_ledger_copies(ty, copying) && !nikaia_std::list::contains(&contract.keeps, &name);
         }
         position += 1;
     }
     false
 }
+
+fn a_function_value(ty: &Ty) -> bool { matches!(ty, Ty::Fn { .. }) }
 
 pub fn a_ledger_copies(ty: &Ty, copying: &[&Ledger]) -> bool {
     match ty {
@@ -28424,7 +28430,7 @@ impl ProverState {
         false
     }
     #[allow(clippy::too_many_arguments)]
-    pub fn exit(&mut self, arena: &mut TermArena, value: &Expr, words: &winnow_grammar::InternerContext, scope: &ProverScope, function: Option<&str>, counts: bool, params: &collections::BTreeSet<String>, ask: impl Fn(&TermArena, &[i64], i64) -> SolverAnswer) {
+    pub fn exit(&mut self, arena: &mut TermArena, value: &Expr, words: &winnow_grammar::InternerContext, scope: &ProverScope, function: Option<&str>, counts: bool, params: &collections::BTreeSet<String>, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer) {
         if self.collecting || !counts { return; }
         let owner = match carrying_function(function) { Some(__nikaia_value) => __nikaia_value, None => return };
         let posts = match standing_posts(&self.postconditions, &owner) { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -28456,7 +28462,7 @@ impl ProverState {
         false
     }
     #[allow(clippy::too_many_arguments)]
-    pub fn an_assert(&mut self, arena: &mut TermArena, words: &winnow_grammar::InternerContext, cond: &Expr, written: String, names: &collections::BTreeSet<String>, message: Option<String>, span: Span, scope: &mut ProverScope, at: &ProverWhere, ask: impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>) -> AssertOutcome {
+    pub fn an_assert(&mut self, arena: &mut TermArena, words: &winnow_grammar::InternerContext, cond: &Expr, written: String, names: &collections::BTreeSet<String>, message: Option<String>, span: Span, scope: &mut ProverScope, at: &ProverWhere, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>) -> AssertOutcome {
         let mut outcome = AssertOutcome { held: ClaimHeld::ByTheTest, findings: vec![] };
         if self.in_test { return outcome; }
         let claim = claim_term(cond, words, &|name| { scope.ints.contains(name) }, &mut arena.nodes);
@@ -28537,7 +28543,7 @@ impl ProverState {
         outcome
     }
     #[allow(clippy::too_many_arguments)]
-    pub fn precondition_call(&mut self, arena: &mut TermArena, words: &winnow_grammar::InternerContext, callee: &str, params: &[String], claims: &[PreClaim], args: &[Expr], span: Span, scope: &ProverScope, at: &ProverWhere, ask: impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: impl Fn(&str) -> String) -> CallOutcome {
+    pub fn precondition_call(&mut self, arena: &mut TermArena, words: &winnow_grammar::InternerContext, callee: &str, params: &[String], claims: &[PreClaim], args: &[Expr], span: Span, scope: &ProverScope, at: &ProverWhere, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String) -> CallOutcome {
         let mut outcome = CallOutcome { reach: CallReach::Proved, findings: vec![] };
         for index in 0..claims.len() as i64 {
             let pre = nikaia_std::index::get(&claims, (index) as usize);
@@ -28621,7 +28627,7 @@ impl ProverState {
         outcome
     }
     #[allow(clippy::too_many_arguments)]
-    pub fn carry_back(&mut self, arena: &mut TermArena, goal: Option<i64>, pre: &PreClaim, callee: &str, site: CarriedFrom, scope: &ProverScope, function: Option<&str>, params: &collections::BTreeSet<String>, ask: impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>) {
+    pub fn carry_back(&mut self, arena: &mut TermArena, goal: Option<i64>, pre: &PreClaim, callee: &str, site: CarriedFrom, scope: &ProverScope, function: Option<&str>, params: &collections::BTreeSet<String>, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>) {
         let claim = match goal { Some(__nikaia_value) => __nikaia_value, None => return };
         let owner = match carrying_function(function) { Some(__nikaia_value) => __nikaia_value, None => return };
         if self.in_test || self.reaches(callee, &owner) { return; }
@@ -39083,7 +39089,7 @@ pub mod ledger_text {
 }
 pub mod lends {
     #[allow(unused_imports)]
-    pub use super::{lends_in, a_ledger_copies, moves, Passed, Uses, kept_by};
+    pub use super::{lends_in, lends_in_own, a_ledger_copies, moves, Passed, Uses, kept_by};
 }
 pub mod libraries {
     #[allow(unused_imports)]

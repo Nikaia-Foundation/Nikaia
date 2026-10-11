@@ -1484,6 +1484,8 @@ struct Argument<'a> {
     found: &'a Ty,
     /// The type the parameter declares.
     want: &'a Ty,
+    /// The callee is a function or method of this program's own.
+    own: bool,
 }
 
 /// **What a `?.` reaches**, which Part I 3.5 calls a *member*
@@ -4340,6 +4342,7 @@ impl<'a> Checker<'a> {
             given,
             found,
             want,
+            own,
         } = argument;
         // `arguments()` drops the receiver, and the contract's positions do
         // not, so a method's argument sits one further along.
@@ -4397,7 +4400,12 @@ impl<'a> Checker<'a> {
             self.s.facts.mut_args.insert(value_node(given));
             return true;
         }
-        if !crate::contracts::keeps::lends_in(contract, position, &[self.world.library]) {
+        let copying = [self.world.library];
+        let lends = match own {
+            true => crate::contracts::keeps::lends_in_own(contract, position, &copying),
+            false => crate::contracts::keeps::lends_in(contract, position, &copying),
+        };
+        if !lends {
             return false;
         }
         let Some(given) = given else {
@@ -12018,11 +12026,18 @@ impl<'a> Checker<'a> {
             // **What is printed is only read** (ADR-279 D5): the four print
             // calls take any value by `?`, which would otherwise count as
             // kept, and format it by reference (#473).
-            let lent = crate::contracts::keeps::lends_in(
-                contract,
-                at + usize::from(signature.takes_a_receiver()),
-                &[self.world.library],
-            ) || (at == 0 && is_a_lookup(key))
+            let lent = match self.world.own.functions.contains_key(key) {
+                true => crate::contracts::keeps::lends_in_own(
+                    contract,
+                    at + usize::from(signature.takes_a_receiver()),
+                    &[self.world.library],
+                ),
+                false => crate::contracts::keeps::lends_in(
+                    contract,
+                    at + usize::from(signature.takes_a_receiver()),
+                    &[self.world.library],
+                ),
+            } || (at == 0 && is_a_lookup(key))
                 || matches!(key, "println" | "eprintln" | "print" | "eprint");
             let kept = !lent;
             // **What the callee keeps, it is given** (ADR-293 D29): no `&` is
@@ -12127,6 +12142,7 @@ impl<'a> Checker<'a> {
                     given: given.get(at),
                     found,
                     want,
+                    own: self.world.own.functions.contains_key(key),
                 },
                 written,
                 span,
@@ -12472,11 +12488,18 @@ impl<'a> Checker<'a> {
         let arguments = signature.arguments();
         for (at, ((name, declared), want)) in arguments.iter().zip(expected).enumerate() {
             let generic = matches!(declared, Ty::Var { .. });
-            let lent = crate::contracts::keeps::lends_in(
-                contract,
-                at + usize::from(signature.takes_a_receiver()),
-                &[self.world.library],
-            ) || (at == 0 && is_a_lookup(key));
+            let lent = match self.world.own.functions.contains_key(key) {
+                true => crate::contracts::keeps::lends_in_own(
+                    contract,
+                    at + usize::from(signature.takes_a_receiver()),
+                    &[self.world.library],
+                ),
+                false => crate::contracts::keeps::lends_in(
+                    contract,
+                    at + usize::from(signature.takes_a_receiver()),
+                    &[self.world.library],
+                ),
+            } || (at == 0 && is_a_lookup(key));
             let kept = !lent;
             let Some(found) = found.get(at) else { continue };
             if generic
@@ -15241,8 +15264,8 @@ impl<'a> Checker<'a> {
             want,
             pairs,
             span,
-            |ty: &str, variant: &str| payload_of(parsed, beside, ty, variant),
-            |f: f64| format!("{f:?}"),
+            &|ty: &str, variant: &str| payload_of(parsed, beside, ty, variant),
+            &|f: f64| format!("{f:?}"),
         );
         match table.found {
             true => (Some((table.below, table.written)), false),

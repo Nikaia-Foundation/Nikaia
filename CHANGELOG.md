@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.809] — 2026-10-11
+
+**A method's function value is lent on, as a free function's is (#558, #125).**
+- A method of this program that takes a `fn` parameter lowers it as `&impl Fn`, and its callers pass `&`, so a method can hand its function to itself in a loop (E0382 before). `lends_in_own` is `lends_in` for an own function or method; library methods keep taking it by value. `check_fields.nika`'s lent-parameter test and the emitter use it, and `a_table_that_crosses`, `quoted` and the prover's methods take `&impl Fn`.
+
 ## [0.0.808] — 2026-10-11
 
 **The grammars, the keep plans and the methods are tables of EmitState (#558, step E5).**

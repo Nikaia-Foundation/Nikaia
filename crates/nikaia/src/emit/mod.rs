@@ -3436,7 +3436,7 @@ impl<'p> Emitter<'p> {
                 // handed over is one lifetime, which the elision names.
                 let lent = |at: usize| {
                     self.s.own_contracts.functions.get(&key).is_some_and(|c| {
-                        crate::contracts::keeps::lends_in(
+                        crate::contracts::keeps::lends_in_own(
                             c,
                             at,
                             &[self.world.library, &self.s.described],
@@ -3489,7 +3489,7 @@ impl<'p> Emitter<'p> {
                     c.signature
                         .as_ref()
                         .is_some_and(|s| s.mutable.iter().any(|m| m == self.text(a.name)))
-                        || crate::contracts::keeps::lends_in(
+                        || crate::contracts::keeps::lends_in_own(
                             c,
                             at,
                             &[self.world.library, &self.s.described],
@@ -3571,7 +3571,11 @@ impl<'p> Emitter<'p> {
                     false => "&mut ",
                 }
             } else if lent.is_some_and(|c| {
-                crate::contracts::keeps::lends_in(c, at, &[self.world.library, &self.s.described])
+                crate::contracts::keeps::lends_in_own(
+                    c,
+                    at,
+                    &[self.world.library, &self.s.described],
+                )
             }) && !written_as_a_view
             {
                 match shared {

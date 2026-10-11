@@ -78,6 +78,12 @@ pub fn lends_in(contract: &super::FnContract, at: usize, copying: &[&super::Ledg
     nikaia_std::tools::lends::lends_in(contract, at as i64, copying)
 }
 
+/// [`lends_in`] for a contract of this program's own: a method's function
+/// value is lent too.
+pub fn lends_in_own(contract: &super::FnContract, at: usize, copying: &[&super::Ledger]) -> bool {
+    nikaia_std::tools::lends::lends_in_own(contract, at as i64, copying)
+}
+
 /// Whether a ledger says values of `ty` are copies.
 pub fn a_ledger_copies(ty: &super::ty::Ty, copying: &[&super::Ledger]) -> bool {
     nikaia_std::tools::lends::a_ledger_copies(ty, copying)

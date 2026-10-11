@@ -223,7 +223,7 @@ impl CheckState {
         if at < 0 {
             return false
         }
-        return lends_in(contract, at, [world.library])
+        return lends_in_own(contract, at, [world.library])
     }
 
     /// **An empty map written to for the first time** (`m["k"] = v`): its
