@@ -78,8 +78,9 @@ Since `03dec80` (0.0.786). Share at the end: 49.8 % (`scripts/self_hosting.py`).
   line, 5 and 4.7 active hours.
 * **The first short agents** (abfc7f emit E7 first slice, 164 turns, 24 M,
   36 active minutes: 72k per moved line; a5fd67, a method-lowering fix, 22
-  turns, 1.4 M, 0 lines moved but a language change of 0.0.809) cost a tenth to
-  a third per slice. a99ad9 (C-2) was still running when this was taken: its
+  turns, 1.4 M, 0 lines moved but a language change of 0.0.809) cost 72k per moved
+  line against 120-190k for the long agents (40-60 % of it); one slice is too
+  few to call a trend. a99ad9 (C-2) was still running when this was taken: its
   line shows 0 moved.
 * **Planning is cheap** (three Opus agents on high effort, 7-21 M each, 5-12
   active minutes) and decided what four long builder runs had been stuck on
