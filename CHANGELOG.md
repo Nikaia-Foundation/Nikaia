@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.831] — 2026-10-11
+
+**emit: the places of the core are Nikaia: SafeMethod, Field, SafeField, Index, Cast, StructLit, With, Tuple, ListLit (#558, #125, E9 U7)**
+- New tools/emit_core_places.nika: the arms of expr_as_written for SafeMethod, Field, SafeField, Index, Cast, StructLit, With, Tuple and ListLit as emit_core_* of EmitState, one function per variant. The arms in the Rust match are one-line stubs through Emitter::cross; the dead Rust (method_call, index_read, a_field_call, reflected, narrows, field_contract, field_defaults, is_boxed_field, either_field, around, cleaned) is deleted. EmitHost gains take_lend. emit_deep_nesting covers lists, a ?? chain and a method chain 500 deep.
+
 ## [0.0.830] — 2026-10-11
 
 **emit: the calls of the core are Nikaia: call, call_inner, method_call, the MethodCall arm (#558, #125, E9 U6)**

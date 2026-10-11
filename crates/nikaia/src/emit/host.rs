@@ -104,6 +104,18 @@ impl Emitter<'_> {
         result
     }
 
+    /// A moved arm: the flow split for the crossing, `f` run with the walk, the
+    /// result as the Rust side raises it.
+    pub(super) fn cross(
+        &self,
+        flow: Flow<'_>,
+        f: impl FnOnce(&mut EmitWalk, EmitFlow, &EmitScope) -> Crossing,
+    ) -> Result<()> {
+        let (flow, scope) = flow.to_emit();
+        let crossed = self.nikaia(|walk| f(walk, flow, &scope));
+        self.crossed(crossed)
+    }
+
     /// The result of a crossing into Nikaia, as the Rust side raises it.
     pub(super) fn crossed<T>(&self, result: Result<T, Box<dyn std::error::Error>>) -> Result<T> {
         let error = match result {
@@ -227,6 +239,10 @@ impl EmitHost for Emitter<'_> {
             .get(&at)
             .map(|names| names.iter().cloned().collect())
             .unwrap_or_default()
+    }
+
+    fn take_lend(&self, out: &mut Out) -> bool {
+        super::OutText::take_lend(out)
     }
 
     fn overlaps_user_code(&self) -> bool {

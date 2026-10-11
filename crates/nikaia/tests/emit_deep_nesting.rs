@@ -62,3 +62,34 @@ fn an_index_nested_deep_lowers() {
         "index",
     );
 }
+
+#[test]
+fn lists_nested_deep_lower() {
+    let list = format!("{}1{}", "[".repeat(DEPTH), "]".repeat(DEPTH));
+    lowers(
+        &format!("fn main() {{\n    let a = {list}\n    println(f\"{{a.len()}}\")\n}}\n"),
+        "list",
+    );
+}
+
+#[test]
+fn a_coalesce_chain_deep_lowers() {
+    let chain = format!("{}0", "x ?? ".repeat(DEPTH));
+    lowers(
+        &format!(
+            "fn main() {{\n    let x: i64? = null\n    let a = {chain}\n    println(f\"{{a}}\")\n}}\n"
+        ),
+        "coalesce",
+    );
+}
+
+#[test]
+fn a_method_chain_deep_lowers() {
+    let chain = format!("s{}", ".clone()".repeat(DEPTH));
+    lowers(
+        &format!(
+            "fn main() {{\n    let s: String = \"a\"\n    let t = {chain}\n    println(t)\n}}\n"
+        ),
+        "chain",
+    );
+}

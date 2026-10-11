@@ -580,13 +580,6 @@ impl SourceMap {
 /// (`tools/emit_out.nika`).
 type Out = nikaia_std::tools::emit_out::EmitOut;
 
-/// The name a `?.m()`'s reached value is bound to inside the `match`.
-///
-/// Prefixed like every other name this emitter invents, so it can never be one
-/// a program wrote: `__nikaia_` is reserved by the same rule that reserves the
-/// branch names an `overlap` uses.
-const REACHED: &str = "__nikaia_it";
-
 /// Kap 7.1: the name a `catch` handler sees the failure under.
 ///
 /// One place, because the emitter writes it and
@@ -2106,18 +2099,6 @@ impl<'p> Emitter<'p> {
         let pair = self.walk(|w| w.specialising.clone())?;
         self.s
             .unrolls_here(&self.world, &pair.first, &pair.second, iter)
-    }
-
-    /// **The field this unrolled turn stands at**, where `base.member` is a
-    /// read of the loop's own binding ([ADR-304](../../docs/specification/adr/adr-304.md)
-    /// D2).
-    ///
-    /// `None` everywhere else, which is every program that does not walk a
-    /// shape: the binding's name has to match the one the `for` wrote and the
-    /// member has to be the one asked for, so an ordinary `x.name` on a struct
-    /// called `field` is untouched.
-    fn reflected(&self, base: &Expr, member: Symbol, wanted: &str) -> Option<String> {
-        self.walk(|w| w.reflected(&self.world, base, member, wanted))
     }
 
     /// The type parameter a shape walk stands on — the `T` of
@@ -4580,12 +4561,6 @@ impl<'p> Emitter<'p> {
         nikaia_std::tools::emit_core_types::emit_settle_kind(self.build.overlaps_user_code())
     }
 
-    /// The wrapper a value with a cleanup is held in: the one whose parked work
-    /// may move with its task where tasks run on threads (ADR-297 D1).
-    fn cleaned(&self) -> String {
-        nikaia_std::tools::emit_core_types::emit_cleaned(self.build.overlaps_user_code())
-    }
-
     // --- Statements and expressions ---
 
     /// `if c { … } else { … }`, where `tail` says what the whole thing is in
@@ -5968,10 +5943,6 @@ impl<'p> Emitter<'p> {
         nikaia_std::tools::emit_exprs::emit_around_value(how, value)
     }
 
-    fn around(how: Option<&crate::check::Wrap>) -> (String, String) {
-        nikaia_std::tools::emit_exprs::emit_around(how)
-    }
-
     /// What a `return` hands back: the nullable wrap, and **the `&` the compiler
     /// owes** where the value is a view of the subject
     /// ([ADR-094](../../../docs/specification/adr/adr-094.md) D1's third
@@ -6003,12 +5974,6 @@ impl<'p> Emitter<'p> {
             )
         });
         self.crossed(crossed)
-    }
-
-    /// Whether a struct's field is text both kinds of which flow into
-    /// ([ADR-282](../../docs/specification/adr/adr-282.md) D14).
-    fn either_field(&self, owner: &str, field: Symbol) -> bool {
-        self.s.either_field(&self.world, owner, field)
     }
 
     /// Whether the function being written hands back text both kinds of
@@ -6467,143 +6432,54 @@ impl<'p> Emitter<'p> {
             {
                 self.method_arm(out, expr, receiver, *method, args, config, depth, flow)?
             }
-            // Part I 3.5 onto a **method**
-            // ([ADR-278](../../../docs/specification/adr/adr-278.md)): the call
-            // happens only where there is something to call it on.
-            //
-            // **A `match` and not the field's `map`**, and the difference is the
-            // difference between a field and a method. A field access can
-            // neither pause nor fail, so a closure is somewhere it can happen; a
-            // method call may do both, and inside a closure an `.await` does not
-            // compile and a `?` has nowhere to go. So the reach is written out,
-            // which is the one shape that lets the call be whatever a call is.
-            //
-            // `None => None` and not `.map(…)`'s implicit one, for the flattened
-            // case: where the method's own result is a `T?`, the `Some` arm
-            // hands it back as it is and the reach does not nest.
+            // Part I 3.5 onto a **method** (ADR-278): `emit_core_safe_method`.
             Expr::SafeMethod {
                 receiver,
                 method,
                 args,
                 config,
                 ..
-            } => {
-                let flattens = self
-                    .s
-                    .facts
-                    .flattened_reaches
-                    .contains(&crate::check::value_node(receiver));
-                // **The scrutinee is lent where the call changes nothing**
-                // ([ADR-278](../../docs/specification/adr/adr-278.md) D18):
-                // `find(1)?.greet("Hallo")` used to take `find(1)`'s value into
-                // the `match`, so a receiver bound to a name was gone
-                // afterwards and `rustc` said so about a file nobody wrote
-                // (Part III C.1). What comes out is the **call's** result, so
-                // nothing about the reach needs the state that is not built.
-                let lent = match self
-                    .s
-                    .facts
-                    .lent_reaches
-                    .contains(&crate::check::value_node(receiver))
-                {
-                    true => ".as_ref()",
-                    false => "",
-                };
-                out.push("match ");
-                let held = self.walk(|w| {
-                    w.held
-                        .get(&(crate::check::value_node(receiver.as_ref())))
-                        .cloned()
-                });
-                match held {
-                    Some(name) => out.push(&name),
-                    // A map's read is not lent (0.0.246), so nothing follows
-                    // it and a `match` needs no parentheses around the `*`.
-                    None if lent.is_empty() && matches!(receiver.as_ref(), Expr::Index { .. }) => {
-                        self.expr(out, receiver, depth, flow)?
-                    }
-                    None => self.postfix_base(out, receiver, depth, flow)?,
-                }
-                out.push(lent);
-                out.push(&format!(
-                    " {{
-{}",
-                    "    ".repeat(depth + 1)
-                ));
-                out.push(&format!("Some({REACHED}) => "));
-                if !flattens {
-                    out.push("Some(");
-                }
-                // **A copy of the view reached** is `to_owned`, as the plain
-                // call's is (ADR-293 D24): the receiver the rewrite reads is the
-                // one this `match` bound.
-                let copy = self
-                    .s
-                    .facts
-                    .owned_copies
-                    .contains(&crate::check::value_node(receiver));
-                let held_copy = self.walking(|w| std::mem::replace(&mut w.reached_copy, copy));
-                let written =
-                    match self.a_field_call(out, receiver, true, *method, args, depth + 1, flow) {
-                        Ok(true) => Ok(()),
-                        Ok(false) => {
-                            self.method_call(out, None, *method, args, config, depth + 1, flow)
-                        }
-                        Err(error) => Err(error),
-                    };
-                self.walking(|w| w.reached_copy = held_copy);
-                written?;
-                if !flattens {
-                    out.push(")");
-                }
-                out.push(&format!(
-                    ",
-{}None => None,
-{}}}",
-                    "    ".repeat(depth + 1),
-                    "    ".repeat(depth)
-                ));
-            }
+            } => self.cross(flow, |walk, flow, scope| {
+                self.s.emit_core_safe_method(
+                    &self.world,
+                    walk,
+                    out,
+                    self,
+                    receiver,
+                    *method,
+                    args,
+                    config,
+                    depth as i64,
+                    flow,
+                    scope,
+                )
+            })?,
             Expr::Match { value, arms, .. } => self.match_expr(out, value, arms, depth, flow)?,
-            Expr::Tuple(parts, _) => {
-                out.push("(");
-                for (i, part) in parts.iter().enumerate() {
-                    if i > 0 {
-                        out.push(", ");
-                    }
-                    self.expr(out, part, depth, flow)?;
-                }
-                out.push(")");
-            }
-            // **`vec![…]`, which is what a `Vec` already is below**
-            // ([ADR-135](../../../docs/specification/adr/adr-135.md) D1). Part
-            // I 2.2 offers one container and the literal writes that one, so
-            // there is no second shape to choose between here.
-            //
-            // **Unless the use asked for an array**
-            // ([ADR-152](../../../docs/specification/adr/adr-152.md) D4), which
-            // is a fact about the literal's *type* and therefore the checker's
-            // to hand over: the same three values are `vec![…]` in one position
-            // and `[…]` in the other, and nothing in the source distinguishes
-            // them.
-            Expr::ListLit { items, .. } => {
-                let array = self
-                    .s
-                    .facts
-                    .array_literals
-                    .contains(&crate::check::value_node(expr));
-                out.push(match array {
-                    true => "[",
-                    false => "vec![",
-                });
-                for (i, item) in items.iter().enumerate() {
-                    if i > 0 {
-                        out.push(", ");
-                    }
-                    self.expr(out, item, depth, flow)?;
-                }
-                out.push("]");
-            }
+            Expr::Tuple(parts, _) => self.cross(flow, |walk, flow, scope| {
+                self.s.emit_core_tuple(
+                    &self.world,
+                    walk,
+                    out,
+                    self,
+                    parts,
+                    depth as i64,
+                    flow,
+                    scope,
+                )
+            })?,
+            Expr::ListLit { items, .. } => self.cross(flow, |walk, flow, scope| {
+                self.s.emit_core_list_lit(
+                    &self.world,
+                    walk,
+                    out,
+                    self,
+                    expr,
+                    items,
+                    depth as i64,
+                    flow,
+                    scope,
+                )
+            })?,
             Expr::Field { base, name, .. } | Expr::SafeField { base, name, .. }
                 if matches!(expr, Expr::Field { .. })
                     || self
@@ -6612,480 +6488,95 @@ impl<'p> Emitter<'p> {
                         .plain_reaches
                         .contains(&crate::check::value_node(expr)) =>
             {
-                // **`field.name` is the field's own name as text**
-                // ([ADR-304](../../docs/specification/adr/adr-304.md) D2): a
-                // literal, because the turn this copy stands at is known.
-                if let Some(field) = self.reflected(base, *name, "name") {
-                    out.push(&format!("\"{}\"", field));
-                    return Ok(());
-                }
-                // **`field.default` is its default as a `T?`** (ADR-331 D5).
-                if let Some(field) = self.reflected(base, *name, "default")
-                    && let Some((_, on)) =
-                        self.walk(|w| w.specialising.clone().map(|pair| ((), pair.second)))
-                {
-                    let written = match self.field_contract(&on, &field) {
-                        Some(f) if !f.default.is_empty() => held_literal(
-                            &f.default,
-                            &crate::contracts::ty::Ty::Nullable(Box::new(f.ty)),
-                        ),
-                        Some(f) => format!("None::<{}>", plain_rust_spelling(&f.ty)),
-                        None => "None".to_string(),
-                    };
-                    out.push(&written);
-                    return Ok(());
-                }
-                // **A boxed field is read through its box**
-                // ([ADR-246](../../docs/specification/adr/adr-246.md) D2):
-                // `(*base.field)` is a place that behaves as the unboxed field
-                // would - read, lent, moved out of an owned value, assigned.
-                let boxed = self
-                    .s
-                    .facts
-                    .boxed_reads
-                    .contains(&crate::check::value_node(expr));
-                if boxed {
-                    out.push("(*");
-                }
-                // **A field of an element is read through the reference the
-                // read answers**, as a read of a read is (0.0.238): `xs[0].a`
-                // was `(*get(&xs, 0)).a`, a deref the language below does on
-                // its own and `clippy` refuses in a `std` written in Nikaia
-                // (`tools/ty.nika`, ADR-294).
-                match &**base {
-                    Expr::Index {
-                        base: inner,
-                        index: at,
-                        ..
-                    } if !flow.in_a_place
-                        && !self.slices(at)
-                        && self.map_key(at, false).is_none()
-                        && !self.reads_through_handle(flow, inner) =>
-                    {
-                        self.index_read(out, inner, at, depth, flow, false)?;
-                    }
-                    _ => self.postfix_base(out, base, depth, flow)?,
-                }
-                out.push(&format!(".{}", self.name(*name)));
-                if boxed {
-                    out.push(")");
-                }
+                self.cross(flow, |walk, flow, scope| {
+                    self.s.emit_core_field(
+                        &self.world,
+                        walk,
+                        out,
+                        self,
+                        expr,
+                        base,
+                        *name,
+                        depth as i64,
+                        flow,
+                        scope,
+                    )
+                })?
             }
-            // Part I 3.5: `x?.name` reaches the field only where there is
-            // something to reach it on.
-            //
-            // **`map` or `and_then`, and the checker says which.** Over a plain
-            // field `map` is right; over a field that is *itself* a `T?` it
-            // would make an `Option<Option<T>>`, and `and_then` is what
-            // flattens - which is a question about the declared type, so it is
-            // answered where the types are (ADR-288). `map` is the fallback,
-            // because it is the one that cannot nest a plain field.
-            Expr::SafeField { base, name, .. } => {
-                let field = self.text(*name).to_string();
-                let flattens = self
-                    .s
-                    .facts
-                    .flattened_reaches
-                    .contains(&crate::check::value_node(base));
-                let how = if flattens { "and_then" } else { "map" };
-                // **The receiver is lent where the member copies**
-                // ([ADR-278](../../docs/specification/adr/adr-278.md) D18):
-                // `user?.id` reads `user` where it lies and `user` is usable on
-                // the next line, which is
-                // [ADR-278](../../docs/specification/adr/adr-278.md) D16. Before
-                // it, `Option::map` took its receiver and `rustc` said *use of
-                // moved value* about a file nobody wrote (Part III C.1).
-                //
-                // **Only where the checker said the member copies**, which is
-                // the safe direction: a member that would come out as a *view*
-                // needs the state this compiler does not build, and a field
-                // whose type this compiler could not work out is claimed
-                // nothing about (Part III C.4). Both lower exactly as they did.
-                let copies = self
-                    .s
-                    .facts
-                    .copied_reaches
-                    .contains(&crate::check::value_node(base));
-                // **And where it comes out as a view** (0.0.244, issue #167
-                // issue #167): a view of the member is a view *into* the receiver,
-                // so the receiver has to be lent for it as well. `a.b?.c?.v`
-                // took `a.b` out of a lent `a` - *cannot move out of `a.b`* -
-                // and handed back a view of the value it had just moved.
-                let viewed = self
-                    .s
-                    .facts
-                    .viewed_reaches
-                    .contains_key(&crate::check::value_node(base));
-                let lent = match copies || viewed {
-                    true => ".as_ref()",
-                    false => "",
-                };
-                // **And how the member is taken out of that view**
-                // ([ADR-278](../../docs/specification/adr/adr-278.md) D19). A
-                // member that copies is read; one that does not comes out as a
-                // view, and the two views are spelled differently below: a view
-                // of `String` is `&str`
-                // ([ADR-184](../../docs/specification/adr/adr-184.md) D2) and a
-                // view of anything else is `&T`. The checker says which,
-                // because this emitter has no types (ADR-296 D17).
-                // **A boxed field is reached through its box**
-                // ([ADR-246](../../docs/specification/adr/adr-246.md) D2).
-                let place = match self
-                    .s
-                    .facts
-                    .boxed_reads
-                    .contains(&crate::check::value_node(expr))
-                {
-                    true => format!("(*__nikaia_it.{field})"),
-                    false => format!("__nikaia_it.{field}"),
-                };
-                let reach = match (
-                    self.s
-                        .facts
-                        .viewed_reaches
-                        .get(&crate::check::value_node(base)),
-                    flattens,
-                ) {
-                    (None, _) => place,
-                    (Some(crate::check::Viewed::Text), false) => format!("{place}.as_str()"),
-                    (Some(crate::check::Viewed::Text), true) => format!("{place}.as_deref()"),
-                    (Some(crate::check::Viewed::Plain), false) => format!("&{place}"),
-                    (Some(crate::check::Viewed::Plain), true) => format!("{place}.as_ref()"),
-                };
-                self.postfix_base(out, base, depth, flow)?;
-                out.push(&format!("{lent}.{how}(|__nikaia_it| {reach})"));
-            }
-            Expr::Index { base, index, .. } => {
-                // **A length is an `i64`, so an index is one too**
-                // ([ADR-285](../../../docs/specification/adr/adr-285.md) D1), and
-                // Rust indexes a sequence by `usize`. The conversion is emitted
-                // and never written, in both directions - which is the whole of
-                // what D1 buys.
-                //
-                // Around **every** index but one, because this emitter does not
-                // know types (ADR-296 D17) and a map is indexed too:
-                // `counts[path]` takes a `&str`. `nikaia_std::index::at` chooses
-                // on the type of what is in the brackets and is the identity for
-                // anything that is not a number, so a rule applied everywhere
-                // cannot be applied to the wrong index.
-                //
-                // **The one exception is an index written only in literals.**
-                // `xs[0]` and `&text[1..3]` need no conversion - Rust's own
-                // inference gives a literal the `usize` the sequence wants - and
-                // they cannot *take* one: `at(0)` has nothing to infer `I` from,
-                // since every integer type answers with the same `usize`, and
-                // `cannot infer type` about a generated file is exactly what
-                // Part III C.1 forbids.
-                //
-                // **A read is a call and a place is brackets**
-                // ([ADR-293](../../../docs/specification/adr/adr-293.md) D4). A
-                // read through the brackets answers what the container can
-                // promise — a `T` for a sequence, a `T?` for a map, because a
-                // key that is not there is data about the world rather than a
-                // bug — and `index::get` is the one trait that lets this
-                // emitter write the same three tokens for both. The **left of
-                // an assignment** is not a read: `self.bodies[0].vx = …` writes
-                // through the index, so the brackets there stay the language
-                // below's own.
-                if !flow.in_a_place {
-                    // **A slice is already a view, so it takes no `*`**
-                    // ([ADR-182](../../docs/specification/adr/adr-182.md) D2). A read
-                    // at a number answers a `&T` and the `*` is what makes it
-                    // the `T` the program asked for; a read at a **range**
-                    // answers a `&str` or a `&[T]`, and `*` over one of those
-                    // is a `str` or a `[T]` — a value whose size the language
-                    // below does not know, which is what it said: *the size
-                    // for values of type `str` cannot be known at compilation
-                    // time*, about a noun nobody wrote
-                    // ([Part III C.1](../../docs/specification/30-nikaia-tooling.md)).
-                    //
-                    // **Off the shape of what is in the brackets**, which is
-                    // the one place this needs no type: a range is a run and a
-                    // key is not, in this language and in the one below alike.
-                    //
-                    // **And no parentheses here at all**
-                    // ([ADR-293](../../docs/specification/adr/adr-293.md) D33).
-                    // A pair around `*get(…)` is what makes `(*get(…)).len()`
-                    // the length of the deref rather than the deref of the
-                    // length - but only where a postfix follows, and a postfix
-                    // is written through `postfix_base`, which adds it. Written
-                    // here, it stood around every read: `m[k] ?? 0` and
-                    // `let x = m[k]` were `rustc` warnings about a file nobody
-                    // wrote ([Part III C.1](../../docs/specification/30-nikaia-tooling.md)).
-                    //
-                    // **A read that is lent is the reference it already was**
-                    // (0.0.250): the `&` in front and the `*` cancel.
-                    // **A read of a map of `T?` is one `T?`**
-                    // ([ADR-293](../../docs/specification/adr/adr-293.md) D14):
-                    // `index::flat` over the read, which is the `Option<&T>`
-                    // a `ref T?` is below - so a lend in front of it is
-                    // already there, and is taken.
-                    if self
-                        .s
-                        .facts
-                        .flat_reads
-                        .contains(&crate::check::value_node(expr))
-                    {
-                        let _ = out.take_lend();
-                        out.push("nikaia_std::index::flat(");
-                        self.index_read(out, base, index, depth, flow, true)?;
-                        out.push(")");
-                        return Ok(());
-                    }
-                    // **A map's read lent is the option it already is**: `*get(…)`
-                    // is the `Option<&V>` a `ref V?` is, and cancelling the `*`
-                    // against the lend left `index::Found`, which no `ref V?`
-                    // parameter takes (found moving `sharing`'s leaves into
-                    // Nikaia, #125). A sequence's read keeps the cancelling.
-                    if self.map_key(index, false).is_some() {
-                        let _ = out.take_lend();
-                        return self.index_read(out, base, index, depth, flow, true);
-                    }
-                    let lent = !self.slices(index) && out.take_lend();
-                    return self.index_read(out, base, index, depth, flow, !lent);
-                }
-                self.postfix_base(out, base, depth, flow)?;
-                match only_literals(index) {
-                    true => {
-                        out.push("[");
-                        self.index_expr(out, index, depth, flow.inferred())?;
-                        out.push("]");
-                    }
-                    false => {
-                        out.push("[nikaia_std::index::at(");
-                        self.index_expr(out, index, depth, flow)?;
-                        out.push(")]");
-                    }
-                }
-            }
-            Expr::Cast { expr, ty, .. } => {
-                let into = self.ty(ty, Lifetimes::Elided);
-                // **A `for` lends, and `as` does not see through a view**
-                // ([ADR-182](../../docs/specification/adr/adr-182.md) D1).
-                // The checker says which operands those are, because which name is
-                // a view is a question about the scope (ADR-288).
-                //
-                // **`num::value` and not a `*`**, which is
-                // `nikaia_std::index::at`'s own reasoning one construct over:
-                // for a number that is already a number this is the identity,
-                // so the rule cannot be written onto the wrong operand — and a
-                // `*` written onto one would be a `rustc` error about the
-                // generated file, which is the very thing this closes.
-                let viewed = match expr.as_ref() {
-                    Expr::Variable(name, _) => self
-                        .s
-                        .facts
-                        .viewed_numbers
-                        .contains(&((flow.statement as i64), self.text(*name).to_string())),
-                    _ => false,
-                };
-                match self.narrows(flow.statement, &into) {
-                    // **A narrowing conversion is checked, and an unchecked one
-                    // aborts** (ADR-285 D12). Rust's `as` truncates by definition
-                    // and no setting changes that, so this is the one place in
-                    // the arithmetic decision where the emitted code differs from
-                    // what was written - and it differs into what a Rust
-                    // programmer would have written here anyway.
-                    Some(crate::check::Narrowing::Integer) => {
-                        // `unwrap_or_else` and not `expect`: `expect` appends
-                        // the error's `Debug`, which is `TryFromIntError(())` -
-                        // Rust internals in a sentence a Nikaia user reads, and
-                        // the same leak the diagnostics filter exists to stop.
-                        out.push(&format!("{into}::try_from("));
-                        self.operand(out, expr, viewed, depth, flow)?;
-                        out.push(&format!(
-                            ").unwrap_or_else(|_| panic!(\"the value does not fit in an `{into}`\"))"
-                        ));
-                    }
-                    // `i32::try_from(f64)` does not exist, so the range and
-                    // "not a number" are tested by a `std` helper instead.
-                    Some(crate::check::Narrowing::FromFloat) => {
-                        out.push(&format!("nikaia_std::num::to_{into}("));
-                        self.operand(out, expr, viewed, depth, flow)?;
-                        out.push(")");
-                    }
-                    None if viewed => {
-                        self.operand(out, expr, viewed, depth, flow)?;
-                        out.push(&format!(" as {into}"));
-                    }
-                    None => {
-                        self.nested(out, expr, u8::MAX, depth, flow)?;
-                        out.push(&format!(" as {into}"));
-                    }
-                }
-            }
-            Expr::StructLit { name, fields, .. } => {
-                // `unaliased`, the same as a type: `h::Request(path: …)` builds
-                // `http::Request` (ADR-286 D12).
-                let owner = self.parsed.unaliased(self.text(*name));
-                // A value with a cleanup is made in its `Cleaned` (ADR-297 D1).
-                let cleaned = self.s.cleaned_types.contains(&owner);
-                if cleaned {
-                    out.push(&format!("{}::new(", self.cleaned()));
-                }
-                out.push(&format!("{owner} {{ "));
-                for (i, field) in fields.iter().enumerate() {
-                    if i > 0 {
-                        out.push(", ");
-                    }
-                    out.push(&self.name(field.name));
-                    // Part I 2.3: a plain value in a field the struct declares
-                    // nullable, by the value's id.
-                    let how = self.s.facts.nullable_fields.get(&(
-                        crate::check::value_node(expr),
-                        self.text(field.name).to_string(),
-                    ));
-                    let (before, after) = Self::around(how);
-                    // **A boxed field is built in its box**
-                    // ([ADR-246](../../docs/specification/adr/adr-246.md) D3),
-                    // around whatever else the value is wrapped in.
-                    let boxed = self.is_boxed_field(&owner, self.text(field.name));
-                    let (before, after) = match boxed {
-                        true => (format!("Box::new({before}"), format!("{after})")),
-                        false => (before.to_string(), after.to_string()),
-                    };
-                    let (before, after) = (before.as_str(), after.as_str());
-                    // **Into a field both kinds of text flow into, each value
-                    // goes as it is** (ADR-282 D14): a view borrowed, text of its
-                    // own moved in.
-                    let either = self.either_field(&owner, field.name)
-                        && !matches!(field.value, Some(Expr::LitNull(_)));
-                    // The nullable wrap goes around it: `Some(either(v))`
-                    // (ADR-282 D5).
-                    if either {
-                        out.push(": ");
-                        out.push(before);
-                        out.push("nikaia_std::either_text::either(");
-                        match &field.value {
-                            Some(value) => self.expr(out, value, depth, flow)?,
-                            None => out.push(&self.name(field.name)),
-                        }
-                        out.push(")");
-                        out.push(after);
-                    } else if let Some(value) = &field.value {
-                        // **`name: name` is written `name`** (0.0.249), as the
-                        // source may write it (Part I 4.1): the pair is what
-                        // `clippy` refuses in `std`, and a lowering that only
-                        // repeats the field's name adds nothing to say.
-                        if before.is_empty()
-                            && after.is_empty()
-                            && matches!(value, Expr::Variable(v, _) if self.text(*v) == self.text(field.name))
-                            && {
-                                let mut inner_buf = Out::empty();
-                                let inner = &mut inner_buf;
-                                self.expr(inner, value, depth, flow)?;
-                                inner_buf
-                            }
-                            .buf == self.name(field.name)
-                        {
-                            continue;
-                        }
-                        out.push(": ");
-                        out.push(before);
-                        self.expr(out, value, depth, flow)?;
-                        out.push(after);
-                    } else if how.is_some() || boxed {
-                        // `Counter { db }` is the shorthand for `db: db`
-                        // (Part I 4.1), and a wrapper has to be written around
-                        // the name - which means writing the pair out.
-                        let name = self.name(field.name);
-                        let wrapped = match how.is_some() {
-                            true => format!("Some({name})"),
-                            false => name.to_string(),
-                        };
-                        match boxed {
-                            true => out.push(&format!(": Box::new({wrapped})")),
-                            false => out.push(&format!(": {wrapped}")),
-                        }
-                    }
-                }
-                // **A field left out takes its default** (ADR-331 D5): the
-                // value the ledger recorded, written as an option's is.
-                let written: Vec<&str> = fields.iter().map(|f| self.text(f.name)).collect();
-                let mut after_one = !fields.is_empty();
-                for (field, default, ty) in self.field_defaults(&owner) {
-                    if written.contains(&field.as_str()) {
-                        continue;
-                    }
-                    if after_one {
-                        out.push(", ");
-                    }
-                    after_one = true;
-                    let value = held_literal(&default, &ty);
-                    let value = match self.is_boxed_field(&owner, &field) {
-                        true => format!("Box::new({value})"),
-                        false => value,
-                    };
-                    out.push(&format!("{}: {value}", escaped(&field)));
-                }
-                out.push(" }");
-                if cleaned {
-                    out.push(")");
-                }
-            }
-            // **`p with { x: p.x + 1 }`** is Rust's functional update
-            // ([ADR-118](../../docs/specification/adr/adr-118.md) D1, D3): the
-            // named fields, then `..base`, from which every field the program
-            // did not name comes **by move**. No copy is inserted that the
-            // program did not write ([ADR-282](../../docs/specification/adr/adr-282.md)
-            // D3), which is why this is `..base` and not `..base.clone()`.
-            //
-            // The type is the checker's answer, read back under the byte the
-            // `with` stands at. There is always one, because a `with` this
-            // compiler could not name a type for was refused with `NK1173`.
+            Expr::SafeField { base, name, .. } => self.cross(flow, |walk, flow, scope| {
+                self.s.emit_core_safe_field(
+                    &self.world,
+                    walk,
+                    out,
+                    self,
+                    expr,
+                    base,
+                    *name,
+                    depth as i64,
+                    flow,
+                    scope,
+                )
+            })?,
+            Expr::Index { base, index, .. } => self.cross(flow, |walk, flow, scope| {
+                self.s.emit_core_index(
+                    &self.world,
+                    walk,
+                    out,
+                    self,
+                    expr,
+                    base,
+                    index,
+                    depth as i64,
+                    flow,
+                    scope,
+                )
+            })?,
+            Expr::Cast {
+                expr: operand, ty, ..
+            } => self.cross(flow, |walk, flow, scope| {
+                self.s.emit_core_cast(
+                    &self.world,
+                    walk,
+                    out,
+                    self,
+                    operand,
+                    ty,
+                    depth as i64,
+                    flow,
+                    scope,
+                )
+            })?,
+            Expr::StructLit { name, fields, .. } => self.cross(flow, |walk, flow, scope| {
+                self.s.emit_core_struct_lit(
+                    &self.world,
+                    walk,
+                    out,
+                    self,
+                    expr,
+                    *name,
+                    fields,
+                    depth as i64,
+                    flow,
+                    scope,
+                )
+            })?,
             Expr::With {
                 base, fields, at, ..
-            } => {
-                let Some(owner) = self
-                    .s
-                    .facts
-                    .with_types
-                    .get(&crate::check::value_node(expr))
-                    .cloned()
-                else {
-                    return Err(refused_at!(
-                        *at as usize,
-                        "The type of this `with` is unknown. This is a compiler bug: the \
-                         check should have reported it first."
-                    ));
-                };
-                out.push(&format!("{owner} {{ "));
-                for field in fields {
-                    out.push(&self.name(field.name));
-                    // **A boxed field is built in its box** (ADR-246 D3).
-                    if self.is_boxed_field(&owner, self.text(field.name)) {
-                        out.push(": Box::new(");
-                        match &field.value {
-                            Some(value) => self.expr(out, value, depth, flow)?,
-                            None => out.push(&self.name(field.name)),
-                        }
-                        out.push("), ");
-                        continue;
-                    }
-                    let either = self.either_field(&owner, field.name)
-                        && !matches!(field.value, Some(Expr::LitNull(_)));
-                    match (&field.value, either) {
-                        (Some(value), true) => {
-                            out.push(": nikaia_std::either_text::either(");
-                            self.expr(out, value, depth, flow)?;
-                            out.push(")");
-                        }
-                        (Some(value), false) => {
-                            out.push(": ");
-                            self.expr(out, value, depth, flow)?;
-                        }
-                        (None, true) => out.push(&format!(
-                            ": nikaia_std::either_text::either({})",
-                            self.name(field.name)
-                        )),
-                        (None, false) => {}
-                    }
-                    out.push(", ");
-                }
-                out.push("..");
-                self.expr(out, base, depth, flow)?;
-                out.push(" }");
-            }
+            } => self.cross(flow, |walk, flow, scope| {
+                self.s.emit_core_with(
+                    &self.world,
+                    walk,
+                    out,
+                    self,
+                    expr,
+                    base,
+                    fields,
+                    *at,
+                    depth as i64,
+                    flow,
+                    scope,
+                )
+            })?,
             // A lambda's arguments are the ones it names (ADR-277): nothing is
             // read off the body, so `fn { … }` is `||`.
             Expr::Closure {
@@ -8360,73 +7851,6 @@ impl<'p> Emitter<'p> {
         self.s.constructs_by_name(&self.world, name)
     }
 
-    /// Whether the checker said this conversion narrows, and which kind it is.
-    ///
-    /// A lookup, not an analysis: `as i32` narrows or widens by what it is given,
-    /// and nothing here knows that (ADR-288). `None` where the checker had no
-    /// answer - a type it does not recognise, or two conversions to the same type
-    /// in one statement where one of them widens - which leaves the conversion
-    /// exactly as it was rather than guessing at it.
-    fn narrows(&self, statement: usize, into: &str) -> Option<crate::check::Narrowing> {
-        self.s.narrows(statement as i64, into)
-    }
-
-    /// Whether the checker said this method call can fail (Kap 7.1).
-    ///
-    /// A lookup, not an analysis: `fallible_methods` was computed by the one
-    /// type checker this compiler has, against the same ledgers the program is
-    /// built with, and nothing here resolves a receiver type. `false` where the
-    /// checker had no answer - an unresolved receiver, a method no ledger
-    /// describes, or two calls in one statement writing the same name where one
-    /// of them cannot fail - which is the emitter leaving the call exactly as it
-    /// was rather than guessing at it.
-    /// **A call of a field that holds a function**, written through the
-    /// field: `(button.on_click)(4)`, awaited where it may pause - `false`,
-    /// and nothing written, where the checker recorded no such call. `reached`
-    /// is the safe form's (#533): the field is read off [`REACHED`], the name
-    /// the enclosing `match` bound, and `receiver` only keys the record.
-    #[allow(clippy::too_many_arguments)]
-    fn a_field_call(
-        &self,
-        out: &mut Out,
-        receiver: &Expr,
-        reached: bool,
-        method: Symbol,
-        args: &[Expr],
-        depth: usize,
-        flow: Flow<'_>,
-    ) -> Result<bool> {
-        let (flow, scope) = flow.to_emit();
-        let crossed = self.nikaia(|walk| {
-            self.s.emit_core_a_field_call(
-                &self.world,
-                walk,
-                out,
-                self,
-                receiver,
-                reached,
-                method,
-                args,
-                depth as i64,
-                flow,
-                &scope,
-            )
-        });
-        self.crossed(crossed)
-    }
-
-    /// **A reflected field's contract**, from this package's ledger or a
-    /// dependency's: what `.attribute(X)` and `.default` read (ADR-331 D5-D6).
-    fn field_contract(&self, owner: &str, field: &str) -> Option<crate::contracts::FieldContract> {
-        self.s.field_contract(&self.world, owner, field)
-    }
-
-    /// **The fields of `owner` that have a default** (ADR-331 D5): name,
-    /// value and type, from this package's ledger or a dependency's.
-    fn field_defaults(&self, owner: &str) -> Vec<(String, String, crate::contracts::ty::Ty)> {
-        self.s.field_defaults(&self.world, owner)
-    }
-
     /// A string literal. Which of the two it is decides what comes out, and
     /// that is read off the syntax rather than the text (ADR-309 D2).
     fn string(&self, out: &mut Out, expr: &Expr, depth: usize, flow: Flow<'_>) -> Result<()> {
@@ -8452,63 +7876,9 @@ impl<'p> Emitter<'p> {
         nikaia_std::tools::emit_core_types::emit_boxed_future(self.build.overlaps_user_code())
     }
 
-    /// **A field of a struct literal**, which may be a variant's written as a
-    /// struct: `Expr::Neg { inner: … }` is the variant `Neg` of `Expr`, and its
-    /// member is `Neg.inner`.
-    fn is_boxed_field(&self, owner: &str, field: &str) -> bool {
-        self.s.is_boxed_field(owner, field)
-    }
-
     /// A member's lowered type, in its box where it has one.
     fn boxed_ty(&self, owner: &str, member: &str, lowered: String) -> String {
         self.s.boxed_ty(owner, member, lowered)
-    }
-
-    /// **A method call, for both of the ways a program may write one.**
-    ///
-    /// `x.m(…)` and `x?.m(…)` differ in *whether* the call happens and in
-    /// nothing else ([ADR-278](../../../../docs/specification/adr/adr-278.md)),
-    /// so what a call lowers to is written once: the truncating conversion, the
-    /// `len` that becomes an `i64`, `collect`'s turbofish, the arguments, Kap
-    /// 5.1's deferred parameters, ADR-055 D2's `.await` and ADR-023 D8's `?`.
-    ///
-    /// `receiver` is `None` for the safe form, where the receiver is the name
-    /// the enclosing `match` already bound - so the call is written on
-    /// [`REACHED`] rather than on an expression, and the value is reached
-    /// exactly once whatever the receiver cost to produce.
-    ///
-    /// Eight arguments, and each is a part of the call this has to write: the
-    /// receiver, the name, the positional arguments, Kap 5.1's zone, and the
-    /// three the emitter carries everywhere (`out`, `depth`, `flow`). Splitting
-    /// them into a struct would name a shape the AST already has.
-    #[allow(clippy::too_many_arguments)]
-    fn method_call(
-        &self,
-        out: &mut Out,
-        receiver: Option<&Expr>,
-        method: Symbol,
-        args: &[Expr],
-        config: &[crate::ast::ConfigArg],
-        depth: usize,
-        flow: Flow<'_>,
-    ) -> Result<()> {
-        let (flow, scope) = flow.to_emit();
-        let crossed = self.nikaia(|walk| {
-            self.s.emit_core_method_call(
-                &self.world,
-                walk,
-                out,
-                self,
-                receiver,
-                method,
-                args,
-                config,
-                depth as i64,
-                flow,
-                &scope,
-            )
-        });
-        self.crossed(crossed)
     }
 
     /// The `MethodCall` arm of `expr_as_written`, and the `?.` that is a plain
@@ -8537,36 +7907,6 @@ impl<'p> Emitter<'p> {
                 method,
                 args,
                 config,
-                depth as i64,
-                flow,
-                &scope,
-            )
-        });
-        self.crossed(crossed)
-    }
-
-    /// **A read through the brackets** (ADR-293 D4): `*get(&base, at(i))`,
-    /// or without the `*` where `deref` is off - which is how a read that is
-    /// itself the base of a read is written (0.0.238).
-    fn index_read(
-        &self,
-        out: &mut Out,
-        base: &Expr,
-        index: &Expr,
-        depth: usize,
-        flow: Flow<'_>,
-        deref: bool,
-    ) -> Result<()> {
-        let (flow, scope) = flow.to_emit();
-        let crossed = self.nikaia(|walk| {
-            self.s.emit_core_index_read(
-                &self.world,
-                walk,
-                out,
-                self,
-                base,
-                index,
-                deref,
                 depth as i64,
                 flow,
                 &scope,
@@ -9419,16 +8759,4 @@ fn nonnegative_locals(parsed: &Parsed, body: &Block) -> HashSet<Symbol> {
 /// ([ADR-299](../../docs/specification/adr/adr-299.md) D20).
 pub(crate) fn dsl_name(parsed: &Parsed, package: Option<Symbol>, target: Symbol) -> String {
     nikaia_std::tools::emit_items::dsl_name(&parsed.interner, package, target)
-}
-
-/// **A literal as a field of `ty` holds it** (ADR-331 D5-D6, ADR-318 D4):
-/// text for an owned `String` is one, and a value for a `T?` is wrapped.
-fn held_literal(literal: &str, ty: &crate::contracts::ty::Ty) -> String {
-    nikaia_std::tools::emit_text::held_literal(literal, ty)
-}
-
-/// A field's type as the language below writes it, for a `None` nothing else
-/// types: the plain shapes, and `_` for the rest, which leaves it to `rustc`.
-fn plain_rust_spelling(ty: &crate::contracts::ty::Ty) -> String {
-    nikaia_std::tools::emit_text::plain_rust_spelling(ty)
 }

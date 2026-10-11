@@ -187,6 +187,7 @@ COMPILER_NIKA = {
     "check_core_pilot.nika": "check: the pilot of the core: grammar_call, NK1162, instantiations, NK1131 (U-c0) (0.0.828)",
     "emit_core_args.nika": "emit: the arguments and the call of the core: args, called (0.0.827)",
     "emit_core_calls.nika": "emit: the calls of the core: call, call_inner, method_call, the MethodCall arm (0.0.830)",
+    "emit_core_places.nika": "emit: the places of the core: SafeMethod, Field, SafeField, Index, Cast, StructLit, With, Tuple, ListLit (0.0.831)",
 }
 
 

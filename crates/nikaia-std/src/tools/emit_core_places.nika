@@ -1,0 +1,493 @@
+// crates/nikaia-std/src/tools/emit_core_places.nika
+//
+// **The places and the values built of parts of the emitter's core** (ADR-294,
+// #125, #558, E9 unit U7): the arms of `expr_as_written` for `SafeMethod` (the
+// reach that is not the plain call), `Field` (and the `?.` that is a plain
+// field), `SafeField`, `Index`, `Cast`, `StructLit`, `With`, `Tuple` and
+// `ListLit`. Methods of `EmitState`, `emit_core_*[H: EmitHost]`; the arm in the
+// Rust match is a one-line stub, and the match stays the dispatcher until U10.
+
+fn emit_place_text_reach(place: ref String, flattens: bool) -> String {
+    if flattens {
+        return f"{place}.as_deref()"
+    }
+    return f"{place}.as_str()"
+}
+
+fn emit_place_plain_reach(place: ref String, flattens: bool) -> String {
+    if flattens {
+        return f"{place}.as_ref()"
+    }
+    return f"&{place}"
+}
+
+/// Whether a field's value is the literal `null`.
+fn emit_place_null(value: ref Expr?) -> bool {
+    let each = value ?? return false
+    return match each {
+        Expr::LitNull(_) => true,
+        else => false,
+    }
+}
+
+/// Whether an expression is a read through the brackets.
+fn emit_place_an_index(node: ref Expr) -> bool {
+    return match node {
+        Expr::Index { .. } => true,
+        else => false,
+    }
+}
+
+impl EmitState {
+    /// The field a `?.` reads, off the name the `match` around it bound: its
+    /// place, and how the view of it is taken (ADR-278 D19).
+    fn emit_place_reach(ref self, base: ref Expr, place: ref String, flattens: bool) -> String {
+        let view = self.facts.viewed_reaches.get(node_key(base)) ?? return place.clone()
+        return match view {
+            FactViewed::Text => emit_place_text_reach(place, flattens),
+            FactViewed::Plain => emit_place_plain_reach(place, flattens),
+        }
+    }
+
+    /// `field.default` as a `T?` (ADR-331 D5): the value the ledger recorded,
+    /// written as an option's is, or `None`.
+    fn emit_place_default(ref self, world: ref EmitWorld, owner: ref String, field: ref String) -> String {
+        let found = self.field_contract(world, owner, field)
+        let contract = found ?? return "None".clone()
+        if contract.default != "" {
+            let nullable = Ty::Nullable(contract.ty.clone())
+            return held_literal(contract.default, nullable)
+        }
+        return f"None::<{plain_rust_spelling(contract.ty)}>"
+    }
+
+    /// What a plain value in a field the struct declares nullable is put
+    /// between (Part I 2.3), by the value's id.
+    fn emit_place_around(ref self, node: ref Expr, field: ref String) -> (String, String) {
+        let held = self.facts.nullable_fields.get((node_key(node), field.clone())) ?? return ("".clone(), "".clone())
+        return emit_around_held(held)
+    }
+
+    /// A `?.` after a method (Part I 3.5 onto a **method**, ADR-278): the call
+    /// happens only where there is something to call it on.
+    ///
+    /// **A `match` and not the field's `map`**: a method call may pause and fail,
+    /// and inside a closure an `.await` does not compile and a `?` has nowhere to
+    /// go. So the reach is written out, which is the one shape that lets the call
+    /// be whatever a call is. `None => None` and not `.map(..)`'s implicit one,
+    /// for the flattened case: where the method's own result is a `T?`, the
+    /// `Some` arm hands it back as it is and the reach does not nest.
+    pub fn emit_core_safe_method[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        let flattens = self.facts.flattened_reaches.contains(node_key(receiver))
+        // **The scrutinee is lent where the call changes nothing** (ADR-278
+        // D18): what comes out is the **call's** result, so nothing about the
+        // reach needs the state that is not built.
+        let mut lent: String = ""
+        if self.facts.lent_reaches.contains(node_key(receiver)) {
+            lent = ".as_ref()".clone()
+        }
+        out.push("match ")
+        let name = (walk.held.get(node_key(receiver)) ?? "").clone()
+        if walk.held.contains_key(node_key(receiver)) {
+            out.push(name)
+        } else if lent == "" && emit_place_an_index(receiver) {
+            // A map's read is not lent (0.0.246), so nothing follows it and a
+            // `match` needs no parentheses around the `*`.
+            host.expr(walk, out, receiver, depth, flow, scope)
+        } else {
+            self.emit_core_postfix_base(world, walk, out, host, receiver, depth, flow, scope)
+        }
+        out.push(lent)
+        let inner = "    ".repeat(depth + 1)
+        let outer = "    ".repeat(depth)
+        out.push(f" {{\n{inner}")
+        out.push("Some(__nikaia_it) => ")
+        if !flattens {
+            out.push("Some(")
+        }
+        // **A copy of the view reached** is `to_owned`, as the plain call's is
+        // (ADR-293 D24): the receiver the rewrite reads is the one this `match`
+        // bound.
+        let copy = self.facts.owned_copies.contains(node_key(receiver))
+        let held_copy = walk.reached_copy
+        walk.reached_copy = copy
+        let done = self.emit_core_a_field_call(world, walk, out, host, receiver, true, method, args, depth + 1, flow, scope)
+        if !done {
+            self.emit_core_method_call(world, walk, out, host, null, method, args, config, depth + 1, flow, scope)
+        }
+        walk.reached_copy = held_copy
+        if !flattens {
+            out.push(")")
+        }
+        out.push(f",\n{inner}None => None,\n{outer}}}")
+    }
+
+    /// `(a, b)`.
+    pub fn emit_core_tuple[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, parts: ref Vec[Expr], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        out.push("(")
+        let mut i = 0
+        for part in parts {
+            if i > 0 {
+                out.push(", ")
+            }
+            i += 1
+            host.expr(walk, out, part, depth, flow, scope)
+        }
+        out.push(")")
+    }
+
+    /// **`vec![..]`, which is what a `Vec` already is below** (ADR-135 D1),
+    /// **unless the use asked for an array** (ADR-152 D4): a fact about the
+    /// literal's *type*, and therefore the checker's to hand over.
+    pub fn emit_core_list_lit[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, items: ref Vec[Expr], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        if self.facts.array_literals.contains(node_key(node)) {
+            out.push("[")
+        } else {
+            out.push("vec![")
+        }
+        let mut i = 0
+        for item in items {
+            if i > 0 {
+                out.push(", ")
+            }
+            i += 1
+            host.expr(walk, out, item, depth, flow, scope)
+        }
+        out.push("]")
+    }
+
+    /// `base.name`, and a `?.` after a value that cannot be absent, which is the
+    /// same (ADR-279 D13).
+    pub fn emit_core_field[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, base: ref Expr, name: winnow_grammar::Symbol, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        // **`field.name` is the field's own name as text** (ADR-304 D2): a
+        // literal, because the turn this copy stands at is known.
+        let named = walk.reflected(world, base, name, "name")
+        if named != null {
+            out.push("\"")
+            out.push(named ?? "")
+            out.push("\"")
+            return
+        }
+        // **`field.default` is its default as a `T?`** (ADR-331 D5).
+        let default_of = walk.reflected(world, base, name, "default")
+        let on = walk.specialised_to()
+        if default_of != null && on != null {
+            let owner = on ?? ""
+            let field = default_of ?? ""
+            out.push(self.emit_place_default(world, owner, field))
+            return
+        }
+        // **A boxed field is read through its box** (ADR-246 D2):
+        // `(*base.field)` is a place that behaves as the unboxed field would.
+        let boxed = self.facts.boxed_reads.contains(node_key(node))
+        if boxed {
+            out.push("(*")
+        }
+        // **A field of an element is read through the reference the read
+        // answers**, as a read of a read is (0.0.238).
+        let mut through = false
+        match base {
+            Expr::Index { base: inner, index: at, .. } => {
+                if !flow.in_a_place && !self.slices(at) && self.map_key(at, false) == null && !self.reads_through_handle(world, walk, scope.function, inner) {
+                    through = true
+                    self.emit_core_index_read(world, walk, out, host, inner, at, false, depth, flow, scope)
+                }
+            },
+            else => {}
+        }
+        if !through {
+            self.emit_core_postfix_base(world, walk, out, host, base, depth, flow, scope)
+        }
+        out.push(f".{escaped_name(emit_text(world, name))}")
+        if boxed {
+            out.push(")")
+        }
+    }
+
+    /// Part I 3.5: `x?.name` reaches the field only where there is something to
+    /// reach it on. **`map` or `and_then`, and the checker says which**: over a
+    /// field that is *itself* a `T?` `map` would make an `Option<Option<T>>`.
+    pub fn emit_core_safe_field[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, base: ref Expr, name: winnow_grammar::Symbol, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        let field = emit_text(world, name)
+        let flattens = self.facts.flattened_reaches.contains(node_key(base))
+        let mut how: String = "map"
+        if flattens {
+            how = "and_then".clone()
+        }
+        // **The receiver is lent where the member copies** (ADR-278 D18), and
+        // **where it comes out as a view** (0.0.244): a view of the member is a
+        // view *into* the receiver.
+        let copies = self.facts.copied_reaches.contains(node_key(base))
+        let viewed = self.facts.viewed_reaches.contains_key(node_key(base))
+        let mut lent: String = ""
+        if copies || viewed {
+            lent = ".as_ref()".clone()
+        }
+        // **A boxed field is reached through its box** (ADR-246 D2).
+        let mut place = f"__nikaia_it.{field}"
+        if self.facts.boxed_reads.contains(node_key(node)) {
+            place = f"(*__nikaia_it.{field})"
+        }
+        // **And how the member is taken out of that view** (ADR-278 D19): a
+        // view of `String` is `&str` and a view of anything else is `&T`.
+        let reach = self.emit_place_reach(base, place, flattens)
+        self.emit_core_postfix_base(world, walk, out, host, base, depth, flow, scope)
+        out.push(f"{lent}.{how}(|__nikaia_it| {reach})")
+    }
+
+    /// **A length is an `i64`, so an index is one too** (ADR-285 D1), and Rust
+    /// indexes a sequence by `usize`; the conversion is emitted and never
+    /// written. **A read is a call and a place is brackets** (ADR-293 D4): the
+    /// **left of an assignment** is not a read, so the brackets there stay the
+    /// language below's own.
+    pub fn emit_core_index[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, base: ref Expr, index: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        if !flow.in_a_place {
+            // **A read of a map of `T?` is one `T?`** (ADR-293 D14):
+            // `index::flat` over the read, which is the `Option<&T>` a `ref T?`
+            // is below - so a lend in front of it is already there, and is
+            // taken.
+            if self.facts.flat_reads.contains(node_key(node)) {
+                host.take_lend(out)
+                out.push("nikaia_std::index::flat(")
+                self.emit_core_index_read(world, walk, out, host, base, index, true, depth, flow, scope)
+                out.push(")")
+                return
+            }
+            // **A map's read lent is the option it already is**: `*get(..)` is
+            // the `Option<&V>` a `ref V?` is. A sequence's read keeps the
+            // cancelling.
+            if self.map_key(index, false) != null {
+                host.take_lend(out)
+                self.emit_core_index_read(world, walk, out, host, base, index, true, depth, flow, scope)
+                return
+            }
+            let mut lent = false
+            if !self.slices(index) {
+                lent = host.take_lend(out)
+            }
+            self.emit_core_index_read(world, walk, out, host, base, index, !lent, depth, flow, scope)
+            return
+        }
+        self.emit_core_postfix_base(world, walk, out, host, base, depth, flow, scope)
+        if only_literals(index) {
+            out.push("[")
+            self.emit_core_index_expr(world, walk, out, host, index, depth, flow.inferred(), scope)
+            out.push("]")
+        } else {
+            out.push("[nikaia_std::index::at(")
+            self.emit_core_index_expr(world, walk, out, host, index, depth, flow, scope)
+            out.push(")]")
+        }
+    }
+
+    /// 0 for a conversion that cannot lose, 1 for a narrowing integer one, 2
+    /// for one from a float.
+    fn emit_place_narrowing(ref self, statement: i64, into: ref String) -> i64 {
+        let found = self.narrows(statement, into) ?? return 0
+        return match found {
+            FactNarrowing::Integer => 1,
+            FactNarrowing::FromFloat => 2,
+        }
+    }
+
+    /// `value as T`. **A `for` lends, and `as` does not see through a view**
+    /// (ADR-182 D1): `num::value` and not a `*`, which is the identity for a
+    /// number that is already a number, so the rule cannot be written onto the
+    /// wrong operand.
+    pub fn emit_core_cast[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, operand: ref Expr, ty: ref Type, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        let into = self.emit_core_ty(world, walk, host.crossings_are_possible(), host.overlaps_user_code(), ty, EmitLifetimes::Elided)
+        let mut viewed = false
+        match operand {
+            Expr::Variable(name, _) => {
+                viewed = self.facts.viewed_numbers.contains((flow.statement, emit_text(world, name)))
+            },
+            else => {}
+        }
+        let kind = self.emit_place_narrowing(flow.statement, into)
+        if kind == 1 {
+            // **A narrowing conversion is checked, and an unchecked one aborts**
+            // (ADR-285 D12). `unwrap_or_else` and not `expect`: `expect`
+            // appends the error's `Debug`, which is Rust internals in a
+            // sentence a Nikaia user reads.
+            out.push(f"{into}::try_from(")
+            self.emit_core_operand(world, walk, out, host, operand, viewed, depth, flow, scope)
+            out.push(").unwrap_or_else(|_| panic!(\"the value does not fit in an `")
+            out.push(into)
+            out.push("`\"))")
+        } else if kind == 2 {
+            // `i32::try_from(f64)` does not exist, so the range and "not a
+            // number" are tested by a `std` helper instead.
+            out.push(f"nikaia_std::num::to_{into}(")
+            self.emit_core_operand(world, walk, out, host, operand, viewed, depth, flow, scope)
+            out.push(")")
+        } else if viewed {
+            self.emit_core_operand(world, walk, out, host, operand, viewed, depth, flow, scope)
+            out.push(f" as {into}")
+        } else {
+            self.emit_core_nested(world, walk, out, host, operand, 255, depth, flow, scope)
+            out.push(f" as {into}")
+        }
+    }
+
+    /// `Name(field: value, ..)`: a struct built, its cleanup, its nullable,
+    /// boxed and text-of-either fields, and the defaults of the fields left out.
+    pub fn emit_core_struct_lit[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, name: winnow_grammar::Symbol, fields: ref Vec[FieldInit], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        // `unaliased`, the same as a type: `h::Request(path: ..)` builds
+        // `http::Request` (ADR-286 D12).
+        let owner = unaliased_in(world.aliases, emit_text(world, name))
+        // A value with a cleanup is made in its `Cleaned` (ADR-297 D1).
+        let cleaned = self.cleaned_types.contains(owner)
+        if cleaned {
+            out.push(f"{emit_cleaned(host.overlaps_user_code())}::new(")
+        }
+        out.push(f"{owner} {{ ")
+        let mut i = 0
+        for field in fields {
+            if i > 0 {
+                out.push(", ")
+            }
+            i += 1
+            let written = escaped_name(emit_text(world, field.name))
+            let plain = emit_text(world, field.name)
+            out.push(written)
+            // Part I 2.3: a plain value in a field the struct declares nullable,
+            // by the value's id.
+            let wrapped = self.facts.nullable_fields.contains_key((node_key(node), plain.clone()))
+            let (around_before, around_after) = self.emit_place_around(node, plain)
+            // **A boxed field is built in its box** (ADR-246 D3), around
+            // whatever else the value is wrapped in.
+            let boxed = self.is_boxed_field(owner, plain)
+            let mut before = around_before.clone()
+            let mut after = around_after.clone()
+            if boxed {
+                before = f"Box::new({around_before}"
+                after = f"{around_after})"
+            }
+            // **Into a field both kinds of text flow into, each value goes as it
+            // is** (ADR-282 D14): a view borrowed, text of its own moved in.
+            let either = self.either_field(world, owner, field.name) && !emit_place_null(field.value)
+            if either {
+                out.push(": ")
+                out.push(before)
+                out.push("nikaia_std::either_text::either(")
+                if field.value != null {
+                    let value = field.value ?? return
+                    host.expr(walk, out, value, depth, flow, scope)
+                } else {
+                    out.push(written)
+                }
+                out.push(")")
+                out.push(after)
+            } else if field.value != null {
+                let value = field.value ?? return
+                // **`name: name` is written `name`** (0.0.249), as the source
+                // may write it (Part I 4.1).
+                let mut same = false
+                if before == "" && after == "" {
+                    match value {
+                        Expr::Variable(v, _) => {
+                            same = emit_text(world, v) == plain
+                        },
+                        else => {}
+                    }
+                }
+                if same {
+                    let mut inner = EmitOut::empty()
+                    host.expr(walk, inner, value, depth, flow, scope)
+                    if inner.buf == written {
+                        continue
+                    }
+                }
+                out.push(": ")
+                out.push(before)
+                host.expr(walk, out, value, depth, flow, scope)
+                out.push(after)
+            } else if wrapped || boxed {
+                // `Counter { db }` is the shorthand for `db: db` (Part I 4.1),
+                // and a wrapper has to be written around the name - which means
+                // writing the pair out.
+                let mut put = written.clone()
+                if wrapped {
+                    put = f"Some({written})"
+                }
+                if boxed {
+                    out.push(f": Box::new({put})")
+                } else {
+                    out.push(f": {put}")
+                }
+            }
+        }
+        // **A field left out takes its default** (ADR-331 D5): the value the
+        // ledger recorded, written as an option's is.
+        let mut names: Vec[String] = []
+        for field in fields {
+            names.push(emit_text(world, field.name))
+        }
+        let mut after_one = fields.len() > 0
+        for (field, default, ty) in self.field_defaults(world, owner) {
+            if names.contains(field) {
+                continue
+            }
+            if after_one {
+                out.push(", ")
+            }
+            after_one = true
+            let mut value = held_literal(default, ty)
+            if self.is_boxed_field(owner, field) {
+                value = f"Box::new({value})"
+            }
+            out.push(f"{escaped_name(field)}: {value}")
+        }
+        out.push(" }")
+        if cleaned {
+            out.push(")")
+        }
+    }
+
+    /// **`p with { x: p.x + 1 }`** is Rust's functional update (ADR-118 D1, D3):
+    /// the named fields, then `..base`, from which every field the program did
+    /// not name comes **by move**. The type is the checker's answer, read back
+    /// under the node's id.
+    pub fn emit_core_with[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, base: ref Expr, fields: ref Vec[FieldInit], at: u32, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        let known = self.facts.with_types.get(node_key(node))
+        if known == null {
+            throw EmitRefused { message: "The type of this `with` is unknown. This is a compiler bug: the check should have reported it first.".clone(), at: at as i64 }
+        }
+        let owner = (known ?? "").clone()
+        out.push(f"{owner} {{ ")
+        for field in fields {
+            let written = escaped_name(emit_text(world, field.name))
+            out.push(written)
+            // **A boxed field is built in its box** (ADR-246 D3).
+            if self.is_boxed_field(owner, emit_text(world, field.name)) {
+                out.push(": Box::new(")
+                if field.value != null {
+                    let value = field.value ?? return
+                    host.expr(walk, out, value, depth, flow, scope)
+                } else {
+                    out.push(written)
+                }
+                out.push("), ")
+                continue
+            }
+            let either = self.either_field(world, owner, field.name) && !emit_place_null(field.value)
+            if field.value != null {
+                let value = field.value ?? return
+                if either {
+                    out.push(": nikaia_std::either_text::either(")
+                    host.expr(walk, out, value, depth, flow, scope)
+                    out.push(")")
+                } else {
+                    out.push(": ")
+                    host.expr(walk, out, value, depth, flow, scope)
+                }
+            } else if either {
+                out.push(f": nikaia_std::either_text::either({written})")
+            }
+            out.push(", ")
+        }
+        out.push("..")
+        host.expr(walk, out, base, depth, flow, scope)
+        out.push(" }")
+    }
+}

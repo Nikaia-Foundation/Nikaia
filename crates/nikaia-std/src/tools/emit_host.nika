@@ -36,6 +36,11 @@ pub trait EmitHost {
     /// (`check::Checked::guards_inside_boxes`), for the arm whose body is at `at`.
     fn guard_copies(ref self, at: i64) -> Vec[String] sync
 
+    /// Takes back a `&` just written, where what follows is already the
+    /// reference it asked for (0.0.250): `&*get(&v, i)` is `get(&v, i)`. `std`
+    /// has no `String::pop` entry.
+    fn take_lend(ref self, mut out: EmitOut) -> bool sync
+
     /// `Build::overlaps_user_code`: user code may run on more than one thread.
     fn overlaps_user_code(ref self) -> bool sync
 
