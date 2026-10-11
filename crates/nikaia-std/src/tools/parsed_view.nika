@@ -1,0 +1,32 @@
+// crates/nikaia-std/src/tools/parsed_view.nika
+//
+// **What the checker reads of a parsed file** (ADR-294, #125, #558, C-2): the
+// names, the file's aliases, its items and the package it is a part of. The
+// compiler's `Parsed` holds more (the holes, the tiers); a function that only
+// reads the items asks this view, which the Rust adapter makes with four
+// borrows.
+
+use std::collections
+
+pub struct ParsedView {
+    /// The names of the file, to read an identifier back.
+    pub words: ref winnow_grammar::InternerContext,
+    /// What the file calls a package (`use http as h`), to what it is called.
+    pub aliases: ref collections::BTreeMap[String, String],
+    /// The file's top-level items.
+    pub items: ref Vec[Spanned[Item]],
+    /// The package this file is a part of, where it is a dependency's.
+    pub package: ref String?,
+}
+
+impl ParsedView {
+    /// An identifier read back.
+    pub fn text(ref self, sym: winnow_grammar::Symbol) -> String {
+        return self.words.resolve(sym).clone()
+    }
+
+    /// A qualified name with this file's aliases resolved.
+    pub fn unaliased(ref self, name: ref String) -> String {
+        return unaliased_in(self.aliases, name)
+    }
+}

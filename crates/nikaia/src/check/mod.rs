@@ -38,9 +38,9 @@ use crate::contracts::ty::TyOps;
 use crate::contracts::{FieldContract, FnContract, Ledger, send, ty, ty::Ty};
 use crate::fold::Constant;
 use crate::parser::Parsed;
-use crate::types::SHAPE_BOUNDS;
 use nikaia_std::tools::check_access::{dotted_path, names_the_argument, variants_named};
 use nikaia_std::tools::check_consts::{self, CheckCrossing as Crossing};
+use nikaia_std::tools::check_items;
 use nikaia_std::tools::check_literals::element_kind;
 use nikaia_std::tools::check_lookups::names_of;
 use nikaia_std::tools::check_names::{integer_named, is_a_literal as is_literal};
@@ -66,6 +66,7 @@ use nikaia_std::tools::check_widen::{
     views_into_nullable_text, views_into_text,
 };
 use nikaia_std::tools::check_with::CheckCopyable as Copyable;
+use nikaia_std::tools::parsed_view::ParsedView;
 
 /// A finding's code as the `&'static str` the compiler's tables and its tests
 /// compare: each code is kept once for the life of the process.
@@ -425,7 +426,6 @@ fn walked<'a>(
         literal_receivers: Vec::new(),
         at_a_write_door: false,
         pushed_into: None,
-        fields_by_base: fields_by_base(own, library),
         expected_either: false,
         field_either: false,
         throwing: false,
@@ -470,6 +470,13 @@ fn walked<'a>(
             words: &parsed.interner,
             own,
             library,
+            here: parsed_view_of(parsed),
+            beside: beside.iter().map(|other| parsed_view_of(other)).collect(),
+            here_at: beside
+                .iter()
+                .position(|other| std::ptr::eq(*other, parsed))
+                .map_or(-1, |at| at as i64),
+            fields_by_base: check_items::fields_by_base(own, library),
         },
         s: CheckState {
             findings: Vec::new(),
@@ -1167,23 +1174,6 @@ fn a_new_binding() -> usize {
     NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
 }
 
-/// **The fields of every type in `own` and `library`, by the type's own name**
-/// ([`ty::base`]): what a cleanup or a teardown a type holds is asked through.
-/// Built once per walk, `own`'s before `library`'s and each in key order.
-fn fields_by_base(own: &Ledger, library: &Ledger) -> std::collections::HashMap<String, Vec<Ty>> {
-    let mut index: std::collections::HashMap<String, Vec<Ty>> = Default::default();
-    for (key, contract) in [own, library]
-        .into_iter()
-        .flat_map(|ledger| ledger.types.iter())
-    {
-        index
-            .entry(crate::contracts::ty::base(key).to_string())
-            .or_default()
-            .extend(contract.fields.iter().map(|f| f.ty.clone()));
-    }
-    index
-}
-
 /// What a walk past a boundary puts aside, and gives back on the way out.
 struct Boundary {
     loops: usize,
@@ -1462,13 +1452,6 @@ struct Checker<'a> {
     /// **The name of an empty list a `push` is being walked on** (#523): its
     /// first use gives it its element type.
     pushed_into: Option<String>,
-    /// **The fields of every type in `own` and `library`, by the type's own
-    /// name** ([`ty::base`]): what a cleanup or a teardown a type holds is
-    /// asked through. Built the first time it is asked, once per walk, rather
-    /// than by a scan of both ledgers per question - which was most of what
-    /// checking a small program cost. `own`'s before `library`'s and each in
-    /// key order, which is the order the scan visited them in.
-    fields_by_base: std::collections::HashMap<String, Vec<Ty>>,
 }
 
 /// One argument as [`Checker::the_compiler_writes_the_reference`] reads it:
@@ -2742,61 +2725,8 @@ impl<'a> Checker<'a> {
     /// a value in scope, the prelude's or nothing. Everything this checker
     /// knows declares one is asked first, so what is left is certain (C.4).
     fn a_function_nothing_declares(&mut self, name: &str, span: &Span) {
-        let declared = self.s.lookup(name).is_some()
-            || self.s.structs.contains_key(name)
-            || self.s.enums.contains_key(name)
-            || self.world.own.types.contains_key(name)
-            || self.s.modules.contains(name)
-            || self.s.grammars.contains_key(name)
-            || self.s.foreign_names.contains(name)
-            || self.s.variant_parts.contains_key(name)
-            || is_hull(name)
-            || MultiLock::named(name).is_some()
-            || matches!(name, "panic" | ASSET | ASSERT)
-            // **A name a `use` writes last, or as its alias**, is left alone
-            // as the trait check leaves it: whether a `use` brings a name in
-            // is not this check's to decide, and refusing a program that is
-            // right is the one thing it may not do (C.4).
-            || self.parsed.program.items.iter().any(|item| {
-                matches!(&item.node, Item::Import { path, alias }
-                    if alias.map_or_else(
-                        || path.last().is_some_and(|last| self.parsed.text(*last) == name),
-                        |alias| self.parsed.text(alias) == name,
-                    ))
-            });
-        if declared {
-            return;
-        }
-        let mut known: Vec<&str> = self
-            .world
-            .own
-            .functions
-            .keys()
-            .chain(self.world.library.functions.keys())
-            .filter(|key| !key.contains("::"))
-            .map(String::as_str)
-            .collect();
-        known.push("panic");
-        let help = match nearest(name, &known) {
-            Some(near) => format!("Did you mean `{near}`?"),
-            None => format!(
-                "Declare it with `fn {name}(…)`, or call it through the package that has it."
-            ),
-        };
-        self.s.findings.push(Finding {
-            severity: Severity::Error,
-            span: *span,
-            code: "NK1117".to_string(),
-            message: format!("There's no function called `{name}`."),
-            notes: vec![
-                "A function called by its name alone is one of yours or one that's always \
-                 available. A function from a package is called with the package's name in \
-                 front: `package::name(…)`."
-                    .to_string(),
-            ],
-            help: Some(help),
-            labels: Vec::new(),
-        });
+        self.s
+            .a_function_nothing_declares(&self.world.here, &self.world, name, span)
     }
 
     /// **A lookup's key is lent** (0.0.235, issue #169).
@@ -3035,18 +2965,11 @@ impl<'a> Checker<'a> {
     /// `"struct"` or `"enum"` where a type is known to be one **this unit**
     /// declares, the types Part I gives no operator and no way to have one.
     fn declared_with_no_arithmetic(&self, ty: &Ty) -> Option<&'static str> {
-        let Ty::Named { name, .. } = ty.unseen() else {
-            return None;
-        };
-        self.parsed
-            .program
-            .items
-            .iter()
-            .find_map(|item| match &item.node {
-                Item::Struct { name: own, .. } if self.parsed.text(*own) == name => Some("struct"),
-                Item::Enum { name: own, .. } if self.parsed.text(*own) == name => Some("enum"),
-                _ => None,
-            })
+        match check_items::declared_with_no_arithmetic(&self.world.here, ty).as_deref() {
+            Some("struct") => Some("struct"),
+            Some(_) => Some("enum"),
+            None => None,
+        }
     }
 
     /// **A type that holds itself holds itself through a box the compiler
@@ -3067,109 +2990,8 @@ impl<'a> Checker<'a> {
     /// Recorded for **every** type of the program, not only this file's: a
     /// literal in this file may build a type declared beside it.
     fn types_that_contain_themselves(&mut self) {
-        let parsed = self.parsed;
-        let files: Vec<&Parsed> = std::iter::once(parsed)
-            .chain(self.beside.iter().copied())
-            .collect();
-        // **A declared generic type is seen through** (ADR-294): a member
-        // typed `Spanned[Pattern]` holds a `Pattern` inline where `Spanned[T]`
-        // holds its `T` inline, which was read as an indirection like `Vec`'s
-        // and left `Pattern` with no size.
-        let mut generics: Generics<'_> = BTreeMap::new();
-        for file in &files {
-            for item in &file.program.items {
-                if let Item::Struct {
-                    name,
-                    generics: params,
-                    fields,
-                    ..
-                } = &item.node
-                    && !params.is_empty()
-                {
-                    generics.insert(
-                        file.text(*name).to_string(),
-                        Generic {
-                            file,
-                            params: params
-                                .iter()
-                                .map(|p| file.text(p.name).to_string())
-                                .collect(),
-                            members: fields.iter().map(|f| &f.ty).collect(),
-                        },
-                    );
-                }
-            }
-        }
-        // Every declared type's members, with the types each holds inline.
-        let mut members: BTreeMap<String, Vec<(String, BTreeSet<String>)>> = BTreeMap::new();
-        for file in &files {
-            for item in &file.program.items {
-                let (name, held): (String, Vec<(String, &ast::Type)>) = match &item.node {
-                    Item::Struct { name, fields, .. } => (
-                        file.text(*name).to_string(),
-                        fields
-                            .iter()
-                            .map(|f| (file.text(f.name).to_string(), &f.ty))
-                            .collect(),
-                    ),
-                    Item::Enum { name, variants, .. } => (
-                        file.text(*name).to_string(),
-                        variants
-                            .iter()
-                            .flat_map(|v| {
-                                let variant = file.text(v.name).to_string();
-                                match &v.fields {
-                                    ast::VariantFields::Unit => Vec::new(),
-                                    ast::VariantFields::Tuple(types) => types
-                                        .iter()
-                                        .enumerate()
-                                        .map(|(at, ty)| {
-                                            (boxed_member(&variant, Some(at), None), ty)
-                                        })
-                                        .collect(),
-                                    ast::VariantFields::Named(fields) => fields
-                                        .iter()
-                                        .map(|f| {
-                                            let field = file.text(f.name);
-                                            (boxed_member(&variant, None, Some(field)), &f.ty)
-                                        })
-                                        .collect(),
-                                }
-                            })
-                            .collect(),
-                    ),
-                    _ => continue,
-                };
-                let entry = members.entry(name).or_default();
-                for (member, ty) in held {
-                    let mut inline = BTreeSet::new();
-                    held_inline(file, ty, &generics, &mut inline);
-                    entry.push((member, inline));
-                }
-            }
-        }
-        let holds: BTreeMap<String, BTreeSet<String>> = members
-            .iter()
-            .map(|(name, fields)| {
-                let all = fields.iter().flat_map(|(_, inline)| inline.iter().cloned());
-                (name.clone(), all.collect())
-            })
-            .collect();
-        for (name, fields) in &members {
-            for (member, inline) in fields {
-                let back = inline
-                    .iter()
-                    .any(|held| held == name || reaches(held, name, &holds));
-                if back {
-                    self.s
-                        .facts
-                        .boxed_members
-                        .entry(name.clone())
-                        .or_default()
-                        .insert(member.clone());
-                }
-            }
-        }
+        self.s
+            .types_that_contain_themselves(&self.world.here, &self.world.beside)
     }
 
     /// **`NK1193`: a pattern that looks inside a part the compiler boxed,
@@ -3752,67 +3574,8 @@ impl<'a> Checker<'a> {
     /// is a name it must not refuse ([Part III
     /// C.4](../../docs/specification/30-nikaia-tooling.md)).
     fn a_trait_nothing_declares(&mut self, written: &str, span: &Span) {
-        if let Some((head, _)) = written.split_once("::") {
-            return self.a_head_nothing_declares(head, written, span);
-        }
-        let suffix = format!("::{written}");
-        let in_a_ledger = |traits: &BTreeMap<String, BTreeSet<String>>| {
-            traits
-                .keys()
-                .any(|key| key == written || key.ends_with(&suffix))
-        };
-        let imported = |parsed: &Parsed| {
-            parsed.program.items.iter().any(|item| {
-                matches!(&item.node, Item::Import { path, alias }
-                if alias.map_or_else(
-                    || path.last().is_some_and(|last| parsed.text(*last) == written),
-                    |alias| parsed.text(alias) == written,
-                ))
-            })
-        };
-        let shape = SHAPE_BOUNDS.contains(&written);
-        let declared = (!shape && ["Error", "Drop", "Cleanup"].contains(&written))
-            || in_a_ledger(&self.world.own.traits)
-            || in_a_ledger(&self.world.library.traits)
-            || declares_a_type(self.parsed, written)
-            || self
-                .beside
-                .iter()
-                .any(|other| declares_a_type(other, written))
-            || imported(self.parsed)
-            || self.s.foreign_names.contains(written);
-        if declared {
-            return;
-        }
-        let because = match shape {
-            // **A shape bound is answered by the declaration**
-            // ([ADR-304](../../docs/specification/adr/adr-304.md) D2): a
-            // `struct` is a `Struct` by being one, so there is no trait to
-            // implement and no `impl` that could say it.
-            true => format!(
-                "A type is a `{written}` by how it's declared, not by an `impl`: every \
-                 `struct` is already a `Struct` and every `enum` an `Enum`."
-            ),
-            false => format!(
-                "An `impl` can name a trait declared with `trait {written} {{ … }}` in \
-                 this program or a package it uses, or one of `Error`, `Drop` and `Cleanup`."
-            ),
-        };
-        self.s.findings.push(Finding {
-            severity: Severity::Error,
-            span: *span,
-            code: "NK1117".to_string(),
-            message: format!("There's no trait called `{written}`."),
-            notes: vec![because],
-            help: Some(match shape {
-                true => "Leave the `impl` out: that's already covered.".to_string(),
-                false => format!(
-                    "Declare `trait {written}`, or name the package that declares it: \
-                     `package::{written}`."
-                ),
-            }),
-            labels: Vec::new(),
-        });
+        self.s
+            .a_trait_nothing_declares(&self.world.here, &self.world, written, span)
     }
 
     /// **`NK1181`: nothing declares the head of this path.**
@@ -3837,108 +3600,8 @@ impl<'a> Checker<'a> {
     /// this compiler about is the one case, and every other reading of an
     /// absent key had to be ruled out first.
     fn a_head_nothing_declares(&mut self, head: &str, written: &str, span: &Span) {
-        let head = self.parsed.unaliased(head).to_string();
-        let head = head.as_str();
-        let prefix = format!("{head}::");
-        fn under<V>(table: &BTreeMap<String, V>, prefix: &str) -> bool {
-            table
-                .range(prefix.to_string()..)
-                .next()
-                .is_some_and(|(key, _)| key.starts_with(prefix))
-        }
-        let declared = self.s.structs.contains_key(head)
-            || self.s.enums.contains_key(head)
-            // **And a type the package's other files declare.** The files of a
-            // package share one namespace (Part I 9.1), so `Shade::Even` in
-            // `main.nika` names an `enum` that may stand in `shapes.nika` —
-            // and the three tables above are this **unit's**. Without this the
-            // refusal is a correct program refused across a file boundary,
-            // which is [Part III C.4](../../docs/specification/30-nikaia-tooling.md)
-            // and the shape [ADR-182](../../docs/specification/adr/adr-182.md)'s
-            // package had one construct over.
-            || self.beside.iter().any(|other| declares_a_type(other, head))
-            || self.s.grammars.contains_key(head)
-            || self.s.variant_owner.contains_key(head)
-            || self.s.type_parameters.contains_key(head)
-            || self.s.opaque_handles.contains(head)
-            || self.s.foreign_names.contains(head)
-            || self.world.own.types.contains_key(head)
-            || self.world.library.types.contains_key(head)
-            || self.s.modules.contains(head)
-            || self.s.std_modules.contains(head)
-            // A ledger that records anything under this head knows the head:
-            // a described crate is a list of its **items**, and no table
-            // carries the crate's own word on a line of its own.
-            || under(&self.world.own.functions, &prefix)
-            || under(&self.world.own.types, &prefix)
-            || under(&self.world.library.functions, &prefix)
-            || under(&self.world.library.types, &prefix)
-            // **A package `use` introduces** (D13): `use http` makes `http` a
-            // head whether or not this unit was handed the package, as the
-            // name a `use` writes last, or its alias.
-            || self.parsed.program.items.iter().any(|item| {
-                matches!(&item.node, Item::Import { path, alias }
-                    if alias.map_or_else(
-                        || path.last().is_some_and(|last| self.parsed.text(*last) == head),
-                        |alias| self.parsed.text(alias) == head,
-                    ))
-            });
-        if declared {
-            return;
-        }
-        let heads: Vec<&str> = self
-            .s
-            .std_modules
-            .iter()
-            .chain(&self.s.modules)
-            .chain(self.s.structs.keys())
-            .chain(self.s.enums.keys())
-            .map(String::as_str)
-            .collect();
-        // **One edit away** (D33): `fx` beside `fs`, which the general
-        // spelling rule is too careful to offer for a name of two letters.
-        let near = heads
-            .iter()
-            .copied()
-            .find(|known| nikaia_std::tools::spelling::distance(head, known) == 1)
-            .or_else(|| nearest(head, &heads))
-            .map(str::to_string);
-        self.s.findings.push(Finding {
-            severity: Severity::Error,
-            span: *span,
-            code: "NK1181".to_string(),
-            message: format!(
-                "`{written}` is written under `{head}`, but `{head}` isn't declared anywhere."
-            ),
-            notes: vec![
-                "A name in front of `::` has to be a type, a package `use` brings in, a \
-                 package in `nikaia.toml`, a described Rust crate or a `std` module, and \
-                 `{head}` is none of them."
-                    .replace("{head}", head)
-                    .to_string(),
-            ],
-            // **A `use`, never a file** (ADR-286 D33): a `.nika` file beside this
-            // one joins the package's one namespace and makes no head. A known
-            // head one edit away is named first: `fx::read` beside `std::fs`.
-            help: Some(match near {
-                Some(near)
-                    if self.s.std_modules.contains(&near)
-                        && !self.s.std_in_scope.contains(&near) =>
-                {
-                    format!(
-                        "Did you mean `{near}`? Write `use std::{near}` at the top of the file."
-                    )
-                }
-                Some(near) => format!("Did you mean `{near}`?"),
-                None => format!(
-                    "If `{head}` is a package or a `std` module, write `use {head}` at the top \
-                     of the file - for a package, also add it to `[dependencies]` in \
-                     `nikaia.toml`; for a Rust crate, run `nikaia describe {head}`. If it is \
-                     a type, declare it in this package."
-                ),
-            }),
-            labels: Vec::new(),
-        });
+        self.s
+            .a_head_nothing_declares(&self.world.here, &self.world, head, written, span)
     }
 
     /// **`x?.m(…)` over a `T?`** (Part I 3.5): the call happens only where
@@ -4661,9 +4324,12 @@ impl<'a> Checker<'a> {
     }
 
     /// The fields of every type called `base` in either ledger
-    /// ([`Checker::fields_by_base`]).
+    /// ([`CheckWorld::fields_by_base`]).
     fn fields_of_base(&self, base: &str) -> &[Ty] {
-        self.fields_by_base.get(base).map_or(&[], Vec::as_slice)
+        self.world
+            .fields_by_base
+            .get(base)
+            .map_or(&[], Vec::as_slice)
     }
 
     fn cleanup_within(&self, ty: &Ty, seen: &mut BTreeSet<String>) -> Option<(String, bool)> {
@@ -7727,30 +7393,8 @@ impl<'a> Checker<'a> {
     /// names it, or a crate nothing describes yet, which `NK1182`'s
     /// neighbour refuses by name.
     fn through_a_package_unread(&self, expr: &Expr) -> bool {
-        let func = match expr {
-            Expr::Call { func, .. } => &**func,
-            Expr::Path(_, _) => expr,
-            _ => return false,
-        };
-        let Expr::Path(segments, _) = func else {
-            return false;
-        };
-        let [head, _, ..] = segments.as_slice() else {
-            return false;
-        };
-        let head = self.parsed.unaliased(self.parsed.text(*head));
-        let used = self.parsed.program.items.iter().any(|item| {
-            matches!(&item.node, Item::Import { path, .. }
-                if matches!(path.as_slice(), [package] if self.parsed.text(*package) == head))
-        });
-        if !(used || self.s.modules.contains(&head)) || self.s.std_modules.contains(&head) {
-            return false;
-        }
-        let prefix = format!("{head}::");
-        ![self.world.own, self.world.library].iter().any(|ledger| {
-            ledger.functions.keys().any(|k| k.starts_with(&prefix))
-                || ledger.types.keys().any(|k| k.starts_with(&prefix))
-        })
+        self.s
+            .through_a_package_unread(&self.world.here, &self.world, expr)
     }
 
     fn value_of(&mut self, expr: &Expr, span: &Span) -> Ty {
@@ -10728,42 +10372,8 @@ impl<'a> Checker<'a> {
         target: winnow_grammar::Symbol,
         span: &Span,
     ) -> bool {
-        let name = self.parsed.text(target);
-        if name == "html" || self.s.grammars.contains_key(name) {
-            return false;
-        }
-        let used = self
-            .parsed
-            .program
-            .items
-            .iter()
-            .any(|item| match &item.node {
-                Item::Import { path, alias } => {
-                    let word = alias.or_else(|| path.last().copied());
-                    word.is_some_and(|word| self.parsed.text(word) == name)
-                }
-                _ => false,
-            });
-        if !used {
-            return false;
-        }
-        self.s.findings.push(Finding {
-            severity: Severity::Error,
-            span: *span,
-            code: "NK1228".to_string(),
-            message: format!("`{name}` is a package, and a `dsl` block names a grammar."),
-            notes: vec![
-                "A grammar from a package is named with its package, as every name from one is."
-                    .to_string(),
-            ],
-            // **No list of the package's grammars yet**: a package offers one
-            // with `pub grammar`, which is decided and not built (ADR-296 D25).
-            help: Some(format!(
-                "Write `dsl {name}::Grammar`, naming the grammar `{name}` offers."
-            )),
-            labels: Vec::new(),
-        });
-        true
+        self.s
+            .a_package_where_a_grammar_stands(&self.world.here, target, span)
     }
 
     /// Every integer literal a constant expression is made of, recorded as
@@ -12540,28 +12150,7 @@ impl<'a> Checker<'a> {
     /// Whether parameter `at` of a function this program declares is text both
     /// kinds of which flow into (ADR-282 D14): by its key, `f` or `Type::m`.
     fn either_param(&self, key: &str, at: usize) -> bool {
-        let (target, own) = match key.rsplit_once("::") {
-            Some((target, own)) => (Some(target.rsplit("::").next().unwrap_or(target)), own),
-            None => (None, key),
-        };
-        let either = |item: &Item| {
-            matches!(item, Item::Fn { name: Some(n), args, .. }
-                if self.parsed.text(*n) == own && args.get(at).is_some_and(|a| a.ty.either))
-        };
-        self.parsed
-            .program
-            .items
-            .iter()
-            .any(|item| match (&item.node, target) {
-                (
-                    Item::Impl {
-                        target: t, methods, ..
-                    },
-                    Some(target),
-                ) if self.parsed.text(t.name) == target => methods.iter().any(|m| either(&m.node)),
-                (node, None) => either(node),
-                _ => false,
-            })
+        check_items::either_param(&self.world.here, key, at as i64)
     }
 
     /// A function field code is put into where the lock column cannot read it
@@ -12577,17 +12166,7 @@ impl<'a> Checker<'a> {
     /// Whether a struct's field is text both kinds of which flow into
     /// ([ADR-282](../../docs/specification/adr/adr-282.md) D14).
     fn either_field(&self, owner: &str, field: &str) -> bool {
-        let owner = owner.rsplit("::").next().unwrap_or(owner);
-        self.parsed
-            .program
-            .items
-            .iter()
-            .any(|item| match &item.node {
-                Item::Struct { name, fields, .. } if self.parsed.text(*name) == owner => fields
-                    .iter()
-                    .any(|f| f.ty.either && self.parsed.text(f.name) == field),
-                _ => false,
-            })
+        check_items::either_field(&self.world.here, owner, field)
     }
 
     fn a_view_kept(
@@ -13452,76 +13031,7 @@ impl<'a> Checker<'a> {
     /// reads it. `None` where the type has none, and the arm is lowered as it
     /// was.
     fn a_placeholder(&self, subject: &Ty) -> Option<String> {
-        let Ty::Named {
-            name,
-            args,
-            view: false,
-        } = subject
-        else {
-            return None;
-        };
-        if !args.is_empty() {
-            return None;
-        }
-        let made = |tys: &[Ty]| tys.iter().all(has_a_default);
-        for item in &self.parsed.program.items {
-            match &item.node {
-                Item::Enum {
-                    name: declared,
-                    variants,
-                    ..
-                } if self.parsed.text(*declared) == name => {
-                    let mut best: Option<(usize, String)> = None;
-                    for variant in variants {
-                        let written = format!("{name}::{}", self.parsed.text(variant.name));
-                        let (size, text) = match &variant.fields {
-                            ast::VariantFields::Unit => (0, written),
-                            ast::VariantFields::Tuple(types) => {
-                                let tys: Vec<Ty> =
-                                    types.iter().map(|t| Ty::from_ast(self.parsed, t)).collect();
-                                if !made(&tys) {
-                                    continue;
-                                }
-                                let holes = vec!["Default::default()"; tys.len()].join(", ");
-                                (tys.len(), format!("{written}({holes})"))
-                            }
-                            ast::VariantFields::Named(fields) => {
-                                let tys: Vec<Ty> = fields
-                                    .iter()
-                                    .map(|f| Ty::from_ast(self.parsed, &f.ty))
-                                    .collect();
-                                if !made(&tys) {
-                                    continue;
-                                }
-                                let holes: Vec<String> = fields
-                                    .iter()
-                                    .map(|f| {
-                                        format!("{}: Default::default()", self.parsed.text(f.name))
-                                    })
-                                    .collect();
-                                (tys.len(), format!("{written} {{ {} }}", holes.join(", ")))
-                            }
-                        };
-                        if best.as_ref().is_none_or(|(least, _)| size < *least) {
-                            best = Some((size, text));
-                        }
-                    }
-                    return best.map(|(_, text)| text);
-                }
-                _ => {}
-            }
-        }
-        let fields = self.s.structs.get(name)?;
-        if !self.s.struct_parameters.get(name).is_none_or(Vec::is_empty)
-            || !fields.iter().all(|f| has_a_default(&f.ty))
-        {
-            return None;
-        }
-        let holes: Vec<String> = fields
-            .iter()
-            .map(|f| format!("{}: Default::default()", f.name))
-            .collect();
-        Some(format!("{name} {{ {} }}", holes.join(", ")))
+        self.s.a_placeholder(&self.world.here, subject)
     }
 
     /// **`NK2104`: two branches of an `overlap` meet on something**
@@ -14450,69 +13960,12 @@ impl<'a> Checker<'a> {
     /// Whether this unit declares a `pub extern struct` or `pub extern enum`
     /// by that name: a C value that crosses by value (ADR-284 D14, D32).
     fn an_extern_struct_named(&self, name: &str) -> bool {
-        self.parsed
-            .program
-            .items
-            .iter()
-            .any(|item| match &item.node {
-                Item::Struct {
-                    name: declared,
-                    is_extern: true,
-                    ..
-                }
-                | Item::Enum {
-                    name: declared,
-                    is_extern: true,
-                    ..
-                } => self.parsed.text(*declared) == name,
-                _ => false,
-            })
+        check_items::an_extern_struct_named(&self.world.here, name)
     }
 
     /// A field type an `extern` struct may hold (ADR-284 D15).
     fn a_c_value(&self, ty: &crate::ast::Type) -> bool {
-        if ty.is_view || ty.is_nullable || ty.is_tuple || ty.code.is_some() {
-            return false;
-        }
-        let name = self.parsed.text(ty.name);
-        if ty.generics.is_empty() {
-            if matches!(
-                name,
-                "i32" | "i64" | "u8" | "f64" | "bool" | "scalar" | "char"
-            ) {
-                return true;
-            }
-            return self
-                .parsed
-                .program
-                .items
-                .iter()
-                .any(|item| match &item.node {
-                    Item::Enum {
-                        name: declared,
-                        variants,
-                        is_extern,
-                        ..
-                    } => {
-                        self.parsed.text(*declared) == name
-                            && (*is_extern
-                                || variants.iter().all(|variant| {
-                                    matches!(variant.fields, crate::ast::VariantFields::Unit)
-                                }))
-                    }
-                    Item::Struct {
-                        name: declared,
-                        is_extern: true,
-                        ..
-                    } => self.parsed.text(*declared) == name,
-                    _ => false,
-                });
-        }
-        // `Array[T, N]`: inline, laid out as C lays it out (ADR-152 D2).
-        match (name, ty.generics.as_slice()) {
-            ("Array", [element, _]) => self.a_c_value(element),
-            _ => false,
-        }
+        check_items::a_c_value(&self.world.here, ty)
     }
 
     /// Whether `ty` crosses to C at an entry point (ADR-284 D5), `out` for a
@@ -15463,14 +14916,7 @@ impl<'a> Checker<'a> {
     /// Whether this program writes `impl Error for` the type, in this file or
     /// another of the package.
     fn implements_error(&self, ty: &str) -> bool {
-        std::iter::once(self.parsed)
-            .chain(self.beside.iter().copied())
-            .any(|unit| {
-                unit.program.items.iter().any(|item| {
-                    matches!(&item.node, Item::Impl { trait_name: Some(trait_name), target, .. }
-                        if unit.text(*trait_name) == "Error" && unit.text(target.name) == ty)
-                })
-            })
+        check_items::implements_error(&self.world.here, &self.world.beside, ty)
     }
 
     /// **A length beside a view is checked at the call**
@@ -16548,50 +15994,7 @@ impl<'a> Checker<'a> {
     /// What a shape walk is unrolled over: a `struct`'s fields, or an
     /// `enum`'s variants, each a name and nothing a turn has to type.
     fn shape_of(&self, on: &str) -> Option<Vec<FieldContract>> {
-        if let Some(known) = self.s.enums.get(on) {
-            // **In the order the declaration wrote them**, which the set of
-            // names does not keep: this unit's own `enum`, else the ledger's.
-            let declared = self
-                .parsed
-                .program
-                .items
-                .iter()
-                .find_map(|item| match &item.node {
-                    Item::Enum { name, variants, .. } if self.parsed.text(*name) == on => Some(
-                        variants
-                            .iter()
-                            .map(|v| self.parsed.text(v.name).to_string())
-                            .collect::<Vec<_>>(),
-                    ),
-                    _ => None,
-                });
-            let variants = declared
-                .or_else(|| {
-                    [self.world.own, self.world.library]
-                        .iter()
-                        .find_map(|ledger| {
-                            ledger
-                                .types
-                                .get(on)
-                                .map(|c| c.variants.iter().map(|v| v.name.clone()).collect())
-                        })
-                })
-                .filter(|written: &Vec<String>| written.len() == known.len())
-                .unwrap_or_else(|| known.iter().cloned().collect());
-            return Some(
-                variants
-                    .iter()
-                    .map(|variant| FieldContract {
-                        name: variant.clone(),
-                        ty: Ty::named(ty::VARIANT),
-                        public: true,
-                        default: String::new(),
-                        attributes: Vec::new(),
-                    })
-                    .collect(),
-            );
-        }
-        self.s.fields_of(&self.world, on)
+        self.s.shape_of(&self.world.here, &self.world, on)
     }
 
     fn an_instantiation(&mut self, name: &str, args: &[Expr], span: &Span) {
@@ -18396,15 +17799,17 @@ fn grown_text(parsed: &Parsed, body: &Block) -> BTreeSet<String> {
 }
 
 fn declares_a_type(parsed: &Parsed, name: &str) -> bool {
-    parsed.program.items.iter().any(|item| {
-        let written = match &item.node {
-            Item::Struct { name, .. } | Item::Enum { name, .. } => Some(*name),
-            Item::Grammar(def) => Some(def.name),
-            Item::Trait { name, .. } => Some(*name),
-            _ => None,
-        };
-        written.is_some_and(|written| parsed.text(written) == name)
-    })
+    check_items::declares_a_type(&parsed_view_of(parsed), name)
+}
+
+/// What the checker reads of a parsed file, borrowed (`tools/parsed_view.nika`).
+fn parsed_view_of(parsed: &Parsed) -> ParsedView<'_> {
+    ParsedView {
+        words: &parsed.interner,
+        aliases: &parsed.aliases,
+        items: &parsed.program.items,
+        package: parsed.package.as_deref(),
+    }
 }
 
 /// What each of a `for`'s bindings is: [`element_of`] for one, and for
@@ -18964,34 +18369,6 @@ fn is_number(name: &str) -> bool {
     nikaia_std::tools::check_types::a_number_name(name)
 }
 
-/// Whether the language below can make a value of this type from nothing,
-/// `Default::default()`: a number, a `bool`, a `char`, text, a list, a map, a
-/// set, a `T?` and a tuple of such. Never a view, and never a type of the
-/// program's own - the placeholder of one of those is its own question.
-fn has_a_default(ty: &Ty) -> bool {
-    match ty {
-        Ty::Named {
-            name, view: false, ..
-        } => {
-            is_number(name)
-                || matches!(
-                    ty::base(name),
-                    "bool"
-                        | "char"
-                        | "String"
-                        | "Vec"
-                        | "HashMap"
-                        | "HashSet"
-                        | "BTreeMap"
-                        | "BTreeSet"
-                )
-        }
-        Ty::Nullable(_) => true,
-        Ty::Tuple(parts) => parts.len() <= 12 && parts.iter().all(has_a_default),
-        _ => false,
-    }
-}
-
 /// The closest field name, when one is close enough to be worth suggesting.
 ///
 /// The distance is `std`'s, written in Nikaia (`tools/spelling.nika`, 0.0.238):
@@ -19369,110 +18746,6 @@ fn a_copied_part(ty: &Ty, copies: &BTreeSet<String>) -> bool {
 /// is one this says nothing about only when it is also unknown.
 fn copies(ty: &Ty) -> bool {
     nikaia_std::tools::check_types::copies_plainly(ty)
-}
-
-/// The declared types `ty` holds **inline** - itself, nullable or not, a
-/// tuple's parts and an array's element - and nothing it holds through a view,
-/// a function, a list or anything else ([`Checker::types_that_contain_themselves`]).
-fn held_inline(
-    parsed: &Parsed,
-    ty: &ast::Type,
-    generics: &Generics<'_>,
-    out: &mut BTreeSet<String>,
-) {
-    if ty.is_view || ty.code.is_some() {
-        return;
-    }
-    if ty.is_tuple {
-        for part in &ty.generics {
-            held_inline(parsed, part, generics, out);
-        }
-        return;
-    }
-    let name = parsed.text(ty.name);
-    if name == "Array" {
-        if let Some(element) = ty.generics.first() {
-            held_inline(parsed, element, generics, out);
-        }
-        return;
-    }
-    if ty.generics.is_empty() {
-        out.insert(name.to_string());
-        return;
-    }
-    // A declared generic type holds what its members hold, with each of its
-    // parameters read as the argument written here. A container of the
-    // language (`Vec`, a map) is not in `generics` and stays an indirection.
-    if let Some(generic) = generics.get(name)
-        && generic.params.len() == ty.generics.len()
-    {
-        out.insert(name.to_string());
-        for member in &generic.members {
-            held_through(generic, member, parsed, &ty.generics, generics, out);
-        }
-    }
-}
-
-/// A declared generic type's parameters and the types its members hold
-/// ([`held_inline`]).
-struct Generic<'p> {
-    file: &'p Parsed,
-    params: Vec<String>,
-    members: Vec<&'p ast::Type>,
-}
-
-type Generics<'p> = BTreeMap<String, Generic<'p>>;
-
-/// What a member of `generic` holds inline once its parameters are the
-/// `arguments` written in `at`: a member that *is* a parameter holds the
-/// argument, and a tuple or an array of one holds it too.
-fn held_through(
-    generic: &Generic<'_>,
-    member: &ast::Type,
-    at: &Parsed,
-    arguments: &[ast::Type],
-    generics: &Generics<'_>,
-    out: &mut BTreeSet<String>,
-) {
-    if member.is_view || member.code.is_some() {
-        return;
-    }
-    if member.is_tuple {
-        for part in &member.generics {
-            held_through(generic, part, at, arguments, generics, out);
-        }
-        return;
-    }
-    let name = generic.file.text(member.name);
-    if name == "Array" {
-        if let Some(element) = member.generics.first() {
-            held_through(generic, element, at, arguments, generics, out);
-        }
-        return;
-    }
-    if member.generics.is_empty()
-        && let Some(position) = generic.params.iter().position(|p| p == name)
-    {
-        held_inline(at, &arguments[position], generics, out);
-    }
-}
-
-/// Whether `from` holds `to` inline, through any number of types between: a
-/// depth-first walk over what each type holds ([`Checker::types_that_contain_themselves`]).
-fn reaches(from: &str, to: &str, holds: &BTreeMap<String, BTreeSet<String>>) -> bool {
-    let mut seen = BTreeSet::new();
-    let mut stack = vec![from.to_string()];
-    while let Some(at) = stack.pop() {
-        for next in holds.get(&at).into_iter().flatten() {
-            if next == to {
-                return true;
-            }
-            if seen.insert(next.clone()) {
-                stack.push(next.clone());
-            }
-        }
-    }
-    false
 }
 
 /// How a member that may be boxed is named, the same in the checker and the

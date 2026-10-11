@@ -1,0 +1,894 @@
+// crates/nikaia-std/src/tools/check_items.nika
+//
+// **What the checker asks of the items a file declares**, moved from the
+// compiler's checker (ADR-294, #125, #558, C-2): is a name declared, is it an
+// `extern` type, does a field or a parameter take text of both kinds. Each
+// reads the `ParsedView` (`parsed_view.nika`); what is written to the findings
+// goes through `CheckState`.
+
+use std::collections
+
+/// The last `::` segment of a name.
+fn item_last_segment(written: ref String) -> String {
+    let mut last: String = ""
+    for part in written.split("::") {
+        last = part.clone()
+    }
+    return last
+}
+
+/// The name an item declares as a type, or nothing.
+fn item_type_name(view: ref ParsedView, item: ref Item) -> String {
+    return match item {
+        Item::Struct { name, .. } => view.text(name),
+        Item::Enum { name, .. } => view.text(name),
+        Item::Grammar(def) => view.text(def.name),
+        Item::Trait { name, .. } => view.text(name),
+        else => "",
+    }
+}
+
+/// Whether the file declares a struct, an enum, a grammar or a trait called `name`.
+pub fn declares_a_type(view: ref ParsedView, name: ref String) -> bool {
+    if name == "" {
+        return false
+    }
+    for item in view.items {
+        if item_type_name(view, item.node) == name {
+            return true
+        }
+    }
+    return false
+}
+
+/// `"struct"` or `"enum"` where the file declares a type `ty` names, so no
+/// arithmetic is declared on it, or nothing.
+pub fn declared_with_no_arithmetic(view: ref ParsedView, ty: ref Ty) -> String? {
+    let seen = ty.unseen()
+    let name = match seen {
+        Ty::Named { name, .. } => name,
+        else => return null,
+    }
+    for item in view.items {
+        let kind: String = match item.node {
+            Item::Struct { name: own, .. } => if view.text(own) == name { "struct" } else { "" },
+            Item::Enum { name: own, .. } => if view.text(own) == name { "enum" } else { "" },
+            else => "",
+        }
+        if kind != "" {
+            return kind
+        }
+    }
+    return null
+}
+
+/// Whether a function item called `own` takes text of both kinds at `at`.
+fn item_takes_either(view: ref ParsedView, node: ref Item, own: ref String, at: i64) -> bool {
+    return match node {
+        Item::Fn { name, args, .. } => item_fn_takes_either(view, name, args, own, at),
+        else => false,
+    }
+}
+
+fn item_fn_takes_either(view: ref ParsedView, name: winnow_grammar::Symbol?, args: ref Vec[FnArg], own: ref String, at: i64) -> bool {
+    let symbol = name ?? return false
+    if view.text(symbol) != own {
+        return false
+    }
+    if at < 0 || at >= args.len() {
+        return false
+    }
+    return args[at].ty.either
+}
+
+/// Whether the parameter `at` of the function `key` (`Type::name` or `name`) is
+/// text both kinds of which flow into (ADR-282 D14).
+pub fn either_param(view: ref ParsedView, key: ref String, at: i64) -> bool {
+    let parts: Vec[ref String] = key.split("::").collect()
+    let own = parts[parts.len() - 1].clone()
+    let mut target: String = ""
+    if parts.len() > 1 {
+        target = parts[parts.len() - 2].clone()
+    }
+    for item in view.items {
+        if target == "" {
+            if item_takes_either(view, item.node, own, at) {
+                return true
+            }
+        } else {
+            let found = match item.node {
+                Item::Impl { target: t, methods, .. } => item_impl_takes_either(view, t, methods, target, own, at),
+                else => false,
+            }
+            if found {
+                return true
+            }
+        }
+    }
+    return false
+}
+
+fn item_impl_takes_either(view: ref ParsedView, t: ref Type, methods: ref Vec[Spanned[Item]], target: ref String, own: ref String, at: i64) -> bool {
+    if view.text(t.name) != target {
+        return false
+    }
+    for method in methods {
+        if item_takes_either(view, method.node, own, at) {
+            return true
+        }
+    }
+    return false
+}
+
+/// Whether a struct's field is text both kinds of which flow into (ADR-282 D14).
+pub fn either_field(view: ref ParsedView, owner: ref String, field: ref String) -> bool {
+    let owner = item_last_segment(owner)
+    for item in view.items {
+        let found = match item.node {
+            Item::Struct { name, fields, .. } => view.text(name) == owner && item_has_either_field(view, fields, field),
+            else => false,
+        }
+        if found {
+            return true
+        }
+    }
+    return false
+}
+
+fn item_has_either_field(view: ref ParsedView, fields: ref Vec[FieldDef], field: ref String) -> bool {
+    for f in fields {
+        if f.ty.either && view.text(f.name) == field {
+            return true
+        }
+    }
+    return false
+}
+
+/// Whether a `use` brought a package called `name` into the file.
+pub fn imports_a_package(view: ref ParsedView, name: ref String) -> bool {
+    for item in view.items {
+        let found = match item.node {
+            Item::Import { path, alias } => item_import_is(view, path, alias, name),
+            else => false,
+        }
+        if found {
+            return true
+        }
+    }
+    return false
+}
+
+fn item_import_is(view: ref ParsedView, path: ref Vec[winnow_grammar::Symbol], alias: winnow_grammar::Symbol?, name: ref String) -> bool {
+    if alias != null {
+        return view.text(alias ?? return false) == name
+    }
+    if path.len() == 0 {
+        return false
+    }
+    return view.text(path[path.len() - 1]) == name
+}
+
+/// Whether the file's `use` lines name exactly the one package `head`.
+pub fn imports_exactly(view: ref ParsedView, head: ref String) -> bool {
+    for item in view.items {
+        let found = match item.node {
+            Item::Import { path, .. } => path.len() == 1 && view.text(path[0]) == head,
+            else => false,
+        }
+        if found {
+            return true
+        }
+    }
+    return false
+}
+
+/// Whether the file declares an `extern` struct or enum called `name`.
+pub fn an_extern_struct_named(view: ref ParsedView, name: ref String) -> bool {
+    for item in view.items {
+        let found = match item.node {
+            Item::Struct { name: declared, is_extern, .. } => is_extern && view.text(declared) == name,
+            Item::Enum { name: declared, is_extern, .. } => is_extern && view.text(declared) == name,
+            else => false,
+        }
+        if found {
+            return true
+        }
+    }
+    return false
+}
+
+/// Whether the file declares an enum called `name` that crosses to C.
+fn item_c_enum(view: ref ParsedView, node: ref Item, name: ref String) -> bool {
+    return match node {
+        Item::Enum { name: declared, variants, is_extern, .. } => view.text(declared) == name && (is_extern || item_all_unit(variants)),
+        Item::Struct { name: declared, is_extern, .. } => is_extern && view.text(declared) == name,
+        else => false,
+    }
+}
+
+fn item_all_unit(variants: ref Vec[EnumVariant]) -> bool {
+    for variant in variants {
+        let plain = match variant.fields {
+            VariantFields::Unit => true,
+            else => false,
+        }
+        if !plain {
+            return false
+        }
+    }
+    return true
+}
+
+/// A field type an `extern` struct may hold (ADR-284 D15).
+pub fn a_c_value(view: ref ParsedView, ty: ref Type) -> bool {
+    if ty.is_view || ty.is_nullable || ty.is_tuple || ty.code != null {
+        return false
+    }
+    let name = view.text(ty.name)
+    if ty.generics.len() == 0 {
+        if name == "i32" || name == "i64" || name == "u8" || name == "f64" || name == "bool" || name == "scalar" || name == "char" {
+            return true
+        }
+        for item in view.items {
+            if item_c_enum(view, item.node, name) {
+                return true
+            }
+        }
+        return false
+    }
+    // `Array[T, N]`: inline, laid out as C lays it out (ADR-152 D2).
+    if name == "Array" && ty.generics.len() == 2 {
+        return a_c_value(view, ty.generics[0])
+    }
+    return false
+}
+
+/// Whether the file or one beside it implements `Error` for the type `ty`.
+pub fn implements_error(here: ref ParsedView, beside: ref Vec[ParsedView], ty: ref String) -> bool {
+    if item_implements_error(here, ty) {
+        return true
+    }
+    for unit in beside {
+        if item_implements_error(unit, ty) {
+            return true
+        }
+    }
+    return false
+}
+
+fn item_implements_error(unit: ref ParsedView, ty: ref String) -> bool {
+    for item in unit.items {
+        let found = match item.node {
+            Item::Impl { trait_name, target, .. } => item_is_error_impl(unit, trait_name, target, ty),
+            else => false,
+        }
+        if found {
+            return true
+        }
+    }
+    return false
+}
+
+fn item_is_error_impl(unit: ref ParsedView, trait_name: winnow_grammar::Symbol?, target: ref Type, ty: ref String) -> bool {
+    let symbol = trait_name ?? return false
+    return unit.text(symbol) == "Error" && unit.text(target.name) == ty
+}
+
+impl CheckState {
+    /// `NK1228`: a `dsl` block names a package where a grammar stands. Whether
+    /// it was said.
+    pub fn a_package_where_a_grammar_stands(ref mut self, view: ref ParsedView, target: winnow_grammar::Symbol, span: ref Span) -> bool {
+        let name = view.text(target)
+        if name == "html" || self.grammars.contains_key(name) {
+            return false
+        }
+        if !imports_a_package(view, name) {
+            return false
+        }
+        self.findings.push(check_refusal("NK1228", span, f"`{name}` is a package, and a `dsl` block names a grammar.", ["A grammar from a package is named with its package, as every name from one is.".clone()], f"Write `dsl {name}::Grammar`, naming the grammar `{name}` offers."))
+        return true
+    }
+
+    /// Whether `expr` names a function or a type of a package nothing read: the
+    /// package is used (or known) and neither ledger holds a name under it.
+    pub fn through_a_package_unread(ref self, view: ref ParsedView, world: ref CheckWorld, expr: ref Expr) -> bool {
+        let func = match expr {
+            Expr::Call { func, .. } => func,
+            Expr::Path(_, _) => expr,
+            else => return false,
+        }
+        let segments = match func {
+            Expr::Path(segments, _) => segments,
+            else => return false,
+        }
+        if segments.len() < 2 {
+            return false
+        }
+        let head = view.unaliased(view.text(segments[0]))
+        let used = imports_exactly(view, head)
+        if !(used || self.modules.contains(head)) || self.std_modules.contains(head) {
+            return false
+        }
+        let prefix = f"{head}::"
+        return !(item_ledger_has(world.own, prefix) || item_ledger_has(world.library, prefix))
+    }
+}
+
+fn item_ledger_has(ledger: ref Ledger, prefix: ref String) -> bool {
+    for key in ledger.functions.keys() {
+        if key.starts_with(prefix) {
+            return true
+        }
+    }
+    for key in ledger.types.keys() {
+        if key.starts_with(prefix) {
+            return true
+        }
+    }
+    return false
+}
+
+/// **The fields of every type in `own` and `library`, by the type's own name**:
+/// built once per walk, `own`'s before `library`'s and each in key order.
+pub fn fields_by_base(own: ref Ledger, library: ref Ledger) -> collections::BTreeMap[String, Vec[Ty]] {
+    let mut index: collections::BTreeMap[String, Vec[Ty]] = collections::BTreeMap()
+    item_fields_of(own, index)
+    item_fields_of(library, index)
+    return index
+}
+
+fn item_fields_of(ledger: ref Ledger, mut index: collections::BTreeMap[String, Vec[Ty]]) {
+    for (key, contract) in ledger.types {
+        let base = item_last_segment(key)
+        let mut held = item_held(index, base)
+        for f in contract.fields {
+            held.push(f.ty.clone())
+        }
+        index.insert(base, held)
+    }
+}
+
+fn item_held(index: ref collections::BTreeMap[String, Vec[Ty]], base: ref String) -> Vec[Ty] {
+    let found = index.get(base) ?? return []
+    return found.clone()
+}
+
+/// Whether the language below can make a value of this type from nothing,
+/// `Default::default()`.
+fn item_has_a_default(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Named { name, view, .. } => !view && (a_number_name(name) || item_plain_default(item_last_segment(name))),
+        Ty::Nullable(_) => true,
+        Ty::Tuple(parts) => parts.len() <= 12 && item_all_default(parts),
+        else => false,
+    }
+}
+
+fn item_plain_default(base: ref String) -> bool {
+    return base == "bool" || base == "char" || base == "String" || base == "Vec" || base == "HashMap" || base == "HashSet" || base == "BTreeMap" || base == "BTreeSet"
+}
+
+fn item_all_default(tys: ref Vec[Ty]) -> bool {
+    for ty in tys {
+        if !item_has_a_default(ty) {
+            return false
+        }
+    }
+    return true
+}
+
+/// The name of a type written plainly: no view, no arguments.
+fn item_plain_name(subject: ref Ty) -> String? {
+    return match subject {
+        Ty::Named { name, args, view } => if view || args.len() > 0 { null } else { name.clone() },
+        else => null,
+    }
+}
+
+/// The text of a placeholder for the variants of an enum: the one that holds
+/// the fewest parts, or nothing.
+fn item_placeholder_of_enum(view: ref ParsedView, name: ref String, variants: ref Vec[EnumVariant]) -> String? {
+    let mut best: String? = null
+    let mut best_size = -1
+    for variant in variants {
+        let vname = view.text(variant.name)
+        let written = f"{name}::{vname}"
+        let mut size = 0
+        let mut text: String = written.clone()
+        let mut usable = true
+        match variant.fields {
+            VariantFields::Unit => {},
+            VariantFields::Tuple(types) => {
+                let mut tys: Vec[Ty] = []
+                let mut holes: Vec[String] = []
+                for t in types {
+                    tys.push(written_ty(view.words, view.aliases, t))
+                    holes.push("Default::default()".clone())
+                }
+                if !item_all_default(tys) {
+                    usable = false
+                } else {
+                    let joined = holes.join(", ")
+                    size = tys.len()
+                    text = f"{written}({joined})"
+                }
+            },
+            VariantFields::Named(fields) => {
+                let mut tys: Vec[Ty] = []
+                let mut holes: Vec[String] = []
+                for f in fields {
+                    tys.push(written_ty(view.words, view.aliases, f.ty))
+                    let fname = view.text(f.name)
+                    holes.push(f"{fname}: Default::default()")
+                }
+                if !item_all_default(tys) {
+                    usable = false
+                } else {
+                    let joined = holes.join(", ")
+                    size = tys.len()
+                    text = f"{written} {{ {joined} }}"
+                }
+            },
+        }
+        if !usable {
+            continue
+        }
+        if best_size < 0 || size < best_size {
+            best = text
+            best_size = size
+        }
+    }
+    return best
+}
+
+/// The enum's variants in the order the declaration wrote them, or nothing
+/// where the file does not declare it.
+fn item_declared_variants(view: ref ParsedView, on: ref String) -> Vec[String]? {
+    for item in view.items {
+        let found: Vec[String]? = match item.node {
+            Item::Enum { name, variants, .. } => if view.text(name) == on { item_variant_names(view, variants) } else { null },
+            else => null,
+        }
+        if found != null {
+            return found
+        }
+    }
+    return null
+}
+
+fn item_variant_names(view: ref ParsedView, variants: ref Vec[EnumVariant]) -> Vec[String] {
+    let mut out: Vec[String] = []
+    for v in variants {
+        out.push(view.text(v.name))
+    }
+    return out
+}
+
+impl CheckState {
+    /// The text that stands for a value of `subject` where one is needed and
+    /// none was written: an enum's simplest variant, or a struct's fields.
+    pub fn a_placeholder(ref self, view: ref ParsedView, subject: ref Ty) -> String? {
+        let name = item_plain_name(subject) ?? return null
+        for item in view.items {
+            let found: String? = match item.node {
+                Item::Enum { name: declared, variants, .. } => if view.text(declared) == name { item_placeholder_of_enum(view, name, variants) } else { null },
+                else => null,
+            }
+            if found != null {
+                return found
+            }
+            let declared_here = match item.node {
+                Item::Enum { name: declared, .. } => view.text(declared) == name,
+                else => false,
+            }
+            if declared_here {
+                return null
+            }
+        }
+        let fields = self.structs.get(name) ?? return null
+        let parameters = self.struct_parameters.get(name)
+        if parameters != null && (parameters ?? return null).len() > 0 {
+            return null
+        }
+        let mut holes: Vec[String] = []
+        for f in fields {
+            if !item_has_a_default(f.ty) {
+                return null
+            }
+            let fname = f.name.clone()
+            holes.push(f"{fname}: Default::default()")
+        }
+        let joined = holes.join(", ")
+        return f"{name} {{ {joined} }}"
+    }
+
+    /// The fields of a type, or an enum's variants as fields, in the order the
+    /// declaration wrote them.
+    pub fn shape_of(ref self, view: ref ParsedView, world: ref CheckWorld, on: ref String) -> Vec[FieldContract]? {
+        if !self.enums.contains_key(on) {
+            return self.fields_of(world, on)
+        }
+        let known = self.enums.get(on) ?? return null
+        let mut variants: Vec[String] = []
+        let declared = item_declared_variants(view, on)
+        if declared != null {
+            variants = declared ?? return null
+        } else {
+            let own = world.own.types.get(on)
+            if own != null {
+                variants = item_contract_variants(own ?? return null)
+            } else {
+                let library = world.library.types.get(on)
+                if library != null {
+                    variants = item_contract_variants(library ?? return null)
+                }
+            }
+        }
+        if variants.len() != known.len() {
+            variants = []
+            for k in known {
+                variants.push(k.clone())
+            }
+        }
+        let mut out: Vec[FieldContract] = []
+        for variant in variants {
+            out.push(FieldContract { name: variant.clone(), ty: Ty::Named { name: "$Variant", args: [], view: false }, public: true, default: "", attributes: [] })
+        }
+        return out
+    }
+
+    /// `NK1117`: a function called by a name nothing declares.
+    pub fn a_function_nothing_declares(ref mut self, view: ref ParsedView, world: ref CheckWorld, name: ref String, span: ref Span) {
+        let declared = self.lookup(name) != null || self.structs.contains_key(name) || self.enums.contains_key(name) || world.own.types.contains_key(name) || self.modules.contains(name) || self.grammars.contains_key(name) || self.foreign_names.contains(name) || self.variant_parts.contains_key(name) || is_hull(name) || name == "access_all" || name == "update_all" || name == "panic" || name == "asset" || name == "assert" || imports_a_package(view, name)
+        if declared {
+            return
+        }
+        let mut known: Vec[String] = []
+        for key in world.own.functions.keys() {
+            if !key.contains("::") {
+                known.push(key.clone())
+            }
+        }
+        for key in world.library.functions.keys() {
+            if !key.contains("::") {
+                known.push(key.clone())
+            }
+        }
+        known.push("panic".clone())
+        let near = nearest_name(name, known)
+        let mut help: String = f"Declare it with `fn {name}(…)`, or call it through the package that has it."
+        if near != null {
+            let close = near ?? return
+            help = f"Did you mean `{close}`?"
+        }
+        self.findings.push(check_refusal("NK1117", span, f"There's no function called `{name}`.", ["A function called by its name alone is one of yours or one that's always available. A function from a package is called with the package's name in front: `package::name(…)`.".clone()], help))
+    }
+
+    /// `NK1117`/`NK1181`: an `impl` names a trait nothing declares.
+    pub fn a_trait_nothing_declares(ref mut self, view: ref ParsedView, world: ref CheckWorld, written: ref String, span: ref Span) {
+        let at = written.find("::")
+        if at != null {
+            let head = written[0..<(at ?? return)].clone()
+            self.a_head_nothing_declares(view, world, head, written, span)
+            return
+        }
+        let suffix = f"::{written}"
+        let shape = written == "Struct" || written == "Enum"
+        let mut declared = !shape && (written == "Error" || written == "Drop" || written == "Cleanup")
+        declared = declared || item_has_trait(world.own, written, suffix) || item_has_trait(world.library, written, suffix) || declares_a_type(view, written) || imports_a_package(view, written) || self.foreign_names.contains(written)
+        for other in world.beside {
+            if declares_a_type(other, written) {
+                declared = true
+            }
+        }
+        if declared {
+            return
+        }
+        let mut because: String = f"An `impl` can name a trait declared with `trait {written} {{ … }}` in this program or a package it uses, or one of `Error`, `Drop` and `Cleanup`."
+        let mut help: String = f"Declare `trait {written}`, or name the package that declares it: `package::{written}`."
+        if shape {
+            because = f"A type is a `{written}` by how it's declared, not by an `impl`: every `struct` is already a `Struct` and every `enum` an `Enum`."
+            help = "Leave the `impl` out: that's already covered.".clone()
+        }
+        self.findings.push(check_refusal("NK1117", span, f"There's no trait called `{written}`.", [because], help))
+    }
+
+    /// `NK1181`: nothing declares the head of this path.
+    pub fn a_head_nothing_declares(ref mut self, view: ref ParsedView, world: ref CheckWorld, head: ref String, written: ref String, span: ref Span) {
+        let head = view.unaliased(head)
+        let prefix = f"{head}::"
+        let mut declared = self.structs.contains_key(head) || self.enums.contains_key(head)
+        for other in world.beside {
+            if declares_a_type(other, head) {
+                declared = true
+            }
+        }
+        declared = declared || self.grammars.contains_key(head) || self.variant_owner.contains_key(head) || self.type_parameters.contains_key(head) || self.opaque_handles.contains(head) || self.foreign_names.contains(head) || world.own.types.contains_key(head) || world.library.types.contains_key(head) || self.modules.contains(head) || self.std_modules.contains(head)
+        declared = declared || item_ledger_has(world.own, prefix) || item_ledger_has(world.library, prefix) || imports_a_package(view, head)
+        if declared {
+            return
+        }
+        let mut heads: Vec[String] = []
+        for m in self.std_modules {
+            heads.push(m.clone())
+        }
+        for m in self.modules {
+            heads.push(m.clone())
+        }
+        for (k, _) in self.structs {
+            heads.push(k.clone())
+        }
+        for (k, _) in self.enums {
+            heads.push(k.clone())
+        }
+        // One edit away: `fx` beside `fs`, which the general spelling rule is
+        // too careful to offer for a name of two letters.
+        let mut near: String? = null
+        for known in heads {
+            if near == null && distance(head, known) == 1 {
+                near = known.clone()
+            }
+        }
+        if near == null {
+            near = nearest_name(head, heads)
+        }
+        let mut help: String = f"If `{head}` is a package or a `std` module, write `use {head}` at the top of the file - for a package, also add it to `[dependencies]` in `nikaia.toml`; for a Rust crate, run `nikaia describe {head}`. If it is a type, declare it in this package."
+        if near != null {
+            let close = near ?? return
+            help = f"Did you mean `{close}`?"
+            if self.std_modules.contains(close) && !self.std_in_scope.contains(close) {
+                help = f"Did you mean `{close}`? Write `use std::{close}` at the top of the file."
+            }
+        }
+        let note = f"A name in front of `::` has to be a type, a package `use` brings in, a package in `nikaia.toml`, a described Rust crate or a `std` module, and `{head}` is none of them."
+        self.findings.push(check_refusal("NK1181", span, f"`{written}` is written under `{head}`, but `{head}` isn't declared anywhere.", [note], help))
+    }
+}
+
+/// Whether a ledger holds a trait called `written`, or one under a package.
+fn item_has_trait(ledger: ref Ledger, written: ref String, suffix: ref String) -> bool {
+    for key in ledger.traits.keys() {
+        if key == written || key.ends_with(suffix) {
+            return true
+        }
+    }
+    return false
+}
+
+fn item_contract_variants(contract: ref TypeContract) -> Vec[String] {
+    let mut out: Vec[String] = []
+    for v in contract.variants {
+        out.push(v.name.clone())
+    }
+    return out
+}
+
+/// A declared generic type: its parameters and the types its members hold
+/// (`item_held_inline`).
+pub struct ItemGeneric {
+    pub file: ParsedView,
+    pub params: Vec[String],
+    pub members: Vec[Type],
+}
+
+/// A member that may be boxed, named as `boxed_member` names it, and the type
+/// it is written with.
+struct ItemMember {
+    member: String,
+    ty: Type,
+}
+
+/// What a member holds inline, once the type it is in is read.
+struct ItemInline {
+    member: String,
+    inline: collections::BTreeSet[String],
+}
+
+/// The declared types `ty` holds **inline**: itself, nullable or not, a
+/// tuple's parts and an array's element, and nothing it holds through a view,
+/// a function, a list or anything else.
+fn item_held_inline(parsed: ref ParsedView, ty: ref Type, generics: ref collections::BTreeMap[String, ItemGeneric], mut out: collections::BTreeSet[String]) {
+    if ty.is_view || ty.code != null {
+        return
+    }
+    if ty.is_tuple {
+        for part in ty.generics {
+            item_held_inline(parsed, part, generics, out)
+        }
+        return
+    }
+    let name = parsed.text(ty.name)
+    if name == "Array" {
+        if ty.generics.len() > 0 {
+            item_held_inline(parsed, ty.generics[0], generics, out)
+        }
+        return
+    }
+    if ty.generics.len() == 0 {
+        out.insert(name.clone())
+        return
+    }
+    // A declared generic type holds what its members hold, with each of its
+    // parameters read as the argument written here.
+    let generic = generics.get(name) ?? return
+    if generic.params.len() != ty.generics.len() {
+        return
+    }
+    out.insert(name.clone())
+    for member in generic.members {
+        item_held_through(generic, member, parsed, ty.generics, generics, out)
+    }
+}
+
+/// What a member of `generic` holds inline once its parameters are the
+/// `arguments` written in `at`.
+fn item_held_through(generic: ref ItemGeneric, member: ref Type, at: ref ParsedView, arguments: ref Vec[Type], generics: ref collections::BTreeMap[String, ItemGeneric], mut out: collections::BTreeSet[String]) {
+    if member.is_view || member.code != null {
+        return
+    }
+    if member.is_tuple {
+        for part in member.generics {
+            item_held_through(generic, part, at, arguments, generics, out)
+        }
+        return
+    }
+    let name = generic.file.text(member.name)
+    if name == "Array" {
+        if member.generics.len() > 0 {
+            item_held_through(generic, member.generics[0], at, arguments, generics, out)
+        }
+        return
+    }
+    if member.generics.len() > 0 {
+        return
+    }
+    for k in 0..<generic.params.len() {
+        if generic.params[k] == name {
+            item_held_inline(at, arguments[k], generics, out)
+            return
+        }
+    }
+}
+
+/// Whether `from` holds `to` inline, through any number of types between.
+fn item_reaches(from: ref String, to: ref String, holds: ref collections::BTreeMap[String, collections::BTreeSet[String]]) -> bool {
+    let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut stack: Vec[String] = [from.clone()]
+    while stack.len() > 0 {
+        let at = stack.pop() ?? return false
+        let next_of = holds.get(at) ?? continue
+        for next in next_of {
+            if next == to {
+                return true
+            }
+            if !seen.contains(next) {
+                seen.insert(next.clone())
+                stack.push(next.clone())
+            }
+        }
+    }
+    return false
+}
+
+fn item_members_of(file: ref ParsedView, node: ref Item) -> Vec[ItemMember] {
+    let mut out: Vec[ItemMember] = []
+    match node {
+        Item::Struct { fields, .. } => {
+            for f in fields {
+                out.push(ItemMember { member: file.text(f.name), ty: f.ty.clone() })
+            }
+        },
+        Item::Enum { variants, .. } => {
+            for v in variants {
+                let variant = file.text(v.name)
+                match v.fields {
+                    VariantFields::Unit => {},
+                    VariantFields::Tuple(types) => {
+                        for at in 0..<types.len() {
+                            out.push(ItemMember { member: boxed_member(variant, at, ""), ty: types[at].clone() })
+                        }
+                    },
+                    VariantFields::Named(fields) => {
+                        for f in fields {
+                            out.push(ItemMember { member: boxed_member(variant, -1, file.text(f.name)), ty: f.ty.clone() })
+                        }
+                    },
+                }
+            }
+        },
+        else => {},
+    }
+    return out
+}
+
+fn item_declared_type_name(file: ref ParsedView, node: ref Item) -> String? {
+    return match node {
+        Item::Struct { name, .. } => file.text(name),
+        Item::Enum { name, .. } => file.text(name),
+        else => null,
+    }
+}
+
+impl CheckState {
+    /// **A type that holds itself holds itself through a box the compiler
+    /// writes** (ADR-246 D1): a field is boxed where what it holds inline
+    /// reaches back to the type that declares it. Recorded for every type of
+    /// the program, this file's and the ones beside it.
+    pub fn types_that_contain_themselves(ref mut self, here: ref ParsedView, beside: ref Vec[ParsedView]) {
+        let mut files: Vec[ParsedView] = [here.clone()]
+        for other in beside {
+            files.push(other.clone())
+        }
+        // A declared generic type is seen through (ADR-294).
+        let mut generics: collections::BTreeMap[String, ItemGeneric] = collections::BTreeMap()
+        for file in files {
+            for item in file.items {
+                match item.node {
+                    Item::Struct { name, generics: params, fields, .. } => {
+                        if params.len() > 0 {
+                            let mut names: Vec[String] = []
+                            for p in params {
+                                names.push(file.text(p.name))
+                            }
+                            let mut members: Vec[Type] = []
+                            for f in fields {
+                                members.push(f.ty.clone())
+                            }
+                            generics.insert(file.text(name), ItemGeneric { file: file.clone(), params: names, members: members })
+                        }
+                    },
+                    else => {},
+                }
+            }
+        }
+        // Every declared type's members, with the types each holds inline.
+        let mut members: collections::BTreeMap[String, Vec[ItemInline]] = collections::BTreeMap()
+        for file in files {
+            for item in file.items {
+                let name = item_declared_type_name(file, item.node) ?? continue
+                let mut entry = item_inlines(members, name)
+                for held in item_members_of(file, item.node) {
+                    let mut inline: collections::BTreeSet[String] = collections::BTreeSet()
+                    item_held_inline(file, held.ty, generics, inline)
+                    entry.push(ItemInline { member: held.member.clone(), inline: inline })
+                }
+                members.insert(name.clone(), entry)
+            }
+        }
+        let mut holds: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
+        for (name, fields) in members {
+            let mut all: collections::BTreeSet[String] = collections::BTreeSet()
+            for f in fields {
+                for h in f.inline {
+                    all.insert(h.clone())
+                }
+            }
+            holds.insert(name.clone(), all)
+        }
+        for (name, fields) in members {
+            for f in fields {
+                let mut back = false
+                for held in f.inline {
+                    if held == name || item_reaches(held, name, holds) {
+                        back = true
+                    }
+                }
+                if back {
+                    let mut set = item_boxed_set(self.facts.boxed_members, name)
+                    set.insert(f.member.clone())
+                    self.facts.boxed_members.insert(name.clone(), set)
+                }
+            }
+        }
+    }
+}
+
+fn item_inlines(members: ref collections::BTreeMap[String, Vec[ItemInline]], name: ref String) -> Vec[ItemInline] {
+    let found = members.get(name) ?? return []
+    return found.clone()
+}
+
+fn item_boxed_set(boxed: ref collections::BTreeMap[String, collections::BTreeSet[String]], name: ref String) -> collections::BTreeSet[String] {
+    let found = boxed.get(name) ?? return collections::BTreeSet()
+    return found.clone()
+}

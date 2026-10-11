@@ -432,6 +432,16 @@ pub struct CheckWorld {
     pub own: ref Ledger,
     /// `std`'s, as `std` ships them.
     pub library: ref Ledger,
+    /// This file: its items and its aliases.
+    pub here: ParsedView,
+    /// **The program's other files**, for the questions that need a body or a
+    /// declaration rather than a contract. Empty for a caller with one file.
+    pub beside: Vec[ParsedView],
+    /// Where `here` stands among `beside`, or -1 where it does not.
+    pub here_at: i64,
+    /// **The fields of every type in `own` and `library`, by the type's own
+    /// name**: what a cleanup or a teardown a type holds is asked through.
+    pub fields_by_base: collections::BTreeMap[String, Vec[Ty]],
 }
 
 /// **What the checker keeps while it walks a program**: the findings, the

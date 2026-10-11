@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.812] — 2026-10-11
+
+**The checker reads a file's items through a view: `ParsedView`, and fifteen item-reading functions are Nikaia (tools/parsed_view.nika, tools/check_items.nika, #558, #125, C-2).**
+- `ParsedView { words, aliases, items, package }` is what the checker reads of a parsed file. `CheckWorld` gains `here` (this file's view), `beside` (the other files' views), `here_at` (where `here` stands among them, or -1) and `fields_by_base` (built once per walk). `newly` stays with the Rust `Checker`: `Newly` is the public type of `check` and `project`.
+- Moved: `declares_a_type`, `declared_with_no_arithmetic`, `either_param`, `either_field`, `through_a_package_unread`, `a_package_where_a_grammar_stands`, `an_extern_struct_named`, `a_c_value`, `implements_error`, `a_placeholder`, `shape_of`, `a_function_nothing_declares`, `a_trait_nothing_declares`, `a_head_nothing_declares` and `types_that_contain_themselves`, with `held_inline`, `reaches` and `has_a_default`. The Rust methods are one-line adapters.
+
 ## [0.0.811] — 2026-10-11
 
 **The emitter's entry point, the program's own main and the held structs are Nikaia (tools/emit_entry.nika, #558, step E8).**

@@ -190,7 +190,8 @@ pub mod text {
     clippy::same_item_push,
     clippy::redundant_field_names,
     clippy::unnecessary_get_then_check,
-    clippy::collapsible_match
+    clippy::collapsible_match,
+    clippy::comparison_to_empty
 )]
 pub mod tools {
     // **One package, one file** ([ADR-294](../../../docs/specification/adr/adr-294.md)):
