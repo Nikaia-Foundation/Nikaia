@@ -96,3 +96,58 @@ Context tokens per moved Rust line below 70k on the short-agent slices while
 the share keeps rising by 0.2-0.5 points per commit. If a snapshot is worse,
 find out why before changing the rules (CLAUDE.md, "Measuring performance":
 understand a result before quoting it).
+
+## 2026-10-11, later (0.0.787-0.0.823)
+
+Share 43.8 % -> 54.3 % (`scripts/self_hosting.py`), 35k Rust and 41.5k Nikaia
+code lines. The agents table of this snapshot (the per-commit table is
+`scripts/tokenspeed.py`'s first table, rerun it; the plan agents are "plan"):
+
+#### Agents
+
+| agent | module | turns | context tokens read (M) | written (k) | active min | Rust lines moved in its window | tokens per moved line |
+| :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| a0417f | emit | 164 | 28.3 | 1.4 | 28 | 0 | - |
+| a0bc5a | emit | 110 | 10.4 | 5.0 | 24 | -181 | - |
+| a0f5f3 | check | 191 | 29.1 | 1.6 | 29 | 578 | 50,405 |
+| a1bcd3 | check | 118 | 14.2 | 9.1 | 28 | 162 | 87,598 |
+| a5fd67 | check | 22 | 1.4 | 0.3 | 9 | 0 | - |
+| a7bf2b | emit | 103 | 11.7 | 1.2 | 23 | 215 | 54,454 |
+| a965bc | emit | 156 | 23.1 | 1.4 | 36 | 192 | 120,393 |
+| a98554 | check | 139 | 17.1 | 1.2 | 20 | 0 | - |
+| a99ad9 | check | 182 | 24.1 | 2.0 | 41 | 659 | 36,608 |
+| aa4345 | check | 122 | 14.5 | 1.3 | 34 | 378 | 38,474 |
+| aa737a | plan | 72 | 6.9 | 0.6 | 5 | 0 | - |
+| aa986c | plan | 102 | 9.8 | 0.8 | 11 | 0 | - |
+| aad2bf | check | 96 | 9.4 | 1.0 | 25 | -104 | - |
+| ab62ea | emit | 695 | 219.1 | 6.5 | 315 | 1167 | 187,742 |
+| ab8a58 | check | 768 | 276.2 | 6.9 | 281 | 2292 | 120,518 |
+| aba0cc | plan | 318 | 71.3 | 2.8 | 53 | 0 | - |
+| abfc7f | emit | 173 | 26.0 | 1.6 | 41 | 450 | 57,730 |
+| ac786f | plan | 124 | 16.0 | 2.1 | 10 | 0 | - |
+| ae1cf5 | check | 156 | 20.5 | 1.3 | 33 | 418 | 48,963 |
+| af7610 | plan | 159 | 20.9 | 1.5 | 12 | 0 | - |
+| af8991 | emit | 154 | 22.3 | 1.3 | 37 | 136 | 163,867 |
+| afd84f | emit | 33 | 2.0 | 0.5 | 15 | 0 | - |
+
+### Reading
+
+* **Two cohorts.** Long agents (ab62ea, ab8a58; one for 5 h, one for 4.7 h):
+  495 M context tokens for 3,459 lines moved = **143k per moved line**.
+  Fresh one-slice agents (11 builders from a99ad9 on): 205 M for 2,903 net
+  lines = **71k per moved line**, about half. The scaffolding units (C-3, U0b)
+  count negative lines and are inside that figure; the slices that really move
+  code cost 37k-54k (a99ad9, aa4345, ae1cf5, a0f5f3, a7bf2b), the entangled
+  ones 88k-164k (a1bcd3, a965bc, af8991).
+* **Speed.** The fresh builders moved about 500 net lines per active hour
+  (2,903 lines in 5.9 h), the two long agents about 350 (3,459 in 9.9 h).
+  Two agents ran in parallel, so the wall-clock rate is about double that.
+  Share per commit: +0.3 points before 0.0.810, +0.3-0.6 after.
+* **Not yet a trend.** What is left is the harder part: the cycles of `check`
+  (24 functions) and `emit` (47) and the Rust services below them. The plan
+  agents (aba0cc 71 M, 318 turns, the rewrite script, bump script, defect
+  list) are the one long run since; `rs2nika.py` saved about one turn per unit
+  (C-5b), the twin file in the other module saved more.
+* **Waste measured:** two hours of idle agents after an interruption, seven
+  red CI runs from a date mismatch (fixed, `scripts/bump.py` now sets it),
+  version collisions on most rebases (`bump.py rebase-fix`).
