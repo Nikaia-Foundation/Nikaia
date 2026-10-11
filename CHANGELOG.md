@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.825] — 2026-10-11
+
+**emit: the match of the core is Nikaia: patterns, boxed parts, arm bodies, match over a sum**
+- tools/emit_core_match.nika: match (the `Expr::Match` arm), pattern_written, arm_body_led and match_over_a_sum as emit_core_* of EmitState; the boxed parts a pattern looks inside are counted and written by place instead of handed back as references. The Rust `match_expr` is a one-line stub, the dead Rust is deleted. EmitHost gains copied_bindings and guard_copies.
+
 ## [0.0.824] — 2026-10-11
 
 **emit: the reads of the core are Nikaia: held receivers and indices, comparisons against a length, receivers, field calls, index reads, overlap, select**

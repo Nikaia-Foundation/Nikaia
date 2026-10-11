@@ -174,6 +174,7 @@ COMPILER_NIKA = {
     "emit_core_below.nika": "emit: the small questions below the core: held `?.` receivers, resize fills, call options, what a catch guards, keeps, map keys, reflected reads (0.0.820)",
     "emit_core_leaves.nika": "emit: the leaves of the core: keys, postfix bases, operands, string literals, f-strings, call options, guards, grammar entries, html templates, blocks and ifs (0.0.822)",
     "emit_core_reads.nika": "emit: the reads of the core: held receivers and indices, comparisons against a length, receivers, field calls, index reads, overlap and select (0.0.824)",
+    "emit_core_match.nika": "emit: the match of the core: patterns as written, the boxed parts they look inside, arm bodies, matches! for yes-or-no, match over a sum (0.0.825)",
 }
 
 

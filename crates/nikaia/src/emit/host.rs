@@ -210,6 +210,25 @@ impl EmitHost for Emitter<'_> {
         wrapped
     }
 
+    fn copied_bindings(&self, at: i64) -> Vec<String> {
+        self.s
+            .facts
+            .copied_bindings
+            .range((at, String::new())..)
+            .take_while(|(pattern, _)| *pattern == at)
+            .map(|(_, name)| name.clone())
+            .collect()
+    }
+
+    fn guard_copies(&self, at: i64) -> Vec<String> {
+        self.s
+            .facts
+            .guards_inside_boxes
+            .get(&at)
+            .map(|names| names.iter().cloned().collect())
+            .unwrap_or_default()
+    }
+
     fn overlaps_user_code(&self) -> bool {
         self.build.overlaps_user_code()
     }

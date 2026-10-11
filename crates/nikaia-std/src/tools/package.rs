@@ -20713,6 +20713,389 @@ impl EmitState {
 }
 
 
+// --- emit_core_match.nika ---
+
+fn emit_match_is_caught(world: &EmitWorld<'_>, value: &Expr) -> bool {
+    match value {
+        Expr::Variable(name, _) => { let name = *name; emit_text(world, name) == "error" },
+        _ => false,
+    }
+}
+
+fn emit_match_is_otherwise(pattern: &MatchPattern) -> bool { matches!(pattern, MatchPattern::Otherwise) }
+
+fn emit_match_bool(expr: &Expr) -> Option<bool> {
+    match expr {
+        Expr::LitBool(value, _) => { let value = *value; return Some(value) },
+        _ => { },
+    }
+    None
+}
+
+fn emit_match_is_variable(expr: &Expr) -> bool { matches!(expr, Expr::Variable(_, _)) }
+
+fn emit_match_is_match(expr: &Expr) -> bool { matches!(expr, Expr::Match { .. }) }
+
+fn emit_match_yes_or_no(arms: &[MatchArm]) -> Option<bool> {
+    let count = arms.len() as i64;
+    if count < 2 { return None; }
+    let mut last_otherwise = false;
+    let mut any_guard = false;
+    let mut otherwise = false;
+    let mut k: i64 = 0;
+    for arm in arms.iter() {
+        k += 1;
+        if arm.guard.is_some() { any_guard = true; }
+        if k == count {
+            last_otherwise = emit_match_is_otherwise(&arm.pattern);
+            let said = match emit_match_bool(&arm.body) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            otherwise = said;
+        }
+    }
+    if !last_otherwise || any_guard { return None; }
+    k = 0;
+    for arm in arms.iter() {
+        k += 1;
+        if k < count {
+            let said = match emit_match_bool(&arm.body) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            if said == otherwise { return None; }
+        }
+    }
+    Some(!otherwise)
+}
+
+fn emit_match_path(world: &EmitWorld<'_>, path: &[winnow_grammar::Symbol]) -> String {
+    let mut parts: Vec<String> = vec![];
+    for each in path.iter() { parts.push(emit_text(world, *each)); }
+    parts.join("::")
+}
+
+impl EmitState {
+    fn emit_match_bound(&self, world: &EmitWorld<'_>, name: winnow_grammar::Symbol, wild: bool, lent_key: i64) -> String {
+        if wild { return String::from("_"); }
+        let text = emit_text(world, name);
+        if lent_key < 0 || !self.facts.lent_bindings.contains_key(&lent_key) { return text; }
+        let lent = match self.facts.lent_bindings.get(&lent_key) { Some(__nikaia_value) => __nikaia_value, None => return text };
+        if lent.contains(&text) { return format!("ref {}", text); }
+        text
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn emit_core_pattern_written<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, pattern: &MatchPattern, wild: bool, lent_key: i64, collect: bool, found: i64, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<i64, Box<dyn std::error::Error>> {
+        let mut n = found;
+        match pattern {
+            MatchPattern::Otherwise => out.push("_"),
+            MatchPattern::Literal(value) => host.expr(walk, out, value, depth, flow, scope)?,
+            MatchPattern::Path(p) => { if p.len() == 1 { for one in p.iter() { out.push(&self.emit_match_bound(world, *one, wild, lent_key)); } } else { out.push(&emit_match_path(world, p)); } },
+            MatchPattern::Tuple { path, parts } => {
+                out.push(&emit_match_path(world, path));
+                out.push("(");
+                let mut i: i64 = 0;
+                for part in parts.iter() {
+                    if i > 0 { out.push(", "); }
+                    let nests = collect && self.boxed_part(world, path, i) && !binds_a_part(part);
+                    i += 1;
+                    if nests {
+                        out.push(&format!("__nikaia_box{}", n));
+                        n += 1;
+                        continue;
+                    }
+                    n = self.emit_core_pattern_written(world, walk, out, host, part, wild, lent_key, collect, n, depth, flow, scope)?;
+                }
+                out.push(")");
+            },
+            MatchPattern::Named { path, fields, rest } => {
+                let rest = *rest;
+                out.push(&format!("{} {{ ", emit_match_path(world, path)));
+                let mut first = true;
+                let mut open = rest;
+                for field in fields.iter() {
+                    let shorthand = emit_match_shorthand(world, field);
+                    if shorthand && wild {
+                        open = true;
+                        continue;
+                    }
+                    if !first { out.push(", "); }
+                    first = false;
+                    if shorthand { out.push(&self.emit_match_bound(world, field.name, wild, lent_key)); } else {
+                        out.push(&format!("{}: ", emit_text(world, field.name)));
+                        n = self.emit_core_pattern_written(world, walk, out, host, &field.pat, wild, lent_key, collect, n, depth, flow, scope)?;
+                    }
+                }
+                if open || first {
+                    if !first { out.push(", "); }
+                    out.push("..");
+                }
+                out.push(" }");
+            },
+            MatchPattern::Or(alternatives) => {
+                let mut i = 0;
+                for alternative in alternatives.iter() {
+                    if i > 0 { out.push(" | "); }
+                    i += 1;
+                    n = self.emit_core_pattern_written(world, walk, out, host, alternative, wild, lent_key, collect, n, depth, flow, scope)?;
+                }
+            },
+            MatchPattern::Range { start, end } => {
+                host.expr(walk, out, start, depth, flow, scope)?;
+                out.push("..=");
+                host.expr(walk, out, end, depth, flow, scope)?;
+            },
+        }
+        Ok(n)
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn emit_core_nest_written<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, pattern: &MatchPattern, wanted: i64, before: i64, wild: bool, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<i64, Box<dyn std::error::Error>> {
+        let mut n = before;
+        match pattern {
+            MatchPattern::Tuple { path, parts } => {
+                let mut i: i64 = 0;
+                for part in parts.iter() {
+                    let nests = self.boxed_part(world, path, i) && !binds_a_part(part);
+                    i += 1;
+                    if nests {
+                        if n == wanted { self.emit_core_pattern_written(world, walk, out, host, part, wild, -1, false, 0, depth, flow, scope)?; }
+                        n += 1;
+                        continue;
+                    }
+                    n = self.emit_core_nest_written(world, walk, out, host, part, wanted, n, wild, depth, flow, scope)?;
+                }
+            },
+            MatchPattern::Named { fields, .. } => { for field in fields.iter() { if !emit_match_shorthand(world, field) { n = self.emit_core_nest_written(world, walk, out, host, &field.pat, wanted, n, wild, depth, flow, scope)?; } } },
+            MatchPattern::Or(alternatives) => { for alternative in alternatives.iter() { n = self.emit_core_nest_written(world, walk, out, host, alternative, wanted, n, wild, depth, flow, scope)?; } },
+            _ => { },
+        }
+        Ok(n)
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn emit_core_arm_body_led<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, pattern: &MatchPattern, nest_count: i64, body: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope, lead: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let mut taken_apart = lead.to_owned();
+        for at in 0..nest_count {
+            let mut written = EmitOut::empty();
+            self.emit_core_nest_written(world, walk, &mut written, host, pattern, at, 0, false, depth, flow, scope)?;
+            taken_apart.push_str(&format!("let __nikaia_box{} = nikaia_std::boxed::open(__nikaia_box{}); let {} = __nikaia_box{} else {{ unreachable!(\"the guard matched it\") }}; ", at, at, written.buf, at));
+        }
+        let opened = self.boxed_bindings(world, pattern);
+        let copied = host.copied_bindings(node_key(body));
+        let statements = flow.arms_are_statements;
+        let inside = EmitFlow { arms_are_statements: false, ..flow };
+        let plain = opened.is_empty() && copied.is_empty() && nest_count == 0 && lead.is_empty();
+        if statements && plain {
+            match body {
+                Expr::Block(block, _) => {
+                    self.emit_core_block(world, walk, out, host, block, depth, inside, scope, EmitTail::Statement)?;
+                    return Ok(());
+                },
+                _ => { },
+            }
+        }
+        let body_flow = if statements && emit_match_is_match(body) { EmitFlow { arms_are_statements: true, ..inside } } else { inside };
+        if plain {
+            host.expr(walk, out, body, depth, body_flow, scope)?;
+            return Ok(());
+        }
+        match body {
+            Expr::Block(block, _) => {
+                let mut opening = taken_apart.to_owned();
+                for name in opened.iter() { opening.push_str(&format!("let {} = nikaia_std::boxed::open({}); ", name, name)); }
+                for name in copied.iter() { opening.push_str(&format!("let {} = *{}; ", name, name)); }
+                let tail = if statements { EmitTail::Statement } else { EmitTail::Value };
+                let trimmed: Option<String> = Some(opening.trim_end().to_owned());
+                host.block_opening_with(walk, out, block, depth, inside, scope, tail, trimmed)?;
+                return Ok(());
+            },
+            _ => { },
+        }
+        out.push("{ ");
+        out.push(&taken_apart);
+        for name in opened.iter() { out.push(&format!("let {} = nikaia_std::boxed::open({}); ", name, name)); }
+        for name in copied.iter() { out.push(&format!("let {} = *{}; ", name, name)); }
+        host.expr(walk, out, body, depth, body_flow, scope)?;
+        out.push(" }");
+        Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn emit_core_match_over_a_sum<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, sum: &str, arms: &[MatchArm], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+        let listed = self.sum_members(sum);
+        if listed.is_none() { return Err(nikaia_std::error::raise(EmitRefused { message: format!("There's no error set called `{}`.", sum), at: Some(flow.statement) }, &"emit_core_match_over_a_sum")); }
+        let members = match listed { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+        let mut home: Vec<i64> = vec![];
+        let mut catch_all = 0;
+        for arm in arms.iter() {
+            let mut at = -1;
+            let member = member_of(world.words, &self.declared_errors, world.library, &arm.pattern);
+            if member.is_some() {
+                let named = match member { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+                let mut k = 0;
+                for each in members.iter() {
+                    if *each == named && at < 0 { at = k; }
+                    k += 1;
+                }
+            }
+            if at < 0 { catch_all += 1; }
+            home.push(at);
+        }
+        if catch_all == 0 {
+            let covered = if members.len() > 1 { members.len() as i64 } else { 1 };
+            return Err(nikaia_std::error::raise(EmitRefused { message: format!("This `match error` needs an `else` arm: it covers {} error types, but other errors can arrive at a `catch` too. Add `else => throw error` to pass them on, or `else => …` to handle them.", covered), at: Some(flow.statement) }, &"emit_core_match_over_a_sum"));
+        }
+        let pad = "    ".repeat(nikaia_std::count::of(depth + 1));
+        let inner = "    ".repeat(nikaia_std::count::of(depth + 2));
+        let close = "    ".repeat(nikaia_std::count::of(depth));
+        out.push("match error {\n");
+        let mut m: i64 = 0;
+        for member in members.iter() {
+            let own = self.name_of_error(world, member) != 0;
+            let inside = EmitFlow { caught_named: own, ..flow };
+            let named_member: Option<String> = Some(member.to_owned());
+            let inside_scope = EmitScope { caught_member: named_member, ..scope.clone() };
+            let variant = sum_variant(member);
+            if own { out.push(&format!("{}crate::{}::{}(error) => {{ let (error, __nikaia_site) = error.split(); match error {{\n", pad, sum, variant)); } else { out.push(&format!("{}crate::{}::{}(error) => match error {{\n", pad, sum, variant)); }
+            for pass in 0..2 {
+                let mut k: i64 = 0;
+                for arm in arms.iter() {
+                    let mine = if pass == 0 { *nikaia_std::index::get(&home, nikaia_std::index::at(k)) == m } else { *nikaia_std::index::get(&home, nikaia_std::index::at(k)) < 0 };
+                    k += 1;
+                    if !mine { continue; }
+                    out.push(&inner);
+                    if pass == 1 { out.push("#[allow(unreachable_patterns)] "); }
+                    self.emit_core_pattern_written(world, walk, out, host, &arm.pattern, false, node_key(&arm.body), false, 0, depth + 2, inside, &inside_scope)?;
+                    if arm.guard.is_some() {
+                        out.push(" if ");
+                        let guard = match arm.guard.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+                        host.expr(walk, out, guard, depth + 2, inside, &inside_scope)?;
+                    }
+                    out.push(" => ");
+                    self.emit_core_arm_body_led(world, walk, out, host, &arm.pattern, 0, &arm.body, depth + 2, inside, &inside_scope, "")?;
+                    out.push(",\n");
+                }
+            }
+            if own { out.push(&format!("{}}} }},\n", pad)); } else { out.push(&format!("{}}},\n", pad)); }
+            m += 1;
+        }
+        out.push(&format!("{}}}", close));
+        Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn emit_core_match<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, value: &Expr, arms: &[MatchArm], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+        if scope.caught_sum.is_some() && emit_match_is_caught(world, value) {
+            let sum = match match scope.caught_sum.as_ref() {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            } { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+            self.emit_core_match_over_a_sum(world, walk, out, host, &sum, arms, depth, flow, scope)?;
+            return Ok(());
+        }
+        let answer = emit_match_yes_or_no(arms);
+        if answer.is_some() {
+            let mut inside_a_box = false;
+            for arm in arms.iter() { if self.looks_inside_a_box(world, &arm.pattern) { inside_a_box = true; } }
+            if !inside_a_box {
+                if !nikaia_std::index::or(answer, || true) { out.push("!"); }
+                out.push("matches!(");
+                host.expr(walk, out, value, depth, flow, scope)?;
+                out.push(", ");
+                let mut i: i64 = 0;
+                for arm in arms.iter() {
+                    if ((i + 1) as usize) < arms.len() {
+                        if i > 0 { out.push(" | "); }
+                        self.emit_core_pattern_written(world, walk, out, host, &arm.pattern, false, node_key(&arm.body), false, 0, depth + 1, flow, scope)?;
+                    }
+                    i += 1;
+                }
+                out.push(")");
+                return Ok(());
+            }
+        }
+        out.push("match ");
+        if self.facts.lent_scrutinees.contains(&node_key(value)) { out.push("&"); }
+        host.expr(walk, out, value, depth, flow, scope)?;
+        let pad = "    ".repeat(nikaia_std::count::of(depth + 1));
+        let close = "    ".repeat(nikaia_std::count::of(depth));
+        out.push(" {\n");
+        for arm in arms.iter() {
+            out.push(&pad);
+            let key = node_key(&arm.body);
+            if arm.guard.is_none() && !self.looks_inside_a_box(world, &arm.pattern) && self.facts.taking_arms.contains_key(&key) {
+                let stand_in = nikaia_std::index::or(self.facts.taking_arms.get(&key), || "").to_owned();
+                self.emit_core_pattern_written(world, walk, out, host, &arm.pattern, true, -1, false, 0, depth + 1, flow, scope)?;
+                out.push(" => ");
+                let mut place = EmitOut::empty();
+                host.expr(walk, &mut place, value, depth, flow, scope)?;
+                let mut place_text = place.buf.to_owned();
+                if !emit_match_is_variable(value) { place_text = format!("&mut {}", place.buf); }
+                let mut bound = EmitOut::empty();
+                self.emit_core_pattern_written(world, walk, &mut bound, host, &arm.pattern, false, -1, false, 0, depth + 1, flow, scope)?;
+                let lead = format!("let {} = std::mem::replace({}, {}) else {{ unreachable!(\"the pattern matched it\") }}; ", bound.buf, place_text, stand_in);
+                self.emit_core_arm_body_led(world, walk, out, host, &arm.pattern, 0, &arm.body, depth + 1, flow, scope, &lead)?;
+                out.push(",\n");
+                continue;
+            }
+            let nests = self.emit_core_pattern_written(world, walk, out, host, &arm.pattern, false, key, true, 0, depth + 1, flow, scope)?;
+            if arm.guard.is_some() && nests > 0 && self.facts.guards_inside_boxes.contains_key(&key) {
+                let guard = match arm.guard.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+                out.push(" if ");
+                for at in 0..nests {
+                    out.push(&format!("match nikaia_std::boxed::peek(&__nikaia_box{}) {{ ", at));
+                    self.emit_core_nest_written(world, walk, out, host, &arm.pattern, at, 0, false, depth + 1, flow, scope)?;
+                    out.push(" => ");
+                }
+                out.push("{ ");
+                for name in host.guard_copies(key) {
+                    let escaped = escaped_name(&name);
+                    out.push(&format!("let {} = *{}; ", escaped, escaped));
+                }
+                self.emit_core_guard_written(world, walk, out, host, &arm.pattern, guard, depth + 1, flow, scope)?;
+                out.push(" }");
+                for _ in 0..nests { out.push(", _ => false }"); }
+                out.push(" => ");
+                self.emit_core_arm_body_led(world, walk, out, host, &arm.pattern, nests, &arm.body, depth + 1, flow, scope, "")?;
+                out.push(",\n");
+                continue;
+            }
+            for at in 0..nests {
+                if at == 0 { out.push(" if "); } else { out.push(" && "); }
+                out.push(&format!("matches!(nikaia_std::boxed::peek(&__nikaia_box{}), ", at));
+                self.emit_core_nest_written(world, walk, out, host, &arm.pattern, at, 0, true, depth + 1, flow, scope)?;
+                out.push(")");
+            }
+            if arm.guard.is_some() {
+                let guard = match arm.guard.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+                if nests == 0 {
+                    out.push(" if ");
+                    self.emit_core_guard_written(world, walk, out, host, &arm.pattern, guard, depth + 1, flow, scope)?;
+                } else {
+                    out.push(" && (");
+                    self.emit_core_guard_written(world, walk, out, host, &arm.pattern, guard, depth + 1, flow, scope)?;
+                    out.push(")");
+                }
+            }
+            out.push(" => ");
+            self.emit_core_arm_body_led(world, walk, out, host, &arm.pattern, nests, &arm.body, depth + 1, flow, scope, "")?;
+            out.push(",\n");
+        }
+        out.push(&format!("{}}}", close));
+        Ok(())
+    }
+}
+
+fn emit_match_shorthand(world: &EmitWorld<'_>, field: &PatternField) -> bool {
+    match &field.pat {
+        MatchPattern::Path(one) => one.len() == 1 && emit_text(world, *nikaia_std::index::get(&one, 0)) == emit_text(world, field.name),
+        _ => false,
+    }
+}
+
+
 // --- emit_core_reads.nika ---
 
 fn emit_read_a_length(world: &EmitWorld<'_>, expr: &Expr) -> bool {
@@ -21735,6 +22118,8 @@ pub trait EmitHost {
     fn block_opening_with(&self, walk: &mut EmitWalk, out: &mut EmitOut, block: &Block, depth: i64, flow: EmitFlow, scope: &EmitScope, tail: EmitTail, opening: Option<String>) -> Result<(), Box<dyn std::error::Error>>;
     fn wrap_hole(&self, hole: &Expr, wraps: &Vec<(i64, winnow_grammar::Symbol)>) -> Expr;
     fn names_read(&self, expr: &Expr) -> Vec<String>;
+    fn copied_bindings(&self, at: i64) -> Vec<String>;
+    fn guard_copies(&self, at: i64) -> Vec<String>;
     fn overlaps_user_code(&self) -> bool;
 }
 
@@ -43814,6 +44199,7 @@ pub mod emit_core_below {
     pub use super::{EmitHeldFound, emit_held_in, emit_filled_at_once, emit_resize_args, emit_branch_values};
 }
 pub mod emit_core_leaves {}
+pub mod emit_core_match {}
 pub mod emit_core_reads {}
 pub mod emit_core_types {
     #[allow(unused_imports)]

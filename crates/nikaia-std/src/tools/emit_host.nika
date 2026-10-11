@@ -28,6 +28,14 @@ pub trait EmitHost {
     /// included, in the order the walk meets them (`sync::visit_expr`).
     fn names_read(ref self, expr: ref Expr) -> Vec[String] sync
 
+    /// The names bound out of a lent value that an arm copies out
+    /// (`check::Checked::copied_bindings`), for the arm whose body is at `at`.
+    fn copied_bindings(ref self, at: i64) -> Vec[String] sync
+
+    /// The names a guard reads inside a box that an arm copies out
+    /// (`check::Checked::guards_inside_boxes`), for the arm whose body is at `at`.
+    fn guard_copies(ref self, at: i64) -> Vec[String] sync
+
     /// `Build::overlaps_user_code`: user code may run on more than one thread.
     fn overlaps_user_code(ref self) -> bool sync
 }

@@ -1,0 +1,577 @@
+// crates/nikaia-std/src/tools/emit_core_match.nika
+//
+// **The `match` of the emitter's core** (ADR-294, #125, #558, E9 unit U4): the
+// `Expr::Match` arm of `expr_as_written` and everything only it calls - a
+// pattern as written, an arm's body, and a `match error` over a sum. Methods of
+// `EmitState`, `emit_core_*[H: EmitHost]`; the Rust `match_expr` is a one-line
+// stub. The boxed parts a pattern looks inside (ADR-246 D5) are not handed back
+// as references: `emit_core_pattern_written` counts them, and
+// `emit_core_nest_written` writes the one at a place, the traversal being the
+// same.
+
+/// Whether `value` is the name a `catch` binds its error to.
+fn emit_match_is_caught(world: ref EmitWorld, value: ref Expr) -> bool {
+    return match value {
+        Expr::Variable(name, _) => emit_text(world, name) == "error",
+        else => false,
+    }
+}
+
+fn emit_match_is_otherwise(pattern: ref MatchPattern) -> bool {
+    return match pattern {
+        MatchPattern::Otherwise => true,
+        else => false,
+    }
+}
+
+/// What a literal `true` or `false` says, where the expression is one.
+fn emit_match_bool(expr: ref Expr) -> bool? {
+    match expr {
+        Expr::LitBool(value, _) => return value,
+        else => {}
+    }
+    return null
+}
+
+fn emit_match_is_variable(expr: ref Expr) -> bool {
+    return match expr {
+        Expr::Variable(_, _) => true,
+        else => false,
+    }
+}
+
+fn emit_match_is_match(expr: ref Expr) -> bool {
+    return match expr {
+        Expr::Match { .. } => true,
+        else => false,
+    }
+}
+
+/// What every arm but the last answers, where a `match` is one that only says
+/// `true` or `false`: those arms one answer, a last `else` the other, and no
+/// guard anywhere. `null` for every other `match`.
+fn emit_match_yes_or_no(arms: ref Vec[MatchArm]) -> bool? {
+    let count = arms.len()
+    if count < 2 {
+        return null
+    }
+    let mut last_otherwise = false
+    let mut any_guard = false
+    let mut otherwise = false
+    let mut k = 0
+    for arm in arms {
+        k += 1
+        if arm.guard != null {
+            any_guard = true
+        }
+        if k == count {
+            last_otherwise = emit_match_is_otherwise(arm.pattern)
+            let said = emit_match_bool(arm.body) ?? return null
+            otherwise = said
+        }
+    }
+    if !last_otherwise || any_guard {
+        return null
+    }
+    k = 0
+    for arm in arms {
+        k += 1
+        if k < count {
+            let said = emit_match_bool(arm.body) ?? return null
+            if said == otherwise {
+                return null
+            }
+        }
+    }
+    return !otherwise
+}
+
+/// The path of a pattern, as Rust writes it.
+fn emit_match_path(world: ref EmitWorld, path: ref Vec[winnow_grammar::Symbol]) -> String {
+    let mut parts: Vec[String] = []
+    for each in path {
+        parts.push(emit_text(world, each))
+    }
+    return parts.join("::")
+}
+
+impl EmitState {
+    /// A name a pattern binds, as it is written: `_` where the names are not
+    /// wanted, `ref n` where the arm only reads it (`lent_key` is the arm's body,
+    /// whose lent names the checker recorded; `-1` for none).
+    fn emit_match_bound(ref self, world: ref EmitWorld, name: winnow_grammar::Symbol, wild: bool, lent_key: i64) -> String {
+        if wild {
+            return "_"
+        }
+        let text = emit_text(world, name)
+        if lent_key < 0 || !self.facts.lent_bindings.contains_key(lent_key) {
+            return text
+        }
+        let lent = self.facts.lent_bindings.get(lent_key) ?? return text
+        if lent.contains(text) {
+            return f"ref {text}"
+        }
+        return text
+    }
+
+    /// The pattern as written. `wild` writes `_` for every name (and leaves the
+    /// shorthand fields to a `..`); `lent_key` says which names are lent. With
+    /// `collect`, each boxed part the pattern looks inside is written as a fresh
+    /// name, `__nikaia_box0`, `__nikaia_box1`, ... in the order they are met,
+    /// numbered from `found`; what comes back is the number of them so far.
+    pub fn emit_core_pattern_written[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, pattern: ref MatchPattern, wild: bool, lent_key: i64, collect: bool, found: i64, depth: i64, flow: EmitFlow, scope: ref EmitScope) -> i64 sync throws {
+        let mut n = found
+        match pattern {
+            // Rust's own catch-all, which is what the arm was before (ADR-291 D18).
+            MatchPattern::Otherwise => out.push("_"),
+            MatchPattern::Literal(value) => host.expr(walk, out, value, depth, flow, scope),
+            MatchPattern::Path(p) => {
+                if p.len() == 1 {
+                    for one in p {
+                        out.push(self.emit_match_bound(world, one, wild, lent_key))
+                    }
+                } else {
+                    out.push(emit_match_path(world, p))
+                }
+            },
+            // **The parts are patterns**, so this recurses (ADR-291 D10). An empty
+            // path is the bare tuple `(0, 0)`, which names no type.
+            MatchPattern::Tuple { path, parts } => {
+                out.push(emit_match_path(world, path))
+                out.push("(")
+                let mut i = 0
+                for part in parts {
+                    if i > 0 {
+                        out.push(", ")
+                    }
+                    let nests = collect && self.boxed_part(world, path, i) && !binds_a_part(part)
+                    i += 1
+                    if nests {
+                        out.push(f"__nikaia_box{n}")
+                        n += 1
+                        continue
+                    }
+                    n = self.emit_core_pattern_written(world, walk, out, host, part, wild, lent_key, collect, n, depth, flow, scope)
+                }
+                out.push(")")
+            },
+            // **A field takes a pattern** (ADR-291 D25), written as Rust writes it:
+            // a binding of the field's own name is the shorthand, any other
+            // pattern follows `field: `. Where the names are not wanted the
+            // shorthand fields are the rest.
+            MatchPattern::Named { path, fields, rest } => {
+                out.push(f"{emit_match_path(world, path)} {{ ")
+                let mut first = true
+                let mut open = rest
+                for field in fields {
+                    let shorthand = emit_match_shorthand(world, field)
+                    if shorthand && wild {
+                        open = true
+                        continue
+                    }
+                    if !first {
+                        out.push(", ")
+                    }
+                    first = false
+                    if shorthand {
+                        out.push(self.emit_match_bound(world, field.name, wild, lent_key))
+                    } else {
+                        out.push(f"{emit_text(world, field.name)}: ")
+                        n = self.emit_core_pattern_written(world, walk, out, host, field.pat, wild, lent_key, collect, n, depth, flow, scope)
+                    }
+                }
+                if open || first {
+                    if !first {
+                        out.push(", ")
+                    }
+                    out.push("..")
+                }
+                out.push(" }")
+            },
+            MatchPattern::Or(alternatives) => {
+                let mut i = 0
+                for alternative in alternatives {
+                    if i > 0 {
+                        out.push(" | ")
+                    }
+                    i += 1
+                    n = self.emit_core_pattern_written(world, walk, out, host, alternative, wild, lent_key, collect, n, depth, flow, scope)
+                }
+            },
+            // **`..=`, because a pattern's range includes both ends** (D3) and
+            // that is how the language below spells one.
+            MatchPattern::Range { start, end } => {
+                host.expr(walk, out, start, depth, flow, scope)
+                out.push("..=")
+                host.expr(walk, out, end, depth, flow, scope)
+            },
+        }
+        return n
+    }
+
+    /// The boxed part number `wanted` of a pattern (numbered as
+    /// `emit_core_pattern_written` numbers them from `before`), written with the
+    /// names bound (`wild` off) or as `_` (on). What comes back is the number of
+    /// boxed parts in this pattern, so that the walk can go on counting.
+    pub fn emit_core_nest_written[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, pattern: ref MatchPattern, wanted: i64, before: i64, wild: bool, depth: i64, flow: EmitFlow, scope: ref EmitScope) -> i64 sync throws {
+        let mut n = before
+        match pattern {
+            MatchPattern::Tuple { path, parts } => {
+                let mut i = 0
+                for part in parts {
+                    let nests = self.boxed_part(world, path, i) && !binds_a_part(part)
+                    i += 1
+                    if nests {
+                        if n == wanted {
+                            self.emit_core_pattern_written(world, walk, out, host, part, wild, -1, false, 0, depth, flow, scope)
+                        }
+                        n += 1
+                        continue
+                    }
+                    n = self.emit_core_nest_written(world, walk, out, host, part, wanted, n, wild, depth, flow, scope)
+                }
+            },
+            MatchPattern::Named { fields, .. } => {
+                for field in fields {
+                    if !emit_match_shorthand(world, field) {
+                        n = self.emit_core_nest_written(world, walk, out, host, field.pat, wanted, n, wild, depth, flow, scope)
+                    }
+                }
+            },
+            MatchPattern::Or(alternatives) => {
+                for alternative in alternatives {
+                    n = self.emit_core_nest_written(world, walk, out, host, alternative, wanted, n, wild, depth, flow, scope)
+                }
+            },
+            else => {}
+        }
+        return n
+    }
+
+    /// **An arm, with each name bound out of a box taken out of it first**
+    /// (ADR-246 D2): `boxed::open` makes a `T` of a `Box<T>` and a `&T` of a
+    /// `&Box<T>`, so the arm reads the name as the pattern's type says. First
+    /// taking apart each boxed part the pattern looked inside (D5: the guard has
+    /// already said it has the shape), and with a line of its own first (`lead`):
+    /// the arm that takes the value out of its place says so before anything else.
+    pub fn emit_core_arm_body_led[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, pattern: ref MatchPattern, nest_count: i64, body: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope, lead: ref String) sync throws {
+        let mut taken_apart = lead.clone()
+        for at in 0..<nest_count {
+            let mut written = EmitOut::empty()
+            self.emit_core_nest_written(world, walk, written, host, pattern, at, 0, false, depth, flow, scope)
+            taken_apart.push_str(f"let __nikaia_box{at} = nikaia_std::boxed::open(__nikaia_box{at}); let {written.buf} = __nikaia_box{at} else {{ unreachable!(\"the guard matched it\") }}; ")
+        }
+        let opened = self.boxed_bindings(world, pattern)
+        // **And a number bound out of a lent value is copied out** (0.0.236,
+        // `check::Checked::copied_bindings`).
+        let copied = host.copied_bindings(node_key(body))
+        // Only the arm's own block is a statement; what it holds is emitted as it
+        // would be anywhere.
+        let statements = flow.arms_are_statements
+        let inside = flow with { arms_are_statements: false }
+        let plain = opened.len() == 0 && copied.len() == 0 && nest_count == 0 && lead.len() == 0
+        if statements && plain {
+            match body {
+                Expr::Block(block, _) => {
+                    self.emit_core_block(world, walk, out, host, block, depth, inside, scope, EmitTail::Statement)
+                    return
+                },
+                else => {}
+            }
+        }
+        // **A `match` that is an arm's whole body is that arm's statement**, so its
+        // own arms are statements too: an `if` without an `else` that ends one of
+        // them is a statement and not the arm's value.
+        let body_flow = if statements && emit_match_is_match(body) { inside with { arms_are_statements: true } } else { inside }
+        if plain {
+            host.expr(walk, out, body, depth, body_flow, scope)
+            return
+        }
+        // **A block arm opens with the names it binds**, inside its own braces: a
+        // second pair around it was `unused_braces` in every generated file with
+        // one.
+        match body {
+            Expr::Block(block, _) => {
+                let mut opening = taken_apart.clone()
+                for name in opened {
+                    opening.push_str(f"let {name} = nikaia_std::boxed::open({name}); ")
+                }
+                for name in copied {
+                    opening.push_str(f"let {name} = *{name}; ")
+                }
+                let tail = if statements { EmitTail::Statement } else { EmitTail::Value }
+                let trimmed: String? = opening.trim_end().clone()
+                host.block_opening_with(walk, out, block, depth, inside, scope, tail, trimmed)
+                return
+            },
+            else => {}
+        }
+        out.push("{ ")
+        out.push(taken_apart)
+        for name in opened {
+            out.push(f"let {name} = nikaia_std::boxed::open({name}); ")
+        }
+        for name in copied {
+            out.push(f"let {name} = *{name}; ")
+        }
+        host.expr(walk, out, body, depth, body_flow, scope)
+        out.push(" }")
+    }
+
+    /// **`match error { .. }` in a handler whose error travels in a sum** (ADR-280
+    /// D17): one match per member, carrying the arms whose patterns name that
+    /// member's variants, and the source's catch-all written into each of them -
+    /// because Rust has no fall-through and the members are separate types. An arm
+    /// that names no member at all (a bare name, `else`, a literal) is the
+    /// catch-all.
+    pub fn emit_core_match_over_a_sum[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, sum: ref String, arms: ref Vec[MatchArm], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        // **Every member of the sum gets an arm**, and not only the ones the source
+        // named: the sum is a Rust `enum` and a `match` over it has to cover it.
+        let listed = self.sum_members(sum)
+        if listed == null {
+            throw EmitRefused { message: f"There's no error set called `{sum}`.", at: flow.statement }
+        }
+        let members = listed ?? return
+        // Which member each arm belongs to, `-1` for the catch-all. A variant of a
+        // type that is **not** in this set cannot arrive here; it stays with the
+        // catch-all rather than being dropped.
+        let mut home: Vec[i64] = []
+        let mut catch_all = 0
+        for arm in arms {
+            let mut at = -1
+            let member = member_of(world.words, self.declared_errors, world.library, arm.pattern)
+            if member != null {
+                let named = member ?? return
+                let mut k = 0
+                for each in members {
+                    if each == named && at < 0 {
+                        at = k
+                    }
+                    k += 1
+                }
+            }
+            if at < 0 {
+                catch_all += 1
+            }
+            home.push(at)
+        }
+        // **The set of error types is open** (ADR-023 D4), so no `match` over it can
+        // be exhaustive and every one of them needs a catch-all.
+        if catch_all == 0 {
+            let covered = if members.len() > 1 { members.len() } else { 1 }
+            throw EmitRefused { message: f"This `match error` needs an `else` arm: it covers {covered} error types, but other errors can arrive at a `catch` too. Add `else => throw error` to pass them on, or `else => …` to handle them.", at: flow.statement }
+        }
+        let pad = "    ".repeat(depth + 1)
+        let inner = "    ".repeat(depth + 2)
+        let close = "    ".repeat(depth)
+        out.push("match error {\n")
+        let mut m = 0
+        for member in members {
+            // **A member the program declares travels in its envelope** (ADR-280
+            // D13), so the value the patterns are about is what the envelope holds
+            // - and the site is kept in a local beside it, for the arm that passes
+            // the error on.
+            let own = self.name_of_error(world, member) != 0
+            let inside = flow with { caught_named: own }
+            let named_member: String? = member.clone()
+            let inside_scope = scope.clone() with { caught_member: named_member }
+            let variant = sum_variant(member)
+            if own {
+                out.push(f"{pad}crate::{sum}::{variant}(error) => {{ let (error, __nikaia_site) = error.split(); match error {{\n")
+            } else {
+                out.push(f"{pad}crate::{sum}::{variant}(error) => match error {{\n")
+            }
+            // The member's own arms, then the catch-all.
+            for pass in 0..<2 {
+                let mut k = 0
+                for arm in arms {
+                    let mine = if pass == 0 { home[k] == m } else { home[k] < 0 }
+                    k += 1
+                    if !mine {
+                        continue
+                    }
+                    out.push(inner)
+                    // **The catch-all is copied into every member's half**, and in
+                    // one whose own arms already name each variant (an `enum` with a
+                    // single case) the copy cannot be reached. The source's `else`
+                    // is required (ADR-023 D4) and reaches the other members, so
+                    // what `rustc` would warn about is the copy (#542).
+                    if pass == 1 {
+                        out.push("#[allow(unreachable_patterns)] ")
+                    }
+                    self.emit_core_pattern_written(world, walk, out, host, arm.pattern, false, node_key(arm.body), false, 0, depth + 2, inside, inside_scope)
+                    if arm.guard != null {
+                        out.push(" if ")
+                        let guard = arm.guard ?? return
+                        host.expr(walk, out, guard, depth + 2, inside, inside_scope)
+                    }
+                    out.push(" => ")
+                    self.emit_core_arm_body_led(world, walk, out, host, arm.pattern, 0, arm.body, depth + 2, inside, inside_scope, "")
+                    out.push(",\n")
+                }
+            }
+            if own {
+                out.push(f"{pad}}} }},\n")
+            } else {
+                out.push(f"{pad}}},\n")
+            }
+            m += 1
+        }
+        out.push(f"{close}}}")
+    }
+
+    /// **A `match`** (Part I 3.4): the arms as Rust's own, each with its pattern,
+    /// guard and body; a `match` that only answers `true` or `false` as a
+    /// `matches!` (0.0.249); one over the error a `catch` binds, where that
+    /// travels in a sum, taken apart by member (ADR-280 D17).
+    pub fn emit_core_match[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, value: ref Expr, arms: ref Vec[MatchArm], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        // **A `match error` over a sum is taken apart by member** (ADR-280 D17).
+        // The patterns the source writes name variants of the **members** -
+        // `ConfigError::Empty(p)` and `io::IoError::NotFound(p)` in one block -
+        // because the sum is a name no program writes (ADR-023 D4). So one match
+        // becomes a match per member with the arms that belong to it, and the
+        // catch-all is what every one of them falls through to.
+        if scope.caught_sum != null && emit_match_is_caught(world, value) {
+            let sum = scope.caught_sum?.clone() ?? return
+            self.emit_core_match_over_a_sum(world, walk, out, host, sum, arms, depth, flow, scope)
+            return
+        }
+        // **A `match` that only answers `true` or `false` is a `matches!`** (0.0.249):
+        // the arms that say one answer, and `else` the other.
+        let answer = emit_match_yes_or_no(arms)
+        if answer != null {
+            let mut inside_a_box = false
+            for arm in arms {
+                if self.looks_inside_a_box(world, arm.pattern) {
+                    inside_a_box = true
+                }
+            }
+            if !inside_a_box {
+                if !(answer ?? true) {
+                    out.push("!")
+                }
+                out.push("matches!(")
+                host.expr(walk, out, value, depth, flow, scope)
+                out.push(", ")
+                let mut i = 0
+                for arm in arms {
+                    if i + 1 < arms.len() {
+                        if i > 0 {
+                            out.push(" | ")
+                        }
+                        self.emit_core_pattern_written(world, walk, out, host, arm.pattern, false, node_key(arm.body), false, 0, depth + 1, flow, scope)
+                    }
+                    i += 1
+                }
+                out.push(")")
+                return
+            }
+        }
+        out.push("match ")
+        // A field reached through a view is matched by reference
+        // (`check::Checked::lent_scrutinees`).
+        if self.facts.lent_scrutinees.contains(node_key(value)) {
+            out.push("&")
+        }
+        host.expr(walk, out, value, depth, flow, scope)
+        let pad = "    ".repeat(depth + 1)
+        let close = "    ".repeat(depth)
+        out.push(" {\n")
+        for arm in arms {
+            out.push(pad)
+            let key = node_key(arm.body)
+            // **An arm that takes a part out of a `mut` parameter works on the value
+            // taken out of the place** (ADR-094 D7, #576): the place holds a
+            // stand-in meanwhile, the arm binds the parts by value, and writes the
+            // whole back with its assignment. The first `match` only chooses the
+            // arm, so it binds nothing.
+            if arm.guard == null && !self.looks_inside_a_box(world, arm.pattern) && self.facts.taking_arms.contains_key(key) {
+                let stand_in = (self.facts.taking_arms.get(key) ?? "").clone()
+                self.emit_core_pattern_written(world, walk, out, host, arm.pattern, true, -1, false, 0, depth + 1, flow, scope)
+                out.push(" => ")
+                let mut place = EmitOut::empty()
+                host.expr(walk, place, value, depth, flow, scope)
+                let mut place_text = place.buf.clone()
+                if !emit_match_is_variable(value) {
+                    place_text = f"&mut {place.buf}"
+                }
+                let mut bound = EmitOut::empty()
+                self.emit_core_pattern_written(world, walk, bound, host, arm.pattern, false, -1, false, 0, depth + 1, flow, scope)
+                let lead = f"let {bound.buf} = std::mem::replace({place_text}, {stand_in}) else {{ unreachable!(\"the pattern matched it\") }}; "
+                self.emit_core_arm_body_led(world, walk, out, host, arm.pattern, 0, arm.body, depth + 1, flow, scope, lead)
+                out.push(",\n")
+                continue
+            }
+            // **A part looked into through its box** (ADR-246 D5): the language
+            // below matches no pattern through a box, so the part is bound to a
+            // fresh name, the guard asks whether it has the shape (the next arm is
+            // tried where it does not, as for any pattern), and the arm takes it
+            // apart before anything else.
+            let nests = self.emit_core_pattern_written(world, walk, out, host, arm.pattern, false, key, true, 0, depth + 1, flow, scope)
+            // **A guard that reads a name bound in there** (ADR-246 D5 item 2): the
+            // shape is asked by a `match` through the box that binds the names - by
+            // reference, and a number copied out - and answers the guard where it
+            // fits and `false` where it does not.
+            if arm.guard != null && nests > 0 && self.facts.guards_inside_boxes.contains_key(key) {
+                let guard = arm.guard ?? return
+                out.push(" if ")
+                for at in 0..<nests {
+                    out.push(f"match nikaia_std::boxed::peek(&__nikaia_box{at}) {{ ")
+                    self.emit_core_nest_written(world, walk, out, host, arm.pattern, at, 0, false, depth + 1, flow, scope)
+                    out.push(" => ")
+                }
+                out.push("{ ")
+                for name in host.guard_copies(key) {
+                    let escaped = escaped_name(name)
+                    out.push(f"let {escaped} = *{escaped}; ")
+                }
+                self.emit_core_guard_written(world, walk, out, host, arm.pattern, guard, depth + 1, flow, scope)
+                out.push(" }")
+                for _ in 0..<nests {
+                    out.push(", _ => false }")
+                }
+                out.push(" => ")
+                self.emit_core_arm_body_led(world, walk, out, host, arm.pattern, nests, arm.body, depth + 1, flow, scope, "")
+                out.push(",\n")
+                continue
+            }
+            for at in 0..<nests {
+                if at == 0 {
+                    out.push(" if ")
+                } else {
+                    out.push(" && ")
+                }
+                out.push(f"matches!(nikaia_std::boxed::peek(&__nikaia_box{at}), ")
+                self.emit_core_nest_written(world, walk, out, host, arm.pattern, at, 0, true, depth + 1, flow, scope)
+                out.push(")")
+            }
+            // **The guard is Rust's own** (ADR-291 D2), written with the same word,
+            // so this is a transcription like everything else about a pattern.
+            if arm.guard != null {
+                let guard = arm.guard ?? return
+                // In parentheses only beside the conditions above, where an `||` in
+                // it would otherwise bind wider.
+                if nests == 0 {
+                    out.push(" if ")
+                    self.emit_core_guard_written(world, walk, out, host, arm.pattern, guard, depth + 1, flow, scope)
+                } else {
+                    out.push(" && (")
+                    self.emit_core_guard_written(world, walk, out, host, arm.pattern, guard, depth + 1, flow, scope)
+                    out.push(")")
+                }
+            }
+            out.push(" => ")
+            self.emit_core_arm_body_led(world, walk, out, host, arm.pattern, nests, arm.body, depth + 1, flow, scope, "")
+            out.push(",\n")
+        }
+        out.push(f"{close}}}")
+    }
+}
+
+/// Whether a field's pattern is its own name: the shorthand.
+fn emit_match_shorthand(world: ref EmitWorld, field: ref PatternField) -> bool {
+    return match field.pat {
+        MatchPattern::Path(one) => one.len() == 1 && emit_text(world, one[0]) == emit_text(world, field.name),
+        else => false,
+    }
+}
