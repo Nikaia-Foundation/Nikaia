@@ -46,7 +46,7 @@ pub enum EmitLifetimes {
     Inner,
     /// `&'static ` and `'static`.
     Static,
-    /// `&'p ` and `'p`.
+    /// `&'r ` and `'r`.
     Shared,
     /// `&'k ` and `'k`.
     Kept,
@@ -56,9 +56,11 @@ pub enum EmitLifetimes {
     Long,
     /// `&'e ` and `'e`.
     Each,
+    /// `&` and `'r`: a loan of its own over a buffer named `'r`.
+    Within,
     /// `&'static ` and `'a`.
     StaticIn,
-    /// `&'p ` and `'a`.
+    /// `&'r ` and `'a`.
     SharedIn,
     /// `&'k ` and `'a`.
     KeptIn,
@@ -74,7 +76,7 @@ pub enum EmitLifetimes {
     OfInputElided,
     /// `&'a ` and `'static`.
     OfInputStatic,
-    /// `&'a ` and `'p`.
+    /// `&'a ` and `'r`.
     OfInputShared,
     /// `&'a ` and `'k`.
     OfInputKept,
@@ -92,13 +94,14 @@ impl EmitLifetimes {
             EmitLifetimes::Elided => "&",
             EmitLifetimes::Inner => "&",
             EmitLifetimes::Static => "&'static ",
-            EmitLifetimes::Shared => "&'p ",
+            EmitLifetimes::Shared => "&'r ",
             EmitLifetimes::Kept => "&'k ",
             EmitLifetimes::Shortened => "&'s ",
             EmitLifetimes::Long => "&'long ",
             EmitLifetimes::Each => "&'e ",
+            EmitLifetimes::Within => "&",
             EmitLifetimes::StaticIn => "&'static ",
-            EmitLifetimes::SharedIn => "&'p ",
+            EmitLifetimes::SharedIn => "&'r ",
             EmitLifetimes::KeptIn => "&'k ",
             EmitLifetimes::ShortenedIn => "&'s ",
             EmitLifetimes::LongIn => "&'long ",
@@ -114,11 +117,12 @@ impl EmitLifetimes {
             EmitLifetimes::Elided => "'_",
             EmitLifetimes::Inner => "'a",
             EmitLifetimes::Static => "'static",
-            EmitLifetimes::Shared => "'p",
+            EmitLifetimes::Shared => "'r",
             EmitLifetimes::Kept => "'k",
             EmitLifetimes::Shortened => "'s",
             EmitLifetimes::Long => "'long",
             EmitLifetimes::Each => "'e",
+            EmitLifetimes::Within => "'r",
             EmitLifetimes::StaticIn => "'a",
             EmitLifetimes::SharedIn => "'a",
             EmitLifetimes::KeptIn => "'a",
@@ -128,7 +132,7 @@ impl EmitLifetimes {
             EmitLifetimes::OfInputEach => "'e",
             EmitLifetimes::OfInputElided => "'_",
             EmitLifetimes::OfInputStatic => "'static",
-            EmitLifetimes::OfInputShared => "'p",
+            EmitLifetimes::OfInputShared => "'r",
             EmitLifetimes::OfInputKept => "'k",
             EmitLifetimes::OfInputShortened => "'s",
             EmitLifetimes::OfInputLong => "'long",

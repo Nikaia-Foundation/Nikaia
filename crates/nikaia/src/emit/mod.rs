@@ -1218,6 +1218,9 @@ const ARM_VALUE: &str = "__nikaia_value";
 const SEQUENCE: &str = "__nikaia_sequence";
 
 /// The slot a function's result is filed under, as `contracts::sharing` keys it.
+/// Whether a result whose source set is empty is written `'static`.
+const EMPTY_SET_IS_STATIC: bool = true;
+
 const SHARED_RESULT: &str = "<result>";
 
 /// The pseudo-function a `<struct>.<field>` slot is filed under, the same.
@@ -3136,25 +3139,6 @@ impl<'p> Emitter<'p> {
             }
             _ => None,
         };
-        let how = |name: Symbol| {
-            if let Some(kept) = kept.filter(|_| self.tethered_position(&key, self.text(name))) {
-                return kept;
-            }
-            if inner_views == Some(name) {
-                return Lifetimes::Named;
-            }
-            let viewed = args.iter().any(|a| a.name == name && a.ty.is_view);
-            match (
-                carries_input.is_some_and(|set| set.contains(self.text(name))),
-                viewed,
-            ) {
-                (true, true) => lifetimes.of_the_input(),
-                // **A struct parameter that carries a view parameter's buffer**
-                // is written over it: `s: &mut Summary<'a>, name: &'a str`.
-                (true, false) => lifetimes.over_the_input(),
-                (false, _) => lifetimes,
-            }
-        };
         // **A parameter the body does not keep is a view**
         // ([ADR-094](../../docs/specification/adr/adr-094.md) D2). The `&` is
         // written here, in the declaration, and at the call — one answer read
@@ -3178,22 +3162,115 @@ impl<'p> Emitter<'p> {
                         )
                 })
         };
-        // **Two or more of them and a view handed back** (D24): they and the
-        // result share one named lifetime, `'p`.
-        let shared = lifetimes == Lifetimes::Elided
-            && receiver.is_none()
-            && kept.is_none()
+        // **A result points into one parameter, and the signature says which**
+        // ([ADR-283](../../docs/specification/adr/adr-283.md) D25): the ledger's
+        // `ref(..)` is what the body was read to, and the one parameter in it
+        // and the result share one named lifetime, `'r`; no other parameter is
+        // tied. With none, the result borrows from nothing a caller passed:
+        // `'static`, or the keep's. The receiver alone is the elision's own
+        // answer and needs nothing written.
+        let result_is_a_view = ret_type
+            .as_ref()
+            .is_some_and(|ty| self.text(ty.name) != SELF_DSL && self.carries_a_view(ty));
+        let plain_signature = matches!(lifetimes, Lifetimes::Elided | Lifetimes::Inner)
             && inner_views.is_none()
             && carries_input.is_none_or(|set| set.is_empty())
+            && result_is_a_view;
+        let result_borrows: Option<&Vec<String>> = lent.map(|c| &c.borrows);
+        let lowered_views = args
+            .iter()
+            .enumerate()
+            .filter(|(at, a)| lowered_as_a_view(*at, a))
+            .count();
+        let source_at: Option<usize> = match result_borrows {
+            Some(named) if plain_signature && named.len() == 1 && named[0] != "self" => args
+                .iter()
+                .position(|a| self.text(a.name) == named[0])
+                .filter(|at| lowered_as_a_view(*at, &args[*at]))
+                .filter(|at| {
+                    // A parameter that holds views of its own has two
+                    // lifetimes, which elision cannot choose between.
+                    let a = &args[*at];
+                    let loan = a.ty.is_view
+                        || lent.is_some_and(|c| {
+                            crate::contracts::keeps::lends_in_own(
+                                c,
+                                *at + usize::from(receiver.is_some()),
+                                &[self.world.library, &self.s.described],
+                            )
+                        });
+                    receiver.is_some()
+                        || lowered_views > 1
+                        || kept.is_some()
+                        || (loan
+                            && self.carries_a_view(&a.ty)
+                            && (self.borrows(a.ty.name)
+                                || a.ty.generics.iter().any(|g| self.carries_a_view(g))))
+                }),
+            _ => None,
+        };
+        // **An option is a parameter too**: a view among them is the source
+        // where the body hands it back.
+        let source_option: Option<usize> = match result_borrows {
+            Some(named) if plain_signature && named.len() == 1 && source_at.is_none() => config
+                .iter()
+                .position(|c| self.text(c.name) == named[0] && self.carries_a_view(&c.ty)),
+            _ => None,
+        };
+        // **What the parameter's views point into, not the parameter**: a
+        // `ref` to a struct (or a list) of views has the loan and the buffer,
+        // and the result is the buffer's - `&Txt<'r>` and `&'r str`.
+        let source_nested = source_at.is_some_and(|at| {
+            let a = &args[at];
+            self.carries_a_view(&a.ty)
+                && self.borrows(a.ty.name)
+                && a.ty.generics.is_empty()
+                && ret_type.as_ref().is_some_and(|r| r.name != a.ty.name)
+        });
+        let source_name: Option<Symbol> = source_at
+            .map(|at| args[at].name)
+            .or(source_option.map(|at| config[at].name));
+        // **Tied to the keep** where a way out hands back a view of a buffer
+        // the body made (D23) as well: one lifetime over both.
+        let source_kept = source_name.is_some()
+            && kept.is_some()
+            && self.tethered_position(&key, crate::contracts::tether::RESULT);
+        let shared = source_name.is_some() && !source_kept;
+        // **No parameter at all**: the literal outlives everything. Not with a
+        // keep, whose buffers the result may point into.
+        let nothing_borrowed = EMPTY_SET_IS_STATIC
+            && lifetimes == Lifetimes::Elided
+            && plain_signature
+            && kept.is_none()
+            && result_borrows.is_some_and(|named| named.is_empty())
             && ret_type
                 .as_ref()
-                .is_some_and(|ty| self.text(ty.name) != SELF_DSL && self.carries_a_view(ty))
-            && args
-                .iter()
-                .enumerate()
-                .filter(|(at, a)| lowered_as_a_view(*at, a))
-                .count()
-                > 1;
+                .is_some_and(nikaia_std::tools::views::holds_view)
+            && (receiver.is_some()
+                || lowered_views > 0
+                || args.iter().any(|a| self.carries_a_view(&a.ty)));
+        let how = |name: Symbol| {
+            if let Some(kept) = kept.filter(|_| self.tethered_position(&key, self.text(name))) {
+                return kept;
+            }
+            if let (Some(kept), true) = (kept, source_kept && source_name == Some(name)) {
+                return kept;
+            }
+            if inner_views == Some(name) {
+                return Lifetimes::Named;
+            }
+            let viewed = args.iter().any(|a| a.name == name && a.ty.is_view);
+            match (
+                carries_input.is_some_and(|set| set.contains(self.text(name))),
+                viewed,
+            ) {
+                (true, true) => lifetimes.of_the_input(),
+                // **A struct parameter that carries a view parameter's buffer**
+                // is written over it: `s: &mut Summary<'a>, name: &'a str`.
+                (true, false) => lifetimes.over_the_input(),
+                (false, _) => lifetimes,
+            }
+        };
         // **`xs: Array[T]` is an array of any length, and the call says which**
         // ([ADR-184](../../docs/specification/adr/adr-184.md) D3). The language
         // below has the same shape and the same name for it — a `const`
@@ -3222,6 +3299,7 @@ impl<'p> Emitter<'p> {
             .collect();
         let mut either_first: Vec<String> = Vec::new();
         params.extend(args.iter().enumerate().map(|(at, a)| {
+            let is_source = source_at == Some(at);
             // The **source** name is what a `Shared` position is counted by
             // (`count_at`), and the **escaped** one is what is written: two uses
             // of one name that must not be collapsed, or the lookup misses on
@@ -3248,9 +3326,13 @@ impl<'p> Emitter<'p> {
                 .and_then(|c| c.signature.as_ref())
                 .is_some_and(|s| s.mutable.iter().any(|m| m == name));
             let reference = if changes {
-                match shared {
-                    true => "&'p mut ",
-                    false => "&mut ",
+                match (
+                    is_source && shared && !source_nested,
+                    is_source && source_kept,
+                ) {
+                    (true, _) => "&'r mut ",
+                    (_, true) => "&'k mut ",
+                    _ => "&mut ",
                 }
             } else if lent.is_some_and(|c| {
                 crate::contracts::keeps::lends_in_own(
@@ -3260,9 +3342,13 @@ impl<'p> Emitter<'p> {
                 )
             }) && !written_as_a_view
             {
-                match shared {
-                    true => "&'p ",
-                    false => "&",
+                match (
+                    is_source && shared && !source_nested,
+                    is_source && source_kept,
+                ) {
+                    (true, _) => "&'r ",
+                    (_, true) => "&'k ",
+                    _ => "&",
                 }
             } else {
                 ""
@@ -3293,9 +3379,10 @@ impl<'p> Emitter<'p> {
                     let held =
                         self.walking(|w| std::mem::replace(&mut w.code_parameter_runs, runs));
                     let inside = self.walking(|w| std::mem::replace(&mut w.in_parameter, true));
-                    let position = match shared {
-                        true => Lifetimes::Shared,
-                        false => how(a.name),
+                    let position = match (is_source && shared, source_nested) {
+                        (true, true) => Lifetimes::Within,
+                        (true, false) => Lifetimes::Shared,
+                        _ => how(a.name),
                     };
                     let written = self.ty_counted(&a.ty, position, self.count_at(&key, name));
                     self.walking(|w| w.in_parameter = inside);
@@ -3330,8 +3417,8 @@ impl<'p> Emitter<'p> {
                 && !a.ty.is_slice
                 && written.ends_with('>');
             let written = match (reference, plain_text, plain_list) {
-                ("&" | "&'p ", true, _) => "str".to_string(),
-                ("&" | "&'p ", _, true) if written.starts_with("Vec<") => {
+                ("&" | "&'r " | "&'k ", true, _) => "str".to_string(),
+                ("&" | "&'r " | "&'k ", _, true) if written.starts_with("Vec<") => {
                     format!("[{}]", &written[4..written.len() - 1])
                 }
                 ("", _, true) if written.starts_with("&Vec<") => {
@@ -3363,12 +3450,16 @@ impl<'p> Emitter<'p> {
         // order, which is the order every call site fills in. The names stay
         // the source's, so a `rustc` diagnostic about one still lands on the
         // parameter the programmer wrote (ADR-300).
-        params.extend(config.iter().map(|c| {
+        params.extend(config.iter().enumerate().map(|(at, c)| {
             let name = self.text(c.name);
+            let position = match source_option == Some(at) && shared {
+                true => Lifetimes::Shared,
+                false => how(c.name),
+            };
             format!(
                 "{}: {}",
                 escaped(name),
-                self.ty_counted(&c.ty, how(c.name), self.count_at(&key, name))
+                self.ty_counted(&c.ty, position, self.count_at(&key, name))
             )
         }));
 
@@ -3431,7 +3522,7 @@ impl<'p> Emitter<'p> {
             false => declared,
         };
         let declared: Vec<String> = match shared {
-            true => std::iter::once("'p".to_string()).chain(declared).collect(),
+            true => std::iter::once("'r".to_string()).chain(declared).collect(),
             false => declared,
         };
         // The lifetime a published parameter's `EitherText` is of (ADR-282 D23).
@@ -3513,14 +3604,14 @@ impl<'p> Emitter<'p> {
                         .any(|(at, a)| self.carries_a_view(&a.ty) || lowered_as_a_view(at, a));
                 let widens = lifetimes == Lifetimes::Elided
                     && self.carries_a_view(ty)
-                    && !borrows_from_something;
+                    && (!borrows_from_something || nothing_borrowed);
                 let result = match (widens, kept) {
-                    _ if shared => Lifetimes::Shared,
                     (_, Some(kept))
                         if self.tethered_position(&key, crate::contracts::tether::RESULT) =>
                     {
                         kept
                     }
+                    _ if shared => Lifetimes::Shared,
                     (true, _) => Lifetimes::Static,
                     (false, _) if inner_views.is_some() => Lifetimes::Named,
                     // **A published parameter's `'e` is the one lifetime there

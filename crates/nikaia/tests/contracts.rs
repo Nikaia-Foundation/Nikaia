@@ -552,13 +552,9 @@ fn starting_a_task_is_not_pure_computation() {
     assert_eq!(l.functions["go"].sync_claim, Sync::No);
 }
 
-/// The borrow contract, in the spec's own spelling: a result that is a view may
-/// point into any view it was given.
-///
-/// Stage 0 has one input lifetime, so `borrows(a | b)` is the widest contract
-/// the signature supports and the honest one to record - narrowing it needs the
-/// whole-program analysis of ADR-005 D3, which is what the ledger's `inference`
-/// header exists to distinguish.
+/// The borrow contract, in the spec's own spelling: a result that is a view
+/// points into the parameters the body hands back (ADR-283 D25), and the ledger
+/// writes those and no others.
 #[test]
 fn a_result_that_is_a_view_records_what_it_may_point_into() {
     let l = ledger(
@@ -567,7 +563,7 @@ fn a_result_that_is_a_view_records_what_it_may_point_into() {
          fn counted(a: ref String, n: i32) -> ref String { return a }",
     );
 
-    assert_eq!(l.functions["longest"].borrows, ["a", "b"]);
+    assert_eq!(l.functions["longest"].borrows, ["a"]);
     assert!(l.functions["owned"].borrows.is_empty());
     // `n` is not a view, so the result cannot point into it.
     assert_eq!(l.functions["counted"].borrows, ["a"]);

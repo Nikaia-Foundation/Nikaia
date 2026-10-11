@@ -16,9 +16,11 @@ pub struct Finding {
     pub notes: Vec[String],
     pub help: String?,
     pub warning: bool,
+    /// The places it points at, each with what happens there.
+    pub labels: Vec[CheckLabel],
 }
 
 /// A refusal at `span`.
 pub fn refusal(code: ref String, span: Span, message: String, notes: Vec[String], help: String) -> Finding {
-    return Finding { code: code.clone(), span: span, message: message, notes: notes, help: help, warning: false }
+    return Finding { code: code.clone(), span: span, message: message, notes: notes, help: help, warning: false, labels: [] }
 }

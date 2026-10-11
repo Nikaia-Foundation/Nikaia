@@ -44,6 +44,20 @@ pub fn check(parsed: &Parsed, own: &Ledger, library: &Ledger) -> Vec<Finding> {
     .collect()
 }
 
+/// What each function's result points into (ADR-283 D25, `tools/views.nika`),
+/// by ledger key: the ledger's `ref(..)`.
+pub fn result_sources(
+    parsed: &Parsed,
+    own: &Ledger,
+    library: &Ledger,
+) -> Vec<nikaia_std::tools::views::ResultSource> {
+    nikaia_std::tools::views::result_sources(
+        &asked(parsed, own, library),
+        &parsed.program.items,
+        &|value: &Expr| own_buffer(parsed, value, own, library),
+    )
+}
+
 /// The parameters the emitter writes as views of the subject's buffer, by the
 /// byte the method they belong to starts at.
 pub fn carried(parsed: &Parsed, own: &Ledger, library: &Ledger) -> HashMap<usize, HashSet<Ident>> {

@@ -26,6 +26,7 @@ signature = "()"
 pub = true
 sync = "inferred"
 throws = ["ParseError"]
+returns = "ref(data)"
 keeps = ["data"]
 touches = []
 views = ["data: borrowed", "<result>: borrowed"]

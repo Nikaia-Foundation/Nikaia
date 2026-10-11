@@ -49,6 +49,6 @@ pub fn from_nikaia(found: nikaia_std::tools::findings::Finding) -> Finding {
         message: found.message,
         notes: found.notes,
         help: found.help,
-        labels: Vec::new(),
+        labels: found.labels,
     }
 }

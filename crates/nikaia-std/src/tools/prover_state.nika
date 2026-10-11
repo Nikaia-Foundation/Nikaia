@@ -237,6 +237,7 @@ impl ProverState {
                 ],
                 help: f"Check it where it arrives, with a guard the program handles: `throw BadInput({first}) if !({written})`, or `return … if !({written})`. After that line, this `assert` is proved.",
                 warning: false,
+                labels: [],
             })
             return outcome
         }
@@ -253,6 +254,7 @@ impl ProverState {
                 notes: [f"What is known before it rules the claim out: {shown(refuted_values)}."],
                 help: "If the claim is right, the code before it is wrong; if the code is right, the claim is.",
                 warning: false,
+                labels: [],
             })
         }
         // **False for some of the values that reach it** (D8): the same
@@ -271,6 +273,7 @@ impl ProverState {
                 notes: ["That state reaches it: what is known here pins every name the claim depends on."],
                 help: "If the claim is right, the code before it is wrong; if the code is right, the claim is.",
                 warning: false,
+                labels: [],
             })
         }
         let mut why = "nothing before it shows it"
@@ -380,7 +383,7 @@ impl ProverState {
                         notes.push(f"The precondition is `assert({pre.written})` in `{callee}`, carried back to its entry.")
                     }
                 }
-                outcome.findings.push(Finding { code: "NK1207", span: span, message: f"This call breaks `{callee}`'s precondition `{written}` every time it is reached.", notes: notes, help: f"Pass `{callee}` arguments for which `{written}` holds, or check them with a guard before the call.", warning: false })
+                outcome.findings.push(Finding { code: "NK1207", span: span, message: f"This call breaks `{callee}`'s precondition `{written}` every time it is reached.", notes: notes, help: f"Pass `{callee}` arguments for which `{written}` holds, or check them with a guard before the call.", warning: false, labels: [] })
             }
             // **A call that breaks it for some of the values that reach it**
             // (D8): one such state, and what the parameters are in it.
@@ -397,7 +400,7 @@ impl ProverState {
                         let origin = claim_text_of(pre.origin) ?? callee.clone()
                         notes.push(f"The precondition is `assert({pre.written})` in `{origin}`.")
                     }
-                    outcome.findings.push(Finding { code: "NK1207", span: span, message: f"This call breaks `{callee}`'s precondition `{written}` when {shown(values)}.", notes: notes, help: f"Pass `{callee}` arguments for which `{written}` holds, or check them with a guard before the call.", warning: false })
+                    outcome.findings.push(Finding { code: "NK1207", span: span, message: f"This call breaks `{callee}`'s precondition `{written}` when {shown(values)}.", notes: notes, help: f"Pass `{callee}` arguments for which `{written}` holds, or check them with a guard before the call.", warning: false, labels: [] })
                 }
             }
             // **Not proved: the call carries the check** (D5), with the

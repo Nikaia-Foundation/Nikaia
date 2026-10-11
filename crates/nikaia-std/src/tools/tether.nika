@@ -178,6 +178,8 @@ pub fn makes_a_buffer(expr: ref Expr, asked: ref Asked, unaliased: fn(ref String
         Expr::MethodCall { method, receiver, .. } => a_method_buffer(asked.names.resolve(method), receiver),
         Expr::Call { func, .. } => a_call_buffer(func, asked, unaliased),
         Expr::TryCatch { expr, .. } => makes_a_buffer(expr, asked, unaliased),
+        // An `f"…"` is text of its own.
+        Expr::LitInterpolated { .. } => Buffer::Named("String"),
         else => Buffer::None,
     }
 }

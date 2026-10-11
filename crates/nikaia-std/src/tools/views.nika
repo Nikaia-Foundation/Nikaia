@@ -510,6 +510,43 @@ fn buffered(unit: ref Unit, asked: ref Asked, ty: ref Type?) -> bool {
     return brings_buffer(unit, asked, ty ?? return false)
 }
 
+// A type no declaration of the unit and no ledger describes may be a struct
+// of views declared in another file (D13).
+fn rsrc_unknown_named(unit: ref Unit, asked: ref Asked, ty: ref Type) -> bool {
+    if ty.code != null {
+        return false
+    }
+    let written = asked.names.resolve(ty.name).clone()
+    let mut name = written.clone()
+    let segments: Vec[String] = written.split("::").collect()
+    if segments.len() > 1 {
+        name = segments[segments.len() - 1].clone()
+    }
+    let first: Vec[scalar] = name.chars().collect()
+    let a_word = first.len() > 0 && first[0].is_alphabetic()
+    if a_word && !rsrc_plain_name(name) && name != "Self" && !unit.fields.contains_key(name) {
+        if asked.own.types.contains_key(name) {
+            let described = asked.own.types[name]?.clone() ?? return true
+            if described.tethered.len() > 0 {
+                return true
+            }
+        } else if asked.library.types.contains_key(name) {
+            let described = asked.library.types[name]?.clone() ?? return true
+            if described.tethered.len() > 0 {
+                return true
+            }
+        } else if name.len() > 1 {
+            return true
+        }
+    }
+    for inner in ty.generics {
+        if rsrc_unknown_named(unit, asked, inner) {
+            return true
+        }
+    }
+    return false
+}
+
 fn named_in(asked: ref Asked, ty: ref Type?, borrowing: ref collections::BTreeSet[String]) -> bool {
     let named = ty ?? return false
     return borrowing.contains(asked.names.resolve(named.name))
@@ -1235,6 +1272,11 @@ struct ResultSrcFlow {
     // Inside a lambda a `return` is the lambda's own.
     depth: i64,
     inner: collections::BTreeSet[String],
+    // Names a `let`, a loop or a pattern binds that a parameter is called too:
+    // the parameter's declared type says nothing about them.
+    shadow: collections::BTreeSet[String],
+    // The type a `let` wrote for a local, where it wrote one.
+    annotated: collections::BTreeMap[String, Type],
 }
 
 fn rsrc_none() -> collections::BTreeSet[String] {
@@ -1250,7 +1292,37 @@ fn rsrc_join(mut into: collections::BTreeSet[String], more: ref collections::BTr
 
 fn rsrc_flow(at: ref Span) -> ResultSrcFlow {
     let env: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
-    return ResultSrcFlow { env: env, ways: [], at: Span { start: at.start, end: at.end }, depth: 0, inner: rsrc_none() }
+    return ResultSrcFlow { env: env, ways: [], at: Span { start: at.start, end: at.end }, depth: 0, inner: rsrc_none(), shadow: rsrc_none(), annotated: collections::BTreeMap() }
+}
+
+fn rsrc_shadow(asked: ref Asked, here: ref Here, name: ref String, mut flow: ResultSrcFlow) {
+    if variable_type(asked, here, name) != null {
+        flow.shadow.insert(name.clone())
+    }
+}
+
+// The name a place is rooted in.
+fn rsrc_root_name(asked: ref Asked, place: ref Expr) -> String? {
+    return match place {
+        Expr::Field { base, .. } => rsrc_root_name(asked, base),
+        Expr::SafeField { base, .. } => rsrc_root_name(asked, base),
+        Expr::Index { base, .. } => rsrc_root_name(asked, base),
+        Expr::Variable(name, _) => asked.names.resolve(name).clone(),
+        else => null,
+    }
+}
+
+// What the declarations say a place is, unless a local of the same name hides
+// the parameter.
+fn rsrc_type(unit: ref Unit, asked: ref Asked, here: ref Here, flow: ref ResultSrcFlow, place: ref Expr) -> Type? {
+    let root = rsrc_root_name(asked, place)
+    if root != null {
+        let named = root ?? ""
+        if flow.shadow.contains(named) {
+            return null
+        }
+    }
+    return type_of(unit, asked, here, place)
 }
 
 fn rsrc_of_name(flow: ref ResultSrcFlow, name: ref String) -> collections::BTreeSet[String] {
@@ -1280,7 +1352,7 @@ fn rsrc_bind_root(asked: ref Asked, here: ref Here, target: ref Expr, reach: ref
         Expr::Index { base, .. } => rsrc_bind_root(asked, here, base, reach, flow),
         Expr::Variable(name, _) => {
             let written = asked.names.resolve(name).clone()
-            if variable_type(asked, here, written) == null {
+            if variable_type(asked, here, written) == null || flow.shadow.contains(written) {
                 rsrc_bind(flow, written, reach)
             }
         }
@@ -1297,22 +1369,37 @@ fn rsrc_scalar(asked: ref Asked, ty: ref Type) -> bool {
     return name == "i8" || name == "i16" || name == "i32" || name == "i64" || name == "isize" || name == "u8" || name == "u16" || name == "u32" || name == "u64" || name == "usize" || name == "f32" || name == "f64" || name == "bool" || name == "char"
 }
 
-// Whether a type a ledger writes may hold a view. What it does not say, it may.
-fn rsrc_ty_holds_view(ty: ref Ty) -> bool {
+// Whether a type a ledger writes may hold a view. What it does not say, it
+// may: a type no ledger describes is taken to hold one, except the text and
+// number types and the lists and maps of them (D13).
+fn rsrc_ty_holds_view(asked: ref Asked, ty: ref Ty) -> bool {
     return match ty {
-        Ty::Named { args, view, .. } => view || rsrc_any_ty_holds_view(args),
-        Ty::Tuple(parts) => rsrc_any_ty_holds_view(parts),
-        Ty::Nullable(inner) => rsrc_ty_holds_view(inner),
-        Ty::Seq { item, .. } => rsrc_ty_holds_view(item),
+        Ty::Named { name, args, view } => {
+            if view || rsrc_any_ty_holds_view(asked, args) {
+                return true
+            }
+            if asked.own.types.contains_key(name) || asked.library.types.contains_key(name) {
+                let described = asked.own.types[name]?.clone() ?? asked.library.types[name]?.clone() ?? return true
+                return described.tethered.len() > 0
+            }
+            return !rsrc_plain_name(name)
+        }
+        Ty::Tuple(parts) => rsrc_any_ty_holds_view(asked, parts),
+        Ty::Nullable(inner) => rsrc_ty_holds_view(asked, inner),
+        Ty::Seq { item, .. } => rsrc_ty_holds_view(asked, item),
         Ty::Fn { .. } => false,
         Ty::Count(_) => false,
         else => true,
     }
 }
 
-fn rsrc_any_ty_holds_view(types: ref Vec[Ty]) -> bool {
+fn rsrc_plain_name(name: ref String) -> bool {
+    return name == "String" || name == "bool" || name == "char" || name == "i8" || name == "i16" || name == "i32" || name == "i64" || name == "isize" || name == "u8" || name == "u16" || name == "u32" || name == "u64" || name == "usize" || name == "f32" || name == "f64" || name == "Vec" || name == "Array" || name == "Option" || name == "BTreeSet" || name == "BTreeMap" || name == "HashSet" || name == "HashMap" || name == "VecDeque" || name == "Box" || name == "Tuple" || name == "Duration" || name == "Instant" || name == "scalar" || name == "bytes"
+}
+
+fn rsrc_any_ty_holds_view(asked: ref Asked, types: ref Vec[Ty]) -> bool {
     for ty in types {
-        if rsrc_ty_holds_view(ty) {
+        if rsrc_ty_holds_view(asked, ty) {
             return true
         }
     }
@@ -1410,6 +1497,10 @@ fn rsrc_maybe(unit: ref Unit, asked: ref Asked, here: ref Here, known: ref colle
 // the field is a scalar, which is copied out.
 fn rsrc_field(unit: ref Unit, asked: ref Asked, here: ref Here, known: ref collections::BTreeMap[String, ResultSrcKnown], own_buffer: fn(ref Expr) -> bool sync, base: ref Expr, name: ref String, mut flow: ResultSrcFlow) -> collections::BTreeSet[String] {
     let inner = rsrc_eval(unit, asked, here, known, own_buffer, base, flow)
+    let hidden = rsrc_type(unit, asked, here, flow, base)
+    if hidden == null && rsrc_root_name(asked, base) != null && !is_self(asked, base) {
+        return inner
+    }
     let declared = field_type(unit, asked, here, base, name) ?? return inner
     if rsrc_scalar(asked, declared) {
         return rsrc_none()
@@ -1506,6 +1597,7 @@ fn rsrc_match(unit: ref Unit, asked: ref Asked, here: ref Here, known: ref colle
         let mut names: Vec[String] = []
         rsrc_pattern_names(asked, arm.pattern, names)
         for name in names {
+            rsrc_shadow(asked, here, name, flow)
             rsrc_bind(flow, name, matched)
         }
         let guarded = rsrc_maybe(unit, asked, here, known, own_buffer, arm.guard, flow)
@@ -1558,8 +1650,15 @@ fn rsrc_block(unit: ref Unit, asked: ref Asked, here: ref Here, known: ref colle
         let last = i + 1 == count
         match block.stmts[i].node {
             // **A buffer of its own carries no view of a parameter** (ADR-283).
-            Stmt::Let { names, value, .. } => {
+            Stmt::Let { names, value, ty, .. } => {
                 let reach = rsrc_eval(unit, asked, here, known, own_buffer, value, flow)
+                for name in names {
+                    rsrc_shadow(asked, here, asked.names.resolve(name), flow)
+                }
+                if names.len() == 1 && ty != null {
+                    let annotation = ty ?? return tail
+                    flow.annotated.insert(asked.names.resolve(names[0]).clone(), annotation.clone())
+                }
                 if !own_buffer(value) {
                     for name in names {
                         rsrc_bind(flow, asked.names.resolve(name), reach)
@@ -1590,6 +1689,7 @@ fn rsrc_block(unit: ref Unit, asked: ref Asked, here: ref Here, known: ref colle
             Stmt::For { bindings, iter, body } => {
                 let reach = rsrc_eval(unit, asked, here, known, own_buffer, iter, flow)
                 for binding in bindings {
+                    rsrc_shadow(asked, here, asked.names.resolve(binding), flow)
                     rsrc_bind(flow, asked.names.resolve(binding), reach)
                 }
                 let walked = rsrc_block(unit, asked, here, known, own_buffer, body, flow)
@@ -1605,13 +1705,45 @@ fn rsrc_block(unit: ref Unit, asked: ref Asked, here: ref Here, known: ref colle
     return tail
 }
 
-// **A copy carries no view** unless it is a copy of something that holds one.
-fn rsrc_copy(unit: ref Unit, asked: ref Asked, here: ref Here, receiver: ref Expr, on: ref collections::BTreeSet[String]) -> collections::BTreeSet[String] {
-    let ty = type_of(unit, asked, here, receiver) ?? return rsrc_none()
-    if !ty.is_view && names_borrowing(asked.names, ty, unit.borrowing) {
+// **A copy carries no view** unless it is a copy of something that may hold
+// one: a type that is not known counts as one that does (D13), and so does the
+// referent of a `ref` to a struct of views.
+fn rsrc_copy(unit: ref Unit, asked: ref Asked, here: ref Here, flow: ref ResultSrcFlow, receiver: ref Expr, on: ref collections::BTreeSet[String]) -> collections::BTreeSet[String] {
+    let ty = rsrc_type(unit, asked, here, flow, receiver) ?? return on.clone()
+    if names_borrowing(asked.names, ty, unit.borrowing) {
         return on.clone()
     }
+    for inner in ty.generics {
+        if holds_view(inner) {
+            return on.clone()
+        }
+    }
     return rsrc_none()
+}
+
+// Whether a local may hold a view: what its `let` wrote says, and a local
+// with no type written may.
+fn rsrc_may_hold(unit: ref Unit, asked: ref Asked, flow: ref ResultSrcFlow, name: ref String) -> bool {
+    let written = flow.annotated[name]?.clone() ?? return true
+    return brings_buffer(unit, asked, written) || rsrc_unknown_named(unit, asked, written)
+}
+
+// The local a place is rooted in: `v` for `v`, `v.f` and `v[i]`. A parameter
+// is no local: it keeps its own buffer whatever is stored into it.
+fn rsrc_root_local(asked: ref Asked, here: ref Here, flow: ref ResultSrcFlow, place: ref Expr) -> String? {
+    return match place {
+        Expr::Field { base, .. } => rsrc_root_local(asked, here, flow, base),
+        Expr::SafeField { base, .. } => rsrc_root_local(asked, here, flow, base),
+        Expr::Index { base, .. } => rsrc_root_local(asked, here, flow, base),
+        Expr::Variable(name, _) => {
+            let written = asked.names.resolve(name).clone()
+            if variable_type(asked, here, written) == null || flow.shadow.contains(written) {
+                return written
+            }
+            return null
+        }
+        else => null,
+    }
 }
 
 fn rsrc_method(unit: ref Unit, asked: ref Asked, here: ref Here, known: ref collections::BTreeMap[String, ResultSrcKnown], own_buffer: fn(ref Expr) -> bool sync, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg], mut flow: ResultSrcFlow) -> collections::BTreeSet[String] {
@@ -1630,10 +1762,34 @@ fn rsrc_method(unit: ref Unit, asked: ref Asked, here: ref Here, known: ref coll
     }
     let name = asked.names.resolve(method)
     if name == "clone" || name == "to_string" {
-        return rsrc_copy(unit, asked, here, receiver, on)
+        return rsrc_copy(unit, asked, here, flow, receiver, on)
     }
-    let ty = type_of(unit, asked, here, receiver) ?? return everything
-    let subject = asked.names.resolve(ty.name)
+    // **A method that changes its receiver may store its arguments in it**
+    // (`v.push(b)`): the local the receiver is rooted in then carries them. A
+    // method nobody describes may.
+    let mut stored = rsrc_none()
+    for i in 1..<positional.len() {
+        rsrc_join(stored, positional[i])
+    }
+    let root = rsrc_root_local(asked, here, flow, receiver)
+    let ty = rsrc_type(unit, asked, here, flow, receiver)
+    if stored.len() > 0 && root != null {
+        let mut changes = true
+        if ty != null {
+            let kind = ty?.clone() ?? return everything
+            let described = asked.own.functions[f"{asked.names.resolve(kind.name)}::{name}"]?.clone() ?? asked.library.functions[f"{asked.names.resolve(kind.name)}::{name}"]?.clone()
+            if described != null {
+                let contract = described ?? return everything
+                changes = contract.mutates
+            }
+        }
+        let local = (root ?? "").clone()
+        if changes && rsrc_may_hold(unit, asked, flow, local) {
+            rsrc_bind(flow, local, stored)
+        }
+    }
+    let known_type = ty ?? return everything
+    let subject = asked.names.resolve(known_type.name)
     let key = f"{subject}::{name}"
     return rsrc_callee(asked, known, key, positional, everything)
 }
@@ -1646,7 +1802,7 @@ fn rsrc_call(unit: ref Unit, asked: ref Asked, here: ref Here, known: ref collec
         Expr::Variable(name, _) => {
             let written = asked.names.resolve(name).clone()
             let carried = rsrc_of_name(flow, written)
-            if carried.len() == 0 && variable_type(asked, here, written) == null {
+            if carried.len() == 0 && (variable_type(asked, here, written) == null || flow.shadow.contains(written)) {
                 key = written
                 named = true
             }
@@ -1673,6 +1829,22 @@ fn rsrc_call(unit: ref Unit, asked: ref Asked, here: ref Here, known: ref collec
     }
     if !named {
         return everything
+    }
+    // **A `mut` parameter may be given the other arguments to keep**
+    // (`fill(v, b)`): the local passed to one carries all of them.
+    let described = asked.own.functions[key]?.clone() ?? asked.library.functions[key]?.clone()
+    if described != null && args.len() > 1 {
+        let contract = described ?? return rsrc_callee(asked, known, key, positional, everything)
+        let signature = contract.signature?.clone() ?? return rsrc_callee(asked, known, key, positional, everything)
+        for i in 0..<args.len() {
+            if i < signature.params.len() && signature.mutable.contains(signature.params[i].0) {
+                let root = rsrc_root_local(asked, here, flow, args[i])
+                let kept_views = rsrc_ty_holds_view(asked, signature.params[i].1)
+                if root != null && kept_views && rsrc_may_hold(unit, asked, flow, (root ?? "").clone()) {
+                    rsrc_bind(flow, (root ?? "").clone(), everything)
+                }
+            }
+        }
     }
     return rsrc_callee(asked, known, key, positional, everything)
 }
@@ -1703,7 +1875,7 @@ fn rsrc_callee(asked: ref Asked, known: ref collections::BTreeMap[String, Result
     let signature = contract.signature?.clone() ?? return everything.clone()
     if signature.result != null {
         let result = signature.result?.clone() ?? Ty::Unknown
-        if !rsrc_ty_holds_view(result) {
+        if !rsrc_ty_holds_view(asked, result) {
             return rsrc_none()
         }
     }
@@ -1754,7 +1926,7 @@ fn rsrc_key(owner: ref String?, function: ref String) -> String {
     return f"{named}::{function}"
 }
 
-fn rsrc_params(asked: ref Asked, receiver: ref Receiver?, args: ref Vec[FnArg]) -> Vec[String] {
+fn rsrc_params(asked: ref Asked, receiver: ref Receiver?, args: ref Vec[FnArg], config: ref Vec[ConfigParam]) -> Vec[String] {
     let mut params: Vec[String] = []
     if receiver != null {
         let self_name: String = "self"
@@ -1762,6 +1934,9 @@ fn rsrc_params(asked: ref Asked, receiver: ref Receiver?, args: ref Vec[FnArg]) 
     }
     for arg in args {
         params.push(asked.names.resolve(arg.name).clone())
+    }
+    for option in config {
+        params.push(asked.names.resolve(option.name).clone())
     }
     return params
 }
@@ -1771,11 +1946,11 @@ fn rsrc_params(asked: ref Asked, receiver: ref Receiver?, args: ref Vec[FnArg]) 
 // parameter (D25, the least fixpoint).
 fn rsrc_seed(unit: ref Unit, asked: ref Asked, subject: ref Type?, item: ref Item, mut known: collections::BTreeMap[String, ResultSrcKnown]) {
     match item {
-        Item::Fn { name, receiver, args, ret_type, .. } => {
+        Item::Fn { name, receiver, args, config, ret_type, .. } => {
             if buffered(unit, asked, ret_type) {
                 let owner = text_of(asked, subject)
                 let key = rsrc_key(owner, function_name(asked.names, name))
-                known.insert(key, ResultSrcKnown { declared: true, params: rsrc_params(asked, receiver, args), reach: rsrc_none() })
+                known.insert(key, ResultSrcKnown { declared: true, params: rsrc_params(asked, receiver, args, config), reach: rsrc_none() })
             }
         }
         else => {}
@@ -1793,7 +1968,7 @@ fn rsrc_function(unit: ref Unit, asked: ref Asked, subject: ref Type?, trait_nam
             let owner = text_of(asked, subject)
             let key = rsrc_key(owner, function)
             let own_contract = asked.own.functions[key]?.clone()
-            let params = rsrc_params(asked, receiver, args)
+            let params = rsrc_params(asked, receiver, args, config)
             let self_name: String = "self"
             let mut sources: Vec[String] = []
             let mut position = 0
@@ -1801,6 +1976,12 @@ fn rsrc_function(unit: ref Unit, asked: ref Asked, subject: ref Type?, trait_nam
                 position = 1
                 if takes_a_view_of_itself(receiver) {
                     sources.push(self_name.clone())
+                } else if subject != null {
+                    // A subject taken by value that holds views is one too.
+                    let held = subject ?? return false
+                    if names_borrowing(asked.names, held, unit.borrowing) {
+                        sources.push(self_name.clone())
+                    }
                 }
             }
             let mut declared: Vec[(winnow_grammar::Symbol, Type)] = []
@@ -1813,6 +1994,15 @@ fn rsrc_function(unit: ref Unit, asked: ref Asked, subject: ref Type?, trait_nam
             }
             for option in config {
                 declared.push((option.name, option.ty.clone()))
+                if option.ty.code == null && brings_buffer(unit, asked, option.ty) {
+                    sources.push(asked.names.resolve(option.name).clone())
+                }
+            }
+            let mut declared_views: Vec[String] = []
+            for arg in args {
+                if arg.ty.code == null && brings_buffer(unit, asked, arg.ty) {
+                    declared_views.push(asked.names.resolve(arg.name).clone())
+                }
             }
             let walked_here = Here { subject: subject?.clone(), subject_fields: fields_of_type(unit, asked, subject), declared: declared, ours: null, carriers: collections::BTreeSet(), found: [] }
             let mut flow = rsrc_flow(at)
@@ -1821,15 +2011,28 @@ fn rsrc_function(unit: ref Unit, asked: ref Asked, subject: ref Type?, trait_nam
                 own.insert(source.clone())
                 flow.env.insert(source.clone(), own)
             }
+            // **A parameter the body owns** (taken by value, not lent): a view
+            // of it dies with the call, and nothing keeps it. Marked with a
+            // `!`, which is refused where a way out reaches it.
+            for arg in args {
+                let owned = asked.names.resolve(arg.name).clone()
+                if arg.ty.code == null && !arg.mutable && !sources.contains(owned) && !rsrc_scalar(asked, arg.ty) {
+                    let mut marked = rsrc_none()
+                    marked.insert(f"!{owned}")
+                    flow.env.insert(owned, marked)
+                }
+            }
             let mut size = 0
             let mut rounds = 0
-            while rounds < 6 {
+            let mut settled = false
+            while rounds < 64 {
                 flow.ways = []
                 flow.depth = 0
                 let tail = rsrc_block(unit, asked, walked_here, known, own_buffer, body, flow)
                 rsrc_tail(body, tail, flow)
                 let now = rsrc_size(flow)
                 if rounds > 0 && now == size {
+                    settled = true
                     break
                 }
                 size = now
@@ -1839,12 +2042,18 @@ fn rsrc_function(unit: ref Unit, asked: ref Asked, subject: ref Type?, trait_nam
             for way in flow.ways {
                 rsrc_join(reach, way.reach)
             }
+            // A walk that did not settle says more, never less (D13).
+            if !settled {
+                for source in sources {
+                    reach.insert(source.clone())
+                }
+            }
             let before = known[key]?.clone() ?? ResultSrcKnown { declared: false, params: [], reach: rsrc_none() }
             let changed = before.reach.len() != reach.len()
             known.insert(key.clone(), ResultSrcKnown { declared: true, params: params, reach: reach.clone() })
             if report {
                 let of = of_what(owner, function)
-                rsrc_report(asked, of, sources, flow.ways, reach, receiver, trait_name, at, out)
+                rsrc_report(asked, of, sources, declared_views, flow.ways, reach, receiver, trait_name, at, out)
             }
             return changed
         }
@@ -1868,7 +2077,19 @@ fn rsrc_tail(body: ref Block, tail: ref collections::BTreeSet[String], mut flow:
     }
 }
 
-fn rsrc_report(asked: ref Asked, of: ref String, sources: ref Vec[String], ways: ref Vec[ResultSrcWay], reach: ref collections::BTreeSet[String], receiver: ref Receiver?, trait_name: ref winnow_grammar::Symbol?, at: ref Span, mut out: Vec[Finding]) {
+fn rsrc_report(asked: ref Asked, of: ref String, sources: ref Vec[String], declared_views: ref Vec[String], ways: ref Vec[ResultSrcWay], reach: ref collections::BTreeSet[String], receiver: ref Receiver?, trait_name: ref winnow_grammar::Symbol?, at: ref Span, mut out: Vec[Finding]) {
+    for way in ways {
+        for each in way.reach {
+            if each.starts_with("!") {
+                let owned = each.strip_prefix("!") ?? ""
+                let message = f"{of} hands back a view of `{owned}`, which it takes by value, so the data is gone when the call returns."
+                let note = f"`{owned}` is moved into {of} and ends with it; a view of it can't outlive the call."
+                let help: String = "Take it as `ref`, so the view is of the caller's data, or hand back a copy: declare `-> String` and write `.clone()`."
+                out.push(refusal("NK2302", Span { start: way.span.start, end: way.span.end }, message, [note], help))
+                return
+            }
+        }
+    }
     let mut named: Vec[String] = []
     for source in sources {
         if reach.contains(source) {
@@ -1910,11 +2131,31 @@ fn rsrc_report(asked: ref Asked, of: ref String, sources: ref Vec[String], ways:
             }
             message = f"{of} hands back a value that holds views of `{first}`'s data and of `{second}`'s, so a caller can't tell whose data it gets."
         }
-        let note = f"Whoever calls {of} has to keep the data the result points into unchanged while it uses the result, and here that is decided only when the program runs."
+        // A caret under every way out that hands back a view, named with the
+        // parameters it hands back.
+        let mut labels: Vec[CheckLabel] = []
+        let mut marked = false
+        for way in ways {
+            let mut whose: Vec[String] = []
+            for source in named {
+                if way.reach.contains(source) {
+                    whose.push(f"`{source}`")
+                }
+            }
+            if whose.len() > 0 {
+                let joiner: String = " and "
+                let joined = whose.join(joiner)
+                labels.push(CheckLabel { span: Span { start: way.span.start, end: way.span.end }, word: "", text: f"a view of {joined}", main: !marked })
+                marked = true
+            }
+        }
+        let note = f"Whoever calls {of} has to keep the data the result points into unchanged while it uses the result, and here that's decided only when the program runs."
         let split = f"Split it, so each part hands back views of one of `{first}` and `{second}`: a function that says which of them (`fn …(…) -> bool`), then a call where it is used that picks one."
         let copy = "Or hand back a copy: declare `-> String` and write `.clone()`, one allocation per call."
         let help = f"{split}\n           {copy}"
-        out.push(refusal("NK2302", caret, message, [note], help))
+        let mut found = refusal("NK2302", caret, message, [note], help)
+        found.labels = labels
+        out.push(found)
         return
     }
     // An `impl` of a trait hands back what the trait's declaration names
@@ -1922,12 +2163,14 @@ fn rsrc_report(asked: ref Asked, of: ref String, sources: ref Vec[String], ways:
     if trait_name == null {
         return
     }
+    // The receiver, else the declaration's only view; a plain parameter the
+    // body only reads is no part of what the declaration says.
     let mut allowed: String = ""
     if takes_a_view_of_itself(receiver) {
         allowed = "self"
-    } else if sources.len() == 1 {
-        allowed = sources[0].clone()
-    } else {
+    } else if declared_views.len() == 1 {
+        allowed = declared_views[0].clone()
+    } else if declared_views.len() > 1 {
         return
     }
     for source in named {
@@ -1978,6 +2221,13 @@ fn rsrc_function_type(unit: ref Unit, asked: ref Asked, ty: ref Type, at: ref Sp
             }
         }
         let answer = code.result?.clone()
+        if views == 0 && buffered(unit, asked, answer) {
+            let message: String = "A function type that takes no view and hands one back doesn't say whose data the result points into."
+            let note = f"Whoever calls through it has to keep the data the result points into unchanged, and the type has nothing to point at."
+            let help: String = "Take the view it hands back as a parameter, or hand back a copy: declare `-> String`."
+            out.push(refusal("NK2302", Span { start: at.start, end: at.end }, message, [note], help))
+            return
+        }
         if views >= 2 && buffered(unit, asked, answer) {
             let message: String = "A function type that takes two views and hands one back doesn't say which one the result points into, so a caller can't tell whose data it gets."
             let note = f"Whoever calls through it has to keep the data the result points into unchanged, and the type doesn't say which."
@@ -1999,10 +2249,45 @@ fn rsrc_function_types(unit: ref Unit, asked: ref Asked, args: ref Vec[FnArg], r
     rsrc_function_type(unit, asked, written, at, out)
 }
 
+/// What one function's result points into, by its ledger key (D25): the
+/// parameters in the order the signature has them, `self` first. Empty is
+/// `'static` or the caller's keep.
+pub struct ResultSource {
+    pub key: String,
+    pub borrows: Vec[String],
+}
+
+/// The answer of D25 for every function of the unit that hands back a view,
+/// the ledger's `ref(..)` (#580 step 5).
+pub fn result_sources(asked: ref Asked, items: ref Vec[Spanned[Item]], own_buffer: fn(ref Expr) -> bool sync) -> Vec[ResultSource] {
+    let unit = Unit { borrowing: borrowing_types(asked.names, items), fields: view_fields(asked.names, items) }
+    let mut known: collections::BTreeMap[String, ResultSrcKnown] = collections::BTreeMap()
+    let mut ignored: Vec[Finding] = []
+    rsrc_solve(unit, asked, items, own_buffer, known, ignored)
+    let mut out: Vec[ResultSource] = []
+    for (key, found) in known {
+        if !found.declared {
+            continue
+        }
+        let mut borrows: Vec[String] = []
+        for param in found.params {
+            if found.reach.contains(param) {
+                borrows.push(param.clone())
+            }
+        }
+        out.push(ResultSource { key: key.clone(), borrows: borrows })
+    }
+    return out
+}
+
 // The refusals of D25 and D26 over a unit: the fixpoint first, then one report.
 fn rsrc_findings(asked: ref Asked, items: ref Vec[Spanned[Item]], own_buffer: fn(ref Expr) -> bool sync, mut out: Vec[Finding]) {
     let unit = Unit { borrowing: borrowing_types(asked.names, items), fields: view_fields(asked.names, items) }
     let mut known: collections::BTreeMap[String, ResultSrcKnown] = collections::BTreeMap()
+    rsrc_solve(unit, asked, items, own_buffer, known, out)
+}
+
+fn rsrc_solve(unit: ref Unit, asked: ref Asked, items: ref Vec[Spanned[Item]], own_buffer: fn(ref Expr) -> bool sync, mut known: collections::BTreeMap[String, ResultSrcKnown], mut out: Vec[Finding]) {
     let nothing: Type? = null
     let no_trait: winnow_grammar::Symbol? = null
     for item in items {
@@ -2018,7 +2303,8 @@ fn rsrc_findings(asked: ref Asked, items: ref Vec[Spanned[Item]], own_buffer: fn
         }
     }
     let mut round = 0
-    while round < 8 {
+    let mut settled = false
+    while round < 64 {
         let mut grew = false
         for item in items {
             match item.node {
@@ -2039,9 +2325,15 @@ fn rsrc_findings(asked: ref Asked, items: ref Vec[Spanned[Item]], own_buffer: fn
             }
         }
         if !grew {
+            settled = true
             break
         }
         round += 1
+    }
+    if !settled && items.len() > 0 {
+        let message: String = "A chain of functions handing back views is too long for the build to follow, so a caller can't tell whose data a result is."
+        let help: String = "Split the chain, or hand back a copy: declare `-> String` and write `.clone()`."
+        out.push(refusal("NK2302", Span { start: items[0].span.start, end: items[0].span.end }, message, [], help))
     }
     for item in items {
         match item.node {

@@ -23,8 +23,8 @@ views = ["root: borrowed"]
 signature = "(root: ref fs::Root) -> String"
 
 [fn."file_named"]
-keeps = ["code"]
-locks = "?"
+sync = "inferred"
+touches = []
 views = ["code: borrowed"]
 signature = "(code: ref String) -> String?"
 
@@ -34,24 +34,25 @@ locks = true
 signature = "()"
 
 [fn."opens_an_item"]
-keeps = ["line"]
-locks = "?"
+sync = "inferred"
+touches = []
 views = ["line: borrowed"]
 signature = "(line: ref String) -> bool"
 
 [fn."readings"]
-locks = "?"
+sync = "inferred"
+touches = []
 views = ["code: borrowed"]
 signature = "(code: ref String) -> Vec[String]"
 
 [fn."run_all"]
 throws = ["io::IoError"]
-locks = "?"
 views = ["root: borrowed", "dir: borrowed"]
 signature = "(root: ref fs::Root, dir: ref String) -> Vec[Verdict]"
 
 [fn."split"]
-locks = "?"
+sync = "inferred"
+touches = []
 views = ["code: borrowed"]
 signature = "(code: ref String) -> String"
 

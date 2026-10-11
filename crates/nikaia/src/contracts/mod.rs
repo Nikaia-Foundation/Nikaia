@@ -713,6 +713,22 @@ impl LedgerOps for Ledger {
         // one that changes no lowering — the state it writes is a
         // representation and only one of the three is built.
         tether::infer(&mut ledger, units, library);
+        // **What a result points into, written** (ADR-283 D25, #580): the
+        // declaration listed every view, the body knows which one. After
+        // `keeps`, which says which plain parameters are lowered as views, and
+        // twice, so that a callee of another unit is read as written once its
+        // unit has been (the first pass reads the declaration's list, which
+        // only ever says more).
+        for _ in 0..2 {
+            for parsed in units.iter().copied() {
+                let sources = crate::views::result_sources(parsed, &ledger, library);
+                for source in sources {
+                    if let Some(contract) = ledger.functions.get_mut(&source.key) {
+                        contract.borrows = source.borrows;
+                    }
+                }
+            }
+        }
         evaluate_defaults(&mut ledger, units, &defaults, library);
         attribute_values(&mut ledger, units, library);
         (ledger, checked, noted)

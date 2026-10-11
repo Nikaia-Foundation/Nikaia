@@ -11,7 +11,11 @@
 //!
 //! What the lowering writes for the accepted cases (the lifetime on the source
 //! only, `'static` for none, the ledger's `ref(a)`) is the emitter's and the
-//! ledger's, #580 steps 5 and 6; those tests are `#[ignore]`d until then.
+//! ledger's, #580 steps 5 and 6. Every accepted program is also compiled with
+//! `rustc`: a program the checker accepts and `rustc` refuses is a compiler
+//! defect (Part III C.1).
+
+mod common;
 
 use nikaia::check::{self, Finding};
 use nikaia::contracts::{Ledger, LedgerOps, STD};
@@ -48,6 +52,32 @@ fn lowered(source: &str) -> String {
         .rust
 }
 
+/// Lower and compile as a library: an accepted program whose Rust `rustc`
+/// refuses is a compiler defect (Part III C.1), so every accepted case here
+/// goes through it.
+fn compiled(purpose: &str, source: &str) {
+    let rust = lowered(source);
+    let dir = common::scratch_dir(purpose);
+    let file = dir.join("lowered.rs");
+    std::fs::write(&file, &rust).expect("write the Rust");
+    let out = common::compile(
+        &file,
+        &[
+            "--crate-type",
+            "lib",
+            "--emit=metadata",
+            "-o",
+            dir.join("lowered.rmeta").to_str().expect("utf-8 path"),
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "the lowering of {purpose} does not compile:\n{}\n--- the Rust ---\n{rust}",
+        String::from_utf8_lossy(&out.stderr),
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// A lifetime is a tick and a name (`'a`, `'static`), and Part III C.2 keeps
 /// both out of a message: the language below is not spoken to the author.
 fn says_a_lifetime(text: &str) -> bool {
@@ -74,6 +104,7 @@ fn pick_every_path_is_accepted() {
 "#;
     let found = all_findings(source);
     assert!(found.is_empty(), "{found:#?}");
+    compiled("pick_every_path_is_accepted", source);
 }
 
 /// The receiver counts as a source, and an index reads only its base: `world.names[self.at]` points into `world`, and `self` is free again.
@@ -89,6 +120,7 @@ impl Checker {
 "#;
     let found = all_findings(source);
     assert!(found.is_empty(), "{found:#?}");
+    compiled("label_world_is_accepted", source);
 }
 
 /// A `ref String?` built from a loop over `a.split(..)`, with `return null` as the other way out.
@@ -105,6 +137,7 @@ fn loop_split_null_is_accepted() {
 "#;
     let found = all_findings(source);
     assert!(found.is_empty(), "{found:#?}");
+    compiled("loop_split_null_is_accepted", source);
 }
 
 /// A struct literal of the result type pointing into one parameter, beside a `ref self` it only reads a scalar from.
@@ -120,6 +153,7 @@ impl Factory {
 "#;
     let found = all_findings(source);
     assert!(found.is_empty(), "{found:#?}");
+    compiled("struct_beside_self_is_accepted", source);
 }
 
 /// One way out a parameter, the other a literal: the literal outlives everything.
@@ -134,6 +168,7 @@ fn a_or_literal_is_accepted() {
 "#;
     let found = all_findings(source);
     assert!(found.is_empty(), "{found:#?}");
+    compiled("a_or_literal_is_accepted", source);
 }
 
 /// One way out a parameter, the other a view of a buffer the body made (a rustc refusal before D25).
@@ -149,6 +184,7 @@ fn a_or_local_buffer_is_accepted() {
 "#;
     let found = all_findings(source);
     assert!(found.is_empty(), "{found:#?}");
+    compiled("a_or_local_buffer_is_accepted", source);
 }
 
 /// Only literals handed back: the result points into no parameter.
@@ -163,6 +199,7 @@ fn literals_only_is_accepted() {
 "#;
     let found = all_findings(source);
     assert!(found.is_empty(), "{found:#?}");
+    compiled("literals_only_is_accepted", source);
 }
 
 /// A recursive function whose recursive call is handed `a` cut down and `b`: the least fixpoint from no parameter gives `a`.
@@ -177,6 +214,7 @@ fn recursive_is_accepted() {
 "#;
     let found = all_findings(source);
     assert!(found.is_empty(), "{found:#?}");
+    compiled("recursive_is_accepted", source);
 }
 
 /// A call to a function whose result points into its first argument reaches only that argument.
@@ -191,6 +229,7 @@ fn wrap(x: ref String, y: ref String) -> ref String {
 "#;
     let found = all_findings(source);
     assert!(found.is_empty(), "{found:#?}");
+    compiled("calls_ledger_is_accepted", source);
 }
 
 /// Parameters written `String` that are only read are lowered as views (ADR-283 D24) and count as sources like any other.
@@ -202,6 +241,7 @@ fn plain_params_is_accepted() {
 "#;
     let found = all_findings(source);
     assert!(found.is_empty(), "{found:#?}");
+    compiled("plain_params_is_accepted", source);
 }
 
 /// A copy (`b.clone()`) reaches no parameter.
@@ -214,6 +254,7 @@ fn copy_is_none_is_accepted() {
 "#;
     let found = all_findings(source);
     assert!(found.is_empty(), "{found:#?}");
+    compiled("copy_is_none_is_accepted", source);
 }
 
 /// The accepted program of a `ref self` method: the receiver is not reached by
@@ -504,7 +545,6 @@ fn plain_string_longest_is_refused_since_d25() {
 
 /// The signature names the lifetime on the source only.
 #[test]
-#[ignore = "pending #580 step 6: the emitter ties the source parameter alone"]
 fn the_lowered_signature_names_the_source_only() {
     let rust = lowered(
         "fn pick(a: ref String, b: ref String) -> ref String {\n    if a.len() > 3 {\n        return a\n    }\n    return a.trim()\n}\n",
@@ -518,7 +558,6 @@ fn the_lowered_signature_names_the_source_only() {
 /// A method hands back its parameter: the lifetime is on the parameter, not
 /// on the receiver elision would have taken.
 #[test]
-#[ignore = "pending #580 step 6: the emitter ties the source parameter alone"]
 fn a_method_signature_names_the_parameter_not_the_receiver() {
     let rust = lowered(
         "struct Summary { label: ref String }\nimpl Summary {\n    fn pick(ref self, name: ref String) -> ref String sync {\n        return name\n    }\n}\n",
@@ -529,7 +568,6 @@ fn a_method_signature_names_the_parameter_not_the_receiver() {
 
 /// Only literals handed back: `'static`, and a caller may change `b` after.
 #[test]
-#[ignore = "pending #580 step 6: the emitter writes 'static for an empty source set"]
 fn literals_only_lowers_to_static() {
     let rust = lowered(
         "fn kind(a: ref String, b: ref String) -> ref String {\n    if a.len() > b.len() {\n        return \"long\"\n    }\n    return \"short\"\n}\n",
@@ -540,7 +578,6 @@ fn literals_only_lowers_to_static() {
 
 /// A parameter written `String` and only read is a source like any other.
 #[test]
-#[ignore = "pending #580 step 6: the emitter drops the shared 'p"]
 fn plain_parameters_lowered_as_views_name_the_source_only() {
     let rust = lowered("fn first_of(a: String, b: String) -> ref String {\n    return ref a\n}\n");
     assert!(
@@ -551,7 +588,6 @@ fn plain_parameters_lowered_as_views_name_the_source_only() {
 
 /// The ledger writes the answer, `-> ref(a) String`, and not every view.
 #[test]
-#[ignore = "pending #580 step 5: the ledger writes the inferred source"]
 fn the_ledger_names_the_source() {
     let parsed =
         parse_to_ast("fn pick(a: ref String, b: ref String) -> ref String {\n    return a\n}\n")
@@ -559,4 +595,441 @@ fn the_ledger_names_the_source() {
     let own = Ledger::infer(&parsed);
     let contract = own.functions.get("pick").expect("pick has an entry");
     assert_eq!(contract.borrows, vec!["a".to_string()]);
+}
+
+// --- holes the review found: a view that reaches a second parameter by a way the
+// walk has to follow, each one NK2302 -------------------------------------------
+
+/// A method that changes a local list may keep its argument: `v.push(b)` makes `v` carry `b`.
+#[test]
+fn hole_push_into_a_local_list() {
+    let source = r#"fn f(a: ref String, b: ref String) -> ref String {
+    if a.len() > 9 {
+        return a
+    }
+    let mut v: Vec[ref String] = []
+    v.push(b)
+    return v[0]
+}
+"#;
+    let found = all_findings(source);
+    assert!(!found.is_empty(), "accepted, and it should not be");
+    for finding in &found {
+        let shown = nikaia::diagnostics::render_finding(finding, "p.nika", source);
+        assert!(!says_a_lifetime(&shown), "{shown}");
+    }
+}
+
+/// Same for a map: `m.insert(1, b)`.
+#[test]
+fn hole_insert_into_a_local_map() {
+    let source = r#"use std::collections
+fn f(a: ref String, b: ref String) -> ref String {
+    if a.len() > 9 {
+        return a
+    }
+    let mut m: collections::HashMap[i64, ref String] = collections::HashMap()
+    m.insert(1, b)
+    return m[1] ?? a
+}
+"#;
+    let found = all_findings(source);
+    assert!(!found.is_empty(), "accepted, and it should not be");
+    for finding in &found {
+        let shown = nikaia::diagnostics::render_finding(finding, "p.nika", source);
+        assert!(!says_a_lifetime(&shown), "{shown}");
+    }
+}
+
+/// `fill(v, b)` with a `mut` parameter: the local passed to it carries `b`.
+#[test]
+fn hole_a_mut_parameter_keeps_the_other_argument() {
+    let source = r#"fn fill(mut v: Vec[ref String], b: ref String) {
+    v.push(b)
+}
+fn f(a: ref String, b: ref String) -> ref String {
+    if a.len() > 9 {
+        return a
+    }
+    let mut v: Vec[ref String] = []
+    fill(v, b)
+    return v[0]
+}
+"#;
+    let found = all_findings(source);
+    assert!(!found.is_empty(), "accepted, and it should not be");
+    for finding in &found {
+        let shown = nikaia::diagnostics::render_finding(finding, "p.nika", source);
+        assert!(!says_a_lifetime(&shown), "{shown}");
+    }
+}
+
+/// A copy of a value whose type is not known may hold views: it reaches what the value did.
+#[test]
+fn hole_clone_of_an_unknown_type() {
+    let source = r#"fn f(a: ref String, b: ref String) -> ref String {
+    if a.len() > 9 {
+        return a
+    }
+    let t = (b, 1)
+    let u = t.clone()
+    return u.0
+}
+"#;
+    let found = all_findings(source);
+    assert!(!found.is_empty(), "accepted, and it should not be");
+    for finding in &found {
+        let shown = nikaia::diagnostics::render_finding(finding, "p.nika", source);
+        assert!(!says_a_lifetime(&shown), "{shown}");
+    }
+}
+
+/// `p.clone()` with `p: ref Pair`: the copy is a `Pair`, whose view is still `p`'s.
+#[test]
+fn hole_clone_of_a_ref_to_a_struct_of_views() {
+    let source = r#"struct Pair { l: ref String, n: i64 }
+fn f(p: ref Pair, a: ref String) -> ref String {
+    if a.len() > 9 {
+        return a
+    }
+    let q = p.clone()
+    return q.l
+}
+"#;
+    let found = all_findings(source);
+    assert!(!found.is_empty(), "accepted, and it should not be");
+    for finding in &found {
+        let shown = nikaia::diagnostics::render_finding(finding, "p.nika", source);
+        assert!(!says_a_lifetime(&shown), "{shown}");
+    }
+}
+
+/// `self` by value of a struct of views is a source.
+#[test]
+fn hole_a_subject_taken_by_value_that_holds_views() {
+    let source = r#"struct Pair { l: ref String, n: i64 }
+impl Pair {
+    fn left(self, a: ref String) -> ref String {
+        if a.len() > 9 {
+            return a
+        }
+        return self.l
+    }
+}
+"#;
+    let found = all_findings(source);
+    assert!(!found.is_empty(), "accepted, and it should not be");
+    for finding in &found {
+        let shown = nikaia::diagnostics::render_finding(finding, "p.nika", source);
+        assert!(!says_a_lifetime(&shown), "{shown}");
+    }
+}
+
+/// An option written as a view is a parameter and a source.
+#[test]
+fn hole_a_view_option() {
+    let source = r#"fn f(a: ref String; sep: ref String = ",") -> ref String {
+    if a.len() > 9 {
+        return a
+    }
+    return sep
+}
+"#;
+    let found = all_findings(source);
+    assert!(!found.is_empty(), "accepted, and it should not be");
+    for finding in &found {
+        let shown = nikaia::diagnostics::render_finding(finding, "p.nika", source);
+        assert!(!says_a_lifetime(&shown), "{shown}");
+    }
+}
+
+/// A chain of reassignments longer than a few rounds of the walk still reaches `b`.
+#[test]
+fn hole_a_long_reassignment_chain() {
+    let source = r#"fn f(a: ref String, b: ref String) -> ref String {
+    let mut x1: ref String = a
+    let mut x2: ref String = a
+    let mut x3: ref String = a
+    let mut x4: ref String = a
+    let mut x5: ref String = a
+    let mut x6: ref String = a
+    let mut x7: ref String = a
+    let mut x8: ref String = a
+    let mut i = 0
+    while i < 10 {
+        x8 = x7
+        x7 = x6
+        x6 = x5
+        x5 = x4
+        x4 = x3
+        x3 = x2
+        x2 = x1
+        x1 = b
+        i += 1
+    }
+    return x8
+}
+"#;
+    let found = all_findings(source);
+    assert!(!found.is_empty(), "accepted, and it should not be");
+    for finding in &found {
+        let shown = nikaia::diagnostics::render_finding(finding, "p.nika", source);
+        assert!(!says_a_lifetime(&shown), "{shown}");
+    }
+}
+
+/// A chain of twelve functions that ends in `b` is followed to its end.
+#[test]
+fn hole_a_long_call_chain() {
+    let source = r#"fn f(a: ref String, b: ref String) -> ref String {
+    if a.len() > 9 {
+        return a
+    }
+    return g1(a, b)
+}
+fn g1(a: ref String, b: ref String) -> ref String {
+    return g2(a, b)
+}
+fn g2(a: ref String, b: ref String) -> ref String {
+    return g3(a, b)
+}
+fn g3(a: ref String, b: ref String) -> ref String {
+    return g4(a, b)
+}
+fn g4(a: ref String, b: ref String) -> ref String {
+    return g5(a, b)
+}
+fn g5(a: ref String, b: ref String) -> ref String {
+    return g6(a, b)
+}
+fn g6(a: ref String, b: ref String) -> ref String {
+    return g7(a, b)
+}
+fn g7(a: ref String, b: ref String) -> ref String {
+    return g8(a, b)
+}
+fn g8(a: ref String, b: ref String) -> ref String {
+    return g9(a, b)
+}
+fn g9(a: ref String, b: ref String) -> ref String {
+    return g10(a, b)
+}
+fn g10(a: ref String, b: ref String) -> ref String {
+    return g11(a, b)
+}
+fn g11(a: ref String, b: ref String) -> ref String {
+    return g12(a, b)
+}
+fn g12(a: ref String, b: ref String) -> ref String {
+    return b
+}
+"#;
+    let found = all_findings(source);
+    assert!(!found.is_empty(), "accepted, and it should not be");
+    for finding in &found {
+        let shown = nikaia::diagnostics::render_finding(finding, "p.nika", source);
+        assert!(!says_a_lifetime(&shown), "{shown}");
+    }
+}
+
+/// `let p = mk(b)` hides the parameter `p`: the field read is of the local, not of the declared `Num`.
+#[test]
+fn hole_a_local_hides_a_parameter_of_the_same_name() {
+    let source = r#"struct Num { n: i64 }
+struct Txt { n: ref String }
+fn mk(x: ref String) -> Txt {
+    return Txt { n: x }
+}
+fn f(p: ref Num, a: ref String, b: ref String) -> ref String {
+    if a.len() > 9 {
+        return a
+    }
+    let p = mk(b)
+    return p.n
+}
+"#;
+    let found = all_findings(source);
+    assert!(!found.is_empty(), "accepted, and it should not be");
+    for finding in &found {
+        let shown = nikaia::diagnostics::render_finding(finding, "p.nika", source);
+        assert!(!says_a_lifetime(&shown), "{shown}");
+    }
+}
+
+/// `fn() -> ref String` says nothing about whose data the result is, and has nothing to be elided from.
+#[test]
+fn a_function_type_that_takes_no_view_and_hands_one_back() {
+    let source = r#"fn f(g: fn() -> ref String sync, a: ref String) -> ref String {
+    if a.len() > 9 {
+        return a
+    }
+    return g()
+}
+"#;
+    let found = all_findings(source);
+    assert!(!found.is_empty(), "accepted, and it should not be");
+    for finding in &found {
+        let shown = nikaia::diagnostics::render_finding(finding, "p.nika", source);
+        assert!(!says_a_lifetime(&shown), "{shown}");
+    }
+}
+
+/// No receiver: the declaration's only view is `x`; a plain `y` the body reads is not part of the declaration.
+#[test]
+fn a_trait_impl_hands_back_only_what_the_declaration_names() {
+    let source = r#"trait Picks {
+    fn pick(x: ref String, y: String) -> ref String
+}
+struct Holder { n: i64 }
+impl Picks for Holder {
+    fn pick(x: ref String, y: String) -> ref String {
+        return ref y
+    }
+}
+"#;
+    let found = all_findings(source);
+    assert!(!found.is_empty(), "accepted, and it should not be");
+    for finding in &found {
+        let shown = nikaia::diagnostics::render_finding(finding, "p.nika", source);
+        assert!(!says_a_lifetime(&shown), "{shown}");
+    }
+}
+
+/// `b` is moved into the method and ends with it, and nothing keeps it.
+#[test]
+fn a_view_of_a_parameter_taken_by_value_in_a_method() {
+    let source = r#"struct S { name: String }
+impl S {
+    fn get(ref self, b: String) -> ref String {
+        if b.len() > 9 {
+            return self.name
+        }
+        return ref b
+    }
+}
+"#;
+    let found = all_findings(source);
+    assert!(!found.is_empty(), "accepted, and it should not be");
+    assert!(
+        found.iter().any(|f| f.message.contains("takes by value")),
+        "{found:#?}"
+    );
+    for finding in &found {
+        let shown = nikaia::diagnostics::render_finding(finding, "p.nika", source);
+        assert!(!says_a_lifetime(&shown), "{shown}");
+    }
+}
+
+// --- accepted shapes the review found failing in rustc ------------------------------
+
+/// `t: ref Txt` has a loan and a buffer, and the result is the buffer's:
+/// `fn name_of(t: &Txt<'r>) -> &'r str`.
+#[test]
+fn the_buffer_of_a_struct_parameter_is_the_source() {
+    let source = r#"struct Txt { n: ref String }
+fn mk(x: ref String) -> Txt {
+    return Txt { n: x }
+}
+fn name_of(t: ref Txt) -> ref String {
+    return t.n
+}
+fn f(b: ref String) -> ref String {
+    let t = mk(b)
+    return name_of(t)
+}
+"#;
+    let found = all_findings(source);
+    assert!(found.is_empty(), "{found:#?}");
+    compiled("the_buffer_of_a_struct_parameter_is_the_source", source);
+    let rust = lowered(source);
+    assert!(
+        rust.contains("fn name_of<'r>(t: &Txt<'r>) -> &'r str"),
+        "{rust}"
+    );
+}
+
+/// A view of a text the body formats, beside a view of a parameter.
+#[test]
+fn a_formatted_text_beside_a_parameter_is_kept() {
+    let source = r#"fn name_or_made(a: ref String, b: ref String) -> ref String {
+    if a.len() > 3 {
+        return a
+    }
+    let s = f"{b}!"
+    return ref s
+}
+"#;
+    let found = all_findings(source);
+    assert!(found.is_empty(), "{found:#?}");
+    compiled("a_formatted_text_beside_a_parameter_is_kept", source);
+}
+
+/// A caller may change what the result does not point into.
+#[test]
+fn a_caller_may_change_the_argument_the_result_does_not_point_into() {
+    let source = r#"fn pick(a: ref String, b: ref String) -> ref String {
+    if b.len() > 100 {
+        return a
+    }
+    return a.trim()
+}
+fn main() {
+    let x = " ab ".clone()
+    let mut y = "c".clone()
+    let r = pick(x, y)
+    y = "dd".clone()
+    println(r)
+    println(y)
+}
+"#;
+    let found = all_findings(source);
+    assert!(found.is_empty(), "{found:#?}");
+    compiled("a_caller_may_change_the_argument", source);
+}
+
+// --- the message: Part III's catalogue row, reproduced -------------------------------
+
+/// The reproduction of the `NK2302` row for a result that points into two
+/// parameters: the headline, a caret under each way out named with its
+/// parameter, the note and both ways out. No word of the language below.
+#[test]
+fn the_catalogue_row_for_two_sources_is_reproduced() {
+    let source = "fn longest(a: ref String, b: ref String) -> ref String {\n    if a.len() >= b.len() {\n        return a\n    }\n    return b\n}\n";
+    let found = result_findings(source);
+    assert_eq!(found.len(), 1, "{found:#?}");
+    let shown = nikaia::diagnostics::render_finding(&found[0], "p.nika", source);
+    assert!(
+        shown.contains(
+            "error[NK2302]: `longest` hands back a view of `a`'s data here and of `b`'s there, so a caller can't tell whose data it gets."
+        ),
+        "{shown}"
+    );
+    assert!(shown.contains("--> p.nika:3:9"), "{shown}");
+    assert!(shown.contains("^^^^^^^^ a view of `a`"), "{shown}");
+    assert!(shown.contains("-------- a view of `b`"), "{shown}");
+    assert!(
+        shown.contains("here that's decided only when the program runs."),
+        "{shown}"
+    );
+    assert!(
+        shown.contains("Split it, so each part hands back views"),
+        "{shown}"
+    );
+    assert!(
+        shown.contains("Or hand back a copy: declare `-> String`"),
+        "{shown}"
+    );
+    assert!(!says_a_lifetime(&shown), "{shown}");
+}
+
+/// A declaration with no body names no way out: the caret is the declaration.
+#[test]
+fn the_declaration_site_variant_names_the_declaration() {
+    let source = "trait Picks {\n    fn pick(a: ref String, b: ref String) -> ref String\n}\n";
+    let found = result_findings(source);
+    assert_eq!(found.len(), 1, "{found:#?}");
+    let shown = nikaia::diagnostics::render_finding(&found[0], "p.nika", source);
+    assert!(shown.contains("--> p.nika:2:"), "{shown}");
+    assert!(shown.contains("is declared without a body"), "{shown}");
+    assert!(!says_a_lifetime(&shown), "{shown}");
 }
