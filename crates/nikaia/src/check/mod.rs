@@ -35,9 +35,8 @@ use crate::assets::{ASSET, Reads};
 use crate::ast::{self, BinaryOp, Block, Expr, Item, MatchPattern, Span, Stmt, UnaryOp};
 use crate::build_time;
 use crate::contracts::SignatureOps;
-use crate::contracts::send::CrossingOps;
 use crate::contracts::ty::TyOps;
-use crate::contracts::{FieldContract, FnContract, Ledger, send, ty, ty::Ty};
+use crate::contracts::{FieldContract, FnContract, Ledger, ty, ty::Ty};
 use crate::fold::Constant;
 use crate::parser::Parsed;
 use nikaia_std::tools::check_consts::{self, CheckCrossing as Crossing};
@@ -148,15 +147,6 @@ use winnow_grammar::Symbol as Ident;
 const OFFERED: [&str; 11] = [
     "i32", "i64", "u8", "u32", "u64", "f64", "bool", "char", "scalar", "String", "str",
 ];
-
-/// The note every `NK25xx` carries, because it is the reason the code exists.
-///
-/// ADR-005 §1 Group B and ADR-037 §3: the verdict may not depend on
-/// `user_parallelism`, or a library written at one setting would turn out
-/// un-compilable at the other - which is the failure the check was decided to
-/// prevent rather than a property of it.
-const SAME_AT_BOTH: &str = "This is checked even when the program runs on one thread, so \
-     code stays correct when `user-parallelism` is turned on.";
 
 /// **What one call was handed**, positional and named, with the types found for
 /// each.
@@ -2431,34 +2421,9 @@ impl<'a> Checker<'a> {
     /// for the guard (`let n = *n;`), and the rest stay views of the part,
     /// which is what a guard does with them anyway - it reads.
     fn a_guard_reading_inside_a_box(&mut self, pattern: &MatchPattern, body: &Expr, guard: &Expr) {
-        let mut inside = Vec::new();
-        self.names_inside_boxes(pattern, &mut inside);
-        if inside.is_empty() {
-            return;
-        }
-        let mut read: BTreeSet<String> = BTreeSet::new();
-        crate::contracts::sync::visit_expr(self.parsed, guard, &mut |expr| {
-            if let Expr::Variable(name, _) = expr {
-                let name = self.parsed.text(*name);
-                if inside.iter().any(|bound| bound == name) {
-                    read.insert(name.to_string());
-                }
-            }
-        });
-        if read.is_empty() {
-            return;
-        }
-        let mut typed: BTreeMap<String, Ty> = BTreeMap::new();
-        self.typed_inside_boxes(pattern, &mut typed);
-        let copied: BTreeSet<String> = read
-            .iter()
-            .filter(|name| typed.get(*name).is_some_and(a_copy_by_value))
-            .cloned()
-            .collect();
-        self.s
-            .facts
-            .guards_inside_boxes
-            .insert(value_node(body), copied);
+        self.nikaia(|state, world, host| {
+            state.a_guard_reading_inside_a_box(world, host, pattern, body, guard)
+        })
     }
 
     /// The names a pattern binds **whole** to a boxed part: `a` in
@@ -2473,11 +2438,6 @@ impl<'a> Checker<'a> {
     /// own pattern names, which is the boxed type.
     fn typed_inside_boxes(&self, pattern: &MatchPattern, out: &mut BTreeMap<String, Ty>) {
         self.s.typed_inside_boxes(self.world, pattern, out);
-    }
-
-    /// The names a pattern binds inside the boxed parts it looks into.
-    fn names_inside_boxes(&self, pattern: &MatchPattern, out: &mut Vec<String>) {
-        self.s.names_inside_boxes(self.world, pattern, out);
     }
 
     /// Whether a call is to the **prelude's `assert`**
@@ -2652,66 +2612,8 @@ impl<'a> Checker<'a> {
     /// The free calls and the forms in a claim that are not a read
     /// ([ADR-269](../../docs/specification/adr/adr-269.md) D3). Methods are
     /// the frame's; this is what the tree says.
-    fn a_claim_reaches(&self, condition: &Expr, not_pure: &mut Vec<String>) {
-        let mut found: Vec<String> = Vec::new();
-        crate::contracts::sync::visit_expr(self.parsed, condition, &mut |expr| {
-            let form = match expr {
-                Expr::Spawn { .. } => Some("starts a task"),
-                Expr::Select(_, _) => Some("waits in a `select`"),
-                Expr::Overlap(_, _) => Some("runs an `overlap`"),
-                Expr::Dsl { .. } => Some("runs a `dsl` block"),
-                Expr::Asm { .. } | Expr::Unsafe(_, _) => Some("runs `unsafe` code"),
-                Expr::Try(_, _) | Expr::Throw(_, _) | Expr::TryCatch { .. } => Some("can fail"),
-                Expr::Return(_, _) | Expr::Break(_) | Expr::Continue(_) => Some("jumps"),
-                Expr::Block(_, _) | Expr::If { .. } | Expr::Match { .. } | Expr::Closure { .. } => {
-                    Some("contains a block, which might change something")
-                }
-                _ => None,
-            };
-            if let Some(form) = form {
-                found.push(format!("the condition {form}"));
-            }
-            let Expr::Call { func, .. } = expr else {
-                return;
-            };
-            let name = match func.as_ref() {
-                Expr::Variable(name, _) => self.parsed.text(*name).to_string(),
-                Expr::Path(segments, _) => self.parsed.unaliased(
-                    &segments
-                        .iter()
-                        .map(|s| self.parsed.text(*s))
-                        .collect::<Vec<_>>()
-                        .join("::"),
-                ),
-                _ => {
-                    found
-                        .push("The condition calls something that isn't a plain name.".to_string());
-                    return;
-                }
-            };
-            // A value is made, not a call made: a variant, a type's
-            // constructor, a hull.
-            let constructs = self.s.variant_parts.contains_key(&name)
-                || self.declares_a_type(&name)
-                || is_hull(&name)
-                || name
-                    .split_once("::")
-                    .is_some_and(|(ty, variant)| self.s.is_variant(ty, variant));
-            if constructs {
-                return;
-            }
-            match self.resolve(&name) {
-                Some((_, contract)) => {
-                    if let Some(why) = not_pure_because(&contract) {
-                        found.push(format!("`{name}` {why}"));
-                    }
-                }
-                None => found.push(format!(
-                    "The compiler knows nothing about `{name}`, so it might change something."
-                )),
-            }
-        });
-        not_pure.extend(found);
+    fn a_claim_reaches(&mut self, condition: &Expr, not_pure: &mut Vec<String>) {
+        self.nikaia(|state, world, host| state.a_claim_reaches(world, host, condition, not_pure))
     }
 
     fn a_view_compared_with_a_value(
@@ -11037,76 +10939,7 @@ impl<'a> Checker<'a> {
     /// an absence (Part III, C.4) — which is the same polarity every other
     /// answer in this compiler takes about a thing nobody wrote down.
     fn branches_meet_on_nothing(&mut self, block: &Block, span: &Span) {
-        use crate::contracts::order;
-
-        // A branch that **binds** is refused on its own: the block's value
-        // already carries every branch's result, so `let x = …` inside one
-        // would name a thing that leaves by two doors (D2).
-        for stmt in &block.stmts {
-            if let Stmt::Let { names, .. } = &stmt.node {
-                let bound: Vec<String> = names
-                    .iter()
-                    .map(|n| self.parsed.text(*n).to_string())
-                    .collect();
-                let name = bound.join("`, `");
-                self.s.findings.push(Finding {
-                    code: "NK2104".to_string(),
-                    severity: Severity::Error,
-                    span: stmt.span,
-                    message: format!("A branch of an `overlap` can't declare `{name}`."),
-                    notes: vec![
-                        "Each statement in the block runs as its own branch, and the block's \
-                         value is their results in the order they're written."
-                            .to_string(),
-                    ],
-                    help: Some(format!(
-                        "Take the value from the block instead: \
-                         `let ({name}, …) = overlap {{ … }}`."
-                    )),
-                    labels: Vec::new(),
-                });
-            }
-        }
-
-        let operations: Vec<Option<order::Operation>> = block
-            .stmts
-            .iter()
-            .map(|stmt| {
-                order::operation(self.parsed, &stmt.node, self.world.own, self.world.library)
-            })
-            .collect();
-
-        for (i, earlier) in operations.iter().enumerate() {
-            for (j, later) in operations.iter().enumerate().skip(i + 1) {
-                let (Some(earlier), Some(later)) = (earlier, later) else {
-                    continue;
-                };
-                let verdict = order::verdict(earlier, later);
-                if verdict.is_overlap() {
-                    continue;
-                }
-                self.s.findings.push(Finding {
-                    code: "NK2104".to_string(),
-                    severity: Severity::Error,
-                    span: block.stmts[j].span,
-                    message: "These two branches can't run at the same time.".to_string(),
-                    notes: vec![
-                        format!("{}.", sentence(&verdict.why())),
-                        "`overlap` runs its branches at once, so they can't depend on each other."
-                            .to_string(),
-                    ],
-                    help: Some(
-                        "If they should run in order, write them as ordinary statements."
-                            .to_string(),
-                    ),
-                    labels: Vec::new(),
-                });
-                // One finding per branch: a branch that meets two others has
-                // one thing wrong with it, and three messages about it is the
-                // same mistake told three times.
-                break;
-            }
-        }
+        self.s.branches_meet_on_nothing(self.world, block);
         let _ = span;
     }
 
@@ -11249,120 +11082,9 @@ impl<'a> Checker<'a> {
         bound: &[(String, Ty, i64)],
         span: &Span,
     ) {
-        if bound.is_empty() {
-            return;
-        }
-        let (pauses, named) = self.what_the_body_does(body);
-        let places: Vec<(String, usize)> = bound
-            .iter()
-            .map(|(name, _, at)| (name.clone(), *at as usize))
-            .collect();
-        let held = send::held_across_a_pause(&places, &pauses, &named);
-        self.s.facts.held_across_a_pause.extend(
-            held.iter()
-                .map(|name| (span.at() as i64, name.clone()))
-                .collect::<Vec<_>>(),
-        );
-        for (name, ty, _) in bound.iter().filter(|(name, ..)| held.contains(name)) {
-            let crossing = send::crossing(
-                ty,
-                self.world.own,
-                self.world.library,
-                send::Destination::Ours,
-            );
-            if crossing.refused().is_none() {
-                continue;
-            }
-            let notes = [
-                Some(
-                    "A value a task still needs after a pause is kept inside the task, and \
-                     the task can move to another thread."
-                        .to_string(),
-                ),
-                crossing.note(),
-                Some(SAME_AT_BOTH.to_string()),
-            ];
-            self.s.findings.push(Finding {
-                severity: Severity::Error,
-                span: *span,
-                code: "NK2501".to_string(),
-                message: format!(
-                    "This task keeps `{name}` while it pauses, and `{name}` can't be passed to a \
-                     task."
-                ),
-                notes: notes.into_iter().flatten().collect(),
-                help: crossing.way_out(),
-                labels: Vec::new(),
-            });
-        }
-    }
-
-    /// Where a block **pauses**, and where each name it mentions was last
-    /// mentioned — both by the byte a statement starts at, and both reaching
-    /// through the blocks a statement holds.
-    ///
-    /// A method call is answered from [`Checked::pausing_methods`], which the
-    /// walk that just ran filled: which entry `db.load()` goes to is the type
-    /// checker's answer ([ADR-288](../../docs/specification/adr/adr-288.md)). A
-    /// free call is answered from the ledgers directly, the way
-    /// [`contracts::sync`] answers it.
-    fn what_the_body_does(&self, body: &Block) -> (Vec<usize>, BTreeMap<String, usize>) {
-        let mut pauses = Vec::new();
-        let mut named: BTreeMap<String, usize> = BTreeMap::new();
-        self.walk_the_body(body, &mut pauses, &mut named);
-        (pauses, named)
-    }
-
-    fn walk_the_body(
-        &self,
-        body: &Block,
-        pauses: &mut Vec<usize>,
-        named: &mut BTreeMap<String, usize>,
-    ) {
-        for stmt in &body.stmts {
-            let at = stmt.span.at();
-            crate::contracts::sync::visit_stmt(self.parsed, &stmt.node, &mut |expr| {
-                if self.pauses_here(expr, at) {
-                    pauses.push(at);
-                }
-                for name in crate::contracts::send::names_used(self.parsed, expr) {
-                    let last = named.entry(name).or_insert(at);
-                    *last = (*last).max(at);
-                }
-            });
-            // The blocks a statement holds - an `if`, a loop, a lambda. Their
-            // statements have spans of their own, so the order is the source's.
-            crate::contracts::sync::visit_stmt_blocks(&stmt.node, &mut |inner| {
-                self.walk_the_body(inner, pauses, named);
-            });
-        }
-    }
-
-    /// Whether this one expression is a suspension point.
-    fn pauses_here(&self, expr: &Expr, at: usize) -> bool {
-        match crate::contracts::sync::reached(self.parsed, expr, self.world.own, self.world.library)
-        {
-            Some(crate::contracts::sync::Reached::Method) => match expr {
-                Expr::MethodCall { method, .. } | Expr::SafeMethod { method, .. } => self
-                    .s
-                    .flow
-                    .pausing_methods
-                    .contains(&((at as i64), self.parsed.text(*method).to_string())),
-                _ => false,
-            },
-            Some(crate::contracts::sync::Reached::Own(name)) => self
-                .world
-                .own
-                .functions
-                .get(&name)
-                .is_some_and(|c| !c.sync_claim.is_sync()),
-            Some(crate::contracts::sync::Reached::Library { sync, .. }) => !sync,
-            // A call this compiler cannot name may do anything, pausing
-            // included - which is the fail-closed direction for a question
-            // whose wrong answer here is a value silently crossing a thread.
-            Some(crate::contracts::sync::Reached::Opaque(_)) => true,
-            None => false,
-        }
+        self.nikaia(|state, world, host| {
+            state.a_task_holds_these_across_a_pause(world, host, body, bound, span)
+        })
     }
 
     /// ADR-303 D7: a value handed to a call this compiler cannot see the end of
@@ -14233,23 +13955,8 @@ pub const ASSERT: &str = "assert";
 /// ([ADR-269](../../docs/specification/adr/adr-269.md) D3): it may pause, may
 /// fail, touches something or changes a value. A `touches` nobody wrote is not
 /// an answer, and counts as touching.
-fn not_pure_because(contract: &FnContract) -> Option<&'static str> {
-    if !contract.sync_claim.is_sync() {
-        return Some("can pause");
-    }
-    if !contract.fails_with.is_empty() {
-        return Some("can fail");
-    }
-    if contract.mutates {
-        return Some("changes what it is called on");
-    }
-    if !contract.touches_known || !contract.touches.is_empty() {
-        return Some("touches something outside the program's values");
-    }
-    if contract.touches_a_lock.holds() {
-        return Some("takes a lock");
-    }
-    None
+fn not_pure_because(contract: &FnContract) -> Option<String> {
+    nikaia_std::tools::check_walks::check_not_pure_because(contract)
 }
 
 /// In Nikaia (`tools/written.nika`, ADR-294, #125).
@@ -14327,11 +14034,6 @@ type LoopNames = Vec<(String, String)>;
 /// being a habit: the parameter has to be named `root` *and* typed `fs::Root`.
 fn a_root_is_one_of_two(wanted: &[(String, Ty)]) -> String {
     nikaia_std::tools::check_places::a_root_is_one_of_two(wanted)
-}
-
-/// A clause as the start of a sentence: its first letter upper case.
-fn sentence(clause: &str) -> String {
-    nikaia_std::tools::keep::capitalised(clause)
 }
 
 fn plural(n: usize, what: &str) -> String {

@@ -9,7 +9,7 @@ use std::collections
 
 /// The note every `NK25xx` carries, because it is the reason the code exists:
 /// the verdict may not depend on `user_parallelism`.
-fn same_at_both() -> String {
+pub fn same_at_both() -> String {
     return "This is checked even when the program runs on one thread, so code stays correct when `user-parallelism` is turned on.".clone()
 }
 

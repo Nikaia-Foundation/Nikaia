@@ -1,0 +1,109 @@
+// crates/nikaia-std/src/tools/check_task_pauses.nika
+//
+// **What a task keeps across a pause** (ADR-055 §2 D6, ADR-312), moved from the
+// compiler's checker (ADR-294, #125, #558, C-5f): where a task's body pauses,
+// where each name it mentions was last mentioned, and `NK2501` for a value the
+// task still needs after a pause that cannot cross a thread.
+
+use std::collections
+
+impl CheckState {
+    /// **`NK2501`, for what a task keeps while it pauses.** A value a task still
+    /// needs after a pause is kept inside the task, and the task can move to
+    /// another thread. `bound` is each of the body's own bindings with its type
+    /// and the byte it is bound at.
+    pub fn a_task_holds_these_across_a_pause[H: CheckHost](ref mut self, world: ref CheckWorld, host: ref H, body: ref Block, bound: ref Vec[(String, Ty, i64)], span: ref Span) sync {
+        if bound.len() == 0 {
+            return
+        }
+        let mut pauses: Vec[i64] = []
+        let mut named: collections::BTreeMap[String, i64] = collections::BTreeMap()
+        self.walk_the_body(world, host, body, pauses, named)
+        let mut places: Vec[(String, i64)] = []
+        for each in bound {
+            places.push((each.0.clone(), each.2))
+        }
+        let held = held_across_a_pause(places, pauses, named)
+        let at = span.start as i64
+        for name in held {
+            self.facts.held_across_a_pause.insert((at, name.clone()))
+        }
+        for each in bound {
+            if held.contains(each.0) {
+                let verdict = crossing(each.1, Walking { own: world.own, library: world.library, into: Going::Ours })
+                if verdict.refused_part() != null {
+                    let name = each.0.clone()
+                    let mut notes: Vec[String] = ["A value a task still needs after a pause is kept inside the task, and the task can move to another thread.".clone()]
+                    let note = verdict.note()
+                    if note != null {
+                        notes.push(note ?? "".clone())
+                    }
+                    notes.push(same_at_both())
+                    self.findings.push(check_refusal("NK2501", span, f"This task keeps `{name}` while it pauses, and `{name}` can't be passed to a task.", notes, verdict.way_out()))
+                }
+            }
+        }
+    }
+
+    /// Where a block **pauses**, and where each name it mentions was last
+    /// mentioned - both by the byte a statement starts at, and both reaching
+    /// through the blocks a statement holds.
+    fn walk_the_body[H: CheckHost](ref self, world: ref CheckWorld, host: ref H, body: ref Block, mut pauses: Vec[i64], mut named: collections::BTreeMap[String, i64]) sync {
+        for stmt in body.stmts {
+            let at = stmt.span.start as i64
+            for each in check_visit_stmt(stmt.node) {
+                self.a_task_looks_at(world, host, each, at, pauses, named)
+            }
+            // The blocks a statement holds - an `if`, a loop, a lambda. Their
+            // statements have spans of their own, so the order is the source's.
+            for inner in check_visit_stmt_blocks(stmt.node) {
+                self.walk_the_body(world, host, inner, pauses, named)
+            }
+        }
+    }
+
+    fn a_task_looks_at[H: CheckHost](ref self, world: ref CheckWorld, host: ref H, expr: ref Expr, at: i64, mut pauses: Vec[i64], mut named: collections::BTreeMap[String, i64]) sync {
+        if self.pauses_here(world, expr, at) {
+            pauses.push(at)
+        }
+        let mut used: collections::BTreeSet[String] = collections::BTreeSet()
+        names_in(expr, world.words, used)
+        for name in used {
+            let before = named[name] ?? at
+            named.insert(name.clone(), if before > at { before } else { at })
+        }
+        if check_visit_has_holes(expr) {
+            for hole in host.literal_holes(expr) {
+                for inner in check_visit_preorder(hole) {
+                    self.a_task_looks_at(world, host, inner, at, pauses, named)
+                }
+            }
+        }
+    }
+
+    /// Whether this one expression is a suspension point. A method call is
+    /// answered from what the walk that just ran filled (ADR-288); a free call
+    /// from the ledgers directly; a call this compiler cannot name may do
+    /// anything, pausing included - the fail-closed direction.
+    fn pauses_here(ref self, world: ref CheckWorld, expr: ref Expr, at: i64) -> bool sync {
+        let callee = callee_of(world.words, expr, world.own, world.library, world.here.items) ?? return false
+        return match callee {
+            Callee::Method => match expr {
+                Expr::MethodCall { method, .. } => self.flow.pausing_methods.contains((at, world.words.resolve(method).clone())),
+                Expr::SafeMethod { method, .. } => self.flow.pausing_methods.contains((at, world.words.resolve(method).clone())),
+                else => false,
+            },
+            Callee::Own(name) => {
+                let key = name.clone()
+                let found: FnContract? = world.own.functions[key]?.clone()
+                if found == null {
+                    return false
+                }
+                let contract = found ?? return false
+                !contract.sync_claim.is_sync()
+            },
+            Callee::Library { never_pauses, .. } => !never_pauses,
+            Callee::Opaque(_) => true,
+        }
+    }
+}

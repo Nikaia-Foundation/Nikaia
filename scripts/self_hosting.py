@@ -188,6 +188,9 @@ COMPILER_NIKA = {
     "emit_core_args.nika": "emit: the arguments and the call of the core: args, called (0.0.827)",
     "emit_core_calls.nika": "emit: the calls of the core: call, call_inner, method_call, the MethodCall arm (0.0.830)",
     "emit_core_places.nika": "emit: the places of the core: SafeMethod, Field, SafeField, Index, Cast, StructLit, With, Tuple, ListLit (0.0.831)",
+    "check_visit.nika": "check: the walk outside the blocks, with the hole of a literal left to the host (0.0.X) (0.0.832)",
+    "check_walks.nika": "check: the branches of an overlap, a guard inside a box, what a claim reaches (NK2104, NK1194) (0.0.X) (0.0.832)",
+    "check_task_pauses.nika": "check: what a task keeps across a pause (NK2501) (0.0.X) (0.0.832)",
 }
 
 

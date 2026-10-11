@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.832] — 2026-10-11
+
+**check: the walks below the core: overlap branches, guards inside boxes, claims, what a task keeps across a pause (C-5f, #558, #125)**
+- check_visit.nika is the checker's walk outside the blocks (sync::visit_expr and neighbours); check_walks.nika holds NK2104, the guard in a box, a_claim_reaches and not_pure_because; check_task_pauses.nika holds NK2501 for what a task keeps across a pause.
+
 ## [0.0.831] — 2026-10-11
 
 **emit: the places of the core are Nikaia: SafeMethod, Field, SafeField, Index, Cast, StructLit, With, Tuple, ListLit (#558, #125, E9 U7)**

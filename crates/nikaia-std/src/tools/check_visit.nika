@@ -1,0 +1,244 @@
+// crates/nikaia-std/src/tools/check_visit.nika
+//
+// **The walk the checker asks of a tree, outside the blocks it holds**
+// (`contracts::sync::visit_expr` and its neighbours), moved from Rust
+// (ADR-294, #125, #558, C-5f). It is not `emit_walk`'s: that walk descends into
+// the blocks and leaves a `catch` handler, a guard and the options after a `;`
+// out, and this one is the other way round - what a statement holds without the
+// blocks inside it, those being walked separately so each keeps its own
+// statement's span.
+//
+// The answer is a list of references into the tree, in the order the walk
+// meets them. **The holes of a literal are not in it**: they are expressions of
+// their own, owned by the host, so a caller visits the list and asks
+// `host.literal_holes` at each literal, then walks what it gets the same way
+// (see `check_visit_has_holes`).
+
+fn check_visit_one(expr: ref Expr) -> Vec[ref Expr] {
+    return [expr]
+}
+
+fn check_visit_block_one(block: ref Block) -> Vec[ref Block] {
+    return [block]
+}
+
+/// The expressions an expression holds directly, outside its blocks: what the
+/// walk descends into, and what a search for blocks looks through. A `spawn`
+/// holds none here, being a detached context (Part I, 5.4).
+pub fn check_visit_children(expr: ref Expr) -> Vec[ref Expr] {
+    let mut out: Vec[ref Expr] = []
+    match expr {
+        Expr::Call { func, args, config, .. } => {
+            out.push(func)
+            for arg in args {
+                out.push(arg)
+            }
+            for option in config {
+                out.extend(check_visit_one(option.value))
+            }
+        },
+        Expr::MethodCall { receiver, args, config, .. } => {
+            out.push(receiver)
+            for arg in args {
+                out.push(arg)
+            }
+            for option in config {
+                out.extend(check_visit_one(option.value))
+            }
+        },
+        Expr::SafeMethod { receiver, args, config, .. } => {
+            out.push(receiver)
+            for arg in args {
+                out.push(arg)
+            }
+            for option in config {
+                out.extend(check_visit_one(option.value))
+            }
+        },
+        Expr::Binary { lhs, rhs, .. } => {
+            out.push(lhs)
+            out.push(rhs)
+        },
+        Expr::Unary { expr, .. } => out.push(expr),
+        Expr::Try(inner, _) => out.push(inner),
+        Expr::Throw(inner, _) => out.push(inner),
+        Expr::Cast { expr, .. } => out.push(expr),
+        Expr::Field { base, .. } => out.push(base),
+        Expr::SafeField { base, .. } => out.push(base),
+        Expr::Index { base, index, .. } => {
+            out.push(base)
+            out.push(index)
+        },
+        Expr::Range { start, end, .. } => {
+            out.push(start)
+            out.push(end)
+        },
+        Expr::Tuple(parts, _) => {
+            for part in parts {
+                out.push(part)
+            }
+        },
+        Expr::Coalesce { value, fallback, .. } => {
+            out.push(value)
+            out.push(fallback)
+        },
+        Expr::TryCatch { expr, .. } => out.push(expr),
+        Expr::If { cond, .. } => out.push(cond),
+        Expr::Match { value, arms, .. } => {
+            out.push(value)
+            for arm in arms {
+                if arm.guard != null {
+                    out.push(arm.guard ?? return out)
+                }
+                out.extend(check_visit_one(arm.body))
+            }
+        },
+        Expr::StructLit { fields, .. } => {
+            for field in fields {
+                if field.value != null {
+                    out.push(field.value ?? return out)
+                }
+            }
+        },
+        Expr::ListLit { items, .. } => {
+            for item in items {
+                out.push(item)
+            }
+        },
+        Expr::With { base, fields, .. } => {
+            out.push(base)
+            for field in fields {
+                if field.value != null {
+                    out.push(field.value ?? return out)
+                }
+            }
+        },
+        Expr::Return(value, _) => {
+            if value != null {
+                out.push(value ?? return out)
+            }
+        },
+        Expr::Select(arms, _) => {
+            for arm in arms {
+                out.extend(check_visit_one(arm.value))
+            }
+        },
+        else => {},
+    }
+    return out
+}
+
+/// Every expression inside this one, this one included, outside the blocks it
+/// holds, in the order the walk meets them. A literal's holes come after the
+/// literal and before what follows it in the list; the caller puts them there.
+pub fn check_visit_preorder(expr: ref Expr) -> Vec[ref Expr] {
+    let mut out: Vec[ref Expr] = [expr]
+    for child in check_visit_children(expr) {
+        out.extend(check_visit_preorder(child))
+    }
+    return out
+}
+
+/// Whether the host can answer holes for this expression: an `f"…"` or a
+/// template. Asking only these keeps the walk off the host everywhere else.
+pub fn check_visit_has_holes(expr: ref Expr) -> bool {
+    return match expr {
+        Expr::LitInterpolated { .. } => true,
+        Expr::Dsl { .. } => true,
+        else => false,
+    }
+}
+
+/// The expressions a statement holds, without the blocks inside it.
+pub fn check_visit_stmt(stmt: ref Stmt) -> Vec[ref Expr] {
+    let mut out: Vec[ref Expr] = []
+    match stmt {
+        Stmt::Let { value, .. } => out.extend(check_visit_preorder(value)),
+        Stmt::Comptime { value, .. } => out.extend(check_visit_preorder(value)),
+        Stmt::Assign { target, value, .. } => {
+            out.extend(check_visit_preorder(target))
+            out.extend(check_visit_preorder(value))
+        },
+        Stmt::For { iter, .. } => out.extend(check_visit_preorder(iter)),
+        Stmt::While { cond, .. } => out.extend(check_visit_preorder(cond)),
+        Stmt::Return(value) => {
+            if value != null {
+                out.extend(check_visit_preorder(value ?? return out))
+            }
+        },
+        Stmt::Break => {},
+        Stmt::Continue => {},
+        Stmt::Expr(inner) => out.extend(check_visit_preorder(inner)),
+    }
+    return out
+}
+
+/// Every block an expression holds, including the body of a lambda passed as
+/// an argument. A trailing lambda runs during the call it is given to, so what
+/// it calls, the function around it calls; `spawn` is a detached context and is
+/// not walked. An `unsafe` block makes no boundary of its own (ADR-302 D3).
+/// **Through every expression that holds others** (#494).
+pub fn check_visit_expr_blocks(expr: ref Expr) -> Vec[ref Block] {
+    let mut out: Vec[ref Block] = []
+    match expr {
+        Expr::Block(block, _) => {
+            out.push(block)
+            return out
+        },
+        Expr::Unsafe(block, _) => {
+            out.push(block)
+            return out
+        },
+        Expr::Overlap(block, _) => {
+            out.push(block)
+            return out
+        },
+        Expr::Closure { body, .. } => {
+            out.push(body)
+            return out
+        },
+        Expr::Spawn { .. } => return out,
+        Expr::If { then_branch, else_branch, .. } => {
+            out.push(then_branch)
+            if else_branch != null {
+                out.push(else_branch ?? return out)
+            }
+        },
+        Expr::TryCatch { handler, .. } => out.push(handler),
+        Expr::Select(arms, _) => {
+            for arm in arms {
+                out.extend(check_visit_block_one(arm.body))
+            }
+        },
+        else => {},
+    }
+    for child in check_visit_children(expr) {
+        out.extend(check_visit_expr_blocks(child))
+    }
+    return out
+}
+
+/// The blocks a statement holds - an `if`, a loop, a lambda: their statements
+/// have spans of their own, so the order is the source's.
+pub fn check_visit_stmt_blocks(stmt: ref Stmt) -> Vec[ref Block] {
+    let mut out: Vec[ref Block] = []
+    match stmt {
+        Stmt::For { body, .. } => out.push(body),
+        Stmt::While { body, .. } => out.push(body),
+        Stmt::Let { value, .. } => out.extend(check_visit_expr_blocks(value)),
+        Stmt::Comptime { value, .. } => out.extend(check_visit_expr_blocks(value)),
+        Stmt::Expr(value) => out.extend(check_visit_expr_blocks(value)),
+        Stmt::Assign { target, value, .. } => {
+            out.extend(check_visit_expr_blocks(target))
+            out.extend(check_visit_expr_blocks(value))
+        },
+        Stmt::Return(value) => {
+            if value != null {
+                out.extend(check_visit_expr_blocks(value ?? return out))
+            }
+        },
+        Stmt::Break => {},
+        Stmt::Continue => {},
+    }
+    return out
+}

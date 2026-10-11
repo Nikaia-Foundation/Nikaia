@@ -17274,7 +17274,7 @@ pub fn resolve_method(world: &CheckWorld<'_>, key: &str) -> Option<CheckResolved
 
 // --- check_send.nika ---
 
-fn same_at_both() -> String { "This is checked even when the program runs on one thread, so code stays correct when `user-parallelism` is turned on.".to_owned() }
+pub fn same_at_both() -> String { "This is checked even when the program runs on one thread, so code stays correct when `user-parallelism` is turned on.".to_owned() }
 
 fn a_lock_refusal(verdict: &Crossing) -> bool {
     match verdict {
@@ -18265,6 +18265,83 @@ impl CheckState {
 }
 
 
+// --- check_task_pauses.nika ---
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_task_holds_these_across_a_pause<H: CheckHost>(&mut self, world: &CheckWorld<'_>, host: &H, body: &Block, bound: &[(String, Ty, i64)], span: &Span) {
+        if bound.is_empty() { return; }
+        let mut pauses: Vec<i64> = vec![];
+        let mut named: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
+        self.walk_the_body(world, host, body, &mut pauses, &mut named);
+        let mut places: Vec<(String, i64)> = vec![];
+        for each in bound.iter() { places.push((each.0.to_owned(), each.2)); }
+        let held = held_across_a_pause(&places, &pauses, &named);
+        let at = span.start as i64;
+        for name in held.iter() { self.facts.held_across_a_pause.insert((at, name.to_owned())); }
+        for each in bound.iter() {
+            if held.contains(&each.0) {
+                let verdict = crossing(&each.1, &Walking { own: world.own, library: world.library, into: Going::Ours });
+                if verdict.refused_part().is_some() {
+                    let name = each.0.to_owned();
+                    let mut notes: Vec<String> = vec!["A value a task still needs after a pause is kept inside the task, and the task can move to another thread.".to_owned()];
+                    let note = verdict.note();
+                    if note.is_some() { notes.push(nikaia_std::index::or(note, || "".to_owned().into())); }
+                    notes.push(same_at_both());
+                    self.findings.push(check_refusal("NK2501", span, format!("This task keeps `{}` while it pauses, and `{}` can't be passed to a task.", name, name), notes, verdict.way_out()));
+                }
+            }
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn walk_the_body<H: CheckHost>(&self, world: &CheckWorld<'_>, host: &H, body: &Block, pauses: &mut Vec<i64>, named: &mut collections::BTreeMap<String, i64>) {
+        for stmt in body.stmts.iter() {
+            let at = stmt.span.start as i64;
+            for each in check_visit_stmt(&stmt.node) { self.a_task_looks_at(world, host, each, at, pauses, named); }
+            for inner in check_visit_stmt_blocks(&stmt.node) { self.walk_the_body(world, host, inner, pauses, named); }
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn a_task_looks_at<H: CheckHost>(&self, world: &CheckWorld<'_>, host: &H, expr: &Expr, at: i64, pauses: &mut Vec<i64>, named: &mut collections::BTreeMap<String, i64>) {
+        if self.pauses_here(world, expr, at) { pauses.push(at); }
+        let mut used: collections::BTreeSet<String> = collections::BTreeSet::new();
+        names_in(expr, world.words, &mut used);
+        for name in used.iter() {
+            let before = nikaia_std::index::or(*nikaia_std::index::get(&named, name), || at.into());
+            named.insert(name.to_owned(), if before > at { before } else { at });
+        }
+        if check_visit_has_holes(expr) { for hole in host.literal_holes(expr) { for inner in check_visit_preorder(&hole) { self.a_task_looks_at(world, host, inner, at, pauses, named); } } }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn pauses_here(&self, world: &CheckWorld<'_>, expr: &Expr, at: i64) -> bool {
+        let callee = match callee_of(world.words, expr, world.own, world.library, world.here.items) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        match callee {
+            Callee::Method => match expr {
+                Expr::MethodCall { method, .. } => { let method = *method; self.flow.pausing_methods.contains(&(at, world.words.resolve(method).to_owned())) },
+                Expr::SafeMethod { method, .. } => { let method = *method; self.flow.pausing_methods.contains(&(at, world.words.resolve(method).to_owned())) },
+                _ => false,
+            },
+            Callee::Own(ref name) => {
+                let key = name.to_owned();
+                let found: Option<FnContract> = match *nikaia_std::index::get(&world.own.functions, &key) {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                };
+                if found.is_none() { return false; }
+                let contract = match found { Some(__nikaia_value) => __nikaia_value, None => return false };
+                !contract.sync_claim.is_sync()
+            },
+            Callee::Library { never_pauses, .. } => !never_pauses,
+            Callee::Opaque(_) => true,
+        }
+    }
+}
+
+
 // --- check_texts.nika ---
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -18888,6 +18965,166 @@ pub fn ledger_candidates(ledger: &Ledger, method: &str) -> Vec<String> {
 }
 
 
+// --- check_visit.nika ---
+
+fn check_visit_one(expr: &Expr) -> Vec<&Expr> { vec![expr] }
+
+fn check_visit_block_one(block: &Block) -> Vec<&Block> { vec![block] }
+
+pub fn check_visit_children(expr: &Expr) -> Vec<&Expr> {
+    let mut out: Vec<&Expr> = vec![];
+    match expr {
+        Expr::Call { func, args, config, .. } => {
+            let func = nikaia_std::boxed::open(func);
+            out.push(func);
+            for arg in args.iter() { out.push(arg); }
+            for option in config.iter() { out.extend(check_visit_one(&option.value)); }
+        },
+        Expr::MethodCall { receiver, args, config, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver);
+            out.push(receiver);
+            for arg in args.iter() { out.push(arg); }
+            for option in config.iter() { out.extend(check_visit_one(&option.value)); }
+        },
+        Expr::SafeMethod { receiver, args, config, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver);
+            out.push(receiver);
+            for arg in args.iter() { out.push(arg); }
+            for option in config.iter() { out.extend(check_visit_one(&option.value)); }
+        },
+        Expr::Binary { lhs, rhs, .. } => {
+            let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
+            out.push(lhs);
+            out.push(rhs);
+        },
+        Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); out.push(expr) },
+        Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); out.push(inner) },
+        Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); out.push(inner) },
+        Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); out.push(expr) },
+        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); out.push(base) },
+        Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); out.push(base) },
+        Expr::Index { base, index, .. } => {
+            let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
+            out.push(base);
+            out.push(index);
+        },
+        Expr::Range { start, end, .. } => {
+            let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end);
+            out.push(start);
+            out.push(end);
+        },
+        Expr::Tuple(parts, _) => { for part in parts.iter() { out.push(part); } },
+        Expr::Coalesce { value, fallback, .. } => {
+            let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback);
+            out.push(value);
+            out.push(fallback);
+        },
+        Expr::TryCatch { expr, .. } => { let expr = nikaia_std::boxed::open(expr); out.push(expr) },
+        Expr::If { cond, .. } => { let cond = nikaia_std::boxed::open(cond); out.push(cond) },
+        Expr::Match { value, arms, .. } => {
+            let value = nikaia_std::boxed::open(value);
+            out.push(value);
+            for arm in arms.iter() {
+                if arm.guard.is_some() { out.push(match arm.guard.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return out }); }
+                out.extend(check_visit_one(&arm.body));
+            }
+        },
+        Expr::StructLit { fields, .. } => { for field in fields.iter() { if field.value.is_some() { out.push(match field.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return out }); } } },
+        Expr::ListLit { items, .. } => { for item in items.iter() { out.push(item); } },
+        Expr::With { base, fields, .. } => {
+            let base = nikaia_std::boxed::open(base);
+            out.push(base);
+            for field in fields.iter() { if field.value.is_some() { out.push(match field.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return out }); } }
+        },
+        Expr::Return(value, _) => {
+            let value = nikaia_std::boxed::open(value);
+            if value.is_some() { out.push(match value { Some(__nikaia_value) => __nikaia_value, None => return out }); }
+        },
+        Expr::Select(arms, _) => { for arm in arms.iter() { out.extend(check_visit_one(&arm.value)); } },
+        _ => { },
+    }
+    out
+}
+
+pub fn check_visit_preorder(expr: &Expr) -> Vec<&Expr> {
+    let mut out: Vec<&Expr> = vec![expr];
+    for child in check_visit_children(expr) { out.extend(check_visit_preorder(child)); }
+    out
+}
+
+pub fn check_visit_has_holes(expr: &Expr) -> bool { matches!(expr, Expr::LitInterpolated { .. } | Expr::Dsl { .. }) }
+
+pub fn check_visit_stmt(stmt: &Stmt) -> Vec<&Expr> {
+    let mut out: Vec<&Expr> = vec![];
+    match stmt {
+        Stmt::Let { value, .. } => out.extend(check_visit_preorder(value)),
+        Stmt::Comptime { value, .. } => out.extend(check_visit_preorder(value)),
+        Stmt::Assign { target, value, .. } => {
+            out.extend(check_visit_preorder(target));
+            out.extend(check_visit_preorder(value));
+        },
+        Stmt::For { iter, .. } => out.extend(check_visit_preorder(iter)),
+        Stmt::While { cond, .. } => out.extend(check_visit_preorder(cond)),
+        Stmt::Return(value) => { if value.is_some() { out.extend(check_visit_preorder(match value { Some(__nikaia_value) => __nikaia_value, None => return out })); } },
+        Stmt::Break => { },
+        Stmt::Continue => { },
+        Stmt::Expr(inner) => out.extend(check_visit_preorder(inner)),
+    }
+    out
+}
+
+pub fn check_visit_expr_blocks(expr: &Expr) -> Vec<&Block> {
+    let mut out: Vec<&Block> = vec![];
+    match expr {
+        Expr::Block(block, _) => {
+            out.push(block);
+            return out;
+        },
+        Expr::Unsafe(block, _) => {
+            out.push(block);
+            return out;
+        },
+        Expr::Overlap(block, _) => {
+            out.push(block);
+            return out;
+        },
+        Expr::Closure { body, .. } => {
+            out.push(body);
+            return out;
+        },
+        Expr::Spawn { .. } => return out,
+        Expr::If { then_branch, else_branch, .. } => {
+            out.push(then_branch);
+            if else_branch.is_some() { out.push(match else_branch { Some(__nikaia_value) => __nikaia_value, None => return out }); }
+        },
+        Expr::TryCatch { handler, .. } => out.push(handler),
+        Expr::Select(arms, _) => { for arm in arms.iter() { out.extend(check_visit_block_one(&arm.body)); } },
+        _ => { },
+    }
+    for child in check_visit_children(expr) { out.extend(check_visit_expr_blocks(child)); }
+    out
+}
+
+pub fn check_visit_stmt_blocks(stmt: &Stmt) -> Vec<&Block> {
+    let mut out: Vec<&Block> = vec![];
+    match stmt {
+        Stmt::For { body, .. } => out.push(body),
+        Stmt::While { body, .. } => out.push(body),
+        Stmt::Let { value, .. } => out.extend(check_visit_expr_blocks(value)),
+        Stmt::Comptime { value, .. } => out.extend(check_visit_expr_blocks(value)),
+        Stmt::Expr(value) => out.extend(check_visit_expr_blocks(value)),
+        Stmt::Assign { target, value, .. } => {
+            out.extend(check_visit_expr_blocks(target));
+            out.extend(check_visit_expr_blocks(value));
+        },
+        Stmt::Return(value) => { if value.is_some() { out.extend(check_visit_expr_blocks(match value { Some(__nikaia_value) => __nikaia_value, None => return out })); } },
+        Stmt::Break => { },
+        Stmt::Continue => { },
+    }
+    out
+}
+
+
 // --- check_walk.nika ---
 
 pub fn child_exprs_of(expr: &Expr) -> Vec<&Expr> {
@@ -19022,6 +19259,184 @@ pub fn blocks_of_stmt(stmt: &Stmt) -> Vec<&Block> {
         Stmt::Continue => { },
     }
     out
+}
+
+
+// --- check_walks.nika ---
+
+pub fn check_not_pure_because(contract: &FnContract) -> Option<String> {
+    if !contract.sync_claim.is_sync() { return Some("can pause".to_owned()); }
+    if !contract.fails_with.is_empty() { return Some("can fail".to_owned()); }
+    if contract.mutates { return Some("changes what it is called on".to_owned()); }
+    if !contract.touches_known || !contract.touches.is_empty() { return Some("touches something outside the program's values".to_owned()); }
+    if contract.touches_a_lock.holds() { return Some("takes a lock".to_owned()); }
+    None
+}
+
+fn check_walks_clash(earlier: &Accounted, later: &Accounted) -> Option<Verdict> {
+    match earlier {
+        Accounted::Operation(first) => match later {
+            Accounted::Operation(second) => {
+                let verdict = verdict(first, second);
+                if verdict.is_overlap() { return None; }
+                Some(verdict)
+            },
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn branches_meet_on_nothing(&mut self, world: &CheckWorld<'_>, block: &Block) {
+        for stmt in block.stmts.iter() {
+            match &stmt.node {
+                Stmt::Let { names, .. } => {
+                    let mut bound: Vec<String> = vec![];
+                    for name in names.iter() { bound.push(world.words.resolve(*name).to_owned()); }
+                    let name = bound.join("`, `");
+                    self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: stmt.span.clone(), code: "NK2104".to_owned(), message: format!("A branch of an `overlap` can't declare `{}`.", name), notes: vec!["Each statement in the block runs as its own branch, and the block's value is their results in the order they're written.".to_owned()], help: Some(format!("Take the value from the block instead: `let ({}, …) = overlap {{ … }}`.", name)), labels: vec![] });
+                },
+                _ => { },
+            }
+        }
+        let mut operations: Vec<Accounted> = vec![];
+        for stmt in block.stmts.iter() { operations.push(accounted(&stmt.node, world.words, &Walking { own: world.own, library: world.library, into: Going::Ours })); }
+        for i in 0..operations.len() as i64 {
+            for j in i + 1..operations.len() as i64 {
+                let clash = check_walks_clash(nikaia_std::index::get(&operations, (i) as usize), nikaia_std::index::get(&operations, nikaia_std::index::at(j)));
+                if clash.is_some() {
+                    let verdict = nikaia_std::index::or(clash, || Verdict::NotAccountedFor);
+                    let why = capitalised(&verdict.why());
+                    self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: nikaia_std::index::get(&block.stmts, nikaia_std::index::at(j)).span.clone(), code: "NK2104".to_owned(), message: "These two branches can't run at the same time.".to_owned(), notes: vec![format!("{}.", why), "`overlap` runs its branches at once, so they can't depend on each other.".to_owned()], help: Some("If they should run in order, write them as ordinary statements.".to_owned()), labels: vec![] });
+                    break;
+                }
+            }
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_guard_reading_inside_a_box<H: CheckHost>(&mut self, world: &CheckWorld<'_>, host: &H, pattern: &MatchPattern, body: &Expr, guard: &Expr) {
+        let mut inside: Vec<String> = vec![];
+        self.names_inside_boxes(world, pattern, &mut inside);
+        if inside.is_empty() { return; }
+        let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
+        for each in check_visit_preorder(guard) { check_walks_reads(world, host, each, &inside, &mut read); }
+        if read.is_empty() { return; }
+        let mut typed: collections::BTreeMap<String, Ty> = collections::BTreeMap::new();
+        self.typed_inside_boxes(world, pattern, &mut typed);
+        let mut copied: collections::BTreeSet<String> = collections::BTreeSet::new();
+        for name in read.iter() {
+            let held: Option<Ty> = match *nikaia_std::index::get(&typed, name) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            };
+            if held.is_some() && a_copy_by_value(nikaia_std::index::or(held.as_ref(), || &Ty::Unknown)) { copied.insert(name.to_owned()); }
+        }
+        self.facts.guards_inside_boxes.insert(id_of(body) as i64, copied);
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_claim_reaches<H: CheckHost>(&self, world: &CheckWorld<'_>, host: &H, condition: &Expr, not_pure: &mut Vec<String>) {
+        let mut found: Vec<String> = vec![];
+        for each in check_visit_preorder(condition) { self.a_claim_looks_at(world, host, each, &mut found); }
+        not_pure.extend(found);
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn a_claim_looks_at<H: CheckHost>(&self, world: &CheckWorld<'_>, host: &H, expr: &Expr, found: &mut Vec<String>) {
+        self.a_claim_reads(world, expr, found);
+        if check_visit_has_holes(expr) { for hole in host.literal_holes(expr) { for inner in check_visit_preorder(&hole) { self.a_claim_looks_at(world, host, inner, found); } } }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn a_claim_reads(&self, world: &CheckWorld<'_>, expr: &Expr, found: &mut Vec<String>) {
+        let form = check_walks_form(expr);
+        if !form.is_empty() { found.push(format!("the condition {}", form)); }
+        match expr {
+            Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); self.a_claim_names(world, func, found) },
+            _ => { },
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn a_claim_names(&self, world: &CheckWorld<'_>, func: &Expr, found: &mut Vec<String>) {
+        let mut name: String = "".to_owned();
+        match func {
+            Expr::Variable(symbol, _) => {
+                let symbol = *symbol;
+                name = world.words.resolve(symbol).to_owned();
+            },
+            Expr::Path(segments, _) => {
+                let mut parts: Vec<String> = vec![];
+                for segment in segments.iter() { parts.push(world.words.resolve(*segment).to_owned()); }
+                let joined = parts.join("::");
+                name = world.here.unaliased(&joined);
+            },
+            _ => {
+                found.push("The condition calls something that isn't a plain name.".to_owned());
+                return;
+            },
+        }
+        let mut constructs = self.variant_parts.contains_key(&name) || self.declares_a_type(world, &name) || is_hull(&name);
+        if !constructs {
+            let at = nikaia_std::search::find(&name, &"::", 0);
+            if at.is_some() {
+                let cut = nikaia_std::index::or(at, || 0);
+                let ty = nikaia_std::index::get(&name, nikaia_std::index::at(0..cut)).to_owned();
+                let variant = nikaia_std::index::get(&name, nikaia_std::index::at(cut + 2..)).to_owned();
+                constructs = self.is_variant(&ty, &variant);
+            }
+        }
+        if constructs { return; }
+        let resolved = resolve_call(world, &name);
+        if resolved.is_none() {
+            found.push(format!("The compiler knows nothing about `{}`, so it might change something.", name));
+            return;
+        }
+        let call = match resolved { Some(__nikaia_value) => __nikaia_value, None => return };
+        let why = check_not_pure_because(&call.contract);
+        if why.is_some() {
+            let because = nikaia_std::index::or(why, || "".to_owned().into());
+            found.push(format!("`{}` {}", name, because));
+        }
+    }
+}
+
+fn check_walks_form(expr: &Expr) -> String {
+    match expr {
+        Expr::Spawn { .. } => String::from("starts a task"),
+        Expr::Select(_, _) => String::from("waits in a `select`"),
+        Expr::Overlap(_, _) => String::from("runs an `overlap`"),
+        Expr::Dsl { .. } => String::from("runs a `dsl` block"),
+        Expr::Asm { .. } => String::from("runs `unsafe` code"),
+        Expr::Unsafe(_, _) => String::from("runs `unsafe` code"),
+        Expr::Try(_, _) => String::from("can fail"),
+        Expr::Throw(_, _) => String::from("can fail"),
+        Expr::TryCatch { .. } => String::from("can fail"),
+        Expr::Return(_, _) => String::from("jumps"),
+        Expr::Break(_) => String::from("jumps"),
+        Expr::Continue(_) => String::from("jumps"),
+        Expr::Block(_, _) => String::from("contains a block, which might change something"),
+        Expr::If { .. } => String::from("contains a block, which might change something"),
+        Expr::Match { .. } => String::from("contains a block, which might change something"),
+        Expr::Closure { .. } => String::from("contains a block, which might change something"),
+        _ => String::from(""),
+    }
+}
+
+fn check_walks_reads<H: CheckHost>(world: &CheckWorld<'_>, host: &H, expr: &Expr, inside: &[String], read: &mut collections::BTreeSet<String>) {
+    match expr {
+        Expr::Variable(symbol, _) => {
+            let symbol = *symbol;
+            let name = world.words.resolve(symbol).to_owned();
+            for bound in inside.iter() { if *bound == name { read.insert(name.to_owned()); } }
+        },
+        _ => { },
+    }
+    if check_visit_has_holes(expr) { for hole in host.literal_holes(expr) { for inner in check_visit_preorder(&hole) { check_walks_reads(world, host, inner, inside, read); } } }
 }
 
 
@@ -47201,7 +47616,10 @@ pub mod check_scope {
     #[allow(unused_imports)]
     pub use super::{CheckResolved, resolve_call, resolve_method};
 }
-pub mod check_send {}
+pub mod check_send {
+    #[allow(unused_imports)]
+    pub use super::{same_at_both};
+}
 pub mod check_shapes {
     #[allow(unused_imports)]
     pub use super::{roots_in_a_binding, catches_everything, plainly_a_value, an_element_beneath, rust_constant_type, element_below, slice_element, is_fixed, is_growable, constructed};
@@ -47214,6 +47632,7 @@ pub mod check_takes {
     #[allow(unused_imports)]
     pub use super::{CheckUse};
 }
+pub mod check_task_pauses {}
 pub mod check_texts {
     #[allow(unused_imports)]
     pub use super::{literal_is_a_byte, ends_in_text, ends_in_null};
@@ -47226,9 +47645,17 @@ pub mod check_values {
     #[allow(unused_imports)]
     pub use super::{ledger_candidates};
 }
+pub mod check_visit {
+    #[allow(unused_imports)]
+    pub use super::{check_visit_children, check_visit_preorder, check_visit_has_holes, check_visit_stmt, check_visit_expr_blocks, check_visit_stmt_blocks};
+}
 pub mod check_walk {
     #[allow(unused_imports)]
     pub use super::{child_exprs_of, blocks_of_expr, blocks_of_stmt};
+}
+pub mod check_walks {
+    #[allow(unused_imports)]
+    pub use super::{check_not_pure_because};
 }
 pub mod check_widen {
     #[allow(unused_imports)]

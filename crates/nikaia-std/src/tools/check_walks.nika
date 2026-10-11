@@ -1,0 +1,245 @@
+// crates/nikaia-std/src/tools/check_walks.nika
+//
+// **What the checker asks of a block or an expression it walks again**, moved
+// from the compiler's checker (ADR-294, #125, #558, C-5f): the branches of an
+// `overlap` that meet on something (`NK2104`), the names a guard reads inside
+// a boxed part (ADR-246 D5), what a claim reaches (ADR-269 D3). Each walks with
+// `check_visit.nika` and asks the host for the holes of a literal.
+
+use std::collections
+
+/// What a contract is not pure for, in a word the message says: it can pause,
+/// it can fail, it changes what it is called on, it touches something outside
+/// the program's values, it takes a lock. `null` for a contract that does
+/// none of them.
+pub fn check_not_pure_because(contract: ref FnContract) -> String? {
+    if !contract.sync_claim.is_sync() {
+        return "can pause".clone()
+    }
+    if contract.fails_with.len() > 0 {
+        return "can fail".clone()
+    }
+    if contract.mutates {
+        return "changes what it is called on".clone()
+    }
+    if !contract.touches_known || contract.touches.len() > 0 {
+        return "touches something outside the program's values".clone()
+    }
+    if contract.touches_a_lock.holds() {
+        return "takes a lock".clone()
+    }
+    return null
+}
+
+/// Whether two statements of an `overlap` meet on something, and the verdict
+/// that says so; `null` where either cannot be accounted for or they meet on
+/// nothing.
+fn check_walks_clash(earlier: ref Accounted, later: ref Accounted) -> Verdict? {
+    return match earlier {
+        Accounted::Operation(first) => match later {
+            Accounted::Operation(second) => {
+                let verdict = verdict(first, second)
+                if verdict.is_overlap() {
+                    return null
+                }
+                verdict
+            },
+            else => null,
+        },
+        else => null,
+    }
+}
+
+impl CheckState {
+    /// **The branches of an `overlap` meet on nothing** (`NK2104`, ADR-292 D2):
+    /// a branch that binds is refused on its own, and two that depend on each
+    /// other are refused at the later one - one finding per branch.
+    pub fn branches_meet_on_nothing(ref mut self, world: ref CheckWorld, block: ref Block) sync {
+        for stmt in block.stmts {
+            match stmt.node {
+                Stmt::Let { names, .. } => {
+                    let mut bound: Vec[String] = []
+                    for name in names {
+                        bound.push(world.words.resolve(name).clone())
+                    }
+                    let name = bound.join("`, `")
+                    self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: stmt.span.clone(), code: "NK2104".clone(), message: f"A branch of an `overlap` can't declare `{name}`.", notes: ["Each statement in the block runs as its own branch, and the block's value is their results in the order they're written.".clone()], help: f"Take the value from the block instead: `let ({name}, …) = overlap {{ … }}`.", labels: [] })
+                },
+                else => {},
+            }
+        }
+        let mut operations: Vec[Accounted] = []
+        for stmt in block.stmts {
+            operations.push(accounted(stmt.node, world.words, Walking { own: world.own, library: world.library, into: Going::Ours }))
+        }
+        for i in 0..<operations.len() {
+            for j in (i + 1)..<operations.len() {
+                let clash = check_walks_clash(operations[i], operations[j])
+                if clash != null {
+                    let verdict = clash ?? Verdict::NotAccountedFor
+                    let why = capitalised(verdict.why())
+                    self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: block.stmts[j].span.clone(), code: "NK2104".clone(), message: "These two branches can't run at the same time.".clone(), notes: [f"{why}.", "`overlap` runs its branches at once, so they can't depend on each other.".clone()], help: "If they should run in order, write them as ordinary statements.".clone(), labels: [] })
+                    // One finding per branch: a branch that meets two others has
+                    // one thing wrong with it, and three messages about it is
+                    // the same mistake told three times.
+                    break
+                }
+            }
+        }
+    }
+
+    /// **A guard that reads a name bound inside a boxed part** (ADR-246 D5
+    /// item 2, #97). The guard runs before the arm takes the part apart, so the
+    /// lowering binds those names a second time inside the guard, and this
+    /// records which of them the guard reads and which of those are copied out
+    /// for it (a number, a `bool`, a `char`).
+    pub fn a_guard_reading_inside_a_box[H: CheckHost](ref mut self, world: ref CheckWorld, host: ref H, pattern: ref MatchPattern, body: ref Expr, guard: ref Expr) sync {
+        let mut inside: Vec[String] = []
+        self.names_inside_boxes(world, pattern, inside)
+        if inside.len() == 0 {
+            return
+        }
+        let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+        for each in check_visit_preorder(guard) {
+            check_walks_reads(world, host, each, inside, read)
+        }
+        if read.len() == 0 {
+            return
+        }
+        let mut typed: collections::BTreeMap[String, Ty] = collections::BTreeMap()
+        self.typed_inside_boxes(world, pattern, typed)
+        let mut copied: collections::BTreeSet[String] = collections::BTreeSet()
+        for name in read {
+            let held: Ty? = typed[name]?.clone()
+            if held != null && a_copy_by_value(held ?? Ty::Unknown) {
+                copied.insert(name.clone())
+            }
+        }
+        self.facts.guards_inside_boxes.insert(id_of(body) as i64, copied)
+    }
+
+    /// **The free calls and the forms in a claim that are not a read**
+    /// (ADR-269 D3). Methods are the frame's; this is what the tree says.
+    pub fn a_claim_reaches[H: CheckHost](ref self, world: ref CheckWorld, host: ref H, condition: ref Expr, mut not_pure: Vec[String]) sync {
+        let mut found: Vec[String] = []
+        for each in check_visit_preorder(condition) {
+            self.a_claim_looks_at(world, host, each, found)
+        }
+        not_pure.extend(found)
+    }
+
+    fn a_claim_looks_at[H: CheckHost](ref self, world: ref CheckWorld, host: ref H, expr: ref Expr, mut found: Vec[String]) sync {
+        self.a_claim_reads(world, expr, found)
+        if check_visit_has_holes(expr) {
+            for hole in host.literal_holes(expr) {
+                for inner in check_visit_preorder(hole) {
+                    self.a_claim_looks_at(world, host, inner, found)
+                }
+            }
+        }
+    }
+
+    fn a_claim_reads(ref self, world: ref CheckWorld, expr: ref Expr, mut found: Vec[String]) sync {
+        let form = check_walks_form(expr)
+        if form.len() > 0 {
+            found.push(f"the condition {form}")
+        }
+        match expr {
+            Expr::Call { func, .. } => self.a_claim_names(world, func, found),
+            else => {},
+        }
+    }
+
+    fn a_claim_names(ref self, world: ref CheckWorld, func: ref Expr, mut found: Vec[String]) sync {
+        let mut name: String = "".clone()
+        match func {
+            Expr::Variable(symbol, _) => {
+                name = world.words.resolve(symbol).clone()
+            },
+            Expr::Path(segments, _) => {
+                let mut parts: Vec[String] = []
+                for segment in segments {
+                    parts.push(world.words.resolve(segment).clone())
+                }
+                let joined = parts.join("::")
+                name = world.here.unaliased(joined)
+            },
+            else => {
+                found.push("The condition calls something that isn't a plain name.".clone())
+                return
+            },
+        }
+        // A value is made, not a call made: a variant, a type's constructor, a
+        // hull.
+        let mut constructs = self.variant_parts.contains_key(name) || self.declares_a_type(world, name) || is_hull(name)
+        if !constructs {
+            let at = name.find("::")
+            if at != null {
+                let cut = at ?? 0
+                let ty = name[0..<cut].clone()
+                let variant = name[cut + 2..<name.len()].clone()
+                constructs = self.is_variant(ty, variant)
+            }
+        }
+        if constructs {
+            return
+        }
+        let resolved = resolve_call(world, name)
+        if resolved == null {
+            found.push(f"The compiler knows nothing about `{name}`, so it might change something.")
+            return
+        }
+        let call = resolved ?? return
+        let why = check_not_pure_because(call.contract)
+        if why != null {
+            let because = why ?? "".clone()
+            found.push(f"`{name}` {because}")
+        }
+    }
+}
+
+/// What a form in a claim does that a read does not, in a word the message
+/// says; empty for the forms a claim may hold.
+fn check_walks_form(expr: ref Expr) -> String {
+    return match expr {
+        Expr::Spawn { .. } => "starts a task",
+        Expr::Select(_, _) => "waits in a `select`",
+        Expr::Overlap(_, _) => "runs an `overlap`",
+        Expr::Dsl { .. } => "runs a `dsl` block",
+        Expr::Asm { .. } => "runs `unsafe` code",
+        Expr::Unsafe(_, _) => "runs `unsafe` code",
+        Expr::Try(_, _) => "can fail",
+        Expr::Throw(_, _) => "can fail",
+        Expr::TryCatch { .. } => "can fail",
+        Expr::Return(_, _) => "jumps",
+        Expr::Break(_) => "jumps",
+        Expr::Continue(_) => "jumps",
+        Expr::Block(_, _) => "contains a block, which might change something",
+        Expr::If { .. } => "contains a block, which might change something",
+        Expr::Match { .. } => "contains a block, which might change something",
+        Expr::Closure { .. } => "contains a block, which might change something",
+        else => "",
+    }
+}
+
+/// The names of `inside` that this expression reads, and those of its holes.
+fn check_walks_reads[H: CheckHost](world: ref CheckWorld, host: ref H, expr: ref Expr, inside: ref Vec[String], mut read: collections::BTreeSet[String]) {
+    match expr {
+        Expr::Variable(symbol, _) => {
+            let name = world.words.resolve(symbol).clone()
+            for bound in inside {
+                if bound == name {
+                    read.insert(name.clone())
+                }
+            }
+        },
+        else => {},
+    }
+    if check_visit_has_holes(expr) {
+        for hole in host.literal_holes(expr) {
+            for inner in check_visit_preorder(hole) {
+                check_walks_reads(world, host, inner, inside, read)
+            }
+        }
+    }
+}
