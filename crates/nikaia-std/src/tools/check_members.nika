@@ -1,0 +1,322 @@
+// crates/nikaia-std/src/tools/check_members.nika
+//
+// **`NK1171`: a member nothing writes down** (Part I 4.4, ADR-282 D18, ADR-295,
+// ADR-304), moved from the compiler's checker (ADR-294, #125, #558, C-5e): `X::y`
+// and `.y()` where `X` is a type this program or a ledger knows and `y` is
+// nothing it has, and the same asked of a `match` arm's pattern.
+
+use std::collections
+
+/// The names this language offers as types of its own (`OFFERED`, widened by the
+/// containers a program may write).
+fn mem_offered(head: ref String) -> bool {
+    return head == "i32" || head == "i64" || head == "u8" || head == "u32" || head == "u64" || head == "f64" || head == "bool" || head == "char" || head == "scalar" || head == "String" || head == "str" || head == "Vec" || head == "HashMap" || head == "HashSet" || head == "Array" || head == "Seq" || head == "Par"
+}
+
+/// What a key of the ledger has after `prefix`, where that is one name; empty
+/// where the key is not under the prefix or goes deeper.
+fn mem_member_under(key: ref String, prefix: ref String) -> String {
+    if !key.starts_with(prefix) {
+        return "".clone()
+    }
+    let rest = (key.strip_prefix(prefix) ?? "").clone()
+    if rest.contains("::") {
+        return "".clone()
+    }
+    return rest
+}
+
+fn mem_under(table: ref collections::BTreeMap[String, FnContract], prefix: ref String) -> Vec[String] {
+    let mut members: Vec[String] = []
+    for (key, _) in table {
+        let rest = mem_member_under(key, prefix)
+        if rest != "" {
+            members.push(rest)
+        }
+    }
+    return members
+}
+
+/// The heads whose methods a head also has (ADR-282 D18); a list has `ListExt`'s.
+fn mem_also(head: ref String) -> Vec[String] {
+    if head == "String" {
+        return ["str".clone()]
+    }
+    if head == "str" {
+        return ["String".clone()]
+    }
+    if head == "Vec" {
+        return ["list::ListExt".clone()]
+    }
+    if head == "Par" {
+        return ["Seq".clone()]
+    }
+    return []
+}
+
+fn mem_a_said_code(code: ref String) -> bool {
+    return code == "NK1189" || code == "NK1126" || code == "NK1210"
+}
+
+fn mem_unit_has_trait(unit: ref ParsedView, name: ref String) -> bool {
+    for item in unit.items {
+        let found = match item.node {
+            Item::Trait { name: declared, .. } => unit.text(declared) == name,
+            else => false,
+        }
+        if found {
+            return true
+        }
+    }
+    return false
+}
+
+fn mem_a_trait_is_declared(world: ref CheckWorld, name: ref String) -> bool {
+    if mem_unit_has_trait(world.here, name) {
+        return true
+    }
+    for unit in world.beside {
+        if mem_unit_has_trait(unit, name) {
+            return true
+        }
+    }
+    return false
+}
+
+/// Whether a trait this unit implements for `head` provides more than it
+/// writes: `Error` provides `message` and `full` (Part I 7.1), and a trait of
+/// another ledger may provide what this compiler has no list of.
+fn mem_unit_provides(world: ref CheckWorld, unit: ref ParsedView, head: ref String, member: ref String) -> bool {
+    for item in unit.items {
+        let implemented = match item.node {
+            Item::Impl { trait_name, target, .. } => mem_an_impl_provides(world, unit, trait_name, target, head, member),
+            else => false,
+        }
+        if implemented {
+            return true
+        }
+    }
+    return false
+}
+
+fn mem_an_impl_provides(world: ref CheckWorld, unit: ref ParsedView, trait_name: winnow_grammar::Symbol?, target: ref Type, head: ref String, member: ref String) -> bool {
+    let symbol = trait_name ?? return false
+    if unit.text(target.name) != head {
+        return false
+    }
+    let written = unit.text(symbol)
+    if written == "Error" {
+        return member == "message" || member == "full"
+    }
+    return !mem_a_trait_is_declared(world, written)
+}
+
+fn mem_provided_by_a_trait(world: ref CheckWorld, head: ref String, member: ref String) -> bool {
+    if mem_unit_provides(world, world.here, head, member) {
+        return true
+    }
+    for unit in world.beside {
+        if mem_unit_provides(world, unit, head, member) {
+            return true
+        }
+    }
+    return false
+}
+
+fn mem_a_unit_declares(world: ref CheckWorld, head: ref String) -> bool {
+    for unit in world.beside {
+        if declares_a_type(unit, head) {
+            return true
+        }
+    }
+    return false
+}
+
+fn mem_listed(names: ref Vec[String], before: ref String) -> String {
+    let mut shown: Vec[String] = []
+    for name in names {
+        shown.push(f"`{before}{name}`")
+    }
+    return shown.join(", ")
+}
+
+impl CheckState {
+    /// **`NK1171`: a member nothing writes down.** `head` is the type or module
+    /// a path or a method call names, `method` whether it was a call on a
+    /// value. Only where the compiler *knows* the head: a name it has never
+    /// heard of is another question.
+    pub fn a_member_nothing_writes_down(ref mut self, world: ref CheckWorld, head: ref String, member: ref String, method: bool, span: ref Span) sync {
+        // **Said already, in a sentence of its own**: one refusal a call.
+        for found in self.findings {
+            if found.span == span && mem_a_said_code(found.code) {
+                return
+            }
+        }
+        // **A type that is seen through** (`deref` in its ledger, as a `Shared`
+        // is) answers with what it holds; not claimed here.
+        if method && resolve_method(world, f"{head}::deref") != null {
+            return
+        }
+        if self.type_parameters.contains_key(head) || self.foreign_names.contains(head) || self.opaque_handles.contains(head) || self.grammars.contains_key(head) || a_number_name(head) {
+            return
+        }
+        let prefix = f"{head}::"
+        let mut members = mem_under(world.own.functions, prefix)
+        members.extend(mem_under(world.library.functions, prefix))
+        let declared = mem_offered(head) || self.structs.contains_key(head) || self.enums.contains_key(head) || world.own.types.contains_key(head) || world.library.types.contains_key(head) || mem_a_unit_declares(world, head) || (!method && self.std_modules.contains(head)) || members.len() > 0
+        if !declared {
+            return
+        }
+        // **A trait it implements may provide more than it writes.**
+        if method && mem_provided_by_a_trait(world, head, member) {
+            return
+        }
+        for other in mem_also(head) {
+            members.extend(mem_under(world.library.functions, f"{other}::"))
+        }
+        self.a_member_is_refused(head, member, method, members, span)
+    }
+
+    fn a_member_is_refused(ref mut self, head: ref String, member: ref String, method: bool, members: ref Vec[String], span: ref Span) sync {
+        // A view of text is text to the reader.
+        let mut shown: String = head.clone()
+        if head == "str" {
+            shown = "String".clone()
+        }
+        let mut written: String = f"{head}::{member}"
+        if method {
+            written = f".{member}()"
+        }
+        let mut help: String = "".clone()
+        if mem_text_from(head, member) {
+            help = "Write the text itself, `\"x\"`, or `\"x\".clone()` for text of its own.".clone()
+        } else if member == "as_str" {
+            help = "Leave it out: the text is already what is passed.".clone()
+        } else if member == "is_some" {
+            help = "Compare with `null`: `value != null`.".clone()
+        } else if member == "is_none" {
+            help = "Compare with `null`: `value == null`.".clone()
+        } else {
+            help = mem_nearest_help(head, member, method, members, shown)
+        }
+        let mut what: String = f"`{shown}` has no function called `{member}`."
+        if method {
+            what = f"`{shown}` has no method called `{member}`."
+        }
+        self.findings.push(check_refusal("NK1171", span, what, [f"What can be called is what is written down: `{written}` is in no declaration, ledger or description this program reads."], help))
+    }
+
+    /// **`NK1171`: `X::y`, where `X` is a type this program declares and `y` is
+    /// nothing it has.** Only where the compiler *knows*.
+    pub fn a_member_this_type_does_not_have(ref mut self, world: ref CheckWorld, ty: ref String, member: ref String, span: ref Span) sync {
+        // Anything a ledger records under this exact key is a real item.
+        if resolve_call(world, f"{ty}::{member}") != null {
+            return
+        }
+        // **A type parameter is a type this compiler has not read either**, so
+        // it fails open - except for the name a reader of Part II 10.3 writes.
+        if self.type_parameters.contains_key(ty) {
+            if member == "fields" || member == "variants" {
+                self.a_shape_that_is_not_reachable_yet(ty, member, span)
+            }
+            return
+        }
+        if self.enums.contains_key(ty) {
+            self.a_variant_nothing_declares(ty, member, span)
+            return
+        }
+        let fields = self.fields_of(world, ty)
+        if fields == null {
+            // **And if the head is not a name this program has either**, the
+            // path is `NK1181` rather than silence.
+            self.a_head_nothing_declares(world.here, world, ty, f"{ty}::{member}", span)
+            return
+        }
+        // **`T::fields` is specified and unbuilt** (ADR-304).
+        if member == "fields" || member == "variants" {
+            self.a_shape_that_is_not_reachable_yet(ty, member, span)
+            return
+        }
+        let mut named: Vec[String] = []
+        for field in fields ?? [] {
+            named.push(field.name.clone())
+        }
+        let listed = mem_listed(named, "")
+        let mut help: String = f"If `{member}` should be a method, add it in `impl {ty} {{ … }}`."
+        let near = nearest_name(member, named)
+        if near != null {
+            help = f"Read it from a value: `value.{near ?? "".clone()}`."
+        }
+        self.findings.push(check_refusal("NK1171", span, f"`{ty}` has nothing called `{member}` to reach with `::`.", [f"`::` reaches a type's methods and variants. Fields are read from a value with a dot. `{ty}` holds {listed}."], help))
+    }
+
+    fn a_variant_nothing_declares(ref mut self, ty: ref String, member: ref String, span: ref Span) sync {
+        let mut variants: Vec[String] = []
+        let held = self.enums[ty] ?? return
+        for variant in held {
+            variants.push(variant.clone())
+        }
+        let listed = mem_listed(variants, f"{ty}::")
+        let near = nearest_name(member, variants)
+        let mut help: String = f"Write one of {listed}."
+        if near != null {
+            help = f"Did you mean `{ty}::{near ?? "".clone()}`?"
+        } else if variants.len() == 0 {
+            help = f"`{ty}` has no variants, so there's nothing to write here."
+        }
+        self.findings.push(check_refusal("NK1171", span, f"`{ty}` has no variant called `{member}`.", [f"`{ty}` is {listed}."], help))
+    }
+
+    /// One pattern's path, where it names a type and a member of it. One
+    /// segment **binds a name** rather than naming a variant, and an empty one
+    /// is the bare tuple `(0, 0)`.
+    pub fn a_path_in_a_pattern(ref mut self, world: ref CheckWorld, path: ref Vec[winnow_grammar::Symbol], span: ref Span) sync {
+        if path.len() != 2 {
+            return
+        }
+        let ty = world.words.resolve(path[0]).clone()
+        let member = world.words.resolve(path[1]).clone()
+        if self.is_variant(ty, member) {
+            return
+        }
+        self.a_member_this_type_does_not_have(world, ty, member, span)
+    }
+
+    /// The same question asked of a `match` arm's pattern (ADR-291 D10's shapes),
+    /// which is where a misspelled variant is most likely to be written. The
+    /// parts are patterns, so the walk goes into them.
+    pub fn a_pattern_naming_a_member_a_type_does_not_have(ref mut self, world: ref CheckWorld, pattern: ref MatchPattern, span: ref Span) sync {
+        match pattern {
+            MatchPattern::Path(path) => self.a_path_in_a_pattern(world, path, span),
+            MatchPattern::Named { path, .. } => self.a_path_in_a_pattern(world, path, span),
+            MatchPattern::Tuple { path, parts } => {
+                self.a_path_in_a_pattern(world, path, span)
+                for part in parts {
+                    self.a_pattern_naming_a_member_a_type_does_not_have(world, part, span)
+                }
+            },
+            MatchPattern::Or(alternatives) => {
+                for alternative in alternatives {
+                    self.a_pattern_naming_a_member_a_type_does_not_have(world, alternative, span)
+                }
+            },
+            else => {},
+        }
+    }
+}
+
+fn mem_text_from(head: ref String, member: ref String) -> bool {
+    return (head == "String" || head == "str") && member == "from"
+}
+
+fn mem_nearest_help(head: ref String, member: ref String, method: bool, members: ref Vec[String], shown: ref String) -> String {
+    let near = nearest_name(member, members)
+    if near == null {
+        return f"Only what is written down for `{shown}` can be called; a Rust function or method of the same name is not reached."
+    }
+    let name = near ?? "".clone()
+    if method {
+        return f"Did you mean `.{name}()`?"
+    }
+    return f"Did you mean `{head}::{name}`?"
+}

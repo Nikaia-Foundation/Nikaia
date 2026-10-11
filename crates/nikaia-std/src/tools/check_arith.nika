@@ -1,0 +1,315 @@
+// crates/nikaia-std/src/tools/check_arith.nika
+//
+// **Arithmetic on something that has none, and a value of no known type**
+// (Part I 2.3, `NK1191`, `NK1245`), moved from the compiler's checker (ADR-294,
+// #125, #558, C-5e).
+
+use std::collections
+
+/// **`an i32` and `a u64`**: the article as the name is said (`NK1116`'s
+/// rule). A `u` is said *you*, so it takes `a`; the other vowels take `an`.
+pub fn an_or_a_named(ty: ref String) -> String {
+    if ty.starts_with("i") || ty.starts_with("a") || ty.starts_with("e") || ty.starts_with("o") || ty.starts_with("I") || ty.starts_with("A") || ty.starts_with("E") || ty.starts_with("O") {
+        return "an".clone()
+    }
+    return "a".clone()
+}
+
+fn arith_symbol(op: BinaryOp) -> String {
+    return match op {
+        BinaryOp::Add => "+".clone(),
+        BinaryOp::Sub => "-".clone(),
+        BinaryOp::Mul => "*".clone(),
+        BinaryOp::Div => "/".clone(),
+        else => "%".clone(),
+    }
+}
+
+/// `xs += [3]` is the one shape whose way out can be written whole.
+fn arith_extend_text(world: ref CheckWorld, target: ref Expr, value: ref Expr, compound: bool) -> String {
+    if !compound {
+        return "a.extend(b)".clone()
+    }
+    return match target {
+        Expr::Variable(bound, _) => f"{world.words.resolve(bound)}.extend({written_expression(world.words, value)})",
+        else => "a.extend(b)".clone(),
+    }
+}
+
+fn arith_numeric_fields(fields: ref Vec[FieldContract]) -> Vec[String] {
+    let mut numeric: Vec[String] = []
+    for field in fields {
+        if arith_a_plain_number(field.ty) {
+            numeric.push(field.name.clone())
+        }
+    }
+    return numeric
+}
+
+fn arith_a_plain_number(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Named { name, args, .. } => args.len() == 0 && a_number_name(name),
+        else => false,
+    }
+}
+
+fn arith_a_variable(side: ref Expr, world: ref CheckWorld) -> String? {
+    return match side {
+        Expr::Variable(bound, _) => world.words.resolve(bound).clone(),
+        else => null,
+    }
+}
+
+fn arith_a_number_literal(expr: ref Expr) -> bool {
+    return match expr {
+        Expr::LitInt { .. } => true,
+        Expr::LitFloat(_, _) => true,
+        Expr::MethodCall { receiver, .. } => arith_an_int_literal(receiver),
+        else => false,
+    }
+}
+
+fn arith_an_int_literal(expr: ref Expr) -> bool {
+    return match expr {
+        Expr::LitInt { .. } => true,
+        else => false,
+    }
+}
+
+fn arith_a_named_call(world: ref CheckWorld, expr: ref Expr, called: ref String) -> bool {
+    return match expr {
+        Expr::Call { func, .. } => arith_the_variable_named(world, func, called),
+        else => false,
+    }
+}
+
+fn arith_the_variable_named(world: ref CheckWorld, expr: ref Expr, name: ref String) -> bool {
+    return match expr {
+        Expr::Variable(n, _) => world.words.resolve(n) == name,
+        else => false,
+    }
+}
+
+fn arith_structural(expr: ref Expr) -> bool {
+    return match expr {
+        Expr::Binary { .. } => true,
+        Expr::Unary { .. } => true,
+        Expr::If { .. } => true,
+        Expr::Block(_, _) => true,
+        Expr::Match { .. } => true,
+        Expr::Select(_, _) => true,
+        Expr::Return(_, _) => true,
+        Expr::Throw(_, _) => true,
+        Expr::TryCatch { .. } => true,
+        Expr::Range { .. } => true,
+        Expr::Continue(_) => true,
+        Expr::Break(_) => true,
+        else => false,
+    }
+}
+
+fn arith_a_name(expr: ref Expr) -> bool {
+    return match expr {
+        Expr::Variable(_, _) => true,
+        else => false,
+    }
+}
+
+/// The text of what is shown, cut to 60 characters.
+fn arith_shown(written: ref String) -> String {
+    if written.chars().count() <= 60 {
+        return written.clone()
+    }
+    let mut shown: String = "".clone()
+    let mut count = 0
+    for c in written.chars() {
+        if count < 57 {
+            shown.push_str(c.to_string())
+        }
+        count += 1
+    }
+    shown.push_str("...")
+    return shown
+}
+
+impl CheckState {
+    /// **`NK1191`: arithmetic on a list, a map, a set, a `struct` or an `enum`.**
+    /// `compound` says the operator was written with `=` after it.
+    pub fn arithmetic_on_something_that_has_none(ref mut self, world: ref CheckWorld, op: BinaryOp, left_expr: ref Expr, left: ref Ty, right_expr: ref Expr, right: ref Ty, compound: bool, span: ref Span) sync {
+        let symbol = arith_symbol(op)
+        let left_collection = is_a_collection_type(left)
+        if !left_collection && !is_a_collection_type(right) {
+            if declared_with_no_arithmetic(world.here, left) != null {
+                self.arithmetic_on_a_declared_type(world, symbol, left_expr, left, right_expr, right, 0, compound, span)
+            } else if declared_with_no_arithmetic(world.here, right) != null {
+                self.arithmetic_on_a_declared_type(world, symbol, right_expr, right, left_expr, left, 1, compound, span)
+            }
+            return
+        }
+        let mut side = right.text()
+        let mut side_is_a_list = is_a_list_type(right)
+        let mut other = left.text()
+        let mut other_unknown = left.is_unknown()
+        if left_collection {
+            side = left.text()
+            side_is_a_list = is_a_list_type(left)
+            other = right.text()
+            other_unknown = right.is_unknown()
+        }
+        let joining = op == BinaryOp::Add && is_a_list_type(left) && is_a_list_type(right)
+        let extend = arith_extend_text(world, left_expr, right_expr, compound)
+        let mut message: String = f"You can't use `{symbol}` on `{side}`."
+        if side_is_a_list {
+            message = f"You can't use `{symbol}` on a list."
+        }
+        let mut note: String = f"Lists, maps and sets have no arithmetic. The other side is `{other}`."
+        if joining {
+            note = "Lists have no operators: `+` doesn't join two lists.".clone()
+        } else if other_unknown {
+            note = "Lists, maps and sets have no arithmetic.".clone()
+        }
+        let mut help: String? = null
+        if joining {
+            help = f"To add one list's elements to the end of another, write `{extend}`."
+        }
+        self.findings.push(check_refusal("NK1191", span, message, [note], help))
+    }
+
+    /// `NK1191` for a `struct` or an `enum`, the side at `at` being one.
+    ///
+    /// **The help names a field only where there is exactly one it could
+    /// mean**: the struct has one numeric field, the side is a plain name and
+    /// the other side is not a declared type too. Anything else would be a
+    /// guess, and the help says what is always true instead.
+    pub fn arithmetic_on_a_declared_type(ref mut self, world: ref CheckWorld, symbol: ref String, side: ref Expr, ty: ref Ty, other_side: ref Expr, other: ref Ty, at: i64, compound: bool, span: ref Span) sync {
+        let kind = declared_with_no_arithmetic(world.here, ty) ?? return
+        let seen = ty.unseen()
+        let name = match seen {
+            Ty::Named { name, .. } => name.clone(),
+            else => return,
+        }
+        let mut numeric: Vec[String] = []
+        if kind == "struct" && self.structs.contains_key(name) {
+            numeric = arith_numeric_fields(self.structs[name] ?? return)
+        }
+        let mut field: String? = null
+        if numeric.len() == 1 && declared_with_no_arithmetic(world.here, other) == null {
+            let bound = arith_a_variable(side, world)
+            if bound != null {
+                field = f"{bound ?? "".clone()}.{numeric[0]}"
+            }
+        }
+        let mut help: String = f"Write a method that says what `{symbol}` means for it."
+        if kind == "struct" {
+            help = f"Do the arithmetic on one of its fields, or write a method that says what `{symbol}` means for it."
+        }
+        if field != null {
+            let shown = field ?? "".clone()
+            let rhs = written_expression(world.words, other_side)
+            let mut line: String = f"{shown} {symbol} {rhs}"
+            if compound {
+                line = f"{shown} {symbol}= {rhs}"
+            } else if at != 0 {
+                line = f"{rhs} {symbol} {shown}"
+            }
+            help = f"Did you mean a field, like `{line}`?"
+        }
+        let article = an_or_a_named(kind)
+        let notes: Vec[String] = [f"`{name}` is {article} `{kind}`, and {article} `{kind}` has no arithmetic: operators belong to numbers, and `+` to text as well."]
+        self.findings.push(check_refusal("NK1191", span, f"You can't use `{symbol}` on {an_or_a_named(name)} `{name}`.", notes, help))
+    }
+
+    /// **`NK1245`: a value whose type nothing can tell**, unless what left it
+    /// without one was said elsewhere or stood back for a reason.
+    pub fn a_value_of_no_known_type(ref mut self, world: ref CheckWorld, expr: ref Expr, span: ref Span) sync {
+        let open = arith_a_number_literal(expr) || self.number_shaped(world, expr) || self.a_name_of_an_open_comptime(world, expr) || self.a_member_of_an_open_argument(world, expr) || self.a_coalesce_of_numbers(world, expr) || arith_a_named_call(world, expr, "asset")
+        // **A name is asked where it is bound**: a `let`'s value, a loop's
+        // sequence, the place a lambda stands, a declared parameter. Whatever
+        // left it without a type was said there, or stood back for.
+        let said = arith_a_name(expr)
+        let structural = arith_structural(expr) || arith_a_named_call(world, expr, "panic") || self.a_standing_member(world, expr)
+        // **A driver's parameters are each call site's own type** (ADR-296 D5).
+        let per_call = self.a_drivers_row(world, expr) || self.through_a_package_unread(world.here, world, expr) || self.refused_where_it_is_lowered(world, expr)
+        // A member of a value that has no known type is unknown because of
+        // that value, whose own refusal (or reason not to) was said.
+        let of_an_unknown = self.a_member_of_an_unknown(world, expr)
+        if said || per_call || of_an_unknown {
+            self.flow.unknown_said += 1
+            return
+        }
+        if open || structural {
+            return
+        }
+        // A finding already on this statement is the cause, said once.
+        if self.an_error_stands_at(span) {
+            self.flow.unknown_said += 1
+            return
+        }
+        let shown = arith_shown(written_expression(world.words, expr))
+        self.flow.unknown_said += 1
+        self.findings.push(check_refusal("NK1245", span, f"The compiler can't tell what type `{shown}` is.", ["What is not known is not checked, so a type nothing can tell is refused rather than left to the language below.".clone()], "Write the type down where the value is made, such as `let x: T = …`, or pass it to a parameter that declares one.".clone()))
+    }
+
+    fn a_name_of_an_open_comptime(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {
+        return match expr {
+            Expr::Variable(n, _) => self.is_an_open_comptime(world.words.resolve(n)),
+            else => false,
+        }
+    }
+
+    fn is_an_open_comptime(ref self, name: ref String) -> bool sync {
+        let local = self.binding(name) ?? return false
+        return self.open_comptimes.contains_key(local.id)
+    }
+
+    /// `xs ?? 0` and `xs ?? return` over a `T?` nothing typed: the number's
+    /// uses, or the jump, leave the type to what the left side holds.
+    fn a_coalesce_of_numbers(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {
+        return match expr {
+            Expr::Coalesce { fallback, .. } => self.number_shaped(world, fallback) || self.jumps(world, fallback),
+            else => false,
+        }
+    }
+
+    /// `x.of(..)` and `x.default` stand where they are lowered, unless an
+    /// unrolling is under way.
+    fn a_standing_member(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {
+        if self.flow.unrolling != null {
+            return false
+        }
+        return match expr {
+            Expr::MethodCall { method, .. } => world.words.resolve(method) == "of",
+            Expr::Field { name, .. } => world.words.resolve(name) == "default",
+            else => false,
+        }
+    }
+
+    fn a_member_of_an_unknown(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {
+        return match expr {
+            Expr::Field { base, .. } => self.is_an_unknown_name(world, base),
+            Expr::MethodCall { receiver, .. } => self.is_an_unknown_name(world, receiver),
+            else => false,
+        }
+    }
+
+    fn is_an_unknown_name(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {
+        return match expr {
+            Expr::Variable(n, _) => self.is_a_name_bound_unknown(world.words.resolve(n)),
+            else => false,
+        }
+    }
+
+    fn is_a_name_bound_unknown(ref self, name: ref String) -> bool sync {
+        let local = self.binding(name) ?? return false
+        return self.flow.unknown_bound.contains(local.id)
+    }
+
+    fn an_error_stands_at(ref self, span: ref Span) -> bool sync {
+        for found in self.findings {
+            if found.span == span && found.severity == CheckSeverity::Error {
+                return true
+            }
+        }
+        return false
+    }
+}

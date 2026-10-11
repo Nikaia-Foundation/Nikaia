@@ -9639,6 +9639,238 @@ pub fn variants_named(world: &CheckWorld<'_>, pattern: &MatchPattern, out: &mut 
 fn a_last_segment(world: &CheckWorld<'_>, path: &[winnow_grammar::Symbol], out: &mut collections::BTreeSet<String>) { if !path.is_empty() { out.insert(world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 1))).to_owned()); } }
 
 
+// --- check_arith.nika ---
+
+pub fn an_or_a_named(ty: &str) -> String {
+    if ty.starts_with("i") || ty.starts_with("a") || ty.starts_with("e") || ty.starts_with("o") || ty.starts_with("I") || ty.starts_with("A") || ty.starts_with("E") || ty.starts_with("O") { return "an".to_owned(); }
+    "a".to_owned()
+}
+
+fn arith_symbol(op: BinaryOp) -> String {
+    match op {
+        BinaryOp::Add => "+".to_owned(),
+        BinaryOp::Sub => "-".to_owned(),
+        BinaryOp::Mul => "*".to_owned(),
+        BinaryOp::Div => "/".to_owned(),
+        _ => "%".to_owned(),
+    }
+}
+
+fn arith_extend_text(world: &CheckWorld<'_>, target: &Expr, value: &Expr, compound: bool) -> String {
+    if !compound { return "a.extend(b)".to_owned(); }
+    match target {
+        Expr::Variable(bound, _) => { let bound = *bound; format!("{}.extend({})", world.words.resolve(bound), written_expression(world.words, value)) },
+        _ => "a.extend(b)".to_owned(),
+    }
+}
+
+fn arith_numeric_fields(fields: &[FieldContract]) -> Vec<String> {
+    let mut numeric: Vec<String> = vec![];
+    for field in fields.iter() { if arith_a_plain_number(&field.ty) { numeric.push(field.name.to_owned()); } }
+    numeric
+}
+
+fn arith_a_plain_number(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { name, args, .. } => args.is_empty() && a_number_name(name),
+        _ => false,
+    }
+}
+
+fn arith_a_variable(side: &Expr, world: &CheckWorld<'_>) -> Option<String> {
+    match side {
+        Expr::Variable(bound, _) => { let bound = *bound; Some(world.words.resolve(bound).to_owned()) },
+        _ => None,
+    }
+}
+
+fn arith_a_number_literal(expr: &Expr) -> bool {
+    match expr {
+        Expr::LitInt { .. } => true,
+        Expr::LitFloat(_, _) => true,
+        Expr::MethodCall { receiver, .. } => { let receiver = nikaia_std::boxed::open(receiver); arith_an_int_literal(receiver) },
+        _ => false,
+    }
+}
+
+fn arith_an_int_literal(expr: &Expr) -> bool { matches!(expr, Expr::LitInt { .. }) }
+
+fn arith_a_named_call(world: &CheckWorld<'_>, expr: &Expr, called: &str) -> bool {
+    match expr {
+        Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); arith_the_variable_named(world, func, called) },
+        _ => false,
+    }
+}
+
+fn arith_the_variable_named(world: &CheckWorld<'_>, expr: &Expr, name: &str) -> bool {
+    match expr {
+        Expr::Variable(n, _) => { let n = *n; world.words.resolve(n) == name },
+        _ => false,
+    }
+}
+
+fn arith_structural(expr: &Expr) -> bool { matches!(expr, Expr::Binary { .. } | Expr::Unary { .. } | Expr::If { .. } | Expr::Block(_, _) | Expr::Match { .. } | Expr::Select(_, _) | Expr::Return(_, _) | Expr::Throw(_, _) | Expr::TryCatch { .. } | Expr::Range { .. } | Expr::Continue(_) | Expr::Break(_)) }
+
+fn arith_a_name(expr: &Expr) -> bool { matches!(expr, Expr::Variable(_, _)) }
+
+fn arith_shown(written: &str) -> String {
+    if (written.chars().count() as i64) <= 60 { return written.to_owned(); }
+    let mut shown: String = "".to_owned();
+    let mut count = 0;
+    for c in written.chars() {
+        if count < 57 { shown.push_str(&c.to_string()); }
+        count += 1;
+    }
+    shown.push_str("...");
+    shown
+}
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn arithmetic_on_something_that_has_none(&mut self, world: &CheckWorld<'_>, op: BinaryOp, left_expr: &Expr, left: &Ty, right_expr: &Expr, right: &Ty, compound: bool, span: &Span) {
+        let symbol = arith_symbol(op);
+        let left_collection = is_a_collection_type(left);
+        if !left_collection && !is_a_collection_type(right) {
+            if declared_with_no_arithmetic(&world.here, left).is_some() { self.arithmetic_on_a_declared_type(world, &symbol, left_expr, left, right_expr, right, 0, compound, span); } else if declared_with_no_arithmetic(&world.here, right).is_some() { self.arithmetic_on_a_declared_type(world, &symbol, right_expr, right, left_expr, left, 1, compound, span); }
+            return;
+        }
+        let mut side = right.text();
+        let mut side_is_a_list = is_a_list_type(right);
+        let mut other = left.text();
+        let mut other_unknown = left.is_unknown();
+        if left_collection {
+            side = left.text();
+            side_is_a_list = is_a_list_type(left);
+            other = right.text();
+            other_unknown = right.is_unknown();
+        }
+        let joining = op == BinaryOp::Add && is_a_list_type(left) && is_a_list_type(right);
+        let extend = arith_extend_text(world, left_expr, right_expr, compound);
+        let mut message: String = format!("You can't use `{}` on `{}`.", symbol, side);
+        if side_is_a_list { message = format!("You can't use `{}` on a list.", symbol); }
+        let mut note: String = format!("Lists, maps and sets have no arithmetic. The other side is `{}`.", other);
+        if joining { note = "Lists have no operators: `+` doesn't join two lists.".to_owned(); } else if other_unknown { note = "Lists, maps and sets have no arithmetic.".to_owned(); }
+        let mut help: Option<String> = None;
+        if joining { help = Some(format!("To add one list's elements to the end of another, write `{}`.", extend)); }
+        self.findings.push(check_refusal("NK1191", span, message, vec![note], help));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn arithmetic_on_a_declared_type(&mut self, world: &CheckWorld<'_>, symbol: &str, side: &Expr, ty: &Ty, other_side: &Expr, other: &Ty, at: i64, compound: bool, span: &Span) {
+        let kind = match declared_with_no_arithmetic(&world.here, ty) { Some(__nikaia_value) => __nikaia_value, None => return };
+        let seen = ty.unseen();
+        let name = match seen {
+            Ty::Named { ref name, .. } => name.to_owned(),
+            _ => return,
+        };
+        let mut numeric: Vec<String> = vec![];
+        if kind == "struct" && self.structs.contains_key(&name) { numeric = arith_numeric_fields(&match *nikaia_std::index::get(&self.structs, &name) { Some(__nikaia_value) => __nikaia_value, None => return }); }
+        let mut field: Option<String> = None;
+        if numeric.len() == 1 && declared_with_no_arithmetic(&world.here, other).is_none() {
+            let bound = arith_a_variable(side, world);
+            if bound.is_some() { field = Some(format!("{}.{}", nikaia_std::index::or(bound, || "".to_owned().into()), *nikaia_std::index::get(&numeric, 0))); }
+        }
+        let mut help: String = format!("Write a method that says what `{}` means for it.", symbol);
+        if kind == "struct" { help = format!("Do the arithmetic on one of its fields, or write a method that says what `{}` means for it.", symbol); }
+        if field.is_some() {
+            let shown = nikaia_std::index::or(field, || "".to_owned().into());
+            let rhs = written_expression(world.words, other_side);
+            let mut line: String = format!("{} {} {}", shown, symbol, rhs);
+            if compound { line = format!("{} {}= {}", shown, symbol, rhs); } else if at != 0 { line = format!("{} {} {}", rhs, symbol, shown); }
+            help = format!("Did you mean a field, like `{}`?", line);
+        }
+        let article = an_or_a_named(&kind);
+        let notes: Vec<String> = vec![format!("`{}` is {} `{}`, and {} `{}` has no arithmetic: operators belong to numbers, and `+` to text as well.", name, article, kind, article, kind)];
+        self.findings.push(check_refusal("NK1191", span, format!("You can't use `{}` on {} `{}`.", symbol, an_or_a_named(&name), name), notes, Some(help)));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_value_of_no_known_type(&mut self, world: &CheckWorld<'_>, expr: &Expr, span: &Span) {
+        let open = arith_a_number_literal(expr) || self.number_shaped(world, expr) || self.a_name_of_an_open_comptime(world, expr) || self.a_member_of_an_open_argument(world, expr) || self.a_coalesce_of_numbers(world, expr) || arith_a_named_call(world, expr, "asset");
+        let said = arith_a_name(expr);
+        let structural = arith_structural(expr) || arith_a_named_call(world, expr, "panic") || self.a_standing_member(world, expr);
+        let per_call = self.a_drivers_row(world, expr) || self.through_a_package_unread(&world.here, world, expr) || self.refused_where_it_is_lowered(world, expr);
+        let of_an_unknown = self.a_member_of_an_unknown(world, expr);
+        if said || per_call || of_an_unknown {
+            self.flow.unknown_said += 1;
+            return;
+        }
+        if open || structural { return; }
+        if self.an_error_stands_at(span) {
+            self.flow.unknown_said += 1;
+            return;
+        }
+        let shown = arith_shown(&written_expression(world.words, expr));
+        self.flow.unknown_said += 1;
+        self.findings.push(check_refusal("NK1245", span, format!("The compiler can't tell what type `{}` is.", shown), vec!["What is not known is not checked, so a type nothing can tell is refused rather than left to the language below.".to_owned()], Some("Write the type down where the value is made, such as `let x: T = …`, or pass it to a parameter that declares one.".to_owned())));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn a_name_of_an_open_comptime(&self, world: &CheckWorld<'_>, expr: &Expr) -> bool {
+        match expr {
+            Expr::Variable(n, _) => { let n = *n; self.is_an_open_comptime(world.words.resolve(n)) },
+            _ => false,
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn is_an_open_comptime(&self, name: &str) -> bool {
+        let local = match self.binding(name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        self.open_comptimes.contains_key(&local.id)
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn a_coalesce_of_numbers(&self, world: &CheckWorld<'_>, expr: &Expr) -> bool {
+        match expr {
+            Expr::Coalesce { fallback, .. } => { let fallback = nikaia_std::boxed::open(fallback); self.number_shaped(world, fallback) || self.jumps(world, fallback) },
+            _ => false,
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn a_standing_member(&self, world: &CheckWorld<'_>, expr: &Expr) -> bool {
+        if self.flow.unrolling.is_some() { return false; }
+        match expr {
+            Expr::MethodCall { method, .. } => { let method = *method; world.words.resolve(method) == "of" },
+            Expr::Field { name, .. } => { let name = *name; world.words.resolve(name) == "default" },
+            _ => false,
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn a_member_of_an_unknown(&self, world: &CheckWorld<'_>, expr: &Expr) -> bool {
+        match expr {
+            Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); self.is_an_unknown_name(world, base) },
+            Expr::MethodCall { receiver, .. } => { let receiver = nikaia_std::boxed::open(receiver); self.is_an_unknown_name(world, receiver) },
+            _ => false,
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn is_an_unknown_name(&self, world: &CheckWorld<'_>, expr: &Expr) -> bool {
+        match expr {
+            Expr::Variable(n, _) => { let n = *n; self.is_a_name_bound_unknown(world.words.resolve(n)) },
+            _ => false,
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn is_a_name_bound_unknown(&self, name: &str) -> bool {
+        let local = match self.binding(name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        self.flow.unknown_bound.contains(&local.id)
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn an_error_stands_at(&self, span: &Span) -> bool {
+        for found in self.findings.iter() { if found.span == *span && found.severity == CheckSeverity::Error { return true; } }
+        false
+    }
+}
+
+
 // --- check_arms.nika ---
 
 #[derive(Debug, Clone, PartialEq)]
@@ -11536,6 +11768,172 @@ fn a_call_of_a_variant(state: &CheckState, world: &CheckWorld<'_>, func: &Expr) 
     match func {
         Expr::Path(segments, _) => a_variant_path(state, world, segments),
         _ => false,
+    }
+}
+
+
+// --- check_extern.nika ---
+
+fn ext_a_number(name: &str) -> bool { name == "i32" || name == "i64" || name == "u8" || name == "f64" || name == "bool" || name == "scalar" || name == "char" }
+
+fn ext_a_text(base: &str) -> bool { base == "String" || base == "str" }
+
+fn ext_a_struct_note() -> String { "An `extern` struct has C's layout and crosses to C by value: its fields are numbers, `bool`, `scalar`, enums without payload, other `extern` structs and `Array[T, N]` of these.".to_owned() }
+
+fn ext_an_enum_note() -> String { "An `extern` enum is a tagged union in C's layout and crosses to C by value: its fields are numbers, `bool`, `scalar`, enums without payload, `extern` structs and enums, and `Array[T, N]` of these.".to_owned() }
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn an_entry_point(&mut self, world: &CheckWorld<'_>, item: &Item, span: &Span, of_a_trait: bool) {
+        match item {
+            Item::Fn { name, generics, args, ret_type, is_public, is_extern, .. } => {
+                let is_extern = *is_extern; let is_public = *is_public; let name = *name;
+                if is_extern { self.an_entry_point_of(world, name, generics, args, (ret_type).as_ref(), is_public, span, of_a_trait); }
+            },
+            _ => { },
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    fn an_entry_point_of(&mut self, world: &CheckWorld<'_>, name: Option<winnow_grammar::Symbol>, generics: &[GenericParam], args: &[FnArg], ret_type: Option<&Type>, is_public: bool, span: &Span, of_a_trait: bool) {
+        let mut written: String = "new".to_owned();
+        if name.is_some() { written = world.words.resolve(match name { Some(__nikaia_value) => __nikaia_value, None => return }).to_owned(); }
+        if !is_public { self.findings.push(check_refusal("NK1237", span, format!("`{}` is `extern` but not `pub`.", written), vec!["`extern` before a function with a body exports it to C, and what a package exports is part of its surface.".to_owned()], Some(format!("Write `pub extern fn {}`, or leave out `extern` for a function only this program calls.", written)))); }
+        self.findings.push(check_refusal("NK1238", span, format!("`{}` is an entry point, and this build makes no library.", written), vec!["Only a build with `artifact = \"c-library\"` in `[build]` exports its `extern` functions, as a shared and a static library and a header.".to_owned()], Some(format!("Set `artifact = \"c-library\"` in `[build]`, or leave out `extern`: `{}` is an ordinary function without it.", written))));
+        if !generics.is_empty() || of_a_trait {
+            let mut what: String = "generic".to_owned();
+            let mut help: String = format!("Export one function for each type `{}` is called with, each calling it.", written);
+            if of_a_trait {
+                what = "a trait's method".to_owned();
+                help = format!("Export a plain function that calls `{}`.", written);
+            }
+            self.findings.push(check_refusal("NK1239", span, format!("`{}` is {}, and C cannot call one.", written, what), vec!["A C function has one signature and no dispatch: what a generic function or a trait's method stands for is decided in Nikaia, not by the caller.".to_owned()], Some(help)));
+        }
+        for arg in args.iter() {
+            let way = self.crosses_to_c(world, &arg.ty, false);
+            if way.is_some() {
+                let param = world.words.resolve(arg.name).to_owned();
+                self.findings.push(check_refusal("NK1240", span, format!("`{}` of `{}` cannot cross to C.", param, written), vec!["An entry point takes numbers, `bool` and `scalar` by value, text and bytes as a view, a list of numbers, a struct or an enum of the package, an optional of those, and a callback that does not pause (Part III 15.1).".to_owned()], way));
+            }
+        }
+        self.what_an_entry_point_hands_back(world, &written, ret_type, span);
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn what_an_entry_point_hands_back(&mut self, world: &CheckWorld<'_>, written: &str, ret_type: Option<&Type>, span: &Span) {
+        let result = match ret_type { Some(__nikaia_value) => __nikaia_value, None => return };
+        let way = self.crosses_to_c(world, result, true);
+        if way.is_some() { self.findings.push(check_refusal("NK1240", span, format!("What `{}` hands back cannot cross to C.", written), vec!["An entry point hands back numbers, `bool` and `scalar`, text and bytes into the caller's buffer, a struct or an enum of the package, or an optional of those (Part III 15.1).".to_owned()], way)); }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn an_extern_struct(&mut self, world: &CheckWorld<'_>, item: &Item, span: &Span) {
+        match item {
+            Item::Struct { name, generics, fields, is_public, is_extern } => {
+                let is_extern = *is_extern; let is_public = *is_public; let name = *name;
+                if is_extern { self.an_extern_struct_of(world, name, generics, fields, is_public, span); }
+            },
+            _ => { },
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn an_extern_struct_of(&mut self, world: &CheckWorld<'_>, name: winnow_grammar::Symbol, generics: &[GenericParam], fields: &[FieldDef], is_public: bool, span: &Span) {
+        let written = world.words.resolve(name).to_owned();
+        if !is_public { self.findings.push(check_refusal("NK1237", span, format!("`{}` is `extern` but not `pub`.", written), vec![ext_a_struct_note()], Some(format!("Write `pub extern struct {}`, or leave out `extern` for a struct only this program uses.", written)))); }
+        if !generics.is_empty() { self.findings.push(check_refusal("NK1145", span, format!("`{}` is an `extern` struct with type parameters, and C's layout has none.", written), vec![ext_a_struct_note()], Some(format!("Declare one `extern` struct for each type `{}` is used with.", written)))); }
+        for field in fields.iter() {
+            if !a_c_value(&world.here, &field.ty) {
+                let field_name = world.words.resolve(field.name).to_owned();
+                let ty = world.words.resolve(field.ty.name).to_owned();
+                self.findings.push(check_refusal("NK1145", &field.span, format!("`{}.{}` is a `{}`, which is not a C value.", written, field_name, ty), vec![ext_a_struct_note()], Some(format!("Leave out `extern`: a `pub struct` crosses to C as a handle, with a getter for `{}`.", field_name))));
+            }
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn an_extern_enum(&mut self, world: &CheckWorld<'_>, item: &Item, span: &Span) {
+        match item {
+            Item::Enum { name, variants, is_public, is_extern } => {
+                let is_extern = *is_extern; let is_public = *is_public; let name = *name;
+                if is_extern { self.an_extern_enum_of(world, name, variants, is_public, span); }
+            },
+            _ => { },
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn an_extern_enum_of(&mut self, world: &CheckWorld<'_>, name: winnow_grammar::Symbol, variants: &[EnumVariant], is_public: bool, span: &Span) {
+        let written = world.words.resolve(name).to_owned();
+        if !is_public { self.findings.push(check_refusal("NK1237", span, format!("`{}` is `extern` but not `pub`.", written), vec![ext_an_enum_note()], Some(format!("Write `pub extern enum {}`, or leave out `extern` for an enum only this program uses.", written)))); }
+        for variant in variants.iter() {
+            let variant_name = world.words.resolve(variant.name).to_owned();
+            match &variant.fields {
+                VariantFields::Unit => { },
+                VariantFields::Tuple(types) => {
+                    let mut at = 0;
+                    for ty in types.iter() {
+                        self.a_variant_field(world, &written, &variant_name, format!("{}", at), ty, &variant.span);
+                        at += 1;
+                    }
+                },
+                VariantFields::Named(named) => { for field in named.iter() { self.a_variant_field(world, &written, &variant_name, world.words.resolve(field.name).to_owned(), &field.ty, &variant.span); } },
+            }
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn a_variant_field(&mut self, world: &CheckWorld<'_>, written: &str, variant_name: &str, field: String, ty: &Type, at: &Span) {
+        if a_c_value(&world.here, ty) { return; }
+        let shown = world.words.resolve(ty.name).to_owned();
+        self.findings.push(check_refusal("NK1145", at, format!("`{}::{}.{}` is a `{}`, which is not a C value.", written, variant_name, field, shown), vec![ext_an_enum_note()], Some("Leave out `extern`: a `pub enum` crosses to C as a handle, read through `_kind` and a getter per field.".to_owned())));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn crosses_to_c(&self, world: &CheckWorld<'_>, ty: &Type, out: bool) -> Option<String> {
+        let name = world.words.resolve(ty.name).to_owned();
+        if (*ty.code).is_some() { return self.a_callback_crosses(world, ty, out); }
+        if ty.is_tuple { return Some("Hand a tuple's parts over one by one, or as a `pub extern struct`.".to_owned()); }
+        let mut args: Vec<String> = vec![];
+        for generic in ty.generics.iter() { args.push(world.words.resolve(generic.name).to_owned()); }
+        let declared = self.structs.contains_key(&name) || self.enums.contains_key(&name) || world.own.types.contains_key(&name);
+        self.ext_table(world, &name, &a_type_base(&name), &args, ty.is_view, out, declared)
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn a_callback_crosses(&self, world: &CheckWorld<'_>, ty: &Type, out: bool) -> Option<String> {
+        if out { return Some("Hand back a value; a function is a parameter's shape: a callback.".to_owned()); }
+        let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
+        if !code.is_sync { return Some("Write the callback `sync`: C calls it on its own thread, where nothing may pause.".to_owned()); }
+        for part in ty.generics.iter() {
+            let way = self.crosses_to_c(world, part, false);
+            if way.is_some() { return way; }
+        }
+        let result = match (*code.result).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
+        self.crosses_to_c(world, result, false)
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    fn ext_table(&self, world: &CheckWorld<'_>, name: &str, base: &str, args: &[String], view: bool, out: bool, declared: bool) -> Option<String> {
+        let plain = args.is_empty();
+        if plain && !view && ext_a_number(base) { return None; }
+        if ext_a_text(base) && plain && view && !out { return None; }
+        if base == "String" && plain && !view && out { return None; }
+        if base == "String" && plain && !view && !out { return Some("Take `ref String`: C keeps the text and lends it for the call.".to_owned()); }
+        if ext_a_text(base) && plain && view && out { return Some("Hand back `String`: it is written into the caller's buffer.".to_owned()); }
+        if base == "Bytes" && plain { return None; }
+        if base == "Vec" && args.len() == 1 && !view && out && *nikaia_std::index::get(&args, 0) == "u8" { return None; }
+        if base == "Array" && args.len() == 1 && view && !out && ext_a_number(nikaia_std::index::get(&args, 0)) { return None; }
+        if args.len() == 1 && (base == "Array" && view && !out || base == "Vec" && !view) && an_extern_struct_named(&world.here, nikaia_std::index::get(&args, 0)) { return None; }
+        if (base == "Vec" || base == "Array") && !out { return Some("Take `ref Array[T]` of a number: C keeps the array and lends it for the call.".to_owned()); }
+        if plain && declared { return None; }
+        if base == "Locked" || base == "Shared" || base == "SharedMut" || base == "Seen" { return Some(format!("Keep the `{}` inside the package, in a `pub struct` C holds as a handle.", name)); }
+        if base == "HashMap" || base == "BTreeMap" || base == "Map" { return Some("Keep the map in a `pub struct` C holds as a handle, or hand its entries to a callback.".to_owned()); }
+        if base == "Vec" || base == "Array" { return Some("Hand many results to a callback, or put them in a `pub struct` C holds as a handle.".to_owned()); }
+        Some(format!("Declare `{}` in the package as a `pub struct`, which C holds as a handle.", name))
     }
 }
 
@@ -13555,6 +13953,218 @@ fn item_boxed_set(boxed: &collections::BTreeMap<String, collections::BTreeSet<St
 }
 
 
+// --- check_kinds.nika ---
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CheckRaised {
+    pub steps: Option<u64>,
+    pub ram: Option<u64>,
+}
+
+fn kind_a_bound_name(name: &str) -> bool { name == "steps" || name == "ram" }
+
+fn kind_unknown_bound_help(name: &str) -> String {
+    let among: Vec<String> = vec!["steps".to_owned(), "ram".to_owned()];
+    let near = match nearest_name(name, &among) { Some(__nikaia_value) => __nikaia_value, None => return "Name `steps` or `ram`, like `comptime(steps: 50G) …`.".to_owned() };
+    format!("Did you mean `{}`?", near)
+}
+
+fn kind_bound_value(folded: Option<&CheckConstant>) -> Option<u64> {
+    let constant = match folded { Some(__nikaia_value) => __nikaia_value, None => return None };
+    if constant.beyond || constant.value.negative { return None; }
+    Some(constant.value.magnitude)
+}
+
+fn kind_a_slice_pointer(ty: &Ty) -> bool {
+    match ty {
+        Ty::Pointed { slice, .. } => { let slice = *slice; slice },
+        _ => false,
+    }
+}
+
+fn kind_a_usize(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { name, args, .. } => name == "usize" && args.is_empty(),
+        _ => false,
+    }
+}
+
+fn kind_the_buffers_own_length(world: &CheckWorld<'_>, count: &Expr, buffer: &Expr) -> bool {
+    match count {
+        Expr::MethodCall { receiver, method, args, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; world.words.resolve(method) == "len" && args.is_empty() && receiver == buffer },
+        _ => false,
+    }
+}
+
+fn kind_count_of(ty: &Ty) -> Option<i64> {
+    match ty {
+        Ty::Count(n) => { let n = *n; Some(n) },
+        _ => None,
+    }
+}
+
+fn kind_array_room(found: &[Ty], at: i64) -> Option<i64> {
+    if at >= found.len() as i64 { return None; }
+    match nikaia_std::index::get(&found, nikaia_std::index::at(at)) {
+        Ty::Named { name, args, .. } => kind_array_count(name, args),
+        _ => None,
+    }
+}
+
+fn kind_array_count(name: &str, args: &[Ty]) -> Option<i64> {
+    if name == ARRAY && args.len() == 2 { return kind_count_of(nikaia_std::index::get(&args, 1)); }
+    None
+}
+
+fn kind_a_count_fits(folded: Option<&CheckConstant>, room: Option<i64>) -> bool {
+    let constant = match folded { Some(__nikaia_value) => __nikaia_value, None => return false };
+    if constant.beyond { return false; }
+    if constant.value.magnitude == 0u64 { return true; }
+    let n = match room { Some(__nikaia_value) => __nikaia_value, None => return false };
+    if constant.value.negative || n < 0 { return false; }
+    let cap: u64 = u64::try_from(n).unwrap_or_else(|_| panic!("the value does not fit in an `u64`"));
+    constant.value.magnitude <= cap
+}
+
+fn kind_names_a_variant(pattern: &MatchPattern) -> bool {
+    match pattern {
+        MatchPattern::Path(path) => path.len() >= 2,
+        MatchPattern::Tuple { path, .. } => path.len() >= 2,
+        MatchPattern::Named { path, .. } => path.len() >= 2,
+        _ => false,
+    }
+}
+
+fn kind_an_update_only_replaces(world: &CheckWorld<'_>, name: &str, body: &Block) -> bool {
+    let mut assigned = false;
+    let mut read = false;
+    for stmt in body.stmts.iter() {
+        let mut mentioned: collections::BTreeSet<String> = collections::BTreeSet::new();
+        match &stmt.node {
+            Stmt::Assign { target, op, value } => {
+                if op.is_none() && kind_is_the_name(world, target, name) {
+                    assigned = true;
+                    names_in(value, world.words, &mut mentioned);
+                } else { names_in_statement(&stmt.node, world.words, &mut mentioned); }
+            },
+            _ => names_in_statement(&stmt.node, world.words, &mut mentioned),
+        }
+        if mentioned.contains(name) { read = true; }
+    }
+    assigned && !read
+}
+
+fn kind_is_the_name(world: &CheckWorld<'_>, target: &Expr, name: &str) -> bool {
+    match target {
+        Expr::Variable(n, _) => { let n = *n; world.words.resolve(n) == name },
+        _ => false,
+    }
+}
+
+fn kind_callee_name(world: &CheckWorld<'_>, func: &Expr) -> Option<String> {
+    match func {
+        Expr::Variable(name, _) => { let name = *name; Some(world.words.resolve(name).to_owned()) },
+        Expr::Path(segments, _) => Some(kind_path_text(world, segments)),
+        _ => None,
+    }
+}
+
+fn kind_path_text(world: &CheckWorld<'_>, segments: &[winnow_grammar::Symbol]) -> String {
+    let mut parts: Vec<String> = vec![];
+    for segment in segments.iter() { parts.push(world.words.resolve(*segment).to_owned()); }
+    parts.join("::")
+}
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn raised_bounds(&mut self, world: &CheckWorld<'_>, bounds: &[ConfigArg], span: &Span) -> Option<CheckRaised> {
+        let mut raised = CheckRaised { steps: None, ram: None };
+        let mut refused = false;
+        for bound in bounds.iter() {
+            let name = world.words.resolve(bound.name).to_owned();
+            if !kind_a_bound_name(&name) {
+                self.findings.push(check_refusal("NK1109", span, format!("A `comptime` has no bound called `{}`.", name), vec!["Its bounds are `steps` and `ram`.".to_owned()], Some(kind_unknown_bound_help(&name))));
+                refused = true;
+                continue;
+            }
+            let value = kind_bound_value((self.constant_of(world, &bound.value)).as_ref());
+            if value.is_none() {
+                let mut help: String = "Write a number of bytes, like `ram: 16Gi`.".to_owned();
+                if name == "steps" { help = "Write a number, like `steps: 50G`.".to_owned(); }
+                self.findings.push(check_refusal("NK1102", span, format!("`{}` takes a whole number the build knows, and this is not one.", name), vec![], Some(help)));
+                refused = true;
+                continue;
+            }
+            if name == "steps" { raised.steps = value; } else { raised.ram = value; }
+        }
+        if refused { return None; }
+        Some(raised)
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_length_that_fits_its_buffer(&mut self, world: &CheckWorld<'_>, written: &str, wanted: &[(String, Ty)], given: &[Expr], found: &[Ty], span: &Span) {
+        if !self.foreign_names.contains(written) { return; }
+        let mut at: i64 = 0;
+        while at < wanted.len() as i64 {
+            self.a_buffer_and_its_count(world, written, wanted, given, found, at, span);
+            at += 1;
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    fn a_buffer_and_its_count(&mut self, world: &CheckWorld<'_>, written: &str, wanted: &[(String, Ty)], given: &[Expr], found: &[Ty], at: i64, span: &Span) {
+        if !kind_a_slice_pointer(&nikaia_std::index::get(&wanted, nikaia_std::index::at(at)).1) { return; }
+        if at + 1 >= wanted.len() as i64 || !kind_a_usize(&nikaia_std::index::get(&wanted, nikaia_std::index::at(at + 1)).1) { return; }
+        if at + 1 >= given.len() as i64 { return; }
+        let buffer = nikaia_std::index::get(&given, nikaia_std::index::at(at));
+        let count = nikaia_std::index::get(&given, nikaia_std::index::at(at + 1));
+        if kind_the_buffers_own_length(world, &count, &buffer) { return; }
+        let folded = self.constant_of(world, &count);
+        if kind_a_count_fits((folded).as_ref(), kind_array_room(found, at)) { return; }
+        self.a_length_that_may_not_fit(world, written, &buffer, span);
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn an_update_block_reads_what_it_writes(&mut self, world: &CheckWorld<'_>, params: &[winnow_grammar::Symbol], body: &Block, span: &Span) {
+        for param in params.iter() {
+            let name = world.words.resolve(*param).to_owned();
+            if kind_an_update_only_replaces(world, &name, body) { self.findings.push(check_refusal("NK2207", span, format!("This `update` block replaces `{}` without reading it, which is what `set` is for.", name), vec!["`update` is for changes that depend on the current value. Just storing a new value is what `set` does.".to_owned()], Some("Use `set` if the value is computed outside, or use the old value here: `v += n`, `v.push(e)`, `if v > 100 { v = 0 }`.".to_owned()))); }
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_variant_matched_on_a_nullable(&mut self, world: &CheckWorld<'_>, on: &Ty, value: &Expr, arms: &[MatchArm], span: &Span) {
+        let inner = match on {
+            Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); inner.clone() },
+            _ => return,
+        };
+        for arm in arms.iter() {
+            if kind_names_a_variant(&arm.pattern) {
+                let written = written_expression(world.words, value);
+                let variant = written_pattern(world.words, &arm.pattern);
+                let note = format!("`{}` is a `{}`: a `{}` or nothing, and a pattern of the `{}` says nothing about the nothing.", written, on.text(), inner.text(), inner.text());
+                self.findings.push(check_refusal("NK1205", span, format!("`{}` may be `null`, so `{}` can't be matched on it directly.", written, variant), vec![note], Some(format!("Say what `null` stands for first: `let value = {} ?? …`, and `match value`.", written))));
+                return;
+            }
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn several_arrive(&self, world: &CheckWorld<'_>, guarded: &Expr) -> bool {
+        let name = match guarded {
+            Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); match kind_callee_name(world, func) { Some(__nikaia_value) => __nikaia_value, None => return false } },
+            Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); return self.several_arrive(world, inner) },
+            _ => return false,
+        };
+        let key = world.here.unaliased(&name);
+        let contract = match *nikaia_std::index::get(&world.own.functions, &key) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        contract.fails_with.len() > 1
+    }
+}
+
+
 // --- check_lambdas.nika ---
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -14020,6 +14630,195 @@ impl CheckState {
 }
 
 
+// --- check_members.nika ---
+
+fn mem_offered(head: &str) -> bool { head == "i32" || head == "i64" || head == "u8" || head == "u32" || head == "u64" || head == "f64" || head == "bool" || head == "char" || head == "scalar" || head == "String" || head == "str" || head == "Vec" || head == "HashMap" || head == "HashSet" || head == "Array" || head == "Seq" || head == "Par" }
+
+fn mem_member_under(key: &str, prefix: &str) -> String {
+    if !key.starts_with(prefix) { return "".to_owned(); }
+    let rest = nikaia_std::index::or(key.strip_prefix(prefix), || "").to_owned();
+    if rest.contains("::") { return "".to_owned(); }
+    rest
+}
+
+fn mem_under(table: &collections::BTreeMap<String, FnContract>, prefix: &str) -> Vec<String> {
+    let mut members: Vec<String> = vec![];
+    for (key, _) in table.iter() {
+        let rest = mem_member_under(key, prefix);
+        if rest != "" { members.push(rest); }
+    }
+    members
+}
+
+fn mem_also(head: &str) -> Vec<String> {
+    if head == "String" { return vec!["str".to_owned()]; }
+    if head == "str" { return vec!["String".to_owned()]; }
+    if head == "Vec" { return vec!["list::ListExt".to_owned()]; }
+    if head == "Par" { return vec!["Seq".to_owned()]; }
+    vec![]
+}
+
+fn mem_a_said_code(code: &str) -> bool { code == "NK1189" || code == "NK1126" || code == "NK1210" }
+
+fn mem_unit_has_trait(unit: &ParsedView<'_>, name: &str) -> bool {
+    for item in unit.items.iter() {
+        let found = match &item.node {
+            Item::Trait { name: declared, .. } => { let declared = *declared; unit.text(declared) == name },
+            _ => false,
+        };
+        if found { return true; }
+    }
+    false
+}
+
+fn mem_a_trait_is_declared(world: &CheckWorld<'_>, name: &str) -> bool {
+    if mem_unit_has_trait(&world.here, name) { return true; }
+    for unit in world.beside.iter() { if mem_unit_has_trait(unit, name) { return true; } }
+    false
+}
+
+fn mem_unit_provides(world: &CheckWorld<'_>, unit: &ParsedView<'_>, head: &str, member: &str) -> bool {
+    for item in unit.items.iter() {
+        let implemented = match &item.node {
+            Item::Impl { trait_name, target, .. } => { let trait_name = *trait_name; mem_an_impl_provides(world, unit, trait_name, target, head, member) },
+            _ => false,
+        };
+        if implemented { return true; }
+    }
+    false
+}
+
+fn mem_an_impl_provides(world: &CheckWorld<'_>, unit: &ParsedView<'_>, trait_name: Option<winnow_grammar::Symbol>, target: &Type, head: &str, member: &str) -> bool {
+    let symbol = match trait_name { Some(__nikaia_value) => __nikaia_value, None => return false };
+    if unit.text(target.name) != head { return false; }
+    let written = unit.text(symbol);
+    if written == "Error" { return member == "message" || member == "full"; }
+    !mem_a_trait_is_declared(world, &written)
+}
+
+fn mem_provided_by_a_trait(world: &CheckWorld<'_>, head: &str, member: &str) -> bool {
+    if mem_unit_provides(world, &world.here, head, member) { return true; }
+    for unit in world.beside.iter() { if mem_unit_provides(world, unit, head, member) { return true; } }
+    false
+}
+
+fn mem_a_unit_declares(world: &CheckWorld<'_>, head: &str) -> bool {
+    for unit in world.beside.iter() { if declares_a_type(unit, head) { return true; } }
+    false
+}
+
+fn mem_listed(names: &[String], before: &str) -> String {
+    let mut shown: Vec<String> = vec![];
+    for name in names.iter() { shown.push(format!("`{}{}`", before, name)); }
+    shown.join(", ")
+}
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_member_nothing_writes_down(&mut self, world: &CheckWorld<'_>, head: &str, member: &str, method: bool, span: &Span) {
+        for found in self.findings.iter() { if found.span == *span && mem_a_said_code(&found.code) { return; } }
+        if method && resolve_method(world, &format!("{}::deref", head)).is_some() { return; }
+        if self.type_parameters.contains_key(head) || self.foreign_names.contains(head) || self.opaque_handles.contains(head) || self.grammars.contains_key(head) || a_number_name(head) { return; }
+        let prefix = format!("{}::", head);
+        let mut members = mem_under(&world.own.functions, &prefix);
+        members.extend(mem_under(&world.library.functions, &prefix));
+        let declared = mem_offered(head) || self.structs.contains_key(head) || self.enums.contains_key(head) || world.own.types.contains_key(head) || world.library.types.contains_key(head) || mem_a_unit_declares(world, head) || !method && self.std_modules.contains(head) || !members.is_empty();
+        if !declared { return; }
+        if method && mem_provided_by_a_trait(world, head, member) { return; }
+        for other in mem_also(head) { members.extend(mem_under(&world.library.functions, &format!("{}::", other))); }
+        self.a_member_is_refused(head, member, method, &members, span);
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn a_member_is_refused(&mut self, head: &str, member: &str, method: bool, members: &[String], span: &Span) {
+        let mut shown: String = head.to_owned();
+        if head == "str" { shown = "String".to_owned(); }
+        let mut written: String = format!("{}::{}", head, member);
+        if method { written = format!(".{}()", member); }
+        let mut help: String = "".to_owned();
+        if mem_text_from(head, member) { help = "Write the text itself, `\"x\"`, or `\"x\".clone()` for text of its own.".to_owned(); } else if member == "as_str" { help = "Leave it out: the text is already what is passed.".to_owned(); } else if member == "is_some" { help = "Compare with `null`: `value != null`.".to_owned(); } else if member == "is_none" { help = "Compare with `null`: `value == null`.".to_owned(); } else { help = mem_nearest_help(head, member, method, members, &shown); }
+        let mut what: String = format!("`{}` has no function called `{}`.", shown, member);
+        if method { what = format!("`{}` has no method called `{}`.", shown, member); }
+        self.findings.push(check_refusal("NK1171", span, what, vec![format!("What can be called is what is written down: `{}` is in no declaration, ledger or description this program reads.", written)], Some(help)));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_member_this_type_does_not_have(&mut self, world: &CheckWorld<'_>, ty: &str, member: &str, span: &Span) {
+        if resolve_call(world, &format!("{}::{}", ty, member)).is_some() { return; }
+        if self.type_parameters.contains_key(ty) {
+            if member == "fields" || member == "variants" { self.a_shape_that_is_not_reachable_yet(ty, member, span); }
+            return;
+        }
+        if self.enums.contains_key(ty) {
+            self.a_variant_nothing_declares(ty, member, span);
+            return;
+        }
+        let fields = self.fields_of(world, ty);
+        if fields.is_none() {
+            self.a_head_nothing_declares(&world.here, world, ty, &format!("{}::{}", ty, member), span);
+            return;
+        }
+        if member == "fields" || member == "variants" {
+            self.a_shape_that_is_not_reachable_yet(ty, member, span);
+            return;
+        }
+        let mut named: Vec<String> = vec![];
+        for field in nikaia_std::index::or(fields, || vec![].into()) { named.push(field.name.to_owned()); }
+        let listed = mem_listed(&named, "");
+        let mut help: String = format!("If `{}` should be a method, add it in `impl {} {{ … }}`.", member, ty);
+        let near = nearest_name(member, &named);
+        if near.is_some() { help = format!("Read it from a value: `value.{}`.", nikaia_std::index::or(near, || "".to_owned().into())); }
+        self.findings.push(check_refusal("NK1171", span, format!("`{}` has nothing called `{}` to reach with `::`.", ty, member), vec![format!("`::` reaches a type's methods and variants. Fields are read from a value with a dot. `{}` holds {}.", ty, listed)], Some(help)));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn a_variant_nothing_declares(&mut self, ty: &str, member: &str, span: &Span) {
+        let mut variants: Vec<String> = vec![];
+        let held = match *nikaia_std::index::get(&self.enums, ty) { Some(__nikaia_value) => __nikaia_value, None => return };
+        for variant in held.iter() { variants.push(variant.to_owned()); }
+        let listed = mem_listed(&variants, &format!("{}::", ty));
+        let near = nearest_name(member, &variants);
+        let mut help: String = format!("Write one of {}.", listed);
+        if near.is_some() { help = format!("Did you mean `{}::{}`?", ty, nikaia_std::index::or(near, || "".to_owned().into())); } else if variants.is_empty() { help = format!("`{}` has no variants, so there's nothing to write here.", ty); }
+        self.findings.push(check_refusal("NK1171", span, format!("`{}` has no variant called `{}`.", ty, member), vec![format!("`{}` is {}.", ty, listed)], Some(help)));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_path_in_a_pattern(&mut self, world: &CheckWorld<'_>, path: &[winnow_grammar::Symbol], span: &Span) {
+        if path.len() != 2 { return; }
+        let ty = world.words.resolve(*nikaia_std::index::get(&path, 0)).to_owned();
+        let member = world.words.resolve(*nikaia_std::index::get(&path, 1)).to_owned();
+        if self.is_variant(&ty, &member) { return; }
+        self.a_member_this_type_does_not_have(world, &ty, &member, span);
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_pattern_naming_a_member_a_type_does_not_have(&mut self, world: &CheckWorld<'_>, pattern: &MatchPattern, span: &Span) {
+        match pattern {
+            MatchPattern::Path(path) => self.a_path_in_a_pattern(world, path, span),
+            MatchPattern::Named { path, .. } => self.a_path_in_a_pattern(world, path, span),
+            MatchPattern::Tuple { path, parts } => {
+                self.a_path_in_a_pattern(world, path, span);
+                for part in parts.iter() { self.a_pattern_naming_a_member_a_type_does_not_have(world, part, span); }
+            },
+            MatchPattern::Or(alternatives) => { for alternative in alternatives.iter() { self.a_pattern_naming_a_member_a_type_does_not_have(world, alternative, span); } },
+            _ => { },
+        }
+    }
+}
+
+fn mem_text_from(head: &str, member: &str) -> bool { (head == "String" || head == "str") && member == "from" }
+
+fn mem_nearest_help(head: &str, member: &str, method: bool, members: &[String], shown: &str) -> String {
+    let near = nearest_name(member, members);
+    if near.is_none() { return format!("Only what is written down for `{}` can be called; a Rust function or method of the same name is not reached.", shown); }
+    let name = nikaia_std::index::or(near, || "".to_owned().into());
+    if method { return format!("Did you mean `.{}()`?", name); }
+    format!("Did you mean `{}::{}`?", head, name)
+}
+
+
 // --- check_names.nika ---
 
 impl CheckState {
@@ -14109,6 +14908,144 @@ pub fn integer_named(ty: &Ty) -> Option<String> {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn is_a_literal(expr: &Expr) -> bool { matches!(expr, Expr::LitInt { .. } | Expr::LitFloat(_, _) | Expr::LitStr { .. } | Expr::LitInterpolated { .. } | Expr::LitChar(_, _) | Expr::LitBool(_, _)) }
+
+
+// --- check_notes.nika ---
+
+fn note_seq_shape(ty: &Ty) -> Option<Shape> {
+    match ty {
+        Ty::Seq { shape, .. } => Some(shape.clone()),
+        _ => None,
+    }
+}
+
+fn note_seq_item(ty: &Ty) -> Ty {
+    match ty {
+        Ty::Seq { item, .. } => { let item = nikaia_std::boxed::open(item); item.clone() },
+        _ => Ty::Unknown,
+    }
+}
+
+fn note_a_division(op: &BinaryOp) -> bool { *op == BinaryOp::Div || *op == BinaryOp::Rem }
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_sequence_that_cannot_do_this(&mut self, world: &CheckWorld<'_>, on: &Ty, method: winnow_grammar::Symbol, contract: &FnContract, found: &[Ty], span: &Span) {
+        let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
+        let written = world.words.resolve(method).to_owned();
+        let receiver_lacks = !signature.params.is_empty() && nikaia_std::index::get(&signature.params, 0).0 == "self" && self.a_sequence_lacks(&written, &nikaia_std::index::get(&signature.params, 0).1, on, span);
+        if receiver_lacks { return; }
+        let arguments = call_arguments(signature);
+        let mut at: i64 = 0;
+        while ((at) as usize) < arguments.len() && ((at) as usize) < found.len() {
+            if self.a_sequence_lacks(&written, &nikaia_std::index::get(&arguments, (at) as usize).1, nikaia_std::index::get(&found, (at) as usize), span) { return; }
+            at += 1;
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn a_sequence_lacks(&mut self, written: &str, pattern: &Ty, actual: &Ty, span: &Span) -> bool {
+        let wanted = match note_seq_shape(pattern) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let has = match note_seq_shape(actual) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let missing = has.missing(&wanted);
+        if missing.is_empty() { return false; }
+        let mut needs: String = "walks the sequence more than once".to_owned();
+        let mut lacks: String = "this one is used up by the first walk".to_owned();
+        let mut way: String = "Collect it into a list first.".to_owned();
+        if *nikaia_std::index::get(&missing, 0) == ENDS {
+            needs = "walks a sequence from the back".to_owned();
+            lacks = "this one can only be walked from the front".to_owned();
+            way = "Collect it into a list first, and walk the list from the back: `….collect()` and then `list.iter().rev()`.".to_owned();
+        } else if *nikaia_std::index::get(&missing, 0) == SIZED {
+            needs = "needs to know how long the sequence is".to_owned();
+            lacks = "this one doesn't know until it has been walked".to_owned();
+            way = "Collect it into a list first with `….collect()`: a list knows its length.".to_owned();
+        }
+        let item = note_seq_item(actual);
+        let mut what: String = "a sequence".to_owned();
+        if !item.is_unknown() { what = format!("a sequence of `{}`", item.text()); }
+        let notes: Vec<String> = vec![format!("This is {}. Ranges, a list's `iter()`, `chars()` and `drain()` can be walked from either end; a map's `keys()` and `io::lines()` only from the front, and a `filter` doesn't know its length.", what)];
+        self.findings.push(check_refusal("NK2703", span, format!("`{}` {}, but {}.", written, needs, lacks), notes, Some(way)));
+        true
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn newly_reaches_a_handler(&mut self, key: &str, gained: &[String], span: &Span) {
+        if self.flow.guarded.is_none() || gained.is_empty() { return; }
+        let named = names_listed(gained);
+        let notes: Vec<String> = vec![format!("`{}` couldn't throw {} when this handler was written. A `catch` takes everything that reaches it, so it handles the new error the same way as the others.", key, named), "Nothing is wrong: this is just to let you know. Once the updated `nikaia.contracts` is committed, you won't see this note again.".to_owned()];
+        self.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: "NK2402".to_owned(), message: format!("This `catch` now also receives {} from `{}`.", named, key), notes, help: Some("Check that the handler does the right thing for it. Adding an arm and leaving it as it is are both fine; `nikaia build` without `--locked` records the change.".to_owned()), labels: vec![] });
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn a_cleanup_that_moved(&mut self, world: &CheckWorld<'_>, key: &str, param: &str, moved_now: bool, moved_ty: &str, want: &Ty, given: Option<&Expr>, span: &Span) {
+        let expr = match given { Some(__nikaia_value) => __nikaia_value, None => return };
+        let value = match expr {
+            Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_owned() },
+            _ => return,
+        };
+        let how = match self.tears_down(world, want, &mut collections::BTreeSet::new()) { Some(__nikaia_value) => __nikaia_value, None => return };
+        let mut message: String = "".to_owned();
+        let mut before: String = "".to_owned();
+        let mut help: String = "".to_owned();
+        if moved_now {
+            message = format!("`{}` now keeps `{}`, so `{}` is cleaned up when `{}` is done with it, not at the end of this block.", key, param, value, key);
+            before = format!("`{}` only read its `{}` when this call was written", key, param);
+            help = format!("If the cleanup belongs here, pass `{}` a copy, `{}.clone()`, or change `{}` back to only reading it.", key, value, key);
+        } else {
+            message = format!("`{}` now only reads `{}`, so `{}` is cleaned up at the end of this block, not when `{}` is done with it.", key, param, value, key);
+            before = format!("`{}` kept its `{}` when this call was written", key, param);
+            help = format!("If the cleanup belongs inside `{}`, change it back to keeping what it's given. Otherwise there's nothing to do.", key);
+        }
+        let notes: Vec<String> = vec![format!("{}, and a `{}` does something when it's cleaned up ({}).", capitalised(&before), moved_ty, how), "Nothing is wrong: this is just to let you know, since the call itself doesn't show it. Once the updated `nikaia.contracts` is committed, you won't see this note again.".to_owned()];
+        self.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: "NK2403".to_owned(), message, notes, help: Some(help), labels: vec![] });
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn divisor_is_not_zero(&mut self, world: &CheckWorld<'_>, op: BinaryOp, rhs: &Expr, span: &Span) {
+        if !note_a_division(&op) { return; }
+        let divisor = match self.constant_of(world, rhs) { Some(__nikaia_value) => __nikaia_value, None => return };
+        if divisor.beyond || divisor.value.magnitude != 0u64 { return; }
+        let mut what: String = "takes the remainder".to_owned();
+        if op == BinaryOp::Div { what = "divides".to_owned(); }
+        self.findings.push(check_refusal("NK1118", span, format!("This {} by zero.", what), vec!["Dividing by zero would stop the program, and here it's certain to happen.".to_owned()], Some("If the divisor can really be zero, check it before dividing.".to_owned())));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn lambda_parameter(&mut self, world: &CheckWorld<'_>, name: winnow_grammar::Symbol, mutable: &[winnow_grammar::Symbol], ty: Ty, span: &Span) -> CheckLocal {
+        let mut written = false;
+        for one in mutable.iter() { if *one == name { written = true; } }
+        let asked = self.flow.at_a_write_door && !written;
+        let mut local = CheckLocal::free(world.words.resolve(name).to_owned(), ty, self.a_new_binding());
+        if asked { local.immutable = Some(CheckImmutable { at: span.clone(), kind: CheckKind::Parameter }); }
+        local
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn the_one_error(&self, world: &CheckWorld<'_>, expr: &Expr) -> Option<Ty> {
+        let name = match expr {
+            Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); match func {
+                Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_owned() },
+                Expr::Path(segments, _) => note_joined(world, segments),
+                _ => return None,
+            } },
+            Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); return self.the_one_error(world, inner) },
+            _ => return None,
+        };
+        let key = world.here.unaliased(&name);
+        let contract = match ledger_function(world, &key) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        if contract.fails_with.len() == 1 && *nikaia_std::index::get(&contract.fails_with, 0) != "?" { return Some(Ty::Named { name: (*nikaia_std::index::get(&contract.fails_with, 0)).to_owned(), args: vec![], view: false }); }
+        None
+    }
+}
+
+fn note_joined(world: &CheckWorld<'_>, segments: &[winnow_grammar::Symbol]) -> String {
+    let mut parts: Vec<String> = vec![];
+    for segment in segments.iter() { parts.push(world.words.resolve(*segment).to_owned()); }
+    parts.join("::")
+}
 
 
 // --- check_numbers.nika ---
@@ -44507,6 +45444,10 @@ pub mod check_access {
     #[allow(unused_imports)]
     pub use super::{names_the_argument, dotted_path, variants_named};
 }
+pub mod check_arith {
+    #[allow(unused_imports)]
+    pub use super::{an_or_a_named};
+}
 pub mod check_arms {
     #[allow(unused_imports)]
     pub use super::{CheckArm};
@@ -44542,6 +45483,7 @@ pub mod check_exprs {
     #[allow(unused_imports)]
     pub use super::{a_plain_string, CheckKept};
 }
+pub mod check_extern {}
 pub mod check_facts {
     #[allow(unused_imports)]
     pub use super::{FactWrap, FactKeyForm, FactViewed, FactNarrowing, FactPausing, FactClaim, CheckFacts};
@@ -44565,6 +45507,10 @@ pub mod check_items {
     #[allow(unused_imports)]
     pub use super::{declares_a_type, declared_with_no_arithmetic, either_param, either_field, imports_a_package, imports_exactly, an_extern_struct_named, a_c_value, implements_error, fields_by_base, ItemGeneric};
 }
+pub mod check_kinds {
+    #[allow(unused_imports)]
+    pub use super::{CheckRaised};
+}
 pub mod check_lambdas {}
 pub mod check_literals {
     #[allow(unused_imports)]
@@ -44574,10 +45520,12 @@ pub mod check_lookups {
     #[allow(unused_imports)]
     pub use super::{names_of, as_this_program_says, bounds_in_a_signature, ledger_function};
 }
+pub mod check_members {}
 pub mod check_names {
     #[allow(unused_imports)]
     pub use super::{integer_named, is_a_literal};
 }
+pub mod check_notes {}
 pub mod check_numbers {
     #[allow(unused_imports)]
     pub use super::{a_number_that_does_not_fit};

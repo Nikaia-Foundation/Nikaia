@@ -2388,140 +2388,17 @@ impl<'a> Checker<'a> {
         compound: bool,
         span: &Span,
     ) {
-        let symbol = match op {
-            BinaryOp::Add => "+",
-            BinaryOp::Sub => "-",
-            BinaryOp::Mul => "*",
-            BinaryOp::Div => "/",
-            _ => "%",
-        };
-        let [(_, left), (_, right)] = sides;
-        if !is_a_collection(left) && !is_a_collection(right) {
-            let declared = sides
-                .iter()
-                .position(|(_, ty)| self.declared_with_no_arithmetic(ty).is_some());
-            if let Some(at) = declared {
-                self.arithmetic_on_a_declared_type(symbol, sides, at, compound, span);
-            }
-            return;
-        }
-        let (side, other) = match is_a_collection(left) {
-            true => (left, right),
-            false => (right, left),
-        };
-        let joining = matches!(op, BinaryOp::Add) && is_a_list(left) && is_a_list(right);
-        // `xs += [3]` is the one shape whose way out can be written whole.
-        let extend = match sides {
-            [(Expr::Variable(bound, _), _), (value, _)] if compound => format!(
-                "{}.extend({})",
-                self.parsed.text(*bound),
-                written(self.parsed, value)
-            ),
-            _ => "a.extend(b)".to_string(),
-        };
-        self.s.findings.push(Finding {
-            severity: Severity::Error,
-            span: *span,
-            code: "NK1191".to_string(),
-            message: match is_a_list(side) {
-                true => format!("You can't use `{symbol}` on a list."),
-                false => format!("You can't use `{symbol}` on `{side}`."),
-            },
-            notes: vec![match joining {
-                true => "Lists have no operators: `+` doesn't join two lists.".to_string(),
-                false => match other.is_unknown() {
-                    true => "Lists, maps and sets have no arithmetic.".to_string(),
-                    false => format!(
-                        "Lists, maps and sets have no arithmetic. The other side is `{other}`."
-                    ),
-                },
-            }],
-            help: joining.then(|| {
-                format!("To add one list's elements to the end of another, write `{extend}`.")
-            }),
-            labels: Vec::new(),
-        });
-    }
-
-    /// `NK1191` for a `struct` or an `enum`, the side at `at` being one.
-    ///
-    /// **The help names a field only where there is exactly one it could
-    /// mean**: the struct has one numeric field, the side is a plain name and
-    /// the other side is not a declared type too. Anything else would be a
-    /// guess, and the help says what is always true instead.
-    fn arithmetic_on_a_declared_type(
-        &mut self,
-        symbol: &str,
-        sides: [(&Expr, &Ty); 2],
-        at: usize,
-        compound: bool,
-        span: &Span,
-    ) {
-        let (side, ty) = sides[at];
-        let (other_side, other) = sides[1 - at];
-        let Some(kind) = self.declared_with_no_arithmetic(ty) else {
-            return;
-        };
-        let name = match ty.unseen() {
-            Ty::Named { name, .. } => name.clone(),
-            _ => return,
-        };
-        let numeric: Vec<String> = match kind {
-            "struct" => self
-                .s
-                .structs
-                .get(&name)
-                .map(|fields| {
-                    fields
-                        .iter()
-                        .filter(|f| {
-                            matches!(&f.ty, Ty::Named { name, args, .. }
-                                if args.is_empty() && is_number(name))
-                        })
-                        .map(|f| f.name.clone())
-                        .collect()
-                })
-                .unwrap_or_default(),
-            _ => Vec::new(),
-        };
-        let field = match (numeric.as_slice(), side) {
-            ([field], Expr::Variable(bound, _))
-                if self.declared_with_no_arithmetic(other).is_none() =>
-            {
-                Some(format!("{}.{field}", self.parsed.text(*bound)))
-            }
-            _ => None,
-        };
-        let help = match field {
-            Some(field) => {
-                let other = written(self.parsed, other_side);
-                let line = match (compound, at) {
-                    (true, _) => format!("{field} {symbol}= {other}"),
-                    (false, 0) => format!("{field} {symbol} {other}"),
-                    (false, _) => format!("{other} {symbol} {field}"),
-                };
-                format!("Did you mean a field, like `{line}`?")
-            }
-            None if kind == "struct" => format!(
-                "Do the arithmetic on one of its fields, or write a method that says what \
-                 `{symbol}` means for it."
-            ),
-            None => format!("Write a method that says what `{symbol}` means for it."),
-        };
-        self.s.findings.push(Finding {
-            severity: Severity::Error,
-            span: *span,
-            code: "NK1191".to_string(),
-            message: format!("You can't use `{symbol}` on {} `{name}`.", an_or_a(&name)),
-            notes: vec![format!(
-                "`{name}` is {} `{kind}`, and {} `{kind}` has no arithmetic: operators \
-                 belong to numbers, and `+` to text as well.",
-                an_or_a(kind),
-                an_or_a(kind)
-            )],
-            help: Some(help),
-            labels: Vec::new(),
-        });
+        let [(left_expr, left), (right_expr, right)] = sides;
+        self.s.arithmetic_on_something_that_has_none(
+            &self.world,
+            op,
+            left_expr,
+            left,
+            right_expr,
+            right,
+            compound,
+            span,
+        );
     }
 
     /// A list, a map, a set, or a `struct` or an `enum` this unit declares.
@@ -3619,24 +3496,8 @@ impl<'a> Checker<'a> {
         ty: Ty,
         span: &Span,
     ) -> Local {
-        let asked = self.s.flow.at_a_write_door && !mutable.contains(&name);
-        Local {
-            written_mut: false,
-            id: self.a_new_binding(),
-            literal: None,
-            name: self.parsed.text(name).to_string(),
-            ty,
-            constant: None,
-            lent: false,
-            changing: false,
-            built: None,
-            empty_list: None,
-            open_number: None,
-            immutable: asked.then_some(Immutable {
-                at: *span,
-                kind: Kind::Parameter,
-            }),
-        }
+        self.s
+            .lambda_parameter(&self.world, name, mutable, ty, span)
     }
 
     /// **Whether a type's values have a cleanup**, and whether it can fail
@@ -4648,75 +4509,8 @@ impl<'a> Checker<'a> {
         found: &[Ty],
         span: &Span,
     ) {
-        let Some(signature) = &contract.signature else {
-            return;
-        };
-        let receiver = signature
-            .params
-            .first()
-            .filter(|(name, _)| name == "self")
-            .map(|(_, pattern)| (pattern, on));
-        let arguments = signature
-            .arguments()
-            .iter()
-            .zip(found)
-            .map(|((_, pattern), actual)| (pattern, actual));
-        let written = self.parsed.text(method).to_string();
-        for (pattern, actual) in receiver.into_iter().chain(arguments) {
-            let (
-                Ty::Seq { shape: wanted, .. },
-                Ty::Seq {
-                    shape: has, item, ..
-                },
-            ) = (pattern, actual)
-            else {
-                continue;
-            };
-            let missing = has.missing(wanted);
-            if missing.is_empty() {
-                continue;
-            }
-            // In the program's words and not the ledger's: `ends` and `sized`
-            // are not words a program can write (ADR-105 D4), so a message that
-            // named them would name something its reader cannot type
-            // (Part III C.1).
-            let (needs, lacks, way) = match missing[0].as_str() {
-                ty::ENDS => (
-                    "walks a sequence from the back",
-                    "this one can only be walked from the front",
-                    "Collect it into a list first, and walk the list from the back: \
-                     `….collect()` and then `list.iter().rev()`.",
-                ),
-                ty::SIZED => (
-                    "needs to know how long the sequence is",
-                    "this one doesn't know until it has been walked",
-                    "Collect it into a list first with `….collect()`: a list knows its length.",
-                ),
-                _ => (
-                    "walks the sequence more than once",
-                    "this one is used up by the first walk",
-                    "Collect it into a list first.",
-                ),
-            };
-            let item = match &**item {
-                Ty::Unknown => "a sequence".to_string(),
-                item => format!("a sequence of `{item}`"),
-            };
-            self.s.findings.push(Finding {
-                code: "NK2703".to_string(),
-                severity: Severity::Error,
-                span: *span,
-                message: format!("`{written}` {needs}, but {lacks}."),
-                notes: vec![format!(
-                    "This is {item}. Ranges, a list's `iter()`, `chars()` and `drain()` \
-                         can be walked from either end; a map's `keys()` and `io::lines()` \
-                         only from the front, and a `filter` doesn't know its length."
-                )],
-                help: Some(way.to_string()),
-                labels: Vec::new(),
-            });
-            return;
-        }
+        self.s
+            .a_sequence_that_cannot_do_this(&self.world, on, method, contract, found, span);
     }
 
     /// **A count the language below takes in `usize`**
@@ -5080,31 +4874,7 @@ impl<'a> Checker<'a> {
     }
 
     fn divisor_is_not_zero(&mut self, op: BinaryOp, rhs: &Expr, span: &Span) {
-        if !matches!(op, BinaryOp::Div | BinaryOp::Rem) {
-            return;
-        }
-        let Some(divisor) = self.constant_of(rhs) else {
-            return;
-        };
-        if divisor.beyond || divisor.value.magnitude != 0 {
-            return;
-        }
-        let what = match op {
-            BinaryOp::Div => "divides",
-            _ => "takes the remainder",
-        };
-        self.s.findings.push(Finding {
-            severity: Severity::Error,
-            span: *span,
-            code: "NK1118".to_string(),
-            message: format!("This {what} by zero."),
-            notes: vec![
-                "Dividing by zero would stop the program, and here it's certain to happen."
-                    .to_string(),
-            ],
-            help: Some("If the divisor can really be zero, check it before dividing.".to_string()),
-            labels: Vec::new(),
-        });
+        self.s.divisor_is_not_zero(&self.world, op, rhs, span);
     }
 
     // --- statements ---------------------------------------------------------
@@ -6091,111 +5861,7 @@ impl<'a> Checker<'a> {
     /// `panic`, of a reflected field's `of` in a generic body, and not again
     /// where a part inside was already refused: one cause, one refusal.
     fn a_value_of_no_known_type(&mut self, expr: &Expr, span: &Span) {
-        let open = matches!(expr, Expr::LitInt { .. } | Expr::LitFloat(_, _))
-            || matches!(expr, Expr::MethodCall { receiver, .. } if matches!(**receiver, Expr::LitInt { .. }))
-            || self.number_shaped(expr)
-            || matches!(expr, Expr::Variable(n, _) if self
-                .s
-                .binding(self.parsed.text(*n))
-                .is_some_and(|l| self.s.open_comptimes.contains_key(&((l.id as usize) as i64))))
-            || self.s.a_member_of_an_open_argument(&self.world, expr)
-            // `xs ?? 0` and `xs ?? return` over a `T?` nothing typed: the
-            // number's uses, or the jump, leave the type to what the left side
-            // holds - an open number of a list or map, a channel's element.
-            || matches!(expr, Expr::Coalesce { fallback, .. }
-                if self.number_shaped(fallback) || self.s.jumps(&self.world, fallback))
-            // `asset("…")` is the bytes of a file, and the `comptime` it
-            // stands in says what they are read as (ADR-310 D3).
-            || matches!(expr, Expr::Call { func, .. }
-                if matches!(&**func, Expr::Variable(n, _) if self.parsed.text(*n) == ASSET));
-        // **A name is asked where it is bound**: a `let`'s value, a loop's
-        // sequence, the place a lambda stands, a declared parameter. Whatever
-        // left it without a type was said there, or stood back for.
-        let said = matches!(expr, Expr::Variable(_, _));
-        let structural = matches!(
-            expr,
-            Expr::Binary { .. }
-                | Expr::Unary { .. }
-                | Expr::If { .. }
-                | Expr::Block(_, _)
-                | Expr::Match { .. }
-                | Expr::Select(_, _)
-                | Expr::Return(_, _)
-                | Expr::Throw(_, _)
-                | Expr::TryCatch { .. }
-                | Expr::Range { .. }
-                | Expr::Continue(_)
-                | Expr::Break(_)
-        ) || matches!(expr, Expr::Call { func, .. }
-            if matches!(&**func, Expr::Variable(n, _) if self.parsed.text(*n) == "panic"))
-            || matches!(expr, Expr::MethodCall { method, .. }
-                if self.parsed.text(*method) == "of" && self.s.flow.unrolling.is_none())
-            || matches!(expr, Expr::Field { name, .. }
-                if self.parsed.text(*name) == "default" && self.s.flow.unrolling.is_none());
-        // **A driver's parameters are each call site's own type** (ADR-296
-        // D5): `db.prepare(query; id: 501)` is a row of what that call gave,
-        // known where it is lowered, as `field.of(value)` is where it is
-        // unrolled.
-        let per_call = self.s.a_drivers_row(&self.world, expr)
-            || self.through_a_package_unread(expr)
-            || self.s.refused_where_it_is_lowered(&self.world, expr);
-        // A member of a value that has no known type is unknown because of
-        // that value, whose own refusal (or reason not to) was said.
-        let of_an_unknown = matches!(expr, Expr::Field { base, .. } | Expr::MethodCall { receiver: base, .. }
-            if matches!(&**base, Expr::Variable(n, _) if self
-                .s
-                .binding(self.parsed.text(*n))
-                .is_some_and(|l| self.s.flow.unknown_bound.contains(&((l.id as usize) as i64)))));
-        if said || per_call || of_an_unknown {
-            self.s.flow.unknown_said += 1;
-            return;
-        }
-        if open || structural {
-            return;
-        }
-        // A finding already on this statement is the cause, said once.
-        if self
-            .s
-            .findings
-            .iter()
-            .any(|f| f.span == *span && f.severity == Severity::Error)
-        {
-            self.s.flow.unknown_said += 1;
-            return;
-        }
-        let written = written(self.parsed, expr);
-        let written: String = match written.chars().count() > 60 {
-            true => written.chars().take(57).collect::<String>() + "...",
-            false => written,
-        };
-        self.s.flow.unknown_said += 1;
-        self.s.findings.push(Finding {
-            severity: Severity::Error,
-            span: *span,
-            code: "NK1245".to_string(),
-            message: format!("The compiler can't tell what type `{written}` is."),
-            notes: vec![
-                "What is not known is not checked, so a type nothing can tell is refused \
-                 rather than left to the language below."
-                    .to_string(),
-            ],
-            help: Some(
-                "Write the type down where the value is made, such as `let x: T = …`, or \
-                 pass it to a parameter that declares one."
-                    .to_string(),
-            ),
-            labels: Vec::new(),
-        });
-    }
-
-    /// **A call through a package whose ledger this build does not read**
-    /// (#497): a dependency's own dependency, which is invisible to the
-    /// program (ADR-286 D21) and checked by the build of the package that
-    /// names it, or a crate nothing describes yet, which `NK1182`'s
-    /// neighbour refuses by name.
-    fn through_a_package_unread(&self, expr: &Expr) -> bool {
-        self.s
-            .through_a_package_unread(&self.world.here, &self.world, expr)
+        self.s.a_value_of_no_known_type(&self.world, expr, span);
     }
 
     fn value_of(&mut self, expr: &Expr, span: &Span) -> Ty {
@@ -11148,36 +10814,10 @@ impl<'a> Checker<'a> {
     /// The caret is on the **call** rather than on the `catch`, because that is
     /// what the sentence is about: *this call brings something new in here*.
     fn newly_reaches_a_handler(&mut self, key: &str, span: &Span) {
-        if self.s.flow.guarded.is_none() {
-            return;
-        }
         let Some(gained) = self.newly.throws.get(key) else {
             return;
         };
-        let named = list(&gained.iter().map(String::as_str).collect::<Vec<_>>());
-        self.s.findings.push(Finding {
-            severity: Severity::Warning,
-            span: *span,
-            code: "NK2402".to_string(),
-            message: format!("This `catch` now also receives {named} from `{key}`."),
-            notes: vec![
-                format!(
-                    "`{key}` couldn't throw {named} when this handler was written. A `catch` \
-                     takes everything that reaches it, so it handles the new error the same \
-                     way as the others."
-                ),
-                "Nothing is wrong: this is just to let you know. Once the updated \
-                 `nikaia.contracts` is committed, you won't see this note again."
-                    .to_string(),
-            ],
-            help: Some(
-                "Check that the handler does the right thing for it. Adding an arm and \
-                 leaving it as it is are both fine; `nikaia build` without `--locked` \
-                 records the change."
-                    .to_string(),
-            ),
-            labels: Vec::new(),
-        });
+        self.s.newly_reaches_a_handler(key, gained, span);
     }
 
     /// **`NK2403`: a value's cleanup moved with a contract**
@@ -11210,63 +10850,16 @@ impl<'a> Checker<'a> {
         else {
             return;
         };
-        let Some(Expr::Variable(value, _)) = given else {
-            return;
-        };
-        let Some(how) = self.tears_down(want, &mut BTreeSet::new()) else {
-            return;
-        };
-        let value = self.parsed.text(*value).to_string();
-        let ty = &moved.ty;
-        let (message, before, help) = match moved.now {
-            true => (
-                format!(
-                    "`{key}` now keeps `{param}`, so `{value}` is cleaned up when `{key}` is \
-                     done with it, not at the end of this block."
-                ),
-                format!("`{key}` only read its `{param}` when this call was written"),
-                format!(
-                    "If the cleanup belongs here, pass `{key}` a copy, `{value}.clone()`, or \
-                     change `{key}` back to only reading it."
-                ),
-            ),
-            false => (
-                format!(
-                    "`{key}` now only reads `{param}`, so `{value}` is cleaned up at the end \
-                     of this block, not when `{key}` is done with it."
-                ),
-                format!("`{key}` kept its `{param}` when this call was written"),
-                format!(
-                    "If the cleanup belongs inside `{key}`, change it back to keeping what \
-                     it's given. Otherwise there's nothing to do."
-                ),
-            ),
-        };
-        self.s.findings.push(Finding {
-            severity: Severity::Warning,
-            span: *span,
-            code: "NK2403".to_string(),
-            message,
-            notes: vec![
-                format!(
-                    "{}, and a `{ty}` does something when it's cleaned up ({how}).",
-                    sentence(&before)
-                ),
-                "Nothing is wrong: this is just to let you know, since the call itself \
-                 doesn't show it. Once the updated `nikaia.contracts` is committed, you \
-                 won't see this note again."
-                    .to_string(),
-            ],
-            help: Some(help),
-            labels: Vec::new(),
-        });
-    }
-
-    /// **Whether a type's teardown does something**, and what says so
-    /// (ADR-297 D12): an `impl Drop` or an `impl Cleanup` in any ledger this
-    /// build reads, on the type or on the type of one of its fields.
-    fn tears_down(&self, ty: &Ty, seen: &mut BTreeSet<String>) -> Option<String> {
-        self.s.tears_down(&self.world, ty, seen)
+        self.s.a_cleanup_that_moved(
+            &self.world,
+            key,
+            param,
+            moved.now,
+            &moved.ty,
+            want,
+            given,
+            span,
+        );
     }
 
     /// Where a method call stands in ADR-023 D8's propagation, for the emitter
@@ -11924,330 +11517,21 @@ impl<'a> Checker<'a> {
     /// D4, D5): `extern` before a function with a body exports it to C, and four
     /// shapes are refused at the declaration.
     fn an_entry_point(&mut self, item: &Item, span: &Span, of_a_trait: bool) {
-        let Item::Fn {
-            name,
-            generics,
-            receiver,
-            args,
-            ret_type,
-            is_public,
-            is_extern: true,
-            ..
-        } = item
-        else {
-            return;
-        };
-        let written = name
-            .map(|n| self.parsed.text(n).to_string())
-            .unwrap_or_else(|| "new".to_string());
-        let refuse =
-            |checker: &mut Self, code: &'static str, message: String, note: &str, help: String| {
-                checker.s.findings.push(Finding {
-                    severity: Severity::Error,
-                    span: *span,
-                    code: code.to_string(),
-                    message,
-                    notes: vec![note.to_string()],
-                    help: Some(help),
-                    labels: Vec::new(),
-                });
-            };
-        // `NK1237`: an entry point is the package's surface.
-        if !is_public {
-            refuse(
-                self,
-                "NK1237",
-                format!("`{written}` is `extern` but not `pub`."),
-                "`extern` before a function with a body exports it to C, and what a package \
-                 exports is part of its surface.",
-                format!(
-                    "Write `pub extern fn {written}`, or leave out `extern` for a function only this program calls."
-                ),
-            );
-        }
-        // `NK1238`: a function C calls needs a library for C to call into.
-        refuse(
-            self,
-            "NK1238",
-            format!("`{written}` is an entry point, and this build makes no library."),
-            "Only a build with `artifact = \"c-library\"` in `[build]` exports its \
-             `extern` functions, as a shared and a static library and a header.",
-            format!(
-                "Set `artifact = \"c-library\"` in `[build]`, or leave out `extern`: `{written}` is an ordinary function without it."
-            ),
-        );
-        // `NK1239`: C has neither generics nor traits.
-        if !generics.is_empty() || of_a_trait {
-            let (what, help) = match of_a_trait {
-                true => (
-                    "a trait's method",
-                    format!("Export a plain function that calls `{written}`."),
-                ),
-                false => (
-                    "generic",
-                    format!(
-                        "Export one function for each type `{written}` is called with, each calling it."
-                    ),
-                ),
-            };
-            refuse(
-                self,
-                "NK1239",
-                format!("`{written}` is {what}, and C cannot call one."),
-                "A C function has one signature and no dispatch: what a generic function or a \
-                 trait's method stands for is decided in Nikaia, not by the caller.",
-                help,
-            );
-        }
-        // `NK1240`: what crosses is D5's table, both ways.
-        let _ = receiver;
-        for arg in args {
-            if let Err(help) = self.crosses_to_c(&arg.ty, false) {
-                let param = self.parsed.text(arg.name).to_string();
-                refuse(
-                    self,
-                    "NK1240",
-                    format!("`{param}` of `{written}` cannot cross to C."),
-                    "An entry point takes numbers, `bool` and `scalar` by value, text and bytes as \
-                     a view, a list of numbers, a struct or an enum of the package, an optional of \
-                     those, and a callback that does not pause (Part III 15.1).",
-                    help,
-                );
-            }
-        }
-        if let Some(result) = ret_type
-            && let Err(help) = self.crosses_to_c(result, true)
-        {
-            refuse(
-                self,
-                "NK1240",
-                format!("What `{written}` hands back cannot cross to C."),
-                "An entry point hands back numbers, `bool` and `scalar`, text and bytes into the \
-                 caller's buffer, a struct or an enum of the package, or an optional of those \
-                 (Part III 15.1).",
-                help,
-            );
-        }
+        self.s.an_entry_point(&self.world, item, span, of_a_trait);
     }
 
     /// **What a `pub extern struct` may hold**
     /// ([ADR-284](../../docs/specification/adr/adr-284.md) D14, D15): it is
     /// `pub`, it is not generic, and every field is a C value.
     fn an_extern_struct(&mut self, item: &Item, span: &Span) {
-        let Item::Struct {
-            name,
-            generics,
-            fields,
-            is_public,
-            is_extern: true,
-        } = item
-        else {
-            return;
-        };
-        let written = self.parsed.text(*name).to_string();
-        let refuse =
-            |checker: &mut Self, code: &'static str, at: Span, message: String, help: String| {
-                checker.s.findings.push(Finding {
-                    severity: Severity::Error,
-                    span: at,
-                    code: code.to_string(),
-                    message,
-                    notes: vec![
-                        "An `extern` struct has C's layout and crosses to C by value: its fields \
-                     are numbers, `bool`, `scalar`, enums without payload, other `extern` \
-                     structs and `Array[T, N]` of these."
-                            .to_string(),
-                    ],
-                    help: Some(help),
-                    labels: Vec::new(),
-                });
-            };
-        if !is_public {
-            refuse(
-                self,
-                "NK1237",
-                *span,
-                format!("`{written}` is `extern` but not `pub`."),
-                format!(
-                    "Write `pub extern struct {written}`, or leave out `extern` for a struct only this program uses."
-                ),
-            );
-        }
-        if !generics.is_empty() {
-            refuse(
-                self,
-                "NK1145",
-                *span,
-                format!(
-                    "`{written}` is an `extern` struct with type parameters, and C's layout has none."
-                ),
-                format!("Declare one `extern` struct for each type `{written}` is used with."),
-            );
-        }
-        for field in fields {
-            if !self.a_c_value(&field.ty) {
-                let field_name = self.parsed.text(field.name).to_string();
-                let ty = self.parsed.text(field.ty.name).to_string();
-                refuse(
-                    self,
-                    "NK1145",
-                    field.span,
-                    format!("`{written}.{field_name}` is a `{ty}`, which is not a C value."),
-                    format!(
-                        "Leave out `extern`: a `pub struct` crosses to C as a handle, with a getter for `{field_name}`."
-                    ),
-                );
-            }
-        }
+        self.s.an_extern_struct(&self.world, item, span);
     }
 
     /// **What a `pub extern enum` may hold**
     /// ([ADR-284](../../docs/specification/adr/adr-284.md) D32): it is `pub`,
     /// and every field of every variant is a C value, as an `extern` struct's.
     fn an_extern_enum(&mut self, item: &Item, span: &Span) {
-        let Item::Enum {
-            name,
-            variants,
-            is_public,
-            is_extern: true,
-        } = item
-        else {
-            return;
-        };
-        let written = self.parsed.text(*name).to_string();
-        let mut refusals: Vec<(&'static str, Span, String, String)> = Vec::new();
-        if !is_public {
-            refusals.push((
-                "NK1237",
-                *span,
-                format!("`{written}` is `extern` but not `pub`."),
-                format!(
-                    "Write `pub extern enum {written}`, or leave out `extern` for an enum only this program uses."
-                ),
-            ));
-        }
-        for variant in variants {
-            let variant_name = self.parsed.text(variant.name).to_string();
-            let fields: Vec<(String, &crate::ast::Type)> = match &variant.fields {
-                ast::VariantFields::Unit => Vec::new(),
-                ast::VariantFields::Tuple(types) => types
-                    .iter()
-                    .enumerate()
-                    .map(|(at, ty)| (at.to_string(), ty))
-                    .collect(),
-                ast::VariantFields::Named(named) => named
-                    .iter()
-                    .map(|field| (self.parsed.text(field.name).to_string(), &field.ty))
-                    .collect(),
-            };
-            for (field, ty) in fields {
-                if !self.a_c_value(ty) {
-                    let shown = self.parsed.text(ty.name).to_string();
-                    refusals.push((
-                        "NK1145",
-                        variant.span,
-                        format!(
-                            "`{written}::{variant_name}.{field}` is a `{shown}`, which is not a C value."
-                        ),
-                        "Leave out `extern`: a `pub enum` crosses to C as a handle, read through \
-                         `_kind` and a getter per field."
-                            .to_string(),
-                    ));
-                }
-            }
-        }
-        for (code, at, message, help) in refusals {
-            self.s.findings.push(Finding {
-                severity: Severity::Error,
-                span: at,
-                code: code.to_string(),
-                message,
-                notes: vec![
-                    "An `extern` enum is a tagged union in C's layout and crosses to C by value: \
-                     its fields are numbers, `bool`, `scalar`, enums without payload, `extern` \
-                     structs and enums, and `Array[T, N]` of these."
-                        .to_string(),
-                ],
-                help: Some(help),
-                labels: Vec::new(),
-            });
-        }
-    }
-
-    /// Whether this unit declares a `pub extern struct` or `pub extern enum`
-    /// by that name: a C value that crosses by value (ADR-284 D14, D32).
-    fn an_extern_struct_named(&self, name: &str) -> bool {
-        check_items::an_extern_struct_named(&self.world.here, name)
-    }
-
-    /// A field type an `extern` struct may hold (ADR-284 D15).
-    fn a_c_value(&self, ty: &crate::ast::Type) -> bool {
-        check_items::a_c_value(&self.world.here, ty)
-    }
-
-    /// Whether `ty` crosses to C at an entry point (ADR-284 D5), `out` for a
-    /// result: the shape to use where it does not.
-    fn crosses_to_c(&self, ty: &crate::ast::Type, out: bool) -> Result<(), String> {
-        let name = self.parsed.text(ty.name).to_string();
-        let args: Vec<String> = ty
-            .generics
-            .iter()
-            .map(|g| self.parsed.text(g.name).to_string())
-            .collect();
-        let a_number =
-            |n: &str| matches!(n, "i32" | "i64" | "u8" | "f64" | "bool" | "scalar" | "char");
-        if let Some(code) = &*ty.code {
-            if out {
-                return Err(
-                    "Hand back a value; a function is a parameter's shape: a callback.".to_string(),
-                );
-            }
-            if !code.is_sync {
-                return Err("Write the callback `sync`: C calls it on its own thread, where nothing may pause.".to_string());
-            }
-            for part in ty.generics.iter().chain((*code.result).iter()) {
-                self.crosses_to_c(part, false)?;
-            }
-            return Ok(());
-        }
-        if ty.is_tuple {
-            return Err(
-                "Hand a tuple's parts over one by one, or as a `pub extern struct`.".to_string(),
-            );
-        }
-        let declared = self.s.structs.contains_key(&name)
-            || self.s.enums.contains_key(&name)
-            || self.world.own.types.contains_key(&name);
-        let base = name.rsplit("::").next().unwrap_or(&name);
-        match (base, args.as_slice(), ty.is_view, out) {
-            (n, [], false, _) if a_number(n) => Ok(()),
-            ("String" | "str", [], true, false) => Ok(()),
-            ("String", [], false, true) => Ok(()),
-            ("String", [], false, false) => Err("Take `ref String`: C keeps the text and lends it for the call.".to_string()),
-            ("String" | "str", [], true, true) => Err("Hand back `String`: it is written into the caller's buffer.".to_string()),
-            ("Bytes", [], _, _) => Ok(()),
-            ("Vec", [element], false, true) if element == "u8" => Ok(()),
-            ("Array", [element], true, false) if a_number(element) => Ok(()),
-            // **A run of `extern` structs** (ADR-284 D16): in as an array C
-            // keeps, out into the caller's buffer counted in structs.
-            ("Array", [element], true, false) | ("Vec", [element], false, _)
-                if self.an_extern_struct_named(element) =>
-            {
-                Ok(())
-            }
-            ("Vec" | "Array", _, _, false) => Err("Take `ref Array[T]` of a number: C keeps the array and lends it for the call.".to_string()),
-            (_, [], _, _) if declared => Ok(()),
-            ("Locked" | "Shared" | "SharedMut" | "Seen", _, _, _) => Err(format!(
-                "Keep the `{name}` inside the package, in a `pub struct` C holds as a handle."
-            )),
-            ("HashMap" | "BTreeMap" | "Map", _, _, _) => {
-                Err("Keep the map in a `pub struct` C holds as a handle, or hand its entries to a callback.".to_string())
-            }
-            ("Vec" | "Array", _, _, true) => Err("Hand many results to a callback, or put them in a `pub struct` C holds as a handle.".to_string()),
-            _ => Err(format!(
-                "Declare `{name}` in the package as a `pub struct`, which C holds as a handle."
-            )),
-        }
+        self.s.an_extern_enum(&self.world, item, span);
     }
 
     /// Whether any ledger or this unit declares a **type** by this name.
@@ -12308,25 +11592,7 @@ impl<'a> Checker<'a> {
     /// the outermost call and only one by name, because that is what a `catch`
     /// guards in every program in the tree.
     fn several_arrive(&self, guarded: &Expr) -> bool {
-        let name = match guarded {
-            Expr::Call { func, .. } => match func.as_ref() {
-                Expr::Variable(name, _) => self.parsed.text(*name).to_string(),
-                Expr::Path(segments, _) => segments
-                    .iter()
-                    .map(|s| self.parsed.text(*s))
-                    .collect::<Vec<_>>()
-                    .join("::"),
-                _ => return false,
-            },
-            Expr::Try(inner, _) => return self.several_arrive(inner),
-            _ => return false,
-        };
-        let key = self.parsed.unaliased(&name);
-        self.world
-            .own
-            .functions
-            .get(&key)
-            .is_some_and(|contract| contract.fails_with.len() > 1)
+        self.s.several_arrive(&self.world, guarded)
     }
 
     /// The **one** error type a guarded expression can fail with, where exactly
@@ -12341,36 +11607,7 @@ impl<'a> Checker<'a> {
     /// ([ADR-024](../../docs/specification/adr/adr-024.md) D1), which names no
     /// type and therefore no cases.
     fn the_one_error(&self, expr: &Expr) -> Option<Ty> {
-        let name = match expr {
-            Expr::Call { func, .. } => match &**func {
-                Expr::Variable(name, _) => self.parsed.text(*name).to_string(),
-                Expr::Path(segments, _) => segments
-                    .iter()
-                    .map(|s| self.parsed.text(*s))
-                    .collect::<Vec<_>>()
-                    .join("::"),
-                _ => return None,
-            },
-            Expr::Try(inner, _) => return self.the_one_error(inner),
-            _ => return None,
-        };
-        let key = self.parsed.unaliased(&name);
-        let contract = self.world.own.functions.get(&key).or_else(|| {
-            self.world
-                .library
-                .lookup(&key)
-                .map(|(_, c)| c)
-                .as_ref()
-                .copied()
-        })?;
-        match contract.fails_with.as_slice() {
-            [one] if one != "?" => Some(Ty::Named {
-                name: one.clone(),
-                args: Vec::new(),
-                view: false,
-            }),
-            _ => None,
-        }
+        self.s.the_one_error(&self.world, expr)
     }
 
     /// **`NK1151` for a `match` over a `catch`'s error**
@@ -12410,42 +11647,8 @@ impl<'a> Checker<'a> {
         arms: &[ast::MatchArm],
         span: &Span,
     ) {
-        let Ty::Nullable(inner) = on else {
-            return;
-        };
-        let names_a_variant = |pattern: &MatchPattern| match pattern {
-            MatchPattern::Path(path)
-            | MatchPattern::Tuple { path, .. }
-            | MatchPattern::Named { path, .. } => path.len() >= 2,
-            _ => false,
-        };
-        let Some(arm) = arms.iter().find(|arm| names_a_variant(&arm.pattern)) else {
-            return;
-        };
-        let (written, variant) = (
-            written(self.parsed, value),
-            written_pattern(self.parsed, &arm.pattern),
-        );
-        self.s.findings.push(Finding {
-            severity: Severity::Error,
-            span: *span,
-            code: "NK1205".to_string(),
-            message: format!(
-                "`{written}` may be `null`, so `{variant}` can't be matched on it directly."
-            ),
-            notes: vec![format!(
-                "`{written}` is a `{}`: a `{}` or nothing, and a pattern of the `{}` says \
-                 nothing about the nothing.",
-                on.text(),
-                inner.text(),
-                inner.text()
-            )],
-            help: Some(format!(
-                "Say what `null` stands for first: `let value = {written} ?? …`, and \
-                 `match value`."
-            )),
-            labels: Vec::new(),
-        });
+        self.s
+            .a_variant_matched_on_a_nullable(&self.world, on, value, arms, span);
     }
 
     /// `NK1206` (`tools/check_exprs.nika`).
@@ -12761,65 +11964,8 @@ impl<'a> Checker<'a> {
         found: &[Ty],
         span: &Span,
     ) {
-        if !self.s.foreign_names.contains(written) {
-            return;
-        }
-        for (at, (_, want)) in wanted.iter().enumerate() {
-            if !matches!(want, Ty::Pointed { slice: true, .. }) {
-                continue;
-            }
-            let counts = matches!(
-                wanted.get(at + 1).map(|(_, t)| t),
-                Some(Ty::Named { name, args, .. }) if name == "usize" && args.is_empty()
-            );
-            if !counts {
-                continue;
-            }
-            let (Some(buffer), Some(count)) = (given.get(at), given.get(at + 1)) else {
-                continue;
-            };
-            // `buf.len()` on the very expression the buffer position was given.
-            // Compared by shape, which is how this module tells two arguments of
-            // one statement apart everywhere else.
-            if let Expr::MethodCall {
-                receiver,
-                method,
-                args,
-                ..
-            } = count
-                && self.parsed.text(*method) == "len"
-                && args.is_empty()
-                && **receiver == *buffer
-            {
-                continue;
-            }
-            let folded = self
-                .constant_of(count)
-                .filter(|c| !c.beyond)
-                .map(|c| c.value);
-            // A constant the buffer's own length covers. `Array[T, N]` is the
-            // one buffer whose length this compiler knows, and a zero is
-            // covered by every buffer there is.
-            let room = match found.get(at) {
-                Some(Ty::Named { name, args, .. }) if name == ty::ARRAY => match args.as_slice() {
-                    [_, Ty::Count(n)] => Some(*n),
-                    _ => None,
-                },
-                _ => None,
-            };
-            let fits = match (folded, room) {
-                (Some(c), _) if c.magnitude == 0 => true,
-                (Some(c), Some(n)) => {
-                    !c.negative && u64::try_from(n).is_ok_and(|n| c.magnitude <= n)
-                }
-                _ => false,
-            };
-            if fits {
-                continue;
-            }
-            self.s
-                .a_length_that_may_not_fit(&self.world, written, buffer, span);
-        }
+        self.s
+            .a_length_that_fits_its_buffer(&self.world, written, wanted, given, found, span);
     }
 
     /// **A literal takes the use's type, whichever literal it is**: an array
@@ -13168,164 +12314,8 @@ impl<'a> Checker<'a> {
         method: bool,
         span: &Span,
     ) {
-        // **Said already, in a sentence of its own**: `NK1189`'s `to_owned`,
-        // `NK1126`'s type parameter, `NK1210`'s number. One refusal a call.
-        if self
-            .s
-            .findings
-            .iter()
-            .any(|f| f.span == *span && matches!(f.code.as_str(), "NK1189" | "NK1126" | "NK1210"))
-        {
-            return;
-        }
-        // **A type that is seen through** (`deref` in its ledger, as a
-        // `Shared` is) answers with what it holds, which
-        // `fits_through_deref` asks one question at a time; not claimed here.
-        if method && self.method(&format!("{head}::deref")).is_some() {
-            return;
-        }
-        if self.s.type_parameters.contains_key(head)
-            || self.s.foreign_names.contains(head)
-            || self.s.opaque_handles.contains(head)
-            || self.s.grammars.contains_key(head)
-            || is_number(head)
-        {
-            return;
-        }
-        let prefix = format!("{head}::");
-        let under = |table: &BTreeMap<String, FnContract>| {
-            table
-                .range(prefix.clone()..)
-                .take_while(|(key, _)| key.starts_with(&prefix))
-                .map(|(key, _)| key[prefix.len()..].to_string())
-                .filter(|rest| !rest.contains("::"))
-                .collect::<Vec<_>>()
-        };
-        let mut members = under(&self.world.own.functions);
-        members.extend(under(&self.world.library.functions));
-        let declared = OFFERED.contains(&head)
-            || matches!(
-                head,
-                "Vec" | "HashMap" | "HashSet" | "Array" | "Seq" | "Par"
-            )
-            || self.s.structs.contains_key(head)
-            || self.s.enums.contains_key(head)
-            || self.world.own.types.contains_key(head)
-            || self.world.library.types.contains_key(head)
-            || self.beside.iter().any(|other| declares_a_type(other, head))
-            || (!method && self.s.std_modules.contains(head))
-            || !members.is_empty();
-        if !declared {
-            return;
-        }
-        // **A trait it implements may provide more than it writes**: `Error`
-        // provides `full` (Part I 7.1), and a trait of another ledger may
-        // provide what this compiler has no list of, so such a type is not
-        // claimed. A trait this program declares has no default bodies
-        // (ADR-295), so its methods are the type's own entries already.
-        if method {
-            let mut foreign_trait = false;
-            for unit in std::iter::once(self.parsed).chain(self.beside.iter().copied()) {
-                for item in &unit.program.items {
-                    let Item::Impl {
-                        trait_name: Some(trait_name),
-                        target,
-                        ..
-                    } = &item.node
-                    else {
-                        continue;
-                    };
-                    if unit.text(target.name) != head {
-                        continue;
-                    }
-                    let trait_name = unit.text(*trait_name);
-                    let declared_here = std::iter::once(self.parsed)
-                        .chain(self.beside.iter().copied())
-                        .any(|unit| {
-                            unit.program.items.iter().any(|item| {
-                                matches!(&item.node, Item::Trait { name, .. }
-                                    if unit.text(*name) == trait_name)
-                            })
-                        });
-                    match trait_name {
-                        "Error" if matches!(member, "message" | "full") => return,
-                        "Error" => {}
-                        _ if !declared_here => foreign_trait = true,
-                        _ => {}
-                    }
-                }
-            }
-            if foreign_trait {
-                return;
-            }
-        }
-        // A view of text has a `String`'s methods and the reverse (ADR-282
-        // D18); a list has `ListExt`'s.
-        let also: &[&str] = match head {
-            "String" => &["str"],
-            "str" => &["String"],
-            "Vec" => &["list::ListExt"],
-            "Par" => &["Seq"],
-            _ => &[],
-        };
-        for other in also {
-            let prefix = format!("{other}::");
-            members.extend(
-                self.world
-                    .library
-                    .functions
-                    .range(prefix.clone()..)
-                    .take_while(|(key, _)| key.starts_with(&prefix))
-                    .map(|(key, _)| key[prefix.len()..].to_string()),
-            );
-        }
-        // A view of text is text to the reader.
-        let shown = match head {
-            "str" => "String",
-            head => head,
-        };
-        let written = match method {
-            true => format!(".{member}()"),
-            false => format!("{head}::{member}"),
-        };
-        let help = match (head, member) {
-            ("String" | "str", "from") => {
-                "Write the text itself, `\"x\"`, or `\"x\".clone()` for text of its own."
-                    .to_string()
-            }
-            (_, "as_str") => "Leave it out: the text is already what is passed.".to_string(),
-            (_, "is_some") => "Compare with `null`: `value != null`.".to_string(),
-            (_, "is_none") => "Compare with `null`: `value == null`.".to_string(),
-            _ => {
-                let known: Vec<&str> = members.iter().map(String::as_str).collect();
-                match nearest(member, &known) {
-                    Some(near) => match method {
-                        true => format!("Did you mean `.{near}()`?"),
-                        false => format!("Did you mean `{head}::{near}`?"),
-                    },
-                    None => format!(
-                        "Only what is written down for `{shown}` can be called; a Rust \
-                         function or method of the same name is not reached."
-                    ),
-                }
-            }
-        };
-        let what = match method {
-            true => format!("`{shown}` has no method called `{member}`."),
-            false => format!("`{shown}` has no function called `{member}`."),
-        };
-        self.s.findings.push(Finding {
-            severity: Severity::Error,
-            span: *span,
-            code: "NK1171".to_string(),
-            message: what,
-            notes: vec![format!(
-                "What can be called is what is written down: `{written}` is in no declaration, \
-                 ledger or description this program reads."
-            )],
-            help: Some(help),
-            labels: Vec::new(),
-        });
+        self.s
+            .a_member_nothing_writes_down(&self.world, head, member, method, span);
     }
 
     /// **`NK1171`: `X::y`, where `X` is a type this program declares and `y` is
@@ -13350,104 +12340,8 @@ impl<'a> Checker<'a> {
     /// variant that is missing; with an `else` arm beside it, it reports
     /// nothing.
     fn a_member_this_type_does_not_have(&mut self, ty: &str, member: &str, span: &Span) {
-        // Anything a ledger records under this exact key is a real item —
-        // `Summary::merge`, a `new` a hand-written ledger carries — and says so
-        // for itself.
-        if self.resolve(&format!("{ty}::{member}")).is_some() {
-            return;
-        }
-        // **A type parameter is a type this compiler has not read either**, so
-        // it fails open the way an unknown head does — with one exception,
-        // which is the name a reader of Part II 10.3 writes. `[T: Struct]`
-        // became a legal bound in the same package as this line, and without it
-        // `T::fields` went from `NK1135` on the bound to **silence**, and from
-        // there to `rustc` about the generated file
-        // ([Part III C.1](../../docs/specification/30-nikaia-tooling.md)).
-        if self.s.type_parameters.contains_key(ty) {
-            if member == "fields" || member == "variants" {
-                self.s.a_shape_that_is_not_reachable_yet(ty, member, span);
-            }
-            return;
-        }
-        if let Some(variants) = self.s.enums.get(ty) {
-            let known: Vec<&str> = variants.iter().map(String::as_str).collect();
-            let listed = known
-                .iter()
-                .map(|v| format!("`{ty}::{v}`"))
-                .collect::<Vec<_>>()
-                .join(", ");
-            let help = match nearest(member, &known) {
-                Some(near) => format!("Did you mean `{ty}::{near}`?"),
-                None if known.is_empty() => {
-                    format!("`{ty}` has no variants, so there's nothing to write here.")
-                }
-                None => format!("Write one of {listed}."),
-            };
-            self.s.findings.push(Finding {
-                severity: Severity::Error,
-                span: *span,
-                code: "NK1171".to_string(),
-                message: format!("`{ty}` has no variant called `{member}`."),
-                notes: vec![format!("`{ty}` is {listed}.")],
-                help: Some(help),
-                labels: Vec::new(),
-            });
-            return;
-        }
-        let Some(fields) = self.s.fields_of(&self.world, ty) else {
-            // **And if the head is not a name this program has either**, the
-            // path is `NK1181` rather than silence.
-            self.a_head_nothing_declares(ty, &format!("{ty}::{member}"), span);
-            return;
-        };
-        // **`T::fields` is specified and unbuilt**, and that is worth its own
-        // sentence: a reader who wrote it read Part II 10.3, and *`Point` has
-        // no member `fields`* would send them looking for a spelling that does
-        // not exist ([ADR-304](../../docs/specification/adr/adr-304.md)).
-        if member == "fields" || member == "variants" {
-            self.s.a_shape_that_is_not_reachable_yet(ty, member, span);
-            return;
-        }
-        let named: Vec<&str> = fields.iter().map(|field| field.name.as_str()).collect();
-        let listed = named
-            .iter()
-            .map(|field| format!("`{field}`"))
-            .collect::<Vec<_>>()
-            .join(", ");
-        self.s.findings.push(Finding {
-            severity: Severity::Error,
-            span: *span,
-            code: "NK1171".to_string(),
-            message: format!("`{ty}` has nothing called `{member}` to reach with `::`."),
-            notes: vec![format!(
-                "`::` reaches a type's methods and variants. Fields are read from a value \
-                 with a dot. `{ty}` holds {listed}."
-            )],
-            help: Some(match nearest(member, &named) {
-                Some(near) => format!("Read it from a value: `value.{near}`."),
-                None => format!("If `{member}` should be a method, add it in `impl {ty} {{ … }}`."),
-            }),
-            labels: Vec::new(),
-        });
-    }
-
-    /// One pattern's path, where it names a type and a member of it.
-    ///
-    /// One segment **binds a name** rather than naming a variant, which is the
-    /// rule [`Checker::pattern_names`] already reads, and an empty one is the
-    /// bare tuple `(0, 0)`.
-    fn a_path_in_a_pattern(&mut self, path: &[Ident], span: &Span) {
-        let names: Vec<String> = path
-            .iter()
-            .map(|s| self.parsed.text(*s).to_string())
-            .collect();
-        let [ty, member] = names.as_slice() else {
-            return;
-        };
-        if self.s.is_variant(ty, member) {
-            return;
-        }
-        self.a_member_this_type_does_not_have(ty, member, span);
+        self.s
+            .a_member_this_type_does_not_have(&self.world, ty, member, span);
     }
 
     /// The same question asked of a `match` arm's pattern
@@ -13459,27 +12353,8 @@ impl<'a> Checker<'a> {
         pattern: &MatchPattern,
         span: &Span,
     ) {
-        match pattern {
-            MatchPattern::Path(path) | MatchPattern::Named { path, .. } => {
-                self.a_path_in_a_pattern(path, span);
-            }
-            // **The parts are patterns**, so the walk goes into them: a
-            // misspelling inside `Event::Click(Op::Mul)` is the same mistake one
-            // level down, and stopping at the outer path would find the shallow
-            // half of a rule.
-            MatchPattern::Tuple { path, parts } => {
-                self.a_path_in_a_pattern(path, span);
-                for part in parts {
-                    self.a_pattern_naming_a_member_a_type_does_not_have(part, span);
-                }
-            }
-            MatchPattern::Or(alternatives) => {
-                for alternative in alternatives {
-                    self.a_pattern_naming_a_member_a_type_does_not_have(alternative, span);
-                }
-            }
-            MatchPattern::Otherwise | MatchPattern::Literal(_) | MatchPattern::Range { .. } => {}
-        }
+        self.s
+            .a_pattern_naming_a_member_a_type_does_not_have(&self.world, pattern, span);
     }
 
     /// **The instantiations that stand in the program's other files**
@@ -14126,52 +13001,8 @@ impl<'a> Checker<'a> {
         body: &Block,
         span: &Span,
     ) {
-        for name in params {
-            let name = self.parsed.text(*name).to_string();
-            let mut assigned = false;
-            let mut read = false;
-            for stmt in &body.stmts {
-                // A whole-name assignment is the shape the rule is about; a
-                // mention anywhere else is a read.
-                if let Stmt::Assign { target, op, value } = &stmt.node
-                    && op.is_none()
-                    && matches!(target, Expr::Variable(n, _) if self.parsed.text(*n) == name)
-                {
-                    assigned = true;
-                    // **And the value being stored is still a read**:
-                    // `v = v + 1` mentions `v`, and it decides inside the
-                    // lock exactly as `v += 1` does.
-                    let mentioned = crate::contracts::send::names_used(self.parsed, value);
-                    read |= mentioned.contains(&name);
-                    continue;
-                }
-                let mentioned = crate::contracts::send::names_used_in_stmt(self.parsed, &stmt.node);
-                read |= mentioned.contains(&name);
-            }
-            if !assigned || read {
-                continue;
-            }
-            self.s.findings.push(Finding {
-                severity: Severity::Error,
-                span: *span,
-                code: "NK2207".to_string(),
-                message: format!(
-                    "This `update` block replaces `{name}` without reading it, which is what `set` \
-                     is for."
-                ),
-                notes: vec![
-                    "`update` is for changes that depend on the current value. Just storing a \
-                     new value is what `set` does."
-                        .to_string(),
-                ],
-                help: Some(
-                    "Use `set` if the value is computed outside, or use the old value here: \
-                     `v += n`, `v.push(e)`, `if v > 100 { v = 0 }`."
-                        .to_string(),
-                ),
-                labels: Vec::new(),
-            });
-        }
+        self.s
+            .an_update_block_reads_what_it_writes(&self.world, params, body, span);
     }
 
     /// `NK2204`: an assignment straight into a `SharedMut`
@@ -14356,57 +13187,8 @@ impl<'a> Checker<'a> {
         bounds: &[crate::ast::ConfigArg],
         span: &Span,
     ) -> Option<(Option<u64>, Option<u64>)> {
-        const NAMES: [&str; 2] = ["steps", "ram"];
-        let mut raised = (None, None);
-        let mut refused = false;
-        for bound in bounds {
-            let name = self.parsed.text(bound.name).to_string();
-            if !NAMES.contains(&name.as_str()) {
-                self.s.findings.push(Finding {
-                    severity: Severity::Error,
-                    span: *span,
-                    code: "NK1109".to_string(),
-                    message: format!("A `comptime` has no bound called `{name}`."),
-                    notes: vec!["Its bounds are `steps` and `ram`.".to_string()],
-                    help: Some(match nearest(&name, &NAMES) {
-                        Some(near) => format!("Did you mean `{near}`?"),
-                        None => "Name `steps` or `ram`, like `comptime(steps: 50G) …`.".to_string(),
-                    }),
-                    labels: Vec::new(),
-                });
-                refused = true;
-                continue;
-            }
-            let value = match self.constant_of(&bound.value) {
-                Some(folded) if !folded.beyond && !folded.value.negative => {
-                    Some(folded.value.magnitude)
-                }
-                _ => None,
-            };
-            let Some(value) = value else {
-                self.s.findings.push(Finding {
-                    severity: Severity::Error,
-                    span: *span,
-                    code: "NK1102".to_string(),
-                    message: format!(
-                        "`{name}` takes a whole number the build knows, and this is not one."
-                    ),
-                    notes: Vec::new(),
-                    help: Some(match name.as_str() {
-                        "steps" => "Write a number, like `steps: 50G`.".to_string(),
-                        _ => "Write a number of bytes, like `ram: 16Gi`.".to_string(),
-                    }),
-                    labels: Vec::new(),
-                });
-                refused = true;
-                continue;
-            };
-            match name.as_str() {
-                "steps" => raised.0 = Some(value),
-                _ => raised.1 = Some(value),
-            }
-        }
-        (!refused).then_some(raised)
+        let raised = self.s.raised_bounds(&self.world, bounds, span)?;
+        Some((raised.steps, raised.ram))
     }
 
     /// **`dsl G { … } eod` over a grammar of this program** (#518): the
@@ -15198,10 +13980,6 @@ fn grown_text(parsed: &Parsed, body: &Block) -> BTreeSet<String> {
     out
 }
 
-fn declares_a_type(parsed: &Parsed, name: &str) -> bool {
-    check_items::declares_a_type(&parsed_view_of(parsed), name)
-}
-
 /// What the checker reads of a parsed file, borrowed (`tools/parsed_view.nika`).
 fn parsed_view_of(parsed: &Parsed) -> ParsedView<'_> {
     ParsedView {
@@ -15648,16 +14426,6 @@ fn not_pure_because(contract: &FnContract) -> Option<&'static str> {
     None
 }
 
-/// **An expression as it was written**, near enough, rewritten from the tree:
-/// the parser keeps no text, and an `assert`'s failure names its condition
-/// ([ADR-269](../../docs/specification/adr/adr-269.md) D2). What this does not
-/// spell out it writes as `…`, which a reader recognises and nothing parses.
-/// A pattern's path as the source wrote it, with `(…)` or `{ … }` where it
-/// takes a variant apart.
-fn written_pattern(parsed: &Parsed, pattern: &MatchPattern) -> String {
-    nikaia_std::tools::written::written_pattern(&parsed.interner, pattern)
-}
-
 /// In Nikaia (`tools/written.nika`, ADR-294, #125).
 pub fn written(parsed: &Parsed, expr: &Expr) -> String {
     nikaia_std::tools::written::written_expression(&parsed.interner, expr)
@@ -15665,18 +14433,6 @@ pub fn written(parsed: &Parsed, expr: &Expr) -> String {
 
 fn is_number(name: &str) -> bool {
     nikaia_std::tools::check_types::a_number_name(name)
-}
-
-/// The closest field name, when one is close enough to be worth suggesting.
-///
-/// The distance is `std`'s, written in Nikaia (`tools/spelling.nika`, 0.0.238):
-/// an edit is a character put in, taken out or changed, and two neighbours
-/// that swapped count as one.
-fn nearest<'n>(name: &str, among: &[&'n str]) -> Option<&'n str> {
-    // In Nikaia (`tools/check_words.nika`).
-    let names: Vec<String> = among.iter().map(|n| n.to_string()).collect();
-    let found = nikaia_std::tools::check_words::nearest_name(name, &names)?;
-    among.iter().copied().find(|n| *n == found)
 }
 
 /// Every `a` or `an` in front of a word in backticks, chosen by that word
@@ -15754,11 +14510,6 @@ fn sentence(clause: &str) -> String {
 
 fn plural(n: usize, what: &str) -> String {
     nikaia_std::tools::check_words::counted(n as i64, what)
-}
-
-fn list(names: &[&str]) -> String {
-    let names: Vec<String> = names.iter().map(|n| n.to_string()).collect();
-    nikaia_std::tools::check_words::names_listed(&names)
 }
 
 /// What the receiver's actual type binds this signature's variables to.
@@ -16045,11 +14796,6 @@ pub fn boxed_member(owner: &str, at: Option<usize>, field: Option<&str>) -> Stri
 /// key is lent ([`Checker::a_lookup_key_lent`]) and not handed over.
 fn is_a_lookup(key: &str) -> bool {
     nikaia_std::tools::check_words::is_a_lookup(key)
-}
-
-/// A list: what `[…]` makes, and what `Vec()` builds.
-fn is_a_list(ty: &Ty) -> bool {
-    nikaia_std::tools::check_types::is_a_list_type(ty)
 }
 
 /// A list, a map or a set - the types Part I gives no operator.

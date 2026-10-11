@@ -1,0 +1,271 @@
+// crates/nikaia-std/src/tools/check_kinds.nika
+//
+// **Refusals about what a written form is made of** (ADR-321 D11, ADR-285 D1,
+// ADR-281 D10, ADR-024, issue #180), moved from the compiler's checker
+// (ADR-294, #125, #558, C-5e): a `comptime`'s bounds, a length beside the buffer
+// it counts, an `update` block that only replaces, a variant matched on a
+// `T?`, and how many error types a guarded call can throw.
+
+use std::collections
+
+/// The bounds a `comptime` may raise (ADR-321 D11): `steps` and `ram`, where
+/// the build knows the number.
+pub struct CheckRaised {
+    pub steps: u64?,
+    pub ram: u64?,
+}
+
+fn kind_a_bound_name(name: ref String) -> bool {
+    return name == "steps" || name == "ram"
+}
+
+fn kind_unknown_bound_help(name: ref String) -> String {
+    let among: Vec[String] = ["steps".clone(), "ram".clone()]
+    let near = nearest_name(name, among) ?? return "Name `steps` or `ram`, like `comptime(steps: 50G) …`.".clone()
+    return f"Did you mean `{near}`?"
+}
+
+fn kind_bound_value(folded: ref CheckConstant?) -> u64? {
+    let constant = folded ?? return null
+    if constant.beyond || constant.value.negative {
+        return null
+    }
+    return constant.value.magnitude
+}
+
+fn kind_a_slice_pointer(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Pointed { slice, .. } => slice,
+        else => false,
+    }
+}
+
+fn kind_a_usize(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Named { name, args, .. } => name == "usize" && args.len() == 0,
+        else => false,
+    }
+}
+
+/// `buf.len()` on the very expression the buffer position was given.
+fn kind_the_buffers_own_length(world: ref CheckWorld, count: ref Expr, buffer: ref Expr) -> bool {
+    return match count {
+        Expr::MethodCall { receiver, method, args, .. } => world.words.resolve(method) == "len" && args.len() == 0 && receiver == buffer,
+        else => false,
+    }
+}
+
+fn kind_count_of(ty: ref Ty) -> i64? {
+    return match ty {
+        Ty::Count(n) => n,
+        else => null,
+    }
+}
+
+/// The length of an `Array[T, N]` buffer, the one whose length the type knows.
+fn kind_array_room(found: ref Vec[Ty], at: i64) -> i64? {
+    if at >= found.len() {
+        return null
+    }
+    return match found[at] {
+        Ty::Named { name, args, .. } => kind_array_count(name, args),
+        else => null,
+    }
+}
+
+fn kind_array_count(name: ref String, args: ref Vec[Ty]) -> i64? {
+    if name == ARRAY && args.len() == 2 {
+        return kind_count_of(args[1])
+    }
+    return null
+}
+
+/// A constant the buffer's own length covers; a zero is covered by every buffer.
+fn kind_a_count_fits(folded: ref CheckConstant?, room: i64?) -> bool {
+    let constant = folded ?? return false
+    if constant.beyond {
+        return false
+    }
+    if constant.value.magnitude == 0 {
+        return true
+    }
+    let n = room ?? return false
+    if constant.value.negative || n < 0 {
+        return false
+    }
+    let cap: u64 = n as u64
+    return constant.value.magnitude <= cap
+}
+
+fn kind_names_a_variant(pattern: ref MatchPattern) -> bool {
+    return match pattern {
+        MatchPattern::Path(path) => path.len() >= 2,
+        MatchPattern::Tuple { path, .. } => path.len() >= 2,
+        MatchPattern::Named { path, .. } => path.len() >= 2,
+        else => false,
+    }
+}
+
+/// Whether the block assigns `name` as a whole and never reads it.
+fn kind_an_update_only_replaces(world: ref CheckWorld, name: ref String, body: ref Block) -> bool {
+    let mut assigned = false
+    let mut read = false
+    for stmt in body.stmts {
+        let mut mentioned: collections::BTreeSet[String] = collections::BTreeSet()
+        match stmt.node {
+            Stmt::Assign { target, op, value } => {
+                if op == null && kind_is_the_name(world, target, name) {
+                    assigned = true
+                    names_in(value, world.words, mentioned)
+                } else {
+                    names_in_statement(stmt.node, world.words, mentioned)
+                }
+            },
+            else => names_in_statement(stmt.node, world.words, mentioned),
+        }
+        if mentioned.contains(name) {
+            read = true
+        }
+    }
+    return assigned && !read
+}
+
+fn kind_is_the_name(world: ref CheckWorld, target: ref Expr, name: ref String) -> bool {
+    return match target {
+        Expr::Variable(n, _) => world.words.resolve(n) == name,
+        else => false,
+    }
+}
+
+/// The name a guarded call is written with, through a `?`.
+fn kind_callee_name(world: ref CheckWorld, func: ref Expr) -> String? {
+    return match func {
+        Expr::Variable(name, _) => world.words.resolve(name).clone(),
+        Expr::Path(segments, _) => kind_path_text(world, segments),
+        else => null,
+    }
+}
+
+fn kind_path_text(world: ref CheckWorld, segments: ref Vec[winnow_grammar::Symbol]) -> String {
+    let mut parts: Vec[String] = []
+    for segment in segments {
+        parts.push(world.words.resolve(segment).clone())
+    }
+    return parts.join("::")
+}
+
+impl CheckState {
+    /// **The bounds a `comptime` raises** (ADR-321 D11), read before anything
+    /// runs: a bound that is refused runs nothing, and `null` says so.
+    pub fn raised_bounds(ref mut self, world: ref CheckWorld, bounds: ref Vec[ConfigArg], span: ref Span) -> CheckRaised? sync {
+        let mut raised = CheckRaised { steps: null, ram: null }
+        let mut refused = false
+        for bound in bounds {
+            let name = world.words.resolve(bound.name).clone()
+            if !kind_a_bound_name(name) {
+                self.findings.push(check_refusal("NK1109", span, f"A `comptime` has no bound called `{name}`.", ["Its bounds are `steps` and `ram`.".clone()], kind_unknown_bound_help(name)))
+                refused = true
+                continue
+            }
+            let value = kind_bound_value(self.constant_of(world, bound.value))
+            if value == null {
+                let mut help: String = "Write a number of bytes, like `ram: 16Gi`.".clone()
+                if name == "steps" {
+                    help = "Write a number, like `steps: 50G`.".clone()
+                }
+                self.findings.push(check_refusal("NK1102", span, f"`{name}` takes a whole number the build knows, and this is not one.", [], help))
+                refused = true
+                continue
+            }
+            if name == "steps" {
+                raised.steps = value
+            } else {
+                raised.ram = value
+            }
+        }
+        if refused {
+            return null
+        }
+        return raised
+    }
+
+    /// **A count beside the buffer it counts** (ADR-285 D1): a `&[T]` and, right
+    /// after it, a `usize` of a foreign declaration. The buffer's own `len()`,
+    /// and a constant its length is known to cover, are accepted; the rest is
+    /// asked of `a_length_that_may_not_fit`.
+    pub fn a_length_that_fits_its_buffer(ref mut self, world: ref CheckWorld, written: ref String, wanted: ref Vec[(String, Ty)], given: ref Vec[Expr], found: ref Vec[Ty], span: ref Span) sync {
+        if !self.foreign_names.contains(written) {
+            return
+        }
+        let mut at = 0
+        while at < wanted.len() {
+            self.a_buffer_and_its_count(world, written, wanted, given, found, at, span)
+            at += 1
+        }
+    }
+
+    fn a_buffer_and_its_count(ref mut self, world: ref CheckWorld, written: ref String, wanted: ref Vec[(String, Ty)], given: ref Vec[Expr], found: ref Vec[Ty], at: i64, span: ref Span) sync {
+        if !kind_a_slice_pointer(wanted[at].1) {
+            return
+        }
+        if at + 1 >= wanted.len() || !kind_a_usize(wanted[at + 1].1) {
+            return
+        }
+        if at + 1 >= given.len() {
+            return
+        }
+        let buffer = given[at]
+        let count = given[at + 1]
+        if kind_the_buffers_own_length(world, count, buffer) {
+            return
+        }
+        let folded = self.constant_of(world, count)
+        if kind_a_count_fits(folded, kind_array_room(found, at)) {
+            return
+        }
+        self.a_length_that_may_not_fit(world, written, buffer, span)
+    }
+
+    /// **`NK2207`: an `update` block that replaces a name without reading it**,
+    /// which is what `set` is for (ADR-281 D10).
+    pub fn an_update_block_reads_what_it_writes(ref mut self, world: ref CheckWorld, params: ref Vec[winnow_grammar::Symbol], body: ref Block, span: ref Span) sync {
+        for param in params {
+            let name = world.words.resolve(param).clone()
+            if kind_an_update_only_replaces(world, name, body) {
+                self.findings.push(check_refusal("NK2207", span, f"This `update` block replaces `{name}` without reading it, which is what `set` is for.", ["`update` is for changes that depend on the current value. Just storing a new value is what `set` does.".clone()], "Use `set` if the value is computed outside, or use the old value here: `v += n`, `v.push(e)`, `if v > 100 { v = 0 }`.".clone()))
+            }
+        }
+    }
+
+    /// **`NK1205`: a variant matched on a `T?`** (issue #180): a pattern of `W`
+    /// says nothing about the nothing. The way out is to say what `null` stands
+    /// for first, with `??`.
+    pub fn a_variant_matched_on_a_nullable(ref mut self, world: ref CheckWorld, on: ref Ty, value: ref Expr, arms: ref Vec[MatchArm], span: ref Span) sync {
+        let inner = match on {
+            Ty::Nullable(inner) => inner.clone(),
+            else => return,
+        }
+        for arm in arms {
+            if kind_names_a_variant(arm.pattern) {
+                let written = written_expression(world.words, value)
+                let variant = written_pattern(world.words, arm.pattern)
+                let note = f"`{written}` is a `{on.text()}`: a `{inner.text()}` or nothing, and a pattern of the `{inner.text()}` says nothing about the nothing."
+                self.findings.push(check_refusal("NK1205", span, f"`{written}` may be `null`, so `{variant}` can't be matched on it directly.", [note], f"Say what `null` stands for first: `let value = {written} ?? …`, and `match value`."))
+                return
+            }
+        }
+    }
+
+    /// Whether the guarded call can fail with several error types, by this
+    /// unit's own ledger.
+    pub fn several_arrive(ref self, world: ref CheckWorld, guarded: ref Expr) -> bool sync {
+        let name = match guarded {
+            Expr::Call { func, .. } => kind_callee_name(world, func) ?? return false,
+            Expr::Try(inner, _) => return self.several_arrive(world, inner),
+            else => return false,
+        }
+        let key = world.here.unaliased(name)
+        let contract = world.own.functions[key] ?? return false
+        return contract.fails_with.len() > 1
+    }
+}

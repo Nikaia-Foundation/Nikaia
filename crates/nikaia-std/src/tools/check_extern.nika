@@ -1,0 +1,241 @@
+// crates/nikaia-std/src/tools/check_extern.nika
+//
+// **What crosses to C** (ADR-284 D4, D5, D14, D15, D32; Part III 15.1),
+// moved from the compiler's checker (ADR-294, #125, #558, C-5e): an `extern`
+// entry point, a `pub extern struct` and a `pub extern enum`, and the table of
+// what an entry point takes and hands back.
+
+fn ext_a_number(name: ref String) -> bool {
+    return name == "i32" || name == "i64" || name == "u8" || name == "f64" || name == "bool" || name == "scalar" || name == "char"
+}
+
+fn ext_a_text(base: ref String) -> bool {
+    return base == "String" || base == "str"
+}
+
+fn ext_a_struct_note() -> String {
+    return "An `extern` struct has C's layout and crosses to C by value: its fields are numbers, `bool`, `scalar`, enums without payload, other `extern` structs and `Array[T, N]` of these.".clone()
+}
+
+fn ext_an_enum_note() -> String {
+    return "An `extern` enum is a tagged union in C's layout and crosses to C by value: its fields are numbers, `bool`, `scalar`, enums without payload, `extern` structs and enums, and `Array[T, N]` of these.".clone()
+}
+
+impl CheckState {
+    /// **An `extern fn` is an entry point** (ADR-284 D4): `pub`, in a build
+    /// that makes a library, not generic, not a trait's method, and what
+    /// crosses is D5's table both ways.
+    pub fn an_entry_point(ref mut self, world: ref CheckWorld, item: ref Item, span: ref Span, of_a_trait: bool) sync {
+        match item {
+            Item::Fn { name, generics, args, ret_type, is_public, is_extern, .. } => {
+                if is_extern {
+                    self.an_entry_point_of(world, name, generics, args, ret_type, is_public, span, of_a_trait)
+                }
+            },
+            else => {},
+        }
+    }
+
+    fn an_entry_point_of(ref mut self, world: ref CheckWorld, name: winnow_grammar::Symbol?, generics: ref Vec[GenericParam], args: ref Vec[FnArg], ret_type: ref Type?, is_public: bool, span: ref Span, of_a_trait: bool) sync {
+        let mut written: String = "new".clone()
+        if name != null {
+            written = world.words.resolve(name ?? return).clone()
+        }
+        // `NK1237`: an entry point is the package's surface.
+        if !is_public {
+            self.findings.push(check_refusal("NK1237", span, f"`{written}` is `extern` but not `pub`.", ["`extern` before a function with a body exports it to C, and what a package exports is part of its surface.".clone()], f"Write `pub extern fn {written}`, or leave out `extern` for a function only this program calls."))
+        }
+        // `NK1238`: a function C calls needs a library for C to call into.
+        self.findings.push(check_refusal("NK1238", span, f"`{written}` is an entry point, and this build makes no library.", ["Only a build with `artifact = \"c-library\"` in `[build]` exports its `extern` functions, as a shared and a static library and a header.".clone()], f"Set `artifact = \"c-library\"` in `[build]`, or leave out `extern`: `{written}` is an ordinary function without it."))
+        // `NK1239`: C has neither generics nor traits.
+        if generics.len() > 0 || of_a_trait {
+            let mut what: String = "generic".clone()
+            let mut help: String = f"Export one function for each type `{written}` is called with, each calling it."
+            if of_a_trait {
+                what = "a trait's method".clone()
+                help = f"Export a plain function that calls `{written}`."
+            }
+            self.findings.push(check_refusal("NK1239", span, f"`{written}` is {what}, and C cannot call one.", ["A C function has one signature and no dispatch: what a generic function or a trait's method stands for is decided in Nikaia, not by the caller.".clone()], help))
+        }
+        // `NK1240`: what crosses is D5's table, both ways.
+        for arg in args {
+            let way = self.crosses_to_c(world, arg.ty, false)
+            if way != null {
+                let param = world.words.resolve(arg.name).clone()
+                self.findings.push(check_refusal("NK1240", span, f"`{param}` of `{written}` cannot cross to C.", ["An entry point takes numbers, `bool` and `scalar` by value, text and bytes as a view, a list of numbers, a struct or an enum of the package, an optional of those, and a callback that does not pause (Part III 15.1).".clone()], way))
+            }
+        }
+        self.what_an_entry_point_hands_back(world, written, ret_type, span)
+    }
+
+    fn what_an_entry_point_hands_back(ref mut self, world: ref CheckWorld, written: ref String, ret_type: ref Type?, span: ref Span) sync {
+        let result = ret_type ?? return
+        let way = self.crosses_to_c(world, result, true)
+        if way != null {
+            self.findings.push(check_refusal("NK1240", span, f"What `{written}` hands back cannot cross to C.", ["An entry point hands back numbers, `bool` and `scalar`, text and bytes into the caller's buffer, a struct or an enum of the package, or an optional of those (Part III 15.1).".clone()], way))
+        }
+    }
+
+    /// **What a `pub extern struct` may hold** (ADR-284 D14, D15): it is
+    /// `pub`, it is not generic, and every field is a C value.
+    pub fn an_extern_struct(ref mut self, world: ref CheckWorld, item: ref Item, span: ref Span) sync {
+        match item {
+            Item::Struct { name, generics, fields, is_public, is_extern } => {
+                if is_extern {
+                    self.an_extern_struct_of(world, name, generics, fields, is_public, span)
+                }
+            },
+            else => {},
+        }
+    }
+
+    fn an_extern_struct_of(ref mut self, world: ref CheckWorld, name: winnow_grammar::Symbol, generics: ref Vec[GenericParam], fields: ref Vec[FieldDef], is_public: bool, span: ref Span) sync {
+        let written = world.words.resolve(name).clone()
+        if !is_public {
+            self.findings.push(check_refusal("NK1237", span, f"`{written}` is `extern` but not `pub`.", [ext_a_struct_note()], f"Write `pub extern struct {written}`, or leave out `extern` for a struct only this program uses."))
+        }
+        if generics.len() > 0 {
+            self.findings.push(check_refusal("NK1145", span, f"`{written}` is an `extern` struct with type parameters, and C's layout has none.", [ext_a_struct_note()], f"Declare one `extern` struct for each type `{written}` is used with."))
+        }
+        for field in fields {
+            if !a_c_value(world.here, field.ty) {
+                let field_name = world.words.resolve(field.name).clone()
+                let ty = world.words.resolve(field.ty.name).clone()
+                self.findings.push(check_refusal("NK1145", field.span, f"`{written}.{field_name}` is a `{ty}`, which is not a C value.", [ext_a_struct_note()], f"Leave out `extern`: a `pub struct` crosses to C as a handle, with a getter for `{field_name}`."))
+            }
+        }
+    }
+
+    /// **What a `pub extern enum` may hold** (ADR-284 D32): it is `pub`, and
+    /// every field of every variant is a C value, as an `extern` struct's.
+    pub fn an_extern_enum(ref mut self, world: ref CheckWorld, item: ref Item, span: ref Span) sync {
+        match item {
+            Item::Enum { name, variants, is_public, is_extern } => {
+                if is_extern {
+                    self.an_extern_enum_of(world, name, variants, is_public, span)
+                }
+            },
+            else => {},
+        }
+    }
+
+    fn an_extern_enum_of(ref mut self, world: ref CheckWorld, name: winnow_grammar::Symbol, variants: ref Vec[EnumVariant], is_public: bool, span: ref Span) sync {
+        let written = world.words.resolve(name).clone()
+        if !is_public {
+            self.findings.push(check_refusal("NK1237", span, f"`{written}` is `extern` but not `pub`.", [ext_an_enum_note()], f"Write `pub extern enum {written}`, or leave out `extern` for an enum only this program uses."))
+        }
+        for variant in variants {
+            let variant_name = world.words.resolve(variant.name).clone()
+            match variant.fields {
+                VariantFields::Unit => {},
+                VariantFields::Tuple(types) => {
+                    let mut at = 0
+                    for ty in types {
+                        self.a_variant_field(world, written, variant_name, f"{at}", ty, variant.span)
+                        at += 1
+                    }
+                },
+                VariantFields::Named(named) => {
+                    for field in named {
+                        self.a_variant_field(world, written, variant_name, world.words.resolve(field.name).clone(), field.ty, variant.span)
+                    }
+                },
+            }
+        }
+    }
+
+    fn a_variant_field(ref mut self, world: ref CheckWorld, written: ref String, variant_name: ref String, field: String, ty: ref Type, at: ref Span) sync {
+        if a_c_value(world.here, ty) {
+            return
+        }
+        let shown = world.words.resolve(ty.name).clone()
+        self.findings.push(check_refusal("NK1145", at, f"`{written}::{variant_name}.{field}` is a `{shown}`, which is not a C value.", [ext_an_enum_note()], "Leave out `extern`: a `pub enum` crosses to C as a handle, read through `_kind` and a getter per field.".clone()))
+    }
+
+    /// Whether `ty` crosses to C at an entry point (ADR-284 D5), `out` for a
+    /// result: the shape to use where it does not, and `null` where it does.
+    pub fn crosses_to_c(ref self, world: ref CheckWorld, ty: ref Type, out: bool) -> String? sync {
+        let name = world.words.resolve(ty.name).clone()
+        if ty.code != null {
+            return self.a_callback_crosses(world, ty, out)
+        }
+        if ty.is_tuple {
+            return "Hand a tuple's parts over one by one, or as a `pub extern struct`.".clone()
+        }
+        let mut args: Vec[String] = []
+        for generic in ty.generics {
+            args.push(world.words.resolve(generic.name).clone())
+        }
+        let declared = self.structs.contains_key(name) || self.enums.contains_key(name) || world.own.types.contains_key(name)
+        return self.ext_table(world, name, a_type_base(name), args, ty.is_view, out, declared)
+    }
+
+    /// A callback: C keeps it and calls it on its own thread, so it takes its
+    /// parts as a parameter would and does not pause.
+    fn a_callback_crosses(ref self, world: ref CheckWorld, ty: ref Type, out: bool) -> String? sync {
+        if out {
+            return "Hand back a value; a function is a parameter's shape: a callback.".clone()
+        }
+        let code = ty.code ?? return null
+        if !code.is_sync {
+            return "Write the callback `sync`: C calls it on its own thread, where nothing may pause.".clone()
+        }
+        for part in ty.generics {
+            let way = self.crosses_to_c(world, part, false)
+            if way != null {
+                return way
+            }
+        }
+        let result = code.result ?? return null
+        return self.crosses_to_c(world, result, false)
+    }
+
+    fn ext_table(ref self, world: ref CheckWorld, name: ref String, base: ref String, args: ref Vec[String], view: bool, out: bool, declared: bool) -> String? sync {
+        let plain = args.len() == 0
+        if plain && !view && ext_a_number(base) {
+            return null
+        }
+        if ext_a_text(base) && plain && view && !out {
+            return null
+        }
+        if base == "String" && plain && !view && out {
+            return null
+        }
+        if base == "String" && plain && !view && !out {
+            return "Take `ref String`: C keeps the text and lends it for the call.".clone()
+        }
+        if ext_a_text(base) && plain && view && out {
+            return "Hand back `String`: it is written into the caller's buffer.".clone()
+        }
+        if base == "Bytes" && plain {
+            return null
+        }
+        if base == "Vec" && args.len() == 1 && !view && out && args[0] == "u8" {
+            return null
+        }
+        if base == "Array" && args.len() == 1 && view && !out && ext_a_number(args[0]) {
+            return null
+        }
+        // **A run of `extern` structs** (ADR-284 D16): in as an array C keeps,
+        // out into the caller's buffer counted in structs.
+        if args.len() == 1 && ((base == "Array" && view && !out) || (base == "Vec" && !view)) && an_extern_struct_named(world.here, args[0]) {
+            return null
+        }
+        if (base == "Vec" || base == "Array") && !out {
+            return "Take `ref Array[T]` of a number: C keeps the array and lends it for the call.".clone()
+        }
+        if plain && declared {
+            return null
+        }
+        if base == "Locked" || base == "Shared" || base == "SharedMut" || base == "Seen" {
+            return f"Keep the `{name}` inside the package, in a `pub struct` C holds as a handle."
+        }
+        if base == "HashMap" || base == "BTreeMap" || base == "Map" {
+            return "Keep the map in a `pub struct` C holds as a handle, or hand its entries to a callback.".clone()
+        }
+        if base == "Vec" || base == "Array" {
+            return "Hand many results to a callback, or put them in a `pub struct` C holds as a handle.".clone()
+        }
+        return f"Declare `{name}` in the package as a `pub struct`, which C holds as a handle."
+    }
+}

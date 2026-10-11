@@ -1,0 +1,203 @@
+// crates/nikaia-std/src/tools/check_notes.nika
+//
+// **Small refusals and warnings that call nothing else the checker has not
+// moved** (ADR-293 D17, ADR-297 D12, ADR-308 D3, ADR-094 D3), moved from the
+// compiler's checker (ADR-294, #125, #558, C-5e): `NK2703` for a sequence asked
+// for something it is not, `NK2402` and `NK2403` for what a changed contract
+// brings in, `NK1118` for a division by zero, the lambda parameter's binding
+// and the one error a call throws.
+
+use std::collections
+
+fn note_seq_shape(ty: ref Ty) -> Shape? {
+    return match ty {
+        Ty::Seq { shape, .. } => shape.clone(),
+        else => null,
+    }
+}
+
+fn note_seq_item(ty: ref Ty) -> Ty {
+    return match ty {
+        Ty::Seq { item, .. } => item.clone(),
+        else => Ty::Unknown,
+    }
+}
+
+fn note_a_division(op: BinaryOp) -> bool {
+    return op == BinaryOp::Div || op == BinaryOp::Rem
+}
+
+impl CheckState {
+    /// **`NK2703`: a sequence asked for something it is not** (ADR-293 D17).
+    ///
+    /// `rev` writes its receiver `Seq[$T] ends`, and in a receiver's position
+    /// the word is a demand: `io::lines().rev()` is refused here, in the
+    /// program's words, where it used to be refused by `rustc` in the language
+    /// below's.
+    pub fn a_sequence_that_cannot_do_this(ref mut self, world: ref CheckWorld, on: ref Ty, method: winnow_grammar::Symbol, contract: ref FnContract, found: ref Vec[Ty], span: ref Span) sync {
+        let signature = contract.signature ?? return
+        let written = world.words.resolve(method).clone()
+        let receiver_lacks = signature.params.len() > 0 && signature.params[0].0 == "self" && self.a_sequence_lacks(written, signature.params[0].1, on, span)
+        if receiver_lacks {
+            return
+        }
+        let arguments = call_arguments(signature)
+        let mut at = 0
+        while at < arguments.len() && at < found.len() {
+            if self.a_sequence_lacks(written, arguments[at].1, found[at], span) {
+                return
+            }
+            at += 1
+        }
+    }
+
+    /// One pattern against the type that arrived: whether the sequence lacks
+    /// what the pattern demands, and the finding for it.
+    fn a_sequence_lacks(ref mut self, written: ref String, pattern: ref Ty, actual: ref Ty, span: ref Span) -> bool sync {
+        let wanted = note_seq_shape(pattern) ?? return false
+        let has = note_seq_shape(actual) ?? return false
+        let missing = has.missing(wanted)
+        if missing.len() == 0 {
+            return false
+        }
+        // In the program's words and not the ledger's: `ends` and `sized` are
+        // not words a program can write (ADR-105 D4).
+        let mut needs: String = "walks the sequence more than once".clone()
+        let mut lacks: String = "this one is used up by the first walk".clone()
+        let mut way: String = "Collect it into a list first.".clone()
+        if missing[0] == ENDS {
+            needs = "walks a sequence from the back".clone()
+            lacks = "this one can only be walked from the front".clone()
+            way = "Collect it into a list first, and walk the list from the back: `….collect()` and then `list.iter().rev()`.".clone()
+        } else if missing[0] == SIZED {
+            needs = "needs to know how long the sequence is".clone()
+            lacks = "this one doesn't know until it has been walked".clone()
+            way = "Collect it into a list first with `….collect()`: a list knows its length.".clone()
+        }
+        let item = note_seq_item(actual)
+        let mut what: String = "a sequence".clone()
+        if !item.is_unknown() {
+            what = f"a sequence of `{item.text()}`"
+        }
+        let notes: Vec[String] = [f"This is {what}. Ranges, a list's `iter()`, `chars()` and `drain()` can be walked from either end; a map's `keys()` and `io::lines()` only from the front, and a `filter` doesn't know its length."]
+        self.findings.push(check_refusal("NK2703", span, f"`{written}` {needs}, but {lacks}.", notes, way))
+        return true
+    }
+
+    /// **`NK2402`: a `catch` now also receives errors** a callee gained
+    /// (ADR-308 D3). `gained` is what the committed ledger lacks for `key`.
+    pub fn newly_reaches_a_handler(ref mut self, key: ref String, gained: ref Vec[String], span: ref Span) sync {
+        if self.flow.guarded == null || gained.len() == 0 {
+            return
+        }
+        let named = names_listed(gained)
+        let notes: Vec[String] = [f"`{key}` couldn't throw {named} when this handler was written. A `catch` takes everything that reaches it, so it handles the new error the same way as the others.", "Nothing is wrong: this is just to let you know. Once the updated `nikaia.contracts` is committed, you won't see this note again.".clone()]
+        self.findings.push(CheckFinding {
+            severity: CheckSeverity::Warning,
+            span: span.clone(),
+            code: "NK2402".clone(),
+            message: f"This `catch` now also receives {named} from `{key}`.",
+            notes: notes,
+            help: "Check that the handler does the right thing for it. Adding an arm and leaving it as it is are both fine; `nikaia build` without `--locked` records the change.".clone(),
+            labels: [],
+        })
+    }
+
+    /// **`NK2403`: a value's cleanup moved with a contract** (ADR-297, ADR-094
+    /// D5). `moved_now` and `moved_ty` are what the committed ledger says of
+    /// the parameter; only a name is told about, and only a type whose teardown
+    /// does something.
+    pub fn a_cleanup_that_moved(ref mut self, world: ref CheckWorld, key: ref String, param: ref String, moved_now: bool, moved_ty: ref String, want: ref Ty, given: ref Expr?, span: ref Span) sync {
+        let expr = given ?? return
+        let value = match expr {
+            Expr::Variable(name, _) => world.words.resolve(name).clone(),
+            else => return,
+        }
+        let how = self.tears_down(world, want, collections::BTreeSet()) ?? return
+        let mut message: String = "".clone()
+        let mut before: String = "".clone()
+        let mut help: String = "".clone()
+        if moved_now {
+            message = f"`{key}` now keeps `{param}`, so `{value}` is cleaned up when `{key}` is done with it, not at the end of this block."
+            before = f"`{key}` only read its `{param}` when this call was written"
+            help = f"If the cleanup belongs here, pass `{key}` a copy, `{value}.clone()`, or change `{key}` back to only reading it."
+        } else {
+            message = f"`{key}` now only reads `{param}`, so `{value}` is cleaned up at the end of this block, not when `{key}` is done with it."
+            before = f"`{key}` kept its `{param}` when this call was written"
+            help = f"If the cleanup belongs inside `{key}`, change it back to keeping what it's given. Otherwise there's nothing to do."
+        }
+        let notes: Vec[String] = [f"{capitalised(before)}, and a `{moved_ty}` does something when it's cleaned up ({how}).", "Nothing is wrong: this is just to let you know, since the call itself doesn't show it. Once the updated `nikaia.contracts` is committed, you won't see this note again.".clone()]
+        self.findings.push(CheckFinding {
+            severity: CheckSeverity::Warning,
+            span: span.clone(),
+            code: "NK2403".clone(),
+            message: message,
+            notes: notes,
+            help: help,
+            labels: [],
+        })
+    }
+
+    /// **`NK1118`: a division, or a remainder, by a constant zero.**
+    pub fn divisor_is_not_zero(ref mut self, world: ref CheckWorld, op: BinaryOp, rhs: ref Expr, span: ref Span) sync {
+        if !note_a_division(op) {
+            return
+        }
+        let divisor = self.constant_of(world, rhs) ?? return
+        if divisor.beyond || divisor.value.magnitude != 0 {
+            return
+        }
+        let mut what: String = "takes the remainder".clone()
+        if op == BinaryOp::Div {
+            what = "divides".clone()
+        }
+        self.findings.push(check_refusal("NK1118", span, f"This {what} by zero.", ["Dividing by zero would stop the program, and here it's certain to happen.".clone()], "If the divisor can really be zero, check it before dividing.".clone()))
+    }
+
+    /// **A lambda's parameter**, bound without `mut` where a write door asks
+    /// (ADR-094 D3): held for every lambda it would refuse correct programs, so
+    /// only a parameter the lambda did not write `mut` is asked.
+    pub fn lambda_parameter(ref mut self, world: ref CheckWorld, name: winnow_grammar::Symbol, mutable: ref Vec[winnow_grammar::Symbol], ty: Ty, span: ref Span) -> CheckLocal sync {
+        let mut written = false
+        for one in mutable {
+            if one == name {
+                written = true
+            }
+        }
+        let asked = self.flow.at_a_write_door && !written
+        let mut local = CheckLocal::free(world.words.resolve(name).clone(), ty, self.a_new_binding())
+        if asked {
+            local.immutable = CheckImmutable { at: span.clone(), kind: CheckKind::Parameter }
+        }
+        return local
+    }
+
+    /// **The one error type a call throws**, over both ledgers: `null` where
+    /// several arrive, where the callee cannot be resolved, or where the single
+    /// member is `"?"` - the absence of a claim (ADR-024 D1).
+    pub fn the_one_error(ref self, world: ref CheckWorld, expr: ref Expr) -> Ty? sync {
+        let name = match expr {
+            Expr::Call { func, .. } => match func {
+                Expr::Variable(name, _) => world.words.resolve(name).clone(),
+                Expr::Path(segments, _) => note_joined(world, segments),
+                else => return null,
+            },
+            Expr::Try(inner, _) => return self.the_one_error(world, inner),
+            else => return null,
+        }
+        let key = world.here.unaliased(name)
+        let contract = ledger_function(world, key) ?? return null
+        if contract.fails_with.len() == 1 && contract.fails_with[0] != "?" {
+            return Ty::Named { name: contract.fails_with[0].clone(), args: [], view: false }
+        }
+        return null
+    }
+}
+
+fn note_joined(world: ref CheckWorld, segments: ref Vec[winnow_grammar::Symbol]) -> String {
+    let mut parts: Vec[String] = []
+    for segment in segments {
+        parts.push(world.words.resolve(segment).clone())
+    }
+    return parts.join("::")
+}

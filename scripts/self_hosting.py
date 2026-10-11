@@ -179,6 +179,11 @@ COMPILER_NIKA = {
     "check_numbers5.nika": "check: the constant a name or sum comes to and the type a number must fit (0.0.826)",
     "check_binds.nika": "check: putting a name into scope, a tuple taken apart, the boundary a lambda or task crosses (0.0.826)",
     "check_arms.nika": "check: arms that meet at T? and a lambda that ends in text (0.0.826)",
+    "check_notes.nika": "check: small refusals and warnings: NK2703, NK2402, NK2403, NK1118, lambda parameter (0.0.827)",
+    "check_kinds.nika": "check: comptime bounds, a count beside its buffer, update blocks, a variant on a T? (0.0.827)",
+    "check_arith.nika": "check: arithmetic on something that has none, a value of no known type (NK1191, NK1245) (0.0.827)",
+    "check_extern.nika": "check: what crosses to C: entry points, extern structs and enums (NK1237-NK1240, NK1145) (0.0.827)",
+    "check_members.nika": "check: a member nothing writes down (NK1171) (0.0.827)",
 }
 
 
