@@ -82,3 +82,56 @@ Stack depth of a huge `match`; findings order, `read_seq`, `next_choice` and
 fresh ids must come out in the same order or emit and check disagree silently;
 `RefCell<EmitWalk>` borrows (never hold one across a call back into the
 emitter); clones where Rust returned views (measure by callgrind).
+
+## E9 in units (host-trait strangler, decided 2026-10-11)
+
+Not one commit and not a file per agent: the core moves through a
+`trait EmitHost` in 13 sequential units, each of about 100 turns, each ending
+with `lower-std`, tests and a push. Cutting only `expr` and
+`block_opening_with` turns the 47-method cycle (7,286 lines) into a DAG, so the
+host needs those two plus the Rust-only helpers until U10 closes the cycle.
+Call-graph scripts: `scripts/e9/` (`callgraph.py`, `units.py`, `arms.py`).
+
+* **Method form:** `emit_core_<name>[H: EmitHost](ref self, world: ref EmitWorld,
+  mut walk: EmitWalk, mut out: EmitOut, host: ref H, .., depth: i64,
+  flow: EmitFlow, scope: ref EmitScope) sync throws`, `impl EmitState`. A moved
+  callee is `self.emit_core_*`, an unmoved one `host.<name>`. The Rust method
+  becomes a one-line stub through `self.nikaia(..)` (`emit/host.rs`).
+* **Adapter (`emit/host.rs`, trait in `tools/emit_host.nika`):** the walk is a
+  baton, `w: RefCell<Option<EmitWalk>>`: a stub takes it, passes `&mut`, puts it
+  back; every host method swaps it in and out; a forgotten swap panics. `Flow`
+  converts only at the crossing (`to_emit` / `from_emit`). An anyhow error from
+  a `refused_at!` is stashed in `failed: RefCell<Option<anyhow::Error>>` and a
+  marker error returned; the stub returns the stash, else maps `EmitRefused`.
+  `expr_as_written` and `a_stmt` move one variant per Nikaia method; guarded
+  arms of one variant move together in their original order; the Rust match
+  stays the dispatcher until U10.
+* **Oracle per unit:** `lower-std` with the previous unit's binary and with the
+  new one on the same tree: `package.rs` byte-identical; then the NK tests the
+  moved arms touch and `examples.rs`.
+* **Units:** U0a compiler: a trait declaration's `mut` parameter lowers to
+  `&mut T` (today by value in the declaration, `&mut` in the impl; see
+  `trait_method`), with a test. U0b scaffolding (`emit_host.nika`,
+  `host.rs`, baton, flow conversion, error stash, `Build::for_emit()`, pilot
+  `operand` / `bare_range` / `index_expr`, test that a refusal keeps its line).
+  U1a types (`ty_counted`, `ty`, `pointer_for`, `hull_new`, ...). U1b the
+  remaining below-core code (`held_in`, `filled_at_once`, `options_of`,
+  `caught_*`, keeps, ...). U2 leaves (`emit_core_leaves.nika`: `key`,
+  `string`, `template*`, `block`, `if_expr`, `grammar_entry`...). U3 reads
+  (`overlap`, `select`, `receiver`, index reads). U4 match (`pattern_written`,
+  `arm_body*`, `match_over_a_sum`). U5 `args`, `called`. U6 `call_inner`,
+  `call`, `method_call`. U7 places (SafeMethod, Field, Index, Cast, StructLit,
+  With, Tuple, ListLit). U8 flow (Closure, Binary, Coalesce, Try*, Return,
+  Break, Throw, Spawn). U9 all `a_stmt` arms. U10 the remaining arms and
+  `expr` / `block_opening_with` / `stmt` / `a_stmt`; every `host.expr(` becomes
+  `self.emit_core_*` and those trait methods are deleted.
+* **Stay Rust:** `take_lend`, `insert_after_first_brace` (no `String::pop` /
+  `insert_str` in `std`); ~10 queries on Rust-only code (`prove::call_key`,
+  `fold::constant_of`, `order::block_mentions`, `throws::error_type`,
+  `keep::root_of`, `dsl::type_name`, `sync::visit_expr` or Nikaia's
+  `visited_in_*`).
+* **Risks:** no callgrind before U10 (each crossing allocates an `EmitScope`);
+  an error that loses its identity across a crossing breaks diagnostics
+  silently; arms reordered; stack depth of generic frames (keep a deep-nesting
+  test); findings, `next_choice` and id order; units must not overlap in time
+  (`package.rs`).
