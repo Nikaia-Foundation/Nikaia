@@ -1964,6 +1964,19 @@ impl<'p> Emitter<'p> {
                         })
                 })
                 .collect(),
+            template_holes: Default::default(),
+            template_errors: Default::default(),
+            hole_wraps: parsed
+                .hole_wraps
+                .iter()
+                .map(|(at, wraps)| {
+                    (
+                        *at as i64,
+                        wraps.iter().map(|(n, s)| (*n as i64, *s)).collect(),
+                    )
+                })
+                .collect(),
+            kept_calls: Default::default(),
             uses_std,
             is_std: false,
             fails,
@@ -2021,6 +2034,20 @@ impl<'p> Emitter<'p> {
             entry: true,
             sums: std::collections::BTreeMap::new(),
         };
+        let mut state = state;
+        let (holes, errors) = template_hole_tables(parsed);
+        state.template_holes = holes;
+        state.template_errors = errors;
+        state.kept_calls = parsed
+            .cached_kept_calls()
+            .into_iter()
+            .map(|((name, arity), (names, call))| {
+                (
+                    (name, arity as i64),
+                    nikaia_std::tools::emit_state::EmitKeptCall { names, call },
+                )
+            })
+            .collect();
         let mut made = Self {
             parsed,
             build,
@@ -13353,6 +13380,60 @@ fn precedence(op: BinaryOp) -> u8 {
 
 fn binary_op(op: BinaryOp) -> String {
     nikaia_std::tools::emit_ops::binary_op(op)
+}
+
+type HoleTables = (
+    std::collections::BTreeMap<(i64, String), Expr>,
+    std::collections::BTreeMap<(i64, String), String>,
+);
+
+/// Every hole of every template in the file, by the template's site and the
+/// hole's text - the trees every reader of them shares - and what was said of
+/// the ones that did not parse.
+fn template_hole_tables(parsed: &Parsed) -> HoleTables {
+    let mut errors = std::collections::BTreeMap::new();
+    let mut ask = |expr: &Expr| {
+        let Expr::Dsl {
+            target,
+            package,
+            content,
+            ..
+        } = expr
+        else {
+            return;
+        };
+        if crate::dsl::is_deferred(&dsl_name(parsed, *package, *target), content) {
+            return;
+        }
+        let Ok(segments) = template::split(content.trim()) else {
+            return;
+        };
+        let site = crate::ast::id_of(expr);
+        for (hole, _) in template_holes_bound(&segments) {
+            if let Err(error) = parsed.hole(site, &hole) {
+                errors.insert((site as i64, hole), error.to_string());
+            }
+        }
+    };
+    for item in &parsed.program.items {
+        match &item.node {
+            Item::Fn { body, .. } => visit_block(body, &mut ask),
+            Item::Impl { methods, .. } => {
+                for method in methods {
+                    if let Item::Fn { body, .. } = &method.node {
+                        visit_block(body, &mut ask);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    let holes = parsed
+        .cached_holes()
+        .into_iter()
+        .map(|((site, text), expr)| ((site as i64, text), expr))
+        .collect();
+    (holes, errors)
 }
 
 /// **The names a `fold`'s or a `par_fold`'s step calls directly** (#433): a

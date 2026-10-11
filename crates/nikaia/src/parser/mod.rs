@@ -459,6 +459,25 @@ impl Parsed {
             .clone()
     }
 
+    /// Every hole parsed so far, by the site and the text: what the emitter is
+    /// handed once the checker has read the file.
+    pub(crate) fn cached_holes(&self) -> Vec<((u32, String), ast::Expr)> {
+        let holes = self.holes.lock().expect("a hole parse panicked");
+        holes
+            .iter()
+            .map(|(key, expr)| (key.clone(), expr.clone()))
+            .collect()
+    }
+
+    /// Every call built for a function kept as a value, by name and arity.
+    pub(crate) fn cached_kept_calls(&self) -> Vec<((String, usize), KeptCall)> {
+        let built = self.kept_calls.lock().expect("a kept call build panicked");
+        built
+            .iter()
+            .map(|(key, call)| (key.clone(), call.clone()))
+            .collect()
+    }
+
     /// The same file with only the items `keep` says yes to.
     ///
     /// **The interner travels with them**, which is the whole reason this is a

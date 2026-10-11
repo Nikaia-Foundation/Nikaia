@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.813] — 2026-10-11
+
+**EmitState holds the hand-over tables the core needs (#558, step E5b).**
+- `template_holes`, `template_errors`, `hole_wraps` and `kept_calls` are tables of `EmitState`, filled by the Rust adapter from `Parsed` after the check, from the same caches, so the same expression ids come out (ADR-340 D2). A key that is not there is refused, never parsed again. `Parsed` gains the accessors `cached_holes` and `cached_kept_calls`. Output unchanged.
+
 ## [0.0.812] — 2026-10-11
 
 **The checker reads a file's items through a view: `ParsedView`, and fifteen item-reading functions are Nikaia (tools/parsed_view.nika, tools/check_items.nika, #558, #125, C-2).**

@@ -19393,6 +19393,12 @@ pub struct EmitPair {
     pub second: String,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct EmitKeptCall {
+    pub names: Vec<winnow_grammar::Symbol>,
+    pub call: Expr,
+}
+
 #[derive(Debug, Clone)]
 pub struct EmitWorld<'a> {
     pub words: &'a winnow_grammar::InternerContext,
@@ -19430,6 +19436,10 @@ pub struct EmitState {
     pub keep_plans: collections::BTreeMap<String, BufferPlan>,
     pub methods: collections::BTreeMap<String, EmitMethod>,
     pub by_name: collections::BTreeMap<String, EmitMethod>,
+    pub template_holes: collections::BTreeMap<(i64, String), Expr>,
+    pub template_errors: collections::BTreeMap<(i64, String), String>,
+    pub hole_wraps: collections::BTreeMap<i64, Vec<(i64, winnow_grammar::Symbol)>>,
+    pub kept_calls: collections::BTreeMap<(String, i64), EmitKeptCall>,
     pub uses_std: bool,
     pub is_std: bool,
     pub fails: bool,
@@ -40224,7 +40234,7 @@ pub mod emit_reach {
 }
 pub mod emit_state {
     #[allow(unused_imports)]
-    pub use super::{EmitPair, EmitWorld, EmitState, EmitWalk};
+    pub use super::{EmitPair, EmitKeptCall, EmitWorld, EmitState, EmitWalk};
 }
 pub mod emit_sums {}
 pub mod emit_text {

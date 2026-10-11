@@ -28,6 +28,13 @@ pub struct EmitPair {
     pub second: String,
 }
 
+/// The call a named function stands for where a function value is kept: the
+/// names of its arguments and the call.
+pub struct EmitKeptCall {
+    pub names: Vec[winnow_grammar::Symbol],
+    pub call: Expr,
+}
+
 /// What the emitter looks at and does not own.
 pub struct EmitWorld {
     /// The names of the file, to read an identifier back.
@@ -99,6 +106,18 @@ pub struct EmitState {
     /// The same, by the method's name alone, for the names only one `impl`
     /// declares.
     pub by_name: collections::BTreeMap[String, EmitMethod],
+    /// Every template hole the file's readers parsed, by the site of the
+    /// template and the hole's text: the same trees, with the same ids
+    /// (ADR-340 D2). A key that is not here is refused, never parsed again.
+    pub template_holes: collections::BTreeMap[(i64, String), Expr],
+    /// What was said about a hole that did not parse, by the same key.
+    pub template_errors: collections::BTreeMap[(i64, String), String],
+    /// What the tier pass wraps in each `f"..."` hole, by the hole's place: the
+    /// position and the name.
+    pub hole_wraps: collections::BTreeMap[i64, Vec[(i64, winnow_grammar::Symbol)]],
+    /// The call a named function stands for where a function value is kept,
+    /// by the name and the arity.
+    pub kept_calls: collections::BTreeMap[(String, i64), EmitKeptCall],
     /// The file imports from `std`.
     pub uses_std: bool,
     /// The file is `std` itself.
