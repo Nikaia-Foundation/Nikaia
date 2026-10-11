@@ -1,0 +1,310 @@
+// crates/nikaia-std/src/tools/emit_misc.nika
+//
+// **Small questions the emitter asks of the contracts and the checker's
+// facts**, moved from `emit/mod.rs` (ADR-294, #125, #558, step E4): whether a
+// method call pauses or can fail, whether a call closes a cycle of pausing
+// calls, which bindings of a pattern are boxed, which function is a package's
+// grammar entry, what a shape walk unrolls, the Rust a declared handle type is
+// written as, and which names Rust reserves. Methods of `EmitState`.
+
+use std::collections
+
+/// Whether a name is one Rust reserves and Nikaia does not (ADR-298 D9), so
+/// it is written `r#name`.
+pub fn is_reserved(name: ref String) -> bool {
+    return match name {
+        "abstract" => true,
+        "async" => true,
+        "await" => true,
+        "become" => true,
+        "box" => true,
+        "const" => true,
+        "do" => true,
+        "dyn" => true,
+        "extern" => true,
+        "final" => true,
+        "gen" => true,
+        "loop" => true,
+        "macro" => true,
+        "mod" => true,
+        "move" => true,
+        "override" => true,
+        "priv" => true,
+        "ref" => true,
+        "static" => true,
+        "trait" => true,
+        "try" => true,
+        "type" => true,
+        "typeof" => true,
+        "unsafe" => true,
+        "unsized" => true,
+        "virtual" => true,
+        "where" => true,
+        "yield" => true,
+        else => false,
+    }
+}
+
+/// A source name, written so the language below can read it.
+pub fn escaped_name(name: ref String) -> String {
+    if is_reserved(name) {
+        return f"r#{name}"
+    }
+    return name.clone()
+}
+
+/// The Rust a declared handle type is: a transparent wrapper of the address,
+/// dropped by the function that releases it (ADR-302 D7).
+pub fn opaque_type_text(name: ref String, release: ref String) -> String {
+    return f"#[repr(transparent)]\n#[derive(Debug)]\n// A C type keeps the name its header gives it, which is not the\n// shape Rust's own lint expects (Part III, C.1: what `rustc` would\n// say here is about a file nobody wrote).\n#[allow(non_camel_case_types)]\npub struct {name}(core::ptr::NonNull<core::ffi::c_void>);\n\n#[allow(dead_code)]\nimpl {name} {{\n    /// What a declaration that says `-> {name}` hands back\n    /// (ADR-302 D12): the address, or an abort naming the\n    /// declaration that claimed it would be one.\n    #[track_caller]\n    fn from_c(declaration: &str, address: *mut core::ffi::c_void) -> {name} {{\n        match core::ptr::NonNull::new(address) {{\n            Some(address) => {name}(address),\n            None => nikaia_std::foreign::nothing_came_back(declaration),\n        }}\n    }}\n\n    /// The same, where the declaration **does** say `?` (D1).\n    fn maybe(address: *mut core::ffi::c_void) -> Option<{name}> {{\n        core::ptr::NonNull::new(address).map({name})\n    }}\n\n    /// The same address, without giving the handle away\n    /// (ADR-302 D7): what a C function is handed is the\n    /// pointer, and this handle stays the caller's to close.\n    fn lent(&self) -> {name} {{\n        {name}(self.0)\n    }}\n}}\n\nimpl Drop for {name} {{\n    fn drop(&mut self) {{\n        let _released = unsafe {{ {release}(self.lent()) }};\n    }}\n}}\n\n"
+}
+
+fn emit_lends(contract: ref FnContract, at: i64, library: ref Ledger, described: ref Ledger) -> bool {
+    return lends_in(contract, at, [library, described])
+}
+
+fn emit_field_type(contract: ref FieldContract?) -> Ty {
+    let held = contract ?? return Ty::Unknown
+    return held.ty.clone()
+}
+
+impl EmitState {
+    /// Whether the checker found the method call at the statement pauses.
+    pub fn method_pauses(ref self, statement: i64, method: ref String) -> bool {
+        return self.facts.pausing_methods.contains((statement, method.clone()))
+    }
+
+    /// Whether the checker found the method call at the statement can fail.
+    pub fn method_can_fail(ref self, statement: i64, method: ref String) -> bool {
+        return self.facts.fallible_methods.contains((statement, method.clone()))
+    }
+
+    /// Whether the function's `sync` is decided by what it is passed.
+    pub fn lambda_decides(ref self, key: ref String) -> bool {
+        let contract = self.own_contracts.functions.get(key) ?? return false
+        return match contract.sync_claim {
+            Sync::From(_) => true,
+            else => false,
+        }
+    }
+
+    /// Whether the function pauses, or its `sync` is decided by an argument.
+    pub fn lowered_pausing(ref self, key: ref String) -> bool {
+        return call_pauses(self.own_contracts, key) || self.lambda_decides(key)
+    }
+
+    /// Whether calling `callee` from `caller` closes a cycle of pausing calls.
+    pub fn closes_a_pausing_cycle(ref self, caller: ref String, callee: ref String) -> bool {
+        let seen = self.pausing_reach.get(callee) ?? return false
+        return seen.contains(caller)
+    }
+
+    /// As `closes_a_pausing_cycle`, for a method called by its bare name: any
+    /// function whose key ends in it.
+    pub fn method_closes_a_pausing_cycle(ref self, caller: ref String, method: ref String) -> bool {
+        let suffix = f"::{method}"
+        for key in self.pausing_reach.keys() {
+            if !key.ends_with(ref suffix) {
+                continue
+            }
+            let seen = self.pausing_reach.get(key) ?? continue
+            if seen.contains(caller) {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// Whether the function is a grammar's entry in a package: it fails with
+    /// the parse error and takes the input alone.
+    pub fn a_package_grammar_entry(ref self, key: ref String) -> bool {
+        let contract = self.own_contracts.functions.get(key) ?? return false
+        if contract.fails_with.len() != 1 || contract.fails_with[0] != "ParseError" {
+            return false
+        }
+        let signature = contract.signature?.clone() ?? return false
+        return signature.params.len() == 1 && signature.params[0].0 == "input"
+    }
+
+    /// The function a shape walk is inside, found by the type it is made for.
+    pub fn enclosing_shape_walk(ref self, on: ref String) -> String? {
+        for key in self.facts.unrolled.keys() {
+            if key.1 == on {
+                return key.0.clone()
+            }
+        }
+        return null
+    }
+
+    /// The fields a `for` over `T::fields` or `T::variants` walks, where the
+    /// walk is over the parameter `name` made for the type `on`.
+    pub fn unrolls_here(ref self, world: ref EmitWorld, name: ref String, on: ref String, iter: ref Expr) -> Vec[FieldContract]? {
+        match iter {
+            Expr::Path(segments, _) => {
+                if segments.len() != 2 {
+                    return null
+                }
+                let parameter = world.words.resolve(segments[0])
+                let member = world.words.resolve(segments[1])
+                if parameter != name || (member != "fields" && member != "variants") {
+                    return null
+                }
+                let walk = self.enclosing_shape_walk(on) ?? return null
+                let found = self.facts.unrolled.get((walk, on.clone())) ?? return null
+                return found.clone()
+            },
+            else => {},
+        }
+        return null
+    }
+
+    /// The names a pattern binds that are the boxed parts of a variant or the
+    /// boxed fields of a struct.
+    pub fn boxed_bindings(ref self, world: ref EmitWorld, pattern: ref MatchPattern) -> Vec[String] {
+        let mut out: Vec[String] = []
+        match pattern {
+            MatchPattern::Tuple { path, parts } => {
+                let (owner, variant) = self.boxed_owner(world, path)
+                for at in 0..<parts.len() {
+                    let boxed = variant.len() > 0 && self.is_boxed(owner, boxed_member(variant, at, ""))
+                    if boxed && self.binds_one_name(parts[at]) {
+                        out.extend(self.single_binding(world, parts[at]))
+                    } else {
+                        out.extend(self.boxed_bindings(world, parts[at]))
+                    }
+                }
+            },
+            MatchPattern::Named { path, bindings, .. } => {
+                let (owner, variant) = self.boxed_owner(world, path)
+                if owner.len() == 0 {
+                    return out
+                }
+                for binding in bindings {
+                    let field = world.words.resolve(binding).clone()
+                    let mut member = field.clone()
+                    if variant.len() > 0 {
+                        member = boxed_member(variant, -1, field)
+                    }
+                    if self.is_boxed(owner, member) {
+                        out.push(escaped_name(field))
+                    }
+                }
+            },
+            MatchPattern::Or(alternatives) => {
+                if alternatives.len() > 0 {
+                    out.extend(self.boxed_bindings(world, alternatives[0]))
+                }
+            },
+            else => {},
+        }
+        return out
+    }
+
+    fn binds_one_name(ref self, pattern: ref MatchPattern) -> bool {
+        return match pattern {
+            MatchPattern::Path(one) => one.len() == 1,
+            else => false,
+        }
+    }
+
+    fn single_binding(ref self, world: ref EmitWorld, pattern: ref MatchPattern) -> Vec[String] {
+        return match pattern {
+            MatchPattern::Path(one) => self.binding_if_named(world, one),
+            else => [],
+        }
+    }
+
+    fn binding_if_named(ref self, world: ref EmitWorld, one: ref Vec[winnow_grammar::Symbol]) -> Vec[String] {
+        let name = world.words.resolve(one[0]).clone()
+        if name == "_" {
+            return []
+        }
+        return [escaped_name(name)]
+    }
+
+    /// The owner and variant a pattern's path names: the type and the variant
+    /// where the type has boxed members, the last segment alone otherwise;
+    /// empty where the path is.
+    fn boxed_owner(ref self, world: ref EmitWorld, path: ref Vec[winnow_grammar::Symbol]) -> (String, String) {
+        if path.len() == 0 {
+            return ("", "")
+        }
+        let last = world.words.resolve(path[path.len() - 1]).clone()
+        if path.len() >= 2 {
+            let owner = world.words.resolve(path[path.len() - 2]).clone()
+            if self.facts.boxed_members.contains_key(owner) {
+                return (owner, last)
+            }
+        }
+        return (last, "")
+    }
+
+    /// How a cast at the statement narrows into `into`, if the checker found
+    /// it does.
+    pub fn narrows(ref self, statement: i64, into: ref String) -> FactNarrowing? {
+        let found = self.facts.narrowing_casts.get((statement, into.clone())) ?? return null
+        return found.clone()
+    }
+
+    /// Whether `name` is a code parameter of `function` that the function
+    /// hands on whole: it is code, it is not kept, and nothing it is handed to
+    /// lends it.
+    pub fn a_code_parameter_taken_whole(ref self, world: ref EmitWorld, function: ref String, name: ref String) -> bool {
+        let contract = self.own_contracts.functions.get(function) ?? return false
+        let signature = contract.signature?.clone() ?? return false
+        for at in 0..<signature.params.len() {
+            let param = signature.params[at].clone()
+            if param.0 != name {
+                continue
+            }
+            let is_code = match param.1 {
+                Ty::Fn { .. } => true,
+                else => false,
+            }
+            if !is_code || contract.keeps.contains(name) {
+                continue
+            }
+            if !emit_lends(contract, at, world.library, self.described) {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// An attribute written `Name { field: value, ... }` as Rust: the fields
+    /// escaped, the values as the field's type holds them.
+    pub fn attribute_in_rust(ref self, world: ref EmitWorld, written: ref String) -> String {
+        let pieces: Vec[String] = written.split(" { ").collect()
+        let name = pieces[0].clone()
+        let mut inside: String = ""
+        if pieces.len() > 1 {
+            let mut rest: Vec[String] = []
+            for at in 1..<pieces.len() {
+                rest.push(pieces[at].clone())
+            }
+            let joined = rest.join(" { ")
+            let stripped = joined.strip_suffix(" }")
+            if stripped != null {
+                inside = (stripped ?? "").clone()
+            } else {
+                inside = joined.clone()
+            }
+        }
+        let mut fields: Vec[String] = []
+        for part in top_level_parts(inside) {
+            let halves: Vec[String] = part.split(": ").collect()
+            if halves.len() < 2 {
+                continue
+            }
+            let field = halves[0].clone()
+            let mut value_parts: Vec[String] = []
+            for at in 1..<halves.len() {
+                value_parts.push(halves[at].clone())
+            }
+            let value = value_parts.join(": ")
+            let ty = emit_field_type(self.field_contract(world, name, field))
+            fields.push(f"{escaped_name(field)}: {held_literal(value, ty)}")
+        }
+        return f"{name} {{ {fields.join(", ")} }}"
+    }
+}

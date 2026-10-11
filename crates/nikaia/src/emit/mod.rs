@@ -1110,12 +1110,6 @@ fn std_ledger() -> &'static crate::contracts::Ledger {
 /// **Rust forbids a raw identifier for exactly those four**, so there is no
 /// escape to write. They are refused instead (`NK1128`, and `NK1119` for
 /// `self`), which is [ADR-298](../../../docs/specification/adr/adr-298.md) D11.
-const RESERVED_BELOW: &[&str] = &[
-    "abstract", "async", "await", "become", "box", "const", "do", "dyn", "extern", "final", "gen",
-    "loop", "macro", "mod", "move", "override", "priv", "ref", "static", "trait", "try", "type",
-    "typeof", "unsafe", "unsized", "virtual", "where", "yield",
-];
-
 /// A source name, written so the language below can read it.
 ///
 /// **This is [ADR-296](../../../docs/specification/adr/adr-296.md) D17 paying one
@@ -1143,7 +1137,7 @@ const RESERVED_BELOW: &[&str] = &[
 /// Borrowed where nothing changes, which is every name in every program written
 /// today.
 pub fn escaped(name: &str) -> std::borrow::Cow<'_, str> {
-    match RESERVED_BELOW.contains(&name) {
+    match nikaia_std::tools::emit_misc::is_reserved(name) {
         true => std::borrow::Cow::Owned(format!("r#{name}")),
         false => std::borrow::Cow::Borrowed(name),
     }
@@ -2227,23 +2221,7 @@ impl<'p> Emitter<'p> {
     /// functions were instantiated with what, is the checker's
     /// ([ADR-288](../../docs/specification/adr/adr-288.md)).
     fn walks_a_shape(&self, item: &Item) -> Option<String> {
-        let Item::Fn {
-            name: Some(name), ..
-        } = item
-        else {
-            return None;
-        };
-        let name = self.text(*name).to_string();
-        // **Off `walks_fields` and not off `unrolled`**, because the two differ
-        // where it matters: a function that walks a shape and is never called
-        // has no copies, and the generic original still may not be written —
-        // its body holds a loop over a shape. Part II 10.3's own block is that
-        // shape, and it reached `rustc` until this line read the right map.
-        self.s
-            .facts
-            .walks_fields
-            .contains_key(&name)
-            .then_some(name)
+        self.s.walks_a_shape(&self.world, item)
     }
 
     /// The concrete type the parameter stands for, while a copy is being
@@ -2260,39 +2238,8 @@ impl<'p> Emitter<'p> {
     /// checker's table, which is the only thing that knows which copy this is.
     fn unrolls_here(&self, iter: &Expr) -> Option<Vec<crate::contracts::FieldContract>> {
         let pair = self.walk(|w| w.specialising.clone())?;
-        let (name, on) = (pair.first, pair.second);
-        let Expr::Path(segments, _) = iter else {
-            return None;
-        };
-        let names: Vec<String> = segments.iter().map(|s| self.text(*s).to_string()).collect();
-        let [parameter, member] = names.as_slice() else {
-            return None;
-        };
-        if *parameter != name || !matches!(member.as_str(), "fields" | "variants") {
-            return None;
-        }
         self.s
-            .facts
-            .unrolled
-            .get(&(self.enclosing_shape_walk()?, on))
-            .cloned()
-    }
-
-    /// The name of the function this copy is of, while one is being written.
-    ///
-    /// The parameter's name is what `specialising` holds beside the type, so
-    /// the function's own name is looked up the way the copy was chosen: there
-    /// is exactly one entry per (function, type) and the type is in hand.
-    fn enclosing_shape_walk(&self) -> Option<String> {
-        let pair = self.walk(|w| w.specialising.clone())?;
-        let (parameter, on) = (pair.first, pair.second);
-        let _ = parameter;
-        self.s
-            .facts
-            .unrolled
-            .keys()
-            .find(|(_, held)| *held == on)
-            .map(|(written, _)| written.clone())
+            .unrolls_here(&self.world, &pair.first, &pair.second, iter)
     }
 
     /// **The field this unrolled turn stands at**, where `base.member` is a
@@ -2318,13 +2265,7 @@ impl<'p> Emitter<'p> {
     /// The **first** one, which is what the checker bound: a second parameter
     /// beside it is an ordinary generic and keeps its place in the signature.
     fn walked_parameter(&self, item: &Item) -> String {
-        let Item::Fn { generics, .. } = item else {
-            return String::new();
-        };
-        generics
-            .first()
-            .map(|g| self.text(g.name).to_string())
-            .unwrap_or_default()
+        self.s.walked_parameter(&self.world, item)
     }
 
     /// A module's items and nothing else - no preamble, no `mod` header.
@@ -3179,49 +3120,9 @@ impl<'p> Emitter<'p> {
     /// `&mut T?` is `T **` exactly as C writes it — the right words around the
     /// right memory, which at this boundary is the only kind that counts.
     fn opaque_type(&self, out: &mut Out, handle: &crate::ast::OpaqueType) {
-        let name = self.name(handle.name);
-        let release = self.name(handle.released_by);
-        out.push(&format!(
-            "#[repr(transparent)]\n\
-             #[derive(Debug)]\n\
-             // A C type keeps the name its header gives it, which is not the\n\
-             // shape Rust's own lint expects (Part III, C.1: what `rustc` would\n\
-             // say here is about a file nobody wrote).\n\
-             #[allow(non_camel_case_types)]\n\
-             pub struct {name}(core::ptr::NonNull<core::ffi::c_void>);\n\
-             \n\
-             #[allow(dead_code)]\n\
-             impl {name} {{\n\
-             \x20   /// What a declaration that says `-> {name}` hands back\n\
-             \x20   /// (ADR-302 D12): the address, or an abort naming the\n\
-             \x20   /// declaration that claimed it would be one.\n\
-             \x20   #[track_caller]\n\
-             \x20   fn from_c(declaration: &str, address: *mut core::ffi::c_void) -> {name} {{\n\
-             \x20       match core::ptr::NonNull::new(address) {{\n\
-             \x20           Some(address) => {name}(address),\n\
-             \x20           None => nikaia_std::foreign::nothing_came_back(declaration),\n\
-             \x20       }}\n\
-             \x20   }}\n\
-             \n\
-             \x20   /// The same, where the declaration **does** say `?` (D1).\n\
-             \x20   fn maybe(address: *mut core::ffi::c_void) -> Option<{name}> {{\n\
-             \x20       core::ptr::NonNull::new(address).map({name})\n\
-             \x20   }}\n\
-             \n\
-             \x20   /// The same address, without giving the handle away\n\
-             \x20   /// (ADR-302 D7): what a C function is handed is the\n\
-             \x20   /// pointer, and this handle stays the caller's to close.\n\
-             \x20   fn lent(&self) -> {name} {{\n\
-             \x20       {name}(self.0)\n\
-             \x20   }}\n\
-             }}\n\
-             \n\
-             impl Drop for {name} {{\n\
-             \x20   fn drop(&mut self) {{\n\
-             \x20       let _released = unsafe {{ {release}(self.lent()) }};\n\
-             \x20   }}\n\
-             }}\n\
-             \n"
+        out.push(&nikaia_std::tools::emit_misc::opaque_type_text(
+            &self.name(handle.name),
+            &self.name(handle.released_by),
         ));
     }
 
@@ -5080,12 +4981,8 @@ impl<'p> Emitter<'p> {
     /// randomly seeded one `std` gives every map by default. Nothing else about
     /// the map changes - same table, same API, same full-content equality - so
     /// this is a name and not a translation.
-    fn map_name<'n>(&self, name: &'n str) -> &'n str {
-        match (name, self.s.trusted_input || self.walk(|w| w.trusting)) {
-            ("HashMap", true) => "TrustedMap",
-            ("HashSet", true) => "TrustedSet",
-            _ => name,
-        }
+    fn map_name(&self, name: &str) -> String {
+        self.s.map_name(self.walk(|w| w.trusting), name)
     }
 
     /// **One side of a text `+`**, where a side read out of a list is handed
@@ -5117,10 +5014,7 @@ impl<'p> Emitter<'p> {
     /// so the annotation and the constructor cannot disagree about which hash a
     /// map got.
     fn mapped_path(&self, name: &str) -> String {
-        match name.rsplit_once("::") {
-            Some((module, last)) => format!("{module}::{}", self.map_name(last)),
-            None => self.map_name(name).to_string(),
-        }
+        self.s.mapped_path(self.walk(|w| w.trusting), name)
     }
 
     /// The name a type is written with below, which for one name depends on the
@@ -5935,21 +5829,7 @@ impl<'p> Emitter<'p> {
     /// Whether `expr` is never negative here: a non-negative literal, a
     /// counter of [`Emitter::nonnegative`], or a sum or product of those.
     fn never_negative(&self, flow: Flow<'_>, expr: &Expr) -> bool {
-        match expr {
-            Expr::LitInt { negative, .. } => !negative,
-            Expr::Variable(name, _) => self.walk(|w| {
-                w.nonnegative
-                    .get(flow.function)
-                    .is_some_and(|set| set.contains(self.text(*name)))
-            }),
-            Expr::Binary {
-                op: BinaryOp::Add | BinaryOp::Mul,
-                lhs,
-                rhs,
-                ..
-            } => self.never_negative(flow, lhs) && self.never_negative(flow, rhs),
-            _ => false,
-        }
+        self.walk(|w| w.never_negative(&self.world, flow.function, expr))
     }
 
     /// `i < xs.len()` for a counter `i` that is never negative, written as
@@ -6435,14 +6315,14 @@ impl<'p> Emitter<'p> {
                         self.s.facts.nullable_sites.get(&(span.at() as i64)),
                         value,
                     );
-                    out.push(before);
+                    out.push(&before);
                     // **Out of a place, the tuple is lent** (#465), as one
                     // name's `let` over a place is.
                     if mutable.is_empty() && self.s.facts.lent_lets.contains(&(span.at() as i64)) {
                         out.push("&");
                     }
                     self.expr(out, value, depth, flow)?;
-                    out.push(after);
+                    out.push(&after);
                     out.push(";");
                     // A number among its parts is read out of its view.
                     for name in names {
@@ -6550,7 +6430,7 @@ impl<'p> Emitter<'p> {
                 let (before, after) =
                     Self::around_value(self.s.facts.nullable_sites.get(&(span.at() as i64)), value);
                 out.push(&format!("let {mutable}{}{annotation} = ", escaped(bound)));
-                out.push(before);
+                out.push(&before);
                 // **A `let` over a place is a view of it**
                 // ([ADR-094](../../docs/specification/adr/adr-094.md) D4).
                 // `let s = totals.stations[name]` and `let name = config.name`
@@ -6583,7 +6463,7 @@ impl<'p> Emitter<'p> {
                     _ => false,
                 };
                 self.operand(out, value, viewed, depth, flow)?;
-                out.push(after);
+                out.push(&after);
                 out.push(";");
             }
             // **The folded value is what is written**, not the expression that
@@ -6648,9 +6528,9 @@ impl<'p> Emitter<'p> {
                 // A `let` ends the read before the write begins, which is what
                 // a reader would write by hand.
                 out.push(&format!("{{ let {STORED} = "));
-                out.push(before);
+                out.push(&before);
                 self.expr(out, value, depth, flow)?;
-                out.push(after);
+                out.push(&after);
                 // **A `mut` parameter is already a `&mut`** (ADR-094 D3), so
                 // it is lent on again rather than borrowed a second time:
                 // `set(&mut out, …)` asks for the binding itself to be `mut`,
@@ -6731,9 +6611,9 @@ impl<'p> Emitter<'p> {
                 let (before, after) =
                     Self::around_value(self.s.facts.nullable_sites.get(&(span.at() as i64)), value);
                 out.push(&format!("{{ let {STORED} = "));
-                out.push(before);
+                out.push(&before);
                 self.expr(out, value, depth, flow)?;
-                out.push(after);
+                out.push(&after);
                 out.push("; ");
                 self.expr(out, keeper, depth, flow.place())?;
                 match only_literals(index) {
@@ -6873,7 +6753,7 @@ impl<'p> Emitter<'p> {
                     };
                     out.push(&format!("{}.{put}(", Self::keep_expr(keep, false)));
                 }
-                out.push(before);
+                out.push(&before);
                 // **A view of the place being assigned is copied first**
                 // (#563): `rest = rest.strip_prefix(">") ?? ""` into a mixed
                 // `String` hands `EitherText` a borrow of the very buffer the
@@ -6904,7 +6784,7 @@ impl<'p> Emitter<'p> {
                 if !own_view {
                     self.expr(out, value, depth, flow)?;
                 }
-                out.push(after);
+                out.push(&after);
                 if reput.is_some() {
                     out.push(")");
                 }
@@ -7313,52 +7193,12 @@ impl<'p> Emitter<'p> {
     /// a value an operator makes is held in parentheses - `a - 1` into an
     /// `i64?` went below as `a - 1.into()`, the conversion taking the `1` alone
     /// (found moving the build-time integers into Nikaia, #125).
-    fn around_value(
-        how: Option<&crate::check::Wrap>,
-        value: &Expr,
-    ) -> (&'static str, &'static str) {
-        let compound = matches!(
-            value,
-            Expr::Binary { .. }
-                | Expr::Unary { .. }
-                | Expr::Cast { .. }
-                | Expr::Range { .. }
-                | Expr::Coalesce { .. }
-        );
-        match (how, compound) {
-            (Some(crate::check::Wrap::Conversion), true) => ("(", ").into()"),
-            _ => Self::around(how),
-        }
+    fn around_value(how: Option<&crate::check::Wrap>, value: &Expr) -> (String, String) {
+        nikaia_std::tools::emit_exprs::emit_around_value(how, value)
     }
 
-    fn around(how: Option<&crate::check::Wrap>) -> (&'static str, &'static str) {
-        match how {
-            Some(crate::check::Wrap::Constructor) => ("Some(", ")"),
-            Some(crate::check::Wrap::Conversion) => ("", ".into()"),
-            // A file's name made from text (ADR-319 D2): an owned one is
-            // built, a view is lent without a copy.
-            Some(crate::check::Wrap::Path) => ("std::path::PathBuf::from(", ")"),
-            Some(crate::check::Wrap::PathView) => ("std::path::Path::new(&(", "))"),
-            // An integer widened without loss (ADR-285 D32).
-            Some(crate::check::Wrap::Widen(into)) => (
-                match into.as_str() {
-                    "u32" => "u32::from(",
-                    "u64" => "u64::from(",
-                    "i32" => "i32::from(",
-                    _ => "i64::from(",
-                },
-                ")",
-            ),
-            // A signed value the walk proved not negative (ADR-285 D32).
-            Some(crate::check::Wrap::Unsigned(into)) => (
-                match into.as_str() {
-                    "u32" => "nikaia_std::num::u32_of(",
-                    _ => "nikaia_std::num::u64_of(",
-                },
-                ")",
-            ),
-            None => ("", ""),
-        }
+    fn around(how: Option<&crate::check::Wrap>) -> (String, String) {
+        nikaia_std::tools::emit_exprs::emit_around(how)
     }
 
     /// What a `return` hands back: the nullable wrap, and **the `&` the compiler
@@ -7379,7 +7219,7 @@ impl<'p> Emitter<'p> {
     ) -> Result<()> {
         let (before, after) =
             Self::around_value(self.s.facts.nullable_sites.get(&(span.at() as i64)), value);
-        out.push(before);
+        out.push(&before);
         // `null` is no text of either kind (ADR-282 D5), and goes as `None`.
         let either = self.returns_either(flow.function) && !matches!(value, Expr::LitNull(_));
         if either {
@@ -7392,7 +7232,7 @@ impl<'p> Emitter<'p> {
         if either {
             out.push(")");
         }
-        out.push(after);
+        out.push(&after);
         Ok(())
     }
 
@@ -7453,12 +7293,7 @@ impl<'p> Emitter<'p> {
     /// Whether what stands in the brackets is a **run**: a range written there,
     /// or one the checker says is kept in a name (ADR-293 D23).
     fn slices(&self, index: &Expr) -> bool {
-        matches!(index, Expr::Range { .. })
-            || self
-                .s
-                .facts
-                .slice_indices
-                .contains(&crate::check::value_node(index))
+        self.s.slices(index)
     }
 
     /// How the checker said this key goes into a map's brackets, where the
@@ -7529,12 +7364,7 @@ impl<'p> Emitter<'p> {
     /// Whether `name` is a parameter of the function being emitted that it
     /// changes in place - a `mut` parameter, lowered as `&mut T` (ADR-094 D3).
     fn changes_in_place(&self, flow: Flow<'_>, name: &str) -> bool {
-        self.s
-            .own_contracts
-            .functions
-            .get(flow.function)
-            .and_then(|c| c.signature.as_ref())
-            .is_some_and(|s| s.mutable.iter().any(|m| m == name))
+        self.s.changes_in_place(flow.function, name)
     }
 
     /// Whether `name` is a `mut` parameter whose value **copies** - a number,
@@ -7543,19 +7373,7 @@ impl<'p> Emitter<'p> {
     /// (#576). A parameter of any other type is read through methods and
     /// handed on, which the language below dereferences itself.
     fn copied_in_place(&self, flow: Flow<'_>, name: &str) -> bool {
-        self.s
-            .own_contracts
-            .functions
-            .get(flow.function)
-            .and_then(|c| c.signature.as_ref())
-            .is_some_and(|s| {
-                s.mutable.iter().any(|m| m == name)
-                    && s.params.iter().any(|(param, ty)| {
-                        param == name
-                            && !ty.is_a_view()
-                            && nikaia_std::tools::check_types::copies_plainly(ty)
-                    })
-            })
+        self.s.copied_in_place(flow.function, name)
     }
 
     /// Whether `place` is a `mut` parameter of the function being emitted, or
@@ -7594,9 +7412,9 @@ impl<'p> Emitter<'p> {
         // **And a plain value in a nullable slot** (`check::Checked::wrapped`).
         if let Some(how) = self.s.facts.wrapped.get(&(crate::check::value_node(expr))) {
             let (before, after) = Self::around_value(Some(how), expr);
-            out.push(before);
+            out.push(&before);
             self.expr_as_written(out, expr, depth, flow)?;
-            out.push(after);
+            out.push(&after);
             return Ok(());
         }
         // **A map's read copied out where a `T?` of its own is kept**
@@ -11163,10 +10981,7 @@ impl<'p> Emitter<'p> {
     /// test is that the callee can reach the caller again, which is what closing
     /// a cycle *is*.
     fn closes_a_pausing_cycle(&self, caller: &str, callee: &str) -> bool {
-        self.s
-            .pausing_reach
-            .get(callee)
-            .is_some_and(|seen| seen.contains(caller))
+        self.s.closes_a_pausing_cycle(caller, callee)
     }
 
     /// The same, for a call whose callee this emitter cannot name
@@ -11181,12 +10996,7 @@ impl<'p> Emitter<'p> {
     /// reason: a box nobody needed costs one allocation, and a box that was
     /// needed and is missing is a program that does not compile.
     fn method_closes_a_pausing_cycle(&self, caller: &str, method: &str) -> bool {
-        let suffix = format!("::{method}");
-        self.s
-            .pausing_reach
-            .iter()
-            .filter(|(key, _)| key.ends_with(&suffix))
-            .any(|(_, seen)| seen.contains(caller))
+        self.s.method_closes_a_pausing_cycle(caller, method)
     }
 
     /// Whether a type named here holds a view, and so carries the input lifetime
@@ -11499,66 +11309,19 @@ impl<'p> Emitter<'p> {
     /// A code parameter `function` takes whole and does not keep: a
     /// method's, which `lends.nika` never lends (#463).
     fn a_code_parameter_taken_whole(&self, function: &str, name: &str) -> bool {
-        let Some(contract) = self.s.own_contracts.functions.get(function) else {
-            return false;
-        };
-        let Some(signature) = &contract.signature else {
-            return false;
-        };
-        signature
-            .params
-            .iter()
-            .enumerate()
-            .any(|(at, (param, ty))| {
-                param == name
-                    && matches!(ty, crate::contracts::ty::Ty::Fn { .. })
-                    && !contract.keeps.iter().any(|kept| kept == name)
-                    && !crate::contracts::keeps::lends_in(
-                        contract,
-                        at,
-                        &[self.world.library, &self.s.described],
-                    )
-            })
+        self.s
+            .a_code_parameter_taken_whole(&self.world, function, name)
     }
 
     /// Whether `callee`'s parameter at `i` is written `mut` (ADR-094 D3).
     fn changes_at(&self, callee: &str, i: usize) -> bool {
-        let changes = |contract: &crate::contracts::FnContract| {
-            contract.signature.as_ref().is_some_and(|s| {
-                s.arguments()
-                    .get(i)
-                    .is_some_and(|(name, _)| s.mutable.iter().any(|m| m == name))
-            })
-        };
-        match self.s.own_contracts.functions.get(callee) {
-            Some(contract) => changes(contract),
-            None => {
-                let candidates = self.s.own_contracts.candidates(callee);
-                !candidates.is_empty() && candidates.iter().all(|(_, contract)| changes(contract))
-            }
-        }
+        self.s.changes_at(callee, i as i64)
     }
 
     /// Whether the code a call hands `callee` at argument `i` is only run
     /// there, not kept - by its entry, or by every method of that name.
     fn runs_code_at(&self, callee: &str, i: usize) -> bool {
-        let runs = |contract: &crate::contracts::FnContract| {
-            contract
-                .signature
-                .as_ref()
-                .and_then(|s| s.arguments().get(i))
-                .is_some_and(|(name, ty)| {
-                    matches!(ty, crate::contracts::ty::Ty::Fn { .. })
-                        && !contract.keeps.iter().any(|kept| kept == name)
-                })
-        };
-        match self.s.own_contracts.functions.get(callee) {
-            Some(contract) => runs(contract),
-            None => {
-                let candidates = self.s.own_contracts.candidates(callee);
-                !candidates.is_empty() && candidates.iter().all(|(_, contract)| runs(contract))
-            }
-        }
+        self.s.runs_code_at(callee, i as i64)
     }
 
     /// How a sum is **named** wherever it is used.
@@ -11707,16 +11470,12 @@ impl<'p> Emitter<'p> {
     /// way an own entry says `Sync::From`, since the inference never writes it
     /// ([ADR-288](../../docs/specification/adr/adr-288.md) D31).
     fn lambda_decides(&self, key: &str) -> bool {
-        self.s
-            .own_contracts
-            .functions
-            .get(key)
-            .is_some_and(|contract| matches!(contract.sync_claim, crate::contracts::Sync::From(_)))
+        self.s.lambda_decides(key)
     }
 
     /// Whether the function under `key` is lowered as an `async fn`.
     fn lowered_pausing(&self, key: &str) -> bool {
-        self.pauses(key) || self.lambda_decides(key)
+        self.s.lowered_pausing(key)
     }
 
     /// Whether a call is `task::scope` with a task that pauses, which the
@@ -11775,17 +11534,7 @@ impl<'p> Emitter<'p> {
     /// entry — read off the ledger rather than from a list of three names, for
     /// the reason the call path gives.
     fn constructs_by_name(&self, name: &str) -> bool {
-        if self.declares_a_struct(name) {
-            return self
-                .s
-                .own_contracts
-                .functions
-                .contains_key(&format!("{name}::new"));
-        }
-        self.world
-            .library
-            .functions
-            .contains_key(&format!("{name}::new"))
+        self.s.constructs_by_name(&self.world, name)
     }
 
     /// Whether the contracts say a call by name can fail (Kap 7.1).
@@ -11820,11 +11569,7 @@ impl<'p> Emitter<'p> {
     /// in one statement where one of them widens - which leaves the conversion
     /// exactly as it was rather than guessing at it.
     fn narrows(&self, statement: usize, into: &str) -> Option<crate::check::Narrowing> {
-        self.s
-            .facts
-            .narrowing_casts
-            .get(&((statement as i64), into.to_string()))
-            .copied()
+        self.s.narrows(statement as i64, into)
     }
 
     /// Whether the checker said this method call can fail (Kap 7.1).
@@ -11898,9 +11643,7 @@ impl<'p> Emitter<'p> {
 
     fn method_can_fail(&self, flow: Flow<'_>, method: Symbol) -> bool {
         self.s
-            .facts
-            .fallible_methods
-            .contains(&((flow.statement as i64), self.text(method).to_string()))
+            .method_can_fail(flow.statement as i64, self.text(method))
     }
 
     /// Whether the checker said this method call pauses (ADR-055 D2).
@@ -11911,9 +11654,7 @@ impl<'p> Emitter<'p> {
     /// guessing at it.
     fn method_pauses(&self, flow: Flow<'_>, method: Symbol) -> bool {
         self.s
-            .facts
-            .pausing_methods
-            .contains(&((flow.statement as i64), self.text(method).to_string()))
+            .method_pauses(flow.statement as i64, self.text(method))
     }
 
     /// The options a call by name has, from the contract that declares them.
@@ -11964,22 +11705,7 @@ impl<'p> Emitter<'p> {
     /// `Name { value: "createdAt", case: Case::Camel }` with each field
     /// written as its type holds it.
     fn attribute_in_rust(&self, written: &str) -> String {
-        let (name, inside) = written
-            .split_once(" { ")
-            .map(|(name, rest)| (name, rest.strip_suffix(" }").unwrap_or(rest)))
-            .unwrap_or((written, ""));
-        let fields: Vec<String> = top_level_parts(inside)
-            .into_iter()
-            .filter_map(|part| {
-                let (field, value) = part.split_once(": ")?;
-                let ty = self
-                    .field_contract(name, field)
-                    .map(|f| f.ty)
-                    .unwrap_or(crate::contracts::ty::Ty::Unknown);
-                Some(format!("{}: {}", escaped(field), held_literal(value, &ty)))
-            })
-            .collect();
-        format!("{name} {{ {} }}", fields.join(", "))
+        self.s.attribute_in_rust(&self.world, written)
     }
 
     /// **The fields of `owner` that have a default** (ADR-331 D5): name,
@@ -12355,65 +12081,7 @@ impl<'p> Emitter<'p> {
     }
 
     fn boxed_bindings(&self, pattern: &MatchPattern, out: &mut Vec<String>) {
-        let owner_of = |path: &[Symbol]| -> Option<(String, Option<String>)> {
-            match path {
-                [.., owner, variant]
-                    if self.s.facts.boxed_members.contains_key(self.text(*owner)) =>
-                {
-                    Some((
-                        self.text(*owner).to_string(),
-                        Some(self.text(*variant).to_string()),
-                    ))
-                }
-                [.., owner] => Some((self.text(*owner).to_string(), None)),
-                [] => None,
-            }
-        };
-        match pattern {
-            MatchPattern::Tuple { path, parts } => {
-                let owner = owner_of(path);
-                for (at, part) in parts.iter().enumerate() {
-                    let boxed = owner.as_ref().is_some_and(|(owner, variant)| {
-                        variant.as_deref().is_some_and(|variant| {
-                            self.is_boxed(
-                                owner,
-                                &crate::check::boxed_member(variant, Some(at), None),
-                            )
-                        })
-                    });
-                    match (boxed, part) {
-                        (true, MatchPattern::Path(one)) if one.len() == 1 => {
-                            let name = self.text(one[0]);
-                            if name != "_" {
-                                out.push(self.name(one[0]).to_string());
-                            }
-                        }
-                        _ => self.boxed_bindings(part, out),
-                    }
-                }
-            }
-            MatchPattern::Named { path, bindings, .. } => {
-                let Some((owner, variant)) = owner_of(path) else {
-                    return;
-                };
-                for binding in bindings {
-                    let field = self.text(*binding);
-                    let member = match &variant {
-                        Some(variant) => crate::check::boxed_member(variant, None, Some(field)),
-                        None => field.to_string(),
-                    };
-                    if self.is_boxed(&owner, &member) {
-                        out.push(self.name(*binding).to_string());
-                    }
-                }
-            }
-            MatchPattern::Or(alternatives) => {
-                if let Some(first) = alternatives.first() {
-                    self.boxed_bindings(first, out);
-                }
-            }
-            _ => {}
-        }
+        out.extend(self.s.boxed_bindings(&self.world, pattern));
     }
 
     fn match_pattern(
@@ -13342,44 +13010,18 @@ impl<'p> Emitter<'p> {
     /// Whether `expr` is written ending in `as T`: a conversion, or an
     /// operation whose right operand is written bare and ends in one.
     fn ends_in_a_cast(&self, expr: &Expr) -> bool {
-        match expr {
-            Expr::Binary { op, rhs, .. } => match &**rhs {
-                Expr::Binary { op: inner, .. } if precedence(*inner) < precedence(*op) + 1 => false,
-                rhs => self.ends_in_a_cast(rhs),
-            },
-            _ => self.emits_as_cast(expr),
-        }
+        self.s.ends_in_a_cast(&self.world, expr)
     }
 
     fn emits_as_cast(&self, expr: &Expr) -> bool {
-        match expr {
-            Expr::Cast { .. } => true,
-            Expr::MethodCall {
-                receiver,
-                method,
-                args,
-                ..
-            } => {
-                let name = self.text(*method);
-                truncating(name).is_some()
-                    || is_length(name, args)
-                    || self.is_counted(receiver, *method, args)
-            }
-            _ => false,
-        }
+        self.s.emits_as_cast(&self.world, expr)
     }
 
     /// **`std`'s count of a sequence**, which counts in `usize` below and is
     /// an `i64` here, as a length is (Part I 2.2): the checker says which
     /// `count()` resolved to it, so a program's own `count` is left alone.
     fn is_counted(&self, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr]) -> bool {
-        self.text(method) == "count"
-            && args.is_empty()
-            && self
-                .s
-                .facts
-                .counted
-                .contains(&crate::check::value_node(receiver))
+        self.s.is_counted(receiver, self.text(method), args)
     }
 
     /// An operand of an operator, parenthesised only where it binds looser
@@ -13600,7 +13242,7 @@ impl<'p> Emitter<'p> {
                 && !change
                 && !matches!(arg, Expr::LitNull(_))
                 && self.either_param(callee, i);
-            out.push(before);
+            out.push(&before);
             if either {
                 out.push("nikaia_std::either_text::either(");
             }
@@ -13679,7 +13321,7 @@ impl<'p> Emitter<'p> {
             // `Some(&value)`, which reaches an `Option<&str>` from a `String`
             // by the coercion the constructor's argument gets
             // (`check::Checked::nullable_args`).
-            let inside_the_option = match before {
+            let inside_the_option = match before.as_str() {
                 "Some(" => None,
                 _ => inside_the_option,
             };
@@ -13705,7 +13347,7 @@ impl<'p> Emitter<'p> {
                     && self.runs_code_at(callee, i));
             if matches!(arg, Expr::LitNull(_)) && inside_the_option.is_some() {
                 out.push("None");
-                out.push(after);
+                out.push(&after);
                 continue;
             }
             let mut kept_here = false;
@@ -13913,7 +13555,7 @@ impl<'p> Emitter<'p> {
             if either {
                 out.push(")");
             }
-            out.push(after);
+            out.push(&after);
             if duplicate {
                 // `.clone()` and not `Rc::clone(&x)`: it is right under either
                 // count, so it cannot disagree with the type the position was
@@ -13951,12 +13593,7 @@ impl<'p> Emitter<'p> {
     /// `contracts` records for every `entry rule` - one input, `input`, and a
     /// `ParseError` its one failure (#520).
     fn a_package_grammar_entry(&self, key: &str) -> bool {
-        self.s.own_contracts.functions.get(key).is_some_and(|contract| {
-            contract.fails_with == [crate::contracts::PARSE_ERROR]
-                && contract.signature.as_ref().is_some_and(|signature| {
-                    matches!(signature.params.as_slice(), [(name, _)] if name == crate::contracts::INPUT)
-                })
-        })
+        self.s.a_package_grammar_entry(key)
     }
 
     /// `Measurements.file(data)` - the whole of what a user writes to run a
@@ -15217,12 +14854,6 @@ pub(crate) fn dsl_name(parsed: &Parsed, package: Option<Symbol>, target: Symbol)
 /// text for an owned `String` is one, and a value for a `T?` is wrapped.
 fn held_literal(literal: &str, ty: &crate::contracts::ty::Ty) -> String {
     nikaia_std::tools::emit_text::held_literal(literal, ty)
-}
-
-/// The parts of `a: 1, b: "x, y"` between its top-level commas: none inside
-/// text, braces or parentheses.
-fn top_level_parts(inside: &str) -> Vec<String> {
-    nikaia_std::tools::emit_text::top_level_parts(inside)
 }
 
 /// A field's type as the language below writes it, for a `None` nothing else

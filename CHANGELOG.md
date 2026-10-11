@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.802] — 2026-10-11
+
+**The emitter's questions about calls, patterns and shapes are methods of EmitState (tools/emit_exprs.nika, emit_misc.nika, #558, step E4).**
+- `emit_exprs`: whether an argument is code the callee runs or a place it changes, what a plain value is wrapped in to fit its slot (`emit_around`, `emit_around_value`), whether an expression is written as a cast, which index is a slice, which struct is built by its `new`, and whether an expression is never negative (a method of `EmitWalk`). `emit_misc`: whether a method call pauses or can fail, whether a call closes a pausing cycle, the boxed bindings of a pattern, a package's grammar entry, what a shape walk unrolls, the Rust of a declared handle type, the names Rust reserves, a narrowing cast, a code parameter handed on whole and an attribute in Rust.
+
 ## [0.0.801] — 2026-10-11
 
 **The error sums and what the emitter asks of a type are methods of EmitState (tools/emit_sums.nika, emit_types.nika, #558, step E4).**

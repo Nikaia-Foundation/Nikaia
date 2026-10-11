@@ -1,0 +1,352 @@
+// crates/nikaia-std/src/tools/emit_exprs.nika
+//
+// **What the emitter asks of an expression and of the contracts around it**,
+// moved from `emit/mod.rs` (ADR-294, #125, #558, step E4): whether an argument
+// is code the callee runs or a place it changes, what a plain value is wrapped
+// in to fit its slot, whether an expression is written as a cast, which index
+// is a slice. Methods of `EmitState`; `EmitWorld` is the file's names and
+// `std`'s ledger.
+
+use std::collections
+
+/// The entries of the ledger whose key ends in `::method` and that are
+/// methods: their first parameter is `self`, or their signature is not known.
+fn emit_candidates(ledger: ref Ledger, method: ref String) -> Vec[FnContract] {
+    let suffix = f"::{method}"
+    let mut out: Vec[FnContract] = []
+    for key in ledger.functions.keys() {
+        if !key.ends_with(ref suffix) {
+            continue
+        }
+        let contract = ledger.functions.get(key) ?? continue
+        if emit_takes_self(contract) {
+            out.push(contract.clone())
+        }
+    }
+    return out
+}
+
+fn emit_takes_self(contract: ref FnContract) -> bool {
+    let signature = contract.signature ?? return true
+    if signature.params.len() == 0 {
+        return false
+    }
+    return signature.params[0].0 == "self"
+}
+
+/// The argument `i` of the call this contract is for, as the call passes it
+/// (the parameters after a receiver): its name and type.
+struct EmitArg {
+    name: String,
+    ty: Ty,
+}
+
+fn emit_argument(contract: ref FnContract, i: i64) -> EmitArg? {
+    let signature = contract.signature?.clone() ?? return null
+    let arguments = call_arguments(signature)
+    if i < 0 || i >= arguments.len() {
+        return null
+    }
+    let found = arguments[i].clone()
+    return EmitArg { name: found.0, ty: found.1 }
+}
+
+fn emit_runs(contract: ref FnContract, i: i64) -> bool {
+    let argument = emit_argument(contract, i) ?? return false
+    let is_code = match argument.ty {
+        Ty::Fn { .. } => true,
+        else => false,
+    }
+    if !is_code {
+        return false
+    }
+    for kept in contract.keeps {
+        if kept == argument.name {
+            return false
+        }
+    }
+    return true
+}
+
+fn emit_changes(contract: ref FnContract, i: i64) -> bool {
+    let argument = emit_argument(contract, i) ?? return false
+    let signature = contract.signature?.clone() ?? return false
+    for name in signature.mutable {
+        if name == argument.name {
+            return true
+        }
+    }
+    return false
+}
+
+/// How a plain value is put into a slot that wants another shape: the text
+/// before it and the text after it.
+fn emit_two(before: ref String, after: ref String) -> (String, String) {
+    return (before.clone(), after.clone())
+}
+
+pub fn emit_around(how: ref FactWrap?) -> (String, String) {
+    let held = how ?? return emit_two("", "")
+    return match held {
+        FactWrap::Constructor => emit_two("Some(", ")"),
+        FactWrap::Conversion => emit_two("", ".into()"),
+        FactWrap::Path => emit_two("std::path::PathBuf::from(", ")"),
+        FactWrap::PathView => emit_two("std::path::Path::new(&(", "))"),
+        FactWrap::Widen(into) => emit_two(emit_widen(into), ")"),
+        FactWrap::Unsigned(into) => emit_two(emit_unsigned(into), ")"),
+    }
+}
+
+fn emit_widen(into: ref String) -> String {
+    return match into {
+        "u32" => "u32::from(",
+        "u64" => "u64::from(",
+        "i32" => "i32::from(",
+        else => "i64::from(",
+    }
+}
+
+fn emit_unsigned(into: ref String) -> String {
+    return match into {
+        "u32" => "nikaia_std::num::u32_of(",
+        else => "nikaia_std::num::u64_of(",
+    }
+}
+
+/// As `emit_around`, but a conversion of a compound value is parenthesised.
+pub fn emit_around_value(how: ref FactWrap?, value: ref Expr) -> (String, String) {
+    let compound = match value {
+        Expr::Binary { .. } => true,
+        Expr::Unary { .. } => true,
+        Expr::Cast { .. } => true,
+        Expr::Range { .. } => true,
+        Expr::Coalesce { .. } => true,
+        else => false,
+    }
+    if compound && emit_a_conversion(how) {
+        return emit_two("(", ").into()")
+    }
+    return emit_around(how)
+}
+
+fn emit_a_conversion(how: ref FactWrap?) -> bool {
+    let held = how ?? return false
+    return match held {
+        FactWrap::Conversion => true,
+        else => false,
+    }
+}
+
+impl EmitState {
+    /// Whether the argument `i` of `callee` is code the callee runs and does
+    /// not keep: this unit's entry, or else every method of that name.
+    pub fn runs_code_at(ref self, callee: ref String, i: i64) -> bool {
+        let contract = self.own_contracts.functions.get(callee)
+        if contract != null {
+            return emit_runs(contract ?? return false, i)
+        }
+        let candidates = emit_candidates(self.own_contracts, callee)
+        if candidates.len() == 0 {
+            return false
+        }
+        for candidate in candidates {
+            if !emit_runs(candidate, i) {
+                return false
+            }
+        }
+        return true
+    }
+
+    /// Whether the argument `i` of `callee` is a `mut` parameter, which the
+    /// callee changes in place.
+    pub fn changes_at(ref self, callee: ref String, i: i64) -> bool {
+        let contract = self.own_contracts.functions.get(callee)
+        if contract != null {
+            return emit_changes(contract ?? return false, i)
+        }
+        let candidates = emit_candidates(self.own_contracts, callee)
+        if candidates.len() == 0 {
+            return false
+        }
+        for candidate in candidates {
+            if !emit_changes(candidate, i) {
+                return false
+            }
+        }
+        return true
+    }
+
+    /// Whether the function `function` takes `name` as a `mut` parameter.
+    pub fn changes_in_place(ref self, function: ref String, name: ref String) -> bool {
+        let contract = self.own_contracts.functions.get(function) ?? return false
+        let signature = contract.signature?.clone() ?? return false
+        for mutable in signature.mutable {
+            if mutable == name {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// Whether `name` is a `mut` parameter of `function` that is a plain
+    /// copy, not a view: it is copied in and written back.
+    pub fn copied_in_place(ref self, function: ref String, name: ref String) -> bool {
+        if !self.changes_in_place(function, name) {
+            return false
+        }
+        let contract = self.own_contracts.functions.get(function) ?? return false
+        let signature = contract.signature?.clone() ?? return false
+        for param in signature.params {
+            if param.0 == name && !param.1.is_a_view() && copies_plainly(param.1) {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// Whether an index is a range, or a slice the checker found.
+    pub fn slices(ref self, index: ref Expr) -> bool {
+        let range = match index {
+            Expr::Range { .. } => true,
+            else => false,
+        }
+        return range || self.facts.slice_indices.contains(node_key(index))
+    }
+
+    /// The name of the first generic parameter of a function: the type a copy
+    /// of it walking a shape is made for.
+    pub fn walked_parameter(ref self, world: ref EmitWorld, item: ref Item) -> String {
+        return match item {
+            Item::Fn { generics, .. } => self.first_generic(world, generics),
+            else => "",
+        }
+    }
+
+    fn first_generic(ref self, world: ref EmitWorld, generics: ref Vec[GenericParam]) -> String {
+        if generics.len() == 0 {
+            return ""
+        }
+        return world.words.resolve(generics[0].name).clone()
+    }
+
+    /// The function's name, if it walks the fields of a shape.
+    pub fn walks_a_shape(ref self, world: ref EmitWorld, item: ref Item) -> String? {
+        match item {
+            Item::Fn { name, .. } => {
+                let held = name ?? return null
+                let text = world.words.resolve(held).clone()
+                if self.facts.walks_fields.contains_key(text) {
+                    return text
+                }
+            },
+            else => {},
+        }
+        return null
+    }
+
+    /// Whether a struct of this name is built by its `new`.
+    pub fn constructs_by_name(ref self, world: ref EmitWorld, name: ref String) -> bool {
+        let constructor = f"{name}::new"
+        if self.declares_a_struct(name) {
+            return self.own_contracts.functions.contains_key(constructor)
+        }
+        return world.library.functions.contains_key(constructor)
+    }
+
+    /// Whether `x.count()` is the checker's count of a sequence.
+    pub fn is_counted(ref self, receiver: ref Expr, method: ref String, args: ref Vec[Expr]) -> bool {
+        return method == "count" && args.len() == 0 && self.facts.counted.contains(node_key(receiver))
+    }
+
+    /// Whether an expression is written as a cast, so what follows it needs a
+    /// parenthesis.
+    pub fn emits_as_cast(ref self, world: ref EmitWorld, expr: ref Expr) -> bool {
+        return match expr {
+            Expr::Cast { .. } => true,
+            Expr::MethodCall { receiver, method, args, .. } => self.method_emits_as_cast(world, receiver, method, args),
+            else => false,
+        }
+    }
+
+    fn method_emits_as_cast(ref self, world: ref EmitWorld, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr]) -> bool {
+        let name = world.words.resolve(method).clone()
+        return truncating(name) != null || is_length(name, args) || self.is_counted(receiver, name, args)
+    }
+
+    /// Whether the right end of an expression is a cast.
+    pub fn ends_in_a_cast(ref self, world: ref EmitWorld, expr: ref Expr) -> bool {
+        return match expr {
+            Expr::Binary { op, rhs, .. } => self.rhs_ends_in_a_cast(world, op, rhs),
+            else => self.emits_as_cast(world, expr),
+        }
+    }
+
+    fn rhs_ends_in_a_cast(ref self, world: ref EmitWorld, outer: BinaryOp, rhs: ref Expr) -> bool {
+        return match rhs {
+            Expr::Binary { op, .. } => self.inner_ends_in_a_cast(world, outer, op, rhs),
+            else => self.ends_in_a_cast(world, rhs),
+        }
+    }
+
+    fn inner_ends_in_a_cast(ref self, world: ref EmitWorld, op: BinaryOp, inner: BinaryOp, rhs: ref Expr) -> bool {
+        if precedence(inner) < precedence(op) + 1 {
+            return false
+        }
+        return self.ends_in_a_cast(world, rhs)
+    }
+
+    /// `HashMap` and `HashSet` are the trusted ones while the input is
+    /// trusted.
+    pub fn map_name(ref self, trusting: bool, name: ref String) -> String {
+        if self.trusted_input || trusting {
+            if name == "HashMap" {
+                return "TrustedMap"
+            }
+            if name == "HashSet" {
+                return "TrustedSet"
+            }
+        }
+        return name.clone()
+    }
+
+    /// As `map_name`, for a path: the last segment is mapped.
+    pub fn mapped_path(ref self, trusting: bool, name: ref String) -> String {
+        let parts: Vec[String] = name.split("::").collect()
+        if parts.len() < 2 {
+            return self.map_name(trusting, name)
+        }
+        let last = parts[parts.len() - 1].clone()
+        let mut module: Vec[String] = []
+        for at in 0..<parts.len() - 1 {
+            module.push(parts[at].clone())
+        }
+        return f"{module.join("::")}::{self.map_name(trusting, last)}"
+    }
+}
+
+impl EmitWalk {
+    /// Whether an expression is never negative in `function`: a literal that is
+    /// not, a local found to be, or a sum or product of those.
+    pub fn never_negative(ref self, world: ref EmitWorld, function: ref String, expr: ref Expr) -> bool {
+        return match expr {
+            Expr::LitInt { negative, .. } => !negative,
+            Expr::Variable(name, _) => self.local_never_negative(world, function, name),
+            Expr::Binary { op, lhs, rhs, .. } => self.sum_never_negative(world, function, op, lhs, rhs),
+            else => false,
+        }
+    }
+
+    fn local_never_negative(ref self, world: ref EmitWorld, function: ref String, name: winnow_grammar::Symbol) -> bool {
+        let set = self.nonnegative.get(function) ?? return false
+        return set.contains(world.words.resolve(name))
+    }
+
+    fn sum_never_negative(ref self, world: ref EmitWorld, function: ref String, op: BinaryOp, lhs: ref Expr, rhs: ref Expr) -> bool {
+        let sums = match op {
+            BinaryOp::Add => true,
+            BinaryOp::Mul => true,
+            else => false,
+        }
+        return sums && self.never_negative(world, function, lhs) && self.never_negative(world, function, rhs)
+    }
+}
