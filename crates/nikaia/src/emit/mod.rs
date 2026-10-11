@@ -1772,6 +1772,18 @@ impl<'p> Emitter<'p> {
         // ADR-055 D6, before `own_contracts` is moved into place.
         let reach = pausing_reach(parsed, &own_contracts);
 
+        // **The classes of the file's maps** (ADR-010 D9, #581): where the
+        // package is untrusted, the `let`s, parameters and results whose class
+        // no untrusted key reaches keep the fast hash.
+        let plan = match provenance {
+            crate::contracts::Provenance::Trusted => crate::contracts::trust::MapPlan {
+                lets: Default::default(),
+                slots: Default::default(),
+            },
+            crate::contracts::Provenance::Untrusted => {
+                crate::contracts::trust::trusted_maps(parsed, library)
+            }
+        };
         let state = EmitState {
             described: described.clone(),
             borrowing: borrowing_structs_beside(
@@ -1854,15 +1866,8 @@ impl<'p> Emitter<'p> {
             is_std: false,
             fails,
             trusted_input: provenance == crate::contracts::Provenance::Trusted,
-            trusted_lets: match provenance {
-                crate::contracts::Provenance::Trusted => std::collections::BTreeSet::new(),
-                crate::contracts::Provenance::Untrusted => {
-                    crate::contracts::trust::trusted_maps(parsed, library)
-                }
-            }
-            .into_iter()
-            .map(|at| at as i64)
-            .collect(),
+            trusted_lets: plan.lets.clone(),
+            fast_slots: plan.slots.clone(),
             proven_indices: propagation
                 .list_indices
                 .iter()
@@ -3088,6 +3093,10 @@ impl<'p> Emitter<'p> {
             None => own_name.clone(),
         };
 
+        // **A function that stands alone** (not a method, not `pub`, no type
+        // parameters): every call is seen, so its map parameters and result
+        // may keep the fast hash of their class (ADR-010 D9).
+        let standalone = owner.is_none() && !*is_public && generics.is_empty() && name.is_some();
         let mut params = Vec::new();
         if let Some(receiver) = receiver {
             params.push(
@@ -3391,7 +3400,14 @@ impl<'p> Emitter<'p> {
                         (true, false) => Lifetimes::Shared,
                         _ => how(a.name),
                     };
+                    let fast = standalone
+                        && self.s.fast_slots.contains(&format!(
+                            "p:{own_name}:{}",
+                            at - usize::from(receiver.is_some())
+                        ));
+                    let outer = self.walking(|w| std::mem::replace(&mut w.trusting, fast));
                     let written = self.ty_counted(&a.ty, position, self.count_at(&key, name));
+                    self.walking(|w| w.trusting = outer);
                     self.walking(|w| w.in_parameter = inside);
                     self.walking(|w| w.code_parameter_runs = held);
                     written
@@ -3637,7 +3653,11 @@ impl<'p> Emitter<'p> {
                     }
                     (false, _) => lifetimes,
                 };
-                self.ty_counted(ty, result, self.count_at(&key, SHARED_RESULT))
+                let fast = standalone && self.s.fast_slots.contains(&format!("r:{own_name}"));
+                let outer = self.walking(|w| std::mem::replace(&mut w.trusting, fast));
+                let written = self.ty_counted(ty, result, self.count_at(&key, SHARED_RESULT));
+                self.walking(|w| w.trusting = outer);
+                written
             }
             None => "()".to_string(),
         };

@@ -61,16 +61,25 @@ fn a_file_map_beside_a_socket_map_keeps_the_fast_hash() {
     );
 }
 
-/// **A map that leaves its function is not followed**: handed to another
-/// function, its type is named there too, so it takes the program's answer.
+/// **A map handed to a private function is one class with its parameter**
+/// (ADR-010 D9, #581 step 4): the file map and the helper's signature keep the
+/// fast hash, and the socket map beside them keeps the keyed one.
 #[test]
-fn a_map_that_leaves_its_function_takes_the_programs_answer() {
+fn a_map_handed_to_a_private_function_is_one_class_with_its_parameter() {
     let source = BOTH.replace(
         "    println(f\"{from_file.len()} {from_socket.len()}\")\n",
         "    println(f\"{count(from_file)} {from_socket.len()}\")\n",
     ) + "fn count(m: collections::HashMap[ref String, i64]) -> i64 {\n    return m.len()\n}\n";
     let rust = lowered(&source);
-    assert!(!rust.contains("TrustedMap"), "{rust}");
+    assert!(
+        the_map_made_by(&rust, "from_file").contains("TrustedMap"),
+        "{rust}"
+    );
+    assert!(
+        !the_map_made_by(&rust, "from_socket").contains("TrustedMap"),
+        "{rust}"
+    );
+    assert!(rust.contains("m: &collections::TrustedMap<"), "{rust}");
 }
 
 /// **A key from a function of the program's own is not followed**: it may read
@@ -188,19 +197,29 @@ fn entry_calling(other: &str) -> String {
     format!("fn main() throws {{\n    println(f\"{{{other}()}}\")\n}}\n")
 }
 
+/// **The map the socket fills is keyed in whichever file it stands**, and
+/// the map of the file that reads nothing, filled with what the program wrote
+/// and only handed to its own helper, is a class of its own and stays fast.
 fn assert_keyed_everywhere(rust: &str) {
+    let size_n = rust
+        .lines()
+        .find(|l| l.contains("fn size_n("))
+        .expect("`size_n` is lowered");
     assert!(
-        !rust.contains("TrustedMap"),
-        "a socket is read in the package, so no map has the fixed seed:\n{rust}"
+        size_n.contains("HashMap<i64, i64>") && !size_n.contains("Trusted"),
+        "{size_n}"
     );
+    let socket_map = rust
+        .lines()
+        .skip_while(|l| !l.contains("fn serve("))
+        .find(|l| l.contains("let mut m"))
+        .expect("serve's map");
+    assert!(!socket_map.contains("Trusted"), "{socket_map}");
     let size = rust
         .lines()
         .find(|l| l.contains("fn size("))
         .expect("`size` is lowered");
-    assert!(
-        size.contains("HashMap<&str, i64>") && !size.contains("Trusted"),
-        "{size}"
-    );
+    assert!(size.contains("TrustedMap<&str, i64>"), "{size}");
 }
 
 #[test]
@@ -481,4 +500,197 @@ fn a_helper_given_two_file_maps_is_fast_in_all_three() {
         .find(|l| l.contains("fn count("))
         .expect("count");
     assert!(count.contains("TrustedMap"), "{count}");
+}
+
+// ---------------------------------------------------------------------------
+// **Classes** (ADR-010 D9, #581 step 4): in a package that reads an untrusted
+// source, a map keeps the fast hash when every position a value of it passes
+// between (a `let`, a private function's parameter or result) is in one class
+// and no key that reaches the class is untrusted.
+// ---------------------------------------------------------------------------
+
+/// A program that reads a file and a socket; `a` is filled from the file and
+/// handed to `count`, `b` from the socket.
+fn classes_program(call: &str, helpers: &str) -> String {
+    format!(
+        "use std::net\n\
+         use std::fs\n\
+         use std::collections\n\
+         {helpers}\
+         fn main() throws {{\n\
+         \x20   let text = fs::read_to_string(\"words.txt\", fs::Root::Anywhere)\n\
+         \x20   let mut a = collections::HashMap()\n\
+         \x20   for w in text.split(\" \") {{ a.insert(w.len(), 1) }}\n\
+         \x20   let mut c = net::connect(\"127.0.0.1:1\")\n\
+         \x20   let data = c.read()\n\
+         \x20   let mut b = collections::HashMap()\n\
+         \x20   b.insert(data.len(), 1)\n\
+         {call}\
+         }}\n"
+    )
+}
+
+const COUNT: &str = "fn count(m: collections::HashMap[i64, i64]) -> i64 {\n    return m.len()\n}\n";
+
+fn line_with<'a>(rust: &'a str, what: &str) -> &'a str {
+    rust.lines()
+        .find(|l| l.contains(what))
+        .unwrap_or_else(|| panic!("no `{what}` in:\n{rust}"))
+}
+
+/// **The file map and the helper it is handed to stay fast** beside a socket
+/// map that never meets them: they are one class, and nothing untrusted
+/// reaches it.
+#[test]
+fn a_class_no_untrusted_key_reaches_keeps_the_fast_hash() {
+    let source = classes_program("    println(f\"{count(a)} {b.len()}\")\n", COUNT);
+    let rust = lowered_and_compiled(&source, "class-fast");
+    assert!(the_map_made_by(&rust, "a").contains("TrustedMap"), "{rust}");
+    assert!(
+        line_with(&rust, "fn count(").contains("TrustedMap"),
+        "{rust}"
+    );
+    assert!(
+        !the_map_made_by(&rust, "b").contains("TrustedMap"),
+        "{rust}"
+    );
+}
+
+/// **The join**: the socket map handed to the same helper makes the whole
+/// class keyed, the file map included.
+#[test]
+fn the_socket_map_in_the_class_keys_the_file_map_too() {
+    let source = classes_program("    println(f\"{count(a)} {count(b)}\")\n", COUNT);
+    let rust = lowered_and_compiled(&source, "class-joined");
+    assert!(!rust.contains("TrustedMap"), "{rust}");
+}
+
+/// **A class is also a result**: a helper that builds a map and returns it is
+/// in the class of the `let` that takes it.
+#[test]
+fn a_helper_that_returns_a_map_is_in_the_class_of_its_caller() {
+    let fresh = "fn fresh() -> collections::HashMap[i64, i64] {\n\
+         \x20   let mut m = collections::HashMap()\n\
+         \x20   m.insert(1, 1)\n\
+         \x20   return m\n}\n";
+    let fast = classes_program(
+        "    let mut got = fresh()\n    got.insert(text.len(), 2)\n    println(f\"{got.len()} {b.len()}\")\n",
+        fresh,
+    );
+    let rust = lowered_and_compiled(&fast, "class-result-fast");
+    assert!(
+        line_with(&rust, "fn fresh(").contains("TrustedMap"),
+        "{rust}"
+    );
+    assert!(
+        line_with(&rust, "let mut m").contains("TrustedMap"),
+        "{rust}"
+    );
+    // The same, with a socket key put into what it returned.
+    let keyed = classes_program(
+        "    let mut got = fresh()\n    got.insert(data.len(), 2)\n    println(f\"{got.len()} {b.len()}\")\n",
+        fresh,
+    );
+    let rust = lowered_and_compiled(&keyed, "class-result-keyed");
+    assert!(
+        !line_with(&rust, "fn fresh(").contains("TrustedMap"),
+        "{rust}"
+    );
+    assert!(
+        !line_with(&rust, "let mut m").contains("TrustedMap"),
+        "{rust}"
+    );
+    // Where the file map `a`, a class of its own, keeps the fast hash.
+    assert!(the_map_made_by(&rust, "a").contains("TrustedMap"), "{rust}");
+}
+
+/// **A chain of helpers is one class**, so one socket key anywhere keys it.
+#[test]
+fn a_chain_of_helpers_is_one_class() {
+    let chain = format!(
+        "{COUNT}fn through(m: collections::HashMap[i64, i64]) -> i64 {{\n    return count(m)\n}}\n"
+    );
+    let rust = lowered_and_compiled(
+        &classes_program("    println(f\"{through(a)} {b.len()}\")\n", &chain),
+        "class-chain-fast",
+    );
+    assert!(
+        line_with(&rust, "fn through(").contains("TrustedMap"),
+        "{rust}"
+    );
+    assert!(
+        line_with(&rust, "fn count(").contains("TrustedMap"),
+        "{rust}"
+    );
+    let rust = lowered_and_compiled(
+        &classes_program("    println(f\"{through(a)} {count(b)}\")\n", &chain),
+        "class-chain-keyed",
+    );
+    assert!(!rust.contains("TrustedMap"), "{rust}");
+}
+
+/// **What this cannot follow is keyed** (a barrier widens): a key that comes
+/// in through a parameter, a `pub` helper (the package's boundary).
+#[test]
+fn what_the_class_cannot_follow_is_keyed() {
+    let cases = [
+        (
+            "param-key",
+            "fn fill(mut m: collections::HashMap[i64, i64], k: i64) {\n    m.insert(k, 1)\n}\n",
+            "    fill(a, 1)\n    println(f\"{b.len()}\")\n",
+        ),
+        (
+            "pub-helper",
+            "pub fn count(m: collections::HashMap[i64, i64]) -> i64 {\n    return m.len()\n}\n",
+            "    println(f\"{count(a)} {b.len()}\")\n",
+        ),
+    ];
+    for (name, helpers, call) in cases {
+        let rust = lowered_and_compiled(&classes_program(call, helpers), name);
+        assert!(!rust.contains("TrustedMap"), "{name}:\n{rust}");
+    }
+}
+
+/// **A function this walk cannot read to the end hides its calls**, so no
+/// parameter or result of the file is followed: the helper and the map it is
+/// handed stay keyed, and `rustc` takes the whole.
+#[test]
+fn a_file_with_a_function_that_is_not_read_keeps_every_class_keyed() {
+    let helpers = format!(
+        "{COUNT}fn pick(x: i64) -> i64 {{\n    return match x {{\n        1 => 2,\n        else => 3,\n    }}\n}}\n"
+    );
+    let rust = lowered_and_compiled(
+        &classes_program(
+            "    println(f\"{count(a)} {b.len()} {pick(1)}\")\n",
+            &helpers,
+        ),
+        "class-unread",
+    );
+    assert!(
+        !line_with(&rust, "fn count(").contains("TrustedMap"),
+        "{rust}"
+    );
+    assert!(
+        !the_map_made_by(&rust, "a").contains("TrustedMap"),
+        "{rust}"
+    );
+}
+
+/// **A map read in a loop of the helper, and handed on twice** is one class.
+#[test]
+fn a_helper_that_loops_over_its_map_and_hands_it_on_stays_one_class() {
+    let helpers = format!(
+        "{COUNT}fn total(m: collections::HashMap[i64, i64]) -> i64 {{\n\
+         \x20   let mut sum = 0\n\
+         \x20   for k in m {{ sum = sum + 1 }}\n\
+         \x20   return sum + count(m)\n}}\n"
+    );
+    let rust = lowered_and_compiled(
+        &classes_program("    println(f\"{total(a)} {b.len()}\")\n", &helpers),
+        "class-loop",
+    );
+    assert!(
+        line_with(&rust, "fn total(").contains("TrustedMap"),
+        "{rust}"
+    );
 }

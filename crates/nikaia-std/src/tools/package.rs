@@ -27861,6 +27861,7 @@ pub struct EmitState {
     pub opaque_handles: collections::BTreeMap<String, String>,
     pub foreign_results: collections::BTreeMap<String, Type>,
     pub trusted_lets: collections::BTreeSet<i64>,
+    pub fast_slots: collections::BTreeSet<String>,
     pub grammars: collections::BTreeMap<String, GrammarDef>,
     pub keep_plans: collections::BTreeMap<String, BufferPlan>,
     pub methods: collections::BTreeMap<String, EmitMethod>,
@@ -45344,6 +45345,22 @@ struct KeyDeps {
 struct MapEnv {
     sources: collections::BTreeSet<String>,
     own: collections::BTreeSet<String>,
+    privates: collections::BTreeMap<String, i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct MapClasses {
+    parent: collections::BTreeMap<String, String>,
+    poisoned: collections::BTreeSet<String>,
+    lets: Vec<i64>,
+    slots: Vec<String>,
+    unread: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MapPlan {
+    pub lets: collections::BTreeSet<i64>,
+    pub slots: collections::BTreeSet<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -45361,6 +45378,8 @@ struct MapKept {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct MapWalk {
+    nodes: Vec<String>,
+    ret: String,
     scopes: Vec<collections::BTreeMap<String, i64>>,
     given: Vec<Vec<KeyDeps>>,
     made: Vec<MapMade>,
@@ -45390,8 +45409,40 @@ fn tm_join(a: &KeyDeps, b: &KeyDeps) -> KeyDeps {
     KeyDeps { known: true, ids }
 }
 
-pub fn trusted_maps(program: &Program, words: &winnow_grammar::InternerContext, library: &Ledger) -> collections::BTreeSet<i64> {
-    let mut env = MapEnv { sources: collections::BTreeSet::new(), own: collections::BTreeSet::new() };
+fn mc_find(classes: &MapClasses, node: &str) -> String {
+    let mut at: String = node.to_owned();
+    let mut moving = true;
+    while moving {
+        let up = classes.parent.get(&at);
+        if up.is_none() { moving = false; } else {
+            let next = nikaia_std::index::or(up, || "").to_owned();
+            if next == at { moving = false; } else { at = next; }
+        }
+    }
+    at
+}
+
+fn mc_union(classes: &mut MapClasses, a: &str, b: &str) {
+    let ra = mc_find(&classes, a);
+    let rb = mc_find(&classes, b);
+    if ra != rb { classes.parent.insert(ra, rb); }
+}
+
+fn mc_poison(classes: &mut MapClasses, node: &str) { classes.poisoned.insert(node.to_owned()); }
+
+fn mc_poison_function(classes: &mut MapClasses, name: &str, arity: i64) {
+    let ret = format!("r:{}", name);
+    mc_poison(classes, &ret);
+    let mut at: i64 = 0;
+    while at < arity {
+        let param = format!("p:{}:{}", name, at);
+        mc_poison(classes, &param);
+        at = at + 1;
+    }
+}
+
+pub fn trusted_maps(program: &Program, words: &winnow_grammar::InternerContext, library: &Ledger) -> MapPlan {
+    let mut env = MapEnv { sources: collections::BTreeSet::new(), own: collections::BTreeSet::new(), privates: collections::BTreeMap::new() };
     for (key, contract) in library.functions.iter() {
         let provenance = match contract.provenance { Some(__nikaia_value) => __nikaia_value, None => continue };
         if provenance == Provenance::Untrusted {
@@ -45401,7 +45452,14 @@ pub fn trusted_maps(program: &Program, words: &winnow_grammar::InternerContext, 
     }
     for item in program.items.iter() {
         match &item.node {
-            Item::Fn { name, .. } => { let name = *name; tm_remember(name, words, &mut env.own) },
+            Item::Fn { name, generics, args, is_public, is_extern, .. } => {
+                let is_extern = *is_extern; let is_public = *is_public; let name = *name;
+                tm_remember(name, words, &mut env.own);
+                if !is_public && !is_extern && generics.is_empty() {
+                    let symbol = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
+                    env.privates.insert(words.resolve(symbol).to_owned(), args.len() as i64);
+                }
+            },
             Item::Impl { methods, .. } => {
                 for method in methods.iter() {
                     match &method.node {
@@ -45413,22 +45471,60 @@ pub fn trusted_maps(program: &Program, words: &winnow_grammar::InternerContext, 
             _ => { },
         }
     }
-    let mut out: collections::BTreeSet<i64> = collections::BTreeSet::new();
+    let mut classes = MapClasses { parent: collections::BTreeMap::new(), poisoned: collections::BTreeSet::new(), lets: vec![], slots: vec![], unread: false };
+    let mut counter = 0;
     for item in program.items.iter() {
         match &item.node {
-            Item::Fn { args, body, .. } => tm_walk_function(args, body, words, library, &env, &mut out),
+            Item::Fn { name, generics, args, body, is_public, is_extern, .. } => {
+                let is_extern = *is_extern; let is_public = *is_public; let name = *name;
+                let mut fname: String = String::from("fn");
+                let mut alone = false;
+                if !is_public && !is_extern && generics.is_empty() {
+                    let symbol = name;
+                    if symbol.is_some() {
+                        fname = words.resolve(match symbol { Some(__nikaia_value) => __nikaia_value, None => continue }).to_owned();
+                        alone = true;
+                    }
+                }
+                if !alone {
+                    counter = counter + 1;
+                    fname = format!("#{}", counter);
+                }
+                tm_walk_function(&fname, alone, args, body, words, library, &env, &mut classes);
+            },
             Item::Impl { methods, .. } => {
                 for method in methods.iter() {
                     match &method.node {
-                        Item::Fn { args, body, .. } => tm_walk_function(args, body, words, library, &env, &mut out),
+                        Item::Fn { args, body, .. } => {
+                            counter = counter + 1;
+                            let fname = format!("#{}", counter);
+                            tm_walk_function(&fname, false, args, body, words, library, &env, &mut classes);
+                        },
                         _ => { },
                     }
                 }
             },
-            _ => { },
+            Item::Struct { .. } => { },
+            Item::Enum { .. } => { },
+            Item::Extern { .. } => { },
+            Item::Import { .. } => { },
+            _ => { classes.unread = true; },
         }
     }
-    out
+    if classes.unread {
+        let every = classes.slots.to_owned();
+        for slot in every.iter() { mc_poison(&mut classes, slot); }
+    }
+    let mut bad: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for node in classes.poisoned.iter() { bad.insert(mc_find(&classes, node)); }
+    let mut plan = MapPlan { lets: collections::BTreeSet::new(), slots: collections::BTreeSet::new() };
+    for at in classes.lets.iter() {
+        let at = nikaia_std::num::value(at);
+        let node = format!("l:{}", at);
+        if !bad.contains(&mc_find(&classes, &node)) { plan.lets.insert(at); }
+    }
+    for slot in classes.slots.iter() { if !bad.contains(&mc_find(&classes, slot)) { plan.slots.insert(slot.to_owned()); } }
+    plan
 }
 
 fn tm_remember(name: Option<winnow_grammar::Symbol>, words: &winnow_grammar::InternerContext, own: &mut collections::BTreeSet<String>) {
@@ -45436,26 +45532,49 @@ fn tm_remember(name: Option<winnow_grammar::Symbol>, words: &winnow_grammar::Int
     own.insert(words.resolve(symbol).to_owned());
 }
 
-fn tm_walk_function(args: &[FnArg], body: &Block, words: &winnow_grammar::InternerContext, library: &Ledger, env: &MapEnv, out: &mut collections::BTreeSet<i64>) {
+#[allow(clippy::too_many_arguments)]
+fn tm_walk_function(fname: &str, alone: bool, args: &[FnArg], body: &Block, words: &winnow_grammar::InternerContext, library: &Ledger, env: &MapEnv, classes: &mut MapClasses) {
+    let ret = format!("r:{}", fname);
     let mut first: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
-    for arg in args.iter() { first.insert(words.resolve(arg.name).to_owned(), -1); }
-    let mut walk = MapWalk { scopes: vec![first], given: vec![], made: vec![], kept: vec![], escapes: collections::BTreeSet::new(), bound: collections::BTreeMap::new(), unread: false };
-    tm_walk_block(body, words, library, env, &mut walk);
-    if walk.made.is_empty() || walk.unread { return; }
+    let mut walk = MapWalk { nodes: vec![], ret: ret.to_owned(), scopes: vec![], given: vec![], made: vec![], kept: vec![], escapes: collections::BTreeSet::new(), bound: collections::BTreeMap::new(), unread: false };
+    if alone { classes.slots.push(ret.to_owned()); } else { mc_poison(classes, &ret); }
+    let mut at = 0;
+    for arg in args.iter() {
+        let node = format!("p:{}:{}", fname, at);
+        if alone { classes.slots.push(node.to_owned()); } else { mc_poison(classes, &node); }
+        let id = walk.given.len() as i64;
+        walk.given.push(vec![tm_never()]);
+        walk.nodes.push(node.to_owned());
+        let name = words.resolve(arg.name).to_owned();
+        walk.made.push(MapMade { at: -1, name: name.to_owned(), id });
+        tm_count_binding(&name, &mut walk);
+        first.insert(name.to_owned(), id);
+        at = at + 1;
+    }
+    walk.scopes.push(first);
+    tm_walk_block(body, words, library, env, classes, &mut walk);
+    if walk.unread {
+        classes.unread = true;
+        for node in walk.nodes.iter() { mc_poison(classes, node); }
+        mc_poison(classes, &ret);
+        return;
+    }
     let trusted = tm_trusted_bindings(&walk.given);
-    for made in walk.made.iter() {
-        if nikaia_std::index::or(walk.bound.get(&made.name), || 0) != 1 { continue; }
-        if walk.escapes.contains(&made.id) { continue; }
-        let mut keys_trusted = true;
-        for kept in walk.kept.iter() {
-            if kept.id != made.id { continue; }
-            if !kept.deps.known { keys_trusted = false; }
-            for dep in kept.deps.ids.iter() {
-                let dep = nikaia_std::num::value(dep);
-                if !trusted.contains(&dep) { keys_trusted = false; }
-            }
+    for kept in walk.kept.iter() {
+        let mut keys_trusted = kept.deps.known;
+        for dep in kept.deps.ids.iter() {
+            let dep = nikaia_std::num::value(dep);
+            if !trusted.contains(&dep) { keys_trusted = false; }
         }
-        if keys_trusted { out.insert(made.at); }
+        if !keys_trusted { mc_poison(classes, nikaia_std::index::get(&walk.nodes, nikaia_std::index::at(kept.id))); }
+    }
+    for id in walk.escapes.iter() {
+        let id = nikaia_std::num::value(id);
+        mc_poison(classes, nikaia_std::index::get(&walk.nodes, nikaia_std::index::at(id)));
+    }
+    for made in walk.made.iter() {
+        if nikaia_std::index::or(walk.bound.get(&made.name), || 0) != 1 { mc_poison(classes, nikaia_std::index::get(&walk.nodes, nikaia_std::index::at(made.id))); }
+        if made.at >= 0 { classes.lets.push(made.at); }
     }
 }
 
@@ -45494,8 +45613,9 @@ fn tm_trusted_bindings(given: &[Vec<KeyDeps>]) -> collections::BTreeSet<i64> {
     trusted
 }
 
-fn tm_bind(name: &str, given: &KeyDeps, walk: &mut MapWalk) -> i64 {
+fn tm_bind(name: &str, given: &KeyDeps, node: &str, walk: &mut MapWalk) -> i64 {
     let id = walk.given.len() as i64;
+    walk.nodes.push(node.to_owned());
     walk.given.push(vec![KeyDeps { known: given.known, ids: given.ids.to_owned() }]);
     tm_count_binding(name, walk);
     let last = walk.scopes.len() as i64 - 1;
@@ -45524,22 +45644,26 @@ fn tm_resolve(name: &str, walk: &MapWalk) -> i64 {
     -2
 }
 
-fn tm_walk_block(block: &Block, words: &winnow_grammar::InternerContext, library: &Ledger, env: &MapEnv, walk: &mut MapWalk) {
+fn tm_walk_block(block: &Block, words: &winnow_grammar::InternerContext, library: &Ledger, env: &MapEnv, classes: &mut MapClasses, walk: &mut MapWalk) {
     walk.scopes.push(collections::BTreeMap::new());
     for stmt in block.stmts.iter() {
         match &stmt.node {
             Stmt::Let { names, value, .. } => {
-                tm_walk_expr(value, words, library, env, walk);
                 let given = tm_deps_of(value, words, library, env, &walk);
                 if names.len() == 1 {
                     let name = words.resolve(*nikaia_std::index::get(&names, 0)).to_owned();
-                    let id = tm_bind(&name, &given, walk);
-                    if is_a_map_made(value, words) { walk.made.push(MapMade { at: stmt.span.start as i64, name: name.to_owned(), id }); }
-                } else { for one in names.iter() { tm_opaque(words.resolve(*one), walk); } }
+                    let node = format!("l:{}", stmt.span.start);
+                    if is_a_map_made(value, words) { tm_walk_expr(value, words, library, env, classes, walk); } else { tm_flow(&node, value, words, library, env, classes, walk); }
+                    let id = tm_bind(&name, &given, &node, walk);
+                    walk.made.push(MapMade { at: stmt.span.start as i64, name: name.to_owned(), id });
+                } else {
+                    tm_walk_expr(value, words, library, env, classes, walk);
+                    for one in names.iter() { tm_opaque(words.resolve(*one), walk); }
+                }
             },
             Stmt::Assign { target, value, .. } => {
-                tm_walk_expr(target, words, library, env, walk);
-                tm_walk_expr(value, words, library, env, walk);
+                tm_walk_expr(target, words, library, env, classes, walk);
+                tm_walk_expr(value, words, library, env, classes, walk);
                 match target {
                     Expr::Variable(name, _) => {
                         let name = *name;
@@ -45557,24 +45681,92 @@ fn tm_walk_block(block: &Block, words: &winnow_grammar::InternerContext, library
                         let id = tm_resolve(words.resolve(name), &walk);
                         if id >= 0 { walk.kept.push(MapKept { id, deps: tm_nothing() }); }
                     },
-                    _ => tm_walk_expr(iter, words, library, env, walk),
+                    _ => tm_walk_expr(iter, words, library, env, classes, walk),
                 }
                 let given = tm_deps_of(iter, words, library, env, &walk);
                 walk.scopes.push(collections::BTreeMap::new());
-                for one in bindings.iter() { tm_bind(words.resolve(*one), &given, walk); }
-                tm_walk_block(body, words, library, env, walk);
+                for one in bindings.iter() {
+                    let node = format!("b:{}", walk.given.len() as i64);
+                    tm_bind(words.resolve(*one), &given, &node, walk);
+                }
+                tm_walk_block(body, words, library, env, classes, walk);
                 walk.scopes.pop();
             },
             Stmt::While { cond, body } => {
-                tm_walk_expr(cond, words, library, env, walk);
-                tm_walk_block(body, words, library, env, walk);
+                tm_walk_expr(cond, words, library, env, classes, walk);
+                tm_walk_block(body, words, library, env, classes, walk);
             },
-            Stmt::Expr(value) => tm_walk_expr(value, words, library, env, walk),
-            Stmt::Return(value) => { if value.is_some() { tm_walk_expr(match value { Some(__nikaia_value) => __nikaia_value, None => return }, words, library, env, walk); } },
+            Stmt::Expr(value) => tm_walk_expr(value, words, library, env, classes, walk),
+            Stmt::Return(value) => {
+                if value.is_some() {
+                    let ret = walk.ret.to_owned();
+                    tm_flow(&ret, match value { Some(__nikaia_value) => __nikaia_value, None => return }, words, library, env, classes, walk);
+                }
+            },
             _ => { walk.unread = true; },
         }
     }
     walk.scopes.pop();
+}
+
+fn tm_private_callee(func: &Expr, words: &winnow_grammar::InternerContext, env: &MapEnv, walk: &MapWalk) -> String {
+    match func {
+        Expr::Variable(name, _) => {
+            let name = *name;
+            let text = words.resolve(name);
+            if tm_resolve(text, walk) == -2 && env.privates.contains_key(text) { text.to_owned() } else { String::from("") }
+        },
+        _ => String::from(""),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn tm_call_args(callee: &str, args: &[Expr], config: &[ConfigArg], words: &winnow_grammar::InternerContext, library: &Ledger, env: &MapEnv, classes: &mut MapClasses, walk: &mut MapWalk) {
+    let arity = nikaia_std::index::or(env.privates.get(callee), || -1);
+    if arity != args.len() as i64 {
+        mc_poison_function(classes, callee, arity);
+        for a in args.iter() { tm_walk_expr(a, words, library, env, classes, walk); }
+    } else {
+        let mut at = 0;
+        for a in args.iter() {
+            let param = format!("p:{}:{}", callee, at);
+            tm_flow(&param, a, words, library, env, classes, walk);
+            at = at + 1;
+        }
+    }
+    for c in config.iter() { tm_walk_expr(&c.value, words, library, env, classes, walk); }
+}
+
+fn tm_flow(sink: &str, value: &Expr, words: &winnow_grammar::InternerContext, library: &Ledger, env: &MapEnv, classes: &mut MapClasses, walk: &mut MapWalk) {
+    match value {
+        Expr::Variable(name, _) => {
+            let name = *name;
+            let id = tm_resolve(words.resolve(name), &walk);
+            if id >= 0 {
+                let node = (*nikaia_std::index::get(&walk.nodes, nikaia_std::index::at(id))).to_owned();
+                mc_union(classes, sink, &node);
+            } else {
+                mc_poison(classes, sink);
+                tm_walk_expr(value, words, library, env, classes, walk);
+            }
+        },
+        Expr::Call { func, args, config, .. } => {
+            let func = nikaia_std::boxed::open(func);
+            let callee = tm_private_callee(func, words, env, &walk);
+            if callee != "" {
+                let ret = format!("r:{}", callee);
+                mc_union(classes, sink, &ret);
+                tm_call_args(&callee, args, config, words, library, env, classes, walk);
+            } else {
+                mc_poison(classes, sink);
+                tm_walk_expr(value, words, library, env, classes, walk);
+            }
+        },
+        _ => {
+            mc_poison(classes, sink);
+            tm_walk_expr(value, words, library, env, classes, walk);
+        },
+    }
 }
 
 fn map_named(receiver: &Expr, words: &winnow_grammar::InternerContext, walk: &MapWalk) -> i64 {
@@ -45588,15 +45780,15 @@ fn map_named(receiver: &Expr, words: &winnow_grammar::InternerContext, walk: &Ma
     }
 }
 
-fn tm_walk_expr(expr: &Expr, words: &winnow_grammar::InternerContext, library: &Ledger, env: &MapEnv, walk: &mut MapWalk) {
+fn tm_walk_expr(expr: &Expr, words: &winnow_grammar::InternerContext, library: &Ledger, env: &MapEnv, classes: &mut MapClasses, walk: &mut MapWalk) {
     match expr {
-        Expr::Block(b, _) => tm_walk_block(b, words, library, env, walk),
-        Expr::Unsafe(b, _) => tm_walk_block(b, words, library, env, walk),
+        Expr::Block(b, _) => tm_walk_block(b, words, library, env, classes, walk),
+        Expr::Unsafe(b, _) => tm_walk_block(b, words, library, env, classes, walk),
         Expr::If { cond, then_branch, else_branch, .. } => {
             let cond = nikaia_std::boxed::open(cond);
-            tm_walk_expr(cond, words, library, env, walk);
-            tm_walk_block(then_branch, words, library, env, walk);
-            if else_branch.is_some() { tm_walk_block(match else_branch { Some(__nikaia_value) => __nikaia_value, None => return }, words, library, env, walk); }
+            tm_walk_expr(cond, words, library, env, classes, walk);
+            tm_walk_block(then_branch, words, library, env, classes, walk);
+            if else_branch.is_some() { tm_walk_block(match else_branch { Some(__nikaia_value) => __nikaia_value, None => return }, words, library, env, classes, walk); }
         },
         Expr::MethodCall { receiver, method, args, config, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
@@ -45605,9 +45797,9 @@ fn tm_walk_expr(expr: &Expr, words: &winnow_grammar::InternerContext, library: &
                 let mut all = tm_nothing();
                 for a in args.iter() { all = tm_join(&all, &tm_deps_of(a, words, library, env, &walk)); }
                 walk.kept.push(MapKept { id, deps: all });
-            } else { tm_walk_expr(receiver, words, library, env, walk); }
-            for a in args.iter() { tm_walk_expr(a, words, library, env, walk); }
-            for c in config.iter() { tm_walk_expr(&c.value, words, library, env, walk); }
+            } else { tm_walk_expr(receiver, words, library, env, classes, walk); }
+            for a in args.iter() { tm_walk_expr(a, words, library, env, classes, walk); }
+            for c in config.iter() { tm_walk_expr(&c.value, words, library, env, classes, walk); }
         },
         Expr::Index { base, index, .. } => {
             let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
@@ -45615,49 +45807,63 @@ fn tm_walk_expr(expr: &Expr, words: &winnow_grammar::InternerContext, library: &
             if id >= 0 {
                 let deps = tm_deps_of(index, words, library, env, &walk);
                 walk.kept.push(MapKept { id, deps });
-            } else { tm_walk_expr(base, words, library, env, walk); }
-            tm_walk_expr(index, words, library, env, walk);
+            } else { tm_walk_expr(base, words, library, env, classes, walk); }
+            tm_walk_expr(index, words, library, env, classes, walk);
         },
         Expr::Call { func, args, config, .. } => {
             let func = nikaia_std::boxed::open(func);
-            tm_walk_expr(func, words, library, env, walk);
-            for a in args.iter() { tm_walk_expr(a, words, library, env, walk); }
-            for c in config.iter() { tm_walk_expr(&c.value, words, library, env, walk); }
+            let callee = tm_private_callee(func, words, env, &walk);
+            if callee != "" {
+                let ret = format!("r:{}", callee);
+                mc_poison(classes, &ret);
+                tm_call_args(&callee, args, config, words, library, env, classes, walk);
+            } else {
+                tm_walk_expr(func, words, library, env, classes, walk);
+                for a in args.iter() { tm_walk_expr(a, words, library, env, classes, walk); }
+                for c in config.iter() { tm_walk_expr(&c.value, words, library, env, classes, walk); }
+            }
         },
         Expr::Binary { lhs, rhs, .. } => {
             let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
-            tm_walk_expr(lhs, words, library, env, walk);
-            tm_walk_expr(rhs, words, library, env, walk);
+            tm_walk_expr(lhs, words, library, env, classes, walk);
+            tm_walk_expr(rhs, words, library, env, classes, walk);
         },
-        Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); tm_walk_expr(expr, words, library, env, walk) },
-        Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); tm_walk_expr(expr, words, library, env, walk) },
-        Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); tm_walk_expr(inner, words, library, env, walk) },
-        Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); tm_walk_expr(inner, words, library, env, walk) },
-        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); tm_walk_expr(base, words, library, env, walk) },
-        Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); tm_walk_expr(base, words, library, env, walk) },
+        Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); tm_walk_expr(expr, words, library, env, classes, walk) },
+        Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); tm_walk_expr(expr, words, library, env, classes, walk) },
+        Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); tm_walk_expr(inner, words, library, env, classes, walk) },
+        Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); tm_walk_expr(inner, words, library, env, classes, walk) },
+        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); tm_walk_expr(base, words, library, env, classes, walk) },
+        Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); tm_walk_expr(base, words, library, env, classes, walk) },
         Expr::Coalesce { value, fallback, .. } => {
             let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback);
-            tm_walk_expr(value, words, library, env, walk);
-            tm_walk_expr(fallback, words, library, env, walk);
+            tm_walk_expr(value, words, library, env, classes, walk);
+            tm_walk_expr(fallback, words, library, env, classes, walk);
         },
-        Expr::Tuple(items, _) => { for i in items.iter() { tm_walk_expr(i, words, library, env, walk); } },
-        Expr::ListLit { items, .. } => { for i in items.iter() { tm_walk_expr(i, words, library, env, walk); } },
+        Expr::Tuple(items, _) => { for i in items.iter() { tm_walk_expr(i, words, library, env, classes, walk); } },
+        Expr::ListLit { items, .. } => { for i in items.iter() { tm_walk_expr(i, words, library, env, classes, walk); } },
         Expr::LitInterpolated { parts, .. } => {
             for part in parts.iter() {
                 match part {
-                    FPart::Hole { expr, .. } => tm_walk_expr(expr, words, library, env, walk),
+                    FPart::Hole { expr, .. } => tm_walk_expr(expr, words, library, env, classes, walk),
                     _ => { },
                 }
             }
         },
         Expr::Return(value, _) => {
             let value = nikaia_std::boxed::open(value);
-            if value.is_some() { tm_walk_expr(match value { Some(__nikaia_value) => __nikaia_value, None => return }, words, library, env, walk); }
+            if value.is_some() {
+                let ret = walk.ret.to_owned();
+                tm_flow(&ret, match value { Some(__nikaia_value) => __nikaia_value, None => return }, words, library, env, classes, walk);
+            }
         },
         Expr::Variable(name, _) => {
             let name = *name;
             let id = tm_resolve(words.resolve(name), &walk);
             if id >= 0 { walk.escapes.insert(id); }
+            if id == -2 {
+                let arity = nikaia_std::index::or(env.privates.get(words.resolve(name)), || -1);
+                if arity >= 0 { mc_poison_function(classes, words.resolve(name), arity); }
+            }
         },
         Expr::Path(_, _) => { },
         Expr::LitInt { .. } => { },
@@ -49932,7 +50138,7 @@ pub mod tree_build {
 }
 pub mod trust {
     #[allow(unused_imports)]
-    pub use super::{Wrote, spelled, written_root, Reason, Place, render, trusted_maps};
+    pub use super::{Wrote, spelled, written_root, Reason, Place, render, MapPlan, trusted_maps};
 }
 pub mod ty {
     #[allow(unused_imports)]

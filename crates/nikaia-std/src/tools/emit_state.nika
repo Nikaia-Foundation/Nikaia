@@ -96,6 +96,10 @@ pub struct EmitState {
     pub foreign_results: collections::BTreeMap[String, Type],
     /// The `let`s whose value is trusted input, by the start of the statement.
     pub trusted_lets: collections::BTreeSet[i64],
+    /// The parameters (`p:<fn>:<n>`) and results (`r:<fn>`) of the private
+    /// functions that keep the fast hash, because they are in a class of
+    /// `trusted_lets` (ADR-010 D9).
+    pub fast_slots: collections::BTreeSet[String],
     /// The grammars this file declares, by name.
     pub grammars: collections::BTreeMap[String, GrammarDef],
     /// Where each function's buffers live and what is written for them

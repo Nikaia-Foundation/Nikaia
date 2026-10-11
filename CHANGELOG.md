@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.843] — 2026-10-11
+
+**Map classes: a map keeps the fast hash across a private function's parameter and result (ADR-010 D9, #581 step 4)**
+- The trust of a map is its class's (union-find over the positions a map value passes between: a let, a private function's parameter, a private function's result) and not the let's alone (trust.nika, MapPlan, emit_state fast_slots); a class is keyed where an untrusted key reaches it, a pub or generic function, a method or an unread file touches it. A file map handed to a private helper and a helper that returns a map keep TrustedMap in an untrusted package; the cross-package case is as before.
+
 ## [0.0.842] — 2026-10-11
 
 **NK2302 payoff: two world clones return the view (ADR-283 D25, #580 step 8)**

@@ -255,9 +255,10 @@ pub fn render(trust: &Trust, path: &str, source: &str) -> String {
 /// source somewhere in `std` by its name, and any shape this does not read. A
 /// map that gets the keyed hash needlessly is slower; the opposite is an
 /// attack.
-pub fn trusted_maps(parsed: &Parsed, library: &Ledger) -> std::collections::BTreeSet<usize> {
+pub fn trusted_maps(parsed: &Parsed, library: &Ledger) -> MapPlan {
     nikaia_std::tools::trust::trusted_maps(&parsed.program, &parsed.interner, library)
-        .into_iter()
-        .map(|at| at as usize)
-        .collect()
 }
+
+/// The `let`s, parameters and results that keep the fast hash
+/// (`nikaia-std/src/tools/trust.nika`).
+pub use nikaia_std::tools::trust::MapPlan;
