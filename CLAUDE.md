@@ -235,3 +235,5 @@ Rules from the sessions that moved the most; they save tokens, not just time.
   small reads; plan and state from the repository, not from the prompt. The
   numbers and the rules are in `docs/tokensaverstrategy.md`; the ordered
   steps for the core of `emit` and `check` are in `docs/selfhosting-plan.md`.
+  What agents cost against what they moved is kept in `docs/tokenspeed.md`
+  (`scripts/tokenspeed.py`); add a snapshot when a run ends.
