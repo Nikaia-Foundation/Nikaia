@@ -35,8 +35,10 @@ and it refuses with NK2302 (Part I 6.6).
   sentence Part I 6.6 already has ("may point into another buffer as well") and
   ADR-283's "nothing is written". Cost: medium, since the keeps/tether analysis
   already follows views into results. Risk: a wrong inference is a dangling
-  view that rustc rejects (E0106/E0515) rather than undefined behaviour, so the
-  failure is loud.
+  view that rustc rejects (E0106/E0515) rather than undefined behaviour. That
+  is a compiler defect all the same: a rustc error reaching the user is a
+  Nikaia bug (Part III C.1), so the checker must refuse beforehand every
+  program whose result source the emitter cannot name as one lifetime.
 * (b) An explicit result source in the source, `-> ref(world) String`, the
   spelling the ledger already uses (ADR-251 D4, `described.contracts`). This
   is a new piece of syntax that runs against ADR-283's "nothing is written".
