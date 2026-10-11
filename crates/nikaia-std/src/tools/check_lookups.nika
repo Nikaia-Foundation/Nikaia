@@ -351,3 +351,23 @@ pub fn ledger_function(world: ref CheckWorld, key: ref String) -> FnContract? sy
     }
     return null
 }
+
+impl CheckState {
+    /// Whether a type of this name is declared here, in this unit's contracts,
+    /// among `std`'s (by its last segment), or is `Self`.
+    pub fn declares_a_type(ref self, world: ref CheckWorld, name: ref String) -> bool sync {
+        if self.structs.contains_key(name) || world.own.types.contains_key(name) {
+            return true
+        }
+        if name == "Self" || self.enums.contains_key(name) {
+            return true
+        }
+        let suffix = f"::{name}"
+        for (key, _) in world.library.types {
+            if key == name || key.ends_with(ref suffix) {
+                return true
+            }
+        }
+        return false
+    }
+}

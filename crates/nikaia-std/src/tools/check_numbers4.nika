@@ -1,0 +1,467 @@
+// crates/nikaia-std/src/tools/check_numbers4.nika
+//
+// **The open numbers a value is made of** (ADR-285 D1, D9, D23, D34), moved from
+// the compiler's checker (ADR-294, #125, #558, C-5c): the numbers a name, an
+// element, a call, a choice or an operation leads to, the choice's branches,
+// the literals in a value and the constant an element of a list of literals is.
+// A node is named by its id (`id_of`, ADR-340), the tables are keyed on it.
+
+use std::collections
+
+/// **The operations whose result is of their operands' type**: arithmetic and
+/// the bit operators (ADR-285 D23).
+pub fn an_operation_of_one_type(op: BinaryOp) -> bool sync {
+    return !op.is_comparison() && op != BinaryOp::And && op != BinaryOp::Or
+}
+
+/// A value that leaves: `return`, `break`, `continue`, `throw`.
+fn number_leaves(expr: ref Expr) -> bool sync {
+    return match expr {
+        Expr::Return(_, _) => true,
+        Expr::Break(_) => true,
+        Expr::Continue(_) => true,
+        Expr::Throw(_, _) => true,
+        else => false,
+    }
+}
+
+/// The values a block can come to: none where it ends in a jump.
+fn number_branches_of_block(block: ref Block) -> Vec[ref Expr]? sync {
+    if block.stmts.len() > 0 {
+        let leaves = match block.stmts[block.stmts.len() - 1].node {
+            Stmt::Return(_) => true,
+            Stmt::Break => true,
+            Stmt::Continue => true,
+            else => false,
+        }
+        if leaves {
+            return []
+        }
+    }
+    let tail = block_tail(block)
+    if tail.len() == 0 {
+        return null
+    }
+    return number_branches_of_value(tail[0])
+}
+
+fn number_branches_of_value(value: ref Expr) -> Vec[ref Expr]? sync {
+    let mut out: Vec[ref Expr] = []
+    match value {
+        Expr::If { .. } => {
+            return number_branches(value)
+        },
+        Expr::Match { .. } => {
+            return number_branches(value)
+        },
+        Expr::Block(block, _) => {
+            return number_branches_of_block(block)
+        },
+        else => {
+            if !number_leaves(value) {
+                out.push(value)
+            }
+        },
+    }
+    return out
+}
+
+/// **The values a choice can come to**: each branch's last expression, for an
+/// `if` with an `else` and for a `match`. A branch that leaves comes to nothing
+/// and is left out; a branch with no value makes the whole `null`.
+pub fn number_branches(expr: ref Expr) -> Vec[ref Expr]? sync {
+    let mut out: Vec[ref Expr] = []
+    match expr {
+        Expr::If { then_branch, else_branch, .. } => {
+            if else_branch == null {
+                return null
+            }
+            out.extend(number_branches_of_block(then_branch) ?? return null)
+            out.extend(number_branches_of_block(else_branch ?? return null) ?? return null)
+        },
+        Expr::Match { arms, .. } => {
+            for arm in arms {
+                out.extend(number_branches_of_value(arm.body) ?? return null)
+            }
+        },
+        else => return null,
+    }
+    return out
+}
+
+/// Every integer literal in a value, by its node, for the suffix the emitter may
+/// owe it.
+pub fn literals_in(expr: ref Expr) -> Vec[(i64, Integer)] sync {
+    let mut out: Vec[(i64, Integer)] = []
+    match expr {
+        Expr::LitInt { value, negative, .. } => out.push((id_of(expr) as i64, integer(value, negative))),
+        Expr::Binary { lhs, rhs, .. } => {
+            out.extend(literals_in(lhs))
+            out.extend(literals_in(rhs))
+        },
+        Expr::Unary { expr, .. } => out.extend(literals_in(expr)),
+        Expr::If { .. } => {
+            for tail in number_branches(expr) ?? [] {
+                out.extend(literals_in(tail))
+            }
+        },
+        Expr::Match { .. } => {
+            for tail in number_branches(expr) ?? [] {
+                out.extend(literals_in(tail))
+            }
+        },
+        else => {},
+    }
+    return out
+}
+
+impl CheckState {
+    /// **An element read out of a list whose elements are open** (D34): `xs[i]`,
+    /// and not a slice of it.
+    pub fn open_element_of(ref self, world: ref CheckWorld, expr: ref Expr) -> i64? sync {
+        return match expr {
+            Expr::Index { base, index, .. } => self.open_element_in(world, base, index),
+            else => null,
+        }
+    }
+
+    fn open_element_in(ref self, world: ref CheckWorld, base: ref Expr, index: ref Expr) -> i64? sync {
+        return match base {
+            Expr::Variable(name, _) => self.open_element_named(world, name, index),
+            else => null,
+        }
+    }
+
+    fn open_element_named(ref self, world: ref CheckWorld, name: winnow_grammar::Symbol, index: ref Expr) -> i64? sync {
+        let is_a_slice = match index {
+            Expr::Range { .. } => true,
+            else => false,
+        }
+        if is_a_slice {
+            return null
+        }
+        let local = self.binding(world.words.resolve(name)) ?? return null
+        return self.flow.open_elements[local.id]
+    }
+
+    /// **The constant an element of an immutable list of literals is**, where the
+    /// index folds (D34, D26); `fold` is the checker's fold of the index.
+    pub fn element_constant(ref self, world: ref CheckWorld, expr: ref Expr, fold: fn(ref Expr) -> CheckConstant? sync) -> CheckConstant? sync {
+        return match expr {
+            Expr::Index { base, index, .. } => self.element_constant_in(world, base, index, fold),
+            else => null,
+        }
+    }
+
+    fn element_constant_in(ref self, world: ref CheckWorld, base: ref Expr, index: ref Expr, fold: fn(ref Expr) -> CheckConstant? sync) -> CheckConstant? sync {
+        return match base {
+            Expr::Variable(name, _) => self.element_of_a_name(world, name, index, fold),
+            else => null,
+        }
+    }
+
+    fn element_of_a_name(ref self, world: ref CheckWorld, name: winnow_grammar::Symbol, index: ref Expr, fold: fn(ref Expr) -> CheckConstant? sync) -> CheckConstant? sync {
+        let local = self.binding(world.words.resolve(name)) ?? return null
+        let elements = self.flow.list_constants[local.id] ?? return null
+        let at = fold(index) ?? return null
+        if at.value.negative || at.value.magnitude >= elements.len() as u64 {
+            return null
+        }
+        let found = elements[at.value.magnitude as i64].clone()
+        return CheckConstant { value: found.value.clone(), beyond: false, pinned: null }
+    }
+
+    /// **The open numbers a value is made of**: a name bound to one, through the
+    /// operations whose result is of their operands' type - arithmetic, a bit
+    /// operation, a negation. A call, a cast and a comparison make a value of a
+    /// type of their own and stop it; so does a shift's count, which is any
+    /// integer (ADR-285 D9).
+    pub fn open_numbers_in(ref self, world: ref CheckWorld, expr: ref Expr) -> Vec[i64] sync {
+        let mut out: Vec[i64] = []
+        match expr {
+            Expr::Variable(name, _) => {
+                let found = self.binding(world.words.resolve(name))
+                if found != null {
+                    let local = found ?? return out
+                    if local.open_number != null {
+                        out.push(self.open_root(local.open_number ?? 0))
+                    }
+                }
+            },
+            Expr::Index { .. } => {
+                let at = self.open_element_of(world, expr)
+                if at != null {
+                    out.push(self.open_root(at ?? 0))
+                }
+            },
+            Expr::Call { args, .. } => {
+                if args.len() > 0 {
+                    let calls = self.flow.open_calls[id_of(args[0]) as i64]
+                    for at in calls?.clone() ?? [] {
+                        out.extend(self.open_numbers_in(world, args[at]))
+                    }
+                }
+            },
+            // **A choice between numbers is one number** (D1): each branch's
+            // value is the `if`'s.
+            Expr::If { .. } => {
+                for tail in number_branches(expr) ?? [] {
+                    out.extend(self.open_numbers_in(world, tail))
+                }
+            },
+            Expr::Match { .. } => {
+                for tail in number_branches(expr) ?? [] {
+                    out.extend(self.open_numbers_in(world, tail))
+                }
+            },
+            Expr::Binary { op, lhs, rhs, .. } => {
+                if an_operation_of_one_type(op) {
+                    out.extend(self.open_numbers_in(world, lhs))
+                    if op != BinaryOp::Shl && op != BinaryOp::Shr {
+                        out.extend(self.open_numbers_in(world, rhs))
+                    }
+                }
+            },
+            Expr::Unary { op, expr, .. } => {
+                if op == UnaryOp::Neg || op == UnaryOp::Not {
+                    out.extend(self.open_numbers_in(world, expr))
+                }
+            },
+            else => {},
+        }
+        return out
+    }
+
+    /// **A value that is nothing but numbers**: literals and open numbers, joined
+    /// by the operations [`open_numbers_in`] walks. A `let` of one is an open
+    /// number itself (D1).
+    pub fn number_shaped(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {
+        return match expr {
+            Expr::LitInt { .. } => true,
+            Expr::Variable(name, _) => self.a_name_of_an_open_number(world, name),
+            Expr::Index { .. } => self.open_element_of(world, expr) != null,
+            Expr::Call { args, .. } => self.a_call_of_numbers(world, args),
+            Expr::If { .. } => self.a_choice_of_numbers(world, expr),
+            Expr::Match { .. } => self.a_choice_of_numbers(world, expr),
+            Expr::Binary { op, lhs, rhs, .. } => an_operation_of_one_type(op) && self.number_shaped(world, lhs) && self.number_shaped(world, rhs),
+            Expr::Unary { op, expr, .. } => (op == UnaryOp::Neg || op == UnaryOp::Not) && self.number_shaped(world, expr),
+            else => false,
+        }
+    }
+
+    fn a_name_of_an_open_number(ref self, world: ref CheckWorld, name: winnow_grammar::Symbol) -> bool sync {
+        let local = self.binding(world.words.resolve(name)) ?? return false
+        return local.open_number != null
+    }
+
+    fn a_call_of_numbers(ref self, world: ref CheckWorld, args: ref Vec[Expr]) -> bool sync {
+        if args.len() == 0 {
+            return false
+        }
+        let calls = self.flow.open_calls[id_of(args[0]) as i64] ?? return false
+        for at in calls {
+            if !self.number_shaped(world, args[at]) {
+                return false
+            }
+        }
+        return true
+    }
+
+    fn a_choice_of_numbers(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {
+        let tails = number_branches(expr) ?? return false
+        if tails.len() == 0 {
+            return false
+        }
+        for tail in tails {
+            if !self.number_shaped(world, tail) {
+                return false
+            }
+        }
+        return true
+    }
+}
+
+/// The name a variable is, and nothing for any other value.
+fn number_variable_name(world: ref CheckWorld, expr: ref Expr) -> String? sync {
+    match expr {
+        Expr::Variable(name, _) => {
+            return world.words.resolve(name).clone()
+        },
+        else => {
+            return null
+        },
+    }
+}
+
+/// The name of the list a value is, or a copy of one: `xs` and `xs.clone()`.
+fn number_list_name(world: ref CheckWorld, value: ref Expr) -> String? sync {
+    match value {
+        Expr::MethodCall { receiver, method, .. } => {
+            if world.words.resolve(method) == "clone" {
+                return number_variable_name(world, receiver)
+            }
+        },
+        else => {},
+    }
+    return number_variable_name(world, value)
+}
+
+/// The integer type a list type holds its elements as, where it is one.
+fn number_list_element(ty: ref Ty) -> String? sync {
+    match ty {
+        Ty::Named { name, args, .. } => {
+            if (name == "Vec" || name == "Array") && args.len() > 0 {
+                return integer_named(args[0])
+            }
+            return null
+        },
+        else => {
+            return null
+        },
+    }
+}
+
+fn a_lit_int(expr: ref Expr) -> bool sync {
+    return match expr {
+        Expr::LitInt { .. } => true,
+        else => false,
+    }
+}
+
+/// The code of the position a number was put where none fits.
+fn number_position_code(what: ref String) -> String? sync {
+    if what == "let" {
+        return "NK1103".clone()
+    }
+    if what == "returns" {
+        return "NK1104".clone()
+    }
+    if what == "assign" {
+        return "NK1105".clone()
+    }
+    if what == "field" {
+        return "NK1106".clone()
+    }
+    if what == "argument" {
+        return "NK1102".clone()
+    }
+    return null
+}
+
+impl CheckState {
+    /// **A use asks the open numbers in a value for a type** (D2): a type
+    /// standing beside it (`beside`), or an index, which takes any integer.
+    pub fn number_asked(ref mut self, world: ref CheckWorld, value: ref Expr, want: ref Ty, at: ref Span, beside: bool) sync {
+        let seen = want.unseen()
+        let copy = value_of_a_copy(seen)
+        // **A list of open elements asked for a list of one integer type**
+        // (D34): `fn total(xs: Vec[u8])` handed `xs` or a copy of it, or
+        // `let ys: Vec[u8] = xs`.
+        if self.elements_asked(world, value, copy, at, beside) {
+            return
+        }
+        let ty = integer_named(copy) ?? return
+        for number in self.open_numbers_in(world, value) {
+            self.add_ask(number, ty.clone(), at, beside)
+        }
+        self.comptimes_asked(world, value, ty)
+    }
+
+    fn elements_asked(ref mut self, world: ref CheckWorld, value: ref Expr, copy: ref Ty, at: ref Span, beside: bool) -> bool sync {
+        let name = number_list_name(world, value) ?? return false
+        let local = self.binding(name) ?? return false
+        let number = self.flow.open_elements[local.id] ?? return false
+        let ty = number_list_element(copy) ?? return false
+        let root = self.open_root(number)
+        self.add_ask(root, ty, at, beside)
+        return true
+    }
+
+    fn add_ask(ref mut self, number: i64, ty: String, at: ref Span, beside: bool) sync {
+        let found = self.flow.open_numbers[number] ?? return
+        let mut entry = found.clone()
+        entry.asks.push((ty, at.clone(), beside))
+        self.flow.open_numbers.insert(number, entry)
+    }
+
+    /// **One operation, one type**: the open numbers on both sides of it are one
+    /// question from here on (D1).
+    pub fn open_numbers_joined(ref mut self, numbers: ref Vec[i64]) sync {
+        if numbers.len() == 0 {
+            return
+        }
+        let head = self.open_root(numbers[0])
+        for at in 1..<numbers.len() {
+            let other = self.open_root(numbers[at])
+            if other != head {
+                self.join_number(other, head)
+            }
+        }
+    }
+
+    fn join_number(ref mut self, number: i64, head: i64) sync {
+        let found = self.flow.open_numbers[number] ?? return
+        let mut entry = found.clone()
+        entry.joined = head
+        self.flow.open_numbers.insert(number, entry)
+    }
+
+    /// **An open number put where no number fits** (#554): `let n = 12` and then
+    /// `let s: String = n`. The number has no type until a use decides it
+    /// (ADR-285 D23), so it read as `?` here and passed, and `rustc` refused the
+    /// generated file. A use that asks for a type no number can be is refused at
+    /// that use, with the position's own code and sentence, the value named *a
+    /// number*.
+    pub fn an_open_number_where_none_fits(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr, span: ref Span, what: ref String, message: fn(ref String, ref String) -> String sync) -> bool sync {
+        if !found.is_unknown() || !self.number_shaped(world, value) || a_lit_int(value) || !self.no_number_is(want) {
+            return false
+        }
+        let code = number_position_code(what) ?? return false
+        // The position's sentence, with the value's type written as words:
+        // there is none to put between backticks yet.
+        let hole: String = "\u{0}"
+        let wanted = want.text()
+        let said = message(hole, wanted)
+        let text = said.replace(f"`{hole}`", "a number")
+        self.findings.push(check_refusal(code, span, text, ["A number nothing typed takes the type its uses ask for, and this one asks for a type that is not a number.".clone()], f"Make it a `{wanted}`, or give the number to a place that holds one."))
+        return true
+    }
+
+    /// **Every integer literal in a value is of the unsigned type it is put
+    /// where** - through the operations, a choice and the value a branch hands
+    /// back (issue #171), the emitter writes the suffix from it. A shift's count
+    /// is its own type, not the shifted one's.
+    pub fn literals_are(ref mut self, value: ref Expr, ty: ref String) sync {
+        match value {
+            Expr::LitInt { .. } => {
+                self.facts.unsigned_literals.insert(id_of(value) as i64, ty.clone())
+            },
+            Expr::Binary { lhs, rhs, op, .. } => {
+                self.literals_are(lhs, ty)
+                if op != BinaryOp::Shl && op != BinaryOp::Shr {
+                    self.literals_are(rhs, ty)
+                }
+            },
+            Expr::Unary { expr, .. } => self.literals_are(expr, ty),
+            Expr::If { then_branch, else_branch, .. } => {
+                self.literals_in_the_tail(then_branch, ty)
+                if else_branch != null {
+                    self.literals_in_the_tail(else_branch ?? return, ty)
+                }
+            },
+            Expr::Match { arms, .. } => {
+                for arm in arms {
+                    self.literals_are(arm.body, ty)
+                }
+            },
+            Expr::Block(block, _) => self.literals_in_the_tail(block, ty),
+            else => {},
+        }
+    }
+
+    pub fn literals_in_the_tail(ref mut self, block: ref Block, ty: ref String) sync {
+        for tail in block_tail(block) {
+            self.literals_are(tail, ty)
+        }
+    }
+}

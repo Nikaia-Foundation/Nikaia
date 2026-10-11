@@ -116,6 +116,8 @@ COMPILER_NIKA = {
     "check_boxes.nika": "check: what a pattern asks of a boxed part (NK1193) and a match that misses a case (NK1151) (0.0.821)",
     "check_parts.nika": "check: a read extended by a field, a fold part that may pause, a field that holds code (0.0.821)",
     "check_numbers3.nika": "check: the open numbers a body leaves, decided by their uses (0.0.821)",
+    "check_lambdas.nika": "check: what a kept lambda captures: hulls and the values it takes (0.0.823)",
+    "check_numbers4.nika": "check: the open numbers a value is made of (0.0.823)",
     "check_reads.nika": "check: a view compared with a value, a lookup key lent, a map read kept, reads, casts (0.0.819)",
     "check_places.nika": "check: a jump with no loop, a door written wrong, an owned place, the match over several errors (0.0.819)",
     "check_host.nika": "check: the services the checker asks of the compiler (CheckHost) and the seven functions below the core that needed them (0.0.818)",

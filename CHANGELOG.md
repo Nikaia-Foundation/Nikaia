@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.823] — 2026-10-11
+
+**check: the number knot, kept lambdas and a few field readers are Nikaia (#558, #125, C-5c)**
+- check_numbers4.nika: open_numbers_in, open_element_of, element_constant, number_shaped, number_branches, literals_in, number_asked, open_numbers_joined, an_open_number_where_none_fits, literals_are, keyed on expression ids; check_lambdas.nika: what a kept lambda captures, a task takes, a child keeps; declares_a_type, coalesces_not_lent_are_taken, a_value_written_out. The Rust methods are one-line stubs.
+
 ## [0.0.822] — 2026-10-11
 
 **emit: the leaves of the core are Nikaia: keys, postfix bases, operands, strings, f-strings, options, guards, grammar entries, templates, blocks, ifs (#558, #125, E9 U2)**

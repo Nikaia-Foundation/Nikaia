@@ -11280,6 +11280,29 @@ fn a_parameter_binding(local: &CheckLocal) -> bool {
     at.kind == CheckKind::Parameter
 }
 
+fn a_variant_path(state: &CheckState, world: &CheckWorld<'_>, segments: &[winnow_grammar::Symbol]) -> bool {
+    if segments.len() != 2 { return false; }
+    state.is_variant(world.words.resolve(*nikaia_std::index::get(&segments, 0)), world.words.resolve(*nikaia_std::index::get(&segments, 1)))
+}
+
+impl CheckState {
+    pub fn a_value_written_out(&self, world: &CheckWorld<'_>, written: &Expr) -> bool {
+        match written {
+            Expr::Path(segments, _) => a_variant_path(self, world, segments),
+            Expr::StructLit { .. } => true,
+            Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); a_call_of_a_variant(self, world, func) },
+            _ => false,
+        }
+    }
+}
+
+fn a_call_of_a_variant(state: &CheckState, world: &CheckWorld<'_>, func: &Expr) -> bool {
+    match func {
+        Expr::Path(segments, _) => a_variant_path(state, world, segments),
+        _ => false,
+    }
+}
+
 
 // --- check_facts.nika ---
 
@@ -13296,6 +13319,143 @@ fn item_boxed_set(boxed: &collections::BTreeMap<String, collections::BTreeSet<St
 }
 
 
+// --- check_lambdas.nika ---
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn lambda_names(world: &CheckWorld<'_>, body: &Block) -> collections::BTreeSet<String> {
+    let mut named: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for e in visited_in_block(body) {
+        match e {
+            Expr::Variable(name, _) => {
+                let name = *name;
+                named.insert(world.words.resolve(name).to_owned());
+            },
+            _ => { },
+        }
+    }
+    named
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn lambda_own(world: &CheckWorld<'_>, params: &[winnow_grammar::Symbol]) -> collections::BTreeSet<String> {
+    let mut own: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for p in params.iter() { own.insert(world.words.resolve(*p).to_owned()); }
+    own
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn a_hull_type(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { name, .. } => a_hull_named(name),
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn a_hull_named(name: &str) -> bool {
+    let last = type_last_segment(name);
+    is_hull(&last)
+}
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_kept_lambdas_hulls(&mut self, world: &CheckWorld<'_>, value: &Expr) {
+        match value {
+            Expr::Closure { params, body, .. } => { self.hulls_of_a_lambda(world, value, params, body); },
+            _ => { },
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn a_name_of_a_hull(&self, name: &str) -> bool {
+        let found = match self.lookup(name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        a_hull_type(&found)
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn hulls_of_a_lambda(&mut self, world: &CheckWorld<'_>, value: &Expr, params: &[winnow_grammar::Symbol], body: &Block) {
+        let named = lambda_names(world, body);
+        let own = lambda_own(world, params);
+        let mut hulls: Vec<String> = vec![];
+        for name in named.iter() {
+            if own.contains(name) { continue; }
+            if self.a_name_of_a_hull(name) { hulls.push(name.to_owned()); }
+        }
+        if !hulls.is_empty() { self.facts.kept_hulls.insert(id_of(value) as i64, hulls); }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_kept_lambda_takes_these(&mut self, world: &CheckWorld<'_>, value: &Expr, pauses: bool, span: &Span) {
+        match value {
+            Expr::Closure { params, body, .. } => { self.takes_of_a_lambda(world, value, params, body, pauses, span); },
+            _ => { },
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn takes_of_a_lambda(&mut self, world: &CheckWorld<'_>, value: &Expr, params: &[winnow_grammar::Symbol], body: &Block, pauses: bool, span: &Span) {
+        let named = lambda_names(world, body);
+        let own = lambda_own(world, params);
+        let mut owned: Vec<String> = vec![];
+        for name in named.iter() {
+            if own.contains(name) { continue; }
+            let found = self.binding(name);
+            if found.is_some() {
+                let local = match found { Some(__nikaia_value) => __nikaia_value, None => return };
+                if is_a_handle(&local.ty) || !self.takes_away(world, &local.ty) { continue; }
+                owned.push(name.to_owned());
+                self.moved_into_a_task.push((name.to_owned(), local.ty.clone(), span.end as i64, "a function kept for later".to_owned()));
+            }
+        }
+        if pauses && !owned.is_empty() { self.facts.kept_owned.insert(id_of(value) as i64, owned); }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_task_takes_these(&mut self, world: &CheckWorld<'_>, names: &[String], span: &Span) {
+        for name in names.iter() {
+            let found = self.binding(name);
+            if found.is_some() {
+                let local = match found { Some(__nikaia_value) => __nikaia_value, None => return };
+                if is_a_handle(&local.ty) { self.facts.task_handles.insert((span.start as i64, name.to_owned())); }
+                if !self.takes_away(world, &local.ty) { continue; }
+                self.moved_into_a_task.push((name.to_owned(), local.ty.clone(), span.end as i64, "a background task".to_owned()));
+            }
+        }
+    }
+}
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_child_that_keeps_state(&mut self, world: &CheckWorld<'_>, body: &Expr, span: &Span) {
+        match body {
+            Expr::Closure { params, body, .. } => { self.state_of_a_child(world, params, body, span); },
+            _ => { },
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn state_of_a_child(&mut self, world: &CheckWorld<'_>, params: &[winnow_grammar::Symbol], block: &Block, span: &Span) {
+        let mut named: collections::BTreeSet<String> = collections::BTreeSet::new();
+        names_in_block(block, world.words, &mut named);
+        let own = lambda_own(world, params);
+        for name in named.iter() {
+            if own.contains(name) { continue; }
+            let found = self.binding(name);
+            if found.is_some() {
+                let local = match found { Some(__nikaia_value) => __nikaia_value, None => return };
+                if local.written_mut { self.findings.push(check_refusal("NK1229", span, format!("This child captures `{}`, which is `mut`, so its next attempt would not start fresh.", name), vec!["A supervisor calls a child's function again for every attempt (Part II 12.8). What one attempt changed in a captured `mut` binding would still be there.".to_owned()], Some(format!("Build `{}` inside the child's function, or take `{}.clone()` there.", name, name)))); }
+            }
+        }
+    }
+}
+
+
 // --- check_literals.nika ---
 
 impl CheckState {
@@ -13607,6 +13767,18 @@ pub fn ledger_function(world: &CheckWorld<'_>, key: &str) -> Option<FnContract> 
         };
     }
     None
+}
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn declares_a_type(&self, world: &CheckWorld<'_>, name: &str) -> bool {
+        if self.structs.contains_key(name) || world.own.types.contains_key(name) { return true; }
+        if name == "Self" || self.enums.contains_key(name) { return true; }
+        let suffix = format!("::{}", name);
+        for (key, _) in world.library.types.iter() { if key == name || key.ends_with(&suffix) { return true; } }
+        false
+    }
 }
 
 
@@ -14157,6 +14329,354 @@ impl CheckState {
             }
         }
     }
+}
+
+
+// --- check_numbers4.nika ---
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn an_operation_of_one_type(op: BinaryOp) -> bool { !op.is_comparison() && op != BinaryOp::And && op != BinaryOp::Or }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn number_leaves(expr: &Expr) -> bool { matches!(expr, Expr::Return(_, _) | Expr::Break(_) | Expr::Continue(_) | Expr::Throw(_, _)) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn number_branches_of_block(block: &Block) -> Option<Vec<&Expr>> {
+    if !block.stmts.is_empty() {
+        let leaves = matches!(nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1)).node, Stmt::Return(_) | Stmt::Break | Stmt::Continue);
+        if leaves { return Some(vec![]); }
+    }
+    let tail = block_tail(block);
+    if tail.is_empty() { return None; }
+    number_branches_of_value(*nikaia_std::index::get(&tail, 0))
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn number_branches_of_value(value: &Expr) -> Option<Vec<&Expr>> {
+    let mut out: Vec<&Expr> = vec![];
+    match value {
+        Expr::If { .. } => { return number_branches(value); },
+        Expr::Match { .. } => { return number_branches(value); },
+        Expr::Block(block, _) => { return number_branches_of_block(block); },
+        _ => { if !number_leaves(value) { out.push(value); } },
+    }
+    Some(out)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn number_branches(expr: &Expr) -> Option<Vec<&Expr>> {
+    let mut out: Vec<&Expr> = vec![];
+    match expr {
+        Expr::If { then_branch, else_branch, .. } => {
+            if else_branch.is_none() { return None; }
+            out.extend(match number_branches_of_block(then_branch) { Some(__nikaia_value) => __nikaia_value, None => return None });
+            out.extend(match number_branches_of_block(match else_branch { Some(__nikaia_value) => __nikaia_value, None => return None }) { Some(__nikaia_value) => __nikaia_value, None => return None });
+        },
+        Expr::Match { arms, .. } => { for arm in arms.iter() { out.extend(match number_branches_of_value(&arm.body) { Some(__nikaia_value) => __nikaia_value, None => return None }); } },
+        _ => return None,
+    }
+    Some(out)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn literals_in(expr: &Expr) -> Vec<(i64, Integer)> {
+    let mut out: Vec<(i64, Integer)> = vec![];
+    match expr {
+        Expr::LitInt { value, negative, .. } => { let negative = *negative; let value = *value; out.push((id_of(expr) as i64, integer(value, negative))) },
+        Expr::Binary { lhs, rhs, .. } => {
+            let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
+            out.extend(literals_in(lhs));
+            out.extend(literals_in(rhs));
+        },
+        Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); out.extend(literals_in(expr)) },
+        Expr::If { .. } => { for tail in nikaia_std::index::or(number_branches(expr), || vec![].into()) { out.extend(literals_in(tail)); } },
+        Expr::Match { .. } => { for tail in nikaia_std::index::or(number_branches(expr), || vec![].into()) { out.extend(literals_in(tail)); } },
+        _ => { },
+    }
+    out
+}
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn open_element_of(&self, world: &CheckWorld<'_>, expr: &Expr) -> Option<i64> {
+        match expr {
+            Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); self.open_element_in(world, base, index) },
+            _ => None,
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn open_element_in(&self, world: &CheckWorld<'_>, base: &Expr, index: &Expr) -> Option<i64> {
+        match base {
+            Expr::Variable(name, _) => { let name = *name; self.open_element_named(world, name, index) },
+            _ => None,
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn open_element_named(&self, world: &CheckWorld<'_>, name: winnow_grammar::Symbol, index: &Expr) -> Option<i64> {
+        let is_a_slice = matches!(index, Expr::Range { .. });
+        if is_a_slice { return None; }
+        let local = match self.binding(world.words.resolve(name)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        (*nikaia_std::index::get(&self.flow.open_elements, &local.id)).copied()
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn element_constant(&self, world: &CheckWorld<'_>, expr: &Expr, fold: &impl Fn(&Expr) -> Option<CheckConstant>) -> Option<CheckConstant> {
+        match expr {
+            Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); self.element_constant_in(world, base, index, &fold) },
+            _ => None,
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn element_constant_in(&self, world: &CheckWorld<'_>, base: &Expr, index: &Expr, fold: &impl Fn(&Expr) -> Option<CheckConstant>) -> Option<CheckConstant> {
+        match base {
+            Expr::Variable(name, _) => { let name = *name; self.element_of_a_name(world, name, index, &fold) },
+            _ => None,
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn element_of_a_name(&self, world: &CheckWorld<'_>, name: winnow_grammar::Symbol, index: &Expr, fold: &impl Fn(&Expr) -> Option<CheckConstant>) -> Option<CheckConstant> {
+        let local = match self.binding(world.words.resolve(name)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let elements = match *nikaia_std::index::get(&self.flow.list_constants, &local.id) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let at = match fold(index) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        if at.value.negative || at.value.magnitude >= u64::try_from(elements.len() as i64).unwrap_or_else(|_| panic!("the value does not fit in an `u64`")) { return None; }
+        let found = (*nikaia_std::index::get(&elements, nikaia_std::index::at(i64::try_from(at.value.magnitude).unwrap_or_else(|_| panic!("the value does not fit in an `i64`"))))).clone();
+        Some(CheckConstant { value: found.value.clone(), beyond: false, pinned: None })
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn open_numbers_in(&self, world: &CheckWorld<'_>, expr: &Expr) -> Vec<i64> {
+        let mut out: Vec<i64> = vec![];
+        match expr {
+            Expr::Variable(name, _) => {
+                let name = *name;
+                let found = self.binding(world.words.resolve(name));
+                if found.is_some() {
+                    let local = match found { Some(__nikaia_value) => __nikaia_value, None => return out };
+                    if local.open_number.is_some() { out.push(self.open_root(nikaia_std::index::or(local.open_number, || 0))); }
+                }
+            },
+            Expr::Index { .. } => {
+                let at = self.open_element_of(world, expr);
+                if at.is_some() { out.push(self.open_root(nikaia_std::index::or(at, || 0))); }
+            },
+            Expr::Call { args, .. } => {
+                if !args.is_empty() {
+                    let calls = *nikaia_std::index::get(&self.flow.open_calls, &(id_of(nikaia_std::index::get(&args, 0)) as i64));
+                    for at in nikaia_std::index::or(match calls {
+                        Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+                        None => None,
+                    }, || vec![].into()) { out.extend(self.open_numbers_in(world, nikaia_std::index::get(&args, nikaia_std::index::at(at)))); }
+                }
+            },
+            Expr::If { .. } => { for tail in nikaia_std::index::or(number_branches(expr), || vec![].into()) { out.extend(self.open_numbers_in(world, tail)); } },
+            Expr::Match { .. } => { for tail in nikaia_std::index::or(number_branches(expr), || vec![].into()) { out.extend(self.open_numbers_in(world, tail)); } },
+            Expr::Binary { op, lhs, rhs, .. } => {
+                let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
+                if an_operation_of_one_type(*op) {
+                    out.extend(self.open_numbers_in(world, lhs));
+                    if *op != BinaryOp::Shl && *op != BinaryOp::Shr { out.extend(self.open_numbers_in(world, rhs)); }
+                }
+            },
+            Expr::Unary { op, expr, .. } => {
+                let expr = nikaia_std::boxed::open(expr);
+                if *op == UnaryOp::Neg || *op == UnaryOp::Not { out.extend(self.open_numbers_in(world, expr)); }
+            },
+            _ => { },
+        }
+        out
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn number_shaped(&self, world: &CheckWorld<'_>, expr: &Expr) -> bool {
+        match expr {
+            Expr::LitInt { .. } => true,
+            Expr::Variable(name, _) => { let name = *name; self.a_name_of_an_open_number(world, name) },
+            Expr::Index { .. } => self.open_element_of(world, expr).is_some(),
+            Expr::Call { args, .. } => self.a_call_of_numbers(world, args),
+            Expr::If { .. } => self.a_choice_of_numbers(world, expr),
+            Expr::Match { .. } => self.a_choice_of_numbers(world, expr),
+            Expr::Binary { op, lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); an_operation_of_one_type(*op) && self.number_shaped(world, lhs) && self.number_shaped(world, rhs) },
+            Expr::Unary { op, expr, .. } => { let expr = nikaia_std::boxed::open(expr); (*op == UnaryOp::Neg || *op == UnaryOp::Not) && self.number_shaped(world, expr) },
+            _ => false,
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn a_name_of_an_open_number(&self, world: &CheckWorld<'_>, name: winnow_grammar::Symbol) -> bool {
+        let local = match self.binding(world.words.resolve(name)) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        local.open_number.is_some()
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn a_call_of_numbers(&self, world: &CheckWorld<'_>, args: &[Expr]) -> bool {
+        if args.is_empty() { return false; }
+        let calls = match *nikaia_std::index::get(&self.flow.open_calls, &(id_of(nikaia_std::index::get(&args, 0)) as i64)) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        for at in calls.iter() {
+            let at = nikaia_std::num::value(at);
+            if !self.number_shaped(world, nikaia_std::index::get(&args, nikaia_std::index::at(at))) { return false; }
+        }
+        true
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn a_choice_of_numbers(&self, world: &CheckWorld<'_>, expr: &Expr) -> bool {
+        let tails = match number_branches(expr) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        if tails.is_empty() { return false; }
+        for tail in tails.iter() {
+            let tail = *tail;
+            if !self.number_shaped(world, tail) { return false; }
+        }
+        true
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn number_variable_name(world: &CheckWorld<'_>, expr: &Expr) -> Option<String> {
+    match expr {
+        Expr::Variable(name, _) => {
+            let name = *name;
+            return Some(world.words.resolve(name).to_owned());
+        },
+        _ => { return None; },
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn number_list_name(world: &CheckWorld<'_>, value: &Expr) -> Option<String> {
+    match value {
+        Expr::MethodCall { receiver, method, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            if world.words.resolve(method) == "clone" { return number_variable_name(world, receiver); }
+        },
+        _ => { },
+    }
+    number_variable_name(world, value)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn number_list_element(ty: &Ty) -> Option<String> {
+    match ty {
+        Ty::Named { name, args, .. } => {
+            if (name == "Vec" || name == "Array") && !args.is_empty() { return integer_named(nikaia_std::index::get(&args, 0)); }
+            return None;
+        },
+        _ => { return None; },
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn a_lit_int(expr: &Expr) -> bool { matches!(expr, Expr::LitInt { .. }) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn number_position_code(what: &str) -> Option<String> {
+    if what == "let" { return Some("NK1103".to_owned()); }
+    if what == "returns" { return Some("NK1104".to_owned()); }
+    if what == "assign" { return Some("NK1105".to_owned()); }
+    if what == "field" { return Some("NK1106".to_owned()); }
+    if what == "argument" { return Some("NK1102".to_owned()); }
+    None
+}
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn number_asked(&mut self, world: &CheckWorld<'_>, value: &Expr, want: &Ty, at: &Span, beside: bool) {
+        let seen = want.unseen();
+        let copy = value_of_a_copy(&seen);
+        if self.elements_asked(world, value, &copy, at, beside) { return; }
+        let ty = match integer_named(&copy) { Some(__nikaia_value) => __nikaia_value, None => return };
+        for number in self.open_numbers_in(world, value) { self.add_ask(number, ty.to_owned(), at, beside); }
+        self.comptimes_asked(world, value, &ty);
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn elements_asked(&mut self, world: &CheckWorld<'_>, value: &Expr, copy: &Ty, at: &Span, beside: bool) -> bool {
+        let name = match number_list_name(world, value) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let local = match self.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let number = match *nikaia_std::index::get(&self.flow.open_elements, &local.id) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => return false };
+        let ty = match number_list_element(copy) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let root = self.open_root(number);
+        self.add_ask(root, ty, at, beside);
+        true
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn add_ask(&mut self, number: i64, ty: String, at: &Span, beside: bool) {
+        let found = match *nikaia_std::index::get(&self.flow.open_numbers, &number) { Some(__nikaia_value) => __nikaia_value, None => return };
+        let mut entry = found.clone();
+        entry.asks.push((ty, at.clone(), beside));
+        self.flow.open_numbers.insert(number, entry);
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn open_numbers_joined(&mut self, numbers: &[i64]) {
+        if numbers.is_empty() { return; }
+        let head = self.open_root(*nikaia_std::index::get(&numbers, 0));
+        for at in 1..numbers.len() as i64 {
+            let other = self.open_root(*nikaia_std::index::get(&numbers, (at) as usize));
+            if other != head { self.join_number(other, head); }
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn join_number(&mut self, number: i64, head: i64) {
+        let found = match *nikaia_std::index::get(&self.flow.open_numbers, &number) { Some(__nikaia_value) => __nikaia_value, None => return };
+        let mut entry = found.clone();
+        entry.joined = head;
+        self.flow.open_numbers.insert(number, entry);
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn an_open_number_where_none_fits(&mut self, world: &CheckWorld<'_>, found: &Ty, want: &Ty, value: &Expr, span: &Span, what: &str, message: &impl Fn(&str, &str) -> String) -> bool {
+        if !found.is_unknown() || !self.number_shaped(world, value) || a_lit_int(value) || !self.no_number_is(want) { return false; }
+        let code = match number_position_code(what) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let hole: String = String::from("\u{0}");
+        let wanted = want.text();
+        let said = message(&hole, &wanted);
+        let text = said.replace(&format!("`{}`", hole), "a number");
+        self.findings.push(check_refusal(&code, span, text, vec!["A number nothing typed takes the type its uses ask for, and this one asks for a type that is not a number.".to_owned()], Some(format!("Make it a `{}`, or give the number to a place that holds one.", wanted))));
+        true
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn literals_are(&mut self, value: &Expr, ty: &str) {
+        match value {
+            Expr::LitInt { .. } => { self.facts.unsigned_literals.insert(id_of(value) as i64, ty.to_owned()); },
+            Expr::Binary { lhs, rhs, op, .. } => {
+                let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
+                self.literals_are(lhs, ty);
+                if *op != BinaryOp::Shl && *op != BinaryOp::Shr { self.literals_are(rhs, ty); }
+            },
+            Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); self.literals_are(expr, ty) },
+            Expr::If { then_branch, else_branch, .. } => {
+                self.literals_in_the_tail(then_branch, ty);
+                if else_branch.is_some() { self.literals_in_the_tail(match else_branch { Some(__nikaia_value) => __nikaia_value, None => return }, ty); }
+            },
+            Expr::Match { arms, .. } => { for arm in arms.iter() { self.literals_are(&arm.body, ty); } },
+            Expr::Block(block, _) => self.literals_in_the_tail(block, ty),
+            _ => { },
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn literals_in_the_tail(&mut self, block: &Block, ty: &str) { for tail in block_tail(block) { self.literals_are(tail, ty); } }
 }
 
 
@@ -16205,6 +16725,24 @@ fn every_choice_held(given: &[(i64, i64)], taking: &[(i64, i64)], way: &[(i64, i
         if !held { return false; }
     }
     true
+}
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn coalesces_not_lent_are_taken(&mut self, world: &CheckWorld<'_>) {
+        let pending = self.flow.pending_coalesces.to_owned();
+        self.flow.pending_coalesces = vec![];
+        for one in pending.iter() {
+            let key = (one.left, one.span.start as i64);
+            let found = *nikaia_std::index::get(&self.flow.read_index, &key);
+            if found.is_some() {
+                let at: i64 = match found { Some(__nikaia_value) => __nikaia_value, None => return }.clone();
+                let read = (*nikaia_std::index::get(&self.reads_on_paths, nikaia_std::index::at(at))).clone();
+                self.hands_over_path(world, read.path.to_owned(), &one.ty, read.seq, "given to `??`", &one.span);
+            }
+        }
+    }
 }
 
 
@@ -42600,6 +43138,7 @@ pub mod check_items {
     #[allow(unused_imports)]
     pub use super::{declares_a_type, declared_with_no_arithmetic, either_param, either_field, imports_a_package, imports_exactly, an_extern_struct_named, a_c_value, implements_error, fields_by_base, ItemGeneric};
 }
+pub mod check_lambdas {}
 pub mod check_literals {
     #[allow(unused_imports)]
     pub use super::{element_kind};
@@ -42618,6 +43157,10 @@ pub mod check_numbers {
 }
 pub mod check_numbers2 {}
 pub mod check_numbers3 {}
+pub mod check_numbers4 {
+    #[allow(unused_imports)]
+    pub use super::{an_operation_of_one_type, number_branches, literals_in};
+}
 pub mod check_parts {}
 pub mod check_patterns {
     #[allow(unused_imports)]

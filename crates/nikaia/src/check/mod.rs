@@ -5072,190 +5072,50 @@ impl<'a> Checker<'a> {
     /// of a type of their own and stop it; so does a shift's count, which is
     /// any integer (ADR-285 D9).
     fn open_numbers_in(&self, expr: &Expr, out: &mut Vec<usize>) {
-        match expr {
-            Expr::Variable(name, _) => {
-                if let Some(at) = self
-                    .s
-                    .binding(self.parsed.text(*name))
-                    .and_then(|local| local.open_number.map(|n| n as usize))
-                {
-                    out.push(self.open_root(at));
-                }
-            }
-            Expr::Index { .. } => {
-                if let Some(at) = self.open_element_of(expr) {
-                    out.push(self.open_root(at));
-                }
-            }
-            Expr::Call { args, .. } => {
-                for &at in args
-                    .first()
-                    .and_then(|first| self.s.flow.open_calls.get(&value_node(first)))
-                    .into_iter()
-                    .flatten()
-                {
-                    self.open_numbers_in(&args[at as usize], out);
-                }
-            }
-            // **A choice between numbers is one number** (D1): each branch's
-            // value is the `if`'s.
-            Expr::If { .. } | Expr::Match { .. } => {
-                for tail in number_branches(expr).unwrap_or_default() {
-                    self.open_numbers_in(tail, out);
-                }
-            }
-            Expr::Binary { op, lhs, rhs, .. } if an_operation_of_one_type(*op) => {
-                self.open_numbers_in(lhs, out);
-                if !matches!(op, BinaryOp::Shl | BinaryOp::Shr) {
-                    self.open_numbers_in(rhs, out);
-                }
-            }
-            Expr::Unary {
-                op: UnaryOp::Neg | UnaryOp::Not,
-                expr,
-                ..
-            } => self.open_numbers_in(expr, out),
-            _ => {}
-        }
+        out.extend(
+            self.s
+                .open_numbers_in(&self.world, expr)
+                .into_iter()
+                .map(|at| at as usize),
+        );
     }
 
     /// **An element read out of a list whose elements are open** (D34):
     /// `xs[i]`, and not a slice of it.
     fn open_element_of(&self, expr: &Expr) -> Option<usize> {
-        let Expr::Index { base, index, .. } = expr else {
-            return None;
-        };
-        let Expr::Variable(name, _) = &**base else {
-            return None;
-        };
-        if matches!(&**index, Expr::Range { .. }) {
-            return None;
-        }
-        let local = self.s.binding(self.parsed.text(*name))?;
         self.s
-            .flow
-            .open_elements
-            .get(&local.id)
-            .map(|at| *at as usize)
+            .open_element_of(&self.world, expr)
+            .map(|at| at as usize)
     }
 
     /// **The constant an element of an immutable list of literals is**, where
     /// the index folds (D34, D26).
     fn element_constant(&self, expr: &Expr) -> Option<Constant> {
-        let Expr::Index { base, index, .. } = expr else {
-            return None;
-        };
-        let Expr::Variable(name, _) = &**base else {
-            return None;
-        };
-        let local = self.s.binding(self.parsed.text(*name))?;
-        let elements = self
-            .s
-            .flow
-            .list_constants
-            .get(&((local.id as usize) as i64))?;
-        let at = self.constant_of(index)?;
-        if at.value.negative {
-            return None;
-        }
-        let at = usize::try_from(at.value.magnitude).ok()?;
-        elements.get(at).map(|c| Constant::of(c.value))
+        self.s
+            .element_constant(&self.world, expr, &|index| {
+                self.constant_of(index).map(Into::into)
+            })
+            .map(|found| Constant::of(found.value))
     }
 
     /// **A value that is nothing but numbers**: literals and open numbers,
     /// joined by the operations [`Self::open_numbers_in`] walks. A `let` of one
     /// is an open number itself (D1).
     fn number_shaped(&self, expr: &Expr) -> bool {
-        match expr {
-            Expr::LitInt { .. } => true,
-            Expr::Variable(name, _) => self
-                .s
-                .binding(self.parsed.text(*name))
-                .is_some_and(|local| local.open_number.is_some()),
-            Expr::Index { .. } => self.open_element_of(expr).is_some(),
-            Expr::Call { args, .. } => args
-                .first()
-                .and_then(|first| self.s.flow.open_calls.get(&value_node(first)))
-                .is_some_and(|at| at.iter().all(|&at| self.number_shaped(&args[at as usize]))),
-            Expr::If { .. } | Expr::Match { .. } => number_branches(expr).is_some_and(|tails| {
-                !tails.is_empty() && tails.iter().all(|tail| self.number_shaped(tail))
-            }),
-            Expr::Binary { op, lhs, rhs, .. } if an_operation_of_one_type(*op) => {
-                self.number_shaped(lhs) && self.number_shaped(rhs)
-            }
-            Expr::Unary {
-                op: UnaryOp::Neg | UnaryOp::Not,
-                expr,
-                ..
-            } => self.number_shaped(expr),
-            _ => false,
-        }
+        self.s.number_shaped(&self.world, expr)
     }
 
     /// **A use asks the open numbers in a value for a type** (D2): a type
     /// standing beside it (`beside`), or an index, which takes any integer.
     fn number_asked(&mut self, value: &Expr, want: &Ty, at: &Span, beside: bool) {
-        // **A list of open elements asked for a list of one integer type**
-        // (D34): `fn total(xs: Vec[u8])` handed `xs` or a copy of it, or
-        // `let ys: Vec[u8] = xs`.
-        let list = match value {
-            Expr::MethodCall {
-                receiver, method, ..
-            } if self.parsed.text(*method) == "clone" => &**receiver,
-            value => value,
-        };
-        if let Expr::Variable(name, _) = list
-            && let Some(number) = self.s.binding(self.parsed.text(*name)).and_then(|local| {
-                self.s
-                    .flow
-                    .open_elements
-                    .get(&local.id)
-                    .map(|at| *at as usize)
-            })
-            && let Ty::Named { name, args, .. } = value_of_a_copy(want.unseen())
-            && matches!(name.as_str(), "Vec" | "Array")
-            && let Some(ty) = args.first().and_then(integer_named)
-        {
-            let number = self.open_root(number);
-            if let Some(number) = self.s.flow.open_numbers.get_mut(&(number as i64)) {
-                number.asks.push((ty, *at, beside));
-            }
-            return;
-        }
-        let Some(ty) = integer_named(&value_of_a_copy(want.unseen())) else {
-            return;
-        };
-        let mut open = Vec::new();
-        self.open_numbers_in(value, &mut open);
-        for number in open {
-            if let Some(number) = self.s.flow.open_numbers.get_mut(&(number as i64)) {
-                number.asks.push((ty.clone(), *at, beside));
-            }
-        }
-        self.comptimes_asked(value, &ty);
-    }
-
-    /// A `comptime` binding used where a type is asked
-    /// (`tools/check_fields.nika`).
-    fn comptimes_asked(&mut self, expr: &Expr, ty: &str) {
-        self.s.comptimes_asked(&self.world, expr, ty);
+        self.s.number_asked(&self.world, value, want, at, beside);
     }
 
     /// **One operation, one type**: the open numbers on both sides of it are
     /// one question from here on (D1).
     fn open_numbers_joined(&mut self, numbers: &[usize]) {
-        let Some((&first, rest)) = numbers.split_first() else {
-            return;
-        };
-        let head = self.open_root(first);
-        for &other in rest {
-            let other = self.open_root(other);
-            if other != head
-                && let Some(number) = self.s.flow.open_numbers.get_mut(&(other as i64))
-            {
-                number.joined = head as i64;
-            }
-        }
+        let numbers: Vec<i64> = numbers.iter().map(|&at| at as i64).collect();
+        self.s.open_numbers_joined(&numbers);
     }
 
     /// **A number given to an open one**: its own value at the `let`, or one
@@ -5269,8 +5129,7 @@ impl<'a> Checker<'a> {
             Some(_) => None,
             None => self.constant_of(value),
         };
-        let mut literals = Vec::new();
-        literals_in(value, &mut literals);
+        let literals = nikaia_std::tools::check_numbers4::literals_in(value);
         let Some(entry) = self.s.flow.open_numbers.get_mut(&(number as i64)) else {
             return;
         };
@@ -9503,57 +9362,8 @@ impl<'a> Checker<'a> {
 
     /// Every integer literal a constant expression is made of, recorded as
     /// being of an unsigned type ([`Checked::unsigned_literals`]).
-    fn literals_are(&mut self, value: &Expr, ty: &str, span: &Span) {
-        let value_expr = value;
-        match value {
-            Expr::LitInt { .. } => {
-                let _ = span;
-                self.s
-                    .facts
-                    .unsigned_literals
-                    .insert(value_node(value_expr), ty.to_string());
-            }
-            Expr::Binary { lhs, rhs, op, .. } => {
-                self.literals_are(lhs, ty, span);
-                // A shift's count is its own type, not the shifted one's.
-                if !matches!(op, BinaryOp::Shl | BinaryOp::Shr) {
-                    self.literals_are(rhs, ty, span);
-                }
-            }
-            Expr::Unary { expr, .. } => self.literals_are(expr, ty, span),
-            // **And the value a branch hands back** (issue #171):
-            // `let limit: u64 = match t { "i32" => if n { 2147483648 } else
-            // { 1 }, … }` wrote `2147483648i64`, because the type stopped at
-            // the `match`.
-            Expr::If {
-                then_branch,
-                else_branch,
-                ..
-            } => {
-                self.literals_in_the_tail(then_branch, ty);
-                if let Some(otherwise) = else_branch {
-                    self.literals_in_the_tail(otherwise, ty);
-                }
-            }
-            Expr::Match { arms, .. } => {
-                for arm in arms {
-                    self.literals_are(&arm.body, ty, span);
-                }
-            }
-            Expr::Block(block, _) => self.literals_in_the_tail(block, ty),
-            _ => {}
-        }
-    }
-
-    /// [`Checker::literals_are`] for the value a block ends with.
-    fn literals_in_the_tail(&mut self, block: &Block, ty: &str) {
-        // Keyed by the tail's own statement, which is the one the emitter is
-        // writing when it reaches the literal.
-        if let Some(last) = block.stmts.last()
-            && let Stmt::Expr(tail) = &last.node
-        {
-            self.literals_are(tail, ty, &last.span);
-        }
+    fn literals_are(&mut self, value: &Expr, ty: &str, _span: &Span) {
+        self.s.literals_are(value, ty);
     }
 
     /// `NK1197` (`tools/check_exprs.nika`).
@@ -9622,20 +9432,7 @@ impl<'a> Checker<'a> {
     /// or without its parts, or a struct written out: a value that stands for
     /// itself, and that the language below can lend as a constant.
     fn a_value_written_out(&self, written: &Expr) -> bool {
-        let variant = |segments: &[Ident]| {
-            segments.len() == 2
-                && self
-                    .s
-                    .is_variant(self.parsed.text(segments[0]), self.parsed.text(segments[1]))
-        };
-        match written {
-            Expr::Path(segments, _) => variant(segments),
-            Expr::StructLit { .. } => true,
-            Expr::Call { func, .. } => {
-                matches!(&**func, Expr::Path(segments, _) if variant(segments))
-            }
-            _ => false,
-        }
+        self.s.a_value_written_out(&self.world, written)
     }
 
     /// `NK1185` (`tools/check_fields.nika`).
@@ -11041,41 +10838,15 @@ impl<'a> Checker<'a> {
         what: &str,
         message: &dyn Fn(&str, &str) -> String,
     ) -> bool {
-        if !found.is_unknown()
-            || !self.number_shaped(value)
-            || matches!(value, Expr::LitInt { .. })
-            || !self.s.no_number_is(want)
-        {
-            return false;
-        }
-        let code = match what {
-            "let" => "NK1103",
-            "returns" => "NK1104",
-            "assign" => "NK1105",
-            "field" => "NK1106",
-            "argument" => "NK1102",
-            _ => return false,
-        };
-        // The position's sentence, with the value's type written as words:
-        // there is none to put between backticks yet.
-        const HOLE: &str = "\u{0}";
-        let message = message(HOLE, &want.text()).replace(&format!("`{HOLE}`"), "a number");
-        self.s.findings.push(Finding {
-            severity: Severity::Error,
-            span,
-            code: code.to_string(),
-            message,
-            notes: vec![
-                "A number nothing typed takes the type its uses ask for, and this one asks for a type that is not a number."
-                    .to_string(),
-            ],
-            help: Some(format!(
-                "Make it a `{}`, or give the number to a place that holds one.",
-                want.text()
-            )),
-            labels: Vec::new(),
-        });
-        true
+        self.s.an_open_number_where_none_fits(
+            &self.world,
+            found,
+            want,
+            value,
+            &span,
+            what,
+            &|hole, ty| message(hole, ty),
+        )
     }
 
     /// [`Checker::expect`], for a position that has the value in hand, so a
@@ -11719,35 +11490,8 @@ impl<'a> Checker<'a> {
     /// What is left is data that a move takes away, which is what the
     /// diagnostic is about.
     fn a_task_takes_these(&mut self, body: &Expr, span: &Span) {
-        // The same walk `crosses_into_a_task` uses, and for the same reason: the
-        // names a task's body reads are one question, asked once.
-        for name in send::names_used(self.parsed, body) {
-            let Some((ty, _)) = self.local(&name) else {
-                continue;
-            };
-            // **A handle is duplicated into the task, not moved**
-            // ([ADR-312](../../docs/specification/adr/adr-312.md) D1). It is
-            // recorded rather than refused, because the emitter is what writes
-            // the step and it has no types (ADR-288) - the same arrangement
-            // every other answer this module hands over uses. Unconditional, and
-            // not only where the name is used again (D2): a line further down
-            // may not decide what a line further up does to a cleanup point.
-            if is_a_handle(&ty) {
-                self.s
-                    .facts
-                    .task_handles
-                    .insert(((span.at() as i64), name.clone()));
-            }
-            if !self.s.takes_away(&self.world, &ty) {
-                continue;
-            }
-            self.s.moved_into_a_task.push((
-                name,
-                ty,
-                span.stop() as i64,
-                "a background task".to_string(),
-            ));
-        }
+        let names: Vec<String> = send::names_used(self.parsed, body).into_iter().collect();
+        self.s.a_task_takes_these(&self.world, &names, span);
     }
 
     /// **A key in the brackets of a map whose keys are owned**
@@ -11931,28 +11675,7 @@ impl<'a> Checker<'a> {
     /// Every `??` of the statement just walked that no reading position lent
     /// is taken (ADR-279 D5).
     fn coalesces_not_lent_are_taken(&mut self) {
-        for pending in std::mem::take(&mut self.s.flow.pending_coalesces) {
-            let Some(&at) = self
-                .s
-                .flow
-                .read_index
-                .get(&(pending.left, pending.span.at() as i64))
-            else {
-                continue;
-            };
-            let (path, seq) = (
-                self.s.reads_on_paths[at as usize].path.clone(),
-                self.s.reads_on_paths[at as usize].seq,
-            );
-            self.s.hands_over_path(
-                &self.world,
-                path,
-                &pending.ty,
-                seq,
-                "given to `??`",
-                &pending.span,
-            );
-        }
+        self.s.coalesces_not_lent_are_taken(&self.world);
     }
 
     /// A read of a name, recorded once per expression and statement.
@@ -12524,41 +12247,7 @@ impl<'a> Checker<'a> {
     /// function is called again for every attempt, so a `mut` binding it
     /// captures carries one attempt's changes into the next.
     fn a_child_that_keeps_state(&mut self, body: &Expr, span: &Span) {
-        let Expr::Closure {
-            params,
-            body: block,
-            ..
-        } = body
-        else {
-            return;
-        };
-        let mut named = BTreeSet::new();
-        nikaia_std::tools::names::names_in_block(block, &self.parsed.interner, &mut named);
-        for name in named {
-            if params.iter().any(|p| self.parsed.text(*p) == name) {
-                continue;
-            }
-            if !self.s.binding(&name).is_some_and(|local| local.written_mut) {
-                continue;
-            }
-            self.s.findings.push(Finding {
-                severity: Severity::Error,
-                span: *span,
-                code: "NK1229".to_string(),
-                message: format!(
-                    "This child captures `{name}`, which is `mut`, so its next attempt would not start fresh."
-                ),
-                notes: vec![
-                    "A supervisor calls a child's function again for every attempt (Part II 12.8). \
-                     What one attempt changed in a captured `mut` binding would still be there."
-                        .to_string(),
-                ],
-                help: Some(format!(
-                    "Build `{name}` inside the child's function, or take `{name}.clone()` there."
-                )),
-                labels: Vec::new(),
-            });
-        }
+        self.s.a_child_that_keeps_state(&self.world, body, span);
     }
 
     /// **What an entry point may be** ([ADR-284](../../docs/specification/adr/adr-284.md)
@@ -12898,20 +12587,7 @@ impl<'a> Checker<'a> {
     /// (Part III 15.2), so a described foreign type has an entry and no fields,
     /// and it is declared.
     fn declares_a_type(&self, name: &str) -> bool {
-        if self.s.structs.contains_key(name) || self.world.own.types.contains_key(name) {
-            return true;
-        }
-        // `Self` inside an `impl`, and the type parameters an item brought in:
-        // both are names a literal may wear and neither is in a `types` map.
-        if name == "Self" || self.s.enums.contains_key(name) {
-            return true;
-        }
-        let suffix = format!("::{name}");
-        self.world
-            .library
-            .types
-            .keys()
-            .any(|key| key == name || key.ends_with(&suffix))
+        self.s.declares_a_type(&self.world, name)
     }
 
     /// **`NK1162`: `m[k] += 1` on a map**
@@ -13509,29 +13185,7 @@ impl<'a> Checker<'a> {
     /// outside is still there on the next line. Asked wherever a lambda is
     /// kept - a field, a `let`, and a parameter the callee keeps (#536).
     fn a_kept_lambdas_hulls(&mut self, value: &Expr) {
-        let Expr::Closure { params, body, .. } = value else {
-            return;
-        };
-        let mut named: BTreeSet<String> = BTreeSet::new();
-        crate::emit::visit_block(body, &mut |e| {
-            if let Expr::Variable(name, _) = e {
-                named.insert(self.parsed.text(*name).to_string());
-            }
-        });
-        let own: BTreeSet<String> = params
-            .iter()
-            .map(|p| self.parsed.text(*p).to_string())
-            .collect();
-        let hulls: Vec<String> = named
-            .into_iter()
-            .filter(|name| !own.contains(name))
-            .filter(|name| {
-                matches!(self.s.lookup(name), Some(Ty::Named { name, .. }) if is_hull(ty::base(&name)))
-            })
-            .collect();
-        if !hulls.is_empty() {
-            self.s.facts.kept_hulls.insert(value_node(value), hulls);
-        }
+        self.s.a_kept_lambdas_hulls(&self.world, value);
     }
 
     /// **What a kept lambda captures, it takes** (Part I 8.3, ADR-328 D7, #95
@@ -13541,37 +13195,8 @@ impl<'a> Checker<'a> {
     /// call's future must own what it reads - which the emitter writes from
     /// `kept_owned`: no copy.
     fn a_kept_lambda_takes_these(&mut self, value: &Expr, pauses: bool, span: &Span) {
-        let Expr::Closure { params, body, .. } = value else {
-            return;
-        };
-        let mut named: BTreeSet<String> = BTreeSet::new();
-        crate::emit::visit_block(body, &mut |e| {
-            if let Expr::Variable(name, _) = e {
-                named.insert(self.parsed.text(*name).to_string());
-            }
-        });
-        let mut owned = Vec::new();
-        for name in named {
-            if params.iter().any(|p| self.parsed.text(*p) == name) {
-                continue;
-            }
-            let Some((ty, _)) = self.local(&name) else {
-                continue;
-            };
-            if is_a_handle(&ty) || !self.s.takes_away(&self.world, &ty) {
-                continue;
-            }
-            owned.push(name.clone());
-            self.s.moved_into_a_task.push((
-                name,
-                ty,
-                span.stop() as i64,
-                "a function kept for later".to_string(),
-            ));
-        }
-        if pauses && !owned.is_empty() {
-            self.s.facts.kept_owned.insert(value_node(value), owned);
-        }
+        self.s
+            .a_kept_lambda_takes_these(&self.world, value, pauses, span);
     }
 
     /// **A lambda where a function value is kept** is one shared closure
@@ -16196,16 +15821,6 @@ fn locked_content_of(ty: &Ty) -> Option<Ty> {
     nikaia_std::tools::check_types::locked_content_of(ty)
 }
 
-/// Whether a value **is** a handle on a shared one, held by value.
-///
-/// `&Shared[T]` is not: lending the inner value out hands no handle on, so
-/// nothing is duplicated ([ADR-312](../../../docs/specification/adr/adr-312.md)
-/// D1's correction). A type that merely *holds* one is not either - a struct is
-/// carried by whatever holds it.
-fn is_a_handle(ty: &Ty) -> bool {
-    nikaia_std::tools::check_types::is_a_handle(ty)
-}
-
 /// Whether a plain value stands where a **hull** is wanted - the shape whose
 /// message names the constructor.
 ///
@@ -16228,94 +15843,6 @@ fn becomes_shared(found: &Ty, want: &Ty) -> bool {
 /// Part III C.2: every diagnostic names a concrete way out.
 fn convert(found: &Ty, want: &Ty) -> String {
     nikaia_std::tools::check_types::way_out_of_a_mismatch(found, want)
-}
-
-/// The name of the integer type this is, among the three Part I 2.2 offers.
-///
-/// A view or a type with arguments is neither: `&i32` is a reference and
-/// `Vec[i32]` is a list, and a number does not stand beside either of them.
-/// **The operations whose result is of their operands' type**: arithmetic and
-/// the bit operators ([ADR-285](../../docs/specification/adr/adr-285.md) D23).
-fn an_operation_of_one_type(op: BinaryOp) -> bool {
-    !op.is_comparison() && !matches!(op, BinaryOp::And | BinaryOp::Or)
-}
-
-/// The integer literals of a value, each by its node and its value.
-type Literals = Vec<(i64, nikaia_std::tools::integers::Integer)>;
-
-/// Every integer literal in a value, by its node, for the suffix the emitter
-/// may owe it.
-fn literals_in(expr: &Expr, out: &mut Literals) {
-    match expr {
-        Expr::LitInt {
-            value, negative, ..
-        } => out.push((
-            value_node(expr),
-            nikaia_std::tools::integers::integer(*value, *negative),
-        )),
-        Expr::Binary { lhs, rhs, .. } => {
-            literals_in(lhs, out);
-            literals_in(rhs, out);
-        }
-        Expr::Unary { expr, .. } => literals_in(expr, out),
-        Expr::If { .. } | Expr::Match { .. } => {
-            for tail in number_branches(expr).unwrap_or_default() {
-                literals_in(tail, out);
-            }
-        }
-        _ => {}
-    }
-}
-
-/// **The values a choice can come to**: each branch's last expression, for an
-/// `if` with an `else` and for a `match`. A branch that leaves - `return`,
-/// `break`, `continue`, `throw`, a `panic` - comes to nothing and is left out;
-/// a branch with no value makes the whole `None`.
-fn number_branches(expr: &Expr) -> Option<Vec<&Expr>> {
-    fn leaves(expr: &Expr) -> bool {
-        matches!(
-            expr,
-            Expr::Return(_, _) | Expr::Break(_) | Expr::Continue(_) | Expr::Throw(_, _)
-        )
-    }
-    fn of_block<'e>(block: &'e Block, out: &mut Vec<&'e Expr>) -> Option<()> {
-        // A block that ends in `return`, `break` or `continue` leaves.
-        if matches!(
-            block.stmts.last().map(|s| &s.node),
-            Some(Stmt::Return(_) | Stmt::Break | Stmt::Continue)
-        ) {
-            return Some(());
-        }
-        let tail = tail_of(block)?;
-        of_value(tail, out)
-    }
-    fn of_value<'e>(value: &'e Expr, out: &mut Vec<&'e Expr>) -> Option<()> {
-        match value {
-            Expr::If { .. } | Expr::Match { .. } => out.extend(number_branches(value)?),
-            Expr::Block(block, _) => of_block(block, out)?,
-            value if leaves(value) => {}
-            value => out.push(value),
-        }
-        Some(())
-    }
-    let mut out = Vec::new();
-    match expr {
-        Expr::If {
-            then_branch,
-            else_branch: Some(else_branch),
-            ..
-        } => {
-            of_block(then_branch, &mut out)?;
-            of_block(else_branch, &mut out)?;
-        }
-        Expr::Match { arms, .. } => {
-            for arm in arms {
-                of_value(&arm.body, &mut out)?;
-            }
-        }
-        _ => return None,
-    }
-    Some(out)
 }
 
 /// **Whether a `'…'` as written is one ASCII character**, which is what makes

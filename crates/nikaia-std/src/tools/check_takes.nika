@@ -550,3 +550,21 @@ fn every_choice_held(given: ref Vec[(i64, i64)], taking: ref Vec[(i64, i64)], wa
     }
     return true
 }
+
+impl CheckState {
+    /// **A `??` whose left side was not lent is taken**: the reads it left
+    /// pending are handed over, at the place the read was recorded.
+    pub fn coalesces_not_lent_are_taken(ref mut self, world: ref CheckWorld) sync {
+        let pending = self.flow.pending_coalesces.clone()
+        self.flow.pending_coalesces = []
+        for one in pending {
+            let key = (one.left, one.span.start as i64)
+            let found = self.flow.read_index[key]
+            if found != null {
+                let at: i64 = (found ?? return).clone()
+                let read = self.reads_on_paths[at].clone()
+                self.hands_over_path(world, read.path.clone(), one.ty, read.seq, "given to `??`", one.span)
+            }
+        }
+    }
+}

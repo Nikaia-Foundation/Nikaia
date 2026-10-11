@@ -251,3 +251,31 @@ fn a_parameter_binding(local: ref CheckLocal) -> bool {
     let at = local.immutable ?? return false
     return at.kind == CheckKind::Parameter
 }
+
+/// Whether a path of two names is `Enum::Variant` of a declared enum.
+fn a_variant_path(state: ref CheckState, world: ref CheckWorld, segments: ref Vec[winnow_grammar::Symbol]) -> bool {
+    if segments.len() != 2 {
+        return false
+    }
+    return state.is_variant(world.words.resolve(segments[0]), world.words.resolve(segments[1]))
+}
+
+impl CheckState {
+    /// **A value written out**: a variant, a struct literal or the call of a
+    /// variant - a value of its own, not a place.
+    pub fn a_value_written_out(ref self, world: ref CheckWorld, written: ref Expr) -> bool {
+        return match written {
+            Expr::Path(segments, _) => a_variant_path(self, world, segments),
+            Expr::StructLit { .. } => true,
+            Expr::Call { func, .. } => a_call_of_a_variant(self, world, func),
+            else => false,
+        }
+    }
+}
+
+fn a_call_of_a_variant(state: ref CheckState, world: ref CheckWorld, func: ref Expr) -> bool {
+    return match func {
+        Expr::Path(segments, _) => a_variant_path(state, world, segments),
+        else => false,
+    }
+}

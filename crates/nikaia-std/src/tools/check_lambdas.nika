@@ -1,0 +1,173 @@
+// crates/nikaia-std/src/tools/check_lambdas.nika
+//
+// **What a lambda that is kept captures** (ADR-230 D4, ADR-312 D5, ADR-328 D7,
+// Part I 8.3), moved from the compiler's checker (ADR-294, #125, #558, C-5c): the
+// hulls it captures a handle of, and the values it takes, which a move takes
+// away from the code after it.
+
+use std::collections
+
+/// Every name a block reads, once.
+fn lambda_names(world: ref CheckWorld, body: ref Block) -> collections::BTreeSet[String] sync {
+    let mut named: collections::BTreeSet[String] = collections::BTreeSet()
+    for e in visited_in_block(body) {
+        match e {
+            Expr::Variable(name, _) => {
+                named.insert(world.words.resolve(name).clone())
+            },
+            else => {},
+        }
+    }
+    return named
+}
+
+/// The names a lambda's own parameters are.
+fn lambda_own(world: ref CheckWorld, params: ref Vec[winnow_grammar::Symbol]) -> collections::BTreeSet[String] sync {
+    let mut own: collections::BTreeSet[String] = collections::BTreeSet()
+    for p in params {
+        own.insert(world.words.resolve(p).clone())
+    }
+    return own
+}
+
+/// Whether a type is a hull: `Shared`, `SharedMut` or `Locked`.
+fn a_hull_type(ty: ref Ty) -> bool sync {
+    return match ty {
+        Ty::Named { name, .. } => a_hull_named(name),
+        else => false,
+    }
+}
+
+fn a_hull_named(name: ref String) -> bool sync {
+    let last = type_last_segment(name)
+    return is_hull(last)
+}
+
+impl CheckState {
+    /// **A hull a kept lambda captures, it captures a handle of** (ADR-230 D4,
+    /// ADR-312 D5): handing a hull on duplicates the count, so the name outside
+    /// is still there on the next line. Asked wherever a lambda is kept - a
+    /// field, a `let`, and a parameter the callee keeps (#536).
+    pub fn a_kept_lambdas_hulls(ref mut self, world: ref CheckWorld, value: ref Expr) sync {
+        match value {
+            Expr::Closure { params, body, .. } => {
+                self.hulls_of_a_lambda(world, value, params, body)
+            },
+            else => {},
+        }
+    }
+
+    fn a_name_of_a_hull(ref self, name: ref String) -> bool sync {
+        let found = self.lookup(name) ?? return false
+        return a_hull_type(found)
+    }
+
+    fn hulls_of_a_lambda(ref mut self, world: ref CheckWorld, value: ref Expr, params: ref Vec[winnow_grammar::Symbol], body: ref Block) sync {
+        let named = lambda_names(world, body)
+        let own = lambda_own(world, params)
+        let mut hulls: Vec[String] = []
+        for name in named {
+            if own.contains(name) {
+                continue
+            }
+            if self.a_name_of_a_hull(name) {
+                hulls.push(name.clone())
+            }
+        }
+        if hulls.len() > 0 {
+            self.facts.kept_hulls.insert(id_of(value) as i64, hulls)
+        }
+    }
+
+    /// **What a kept lambda captures, it takes** (Part I 8.3, ADR-328 D7, #95
+    /// step 6): it is called after the statement that made it, so a value a move
+    /// takes away goes with it and is `NK2101` where it is used again. One that
+    /// pauses owns it once and counts the calls that borrow it - each call's
+    /// future must own what it reads - which the emitter writes from
+    /// `kept_owned`: no copy.
+    pub fn a_kept_lambda_takes_these(ref mut self, world: ref CheckWorld, value: ref Expr, pauses: bool, span: ref Span) sync {
+        match value {
+            Expr::Closure { params, body, .. } => {
+                self.takes_of_a_lambda(world, value, params, body, pauses, span)
+            },
+            else => {},
+        }
+    }
+
+    fn takes_of_a_lambda(ref mut self, world: ref CheckWorld, value: ref Expr, params: ref Vec[winnow_grammar::Symbol], body: ref Block, pauses: bool, span: ref Span) sync {
+        let named = lambda_names(world, body)
+        let own = lambda_own(world, params)
+        let mut owned: Vec[String] = []
+        for name in named {
+            if own.contains(name) {
+                continue
+            }
+            let found = self.binding(name)
+            if found != null {
+                let local = found ?? return
+                if is_a_handle(local.ty) || !self.takes_away(world, local.ty) {
+                    continue
+                }
+                owned.push(name.clone())
+                self.moved_into_a_task.push((name.clone(), local.ty.clone(), span.end as i64, "a function kept for later".clone()))
+            }
+        }
+        if pauses && owned.len() > 0 {
+            self.facts.kept_owned.insert(id_of(value) as i64, owned)
+        }
+    }
+
+    /// **What a task takes** (ADR-312 D1, D2): the names its body reads, given
+    /// in order. A handle is duplicated into the task, not moved - recorded
+    /// rather than refused, because the emitter writes the step and has no
+    /// types (ADR-288). Unconditional, and not only where the name is used
+    /// again: a line further down may not decide what a line further up does to
+    /// a cleanup point. A value a move takes away goes with it.
+    pub fn a_task_takes_these(ref mut self, world: ref CheckWorld, names: ref Vec[String], span: ref Span) sync {
+        for name in names {
+            let found = self.binding(name)
+            if found != null {
+                let local = found ?? return
+                if is_a_handle(local.ty) {
+                    self.facts.task_handles.insert((span.start as i64, name.clone()))
+                }
+                if !self.takes_away(world, local.ty) {
+                    continue
+                }
+                self.moved_into_a_task.push((name.clone(), local.ty.clone(), span.end as i64, "a background task".clone()))
+            }
+        }
+    }
+}
+
+impl CheckState {
+    /// **`NK1229`: a supervisor's child that would not start fresh** (ADR-328
+    /// D7, Part II 12.8): its function is called again for every attempt, so a
+    /// `mut` binding it captures carries one attempt's changes into the next.
+    pub fn a_child_that_keeps_state(ref mut self, world: ref CheckWorld, body: ref Expr, span: ref Span) sync {
+        match body {
+            Expr::Closure { params, body, .. } => {
+                self.state_of_a_child(world, params, body, span)
+            },
+            else => {},
+        }
+    }
+
+    fn state_of_a_child(ref mut self, world: ref CheckWorld, params: ref Vec[winnow_grammar::Symbol], block: ref Block, span: ref Span) sync {
+        let mut named: collections::BTreeSet[String] = collections::BTreeSet()
+        names_in_block(block, world.words, named)
+        let own = lambda_own(world, params)
+        for name in named {
+            if own.contains(name) {
+                continue
+            }
+            let found = self.binding(name)
+            if found != null {
+                let local = found ?? return
+                if local.written_mut {
+                    self.findings.push(check_refusal("NK1229", span, f"This child captures `{name}`, which is `mut`, so its next attempt would not start fresh.", ["A supervisor calls a child's function again for every attempt (Part II 12.8). What one attempt changed in a captured `mut` binding would still be there.".clone()], f"Build `{name}` inside the child's function, or take `{name}.clone()` there."))
+                }
+            }
+        }
+    }
+}
