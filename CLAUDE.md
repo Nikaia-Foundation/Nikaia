@@ -229,3 +229,9 @@ Rules from the sessions that moved the most; they save tokens, not just time.
   Splitting one file into slices costs more in conflicts and repeated context
   than it saves. Leaves first: a consumer moved before its dependencies finds
   its errors late. Record the state in the commit message after each chunk.
+* **Tokens: one agent, one slice, at most 100-150 turns, then a fresh one.**
+  The cost is the context every turn re-reads, not the output; long agents
+  cost three times what restarted ones do. Scripts in files, not heredocs;
+  small reads; plan and state from the repository, not from the prompt. The
+  numbers and the rules are in `docs/tokensaverstrategy.md`; the ordered
+  steps for the core of `emit` and `check` are in `docs/selfhosting-plan.md`.
