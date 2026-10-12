@@ -1147,6 +1147,9 @@ pub struct TypeContract {
     /// for a type whose parts are the library's. Absent means it has none
     /// (`NK1247`).
     pub orders: bool,
+    /// **Its equality is an equivalence** - Rust's `Eq` - for a type whose
+    /// parts are the library's (ADR-341 D4). Absent means it is not taken for one.
+    pub equates: bool,
     pub copies: bool,
     pub touches: Vec[String],
     pub tethered: Vec[String],
@@ -1175,6 +1178,7 @@ impl TypeContract {
             iterates_fallibly: false,
             compares: false,
             orders: false,
+            equates: false,
             copies: false,
             touches: [],
             tethered: [],

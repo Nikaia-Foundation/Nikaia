@@ -2655,6 +2655,49 @@ impl<'p> Emitter<'p> {
                     ));
                     return Ok(());
                 }
+                // **`impl Eq` and `impl Ord` are the language's** (ADR-341 D1):
+                // the method is the author's, as `Cleanup`'s is, and a bridge
+                // gives the standard library's trait the answer. A program that
+                // declares a trait of the name has its own and is relayed.
+                let standard = trait_name
+                    .map(|t| self.text(t).to_string())
+                    .filter(|t| matches!(t.as_str(), "Eq" | "Ord"))
+                    .filter(|t| {
+                        !self.parsed.program.items.iter().any(|item| {
+                            matches!(&item.node, Item::Trait { name, .. } if self.text(*name) == t)
+                        })
+                    });
+                if let Some(standard) = standard {
+                    out.push(&format!("impl{declares} {target_name}{applied} {{\n"));
+                    for method in methods {
+                        let carries = self.s.carries_input.get(&(method.span.at() as i64));
+                        let st = out.mark();
+                        out.push("    ");
+                        self.function(
+                            out,
+                            &method.node,
+                            1,
+                            lifetimes,
+                            carries,
+                            Some(MethodOf {
+                                target: &target_name,
+                                declared_by: None,
+                            }),
+                        )?;
+                        out.record(&method.span, st);
+                    }
+                    out.push("}\n");
+                    let me = format!("{target_name}{applied}");
+                    match standard.as_str() {
+                        "Eq" => out.push(&format!(
+                            "impl{declares} PartialEq for {me} {{\n    fn eq(&self, other: &Self) -> bool {{ {target_name}::eq(self, other) }}\n}}\nimpl{declares} Eq for {me} {{}}\n"
+                        )),
+                        _ => out.push(&format!(
+                            "impl{declares} PartialOrd for {me} {{\n    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {{ Some(std::cmp::Ord::cmp(self, other)) }}\n}}\nimpl{declares} Ord for {me} {{\n    fn cmp(&self, other: &Self) -> std::cmp::Ordering {{ {target_name}::compare(self, other) }}\n}}\n"
+                        )),
+                    }
+                    return Ok(());
+                }
                 // **The methods of a type that declares map parameters take
                 // them** (ADR-010 D9): the `impl` is generic over them, and a
                 // mention of the type inside it is `Self`'s.

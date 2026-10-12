@@ -330,6 +330,9 @@ fn type_text(contract: ref TypeContract) -> String {
     if contract.compares {
         out.push_str("compares = true\n")
     }
+    if contract.equates {
+        out.push_str("equates = true\n")
+    }
     if contract.orders {
         out.push_str("orders = true\n")
     }

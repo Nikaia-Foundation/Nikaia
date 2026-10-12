@@ -233,8 +233,16 @@ fn leaf(blocked: bool) -> SyncNode {
 fn declared_by(trait_name: ref winnow_grammar::Symbol?, method: ref String, names: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, mut node: SyncNode) {
     let named = trait_name ?? return
     let declared = f"{names.resolve(named)}::{method}"
-    if own.functions.contains_key(declared) || library.functions.contains_key(declared) {
+    if own.functions.contains_key(declared) {
         node.reach.calls.insert(declared)
+    } else if library.functions.contains_key(declared) {
+        // A declaration the library promises `sync` carries no pause: the edge
+        // would read as one, because the graph has no node for a library's
+        // entry (`impl Ord` is `sync`, ADR-341 D1).
+        let entry = library.functions[declared]?.clone() ?? FnContract::empty()
+        if !entry.sync_claim.is_sync() {
+            node.reach.calls.insert(declared)
+        }
     }
 }
 

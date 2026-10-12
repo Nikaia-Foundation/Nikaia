@@ -2212,6 +2212,33 @@ signature = "(self: ref Vec[?]) -> i64"
 # allocation, no generated code, and the lookup shape decided from the key count
 # while the program was built.
 #
+# **How two values of an ordered type compare** (ADR-341 D1): `Ord`'s `compare`
+# answers one of the three. Keyed with no module in front, like `Fixed`, and the
+# standard library's own `std::cmp::Ordering` in the generated file.
+[type."Ordering"]
+pub = true
+crosses = true
+compares = true
+equates = true
+orders = true
+copies = true
+variants = ["Less", "Equal", "Greater"]
+
+# **`compare` and `eq`, the language's** (ADR-341 D2): what a bound `[T: Ord]` or
+# `[T: Eq]` gives the body, and what a number, a text or a container has. They
+# never pause, which is what lets them stand in an `assert` and an operator.
+[fn."Ord::compare"]
+pub = true
+sync = true
+touches = []
+signature = "[T](self: ref T, other: ref T) -> Ordering"
+
+[fn."Eq::eq"]
+pub = true
+sync = true
+touches = []
+signature = "[T](self: ref T, other: ref T) -> bool"
+
 # `Fixed` is keyed **with no module in front**, which is `Overtaken`'s and
 # `ParseError`'s shape: a program writes it in a declaration and never reaches
 # for a path to it.

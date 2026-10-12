@@ -11,6 +11,10 @@ use std::collections
 // The bounds `T: Struct` and `T: Enum` name a shape, not a trait.
 comptime SHAPE_BOUNDS: Array[ref String, 2] = ["Struct", "Enum"]
 
+// The bounds `T: Eq` and `T: Ord` name what a type can do, and the language
+// answers them (ADR-341), as it does the two above.
+comptime STANDARD_BOUNDS: Array[ref String, 2] = ["Eq", "Ord"]
+
 // Types every program has without declaring them.
 comptime BUILT_IN: Array[ref String, 27] = ["i8", "i16", "i32", "i64", "i128", "isize", "u8", "u16", "u32", "u64", "u128", "usize", "f32", "f64", "bool", "char", "scalar", "String", "str", "Self", "Vec", "Shared", "SharedMut", "Locked", "TaskHandle", "Array", "Bytes"]
 
@@ -64,6 +68,9 @@ fn known_traits(names: ref winnow_grammar::InternerContext, items: ref Vec[Spann
     let mut known: collections::BTreeSet[String] = collections::BTreeSet()
     for shape in SHAPE_BOUNDS {
         known.insert(shape.clone())
+    }
+    for standard in STANDARD_BOUNDS {
+        known.insert(standard.clone())
     }
     for (key, _) in own.traits {
         with_its_last_segment(key, known)

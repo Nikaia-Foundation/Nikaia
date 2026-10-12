@@ -248,7 +248,7 @@ pub enum FPart {
     Hole { expr: Expr, spec: Option<String>, at: u32 },
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Type {
     pub name: winnow_grammar::Symbol,
     pub generics: Vec<Type>,
@@ -268,13 +268,13 @@ pub enum ExternMember {
     Opaque(Spanned<OpaqueType>),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OpaqueType {
     pub name: winnow_grammar::Symbol,
     pub released_by: winnow_grammar::Symbol,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Code {
     pub result: Box<Option<Type>>,
     pub is_sync: bool,
@@ -328,7 +328,7 @@ pub enum MatchPattern {
     Range { start: Expr, end: Expr },
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GenericParam {
     pub name: winnow_grammar::Symbol,
     pub bounds: Vec<winnow_grammar::Symbol>,
@@ -385,7 +385,7 @@ pub struct FieldDefault {
     pub span: Span,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AsmBinding {
     pub alias: winnow_grammar::Symbol,
     pub direction: String,
@@ -4039,7 +4039,7 @@ pub struct BufferAsk<'a> {
     pub context: &'a KeepContext,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct Local {
     at: i64,
     path: Vec<(i64, bool)>,
@@ -4062,7 +4062,7 @@ struct PutsAt {
     by_arg: collections::BTreeMap<i64, collections::BTreeSet<(i64, String)>>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct BufferWalk {
     target: Option<String>,
     locals: collections::BTreeMap<String, Vec<Local>>,
@@ -6176,7 +6176,7 @@ pub struct CxExported {
     pub node: String,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CxCtx {
     pub plains: Vec<CxPlain>,
     pub handles: Vec<CxHandled>,
@@ -7199,7 +7199,7 @@ pub struct CxVariantOf {
     pub pattern: String,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CxEntry {
     pub owner: Option<String>,
     pub name: String,
@@ -7229,14 +7229,14 @@ impl CxEntry {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CxHandled {
     pub name: String,
     pub fields: Vec<(String, Type)>,
     pub variants: Vec<CxShown>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CxShown {
     pub name: String,
     pub pattern: String,
@@ -12205,6 +12205,7 @@ pub struct CheckFacts {
     pub number_lets: collections::BTreeMap<i64, String>,
     pub changed_elements: collections::BTreeSet<i64>,
     pub text_finds: collections::BTreeSet<i64>,
+    pub standard_compares: collections::BTreeMap<i64, i64>,
     pub count_args: collections::BTreeSet<i64>,
     pub path_methods: collections::BTreeMap<i64, bool>,
     pub map_keys: collections::BTreeMap<(i64, bool), FactKeyForm>,
@@ -12300,7 +12301,7 @@ pub struct CheckFacts {
 }
 
 impl CheckFacts {
-    pub fn empty() -> CheckFacts { CheckFacts { held_across_a_pause: collections::BTreeSet::new(), comptime_values: collections::BTreeMap::new(), dsl_values: collections::BTreeMap::new(), with_types: collections::BTreeMap::new(), unrolled: collections::BTreeMap::new(), walks_fields: collections::BTreeMap::new(), unrolled_calls: collections::BTreeMap::new(), fallible_loops: collections::BTreeSet::new(), pausing_walks: collections::BTreeSet::new(), pausing_loops: collections::BTreeSet::new(), owned_loops: collections::BTreeSet::new(), copied_loop_bindings: collections::BTreeSet::new(), copied_view_bindings: collections::BTreeSet::new(), unsigned_literals: collections::BTreeMap::new(), number_lets: collections::BTreeMap::new(), changed_elements: collections::BTreeSet::new(), text_finds: collections::BTreeSet::new(), count_args: collections::BTreeSet::new(), path_methods: collections::BTreeMap::new(), map_keys: collections::BTreeMap::new(), slice_indices: collections::BTreeSet::new(), list_indices: collections::BTreeSet::new(), copied_tuple_parts: collections::BTreeSet::new(), std_lengths: collections::BTreeSet::new(), sized_lengths: collections::BTreeSet::new(), char_codes: collections::BTreeSet::new(), arithmetic: collections::BTreeMap::new(), negations: collections::BTreeMap::new(), copied_slots: collections::BTreeSet::new(), owned_copies: collections::BTreeSet::new(), text_as_is: collections::BTreeSet::new(), lent_coalesces: collections::BTreeMap::new(), plain_reaches: collections::BTreeSet::new(), copied_jump_reads: collections::BTreeSet::new(), view_coalesces: collections::BTreeSet::new(), lent_map_fallbacks: collections::BTreeSet::new(), optional_fallbacks: collections::BTreeSet::new(), flat_reads: collections::BTreeSet::new(), copied_reads: collections::BTreeSet::new(), text_in_lists: collections::BTreeSet::new(), counted: collections::BTreeSet::new(), lent_bindings: collections::BTreeMap::new(), taking_arms: collections::BTreeMap::new(), views_handed_on: collections::BTreeSet::new(), comptime_uses: collections::BTreeMap::new(), lent_scrutinees: collections::BTreeSet::new(), guards_inside_boxes: collections::BTreeMap::new(), collected_into: collections::BTreeSet::new(), copied_walks: collections::BTreeSet::new(), filter_patterns: collections::BTreeSet::new(), kept_lambdas: collections::BTreeMap::new(), kept_hulls: collections::BTreeMap::new(), kept_owned: collections::BTreeMap::new(), field_calls: collections::BTreeMap::new(), kept_calls: collections::BTreeMap::new(), kept_args: collections::BTreeSet::new(), kept_functions: collections::BTreeMap::new(), fallible_methods: collections::BTreeSet::new(), future_lambdas: collections::BTreeSet::new(), run_lambdas: collections::BTreeSet::new(), sync_functions_run_async: collections::BTreeMap::new(), pausing_lambdas: collections::BTreeMap::new(), paused_scopes: collections::BTreeSet::new(), witnessed_sets: collections::BTreeSet::new(), pausing_methods: collections::BTreeSet::new(), nullable_sites: collections::BTreeMap::new(), concatenations: collections::BTreeSet::new(), path_comparisons: collections::BTreeSet::new(), mixed_comparisons: collections::BTreeMap::new(), path_holes: collections::BTreeMap::new(), flattened_reaches: collections::BTreeSet::new(), copied_reaches: collections::BTreeSet::new(), viewed_reaches: collections::BTreeMap::new(), lent_reaches: collections::BTreeSet::new(), held_reaches: collections::BTreeSet::new(), nullable_fields: collections::BTreeMap::new(), nullable_args: collections::BTreeMap::new(), narrowing_casts: collections::BTreeMap::new(), task_handles: collections::BTreeSet::new(), method_options: collections::BTreeMap::new(), lent_args: collections::BTreeSet::new(), lookup_keys: collections::BTreeSet::new(), boxed_members: collections::BTreeMap::new(), boxed_reads: collections::BTreeSet::new(), copied_bindings: collections::BTreeSet::new(), some_tails: collections::BTreeSet::new(), lent_options: collections::BTreeSet::new(), wrapped: collections::BTreeMap::new(), compared_views: collections::BTreeSet::new(), compared_numbers: collections::BTreeSet::new(), claims: collections::BTreeMap::new(), entries: collections::BTreeMap::new(), reaches: collections::BTreeMap::new(), published: collections::BTreeMap::new(), mut_args: collections::BTreeSet::new(), copied_args: collections::BTreeSet::new(), settle_fns: collections::BTreeMap::new(), settle_lets: collections::BTreeMap::new(), lent_lets: collections::BTreeSet::new(), lent_returns: collections::BTreeSet::new(), compares: collections::BTreeSet::new(), compares_totally: collections::BTreeSet::new(), copies: collections::BTreeSet::new(), viewed_numbers: collections::BTreeSet::new(), array_literals: collections::BTreeSet::new(), byte_literals: collections::BTreeSet::new(), owned_texts: collections::BTreeSet::new(), lent_list_reads: collections::BTreeSet::new(), view_fallbacks: collections::BTreeSet::new() } }
+    pub fn empty() -> CheckFacts { CheckFacts { held_across_a_pause: collections::BTreeSet::new(), comptime_values: collections::BTreeMap::new(), dsl_values: collections::BTreeMap::new(), with_types: collections::BTreeMap::new(), unrolled: collections::BTreeMap::new(), walks_fields: collections::BTreeMap::new(), unrolled_calls: collections::BTreeMap::new(), fallible_loops: collections::BTreeSet::new(), pausing_walks: collections::BTreeSet::new(), pausing_loops: collections::BTreeSet::new(), owned_loops: collections::BTreeSet::new(), copied_loop_bindings: collections::BTreeSet::new(), copied_view_bindings: collections::BTreeSet::new(), unsigned_literals: collections::BTreeMap::new(), number_lets: collections::BTreeMap::new(), changed_elements: collections::BTreeSet::new(), text_finds: collections::BTreeSet::new(), standard_compares: collections::BTreeMap::new(), count_args: collections::BTreeSet::new(), path_methods: collections::BTreeMap::new(), map_keys: collections::BTreeMap::new(), slice_indices: collections::BTreeSet::new(), list_indices: collections::BTreeSet::new(), copied_tuple_parts: collections::BTreeSet::new(), std_lengths: collections::BTreeSet::new(), sized_lengths: collections::BTreeSet::new(), char_codes: collections::BTreeSet::new(), arithmetic: collections::BTreeMap::new(), negations: collections::BTreeMap::new(), copied_slots: collections::BTreeSet::new(), owned_copies: collections::BTreeSet::new(), text_as_is: collections::BTreeSet::new(), lent_coalesces: collections::BTreeMap::new(), plain_reaches: collections::BTreeSet::new(), copied_jump_reads: collections::BTreeSet::new(), view_coalesces: collections::BTreeSet::new(), lent_map_fallbacks: collections::BTreeSet::new(), optional_fallbacks: collections::BTreeSet::new(), flat_reads: collections::BTreeSet::new(), copied_reads: collections::BTreeSet::new(), text_in_lists: collections::BTreeSet::new(), counted: collections::BTreeSet::new(), lent_bindings: collections::BTreeMap::new(), taking_arms: collections::BTreeMap::new(), views_handed_on: collections::BTreeSet::new(), comptime_uses: collections::BTreeMap::new(), lent_scrutinees: collections::BTreeSet::new(), guards_inside_boxes: collections::BTreeMap::new(), collected_into: collections::BTreeSet::new(), copied_walks: collections::BTreeSet::new(), filter_patterns: collections::BTreeSet::new(), kept_lambdas: collections::BTreeMap::new(), kept_hulls: collections::BTreeMap::new(), kept_owned: collections::BTreeMap::new(), field_calls: collections::BTreeMap::new(), kept_calls: collections::BTreeMap::new(), kept_args: collections::BTreeSet::new(), kept_functions: collections::BTreeMap::new(), fallible_methods: collections::BTreeSet::new(), future_lambdas: collections::BTreeSet::new(), run_lambdas: collections::BTreeSet::new(), sync_functions_run_async: collections::BTreeMap::new(), pausing_lambdas: collections::BTreeMap::new(), paused_scopes: collections::BTreeSet::new(), witnessed_sets: collections::BTreeSet::new(), pausing_methods: collections::BTreeSet::new(), nullable_sites: collections::BTreeMap::new(), concatenations: collections::BTreeSet::new(), path_comparisons: collections::BTreeSet::new(), mixed_comparisons: collections::BTreeMap::new(), path_holes: collections::BTreeMap::new(), flattened_reaches: collections::BTreeSet::new(), copied_reaches: collections::BTreeSet::new(), viewed_reaches: collections::BTreeMap::new(), lent_reaches: collections::BTreeSet::new(), held_reaches: collections::BTreeSet::new(), nullable_fields: collections::BTreeMap::new(), nullable_args: collections::BTreeMap::new(), narrowing_casts: collections::BTreeMap::new(), task_handles: collections::BTreeSet::new(), method_options: collections::BTreeMap::new(), lent_args: collections::BTreeSet::new(), lookup_keys: collections::BTreeSet::new(), boxed_members: collections::BTreeMap::new(), boxed_reads: collections::BTreeSet::new(), copied_bindings: collections::BTreeSet::new(), some_tails: collections::BTreeSet::new(), lent_options: collections::BTreeSet::new(), wrapped: collections::BTreeMap::new(), compared_views: collections::BTreeSet::new(), compared_numbers: collections::BTreeSet::new(), claims: collections::BTreeMap::new(), entries: collections::BTreeMap::new(), reaches: collections::BTreeMap::new(), published: collections::BTreeMap::new(), mut_args: collections::BTreeSet::new(), copied_args: collections::BTreeSet::new(), settle_fns: collections::BTreeMap::new(), settle_lets: collections::BTreeMap::new(), lent_lets: collections::BTreeSet::new(), lent_returns: collections::BTreeSet::new(), compares: collections::BTreeSet::new(), compares_totally: collections::BTreeSet::new(), copies: collections::BTreeSet::new(), viewed_numbers: collections::BTreeSet::new(), array_literals: collections::BTreeSet::new(), byte_literals: collections::BTreeSet::new(), owned_texts: collections::BTreeSet::new(), lent_list_reads: collections::BTreeSet::new(), view_fallbacks: collections::BTreeSet::new() } }
 }
 
 
@@ -13938,11 +13939,11 @@ impl CheckState {
         }
         let suffix = format!("::{}", written);
         let shape = written == "Struct" || written == "Enum";
-        let mut declared = !shape && (written == "Error" || written == "Drop" || written == "Cleanup");
+        let mut declared = !shape && (written == "Error" || written == "Drop" || written == "Cleanup" || written == "Eq" || written == "Ord");
         declared = declared || item_has_trait(world.own, written, &suffix) || item_has_trait(world.library, written, &suffix) || declares_a_type(view, written) || imports_a_package(view, written) || self.foreign_names.contains(written);
         for other in world.beside.iter() { if declares_a_type(other, written) { declared = true; } }
         if declared { return; }
-        let mut because: String = format!("An `impl` can name a trait declared with `trait {} {{ … }}` in this program or a package it uses, or one of `Error`, `Drop` and `Cleanup`.", written);
+        let mut because: String = format!("An `impl` can name a trait declared with `trait {} {{ … }}` in this program or a package it uses, or one of `Error`, `Drop`, `Cleanup`, `Eq` and `Ord`.", written);
         let mut help: String = format!("Declare `trait {}`, or name the package that declares it: `package::{}`.", written, written);
         if shape {
             because = format!("A type is a `{}` by how it's declared, not by an `impl`: every `struct` is already a `Struct` and every `enum` an `Enum`.", written);
@@ -13995,7 +13996,7 @@ pub struct ItemGeneric<'a> {
     pub members: Vec<Type>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct ItemMember {
     member: String,
     ty: Type,
@@ -20919,6 +20920,7 @@ pub fn type_entry(fields: &[String], derives: &collections::BTreeSet<String>) ->
     entry.crosses = crosses(fields);
     entry.compares = derives.contains("PartialEq");
     entry.orders = derives.contains("Ord") && derives.contains("PartialOrd");
+    entry.equates = derives.contains("Eq") && derives.contains("PartialEq");
     entry.copies = derives.contains("Copy");
     entry
 }
@@ -23867,6 +23869,17 @@ impl EmitState {
     #[allow(clippy::too_many_arguments)]
     pub fn emit_core_method_arm<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         let name = emit_text(world, method);
+        if (name == "compare" || name == "eq") && args.len() == 1 && self.facts.standard_compares.contains_key(&node_key(receiver)) {
+            let flags = nikaia_std::index::or(*nikaia_std::index::get(&self.facts.standard_compares, &(node_key(receiver))), || 0);
+            if name == "compare" { out.push("std::cmp::Ord::cmp(&"); } else { out.push("std::cmp::PartialEq::eq(&"); }
+            if flags % 2 == 1 { out.push("*"); }
+            self.emit_core_nested(world, walk, out, host, receiver, 255, depth, flow, scope)?;
+            out.push(", &");
+            if flags / 2 % 2 == 1 { out.push("*"); }
+            self.emit_core_nested(world, walk, out, host, nikaia_std::index::get(&args, 0), 255, depth, flow, scope)?;
+            out.push(")");
+            return Ok(());
+        }
         if name == "find" && self.facts.text_finds.contains(&node_key(receiver)) {
             out.push("nikaia_std::search::find(&");
             self.emit_core_nested(world, walk, out, host, receiver, 255, depth, flow, scope)?;
@@ -27149,7 +27162,7 @@ impl EmitFlow {
     pub fn inferred(self) -> EmitFlow { EmitFlow { inferred: true, ..self } }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EmitScope {
     pub origin: String,
     pub function: String,
@@ -27168,7 +27181,7 @@ impl EmitScope {
 
 // --- emit_locals.nika ---
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct NnState {
     declared: collections::BTreeMap<winnow_grammar::Symbol, i64>,
     candidates: collections::BTreeSet<winnow_grammar::Symbol>,
@@ -29794,13 +29807,13 @@ fn printed(args: &[Expr], lead: &str, format_of: &impl Fn(&[FPart]) -> String, o
 
 // --- keep.nika ---
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KeepContext {
     pub borrowing: collections::BTreeSet<String>,
     pub structs: collections::BTreeMap<String, DeclaredStruct>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DeclaredStruct {
     pub generic: bool,
     pub fields: Vec<(String, Type)>,
@@ -30979,7 +30992,7 @@ fn function_key(entry: &mut FnContract, name: &str, key: &str, value: &str, n: i
 }
 
 fn type_key(entry: &mut TypeContract, key: &str, value: &str, n: i64) -> Result<(), nikaia_std::error::Thrown<Refused>> {
-    if key == "pub" { entry.public = value == "true"; } else if key == "crosses" { if value == "true" { entry.crosses = Crosses::May; } else if value == "false" { entry.crosses = Crosses::MayNot; } else { return Err(nikaia_std::error::throwing(Refused::Because(format!("line {}: `crosses` is `true` or `false`, not `{}` - and leaving the line out is the third answer", n, value)), &"type_key")); } } else if key == "compares" { entry.compares = value.trim() == "true"; } else if key == "orders" { entry.orders = value.trim() == "true"; } else if key == "copies" { entry.copies = value.trim() == "true"; } else if key == "tethered" { entry.tethered = entries(value, n)?; } else if key == "attribute" { entry.mark = unquoted(value, n)?; } else if key == "constant" { entry.constant = unquoted(value, n)?; } else if key == "touches" { entry.touches = entries(value, n)?; } else if key == "iterates" {
+    if key == "pub" { entry.public = value == "true"; } else if key == "crosses" { if value == "true" { entry.crosses = Crosses::May; } else if value == "false" { entry.crosses = Crosses::MayNot; } else { return Err(nikaia_std::error::throwing(Refused::Because(format!("line {}: `crosses` is `true` or `false`, not `{}` - and leaving the line out is the third answer", n, value)), &"type_key")); } } else if key == "compares" { entry.compares = value.trim() == "true"; } else if key == "equates" { entry.equates = value.trim() == "true"; } else if key == "orders" { entry.orders = value.trim() == "true"; } else if key == "copies" { entry.copies = value.trim() == "true"; } else if key == "tethered" { entry.tethered = entries(value, n)?; } else if key == "attribute" { entry.mark = unquoted(value, n)?; } else if key == "constant" { entry.constant = unquoted(value, n)?; } else if key == "touches" { entry.touches = entries(value, n)?; } else if key == "iterates" {
         let said = unquoted(value, n)?;
         if said != "throws" { return Err(nikaia_std::error::throwing(Refused::Because(format!("line {}: `iterates` is `throws` and nothing else, not `{}` - a step that cannot fail says nothing", n, said)), &"type_key")); }
         entry.iterates_fallibly = true;
@@ -32328,6 +32341,7 @@ fn type_text(contract: &TypeContract) -> String {
         Crosses::Undecided => { },
     }
     if contract.compares { out.push_str("compares = true\n"); }
+    if contract.equates { out.push_str("equates = true\n"); }
     if contract.orders { out.push_str("orders = true\n"); }
     if contract.copies { out.push_str("copies = true\n"); }
     if contract.iterates_fallibly { out.push_str("iterates = \"throws\"\n"); }
@@ -42122,7 +42136,13 @@ fn leaf(blocked: bool) -> SyncNode { SyncNode { reach: SyncReach { blocked, call
 fn declared_by(trait_name: Option<&winnow_grammar::Symbol>, method: &str, names: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, node: &mut SyncNode) {
     let named = match trait_name { Some(__nikaia_value) => __nikaia_value, None => return };
     let declared = format!("{}::{}", names.resolve(*named), method);
-    if own.functions.contains_key(&declared) || library.functions.contains_key(&declared) { node.reach.calls.insert(declared); }
+    if own.functions.contains_key(&declared) { node.reach.calls.insert(declared); } else if library.functions.contains_key(&declared) {
+        let entry = nikaia_std::index::or(match *nikaia_std::index::get(&library.functions, &declared) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || FnContract::empty());
+        if !entry.sync_claim.is_sync() { node.reach.calls.insert(declared); }
+    }
 }
 
 fn code_of(args: &[FnArg], names: &winnow_grammar::InternerContext) -> collections::BTreeMap<String, bool> {
@@ -43047,20 +43067,20 @@ pub fn unaliased_in(aliases: &collections::BTreeMap<String, String>, name: &str)
     format!("{}{}::{}", amp, package, *nikaia_std::index::get(&parts, 1))
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct FieldDecl {
     ty: Type,
     published: bool,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct FnDecl {
     params: Vec<Type>,
     result: Option<Type>,
     published: bool,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct TextDeclared {
     fields: collections::BTreeMap<(String, String), FieldDecl>,
     fns: collections::BTreeMap<String, FnDecl>,
@@ -43153,13 +43173,13 @@ fn string_type(declared: &TextDeclared, names: &winnow_grammar::InternerContext)
     None
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct Declaring {
     owner: TextOwner,
     ty: Type,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct TierLocal {
     kinds: Kinds,
     of: Option<String>,
@@ -43308,7 +43328,7 @@ fn flow_value(going: &TierGoing, value: Option<&Expr>, kinds: &Kinds, ask: &Tier
     if a_container(ask.names, &ty) { flow_whole(going, given, ask, walk); }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct TierGoing {
     owner: TextOwner,
     ty: Type,
@@ -45053,6 +45073,11 @@ pub fn check_impls(names: &winnow_grammar::InternerContext, items: &[Spanned<Ite
                 let written_trait = match trait_name { Some(__nikaia_value) => __nikaia_value, None => continue };
                 let named = names.resolve(written_trait).to_owned();
                 for one in receivers(names, items, &named, methods) { found.push(one); }
+                if (named == "Eq" || named == "Ord") && !own.traits.contains_key(&named) {
+                    let target_text = names.resolve(target.name).to_owned();
+                    for one in language_trait(names, own, &named, &target_text, methods, item.span.clone()) { found.push(one); }
+                    continue;
+                }
                 if !own.traits.contains_key(&named) { continue; }
                 let declared = nikaia_std::index::or(match *nikaia_std::index::get(&own.traits, &named) {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -45081,6 +45106,40 @@ pub fn check_impls(names: &winnow_grammar::InternerContext, items: &[Spanned<Ite
                 if !missing.is_empty() { found.push(incomplete(&named, &target_name, &missing, item.span.clone())); }
             },
             _ => { },
+        }
+    }
+    found
+}
+
+fn language_trait(names: &winnow_grammar::InternerContext, own: &Ledger, trait_name: &str, target: &str, methods: &[Spanned<Item>], span: Span) -> Vec<Finding> {
+    let mut found: Vec<Finding> = vec![];
+    let mut wanted: String = String::from("eq");
+    if trait_name == "Ord" { wanted = "compare".to_owned(); }
+    let mut given = false;
+    for method in methods.iter() {
+        match &method.node {
+            Item::Fn { name, .. } => {
+                let name = *name;
+                let symbol = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
+                let written = names.resolve(symbol).to_owned();
+                if written == wanted { given = true; } else { found.push(not_in_the_trait(trait_name, target, &written, method.span.clone())); }
+            },
+            _ => { },
+        }
+    }
+    if !given {
+        let missing: Vec<String> = vec![wanted.to_owned()];
+        found.push(incomplete(trait_name, target, &missing, span.clone()));
+    }
+    let key = format!("{}::{}", target, wanted);
+    if own.functions.contains_key(&key) {
+        let contract = nikaia_std::index::or(match *nikaia_std::index::get(&own.functions, &key) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || FnContract::empty());
+        if !contract.sync_claim.is_sync() {
+            let notes: Vec<String> = vec![format!("`{}` is the language's, and an operator such as `==` or `<` cannot wait for anything.", trait_name)];
+            found.push(refusal("NK1129", span, format!("`{}` can pause, but `{}`'s `{}` is `sync`.", key, trait_name, wanted), notes, String::from("Take out the part that waits (a read, a lock, a call that pauses) and compare what is already in hand.")));
         }
     }
     found
@@ -45147,7 +45206,7 @@ fn wanted_receiver(names: &winnow_grammar::InternerContext, items: &[Spanned<Ite
     }
     let shared = Receiver { is_ref: true, is_mut: false };
     let changed = Receiver { is_ref: true, is_mut: true };
-    if trait_name == "Error" && method == "message" { return Wanted { known: true, receiver: Some(shared) }; }
+    if trait_name == "Error" && method == "message" || trait_name == "Eq" && method == "eq" || trait_name == "Ord" && method == "compare" { return Wanted { known: true, receiver: Some(shared) }; }
     if trait_name == "Drop" && method == "drop" || trait_name == "Cleanup" && method == "cleanup" { return Wanted { known: true, receiver: Some(changed) }; }
     Wanted { known: false, receiver: None }
 }
@@ -45358,7 +45417,7 @@ struct KeyDeps {
     ids: Vec<i64>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct MapEnv {
     sources: collections::BTreeSet<String>,
     own: collections::BTreeSet<String>,
@@ -45382,7 +45441,7 @@ pub struct MapPlan {
     pub escaped: collections::BTreeSet<i64>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct MapMade {
     at: i64,
     name: winnow_grammar::Symbol,
@@ -45395,7 +45454,7 @@ struct MapKept {
     deps: KeyDeps,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct MapWalk {
     nodes: Vec<String>,
     ret: String,
@@ -46710,6 +46769,7 @@ pub struct TypeContract {
     pub iterates_fallibly: bool,
     pub compares: bool,
     pub orders: bool,
+    pub equates: bool,
     pub copies: bool,
     pub touches: Vec<String>,
     pub tethered: Vec<String>,
@@ -46719,7 +46779,7 @@ pub struct TypeContract {
 }
 
 impl TypeContract {
-    pub fn empty() -> TypeContract { TypeContract { public: false, fields: vec![], variants: vec![], crosses: Crosses::Undecided, iterates_fallibly: false, compares: false, orders: false, copies: false, touches: vec![], tethered: vec![], constant: String::from(""), mark: String::from(""), attributes: vec![] } }
+    pub fn empty() -> TypeContract { TypeContract { public: false, fields: vec![], variants: vec![], crosses: Crosses::Undecided, iterates_fallibly: false, compares: false, orders: false, equates: false, copies: false, touches: vec![], tethered: vec![], constant: String::from(""), mark: String::from(""), attributes: vec![] } }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -47204,6 +47264,8 @@ fn renamed_result(result: Option<&Ty>, renames: &collections::BTreeMap<String, S
 
 const SHAPE_BOUNDS: [&str; 2] = ["Struct", "Enum"];
 
+const STANDARD_BOUNDS: [&str; 2] = ["Eq", "Ord"];
+
 const BUILT_IN: [&str; 27] = ["i8", "i16", "i32", "i64", "i128", "isize", "u8", "u16", "u32", "u64", "u128", "usize", "f32", "f64", "bool", "char", "scalar", "String", "str", "Self", "Vec", "Shared", "SharedMut", "Locked", "TaskHandle", "Array", "Bytes"];
 
 const STD_MODULES: [&str; 7] = ["cli", "collections", "channel", "foreign", "fs", "io", "time"];
@@ -47240,6 +47302,10 @@ fn known_traits(names: &winnow_grammar::InternerContext, items: &[Spanned<Item>]
     for shape in SHAPE_BOUNDS.iter() {
         let shape = *shape;
         known.insert(shape.to_owned());
+    }
+    for standard in STANDARD_BOUNDS.iter() {
+        let standard = *standard;
+        known.insert(standard.to_owned());
     }
     for (key, _) in own.traits.iter() { with_its_last_segment(key, &mut known); }
     for (key, _) in library.traits.iter() { with_its_last_segment(key, &mut known); }
@@ -47530,7 +47596,7 @@ fn std_module_of(name: &str, known: &collections::BTreeSet<String>) -> String {
 
 // --- views.nika ---
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Stored {
     pub span: Span,
     pub param: String,
@@ -47544,7 +47610,7 @@ pub struct Stored {
     pub carrier: Option<winnow_grammar::Symbol>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Destination {
     Field { owner: String, field: String, ty: String },
     Subject { owner: String },
@@ -47559,13 +47625,13 @@ pub struct Asked<'a> {
     pub library: &'a Ledger,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct Unit {
     borrowing: collections::BTreeSet<String>,
     fields: collections::BTreeMap<String, Vec<(String, Type)>>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct Here {
     subject: Option<Type>,
     subject_fields: Vec<(String, Type)>,
@@ -47575,7 +47641,7 @@ struct Here {
     found: Vec<(Span, Destination)>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum Root {
     Subject,
     SubjectField(String),
@@ -48381,7 +48447,7 @@ fn stores_maybe(unit: &Unit, asked: &Asked<'_>, expr: Option<&Expr>, span: &Span
 
 fn walk_maybe_block(unit: &Unit, asked: &Asked<'_>, block: Option<&Block>, own_buffer: &impl Fn(&Expr) -> bool, here: &mut Here) { walk_block(unit, asked, match block { Some(__nikaia_value) => __nikaia_value, None => return }, false, own_buffer, here); }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FieldsHeld {
     pub name: winnow_grammar::Symbol,
     pub fields: Vec<(String, Type)>,
@@ -48442,7 +48508,7 @@ struct ResultSrcKnown {
     reach: collections::BTreeSet<String>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct ResultSrcFlow {
     env: collections::BTreeMap<String, collections::BTreeSet<String>>,
     ways: Vec<ResultSrcWay>,

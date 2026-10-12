@@ -1,0 +1,76 @@
+// `Eq` and `Ord` are the language's (ADR-341, #592): what a bound gives the
+// body and what an `impl` is, as it runs. The refusals and the lowering are
+// `crates/nikaia/tests/std_bounds.rs`.
+
+struct BoundsPoint { x: i64, y: i64 }
+
+impl Ord for BoundsPoint {
+    fn compare(ref self, other: ref BoundsPoint) -> Ordering {
+        if self.x < other.x { return Ordering::Less }
+        if self.x > other.x { return Ordering::Greater }
+        if self.y < other.y { return Ordering::Less }
+        if self.y > other.y { return Ordering::Greater }
+        return Ordering::Equal
+    }
+}
+
+struct BoundsTagged { id: i64, note: String }
+
+impl Eq for BoundsTagged {
+    fn eq(ref self, other: ref BoundsTagged) -> bool {
+        return self.id == other.id
+    }
+}
+
+fn bounds_biggest[T: Ord](a: T, b: T) -> T {
+    if a > b { return a }
+    return b
+}
+
+fn bounds_same[T: Eq](a: ref T, b: ref T) -> bool {
+    return a == b
+}
+
+fn bounds_rank[T: Ord](a: ref T, b: ref T) -> i64 {
+    return match a.compare(b) {
+        Ordering::Less => -1,
+        Ordering::Equal => 0,
+        Ordering::Greater => 1,
+    }
+}
+
+test "a bound gives the operators" {
+    assert(bounds_biggest(3, 9) == 9)
+    let first: String = "a"
+    let second: String = "b"
+    let bigger = bounds_biggest(first, second)
+    assert(bigger == "b")
+    let one: i64 = 4
+    let two: i64 = 4
+    assert(bounds_same(one, two))
+}
+
+test "a bound gives compare, and a number has it" {
+    let small: i64 = 1
+    let large: i64 = 2
+    assert(bounds_rank(small, large) == -1)
+    assert(bounds_rank(large, small) == 1)
+    assert(bounds_rank(small, small) == 0)
+    assert(small.compare(large) == Ordering::Less)
+}
+
+test "an impl Eq is the equality" {
+    let a = BoundsTagged { id: 1, note: "one" }
+    let b = BoundsTagged { id: 1, note: "uno" }
+    assert(a == b)
+    assert(bounds_same(a, b))
+}
+
+test "an impl Ord orders a declared type" {
+    let a = BoundsPoint { x: 1, y: 2 }
+    let b = BoundsPoint { x: 1, y: 3 }
+    assert(a < b)
+    assert(!(b < a))
+    let c = bounds_biggest(a, b)
+    assert(c.y == 3)
+}

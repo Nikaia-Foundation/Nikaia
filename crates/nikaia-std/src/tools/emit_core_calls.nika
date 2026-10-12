@@ -853,6 +853,27 @@ impl EmitState {
         let name = emit_text(world, method)
         // **`s.find(needle; from:)` on text is `std`'s search** (ADR-320 D6): the
         // language below's `str::find` takes one argument and answers a `usize`.
+        // **`a.compare(b)` and `a.eq(b)` are the standard library's** (ADR-341 D2):
+        // a bound gives the method, and a number or a text has it too.
+        if (name == "compare" || name == "eq") && args.len() == 1 && self.facts.standard_compares.contains_key(node_key(receiver)) {
+            let flags = self.facts.standard_compares[node_key(receiver)] ?? 0
+            if name == "compare" {
+                out.push("std::cmp::Ord::cmp(&")
+            } else {
+                out.push("std::cmp::PartialEq::eq(&")
+            }
+            if flags % 2 == 1 {
+                out.push("*")
+            }
+            self.emit_core_nested(world, walk, out, host, receiver, 255, depth, flow, scope)
+            out.push(", &")
+            if (flags / 2) % 2 == 1 {
+                out.push("*")
+            }
+            self.emit_core_nested(world, walk, out, host, args[0], 255, depth, flow, scope)
+            out.push(")")
+            return
+        }
         if name == "find" && self.facts.text_finds.contains(node_key(receiver)) {
             out.push("nikaia_std::search::find(&")
             self.emit_core_nested(world, walk, out, host, receiver, 255, depth, flow, scope)

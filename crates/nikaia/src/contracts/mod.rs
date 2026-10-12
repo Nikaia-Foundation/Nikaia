@@ -575,6 +575,7 @@ impl LedgerOps for Ledger {
                                 // column is for a type whose parts are Rust.
                                 compares: false,
                                 orders: false,
+                                equates: false,
                                 copies: false,
                                 // Nor does a declared `struct` read anything when
                                 // it is read: a field access is memory. The types

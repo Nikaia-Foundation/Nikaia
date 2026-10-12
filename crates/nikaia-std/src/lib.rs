@@ -609,9 +609,12 @@ pub mod prelude {
     // arrives in a `catch`, and the generated file has to find it there
     // without a `use` the program did not write.
     pub use crate::fixed::Fixed;
+    // **How `Ord`'s `compare` answers** (ADR-341 D1): the standard library's
+    // own, bare, so `Ordering::Less` resolves where the program wrote it.
     pub use crate::grammar::ParseError;
     pub use crate::hash::{TrustedMap, TrustedSet};
     pub use crate::html;
+    pub use std::cmp::Ordering;
     // **HTTP/1.1's text half** ([ADR-289](../../../docs/specification/adr/adr-289.md)
     // D5), which the `http` package calls. **Not named `http`**: a program
     // reaches a *package* by that word, and a `std` module of the same name

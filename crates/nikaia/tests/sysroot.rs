@@ -281,8 +281,8 @@ fn a_sysroot_module_is_checked_before_it_is_lowered() {
 /// **A tool reads the Rust it is handed, described**
 /// ([ADR-294](../../../docs/specification/adr/adr-294.md) D9.3): a module in
 /// `tools/` is checked and lowered against `tools/described.contracts` too, so
-/// a `winnow_grammar::Symbol` copies and compares and `resolve` does not
-/// pause. A module of `std` itself is not: a program's `std` names no crate of
+/// a `winnow_grammar::Symbol` copies, compares (and equates: `equates = true`,
+/// ADR-341 D4) and `resolve` does not pause. A module of `std` itself is not: a program's `std` names no crate of
 /// the toolchain's.
 #[test]
 fn a_tool_reads_the_names_of_the_tree_as_described() {
@@ -319,7 +319,7 @@ fn a_tool_reads_the_names_of_the_tree_as_described() {
 
     let tool = lowered_in("tools").expect("a tool lowers against the description");
     assert!(
-        tool.contains("#[derive(Debug, Clone, Copy, PartialEq)]\npub struct Named"),
+        tool.contains("#[derive(Debug, Clone, Copy, PartialEq, Eq)]\npub struct Named"),
         "{tool}"
     );
     assert!(!tool.contains("async fn is_main"), "{tool}");

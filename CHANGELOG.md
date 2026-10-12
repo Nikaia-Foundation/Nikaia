@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.853] — 2026-10-12
+
+**Eq and Ord: bounds, operators, compare, impl Eq / impl Ord, NK1247 for declared keys, NK1248, NK1249, NK1164 (ADR-341, #592)**
+- [T: Eq] and [T: Ord] are the language's bounds and std's Eq/Ord in the lowered Rust: a bound gives ==, !=, < <= > >= and compare; an operator on an unbounded type parameter is NK1248; impl Eq / impl Ord for a declared type lower to PartialEq/Eq and PartialOrd/Ord (NK1249 for a foreign type or an Ord without Eq, NK1129 for a body that pauses); an argument without the bound is NK1164; a declared type with impl Ord is a BTreeMap key; Ordering is std's; ledger column equates (Symbol equates)
+
 ## [0.0.852] — 2026-10-12
 
 **ADR-341: Eq and Ord are sync and lower to the standard library's traits (#592)**

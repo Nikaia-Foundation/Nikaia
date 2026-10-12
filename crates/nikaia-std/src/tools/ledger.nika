@@ -474,6 +474,8 @@ fn type_key(mut entry: TypeContract, key: ref String, value: ref String, n: i64)
         }
     } else if key == "compares" {
         entry.compares = value.trim() == "true"
+    } else if key == "equates" {
+        entry.equates = value.trim() == "true"
     } else if key == "orders" {
         entry.orders = value.trim() == "true"
     } else if key == "copies" {

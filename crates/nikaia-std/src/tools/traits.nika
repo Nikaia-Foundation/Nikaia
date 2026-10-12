@@ -23,6 +23,16 @@ pub fn check_impls(names: ref winnow_grammar::InternerContext, items: ref Vec[Sp
                 for one in receivers(names, items, named, methods) {
                     found.push(one)
                 }
+                // **`Eq` and `Ord` are the language's** (ADR-341 D1): a program
+                // that declares a trait of the name has its own, and one that
+                // does not owes the one method each names.
+                if (named == "Eq" || named == "Ord") && !own.traits.contains_key(ref named) {
+                    let target_text = names.resolve(target.name).clone()
+                    for one in language_trait(names, own, named, target_text, methods, item.span.clone()) {
+                        found.push(one)
+                    }
+                    continue
+                }
                 // A trait this unit does not declare is one nothing here can
                 // check against: `impl Error for ConfigError` names a trait the
                 // compiler reads rather than one a `.nika` file wrote (ADR-023
@@ -63,6 +73,46 @@ pub fn check_impls(names: ref winnow_grammar::InternerContext, items: ref Vec[Sp
                 }
             }
             else => {}
+        }
+    }
+    return found
+}
+
+/// **What an `impl Eq` or `impl Ord` owes the language** (ADR-341 D1): `eq`
+/// for the one, `compare` for the other, and no other method.
+fn language_trait(names: ref winnow_grammar::InternerContext, own: ref Ledger, trait_name: ref String, target: ref String, methods: ref Vec[Spanned[Item]], span: Span) -> Vec[Finding] {
+    let mut found: Vec[Finding] = []
+    let mut wanted: String = "eq"
+    if trait_name == "Ord" {
+        wanted = "compare".clone()
+    }
+    let mut given = false
+    for method in methods {
+        match method.node {
+            Item::Fn { name, .. } => {
+                let symbol = name ?? continue
+                let written = names.resolve(symbol).clone()
+                if written == wanted {
+                    given = true
+                } else {
+                    found.push(not_in_the_trait(trait_name, target, written, method.span.clone()))
+                }
+            }
+            else => {}
+        }
+    }
+    if !given {
+        let missing: Vec[String] = [wanted.clone()]
+        found.push(incomplete(trait_name, target, missing, span.clone()))
+    }
+    // **The bridge to the standard library's trait is not asynchronous**
+    // (ADR-341 D1): a body that can pause cannot answer `==` or `<`.
+    let key = f"{target}::{wanted}"
+    if own.functions.contains_key(ref key) {
+        let contract = own.functions[key]?.clone() ?? FnContract::empty()
+        if !contract.sync_claim.is_sync() {
+            let notes: Vec[String] = [f"`{trait_name}` is the language's, and an operator such as `==` or `<` cannot wait for anything."]
+            found.push(refusal("NK1129", span, f"`{key}` can pause, but `{trait_name}`'s `{wanted}` is `sync`.", notes, "Take out the part that waits (a read, a lock, a call that pauses) and compare what is already in hand."))
         }
     }
     return found
@@ -123,7 +173,7 @@ fn wanted_receiver(names: ref winnow_grammar::InternerContext, items: ref Vec[Sp
     }
     let shared = Receiver { is_ref: true, is_mut: false }
     let changed = Receiver { is_ref: true, is_mut: true }
-    if trait_name == "Error" && method == "message" {
+    if (trait_name == "Error" && method == "message") || (trait_name == "Eq" && method == "eq") || (trait_name == "Ord" && method == "compare") {
         return Wanted { known: true, receiver: shared }
     }
     if (trait_name == "Drop" && method == "drop") || (trait_name == "Cleanup" && method == "cleanup") {

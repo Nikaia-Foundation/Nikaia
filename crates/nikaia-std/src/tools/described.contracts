@@ -13,6 +13,7 @@ pub = true
 crosses = true
 compares = true
 # Ordered by the number it is: the order of interning, not of the text.
+equates = true
 orders = true
 copies = true
 

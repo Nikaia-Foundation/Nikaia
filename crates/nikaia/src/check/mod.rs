@@ -534,6 +534,7 @@ fn walked<'a>(
     // type walk runs before `sync::infer` fills that in
     // ([ADR-080](../../docs/specification/adr/adr-080.md)).
     checker.s.findings.extend(crate::traits::check(parsed, own));
+    checker.language_impls();
     // Part I 2.2: a **type** nothing declares, which had nothing where a value
     // has had `NK1117` since ADR-298
     // ([ADR-096](../../docs/specification/adr/adr-096.md)). Separate for the
@@ -1541,6 +1542,11 @@ impl<'a> Checker<'a> {
             .collect();
         let mut compared: Vec<(String, bool)> = Vec::new();
         for name in declared {
+            // **An `impl Eq` is the equality** (ADR-341 D5): no derive is written
+            // for the type, and the emitter writes the `impl` the program did.
+            if asking.implements("Eq", &name) {
+                continue;
+            }
             let parts: Vec<Ty> = match self.s.enum_payloads.get(&name) {
                 Some(held) => held.clone(),
                 None => self
@@ -3196,6 +3202,224 @@ impl<'a> Checker<'a> {
         Some(fails)
     }
 
+    /// **`NK1164` for `[T: Eq]` and `[T: Ord]`: the argument's type is neither**
+    /// ([ADR-341](../../docs/specification/adr/adr-341.md) D4).
+    ///
+    /// The bound is the language's, so no `impl` in a ledger answers it: the
+    /// walk does (`Comparable`), with the program's `impl Eq` and `impl Ord`.
+    /// A type parameter of the caller's answers for its own bounds, and a type
+    /// nobody could work out answers yes (Part III C.4).
+    fn a_standard_bound_not_met(&mut self, key: &str, bound: &BTreeMap<String, Ty>, span: &Span) {
+        let Some(wanted) = self.s.declared_bounds.get(key) else {
+            return;
+        };
+        let beside = self.parts_beside();
+        let mut refused: Vec<(String, String, String)> = Vec::new();
+        {
+            let asking = Comparable {
+                beside: &beside,
+                structs: &self.s.structs,
+                enums: &self.s.enums,
+                payloads: &self.s.enum_payloads,
+                parameters: &self.s.struct_parameters,
+                own: self.world.own,
+                library: self.world.library,
+            };
+            for (parameter, traits) in wanted {
+                let Some(held) = bound.get(parameter) else {
+                    continue;
+                };
+                for wanted_trait in traits {
+                    if !matches!(wanted_trait.as_str(), "Eq" | "Ord")
+                        || self.world.own.traits.contains_key(wanted_trait)
+                    {
+                        continue;
+                    }
+                    let met = match held {
+                        Ty::Named { name, args, .. }
+                            if args.is_empty() && self.s.type_parameters.contains_key(name) =>
+                        {
+                            self.s.type_parameters[name]
+                                .iter()
+                                .any(|own| own == "Ord" || (wanted_trait == "Eq" && own == "Eq"))
+                        }
+                        _ if wanted_trait == "Ord" => asking.orders(held),
+                        _ => asking.totally(held),
+                    };
+                    if !met {
+                        refused.push((parameter.clone(), wanted_trait.clone(), held.text()));
+                    }
+                }
+            }
+        }
+        for (parameter, wanted_trait, held) in refused {
+            let what = match wanted_trait.as_str() {
+                "Ord" => "an order",
+                _ => "an equality that is an equivalence",
+            };
+            let declared = self.s.structs.contains_key(&held) || self.s.enums.contains_key(&held);
+            self.s.findings.push(Finding {
+                severity: Severity::Error,
+                span: *span,
+                code: "NK1164".to_string(),
+                message: format!("`{key}` needs a `{wanted_trait}` here, but `{held}` isn't one."),
+                notes: vec![format!(
+                    "`{key}` declares `[{parameter}: {wanted_trait}]`, so the type passed has to have {what}, and `{held}` hasn't."
+                )],
+                help: Some(match declared {
+                    true => format!(
+                        "Write `impl {wanted_trait} for {held} {{ … }}`, or pass a type that already has one."
+                    ),
+                    false => "Pass a type that has one: a number, `String`, `bool`, `char`, or a tuple, list or option of those, or a type you declare with an `impl`.".to_string(),
+                }),
+                labels: Vec::new(),
+            });
+        }
+    }
+
+    /// **`NK1248`: a comparison on a type parameter that no bound allows**
+    /// ([ADR-341](../../docs/specification/adr/adr-341.md) D3).
+    ///
+    /// `fn lt[T](a: T, b: T) -> bool { return a < b }` passed the checker and
+    /// reached `rustc` as *binary operation `<` cannot be applied to type `T`*
+    /// (Part III C.1). `==` and `!=` need `Eq` or `Ord`, the order operators
+    /// need `Ord`; a trait of the program's own with one of those names gives
+    /// no operator.
+    fn an_operator_needs_a_bound(&mut self, op: BinaryOp, left: &Ty, right: &Ty, at: &Span) {
+        let ordering = matches!(
+            op,
+            BinaryOp::Lt | BinaryOp::Le | BinaryOp::Gt | BinaryOp::Ge
+        );
+        for ty in [left, right] {
+            let Ty::Named { name, args, .. } = ty else {
+                continue;
+            };
+            if !args.is_empty() {
+                continue;
+            }
+            let Some(bounds) = self.s.type_parameters.get(name) else {
+                continue;
+            };
+            let allowed = bounds.iter().any(|bound| {
+                !self.world.own.traits.contains_key(bound)
+                    && (bound == "Ord" || (!ordering && bound == "Eq"))
+            });
+            if allowed {
+                return;
+            }
+            let (symbol, needs) = match (ordering, op) {
+                (true, BinaryOp::Lt) => ("<", "Ord"),
+                (true, BinaryOp::Le) => ("<=", "Ord"),
+                (true, BinaryOp::Gt) => (">", "Ord"),
+                (true, _) => (">=", "Ord"),
+                (false, BinaryOp::Ne) => ("!=", "Eq"),
+                (false, _) => ("==", "Eq"),
+            };
+            let name = name.clone();
+            self.s.findings.push(Finding {
+                severity: Severity::Error,
+                span: *at,
+                code: "NK1248".to_string(),
+                message: format!("`{symbol}` needs `{name}: {needs}`."),
+                notes: vec![format!(
+                    "`{name}` can be any type the caller picks, so it can only be compared where a bound says how."
+                )],
+                help: Some(format!("Write `[{name}: {needs}]`.")),
+                labels: Vec::new(),
+            });
+            return;
+        }
+    }
+
+    /// **`NK1249`: an `impl Eq` or `impl Ord` the language cannot honour**
+    /// ([ADR-341](../../docs/specification/adr/adr-341.md) D5).
+    ///
+    /// For a type another package declares the ledger answers, and `rustc`
+    /// would refuse the `impl` as an orphan; and an order for a type that is
+    /// not `Eq` is not one `BTreeMap` can use.
+    fn language_impls(&mut self) {
+        let beside = self.parts_beside();
+        let mut refused: Vec<(Span, String, String, String, bool)> = Vec::new();
+        {
+            let asking = Comparable {
+                beside: &beside,
+                structs: &self.s.structs,
+                enums: &self.s.enums,
+                payloads: &self.s.enum_payloads,
+                parameters: &self.s.struct_parameters,
+                own: self.world.own,
+                library: self.world.library,
+            };
+            for item in &self.parsed.program.items {
+                let Item::Impl {
+                    trait_name: Some(trait_name),
+                    target,
+                    ..
+                } = &item.node
+                else {
+                    continue;
+                };
+                let trait_text = self.parsed.text(*trait_name);
+                if !matches!(trait_text, "Eq" | "Ord")
+                    || self.world.own.traits.contains_key(trait_text)
+                {
+                    continue;
+                }
+                let target = self.parsed.text(target.name).to_string();
+                let declared = self.s.structs.contains_key(&target)
+                    || self.s.enums.contains_key(&target)
+                    || beside.contains_key(&target);
+                if !declared {
+                    refused.push((
+                        item.span,
+                        trait_text.to_string(),
+                        target,
+                        String::new(),
+                        true,
+                    ));
+                } else if trait_text == "Ord" && !asking.totally(&Ty::named(&target)) {
+                    refused.push((
+                        item.span,
+                        trait_text.to_string(),
+                        target,
+                        String::new(),
+                        false,
+                    ));
+                }
+            }
+        }
+        for (span, trait_text, target, _, foreign) in refused {
+            let (message, note, help) = if foreign {
+                (
+                    format!(
+                        "You can't write `impl {trait_text} for {target}`: your program doesn't declare it."
+                    ),
+                    format!(
+                        "`{trait_text}` for a type another package declares is that package's to say, and its ledger does."
+                    ),
+                    format!(
+                        "Write it for a type you declare, or hold `{target}` in a `struct` of your own."
+                    ),
+                )
+            } else {
+                (
+                    format!("`impl Ord for {target}` needs `{target}` to be `Eq`."),
+                    "An order that disagrees with equality gives an ordered map no meaning, and a type holding a float is not `Eq`.".to_string(),
+                    format!("Write `impl Eq for {target}`, or take out the part that has no equality."),
+                )
+            };
+            self.s.findings.push(Finding {
+                severity: Severity::Error,
+                span,
+                code: "NK1249".to_string(),
+                message,
+                notes: vec![note],
+                help: Some(help),
+                labels: Vec::new(),
+            });
+        }
+    }
+
     /// **`NK1188`: `==` on a type that does not compare**
     /// ([ADR-204](../../docs/specification/adr/adr-204.md) D3).
     ///
@@ -3580,6 +3804,62 @@ impl<'a> Checker<'a> {
             // declaration, exactly as it would be from a written-down receiver.
             if let Some(bound) = self.s.bound_that_answers(self.world, name, entry) {
                 return self.call_on(bound, receiver, method, args, entry, span);
+            }
+            // **`compare` and `eq` are the language's** (ADR-341 D2): a type
+            // parameter with the bound has them, and so has a number, a text
+            // or a container the language orders or equates. A declared type
+            // with `impl Ord` has its own, found above.
+            if matches!(entry, "compare" | "eq") && args.len() == 1 {
+                let wants_order = entry == "compare";
+                let by_bound = match &on {
+                    Ty::Named {
+                        name, args: held, ..
+                    } if held.is_empty() => self.s.type_parameters.get(name).map(|bounds| {
+                        bounds.iter().any(|bound| {
+                            !self.world.own.traits.contains_key(bound)
+                                && (bound == "Ord" || (!wants_order && bound == "Eq"))
+                        })
+                    }),
+                    _ => None,
+                };
+                let answered = match by_bound {
+                    Some(held) => held,
+                    None if matches!(&on, Ty::Unknown | Ty::Var { .. }) => false,
+                    None => {
+                        let beside = self.parts_beside();
+                        let asking = Comparable {
+                            beside: &beside,
+                            structs: &self.s.structs,
+                            enums: &self.s.enums,
+                            payloads: &self.s.enum_payloads,
+                            parameters: &self.s.struct_parameters,
+                            own: self.world.own,
+                            library: self.world.library,
+                        };
+                        match wants_order {
+                            true => asking.orders(&on),
+                            false => asking.totally(&on),
+                        }
+                    }
+                };
+                if answered {
+                    let given = self.expr(&args[0], span);
+                    let view = |ty: &Ty| matches!(ty, Ty::Named { view: true, .. }) as i64;
+                    self.s
+                        .facts
+                        .standard_compares
+                        .insert(value_node(receiver), view(&on) | (view(&given) << 1));
+                    self.reached_method(Some(match wants_order {
+                        true => "Ord::compare",
+                        false => "Eq::eq",
+                    }));
+                    self.method_pauses(method, false, span);
+                    self.method_propagates(method, false, span);
+                    return match wants_order {
+                        true => Ty::named("Ordering"),
+                        false => Ty::named("bool"),
+                    };
+                }
             }
             // **A `Seen[T]` is the `T` it stamps** (ADR-281 D26, #497): the
             // stamp is erased below, so `seen.len()` is the list's `len`.
@@ -3974,6 +4254,7 @@ impl<'a> Checker<'a> {
         // do, and one written call is one rule (ADR-278).
         self.s
             .a_bound_the_argument_does_not_meet(self.world, &key, &bound, span);
+        self.a_standard_bound_not_met(&key, &bound, span);
         let result = ty::substitute(&result, &bound);
         let result = shape_through(&contract, &on, &found, result);
         let result =
@@ -7548,6 +7829,7 @@ impl<'a> Checker<'a> {
                         let asks_for_null = matches!(lhs.as_ref(), Expr::LitNull(_))
                             || matches!(rhs.as_ref(), Expr::LitNull(_));
                         if !asks_for_null {
+                            self.an_operator_needs_a_bound(*op, &left, &right, at);
                             self.a_type_that_does_not_compare(&left, &right, at);
                         }
                         if !asks_for_null {
@@ -7560,6 +7842,7 @@ impl<'a> Checker<'a> {
                         Ty::named("bool")
                     }
                     BinaryOp::Lt | BinaryOp::Le | BinaryOp::Gt | BinaryOp::Ge => {
+                        self.an_operator_needs_a_bound(*op, &left, &right, at);
                         self.s.a_maybe_compared_with_a_value(&left, &right, span);
                         self.a_view_compared_with_a_value(lhs, &left, rhs, &right, at);
                         Ty::named("bool")
@@ -9358,6 +9641,7 @@ impl<'a> Checker<'a> {
         // same binding read for the other question a type parameter raises.
         self.s
             .a_bound_the_argument_does_not_meet(self.world, &key, &bound, span);
+        self.a_standard_bound_not_met(&key, &bound, span);
         let result = constructed.unwrap_or_else(|| ty::substitute(&result, &bound));
         self.stamped_through(&contract, &found, result)
     }
@@ -13511,6 +13795,19 @@ impl Comparable<'_> {
         self.asking(ty, Strength::Totally, &mut BTreeSet::new())
     }
 
+    /// Whether the program or a library wrote `impl <trait_name> for <name>`
+    /// for a language trait (`Eq`, `Ord`), unless the program declares a trait
+    /// of that name, which then means its own ([ADR-341](../../docs/specification/adr/adr-341.md)).
+    fn implements(&self, trait_name: &str, name: &str) -> bool {
+        !self.own.traits.contains_key(trait_name)
+            && [self.own, self.library].into_iter().any(|ledger| {
+                ledger
+                    .implementations
+                    .get(trait_name)
+                    .is_some_and(|types| types.contains(name))
+            })
+    }
+
     /// The same question about **`Ord`**, the one an ordered map asks of its key.
     fn orders(&self, ty: &Ty) -> bool {
         self.asking(ty, Strength::Orders, &mut BTreeSet::new())
@@ -13594,15 +13891,19 @@ impl Comparable<'_> {
                     // *un*comparable for holding itself.
                     return true;
                 }
-                // **A type this language declares is given no order**: its
-                // derives are `PartialEq`, `Eq` and `Copy` where its parts allow
-                // them, and nothing says what comes first.
-                if how == Strength::Orders
-                    && (self.structs.contains_key(name)
-                        || self.enums.contains_key(name)
-                        || self.beside.contains_key(name))
-                {
-                    return false;
+                // **A type this language declares has the order and the equality
+                // its program wrote** (ADR-341 D4): none until `impl Ord`, and
+                // the walk's own until `impl Eq` replaces it.
+                let declared = self.structs.contains_key(name)
+                    || self.enums.contains_key(name)
+                    || self.beside.contains_key(name);
+                if declared {
+                    if how == Strength::Orders {
+                        return self.implements("Ord", name);
+                    }
+                    if self.implements("Eq", name) {
+                        return true;
+                    }
                 }
                 if let Some(fields) = self.structs.get(name) {
                     // **A generic struct is asked about what it was given**: its
@@ -13643,7 +13944,7 @@ impl Comparable<'_> {
                 let claimed = |contract: &crate::contracts::TypeContract| match how {
                     Strength::Compares => contract.compares,
                     Strength::Orders => contract.orders,
-                    Strength::Totally => false,
+                    Strength::Totally => contract.equates,
                 };
                 [self.own, self.library]
                     .into_iter()

@@ -82,6 +82,10 @@ pub struct CheckFacts {
     pub number_lets: collections::BTreeMap[i64, String],
     pub changed_elements: collections::BTreeSet[i64],
     pub text_finds: collections::BTreeSet[i64],
+    /// **`a.compare(b)` and `a.eq(b)` on a type the language orders or equates**
+    /// (ADR-341 D2), by the receiver: which side is a view (bit 0 the receiver,
+    /// bit 1 the argument), so the emitter writes `std::cmp::Ord::cmp(&*a, &b)`.
+    pub standard_compares: collections::BTreeMap[i64, i64],
     pub count_args: collections::BTreeSet[i64],
     pub path_methods: collections::BTreeMap[i64, bool],
     pub map_keys: collections::BTreeMap[(i64, bool), FactKeyForm],
@@ -196,6 +200,7 @@ impl CheckFacts {
             number_lets: collections::BTreeMap(),
             changed_elements: collections::BTreeSet(),
             text_finds: collections::BTreeSet(),
+            standard_compares: collections::BTreeMap(),
             count_args: collections::BTreeSet(),
             path_methods: collections::BTreeMap(),
             map_keys: collections::BTreeMap(),
