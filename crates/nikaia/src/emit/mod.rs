@@ -27,7 +27,7 @@ use std::collections::{HashMap, HashSet};
 use anyhow::{Result, anyhow};
 
 mod host;
-mod seeds;
+pub(crate) mod seeds;
 pub mod template;
 use winnow_grammar::Symbol;
 
@@ -3273,7 +3273,20 @@ impl<'p> Emitter<'p> {
                     false => self.seeds.mentions_a_struct(self.parsed, t),
                 });
         if seeded_fn {
-            self.place.borrow_mut().declare(base);
+            let shape = match (*is_public, name) {
+                (true, Some(n)) => {
+                    let key = match &owner {
+                        Some(o) => format!("{}::{}", o.target, self.text(*n)),
+                        None => self.text(*n).to_string(),
+                    };
+                    self.seeds.shape(&key).cloned()
+                }
+                _ => None,
+            };
+            match shape {
+                Some(shape) => self.place.borrow_mut().declare_fn(base, shape),
+                None => self.place.borrow_mut().declare(base),
+            }
         }
         let mut params = Vec::new();
         if let Some(receiver) = receiver {

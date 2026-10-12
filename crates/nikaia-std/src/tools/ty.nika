@@ -1083,6 +1083,10 @@ pub struct FnContract {
     pub threads: Threads,
     pub views: Vec[Held],
     pub sharing: Vec[Class],
+    /// **Which map positions of the signature are one map, and what the body
+    /// puts into each** (ADR-010 D9, Part III 13.5 `maps`): `a | b: either`,
+    /// `t.counts: from(word)`, `seen: keyed`. A map no line covers is keyed.
+    pub maps: Vec[String],
     pub ends_by_length: bool,
     /// **A grammar entry whose body is a `par_fold`** (ADR-296 D19, #521):
     /// a consumer in another package drives it in pieces, as the grammar's own
@@ -1120,6 +1124,7 @@ impl FnContract {
             threads: Threads::Undecided,
             views: [],
             sharing: [],
+            maps: [],
             ends_by_length: false,
             pieces: false,
             requires: [],

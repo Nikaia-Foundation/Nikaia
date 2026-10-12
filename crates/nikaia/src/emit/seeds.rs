@@ -17,6 +17,7 @@
 use std::collections::BTreeMap;
 
 use crate::ast::{Item, Type};
+use crate::contracts::maps::Shape;
 use crate::parser::Parsed;
 
 const SEED: &str = "nikaia_std::hash::Seed";
@@ -47,6 +48,10 @@ pub struct Seeds {
     fixed: std::collections::BTreeSet<String>,
     /// Some trait of the units, or an `impl` of one, holds a map position.
     trait_maps: bool,
+    /// The hidden parameters of each `pub` function and method, by the key
+    /// the ledger gives it: one per group of positions its body joins
+    /// (`contracts::maps`, Part III 17.1).
+    shapes: BTreeMap<String, Shape>,
 }
 
 /// Where the parameters of a type being written come from.
@@ -60,6 +65,10 @@ pub struct Place {
     share: bool,
     next: usize,
     seen: Vec<(String, String)>,
+    /// A `pub` function declares one parameter per group of positions the
+    /// body joins: the shape, the position the written types are at, and the
+    /// name each group got.
+    shape: Option<(Shape, usize, Vec<Option<String>>)>,
     /// Inside the `impl` of a type that declares parameters: a mention of the
     /// type is `Self`'s.
     within: Option<(String, Vec<String>)>,
@@ -75,6 +84,37 @@ impl Place {
         self.seen.clear();
     }
 
+    /// A `pub` function or method declares: one parameter for each group of
+    /// positions its body joins. A position of the `impl`'s own type has that
+    /// type's parameter, whose names are `types`.
+    pub fn declare_fn(&mut self, base: usize, shape: Shape) {
+        self.declare(base);
+        self.share = false;
+        let mut names: Vec<Option<String>> = vec![None; shape.groups.len()];
+        for (at, within) in shape.within.iter().enumerate() {
+            if let Some(j) = within {
+                names[shape.groups[at]] = Some(format!("__S{j}"));
+            }
+        }
+        let start = shape.start;
+        self.shape = Some((shape, start, names));
+    }
+
+    /// The name of the parameter the next position has, and the position
+    /// after it.
+    fn position(&mut self) -> Option<String> {
+        let next = self.next;
+        let (shape, at, names) = self.shape.as_mut()?;
+        let me = *at;
+        *at += 1;
+        let group = *shape.groups.get(me)?;
+        if names[group].is_none() {
+            names[group] = Some(format!("__S{next}"));
+            self.next += 1;
+        }
+        names[group].clone()
+    }
+
     /// A type declares: one parameter for each map position, in field order.
     pub fn declare_type(&mut self, base: usize) {
         self.declare(base);
@@ -87,6 +127,7 @@ impl Place {
         self.declaring = false;
         self.next = 0;
         self.seen.clear();
+        self.shape = None;
         n
     }
 
@@ -172,6 +213,9 @@ impl Seeds {
         }
         seeds.types.retain(|_, n| *n > 0);
         seeds.read_barriers(units);
+        for found in crate::contracts::maps::analyse_with(units, &seeds) {
+            seeds.shapes.insert(found.key, found.shape);
+        }
         for parsed in units {
             for item in &parsed.program.items {
                 if let Item::Fn {
@@ -210,6 +254,12 @@ impl Seeds {
                     if seeds.fixed.contains(parsed.text(*name)) {
                         continue;
                     }
+                    // A `pub` function declares one parameter for each group
+                    // of positions its body joins.
+                    let (total, fixed) = match seeds.shapes.get(parsed.text(*name)) {
+                        Some(shape) if *is_public => (shape.own(), shape.fixed()),
+                        _ => (total, fixed),
+                    };
                     if total > fixed {
                         // A type parameter of its own comes first, and nothing
                         // fixes it from here: the call leaves it to `_`.
@@ -434,7 +484,7 @@ impl Seeds {
             .sum::<usize>()
     }
 
-    fn key(&self, parsed: &Parsed, ty: &Type, top: bool) -> String {
+    pub(crate) fn key(&self, parsed: &Parsed, ty: &Type, top: bool) -> String {
         let name = last(parsed.text(ty.name));
         let name = match name {
             "TrustedMap" => "HashMap",
@@ -471,6 +521,12 @@ impl Seeds {
     /// The positions of a type, for the item that declares them.
     pub fn positions(&self, parsed: &Parsed, ty: &Type) -> usize {
         self.count(parsed, ty)
+    }
+
+    /// How the `pub` function (or method, `Type::name`) declares its hidden
+    /// parameters.
+    pub fn shape(&self, key: &str) -> Option<&Shape> {
+        self.shapes.get(key)
     }
 
     pub fn is_empty(&self) -> bool {
@@ -628,14 +684,35 @@ impl Seeds {
         let mut name = path.to_string();
         if map {
             if place.declaring {
-                added.push(format!("__S{}", place.next));
-                place.next += 1;
+                match place.position() {
+                    Some(own) => added.push(own),
+                    None => {
+                        added.push(format!("__S{}", place.next));
+                        place.next += 1;
+                    }
+                }
                 name = renamed(path);
             }
         } else {
             match &place.within {
                 Some((target, params)) if last(path) == target.as_str() => {
                     added = params.clone();
+                    if place.shape.is_some() {
+                        for _ in 0..k {
+                            place.position();
+                        }
+                    }
+                }
+                _ if place.declaring && place.shape.is_some() => {
+                    for _ in 0..k {
+                        match place.position() {
+                            Some(own) => added.push(own),
+                            None => {
+                                added.push(format!("__S{}", place.next));
+                                place.next += 1;
+                            }
+                        }
+                    }
                 }
                 _ if place.declaring => {
                     added = Seeds::applied(place.next, k);

@@ -28,6 +28,7 @@
 pub mod keep;
 pub mod keeps;
 pub mod locks;
+pub mod maps;
 pub mod order;
 pub mod send;
 pub mod sharing;
@@ -691,6 +692,9 @@ impl LedgerOps for Ledger {
         for parsed in units.iter().copied() {
             sharing::infer(&mut ledger, parsed, library);
         }
+        // **The `maps` key** (ADR-010 D9, #581 step 6): read from the bodies
+        // of the package's `pub` functions, and written as a permission.
+        maps::infer(&mut ledger, units);
         // Beside `keeps`, and for the same reason it runs here: it reads the
         // checker's method answers and the entries the item loop wrote.
         let stored: BTreeMap<String, crate::check::StoredCode> = checked

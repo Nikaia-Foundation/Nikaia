@@ -248,6 +248,50 @@ fn a_library_that_reads_a_socket_keys_the_maps_of_a_trusted_program() {
     done(&t.dir);
 }
 
+/// **What a library reads elsewhere is not what it puts in a map**
+/// (ADR-010 D9, `maps`, #581 step 6): `ping` reads a socket and touches no map,
+/// so the ledger of `count_in` and the rest says `from(word)` and `from()`,
+/// and a program with its own keys gets the fast hash.
+#[test]
+fn a_library_that_reads_a_socket_elsewhere_leaves_the_maps_to_the_program() {
+    let lib = TALLY.replace(
+        "fn main() {\n}\n",
+        "pub fn ping() throws {\n\
+         \x20   let mut c = net::connect(\"127.0.0.1:1\")\n\
+         \x20   let b = c.read()\n\
+         \x20   println(f\"{b.len()}\")\n}\n\nfn main() {\n}\n",
+    );
+    let lib = lib.replace(
+        "use std::collections\n",
+        "use std::collections\nuse std::net\n",
+    );
+    let t = one("ping", &lib, FROM_ITS_OWN);
+    assert!(t.app.contains("hash::Fast"), "{}", t.app);
+    assert!(!t.app.contains("hash::Keyed"), "{}", t.app);
+    compiles(&t.dir, &t.lib, &t.app, "app");
+    done(&t.dir);
+}
+
+/// **A `keyed` function nobody calls costs the program nothing.**
+#[test]
+fn a_keyed_function_the_program_never_calls_leaves_it_fast() {
+    let lib = TALLY.replace(
+        "fn main() {\n}\n",
+        "pub fn fill(mut m: collections::HashMap[i64, i64]) throws {\n\
+         \x20   let mut c = net::connect(\"127.0.0.1:1\")\n\
+         \x20   let b = c.read()\n\
+         \x20   m[b.len()] = 1\n}\n\nfn main() {\n}\n",
+    );
+    let lib = lib.replace(
+        "use std::collections\n",
+        "use std::collections\nuse std::net\n",
+    );
+    let t = one("uncalled", &lib, FROM_ITS_OWN);
+    assert!(t.app.contains("hash::Fast"), "{}", t.app);
+    compiles(&t.dir, &t.lib, &t.app, "app");
+    done(&t.dir);
+}
+
 /// **A type with methods**: the `impl` is generic over the type's parameters,
 /// so a method serves a `Fast` value and a `Keyed` one, and the type compares.
 const WITH_METHODS: &str = "use std::collections\n\n\
@@ -562,7 +606,7 @@ fn a_trait_implemented_in_a_third_package_that_reads_a_socket_keys_the_program()
         "use api\nuse third\nuse std::collections\n\n\
          fn main() throws {\n\
          \x20   let mut m = collections::HashMap()\n\
-         \x20   m.insert(\"a\", 1)\n\
+         \x20   m.insert(f\"a\", 1)\n\
          \x20   let mut k = third::Count { n: 0 }\n\
          \x20   k.put(m)\n}\n",
     );

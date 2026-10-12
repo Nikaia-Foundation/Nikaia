@@ -936,10 +936,14 @@ impl Program {
             .collect();
         let mut trust = crate::contracts::trust::analyse_package(&package, std_ledger());
         // **A package whose `pub` items hold maps fills them with the hasher of
-        // the program that uses it** (ADR-010 D9), and runs its body with that
-        // hasher: keys it reads from outside reach a map the program may have
-        // given the fixed seed. So such a package is as trusted as the program
-        // is, and the program is no more trusted than it.
+        // the program that uses it** (ADR-010 D9), and the ledger says what
+        // each function of it puts in (13.5, `maps`): a program that calls one
+        // whose line is `keyed`, or that has no line, hands its maps to a body
+        // that fills them with keys the program cannot vouch for, so it is no
+        // more trusted than that. `from(..)` adds nothing the program has not
+        // chosen: a trusted program's arguments are trusted, and an untrusted
+        // program's maps are keyed already. The ledger is read, never the
+        // body.
         let mut packages: std::collections::BTreeMap<&str, Vec<&crate::parser::Parsed>> =
             std::collections::BTreeMap::new();
         for unit in self.units.iter().filter(|u| u.package.is_some()) {
@@ -947,12 +951,16 @@ impl Program {
                 packages.entry(name).or_default().push(&unit.parsed);
             }
         }
-        for files in packages.values() {
-            if crate::emit::holds_map_positions(files)
-                && crate::contracts::trust::analyse_package(files, std_ledger()).provenance
-                    == crate::contracts::Provenance::Untrusted
-            {
-                trust.provenance = crate::contracts::Provenance::Untrusted;
+        if trust.provenance == crate::contracts::Provenance::Trusted {
+            let called = names_in(&package);
+            'packages: for (name, files) in &packages {
+                for key in crate::contracts::maps::keyed_functions(files, &self.contracts, name) {
+                    let last = key.rsplit("::").next().unwrap_or(&key);
+                    if called.contains(last) {
+                        trust.provenance = crate::contracts::Provenance::Untrusted;
+                        break 'packages;
+                    }
+                }
             }
         }
         // **A call to a barrier** (D9): a method of a trait that holds a map in

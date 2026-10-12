@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.847] — 2026-10-12
+
+**The ledger's maps key: one line per group of map positions, from(..) or keyed; a function declares one hidden parameter per group its body joins (ADR-010 D9, #581 step 6)**
+- A pub function's ledger entry carries maps, one line per group of map positions its body makes one map: from(p, ...) (from() for none) where the body is read to its end and puts into the map only keys made of the named arguments, keyed everywhere else; a position without a line is keyed. The key is a permission: a map handed to a call, kept in a local, matched or captured makes every line of the function keyed. A program that calls a keyed function (or one with no line) is no more trusted than the keyed hash.
+- A pub function or method declares one hidden parameter per group of positions its body joins (a map assigned to another, compared, returned from a parameter); where the body is not read to its end, the positions of one written type are one group. Part III 13.5 (the maps row), 17.1 and ADR-010 D9: either is from() with no arguments.
+
 ## [0.0.846] — 2026-10-12
 
 **A pub type declares one hidden parameter per map position, in field order (ADR-010 D9, #581 step 5 fix)**

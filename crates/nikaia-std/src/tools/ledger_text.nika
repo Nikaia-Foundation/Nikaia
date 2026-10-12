@@ -238,6 +238,9 @@ fn function_text(name: ref String, contract: ref FnContract) -> String {
         }
         out.push_str(f"sharing = [{quoted_all(classes)}]\n")
     }
+    if contract.maps.len() > 0 {
+        out.push_str(f"maps = [{quoted_all(contract.maps)}]\n")
+    }
     if contract.ends_by_length {
         out.push_str("ends_by_length = true\n")
     }
