@@ -257,7 +257,7 @@ impl EmitState {
         }
         // **Into a parameter both kinds of text flow into, each argument goes as
         // it is** (ADR-282 D2): a view borrowed, text of its own moved in.
-        let either = !lend && !change && !emit_arg_is_null(arg) && self.either_param(world, callee, i)
+        let either = !lend && !change && !emit_arg_is_null(arg) && self.either_param(world, callee, i) && !self.facts.mixed_choices.contains(node_key(arg))
         out.push(before)
         if either {
             out.push("nikaia_std::either_text::either(")

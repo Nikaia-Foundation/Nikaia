@@ -766,3 +766,277 @@ fn main() {
     );
     assert_eq!(said.trim(), "x=3 g2");
 }
+
+/// Lowers `source` and returns what the compiler said, for a program that is
+/// refused.
+fn refused(purpose: &str, source: &str) -> String {
+    let dir = common::scratch_dir(&format!("selfhosting-{purpose}"));
+    std::fs::write(dir.join("p.nika"), source).expect("write the source");
+    let lowered = Command::new(env!("CARGO_BIN_EXE_nikaia"))
+        .current_dir(&dir)
+        .args(["lower", "p.nika", "--output", "p.rs"])
+        .output()
+        .expect("the nikaia binary runs");
+    std::fs::remove_dir_all(&dir).ok();
+    assert!(!lowered.status.success(), "{purpose} was not refused");
+    String::from_utf8_lossy(&lowered.stderr).into_owned()
+}
+
+/// #562: a mixed text position fed by a `match` wraps each arm on its own.
+#[test]
+fn a_match_into_a_mixed_result_wraps_each_arm() {
+    let said = printed(
+        "mixed-match",
+        r#"
+fn int_text(n: i64) -> String {
+    return f"{n}"
+}
+
+fn plain(s: ref String, n: i64) -> String {
+    return match n {
+        0 => s,
+        else => int_text(n),
+    }
+}
+
+fn tail_plain(s: ref String, n: i64) -> String {
+    match n {
+        0 => { s },
+        else => { int_text(n) },
+    }
+}
+
+fn nested(s: ref String, n: i64) -> String {
+    return match n {
+        0 => s,
+        else => if n > 5 { int_text(n) } else { s },
+    }
+}
+
+fn main() {
+    println(plain("hi", 0))
+    println(plain("hi", 5))
+    println(tail_plain("hi", 0))
+    println(tail_plain("hi", 6))
+    println(nested("hi", 0))
+    println(nested("hi", 9))
+    println(nested("hi", 3))
+}
+"#,
+    );
+    assert_eq!(said.trim(), "hi\n5\nhi\n6\nhi\n9\nhi");
+}
+
+/// #562: the same into a `String?`, with a `null` arm, in the three forms a
+/// value reaches the result in.
+#[test]
+fn a_match_into_a_mixed_option_wraps_each_arm() {
+    let said = printed(
+        "mixed-option-match",
+        r#"
+fn int_text(n: i64) -> String {
+    return f"{n}"
+}
+
+fn by_return(s: ref String, n: i64) -> String? {
+    return match n {
+        0 => s,
+        1 => int_text(n),
+        else => null,
+    }
+}
+
+fn by_tail(s: ref String, n: i64) -> String? {
+    match n {
+        0 => s,
+        1 => int_text(n),
+        else => null,
+    }
+}
+
+fn by_let(s: ref String, n: i64) -> String? {
+    let r = match n {
+        0 => s,
+        1 => int_text(n),
+        else => null,
+    }
+    return r
+}
+
+fn main() {
+    for n in 0..<3 {
+        println(f"{by_return("hi", n) ?? "none"} {by_tail("hi", n) ?? "none"} {by_let("hi", n) ?? "none"}")
+    }
+}
+"#,
+    );
+    assert_eq!(said.trim(), "hi hi hi\n1 1 1\nnone none none");
+}
+
+/// #562: `if` / `else if` / `else` feeds the same positions.
+#[test]
+fn an_if_into_a_mixed_option_wraps_each_branch() {
+    let said = printed(
+        "mixed-option-if",
+        r#"
+fn int_text(n: i64) -> String {
+    return f"{n}"
+}
+
+fn by_return(s: ref String, n: i64) -> String? {
+    return if n == 0 {
+        s
+    } else if n == 1 {
+        int_text(n)
+    } else {
+        null
+    }
+}
+
+fn by_tail(s: ref String, n: i64) -> String? {
+    if n == 0 {
+        s
+    } else if n == 1 {
+        int_text(n)
+    } else {
+        null
+    }
+}
+
+fn by_let(s: ref String, n: i64) -> String? {
+    let r = if n == 0 {
+        s
+    } else if n == 1 {
+        int_text(n)
+    } else {
+        null
+    }
+    return r
+}
+
+fn plain(s: ref String, n: i64) -> String {
+    return if n == 0 { s } else { int_text(n) }
+}
+
+fn main() {
+    for n in 0..<3 {
+        println(f"{by_return("hi", n) ?? "none"} {by_tail("hi", n) ?? "none"} {by_let("hi", n) ?? "none"}")
+    }
+    println(plain("hi", 0))
+    println(plain("hi", 4))
+}
+"#,
+    );
+    assert_eq!(said.trim(), "hi hi hi\n1 1 1\nnone none none\nhi\n4");
+}
+
+/// #562: `ref String` and `String` arms meet as text; the position they flow
+/// into decides the representation.
+#[test]
+fn a_view_and_text_of_its_own_meet_as_text_in_a_let() {
+    let said = printed(
+        "view-meets-text",
+        r#"
+fn int_text(n: i64) -> String {
+    return f"{n}"
+}
+
+fn h(s: ref String, c: bool) -> String {
+    let y = if c { s } else { int_text(1) }
+    return y
+}
+
+fn main() {
+    println(h("a", true))
+    println(h("a", false))
+}
+"#,
+    );
+    assert_eq!(said.trim(), "a\n1");
+}
+
+/// #562, ADR-282 D22 and D25: a `pub` function cannot hand back a view, so the
+/// view arm is refused and `.clone()` is named.
+#[test]
+fn a_pub_function_refuses_the_view_arm_of_a_match() {
+    let said = refused(
+        "mixed-pub",
+        r#"
+fn int_text(n: i64) -> String {
+    return f"{n}"
+}
+
+pub fn plain(s: ref String, n: i64) -> String {
+    return match n {
+        0 => s,
+        else => int_text(n),
+    }
+}
+
+fn main() {
+    println(plain("hi", 0))
+}
+"#,
+    );
+    assert!(said.contains("NK1104"), "{said}");
+    assert!(said.contains(".clone()"), "{said}");
+    assert!(!said.contains("NK1245"), "{said}");
+}
+
+/// #562: the same through a `let` in a `pub` function stays refused.
+#[test]
+fn a_pub_function_refuses_the_view_arm_of_a_let() {
+    let said = refused(
+        "mixed-pub-let",
+        r#"
+fn int_text(n: i64) -> String {
+    return f"{n}"
+}
+
+pub fn h(s: ref String, c: bool) -> String {
+    let y = if c { s } else { int_text(1) }
+    return y
+}
+
+fn main() {
+    println(h("a", true))
+}
+"#,
+    );
+    assert!(said.contains("NK1245"), "{said}");
+}
+
+/// #562: the same into a mixed field and a mixed parameter.
+#[test]
+fn a_choice_into_a_mixed_field_and_argument_wraps_each_arm() {
+    let said = printed(
+        "mixed-field-argument",
+        r#"
+struct Row { text: String }
+
+fn int_text(n: i64) -> String {
+    return f"{n}"
+}
+
+fn same(x: String) -> String {
+    return x
+}
+
+fn keep(s: ref String, n: i64) -> Row {
+    return Row { text: if n == 0 { s } else { int_text(n) } }
+}
+
+fn arg(s: ref String, n: i64) -> String {
+    return same(if n == 0 { s } else { int_text(n) })
+}
+
+fn main() {
+    println(keep("hi", 0).text)
+    println(keep("hi", 7).text)
+    println(arg("hi", 0))
+    println(arg("hi", 12))
+}
+"#,
+    );
+    assert_eq!(said.trim(), "hi\n7\nhi\n12");
+}

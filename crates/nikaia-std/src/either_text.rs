@@ -246,6 +246,12 @@ pub fn either<T: IntoEither>(value: T) -> T::Either {
     value.into_either()
 }
 
+/// [`IntoEitherMaybe`] as a function: the arm of a choice that goes into a
+/// `String?` on its own, `Some` for text and as it is for an option.
+pub fn either_maybe<T: IntoEitherMaybe>(value: T) -> Option<T::Either> {
+    value.into_either_maybe()
+}
+
 impl PartialEq<str> for EitherText<'_> {
     fn eq(&self, other: &str) -> bool {
         *self.0 == *other

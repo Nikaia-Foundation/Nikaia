@@ -6175,7 +6175,17 @@ impl<'p> Emitter<'p> {
                 // { self.text }` and the `return` form are one program.
                 let either = tail == Tail::Return
                     && self.returns_either(flow.function)
-                    && !matches!(expr, Expr::LitNull(_));
+                    && !matches!(expr, Expr::LitNull(_))
+                    && !self
+                        .s
+                        .facts
+                        .mixed_choices
+                        .contains(&crate::check::value_node(expr))
+                    && !self
+                        .s
+                        .facts
+                        .mixed_leaves
+                        .contains_key(&crate::check::value_node(expr));
                 if either {
                     out.push("nikaia_std::either_text::either(");
                 }
@@ -6363,6 +6373,30 @@ impl<'p> Emitter<'p> {
             out.push(&name);
             return Ok(());
         }
+        // **An arm of a choice that goes into a mixed position is wrapped on
+        // its own** (ADR-282 D14, `check::Checked::mixed_leaves`, #562): a
+        // view and text of its own are two types, and only `EitherText` holds
+        // both.
+        if let Some(nullable) = self
+            .s
+            .facts
+            .mixed_leaves
+            .get(&crate::check::value_node(expr))
+            .copied()
+        {
+            out.push(match nullable {
+                true => "nikaia_std::either_text::either_maybe(",
+                false => "nikaia_std::either_text::either(",
+            });
+            self.expr_unmixed(out, expr, depth, flow)?;
+            out.push(")");
+            return Ok(());
+        }
+        self.expr_unmixed(out, expr, depth, flow)
+    }
+
+    /// [`Emitter::expr`], past the wrap of an arm in a mixed position.
+    fn expr_unmixed(&self, out: &mut Out, expr: &Expr, depth: usize, flow: Flow<'_>) -> Result<()> {
         // **A plain arm beside a `null` is `Some`** (`check::Checked::some_tails`).
         if self
             .s

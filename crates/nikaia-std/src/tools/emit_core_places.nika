@@ -7,6 +7,8 @@
 // `ListLit`. Methods of `EmitState`, `emit_core_*[H: EmitHost]`; the arm in the
 // Rust match is a one-line stub, and the match stays the dispatcher until U10.
 
+use std::collections
+
 fn emit_place_text_reach(place: ref String, flattens: bool) -> String {
     if flattens {
         return f"{place}.as_deref()"
@@ -28,6 +30,13 @@ fn emit_place_null(value: ref Expr?) -> bool {
         Expr::LitNull(_) => true,
         else => false,
     }
+}
+
+/// Whether a field's value is a choice whose arms the checker wrapped on their own
+/// (`mixed_choices`, #562).
+fn emit_place_mixed(choices: ref collections::BTreeSet[i64], value: ref Expr?) -> bool {
+    let each = value ?? return false
+    return choices.contains(node_key(each))
 }
 
 /// Whether an expression is a read through the brackets.
@@ -365,7 +374,7 @@ impl EmitState {
             }
             // **Into a field both kinds of text flow into, each value goes as it
             // is** (ADR-282 D14): a view borrowed, text of its own moved in.
-            let either = self.either_field(world, owner, field.name) && !emit_place_null(field.value)
+            let either = self.either_field(world, owner, field.name) && !emit_place_null(field.value) && !emit_place_mixed(self.facts.mixed_choices, field.value)
             if either {
                 out.push(": ")
                 out.push(before)
@@ -470,7 +479,7 @@ impl EmitState {
                 out.push("), ")
                 continue
             }
-            let either = self.either_field(world, owner, field.name) && !emit_place_null(field.value)
+            let either = self.either_field(world, owner, field.name) && !emit_place_null(field.value) && !emit_place_mixed(self.facts.mixed_choices, field.value)
             if field.value != null {
                 let value = field.value ?? return
                 if either {

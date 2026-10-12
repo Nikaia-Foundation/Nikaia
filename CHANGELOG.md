@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.861] — 2026-10-12
+
+**lowering: a mixed text position wraps each arm of an if/match; ref String and String arms meet at text (#562)**
+- A value going into a mixed text position (`EitherText`, `Option<EitherText>`) is wrapped arm by arm: each leaf of an `if`/`match` (recursively through nested choices and blocks) is `either(…)`, `either_maybe(…)` in a `String?` position, `null` stays `None`; the checker records the leaves (`mixed_leaves`, `mixed_choices`) where a position takes a view arm beside text of its own (return, tail, field).
+- `let y = if c { s } else { owned }` is text: a `ref String` arm and a `String` arm meet at `String` (or `String?` beside `null`) in a function whose result is mixed or is no text; a `pub fn … -> String` keeps the refusal (ADR-282 D22, D25).
+
 ## [0.0.860] — 2026-10-12
 
 **checker: an if/match value is asked where it goes; arms that disagree are NK1245 (#596)**

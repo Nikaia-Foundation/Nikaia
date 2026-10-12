@@ -4970,7 +4970,10 @@ impl<'a> Checker<'a> {
                         if !(found == Ty::Unknown && self.number_shaped(value)) {
                             self.constant_fits(value, None, span);
                         }
-                        found
+                        match found {
+                            Ty::Unknown => self.views_meet_owned_text(value).unwrap_or(found),
+                            found => found,
+                        }
                     }
                 };
                 let open = match ty {
@@ -9981,6 +9984,14 @@ impl<'a> Checker<'a> {
             // borrowed as it is ([ADR-282](../../docs/specification/adr/adr-282.md)
             // D2): the emitter hands it over, as it does into a mixed field.
             if views_into_text(found, want) && self.either_param(key, at) {
+                // **An `if` or a `match` asked arm by arm** is wrapped arm by
+                // arm below (#562).
+                if let (Some(whole), Some(arm)) = (given.get(at), given_here)
+                    && matches!(whole, Expr::If { .. } | Expr::Match { .. })
+                    && !std::ptr::eq(whole, arm)
+                {
+                    self.note_mixed(whole, matches!(want, Ty::Nullable(_)));
+                }
                 continue;
             }
             // **A `usize` at the C boundary takes this language's own integer**
@@ -10235,8 +10246,23 @@ impl<'a> Checker<'a> {
         {
             let arms = self.arms_to_ask(value);
             if !arms.is_empty() {
+                // **A position both kinds of text flow into takes each arm as
+                // it is** (ADR-282 D14, #562): the lowering wraps every arm on
+                // its own, so the arms that are views and the ones that are
+                // text of their own meet as `EitherText`.
+                let mixed = match what {
+                    "returns" => self.s.flow.expected_either,
+                    "field" => self.s.flow.field_either,
+                    _ => false,
+                };
+                let a_view = arms
+                    .iter()
+                    .any(|(_, ty)| views_into_text(ty, &Ty::named("String")));
                 for (arm, ty) in arms {
                     let ty = self.text_literal(want, arm, true).unwrap_or(ty);
+                    if what == "field" {
+                        self.s.flow.field_either = mixed;
+                    }
                     self.s.expect_kept(
                         self.world,
                         &ty,
@@ -10247,6 +10273,9 @@ impl<'a> Checker<'a> {
                         what,
                         &message,
                     );
+                }
+                if mixed && a_view {
+                    self.note_mixed(value, matches!(want, Ty::Nullable(_)));
                 }
                 return;
             }
@@ -11660,6 +11689,67 @@ impl<'a> Checker<'a> {
             }
         }
         asked
+    }
+
+    /// **An `if` or a `match` whose arms are views and text of their own, going
+    /// into a position both kinds flow into** (#562): the lowering wraps each
+    /// leaf on its own (`either(…)`, `either_maybe(…)` in a `T?`, `null`
+    /// stays `None`) instead of the whole value once.
+    fn note_mixed(&mut self, value: &Expr, nullable: bool) {
+        let (mut leaves, mut nodes) = (Vec::new(), Vec::new());
+        self.value_leaves(value, &mut leaves, &mut nodes);
+        for leaf in leaves {
+            if !matches!(peeled(leaf), Expr::LitNull(_)) {
+                self.s.facts.mixed_leaves.insert(value_node(leaf), nullable);
+            }
+        }
+        self.s.facts.mixed_choices.insert(value_node(value));
+    }
+
+    /// **Views and text of its own meet as text where nothing asks** (#562):
+    /// `let y = if c { s } else { int_text(1) }` is text, and the position `y`
+    /// goes into decides what it is (ADR-282 D14). Said only where the
+    /// function can take a view back out (a mixed result, or a result that is
+    /// no text): a `pub fn … -> String` keeps the refusal.
+    fn views_meet_owned_text(&mut self, value: &Expr) -> Option<Ty> {
+        if !matches!(value, Expr::If { .. } | Expr::Match { .. }) {
+            return None;
+        }
+        let text = Ty::named("String");
+        let nullable_text = Ty::Nullable(Box::new(text.clone()));
+        let text_result =
+            matches!(&self.s.expected, Some(ty) if *ty == text || *ty == nullable_text);
+        if text_result && !self.s.flow.expected_either {
+            return None;
+        }
+        let (mut leaves, mut nodes) = (Vec::new(), Vec::new());
+        self.value_leaves(value, &mut leaves, &mut nodes);
+        let (mut views, mut owned, mut absent) = (0, 0, false);
+        for leaf in leaves {
+            if matches!(peeled(leaf), Expr::LitNull(_)) {
+                absent = true;
+                continue;
+            }
+            let ty = self.arm_types.get(&value_node(leaf))?;
+            if views_into_text(ty, &text) {
+                views += 1;
+            } else if *ty == text {
+                owned += 1;
+            } else {
+                return None;
+            }
+        }
+        if views == 0 || owned == 0 {
+            return None;
+        }
+        for node in nodes {
+            self.arm_disagreements.remove(&node);
+        }
+        self.note_mixed(value, absent);
+        Some(match absent {
+            true => nullable_text,
+            false => text,
+        })
     }
 
     /// **Arms that are known and disagree** (#596, `NK1245`): the compiler
