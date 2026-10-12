@@ -133,7 +133,13 @@ file declares is unresolved and so untrusted; a project uses the entry file's
 analysis for every file, so a socket read in another file gets the fixed seed.
 (a) stays the convention until #581 is built and its callgrind count is in.
 
-## 4. `Symbol` is not `Ord`
+## 4. `Symbol` is `Ord` (winnow-grammar b27d8ba, taken)
+
+**Done:** winnow-grammar derives `PartialOrd, Ord` on `Symbol` (b27d8ba) and
+Nikaia's `rev` points at it. The order is interning order, not alphabetical:
+key by `Symbol` only where the iteration order is not observable. The text
+below is the basis of the decision, kept for the maps still to convert; (b)
+is still open (D15).
 
 **What it is.** `winnow_grammar::Symbol` is an interned name, a `u32` handle.
 Rust derives `Copy, Eq, Hash` and not `Ord` (`interner.rs:13`).

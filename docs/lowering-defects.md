@@ -230,6 +230,7 @@ Workaround: a helper function that takes the matched value by `ref` (`draft_a_cl
 ## D15 (new). `BTreeMap[Symbol, V]` passes the checker and fails in rustc
 
 ### Today
+`Symbol` is `Ord` since winnow-grammar b27d8ba (Nikaia's `rev` has it), so this key now compiles; the refusal for a key with no order is still owed.
 With `n.clone()` as the key, `collections::BTreeMap[winnow_grammar::Symbol, i64]` is accepted by the checker. rustc reports E0277 (`Symbol: Ord` not satisfied). `HashMap[Symbol, V]` compiles. The ledger has no claim for an order (`compares`, `copies`, `crosses` only).
 
 ### To build
