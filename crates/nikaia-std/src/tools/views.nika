@@ -1894,6 +1894,9 @@ fn rsrc_callee(asked: ref Asked, known: ref collections::BTreeMap[String, Result
         }
     }
     if contract.borrows.len() == 0 {
+        if positional.len() > 0 && rsrc_result_is_receivers(asked, signature) {
+            return positional[0].clone()
+        }
         return everything.clone()
     }
     let mut out = rsrc_none()
@@ -1910,6 +1913,61 @@ fn rsrc_callee(asked: ref Asked, known: ref collections::BTreeMap[String, Result
         rsrc_join(out, positional[at])
     }
     return out
+}
+
+// Whether a ledger entry's result is typed only by type parameters the receiver
+// supplies and no other parameter mentions: `HashMap[K, V].get(key) -> V?` hands
+// back what the map holds, whatever the key was, so it points into the receiver
+// alone (#585 item 4). An entry that also takes a `V` (`insert`) is not one.
+fn rsrc_result_is_receivers(asked: ref Asked, signature: ref Signature) -> bool {
+    let result = signature.result?.clone() ?? return false
+    if signature.params.len() == 0 || signature.params[0].0 != "self" {
+        return false
+    }
+    let mut wanted: Vec[String] = []
+    rsrc_ty_names(result, wanted)
+    let mut generics = 0
+    let mut receiver: Vec[String] = []
+    rsrc_ty_names(signature.params[0].1, receiver)
+    for name in wanted {
+        // A ledger signature does not list its unbounded parameters (`[K, V]`):
+        // a name no ledger describes and no plain type carries is one.
+        let generic = !rsrc_plain_name(name) && !name.contains("::") && !asked.own.types.contains_key(name) && !asked.library.types.contains_key(name)
+        if generic {
+            generics += 1
+            if !receiver.contains(name) {
+                return false
+            }
+            for i in 1..<signature.params.len() {
+                let mut other: Vec[String] = []
+                rsrc_ty_names(signature.params[i].1, other)
+                if other.contains(name) {
+                    return false
+                }
+            }
+        }
+    }
+    return generics > 0
+}
+
+fn rsrc_ty_names(ty: ref Ty, mut out: Vec[String]) {
+    match ty {
+        Ty::Named { name, args, .. } => {
+            out.push(name.clone())
+            for arg in args {
+                rsrc_ty_names(arg, out)
+            }
+        }
+        Ty::Var { name, .. } => out.push(name.clone()),
+        Ty::Tuple(parts) => {
+            for part in parts {
+                rsrc_ty_names(part, out)
+            }
+        }
+        Ty::Nullable(inner) => rsrc_ty_names(inner, out),
+        Ty::Seq { item, .. } => rsrc_ty_names(item, out),
+        else => {}
+    }
 }
 
 // Whether a parameter is a view the result may point into: the receiver (named

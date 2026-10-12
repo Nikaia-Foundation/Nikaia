@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.855] — 2026-10-12
+
+**NK2302: a std lookup typed by the receiver's type parameter points into the receiver alone (#585 item 4)**
+- check: a ledger entry without ref(..) whose result is typed only by type parameters the receiver supplies (HashMap::get) maps to the receiver, not to every argument, so self.cache.get(world.key) beside a second view parameter is no longer refused
+
 ## [0.0.854] — 2026-10-12
 
 **nikaia check: the checker's findings for one file, nothing written (#590)**

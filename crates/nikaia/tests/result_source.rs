@@ -123,6 +123,23 @@ impl Checker {
     compiled("label_world_is_accepted", source);
 }
 
+/// #585 item 4: a std entry with no `ref(..)` whose result is typed by the receiver's type parameter points into the receiver alone, whatever the key was.
+#[test]
+fn a_map_lookup_beside_a_second_view_is_accepted() {
+    let source = r#"use std::collections
+struct World { key: String }
+struct Cache { cache: collections::HashMap[String, String] }
+impl Cache {
+    fn lookup(ref self, world: ref World) -> ref String {
+        return self.cache.get(world.key) ?? "none"
+    }
+}
+"#;
+    let found = all_findings(source);
+    assert!(found.is_empty(), "{found:#?}");
+    compiled("a_map_lookup_beside_a_second_view_is_accepted", source);
+}
+
 /// A `ref String?` built from a loop over `a.split(..)`, with `return null` as the other way out.
 #[test]
 fn loop_split_null_is_accepted() {

@@ -49056,7 +49056,10 @@ fn rsrc_callee(asked: &Asked<'_>, known: &collections::BTreeMap<String, ResultSr
         }, || Ty::Unknown);
         if !rsrc_ty_holds_view(asked, &result) { return rsrc_none(); }
     }
-    if contract.borrows.is_empty() { return everything.to_owned(); }
+    if contract.borrows.is_empty() {
+        if !positional.is_empty() && rsrc_result_is_receivers(asked, &signature) { return (*nikaia_std::index::get(&positional, 0)).to_owned(); }
+        return everything.to_owned();
+    }
     let mut out = rsrc_none();
     for borrowed in contract.borrows.iter() {
         let mut at: i64 = -1;
@@ -49065,6 +49068,46 @@ fn rsrc_callee(asked: &Asked<'_>, known: &collections::BTreeMap<String, ResultSr
         rsrc_join(&mut out, nikaia_std::index::get(&positional, nikaia_std::index::at(at)));
     }
     out
+}
+
+fn rsrc_result_is_receivers(asked: &Asked<'_>, signature: &Signature) -> bool {
+    let result = match match signature.result.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return false };
+    if signature.params.is_empty() || nikaia_std::index::get(&signature.params, 0).0 != "self" { return false; }
+    let mut wanted: Vec<String> = vec![];
+    rsrc_ty_names(&result, &mut wanted);
+    let mut generics = 0;
+    let mut receiver: Vec<String> = vec![];
+    rsrc_ty_names(&nikaia_std::index::get(&signature.params, 0).1, &mut receiver);
+    for name in wanted.iter() {
+        let generic = !rsrc_plain_name(name) && !name.contains("::") && !asked.own.types.contains_key(name) && !asked.library.types.contains_key(name);
+        if generic {
+            generics += 1;
+            if !nikaia_std::list::contains(&receiver, &name) { return false; }
+            for i in 1..signature.params.len() as i64 {
+                let mut other: Vec<String> = vec![];
+                rsrc_ty_names(&nikaia_std::index::get(&signature.params, (i) as usize).1, &mut other);
+                if nikaia_std::list::contains(&other, &name) { return false; }
+            }
+        }
+    }
+    generics > 0
+}
+
+fn rsrc_ty_names(ty: &Ty, out: &mut Vec<String>) {
+    match ty {
+        Ty::Named { name, args, .. } => {
+            out.push(name.to_owned());
+            for arg in args.iter() { rsrc_ty_names(arg, out); }
+        },
+        Ty::Var { name, .. } => out.push(name.to_owned()),
+        Ty::Tuple(parts) => { for part in parts.iter() { rsrc_ty_names(part, out); } },
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); rsrc_ty_names(inner, out) },
+        Ty::Seq { item, .. } => { let item = nikaia_std::boxed::open(item); rsrc_ty_names(item, out) },
+        _ => { },
+    }
 }
 
 fn rsrc_a_source(unit: &Unit, asked: &Asked<'_>, arg: &FnArg, contract: Option<&FnContract>, at: i64) -> bool {
