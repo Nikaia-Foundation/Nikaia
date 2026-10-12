@@ -1892,3 +1892,96 @@ fn an_empty_list_takes_its_element_type_from_its_first_push() {
         "{found:#?}"
     );
 }
+
+// --- the value of an `if` or a `match` is asked where it goes (#596) -----------
+
+const A_CHOICE_OF_ARMS: &str = "enum Val {\n    Int(i64),\n    Text(String),\n}\n";
+
+/// Text in an `i64` result: the arm is asked as `return s` is.
+#[test]
+fn an_if_arm_of_the_wrong_type_is_refused_where_the_value_returns() {
+    let found =
+        findings("fn b(s: ref String, c: bool) -> i64 {\n    return if c { s } else { 1 }\n}\n");
+    assert!(
+        found.iter().any(|f| f.code == "NK1104"
+            && f.message.contains("`ref String`")
+            && f.message.contains("`i64`")),
+        "{found:#?}"
+    );
+}
+
+/// A view in an arm of a `match` that returns text of its own, helped as the
+/// statement form is.
+#[test]
+fn a_match_arm_that_is_a_view_is_refused_where_the_value_returns() {
+    let found = findings(&format!(
+        "{A_CHOICE_OF_ARMS}fn f(v: ref Val) -> String {{\n    return match v {{\n        \
+         Val::Int(n) => f\"{{n}}\",\n        Val::Text(t) => t,\n    }}\n}}\n"
+    ));
+    let refused: Vec<&Finding> = found.iter().filter(|f| f.code == "NK1104").collect();
+    assert_eq!(refused.len(), 1, "{found:#?}");
+    assert!(
+        refused[0]
+            .help
+            .as_deref()
+            .is_some_and(|h| h.contains(".clone()")),
+        "{found:#?}"
+    );
+    assert!(found.iter().all(|f| f.code == "NK1104"), "{found:#?}");
+}
+
+#[test]
+fn a_match_arm_that_is_a_view_is_refused_in_an_annotated_let() {
+    let found = findings(&format!(
+        "{A_CHOICE_OF_ARMS}fn f(v: ref Val) -> String {{\n    let r: String = match v {{\n        \
+         Val::Int(n) => f\"{{n}}\",\n        Val::Text(t) => t,\n    }}\n    return r\n}}\n"
+    ));
+    assert!(found.iter().any(|f| f.code == "NK1103"), "{found:#?}");
+    assert!(found.iter().all(|f| f.code == "NK1103"), "{found:#?}");
+}
+
+#[test]
+fn a_match_arm_that_is_a_view_is_refused_as_an_argument() {
+    let found = findings(&format!(
+        "{A_CHOICE_OF_ARMS}fn g(x: String) -> String {{\n    return x\n}}\n\
+         fn f(v: ref Val) -> String {{\n    return g(match v {{\n        Val::Int(n) => f\"{{n}}\",\n        \
+         Val::Text(t) => t,\n    }})\n}}\n"
+    ));
+    assert!(found.iter().any(|f| f.code == "NK1102"), "{found:#?}");
+    assert!(found.iter().all(|f| f.code == "NK1102"), "{found:#?}");
+}
+
+#[test]
+fn a_match_arm_that_is_a_view_is_refused_in_a_field() {
+    let found = findings(&format!(
+        "{A_CHOICE_OF_ARMS}struct Row {{\n    text: String,\n}}\n\
+         fn f(v: ref Val) -> Row {{\n    return Row {{ text: match v {{\n        \
+         Val::Int(n) => f\"{{n}}\",\n        Val::Text(t) => t,\n    }} }}\n}}\n"
+    ));
+    assert!(found.iter().any(|f| f.code == "NK1106"), "{found:#?}");
+}
+
+/// Arms that are known and disagree, where nothing asks them.
+#[test]
+fn arms_that_disagree_with_no_position_are_nk1245() {
+    let (code, message) =
+        one("fn f(c: bool) {\n    let r = if c { 1 } else { \"x\" }\n    println(r)\n}\n");
+    assert_eq!(code, "NK1245");
+    assert!(message.contains("`ref String`"), "{message}");
+}
+
+/// An arm that leaves is no value: the other arm's type is the type.
+#[test]
+fn an_arm_that_returns_gives_no_value() {
+    let found = findings(
+        "fn f(name: ref String, c: bool) -> i64 {\n    let t = if c { name } else { return 1 }\n    \
+         let n: i64 = t\n    return n\n}\n",
+    );
+    assert!(
+        found
+            .iter()
+            .any(|f| f.code == "NK1103" && f.message.contains("`ref String`")),
+        "{found:#?}"
+    );
+    assert!(found.iter().all(|f| f.code == "NK1103"), "{found:#?}");
+}

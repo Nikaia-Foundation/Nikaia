@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.860] — 2026-10-12
+
+**checker: an if/match value is asked where it goes; arms that disagree are NK1245 (#596)**
+- The checker asked the type of an `if` or `match` only when its arms agreed or met at text or `null`; arms that were known and disagreed made the value unknown, and the mistake (`return if c { s } else { 1 }`, a view in an arm of a `match` that returns `String`) reached `rustc`. Where the value goes into a position with a type, each arm is now asked as a value written there (`NK1104` return and tail, `NK1103` annotated `let`, `NK1102` argument, `NK1106` field), arms that leave are skipped, and arms that are all known and disagree with no position to ask are `NK1245` at the `if`/`match`, naming the arms' types. Part III C.4 says so.
+
 ## [0.0.859] — 2026-10-12
 
 **ADR-327 D11: update_all copies only where both values copy; a read-only door never poisons (#490)**

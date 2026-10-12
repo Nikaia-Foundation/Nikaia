@@ -461,6 +461,9 @@ fn walked<'a>(
         world: &world,
         s: core::Baton::new(s),
         spares: Vec::new(),
+        arm_types: BTreeMap::new(),
+        arm_disagreements: BTreeMap::new(),
+        discarded: BTreeSet::new(),
     };
     checker.collect_types();
     checker.program();
@@ -547,6 +550,9 @@ fn walked<'a>(
         .extend(crate::types::check(parsed, own, library));
     // **What no function body held**, typed the same way (ADR-285).
     checker.numbers_typed_by_their_uses();
+    // **Arms that disagree, where no position asked them** (#596).
+    let disagreeing = std::mem::take(&mut checker.arm_disagreements);
+    checker.s.findings.extend(disagreeing.into_values());
     // **`NK1245` comes after every other refusal** (ADR-286 D41): a type
     // nothing can tell is most often what another refusal left behind - a
     // name never declared, a member a type does not have, a body with a jump
@@ -1029,6 +1035,15 @@ struct Checker<'a> {
     world: &'a CheckWorld<'a>,
     /// States with nothing in them, for the crossings into Nikaia (`core.rs`).
     spares: Vec<Box<CheckState>>,
+    /// **The type each arm of an `if` or a `match` came to**, by the node of
+    /// the value the arm ends in (#596). The value of the whole has no type
+    /// where its arms disagree, and the position it goes into asks each arm.
+    arm_types: BTreeMap<i64, Ty>,
+    /// **Arms that are known and disagree** (#596), by the `if` or `match`: a
+    /// refusal that stands unless a position asks the arms one by one.
+    arm_disagreements: BTreeMap<i64, Finding>,
+    /// The statements whose value nothing reads.
+    discarded: BTreeSet<i64>,
     /// What each callee has **newly** gained since the committed ledger
     /// ([ADR-308](../../docs/specification/adr/adr-308.md) D11). Empty where
     /// there is nothing to compare, which says nothing.
@@ -4741,6 +4756,11 @@ impl<'a> Checker<'a> {
         let mut tail = Ty::Tuple(Vec::new());
         let last = block.stmts.len().saturating_sub(1);
         for (at, stmt) in block.stmts.iter().enumerate() {
+            if at < last
+                && let Stmt::Expr(value) = &stmt.node
+            {
+                self.discarded.insert(value_node(value));
+            }
             let ty = self.stmt(&stmt.node, &stmt.span);
             self.coalesces_not_lent_are_taken();
             // **`break i` is two statements, and that is the point** - a jump
@@ -6067,6 +6087,17 @@ impl<'a> Checker<'a> {
                             self.s.block_exits(self.world, block)
                                 || self.s.block_leaves(self.world, block)
                         };
+                        // **Each arm's type is kept for the position the value
+                        // goes into** (#596).
+                        let (then_leaves, other_leaves) = (leaves(then_branch), leaves(otherwise));
+                        for (block, ty, leaving) in [
+                            (then_branch, &then, then_leaves),
+                            (otherwise, &other, other_leaves),
+                        ] {
+                            if let (Some(tail), false) = (tail_of(block), leaving) {
+                                self.arm_types.insert(value_node(peeled(tail)), ty.clone());
+                            }
+                        }
                         if then == other || (leaves(otherwise) && !leaves(then_branch)) {
                             then
                         } else if leaves(then_branch) && !leaves(otherwise) {
@@ -6079,9 +6110,13 @@ impl<'a> Checker<'a> {
                             typed
                         } else {
                             let arms = [(tail_of(then_branch), then), (tail_of(otherwise), other)];
-                            self.arms_meet_at_text(&arms, span)
-                                .or_else(|| self.arms_meet_at_null(&arms))
-                                .unwrap_or(Ty::Unknown)
+                            let met = self
+                                .arms_meet_at_text(&arms, span)
+                                .or_else(|| self.arms_meet_at_null(&arms));
+                            if met.is_none() {
+                                self.arms_that_disagree(expr, &arms, span);
+                            }
+                            met.unwrap_or(Ty::Unknown)
                         }
                     }
                     // An `if` with no `else` is a statement's worth of value.
@@ -6386,6 +6421,8 @@ impl<'a> Checker<'a> {
                         continue;
                     }
                     answered.push((Some(&arm.body), ty.clone()));
+                    self.arm_types
+                        .insert(value_node(peeled(&arm.body)), ty.clone());
                     match &result {
                         None => result = Some(ty),
                         Some(seen) if *seen == ty => {}
@@ -6413,10 +6450,15 @@ impl<'a> Checker<'a> {
                 // or when the arms meet at text (ADR-282 D4).
                 match result {
                     Some(ty) if agree => ty,
-                    _ => self
-                        .arms_meet_at_text(&answered, span)
-                        .or_else(|| self.arms_meet_at_null(&answered))
-                        .unwrap_or(Ty::Unknown),
+                    _ => {
+                        let met = self
+                            .arms_meet_at_text(&answered, span)
+                            .or_else(|| self.arms_meet_at_null(&answered));
+                        if met.is_none() {
+                            self.arms_that_disagree(expr, &answered, span);
+                        }
+                        met.unwrap_or(Ty::Unknown)
+                    }
                 }
             }
 
@@ -9772,7 +9814,25 @@ impl<'a> Checker<'a> {
         }
 
         let text_view = Ty::view(ty::TEXT_VIEW);
-        for (at, ((name, want), found)) in wanted.iter().zip(found).enumerate() {
+        // **An argument that is an `if` or a `match` whose arms did not agree
+        // is its arms** (#596): each is a value handed to the parameter.
+        let mut expanded: Vec<(usize, Option<&Expr>, Ty)> = Vec::new();
+        for (at, found) in found.iter().enumerate() {
+            let known_want = wanted
+                .get(at)
+                .is_some_and(|(_, want)| wholly_known(want) && !matches!(want, Ty::Var { .. }));
+            let arms = match (found.is_unknown() && known_want, given.get(at)) {
+                (true, Some(value)) => self.arms_to_ask(value),
+                _ => Vec::new(),
+            };
+            match arms.is_empty() {
+                true => expanded.push((at, given.get(at), found.clone())),
+                false => expanded.extend(arms.into_iter().map(|(arm, ty)| (at, Some(arm), ty))),
+            }
+        }
+        for (at, given_here, found) in &expanded {
+            let (at, given_here) = (*at, *given_here);
+            let (name, want) = &wanted[at];
             // **A view of a `String` is a view of text here**
             // ([ADR-233](../../docs/specification/adr/adr-233.md) D4): an
             // element of `words.iter()` is one, and the language below lends it
@@ -9786,7 +9846,7 @@ impl<'a> Checker<'a> {
             // arguments before it resolves the callee, so the type to measure
             // against is not known yet at that point (ADR-288's ordering is what
             // gives a *method* call the answer earlier).
-            if let Some(given) = given.get(at) {
+            if let Some(given) = given_here {
                 self.constant_fits(given, Some(want), span);
                 if self.an_open_number_where_none_fits(
                     found,
@@ -9826,7 +9886,7 @@ impl<'a> Checker<'a> {
                     }
                 }
             }
-            self.a_cleanup_that_moved(key, name, want, given.get(at), span);
+            self.a_cleanup_that_moved(key, name, want, given_here, span);
             // **A parameter is a use** (ADR-152 D4), and a literal handed to one
             // that takes an `Array[T, N]` **is** that array. What it changes is
             // the type the rest of this loop reads, rather than ending it: the
@@ -9864,7 +9924,7 @@ impl<'a> Checker<'a> {
                 && !want.is_a_view()
                 && !signature.mutable.contains(name)
                 && !self.s.foreign_names.contains(written)
-                && let Some(given) = given.get(at)
+                && let Some(given) = given_here
             {
                 self.hands_over(
                     given,
@@ -9887,7 +9947,7 @@ impl<'a> Checker<'a> {
                 true => &text,
                 false => want,
             };
-            let array = given.get(at).and_then(|given| {
+            let array = given_here.and_then(|given| {
                 self.array_literal(found, want, given, span)
                     .or_else(|| self.text_literal(literal_wants, given, kept))
             });
@@ -9903,7 +9963,7 @@ impl<'a> Checker<'a> {
             // reference at a lending call is the compiler's, and a view that
             // arrives as a view is the case this is for.
             let wrote_ref = matches!(
-                given.get(at),
+                given_here,
                 Some(Expr::Unary {
                     op: crate::ast::UnaryOp::Ref,
                     ..
@@ -9954,7 +10014,7 @@ impl<'a> Checker<'a> {
                 contract,
                 Argument {
                     at,
-                    given: given.get(at),
+                    given: given_here,
                     found,
                     want,
                     own: self.world.own.functions.contains_key(key),
@@ -9968,7 +10028,7 @@ impl<'a> Checker<'a> {
             // print calls format their argument by reference, so a `??`
             // handed to one lends its left side as a lent argument does.
             if matches!(written, "println" | "eprintln" | "print" | "eprint")
-                && let Some(given) = given.get(at)
+                && let Some(given) = given_here
                 && self.a_pending_coalesce_is_lent(given)
             {
                 continue;
@@ -9976,7 +10036,7 @@ impl<'a> Checker<'a> {
             // **A file's name is printed as its bytes** (ADR-319 D4): the
             // print calls take text or a name.
             if matches!(written, "println" | "eprintln" | "print" | "eprint")
-                && let Some(given) = given.get(at)
+                && let Some(given) = given_here
                 && matches!(found, Ty::Named { name, .. } if name == "fs::Path")
             {
                 // An `f"…"` recorded which of its holes are names already.
@@ -9987,11 +10047,11 @@ impl<'a> Checker<'a> {
                     .or_insert_with(|| vec![true]);
                 continue;
             }
-            if let Some(value) = given.get(at) {
+            if let Some(value) = given_here {
                 self.a_map_read_kept(found, want, value, span);
             }
-            if let Some(how) = self.widened_slot(found, want, given.get(at), span) {
-                if let Some(value) = given.get(at) {
+            if let Some(how) = self.widened_slot(found, want, given_here, span) {
+                if let Some(value) = given_here {
                     self.s.facts.nullable_args.insert(value_node(value), how);
                 }
                 continue;
@@ -10007,9 +10067,9 @@ impl<'a> Checker<'a> {
             // whatever this checker calls it, and a `*` on it is not Rust.
             if self.a_view_that_copies(found)
                 && unviewed(found) == *want
-                && matches!(given.get(at), Some(Expr::Variable(_, _)))
+                && matches!(given_here, Some(Expr::Variable(_, _)))
             {
-                if let Some(value) = given.get(at) {
+                if let Some(value) = given_here {
                     self.s.facts.copied_args.insert(value_node(value));
                 }
                 continue;
@@ -10020,7 +10080,7 @@ impl<'a> Checker<'a> {
             // ([ADR-281](../../docs/specification/adr/adr-281.md) D2) - the word
             // goes here, at the call, where it used to have to go somewhere else.
             if becomes_shared(found, want) {
-                let value = given.get(at).and_then(|arg| names_of(self.world, arg));
+                let value = given_here.and_then(|arg| names_of(self.world, arg));
                 self.s.findings.push(Finding {
                     severity: Severity::Error,
                     span: *span,
@@ -10045,13 +10105,13 @@ impl<'a> Checker<'a> {
                 });
                 continue;
             }
-            if self.a_name_in_text(want, given.get(at), span) {
+            if self.a_name_in_text(want, given_here, span) {
                 continue;
             }
             let (why, help) = match self.a_view_kept(
                 found,
                 want,
-                given.get(at),
+                given_here,
                 &format!("`{key}` keeps its `{name}` after the call returns"),
             ) {
                 Some((why, help)) => (why, help),
@@ -10167,6 +10227,30 @@ impl<'a> Checker<'a> {
         what: &str,
         message: impl Fn(&str, &str) -> String,
     ) {
+        // **An `if` or a `match` whose arms did not agree is asked arm by arm**
+        // (#596): each is a value written in this position, with this
+        // position's code and help.
+        if found.is_unknown()
+            && let Some(value) = value
+        {
+            let arms = self.arms_to_ask(value);
+            if !arms.is_empty() {
+                for (arm, ty) in arms {
+                    let ty = self.text_literal(want, arm, true).unwrap_or(ty);
+                    self.s.expect_kept(
+                        self.world,
+                        &ty,
+                        want,
+                        Some(arm),
+                        keeper,
+                        &span,
+                        what,
+                        &message,
+                    );
+                }
+                return;
+            }
+        }
         self.s.expect_kept(
             self.world, found, want, value, keeper, &span, what, &message,
         );
@@ -11515,6 +11599,138 @@ impl<'a> Checker<'a> {
                 .insert(((span.at() as i64), self.parsed.text(method).to_string()));
         }
         Some((*result).unwrap_or_else(|| Ty::named("()")))
+    }
+
+    /// **The values an `if` or a `match` ends in** (#596): each arm's own
+    /// value, following a braced arm to its tail and a nested `if` or `match`
+    /// into its arms. An arm that leaves gives none. `nodes` collects the
+    /// `if`s and `match`es passed through.
+    fn value_leaves<'e>(&self, value: &'e Expr, out: &mut Vec<&'e Expr>, nodes: &mut Vec<i64>) {
+        match value {
+            Expr::If {
+                then_branch,
+                else_branch: Some(otherwise),
+                ..
+            } => {
+                nodes.push(value_node(value));
+                for block in [then_branch, otherwise] {
+                    let leaves = self.s.block_exits(self.world, block)
+                        || self.s.block_leaves(self.world, block);
+                    if let (Some(tail), false) = (tail_of(block), leaves) {
+                        self.value_leaves(tail, out, nodes);
+                    }
+                }
+            }
+            Expr::Match { arms, .. } => {
+                nodes.push(value_node(value));
+                for arm in arms {
+                    if !self.s.leaves(self.world, &arm.body) {
+                        self.value_leaves(&arm.body, out, nodes);
+                    }
+                }
+            }
+            Expr::Block(block, _) => {
+                if let Some(tail) = tail_of(block) {
+                    self.value_leaves(tail, out, nodes);
+                }
+            }
+            Expr::If { .. } => {}
+            _ => out.push(value),
+        }
+    }
+
+    /// **The arms of an `if` or a `match` are values written in the position
+    /// the whole goes into** (#596): where the arms did not agree there is no
+    /// type for the whole, and a position that asked only that said nothing.
+    /// Each arm is returned with the type it came to; empty where `value` is
+    /// not a choice or none of its arms has a type.
+    fn arms_to_ask<'e>(&mut self, value: &'e Expr) -> Vec<(&'e Expr, Ty)> {
+        if !matches!(value, Expr::If { .. } | Expr::Match { .. }) {
+            return Vec::new();
+        }
+        let (mut leaves, mut nodes) = (Vec::new(), Vec::new());
+        self.value_leaves(value, &mut leaves, &mut nodes);
+        let asked: Vec<(&Expr, Ty)> = leaves
+            .into_iter()
+            .filter_map(|leaf| Some((leaf, self.arm_types.get(&value_node(leaf))?.clone())))
+            .collect();
+        if !asked.is_empty() {
+            for node in nodes {
+                self.arm_disagreements.remove(&node);
+            }
+        }
+        asked
+    }
+
+    /// **Arms that are known and disagree** (#596, `NK1245`): the compiler
+    /// cannot tell the type of the value, and no arm is unknown for another
+    /// refusal's sake. Said unless a position asks the arms one by one.
+    fn arms_that_disagree(&mut self, expr: &Expr, arms: &[(Option<&Expr>, Ty)], span: &Span) {
+        if self.discarded.contains(&value_node(expr)) || arms.len() < 2 {
+            return;
+        }
+        // A number nothing typed yet is a use's to type, so it is a number.
+        let (mut known, mut numbers): (Vec<Ty>, usize) = (Vec::new(), 0);
+        for (tail, ty) in arms {
+            let ty = ty.unseen();
+            match (wholly_known(&ty), tail.map(peeled)) {
+                (true, _) if ty == Ty::Tuple(Vec::new()) => return,
+                (true, _) => known.push(ty),
+                (false, Some(Expr::LitInt { .. })) => numbers += 1,
+                (false, _) => return,
+            }
+        }
+        let numeric = |ty: &Ty| integer_named(&value_of_a_copy(ty.clone())).is_some();
+        let alike = known.windows(2).all(|pair| pair[0] == pair[1])
+            && (numbers == 0 || known.iter().all(numeric));
+        if alike {
+            return;
+        }
+        let (word, article) = match expr {
+            Expr::If { .. } => ("if", "`if`"),
+            _ => ("match", "`match`"),
+        };
+        let mut shown: Vec<String> = Vec::new();
+        for ty in &known {
+            if !shown.contains(&ty.text()) {
+                shown.push(ty.text());
+            }
+        }
+        if numbers > 0 {
+            shown.push("a number".to_string());
+        }
+        let listed = match shown.as_slice() {
+            [rest @ .., last] => format!(
+                "{} and `{last}`",
+                rest.iter()
+                    .map(|t| format!("`{t}`"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            [] => String::new(),
+        };
+        self.arm_disagreements.insert(
+            value_node(expr),
+            Finding {
+                severity: Severity::Error,
+                span: *span,
+                code: "NK1245".to_string(),
+                message: format!(
+                    "The arms of this {article} are {listed}, so the compiler can't tell what \
+                     type its value is."
+                ),
+                notes: vec![format!(
+                    "What is not known is not checked, so the value of a `{word}` whose arms \
+                     disagree is refused rather than left to the language below."
+                )],
+                help: Some(
+                    "Make the arms the same type, or write the type down where the value goes, \
+                     such as `let x: T = …`."
+                        .to_string(),
+                ),
+                labels: Vec::new(),
+            },
+        );
     }
 
     /// A text literal where `String` is wanted, built as text of its own
@@ -13463,6 +13679,27 @@ fn members_named(members: &[Ty]) -> String {
 }
 
 /// The value a block ends in: its last statement, where that is an expression.
+/// The value a braced arm ends in: `{ { x } }` is `x`.
+fn peeled(mut value: &Expr) -> &Expr {
+    while let Expr::Block(block, _) = value
+        && let Some(tail) = tail_of(block)
+    {
+        value = tail;
+    }
+    value
+}
+
+/// Whether a type is known all the way down.
+fn wholly_known(ty: &Ty) -> bool {
+    match ty {
+        Ty::Unknown => false,
+        Ty::Nullable(inner) => wholly_known(inner),
+        Ty::Tuple(parts) => parts.iter().all(wholly_known),
+        Ty::Named { args, .. } => args.iter().all(wholly_known),
+        _ => true,
+    }
+}
+
 fn tail_of(block: &Block) -> Option<&Expr> {
     match block.stmts.last().map(|s| &s.node) {
         Some(Stmt::Expr(value)) => Some(value),
