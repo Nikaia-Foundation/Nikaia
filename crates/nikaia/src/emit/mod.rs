@@ -4295,7 +4295,7 @@ impl<'p> Emitter<'p> {
                 let ty = rule.ret_type.as_ref()?;
                 Some((
                     self.text(rule.name).to_string(),
-                    self.ty(ty, Lifetimes::Named),
+                    self.ty_filled(ty, Lifetimes::Named),
                 ))
             })
             .collect();
@@ -4345,7 +4345,7 @@ impl<'p> Emitter<'p> {
         // (ADR-296 D25).
         let vis = if rule.is_entry { "pub " } else { "" };
         let ret = match &rule.ret_type {
-            Some(ty) => format!(" -> {}", self.ty(ty, Lifetimes::Named)),
+            Some(ty) => format!(" -> {}", self.ty_filled(ty, Lifetimes::Named)),
             None => String::new(),
         };
         // The label sits between the return type and the `=`, in both
@@ -4589,7 +4589,7 @@ impl<'p> Emitter<'p> {
             // The accumulator's type is annotated because the path
             // names it: without that, the backend's `let merge = …`
             // leaves the closure with nothing to infer from.
-            let owner = self.ty(
+            let owner = self.ty_filled(
                 &Type {
                     name: *owner,
                     generics: Vec::new(),
@@ -4725,6 +4725,14 @@ impl<'p> Emitter<'p> {
                 lifetimes,
             )
         })
+    }
+
+    /// **A type the package writes outside a signature** (a grammar rule's
+    /// result, the accumulator of a fold): a `pub` type with map parameters
+    /// takes what the package fills an ordinary mention with, `Fast` where it
+    /// is trusted and `Keyed` where it is not, not the type's default.
+    fn ty_filled(&self, ty: &Type, lifetimes: Lifetimes) -> String {
+        self.seeded(self.ty(ty, lifetimes))
     }
 
     /// The same, where the count a `Shared` in this position was given is known.

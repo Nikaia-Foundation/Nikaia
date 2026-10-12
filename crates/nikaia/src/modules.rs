@@ -1230,6 +1230,11 @@ fn names_in(files: &[&crate::parser::Parsed]) -> std::collections::BTreeSet<Stri
             Expr::MethodCall { method, .. } | Expr::SafeMethod { method, .. } => {
                 names.insert(parsed.text(*method).to_string());
             }
+            // A struct literal names the type it builds: a `pub` type whose
+            // maps are the keyed one (a barrier) is built with it.
+            Expr::StructLit { name, .. } => {
+                names.insert(parsed.text(*name).to_string());
+            }
             Expr::LitInterpolated { parts, .. } => {
                 for part in parts {
                     if let FPart::Hole { expr, .. } = part {

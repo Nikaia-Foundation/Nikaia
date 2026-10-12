@@ -292,6 +292,138 @@ fn a_keyed_function_the_program_never_calls_leaves_it_fast() {
     done(&t.dir);
 }
 
+/// **A body that hands the map on says `keyed`**, and a trusted program that
+/// calls it gets the keyed hash: the ledger is read, never the body.
+#[test]
+fn a_map_the_library_hands_on_keys_the_callers_map() {
+    let lib = "use std::collections\n\n\
+         pub fn pass(m: collections::HashMap[String, i64]) -> i64 {\n\
+         \x20   return count(m)\n}\n\n\
+         fn count(m: collections::HashMap[String, i64]) -> i64 {\n\
+         \x20   return m.len()\n}\n\n\
+         fn main() {\n}\n";
+    let app = "use lib\nuse std::collections\n\n\
+         fn main() throws {\n\
+         \x20   let mut m = collections::HashMap()\n\
+         \x20   m.insert(f\"a\", 1)\n\
+         \x20   println(f\"{lib::pass(m)}\")\n}\n";
+    let t = one("handed-on", lib, app);
+    assert!(!t.app.contains("TrustedMap"), "{}", t.app);
+    assert!(!t.app.contains("hash::Fast"), "{}", t.app);
+    compiles(&t.dir, &t.lib, &t.app, "app");
+    done(&t.dir);
+}
+/// **A function that only reads its argument is `from(..)`**, though the
+/// library reads a socket elsewhere: the program may choose the fast hash.
+#[test]
+fn a_function_that_only_reads_its_map_leaves_it_to_the_program() {
+    let lib = "use std::net\nuse std::collections\n\n\
+         pub fn size(m: ref collections::HashMap[String, i64]) -> i64 {\n\
+         \x20   return m.len()\n}\n\n\
+         pub fn ping() throws {\n\
+         \x20   let mut c = net::connect(\"127.0.0.1:1\")\n\
+         \x20   let b = c.read()\n\
+         \x20   println(f\"{b.len()}\")\n}\n\n\
+         fn main() {\n}\n";
+    let app = "use lib\nuse std::collections\n\n\
+         fn main() throws {\n\
+         \x20   let mut m = collections::HashMap()\n\
+         \x20   m.insert(f\"a\", 1)\n\
+         \x20   println(f\"{lib::size(m)}\")\n}\n";
+    let t = one("reads-only", lib, app);
+    assert!(t.app.contains("TrustedMap"), "{}", t.app);
+    compiles(&t.dir, &t.lib, &t.app, "app");
+    done(&t.dir);
+}
+
+/// **A body that inserts socket bytes keys that position, and a program with
+/// a trusted file map gets the keyed hash through it.**
+#[test]
+fn a_function_that_inserts_socket_bytes_keys_the_trusted_programs_map() {
+    let lib = "use std::net\nuse std::collections\n\n\
+         pub fn fill(mut m: collections::HashMap[String, i64]) throws {\n\
+         \x20   let mut c = net::connect(\"127.0.0.1:1\")\n\
+         \x20   let b = c.read()\n\
+         \x20   m[f\"{b.len()}\"] = 1\n}\n\n\
+         fn main() {\n}\n";
+    let app = "use lib\nuse std::collections\nuse std::fs\n\n\
+         fn main() throws {\n\
+         \x20   let mut m = collections::HashMap()\n\
+         \x20   m.insert(f\"a\", 1)\n\
+         \x20   lib::fill(m)\n\
+         \x20   println(f\"{m.len()}\")\n}\n";
+    let t = one("inserts-socket", lib, app);
+    assert!(!t.app.contains("TrustedMap"), "{}", t.app);
+    assert!(!t.app.contains("hash::Fast"), "{}", t.app);
+    compiles(&t.dir, &t.lib, &t.app, "app");
+    done(&t.dir);
+}
+
+/// **`handle(state, request)`**: the request fills the sessions and the
+/// config is only read, so a program whose request comes from a file keeps
+/// the fast hash for both, and the library is one function for either.
+#[test]
+fn a_struct_argument_keeps_the_fast_hash_where_only_one_map_is_filled() {
+    let lib = "use std::collections\n\n\
+         pub struct State { pub config: collections::HashMap[String, String], pub sessions: collections::HashMap[String, i64] }\n\n\
+         pub fn state_new() -> State {\n\
+         \x20   return State { config: collections::HashMap(), sessions: collections::HashMap() }\n}\n\n\
+         pub fn handle(mut state: State, request: ref String) {\n\
+         \x20   state.sessions[request.clone()] = 1\n\
+         \x20   println(f\"{state.config.len()}\")\n}\n\n\
+         fn main() {\n}\n";
+    let app = "use lib\n\n\
+         fn main() throws {\n\
+         \x20   let mut s = lib::state_new()\n\
+         \x20   lib::handle(s, \"a\")\n}\n";
+    let t = one("handle", lib, app);
+    assert!(t.app.contains("hash::Fast"), "{}", t.app);
+    assert!(!t.app.contains("hash::Keyed"), "{}", t.app);
+    compiles(&t.dir, &t.lib, &t.app, "app");
+    done(&t.dir);
+}
+
+/// **A `pub` function has one parameter for each group of positions its body
+/// joins** (Part III 17.1): `same` compares its two maps, so they are one
+/// type; `merge` only reads one and fills the other, so they are two and a
+/// caller may give each its own.
+#[test]
+fn a_function_declares_one_parameter_per_group_its_body_joins() {
+    let lib = "use std::collections\n\n\
+         pub fn same(a: ref collections::HashMap[String, i64], b: ref collections::HashMap[String, i64]) -> bool {\n\
+         \x20   return a == b\n}\n\n\
+         pub fn merge(mut a: collections::HashMap[String, i64], b: ref collections::HashMap[String, i64]) {\n\
+         \x20   for k in b.keys() {\n\
+         \x20       a[k.clone()] = 1\n\
+         \x20   }\n}\n\n\
+         fn main() {\n}\n";
+    let app = "use lib\nuse std::collections\n\n\
+         fn main() throws {\n\
+         \x20   let mut a = collections::HashMap()\n\
+         \x20   let mut b = collections::HashMap()\n\
+         \x20   a.insert(f\"a\", 1)\n\
+         \x20   b.insert(f\"b\", 1)\n\
+         \x20   println(f\"{lib::same(a, b)}\")\n\
+         \x20   lib::merge(a, b)\n}\n";
+    let t = one("groups", lib, app);
+    let same = t.lib.find("fn same<").map(|at| &t.lib[at..]).unwrap_or("");
+    let same = same.split('(').next().unwrap_or("");
+    assert_eq!(same.matches("__S").count(), 1, "{same}\n{}", t.lib);
+    assert!(
+        same.contains("__S0: nikaia_std::hash::Seed") && !same.contains("__S1"),
+        "{same}"
+    );
+    let merge = t.lib.find("fn merge<").map(|at| &t.lib[at..]).unwrap_or("");
+    let merge = merge.split('(').next().unwrap_or("");
+    assert!(
+        merge.contains("__S0") && merge.contains("__S1"),
+        "{merge}\n{}",
+        t.lib
+    );
+    compiles(&t.dir, &t.lib, &t.app, "app");
+    done(&t.dir);
+}
+
 /// **A type with methods**: the `impl` is generic over the type's parameters,
 /// so a method serves a `Fast` value and a `Keyed` one, and the type compares.
 const WITH_METHODS: &str = "use std::collections\n\n\
@@ -776,4 +908,159 @@ fn two_maps_of_one_type_in_a_pub_struct_are_two_parameters() {
         String::from_utf8_lossy(&built.stderr)
     );
     done(&dir);
+}
+
+// ---------------------------------------------------------------------------
+// Shapes of #581 step 6 that a position-by-position grouping meets.
+// ---------------------------------------------------------------------------
+
+/// **A `pub` method whose `self` map is handed to a barrier.** The `impl`'s
+/// parameters belong to the type, so one method cannot fix its own position to
+/// std's hasher; the type declares no parameter then, its maps are the keyed
+/// one, and a program that builds it is no more trusted than that. (It was a
+/// `rustc` error: expected `HashMap<_, _, RandomState>`, found `__S0`.)
+#[test]
+fn a_method_that_hands_its_self_map_to_a_barrier_keys_the_type() {
+    let lib = "use std::collections\n\n\
+         pub trait Sink {\n    fn put(ref mut self, m: ref collections::HashMap[String, i64])\n}\n\n\
+         pub struct Count { pub n: i64 }\n\n\
+         impl Sink for Count {\n    fn put(ref mut self, m: ref collections::HashMap[String, i64]) {\n        self.n = m.len()\n    }\n}\n\n\
+         pub struct Names { pub ids: collections::HashMap[String, i64] }\n\n\
+         impl Names {\n    pub fn flush(ref self, mut k: Count) {\n        k.put(self.ids)\n    }\n}\n\n\
+         fn main() {\n}\n";
+    let app = "use lib\nuse std::collections\n\n\
+         fn main() throws {\n\
+         \x20   let mut n = lib::Names { ids: collections::HashMap() }\n\
+         \x20   n.ids.insert(f\"a\", 1)\n\
+         \x20   n.flush(lib::Count { n: 0 })\n}\n";
+    let t = one("self-barrier", lib, app);
+    assert!(!t.lib.contains("Names<__S"), "{}", t.lib);
+    assert!(!t.app.contains("TrustedMap"), "{}", t.app);
+    compiles(&t.dir, &t.lib, &t.app, "app");
+    done(&t.dir);
+}
+
+/// **A method that hands a map it was given to a barrier** has that position
+/// fixed keyed, as a function does (step 7).
+#[test]
+fn a_method_that_hands_its_argument_map_to_a_barrier_is_keyed() {
+    let lib = "use std::collections\n\n\
+         pub trait Sink {\n    fn put(ref mut self, m: ref collections::HashMap[String, i64])\n}\n\n\
+         pub struct Count { pub n: i64 }\n\n\
+         impl Sink for Count {\n    fn put(ref mut self, m: ref collections::HashMap[String, i64]) {\n        self.n = m.len()\n    }\n}\n\n\
+         pub struct Feeder { pub n: i64 }\n\n\
+         impl Feeder {\n    pub fn feed(ref self, m: ref collections::HashMap[String, i64], mut k: Count) {\n        k.put(m)\n    }\n}\n\n\
+         fn main() {\n}\n";
+    let app = "use lib\nuse std::collections\n\n\
+         fn main() throws {\n\
+         \x20   let mut m = collections::HashMap()\n\
+         \x20   m.insert(f\"a\", 1)\n\
+         \x20   let f = lib::Feeder { n: 0 }\n\
+         \x20   f.feed(m, lib::Count { n: 0 })\n}\n";
+    let t = one("arg-barrier", lib, app);
+    assert!(!t.app.contains("TrustedMap"), "{}", t.app);
+    compiles(&t.dir, &t.lib, &t.app, "app");
+    done(&t.dir);
+}
+
+/// **A private struct holding a `pub` one** is filled with the package's
+/// answer, not its class's: the program compiles, and in a program that reads
+/// a socket elsewhere the `pub` struct is keyed whatever keys fill it.
+#[test]
+fn a_private_struct_that_holds_a_pub_struct_compiles_in_both_programs() {
+    let lib = "use std::collections\n\n\
+         pub struct Tally { pub counts: collections::HashMap[String, i64] }\n\n\
+         struct Holder { t: Tally }\n\n\
+         fn hold() -> Holder {\n\
+         \x20   return Holder { t: Tally { counts: collections::HashMap() } }\n}\n\n\
+         pub fn total() -> i64 {\n\
+         \x20   let h = hold()\n\
+         \x20   return h.t.counts.len()\n}\n\n\
+         fn main() {\n}\n";
+    library_compiles("holder", lib);
+    let socket = "use std::net\n\n".to_string() + lib;
+    let socket = socket.replace(
+        "fn main() {\n}\n",
+        "fn main() throws {\n\
+         \x20   let mut c = net::connect(\"127.0.0.1:1\")\n\
+         \x20   let b = c.read()\n\
+         \x20   println(f\"{b.len()} {total()}\")\n}\n",
+    );
+    let t = one("holder-socket", &socket, FILE_APP);
+    assert!(!t.lib.contains("TrustedMap"), "{}", t.lib);
+    compiles(&t.dir, &t.lib, &t.app, "app");
+    done(&t.dir);
+}
+
+/// **A grammar rule's type, by itself** (`Report<'a>`): the rule's result and
+/// the fold's accumulator are written with what the package fills a mention
+/// with, not with the type's `Keyed` default. A trusted program that builds a
+/// `Report` of its own and merges the parsed one into it mixed `Fast` and
+/// `Keyed` before (a `rustc` error: *expected `Report<'_>`, found
+/// `Report<'_, RandomState>`*).
+#[test]
+fn a_grammar_rule_type_takes_the_hasher_the_package_fills() {
+    let example = include_str!("../../../examples/access-log/src/main.nika");
+    let source = example
+        .replace(
+            "fn main() throws {",
+            "fn make() -> Report {\n    return Report()\n}\n\nfn main() throws {",
+        )
+        .replace(
+            "    println(f\"{report.requests} requests, {report.failures} failed\")",
+            "    let mut mine = make()\n    mine.merge(report.clone())\n    println(f\"{mine.requests} requests, {report.failures} failed\")",
+        );
+    let dir = common::scratch_dir("map-seeds-grammar");
+    std::fs::create_dir_all(dir.join("gram/src")).expect("the package");
+    std::fs::write(
+        dir.join("gram/nikaia.toml"),
+        "[package]\nname = \"gram\"\nversion = \"0.1.0\"\n",
+    )
+    .expect("a manifest");
+    std::fs::write(dir.join("gram/src/main.nika"), &source).expect("a source");
+    let rust = lower(&dir, "gram");
+    assert!(
+        rust.contains("-> Report<'a, nikaia_std::hash::Fast>"),
+        "{rust}"
+    );
+    let path = dir.join("gram.rs");
+    std::fs::write(&path, &rust).expect("write");
+    let built = common::compile(
+        &path,
+        &[
+            "--crate-type",
+            "bin",
+            "-o",
+            &dir.join("gram-bin").to_string_lossy(),
+        ],
+    );
+    assert!(
+        built.status.success(),
+        "{}\n{rust}",
+        String::from_utf8_lossy(&built.stderr)
+    );
+    done(&dir);
+}
+
+/// **A method that joins two maps of its own type** (`self.a == self.b`): the
+/// type declares one parameter for each, and no signature can say that two of
+/// the `impl`'s parameters are one, so the type's maps are the keyed map.
+#[test]
+fn a_method_that_joins_two_maps_of_its_type_keys_the_type() {
+    let lib = "use std::collections\n\n\
+         pub struct Pair { pub a: collections::HashSet[String], pub b: collections::HashSet[String] }\n\n\
+         impl Pair {\n\
+         \x20   pub fn alike(ref self) -> bool {\n\
+         \x20       return self.a == self.b\n\
+         \x20   }\n}\n\n\
+         fn main() {\n}\n";
+    let app = "use lib\nuse std::collections\n\n\
+         fn main() throws {\n\
+         \x20   let p = lib::Pair { a: collections::HashSet(), b: collections::HashSet() }\n\
+         \x20   println(f\"{p.alike()}\")\n}\n";
+    let t = one("join-own", lib, app);
+    assert!(!t.lib.contains("Pair<__S"), "{}", t.lib);
+    assert!(!t.app.contains("TrustedSet"), "{}", t.app);
+    compiles(&t.dir, &t.lib, &t.app, "app");
+    done(&t.dir);
 }

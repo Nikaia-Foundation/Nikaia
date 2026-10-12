@@ -52,6 +52,11 @@ pub struct Seeds {
     /// the ledger gives it: one per group of positions its body joins
     /// (`contracts::maps`, Part III 17.1).
     shapes: BTreeMap<String, Shape>,
+    /// Private functions with a map of their own in the signature.
+    private: std::collections::BTreeSet<String>,
+    /// `pub` types that declare no parameters because a method hands a map of
+    /// theirs to a barrier: their maps are the keyed one.
+    excluded: std::collections::BTreeSet<String>,
 }
 
 /// Where the parameters of a type being written come from.
@@ -153,6 +158,13 @@ fn root_name(parsed: &Parsed, e: &crate::ast::Expr) -> Option<String> {
     }
 }
 
+/// The map types written in a type itself, a struct that holds some not
+/// counted.
+fn bare(parsed: &Parsed, ty: &Type) -> usize {
+    let own = usize::from(ty.code.is_none() && !ty.is_tuple && is_map(parsed.text(ty.name)));
+    own + ty.generics.iter().map(|g| bare(parsed, g)).sum::<usize>()
+}
+
 fn last(name: &str) -> &str {
     name.rsplit("::").next().unwrap_or(name)
 }
@@ -195,24 +207,36 @@ impl Seeds {
                 }
             }
         }
-        for (name, _) in &declared {
-            seeds.types.insert(name.clone(), 0);
-        }
-        for _ in 0..8 {
-            let mut changed = false;
-            for (name, fields) in &declared {
-                let n: usize = fields.iter().map(|(p, t)| seeds.count(p, t)).sum();
-                if seeds.types.get(name) != Some(&n) {
-                    seeds.types.insert(name.clone(), n);
-                    changed = true;
+        seeds.count_types(&declared);
+        seeds.read_barriers(units);
+        // **A method that hands a map of its type to a barrier**: the `impl`'s
+        // parameters are the type's and one method cannot fix them to std's
+        // hasher, so the type declares none - its maps are the keyed one - and
+        // a program that names it is no more trusted than the keyed hash.
+        for _ in 0..4 {
+            let mut bad = seeds.self_handers(units);
+            // And a method whose body makes two maps of its own type one: the
+            // type declares a parameter for each, no signature can say that
+            // two of the `impl`'s parameters are the same.
+            for found in crate::contracts::maps::analyse_with(units, &seeds) {
+                if found.shape.conflict
+                    && let Some((target, _)) = found.key.split_once("::")
+                    && seeds.arity(target) > 0
+                    && !bad.iter().any(|b| b == target)
+                {
+                    bad.push(target.to_string());
                 }
             }
-            if !changed {
+            if bad.is_empty() {
                 break;
             }
+            for name in bad {
+                seeds.excluded.insert(name.clone());
+                seeds.barriers.insert(name);
+            }
+            seeds.count_types(&declared);
+            seeds.read_barriers(units);
         }
-        seeds.types.retain(|_, n| *n > 0);
-        seeds.read_barriers(units);
         for found in crate::contracts::maps::analyse_with(units, &seeds) {
             seeds.shapes.insert(found.key, found.shape);
         }
@@ -272,6 +296,103 @@ impl Seeds {
             }
         }
         seeds
+    }
+
+    /// The hidden parameters of each `pub` struct, until the counts stop
+    /// growing (a struct holds another one that holds a map).
+    fn count_types(&mut self, declared: &[(String, Vec<(&Parsed, &Type)>)]) {
+        self.types.clear();
+        for (name, _) in declared {
+            if !self.excluded.contains(name) {
+                self.types.insert(name.clone(), 0);
+            }
+        }
+        for _ in 0..8 {
+            let mut changed = false;
+            for (name, fields) in declared {
+                if self.excluded.contains(name) {
+                    continue;
+                }
+                let n: usize = fields.iter().map(|(p, t)| self.count(p, t)).sum();
+                if self.types.get(name) != Some(&n) {
+                    self.types.insert(name.clone(), n);
+                    changed = true;
+                }
+            }
+            if !changed {
+                break;
+            }
+        }
+        self.types.retain(|_, n| *n > 0);
+    }
+
+    /// Whether a body hands one of `held` (a name, or a field of one) to a
+    /// barrier, to a function that is one, or to a private function with a map
+    /// of its own.
+    fn hands(&self, parsed: &Parsed, body: &crate::ast::Block, held: &[String]) -> bool {
+        let mut hands = false;
+        crate::emit::visit_block(body, &mut |e| {
+            let (callee, given): (String, &[crate::ast::Expr]) = match e {
+                crate::ast::Expr::MethodCall { method, args, .. } => {
+                    (parsed.text(*method).to_string(), args)
+                }
+                crate::ast::Expr::Call { func, args, .. } => match &**func {
+                    crate::ast::Expr::Path(segments, _) => match segments.last() {
+                        Some(last) => (parsed.text(*last).to_string(), args),
+                        None => return,
+                    },
+                    crate::ast::Expr::Variable(one, _) => (parsed.text(*one).to_string(), args),
+                    _ => return,
+                },
+                _ => return,
+            };
+            if (self.barriers.contains(&callee)
+                || self.fixed.contains(&callee)
+                || self.private.contains(&callee))
+                && given
+                    .iter()
+                    .any(|a| root_name(parsed, a).is_some_and(|n| held.contains(&n)))
+            {
+                hands = true;
+            }
+        });
+        hands
+    }
+
+    /// The types with a method (not a trait's) that hands a map of `self` on.
+    fn self_handers(&self, units: &[&Parsed]) -> Vec<String> {
+        let mut out = Vec::new();
+        for parsed in units {
+            for item in &parsed.program.items {
+                let Item::Impl {
+                    trait_name: None,
+                    target,
+                    methods,
+                    ..
+                } = &item.node
+                else {
+                    continue;
+                };
+                let name = last(parsed.text(target.name)).to_string();
+                if self.arity(&name) == 0 || out.contains(&name) {
+                    continue;
+                }
+                let held = vec!["self".to_string()];
+                for m in methods {
+                    if let Item::Fn {
+                        receiver: Some(_),
+                        body,
+                        ..
+                    } = &m.node
+                        && self.hands(parsed, body, &held)
+                    {
+                        out.push(name.clone());
+                        break;
+                    }
+                }
+            }
+        }
+        out
     }
 
     /// The traits' methods with a map position, and then the `pub` functions
@@ -359,6 +480,32 @@ impl Seeds {
                 }
             }
         }
+        // **A private function with a map of its own in its signature** has
+        // the package's class for it, not a hidden parameter: a `pub` function
+        // that hands it a map it was given cannot say that the two are one
+        // type, so its positions are the keyed map, as a trait method's are
+        // (the package writes the keyed map in its own bodies, `seeded()`).
+        self.private.clear();
+        for parsed in units {
+            for item in &parsed.program.items {
+                if let Item::Fn {
+                    name: Some(name),
+                    args,
+                    ret_type,
+                    is_public: false,
+                    receiver: None,
+                    ..
+                } = &item.node
+                    && args
+                        .iter()
+                        .map(|a| &a.ty)
+                        .chain(ret_type.iter())
+                        .any(|t| bare(parsed, t) > 0)
+                {
+                    self.private.insert(parsed.text(*name).to_string());
+                }
+            }
+        }
         for _ in 0..4 {
             let mut changed = false;
             for parsed in units {
@@ -386,36 +533,51 @@ impl Seeds {
                     if held.is_empty() {
                         continue;
                     }
-                    let mut hands = false;
-                    crate::emit::visit_block(body, &mut |e| {
-                        let (callee, given): (String, &[crate::ast::Expr]) = match e {
-                            crate::ast::Expr::MethodCall { method, args, .. } => {
-                                (parsed.text(*method).to_string(), args)
-                            }
-                            crate::ast::Expr::Call { func, args, .. } => match &**func {
-                                crate::ast::Expr::Path(segments, _) => match segments.last() {
-                                    Some(last) => (parsed.text(*last).to_string(), args),
-                                    None => return,
-                                },
-                                crate::ast::Expr::Variable(one, _) => {
-                                    (parsed.text(*one).to_string(), args)
-                                }
-                                _ => return,
-                            },
-                            _ => return,
-                        };
-                        if (self.barriers.contains(&callee) || self.fixed.contains(&callee))
-                            && given
-                                .iter()
-                                .any(|a| root_name(parsed, a).is_some_and(|n| held.contains(&n)))
-                        {
-                            hands = true;
-                        }
-                    });
+                    let hands = self.hands(parsed, body, &held);
                     if hands {
                         self.fixed.insert(fname);
                         self.functions = true;
                         changed = true;
+                    }
+                }
+            }
+            // A method that hands a map it was given (not `self`'s) on.
+            for parsed in units {
+                for item in &parsed.program.items {
+                    let Item::Impl {
+                        trait_name: None,
+                        methods,
+                        ..
+                    } = &item.node
+                    else {
+                        continue;
+                    };
+                    for m in methods {
+                        let Item::Fn {
+                            name: Some(name),
+                            args,
+                            body,
+                            is_public: true,
+                            receiver: Some(_),
+                            ..
+                        } = &m.node
+                        else {
+                            continue;
+                        };
+                        let fname = parsed.text(*name).to_string();
+                        if self.fixed.contains(&fname) {
+                            continue;
+                        }
+                        let held: Vec<String> = args
+                            .iter()
+                            .filter(|a| self.count(parsed, &a.ty) > 0)
+                            .map(|a| parsed.text(a.name).to_string())
+                            .collect();
+                        if !held.is_empty() && self.hands(parsed, body, &held) {
+                            self.fixed.insert(fname);
+                            self.functions = true;
+                            changed = true;
+                        }
                     }
                 }
             }

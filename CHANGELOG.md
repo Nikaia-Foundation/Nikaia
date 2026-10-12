@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.848] — 2026-10-12
+
+**Shapes of the held patch: no rustc error for a barrier handed a self map, a pub function's map handed to a private one, or a grammar rule's type (ADR-010 D9, #581 step 6 fixes)**
+- A pub method that hands a map of self to a trait method (or to another barrier) makes its type declare no hidden parameters: the type's maps are the keyed map, and a program that names or builds it is no more trusted than that (it was a rustc error: expected HashMap<_, _, RandomState>, found __S0). A pub function or method that hands a map it was given to a private function with a map of its own is a barrier too (rustc E0308 before).
+- A method whose body makes two maps of its own type one (`self.a == self.b`) does the same for its type: the `impl`'s parameters are the type's and no signature can say two of them are one.
+- The type of a grammar rule and the accumulator of its fold take the hasher the package fills every mention with, not the Keyed default: a trusted program that merged a Report of its own into the parsed one mixed Fast and Keyed (rustc error), and the access-log example's map is Fast.
+
 ## [0.0.847] — 2026-10-12
 
 **The ledger's maps key: one line per group of map positions, from(..) or keyed; a function declares one hidden parameter per group its body joins (ADR-010 D9, #581 step 6)**

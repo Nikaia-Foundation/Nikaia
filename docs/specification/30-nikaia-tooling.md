@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part III: Tooling, Ecosystem & Interoperability**
-**Version:** 0.0.847 (Draft)
+**Version:** 0.0.848 (Draft)
 **Date:** 2026-10-12
 
 ---
@@ -1361,7 +1361,7 @@ The hasher follows from the provenance: untrusted keys get a keyed hash with a p
 
 **One map, one hasher, decided for the whole package** ([ADR-010](adr/adr-010.md) D9). Maps that a value passes between - a field and the map it is initialised from, a parameter and its argument, a result and what receives it, two maps compared with `==`, the arms of one `if` or `match` - are hashed the same way, and get the keyed hash if any key that reaches any of them is untrusted. The compiler decides it after reading every file of the package: which file builds or fills a map, and the order the files are read in, change nothing. A map whose declaration is not part of a `pub` item's signature or type has one hasher at every use of that declaration.
 
-**At the package's boundary, each use chooses, as with a generic.** A map in the signature of a `pub` function or method, or in a `pub` type, takes the hasher of the map handed in or taken out at each use, in the package and in its callers; a function has one hasher for each group of its positions that its body makes one map, so two maps it only reads from one another may be hashed differently. The package's ledger says what each such function puts into those maps (13.5, `maps`), and a caller counts it with its own keys. A map in a trait method's signature, in a described crate's signature or in a binding for another language always gets the keyed hash. Rust code that names a `pub` Nikaia type holding maps gives one type argument per map, in the order its fields declare them, `nikaia_std::hash::Fast` or `nikaia_std::hash::Keyed`; one it leaves out is `Keyed`.
+**At the package's boundary, each use chooses, as with a generic.** A map in the signature of a `pub` function or method, or in a `pub` type, takes the hasher of the map handed in or taken out at each use, in the package and in its callers; a function has one hasher for each group of its positions that its body makes one map, so two maps it only reads from one another may be hashed differently. The package's ledger says what each such function puts into those maps (13.5, `maps`), and a caller counts it with its own keys. A map in a trait method's signature, in a described crate's signature or in a binding for another language always gets the keyed hash. So does a map a `pub` function or method hands on to one of those, or to a private function with a map of its own, and the maps of a `pub` type one of whose methods hands a map of `self` on to one. Rust code that names a `pub` Nikaia type holding maps gives one type argument per map, in the order its fields declare them, `nikaia_std::hash::Fast` or `nikaia_std::hash::Keyed`; one it leaves out is `Keyed`.
 
 Two maps that must be hashed the same way but are made with two different `hasher:` choices are refused with `NK1246`.
 
