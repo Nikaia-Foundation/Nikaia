@@ -478,17 +478,19 @@ fn nested_positions() {
     );
 }
 
-/// **A method of a trait is a barrier** (D9, step 7, not built): its signature
-/// is fixed keyed, and a trusted library writes the fixed seed there.
+/// **A method of a trait is a barrier** (D9, step 7): its signature and its
+/// implementations' are the keyed map, whatever the package, and a `pub`
+/// function that hands its map to one has that map fixed keyed too - a hidden
+/// parameter could not be shown to be std's hasher.
+const SINK: &str = "use std::collections\n\n\
+     pub trait Sink {\n    fn put(ref mut self, m: ref collections::HashMap[String, i64])\n}\n\n\
+     pub struct Count { pub n: i64 }\n\n\
+     impl Sink for Count {\n    fn put(ref mut self, m: ref collections::HashMap[String, i64]) {\n        self.n = m.len()\n    }\n}\n\n\
+     pub fn feed(mut k: Count, m: ref collections::HashMap[String, i64]) {\n    k.put(m)\n}\n\n\
+     fn main() {\n}\n";
+
 #[test]
-#[ignore = "#581 step 7: a map in a trait method's signature is a fixed keyed position; today it follows the package"]
 fn a_trait_method_with_a_map_is_keyed_whatever_the_package() {
-    let lib = "use std::collections\n\n\
-         pub trait Sink {\n    fn put(ref mut self, m: collections::HashMap[String, i64])\n}\n\n\
-         pub struct Count { pub n: i64 }\n\n\
-         impl Sink for Count {\n    fn put(ref mut self, m: collections::HashMap[String, i64]) {\n        self.n = m.len()\n    }\n}\n\n\
-         pub fn feed(k: ref mut Count, m: collections::HashMap[String, i64]) {\n    k.put(m)\n}\n\n\
-         fn main() {\n}\n";
     let app = "use lib\nuse std::net\nuse std::collections\n\n\
          fn main() throws {\n\
          \x20   let mut c = net::connect(\"127.0.0.1:1\")\n\
@@ -497,7 +499,197 @@ fn a_trait_method_with_a_map_is_keyed_whatever_the_package() {
          \x20   m.insert(f\"{b.len()}\", 1)\n\
          \x20   let mut k = lib::Count { n: 0 }\n\
          \x20   lib::feed(k, m)\n}\n";
-    let t = one("trait", lib, app);
+    let t = one("trait", SINK, app);
+    assert!(!t.lib.contains("TrustedMap"), "{}", t.lib);
+    assert!(!t.lib.contains("fn feed<"), "{}", t.lib);
     compiles(&t.dir, &t.lib, &t.app, "app");
     done(&t.dir);
+}
+
+/// **And a trusted program that calls it keeps no fast map across it.**
+#[test]
+fn a_trusted_program_hands_a_trait_method_the_keyed_map() {
+    let app = "use lib\nuse std::collections\n\n\
+         fn main() throws {\n\
+         \x20   let mut m = collections::HashMap()\n\
+         \x20   m.insert(f\"{1}\", 1)\n\
+         \x20   let mut k = lib::Count { n: 0 }\n\
+         \x20   lib::feed(k, m)\n}\n";
+    let t = one("trait-trusted", SINK, app);
+    assert!(!t.app.contains("TrustedMap"), "{}", t.app);
+    compiles(&t.dir, &t.lib, &t.app, "app");
+    done(&t.dir);
+}
+
+/// **A trait implemented in a third package that reads a socket**, whose own
+/// `pub` items hold no map: the map the program hands to `put` is hashed by a
+/// body the program cannot see, so the program stays keyed.
+#[test]
+fn a_trait_implemented_in_a_third_package_that_reads_a_socket_keys_the_program() {
+    let dir = common::scratch_dir("map-seeds-third");
+    let write = |name: &str, deps: &str, source: &str| {
+        std::fs::create_dir_all(dir.join(name).join("src")).expect("the package");
+        std::fs::write(
+            dir.join(name).join("nikaia.toml"),
+            format!("[package]\nname = \"{name}\"\nversion = \"0.1.0\"\n\n[dependencies]\n{deps}"),
+        )
+        .expect("a manifest");
+        std::fs::write(dir.join(name).join("src/main.nika"), source).expect("a source");
+    };
+    write(
+        "api",
+        "",
+        "use std::collections\n\n\
+         pub trait Sink {\n    fn put(ref mut self, m: ref collections::HashMap[String, i64])\n}\n\n\
+         fn main() {\n}\n",
+    );
+    write(
+        "third",
+        "api = { path = \"../api\" }\n",
+        "use api\nuse std::net\nuse std::collections\n\n\
+         pub struct Count { pub n: i64 }\n\n\
+         impl api::Sink for Count {\n\
+         \x20   fn put(ref mut self, m: ref collections::HashMap[String, i64]) throws {\n\
+         \x20       let mut c = net::connect(\"127.0.0.1:1\")\n\
+         \x20       let b = c.read()\n\
+         \x20       self.n = m.len() + b.len()\n\
+         \x20   }\n}\n\n\
+         fn main() {\n}\n",
+    );
+    write(
+        "app",
+        "api = { path = \"../api\" }\nthird = { path = \"../third\" }\n",
+        "use api\nuse third\nuse std::collections\n\n\
+         fn main() throws {\n\
+         \x20   let mut m = collections::HashMap()\n\
+         \x20   m.insert(\"a\", 1)\n\
+         \x20   let mut k = third::Count { n: 0 }\n\
+         \x20   k.put(m)\n}\n",
+    );
+    let app = lower(&dir, "app");
+    assert!(!app.contains("TrustedMap"), "{app}");
+    assert!(!app.contains("hash::Fast"), "{app}");
+    done(&dir);
+}
+
+/// **A binding for another language takes no map**: the refusal is Nikaia's,
+/// in Nikaia's words, and not a Rust error about a file nobody wrote (C.1).
+#[test]
+fn a_c_binding_with_a_map_is_refused_in_nikaia_words() {
+    let run = |source: &str| {
+        let dir = common::scratch_dir("map-seeds-cexport");
+        std::fs::create_dir_all(dir.join("src")).expect("src");
+        std::fs::write(
+            dir.join("nikaia.toml"),
+            "[package]\nname = \"cl\"\nversion = \"0.1.0\"\n\n[build]\nartifact = \"c-library\"\n",
+        )
+        .expect("a manifest");
+        std::fs::write(dir.join("src/main.nika"), source).expect("a source");
+        let out = std::process::Command::new(env!("CARGO_BIN_EXE_nikaia"))
+            .args([
+                "lower",
+                &dir.join("src/main.nika").to_string_lossy(),
+                "--no-cache",
+            ])
+            .output()
+            .expect("the binary runs");
+        done(&dir);
+        String::from_utf8_lossy(&out.stderr).to_string()
+    };
+    let param = run(
+        "use std::collections\n\npub extern fn count(m: collections::HashMap[String, i64]) -> i64 {\n    return m.len()\n}\n\nfn main() {\n}\n",
+    );
+    assert!(param.contains("does not export yet"), "{param}");
+    let handle = run(
+        "use std::collections\n\npub struct Tally { pub counts: collections::HashMap[String, i64] }\n\npub extern fn tally_len(t: ref Tally) -> i64 {\n    return t.counts.len()\n}\n\nfn main() {\n}\n",
+    );
+    assert!(handle.contains("does not export yet"), "{handle}");
+}
+
+/// **Shapes step 5 left open, each handed to rustc** (C.1): a method whose
+/// result alone holds a map (a method call takes no turbofish), a function
+/// of a lifetime-generic signature whose result alone holds one.
+const MAKERS: &str = "use std::collections\n\n\
+     pub struct Maker { pub n: i64 }\n\n\
+     impl Maker {\n\
+     \x20   pub fn build(ref self) -> collections::HashMap[String, i64] {\n\
+     \x20       return collections::HashMap()\n\
+     \x20   }\n}\n\n\
+     pub fn tally_of(text: ref String) -> collections::HashMap[String, i64] {\n\
+     \x20   return collections::HashMap()\n}\n\n\
+     fn main() {\n}\n";
+
+#[test]
+fn a_method_with_a_result_only_map_compiles_in_both_programs() {
+    let own = "use lib\n\nfn main() throws {\n\
+         \x20   let k = lib::Maker { n: 1 }\n\
+         \x20   let m = k.build()\n\
+         \x20   println(f\"{m.len()}\")\n}\n";
+    let socket = "use lib\nuse std::net\n\nfn main() throws {\n\
+         \x20   let mut c = net::connect(\"127.0.0.1:1\")\n\
+         \x20   let b = c.read()\n\
+         \x20   let k = lib::Maker { n: 1 }\n\
+         \x20   let mut m = k.build()\n\
+         \x20   m.insert(f\"{b.len()}\", 1)\n\
+         \x20   println(f\"{m.len()}\")\n}\n";
+    let (dir, lib, apps) = two("maker-method", MAKERS, &[("own", own), ("socket", socket)]);
+    compiles(&dir, &lib, &apps[0], "own");
+    compiles(&dir, &lib, &apps[1], "socket");
+    done(&dir);
+}
+
+#[test]
+fn a_function_with_a_view_and_a_result_only_map_compiles_in_both_programs() {
+    let own = "use lib\n\nfn main() throws {\n\
+         \x20   let text = \"a b\"\n\
+         \x20   let m = lib::tally_of(text)\n\
+         \x20   println(f\"{m.len()}\")\n}\n";
+    let socket = "use lib\nuse std::net\n\nfn main() throws {\n\
+         \x20   let mut c = net::connect(\"127.0.0.1:1\")\n\
+         \x20   let b = c.read()\n\
+         \x20   let mut m = lib::tally_of(\"a b\")\n\
+         \x20   m.insert(f\"{b.len()}\", 1)\n\
+         \x20   println(f\"{m.len()}\")\n}\n";
+    let (dir, lib, apps) = two("maker-view", MAKERS, &[("own", own), ("socket", socket)]);
+    compiles(&dir, &lib, &apps[0], "own");
+    compiles(&dir, &lib, &apps[1], "socket");
+    done(&dir);
+}
+
+/// **A described Rust crate's signature is a barrier** (D9): a function that
+/// takes `&HashMap<K, V>` takes std's, so a program that calls it keeps no fast
+/// map across the call. The description is read the way a project's is.
+#[test]
+fn a_described_crates_map_function_keys_the_callers_map() {
+    use nikaia::contracts::LedgerOps;
+    let dir = common::scratch_dir("map-seeds-described");
+    std::fs::create_dir_all(dir.join("src")).expect("src");
+    std::fs::write(
+        dir.join("nikaia.toml"),
+        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n",
+    )
+    .expect("a manifest");
+    let source = "use std::collections\n\n\
+         fn main() throws {\n\
+         \x20   let mut m = collections::HashMap()\n\
+         \x20   m.insert(f\"{1}\", 1)\n\
+         \x20   println(f\"{fremd::count(m)}\")\n}\n";
+    std::fs::write(dir.join("src/main.nika"), source).expect("a source");
+    std::fs::write(
+        dir.join("fremd.contracts"),
+        "[fn.\"fremd::count\"]\npub = true\nsignature = \"(m: ref collections::HashMap[String, i64]) -> i64\"\n",
+    )
+    .expect("a description");
+    let mut program = nikaia::comptime_run::defaults_compiled_in(Some(&common::workshop()), || {
+        nikaia::modules::Program::read_with(&dir.join("src/main.nika"), &[])
+    })
+    .expect("the program reads");
+    program.described =
+        nikaia::contracts::Ledger::read_beside(&dir.join("fremd.contracts")).expect("it reads");
+    let rust = program
+        .emit_reading(Default::default(), &common::reads())
+        .expect("the program lowers")
+        .rust;
+    assert!(!rust.contains("TrustedMap"), "{rust}");
+    done(&dir);
 }

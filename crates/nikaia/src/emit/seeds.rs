@@ -36,6 +36,17 @@ pub struct Seeds {
     calls: BTreeMap<String, (usize, usize)>,
     /// Some `pub` function holds a map position.
     functions: bool,
+    /// **Barriers** (ADR-010 D9, #581 step 7): the names of the methods of a
+    /// trait that hold a map position in their signature, and of the functions
+    /// of a described Rust crate that do. The map there is the keyed one
+    /// whatever the program is, so a map handed to one of them is keyed too.
+    barriers: std::collections::BTreeSet<String>,
+    /// The `pub` functions that hand a map position they were given to a
+    /// barrier: their positions are the keyed map, not a hidden parameter
+    /// (`Seed` cannot be proved to be `RandomState`).
+    fixed: std::collections::BTreeSet<String>,
+    /// Some trait of the units, or an `impl` of one, holds a map position.
+    trait_maps: bool,
 }
 
 /// Where the parameters of a type being written come from.
@@ -82,6 +93,15 @@ impl Place {
     }
 }
 
+/// The variable a value is a field chain of: `m`, `t.counts`.
+fn root_name(parsed: &Parsed, e: &crate::ast::Expr) -> Option<String> {
+    match e {
+        crate::ast::Expr::Variable(n, _) => Some(parsed.text(*n).to_string()),
+        crate::ast::Expr::Field { base, .. } => root_name(parsed, base),
+        _ => None,
+    }
+}
+
 fn last(name: &str) -> &str {
     name.rsplit("::").next().unwrap_or(name)
 }
@@ -96,7 +116,14 @@ fn is_map(name: &str) -> bool {
 impl Seeds {
     /// Reads every file of every package in the build.
     pub fn read(units: &[&Parsed]) -> Seeds {
+        Seeds::read_with(units, &[])
+    }
+
+    /// As [`Seeds::read`], with the names of the functions of described Rust
+    /// crates that hold a map position (barriers too).
+    pub fn read_with(units: &[&Parsed], described: &[String]) -> Seeds {
         let mut seeds = Seeds::default();
+        seeds.barriers.extend(described.iter().cloned());
         // Fields of every public struct, then the count of each, until the
         // counts stop growing (a struct holds another one that holds a map).
         let mut declared: Vec<(String, Vec<(&Parsed, &Type)>)> = Vec::new();
@@ -134,6 +161,7 @@ impl Seeds {
             }
         }
         seeds.types.retain(|_, n| *n > 0);
+        seeds.read_barriers(units);
         for parsed in units {
             for item in &parsed.program.items {
                 if let Item::Fn {
@@ -169,6 +197,9 @@ impl Seeds {
                     if total > 0 {
                         seeds.functions = true;
                     }
+                    if seeds.fixed.contains(parsed.text(*name)) {
+                        continue;
+                    }
                     if total > fixed {
                         // A type parameter of its own comes first, and nothing
                         // fixes it from here: the call leaves it to `_`.
@@ -181,6 +212,174 @@ impl Seeds {
             }
         }
         seeds
+    }
+
+    /// The traits' methods with a map position, and then the `pub` functions
+    /// that hand a position they were given to one of them (or to another such
+    /// function), until none is added.
+    fn read_barriers(&mut self, units: &[&Parsed]) {
+        for parsed in units {
+            for item in &parsed.program.items {
+                match &item.node {
+                    Item::Trait { methods, .. } => {
+                        for m in methods {
+                            let held = m
+                                .node
+                                .args
+                                .iter()
+                                .map(|a| &a.ty)
+                                .chain(m.node.ret_type.iter())
+                                .any(|t| self.count(parsed, t) > 0);
+                            if held {
+                                self.trait_maps = true;
+                                self.barriers.insert(parsed.text(m.node.name).to_string());
+                            }
+                        }
+                    }
+                    Item::Impl {
+                        trait_name: Some(_),
+                        methods,
+                        ..
+                    } => {
+                        for m in methods {
+                            if let Item::Fn {
+                                name: Some(name),
+                                args,
+                                ret_type,
+                                ..
+                            } = &m.node
+                                && args
+                                    .iter()
+                                    .map(|a| &a.ty)
+                                    .chain(ret_type.iter())
+                                    .any(|t| self.count(parsed, t) > 0)
+                            {
+                                self.trait_maps = true;
+                                self.barriers.insert(parsed.text(*name).to_string());
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        // **A method whose result alone holds a map position**: a method call
+        // takes no turbofish here, so nothing could fill it. Its positions are
+        // the keyed map, like a barrier's.
+        for parsed in units {
+            for item in &parsed.program.items {
+                let Item::Impl {
+                    trait_name: None,
+                    methods,
+                    ..
+                } = &item.node
+                else {
+                    continue;
+                };
+                for m in methods {
+                    let Item::Fn {
+                        name: Some(name),
+                        args,
+                        ret_type: Some(ret),
+                        is_public: true,
+                        ..
+                    } = &m.node
+                    else {
+                        continue;
+                    };
+                    let mut seen = std::collections::BTreeSet::new();
+                    let given: usize = args
+                        .iter()
+                        .map(|a| self.distinct(parsed, &a.ty, &mut seen))
+                        .sum();
+                    if self.distinct(parsed, ret, &mut seen) > 0 && given == 0 {
+                        self.fixed.insert(parsed.text(*name).to_string());
+                        self.functions = true;
+                    }
+                }
+            }
+        }
+        for _ in 0..4 {
+            let mut changed = false;
+            for parsed in units {
+                for item in &parsed.program.items {
+                    let Item::Fn {
+                        name: Some(name),
+                        args,
+                        body,
+                        is_public: true,
+                        receiver: None,
+                        ..
+                    } = &item.node
+                    else {
+                        continue;
+                    };
+                    let fname = parsed.text(*name).to_string();
+                    if self.fixed.contains(&fname) {
+                        continue;
+                    }
+                    let held: Vec<String> = args
+                        .iter()
+                        .filter(|a| self.count(parsed, &a.ty) > 0)
+                        .map(|a| parsed.text(a.name).to_string())
+                        .collect();
+                    if held.is_empty() {
+                        continue;
+                    }
+                    let mut hands = false;
+                    crate::emit::visit_block(body, &mut |e| {
+                        let (callee, given): (String, &[crate::ast::Expr]) = match e {
+                            crate::ast::Expr::MethodCall { method, args, .. } => {
+                                (parsed.text(*method).to_string(), args)
+                            }
+                            crate::ast::Expr::Call { func, args, .. } => match &**func {
+                                crate::ast::Expr::Path(segments, _) => match segments.last() {
+                                    Some(last) => (parsed.text(*last).to_string(), args),
+                                    None => return,
+                                },
+                                crate::ast::Expr::Variable(one, _) => {
+                                    (parsed.text(*one).to_string(), args)
+                                }
+                                _ => return,
+                            },
+                            _ => return,
+                        };
+                        if (self.barriers.contains(&callee) || self.fixed.contains(&callee))
+                            && given
+                                .iter()
+                                .any(|a| root_name(parsed, a).is_some_and(|n| held.contains(&n)))
+                        {
+                            hands = true;
+                        }
+                    });
+                    if hands {
+                        self.fixed.insert(fname);
+                        self.functions = true;
+                        changed = true;
+                    }
+                }
+            }
+            if !changed {
+                break;
+            }
+        }
+    }
+
+    /// Whether a `pub` function's positions are the keyed map (a barrier).
+    pub fn is_fixed(&self, name: &str) -> bool {
+        self.fixed.contains(name)
+    }
+
+    /// The names a call must not hand a fast map to: calling one makes the
+    /// program no more trusted than the keyed hash.
+    pub fn barrier_names(&self) -> std::collections::BTreeSet<String> {
+        self.barriers.union(&self.fixed).cloned().collect()
+    }
+
+    /// Whether the units declare a trait method, or implement one, with a map
+    /// in its signature.
+    pub fn trait_maps(&self) -> bool {
+        self.trait_maps
     }
 
     fn count(&self, parsed: &Parsed, ty: &Type) -> usize {

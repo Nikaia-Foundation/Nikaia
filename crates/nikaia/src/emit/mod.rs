@@ -808,7 +808,35 @@ pub fn emit_module_body_at(
 /// ones a program that uses it fills with its own hasher, and so the ones whose
 /// body must be as trusted as the program that fills them.
 pub fn holds_map_positions(package: &[&Parsed]) -> bool {
-    !seeds::Seeds::read(package).is_empty()
+    let seeds = seeds::Seeds::read(package);
+    !seeds.is_empty() || seeds.trait_maps()
+}
+
+/// **The names a call must not hand a fast map to** (ADR-010 D9, barriers):
+/// the methods of a trait that hold a map in their signature, the `pub`
+/// functions that hand a map on to one, and the functions of described Rust
+/// crates that take one. A program that calls one is no more trusted than the
+/// keyed hash, because the map arrives there with std's hasher.
+pub fn barrier_names(
+    units: &[&Parsed],
+    described: &crate::contracts::Ledger,
+) -> std::collections::BTreeSet<String> {
+    seeds::Seeds::read_with(units, &described_maps(described)).barrier_names()
+}
+
+/// The functions of a described Rust crate with a map in their signature.
+fn described_maps(described: &crate::contracts::Ledger) -> Vec<String> {
+    described
+        .functions
+        .iter()
+        .filter(|(_, c)| {
+            c.signature.as_ref().is_some_and(|s| {
+                let text = s.text();
+                text.contains("HashMap") || text.contains("HashSet")
+            })
+        })
+        .map(|(key, _)| key.rsplit("::").next().unwrap_or(key).to_string())
+        .collect()
 }
 
 /// What a program's preamble has to say, over all of its files.
@@ -1064,6 +1092,8 @@ struct Emitter<'p> {
     seeds: seeds::Seeds,
     /// Where the parameters of the type being written come from.
     place: std::cell::RefCell<seeds::Place>,
+    /// A signature of a barrier is being written: its maps are the keyed ones.
+    floor: std::cell::Cell<bool>,
 }
 
 /// What an `impl` says about a method. Enough to adapt a `&mut self` method to
@@ -1675,7 +1705,7 @@ impl<'p> Emitter<'p> {
             if !all.iter().any(|p| std::ptr::eq(*p, parsed)) {
                 all.push(parsed);
             }
-            seeds::Seeds::read(&all)
+            seeds::Seeds::read_with(&all, &described_maps(described))
         };
         let mut grammars: std::collections::BTreeMap<String, GrammarDef> =
             std::collections::BTreeMap::new();
@@ -1972,6 +2002,7 @@ impl<'p> Emitter<'p> {
             },
             seeds: seeds_of,
             place: std::cell::RefCell::new(seeds::Place::default()),
+            floor: std::cell::Cell::new(false),
         };
         made.s.sums = made.s.error_sums(&made.world);
         made
@@ -2973,6 +3004,20 @@ impl<'p> Emitter<'p> {
         out: &mut Out,
         method: &crate::ast::TraitMethod,
         is_sync: bool,
+        foreign: bool,
+    ) -> Result<()> {
+        // A trait's methods are barriers (ADR-010 D9): the keyed map.
+        self.floor.set(true);
+        let done = self.trait_method_written(out, method, is_sync, foreign);
+        self.floor.set(false);
+        done
+    }
+
+    fn trait_method_written(
+        &self,
+        out: &mut Out,
+        method: &crate::ast::TraitMethod,
+        is_sync: bool,
         // **Whether this is a C declaration**
         // ([ADR-302](../../docs/specification/adr/adr-302.md) D5), which is
         // what decides how a view is written: at the C boundary it is the
@@ -3209,7 +3254,14 @@ impl<'p> Emitter<'p> {
             (Some(o), true) => self.seeds.arity(o.target),
             _ => 0,
         };
+        // **A signature of a barrier** (D9): a method of a trait and its
+        // implementations, and a function that hands its map to one.
+        let barrier = owner.is_some_and(|o| o.declared_by.is_some())
+            || (owner.is_none_or(|o| o.declared_by.is_none())
+                && name.is_some_and(|n| self.seeds.is_fixed(self.text(n))));
+        self.floor.set(barrier);
         let seeded_fn = !self.seeds.is_empty()
+            && !barrier
             && name.is_some()
             && owner.is_none_or(|o| o.declared_by.is_none())
             && args
@@ -3808,6 +3860,7 @@ impl<'p> Emitter<'p> {
             String::new()
         };
 
+        self.floor.set(false);
         let hidden = match seeded_fn {
             true => self.place.borrow_mut().finish(base),
             false => 0,
@@ -4689,11 +4742,22 @@ impl<'p> Emitter<'p> {
 
     /// **A written type, with the hidden map parameters in** (ADR-010 D9).
     fn seeded(&self, written: String) -> String {
+        // **A barrier's signature is the keyed map** (D9): std's `HashMap`,
+        // whatever the package, and the keyed hasher in a library type's
+        // arguments.
+        let floor = self.floor.get();
+        let written = match floor {
+            true => written
+                .replace("TrustedMap", "HashMap")
+                .replace("TrustedSet", "HashSet"),
+            false => written,
+        };
         if self.seeds.is_empty() {
             return written;
         }
         let mut place = self.place.borrow_mut();
-        self.seeds.write(&written, &mut place, self.s.trusted_input)
+        self.seeds
+            .write(&written, &mut place, self.s.trusted_input && !floor)
     }
 
     /// The queues a settle point drains: at `user_parallelism = yes` only the

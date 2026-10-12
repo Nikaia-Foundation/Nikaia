@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.845] — 2026-10-12
+
+**Barriers: a map in a trait method's signature, a described crate's, or handed to one is the keyed map (ADR-010 D9, #581 step 7)**
+- A trait method's signature and its implementations' write std's keyed map in any package; a `pub` function that hands a map to such a method, and a method whose result alone holds a map, have the keyed map at those positions instead of a hidden parameter; a program that calls one, or a described crate's function taking a map, is no more trusted than the keyed hash; a trait implemented in a package that reads a socket keys the program that uses it.
+
 ## [0.0.844] — 2026-10-11
 
 **A map at a package's boundary is a type parameter each use fills (ADR-010 D9, #581 step 5)**

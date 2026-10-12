@@ -955,6 +955,26 @@ impl Program {
                 trust.provenance = crate::contracts::Provenance::Untrusted;
             }
         }
+        // **A call to a barrier** (D9): a method of a trait that holds a map in
+        // its signature, a `pub` function that hands a map to one, a function
+        // of a described Rust crate that takes one. The map arrives there with
+        // std's keyed hasher, so a program that calls one keeps no fast map
+        // across it: its maps that leave a function are keyed.
+        // And a package that declares one - a trait method with a map, a
+        // function that hands a map to one, a method whose result alone holds
+        // one - writes the keyed map in its own bodies where they make it.
+        if trust.provenance == crate::contracts::Provenance::Trusted
+            && !crate::emit::barrier_names(&package, &self.described).is_empty()
+        {
+            trust.provenance = crate::contracts::Provenance::Untrusted;
+        }
+        if trust.provenance == crate::contracts::Provenance::Trusted {
+            let all: Vec<&crate::parser::Parsed> = self.units.iter().map(|u| &u.parsed).collect();
+            let barriers = crate::emit::barrier_names(&all, &self.described);
+            if !barriers.is_empty() && names_in(&package).iter().any(|n| barriers.contains(n)) {
+                trust.provenance = crate::contracts::Provenance::Untrusted;
+            }
+        }
         let needs = self.units.iter().fold(Needs::default(), |acc, u| {
             acc.join(crate::proofs::for_unit(
                 &u.path,
@@ -1176,4 +1196,64 @@ fn with_tests_as_functions(mut units: Vec<Unit>) -> Result<(Vec<Unit>, Vec<TestC
 
 fn std_ledger() -> &'static crate::contracts::Ledger {
     crate::contracts::std_ledger()
+}
+
+/// Every name an expression of these files writes: a path's last segment, a
+/// variable, a method. Over-approximate on purpose (a local with a function's
+/// name counts as a call of it), which is the cautious direction for a
+/// permission. The holes of an `f"..."` are expressions too.
+fn names_in(files: &[&crate::parser::Parsed]) -> std::collections::BTreeSet<String> {
+    use crate::ast::{Block, Expr, FPart, Item};
+
+    fn note(
+        parsed: &crate::parser::Parsed,
+        e: &Expr,
+        names: &mut std::collections::BTreeSet<String>,
+    ) {
+        match e {
+            Expr::Path(segments, _) => {
+                if let Some(last) = segments.last() {
+                    names.insert(parsed.text(*last).to_string());
+                }
+            }
+            Expr::Variable(n, _) => {
+                names.insert(parsed.text(*n).to_string());
+            }
+            Expr::MethodCall { method, .. } | Expr::SafeMethod { method, .. } => {
+                names.insert(parsed.text(*method).to_string());
+            }
+            Expr::LitInterpolated { parts, .. } => {
+                for part in parts {
+                    if let FPart::Hole { expr, .. } = part {
+                        let mut inner = std::collections::BTreeSet::new();
+                        crate::emit::visit_expr(expr, &mut |e| note(parsed, e, &mut inner));
+                        names.extend(inner);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let mut names = std::collections::BTreeSet::new();
+    for parsed in files {
+        let mut bodies: Vec<&Block> = Vec::new();
+        for item in &parsed.program.items {
+            match &item.node {
+                Item::Fn { body, .. } => bodies.push(body),
+                Item::Impl { methods, .. } => {
+                    for method in methods {
+                        if let Item::Fn { body, .. } = &method.node {
+                            bodies.push(body);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        for body in bodies {
+            crate::emit::visit_block(body, &mut |e| note(parsed, e, &mut names));
+        }
+    }
+    names
 }
