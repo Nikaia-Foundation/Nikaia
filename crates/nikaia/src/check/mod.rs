@@ -11708,20 +11708,16 @@ impl<'a> Checker<'a> {
 
     /// **Views and text of its own meet as text where nothing asks** (#562):
     /// `let y = if c { s } else { int_text(1) }` is text, and the position `y`
-    /// goes into decides what it is (ADR-282 D14). Said only where the
-    /// function can take a view back out (a mixed result, or a result that is
-    /// no text): a `pub fn … -> String` keeps the refusal.
+    /// goes into decides what it is (ADR-282 D14). The name is bound as the
+    /// view it may be, so a position that takes only text of its own refuses
+    /// it where `y` is used - `return y` in a `pub fn … -> String` is `NK1104`
+    /// naming `.clone()` (ADR-282 D22, D25) - and one both kinds flow into
+    /// takes it as it is.
     fn views_meet_owned_text(&mut self, value: &Expr) -> Option<Ty> {
         if !matches!(value, Expr::If { .. } | Expr::Match { .. }) {
             return None;
         }
         let text = Ty::named("String");
-        let nullable_text = Ty::Nullable(Box::new(text.clone()));
-        let text_result =
-            matches!(&self.s.expected, Some(ty) if *ty == text || *ty == nullable_text);
-        if text_result && !self.s.flow.expected_either {
-            return None;
-        }
         let (mut leaves, mut nodes) = (Vec::new(), Vec::new());
         self.value_leaves(value, &mut leaves, &mut nodes);
         let (mut views, mut owned, mut absent) = (0, 0, false);
@@ -11746,9 +11742,10 @@ impl<'a> Checker<'a> {
             self.arm_disagreements.remove(&node);
         }
         self.note_mixed(value, absent);
+        let view = Ty::view(ty::TEXT_VIEW);
         Some(match absent {
-            true => nullable_text,
-            false => text,
+            true => Ty::Nullable(Box::new(view)),
+            false => view,
         })
     }
 

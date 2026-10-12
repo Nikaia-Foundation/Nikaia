@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.862] — 2026-10-12
+
+**checker: a mixed let is bound as the view it may be; the position it flows into decides (Part of #562)**
+- `let y = if c { s } else { owned }` binds `y` as `ref String` (`ref String?` beside `null`) whatever the function returns; `return y` in a `pub fn … -> String` is NK1104 naming `.clone()`, and a parameter both kinds flow into takes it as it is.
+
 ## [0.0.861] — 2026-10-12
 
 **lowering: a mixed text position wraps each arm of an if/match; ref String and String arms meet at text (#562)**

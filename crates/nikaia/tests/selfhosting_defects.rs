@@ -1003,7 +1003,45 @@ fn main() {
 }
 "#,
     );
-    assert!(said.contains("NK1245"), "{said}");
+    assert!(said.contains("NK1104"), "{said}");
+    assert!(said.contains(".clone()"), "{said}");
+    assert!(!said.contains("NK1245"), "{said}");
+}
+
+/// #562: where the name goes decides, not the function's result: the mixed
+/// `let` is handed to a parameter both kinds flow into in a function that
+/// returns a number.
+#[test]
+fn a_mixed_let_goes_where_the_position_takes_it() {
+    let said = printed(
+        "mixed-let-argument",
+        r#"
+fn keep(x: String) -> Vec[String] {
+    let mut v: Vec[String] = Vec()
+    v.push(x)
+    return v
+}
+
+fn r(s: ref String, c: bool) -> String {
+    let y = if c { s } else { f"{c}" }
+    let h = keep(y)
+    return f"{h.len()}"
+}
+
+fn n(s: ref String, c: bool) -> i64 {
+    let y = if c { s } else { f"{c}" }
+    let h = keep(y)
+    return h.len()
+}
+
+fn main() {
+    let a = "hi".clone()
+    println(r(a, true))
+    println(n(a, false))
+}
+"#,
+    );
+    assert_eq!(said.trim(), "1\n1");
 }
 
 /// #562: the same into a mixed field and a mixed parameter.
