@@ -169,16 +169,16 @@ fn a_type_this_compiler_has_not_classified_is_not_refused() {
 #[test]
 fn a_program_that_declares_the_trait_keeps_it() {
     let source = "trait Struct {\n\
-         \x20   fn label(self) -> ref String\n\
+         \x20   fn label(ref self) -> ref String\n\
          }\n\
          \n\
          struct Point { x: i64, y: i64 }\n\
          \n\
          impl Struct for Point {\n\
-         \x20   fn label(self) -> ref String { return \"point\" }\n\
+         \x20   fn label(ref self) -> ref String { return \"point\" }\n\
          }\n\
          \n\
-         fn describe[T: Struct](value: T) -> ref String {\n\
+         fn describe[T: Struct](value: ref T) -> ref String {\n\
          \x20   return value.label()\n\
          }\n\
          \n\
