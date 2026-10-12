@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.857] — 2026-10-12
+
+**ADR-327 D8-D9: a copy toward Rust is written, never inserted (NK2506); a value that left its task counts against its receiver (#490)**
+- specification: Part III 15.2 says a list or text handed to a Rust owner crosses as it is where the compiler follows it back to where it was built, and is otherwise refused with NK2506 and copied by a written .clone() (ADR-282 D7); the code table adds NK2506; Part II 12 says a value that left its task counts against the task that receives or joins it, or the shared value it is stored into, and a receiver it does not fit is a full block; ADR-327 D8 and D9; not built
+
 ## [0.0.856] — 2026-10-12
 
 **ADR-342 and ADR-327 D8-D10: a chain runs element by element; a task's block holds nothing that outlives it (#595, #490)**
