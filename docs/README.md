@@ -133,6 +133,9 @@ is withdrawn — never for age by itself. The method and the measurement are
 still true and still cited by ADR number from wherever they are used; only the
 question the page was written to answer is no longer open.
 
+* [`mitigation-hurdles.md`](history/mitigation-hurdles.md) — four hurdles of
+  the Rust to Nikaia move; three are built (ADR-283 D25-D26, ADR-010 D10), the
+  fourth lives in #581 and ADR-010 D9.
 * [`staging-candidates.md`](history/staging-candidates.md) — the survey of
   where compile-time staging would pay; every candidate is closed
   ([ADR-178](specification/adr/adr-178.md)).

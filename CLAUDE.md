@@ -243,4 +243,4 @@ Rules from the sessions that moved the most; they save tokens, not just time.
   writes a first draft of a Rust function in Nikaia (about half the lines
   survive; TODO markers where it cannot); the known lowering defects and
   their workarounds are in `docs/lowering-defects.md`, the language options
-  against the usual hurdles in `docs/mitigation-hurdles.md`.
+  against the usual hurdles in `docs/history/mitigation-hurdles.md`.

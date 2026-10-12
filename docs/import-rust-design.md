@@ -93,7 +93,7 @@ The 19 entries of `docs/lowering-defects.md`: **none changes behaviour without a
 * a `Held` struct: more lines;
 * a refusal.
 
-Decision B settles it: one source on every way out compiles (ADR-283 D25); the count is in `mitigation-hurdles.md` §1. The report counts every clone the importer adds as a performance obligation.
+Decision B settles it: one source on every way out compiles (ADR-283 D25); the count is in `history/mitigation-hurdles.md` §1. The report counts every clone the importer adds as a performance obligation.
 
 **Partial import.** What is refused stays Rust. The Nikaia program calls it as a described path crate (`type = "rust", path = …` plus `contracts/`, **[V]** `examples/foreign-runtime/crossing`), and Rust calls the imported Nikaia as a module (ADR-290 D16). This is the strangler that self-hosting uses with its host traits. Its limit: a foreign type's methods are not described (ADR-290 §6).
 
@@ -103,7 +103,7 @@ The steps, per crate: read → convert → `nikaia lower` (L1) → `cargo build`
 
 ### 4. What it needs from the language and the rules (owner decisions)
 
-Each topic below goes into its own decision round. Nothing here blocks the self-hosting move. Where they come from: B-E are in `docs/mitigation-hurdles.md`, which the orchestrator of the #125/#558 sessions wrote; it *recommends* them and nobody has decided them. A and F-I are new from this round. Only I is needed now (it decides who builds what). A is needed before Phase 3, and F-H before the first `NK28xx` code ships.
+Each topic below goes into its own decision round. Nothing here blocks the self-hosting move. Where they come from: B-E are in `docs/history/mitigation-hurdles.md`, which the orchestrator of the #125/#558 sessions wrote; it *recommends* them and nobody has decided them. A and F-I are new from this round. Only I is needed now (it decides who builds what). A is needed before Phase 3, and F-H before the first `NK28xx` code ships.
 
 **A. What the importer is written in and what reads Rust.**
 * *What it is:* the command needs a parser for all of Rust. ADR-290 D11 says the toolchain's tools are written in Nikaia, and D13 says the parser is a grammar.

@@ -1,3 +1,11 @@
+> **Status (October 12, 2026): moved to history.** Topics 1, 2 and 4 are done
+> (NK2302 precision, ADR-283 D25-D26; no lifetimes needed beyond it; `Symbol` is
+> `Ord` and `NK1247` refuses an ordered map whose key has none, ADR-010 D10,
+> #589). Topic 3 (one `HashMap` type per class) is decided and lives in
+> [#581](https://github.com/Nikaia-Foundation/Nikaia/issues/581) and
+> ADR-010 D9; until it is built, `BTreeMap`/`BTreeSet` in `tools` stays the
+> convention. The text below is the basis of those decisions, not current.
+
 # Four hurdles of the Rust -> Nikaia move: facts and options (owner decides the language)
 
 Where the question comes from: the orchestrator of the #125/#558 self-hosting
