@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.852] — 2026-10-12
+
+**ADR-341: Eq and Ord are sync and lower to the standard library's traits (#592)**
+- specification: Part I 4.7 and ADR-341 D1 say the two traits are sync and are std's Eq/Ord/Ordering in the lowered Rust; not built
+
 ## [0.0.851] — 2026-10-12
 
 **ADR-341: Eq and Ord are traits of the language; a bound gives the operators; impl Eq / impl Ord for declared types (#592)**

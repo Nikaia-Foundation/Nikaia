@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.851 (Draft)
+**Version:** 0.0.852 (Draft)
 **Date:** 2026-10-12
 
 ---
@@ -1569,7 +1569,7 @@ with `NK1130`. A method whose implementation **pauses** where the declaration
 says `sync` is refused with `NK1129`. A trait method has no **default body**,
 and a trait is not a type: there is no `dyn` and no `fn f(x: Summarize)`.
 
-**`Eq` and `Ord` are traits of the language**, in scope everywhere (a program that declares a trait or an enum of the same name keeps its own): `Eq` has `eq(ref self, other: ref Self) -> bool`, `Ord` has `compare(ref self, other: ref Self) -> Ordering`, and `Ordering` is the enum `Less | Equal | Greater`. A bound `[T: Eq]` gives the body `==` and `!=` on two `T`; `[T: Ord]` gives `<`, `<=`, `>`, `>=`, `compare`, and also `==` and `!=`, because an ordered type is an `Eq` one. An operator on a type parameter that no bound allows is refused with `NK1248`. A bound is answered by an `impl`, and where there is none by the language: the numbers except the floats, `bool`, `char`, `String` and `Bytes` are `Eq` and `Ord`, a float is neither, and a container is when what it holds is. A `struct` or an `enum` the program declares is `Eq` where its parts are, and `Ord` only where the program writes `impl Ord` for it. `impl Eq` and `impl Ord` are written for a type the program declares, and `impl Ord` only for a type that is `Eq`; any other is `NK1249`. An `impl Eq` replaces the equality the type would have had. The laws are the program's: equality is reflexive, symmetric and transitive, the order is total, and `compare` is `Equal` exactly where `eq` is `true`. The compiler does not check them.
+**`Eq` and `Ord` are traits of the language**, in scope everywhere (a program that declares a trait or an enum of the same name keeps its own): `Eq` has `eq(ref self, other: ref Self) -> bool sync`, `Ord` has `compare(ref self, other: ref Self) -> Ordering sync`, and `Ordering` is the enum `Less | Equal | Greater`; they are the standard library's `Eq`, `Ord` and `std::cmp::Ordering` in the Rust a program lowers to, so a type with an `impl Ord` is an `Ord` type to Rust code. A bound `[T: Eq]` gives the body `==` and `!=` on two `T`; `[T: Ord]` gives `<`, `<=`, `>`, `>=`, `compare`, and also `==` and `!=`, because an ordered type is an `Eq` one. An operator on a type parameter that no bound allows is refused with `NK1248`. A bound is answered by an `impl`, and where there is none by the language: the numbers except the floats, `bool`, `char`, `String` and `Bytes` are `Eq` and `Ord`, a float is neither, and a container is when what it holds is. A `struct` or an `enum` the program declares is `Eq` where its parts are, and `Ord` only where the program writes `impl Ord` for it. `impl Eq` and `impl Ord` are written for a type the program declares, and `impl Ord` only for a type that is `Eq`; any other is `NK1249`. An `impl Eq` replaces the equality the type would have had. The laws are the program's: equality is reflexive, symmetric and transitive, the order is total, and `compare` is `Equal` exactly where `eq` is `true`. The compiler does not check them.
 
 ---
 
