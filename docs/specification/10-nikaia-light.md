@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.855 (Draft)
+**Version:** 0.0.856 (Draft)
 **Date:** 2026-10-12
 
 ---
@@ -1329,6 +1329,18 @@ The standard library provides types for groups of values.
     names.sort()                                  // by name
     names.sort_by_key fn (name) { -(report[name]?.hits ?? 0) }   // then by hits, descending
     ```
+    **A chain runs element by element** ([ADR-342](adr/adr-342.md)). A list's
+    `map` hands back a list, but where its result goes straight into the next
+    step - another `map`, `iter()`, a `for`, `len()` - no list is built between
+    them, as none is between the steps of `xs.iter().map(…).filter(…)`. This
+    holds where every lambda of the chain touches nothing (Part III 13.5) and
+    changes no name outside it; a chain with a lambda that prints, reads or
+    takes a lock runs step after step, as written. In a chain that qualifies,
+    the order in which the lambdas reach the elements is not fixed. Where more
+    than one step would panic, which one stops the task is not fixed either,
+    and an overflow may stop the chain after its last element instead of at its
+    own; it stops only for a reason a step has on a value the chain computes as
+    written, and the message names the line that overflowed.
     A map has no order, so a program that prints one says which.
 * **Tuple:** a fixed number of values of *different* types, with no name for
     the group and no names for the parts. It is written and read by position:

@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part III: Tooling, Ecosystem & Interoperability**
-**Version:** 0.0.855 (Draft)
+**Version:** 0.0.856 (Draft)
 **Date:** 2026-10-12
 
 ---
@@ -371,7 +371,7 @@ A diff distinguishes the two forms: the narration of a withdrawn asserted `sync`
 
 **A signature may name its receiver's type arguments.** `HashMap::entry` is written `[K, V](mut self: ref collections::HashMap[K, V], key: ?) -> Entry[V]`: the result holds whatever the map holds. At a call site the receiver's actual type binds the variables, and they are substituted away: `HashMap[ref String, Stats]` makes the result an `Entry[Stats]` and `and_modify`'s `fn(ref V)` a `fn(ref Stats)`, which gives the `s` in `fn(s) { s.add(t) }` its type.
 
-**A sequence has a name in the ledger, and a container keeps its own.** `Seq[T]` is elements of `T` produced step by step; `keys()`, `scalars`, `io::lines()` and `xs.map fn …` hand one back, and `sync`, `pauses` or `throws` after it say what one step may do, as after a function type. The first two are **three states and not two**: `sync` promises the step does not pause, `pauses` warns that it does, and neither is *nobody said*. A `for` over a sequence that says `pauses` gives its thread up instead of holding it; one that says nothing keeps the blocking step. The eager consumers `collect`, `count`, `nth` and `join` also read `pauses`. `collect` builds a list, or the map, set or `String` that the `let`, field or result it goes into declares, where its items fit ([ADR-293](adr/adr-293.md)). A `Seq` is consumed by walking it, so a second walk is refused with `NK2702`, wherever the first one took it: a `let` that names it again, an argument, a loop or a lambda that would take it on its next turn. **Three more words say what a sequence is as a whole**: `ends` — it can be walked from the back; `sized` — its length is known before it is walked; `replays` — walking it does not use it up, which is true of a range and of nothing produced. On a receiver they are a demand (`rev` writes `Seq[T] ends`, and a sequence without the word is `NK2703`); on a result they pass through, and `ends_by_length = true` says the result has a back end only where every input's length is known. A walk of one whose step **pauses** is a `for` or one of the eager consumers; `map`, `filter`, `take`, `skip`, `step_by` and `zip` over one make another such sequence; `rev` is `NK2703`. A list's `windows` and `chunks` hand out `ref Array[T]`. A `Vec[T]` or a `HashMap[K, V]` is a container, walked by view and as often as a program likes. `Par[T]` is what `par_iter()` hands back, and a lambda handed to it must be `sync` (Part II 12.6). Neither `Seq` nor `Par` is in a program's type grammar. **`Seen[T]` is what a lock hands out**: `get` is `-> Seen[T]`, the result of `access` is a `Seen`, the stamp sticks through arithmetic and through calls to entries whose `touches` names no lock, and a `set` given one is refused. A `Seen[i64]` is emitted as an `i64`. `Seen` is in a program's type grammar at two places: a struct field, and a parameter of a function that touches a lock.
+**A sequence has a name in the ledger, and a container keeps its own.** `Seq[T]` is elements of `T` produced step by step; `keys()`, `scalars`, `io::lines()` and `xs.iter().map fn …` hand one back, and `sync`, `pauses` or `throws` after it say what one step may do, as after a function type. The first two are **three states and not two**: `sync` promises the step does not pause, `pauses` warns that it does, and neither is *nobody said*. A `for` over a sequence that says `pauses` gives its thread up instead of holding it; one that says nothing keeps the blocking step. The eager consumers `collect`, `count`, `nth` and `join` also read `pauses`. `collect` builds a list, or the map, set or `String` that the `let`, field or result it goes into declares, where its items fit ([ADR-293](adr/adr-293.md)). A `Seq` is consumed by walking it, so a second walk is refused with `NK2702`, wherever the first one took it: a `let` that names it again, an argument, a loop or a lambda that would take it on its next turn. **Three more words say what a sequence is as a whole**: `ends` — it can be walked from the back; `sized` — its length is known before it is walked; `replays` — walking it does not use it up, which is true of a range and of nothing produced. On a receiver they are a demand (`rev` writes `Seq[T] ends`, and a sequence without the word is `NK2703`); on a result they pass through, and `ends_by_length = true` says the result has a back end only where every input's length is known. A walk of one whose step **pauses** is a `for` or one of the eager consumers; `map`, `filter`, `take`, `skip`, `step_by` and `zip` over one make another such sequence; `rev` is `NK2703`. A list's `windows` and `chunks` hand out `ref Array[T]`. A `Vec[T]` or a `HashMap[K, V]` is a container, walked by view and as often as a program likes. `Par[T]` is what `par_iter()` hands back, and a lambda handed to it must be `sync` (Part II 12.6). Neither `Seq` nor `Par` is in a program's type grammar. **`Seen[T]` is what a lock hands out**: `get` is `-> Seen[T]`, the result of `access` is a `Seen`, the stamp sticks through arithmetic and through calls to entries whose `touches` names no lock, and a `set` given one is refused. A `Seen[i64]` is emitted as an `i64`. `Seen` is in a program's type grammar at two places: a struct field, and a parameter of a function that touches a lock.
 
 **An unbound variable becomes `?`, never a name.** A variable is bound and replaced, or it is the absence of a claim. A map built by `HashMap()` says nothing about what it holds and binds nothing, and the chain stops there.
 
@@ -716,11 +716,16 @@ The rule reaches as far as the Rust signature is true. Where the compiler reads 
 * Rust `i64`, `u8` -> Nikaia `i64`, `u8` — the rest of the numeric surface (Part I, 2.2)
 * Rust `&str` and Rust `String` -> Nikaia `String`, whose state the compiler
   picks: a Nikaia `String` crosses to Rust `&str`
-  for free, and to Rust `String` only by a `.clone()` the program writes
+  for free, and to a Rust `String` the callee owns by being handed over, as
+  the list below
 * Rust `Option<T>` -> Nikaia `T?` (Nullable)
 * Rust `Vec<T>` -> Nikaia `Vec[T]`, and `HashMap<K, V>` -> `HashMap[K, V]`: a
   Nikaia list crosses to Rust `&[T]` for free, and to a Rust `Vec<T>` the callee
-  owns only by a copy the program writes, which leaves the task's memory budget
+  owns by being handed over: as it is where the compiler built it for that
+  call, and as a copy the compiler makes where it cannot follow the value to
+  where it was built. Either way it leaves the task's memory budget at the call,
+  and a program that keeps using it writes `.clone()`. A `Vec<T>` or `String` a
+  Rust function hands back is taken over without a copy
   ([ADR-327](adr/adr-327.md) D8)
 * Rust `Rc<T>` **or** `Arc<T>` -> Nikaia `Shared[T]`. The compiler decides per
   value which it becomes. A `Shared[T]` handed to a call whose body the compiler
@@ -1494,7 +1499,7 @@ Errors arising from external circumstances, such as a missing file or a network 
 ### A.2. Unrecoverable Errors (`panic`)
 Errors indicating an inconsistent program state: an index out of bounds on a **list** (a map read through the brackets is a `T?` and never panics); division by zero; **arithmetic overflow**; a handle a C declaration claimed and C did not hand back (15.1); and an explicit `panic()`.
 
-An overflow is in this list at **every** build. Where a program means to wrap or to stop at the limit, it says so by name (Part I, 2.2). A conversion is not in the list: one that can lose a value is written `as` only where it is shown to fit (`NK1241` otherwise), and `checked_i32` and `truncating_i32` are how a program asks for the rest (Part I, 2.2).
+An overflow is in this list at **every** build. In a chain whose lambdas touch nothing, it may stop the chain after its last element instead of at its own, and still names its own line (Part I 4.5). Where a program means to wrap or to stop at the limit, it says so by name (Part I, 2.2). A conversion is not in the list: one that can lose a value is written `as` only where it is shown to fit (`NK1241` otherwise), and `checked_i32` and `truncating_i32` are how a program asks for the rest (Part I, 2.2).
 
 A constant that cannot fit the type it is given is refused with `NK1116`, and a division whose divisor is a constant zero is refused with `NK1118`. Neither takes a case out of the list: a divisor the compiler cannot evaluate is divided by at run time, and a zero there is unrecoverable. The compile-time refusal replaces the run-time message only where no program had to run to know it (C.1).
 

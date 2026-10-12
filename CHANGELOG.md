@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.856] — 2026-10-12
+
+**ADR-342 and ADR-327 D8-D10: a chain runs element by element; a task's block holds nothing that outlives it (#595, #490)**
+- specification: Part I 4.5 says a list's map whose result goes straight into the next step runs element by element with it where the lambdas touch nothing, and that in such a chain the lambdas' order, which panic stops it, and where an overflow stops it are not fixed; Part III A.2 says the overflow still names its own line; Part III's Seq paragraph says xs.iter().map; ADR-342; not built
+- specification: Part II 12 says a task's budget counts what it holds and a value that can outlive its task is not in its block, so the block is emptied whole; Part III 15.2 says a list or text handed to a Rust owner crosses without a copy where the compiler built it for that and is copied by the compiler otherwise, and a Vec or String handed back is taken over; ADR-327 D8 rewritten, D9-D10; not built
+
 ## [0.0.855] — 2026-10-12
 
 **NK2302: a std lookup typed by the receiver's type parameter points into the receiver alone (#585 item 4)**
