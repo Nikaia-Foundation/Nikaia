@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.851] — 2026-10-12
+
+**ADR-341: Eq and Ord are traits of the language; a bound gives the operators; impl Eq / impl Ord for declared types (#592)**
+- specification: Part I 4.7 names Eq and Ord, what a bound on them gives the body (NK1248) and who answers it; Part III adds NK1248, NK1249 and the ledger column equates, and NK1247 accepts a declared type with impl Ord; ADR-341; not built
+
 ## [0.0.850] — 2026-10-12
 
 **check: an ordered map's key must have an order, NK1247, ledger column orders (#589, ADR-010 D10)**
