@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.846] — 2026-10-12
+
+**A pub type declares one hidden parameter per map position, in field order (ADR-010 D9, #581 step 5 fix)**
+- Two maps of one written type in a `pub` struct are two hidden parameters, as a function's signature counts them; a function still shares one parameter between positions of one written type.
+
 ## [0.0.845] — 2026-10-12
 
 **Barriers: a map in a trait method's signature, a described crate's, or handed to one is the keyed map (ADR-010 D9, #581 step 7)**

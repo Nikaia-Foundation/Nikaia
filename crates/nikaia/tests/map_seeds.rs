@@ -693,3 +693,43 @@ fn a_described_crates_map_function_keys_the_callers_map() {
     assert!(!rust.contains("TrustedMap"), "{rust}");
     done(&dir);
 }
+
+/// **One parameter per map position of a type, in field order**: two maps of
+/// one written type in one `pub struct` are two parameters, and a `pub`
+/// function that takes the struct carries both (C.1: this was a rustc error).
+#[test]
+fn two_maps_of_one_type_in_a_pub_struct_are_two_parameters() {
+    let source = "use std::collections\n\n\
+         pub struct Pair {\n    pub a: collections::HashMap[String, i64],\n    pub b: collections::HashMap[String, i64],\n}\n\n\
+         pub fn bump(mut p: Pair, w: ref String) {\n    p.a[w.clone()] = 1\n    p.b[w.clone()] = 2\n}\n\n\
+         fn main() {\n\
+         \x20   let mut p = Pair { a: collections::HashMap(), b: collections::HashMap() }\n\
+         \x20   bump(p, \"x\")\n\
+         \x20   print(f\"{p.a.len()} {p.b.len()}\")\n}\n";
+    let dir = common::scratch_dir("map-seeds-pair");
+    std::fs::create_dir_all(dir.join("lib/src")).expect("lib");
+    std::fs::write(
+        dir.join("lib/nikaia.toml"),
+        "[package]\nname = \"lib\"\nversion = \"0.1.0\"\n",
+    )
+    .expect("a manifest");
+    std::fs::write(dir.join("lib/src/main.nika"), source).expect("a source");
+    let rust = lower(&dir, "lib");
+    let path = dir.join("pair.rs");
+    std::fs::write(&path, &rust).expect("write");
+    let built = common::compile(
+        &path,
+        &[
+            "--crate-type",
+            "bin",
+            "-o",
+            &dir.join("pair-bin").to_string_lossy(),
+        ],
+    );
+    assert!(
+        built.status.success(),
+        "{}\n{rust}",
+        String::from_utf8_lossy(&built.stderr)
+    );
+    done(&dir);
+}

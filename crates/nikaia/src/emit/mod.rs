@@ -2470,7 +2470,7 @@ impl<'p> Emitter<'p> {
                 // parameters** (ADR-010 D9), numbered by the fields in order.
                 let seeded = *is_public && !*is_extern && self.seeds.arity(self.text(*name)) > 0;
                 if seeded {
-                    self.place.borrow_mut().declare(0);
+                    self.place.borrow_mut().declare_type(0);
                 }
                 let mut derives = self.derives(*name);
                 // `Keyed` is `std`'s own hasher, which does not compare: the

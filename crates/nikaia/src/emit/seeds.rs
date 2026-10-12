@@ -55,6 +55,9 @@ pub struct Place {
     /// An item that declares parameters is being written: its positions are
     /// numbered from `next`, and a type written twice shares them (`seen`).
     declaring: bool,
+    /// A function shares one parameter between positions of one written type;
+    /// a type declares one per position, in field order.
+    share: bool,
     next: usize,
     seen: Vec<(String, String)>,
     /// Inside the `impl` of a type that declares parameters: a mention of the
@@ -66,9 +69,16 @@ impl Place {
     /// An item that declares parameters starts here, after `base` of its
     /// `impl`'s.
     pub fn declare(&mut self, base: usize) {
+        self.share = true;
         self.declaring = true;
         self.next = base;
         self.seen.clear();
+    }
+
+    /// A type declares: one parameter for each map position, in field order.
+    pub fn declare_type(&mut self, base: usize) {
+        self.declare(base);
+        self.share = false;
     }
 
     /// The item is written: how many parameters it declared past `base`.
@@ -599,7 +609,7 @@ impl Seeds {
         // The text of the whole mention, to know a type written before.
         let start = *at - path.len();
         let end = if has_args { closing(bytes, *at) } else { *at };
-        if place.declaring {
+        if place.declaring && place.share {
             let key = format!("{}{}", last(&renamed(path)), &text[*at..end]);
             if let Some((_, written)) = place
                 .seen
@@ -655,7 +665,7 @@ impl Seeds {
             out.push_str(&added.join(", "));
             out.push('>');
         }
-        if place.declaring && !within_hit(place, path) {
+        if place.declaring && place.share && !within_hit(place, path) {
             let key = format!("{}{}", last(&renamed(path)), &text[start + path.len()..end]);
             place.seen.push((key, out[before..].to_string()));
         }
