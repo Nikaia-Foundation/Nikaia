@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.858 (Draft)
+**Version:** 0.0.859 (Draft)
 **Date:** 2026-10-12
 
 ---
@@ -1990,7 +1990,11 @@ straight through: no I/O, and no second lock. The compiler checks both
 that panics while it holds a lock poisons the value. An `update` or
 `update_all` whose changed values all copy - numbers, `bool`s, `char`s - works on
 a copy and puts it in place when its block ends, so a panic in it leaves the
-value as it was and poisons nothing. A door to a poisoned value panics in the
+value as it was and poisons nothing; an `update_all` puts both copies back
+together, and where one of its two values does not copy, neither is copied and
+a panic poisons both. `access` and `access_all` cannot change a value, and a
+panic in them poisons nothing. A change an earlier door made stays: values that
+must agree are changed in one `update_all`. A door to a poisoned value panics in the
 task that opens it. A value made with
 `SharedMut::supervised(fn { … })` is rebuilt instead: the runtime calls the
 function again, puts its result in place, and the holders keep their handle; how

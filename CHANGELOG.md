@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.859] — 2026-10-12
+
+**ADR-327 D11: update_all copies only where both values copy; a read-only door never poisons (#490)**
+- specification: Part I 6.3 says an update_all puts both copies back together and, where one of its values does not copy, copies neither and a panic poisons both; access and access_all poison nothing; a change made in an earlier door stays; ADR-327 D11; not built
+
 ## [0.0.858] — 2026-10-12
 
 **ADR-327 D11: an update of a value that copies works on a copy, so a panic in it poisons nothing (#490)**
