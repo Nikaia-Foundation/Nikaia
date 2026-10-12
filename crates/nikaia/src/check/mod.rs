@@ -6689,6 +6689,18 @@ impl<'a> Checker<'a> {
                     }
                     ty => ty,
                 };
+                // **Over an `if` or a `match` whose arms are views and text of
+                // its own** the conversion is each arm's (#562): the arms meet
+                // as text, and the lowering wraps them one by one.
+                let on = match (self.parsed.text(*method), on) {
+                    ("into_either" | "into_either_maybe", Ty::Unknown)
+                        if args.is_empty() && config.is_empty() =>
+                    {
+                        self.views_meet_owned_text(peeled(receiver))
+                            .unwrap_or(Ty::Unknown)
+                    }
+                    (_, on) => on,
+                };
                 if args.is_empty() && config.is_empty() {
                     match self.parsed.text(*method) {
                         "into_either" => return own(on),
@@ -11731,6 +11743,9 @@ impl<'a> Checker<'a> {
                 views += 1;
             } else if *ty == text {
                 owned += 1;
+            } else if *ty == Ty::Nullable(Box::new(text.clone())) {
+                owned += 1;
+                absent = true;
             } else {
                 return None;
             }

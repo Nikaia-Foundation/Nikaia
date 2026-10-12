@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.863] — 2026-10-12
+
+**checker: into_either over an if/match of views and text is each arm's; an annotated mixed let works (Part of #562)**
+- The tier pass's `value.into_either()` / `into_either_maybe()` over an `if` or a `match` whose arms are `ref String`, `String`, `String?` or `null` is typed `String` / `String?` and the arms are wrapped one by one, so `let y: String = if c { s } else { owned }` works and no message names the generated call.
+
 ## [0.0.862] — 2026-10-12
 
 **checker: a mixed let is bound as the view it may be; the position it flows into decides (Part of #562)**
