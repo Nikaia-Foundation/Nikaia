@@ -12,6 +12,8 @@ inference = "described"
 pub = true
 crosses = true
 compares = true
+# Ordered by the number it is: the order of interning, not of the text.
+orders = true
 copies = true
 
 # A copy of the handle, which is the handle (0.0.325).

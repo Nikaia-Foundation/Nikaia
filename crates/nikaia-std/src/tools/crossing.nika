@@ -299,6 +299,7 @@ pub fn type_entry(fields: ref Vec[String], derives: ref collections::BTreeSet[St
     entry.public = true
     entry.crosses = crosses(fields)
     entry.compares = derives.contains("PartialEq")
+    entry.orders = derives.contains("Ord") && derives.contains("PartialOrd")
     entry.copies = derives.contains("Copy")
     return entry
 }

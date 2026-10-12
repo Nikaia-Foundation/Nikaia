@@ -20918,6 +20918,7 @@ pub fn type_entry(fields: &[String], derives: &collections::BTreeSet<String>) ->
     entry.public = true;
     entry.crosses = crosses(fields);
     entry.compares = derives.contains("PartialEq");
+    entry.orders = derives.contains("Ord") && derives.contains("PartialOrd");
     entry.copies = derives.contains("Copy");
     entry
 }
@@ -30978,7 +30979,7 @@ fn function_key(entry: &mut FnContract, name: &str, key: &str, value: &str, n: i
 }
 
 fn type_key(entry: &mut TypeContract, key: &str, value: &str, n: i64) -> Result<(), nikaia_std::error::Thrown<Refused>> {
-    if key == "pub" { entry.public = value == "true"; } else if key == "crosses" { if value == "true" { entry.crosses = Crosses::May; } else if value == "false" { entry.crosses = Crosses::MayNot; } else { return Err(nikaia_std::error::throwing(Refused::Because(format!("line {}: `crosses` is `true` or `false`, not `{}` - and leaving the line out is the third answer", n, value)), &"type_key")); } } else if key == "compares" { entry.compares = value.trim() == "true"; } else if key == "copies" { entry.copies = value.trim() == "true"; } else if key == "tethered" { entry.tethered = entries(value, n)?; } else if key == "attribute" { entry.mark = unquoted(value, n)?; } else if key == "constant" { entry.constant = unquoted(value, n)?; } else if key == "touches" { entry.touches = entries(value, n)?; } else if key == "iterates" {
+    if key == "pub" { entry.public = value == "true"; } else if key == "crosses" { if value == "true" { entry.crosses = Crosses::May; } else if value == "false" { entry.crosses = Crosses::MayNot; } else { return Err(nikaia_std::error::throwing(Refused::Because(format!("line {}: `crosses` is `true` or `false`, not `{}` - and leaving the line out is the third answer", n, value)), &"type_key")); } } else if key == "compares" { entry.compares = value.trim() == "true"; } else if key == "orders" { entry.orders = value.trim() == "true"; } else if key == "copies" { entry.copies = value.trim() == "true"; } else if key == "tethered" { entry.tethered = entries(value, n)?; } else if key == "attribute" { entry.mark = unquoted(value, n)?; } else if key == "constant" { entry.constant = unquoted(value, n)?; } else if key == "touches" { entry.touches = entries(value, n)?; } else if key == "iterates" {
         let said = unquoted(value, n)?;
         if said != "throws" { return Err(nikaia_std::error::throwing(Refused::Because(format!("line {}: `iterates` is `throws` and nothing else, not `{}` - a step that cannot fail says nothing", n, said)), &"type_key")); }
         entry.iterates_fallibly = true;
@@ -32327,6 +32328,7 @@ fn type_text(contract: &TypeContract) -> String {
         Crosses::Undecided => { },
     }
     if contract.compares { out.push_str("compares = true\n"); }
+    if contract.orders { out.push_str("orders = true\n"); }
     if contract.copies { out.push_str("copies = true\n"); }
     if contract.iterates_fallibly { out.push_str("iterates = \"throws\"\n"); }
     if !contract.touches.is_empty() { out.push_str(&format!("touches = [{}]\n", quoted_all(&contract.touches))); }
@@ -46707,6 +46709,7 @@ pub struct TypeContract {
     pub crosses: Crosses,
     pub iterates_fallibly: bool,
     pub compares: bool,
+    pub orders: bool,
     pub copies: bool,
     pub touches: Vec<String>,
     pub tethered: Vec<String>,
@@ -46716,7 +46719,7 @@ pub struct TypeContract {
 }
 
 impl TypeContract {
-    pub fn empty() -> TypeContract { TypeContract { public: false, fields: vec![], variants: vec![], crosses: Crosses::Undecided, iterates_fallibly: false, compares: false, copies: false, touches: vec![], tethered: vec![], constant: String::from(""), mark: String::from(""), attributes: vec![] } }
+    pub fn empty() -> TypeContract { TypeContract { public: false, fields: vec![], variants: vec![], crosses: Crosses::Undecided, iterates_fallibly: false, compares: false, orders: false, copies: false, touches: vec![], tethered: vec![], constant: String::from(""), mark: String::from(""), attributes: vec![] } }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -1143,6 +1143,10 @@ pub struct TypeContract {
     pub crosses: Crosses,
     pub iterates_fallibly: bool,
     pub compares: bool,
+    /// **A key of an ordered map** (`BTreeMap`, `BTreeSet`): Rust's `Ord`,
+    /// for a type whose parts are the library's. Absent means it has none
+    /// (`NK1247`).
+    pub orders: bool,
     pub copies: bool,
     pub touches: Vec[String],
     pub tethered: Vec[String],
@@ -1170,6 +1174,7 @@ impl TypeContract {
             crosses: Crosses::Undecided,
             iterates_fallibly: false,
             compares: false,
+            orders: false,
             copies: false,
             touches: [],
             tethered: [],

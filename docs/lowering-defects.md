@@ -28,7 +28,7 @@ before the 40 s `lower-std` (no false hits on today's `tools/*.nika`).
 | D12 | function names are one namespace across `tools/*.nika` | by design (Part I 9.1), clear message | (none) |
 | D13 | `grammar`/`test`/`throws` are reserved | by design, decided in #573; message names the word | kw_*.nika |
 | D14 | a `Copy` value bound in a `match` inside a guard reaches its use as `&T` | verified (new; #578's family) | d14b_guard_copy.nika |
-| D15 | `BTreeMap[Symbol, V]` accepted by the checker, refused by rustc (`Symbol: Ord`) | verified (new) | probe_symkey.nika |
+| D15 | `BTreeMap[Symbol, V]` accepted by the checker, refused by rustc (`Symbol: Ord`) | **built** (0.0.850: `NK1247`, ledger `orders`) | ordered_keys.rs |
 | D16 | `if match x {..} =>` in a guard does not parse; `if (match ..)` does | verified (new, small) | (rs2nika R14 writes the parentheses) |
 | D17 | `s.starts_with(['a', 'b'])` passes the checker, lowers to `starts_with(vec![..])` (E0277) | verified (new) | d_un_pass.nika `draft_an_or_a` |
 | D18 | a two-parameter lambda over a list of tuples, `filter fn(name, ty) {..}`, lowers to `\|name, ty\|` (E0593) | verified (new) | `draft_a_root_is_one_of_two` |

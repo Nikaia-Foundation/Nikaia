@@ -8820,7 +8820,70 @@ impl<'a> Checker<'a> {
     /// carries the replacement.
     fn declared(&mut self, ty: &ast::Type, span: &Span) -> Ty {
         self.s.spelling(self.world, ty, span);
-        Ty::from_ast(self.parsed, ty)
+        let written = Ty::from_ast(self.parsed, ty);
+        self.a_key_with_no_order(&written, span);
+        written
+    }
+
+    /// **`NK1247`: an ordered map or set whose key has no order**
+    /// ([ADR-010](../../docs/specification/adr/adr-010.md) D10).
+    ///
+    /// `BTreeMap` and `BTreeSet` keep their keys in order, so the key has to
+    /// have one. The types of the language answer from a list (a float has none),
+    /// a type this language declares has none, and a type whose parts are Rust
+    /// answers from the ledger's `orders` column, whose absence is *no*. Asked at
+    /// the positions a program writes a type, over everything inside it.
+    fn a_key_with_no_order(&mut self, ty: &Ty, span: &Span) {
+        let beside = self.parts_beside();
+        let asking = Comparable {
+            beside: &beside,
+            structs: &self.s.structs,
+            enums: &self.s.enums,
+            payloads: &self.s.enum_payloads,
+            parameters: &self.s.struct_parameters,
+            own: self.world.own,
+            library: self.world.library,
+        };
+        let mut refused = Vec::new();
+        let mut stack = vec![ty];
+        while let Some(ty) = stack.pop() {
+            match ty {
+                Ty::Named { name, args, .. } => {
+                    let last = name.rsplit("::").next().unwrap_or(name);
+                    if matches!(last, "BTreeMap" | "BTreeSet")
+                        && let Some(key) = args.first()
+                        && !asking.orders(key)
+                    {
+                        refused.push((last.to_string(), key.text()));
+                    }
+                    stack.extend(args.iter());
+                }
+                Ty::Tuple(parts) => stack.extend(parts.iter()),
+                Ty::Nullable(inner) => stack.push(inner),
+                _ => {}
+            }
+        }
+        for (map, key) in refused {
+            self.s.findings.push(Finding {
+                severity: Severity::Error,
+                span: *span,
+                code: "NK1247".to_string(),
+                message: format!("`{map}` keeps its keys in order, and `{key}` has no order."),
+                notes: vec![
+                    "A number, a `String`, a `bool`, a `char`, and a tuple, list or option of \
+                     those have one. A float doesn't (`NaN`), a `struct` or an `enum` you \
+                     declare isn't given one, and a type from a library has one only where its \
+                     ledger says `orders = true`."
+                        .to_string(),
+                ],
+                help: Some(
+                    "Use a `HashMap` or `HashSet` where the order of the keys is not \
+                     observable, or key by a text or a number that says what comes first."
+                        .to_string(),
+                ),
+                labels: Vec::new(),
+            });
+        }
     }
 
     fn call(&mut self, func: &Expr, args: &[Expr], config: &[ast::ConfigArg], span: &Span) -> Ty {
@@ -13425,6 +13488,10 @@ enum Strength {
     /// …and equality is an equivalence: Rust's `Eq`, which a float is not and
     /// which a type holding one cannot be.
     Totally,
+    /// …and the values have an order: Rust's `Ord`, which a map kept in order
+    /// asks of its key (`NK1247`). A float has none, and a type this language
+    /// declares is given none.
+    Orders,
 }
 
 impl Comparable<'_> {
@@ -13442,6 +13509,11 @@ impl Comparable<'_> {
     /// is the same, and the float may be several declarations away.
     fn totally(&self, ty: &Ty) -> bool {
         self.asking(ty, Strength::Totally, &mut BTreeSet::new())
+    }
+
+    /// The same question about **`Ord`**, the one an ordered map asks of its key.
+    fn orders(&self, ty: &Ty) -> bool {
+        self.asking(ty, Strength::Orders, &mut BTreeSet::new())
     }
 
     /// `seen` is the types already being asked about, so a `struct` that holds
@@ -13471,6 +13543,23 @@ impl Comparable<'_> {
         // comparison and `&T` is `T`'s, which is Rust's rule too.
         let holds =
             |seen: &mut BTreeSet<String>| args.iter().all(|arg| self.asking(arg, how, seen));
+        // **A map or a set that is not kept in order has none**, and neither has
+        // the unordered `Set`: only the ordered ones and the lists answer by
+        // what they hold.
+        if how == Strength::Orders
+            && matches!(
+                name,
+                "Set"
+                    | "collections::HashMap"
+                    | "collections::HashSet"
+                    | "HashMap"
+                    | "HashSet"
+                    | "TrustedMap"
+                    | "TrustedSet"
+            )
+        {
+            return false;
+        }
         match name {
             // **A float compares and is not an equivalence**, because
             // `NaN != NaN`. It is the one primitive the two questions differ on,
@@ -13504,6 +13593,16 @@ impl Comparable<'_> {
                     // Already being asked about, one level up: a type is not
                     // *un*comparable for holding itself.
                     return true;
+                }
+                // **A type this language declares is given no order**: its
+                // derives are `PartialEq`, `Eq` and `Copy` where its parts allow
+                // them, and nothing says what comes first.
+                if how == Strength::Orders
+                    && (self.structs.contains_key(name)
+                        || self.enums.contains_key(name)
+                        || self.beside.contains_key(name))
+                {
+                    return false;
                 }
                 if let Some(fields) = self.structs.get(name) {
                     // **A generic struct is asked about what it was given**: its
@@ -13541,11 +13640,15 @@ impl Comparable<'_> {
                 // a second claim nobody has had a use for. So a `struct` holding
                 // one compares and is not a map key yet, which is the
                 // under-approximation that cannot be wrong.
-                how == Strength::Compares
-                    && [self.own, self.library]
-                        .into_iter()
-                        .filter_map(|ledger| ledger.types.get(name))
-                        .any(|contract| contract.compares)
+                let claimed = |contract: &crate::contracts::TypeContract| match how {
+                    Strength::Compares => contract.compares,
+                    Strength::Orders => contract.orders,
+                    Strength::Totally => false,
+                };
+                [self.own, self.library]
+                    .into_iter()
+                    .filter_map(|ledger| ledger.types.get(name))
+                    .any(claimed)
             }
         }
     }

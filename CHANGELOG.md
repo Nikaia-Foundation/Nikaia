@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.850] — 2026-10-12
+
+**check: an ordered map's key must have an order, NK1247, ledger column orders (#589, ADR-010 D10)**
+- BTreeMap and BTreeSet over a key with no order (a float, a declared struct or enum, an unordered map, a library type whose ledger lacks orders = true) are refused in the language's words instead of reaching rustc; winnow_grammar::Symbol says orders = true; nikaia describe writes the column where the crate derives Ord (D15)
+
 ## [0.0.849] — 2026-10-12
 
 **tools: trust and emit_locals key their maps by Symbol, no copy of the name (#589)**
