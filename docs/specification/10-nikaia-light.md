@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.857 (Draft)
+**Version:** 0.0.858 (Draft)
 **Date:** 2026-10-12
 
 ---
@@ -1987,8 +1987,11 @@ straight through: no I/O, and no second lock. The compiler checks both
 (Part II, 12.2 and 12.3).
 
 **A value a crashed task left is never read** ([ADR-327](adr/adr-327.md)). A task
-that panics while it holds a lock poisons the value. A door to a poisoned value
-panics in the task that opens it. A value made with
+that panics while it holds a lock poisons the value. An `update` or
+`update_all` whose changed values all copy - numbers, `bool`s, `char`s - works on
+a copy and puts it in place when its block ends, so a panic in it leaves the
+value as it was and poisons nothing. A door to a poisoned value panics in the
+task that opens it. A value made with
 `SharedMut::supervised(fn { … })` is rebuilt instead: the runtime calls the
 function again, puts its result in place, and the holders keep their handle; how
 often is bounded as a supervisor's restarts are (Part II 12.8).

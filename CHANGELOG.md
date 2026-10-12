@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.858] — 2026-10-12
+
+**ADR-327 D11: an update of a value that copies works on a copy, so a panic in it poisons nothing (#490)**
+- specification: Part I 6.3 says an update or update_all whose changed values all copy works on a copy and puts it in place when its block ends, so a panic in it leaves the value as it was and poisons nothing; a list or text is changed in place and poisoned as before; ADR-327 D11; not built
+
 ## [0.0.857] — 2026-10-12
 
 **ADR-327 D8-D9: a copy toward Rust is written, never inserted (NK2506); a value that left its task counts against its receiver (#490)**
