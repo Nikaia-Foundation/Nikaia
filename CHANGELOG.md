@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.849] — 2026-10-12
+
+**tools: trust and emit_locals key their maps by Symbol, no copy of the name (#589)**
+- winnow-grammar b27d8ba makes Symbol Ord; MapWalk.scopes/bound/privates (trust.nika) and NnState (emit_locals.nika) are keyed by Symbol instead of resolve(..).clone(); nonnegative_locals no longer takes the interner
+
 ## [0.0.848] — 2026-10-12
 
 **Shapes of the held patch: no rustc error for a barrier handed a self map, a pub function's map handed to a private one, or a grammar rule's type (ADR-010 D9, #581 step 6 fixes)**

@@ -138,7 +138,7 @@ struct MapEnv {
     /// The private functions that stand alone (not `pub`, no type parameters,
     /// not `extern`), with their number of parameters: the only ones whose
     /// every caller is seen, so the only ones a map may pass through.
-    privates: collections::BTreeMap[String, i64],
+    privates: collections::BTreeMap[winnow_grammar::Symbol, i64],
 }
 
 /// **The classes of the map positions of one file** (ADR-010 D9, #581): a
@@ -174,7 +174,7 @@ pub struct MapPlan {
 /// A `let` that makes a map: the statement, the name, the binding.
 struct MapMade {
     at: i64,
-    name: String,
+    name: winnow_grammar::Symbol,
     id: i64,
 }
 
@@ -193,7 +193,7 @@ struct MapWalk {
     ret: String,
     /// Each block's names, innermost last, to the binding they read; `-1` is
     /// one never trusted (a parameter, a pattern's binding).
-    scopes: Vec[collections::BTreeMap[String, i64]],
+    scopes: Vec[collections::BTreeMap[winnow_grammar::Symbol, i64]],
     /// What each binding is given.
     given: Vec[Vec[KeyDeps]],
     made: Vec[MapMade],
@@ -202,7 +202,7 @@ struct MapWalk {
     /// bound or returned, an assignment.
     escapes: collections::BTreeSet[i64],
     /// How often each name is bound in the body.
-    bound: collections::BTreeMap[String, i64],
+    bound: collections::BTreeMap[winnow_grammar::Symbol, i64],
     unread: bool,
 }
 
@@ -294,7 +294,7 @@ pub fn trusted_maps(program: ref Program, words: ref winnow_grammar::InternerCon
                 tm_remember(name, words, env.own)
                 if !is_public && !is_extern && generics.len() == 0 {
                     let symbol = name ?? continue
-                    env.privates.insert(words.resolve(symbol).clone(), args.len())
+                    env.privates.insert(symbol, args.len())
                 }
             },
             Item::Impl { methods, .. } => {
@@ -386,7 +386,7 @@ fn tm_remember(name: winnow_grammar::Symbol?, words: ref winnow_grammar::Interne
 
 fn tm_walk_function(fname: ref String, alone: bool, args: ref Vec[FnArg], body: ref Block, words: ref winnow_grammar::InternerContext, library: ref Ledger, env: ref MapEnv, mut classes: MapClasses) {
     let ret = f"r:{fname}"
-    let mut first: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    let mut first: collections::BTreeMap[winnow_grammar::Symbol, i64] = collections::BTreeMap()
     let mut walk = MapWalk { nodes: [], ret: ret.clone(), scopes: [], given: [], made: [], kept: [], escapes: collections::BTreeSet(), bound: collections::BTreeMap(), unread: false }
     if alone {
         classes.slots.push(ret.clone())
@@ -404,7 +404,7 @@ fn tm_walk_function(fname: ref String, alone: bool, args: ref Vec[FnArg], body: 
         let id = walk.given.len()
         walk.given.push([tm_never()])
         walk.nodes.push(node.clone())
-        let name = words.resolve(arg.name).clone()
+        let name = arg.name.clone()
         walk.made.push(MapMade { at: -1, name: name.clone(), id: id })
         tm_count_binding(name, walk)
         first.insert(name.clone(), id)
@@ -504,7 +504,7 @@ fn tm_trusted_bindings(given: ref Vec[Vec[KeyDeps]]) -> collections::BTreeSet[i6
     return trusted
 }
 
-fn tm_bind(name: ref String, given: ref KeyDeps, node: ref String, mut walk: MapWalk) -> i64 {
+fn tm_bind(name: winnow_grammar::Symbol, given: ref KeyDeps, node: ref String, mut walk: MapWalk) -> i64 {
     let id = walk.given.len()
     walk.nodes.push(node.clone())
     walk.given.push([KeyDeps { known: given.known, ids: given.ids.clone() }])
@@ -514,20 +514,20 @@ fn tm_bind(name: ref String, given: ref KeyDeps, node: ref String, mut walk: Map
     return id
 }
 
-fn tm_opaque(name: ref String, mut walk: MapWalk) {
+fn tm_opaque(name: winnow_grammar::Symbol, mut walk: MapWalk) {
     tm_count_binding(name, walk)
     let last = walk.scopes.len() - 1
     walk.scopes[last].insert(name.clone(), -1)
 }
 
-fn tm_count_binding(name: ref String, mut walk: MapWalk) {
+fn tm_count_binding(name: winnow_grammar::Symbol, mut walk: MapWalk) {
     let before = walk.bound.get(name) ?? 0
     walk.bound.insert(name.clone(), before + 1)
 }
 
 /// The binding a name reads here: `-2` where nothing binds it, `-1` where
 /// what binds it is never trusted.
-fn tm_resolve(name: ref String, walk: ref MapWalk) -> i64 {
+fn tm_resolve(name: winnow_grammar::Symbol, walk: ref MapWalk) -> i64 {
     let mut at = walk.scopes.len()
     while at > 0 {
         at = at - 1
@@ -546,7 +546,7 @@ fn tm_walk_block(block: ref Block, words: ref winnow_grammar::InternerContext, l
             Stmt::Let { names, value, .. } => {
                 let given = tm_deps_of(value, words, library, env, walk)
                 if names.len() == 1 {
-                    let name = words.resolve(names[0]).clone()
+                    let name = names[0].clone()
                     let node = f"l:{stmt.span.start}"
                     // **Where the value comes from decides the class**: a
                     // map made here has none to join; a name or a private
@@ -561,7 +561,7 @@ fn tm_walk_block(block: ref Block, words: ref winnow_grammar::InternerContext, l
                 } else {
                     tm_walk_expr(value, words, library, env, classes, walk)
                     for one in names {
-                        tm_opaque(words.resolve(one), walk)
+                        tm_opaque(one.clone(), walk)
                     }
                 }
             },
@@ -571,7 +571,7 @@ fn tm_walk_block(block: ref Block, words: ref winnow_grammar::InternerContext, l
                 match target {
                     Expr::Variable(name, _) => {
                         let given = tm_deps_of(value, words, library, env, walk)
-                        let id = tm_resolve(words.resolve(name), walk)
+                        let id = tm_resolve(name.clone(), walk)
                         if id >= 0 {
                             walk.given[id].push(given)
                         }
@@ -582,7 +582,7 @@ fn tm_walk_block(block: ref Block, words: ref winnow_grammar::InternerContext, l
             Stmt::For { bindings, iter, body } => {
                 match iter {
                     Expr::Variable(name, _) => {
-                        let id = tm_resolve(words.resolve(name), walk)
+                        let id = tm_resolve(name.clone(), walk)
                         if id >= 0 {
                             walk.kept.push(MapKept { id: id, deps: tm_nothing() })
                         }
@@ -593,7 +593,7 @@ fn tm_walk_block(block: ref Block, words: ref winnow_grammar::InternerContext, l
                 walk.scopes.push(collections::BTreeMap())
                 for one in bindings {
                     let node = f"b:{walk.given.len()}"
-                    tm_bind(words.resolve(one), given, node, walk)
+                    tm_bind(one.clone(), given, node, walk)
                 }
                 tm_walk_block(body, words, library, env, classes, walk)
                 walk.scopes.pop()
@@ -618,34 +618,34 @@ fn tm_walk_block(block: ref Block, words: ref winnow_grammar::InternerContext, l
 }
 
 /// The private function `func` names, where it is called by its name and no
-/// binding in the body hides it; `""` otherwise.
-fn tm_private_callee(func: ref Expr, words: ref winnow_grammar::InternerContext, env: ref MapEnv, walk: ref MapWalk) -> String {
+/// binding in the body hides it; nothing otherwise.
+fn tm_private_callee(func: ref Expr, env: ref MapEnv, walk: ref MapWalk) -> winnow_grammar::Symbol? {
     return match func {
         Expr::Variable(name, _) => {
-            let text = words.resolve(name)
-            if tm_resolve(text, walk) == -2 && env.privates.contains_key(text) {
-                text.clone()
+            if tm_resolve(name.clone(), walk) == -2 && env.privates.contains_key(name) {
+                name.clone()
             } else {
-                ""
+                null
             }
         },
-        else => "",
+        else => null,
     }
 }
 
 /// What a call hands a private function: each argument is a value flowing
 /// into the parameter of its place.
-fn tm_call_args(callee: ref String, args: ref Vec[Expr], config: ref Vec[ConfigArg], words: ref winnow_grammar::InternerContext, library: ref Ledger, env: ref MapEnv, mut classes: MapClasses, mut walk: MapWalk) {
+fn tm_call_args(callee: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg], words: ref winnow_grammar::InternerContext, library: ref Ledger, env: ref MapEnv, mut classes: MapClasses, mut walk: MapWalk) {
     let arity = env.privates.get(callee) ?? -1
+    let written = words.resolve(callee)
     if arity != args.len() {
-        mc_poison_function(classes, callee, arity)
+        mc_poison_function(classes, written, arity)
         for a in args {
             tm_walk_expr(a, words, library, env, classes, walk)
         }
     } else {
         let mut at = 0
         for a in args {
-            let param = f"p:{callee}:{at}"
+            let param = f"p:{written}:{at}"
             tm_flow(param, a, words, library, env, classes, walk)
             at = at + 1
         }
@@ -661,7 +661,7 @@ fn tm_call_args(callee: ref String, args: ref Vec[Expr], config: ref Vec[ConfigA
 fn tm_flow(sink: ref String, value: ref Expr, words: ref winnow_grammar::InternerContext, library: ref Ledger, env: ref MapEnv, mut classes: MapClasses, mut walk: MapWalk) {
     match value {
         Expr::Variable(name, _) => {
-            let id = tm_resolve(words.resolve(name), walk)
+            let id = tm_resolve(name.clone(), walk)
             if id >= 0 {
                 let node = walk.nodes[id].clone()
                 mc_union(classes, sink, node)
@@ -671,9 +671,10 @@ fn tm_flow(sink: ref String, value: ref Expr, words: ref winnow_grammar::Interne
             }
         },
         Expr::Call { func, args, config, .. } => {
-            let callee = tm_private_callee(func, words, env, walk)
-            if callee != "" {
-                let ret = f"r:{callee}"
+            let found = tm_private_callee(func, env, walk)
+            if found != null {
+                let callee = found ?? return
+                let ret = f"r:{words.resolve(callee)}"
                 mc_union(classes, sink, ret)
                 tm_call_args(callee, args, config, words, library, env, classes, walk)
             } else {
@@ -692,7 +693,7 @@ fn tm_flow(sink: ref String, value: ref Expr, words: ref winnow_grammar::Interne
 fn map_named(receiver: ref Expr, words: ref winnow_grammar::InternerContext, walk: ref MapWalk) -> i64 {
     return match receiver {
         Expr::Variable(name, _) => {
-            let id = tm_resolve(words.resolve(name), walk)
+            let id = tm_resolve(name.clone(), walk)
             if id >= 0 { id } else { -1 }
         },
         else => -1,
@@ -741,10 +742,11 @@ fn tm_walk_expr(expr: ref Expr, words: ref winnow_grammar::InternerContext, libr
             tm_walk_expr(index, words, library, env, classes, walk)
         },
         Expr::Call { func, args, config, .. } => {
-            let callee = tm_private_callee(func, words, env, walk)
-            if callee != "" {
+            let found = tm_private_callee(func, env, walk)
+            if found != null {
+                let callee = found ?? return
                 // Its result is used where no class follows it.
-                let ret = f"r:{callee}"
+                let ret = f"r:{words.resolve(callee)}"
                 mc_poison(classes, ret)
                 tm_call_args(callee, args, config, words, library, env, classes, walk)
             } else {
@@ -796,14 +798,14 @@ fn tm_walk_expr(expr: ref Expr, words: ref winnow_grammar::InternerContext, libr
             }
         },
         Expr::Variable(name, _) => {
-            let id = tm_resolve(words.resolve(name), walk)
+            let id = tm_resolve(name.clone(), walk)
             if id >= 0 {
                 walk.escapes.insert(id)
             }
             // A private function's name where it is not called: a value, so
             // its callers are not all seen.
             if id == -2 {
-                let arity = env.privates.get(words.resolve(name)) ?? -1
+                let arity = env.privates.get(name) ?? -1
                 if arity >= 0 {
                     mc_poison_function(classes, words.resolve(name), arity)
                 }
@@ -817,7 +819,7 @@ fn tm_walk_expr(expr: ref Expr, words: ref winnow_grammar::InternerContext, libr
                 if field.value != null {
                     tm_walk_expr(field.value ?? return, words, library, env, classes, walk)
                 } else {
-                    let id = tm_resolve(words.resolve(field.name), walk)
+                    let id = tm_resolve(field.name.clone(), walk)
                     if id >= 0 {
                         walk.escapes.insert(id)
                     }
@@ -864,7 +866,7 @@ fn tm_deps_of(value: ref Expr, words: ref winnow_grammar::InternerContext, libra
         Expr::LitBool(_, _) => tm_nothing(),
         Expr::LitNull(_) => tm_nothing(),
         Expr::Variable(name, _) => {
-            let id = tm_resolve(words.resolve(name), walk)
+            let id = tm_resolve(name.clone(), walk)
             if id >= 0 { tm_reading(id) } else { tm_never() }
         },
         Expr::LitInterpolated { parts, .. } => {

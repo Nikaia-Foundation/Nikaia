@@ -9,63 +9,61 @@
 use std::collections
 
 struct NnState {
-    declared: collections::BTreeMap[String, i64],
-    candidates: collections::BTreeSet[String],
+    declared: collections::BTreeMap[winnow_grammar::Symbol, i64],
+    candidates: collections::BTreeSet[winnow_grammar::Symbol],
     symbols: Vec[winnow_grammar::Symbol],
-    spoiled: collections::BTreeSet[String],
+    spoiled: collections::BTreeSet[winnow_grammar::Symbol],
     seen: collections::BTreeSet[String],
 }
 
 /// The names of the body's locals that are never negative.
-pub fn nonnegative_locals(words: ref winnow_grammar::InternerContext, body: ref Block) -> Vec[winnow_grammar::Symbol] {
+pub fn nonnegative_locals(body: ref Block) -> Vec[winnow_grammar::Symbol] {
     let mut state = NnState { declared: collections::BTreeMap(), candidates: collections::BTreeSet(), symbols: [], spoiled: collections::BTreeSet(), seen: collections::BTreeSet() }
-    nn_every(words, body, state)
+    nn_every(body, state)
     // A name handed to a call may be changed by it (`mut` parameters).
     for expr in visited_in_block(body) {
         match expr {
-            Expr::Call { args, .. } => nn_spoil_all(words, args, state),
-            Expr::MethodCall { args, .. } => nn_spoil_all(words, args, state),
-            Expr::SafeMethod { args, .. } => nn_spoil_all(words, args, state),
+            Expr::Call { args, .. } => nn_spoil_all(args, state),
+            Expr::MethodCall { args, .. } => nn_spoil_all(args, state),
+            Expr::SafeMethod { args, .. } => nn_spoil_all(args, state),
             else => {},
         }
     }
     let mut out: Vec[winnow_grammar::Symbol] = []
     for at in 0..<state.symbols.len() {
         let symbol = state.symbols[at]
-        let name = words.resolve(symbol).clone()
-        if state.candidates.contains(name) && nn_declared_once(state.declared, name) && !state.spoiled.contains(name) {
+        if state.candidates.contains(symbol) && nn_declared_once(state.declared, symbol) && !state.spoiled.contains(symbol) {
             out.push(symbol)
         }
     }
     return out
 }
 
-fn nn_declared_once(declared: ref collections::BTreeMap[String, i64], name: ref String) -> bool {
+fn nn_declared_once(declared: ref collections::BTreeMap[winnow_grammar::Symbol, i64], name: winnow_grammar::Symbol) -> bool {
     return (declared.get(name) ?? 0) == 1
 }
 
-fn nn_spoil_all(words: ref winnow_grammar::InternerContext, args: ref Vec[Expr], mut state: NnState) {
+fn nn_spoil_all(args: ref Vec[Expr], mut state: NnState) {
     for arg in args {
         match arg {
-            Expr::Variable(name, _) => nn_spoil(words, name, state),
+            Expr::Variable(name, _) => nn_spoil(name, state),
             else => {},
         }
     }
 }
 
-fn nn_spoil(words: ref winnow_grammar::InternerContext, name: winnow_grammar::Symbol, mut state: NnState) {
-    state.spoiled.insert(words.resolve(name).clone())
+fn nn_spoil(name: winnow_grammar::Symbol, mut state: NnState) {
+    state.spoiled.insert(name)
 }
 
-fn nn_candidate(words: ref winnow_grammar::InternerContext, name: winnow_grammar::Symbol, mut state: NnState) {
-    state.candidates.insert(words.resolve(name).clone())
+fn nn_candidate(name: winnow_grammar::Symbol, mut state: NnState) {
+    state.candidates.insert(name.clone())
     state.symbols.push(name)
 }
 
-fn nn_declare(words: ref winnow_grammar::InternerContext, name: winnow_grammar::Symbol, mut state: NnState) {
-    let text = words.resolve(name).clone()
-    let before = state.declared.get(text) ?? 0
-    state.declared.insert(text, before + 1)
+fn nn_declare(name: winnow_grammar::Symbol, mut state: NnState) {
+    let before = state.declared.get(name) ?? 0
+    state.declared.insert(name, before + 1)
 }
 
 fn nn_literal(expr: ref Expr) -> bool {
@@ -91,29 +89,29 @@ fn nn_range_from_literal(iter: ref Expr) -> bool {
     }
 }
 
-fn nn_note(words: ref winnow_grammar::InternerContext, stmt: ref Stmt, mut state: NnState) {
+fn nn_note(stmt: ref Stmt, mut state: NnState) {
     match stmt {
         Stmt::Let { names, ty, value, .. } => {
             for name in names {
-                nn_declare(words, name, state)
+                nn_declare(name, state)
             }
             if names.len() == 1 && ty == null && nn_literal(value) {
-                nn_candidate(words, names[0], state)
+                nn_candidate(names[0], state)
             }
         },
         Stmt::For { bindings, iter, .. } => {
             for name in bindings {
-                nn_declare(words, name, state)
+                nn_declare(name, state)
             }
             if bindings.len() == 1 && nn_range_from_literal(iter) {
-                nn_candidate(words, bindings[0], state)
+                nn_candidate(bindings[0], state)
             }
         },
         Stmt::Assign { target, op, value } => {
             match target {
                 Expr::Variable(name, _) => {
                     if !nn_keeps(op, value) {
-                        nn_spoil(words, name, state)
+                        nn_spoil(name, state)
                     }
                 },
                 else => {},
@@ -154,22 +152,22 @@ fn nn_held(value: ref Expr?) -> i64 {
     return node_key(held)
 }
 
-fn nn_every(words: ref winnow_grammar::InternerContext, block: ref Block, mut state: NnState) {
+fn nn_every(block: ref Block, mut state: NnState) {
     for stmt in block.stmts {
         let key = nn_key(stmt)
         if state.seen.contains(key) {
             continue
         }
         state.seen.insert(key)
-        nn_note(words, stmt.node, state)
+        nn_note(stmt.node, state)
         match stmt.node {
-            Stmt::For { body, .. } => nn_every(words, body, state),
-            Stmt::While { body, .. } => nn_every(words, body, state),
+            Stmt::For { body, .. } => nn_every(body, state),
+            Stmt::While { body, .. } => nn_every(body, state),
             else => {},
         }
     }
     for inner in nn_blocks_in(block) {
-        nn_every(words, inner, state)
+        nn_every(inner, state)
     }
 }
 

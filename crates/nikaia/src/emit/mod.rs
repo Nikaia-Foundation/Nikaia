@@ -4108,7 +4108,7 @@ impl<'p> Emitter<'p> {
         } = declared;
         self.walking(|w| w.keep_function = key.to_string());
         let locals: std::collections::BTreeSet<String> =
-            nikaia_std::tools::emit_locals::nonnegative_locals(self.world.words, body)
+            nikaia_std::tools::emit_locals::nonnegative_locals(body)
                 .into_iter()
                 .map(|s| self.text(s).to_string())
                 .collect();
@@ -8110,12 +8110,12 @@ impl Emitter<'_> {
 /// the range starts at one. A name declared twice, or handed to a call - which
 /// might change it - is left out.
 /// [`nonnegative_locals`], for [`crate::bounds`].
-pub(crate) fn nonnegative_names(parsed: &Parsed, body: &Block) -> HashSet<Symbol> {
-    nonnegative_locals(parsed, body)
+pub(crate) fn nonnegative_names(body: &Block) -> HashSet<Symbol> {
+    nonnegative_locals(body)
 }
 
-fn nonnegative_locals(parsed: &Parsed, body: &Block) -> HashSet<Symbol> {
-    nikaia_std::tools::emit_locals::nonnegative_locals(&parsed.interner, body)
+fn nonnegative_locals(body: &Block) -> HashSet<Symbol> {
+    nikaia_std::tools::emit_locals::nonnegative_locals(body)
         .into_iter()
         .collect()
 }
