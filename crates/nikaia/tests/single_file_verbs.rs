@@ -172,3 +172,26 @@ fn the_old_single_file_switches_are_refused() {
         );
     }
 }
+
+/// **`check` reports the checker's findings and writes nothing**: a good file
+/// passes and leaves no `.rs` beside it, a refused one exits non-zero.
+#[test]
+fn check_reports_findings_and_writes_nothing() {
+    let dir = common::scratch_dir("verb-check");
+    let good = dir.join("good.nika");
+    std::fs::copy(sample(), &good).expect("copy the sample");
+    let run = nikaia(&["check", good.to_str().expect("path")]);
+    assert!(run.status.success(), "{}", said(&run));
+    assert!(!good.with_extension("rs").exists(), "check wrote Rust");
+
+    let bad = dir.join("bad.nika");
+    std::fs::write(&bad, "fn main() {\n    let x: i64 = \"text\"\n}\n").expect("write");
+    let run = nikaia(&["check", bad.to_str().expect("path")]);
+    assert!(!run.status.success(), "{}", said(&run));
+    assert!(
+        String::from_utf8_lossy(&run.stderr).contains("NK"),
+        "{}",
+        said(&run)
+    );
+    assert!(!bad.with_extension("rs").exists(), "check wrote Rust");
+}

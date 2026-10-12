@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part III: Tooling, Ecosystem & Interoperability**
-**Version:** 0.0.853 (Draft)
+**Version:** 0.0.854 (Draft)
 **Date:** 2026-10-12
 
 ---
@@ -37,9 +37,10 @@ Nikaia provides one command-line interface, `nikaia`. It builds and runs a proje
 * `nikaia bind <language>`: writes a binding for a library build from the ledger: `python` over `ctypes`, `js` for a WebAssembly build (15.1).
 * `nikaia lower-std`: re-lowers `std`'s Nikaia half (13.2b).
 
-Three commands take a single `.nika` file:
+Four commands take a single `.nika` file:
 
 * `nikaia lower <file>.nika`: lowers the file to Rust and stops. It writes `<file>.rs`, or the path `--output` names, and the ledger beside it (13.5). It does not call `rustc`.
+* `nikaia check <file>.nika`: reports the checker's findings and exits non-zero when the file is refused. Nothing is written and nothing is compiled; the build cache is not used, so every finding is reported.
 * `nikaia interpret <file>.nika`: runs the file in the interpreter. Nothing is written and nothing is compiled.
 * `nikaia explain <file>.nika`: reads `rustc --error-format=json` on stdin and reports each message against the `.nika` source instead of the emitted Rust.
 

@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.854] — 2026-10-12
+
+**nikaia check: the checker's findings for one file, nothing written (#590)**
+- tooling: Part III 13.2 names the fourth single-file verb; nikaia check FILE reads the file as lower does, without the cache, prints the findings and writes nothing
+
 ## [0.0.853] — 2026-10-12
 
 **Eq and Ord: bounds, operators, compare, impl Eq / impl Ord, NK1247 for declared keys, NK1248, NK1249, NK1164 (ADR-341, #592)**

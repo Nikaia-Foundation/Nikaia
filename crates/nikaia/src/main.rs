@@ -213,6 +213,17 @@ pub enum Command {
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
+    /// Check one `.nika` file: report the checker's findings and write
+    /// nothing. Exits non-zero when the file is refused.
+    ///
+    /// The file is read as `nikaia lower` reads it (its project's settings and
+    /// dependencies) and the build cache is not used, so every finding is
+    /// reported; no `.rs` and no ledger are written.
+    Check {
+        /// The `.nika` file.
+        #[arg(value_name = "FILE")]
+        file: PathBuf,
+    },
     /// Run one `.nika` file in the interpreter; nothing is written and
     /// nothing is compiled.
     ///
@@ -636,7 +647,10 @@ fn project_command(args: &Cli, command: &Command) -> Result<i32> {
             crate_name,
             project,
         } => return describe(crate_name, project.clone()),
-        Command::Lower { .. } | Command::Interpret { .. } | Command::Explain { .. } => {
+        Command::Lower { .. }
+        | Command::Check { .. }
+        | Command::Interpret { .. }
+        | Command::Explain { .. } => {
             unreachable!("the single-file verbs are dispatched by `run`")
         }
     };
@@ -785,6 +799,7 @@ fn report_moved_keys(manifest: &Manifest) {
 /// **What a verb that takes one file does with it** (ADR-260 D3).
 enum Verb<'a> {
     Lower { output: Option<&'a std::path::Path> },
+    Check,
     Interpret,
     Explain,
 }
@@ -823,6 +838,18 @@ fn single_file(args: &Cli, input: &std::path::Path, verb: Verb<'_>) -> Result<()
             Ok(())
         }
         Verb::Lower { output } => lower_to_rust(input, output, args, &settings),
+        Verb::Check => {
+            let (_, packages) = project::read_file(input)?;
+            project::lower_reading(
+                input,
+                &settings,
+                true,
+                &packages,
+                args.allow_read_from_list.as_deref(),
+            )?;
+            println!("Checked {}", input.display());
+            Ok(())
+        }
     }
 }
 
@@ -877,6 +904,7 @@ fn run() -> Result<()> {
                 output: output.as_deref(),
             },
         ),
+        Command::Check { file } => single_file(&args, file, Verb::Check),
         Command::Interpret { file } => single_file(&args, file, Verb::Interpret),
         Command::Explain { file } => single_file(&args, file, Verb::Explain),
         command => {
