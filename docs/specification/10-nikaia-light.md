@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.889 (Draft)
+**Version:** 0.0.890 (Draft)
 **Date:** 2026-10-13
 
 ---
@@ -1012,6 +1012,12 @@ A pattern is one of six things, and each is read the way it is written:
 The last two rows are one rule: a path with `::` in it names a variant, and a
 bare name binds. `Quit` is a variant *of* `Message`, never on its own.
 
+**An enum with exactly one variant is written by its type's name**
+(ADR-347): `Exit(c)` is `Exit::Code(c)` and `Pos { x, y }` is
+`Pos::At { x, y }`, as a pattern and as a value. A bare name still binds, so a
+unit variant's pattern is written long, or as `else`. The short form of an
+enum with more than one variant is refused with `NK1252`.
+
 **Seven more shapes**:
 
 | pattern | matches |
@@ -1312,6 +1318,22 @@ and assigned as the type it declares (ADR-246). What that costs is one
 allocation per such field built. A pattern cannot yet look *inside* such a part
 (`Expr::Add(Expr::Num(n), b)`); a name binds it, and a `match` in the arm asks
 the question.
+
+**An enum with one variant is built by its type's name** (ADR-347): the
+variant adds nothing the type does not say.
+
+```nika
+enum Meters { Value(f64) }
+enum Pos { At { x: i32, y: i32 } }
+enum Done { Only }
+
+let m = Meters(2.5)            // Meters::Value(2.5)
+let p = Pos { x: 1, y: 2 }     // Pos::At { x: 1, y: 2 }
+let d = Done                   // Done::Only
+```
+
+The long form stays valid. An enum with more than one variant takes the long
+form (`NK1252`).
 
 ### 4.5. Collections
 The standard library provides types for groups of values.
@@ -2637,7 +2659,7 @@ let m = run() catch {
 }
 ```
 
-`process::exit(code)` throws `process::Exit::Code(code)`, which is fatal
+`process::exit(code)` throws `process::Exit(code)`, which is fatal
 (Part III 17.1). At the end of `main` it ends the program with `code`; every
 other error that leaves `main` ends it with `1` (Part III A.2).
 

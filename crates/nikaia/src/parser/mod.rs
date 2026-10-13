@@ -825,6 +825,9 @@ pub fn parse_to_ast(input: &str) -> Result<Parsed> {
         next_id: std::sync::Mutex::new(after_ids),
         expr_spans,
     };
+    // ADR-347: a one-variant enum written by its type's name becomes the long
+    // form here, before any reader sees the tree.
+    crate::one_variant::expand(&mut parsed)?;
     // **What a `String` field or result is below is decided here, once**
     // ([ADR-282](../../../../docs/specification/adr/adr-282.md)): by what flows
     // into it, and written into its type so every later reader agrees.

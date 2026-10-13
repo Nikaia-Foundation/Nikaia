@@ -366,7 +366,7 @@ fn rewrite(
 
 // --- Walking the program mutably ------------------------------------------
 
-fn each_block(item: &mut Item, f: &mut dyn FnMut(&mut Block)) {
+pub(crate) fn each_block(item: &mut Item, f: &mut dyn FnMut(&mut Block)) {
     match item {
         Item::Fn { body, .. } => f(body),
         Item::Impl { methods, .. } => {
@@ -379,7 +379,7 @@ fn each_block(item: &mut Item, f: &mut dyn FnMut(&mut Block)) {
 }
 
 /// Every expression and block below a block, children before parents.
-fn visit_block_mut(
+pub(crate) fn visit_block_mut(
     block: &mut Block,
     f: &mut dyn FnMut(&mut Expr),
     s: &mut dyn FnMut(&mut Stmt, usize),

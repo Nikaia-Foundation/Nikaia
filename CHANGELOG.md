@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.890] — 2026-10-13
+
+**An enum with one variant is written by its type's name (ADR-347, #608)**
+- ADR-347: `Exit(c)` for `Exit::Code(c)`, `Pos { x, y }` for `Pos::At { x, y }`, `Done` for `Done::Only`, at the value and in a pattern; `process::exit(code)` throws `process::Exit(code)`.
+- `NK1252`: the short form of an enum with several variants; the message names the long forms.
+
 ## [0.0.889] — 2026-10-13
 
 **spec: every task error has a receiver, ADR-346 (#605)**

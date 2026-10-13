@@ -29,6 +29,7 @@ pub mod interpreter;
 pub mod libraries;
 pub mod manifest;
 pub mod modules;
+pub(crate) mod one_variant;
 pub mod parser;
 pub mod project;
 pub mod proofs;

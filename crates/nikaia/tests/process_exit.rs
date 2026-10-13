@@ -291,3 +291,70 @@ fn a_fatal_type_without_an_error_impl_is_refused() {
     );
     assert!(codes(OWN_FATAL).is_empty(), "{:?}", codes(OWN_FATAL));
 }
+
+const SHORT: &str = r#"use std::process
+
+enum Meters { Value(i64) }
+enum Pos { At { x: i64, y: i64 } }
+enum Done { Only }
+
+fn f() -> i64 throws {
+    throw process::Exit(2)
+    return 1
+}
+
+fn main() {
+    let m = Meters(5)
+    let p = Pos { x: 1, y: 2 }
+    let d = Done
+    let a = match m { Meters(v) => v }
+    let b = match p { Pos { x, y } => x + y }
+    let c = match d { Done::Only => 7 }
+    let v = f() catch {
+        match error {
+            process::Exit(c) => c + 10
+        }
+    }
+    println(f"{a} {b} {c} {v}")
+}
+"#;
+
+/// ADR-347 D1, D4: an enum of one variant is built and matched by its type's
+/// name - positional, named fields and unit - and `process::Exit(c)` is
+/// thrown and caught.
+#[test]
+fn one_variant_is_written_by_the_type_name() {
+    assert!(
+        codes(SHORT).iter().all(|c| c != "NK1252"),
+        "{:?}",
+        codes(SHORT)
+    );
+    let (out, err, code) = ran("short", SHORT, Build::default());
+    assert_eq!(code, Some(0), "{err}");
+    assert_eq!(out, "5 3 7 12\n");
+}
+
+/// ADR-347 D4: `throw process::Exit(2)` leaving `main` ends with code 2.
+#[test]
+fn a_short_exit_ends_main_with_its_code() {
+    let source = "use std::process\n\nfn main() throws {\n    throw process::Exit(2)\n}\n";
+    let (_, err, code) = ran("short-main", source, Build::default());
+    assert_eq!(code, Some(2), "{err}");
+}
+
+/// ADR-347 D3: the short form of an enum with two variants is `NK1252`, and
+/// the message offers the long form.
+#[test]
+fn several_variants_refuse_the_short_form() {
+    for source in [
+        "enum Shape { Circle(i64), Square(i64) }\nfn main() {\n    let s = Shape(1)\n}\n",
+        "enum Shape { Circle(i64), Square(i64) }\nfn main() {\n    let s = Shape::Circle(1)\n    let n = match s { Shape(r) => r, else => 0 }\n    println(f\"{n}\")\n}\n",
+    ] {
+        let refused = match parse_to_ast(source) {
+            Ok(_) => panic!("the short form of two variants parses"),
+            Err(e) => e.to_string(),
+        };
+        assert!(refused.contains("NK1252"), "{refused}");
+        assert!(refused.contains("`Shape::Circle`"), "{refused}");
+    }
+}
