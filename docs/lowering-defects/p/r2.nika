@@ -1,0 +1,9 @@
+fn pick(a: ref String, b: ref String) -> ref String sync {
+    if b.len() > 9 {
+        return a
+    }
+    return a
+}
+fn main() {
+    println(pick("x", "y"))
+}

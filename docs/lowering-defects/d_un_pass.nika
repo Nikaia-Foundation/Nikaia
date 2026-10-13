@@ -1,0 +1,77 @@
+use std::collections
+
+pub fn draft_an_or_a(ty: ref String) -> ref String sync {
+    return match ty.starts_with(['i', 'a', 'e', 'o', 'I', 'A', 'E', 'O']) {
+        true => "an",
+        false => "a",
+    }
+}
+
+fn draft_several_errors(ty: ref Ty) -> ref Vec[Ty]? sync {
+    return match ty {
+        Ty::Named { name, args, view: false } if name == "Error" && args.len() > 1 => (args),
+        else => null,
+    }
+}
+
+fn draft_members_named(members: ref Vec[Ty]) -> String sync {
+    return members.iter().map(fn(m) { f"`{m.text()}`" }).collect().join(", ")
+}
+
+fn draft_is_a_literal_other_than(expr: ref Expr, kind: ref String) -> bool sync {
+    return match expr {
+        Expr::LitBool(_, _) => kind != "bool",
+        Expr::LitStr { .. } | Expr::LitInterpolated { .. } => kind != "text",
+        Expr::LitInt { .. } | Expr::LitFloat(_, _) | Expr::LitChar(_, _) | Expr::LitNull(_) => true,
+        else => false,
+    }
+}
+
+fn draft_not_pure_because(contract: ref FnContract) -> ref String? sync {
+    if !contract.sync_claim.is_sync() {
+        return ("can pause")
+    }
+    if !contract.fails_with.is_empty() {
+        return ("can fail")
+    }
+    if contract.mutates {
+        return ("changes what it is called on")
+    }
+    if !contract.touches_known || !contract.touches.is_empty() {
+        return ("touches something outside the program's values")
+    }
+    if contract.touches_a_lock.holds() {
+        return ("takes a lock")
+    }
+    return null
+}
+
+fn draft_a_root_is_one_of_two(wanted: ref Vec[(String, Ty)]) -> String sync {
+    // TODO(rs2nika): iterator adapter with no `Seq` method: a `for` loop
+    let is_a_root = wanted.iter().filter(fn(name, ty) { name == "root" && ty.text().trim_start_matches("ref ") == "fs::Root" }).count() > 0
+    return match is_a_root {
+        false => "",
+        true => ". The root is either `fs::Root::Dir(store)`, which keeps the path inside `store`, or `fs::Root::Anywhere`, which checks nothing and says so where a reviewer will look",
+    }
+}
+
+fn draft_a_copied_part(ty: ref Ty, copies: ref collections::BTreeSet[String]) -> bool sync {
+    return match ty {
+        Ty::Named { name, args, .. } if name == ARRAY => args.iter().filter(fn(arg) { !((match arg { Ty::Count(_) => true, else => false }) || draft_a_copied_part(arg, copies)) }).count() == 0,
+        Ty::Named { name, args, view: false } => {
+            args.is_empty() && ((match name { "i32" | "i64" | "u8" | "u32" | "u64" | "f64" | "bool" | "char" | "scalar" => true, else => false }) || copies.contains(name))
+        }
+        Ty::Nullable(inner) => draft_a_copied_part(inner, copies),
+        Ty::Tuple(parts) => parts.iter().filter(fn(part) { !(draft_a_copied_part(part, copies)) }).count() == 0,
+        else => false,
+    }
+}
+
+fn draft_binds_a_part(part: ref MatchPattern) -> bool sync {
+    return (match part { MatchPattern::Path(one) if one.len() == 1 => true, else => false }) || (match part { MatchPattern::Otherwise => true, else => false })
+}
+
+fn draft_is_a_whole_number(name: ref String) -> bool sync {
+    return (match name { "i8" | "i16" | "i32" | "i64" | "isize" | "u8" | "u16" | "u32" | "u64" | "usize" => true, else => false })
+}
+

@@ -2,7 +2,8 @@
 
 Checked on 2026-10-11 against `origin/develop` 707307a, with the binary built from it
 (`/home/user/Nikaia-check/target/release/nikaia`). Every probe is a file in
-`docs/lowering-defects/`. A user program is run with `nikaia run <f>.nika`; a `tools` probe is
+`docs/lowering-defects/`; the NK2302 probes (`p/r2.nika`, `p/m.nika`, `p/m2.nika` ...) are in
+`docs/lowering-defects/p/`. A user program is run with `nikaia run <f>.nika`; a `tools` probe is
 copied into `crates/nikaia-std/src/tools/`, then `nikaia lower-std` and
 `cargo check -p nikaia-std` are run (in a throwaway worktree).
 

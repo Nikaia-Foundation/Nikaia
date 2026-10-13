@@ -1,0 +1,20 @@
+fn tail(x: i64) -> i64 sync {
+    x + 1
+}
+
+fn empty(xs: ref Vec[i64]) -> bool sync {
+    return xs.is_empty()
+}
+
+fn anyp(xs: ref Vec[i64]) -> bool sync {
+    return xs.iter().filter fn(x) { x > 3 }.count() > 0
+}
+
+fn holes(xs: ref Vec[i64]) -> String sync {
+    return f"n={xs.len() + 1}"
+}
+
+fn main() {
+    let v = [1, 2, 5]
+    println(f"{tail(1)} {empty(v)} {anyp(v)} {holes(v)}")
+}

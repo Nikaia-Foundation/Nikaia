@@ -1,0 +1,12 @@
+struct World { names: Vec[String] }
+struct State { at: i64 }
+impl State {
+    fn name(ref self, world: ref World) -> ref String sync {
+        return world.names[self.at]
+    }
+}
+fn main() {
+    let w = World { names: ["ab", "cd"] }
+    let s = State { at: 1 }
+    println(s.name(w))
+}
