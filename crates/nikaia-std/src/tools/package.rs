@@ -24012,6 +24012,18 @@ impl EmitState {
             out.push(")");
             return Ok(());
         }
+        if (name == "rfind" || name == "replacen") && self.facts.text_finds.contains(&node_key(receiver)) {
+            out.push(&format!("nikaia_std::search::{}(&", name));
+            self.emit_core_nested(world, walk, out, host, receiver, 255, depth, flow, scope)?;
+            let mut i = 0;
+            for arg in args.iter() {
+                out.push(if i < 2 { ", &" } else { ", " });
+                self.emit_core_nested(world, walk, out, host, arg, 255, depth, flow, scope)?;
+                i += 1;
+            }
+            out.push(")");
+            return Ok(());
+        }
         if name == "find" && self.facts.text_finds.contains(&node_key(receiver)) {
             out.push("nikaia_std::search::find(&");
             self.emit_core_nested(world, walk, out, host, receiver, 255, depth, flow, scope)?;

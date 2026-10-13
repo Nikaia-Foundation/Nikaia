@@ -3007,6 +3007,27 @@ sync = true
 touches = []
 signature = "(self) -> bool"
 
+# Whether the character is an upper-case letter, as Unicode counts them.
+[fn."scalar::is_uppercase"]
+pub = true
+sync = true
+touches = []
+signature = "(self) -> bool"
+
+# Whether the character is a lower-case letter, as Unicode counts them.
+[fn."scalar::is_lowercase"]
+pub = true
+sync = true
+touches = []
+signature = "(self) -> bool"
+
+# Whether the character is one of the ASCII digits `0` to `9`.
+[fn."scalar::is_ascii_digit"]
+pub = true
+sync = true
+touches = []
+signature = "(self) -> bool"
+
 # The character in lower case where it is an ASCII letter, and itself
 # otherwise.
 [fn."scalar::to_ascii_lowercase"]
@@ -3084,6 +3105,14 @@ pub = true
 sync = true
 touches = []
 signature = "(self: ref String, from: ref String, to: ref String) -> String"
+
+# The text with the first `count` matches of `from` replaced by `to`, left to
+# right; a `count` of 0 or less replaces nothing.
+[fn."str::replacen"]
+pub = true
+sync = true
+touches = []
+signature = "(self: ref String, from: ref String, to: ref String, count: i64) -> String"
 
 # The same text with every character in upper case, as new text.
 #
@@ -3200,6 +3229,14 @@ pub = true
 sync = true
 touches = []
 signature = "(self: ref String, needle: ref String; from: i64 = 0) -> i64?"
+
+# **The byte position of the last match**, or nothing. The position cuts the
+# text it came from, as `find`'s does.
+[fn."str::rfind"]
+pub = true
+sync = true
+touches = []
+signature = "(self: ref String, needle: ref String) -> i64?"
 
 # The lines of the text, each a view into it, without its line ending.
 #

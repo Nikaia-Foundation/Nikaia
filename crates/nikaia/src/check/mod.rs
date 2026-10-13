@@ -6982,7 +6982,7 @@ impl<'a> Checker<'a> {
                 // literal there, or by a `.clone()` the program writes.
                 let text = matches!(&on, Ty::Named { name, args: none, .. }
                     if none.is_empty() && matches!(name.as_str(), "String" | "str"));
-                if text && self.parsed.text(*method) == "find" {
+                if text && matches!(self.parsed.text(*method), "find" | "rfind" | "replacen") {
                     self.s.facts.text_finds.insert(value_node(receiver));
                 }
                 if text

@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.876] — 2026-10-13
+
+**std: `rfind` and `replacen` on text, `is_uppercase`, `is_lowercase`, `is_ascii_digit` on `scalar` (#125)**
+- `s.rfind(needle) -> i64?` and `s.replacen(from, to, count: i64) -> String`, counting in `i64` as `find` does.
+- `scalar` answers `is_uppercase`, `is_lowercase` and `is_ascii_digit`.
+
 ## [0.0.875] — 2026-10-13
 
 **std: `cli::args().nth(at)` takes an `i64` (#125)**

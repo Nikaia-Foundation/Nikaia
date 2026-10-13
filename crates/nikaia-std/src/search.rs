@@ -24,9 +24,28 @@ pub fn find(text: &str, needle: &str, from: i64) -> Option<i64> {
     i64::try_from(start + at).ok()
 }
 
+/// The byte position of the last match of `needle` in `text`.
+pub fn rfind(text: &str, needle: &str) -> Option<i64> {
+    i64::try_from(text.rfind(needle)?).ok()
+}
+
+/// `text` with the first `count` matches of `from` replaced by `to`; a `count`
+/// of 0 or less replaces nothing.
+pub fn replacen(text: &str, from: &str, to: &str, count: i64) -> String {
+    text.replacen(from, to, usize::try_from(count).unwrap_or(0))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::find;
+    use super::{find, replacen, rfind};
+
+    #[test]
+    fn the_last_match_and_a_counted_replace() {
+        assert_eq!(rfind("a::b::c", "::"), Some(4));
+        assert_eq!(rfind("abc", "x"), None);
+        assert_eq!(replacen("aaa", "a", "b", 2), "bba");
+        assert_eq!(replacen("aaa", "a", "b", -1), "aaa");
+    }
 
     #[test]
     fn a_match_at_or_after_the_position() {

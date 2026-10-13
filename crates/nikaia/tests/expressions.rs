@@ -557,3 +557,20 @@ fn a_composite_fallback_is_bracketed_before_into() {
     assert!(!emitted.contains("as i64.into()"), "{emitted}");
     assert!(!emitted.contains("0 - 1.into()"), "{emitted}");
 }
+
+/// `rfind` and `replacen` on text count in `i64`, as `find` does: they lower to
+/// `std`'s helpers, not to the language below's `usize` methods.
+#[test]
+fn rfind_and_replacen_count_in_i64() {
+    let emitted = emit(
+        "fn f(name: ref String, n: i64) -> String {\n\
+             let at = name.rfind(\"::\") ?? 0\n\
+             return name.replacen(\"::\", \"/\", n + at)\n\
+         }\n",
+    );
+    assert!(emitted.contains("nikaia_std::search::rfind(&"), "{emitted}");
+    assert!(
+        emitted.contains("nikaia_std::search::replacen(&"),
+        "{emitted}"
+    );
+}
