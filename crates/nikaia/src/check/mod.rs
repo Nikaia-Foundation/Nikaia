@@ -2490,7 +2490,8 @@ impl<'a> Checker<'a> {
         self.s.stored_frames.push(StoredCode::empty());
         let found = self.expr(condition, span);
         let frame = self.s.stored_frames.pop().unwrap_or_else(StoredCode::empty);
-        self.expect_bool(&found, span, "An `assert` checks a `bool`.");
+        let at = self.span_at(condition, *span);
+        self.expect_bool(&found, &at, "An `assert` checks a `bool`.");
         // A number's type is settled below, so the check above cannot see
         // `assert(5)`; the literal is its own answer.
         if is_a_literal_other_than(condition, "bool") {
@@ -4240,9 +4241,10 @@ impl<'a> Checker<'a> {
             // passed here and refused by `rustc`. A literal takes the type it
             // is handed to and is not asked.
             if !is_literal(given) && an_integer_that_does_not_widen(found, want) {
+                let at = self.span_at(given, *span);
                 self.s.findings.push(Finding {
                     severity: Severity::Error,
-                    span: *span,
+                    span: at,
                     code: "NK1102".to_string(),
                     message: format!(
                         "`{key}` expects `{}` here, but you're passing `{}`.",
@@ -5412,7 +5414,8 @@ impl<'a> Checker<'a> {
                     if self.a_name_in_text(&into, Some(value), span) {
                         return Ty::Tuple(Vec::new());
                     }
-                    self.expect(&found, &into, *span, "assign", |found, want| {
+                    let at = self.span_at(value, *span);
+                    self.expect_at(&found, &into, *span, at, "assign", |found, want| {
                         format!("You're assigning `{found}` to something that holds `{want}`.")
                     });
                 }
@@ -5421,9 +5424,10 @@ impl<'a> Checker<'a> {
 
             Stmt::While { cond, body } => {
                 let cond_ty = self.expr(cond, span);
+                let at = self.span_at(cond, *span);
                 self.expect_bool(
                     &cond_ty,
-                    span,
+                    &at,
                     "A `while` loop repeats while a `bool` is `true`.",
                 );
                 let depth = self.s.scope.len() as i64;
@@ -6051,7 +6055,8 @@ impl<'a> Checker<'a> {
                 ..
             } => {
                 let cond_ty = self.expr(cond, span);
-                self.expect_bool(&cond_ty, span, "An `if` decides on a `bool`.");
+                let at = self.span_at(cond, *span);
+                self.expect_bool(&cond_ty, &at, "An `if` decides on a `bool`.");
                 // **A decision taken on what a lock said is stale too**
                 // ([ADR-281](../../docs/specification/adr/adr-281.md) D25's
                 // second shape). It reaches inward and **accumulates**: a
@@ -6393,7 +6398,8 @@ impl<'a> Checker<'a> {
                                 frame[at].lent = lent;
                             }
                         }
-                        self.expect_bool(&found, span, "A `match` guard is a condition.");
+                        let at = self.span_at(guard, *span);
+                        self.expect_bool(&found, &at, "A `match` guard is a condition.");
                     }
                     let ty = self.expr(&arm.body, span);
                     self.a_part_lent_where_it_is_not_kept(
@@ -7641,7 +7647,11 @@ impl<'a> Checker<'a> {
                             let want = held.ty.clone();
                             let owner = name.clone();
                             let field = field.clone();
-                            self.expect(&given, &want, *span, "field", move |given, want| {
+                            let at = init
+                                .value
+                                .as_ref()
+                                .map_or(*span, |v| self.span_at(v, *span));
+                            self.expect_at(&given, &want, *span, at, "field", move |given, want| {
                                 format!("`{owner}.{field}` holds `{want}`, but you're giving it `{given}`.")
                             });
                         }
@@ -7869,8 +7879,10 @@ impl<'a> Checker<'a> {
                         }
                     }
                     BinaryOp::And | BinaryOp::Or => {
-                        self.expect_bool(&left, span, "`&&` and `||` join two `bool`s.");
-                        self.expect_bool(&right, span, "`&&` and `||` join two `bool`s.");
+                        let (on_left, on_right) =
+                            (self.span_at(lhs, *span), self.span_at(rhs, *span));
+                        self.expect_bool(&left, &on_left, "`&&` and `||` join two `bool`s.");
+                        self.expect_bool(&right, &on_right, "`&&` and `||` join two `bool`s.");
                         Ty::named("bool")
                     }
                     BinaryOp::Eq | BinaryOp::Ne => {
@@ -10157,9 +10169,10 @@ impl<'a> Checker<'a> {
                 Some((why, help)) => (why, help),
                 None => (Vec::new(), convert(found, want)),
             };
+            let at = given_here.map_or(*span, |given| self.span_at(given, *span));
             self.s.findings.push(Finding {
                 severity: Severity::Error,
-                span: *span,
+                span: at,
                 code: "NK1102".to_string(),
                 message: format!(
                     "`{key}` expects `{name}` to be `{}`, but you're passing `{}`.",
@@ -10256,6 +10269,17 @@ impl<'a> Checker<'a> {
     /// view of text kept where text of its own is wanted can say **why** here
     /// ([ADR-282](../../docs/specification/adr/adr-282.md) D25). `keeper` is the
     /// position's own words for what keeps it.
+    /// **Where `expr` was written, or the statement's `span`** (#107): the
+    /// parser's span of the expression when it made the node and the node
+    /// stands inside the statement; a node the compiler built, or one from
+    /// another file, is reported at the statement as before.
+    fn span_at(&self, expr: &Expr, span: Span) -> Span {
+        match self.parsed.span_of(ast::id_of(expr)) {
+            Some(at) if at.start >= span.start && at.end <= span.end => at,
+            _ => span,
+        }
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn expect_kept(
         &mut self,
@@ -10292,16 +10316,19 @@ impl<'a> Checker<'a> {
                     if what == "field" {
                         self.s.flow.field_either = mixed;
                     }
-                    self.s.expect_kept(
-                        self.world,
-                        &ty,
-                        want,
-                        Some(arm),
-                        keeper,
-                        &span,
-                        what,
-                        &message,
-                    );
+                    let at = self.span_at(arm, span);
+                    self.moved_to(span, at, |checker| {
+                        checker.s.expect_kept(
+                            checker.world,
+                            &ty,
+                            want,
+                            Some(arm),
+                            keeper,
+                            &span,
+                            what,
+                            &message,
+                        )
+                    });
                 }
                 if mixed && a_view {
                     self.note_mixed(value, matches!(want, Ty::Nullable(_)));
@@ -10309,9 +10336,54 @@ impl<'a> Checker<'a> {
                 return;
             }
         }
-        self.s.expect_kept(
-            self.world, found, want, value, keeper, &span, what, &message,
-        );
+        let at = value.map_or(span, |value| self.span_at(value, span));
+        self.moved_to(span, at, |checker| {
+            checker.s.expect_kept(
+                checker.world,
+                found,
+                want,
+                value,
+                keeper,
+                &span,
+                what,
+                &message,
+            )
+        });
+    }
+
+    /// **What `ask` refuses at the statement `span`, said at `at`** (#107):
+    /// the refusals it pushes, and the one it leaves waiting on an unsigned
+    /// slot, which stays keyed by the statement where the walk answers it
+    /// (ADR-285 D32).
+    fn moved_to(&mut self, span: Span, at: Span, ask: impl FnOnce(&mut Self)) {
+        let key = i64::from(span.start);
+        let pushed = self.s.findings.len();
+        let waiting: Vec<bool> = self
+            .s
+            .flow
+            .unsigned_slots
+            .get(&key)
+            .map(|slots| slots.iter().map(|slot| slot.refusal.is_some()).collect())
+            .unwrap_or_default();
+        ask(self);
+        if at == span {
+            return;
+        }
+        for finding in &mut self.s.findings[pushed..] {
+            if finding.span == span {
+                finding.span = at;
+            }
+        }
+        if let Some(slots) = self.s.flow.unsigned_slots.get_mut(&key) {
+            for (index, slot) in slots.iter_mut().enumerate() {
+                if !waiting.get(index).copied().unwrap_or(false)
+                    && let Some(refusal) = &mut slot.refusal
+                    && refusal.span == span
+                {
+                    refusal.span = at;
+                }
+            }
+        }
     }
 
     /// **A view kept where the receiver says text of its own**
@@ -10421,6 +10493,23 @@ impl<'a> Checker<'a> {
     }
 
     /// Report only when both sides are known and they disagree.
+    /// [`Checker::expect`] for a statement at `span`, said at `at` (#107).
+    fn expect_at(
+        &mut self,
+        found: &Ty,
+        want: &Ty,
+        span: Span,
+        at: Span,
+        what: &str,
+        message: impl Fn(&str, &str) -> String,
+    ) {
+        self.moved_to(span, at, |checker| {
+            checker
+                .s
+                .expect_type(checker.world, found, want, &span, what, &message)
+        });
+    }
+
     fn expect(
         &mut self,
         found: &Ty,
@@ -11825,11 +11914,19 @@ impl<'a> Checker<'a> {
             ),
             [] => String::new(),
         };
+        // **The caret stands on the first arm that is not the first one's
+        // type** (#107), or on the `if` or `match` where none can be named.
+        let first = arms.first().map(|(_, ty)| ty.unseen());
+        let at = arms
+            .iter()
+            .skip(1)
+            .find_map(|(tail, ty)| (Some(ty.unseen()) != first).then_some(*tail)?)
+            .map_or_else(|| self.span_at(expr, *span), |arm| self.span_at(arm, *span));
         self.arm_disagreements.insert(
             value_node(expr),
             Finding {
                 severity: Severity::Error,
-                span: *span,
+                span: at,
                 code: "NK1245".to_string(),
                 message: format!(
                     "The arms of this {article} are {listed}, so the compiler can't tell what \

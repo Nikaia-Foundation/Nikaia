@@ -1889,6 +1889,80 @@ fn an_empty_list_takes_its_element_type_from_its_first_push() {
 
 const A_CHOICE_OF_ARMS: &str = "enum Val {\n    Int(i64),\n    Text(String),\n}\n";
 
+/// **What the caret of `code` stands under** (#107): the text of its span and
+/// the line it begins on, counted from 1.
+fn under(source: &str, code: &str) -> (String, usize) {
+    let found = findings(source);
+    let finding = found
+        .iter()
+        .find(|f| f.code == code)
+        .unwrap_or_else(|| panic!("no {code}: {found:#?}"));
+    let (start, end) = (finding.span.start as usize, finding.span.end as usize);
+    let line = source[..start].matches('\n').count() + 1;
+    (source[start..end].to_string(), line)
+}
+
+/// The arm, and not the `return match v {` it stands in (#107).
+#[test]
+fn a_refused_arm_is_pointed_at() {
+    let source = "enum Val {\n    Int(i64),\n    Text(String),\n}\n\nfn f(v: ref Val) -> String {\n    \
+                  return match v {\n        Val::Int(n) => f\"{n}\",\n        Val::Text(t) => t,\n    }\n}\n";
+    assert_eq!(under(source, "NK1104"), ("t".to_string(), 9));
+}
+
+/// The other arm shapes of #596 point at the arm too (#107).
+#[test]
+fn every_refused_arm_shape_is_pointed_at() {
+    let arms = "match v {{\n        Val::Int(n) => f\"{{n}}\",\n        Val::Text(t) => t,\n    }}";
+    let cases = [
+        (
+            "NK1103",
+            format!(
+                "fn f(v: ref Val) -> String {{\n    let r: String = {arms}\n    return r\n}}\n"
+            ),
+        ),
+        (
+            "NK1102",
+            format!(
+                "fn g(x: String) -> String {{\n    return x\n}}\n\
+                 fn f(v: ref Val) -> String {{\n    return g({arms})\n}}\n"
+            ),
+        ),
+        (
+            "NK1106",
+            format!(
+                "struct Row {{\n    text: String,\n}}\n\
+                 fn f(v: ref Val) -> Row {{\n    return Row {{ text: {arms} }}\n}}\n"
+            ),
+        ),
+    ];
+    for (code, body) in cases {
+        let body = body.replace("{{", "{").replace("}}", "}");
+        let source = format!("{A_CHOICE_OF_ARMS}{body}");
+        assert_eq!(under(&source, code).0, "t", "{code}");
+    }
+    let (text, line) = under(
+        "fn f(c: bool) {\n    let r = if c { 1 } else { \"x\" }\n    println(r)\n}\n",
+        "NK1245",
+    );
+    assert_eq!((text.as_str(), line), ("\"x\"", 2));
+}
+
+/// A condition, an assigned value and an argument are pointed at (#107).
+#[test]
+fn a_refused_expression_is_pointed_at() {
+    let (text, _) = under(
+        "fn f(n: i64) {\n    if n + 1 {\n        println(\"x\")\n    }\n}\n",
+        "NK1108",
+    );
+    assert_eq!(text, "n + 1");
+    let (text, _) = under(
+        "fn g(x: i64) -> i64 {\n    return x\n}\nfn f() -> i64 {\n    return g(\"no\")\n}\n",
+        "NK1102",
+    );
+    assert_eq!(text, "\"no\"");
+}
+
 /// Text in an `i64` result: the arm is asked as `return s` is.
 #[test]
 fn an_if_arm_of_the_wrong_type_is_refused_where_the_value_returns() {

@@ -3172,7 +3172,7 @@ fn running_a_file_that_is_refused_names_that_file() {
     assert!(!run.status.success(), "{}", said(&run));
     let told = String::from_utf8_lossy(&run.stderr);
     assert!(told.contains("NK1103"), "{}", said(&run));
-    assert!(told.contains("kaputt.nika:2:5"), "{}", said(&run));
+    assert!(told.contains("kaputt.nika:2:18"), "{}", said(&run));
     assert!(
         !told.contains("src/main.nika"),
         "not the kept copy's path: {}",

@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.869] — 2026-10-13
+
+**Expressions carry spans**
+- The parser records each expression's span in a table keyed by its NodeId (`Parsed::expr_spans`, #107); the type checker's refusals about one expression (an arm of an `if` or `match` asked where its value goes: NK1102, NK1103, NK1104, NK1106, NK1245; an argument, an assigned value, a field value, a condition) put the caret on that expression instead of the whole statement. A node the compiler builds has no entry and is reported at its statement.
+
 ## [0.0.868] — 2026-10-13
 
 **checker: node-level facts keyed by NodeId (#558)**

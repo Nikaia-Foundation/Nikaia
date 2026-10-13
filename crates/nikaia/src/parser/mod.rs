@@ -92,9 +92,35 @@ pub struct Trivia {
     /// nodes of the file share one and that the same source gives the same
     /// ids, and a counter that only goes up gives both.
     next_id: u32,
+    /// **Where each parsed expression stands** (#107): its id's number and
+    /// the bytes it was read from, the innermost rule that finished the node
+    /// first. A losing branch leaves entries for ids no node keeps, which
+    /// nothing asks for.
+    spans: std::collections::BTreeMap<u32, ast::Span>,
+    /// Where the run of trivia that ends at `end` began, so a span that ends
+    /// in it is cut back to the last token.
+    trivia_start: usize,
 }
 
 impl Trivia {
+    /// Record where `expr` was read, unless a rule inside already did.
+    pub fn at(&mut self, expr: ast::Expr, span: std::ops::Range<usize>) -> ast::Expr {
+        // A node the parser built with a fresh id (a number literal,
+        // `ast::int_literal`) is not numbered in parse order, so it has no
+        // entry and is reported at its statement.
+        let id = ast::id_of(&expr);
+        let mut span = span;
+        if span.end == self.end && self.trivia_start >= span.start {
+            span.end = self.trivia_start;
+        }
+        if id < 1 << 31 {
+            self.spans
+                .entry(id)
+                .or_insert_with(|| ast::Span::from(span));
+        }
+        expr
+    }
+
     /// The id for the node being made.
     pub fn id(&mut self) -> ast::NodeId {
         let id = ast::NodeId::numbered(self.next_id);
@@ -121,6 +147,9 @@ impl Trivia {
     /// belongs to nothing here.
     fn ran(&mut self, at: std::ops::Range<usize>, newline: bool) {
         let carried = self.end == at.start && self.newline;
+        if self.end != at.start {
+            self.trivia_start = at.start;
+        }
         self.end = at.end;
         self.newline = newline || carried;
         if self.doc_reaches == at.start {
@@ -401,9 +430,19 @@ pub struct Parsed {
     /// lock and not an atomic, because a hole is parsed while the lock is held
     /// and its nodes take a run of numbers together.
     next_id: std::sync::Mutex<u32>,
+    /// **The span of each expression the parser made**, keyed by its id's
+    /// number (#107, [ADR-340](../../../docs/specification/adr/adr-340.md)).
+    /// A node the compiler built has none; who reports on it falls back to
+    /// the enclosing statement's span.
+    pub expr_spans: std::collections::BTreeMap<u32, ast::Span>,
 }
 
 impl Parsed {
+    /// Where the expression `id` was written, if the parser made it.
+    pub fn span_of(&self, id: u32) -> Option<ast::Span> {
+        self.expr_spans.get(&id).copied()
+    }
+
     /// One hole of a template, parsed into this file's interner
     /// ([`parse_expression`]), once per text **at one site**
     /// ([`Parsed::holes`]): `site` is the id of the literal the hole is in
@@ -505,6 +544,7 @@ impl Parsed {
             holes: Default::default(),
             kept_calls: Default::default(),
             next_id: std::sync::Mutex::new(*self.next_id.lock().expect("a hole parse panicked")),
+            expr_spans: self.expr_spans.clone(),
         }
     }
 
@@ -542,6 +582,7 @@ impl Parsed {
             holes: Default::default(),
             kept_calls: Default::default(),
             next_id: std::sync::Mutex::new(*self.next_id.lock().expect("a hole parse panicked")),
+            expr_spans: self.expr_spans.clone(),
         }
     }
 
@@ -770,6 +811,7 @@ pub fn parse_to_ast(input: &str) -> Result<Parsed> {
     }
 
     let after_ids = stream.state.user_state.next_id;
+    let expr_spans = std::mem::take(&mut stream.state.user_state.spans);
     let aliases = nikaia_std::tools::parsed_tree::aliases_of(&program.items, &interner);
     let mut parsed = Parsed {
         program,
@@ -781,6 +823,7 @@ pub fn parse_to_ast(input: &str) -> Result<Parsed> {
         holes: Default::default(),
         kept_calls: Default::default(),
         next_id: std::sync::Mutex::new(after_ids),
+        expr_spans,
     };
     // **What a `String` field or result is below is decided here, once**
     // ([ADR-282](../../../../docs/specification/adr/adr-282.md)): by what flows
@@ -2435,12 +2478,18 @@ grammar! {
 
         // --- Expressions ---
 
-        pub rule expr -> Expr # "expression" =
+        pub rule expr -> Expr # "expression" @=
+            e:expr_bare -> { _state.user().at(e, _span) }
+
+        rule expr_bare -> Expr =
             c:closure_expr -> { c }
           | e:catch_expr -> { e }
 
         // Kap 7.1: `fs::map(path, fs::Root::Anywhere) catch { … }` - the error is `error` inside.
-        rule catch_expr -> Expr =
+        rule catch_expr -> Expr @=
+            e:catch_expr_bare -> { _state.user().at(e, _span) }
+
+        rule catch_expr_bare -> Expr =
             value:coalesce_expr handler:catch_tail? -> {
                 match handler {
                     Some(handler) => Expr::TryCatch { expr: Box::new(value), handler, id: _state.user().id() },
@@ -2452,7 +2501,10 @@ grammar! {
             KW_CATCH b:block -> { b }
 
         // Kap 3.5: `value ?? fallback`.
-        rule coalesce_expr -> Expr =
+        rule coalesce_expr -> Expr @=
+            e:coalesce_expr_bare -> { _state.user().at(e, _span) }
+
+        rule coalesce_expr_bare -> Expr =
             value:range_expr fallback:coalesce_tail? -> {
                 match fallback {
                     Some(fallback) => Expr::Coalesce {
@@ -2570,7 +2622,10 @@ grammar! {
         // a slice and a pattern read the same two operators the same way.
         // Kotlin and Swift are the precedent and both read `..<` as *up to, not
         // including*.
-        rule range_expr -> Expr =
+        rule range_expr -> Expr @=
+            e:range_expr_bare -> { _state.user().at(e, _span) }
+
+        rule range_expr_bare -> Expr =
             start:or_expr end:range_tail? -> {
                 match end {
                     Some((inclusive, end)) => Expr::Range {
@@ -2599,17 +2654,26 @@ grammar! {
             ) -> { (true, Expr::LitInt { value: 0, negative: false, id: _state.user().id() }) }
           | ".." e:or_expr -> { (true, e) }
 
-        rule or_expr -> Expr =
+        rule or_expr -> Expr @=
+            e:or_expr_bare -> { _state.user().at(e, _span) }
+
+        rule or_expr_bare -> Expr =
             head:and_expr tail:or_tail* -> { fold_binary(_state.user(), head, tail) }
 
         rule or_tail -> (BinaryOp, Expr, Span) @= "||" e:and_expr -> { (BinaryOp::Or, e, Span::from(_span)) }
 
-        rule and_expr -> Expr =
+        rule and_expr -> Expr @=
+            e:and_expr_bare -> { _state.user().at(e, _span) }
+
+        rule and_expr_bare -> Expr =
             head:cmp_expr tail:and_tail* -> { fold_binary(_state.user(), head, tail) }
 
         rule and_tail -> (BinaryOp, Expr, Span) @= "&&" e:cmp_expr -> { (BinaryOp::And, e, Span::from(_span)) }
 
-        rule cmp_expr -> Expr =
+        rule cmp_expr -> Expr @=
+            e:cmp_expr_bare -> { _state.user().at(e, _span) }
+
+        rule cmp_expr_bare -> Expr =
             head:bit_or_expr tail:cmp_tail? -> {
                 fold_binary(_state.user(), head, tail.into_iter().collect::<Vec<_>>())
             }
@@ -2622,25 +2686,37 @@ grammar! {
         // character operator is kept off its two-character neighbour - `|` off
         // `||` and `|=`, `&` off `&&` and `&=`, `^` off `^=` - so a line that
         // writes the other is read as the other.
-        rule bit_or_expr -> Expr =
+        rule bit_or_expr -> Expr @=
+            e:bit_or_expr_bare -> { _state.user().at(e, _span) }
+
+        rule bit_or_expr_bare -> Expr =
             head:bit_xor_expr tail:bit_or_tail* -> { fold_binary(_state.user(), head, tail) }
 
         rule bit_or_tail -> (BinaryOp, Expr, Span) @=
             "|" not("|") not("=") e:bit_xor_expr -> { (BinaryOp::BitOr, e, Span::from(_span)) }
 
-        rule bit_xor_expr -> Expr =
+        rule bit_xor_expr -> Expr @=
+            e:bit_xor_expr_bare -> { _state.user().at(e, _span) }
+
+        rule bit_xor_expr_bare -> Expr =
             head:bit_and_expr tail:bit_xor_tail* -> { fold_binary(_state.user(), head, tail) }
 
         rule bit_xor_tail -> (BinaryOp, Expr, Span) @=
             "^" not("=") e:bit_and_expr -> { (BinaryOp::BitXor, e, Span::from(_span)) }
 
-        rule bit_and_expr -> Expr =
+        rule bit_and_expr -> Expr @=
+            e:bit_and_expr_bare -> { _state.user().at(e, _span) }
+
+        rule bit_and_expr_bare -> Expr =
             head:shift_expr tail:bit_and_tail* -> { fold_binary(_state.user(), head, tail) }
 
         rule bit_and_tail -> (BinaryOp, Expr, Span) @=
             "&" not("&") not("=") e:shift_expr -> { (BinaryOp::BitAnd, e, Span::from(_span)) }
 
-        rule shift_expr -> Expr =
+        rule shift_expr -> Expr @=
+            e:shift_expr_bare -> { _state.user().at(e, _span) }
+
+        rule shift_expr_bare -> Expr =
             head:add_expr tail:shift_tail* -> { fold_binary(_state.user(), head, tail) }
 
         rule shift_tail -> (BinaryOp, Expr, Span) @= op:shift_op e:add_expr -> { (op, e, Span::from(_span)) }
@@ -2659,7 +2735,10 @@ grammar! {
           | "<" -> { BinaryOp::Lt }
           | ">" -> { BinaryOp::Gt }
 
-        rule add_expr -> Expr =
+        rule add_expr -> Expr @=
+            e:add_expr_bare -> { _state.user().at(e, _span) }
+
+        rule add_expr_bare -> Expr =
             head:mul_expr tail:add_tail* -> { fold_binary(_state.user(), head, tail) }
 
         rule add_tail -> (BinaryOp, Expr, Span) @= op:add_op e:mul_expr -> { (op, e, Span::from(_span)) }
@@ -2668,12 +2747,18 @@ grammar! {
             "+" -> { BinaryOp::Add }
           | "-" -> { BinaryOp::Sub }
 
-        rule mul_expr -> Expr =
+        rule mul_expr -> Expr @=
+            e:mul_expr_bare -> { _state.user().at(e, _span) }
+
+        rule mul_expr_bare -> Expr =
             head:cast_expr tail:mul_tail* -> { fold_binary(_state.user(), head, tail) }
 
         rule mul_tail -> (BinaryOp, Expr, Span) @= op:mul_op e:cast_expr -> { (op, e, Span::from(_span)) }
 
-        rule cast_expr -> Expr =
+        rule cast_expr -> Expr @=
+            e:cast_expr_bare -> { _state.user().at(e, _span) }
+
+        rule cast_expr_bare -> Expr =
             head:unary_expr casts:cast_tail* -> {
                 casts.into_iter().fold(head, |expr, ty| Expr::Cast {
                     expr: Box::new(expr),
@@ -2694,7 +2779,10 @@ grammar! {
         // `mul_expr`, so the label on `expr` never sees it. Every operand
         // chain bottoms out here at the position the operand should have
         // started.
-        rule unary_expr -> Expr # "expression" =
+        rule unary_expr -> Expr # "expression" @=
+            e:unary_expr_bare -> { _state.user().at(e, _span) }
+
+        rule unary_expr_bare -> Expr =
             // **A `-` written against the digits is part of the number**, and
             // it is first because the alternative below would otherwise take
             // it: `-9223372036854775808` is `i64::MIN`, and as a negation of a
@@ -2945,7 +3033,10 @@ grammar! {
         // Keyword-led forms first, then the struct literal, then a plain path:
         // `Reading { .. }` must be tried before `Reading` on its own, because a
         // PEG keeps the first alternative that matches.
-        rule primary_expr -> Expr =
+        rule primary_expr -> Expr @=
+            e:primary_expr_bare -> { _state.user().at(e, _span) }
+
+        rule primary_expr_bare -> Expr =
             sp:spawn_expr -> { sp }
           | d:dsl_block_expr -> { d }
           | d:dsl_from_expr -> { d }
@@ -3060,7 +3151,10 @@ grammar! {
         // is the thing this shape must not become, and it had become exactly
         // that four times over: `&&`, `||`, `??`, `as`, `null` and a tuple were
         // each refused in a position the specification put no restriction on.
-        rule head_expr -> Expr =
+        rule head_expr -> Expr @=
+            e:head_expr_bare -> { _state.user().at(e, _span) }
+
+        rule head_expr_bare -> Expr =
             value:head_range fallback:head_coalesce_tail? -> {
                 match fallback {
                     Some(fallback) => Expr::Coalesce {
@@ -3100,7 +3194,10 @@ grammar! {
                 }
             }
 
-        rule head_range -> Expr =
+        rule head_range -> Expr @=
+            e:head_range_bare -> { _state.user().at(e, _span) }
+
+        rule head_range_bare -> Expr =
             start:head_or end:head_range_tail? -> {
                 match end {
                     Some((inclusive, end)) => Expr::Range {
@@ -3128,36 +3225,54 @@ grammar! {
         // *immediately* before the `{`, and after `&&` comes a `head_cmp`,
         // which descends to the same brace-free `head_primary` as everything
         // else in this chain.
-        rule head_or -> Expr =
+        rule head_or -> Expr @=
+            e:head_or_bare -> { _state.user().at(e, _span) }
+
+        rule head_or_bare -> Expr =
             head:head_and tail:head_or_tail* -> { fold_binary(_state.user(), head, tail) }
 
         rule head_or_tail -> (BinaryOp, Expr, Span) @= "||" e:head_and -> { (BinaryOp::Or, e, Span::from(_span)) }
 
-        rule head_and -> Expr =
+        rule head_and -> Expr @=
+            e:head_and_bare -> { _state.user().at(e, _span) }
+
+        rule head_and_bare -> Expr =
             head:head_cmp tail:head_and_tail* -> { fold_binary(_state.user(), head, tail) }
 
         rule head_and_tail -> (BinaryOp, Expr, Span) @= "&&" e:head_cmp -> { (BinaryOp::And, e, Span::from(_span)) }
 
-        rule head_cmp -> Expr =
+        rule head_cmp -> Expr @=
+            e:head_cmp_bare -> { _state.user().at(e, _span) }
+
+        rule head_cmp_bare -> Expr =
             head:head_add tail:cmp_head_tail? -> {
                 fold_binary(_state.user(), head, tail.into_iter().collect::<Vec<_>>())
             }
 
         rule cmp_head_tail -> (BinaryOp, Expr, Span) @= op:cmp_op e:head_add -> { (op, e, Span::from(_span)) }
 
-        rule head_add -> Expr =
+        rule head_add -> Expr @=
+            e:head_add_bare -> { _state.user().at(e, _span) }
+
+        rule head_add_bare -> Expr =
             head:head_mul tail:head_add_tail* -> { fold_binary(_state.user(), head, tail) }
 
         rule head_add_tail -> (BinaryOp, Expr, Span) @= op:add_op e:head_mul -> { (op, e, Span::from(_span)) }
 
-        rule head_mul -> Expr =
+        rule head_mul -> Expr @=
+            e:head_mul_bare -> { _state.user().at(e, _span) }
+
+        rule head_mul_bare -> Expr =
             head:head_cast tail:head_mul_tail* -> { fold_binary(_state.user(), head, tail) }
 
         rule head_mul_tail -> (BinaryOp, Expr, Span) @= op:mul_op e:head_cast -> { (op, e, Span::from(_span)) }
 
         // `as` names a type ([ADR-285](../../../../docs/specification/adr/adr-285.md)),
         // and a type is not brace-led either - `i64`, `&str`, `Vec[T]`, `T?`.
-        rule head_cast -> Expr =
+        rule head_cast -> Expr @=
+            e:head_cast_bare -> { _state.user().at(e, _span) }
+
+        rule head_cast_bare -> Expr =
             head:head_unary casts:cast_tail* -> {
                 casts.into_iter().fold(head, |expr, ty| Expr::Cast {
                     expr: Box::new(expr),
@@ -3166,7 +3281,10 @@ grammar! {
                 })
             }
 
-        rule head_unary -> Expr =
+        rule head_unary -> Expr @=
+            e:head_unary_bare -> { _state.user().at(e, _span) }
+
+        rule head_unary_bare -> Expr =
             op:unary_op e:head_unary -> {
                 Expr::Unary { op, expr: Box::new(e), id: _state.user().id() }
             }
@@ -3186,7 +3304,10 @@ grammar! {
         // `dsl_from_expr` is here although its sibling is not: the form it
         // refuses has no brace, and the two are separate rules precisely because
         // one of them is a block and the other is not.
-        rule head_primary -> Expr =
+        rule head_primary -> Expr @=
+            e:head_primary_bare -> { _state.user().at(e, _span) }
+
+        rule head_primary_bare -> Expr =
             b:bool_lit -> { b }
           // Before `path_expr`, for the reason `primary_expr` gives.
           | s:f_str_lit -> { s }

@@ -266,3 +266,30 @@ fn a_node_the_parser_places_twice_is_two_nodes() {
     assert_eq!(base, receiver);
     assert_ne!(nikaia::ast::id_of(base), nikaia::ast::id_of(receiver));
 }
+
+/// **The span table is the parse's, and the same for the same source** (#107):
+/// two parses give the same ids and spans, each span is the text of its node,
+/// and a node the compiler builds has none.
+#[test]
+fn every_parsed_expression_has_its_span_and_a_built_one_has_none() {
+    let first = parse_to_ast(A_FILE).expect("parses");
+    let second = parse_to_ast(A_FILE).expect("parses");
+    assert_eq!(first.expr_spans, second.expr_spans);
+    assert!(!first.expr_spans.is_empty());
+    let texts: Vec<&str> = first
+        .expr_spans
+        .values()
+        .map(|span| &A_FILE[span.start as usize..span.end as usize])
+        .collect();
+    for written in [
+        "a + b * 2",
+        "b * 2",
+        "add(xs[0], xs[1]) + xs.len()",
+        "xs.len()",
+        "maybe ?? \"none\"",
+    ] {
+        assert!(texts.contains(&written), "{written}: {texts:?}");
+    }
+    let built = nikaia_std::node_id::NodeId::fresh();
+    assert_eq!(first.span_of(built.get()), None);
+}
