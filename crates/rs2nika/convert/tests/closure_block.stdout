@@ -1,0 +1,7 @@
+fn counted(rows: ref Vec[Held]) -> i64 sync {
+    let count = fn(want) {
+        rows.iter().filter(fn(c) { want(c) }).count()
+    }
+    return count(fn(h) { (match h { Held::Proved => true, else => false }) })
+}
+

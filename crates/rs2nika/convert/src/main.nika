@@ -1679,6 +1679,14 @@ fn rs2nika_closures(mut ctx: Rs2nikaCtx, given: ref String) -> String {
                 }
                 j = j + 1
             }
+            let args0 = rs2nika_join(names, ", ")
+            if block && d > 0 {
+                // the block closes on a later line: open the closure here
+                out.push_str(f"fn({args0}) {{")
+                rs2nika_hit(ctx, "R26")
+                at = b + 1
+                continue
+            }
             let mut body: String = rs2nika_text(c, b, j).trim().clone()
             if block {
                 body = body[1..<body.len() - 1].trim().clone()
