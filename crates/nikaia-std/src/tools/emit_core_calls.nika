@@ -779,6 +779,13 @@ impl EmitState {
                 out.push(".map(|held| held.get())")
             }
         }
+        // **A sequence's position is an `i64`**, as its count is.
+        if name == "position" && receiver != null {
+            let on = receiver ?? return
+            if self.facts.counted.contains(node_key(on)) {
+                out.push(".map(|at| at as i64)")
+            }
+        }
         // **Before the `.await`**, because it is the future that is boxed and not
         // what awaiting it comes to.
         if boxed {

@@ -2453,6 +2453,89 @@ touches = []
 # more than `?`.
 signature = "[T](self: Seq[T], f: fn(T)) -> Seq[T] ends"
 
+# --- Reductions and searches over a sequence (`docs/selfhosting-gaps.md`,
+# LANGUAGE). Each is the language below's own iterator method; the ones that
+# take a lambda have `sync(f)` for `map`'s reason.
+
+# Whether the function says yes to any element; it stops at the first yes.
+[fn."Seq::any"]
+pub = true
+sync = "sync(f)"
+touches = []
+signature = "[T](self: Seq[T], f: fn(T) -> bool) -> bool"
+
+# Whether the function says yes to every element; it stops at the first no.
+[fn."Seq::all"]
+pub = true
+sync = "sync(f)"
+touches = []
+signature = "[T](self: Seq[T], f: fn(T) -> bool) -> bool"
+
+# The first element the function says yes to, or nothing; it stops there.
+[fn."Seq::find"]
+pub = true
+sync = "sync(f)"
+touches = []
+signature = "[T](self: Seq[T], f: fn(T) -> bool) -> T?"
+
+# The position of the first element the function says yes to, or nothing.
+[fn."Seq::position"]
+pub = true
+sync = "sync(f)"
+touches = []
+signature = "[T](self: Seq[T], f: fn(T) -> bool) -> i64?"
+
+# Each element through a function, leaving out the ones it says `null` to.
+[fn."Seq::filter_map"]
+pub = true
+sync = "sync(f)"
+touches = []
+signature = "[T, U](self: Seq[T], f: fn(T) -> U?) -> Seq[U] ends"
+
+# The elements up to the first one the function says no to.
+[fn."Seq::take_while"]
+pub = true
+sync = "sync(f)"
+touches = []
+signature = "[T](self: Seq[T], f: fn(T) -> bool) -> Seq[T] ends"
+
+# The elements from the first one the function says no to.
+[fn."Seq::skip_while"]
+pub = true
+sync = "sync(f)"
+touches = []
+signature = "[T](self: Seq[T], f: fn(T) -> bool) -> Seq[T] ends"
+
+# The last element, or nothing where the sequence is empty. It walks all of it.
+[fn."Seq::last"]
+pub = true
+sync = true
+touches = []
+signature = "[T](self: Seq[T]) -> T?"
+
+# The largest element, or nothing where the sequence is empty; of equal ones
+# the last.
+[fn."Seq::max"]
+pub = true
+sync = true
+touches = []
+signature = "[T](self: Seq[T]) -> T?"
+
+# The smallest element, or nothing where the sequence is empty; of equal ones
+# the first.
+[fn."Seq::min"]
+pub = true
+sync = true
+touches = []
+signature = "[T](self: Seq[T]) -> T?"
+
+# The elements added up; `0` for an empty sequence.
+[fn."Seq::sum"]
+pub = true
+sync = true
+touches = []
+signature = "[T](self: Seq[T]) -> T"
+
 # --- The rest of a pipeline ([ADR-293](../../docs/specification/adr/adr-293.md) D20)
 #
 # None of these allocates: each is the language below's own adapter, walked one
@@ -3253,6 +3336,22 @@ pub = true
 sync = true
 touches = []
 signature = "(self: ref String, sep: ?) -> Seq[ref(self) String] sync ends"
+
+# The pieces of the text between each `sep`, each a view into it, from the
+# last to the first.
+[fn."str::rsplit"]
+pub = true
+sync = true
+touches = []
+signature = "(self: ref String, sep: ?) -> Seq[ref(self) String] sync ends"
+
+# The text cut in two at a byte position: what stands before it and what from
+# it on, both views into it. A position off a scalar's start aborts.
+[fn."str::split_at"]
+pub = true
+sync = true
+touches = []
+signature = "(self: ref String, at: i64) -> (ref(self) String, ref(self) String)"
 
 # **Each place the pattern stands, as a view of it** (#548). Nothing described
 # it, so its `count()` came through as Rust's `usize` and `0 - n` stopped the

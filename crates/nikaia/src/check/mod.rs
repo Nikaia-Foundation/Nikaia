@@ -7053,10 +7053,11 @@ impl<'a> Checker<'a> {
                         self.s.facts.text_in_lists.insert(value_node(receiver));
                     }
                     // **A sequence's count is an `i64`** (Part I 2.2): the
-                    // emitter writes the conversion a length has.
-                    let counts = [ty::SEQ, ty::PAR]
-                        .iter()
-                        .any(|of| key == format!("{of}::count"));
+                    // emitter writes the conversion a length has. So is the
+                    // position `position` finds.
+                    let counts = [ty::SEQ, ty::PAR].iter().any(|of| {
+                        key == format!("{of}::count") || key == format!("{of}::position")
+                    });
                     if counts && !self.world.own.functions.contains_key(&key) {
                         self.s.facts.counted.insert(value_node(receiver));
                     }
@@ -7094,9 +7095,12 @@ impl<'a> Checker<'a> {
                 // **`filter` is handed a reference to the item** below
                 // (ADR-231 D2); where the item copies, the parameter takes it
                 // by pattern and is the item.
-                if self.parsed.text(*method) == "filter"
-                    && let (Ty::Seq { item, .. }, [lambda @ Expr::Closure { params, .. }]) =
-                        (&on_for_the_stamp, args)
+                // So is `find`'s, `take_while`'s and `skip_while`'s.
+                if matches!(
+                    self.parsed.text(*method),
+                    "filter" | "find" | "take_while" | "skip_while"
+                ) && let (Ty::Seq { item, .. }, [lambda @ Expr::Closure { params, .. }]) =
+                    (&on_for_the_stamp, args)
                     && params.len() == 1
                     && !item.is_unknown()
                     && (item.is_a_view() || !crate::contracts::keeps::moves(item))

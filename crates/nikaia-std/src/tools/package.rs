@@ -24046,6 +24046,10 @@ impl EmitState {
             let on = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
             if self.reads_through_handle(world, &walk, &scope.function, on) { out.push(".map(|held| held.get())"); }
         }
+        if name == "position" && receiver.is_some() {
+            let on = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+            if self.facts.counted.contains(&node_key(on)) { out.push(".map(|at| at as i64)"); }
+        }
         if boxed { out.push(")"); }
         if self.facts.pausing_walks.contains(&on_node) { return Err(nikaia_std::error::raise(EmitRefused { message: format!("`{}` can't be used on a sequence whose steps pause. Write a `for x in … {{ … }}` loop instead, and do the work inside it.", name), at: Some(flow.statement) }, &"emit_core_method_call")); }
         if self.method_pauses(on_node) {

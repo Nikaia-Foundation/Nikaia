@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.886] — 2026-10-13
+
+**std: reductions and searches on Seq, rsplit and split_at on text**
+- `Seq` gains `any`, `all`, `find`, `position` (an `i64?`), `filter_map`, `last`, `take_while`, `skip_while`, `max`, `min` and `sum`; text gains `rsplit` and `split_at` (two views). The lambda of `find`, `take_while` and `skip_while` takes the element as `filter`'s does.
+
 ## [0.0.885] — 2026-10-13
 
 **json: an explicit null takes a field's default (ADR-344 D4, #604)**
