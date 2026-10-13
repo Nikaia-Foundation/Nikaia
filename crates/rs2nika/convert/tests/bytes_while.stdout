@@ -1,7 +1,7 @@
 fn shown(byte: u8) -> String sync {
     return match byte {
-        92 | 39 => f"b'\\{byte as scalar}'",
-        0x20..0x7e => f"b'{byte as scalar}'",
+        92 | 39 => f"b'\\{(byte as u8) as scalar}'",
+        0x20..0x7e => f"b'{(byte as u8) as scalar}'",
         127 | 10 => "odd".clone(),
         else => f"b'\\x{byte:02x}'",
     }

@@ -1,0 +1,10 @@
+fn quoted(text: ref String, byte: u8) -> String sync {
+    let mut out: String = ""
+    out.push((byte as u8) as scalar)
+    return out
+}
+
+fn all_known(xs: ref Vec[Ty]) -> bool sync {
+    return xs.iter().all(fn(x) { wholly_known(x) }) && xs.iter().any(fn(x) { x.is_named() })
+}
+

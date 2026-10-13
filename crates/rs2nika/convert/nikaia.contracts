@@ -74,6 +74,12 @@ touches = []
 views = ["given: borrowed"]
 signature = "(mut ctx: Rs2nikaCtx, given: ref String) -> String"
 
+[fn."rs2nika_capacity_char"]
+sync = "inferred"
+touches = []
+views = ["given: borrowed"]
+signature = "(mut ctx: Rs2nikaCtx, given: ref String) -> String"
+
 [fn."rs2nika_char_index"]
 sync = "inferred"
 touches = []
@@ -272,6 +278,12 @@ touches = []
 views = ["text: borrowed"]
 signature = "(text: ref String) -> bool"
 
+[fn."rs2nika_iter_recv"]
+sync = "inferred"
+touches = []
+views = ["recv: borrowed"]
+signature = "(recv: ref String) -> bool"
+
 [fn."rs2nika_join"]
 sync = "inferred"
 touches = []
@@ -375,6 +387,18 @@ touches = []
 views = ["code: borrowed"]
 signature = "(code: ref String) -> i64"
 
+[fn."rs2nika_opt_comb"]
+sync = "inferred"
+touches = []
+views = ["given: borrowed"]
+signature = "(given: ref String) -> String"
+
+[fn."rs2nika_opt_comb_hit"]
+sync = "inferred"
+touches = []
+views = ["given: borrowed"]
+signature = "(mut ctx: Rs2nikaCtx, given: ref String) -> String"
+
 [fn."rs2nika_option_arm"]
 sync = "inferred"
 touches = []
@@ -403,6 +427,13 @@ sync = "inferred"
 touches = []
 views = ["given: borrowed"]
 signature = "(mut ctx: Rs2nikaCtx, given: ref String) -> String"
+
+[fn."rs2nika_recv_start"]
+sync = "inferred"
+keeps = ["at"]
+touches = []
+views = ["c: borrowed"]
+signature = "(c: ref Vec[scalar], at: i64) -> i64"
 
 [fn."rs2nika_renamed"]
 sync = "inferred"

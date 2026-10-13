@@ -72,7 +72,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R23  `if let Some(x) = e {` -> `if e != null {` + `let x = e ?? panic(..)`",
         "R24  `if let P = e {` ... `} else {` ... `}` -> `match e { P => {..}, else => {..} }` (single let, optional `&& guard`)",
         "R25  `for x in &xs` / `xs.iter()` -> `for x in xs`",
-        "R26  closures `|x| e` -> `fn(x) { e }`; `.any(|x| p)` -> `.filter fn(x) { p }.count() > 0`; `.all(..)` likewise",
+        "R26  closures `|x| e` -> `fn(x) { e }`; `.any`/`.all`/`.find` pass through (`Seq`), a function name `.any(f)` -> `.any(fn(x) { f(x) })`",
         "R27  `.collect::<T>()` -> `.collect()`",
         "R28  path prefixes `crate::ast::`, `ast::`, `crate::types::`, `ty::` dropped",
         "R29  `.as_ref()`, `.as_slice()`, `.as_str()`, `.as_deref()`, `.borrow()` dropped",
@@ -105,6 +105,8 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R56  `while let P = e && let Some(t) = f {` -> `while true {` + `let t = f ?? break` / `match e { P => x, else => break }`",
         "R57  a byte literal `b'x'` -> its number (`b'\\\\'` -> `92`)",
         "R58  a line on Rust-only types (`&[&Parsed]`, `Ledger`, `check(..)`, `once(..)`) -> `// ADAPTER: bleibt in Rust`",
+        "R59  Option combinators with a field or method body: `o.map(|x| x.f)` -> `o?.f`, `.is_some_and(|x| x.p())` -> `(o?.p() ?? false)`, `.map_or(d, ..)` -> `(o?.. ?? d)`",
+        "R60  `String::with_capacity(n)` -> `\"\"`",
     ]
 }
 
@@ -1407,7 +1409,7 @@ fn rs2nika_some(mut ctx: Rs2nikaCtx, given: ref String) -> String {
                 }
                 k = k + 1
             }
-            if lead && arrow < 0 {
+            if lead {
                 ok = true
             }
             if ok {
@@ -1648,7 +1650,7 @@ fn rs2nika_expr(mut ctx: Rs2nikaCtx, line: ref String) -> String {
         s = rs2nika_rep(ctx, s, m, "collections::BTreeSet()", "R17")
     }
     s = rs2nika_rep(ctx, s, "Box::new(", "(", "R9")
-    s = rs2nika_rep(ctx, s, " as char", " as scalar", "R57")
+    s = rs2nika_capacity_char(ctx, s)
     if s.contains("\".to_string()") {
         s = s.replace("\".to_string()", "\".clone()")
         rs2nika_hit(ctx, "R16")
@@ -1690,6 +1692,7 @@ fn rs2nika_expr(mut ctx: Rs2nikaCtx, line: ref String) -> String {
     s = rs2nika_rep(ctx, s, "::default()", "::empty()", "R38")
     s = rs2nika_ty_named(ctx, s)
     s = rs2nika_replace_word(s, "self.parsed", "world")
+    s = rs2nika_opt_comb_hit(ctx, s)
     s = rs2nika_adapters(ctx, s)
     s = rs2nika_closures(ctx, s)
     s = rs2nika_some(ctx, s)
@@ -1697,6 +1700,173 @@ fn rs2nika_expr(mut ctx: Rs2nikaCtx, line: ref String) -> String {
     s = rs2nika_idioms(ctx, s)
     if ctx.fn_opt {
         s = rs2nika_question(ctx, s)
+    }
+    if s.contains("¿") {
+        s = s.replace("¿", "?")
+    }
+    return s
+}
+
+/// Where the receiver of a method call at `at` starts: a postfix chain of
+/// names, `.`, `::` and balanced `(..)`/`[..]`.
+fn rs2nika_recv_start(c: ref Vec[scalar], at: i64) -> i64 {
+    let mut b = at
+    let mut depth = 0
+    while b > 0 {
+        let p = c[b - 1]
+        if p == ')' || p == ']' {
+            depth = depth + 1
+        } else if p == '(' || p == '[' {
+            if depth == 0 {
+                break
+            }
+            depth = depth - 1
+        } else if depth == 0 && !(rs2nika_path_char(p) || p == '.') {
+            break
+        }
+        b = b - 1
+    }
+    return b
+}
+
+/// A receiver that is an iterator, not an `Option`.
+fn rs2nika_iter_recv(recv: ref String) -> bool {
+    for m in ["iter()", "chars()", "lines()", "bytes()", "split", "keys()", "values()", "windows(", "drain(", "args()", "zip("] {
+        if recv.contains(m) {
+            return true
+        }
+    }
+    return false
+}
+
+/// R59: `o.map(|x| x.f)` -> `o?.f`, `o.and_then(|x| x.g())` -> `o?.g()`,
+/// `o.is_some_and(|x| x.p())` -> `(o?.p() ?? false)`, `o.map_or(d, |x| x.f)`
+/// -> `(o?.f ?? d)`; every step of the chain gets its own `?.`. The `?` is
+/// written `¿` until R35 has run.
+/// R59 with its hit counted.
+fn rs2nika_opt_comb_hit(mut ctx: Rs2nikaCtx, given: ref String) -> String {
+    let out: String = rs2nika_opt_comb(given)
+    if out != given {
+        rs2nika_hit(ctx, "R59")
+    }
+    return out
+}
+
+fn rs2nika_opt_comb(given: ref String) -> String {
+    let mut s: String = given.clone()
+    for name in ["map", "and_then", "is_some_and", "map_or"] {
+        let mut from = 0
+        while true {
+            let c: Vec[scalar] = s.chars().collect()
+            let at = rs2nika_find_from(c, f".{name}(", from)
+            if at < 0 {
+                break
+            }
+            from = at + 1
+            let open = at + name.len() + 1
+            let end = rs2nika_closing(c, open, '(', ')')
+            if end < 0 {
+                break
+            }
+            let start = rs2nika_recv_start(c, at)
+            let recv: String = rs2nika_text(c, start, at)
+            if recv == "" || rs2nika_iter_recv(recv) {
+                continue
+            }
+            let mut arg: String = rs2nika_text(c, open + 1, end).trim().clone()
+            let mut dflt: String = ""
+            if name == "map_or" {
+                let comma = arg.find(", |") ?? continue
+                dflt = arg[0..<comma].trim().clone()
+                arg = arg[comma + 2..<arg.len()].clone()
+            }
+            if !arg.starts_with("|") {
+                continue
+            }
+            let after: String = arg[1..<arg.len()].clone()
+            let bar = after.find("|") ?? continue
+            let v: String = after[0..<bar].trim().clone()
+            let mut body: String = after[bar + 1..<after.len()].trim().clone()
+            if body.starts_with("&") {
+                body = body[1..<body.len()].clone()
+            }
+            let vd = body.find(".") ?? 0
+            let head_v: String = body[0..<vd].clone()
+            if !rs2nika_is_path(v) || v.contains(":") || head_v != v {
+                continue
+            }
+            let rest: String = body[v.len() + 1..<body.len()].clone()
+            if rs2nika_replace_word(rest, v, "#") != rest {
+                continue
+            }
+            let rc: Vec[scalar] = rest.chars().collect()
+            if rest == "" || rs2nika_recv_start(rc, rc.len()) != 0 {
+                continue
+            }
+            let mut chain: String = "¿."
+            let mut depth = 0
+            for ch in rc {
+                if ch == '(' || ch == '[' {
+                    depth = depth + 1
+                } else if ch == ')' || ch == ']' {
+                    depth = depth - 1
+                }
+                if ch == '.' && depth == 0 {
+                    chain.push_str("¿.")
+                } else {
+                    chain.push(ch)
+                }
+            }
+            let pre: String = rs2nika_text(c, 0, start)
+            let post: String = rs2nika_text(c, end + 1, c.len())
+            if name == "is_some_and" {
+                s = f"{pre}({recv}{chain} ?? false){post}"
+            } else if name == "map_or" {
+                s = f"{pre}({recv}{chain} ?? {dflt}){post}"
+            } else {
+                s = f"{pre}{recv}{chain}{post}"
+            }
+            from = 0
+        }
+    }
+    return s
+}
+
+/// R60: `String::with_capacity(n)` -> `""`; R57: `x as char` -> `(x as u8) as scalar`.
+fn rs2nika_capacity_char(mut ctx: Rs2nikaCtx, given: ref String) -> String {
+    let mut s: String = given.clone()
+    let eq = s.find(" = String::with_capacity(") ?? 0
+    let lhs: String = s[0..<eq].clone()
+    if eq > 0 && lhs.trim_start().starts_with("let ") && !lhs.contains(":") {
+        s = s.replace(" = String::with_capacity(", ": String = String::with_capacity(")
+    }
+    while true {
+        let c: Vec[scalar] = s.chars().collect()
+        let at = rs2nika_find_from(c, "String::with_capacity(", 0)
+        if at < 0 {
+            break
+        }
+        let end = rs2nika_closing(c, at + 21, '(', ')')
+        if end < 0 {
+            break
+        }
+        let pre: String = rs2nika_text(c, 0, at)
+        let post: String = rs2nika_text(c, end + 1, c.len())
+        s = f"{pre}\"\"{post}"
+        rs2nika_hit(ctx, "R60")
+    }
+    while true {
+        let c: Vec[scalar] = s.chars().collect()
+        let at = rs2nika_find_from(c, " as char", 0)
+        if at < 0 {
+            break
+        }
+        let start = rs2nika_recv_start(c, at)
+        let x: String = rs2nika_text(c, start, at)
+        let pre: String = rs2nika_text(c, 0, start)
+        let post: String = rs2nika_text(c, at + 8, c.len())
+        s = f"{pre}({x} as u8) as scalar{post}"
+        rs2nika_hit(ctx, "R57")
     }
     return s
 }
@@ -1872,6 +2042,7 @@ fn rs2nika_simple_slice(text: ref String) -> bool {
 
 /// The `TODO(rs2nika)` markers a Rust line asks for.
 fn rs2nika_todos(line: ref String) -> Vec[String] {
+    let comb: String = rs2nika_opt_comb(line)
     let mut todo: Vec[String] = []
     let st: String = line.trim().clone()
     if line.contains(" && let ") || ((st.starts_with("if let ") || st.starts_with("} else if let ")) && st.ends_with("&&")) || st.starts_with("&& let ") {
@@ -1881,7 +2052,7 @@ fn rs2nika_todos(line: ref String) -> Vec[String] {
         todo.push("`static`: no globals in tools/*.nika; a field of the state struct")
     }
     let map_end = line.trim_end().ends_with(")") && line.contains(".map(|")
-    if line.contains(".and_then(") || (line.contains(".map(|") && (line.contains("?") || line.contains("unwrap_or") || map_end) && !line.contains("iter()")) {
+    if comb.contains(".and_then(") || (comb.contains(".map(|") && (line.contains("?") || line.contains("unwrap_or") || map_end) && !line.contains("iter()")) {
         todo.push("`Option::map`/`and_then`: `let x = e ?? <none>` then the body")
     }
     if line.contains("-> Option<(") {
@@ -1905,14 +2076,8 @@ fn rs2nika_todos(line: ref String) -> Vec[String] {
     if line.contains(".entry(") {
         todo.push("`.entry(..)`: read with `??`, then write `m[k] = v`")
     }
-    if line.contains("is_some_and") || line.contains("is_ok_and") || line.contains("map_or") {
+    if comb.contains("is_some_and") || comb.contains("is_ok_and") || comb.contains("map_or") {
         todo.push("`is_some_and`/`map_or`: `let x = e ?? <false>` then the test")
-    }
-    if head_end > 0 && (head.contains("} | ") || head.contains(") | ")) && head.contains("::") {
-        todo.push("or-pattern over variants: one arm per variant")
-    }
-    if head_end > 0 && head.contains(" if ") && (head.contains(": false") || head.contains(": true") || head.contains(": \"")) {
-        todo.push("a literal field in a pattern with a guard: bind the field and test it in the arm (`view } => if !view && ..`)")
     }
     // `.any`/`.all`/`.find` with a closure or a function name are rewritten
     // (R26); `.find` with anything else is `str::find`, which Nikaia has.
@@ -1938,7 +2103,7 @@ fn rs2nika_todos(line: ref String) -> Vec[String] {
             from = at + 1
         }
     }
-    for a in [".position(", ".find_map(", ".filter_map(", ".flat_map(", ".fold(",".take_while(", ".skip(", ".last(", ".max(", ".min(", ".sum("] {
+    for a in [".find_map(", ".flat_map(", ".fold(", ".skip("] {
         if line.contains(a) {
             todo.push("iterator adapter with no `Seq` method: a `for` loop")
             return todo
@@ -2558,10 +2723,6 @@ pub fn rs2nika_convert(src: ref String, profile: ref String, prefix: ref String,
                 rs2nika_hit(ctx, "R58")
             }
             if sig != "" {
-                if raw.contains("-> Option<&") {
-                    let si = rs2nika_indent(raw)
-                    out.push(f"{si}// TODO(rs2nika): no optional view `ref T?` in tools/*.nika: return `T?` with `.clone()` at each return; the Rust caller then lends it (`f(&m)`)")
-                }
                 out.push(sig)
             } else if iflet.len() > 0 && iflet[0] != "=" {
                 for l in iflet {
@@ -2898,23 +3059,9 @@ fn rs2nika_adapters(mut ctx: Rs2nikaCtx, given: ref String) -> String {
             let mut body: String = ""
             let mut end = 0
             if b < c.len() && c[b] == '|' {
-                let mut bar = b + 1
-                while bar < c.len() && c[bar] != '|' {
-                    bar = bar + 1
-                }
-                let mut e = bar + 1
-                while e < c.len() && c[e] == ' ' {
-                    e = e + 1
-                }
-                head = rs2nika_text(c, b, e)
-                end = rs2nika_closing(c, open, '(', ')')
-                if end < 0 {
-                    break
-                }
-                body = rs2nika_text(c, e, end).trim().clone()
-                if body.starts_with("{") && body.ends_with("}") {
-                    body = body[1..<body.len() - 1].trim().clone()
-                }
+                // a closure: `Seq::any`/`all`/`find` take it as it is
+                from = at + 1
+                continue
             } else {
                 let mut e = b
                 while e < c.len() && rs2nika_path_char(c[e]) {
@@ -2932,13 +3079,7 @@ fn rs2nika_adapters(mut ctx: Rs2nikaCtx, given: ref String) -> String {
             }
             let pre: String = rs2nika_text(c, 0, at)
             let post: String = rs2nika_text(c, end + 1, c.len())
-            if name == "any" {
-                s = f"{pre}.filter({head}{body}).count() > 0{post}"
-            } else if name == "all" {
-                s = f"{pre}.filter({head}!({body})).count() == 0{post}"
-            } else {
-                s = f"{pre}.filter({head}{body}).next(){post}"
-            }
+            s = f"{pre}.{name}({head}{body}){post}"
             rs2nika_hit(ctx, "R26")
             from = at + 1
         }

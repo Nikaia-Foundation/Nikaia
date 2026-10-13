@@ -1,0 +1,14 @@
+fn is_text(e: ref Expr) -> bool sync {
+    return match e {
+        Expr::LitStr { .. } | Expr::LitInterpolated { .. } => true,
+        else => false,
+    }
+}
+
+fn error_of(t: ref Ty) -> ref Ty? sync {
+    return match t {
+        Ty::Named { name, args, view: false } if name == "Error" => args.first(),
+        else => null,
+    }
+}
+

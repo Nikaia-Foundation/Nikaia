@@ -1,0 +1,16 @@
+fn tail_of(block: ref Block) -> ref Expr? sync {
+    return block.stmts.last()?.node
+}
+
+fn named(t: ref Ty?) -> bool sync {
+    return (t?.is_named() ?? false)
+}
+
+fn width(t: ref Ty?) -> i64 sync {
+    return (t?.name?.len() ?? 0)
+}
+
+fn sizes(xs: ref Vec[Ty]) -> Vec[i64] sync {
+    return xs.iter().map(fn(x) { x.size }).collect()
+}
+
