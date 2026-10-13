@@ -419,3 +419,14 @@ fn array_parts_copied(args: ref Vec[Ty], copies: ref collections::BTreeSet[Strin
     }
     return true
 }
+
+/// The value a block ends in: its last statement, where that is an expression.
+pub fn tail_value_of(block: ref Block) -> ref Expr? {
+    if block.stmts.len() == 0 {
+        return null
+    }
+    return match block.stmts[block.stmts.len() - 1].node {
+        Stmt::Expr(value) => value,
+        else => null,
+    }
+}

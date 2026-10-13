@@ -19421,6 +19421,14 @@ fn array_parts_copied(args: &[Ty], copies: &collections::BTreeSet<String>) -> bo
     true
 }
 
+pub fn tail_value_of(block: &Block) -> Option<&Expr> {
+    if block.stmts.is_empty() { return None; }
+    match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1)).node {
+        Stmt::Expr(value) => Some(value),
+        _ => None,
+    }
+}
+
 
 // --- check_values.nika ---
 
@@ -20508,6 +20516,63 @@ pub fn boxed_member(owner: &str, at: i64, field: &str) -> String {
     if at >= 0 { return format!("{}#{}", owner, at); }
     if !field.is_empty() { return format!("{}.{}", owner, field); }
     owner.to_owned()
+}
+
+pub fn articles(text: &str) -> String {
+    let c: Vec<scalar> = nikaia_std::list::chars(text.chars());
+    let mut out: String = String::from("");
+    let mut before: Vec<scalar> = vec![];
+    let mut at: i64 = 0;
+    while at < c.len() as i64 {
+        if *nikaia_std::index::get(&c, nikaia_std::index::at(at)) != '`' {
+            before.push(*nikaia_std::index::get(&c, nikaia_std::index::at(at)));
+            at += 1;
+            continue;
+        }
+        let mut word: String = String::from("");
+        let mut end: i64 = at + 1;
+        while end < c.len() as i64 && *nikaia_std::index::get(&c, nikaia_std::index::at(end)) != '`' {
+            word.push(*nikaia_std::index::get(&c, nikaia_std::index::at(end)));
+            end += 1;
+        }
+        let close = if end < c.len() as i64 { end + 1 } else { c.len() as i64 };
+        let written = article_written_before(&before);
+        let mut kept = before.len() as i64;
+        if written > 0 && at + 1 < c.len() as i64 && (*nikaia_std::index::get(&c, nikaia_std::index::at(at + 1))).is_alphanumeric() { kept = before.len() as i64 - written; }
+        let mut i: i64 = 0;
+        while i < kept {
+            out.push(*nikaia_std::index::get(&before, (i) as usize));
+            i += 1;
+        }
+        if kept < before.len() as i64 {
+            let right = article(&word);
+            if *nikaia_std::index::get(&before, nikaia_std::index::at(kept)) == 'A' { if right == "an" { out.push_str("An"); } else { out.push_str("A"); } } else { out.push_str(&right); }
+            out.push(' ');
+        }
+        before = vec![];
+        let mut j: i64 = at;
+        while j < close {
+            out.push(*nikaia_std::index::get(&c, nikaia_std::index::at(j)));
+            j += 1;
+        }
+        at = close;
+    }
+    for ch in before.iter() {
+        let ch = nikaia_std::num::value(ch);
+        out.push(ch);
+    }
+    out
+}
+
+fn article_written_before(b: &[scalar]) -> i64 {
+    let n = b.len() as i64;
+    if n < 2 || *nikaia_std::index::get(&b, nikaia_std::index::at(n - 1)) != ' ' { return 0; }
+    let mut written: i64 = 0;
+    if *nikaia_std::index::get(&b, nikaia_std::index::at(n - 2)) == 'a' || *nikaia_std::index::get(&b, nikaia_std::index::at(n - 2)) == 'A' { written = 2; } else if n >= 3 && *nikaia_std::index::get(&b, nikaia_std::index::at(n - 2)) == 'n' && (*nikaia_std::index::get(&b, nikaia_std::index::at(n - 3)) == 'a' || *nikaia_std::index::get(&b, nikaia_std::index::at(n - 3)) == 'A') { written = 3; }
+    if written == 0 || n == written { return written; }
+    let last = *nikaia_std::index::get(&b, nikaia_std::index::at(n - written - 1));
+    if last.is_alphanumeric() || last == '`' || last == '_' { return 0; }
+    written
 }
 
 
@@ -42409,7 +42474,7 @@ fn a_stop(name: Option<&str>) -> bool {
     called == "panic"
 }
 
-fn unpromised(claim: &Sync) -> bool { matches!(claim, Sync::Unpromised) }
+fn unpromised(claim: &Sync) -> bool { claim.is_unpromised() }
 
 fn violation(promise: &Promise, span: &Span, callee: &str, from_library: bool, unpromised: bool, construct: bool) -> Violation { Violation { span: span.clone(), caller: promise.caller.to_owned(), promise: promise.promise.to_owned(), callee: callee.to_owned(), from_library, unpromised, construct } }
 
@@ -46564,6 +46629,7 @@ pub enum Sync {
 
 impl Sync {
     pub fn is_sync(&self) -> bool { !matches!(self, Sync::No | Sync::Unpromised) }
+    pub fn is_unpromised(&self) -> bool { matches!(self, Sync::Unpromised) }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -49988,7 +50054,7 @@ pub mod check_texts {
 }
 pub mod check_types {
     #[allow(unused_imports)]
-    pub use super::{a_number_name, type_last_segment, view_of_type, viewed_from_type, unviewed_type, copies_as_a_view, value_of_a_copy, is_a_view_of_a_string, a_copy_by_value, moves_away, copies_plainly, holds_an_array, is_a_list_type, is_a_collection_type, is_text_type, is_a_hull, locked_content_of, is_a_handle, locked_content, becomes_shared, way_out_of_a_mismatch, element_walked, elements_walked, wholly_known, a_map_type, is_a_literal_other_than, a_copied_part};
+    pub use super::{a_number_name, type_last_segment, view_of_type, viewed_from_type, unviewed_type, copies_as_a_view, value_of_a_copy, is_a_view_of_a_string, a_copy_by_value, moves_away, copies_plainly, holds_an_array, is_a_list_type, is_a_collection_type, is_text_type, is_a_hull, locked_content_of, is_a_handle, locked_content, becomes_shared, way_out_of_a_mismatch, element_walked, elements_walked, wholly_known, a_map_type, is_a_literal_other_than, a_copied_part, tail_value_of};
 }
 pub mod check_values {
     #[allow(unused_imports)]
@@ -50016,7 +50082,7 @@ pub mod check_with {
 }
 pub mod check_words {
     #[allow(unused_imports)]
-    pub use super::{reserved_elsewhere, nearest_name, with_article, article, counted, names_listed, indented_text, brace_groups, not_promised_note, is_a_lookup, boxed_member};
+    pub use super::{reserved_elsewhere, nearest_name, with_article, article, counted, names_listed, indented_text, brace_groups, not_promised_note, is_a_lookup, boxed_member, articles};
 }
 pub mod claim_names {
     #[allow(unused_imports)]

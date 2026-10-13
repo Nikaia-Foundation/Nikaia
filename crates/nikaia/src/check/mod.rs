@@ -13931,10 +13931,7 @@ fn wholly_known(ty: &Ty) -> bool {
 }
 
 fn tail_of(block: &Block) -> Option<&Expr> {
-    match block.stmts.last().map(|s| &s.node) {
-        Some(Stmt::Expr(value)) => Some(value),
-        _ => None,
-    }
+    nikaia_std::tools::check_types::tail_value_of(block)
 }
 
 impl Checker<'_> {
@@ -14082,47 +14079,7 @@ fn is_number(name: &str) -> bool {
 /// `u8``. Only the article directly before a backtick, so prose and code
 /// samples are left as they are.
 fn articles(text: &str) -> String {
-    let mut out = String::with_capacity(text.len() + 8);
-    let mut rest = text;
-    while let Some(at) = rest.find('`') {
-        let (before, from) = rest.split_at(at);
-        let fixed = ["a ", "an ", "A ", "An "].iter().find_map(|article| {
-            let head = before.strip_suffix(article)?;
-            let starts_a_word = head
-                .chars()
-                .next_back()
-                .is_none_or(|c| !c.is_alphanumeric() && c != '`' && c != '_');
-            starts_a_word.then_some((head, *article))
-        });
-        match fixed {
-            // **A word that starts with a sign keeps what was written**: `an
-            // `|` pattern` is said *an or-pattern*, and no rule reads that.
-            Some((head, article))
-                if from[1..].chars().next().is_some_and(char::is_alphanumeric) =>
-            {
-                let word: String = from[1..].chars().take_while(|c| *c != '`').collect();
-                let right = nikaia_std::tools::check_words::article(&word);
-                let right = match article.starts_with('A') {
-                    true => {
-                        let mut capital = right[..1].to_uppercase();
-                        capital.push_str(&right[1..]);
-                        capital
-                    }
-                    false => right,
-                };
-                out.push_str(head);
-                out.push_str(&right);
-                out.push(' ');
-            }
-            _ => out.push_str(before),
-        }
-        // The backticked word itself, closing tick included, is copied as it is.
-        let close = from[1..].find('`').map_or(from.len(), |end| end + 2);
-        out.push_str(&from[..close]);
-        rest = &from[close..];
-    }
-    out.push_str(rest);
-    out
+    nikaia_std::tools::check_words::articles(text)
 }
 
 /// What a template's `<for>` binds around a hole: each name beside the
@@ -14492,7 +14449,7 @@ fn is_text(ty: &Ty) -> bool {
 /// ([ADR-288](../../docs/specification/adr/adr-288.md) D28): the one reading of
 /// *may pause* that is not a pause.
 fn unpromised(contract: &FnContract) -> bool {
-    contract.sync_claim == crate::contracts::Sync::Unpromised
+    contract.sync_claim.is_unpromised()
 }
 
 /// The whole-number types an operation may be written unchecked in

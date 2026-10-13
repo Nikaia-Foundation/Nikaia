@@ -197,3 +197,87 @@ pub fn boxed_member(owner: ref String, at: i64, field: ref String) -> String {
     }
     return owner.clone()
 }
+
+/// **A message's articles, said by the word that follows** (#511): `a` or `an`
+/// before a backticked word is set by `article`, `A`/`An` keep their capital,
+/// and a word that starts with a sign keeps what was written. The backticked
+/// word itself, closing tick included, is copied as it is.
+pub fn articles(text: ref String) -> String {
+    let c: Vec[scalar] = text.chars().collect()
+    let mut out: String = ""
+    let mut before: Vec[scalar] = []
+    let mut at = 0
+    while at < c.len() {
+        if c[at] != '`' {
+            before.push(c[at])
+            at += 1
+            continue
+        }
+        let mut word: String = ""
+        let mut end = at + 1
+        while end < c.len() && c[end] != '`' {
+            word.push(c[end])
+            end += 1
+        }
+        let close = if end < c.len() { end + 1 } else { c.len() }
+        let written = article_written_before(before)
+        let mut kept = before.len()
+        if written > 0 && at + 1 < c.len() && c[at + 1].is_alphanumeric() {
+            kept = before.len() - written
+        }
+        let mut i = 0
+        while i < kept {
+            out.push(before[i])
+            i += 1
+        }
+        if kept < before.len() {
+            let right = article(word)
+            if before[kept] == 'A' {
+                if right == "an" {
+                    out.push_str("An")
+                } else {
+                    out.push_str("A")
+                }
+            } else {
+                out.push_str(right)
+            }
+            out.push(' ')
+        }
+        before = []
+        let mut j = at
+        while j < close {
+            out.push(c[j])
+            j += 1
+        }
+        at = close
+    }
+    for ch in before {
+        out.push(ch)
+    }
+    return out
+}
+
+/// How many characters of `a `, `an `, `A ` or `An ` end the text, where the
+/// article starts a word; none is 0.
+fn article_written_before(b: ref Vec[scalar]) -> i64 {
+    let n = b.len()
+    if n < 2 || b[n - 1] != ' ' {
+        return 0
+    }
+    let mut written = 0
+    if b[n - 2] == 'a' || b[n - 2] == 'A' {
+        written = 2
+    } else {
+        if n >= 3 && b[n - 2] == 'n' && (b[n - 3] == 'a' || b[n - 3] == 'A') {
+            written = 3
+        }
+    }
+    if written == 0 || n == written {
+        return written
+    }
+    let last = b[n - written - 1]
+    if last.is_alphanumeric() || last == '`' || last == '_' {
+        return 0
+    }
+    return written
+}

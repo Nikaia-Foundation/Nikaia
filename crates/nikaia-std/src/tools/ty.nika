@@ -706,6 +706,14 @@ impl Sync {
             else => true,
         }
     }
+
+    /// The one reading of *may pause* that is not a pause (ADR-288 D28).
+    pub fn is_unpromised(ref self) -> bool {
+        return match self {
+            Sync::Unpromised => true,
+            else => false,
+        }
+    }
 }
 
 /// **Whether a function takes a lock** (ADR-281 D28): not, yes, or nobody can

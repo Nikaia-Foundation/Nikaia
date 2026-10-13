@@ -476,10 +476,7 @@ fn a_stop(name: ref String?) -> bool {
 }
 
 fn unpromised(claim: ref Sync) -> bool {
-    return match claim {
-        Sync::Unpromised => true,
-        else => false,
-    }
+    return claim.is_unpromised()
 }
 
 fn violation(promise: ref Promise, span: ref Span, callee: ref String, from_library: bool, unpromised: bool, construct: bool) -> Violation {

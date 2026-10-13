@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.873] — 2026-10-13
+
+**Check: articles, tail_of and unpromised in Nikaia**
+- `articles` moves to `tools/check_words.nika`, `tail_of` to `check_types::tail_value_of` (returning `ref Expr?`), and `unpromised` calls the new `Sync::is_unpromised` (#125, #558).
+
 ## [0.0.872] — 2026-10-13
 
 **emit: a cast is cast once and borrowed whole (lowering defects D7, D8; #125)**
