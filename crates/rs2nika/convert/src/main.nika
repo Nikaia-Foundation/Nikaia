@@ -199,13 +199,30 @@ fn rs2nika_split_args(text: ref String) -> Vec[String] {
     let mut out: Vec[String] = []
     let mut cur: String = ""
     let mut depth = 0
+    let mut quoted = false
+    let mut prev = ' '
+    let mut escaped = false
     for ch in text.chars() {
-        if ch == '<' || ch == '(' || ch == '[' || ch == '{' {
+        // `->`, `=>` and a spaced comparison are no brackets; a string's
+        // commas are no separators.
+        let arrow = prev == '-' || prev == '=' || prev == ' '
+        if quoted {
+            if escaped {
+                escaped = false
+            } else if ch == '\\' {
+                escaped = true
+            } else if ch == '"' {
+                quoted = false
+            }
+        } else if ch == '"' {
+            quoted = true
+        } else if (ch == '<' && prev != ' ') || ch == '(' || ch == '[' || ch == '{' {
             depth = depth + 1
-        } else if ch == '>' || ch == ')' || ch == ']' || ch == '}' {
+        } else if (ch == '>' && !arrow) || ch == ')' || ch == ']' || ch == '}' {
             depth = depth - 1
         }
-        if ch == ',' && depth == 0 {
+        prev = ch
+        if ch == ',' && depth == 0 && !quoted {
             out.push(cur.trim().clone())
             cur = ""
         } else {
@@ -1115,6 +1132,14 @@ fn rs2nika_format(mut ctx: Rs2nikaCtx, given: ref String) -> String {
             }
         }
         let filled = rs2nika_holes(text, pos, named_k, named_v)
+        if filled.contains("{?}") {
+            ctx.todo_extra.push("`format!` with fewer arguments than holes: `{?}` is a missing one")
+        }
+        for a in pos {
+            if a.contains("\"") || a.contains("{") {
+                ctx.todo_extra.push(f"an f-string hole holds `{a}`: bind it to a `let` first")
+            }
+        }
         let before = rs2nika_text(c, 0, start)
         let after = rs2nika_text(c, j, c.len())
         s = f"{before}f\"{filled}\"{after}"
@@ -2186,7 +2211,14 @@ pub fn rs2nika_convert(src: ref String, profile: ref String, prefix: ref String,
                     out.push(f"{ind}// TODO(rs2nika): {t}")
                 }
                 let typed = rs2nika_let_type(ctx, line)
+                let before_expr = ctx.todo_extra.len()
                 let mut code: String = rs2nika_expr(ctx, typed).trim_end().clone()
+                let mut k = before_expr
+                while k < ctx.todo_extra.len() {
+                    let t = ctx.todo_extra[k].clone()
+                    out.push(f"{ind}// TODO(rs2nika): {t}")
+                    k = k + 1
+                }
                 if code.ends_with(";") && !code.trim_start().starts_with("//") {
                     code = code[0..<code.len() - 1].clone()
                     rs2nika_hit(ctx, "R1")
