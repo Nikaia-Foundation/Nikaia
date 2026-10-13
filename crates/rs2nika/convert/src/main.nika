@@ -108,6 +108,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R59  Option combinators with a field or method body: `o.map(|x| x.f)` -> `o?.f`, `.is_some_and(|x| x.p())` -> `(o?.p() ?? false)`, `.map_or(d, ..)` -> `(o?.. ?? d)`",
         "R60  `String::with_capacity(n)` -> `\"\"`",
         "R61  a call or a literal in a `format!` argument -> `let hole_N = ..` before the line, `{hole_N}` in the f-string",
+        "R64  `let x = match e { Some(v) => v, None => return y }` (also `continue`/`break`, in loops too) -> `let x = e ?? return y`",
         "R63  what R59 leaves of `o.is_some_and(..)`: `o.is_some_and(|x| p)` -> `(o != null && p)` with `x` read as `(o ?? panic(..))`, `o.is_some_and(f)` -> `(o != null && f(o ?? panic(..)))`",
         "R62  a local closure with arguments -> `let f: fn(ref T) -> R sync = fn(a) { .. }`, its type from the `--facts` file (rust-analyzer) or from its own annotations",
     ]
@@ -2296,12 +2297,27 @@ fn rs2nika_option_matches(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[St
             continue
         }
         let mut new: Vec[String] = []
-        new.push(f"{ind}{pre}if let {first[0]} = {subject} {{")
-        rs2nika_arm_body(new, out, starts[0], starts[1], first[1], arm)
-        new.push(f"{ind}}} else {{")
-        rs2nika_arm_body(new, out, starts[1], j, second[1], arm)
-        let tail: String = out[j].trim()[1..<out[j].trim().len()].clone()
-        new.push(f"{ind}}}{tail}")
+        // R64: `let x = match e { Some(v) => v, None => return y };` (also
+        // `continue`/`break`, in a loop as well) -> `let x = e ?? return y`
+        let b1: String = first[1].trim().trim_end_matches(",").trim().clone()
+        let b2: String = second[1].trim().trim_end_matches(",").trim_end_matches(";").trim().clone()
+        let jump = b2.starts_with("return") || b2.starts_with("continue") || b2.starts_with("break")
+        if pre.starts_with("let ") && pre.trim_end().ends_with("=") && first[0] == f"Some({b1})" && second[0] == "None" && jump && starts[1] + 1 == j {
+            let mut fallback: String = b2.clone()
+            if b2 == "return None" {
+                fallback = "return null"
+            }
+            let tail: String = out[j].trim()[1..<out[j].trim().len()].clone()
+            new.push(f"{ind}{pre}{subject} ?? {fallback}{tail}")
+            rs2nika_hit(ctx, "R64")
+        } else {
+            new.push(f"{ind}{pre}if let {first[0]} = {subject} {{")
+            rs2nika_arm_body(new, out, starts[0], starts[1], first[1], arm)
+            new.push(f"{ind}}} else {{")
+            rs2nika_arm_body(new, out, starts[1], j, second[1], arm)
+            let tail: String = out[j].trim()[1..<out[j].trim().len()].clone()
+            new.push(f"{ind}}}{tail}")
+        }
         let mut rebuilt: Vec[String] = []
         let mut r = 0
         while r < i {
@@ -2317,7 +2333,9 @@ fn rs2nika_option_matches(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[St
             r = r + 1
         }
         out = rebuilt
-        rs2nika_hit(ctx, "R48")
+        if !(new.len() == 1) {
+            rs2nika_hit(ctx, "R48")
+        }
         i = i + 1
     }
     return out
