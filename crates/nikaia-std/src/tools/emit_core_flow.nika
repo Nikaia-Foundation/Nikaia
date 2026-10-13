@@ -520,7 +520,22 @@ impl EmitState {
             out.push(".clone().into())")
             return
         }
+        // **A fallback that comes out as a conversion is bracketed** before
+        // `.into()`: `r.len() as i64.into()` is not Rust. So is one written
+        // with an operator: `(0 - 1).into()` and not `0 - 1.into()`.
+        let operated = match fallback {
+            Expr::Binary { .. } => true,
+            Expr::Unary { .. } => true,
+            else => false,
+        }
+        let cast = !bare && (operated || self.ends_in_a_cast(world, fallback))
+        if cast {
+            out.push("(")
+        }
         host.expr(walk, out, fallback, depth, flow, scope)
+        if cast {
+            out.push(")")
+        }
         if bare {
             out.push(")")
         } else {

@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.874] — 2026-10-13
+
+**emit, parser: a composite `??` fallback is bracketed, and a `-` after one is refused (#125)**
+- `x ?? s.len()` and `x ?? (0 - 1)` lower to `(s.len() as i64).into()` and `(0 - 1).into()` instead of invalid or wrong Rust.
+- `a ?? 0 - 1` is refused as ADR-279 D1 says, instead of being read as `a ?? 0` followed by a statement `-1`.
+
 ## [0.0.873] — 2026-10-13
 
 **Check: articles, tail_of and unpromised in Nikaia**

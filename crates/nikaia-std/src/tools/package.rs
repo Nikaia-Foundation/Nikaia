@@ -3218,7 +3218,7 @@ fn bounding_let(walk: &mut BoundsWalk, names: &[winnow_grammar::Symbol], ty: Opt
         let range = nikaia_std::index::or(bounding_range(walk, value, &facts, context, program, words, ask), || Range::open());
         if range.is_bounded() { value_range = Some(range); }
     }
-    let whole = nikaia_std::index::or(bounding_declared_whole(ty, words), || value_lin.is_some() || value_range.is_some().into());
+    let whole = nikaia_std::index::or(bounding_declared_whole(ty, words), || (value_lin.is_some() || value_range.is_some()).into());
     for symbol in names.iter() {
         let name = words.resolve(*symbol);
         bounding_forget(&walk, facts, name);
@@ -24403,7 +24403,11 @@ impl EmitState {
             out.push(".clone().into())");
             return Ok(());
         }
+        let operated = matches!(fallback, Expr::Binary { .. } | Expr::Unary { .. });
+        let cast = !bare && (operated || self.ends_in_a_cast(world, fallback));
+        if cast { out.push("("); }
         host.expr(walk, out, fallback, depth, flow, scope)?;
+        if cast { out.push(")"); }
         if bare { out.push(")"); } else { out.push(".into())"); }
         Ok(())
     }

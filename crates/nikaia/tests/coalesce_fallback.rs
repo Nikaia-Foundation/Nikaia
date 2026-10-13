@@ -153,3 +153,23 @@ fn an_ordinary_parse_error_gets_no_note() {
         "no `??` on the line, so no note about one:\n{said}"
     );
 }
+
+/// A `-` after the fallback is refused like any other operator: it can also
+/// begin a statement, and `return a ?? 0 - 1` was `return a ?? 0` followed by a
+/// statement `-1` that did nothing.
+#[test]
+fn a_minus_after_the_fallback_is_refused() {
+    let said = everything_said(
+        &parse_to_ast("fn f(a: i64?) -> i64 {\n    return a ?? 0 - 1\n}\n")
+            .expect_err("a `-` after the fallback is refused"),
+    );
+    assert!(said.contains("The fallback after `??`"), "{said}");
+    assert!(
+        parse_to_ast("fn f(a: i64?) -> i64 {\n    return a ?? (0 - 1)\n}\n").is_ok(),
+        "the bracketed fallback parses"
+    );
+    assert!(
+        parse_to_ast("fn f(a: i64?) -> i64 {\n    return a ?? -1\n}\n").is_ok(),
+        "a negative literal is one value"
+    );
+}

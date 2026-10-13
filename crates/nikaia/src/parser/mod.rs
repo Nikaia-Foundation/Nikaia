@@ -2559,8 +2559,12 @@ grammar! {
         //
         // The `#` label is what keeps the refusal in this language's words:
         // without it the message lists every token that could have followed.
+        //
+        // **A `-` after the fallback is refused too**: it is the one binary
+        // operator that can also begin a statement, so `a ?? 0 - 1` used to be
+        // `a ?? 0` and then a statement `-1` that does nothing.
         rule coalesce_fallback -> Expr # "one value, or an expression in brackets" =
-            head:unary_expr tail:coalesce_tail? -> {
+            head:unary_expr tail:coalesce_tail? not("-") -> {
                 match tail {
                     Some(fallback) => Expr::Coalesce {
                         value: Box::new(head),
@@ -2569,6 +2573,11 @@ grammar! {
                     None => head,
                 }
             }
+          | unary_expr coalesce_tail? "-" fail(
+                "The fallback after `??` is a single value unless you use brackets. \
+                 Put brackets around the part you mean: `(a ?? 0) - 1`, or \
+                 `a ?? (0 - 1)`."
+            ) e:unary_expr -> { e }
 
         // Kap 5.2/5.3: a lambda, with its arguments named or implicit.
         rule closure_expr -> Expr =

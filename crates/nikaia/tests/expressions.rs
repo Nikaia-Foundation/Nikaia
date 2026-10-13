@@ -543,3 +543,17 @@ fn a_borrowed_cast_is_bracketed() {
     );
     assert!(emitted.contains("&(x.start as i64)"), "{emitted}");
 }
+
+/// A fallback written with an operator or as a conversion is bracketed before
+/// `.into()`: `r.len() as i64.into()` and `0 - 1.into()` are not what was meant.
+#[test]
+fn a_composite_fallback_is_bracketed_before_into() {
+    let emitted = emit(
+        "fn f(r: ref String) -> i64 {\n\
+             let w = r.find(\" where\") ?? r.len()\n\
+             return w + (r.find(\"x\") ?? (0 - 1))\n\
+         }\n",
+    );
+    assert!(!emitted.contains("as i64.into()"), "{emitted}");
+    assert!(!emitted.contains("0 - 1.into()"), "{emitted}");
+}
