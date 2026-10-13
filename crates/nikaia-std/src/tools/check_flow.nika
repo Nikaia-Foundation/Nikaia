@@ -106,11 +106,11 @@ pub struct CheckFlow {
     pub barrier: String?,
     /// Method calls whose callee's contract says it can fail, and the ones
     /// where that could not be established.
-    pub fallible_methods: collections::BTreeSet[(i64, String)],
-    pub opaque_methods: collections::BTreeSet[(i64, String)],
+    pub fallible_methods: collections::BTreeSet[i64],
+    pub opaque_methods: collections::BTreeSet[i64],
     /// The same pair for the calls whose callee pauses.
-    pub pausing_methods: collections::BTreeSet[(i64, String)],
-    pub settled_methods: collections::BTreeSet[(i64, String)],
+    pub pausing_methods: collections::BTreeSet[i64],
+    pub settled_methods: collections::BTreeSet[i64],
     /// The lambdas of the call being walked that paused and were handed to a
     /// `std` entry (ADR-233 D1).
     pub paused_args: Vec[i64],

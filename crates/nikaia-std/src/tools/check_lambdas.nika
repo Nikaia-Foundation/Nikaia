@@ -123,7 +123,7 @@ impl CheckState {
     /// types (ADR-288). Unconditional, and not only where the name is used
     /// again: a line further down may not decide what a line further up does to
     /// a cleanup point. A value a move takes away goes with it.
-    pub fn a_task_takes_these(ref mut self, world: ref CheckWorld, body: ref Expr, span: ref Span) sync {
+    pub fn a_task_takes_these(ref mut self, world: ref CheckWorld, body: ref Expr, task: i64, span: ref Span) sync {
         let mut named: collections::BTreeSet[String] = collections::BTreeSet()
         names_in(body, world.words, named)
         for name in named {
@@ -131,7 +131,7 @@ impl CheckState {
             if found != null {
                 let local = found ?? return
                 if is_a_handle(local.ty) {
-                    self.facts.task_handles.insert((span.start as i64, name.clone()))
+                    self.facts.task_handles.insert((task, name.clone()))
                 }
                 if !self.takes_away(world, local.ty) {
                     continue

@@ -315,7 +315,7 @@ impl EmitState {
     /// branch's: a grammar entry propagates on its own (ADR-296 D25).
     fn emit_method_can_fail(ref self, world: ref EmitWorld, statement: i64, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg]) -> bool {
         return self.enters_a_grammar(world, receiver, method)
-            || self.method_can_fail(statement, world.words.resolve(method))
+            || self.method_can_fail(node_key(receiver))
             || self.branch_can_fail(world, statement, receiver)
             || self.emit_any_can_fail(world, statement, args)
             || self.emit_config_can_fail(world, statement, config)

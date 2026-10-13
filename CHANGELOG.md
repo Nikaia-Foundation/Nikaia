@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.868] — 2026-10-13
+
+**checker: node-level facts keyed by NodeId (#558)**
+- The checker's facts about a method call, a kept function value, a lambda argument, an unrolled call and a task are keyed by the expression's node, so two such expressions in one statement get their own answers (#558).
+
 ## [0.0.867] — 2026-10-13
 
 **checker: casts keyed by the operand's node (#558)**

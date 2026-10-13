@@ -3652,8 +3652,8 @@ impl<'a> Checker<'a> {
             && self.implements_error(name)
         {
             self.reached_method(None);
-            self.method_pauses(method, false, span);
-            self.method_propagates(method, false, span);
+            self.method_pauses(receiver, false, span);
+            self.method_propagates(receiver, false, span);
             return Ty::named("String");
         }
         // **An error, one of several, answers `Error`'s methods** (ADR-280
@@ -3663,8 +3663,8 @@ impl<'a> Checker<'a> {
                 self.expr(a, span);
             });
             self.reached_method(None);
-            self.method_pauses(method, false, span);
-            self.method_propagates(method, false, span);
+            self.method_pauses(receiver, false, span);
+            self.method_propagates(receiver, false, span);
             if matches!(entry, "message" | "full") && args.is_empty() {
                 return Ty::named("String");
             }
@@ -3748,8 +3748,8 @@ impl<'a> Checker<'a> {
                 self.expr(a, span);
             });
             self.reached_method(None);
-            self.method_propagates(method, false, span);
-            self.method_pauses(method, false, span);
+            self.method_propagates(receiver, false, span);
+            self.method_pauses(receiver, false, span);
             return Ty::Unknown;
         };
         let key = format!("{name}::{entry}");
@@ -3868,8 +3868,8 @@ impl<'a> Checker<'a> {
                         true => "Ord::compare",
                         false => "Eq::eq",
                     }));
-                    self.method_pauses(method, false, span);
-                    self.method_propagates(method, false, span);
+                    self.method_pauses(receiver, false, span);
+                    self.method_propagates(receiver, false, span);
                     return match wants_order {
                         true => Ty::named("Ordering"),
                         false => Ty::named("bool"),
@@ -3906,8 +3906,8 @@ impl<'a> Checker<'a> {
                 self.expr(a, span);
             });
             self.reached_method(None);
-            self.method_pauses(method, false, span);
-            self.method_propagates(method, false, span);
+            self.method_pauses(receiver, false, span);
+            self.method_propagates(receiver, false, span);
             return Ty::Unknown;
         };
         // **`to_text` on a name made from text cannot fail** (ADR-319 D5):
@@ -3971,7 +3971,7 @@ impl<'a> Checker<'a> {
         // below refuses the program and nothing is emitted at all.
         self.method_options(method, &contract, span);
         self.method_propagates(
-            method,
+            receiver,
             !known_text
                 && (!contract.fails_with.is_empty()
                     || self.walks_a_failing_sequence(&on, &contract)),
@@ -3995,7 +3995,7 @@ impl<'a> Checker<'a> {
         let walks_a_pausing_step =
             matches!(&on, Ty::Seq { pauses: true, .. }) && walks_by_value(&contract) && !chained;
         self.method_pauses(
-            method,
+            receiver,
             !contract.sync_claim.is_sync() || walks_a_pausing_step,
             span,
         );
@@ -4014,10 +4014,7 @@ impl<'a> Checker<'a> {
             Some(Ty::Seq { .. })
         );
         if walks_a_pausing_step && hands_back_a_sequence {
-            self.s
-                .facts
-                .pausing_walks
-                .insert(((span.at() as i64), self.parsed.text(method).to_string()));
+            self.s.facts.pausing_walks.insert(value_node(receiver));
         }
         // **A walk of a sequence whose step can fail, can fail**
         // ([ADR-025](../../docs/specification/adr/adr-025.md) D1, one construct
@@ -4272,8 +4269,14 @@ impl<'a> Checker<'a> {
         self.a_standard_bound_not_met(&key, &bound, span);
         let result = ty::substitute(&result, &bound);
         let result = shape_through(&contract, &on, &found, result);
-        let result =
-            self.a_lambda_that_pauses_at_an_entry(&key, method, &on, pausing_lambda, result, span);
+        let result = self.a_lambda_that_pauses_at_an_entry(
+            &key,
+            receiver,
+            &on,
+            pausing_lambda,
+            result,
+            span,
+        );
         self.stamped_through(&contract, &found, result)
     }
 
@@ -4300,7 +4303,7 @@ impl<'a> Checker<'a> {
     fn a_lambda_that_pauses_at_an_entry(
         &mut self,
         key: &str,
-        method: Ident,
+        receiver: &Expr,
         on: &Ty,
         lambda: Option<&Expr>,
         result: Ty,
@@ -4357,7 +4360,7 @@ impl<'a> Checker<'a> {
         // The eager ones pause where they are called, and the call is one that
         // may pause for every rule that asks: the function around it, the
         // lambda around it, the door around it.
-        let written = (span.at() as i64, self.parsed.text(method).to_string());
+        let written = value_node(receiver);
         self.s.flow.settled_methods.remove(&written);
         self.s.flow.pausing_methods.insert(written);
         let callee = key.to_string();
@@ -8607,6 +8610,9 @@ impl<'a> Checker<'a> {
                 // value is a thing this checker already knows. So `spawn fn {
                 // work(21) }` is a `TaskHandle[i64]` and `handle.join()` is an
                 // `i64`, with nothing inferred that a signature did not say.
+                // The handles a task duplicates are keyed by its lambda's node
+                // (ADR-340 D5), the one the emitter is handed.
+                let task = value_node(body);
                 let Expr::Closure { params, body, .. } = body.as_ref() else {
                     self.expr(body, span);
                     return Ty::Unknown;
@@ -8629,6 +8635,7 @@ impl<'a> Checker<'a> {
                         body: body.clone(),
                         id: crate::ast::fresh_id(),
                     },
+                    task,
                     span,
                 );
                 self.s.scope.push(Vec::new());
@@ -9329,7 +9336,7 @@ impl<'a> Checker<'a> {
             self.s
                 .facts
                 .kept_calls
-                .insert(((span.at() as i64), name), (!is_sync, throws));
+                .insert(value_node(func), (!is_sync, throws));
             if let Some(current) = self.s.current.clone() {
                 let entry = self
                     .s
@@ -9432,7 +9439,7 @@ impl<'a> Checker<'a> {
         // something that is not a struct*
         // ([ADR-304](../../docs/specification/adr/adr-304.md) D3) — which the
         // bound already answers and which is why this can assume a struct.
-        self.an_instantiation(&name, args, span);
+        self.an_instantiation(&name, func, args, span);
 
         // **A struct literal written like a call**
         // ([ADR-140](../../docs/specification/adr/adr-140.md) D1). `Stats(min: 1)`
@@ -10563,8 +10570,8 @@ impl<'a> Checker<'a> {
         self.s.method_options(self.world, method, contract, span);
     }
 
-    fn method_propagates(&mut self, method: Ident, fails: bool, span: &Span) {
-        self.s.method_propagates(self.world, method, fails, span);
+    fn method_propagates(&mut self, receiver: &Expr, fails: bool, _span: &Span) {
+        self.s.method_propagates(value_node(receiver), fails);
     }
 
     /// **What a task takes with it** (Part I 8.3, `NK2101`).
@@ -10586,8 +10593,8 @@ impl<'a> Checker<'a> {
     ///
     /// What is left is data that a move takes away, which is what the
     /// diagnostic is about.
-    fn a_task_takes_these(&mut self, body: &Expr, span: &Span) {
-        self.s.a_task_takes_these(self.world, body, span);
+    fn a_task_takes_these(&mut self, body: &Expr, task: i64, span: &Span) {
+        self.s.a_task_takes_these(self.world, body, task, span);
     }
 
     /// **A key in the brackets of a map whose keys are owned**
@@ -10814,8 +10821,8 @@ impl<'a> Checker<'a> {
     /// sets are narrowed independently. Both are recorded at every method call,
     /// including the ones nothing could be established about - `false` there is
     /// "there is no answer", and it lands in the set that *removes* the pair.
-    fn method_pauses(&mut self, method: Ident, pauses: bool, span: &Span) {
-        self.s.method_pauses(self.world, method, pauses, span);
+    fn method_pauses(&mut self, receiver: &Expr, pauses: bool, _span: &Span) {
+        self.s.method_pauses(value_node(receiver), pauses);
     }
 
     /// Whether this method call is an **eager** walk of a sequence whose step
@@ -11523,7 +11530,7 @@ impl<'a> Checker<'a> {
             let named = self.parsed.text(*name).to_string();
             if self.s.lookup(&named).is_none() && self.world.own.functions.contains_key(&named) {
                 self.s.facts.kept_functions.insert(
-                    ((span.at() as i64), named),
+                    value_node(value),
                     (!is_sync, *throws, (params.len() as i64)),
                 );
                 let (names, call) = kept_function_call(self.parsed, *name, params.len());
@@ -11644,10 +11651,7 @@ impl<'a> Checker<'a> {
             entry.code_fails |= throws;
         }
         if throws {
-            self.s
-                .flow
-                .fallible_methods
-                .insert(((span.at() as i64), self.parsed.text(method).to_string()));
+            self.s.flow.fallible_methods.insert(value_node(receiver));
         }
         Some((*result).unwrap_or_else(|| Ty::named("()")))
     }
@@ -12153,9 +12157,12 @@ impl<'a> Checker<'a> {
         })
     }
 
-    fn an_instantiation(&mut self, name: &str, args: &[Expr], span: &Span) {
+    fn an_instantiation(&mut self, name: &str, func: &Expr, args: &[Expr], span: &Span) {
+        let call = value_node(func);
         self.nikaia(|state, world, host| {
-            check_core_pilot::check_core_an_instantiation(state, world, host, name, args, span)
+            check_core_pilot::check_core_an_instantiation(
+                state, world, host, name, call, args, span,
+            )
         })
     }
 
@@ -12308,10 +12315,7 @@ impl<'a> Checker<'a> {
                     // same arrangement `lent_args` and `nullable_args` have, and
                     // keyed the same way.
                     if !is_sync && declared_here {
-                        self.s
-                            .facts
-                            .future_lambdas
-                            .insert(((span.at() as i64), (at as i64)));
+                        self.s.facts.future_lambdas.insert(value_node(arg));
                         // **And an `async` closure where the callee *runs* it**
                         // ([ADR-277](../../docs/specification/adr/adr-277.md)
                         // D1). The box is what a **kept** parameter needs, and
@@ -12332,10 +12336,7 @@ impl<'a> Checker<'a> {
                                 .is_none_or(|(name, _)| !c.keeps.contains(&name))
                         });
                         if runs {
-                            self.s
-                                .facts
-                                .run_lambdas
-                                .insert(((span.at() as i64), (at as i64)));
+                            self.s.facts.run_lambdas.insert(value_node(arg));
                         }
                     }
                     // **A parameter the callee keeps is a kept function
@@ -12417,7 +12418,7 @@ impl<'a> Checker<'a> {
                         self.s
                             .facts
                             .sync_functions_run_async
-                            .insert(((span.at() as i64), (at as i64)), params.len() as i64);
+                            .insert(value_node(arg), params.len() as i64);
                     }
                     // **A kept value handed to a parameter that only runs
                     // it** is lent as the closure it holds.

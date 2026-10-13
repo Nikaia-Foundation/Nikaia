@@ -122,7 +122,7 @@ impl EmitState {
         walk.reached_copy = copy
         let done = self.emit_core_a_field_call(world, walk, out, host, receiver, true, method, args, depth + 1, flow, scope)
         if !done {
-            self.emit_core_method_call(world, walk, out, host, null, method, args, config, depth + 1, flow, scope)
+            self.emit_core_method_call(world, walk, out, host, null, node_key(receiver), method, args, config, depth + 1, flow, scope)
         }
         walk.reached_copy = held_copy
         if !flattens {

@@ -6557,12 +6557,12 @@ impl<'p> Emitter<'p> {
                         .s
                         .facts
                         .kept_functions
-                        .contains_key(&((flow.statement as i64), self.text(*name).to_string())) =>
+                        .contains_key(&crate::check::value_node(expr)) =>
             {
                 // **A named function where a function value is kept** is the
                 // closure that calls it, written as the checker typed it.
-                let (pauses, fails, arity) = self.s.facts.kept_functions
-                    [&(flow.statement as i64, self.text(*name).to_string())];
+                let (pauses, fails, arity) =
+                    self.s.facts.kept_functions[&crate::check::value_node(expr)];
                 let (names, call) =
                     crate::check::kept_function_call(self.parsed, *name, arity as usize);
                 out.push(&format!(

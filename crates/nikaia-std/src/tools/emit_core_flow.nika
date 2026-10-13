@@ -679,19 +679,19 @@ impl EmitState {
     /// closure, with `move` (Part I 8.3's implicit move), and a **handle**, always.
     pub fn emit_core_spawn[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, lambda: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         match lambda {
-            Expr::Closure { body, .. } => self.emit_flow_task(world, walk, out, host, body, depth, flow, scope),
+            Expr::Closure { body, .. } => self.emit_flow_task(world, walk, out, host, node_key(lambda), body, depth, flow, scope),
             else => {
                 throw EmitRefused { message: "`spawn` takes a lambda. Write `spawn fn { … }`.".clone(), at: flow.statement }
             }
         }
     }
 
-    fn emit_flow_task[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, body: ref Block, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_flow_task[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, task: i64, body: ref Block, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         // **A handle the body names is duplicated, not moved** (ADR-312 D1). The
         // step is written *outside* the future, in a block of its own, so the name
         // the body moves is the new handle and the caller's own survives the
         // `spawn`.
-        let handles = host.task_handles(flow.statement)
+        let handles = host.task_handles(task)
         if handles.len() > 0 {
             out.push("{ ")
             for name in handles {
@@ -713,7 +713,7 @@ impl EmitState {
         let inside_scope = EmitScope::plain()
         self.emit_core_block(world, walk, out, host, body, depth, inside, inside_scope, EmitTail::Return)
         out.push(")")
-        if host.task_handles(flow.statement).len() > 0 {
+        if host.task_handles(task).len() > 0 {
             out.push(" }")
         }
     }

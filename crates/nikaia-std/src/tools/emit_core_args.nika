@@ -187,7 +187,7 @@ impl EmitState {
     /// The arity of the function a position that runs code is handed, where it
     /// never pauses and is run where a pause may happen (#516): `-1` otherwise.
     fn emit_arg_run_async(ref self, world: ref EmitWorld, statement: i64, i: i64, arg: ref Expr) -> i64 {
-        let place = (statement, i)
+        let place = node_key(arg)
         if !self.facts.sync_functions_run_async.contains_key(place) {
             return -1
         }
@@ -260,8 +260,7 @@ impl EmitState {
         // **And `&mut` for a parameter the callee declared `mut`** (D3).
         let change = self.facts.mut_args.contains(node)
         // **A lambda handed to a parameter whose type may pause** (ADR-277 D11).
-        let at = (flow.statement, i)
-        let future = emit_arg_is_closure(arg) && self.facts.future_lambdas.contains(at) && !self.facts.kept_lambdas.contains_key(node)
+        let future = emit_arg_is_closure(arg) && self.facts.future_lambdas.contains(node) && !self.facts.kept_lambdas.contains_key(node)
         // **The pointer a C declaration takes** (ADR-302 D5).
         let mut pointer = 0
         if self.foreign_params.contains_key(callee) {
@@ -419,8 +418,7 @@ impl EmitState {
                 // **No `move` on the run shape** (Part I 5.4 A): the call is over
                 // before the caller's frame is. The boxed shape keeps its `move`:
                 // the future outlives the closure body it is made in.
-                let place = (inside.statement, i)
-                let runs = self.facts.run_lambdas.contains(place)
+                let runs = self.facts.run_lambdas.contains(node_key(arg))
                 if runs {
                     out.push(f"async |{joined}| ")
                 } else {
@@ -692,12 +690,10 @@ impl EmitState {
     fn emit_call_special[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, func: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
         // **A call to a function that walks a type's fields goes to the copy**
         // (ADR-304 D6), and which copy is the checker's answer: this emitter has
-        // no types (ADR-288), so the name is handed over keyed by the byte the
-        // call stands at.
-        if self.facts.unrolled_calls.contains_key(flow.statement) {
-            let copy = self.facts.unrolled_calls.get(flow.statement) ?? return false
-            // **Only the call to the walking function**: the key is the
-            // statement, and `println(describe(u))` holds two calls.
+        // no types (ADR-288), so the name is handed over keyed by the callee's
+        // node (ADR-340 D5).
+        if self.facts.unrolled_calls.contains_key(node_key(func)) {
+            let copy = self.facts.unrolled_calls.get(node_key(func)) ?? return false
             if self.emit_call_walks(world, func, copy) {
                 out.push(f"{copy}(")
                 let mut at = 0

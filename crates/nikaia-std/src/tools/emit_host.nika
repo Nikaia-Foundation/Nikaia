@@ -51,9 +51,9 @@ pub trait EmitHost {
     /// The type of the error a `throw` raises (`throws::error_type`).
     fn error_type(ref self, node: ref Expr) -> String? sync
 
-    /// The handles a task started at the statement `statement` names
+    /// The handles the task whose lambda is the node `task` names
     /// (`Checked::task_handles`); a set cannot be walked in Nikaia.
-    fn task_handles(ref self, statement: i64) -> Vec[String] sync
+    fn task_handles(ref self, task: i64) -> Vec[String] sync
 
     /// `Build::overlaps_user_code`: user code may run on more than one thread.
     fn overlaps_user_code(ref self) -> bool sync

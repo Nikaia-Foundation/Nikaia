@@ -11243,7 +11243,7 @@ pub fn check_core_a_compound_write_to_a_map_slot<H: CheckHost>(state: &mut Check
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_an_instantiation<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, name: &str, args: &[Expr], span: &Span) {
+pub fn check_core_an_instantiation<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, name: &str, call: i64, args: &[Expr], span: &Span) {
     if !state.walks_fields.contains_key(name) { return; }
     if args.is_empty() { return; }
     let before = state.findings.len() as i64;
@@ -11254,7 +11254,7 @@ pub fn check_core_an_instantiation<H: CheckHost>(state: &mut CheckState, world: 
         _ => return,
     };
     let fields = match state.shape_of(&world.here, world, &on) { Some(__nikaia_value) => __nikaia_value, None => return };
-    state.facts.unrolled_calls.insert(span.start as i64, check_specialised(name, &on));
+    state.facts.unrolled_calls.insert(call, check_specialised(name, &on));
     state.facts.unrolled.insert((name.to_owned(), on.to_owned()), fields);
 }
 
@@ -12196,7 +12196,7 @@ pub struct CheckFacts {
     pub walks_fields: collections::BTreeMap<String, String>,
     pub unrolled_calls: collections::BTreeMap<i64, String>,
     pub fallible_loops: collections::BTreeSet<i64>,
-    pub pausing_walks: collections::BTreeSet<(i64, String)>,
+    pub pausing_walks: collections::BTreeSet<i64>,
     pub pausing_loops: collections::BTreeSet<i64>,
     pub owned_loops: collections::BTreeSet<i64>,
     pub copied_loop_bindings: collections::BTreeSet<(i64, String)>,
@@ -12243,17 +12243,17 @@ pub struct CheckFacts {
     pub kept_hulls: collections::BTreeMap<i64, Vec<String>>,
     pub kept_owned: collections::BTreeMap<i64, Vec<String>>,
     pub field_calls: collections::BTreeMap<i64, bool>,
-    pub kept_calls: collections::BTreeMap<(i64, String), (bool, bool)>,
+    pub kept_calls: collections::BTreeMap<i64, (bool, bool)>,
     pub kept_args: collections::BTreeSet<i64>,
-    pub kept_functions: collections::BTreeMap<(i64, String), (bool, bool, i64)>,
-    pub fallible_methods: collections::BTreeSet<(i64, String)>,
-    pub future_lambdas: collections::BTreeSet<(i64, i64)>,
-    pub run_lambdas: collections::BTreeSet<(i64, i64)>,
-    pub sync_functions_run_async: collections::BTreeMap<(i64, i64), i64>,
+    pub kept_functions: collections::BTreeMap<i64, (bool, bool, i64)>,
+    pub fallible_methods: collections::BTreeSet<i64>,
+    pub future_lambdas: collections::BTreeSet<i64>,
+    pub run_lambdas: collections::BTreeSet<i64>,
+    pub sync_functions_run_async: collections::BTreeMap<i64, i64>,
     pub pausing_lambdas: collections::BTreeMap<i64, FactPausing>,
     pub paused_scopes: collections::BTreeSet<i64>,
     pub witnessed_sets: collections::BTreeSet<i64>,
-    pub pausing_methods: collections::BTreeSet<(i64, String)>,
+    pub pausing_methods: collections::BTreeSet<i64>,
     pub nullable_sites: collections::BTreeMap<i64, FactWrap>,
     pub concatenations: collections::BTreeSet<i64>,
     pub path_comparisons: collections::BTreeSet<i64>,
@@ -12356,14 +12356,14 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn method_propagates(&mut self, world: &CheckWorld<'_>, method: winnow_grammar::Symbol, fails: bool, span: &Span) {
-        let key = (span.start as i64, world.words.resolve(method).to_owned());
+    pub fn method_propagates(&mut self, on: i64, fails: bool) {
+        let key = on;
         if fails { let added = self.flow.fallible_methods.insert(key); } else { let added = self.flow.opaque_methods.insert(key); }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn method_pauses(&mut self, world: &CheckWorld<'_>, method: winnow_grammar::Symbol, pauses: bool, span: &Span) {
-        let key = (span.start as i64, world.words.resolve(method).to_owned());
+    pub fn method_pauses(&mut self, on: i64, pauses: bool) {
+        let key = on;
         if pauses { let added = self.flow.pausing_methods.insert(key); } else { let added = self.flow.settled_methods.insert(key); }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -12877,10 +12877,10 @@ pub struct CheckFlow {
     pub guarded: Option<CheckGuarded>,
     pub loops: i64,
     pub barrier: Option<String>,
-    pub fallible_methods: collections::BTreeSet<(i64, String)>,
-    pub opaque_methods: collections::BTreeSet<(i64, String)>,
-    pub pausing_methods: collections::BTreeSet<(i64, String)>,
-    pub settled_methods: collections::BTreeSet<(i64, String)>,
+    pub fallible_methods: collections::BTreeSet<i64>,
+    pub opaque_methods: collections::BTreeSet<i64>,
+    pub pausing_methods: collections::BTreeSet<i64>,
+    pub settled_methods: collections::BTreeSet<i64>,
     pub paused_args: Vec<i64>,
     pub next_choice: i64,
     pub read_index: collections::BTreeMap<(i64, i64), i64>,
@@ -14470,14 +14470,14 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_task_takes_these(&mut self, world: &CheckWorld<'_>, body: &Expr, span: &Span) {
+    pub fn a_task_takes_these(&mut self, world: &CheckWorld<'_>, body: &Expr, task: i64, span: &Span) {
         let mut named: collections::BTreeSet<String> = collections::BTreeSet::new();
         names_in(body, world.words, &mut named);
         for name in named.iter() {
             let found = self.binding(name);
             if found.is_some() {
                 let local = match found { Some(__nikaia_value) => __nikaia_value, None => return };
-                if is_a_handle(&local.ty) { self.facts.task_handles.insert((span.start as i64, name.to_owned())); }
+                if is_a_handle(&local.ty) { self.facts.task_handles.insert((task, name.to_owned())); }
                 if !self.takes_away(world, &local.ty) { continue; }
                 self.moved_into_a_task.push((name.to_owned(), local.ty.clone(), span.end as i64, "a background task".to_owned()));
             }
@@ -18824,8 +18824,8 @@ impl CheckState {
         let callee = match callee_of(world.words, expr, world.own, world.library, world.here.items) { Some(__nikaia_value) => __nikaia_value, None => return false };
         match callee {
             Callee::Method => match expr {
-                Expr::MethodCall { method, .. } => { let method = *method; self.flow.pausing_methods.contains(&(at, world.words.resolve(method).to_owned())) },
-                Expr::SafeMethod { method, .. } => { let method = *method; self.flow.pausing_methods.contains(&(at, world.words.resolve(method).to_owned())) },
+                Expr::MethodCall { receiver, .. } => { let receiver = nikaia_std::boxed::open(receiver); self.flow.pausing_methods.contains(&node_key(receiver)) },
+                Expr::SafeMethod { receiver, .. } => { let receiver = nikaia_std::boxed::open(receiver); self.flow.pausing_methods.contains(&node_key(receiver)) },
                 _ => false,
             },
             Callee::Own(ref name) => {
@@ -22076,7 +22076,7 @@ impl EmitState {
         for each in config.iter() { if self.branch_can_fail(world, statement, &each.value) { return true; } }
         false
     }
-    fn emit_method_can_fail(&self, world: &EmitWorld<'_>, statement: i64, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg]) -> bool { self.enters_a_grammar(world, receiver, method) || self.method_can_fail(statement, world.words.resolve(method)) || self.branch_can_fail(world, statement, receiver) || self.emit_any_can_fail(world, statement, args) || self.emit_config_can_fail(world, statement, config) }
+    fn emit_method_can_fail(&self, world: &EmitWorld<'_>, statement: i64, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg]) -> bool { self.enters_a_grammar(world, receiver, method) || self.method_can_fail(node_key(receiver)) || self.branch_can_fail(world, statement, receiver) || self.emit_any_can_fail(world, statement, args) || self.emit_config_can_fail(world, statement, config) }
     fn emit_block_can_fail(&self, world: &EmitWorld<'_>, statement: i64, block: &Block) -> bool {
         for stmt in block.stmts.iter() {
             let at = stmt.span.start as i64;
@@ -22470,7 +22470,7 @@ impl EmitState {
         String::from("")
     }
     fn emit_arg_run_async(&self, world: &EmitWorld<'_>, statement: i64, i: i64, arg: &Expr) -> i64 {
-        let place = (statement, i);
+        let place = node_key(arg);
         if !self.facts.sync_functions_run_async.contains_key(&place) { return -1; }
         let key = match emit_arg_function_key(world, arg) { Some(__nikaia_value) => __nikaia_value, None => return -1 };
         if call_pauses(&self.own_contracts, &key) || call_library_pauses(world.library, &key).is_some() { return -1; }
@@ -22518,8 +22518,7 @@ impl EmitState {
         let count = wants_a_size && !only_literals(arg);
         let mut lend = self.facts.lent_args.contains(&node) && !(emit_arg_is_text_literal(arg) && !self.facts.owned_texts.contains(&node));
         let change = self.facts.mut_args.contains(&node);
-        let at = (flow.statement, i);
-        let future = emit_arg_is_closure(arg) && self.facts.future_lambdas.contains(&at) && !self.facts.kept_lambdas.contains_key(&node);
+        let future = emit_arg_is_closure(arg) && self.facts.future_lambdas.contains(&node) && !self.facts.kept_lambdas.contains_key(&node);
         let mut pointer: i64 = 0;
         if self.foreign_params.contains_key(callee) {
             let params = match self.foreign_params.get(callee) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
@@ -22598,8 +22597,7 @@ impl EmitState {
                 let mut names: Vec<String> = vec![];
                 for p in params.iter() { names.push(escaped_name(&emit_text(world, *p))); }
                 let joined = names.join(", ");
-                let place = (inside.statement, i);
-                let runs = self.facts.run_lambdas.contains(&place);
+                let runs = self.facts.run_lambdas.contains(&node_key(arg));
                 if runs { out.push(&format!("async |{}| ", joined)); } else { out.push(&format!("|{}| Box::pin(async move ", joined)); }
                 let mut changed: Vec<winnow_grammar::Symbol> = scope.changed.to_owned();
                 changed.extend(mutable.to_owned());
@@ -22778,8 +22776,8 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     fn emit_call_special<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, func: &Expr, args: &[Expr], config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, Box<dyn std::error::Error>> {
-        if self.facts.unrolled_calls.contains_key(&flow.statement) {
-            let copy = match self.facts.unrolled_calls.get(&flow.statement) { Some(__nikaia_value) => __nikaia_value, None => return Ok(false) };
+        if self.facts.unrolled_calls.contains_key(&node_key(func)) {
+            let copy = match self.facts.unrolled_calls.get(&node_key(func)) { Some(__nikaia_value) => __nikaia_value, None => return Ok(false) };
             if self.emit_call_walks(world, func, &copy) {
                 out.push(&format!("{}(", copy));
                 let mut at = 0;
@@ -23265,13 +23263,13 @@ impl EmitState {
                             let key = call_pausing_key(world.words, world.aliases, &self.own_contracts, world.library, func);
                             if key.is_some() { return true; }
                         },
-                        Expr::MethodCall { method, .. } => {
-                            let method = *method;
-                            if self.method_pauses(at, world.words.resolve(method)) { return true; }
+                        Expr::MethodCall { receiver, .. } => {
+                            let receiver = nikaia_std::boxed::open(receiver);
+                            if self.method_pauses(node_key(receiver)) { return true; }
                         },
-                        Expr::SafeMethod { method, .. } => {
-                            let method = *method;
-                            if self.method_pauses(at, world.words.resolve(method)) { return true; }
+                        Expr::SafeMethod { receiver, .. } => {
+                            let receiver = nikaia_std::boxed::open(receiver);
+                            if self.method_pauses(node_key(receiver)) { return true; }
                         },
                         _ => { },
                     }
@@ -23584,7 +23582,7 @@ impl EmitState {
         Ok(match func {
             Expr::Variable(name, _) => {
                 let name = *name;
-                let key = (flow.statement, emit_text(world, name));
+                let key = node_key(func);
                 if !self.facts.kept_calls.contains_key(&key) { return Ok(false); }
                 let kept = match self.facts.kept_calls.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return Ok(false) };
                 let pauses = kept.0;
@@ -23683,7 +23681,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_method_call<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, receiver: Option<&Expr>, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_method_call<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, receiver: Option<&Expr>, on_node: i64, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         let name = emit_text(world, method);
         if self.emit_call_chars(world, walk, out, host, receiver, &name, args, depth, flow, scope)? { return Ok(()); }
         if receiver.is_some() && args.len() == 1 {
@@ -23711,7 +23709,7 @@ impl EmitState {
                     self.emit_core_args(world, walk, out, host, &name, args, &vec![], depth, flow, scope)?;
                 }
                 out.push(")");
-                if flow.can_throw && !flow.caught && self.method_can_fail(flow.statement, &name) { out.push("?"); }
+                if flow.can_throw && !flow.caught && self.method_can_fail(on_node) { out.push("?"); }
                 return Ok(());
             }
         }
@@ -23808,7 +23806,7 @@ impl EmitState {
             let on = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
             declared = self.facts.collected_into.contains(&node_key(on));
         }
-        if name == "collect" && args.is_empty() && !declared && !self.method_pauses(flow.statement, &name) { out.push("::<Vec<_>>"); }
+        if name == "collect" && args.is_empty() && !declared && !self.method_pauses(on_node) { out.push("::<Vec<_>>"); }
         if kind == 0 { out.push("("); }
         let takes = self.takes_a_handle(world, &name);
         self.emit_call_hold(world, walk, host, receiver, scope, flow);
@@ -23836,13 +23834,12 @@ impl EmitState {
             if self.reads_through_handle(world, &walk, &scope.function, on) { out.push(".map(|held| held.get())"); }
         }
         if boxed { out.push(")"); }
-        let walked = (flow.statement, name.to_owned());
-        if self.facts.pausing_walks.contains(&walked) { return Err(nikaia_std::error::raise(EmitRefused { message: format!("`{}` can't be used on a sequence whose steps pause. Write a `for x in … {{ … }}` loop instead, and do the work inside it.", name), at: Some(flow.statement) }, &"emit_core_method_call")); }
-        if self.method_pauses(flow.statement, &name) {
+        if self.facts.pausing_walks.contains(&on_node) { return Err(nikaia_std::error::raise(EmitRefused { message: format!("`{}` can't be used on a sequence whose steps pause. Write a `for x in … {{ … }}` loop instead, and do the work inside it.", name), at: Some(flow.statement) }, &"emit_core_method_call")); }
+        if self.method_pauses(on_node) {
             if flow.in_lambda { return Err(nikaia_std::error::raise(EmitRefused { message: format!("This lambda calls `{}`, which can pause, but the compiler knows nothing about what the lambda is passed to, so it can't let it pause. Call `{}` outside the lambda and pass in the value.", name, name), at: Some(flow.statement) }, &"emit_core_method_call")); }
             out.push(".await");
         }
-        let fails = self.method_can_fail(flow.statement, &name);
+        let fails = self.method_can_fail(on_node);
         if flow.can_throw && !flow.caught && fails { out.push("?"); }
         if length && !fails { out.push(" as i64"); }
         Ok(())
@@ -23936,7 +23933,7 @@ impl EmitState {
             out.push("__nikaia_site.full_of(&error)");
             return Ok(());
         }
-        self.emit_core_method_call(world, walk, out, host, Some(receiver), method, args, config, depth, flow, scope)?;
+        self.emit_core_method_call(world, walk, out, host, Some(receiver), node_key(receiver), method, args, config, depth, flow, scope)?;
         if self.facts.copied_walks.contains(&node_key(node)) { out.push(".copied()"); }
         Ok(())
     }
@@ -24400,7 +24397,7 @@ impl EmitState {
     #[allow(clippy::too_many_arguments)]
     pub fn emit_core_spawn<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, lambda: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         match lambda {
-            Expr::Closure { body, .. } => self.emit_flow_task(world, walk, out, host, body, depth, flow, scope)?,
+            Expr::Closure { body, .. } => self.emit_flow_task(world, walk, out, host, node_key(lambda), body, depth, flow, scope)?,
             _ => { return Err(nikaia_std::error::raise(EmitRefused { message: "`spawn` takes a lambda. Write `spawn fn { … }`.".to_owned(), at: Some(flow.statement) }, &"emit_core_spawn")); },
         }
         Ok(())
@@ -24408,8 +24405,8 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    fn emit_flow_task<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, body: &Block, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
-        let handles = host.task_handles(flow.statement);
+    fn emit_flow_task<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, task: i64, body: &Block, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+        let handles = host.task_handles(task);
         if !handles.is_empty() {
             out.push("{ ");
             for name in handles.iter() { out.push(&format!("let {} = {}.clone(); ", name, name)); }
@@ -24419,7 +24416,7 @@ impl EmitState {
         let inside_scope = EmitScope::plain();
         self.emit_core_block(world, walk, out, host, body, depth, inside, &inside_scope, EmitTail::Return)?;
         out.push(")");
-        if !host.task_handles(flow.statement).is_empty() { out.push(" }"); }
+        if !host.task_handles(task).is_empty() { out.push(" }"); }
         Ok(())
     }
 }
@@ -25303,7 +25300,7 @@ impl EmitState {
         let held_copy = walk.reached_copy;
         walk.reached_copy = copy;
         let done = self.emit_core_a_field_call(world, walk, out, host, receiver, true, method, args, depth + 1, flow, scope)?;
-        if !done { self.emit_core_method_call(world, walk, out, host, None, method, args, config, depth + 1, flow, scope)?; }
+        if !done { self.emit_core_method_call(world, walk, out, host, None, node_key(receiver), method, args, config, depth + 1, flow, scope)?; }
         walk.reached_copy = held_copy;
         if !flattens { out.push(")"); }
         out.push(&format!(",\n{}None => None,\n{}}}", inner, outer));
@@ -25863,7 +25860,7 @@ impl EmitState {
         }
         out.push(")");
         if pauses { out.push(".await"); }
-        if flow.can_throw && !flow.caught && self.method_can_fail(flow.statement, &emit_text(world, method)) { out.push("?"); }
+        if flow.can_throw && !flow.caught && self.method_can_fail(node_key(receiver)) { out.push("?"); }
         Ok(true)
     }
     fn emit_read_nested(&self, world: &EmitWorld<'_>, walk: &EmitWalk, function: &str, base: &Expr) -> bool {
@@ -26614,7 +26611,7 @@ pub trait EmitHost {
     fn wants_widening(&self, node: &Expr) -> bool;
     fn block_mentions(&self, block: &Block, name: &str) -> bool;
     fn error_type(&self, node: &Expr) -> Option<String>;
-    fn task_handles(&self, statement: i64) -> Vec<String>;
+    fn task_handles(&self, task: i64) -> Vec<String>;
     fn overlaps_user_code(&self) -> bool;
     fn crossings_are_possible(&self) -> bool;
     fn user_parallelism(&self) -> bool;
@@ -27390,8 +27387,8 @@ fn emit_field_type(contract: Option<&FieldContract>) -> Ty {
 }
 
 impl EmitState {
-    pub fn method_pauses(&self, statement: i64, method: &str) -> bool { self.facts.pausing_methods.contains(&(statement, method.to_owned())) }
-    pub fn method_can_fail(&self, statement: i64, method: &str) -> bool { self.facts.fallible_methods.contains(&(statement, method.to_owned())) }
+    pub fn method_pauses(&self, on: i64) -> bool { self.facts.pausing_methods.contains(&on) }
+    pub fn method_can_fail(&self, on: i64) -> bool { self.facts.fallible_methods.contains(&on) }
     pub fn lambda_decides(&self, key: &str) -> bool {
         let contract = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return false };
         matches!(contract.sync_claim, Sync::From(_))

@@ -69,14 +69,16 @@ fn emit_field_type(contract: ref FieldContract?) -> Ty {
 }
 
 impl EmitState {
-    /// Whether the checker found the method call at the statement pauses.
-    pub fn method_pauses(ref self, statement: i64, method: ref String) -> bool {
-        return self.facts.pausing_methods.contains((statement, method.clone()))
+    /// Whether the checker found the method call on the receiver whose node
+    /// is `on` pauses (ADR-340 D5).
+    pub fn method_pauses(ref self, on: i64) -> bool {
+        return self.facts.pausing_methods.contains(on)
     }
 
-    /// Whether the checker found the method call at the statement can fail.
-    pub fn method_can_fail(ref self, statement: i64, method: ref String) -> bool {
-        return self.facts.fallible_methods.contains((statement, method.clone()))
+    /// Whether the checker found the method call on the receiver whose node
+    /// is `on` can fail.
+    pub fn method_can_fail(ref self, on: i64) -> bool {
+        return self.facts.fallible_methods.contains(on)
     }
 
     /// Whether the function's `sync` is decided by what it is passed.

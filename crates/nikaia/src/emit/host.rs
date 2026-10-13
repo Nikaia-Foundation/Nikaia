@@ -260,12 +260,12 @@ impl EmitHost for Emitter<'_> {
         crate::contracts::throws::error_type(self.parsed, node)
     }
 
-    fn task_handles(&self, statement: i64) -> Vec<String> {
+    fn task_handles(&self, task: i64) -> Vec<String> {
         self.s
             .facts
             .task_handles
             .iter()
-            .filter(|(at, _)| *at == statement)
+            .filter(|(at, _)| *at == task)
             .map(|(_, name)| name.clone())
             .collect()
     }

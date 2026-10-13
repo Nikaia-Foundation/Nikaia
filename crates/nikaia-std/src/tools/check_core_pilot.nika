@@ -69,7 +69,7 @@ pub fn check_core_a_compound_write_to_a_map_slot[H: CheckHost](mut state: CheckS
 /// **A call that is an instantiation of a function the program walks the
 /// fields of** (ADR-304): the type of its first argument decides the copy, and
 /// the fields it is unrolled over are kept for the emitter.
-pub fn check_core_an_instantiation[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, name: ref String, args: ref Vec[Expr], span: ref Span) sync {
+pub fn check_core_an_instantiation[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, name: ref String, call: i64, args: ref Vec[Expr], span: ref Span) sync {
     if !state.walks_fields.contains_key(name) {
         return
     }
@@ -86,7 +86,7 @@ pub fn check_core_an_instantiation[H: CheckHost](mut state: CheckState, world: r
         else => return,
     }
     let fields = state.shape_of(world.here, world, on) ?? return
-    state.facts.unrolled_calls.insert(span.start as i64, check_specialised(name, on))
+    state.facts.unrolled_calls.insert(call, check_specialised(name, on))
     state.facts.unrolled.insert((name.clone(), on.clone()), fields)
 }
 

@@ -76,8 +76,9 @@ impl CheckState {
     }
 
     /// Where a method call stands in ADR-023 D8's propagation, for the emitter.
-    pub fn method_propagates(ref mut self, world: ref CheckWorld, method: winnow_grammar::Symbol, fails: bool, span: ref Span) sync {
-        let key = (span.start as i64, world.words.resolve(method).clone())
+    /// Keyed by the receiver's node (ADR-340 D5): one call, one answer.
+    pub fn method_propagates(ref mut self, on: i64, fails: bool) sync {
+        let key = on
         if fails {
             let added = self.flow.fallible_methods.insert(key)
         } else {
@@ -87,8 +88,8 @@ impl CheckState {
 
     /// The same, for the `.await`: a call can fail without pausing and pause
     /// without failing, and the two sets are narrowed independently.
-    pub fn method_pauses(ref mut self, world: ref CheckWorld, method: winnow_grammar::Symbol, pauses: bool, span: ref Span) sync {
-        let key = (span.start as i64, world.words.resolve(method).clone())
+    pub fn method_pauses(ref mut self, on: i64, pauses: bool) sync {
+        let key = on
         if pauses {
             let added = self.flow.pausing_methods.insert(key)
         } else {

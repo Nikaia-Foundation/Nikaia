@@ -89,8 +89,8 @@ impl CheckState {
         let callee = callee_of(world.words, expr, world.own, world.library, world.here.items) ?? return false
         return match callee {
             Callee::Method => match expr {
-                Expr::MethodCall { method, .. } => self.flow.pausing_methods.contains((at, world.words.resolve(method).clone())),
-                Expr::SafeMethod { method, .. } => self.flow.pausing_methods.contains((at, world.words.resolve(method).clone())),
+                Expr::MethodCall { receiver, .. } => self.flow.pausing_methods.contains(node_key(receiver)),
+                Expr::SafeMethod { receiver, .. } => self.flow.pausing_methods.contains(node_key(receiver)),
                 else => false,
             },
             Callee::Own(name) => {

@@ -375,13 +375,13 @@ impl EmitState {
                                 return true
                             }
                         },
-                        Expr::MethodCall { method, .. } => {
-                            if self.method_pauses(at, world.words.resolve(method)) {
+                        Expr::MethodCall { receiver, .. } => {
+                            if self.method_pauses(node_key(receiver)) {
                                 return true
                             }
                         },
-                        Expr::SafeMethod { method, .. } => {
-                            if self.method_pauses(at, world.words.resolve(method)) {
+                        Expr::SafeMethod { receiver, .. } => {
+                            if self.method_pauses(node_key(receiver)) {
                                 return true
                             }
                         },

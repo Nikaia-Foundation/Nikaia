@@ -370,7 +370,7 @@ impl EmitState {
         if pauses {
             out.push(".await")
         }
-        if flow.can_throw && !flow.caught && self.method_can_fail(flow.statement, emit_text(world, method)) {
+        if flow.can_throw && !flow.caught && self.method_can_fail(node_key(receiver)) {
             out.push("?")
         }
         return true

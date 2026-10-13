@@ -1225,3 +1225,44 @@ fn main() {
     );
     assert_eq!(said.trim(), "2\n5");
 }
+
+/// #558: the failure of a method call is the call's, keyed by its receiver's
+/// node (ADR-340 D5): `a.get() + b.get()` where only `Strict::get` throws
+/// writes one `?`, where the (statement, name) key gave both one.
+#[test]
+fn two_calls_of_one_name_in_a_statement_fail_each_on_its_own() {
+    let said = printed(
+        "fallible-by-receiver",
+        r#"
+struct Strict {
+    n: i64,
+}
+
+struct Lenient {
+    n: i64,
+}
+
+impl Strict {
+    fn get(ref self) -> i64 throws {
+        return self.n
+    }
+}
+
+impl Lenient {
+    fn get(ref self) -> i64 {
+        return self.n
+    }
+}
+
+fn sum(a: Strict, b: Lenient) -> i64 throws {
+    return a.get() + b.get()
+}
+
+fn main() {
+    let total = sum(Strict { n: 2 }, Lenient { n: 3 }) catch { 0 }
+    println(f"{total}")
+}
+"#,
+    );
+    assert_eq!(said.trim(), "5");
+}

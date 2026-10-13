@@ -394,7 +394,7 @@ impl EmitState {
     fn emit_call_kept[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, func: ref Expr, args: ref Vec[Expr], depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
         match func {
             Expr::Variable(name, _) => {
-                let key = (flow.statement, emit_text(world, name))
+                let key = node_key(func)
                 if !self.facts.kept_calls.contains_key(key) {
                     return false
                 }
@@ -536,7 +536,7 @@ impl EmitState {
     /// arguments, Kap 5.1's deferred parameters, ADR-055 D2's `.await` and
     /// ADR-023 D8's `?`. `receiver` is `null` for the safe form, where the
     /// receiver is the name the enclosing `match` already bound.
-    pub fn emit_core_method_call[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, receiver: ref Expr?, method: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    pub fn emit_core_method_call[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, receiver: ref Expr?, on_node: i64, method: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let name = emit_text(world, method)
         // **`text.chars().collect()` is a list of characters asked for at its
         // size** (`nikaia_std::list::chars`): the same list, without the growing a
@@ -581,7 +581,7 @@ impl EmitState {
                     self.emit_core_args(world, walk, out, host, name, args, [], depth, flow, scope)
                 }
                 out.push(")")
-                if flow.can_throw && !flow.caught && self.method_can_fail(flow.statement, name) {
+                if flow.can_throw && !flow.caught && self.method_can_fail(on_node) {
                     out.push("?")
                 }
                 return
@@ -730,7 +730,7 @@ impl EmitState {
             let on = receiver ?? return
             declared = self.facts.collected_into.contains(node_key(on))
         }
-        if name == "collect" && args.len() == 0 && !declared && !self.method_pauses(flow.statement, name) {
+        if name == "collect" && args.len() == 0 && !declared && !self.method_pauses(on_node) {
             out.push("::<Vec<_>>")
         }
         if kind == 0 {
@@ -787,17 +787,16 @@ impl EmitState {
         // **A walk of a pausing sequence that has no pausing form** (ADR-172 D5,
         // ADR-234). Every walk `Seq` has today has one; an entry added without one
         // is refused here with a line, rather than left to `rustc`.
-        let walked = (flow.statement, name.clone())
-        if self.facts.pausing_walks.contains(walked) {
+        if self.facts.pausing_walks.contains(on_node) {
             throw EmitRefused { message: f"`{name}` can't be used on a sequence whose steps pause. Write a `for x in … {{ … }}` loop instead, and do the work inside it.", at: flow.statement }
         }
-        if self.method_pauses(flow.statement, name) {
+        if self.method_pauses(on_node) {
             if flow.in_lambda {
                 throw EmitRefused { message: f"This lambda calls `{name}`, which can pause, but the compiler knows nothing about what the lambda is passed to, so it can't let it pause. Call `{name}` outside the lambda and pass in the value.", at: flow.statement }
             }
             out.push(".await")
         }
-        let fails = self.method_can_fail(flow.statement, name)
+        let fails = self.method_can_fail(on_node)
         if flow.can_throw && !flow.caught && fails {
             out.push("?")
         }
@@ -944,7 +943,7 @@ impl EmitState {
             out.push("__nikaia_site.full_of(&error)")
             return
         }
-        self.emit_core_method_call(world, walk, out, host, receiver, method, args, config, depth, flow, scope)
+        self.emit_core_method_call(world, walk, out, host, receiver, node_key(receiver), method, args, config, depth, flow, scope)
         // **Views of values that copy are the values** (ADR-231 D1).
         if self.facts.copied_walks.contains(node_key(node)) {
             out.push(".copied()")
