@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.879] — 2026-10-13
+
+**json: an official package in packages/json, read[T]/write[T] by ADR-299's rules, a build-time schema, json::Value (ADR-344, #604)**
+- ADR-344 and Part III 17.3: `json::read[T]`, `json::write[T]`, `json::parse` into `json::Value`, a JSON Schema checked at build time; `NK1250`, `NK1251`.
+
 ## [0.0.878] — 2026-10-13
 
 **process::exit(code) decided (ADR-343)**

@@ -35,6 +35,7 @@
   | tests | no, unless they belong to a change above, in its package |
   | `guide/`, the notes in `docs/`, `README.md`, the website | no |
   | `examples/`, `benches/`, `scripts/`, CI, `editors/` | no |
+  | `packages/<name>/` (an official package, ADR-344 D1) | no: only that package's own version |
 
   A change that does not raise the version gets no `CHANGELOG.md` heading or
   entry either: its commit message is its record. It touches neither the
