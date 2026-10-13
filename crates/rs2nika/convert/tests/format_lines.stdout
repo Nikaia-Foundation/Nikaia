@@ -1,8 +1,8 @@
 fn report(path: ref String, rows: ref Vec[Held]) -> String sync {
-    // TODO(rs2nika): an f-string hole holds `count(|h| (match h { Held::Proved => true, else => false }))`: bind it to a `let` first
-    // TODO(rs2nika): an f-string hole holds `count(|h| (match h { Held::Refused => true, else => false }))`: bind it to a `let` first
-    // TODO(rs2nika): an f-string hole holds `if rows.len() > 2 { "many" } else { "few, some" }`: bind it to a `let` first
-    return f"asserts in {path}: {rows.len()} - proved {count(fn(h) { (match h { Held::Proved => true, else => false }) })}, refused {count(fn(h) { (match h { Held::Refused => true, else => false }) })}, {if rows.len() > 2 { "many" } else { "few, some" }}\n"
+    let hole_6 = count(fn(h) { (match h { Held::Proved => true, else => false }) })
+    let hole_7 = count(fn(h) { (match h { Held::Refused => true, else => false }) })
+    let hole_8 = if rows.len() > 2 { "many" } else { "few, some" }
+    return f"asserts in {path}: {rows.len()} - proved {hole_6}, refused {hole_7}, {hole_8}\n"
 }
 
 fn short(a: i64) -> String sync {

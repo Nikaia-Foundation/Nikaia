@@ -107,6 +107,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R58  a line on Rust-only types (`&[&Parsed]`, `Ledger`, `check(..)`, `once(..)`) -> `// ADAPTER: bleibt in Rust`",
         "R59  Option combinators with a field or method body: `o.map(|x| x.f)` -> `o?.f`, `.is_some_and(|x| x.p())` -> `(o?.p() ?? false)`, `.map_or(d, ..)` -> `(o?.. ?? d)`",
         "R60  `String::with_capacity(n)` -> `\"\"`",
+        "R61  a call or a literal in a `format!` argument -> `let hole_N = ..` before the line, `{hole_N}` in the f-string",
     ]
 }
 
@@ -1137,14 +1138,21 @@ fn rs2nika_format(mut ctx: Rs2nikaCtx, given: ref String) -> String {
                 }
             }
         }
+        let mut bound: Vec[String] = []
+        for a in pos {
+            if a.contains("\"") || a.contains("{") {
+                let n = ctx.hits.len()
+                ctx.todo_extra.push(f"let hole_{n} = {a}")
+                bound.push(f"hole_{n}")
+                rs2nika_hit(ctx, "R61")
+            } else {
+                bound.push(a.clone())
+            }
+        }
+        pos = bound
         let filled = rs2nika_holes(text, pos, named_k, named_v)
         if filled.contains("{?}") {
             ctx.todo_extra.push("`format!` with fewer arguments than holes: `{?}` is a missing one")
-        }
-        for a in pos {
-            if a.contains("\"") || a.contains("{") {
-                ctx.todo_extra.push(f"an f-string hole holds `{a}`: bind it to a `let` first")
-            }
         }
         let before = rs2nika_text(c, 0, start)
         let after = rs2nika_text(c, j, c.len())
@@ -2747,7 +2755,12 @@ pub fn rs2nika_convert(src: ref String, profile: ref String, prefix: ref String,
                 let mut k = before_expr
                 while k < ctx.todo_extra.len() {
                     let t = ctx.todo_extra[k].clone()
-                    out.push(f"{ind}// TODO(rs2nika): {t}")
+                    if t.starts_with("let hole_") {
+                        let bound: String = rs2nika_expr(ctx, t)
+                        out.push(f"{ind}{bound}")
+                    } else {
+                        out.push(f"{ind}// TODO(rs2nika): {t}")
+                    }
                     k = k + 1
                 }
                 if code.ends_with(";") && !code.trim_start().starts_with("//") {
