@@ -27,9 +27,6 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-/// The mark a call that may end the program leaves among the errors (ADR-343).
-const EXITS: &str = "\u{0}exits";
-
 use super::sync::{Reached, reached};
 use super::{Ledger, UNNAMED_ERROR};
 use crate::ast::Expr;
@@ -63,82 +60,28 @@ pub fn infer(
             .collect(),
         direct: BTreeMap::new(),
         calls: BTreeMap::new(),
+        fatal_calls: BTreeMap::new(),
     };
+    let fatal = fatal_types(ledger, library);
     for parsed in units.iter().copied() {
         let own: &Ledger = ledger;
         nika::unit_throws(
             &parsed.program,
             &parsed.interner,
             &|expr: &Expr| crate::emit::literal_expressions(parsed, expr),
-            &|expr: &Expr| contribution(parsed, expr, own, library),
+            &|expr: &Expr| contribution(parsed, expr, own, library, &fatal),
             own,
             library,
             &mut graph,
         );
     }
-    // **`exits`** (ADR-343 D2): a call of a library function that may end the
-    // program is marked in `direct` by `EXITS`; the mark is taken out before
-    // the error sets are folded, and travels over the same call graph here.
-    // `unit_throws` walks only the functions that declare `throws`, so every
-    // function is walked here for its calls.
-    let mut exits: BTreeSet<String> = BTreeSet::new();
-    let mut edges: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-    for parsed in units.iter().copied() {
-        let own: &Ledger = ledger;
-        let mut walk = |key: String, body: &crate::ast::Block| {
-            let thrown = nika::thrown_by(
-                body,
-                &parsed.interner,
-                &|expr: &Expr| crate::emit::literal_expressions(parsed, expr),
-                &|expr: &Expr| contribution(parsed, expr, own, library),
-            );
-            if thrown.direct.contains(EXITS) {
-                exits.insert(key.clone());
-            }
-            let mut called = thrown.calls;
-            if let Some(methods) = graph.methods.get(&key) {
-                called.extend(methods.resolved.iter().cloned());
-            }
-            edges.entry(key).or_default().extend(called);
-        };
-        for item in &parsed.program.items {
-            match &item.node {
-                crate::ast::Item::Fn { name, body, .. } => {
-                    walk(function_key(parsed, name.as_ref(), ""), body);
-                }
-                crate::ast::Item::Impl {
-                    target, methods, ..
-                } => {
-                    let owner = parsed.interner.resolve(target.name).to_string();
-                    for method in methods {
-                        if let crate::ast::Item::Fn { name, body, .. } = &method.node {
-                            walk(function_key(parsed, name.as_ref(), &owner), body);
-                        }
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
-    for errors in graph.direct.values_mut() {
-        errors.remove(EXITS);
-    }
-    let mut changed = true;
-    while changed {
-        changed = false;
-        for (name, callees) in &edges {
-            if !exits.contains(name) && callees.iter().any(|callee| exits.contains(callee)) {
-                exits.insert(name.clone());
-                changed = true;
-            }
-        }
-    }
-    for name in &exits {
-        if let Some(contract) = ledger.functions.get_mut(name) {
-            contract.exits = true;
-        }
-    }
-    for (name, errors) in nika::error_sets(&graph.direct, &graph.calls, ledger) {
+    for (name, errors) in nika::error_sets(
+        &graph.direct,
+        &graph.calls,
+        &graph.fatal_calls,
+        &fatal,
+        ledger,
+    ) {
         if let Some(contract) = ledger.functions.get_mut(&name) {
             contract.fails_with = errors;
         }
@@ -146,6 +89,7 @@ pub fn infer(
 }
 
 /// The ledger's key of a function, `Owner::name` for a method.
+#[allow(dead_code)]
 fn function_key(parsed: &Parsed, name: Option<&winnow_grammar::Symbol>, owner: &str) -> String {
     let own = name
         .map(|symbol| parsed.interner.resolve(*symbol).to_string())
@@ -161,6 +105,7 @@ fn contribution(
     expr: &Expr,
     own: &Ledger,
     library: &Ledger,
+    fatal: &BTreeSet<String>,
 ) -> nikaia_std::tools::throws::Contribution {
     let (call, errors) = match reached(parsed, expr, own, library) {
         Some(Reached::Own(name)) => (Some(name), Vec::new()),
@@ -169,19 +114,34 @@ fn contribution(
             library
                 .functions
                 .get(&key)
-                .map(|contract| {
-                    let mut errors = contract.fails_with.clone();
-                    if contract.exits {
-                        errors.push(EXITS.to_string());
-                    }
-                    errors
-                })
+                .map(|contract| contract.fails_with.clone())
                 .unwrap_or_default(),
         ),
         Some(Reached::Opaque(_)) => (None, vec![UNNAMED_ERROR.to_string()]),
         Some(Reached::Method) | None => (None, Vec::new()),
     };
-    nikaia_std::tools::throws::Contribution { call, errors }
+    let fatal = errors
+        .iter()
+        .filter(|e| fatal.contains(*e))
+        .cloned()
+        .collect();
+    nikaia_std::tools::throws::Contribution {
+        call,
+        errors,
+        fatal,
+    }
+}
+
+/// **The fatal error types** (ADR-345 D1): every type an `impl Fatal` names,
+/// in this package or a library.
+pub fn fatal_types(own: &Ledger, library: &Ledger) -> BTreeSet<String> {
+    let mut out = BTreeSet::new();
+    for ledger in [own, library] {
+        if let Some(types) = ledger.implementations.get("Fatal") {
+            out.extend(types.iter().cloned());
+        }
+    }
+    out
 }
 
 /// The type a `throw` raises: `tools/throws.nika` answers it (#125).

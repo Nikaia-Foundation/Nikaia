@@ -14005,11 +14005,11 @@ impl CheckState {
         }
         let suffix = format!("::{}", written);
         let shape = written == "Struct" || written == "Enum";
-        let mut declared = !shape && (written == "Error" || written == "Drop" || written == "Cleanup" || written == "Eq" || written == "Ord");
+        let mut declared = !shape && (written == "Error" || written == "Drop" || written == "Cleanup" || written == "Fatal" || written == "Eq" || written == "Ord");
         declared = declared || item_has_trait(world.own, written, &suffix) || item_has_trait(world.library, written, &suffix) || declares_a_type(view, written) || imports_a_package(view, written) || self.foreign_names.contains(written);
         for other in world.beside.iter() { if declares_a_type(other, written) { declared = true; } }
         if declared { return; }
-        let mut because: String = format!("An `impl` can name a trait declared with `trait {} {{ … }}` in this program or a package it uses, or one of `Error`, `Drop`, `Cleanup`, `Eq` and `Ord`.", written);
+        let mut because: String = format!("An `impl` can name a trait declared with `trait {} {{ … }}` in this program or a package it uses, or one of `Error`, `Drop`, `Cleanup`, `Fatal`, `Eq` and `Ord`.", written);
         let mut help: String = format!("Declare `trait {}`, or name the package that declares it: `package::{}`.", written, written);
         if shape {
             because = format!("A type is a `{}` by how it's declared, not by an `impl`: every `struct` is already a `Struct` and every `enum` an `Enum`.", written);
@@ -24538,10 +24538,41 @@ impl EmitState {
         let inside_scope = EmitScope { caught_sum: sum, ..scope.clone() };
         let mut opening: Option<String> = None;
         if named { opening = Some(String::from("let (error, __nikaia_site) = error.split();")); }
-        out.push(&format!(" {{\n{}Ok(value) => value,\n{}Err({}) => ", pad, pad, bound));
+        out.push(&format!(" {{\n{}Ok(value) => value,\n", pad));
+        let passing = self.fatal_passing(world, guarded_expr, handler);
+        if !passing.is_empty() {
+            let caught_in = self.caught_sum(world, guarded_expr);
+            if caught_in.is_none() {
+                out.push(&format!("{}Err(error) => return Err(error.into()),\n", pad));
+                out.push(&format!("{}#[allow(unreachable_patterns)]\n", pad));
+            } else {
+                let held_sum = nikaia_std::index::or(caught_in.as_deref(), || "").to_owned();
+                for member in passing.iter() { out.push(&format!("{}Err(crate::{}::{}(error)) => return Err(error.into()),\n", pad, held_sum, sum_variant(member))); }
+            }
+        }
+        out.push(&format!("{}Err({}) => ", pad, bound));
         host.block_opening_with(walk, out, handler, depth + 1, inside, &inside_scope, EmitTail::Value, opening)?;
         out.push(&format!(",\n{}}}", close));
         Ok(())
+    }
+    pub fn fatal_passing(&self, world: &EmitWorld<'_>, guarded: &Expr, handler: &Block) -> Vec<String> {
+        let mut out: Vec<String> = vec![];
+        let name = match call_callee_name(world.words, world.aliases, guarded) { Some(__nikaia_value) => __nikaia_value, None => return out };
+        let mut arriving: Vec<String> = vec![];
+        let own = self.own_contracts.functions.get(&name);
+        if own.is_some() {
+            let contract = match own { Some(__nikaia_value) => __nikaia_value, None => return out };
+            arriving = contract.fails_with.to_owned();
+        } else {
+            let theirs = match world.library.functions.get(&name) { Some(__nikaia_value) => __nikaia_value, None => return out };
+            arriving = theirs.fails_with.to_owned();
+        }
+        let named = fatal_named(handler, world.words);
+        for error in arriving.iter() {
+            if named.contains(error) { continue; }
+            if emit_is_fatal(&self.own_contracts, error) || emit_is_fatal(world.library, error) { out.push(error.to_owned()); }
+        }
+        out
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -24648,6 +24679,11 @@ impl EmitState {
         if !host.task_handles(task).is_empty() { out.push(" }"); }
         Ok(())
     }
+}
+
+fn emit_is_fatal(ledger: &Ledger, error: &str) -> bool {
+    let types = match ledger.implementations.get("Fatal") { Some(__nikaia_value) => __nikaia_value, None => return false };
+    types.contains(error)
 }
 
 
@@ -26563,7 +26599,7 @@ impl EmitState {
         text = format!("{}    nikaia_std::abort::report_in_nikaia_terms(__NIKAIA_SITES);\n", text);
         text = format!("{}    let nikaia_runtime = nikaia_std::rt::{}(nikaia_std::rt::UserCode::{});\n", text, start, user_code);
         let exits = main_exits(&self.own_contracts);
-        if exits && call_pauses(&self.own_contracts, "main") { text = format!("{}    let outcome = nikaia_std::rt::exec::block_on(nikaia_std::process::guarded(__nikaia_main()));\n", text); } else if exits { text = format!("{}    let outcome = nikaia_std::process::guarded_sync(__nikaia_main);\n", text); } else if call_pauses(&self.own_contracts, "main") { text = format!("{}    let outcome = nikaia_std::rt::exec::block_on(__nikaia_main());\n", text); } else { text = format!("{}    let outcome = __nikaia_main();\n", text); }
+        if call_pauses(&self.own_contracts, "main") { text = format!("{}    let outcome = nikaia_std::rt::exec::block_on(__nikaia_main());\n", text); } else { text = format!("{}    let outcome = __nikaia_main();\n", text); }
         if exits { text = format!("{}    nikaia_runtime.finish();\n    nikaia_std::process::ended(outcome)\n}}\n", text); } else { text = format!("{}    nikaia_runtime.finish();\n    outcome\n}}\n", text); }
         text
     }
@@ -26605,7 +26641,8 @@ impl EmitState {
 
 fn main_exits(own: &Ledger) -> bool {
     let contract = match own.functions.get("main") { Some(__nikaia_value) => __nikaia_value, None => return false };
-    contract.exits
+    for error in contract.fails_with.iter() { if error == "process::Exit" { return true; } }
+    false
 }
 
 
@@ -28277,6 +28314,12 @@ impl EmitState {
                 out.push(&format!("            {}::{}(e) => {},\n", name, variant, held));
             }
             out.push("        }\n    }\n}\n\n");
+            let mut ends = false;
+            for member in members.iter() { if member == "process::Exit" { ends = true; } }
+            if ends {
+                let exit_variant = sum_variant("process::Exit");
+                out.push(&format!("impl{} nikaia_std::process::Ending for {}{} {{\n    fn exit_code(&self) -> Option<i32> {{\n        match self {{\n            {}::{}(e) => nikaia_std::process::Ending::exit_code(e),\n            #[allow(unreachable_patterns)] _ => None,\n        }}\n    }}\n}}\n\n", decl, name, params, name, exit_variant));
+            }
         }
     }
     pub fn channel_of(&self, world: &EmitWorld<'_>, thrown: &[String], elided: bool, params: &str, static_params: &str, borrows: bool) -> String {
@@ -31244,7 +31287,7 @@ fn function_key(entry: &mut FnContract, name: &str, key: &str, value: &str, n: i
             classes.push(nikaia_std::index::or(read, || Class { members: vec![], count: Count::Atomic }));
         }
         entry.sharing = classes;
-    } else if key == "maps" { entry.maps = entries(value, n)?; } else if key == "exits" { entry.exits = value == "true"; } else if key == "ends_by_length" { entry.ends_by_length = value == "true"; } else if key == "pieces" { entry.pieces = value == "true"; } else if key == "requires" { entry.requires = entries(value, n)?; } else if key == "ensures" { entry.ensures = entries(value, n)?; } else if key == "from" { entry.from = entries(value, n)?; } else { return Err(nikaia_std::error::throwing(Refused::Because(format!("line {}: unknown key `{}` on a fn", n, key)), &"function_key")); }
+    } else if key == "maps" { entry.maps = entries(value, n)?; } else if key == "ends_by_length" { entry.ends_by_length = value == "true"; } else if key == "pieces" { entry.pieces = value == "true"; } else if key == "requires" { entry.requires = entries(value, n)?; } else if key == "ensures" { entry.ensures = entries(value, n)?; } else if key == "from" { entry.from = entries(value, n)?; } else { return Err(nikaia_std::error::throwing(Refused::Because(format!("line {}: unknown key `{}` on a fn", n, key)), &"function_key")); }
     Ok(())
 }
 
@@ -32548,7 +32591,6 @@ fn function_text(name: &str, contract: &FnContract) -> String {
         out.push_str(&format!("sharing = [{}]\n", quoted_all(&classes)));
     }
     if !contract.maps.is_empty() { out.push_str(&format!("maps = [{}]\n", quoted_all(&contract.maps))); }
-    if contract.exits { out.push_str("exits = true\n"); }
     if contract.ends_by_length { out.push_str("ends_by_length = true\n"); }
     if contract.pieces { out.push_str("pieces = true\n"); }
     out.push_str(&claims_text("requires", &contract.requires));
@@ -44710,6 +44752,7 @@ pub struct ThrowsGraph {
     pub methods: collections::BTreeMap<String, MethodsCalled>,
     pub direct: collections::BTreeMap<String, collections::BTreeSet<String>>,
     pub calls: collections::BTreeMap<String, collections::BTreeSet<String>>,
+    pub fatal_calls: collections::BTreeMap<String, collections::BTreeMap<String, collections::BTreeSet<String>>>,
 }
 
 pub fn unit_throws(program: &Program, names: &winnow_grammar::InternerContext, holes_of: &impl Fn(&Expr) -> Vec<Expr>, contribution_of: &impl Fn(&Expr) -> Contribution, own: &Ledger, library: &Ledger, graph: &mut ThrowsGraph) {
@@ -44748,6 +44791,7 @@ fn with_methods(key: &str, thrown: &Thrown, own: &Ledger, library: &Ledger, grap
     methods_into(*nikaia_std::index::get(&graph.methods, key), own, library, &mut named, &mut called);
     graph.direct.insert(key.to_owned(), named);
     graph.calls.insert(key.to_owned(), called);
+    graph.fatal_calls.insert(key.to_owned(), thrown.fatal_calls.to_owned());
 }
 
 fn methods_into(resolved: Option<&MethodsCalled>, own: &Ledger, library: &Ledger, named: &mut collections::BTreeSet<String>, called: &mut collections::BTreeSet<String>) {
@@ -44761,7 +44805,7 @@ fn fails_with_of(library: &Ledger, callee: &str) -> Vec<String> {
     contract.fails_with.to_owned()
 }
 
-pub fn error_sets(direct: &collections::BTreeMap<String, collections::BTreeSet<String>>, calls: &collections::BTreeMap<String, collections::BTreeSet<String>>, own: &Ledger) -> collections::BTreeMap<String, Vec<String>> {
+pub fn error_sets(direct: &collections::BTreeMap<String, collections::BTreeSet<String>>, calls: &collections::BTreeMap<String, collections::BTreeSet<String>>, fatal_calls: &collections::BTreeMap<String, collections::BTreeMap<String, collections::BTreeSet<String>>>, fatal: &collections::BTreeSet<String>, own: &Ledger) -> collections::BTreeMap<String, Vec<String>> {
     let mut sets = direct.to_owned();
     let mut changed = true;
     while changed {
@@ -44773,6 +44817,11 @@ pub fn error_sets(direct: &collections::BTreeMap<String, collections::BTreeSet<S
             }, || collections::BTreeSet::new().into());
             let mut grown = before.to_owned();
             for callee in callees.iter() { for error in theirs(&sets, own, callee) { grown.insert(error); } }
+            let caught = nikaia_std::index::or(match *nikaia_std::index::get(&fatal_calls, name) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || collections::BTreeMap::new().into());
+            for (callee, named) in caught.iter() { for error in theirs(&sets, own, callee) { if fatal.contains(&error) && !named.contains(&error) { grown.insert(error); } } }
             if (grown.len() as i64) != before.len() as i64 {
                 sets.insert(name.to_owned(), grown);
                 changed = true;
@@ -44839,16 +44888,19 @@ pub struct Thrown {
     pub direct: collections::BTreeSet<String>,
     pub calls: collections::BTreeSet<String>,
     passes_on: bool,
+    named: collections::BTreeSet<String>,
+    pub fatal_calls: collections::BTreeMap<String, collections::BTreeSet<String>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Contribution {
     pub call: Option<String>,
     pub errors: Vec<String>,
+    pub fatal: Vec<String>,
 }
 
 pub fn thrown_by(body: &Block, names: &winnow_grammar::InternerContext, holes_of: &impl Fn(&Expr) -> Vec<Expr>, contribution_of: &impl Fn(&Expr) -> Contribution) -> Thrown {
-    let mut out = Thrown { direct: collections::BTreeSet::new(), calls: collections::BTreeSet::new(), passes_on: false };
+    let mut out = Thrown { direct: collections::BTreeSet::new(), calls: collections::BTreeSet::new(), passes_on: false, named: collections::BTreeSet::new(), fatal_calls: collections::BTreeMap::new() };
     thrown_in_block(body, names, holes_of, contribution_of, false, &mut out);
     out
 }
@@ -44936,7 +44988,10 @@ fn thrown_in(expr: &Expr, names: &winnow_grammar::InternerContext, holes_of: &im
         Expr::TryCatch { expr, handler, .. } => {
             let expr = nikaia_std::boxed::open(expr);
             let into_the_handler = caught || !passes_on(handler, names, holes_of, contribution_of);
+            let outer = out.named.to_owned();
+            if !caught { out.named = fatal_named(handler, names); }
             thrown_in(expr, names, holes_of, contribution_of, in_a_handler, into_the_handler, out);
+            out.named = outer;
         },
         Expr::If { cond, .. } => { let cond = nikaia_std::boxed::open(cond); thrown_in(cond, names, holes_of, contribution_of, in_a_handler, caught, out) },
         Expr::Match { value, arms, .. } => {
@@ -45004,7 +45059,19 @@ fn thrown_in_blocks(expr: &Expr, names: &winnow_grammar::InternerContext, holes_
 fn a_contribution(expr: &Expr, names: &winnow_grammar::InternerContext, contribution_of: &impl Fn(&Expr) -> Contribution, in_a_handler: bool, caught: bool, out: &mut Thrown) {
     let passing = the_caught_error(expr, names);
     if passing { out.passes_on = true; }
-    if caught || in_a_handler && passing { return; }
+    if in_a_handler && passing { return; }
+    if caught {
+        match expr {
+            Expr::Throw(_, _) => { },
+            _ => {
+                let given = contribution_of(expr);
+                for error in given.fatal.iter() { if !out.named.contains(error) { out.direct.insert(error.to_owned()); } }
+                let call = nikaia_std::index::or(given.call, || "".into());
+                if !call.is_empty() && !out.fatal_calls.contains_key(&call) { out.fatal_calls.insert(call, out.named.to_owned()); }
+            },
+        }
+        return;
+    }
     match expr {
         Expr::Throw(thrown, _) => {
             let thrown = nikaia_std::boxed::open(thrown);
@@ -45030,9 +45097,56 @@ fn the_caught_error(expr: &Expr, names: &winnow_grammar::InternerContext) -> boo
 }
 
 fn passes_on(handler: &Block, names: &winnow_grammar::InternerContext, holes_of: &impl Fn(&Expr) -> Vec<Expr>, contribution_of: &impl Fn(&Expr) -> Contribution) -> bool {
-    let mut seen = Thrown { direct: collections::BTreeSet::new(), calls: collections::BTreeSet::new(), passes_on: false };
+    let mut seen = Thrown { direct: collections::BTreeSet::new(), calls: collections::BTreeSet::new(), passes_on: false, named: collections::BTreeSet::new(), fatal_calls: collections::BTreeMap::new() };
     thrown_in_block(handler, names, holes_of, contribution_of, false, &mut seen);
     seen.passes_on
+}
+
+pub fn fatal_named(handler: &Block, names: &winnow_grammar::InternerContext) -> collections::BTreeSet<String> {
+    let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for stmt in handler.stmts.iter() {
+        match &stmt.node {
+            Stmt::Expr(value) => named_in_match(value, names, &mut out),
+            Stmt::Let { value, .. } => named_in_match(value, names, &mut out),
+            Stmt::Return(value) => named_in_match(match value { Some(__nikaia_value) => __nikaia_value, None => continue }, names, &mut out),
+            _ => { },
+        }
+    }
+    out
+}
+
+fn named_in_match(expr: &Expr, names: &winnow_grammar::InternerContext, out: &mut collections::BTreeSet<String>) {
+    match expr {
+        Expr::Match { value, arms, .. } => {
+            let value = nikaia_std::boxed::open(value);
+            if !the_error(value, names) { return; }
+            for arm in arms.iter() {
+                let path = match pattern_path(&arm.pattern) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                if path.len() < 2 { continue; }
+                let mut parts: Vec<String> = vec![];
+                for at in 0..path.len() as i64 - 1 { parts.push(names.resolve(*nikaia_std::index::get(&path, (at) as usize)).to_owned()); }
+                out.insert(parts.join("::"));
+            }
+        },
+        _ => { },
+    }
+}
+
+fn the_error(expr: &Expr, names: &winnow_grammar::InternerContext) -> bool {
+    match expr {
+        Expr::Variable(name, _) => { let name = *name; names.resolve(name) == "error" },
+        _ => false,
+    }
+}
+
+fn pattern_path(pattern: &MatchPattern) -> Option<Vec<winnow_grammar::Symbol>> {
+    match pattern {
+        MatchPattern::Path(path) => { return Some(path.to_owned()); },
+        MatchPattern::Tuple { path, .. } => { return Some(path.to_owned()); },
+        MatchPattern::Named { path, .. } => { return Some(path.to_owned()); },
+        _ => { },
+    }
+    None
 }
 
 
@@ -47008,7 +47122,6 @@ pub struct FnContract {
     pub views: Vec<Held>,
     pub sharing: Vec<Class>,
     pub maps: Vec<String>,
-    pub exits: bool,
     pub ends_by_length: bool,
     pub pieces: bool,
     pub requires: Vec<String>,
@@ -47017,7 +47130,7 @@ pub struct FnContract {
 }
 
 impl FnContract {
-    pub fn empty() -> FnContract { FnContract { public: false, sync_claim: Sync::No, fails_with: vec![], touches: vec![], touches_known: false, provenance: None, signature: None, borrows: vec![], keeps: vec![], mutates: false, touches_a_lock: Lock::No, threads: Threads::Undecided, views: vec![], sharing: vec![], maps: vec![], exits: false, ends_by_length: false, pieces: false, requires: vec![], ensures: vec![], from: vec![] } }
+    pub fn empty() -> FnContract { FnContract { public: false, sync_claim: Sync::No, fails_with: vec![], touches: vec![], touches_known: false, provenance: None, signature: None, borrows: vec![], keeps: vec![], mutates: false, touches_a_lock: Lock::No, threads: Threads::Undecided, views: vec![], sharing: vec![], maps: vec![], ends_by_length: false, pieces: false, requires: vec![], ensures: vec![], from: vec![] } }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -50562,7 +50675,7 @@ pub mod threads {
 }
 pub mod throws {
     #[allow(unused_imports)]
-    pub use super::{MethodsCalled, ThrowsGraph, unit_throws, error_sets, error_type, Thrown, Contribution, thrown_by};
+    pub use super::{MethodsCalled, ThrowsGraph, unit_throws, error_sets, error_type, Thrown, Contribution, thrown_by, fatal_named};
 }
 pub mod tiers {
     #[allow(unused_imports)]

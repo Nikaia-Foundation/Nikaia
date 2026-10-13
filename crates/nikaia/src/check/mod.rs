@@ -445,7 +445,6 @@ fn walked<'a>(
         spares: Vec::new(),
         arm_types: BTreeMap::new(),
         arm_disagreements: BTreeMap::new(),
-        in_task: Vec::new(),
         discarded: BTreeSet::new(),
     };
     checker.collect_types();
@@ -1025,10 +1024,6 @@ struct Checker<'a> {
     /// **Arms that are known and disagree** (#596), by the `if` or `match`: a
     /// refusal that stands unless a position asks the arms one by one.
     arm_disagreements: BTreeMap<i64, Finding>,
-    /// **How many task contexts the walk is inside** (ADR-343 D3): `spawn`,
-    /// a branch of `overlap`, a supervisor's child. A `par_iter` lambda and a
-    /// scope's task are `s.in_parallel`. One mark per boundary entered.
-    in_task: Vec<bool>,
     /// The statements whose value nothing reads.
     discarded: BTreeSet<i64>,
     /// What each callee has **newly** gained since the committed ledger
@@ -4041,7 +4036,6 @@ impl<'a> Checker<'a> {
         if !known_text {
             self.may_fail_here(&key, &contract, span);
         }
-        self.an_exit_in_a_task(&key, &contract, span);
 
         // What the receiver's own type tells the signature (ADR-288).
         // `HashMap[&str, Stats]` against `&HashMap[$K, $V]` binds `$V`
@@ -8535,6 +8529,7 @@ impl<'a> Checker<'a> {
                     handed.caught = was;
                 }
                 let guarded = guarded.unwrap_or_else(Guarded::nothing);
+                self.a_fatal_error_passes(&guarded, handler, span);
                 // **`error` is what the guarded calls throw** (Part I 7.1,
                 // #501): `fs::read_to_string(…) catch { … {error} … }` binds an
                 // `io::IoError`, as the ledger records the call. One type, and
@@ -9507,15 +9502,7 @@ impl<'a> Checker<'a> {
         // in both - or `takes(self.name)` slips past `NK1131` while
         // `x.takes(self.name)` does not.
         let outer_paused = std::mem::take(&mut self.s.flow.paused_args);
-        // ADR-343 D3: a supervisor's child is a task.
-        let child = resolved
-            .as_ref()
-            .is_some_and(|(key, _)| key == "supervisor::child");
-        if child {
-            self.in_task.push(true);
-        }
-        if let Some((key, contract)) = &resolved {
-            self.an_exit_in_a_task(key, contract, span);
+        if let Some((key, _)) = &resolved {
             self.an_exit_code_out_of_range(key, args, span);
         }
         let found = self.arguments_given(
@@ -9527,9 +9514,6 @@ impl<'a> Checker<'a> {
             resolved.as_ref().map(|(_, contract)| contract),
             span,
         );
-        if child {
-            self.in_task.pop();
-        }
         let paused_here = std::mem::replace(&mut self.s.flow.paused_args, outer_paused);
         // **A scope with a task that pauses polls it, and pauses itself**
         // (ADR-328 D10): its lambda paused because a task in it did.
@@ -12688,42 +12672,52 @@ impl<'a> Checker<'a> {
     /// of them is not reachable from inside it, so the count starts again at
     /// zero and the word for what stands in the way is carried for the message.
     fn enter_boundary(&mut self, what: &str) -> Boundary {
-        self.in_task
-            .push(what == "task" || what == "`overlap` branch");
         self.s.enter_boundary(what)
     }
 
     /// Back out of what [`Checker::enter_boundary`] went into.
     fn leave_boundary(&mut self, saved: Boundary) {
-        self.in_task.pop();
         self.s.leave_boundary(&saved);
     }
 
-    /// **`NK2607`: code that may end the program, in a task**
-    /// ([ADR-343](../../docs/specification/adr/adr-343.md) D3). The callee's
-    /// ledger entry says `exits` - `process::exit` itself, or a function that
-    /// reaches it over any number of calls.
-    fn an_exit_in_a_task(&mut self, key: &str, contract: &FnContract, span: &Span) {
-        if !contract.exits || (!self.in_task.contains(&true) && self.s.in_parallel.is_none()) {
+    /// **A fatal error passes a `catch` that does not name it**
+    /// ([ADR-345](../../docs/specification/adr/adr-345.md) D2), so it leaves
+    /// the function, which says `throws` (`NK2605`), or the `catch` around it
+    /// counts it.
+    fn a_fatal_error_passes(&mut self, guarded: &Guarded, handler: &Block, span: &Span) {
+        let fatal = crate::contracts::throws::fatal_types(self.world.own, self.world.library);
+        let named = nikaia_std::tools::throws::fatal_named(handler, &self.parsed.interner);
+        let passing: Vec<String> = guarded
+            .thrown
+            .iter()
+            .filter(|error| fatal.contains(*error) && !named.contains(*error))
+            .cloned()
+            .collect();
+        if passing.is_empty() {
             return;
         }
-        let what = match key {
-            "process::exit" => "`process::exit` ends the program".to_string(),
-            _ => format!("`{key}` may end the program: it reaches `process::exit`"),
-        };
+        if let Some(outer) = self.s.flow.guarded.as_mut() {
+            outer.fallible = true;
+            outer.thrown.extend(passing.iter().cloned());
+        }
+        if self.s.flow.throwing || self.s.flow.caught {
+            return;
+        }
+        let list = passing
+            .iter()
+            .map(|error| format!("`{error}`"))
+            .collect::<Vec<_>>()
+            .join(", ");
         self.s.findings.push(Finding {
             severity: Severity::Error,
             span: *span,
-            code: "NK2607".to_string(),
-            message: format!("{what}, and this runs in a task."),
-            notes: vec![
-                "A task ends in order and reports to whoever started it; only `main` \
-                 ends the program, after the other tasks and the cleanups."
-                    .to_string(),
-            ],
+            code: "NK2605".to_string(),
+            message: format!("This function can fail, because {list} passes this `catch`."),
+            notes: vec![format!(
+                "{list} is fatal: a `catch` takes it only in a `match` arm that names its type, and this handler does not."
+            )],
             help: Some(
-                "Throw an error or return a result from the task, and end with \
-                 `process::exit` in `main`."
+                "Add `throws` to the function, or name the type in a `match error` arm of the handler."
                     .to_string(),
             ),
             labels: Vec::new(),

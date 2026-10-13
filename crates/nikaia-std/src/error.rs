@@ -312,6 +312,11 @@ impl<E> Thrown<E> {
     /// the envelope is not thrown away — `error.full()` needs it and so does
     /// `throw error` (D3) — so it comes back beside the error rather than
     /// around it, and the handler holds both.
+    /// The author's error, read in place.
+    pub fn held(&self) -> &E {
+        &self.inner
+    }
+
     pub fn split(self) -> (E, Site<E>) {
         (self.inner, Site { tail: self.tail })
     }
@@ -617,6 +622,12 @@ impl Full for crate::io::IoError {
 }
 
 impl Full for crate::lock::Overtaken {
+    fn full(&self) -> String {
+        format!("{self}\n{BELOW}")
+    }
+}
+
+impl Full for crate::process::Exit {
     fn full(&self) -> String {
         format!("{self}\n{BELOW}")
     }

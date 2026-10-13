@@ -2617,6 +2617,15 @@ impl<'p> Emitter<'p> {
                 // is written as the author wrote it, paused and failing as the
                 // ledger says, and `Cleaned<T>` reaches it through the bridge
                 // when the value dies.
+                // **`impl Fatal for T` is a marker** (ADR-345 D1): the
+                // compiler reads it, and nothing below it needs a trait.
+                let fatal = trait_name.is_some_and(|t| self.text(t) == "Fatal")
+                    && !self.parsed.program.items.iter().any(|item| {
+                        matches!(&item.node, Item::Trait { name, .. } if self.text(*name) == "Fatal")
+                    });
+                if fatal {
+                    return Ok(());
+                }
                 let is_cleanup = trait_name.is_some_and(|t| self.text(t) == "Cleanup");
                 if is_cleanup {
                     out.push(&format!("impl{declares} {target_name}{applied} {{\n"));

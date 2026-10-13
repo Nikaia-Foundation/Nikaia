@@ -10,9 +10,8 @@
 version = 3
 
 [fn."main"]
-throws = ["?"]
+throws = ["process::Exit"]
 locks = true
-exits = true
 signature = "()"
 
 [fn."rs2nika_adapter_mark"]

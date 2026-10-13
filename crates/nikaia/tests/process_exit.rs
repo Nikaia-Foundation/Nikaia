@@ -1,10 +1,10 @@
 // crates/nikaia/tests/process_exit.rs
 //
-// `process::exit(code)` ([ADR-343](../../../docs/specification/adr/adr-343.md)):
-// `main` ends with the code on the path a return from `main` takes, so the
-// cleanups run (D1); code that may end the program is refused in a task,
-// directly and over calls (`NK2607`, D2, D3); a constant code outside 0..=255
-// is refused (`NK1116`, D4).
+// `process::exit(code)` throws the fatal error `process::Exit`
+// ([ADR-345](../../../docs/specification/adr/adr-345.md)): it travels with
+// `throws`, a `catch` takes it only in an arm naming it, and at the end of
+// `main` the program ends with its code after the cleanups; a constant code
+// outside 0..=255 is `NK1116` (ADR-343 D4).
 
 mod common;
 
@@ -56,15 +56,17 @@ fn codes(source: &str) -> Vec<String> {
     found.into_iter().map(|finding| finding.code).collect()
 }
 
-const IN_MAIN: &str = "use std::process\n\
-    \n\
-    fn main() {\n\
-    \x20   println(\"before\")\n\
-    \x20   process::exit(3)\n\
-    \x20   println(\"after\")\n\
-    }\n";
+const IN_MAIN: &str = r#"use std::process
 
-/// D1: the program ends with the code, and nothing after the call runs.
+fn main() throws {
+    println("before")
+    process::exit(3)
+    println("after")
+}
+"#;
+
+/// ADR-345 D3, D4: the program ends with the code, and nothing after the call
+/// runs.
 #[test]
 fn exit_in_main_ends_with_its_code() {
     let (out, err, code) = ran("main", IN_MAIN, Build::default());
@@ -73,34 +75,39 @@ fn exit_in_main_ends_with_its_code() {
     assert!(codes(IN_MAIN).is_empty(), "{:?}", codes(IN_MAIN));
 }
 
-const CLEANED: &str = "use std::process\n\
-    \n\
-    struct Noted {\n\
-    \x20   name: String,\n\
-    }\n\
-    \n\
-    impl Cleanup for Noted {\n\
-    \x20   fn cleanup(ref mut self) {\n\
-    \x20       println(f\"cleanup {self.name}\")\n\
-    \x20   }\n\
-    }\n\
-    \n\
-    fn stop() {\n\
-    \x20   let inner = Noted { name: f\"inner\" }\n\
-    \x20   println(f\"stopping {inner.name}\")\n\
-    \x20   process::exit(4)\n\
-    }\n\
-    \n\
-    fn main() {\n\
-    \x20   let outer = Noted { name: f\"outer\" }\n\
-    \x20   println(f\"start {outer.name}\")\n\
-    \x20   stop()\n\
-    }\n";
+const CLEANED: &str = r#"use std::process
 
-/// D1: the values `main` and the frames below it hold are cleaned up, in the
-/// order they die, before the process ends with the code.
+struct Noted {
+    name: String,
+}
+
+impl Cleanup for Noted {
+    fn cleanup(ref mut self) {
+        println(f"cleanup {self.name}")
+    }
+}
+
+fn stop() throws {
+    let inner = Noted { name: f"inner" }
+    println(f"stopping {inner.name}")
+    process::exit(4)
+}
+
+fn middle() throws {
+    stop()
+}
+
+fn main() throws {
+    let outer = Noted { name: f"outer" }
+    println(f"start {outer.name}")
+    middle()
+}
+"#;
+
+/// D3, D4: two levels deep with `throws`; the values the frames hold are
+/// cleaned up, in the order they die, before the process ends with the code.
 #[test]
-fn exit_runs_the_cleanups() {
+fn exit_two_levels_deep_runs_the_cleanups() {
     for how in [Build::default(), Build::parallel()] {
         let (out, err, code) = ran("cleaned", CLEANED, how);
         assert_eq!(code, Some(4), "{err}");
@@ -111,77 +118,152 @@ fn exit_runs_the_cleanups() {
     }
 }
 
-/// D3: `exit` in a `spawn` is `NK2607`.
+/// D3: a function that calls `exit` says `throws`.
 #[test]
-fn exit_in_a_spawn_is_refused() {
-    let source = "use std::process\n\
-        \n\
-        fn main() {\n\
-        \x20   spawn fn { process::exit(1) }\n\
-        }\n";
+fn exit_needs_throws() {
+    let source = "use std::process\n\nfn main() {\n    process::exit(1)\n}\n";
     assert!(
-        codes(source).contains(&"NK2607".to_string()),
+        codes(source).contains(&"NK2605".to_string()),
         "{:?}",
         codes(source)
     );
 }
 
-/// D2, D3: two calls deep is the same refusal; the ledger carries `exits`.
+const PASSES: &str = r#"use std::process
+
+fn f() -> i64 throws {
+    process::exit(5)
+    return 1
+}
+
+fn main() throws {
+    let v = f() catch { 0 }
+    println(f"{v}")
+}
+"#;
+
+/// D2: a handler without a `match` does not take `Exit`.
 #[test]
-fn exit_two_calls_deep_in_a_spawn_is_refused() {
-    let source = "use std::process\n\
-        \n\
-        fn inner() {\n\
-        \x20   process::exit(2)\n\
-        }\n\
-        \n\
-        fn outer() {\n\
-        \x20   inner()\n\
-        }\n\
-        \n\
-        fn main() {\n\
-        \x20   spawn fn { outer() }\n\
-        }\n";
+fn a_plain_catch_lets_exit_through() {
+    let (out, err, code) = ran("passes", PASSES, Build::default());
+    assert_eq!(code, Some(5), "{err}");
+    assert_eq!(out, "");
+    let unthrowing = PASSES.replace("fn main() throws", "fn main()");
+    assert!(
+        codes(&unthrowing).contains(&"NK2605".to_string()),
+        "{:?}",
+        codes(&unthrowing)
+    );
+}
+
+const NAMED: &str = r#"use std::process
+
+fn f() -> i64 throws {
+    process::exit(5)
+    return 1
+}
+
+fn main() {
+    let v = f() catch {
+        match error {
+            process::Exit::Code(c) => c + 10
+        }
+    }
+    println(f"{v}")
+}
+"#;
+
+/// D2: an arm that names the type takes it.
+#[test]
+fn a_named_arm_takes_exit() {
+    assert!(codes(NAMED).is_empty(), "{:?}", codes(NAMED));
+    let (out, err, code) = ran("named", NAMED, Build::default());
+    assert_eq!(code, Some(0), "{err}");
+    assert_eq!(out, "15\n");
+}
+
+const ELSE_ARM: &str = r#"use std::process
+
+enum E { A(i64) }
+impl Error for E {
+    fn message(ref self) -> String { return "e" }
+}
+
+fn f(x: i64) -> i64 throws {
+    if x > 3 { throw E::A(x) }
+    process::exit(6)
+    return x
+}
+
+fn main() throws {
+    let v = f(1) catch {
+        match error {
+            E::A(c) => c
+            else => 0
+        }
+    }
+    println(f"{v}")
+}
+"#;
+
+/// D2: an `else` arm does not take it.
+#[test]
+fn an_else_arm_lets_exit_through() {
+    let (out, err, code) = ran("else-arm", ELSE_ARM, Build::default());
+    assert_eq!(code, Some(6), "{err}");
+    assert_eq!(out, "");
+}
+
+/// D5: in a task `Exit` is an ordinary error; `NK2607` is retired.
+#[test]
+fn exit_in_a_spawn_is_an_ordinary_error() {
+    let source = "use std::process\n\nfn stop() throws {\n    process::exit(1)\n}\n\nfn main() throws {\n    spawn fn { stop() }\n}\n";
+    let found = codes(source);
+    assert!(!found.contains(&"NK2607".to_string()), "{found:?}");
     let parsed = parse_to_ast(source).expect("the source parses");
     let own = Ledger::infer(&parsed);
-    assert!(own.functions["outer"].exits, "outer reaches exit");
-    assert!(
-        codes(source).contains(&"NK2607".to_string()),
-        "{:?}",
-        codes(source)
+    assert_eq!(
+        own.functions["stop"].fails_with,
+        vec!["process::Exit".to_string()]
     );
 }
 
-/// D3: a branch of `overlap` is a task too.
+const OWN_FATAL: &str = r#"enum Abort { Now(i64) }
+impl Error for Abort {
+    fn message(ref self) -> String { return "aborted" }
+}
+impl Fatal for Abort {}
+
+fn f() -> i64 throws {
+    throw Abort::Now(2)
+}
+
+fn main() throws {
+    let v = f() catch { 0 }
+    println(f"plain {v}")
+}
+"#;
+
+/// D1, D2: a program's own `impl Fatal` behaves as `Exit` does at a `catch`.
 #[test]
-fn exit_in_an_overlap_branch_is_refused() {
-    let source = "use std::process\n\
-        \n\
-        fn stop() {\n\
-        \x20   process::exit(1)\n\
-        }\n\
-        \n\
-        fn main() {\n\
-        \x20   overlap {\n\
-        \x20       stop()\n\
-        \x20       println(\"other\")\n\
-        \x20   }\n\
-        }\n";
-    assert!(
-        codes(source).contains(&"NK2607".to_string()),
-        "{:?}",
-        codes(source)
+fn an_own_fatal_type_passes_a_plain_catch() {
+    assert!(codes(OWN_FATAL).is_empty(), "{:?}", codes(OWN_FATAL));
+    let (out, err, code) = ran("own-fatal", OWN_FATAL, Build::default());
+    assert_eq!(code, Some(1), "{err}");
+    assert_eq!(out, "");
+    let named = OWN_FATAL.replace(
+        "catch { 0 }",
+        "catch {\n        match error {\n            Abort::Now(c) => c\n        }\n    }",
     );
+    let (out, err, code) = ran("own-fatal-named", &named, Build::default());
+    assert_eq!(code, Some(0), "{err}");
+    assert_eq!(out, "plain 2\n");
 }
 
-/// D4: a constant code outside 0..=255 is refused.
+/// ADR-343 D4: a constant code outside 0..=255 is refused.
 #[test]
 fn a_constant_code_out_of_range_is_refused() {
-    let source = "use std::process\n\
-        \n\
-        fn main() {\n\
-        \x20   process::exit(300)\n\
-        }\n";
+    let source = "use std::process\n\nfn main() throws {\n    process::exit(300)\n}\n";
     assert!(
         codes(source).contains(&"NK1116".to_string()),
         "{:?}",

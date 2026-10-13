@@ -53,14 +53,10 @@ impl EmitState {
         text = f"{text}fn main(){ret} {{\n"
         text = f"{text}    nikaia_std::abort::report_in_nikaia_terms(__NIKAIA_SITES);\n"
         text = f"{text}    let nikaia_runtime = nikaia_std::rt::{start}(nikaia_std::rt::UserCode::{user_code});\n"
-        // ADR-343 D1: where `main` may end by `exit`, its body runs guarded,
-        // so the drain follows and the process ends with the code after it.
+        // ADR-345 D4: where `process::Exit` may leave `main`, the process ends
+        // with its code after the drain.
         let exits = main_exits(self.own_contracts)
-        if exits && call_pauses(self.own_contracts, "main") {
-            text = f"{text}    let outcome = nikaia_std::rt::exec::block_on(nikaia_std::process::guarded(__nikaia_main()));\n"
-        } else if exits {
-            text = f"{text}    let outcome = nikaia_std::process::guarded_sync(__nikaia_main);\n"
-        } else if call_pauses(self.own_contracts, "main") {
+        if call_pauses(self.own_contracts, "main") {
             text = f"{text}    let outcome = nikaia_std::rt::exec::block_on(__nikaia_main());\n"
         } else {
             text = f"{text}    let outcome = __nikaia_main();\n"
@@ -125,8 +121,13 @@ impl EmitState {
     }
 }
 
-/// Whether `main` may end by `process::exit` (ADR-343 D1).
+/// Whether `process::Exit` may leave `main` (ADR-345 D4).
 fn main_exits(own: ref Ledger) -> bool {
     let contract = own.functions.get("main") ?? return false
-    return contract.exits
+    for error in contract.fails_with {
+        if error == "process::Exit" {
+            return true
+        }
+    }
+    return false
 }

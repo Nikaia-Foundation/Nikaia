@@ -38,6 +38,10 @@ pub struct ThrowsGraph {
     pub methods: collections::BTreeMap[String, MethodsCalled],
     pub direct: collections::BTreeMap[String, collections::BTreeSet[String]],
     pub calls: collections::BTreeMap[String, collections::BTreeSet[String]],
+    /// **What a `catch` lets through** (ADR-345 D2): per function, the callees
+    /// of this package called inside a `catch`, with the fatal types its
+    /// handler names; the others of their fatal errors still reach the caller.
+    pub fatal_calls: collections::BTreeMap[String, collections::BTreeMap[String, collections::BTreeSet[String]]],
 }
 
 /// Every `throws` function and method of one unit, by the key the ledger
@@ -81,6 +85,7 @@ fn with_methods(key: ref String, thrown: ref Thrown, own: ref Ledger, library: r
     methods_into(graph.methods[key], own, library, named, called)
     graph.direct.insert(key.clone(), named)
     graph.calls.insert(key.clone(), called)
+    graph.fatal_calls.insert(key.clone(), thrown.fatal_calls.clone())
 }
 
 fn methods_into(resolved: ref MethodsCalled?, own: ref Ledger, library: ref Ledger, mut named: collections::BTreeSet[String], mut called: collections::BTreeSet[String]) {
@@ -113,7 +118,7 @@ fn fails_with_of(library: ref Ledger, callee: ref String) -> Vec[String] {
 /// fail cannot propagate. A declared `throws` whose body names nothing keeps
 /// `["?"]`: the declaration is a promise a caller already relies on, and this
 /// is here to say more than it, never less.
-pub fn error_sets(direct: ref collections::BTreeMap[String, collections::BTreeSet[String]], calls: ref collections::BTreeMap[String, collections::BTreeSet[String]], own: ref Ledger) -> collections::BTreeMap[String, Vec[String]] {
+pub fn error_sets(direct: ref collections::BTreeMap[String, collections::BTreeSet[String]], calls: ref collections::BTreeMap[String, collections::BTreeSet[String]], fatal_calls: ref collections::BTreeMap[String, collections::BTreeMap[String, collections::BTreeSet[String]]], fatal: ref collections::BTreeSet[String], own: ref Ledger) -> collections::BTreeMap[String, Vec[String]] {
     let mut sets = direct.clone()
     let mut changed = true
     while changed {
@@ -124,6 +129,14 @@ pub fn error_sets(direct: ref collections::BTreeMap[String, collections::BTreeSe
             for callee in callees {
                 for error in theirs(sets, own, callee) {
                     grown.insert(error)
+                }
+            }
+            let caught = fatal_calls[name]?.clone() ?? collections::BTreeMap()
+            for (callee, named) in caught {
+                for error in theirs(sets, own, callee) {
+                    if fatal.contains(error) && !named.contains(error) {
+                        grown.insert(error)
+                    }
                 }
             }
             if grown.len() != before.len() {
@@ -234,6 +247,10 @@ pub struct Thrown {
     /// Whether a `throw error` stood anywhere in what was walked: a handler
     /// that has one passes what it caught on (ADR-280 D10).
     passes_on: bool,
+    /// The fatal types the handler of the `catch` being walked names
+    /// (ADR-345 D2).
+    named: collections::BTreeSet[String],
+    pub fatal_calls: collections::BTreeMap[String, collections::BTreeSet[String]],
 }
 
 /// What an expression contributes, as the compiler resolved it: a function of
@@ -242,11 +259,13 @@ pub struct Thrown {
 pub struct Contribution {
     pub call: String?,
     pub errors: Vec[String],
+    /// Those of `errors` that are fatal (ADR-345 D1).
+    pub fatal: Vec[String],
 }
 
 /// What a function's body throws itself, and whom in this package it calls.
 pub fn thrown_by(body: ref Block, names: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, contribution_of: fn(ref Expr) -> Contribution sync) -> Thrown {
-    let mut out = Thrown { direct: collections::BTreeSet(), calls: collections::BTreeSet(), passes_on: false }
+    let mut out = Thrown { direct: collections::BTreeSet(), calls: collections::BTreeSet(), passes_on: false, named: collections::BTreeSet(), fatal_calls: collections::BTreeMap() }
     thrown_in_block(body, names, holes_of, contribution_of, false, out)
     return out
 }
@@ -352,7 +371,12 @@ fn thrown_in(expr: ref Expr, names: ref winnow_grammar::InternerContext, holes_o
         }
         Expr::TryCatch { expr, handler, .. } => {
             let into_the_handler = caught || !passes_on(handler, names, holes_of, contribution_of)
+            let outer = out.named.clone()
+            if !caught {
+                out.named = fatal_named(handler, names)
+            }
             thrown_in(expr, names, holes_of, contribution_of, in_a_handler, into_the_handler, out)
+            out.named = outer
         }
         Expr::If { cond, .. } => thrown_in(cond, names, holes_of, contribution_of, in_a_handler, caught, out),
         Expr::Match { value, arms, .. } => {
@@ -459,7 +483,26 @@ fn a_contribution(expr: ref Expr, names: ref winnow_grammar::InternerContext, co
     if passing {
         out.passes_on = true
     }
-    if caught || (in_a_handler && passing) {
+    if in_a_handler && passing {
+        return
+    }
+    if caught {
+        // **A fatal error passes a `catch` that does not name it** (ADR-345 D2).
+        match expr {
+            Expr::Throw(_, _) => {}
+            else => {
+                let given = contribution_of(expr)
+                for error in given.fatal {
+                    if !out.named.contains(error) {
+                        out.direct.insert(error.clone())
+                    }
+                }
+                let call = given.call ?? ""
+                if call.len() > 0 && !out.fatal_calls.contains_key(call) {
+                    out.fatal_calls.insert(call, out.named.clone())
+                }
+            }
+        }
         return
     }
     match expr {
@@ -496,7 +539,67 @@ fn the_caught_error(expr: ref Expr, names: ref winnow_grammar::InternerContext) 
 // Whether a handler passes what it caught on: `throw error` anywhere in it
 // (ADR-280 D10).
 fn passes_on(handler: ref Block, names: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, contribution_of: fn(ref Expr) -> Contribution sync) -> bool {
-    let mut seen = Thrown { direct: collections::BTreeSet(), calls: collections::BTreeSet(), passes_on: false }
+    let mut seen = Thrown { direct: collections::BTreeSet(), calls: collections::BTreeSet(), passes_on: false, named: collections::BTreeSet(), fatal_calls: collections::BTreeMap() }
     thrown_in_block(handler, names, holes_of, contribution_of, false, seen)
     return seen.passes_on
+}
+
+/// **The fatal types a handler takes** (ADR-345 D2): those whose variant a
+/// `match` arm over `error` names, at the handler's top level.
+pub fn fatal_named(handler: ref Block, names: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] {
+    let mut out: collections::BTreeSet[String] = collections::BTreeSet()
+    for stmt in handler.stmts {
+        match stmt.node {
+            Stmt::Expr(value) => named_in_match(value, names, out),
+            Stmt::Let { value, .. } => named_in_match(value, names, out),
+            Stmt::Return(value) => named_in_match(value ?? continue, names, out),
+            else => {}
+        }
+    }
+    return out
+}
+
+fn named_in_match(expr: ref Expr, names: ref winnow_grammar::InternerContext, mut out: collections::BTreeSet[String]) {
+    match expr {
+        Expr::Match { value, arms, .. } => {
+            if !the_error(value, names) {
+                return
+            }
+            for arm in arms {
+                let path = pattern_path(arm.pattern) ?? continue
+                if path.len() < 2 {
+                    continue
+                }
+                let mut parts: Vec[String] = []
+                for at in 0..<path.len() - 1 {
+                    parts.push(names.resolve(path[at]).clone())
+                }
+                out.insert(parts.join("::"))
+            }
+        }
+        else => {}
+    }
+}
+
+fn the_error(expr: ref Expr, names: ref winnow_grammar::InternerContext) -> bool {
+    return match expr {
+        Expr::Variable(name, _) => names.resolve(name) == "error",
+        else => false,
+    }
+}
+
+fn pattern_path(pattern: ref MatchPattern) -> Vec[winnow_grammar::Symbol]? {
+    match pattern {
+        MatchPattern::Path(path) => {
+            return path.clone()
+        },
+        MatchPattern::Tuple { path, .. } => {
+            return path.clone()
+        },
+        MatchPattern::Named { path, .. } => {
+            return path.clone()
+        },
+        else => {},
+    }
+    return null
 }

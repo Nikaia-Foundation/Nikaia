@@ -218,7 +218,7 @@ macro_rules! cleaned {
                 // **A panic parks nothing** (ADR-297 D5): the value may be
                 // broken in the way that caused it, so only its synchronous
                 // `drop` runs, which is dropping it here.
-                if std::thread::panicking() && !crate::process::exiting() {
+                if std::thread::panicking() {
                     return;
                 }
                 let what = value.describe();

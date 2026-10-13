@@ -163,6 +163,18 @@ impl EmitState {
                 out.push(f"            {name}::{variant}(e) => {held},\n")
             }
             out.push("        }\n    }\n}\n\n")
+            // **`Exit` ends `main` with its code** (ADR-345 D4): a sum that
+            // holds it answers for it.
+            let mut ends = false
+            for member in members {
+                if member == "process::Exit" {
+                    ends = true
+                }
+            }
+            if ends {
+                let exit_variant = sum_variant("process::Exit")
+                out.push(f"impl{decl} nikaia_std::process::Ending for {name}{params} {{\n    fn exit_code(&self) -> Option<i32> {{\n        match self {{\n            {name}::{exit_variant}(e) => nikaia_std::process::Ending::exit_code(e),\n            #[allow(unreachable_patterns)] _ => None,\n        }}\n    }}\n}}\n\n")
+            }
         }
     }
 

@@ -4157,15 +4157,24 @@ provenance = "untrusted"
 keeps = ["args"]
 signature = "(program: ref String, args: Vec[String]; dir: ref String = \".\") -> process::Output"
 
-# End `main` now with `code`, from 0 to 255, the way a return from `main` ends
-# it: the cleanups run, then the tasks nobody joined, then the process ends with
-# the code (ADR-343). It may end the program, so code that calls it is refused
-# in a task (`NK2607`).
+# Throw `process::Exit::Code(code)`, with `code` from 0 to 255: a fatal error
+# (ADR-345), which a `catch` takes only in an arm naming it. At the end of
+# `main` it ends the program with the code, after the cleanups and the tasks
+# nobody joined.
 [fn."process::exit"]
 pub = true
 sync = true
-exits = true
+throws = ["process::Exit"]
 signature = "(code: i64)"
+
+# What `process::exit` throws.
+[type."process::Exit"]
+pub = true
+crosses = true
+compares = true
+variants = ["Code(i64)"]
+
+[impl."Fatal for process::Exit"]
 
 # --- `net`: the socket `std` lends (ADR-289 D6) ------------------------------
 #

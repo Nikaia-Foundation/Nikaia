@@ -585,12 +585,54 @@ impl EmitState {
         if named {
             opening = "let (error, __nikaia_site) = error.split();"
         }
-        out.push(f" {{\n{pad}Ok(value) => value,\n{pad}Err({bound}) => ")
+        out.push(f" {{\n{pad}Ok(value) => value,\n")
+        // **A fatal error the handler does not name passes** (ADR-345 D2): an
+        // arm before the handler's hands it on as the function's own failure.
+        let passing = self.fatal_passing(world, guarded_expr, handler)
+        if passing.len() > 0 {
+            let caught_in = self.caught_sum(world, guarded_expr)
+            if caught_in == null {
+                out.push(f"{pad}Err(error) => return Err(error.into()),\n")
+                out.push(f"{pad}#[allow(unreachable_patterns)]\n")
+            } else {
+                let held_sum = (caught_in ?? "").clone()
+                for member in passing {
+                    out.push(f"{pad}Err(crate::{held_sum}::{sum_variant(member)}(error)) => return Err(error.into()),\n")
+                }
+            }
+        }
+        out.push(f"{pad}Err({bound}) => ")
         // Kap 7.1 and ADR-292: the handler's last statement is the value of the
         // `catch`, so a `return` in it is the *function's* return and has to stay
         // one.
         host.block_opening_with(walk, out, handler, depth + 1, inside, inside_scope, EmitTail::Value, opening)
         out.push(f",\n{close}}}")
+    }
+
+    /// The fatal errors that arrive at a `catch` over `guarded` and that its
+    /// handler names in no `match` arm (ADR-345 D2).
+    pub fn fatal_passing(ref self, world: ref EmitWorld, guarded: ref Expr, handler: ref Block) -> Vec[String] {
+        let mut out: Vec[String] = []
+        let name = call_callee_name(world.words, world.aliases, guarded) ?? return out
+        let mut arriving: Vec[String] = []
+        let own = self.own_contracts.functions.get(name)
+        if own != null {
+            let contract = own ?? return out
+            arriving = contract.fails_with.clone()
+        } else {
+            let theirs = world.library.functions.get(name) ?? return out
+            arriving = theirs.fails_with.clone()
+        }
+        let named = fatal_named(handler, world.words)
+        for error in arriving {
+            if named.contains(error) {
+                continue
+            }
+            if emit_is_fatal(self.own_contracts, error) || emit_is_fatal(world.library, error) {
+                out.push(error.clone())
+            }
+        }
+        return out
     }
 
     /// `expr?`.
@@ -732,4 +774,10 @@ impl EmitState {
             out.push(" }")
         }
     }
+}
+
+/// Whether a ledger says `impl Fatal for` this type (ADR-345 D1).
+fn emit_is_fatal(ledger: ref Ledger, error: ref String) -> bool {
+    let types = ledger.implementations.get("Fatal") ?? return false
+    return types.contains(error)
 }
