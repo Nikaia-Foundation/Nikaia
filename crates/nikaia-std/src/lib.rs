@@ -169,8 +169,13 @@ pub mod text {
 ///
 /// **And `unused_variables`** for the parameters every `emit_core_*` method
 /// takes alike (`world`, `scope`, ..., E9) whether or not its body reads them.
+///
+/// **And `never_loop`**, a lint that denies by default: `for b in text.bytes()
+/// { …; break }` reads the first element: valid Nikaia, lowered as written,
+/// and the loop is what the author wrote (#586).
 #[allow(
     unused_assignments,
+    clippy::never_loop,
     unused_variables,
     unreachable_code,
     clippy::borrow_deref_ref,

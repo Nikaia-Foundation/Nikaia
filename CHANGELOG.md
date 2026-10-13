@@ -8,6 +8,14 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.887] — 2026-10-13
+
+**check: a T? as an operand or a hole, a list as a text pattern and impl Fatal without impl Error are refused (#586)**
+- `NK1102`: a `T?` operand of arithmetic, an ordering or a bit operator (also after `!= null`, and a name a `match` arm binds over a `T?`), and a `T?` hole of an `f"…"`, which reached rustc.
+- `NK1102`: a list handed to `starts_with`/`ends_with`/`contains` on text (D17).
+- `NK1164`: `impl Fatal for T` without `impl Error for T` (ADR-345 D1).
+- `clippy::never_loop` is allowed on the lowered `tools` (a `for` that ends with `break`).
+
 ## [0.0.886] — 2026-10-13
 
 **std: reductions and searches on Seq, rsplit and split_at on text**

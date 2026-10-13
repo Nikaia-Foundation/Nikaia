@@ -1685,6 +1685,13 @@ impl<'a> Checker<'a> {
                             &item.span,
                         );
                     }
+                    if trait_name.is_some_and(|t| self.parsed.text(t) == "Fatal") {
+                        self.s.a_fatal_type_that_is_no_error(
+                            self.world,
+                            self.parsed.text(target.name),
+                            &item.span,
+                        );
+                    }
                     if let Some(trait_name) = trait_name {
                         let written = self.parsed.text(*trait_name).to_string();
                         self.a_trait_nothing_declares(&written, &item.span);
@@ -7799,6 +7806,13 @@ impl<'a> Checker<'a> {
                 // came from — which is what lets `set` refuse it and every
                 // other sink take it.
                 let stamped = left.is_seen() || right.is_seen();
+                // **A `T?` has no operator but `==` and `!=`** (Part I 2.3).
+                if !matches!(
+                    op,
+                    BinaryOp::Eq | BinaryOp::Ne | BinaryOp::And | BinaryOp::Or
+                ) {
+                    self.s.a_maybe_in_an_operation(*op, &left, &right, at);
+                }
                 // **A bit operator beside a comparison is parenthesised**
                 // ([ADR-285](../../docs/specification/adr/adr-285.md) D10).
                 if op.is_comparison() {
@@ -8969,6 +8983,7 @@ impl<'a> Checker<'a> {
             // is the hole lends its left side, as a print call's argument does.
             if matches!(literal, Expr::LitInterpolated { .. }) {
                 self.a_pending_coalesce_is_lent(hole);
+                self.s.a_maybe_in_a_hole(&held, span);
             }
             self.s.scope.pop();
             if let Some(spec) = specs.get(index) {

@@ -77,6 +77,17 @@ impl CheckState {
         if found.len() == 0 {
             return
         }
+        // **Nor is a list** (D17, #586): `ty.starts_with(['a', 'i'])` reached
+        // `rustc` as *`Vec<char>` is not a `Pattern`*.
+        let a_list = match found[0] {
+            Ty::Named { name, .. } => name == "Vec" || name == "Array",
+            else => false,
+        }
+        if a_list {
+            let method = (key.strip_prefix("str::") ?? "").clone()
+            self.findings.push(check_refusal("NK1102", span, f"`{key}` expects `{param}` to be text or a character, but you're passing a list.", ["What it looks for is one view of text or one character; a list of them is neither.".clone()], f"Ask once per character: `x.{method}('a') || x.{method}('i')`."))
+            return
+        }
         let owned = match found[0] {
             Ty::Named { name, args, view } => !view && args.len() == 0 && name == "String",
             else => false,

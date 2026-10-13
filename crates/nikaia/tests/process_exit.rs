@@ -270,3 +270,24 @@ fn a_constant_code_out_of_range_is_refused() {
         codes(source)
     );
 }
+
+/// D1: a fatal type is an error as well; `impl Fatal` alone is `NK1164`, and
+/// the help writes the missing `impl Error` (#586).
+#[test]
+fn a_fatal_type_without_an_error_impl_is_refused() {
+    let source = "enum Abort { Now(i64) }\nimpl Fatal for Abort {}\n\nfn main() {}\n";
+    let parsed = parse_to_ast(source).expect("the source parses");
+    let own = Ledger::infer(&parsed);
+    let library = Ledger::parse(STD).expect("std ships a ledger");
+    let found: Vec<Finding> = check::check(&parsed, &own, &library).findings;
+    assert!(
+        found.iter().any(|f| f.code == "NK1164"
+            && f.help
+                .as_deref()
+                .unwrap_or("")
+                .contains("impl Error for Abort")),
+        "{:?}",
+        found.iter().map(|f| &f.message).collect::<Vec<_>>()
+    );
+    assert!(codes(OWN_FATAL).is_empty(), "{:?}", codes(OWN_FATAL));
+}

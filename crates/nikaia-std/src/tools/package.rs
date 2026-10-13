@@ -17409,6 +17409,38 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub fn a_maybe_in_an_operation(&mut self, op: BinaryOp, left: &Ty, right: &Ty, span: &Span) {
+        let mut maybe = left.clone();
+        if !a_known_maybe(left) {
+            if !a_known_maybe(right) { return; }
+            maybe = right.clone();
+        }
+        let symbol = binary_op_text(op);
+        self.findings.push(check_refusal("NK1102", span, format!("`{}` is given `{}`, which may be `null`.", symbol, maybe.text()), vec!["A `T?` is a type of its own (Part I 2.3) and has none of `T`'s operators; a test `x != null` before the use does not change its type, and neither does a `match` arm's name, which binds the whole `T?`.".to_owned()], Some("Say what an absent value counts as first: `(x ?? 0) + 1`, or take the value out once with `let v = x ?? return`.".to_owned())));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_maybe_in_a_hole(&mut self, held: &Ty, span: &Span) {
+        if !a_known_maybe(held) { return; }
+        self.findings.push(check_refusal("NK1102", span, format!("A hole of this `f\"…\"` is `{}`, which may be `null`.", held.text()), vec!["A `T?` is a type of its own (Part I 2.3) and has no text of its own: what an absent value reads as is the program's to say.".to_owned()], Some("Write the fallback in the hole: `{x ?? 0}`, or `{x?.to_string() ?? \"none\"}`.".to_owned())));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_fatal_type_that_is_no_error(&mut self, world: &CheckWorld<'_>, target: &str, span: &Span) {
+        let own = world.own.implementations.get("Error");
+        if own.is_some() && nikaia_std::index::or(match own {
+            Some(__nikaia_it) => Some(__nikaia_it.contains(target)),
+            None => None,
+        }, || false) { return; }
+        let library = world.library.implementations.get("Error");
+        if library.is_some() && nikaia_std::index::or(match library {
+            Some(__nikaia_it) => Some(__nikaia_it.contains(target)),
+            None => None,
+        }, || false) { return; }
+        self.findings.push(check_refusal("NK1164", span, format!("`{}` is made `Fatal`, but it has no `impl Error`.", target), vec!["A fatal error is an error first (ADR-345 D1): it is thrown, travels with `throws` and is caught like any other, and only an `Error` can be.".to_owned()], Some(format!("Add `impl Error for {} {{ fn message(ref self) -> String {{ … }} }}` beside it.", target))));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub fn fields_left_out(&mut self, owner: &str, missing: &[String], span: &Span) {
         let listed = left_out_text(missing);
         let mut one: String = String::from("fields");
@@ -19560,6 +19592,15 @@ impl CheckState {
         let mut param: String = String::from("");
         if key == "str::starts_with" { param = String::from("prefix"); } else if key == "str::ends_with" { param = String::from("suffix"); } else if key == "str::contains" { param = String::from("part"); } else { return; }
         if found.is_empty() { return; }
+        let a_list = match nikaia_std::index::get(&found, 0) {
+            Ty::Named { name, .. } => name == "Vec" || name == "Array",
+            _ => false,
+        };
+        if a_list {
+            let method = nikaia_std::index::or(key.strip_prefix("str::"), || "").to_owned();
+            self.findings.push(check_refusal("NK1102", span, format!("`{}` expects `{}` to be text or a character, but you're passing a list.", key, param), vec!["What it looks for is one view of text or one character; a list of them is neither.".to_owned()], Some(format!("Ask once per character: `x.{}('a') || x.{}('i')`.", method, method))));
+            return;
+        }
         let owned = match nikaia_std::index::get(&found, 0) {
             Ty::Named { name, args, view } => { let view = *view; !view && args.is_empty() && name == "String" },
             _ => false,

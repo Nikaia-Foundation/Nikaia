@@ -1499,3 +1499,44 @@ fn none_is_answered_with_null() {
         "{found:#?}"
     );
 }
+
+/// **A `T?` has no operator but `==` and `!=`, and no text of its own** (Part I
+/// 2.3, #586): `o + 1` after `if o != null`, a guard `n if n > 3` over an
+/// `i64?` scrutinee (the name binds the whole `T?`, Part I 3.4) and `f"{o}"`
+/// passed the checker and reached rustc. Each is `NK1102`; `??` is the way out.
+#[test]
+fn a_maybe_is_refused_as_an_operand_and_as_a_hole() {
+    let refused = [
+        "fn main() {\n    let o: i64? = 3\n    if o != null { print(o + 1) }\n}\n",
+        "fn f(x: i64?) -> String {\n    return match x {\n        n if n > 3 => \"big\".clone(),\n        else => \"small\".clone(),\n    }\n}\nfn main() { print(f(5)) }\n",
+        "fn main() {\n    let o: i64? = 3\n    println(f\"{o}\")\n}\n",
+    ];
+    for source in refused {
+        let found = findings(source);
+        assert!(
+            found
+                .iter()
+                .any(|f| f.code == "NK1102" && f.message.contains("may be `null`")),
+            "{source}\n{:?}",
+            found.iter().map(|f| &f.message).collect::<Vec<_>>()
+        );
+    }
+    let fixed = "fn f(x: i64?) -> String {\n    return match x {\n        n if (n ?? 0) > 3 => \"big\".clone(),\n        n => f\"small {n ?? 0}\",\n    }\n}\nfn main() {\n    let o: i64? = 3\n    if o != null { println((o ?? 0) + 1) }\n    println(f(5))\n    println(f(1))\n}\n";
+    assert!(findings(fixed).is_empty(), "{:?}", findings(fixed));
+    assert_eq!(ran("maybe-operand", fixed), "4\nbig\nsmall 1\n");
+}
+
+/// **A list of characters is not a pattern** (D17, #586): `starts_with(['a',
+/// 'i'])` lowered to a `Vec<char>`, which rustc refuses.
+#[test]
+fn a_list_is_no_pattern_of_text() {
+    let source = "fn vowel(ty: ref String) -> bool {\n    return ty.starts_with(['a', 'i'])\n}\nfn main() { print(vowel(\"apple\")) }\n";
+    let found = findings(source);
+    assert!(
+        found
+            .iter()
+            .any(|f| f.code == "NK1102" && f.message.contains("a list")),
+        "{:?}",
+        found.iter().map(|f| &f.message).collect::<Vec<_>>()
+    );
+}

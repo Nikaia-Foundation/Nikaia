@@ -42,6 +42,47 @@ impl CheckState {
         self.findings.push(check_refusal("NK1102", span, f"This compares `{maybe.text()}` with `{value.text()}`.", ["A `T?` is a type of its own (Part I 2.3): it is read with `??` or `?.`, and compared with nothing but `null` or another `T?`.".clone()], "Say what an absent value compares as, `(x ?? fallback) == y`, or ask `x != null` first.".clone()))
     }
 
+    /// **`NK1102`: a `T?` as an operand of arithmetic, of an ordering or of a bit
+    /// operator** (Part I 2.3). A `T?` has none of `T`'s operators, and a test
+    /// `x != null` before it does not make `x` a `T`: the operand is read with
+    /// `??` first. The same holds for a name a `match` arm binds over a `T?`
+    /// scrutinee, which is the whole `T?` (Part I 3.4).
+    pub fn a_maybe_in_an_operation(ref mut self, op: BinaryOp, left: ref Ty, right: ref Ty, span: ref Span) sync {
+        let mut maybe = left.clone()
+        if !a_known_maybe(left) {
+            if !a_known_maybe(right) {
+                return
+            }
+            maybe = right.clone()
+        }
+        let symbol = binary_op_text(op)
+        self.findings.push(check_refusal("NK1102", span, f"`{symbol}` is given `{maybe.text()}`, which may be `null`.", ["A `T?` is a type of its own (Part I 2.3) and has none of `T`'s operators; a test `x != null` before the use does not change its type, and neither does a `match` arm's name, which binds the whole `T?`.".clone()], "Say what an absent value counts as first: `(x ?? 0) + 1`, or take the value out once with `let v = x ?? return`.".clone()))
+    }
+
+    /// **`NK1102`: a `T?` as a hole of an `f"…"`** (Part I 2.3): it has no text
+    /// of its own, and what `null` reads as is the author's to say.
+    pub fn a_maybe_in_a_hole(ref mut self, held: ref Ty, span: ref Span) sync {
+        if !a_known_maybe(held) {
+            return
+        }
+        self.findings.push(check_refusal("NK1102", span, f"A hole of this `f\"…\"` is `{held.text()}`, which may be `null`.", ["A `T?` is a type of its own (Part I 2.3) and has no text of its own: what an absent value reads as is the program's to say.".clone()], "Write the fallback in the hole: `{x ?? 0}`, or `{x?.to_string() ?? \"none\"}`.".clone()))
+    }
+
+    /// **`NK1164`: `impl Fatal for T` where `T` has no `impl Error`**
+    /// (ADR-345 D1): a fatal type is an error as well, so the second `impl` is
+    /// what the first asks for, as a bound asks for its trait.
+    pub fn a_fatal_type_that_is_no_error(ref mut self, world: ref CheckWorld, target: ref String, span: ref Span) sync {
+        let own = world.own.implementations.get("Error")
+        if own != null && (own?.contains(target) ?? false) {
+            return
+        }
+        let library = world.library.implementations.get("Error")
+        if library != null && (library?.contains(target) ?? false) {
+            return
+        }
+        self.findings.push(check_refusal("NK1164", span, f"`{target}` is made `Fatal`, but it has no `impl Error`.", ["A fatal error is an error first (ADR-345 D1): it is thrown, travels with `throws` and is caught like any other, and only an `Error` can be.".clone()], f"Add `impl Error for {target} {{ fn message(ref self) -> String {{ … }} }}` beside it."))
+    }
+
     /// **`NK1234`: a struct literal leaves out a field that has no default**
     /// (ADR-331 D5, Part I 4.1).
     pub fn fields_left_out(ref mut self, owner: ref String, missing: ref Vec[String], span: ref Span) sync {

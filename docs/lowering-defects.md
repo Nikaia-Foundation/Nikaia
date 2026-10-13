@@ -33,12 +33,16 @@ finds two D8 casts in `check_numbers4.nika`.
 | D14 | a `Copy` value bound in a `match` inside a guard reaches its use as `&T` | verified (new; #578's family) | d14b_guard_copy.nika |
 | D15 | `BTreeMap[Symbol, V]` accepted by the checker, refused by rustc (`Symbol: Ord`) | **built** (0.0.850: `NK1247`, ledger `orders`) | ordered_keys.rs |
 | D16 | `if match x {..} =>` in a guard does not parse; `if (match ..)` does | verified (new, small) | (rs2nika R14 writes the parentheses) |
-| D17 | `s.starts_with(['a', 'b'])` passes the checker, lowers to `starts_with(vec![..])` (E0277) | verified (new) | d_un_pass.nika `draft_an_or_a` |
+| D17 | `s.starts_with(['a', 'b'])` passes the checker, lowers to `starts_with(vec![..])` (E0277) | **built** (0.0.887: refused, `NK1102`, #586) | nullable.rs |
 | D18 | a two-parameter lambda over a list of tuples, `filter fn(name, ty) {..}`, lowers to `\|name, ty\|` (E0593) | verified (new) | `draft_a_root_is_one_of_two` |
-| D19 | `match name { "i32" \| "i64" => .. }` with `name: ref String` lowers to `matches!(name, "i32" \| ..)` on `&String` (E0308) | verified (new) | `draft_a_copied_part` |
+| D19 | `match name { "i32" \| "i64" => .. }` with `name: ref String` lowers to `matches!(name, "i32" \| ..)` on `&String` (E0308) | not reproduced in a user program (0.0.887, `nikaia run`) | `draft_a_copied_part` |
 | D20 | `x ?? s.len()` / `x ?? (0 - 1)` lowered to `|| s.len() as i64.into()` / `0 - 1.into()` | **built** (0.0.874) | expressions.rs |
 | D21 | `a ?? 0 - 1` read as `a ?? 0` and a statement `-1` | **built** (0.0.874: refused, ADR-279 D1) | coalesce_fallback.rs |
 | D22 | `cli::args().nth(at)` with `at: i64` lowered to Rust's `usize` `nth` (E0308) | **built** (0.0.875: `cli::Args`) | cli.rs |
+| D23 | a `T?` as an operand (`if o != null { o + 1 }`, a guard `n if n > 3` over an `i64?` scrutinee) or an `f"{o}"` hole passed the checker, rustc E0369/E0277 | **built** (0.0.887: refused, `NK1102`, #586) | nullable.rs |
+| D24 | `for b in text.bytes() { …; break }` lowered as written, clippy `never_loop` (deny) | **built** (0.0.887: allowed on `tools`, lib.rs, #586) | lib.rs |
+| D25 | `impl Fatal for T` without `impl Error for T` not refused (ADR-345 D1) | **built** (0.0.887: `NK1164`, #586) | process_exit.rs |
+| D26 | `mut e: ref E` returned: lowered `fn f(e: &mut &E) -> &E`, rustc "missing lifetime" | verified (#586) | gaps p25 |
 
 ---
 
