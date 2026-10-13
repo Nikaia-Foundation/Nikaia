@@ -101,6 +101,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R52  profile: a `parsed: &Parsed` parameter -> `parsed: ref CheckWorld`, `parsed.text(x)` -> `parsed.words.resolve(x)`",
         "R53  ranges: Rust's `a..b` stops before `b`, Nikaia's includes it: `a..b` -> `a..<b`, `a..=b` -> `a..b`",
         "R54  idioms Nikaia spells otherwise: `[\"A\", \"B\"].contains(&x)` -> `(x == \"A\" || x == \"B\")`, `x.rsplit(\"::\").next().unwrap_or(x)` -> `type_last_segment(x)`",
+        "R55  `match` on an option with `Some(P)` arms -> `let given = e ?? <None arm>` then `match given { P => .. }`",
     ]
 }
 
@@ -1977,6 +1978,176 @@ fn rs2nika_option_matches(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[St
     return out
 }
 
+/// An arm's pattern of a `match` on an option: `Some(P)` -> `P`, `None` ->
+/// `null`, `Some(P) | None` -> `P|null`, `_` -> `_`; otherwise "".
+fn rs2nika_some_pattern(pat: ref String) -> String {
+    if pat == "None" || pat == "_" {
+        if pat == "None" {
+            return "null"
+        }
+        return "_"
+    }
+    let mut p: String = pat.clone()
+    let mut with_none = false
+    if p.ends_with("| None") {
+        p = p[0..<p.len() - 6].trim().clone()
+        with_none = true
+    } else if p.starts_with("None |") {
+        p = p[6..<p.len()].trim().clone()
+        with_none = true
+    }
+    if !(p.starts_with("Some(") && p.ends_with(")")) || p.contains("| ") {
+        return ""
+    }
+    let inner: String = p[5..<p.len() - 1].trim().clone()
+    if with_none {
+        return f"{inner}|null"
+    }
+    return inner
+}
+
+/// R55: `match e { Some(A) => .., Some(B(x)) => .., None => n }` ->
+/// `let given = e ?? <n>` then `match given { A => .., B(x) => .. }`.
+fn rs2nika_some_matches(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[String] {
+    let mut out: Vec[String] = given.clone()
+    let mut i = 0
+    while i < out.len() {
+        let line: String = out[i].clone()
+        let at = rs2nika_find_from(line.chars().collect(), "match ", 0)
+        let ok_head = at >= 0 && line.ends_with(" {") && !line.trim().starts_with("//") && (at == 0 || !rs2nika_word(line.chars().collect()[at - 1]))
+        if !ok_head {
+            i = i + 1
+            continue
+        }
+        let c: Vec[scalar] = line.chars().collect()
+        let ind = rs2nika_indent(line)
+        let pre: String = rs2nika_text(c, ind.chars().count(), at)
+        let mut subject: String = rs2nika_text(c, at + 6, c.len() - 2).trim().clone()
+        while subject.starts_with("&") {
+            subject = subject[1..<subject.len()].clone()
+        }
+        let arm = f"{ind}    "
+        let arm_deeper = f"{arm} "
+        let closing = f"{ind}}}"
+        let mut j = i + 1
+        while j < out.len() && !(rs2nika_starts(out[j], closing) && rs2nika_indent(out[j]) == ind) {
+            j = j + 1
+        }
+        if j >= out.len() {
+            i = i + 1
+            continue
+        }
+        let mut starts: Vec[i64] = []
+        let mut pats: Vec[String] = []
+        let mut ok = true
+        let mut somes = 0
+        let mut k = i + 1
+        while k < j {
+            let t: String = out[k].trim().clone()
+            if rs2nika_starts(out[k], arm) && !rs2nika_starts(out[k], arm_deeper) && !t.starts_with("//") && !t.starts_with("}") {
+                starts.push(k)
+                let arrow = t.find("=>") ?? 0
+                let p = rs2nika_some_pattern(t[0..<arrow].trim().clone())
+                if arrow == 0 || p == "" {
+                    ok = false
+                }
+                if p != "null" && p != "_" {
+                    somes = somes + 1
+                }
+                pats.push(p.clone())
+            }
+            k = k + 1
+        }
+        if !ok || somes == 0 || starts.len() < 2 {
+            i = i + 1
+            continue
+        }
+        // the `None` arm's value: its one line, or the one line of its block
+        let mut none: String = ""
+        let mut n = 0
+        while n < starts.len() {
+            if pats[n] == "null" || pats[n] == "_" || pats[n].ends_with("|null") {
+                let t: String = out[starts[n]].trim().clone()
+                let arrow = t.find("=>") ?? 0
+                let mut body: String = t[arrow + 2..<t.len()].trim().clone()
+                let mut end = j
+                if n + 1 < starts.len() {
+                    end = starts[n + 1]
+                }
+                if body == "{" && end - starts[n] == 3 {
+                    body = out[starts[n] + 1].trim().clone()
+                }
+                if body.ends_with(",") {
+                    body = body[0..<body.len() - 1].clone()
+                }
+                none = body.clone()
+            }
+            n = n + 1
+        }
+        let mut new: Vec[String] = []
+        if none == "" {
+            new.push(f"{ind}// TODO(rs2nika): no `None` arm found: the `??` fallback is yours")
+            none = "return"
+        } else if !(none.starts_with("return") || none.starts_with("continue") || none.starts_with("break")) {
+            let tail = pre.trim() == "" && j + 1 < out.len() && out[j + 1].trim() == "}" && rs2nika_indent(out[j + 1]).len() < ind.len()
+            if pre.trim() != "return" && !tail {
+                new.push(f"{ind}// TODO(rs2nika): the `None` arm is a value: `?? return` fits once this `match` is a function of its own (pattern check_claim_held)")
+            }
+            none = f"return {none}"
+        }
+        new.push(f"{ind}let given = {subject} ?? {none}")
+        new.push(f"{ind}{pre}match given {{")
+        let mut r = i + 1
+        let mut a = 0
+        while r < j {
+            if a < starts.len() && r == starts[a] {
+                let p: String = pats[a].clone()
+                let mut end = j
+                if a + 1 < starts.len() {
+                    end = starts[a + 1]
+                }
+                a = a + 1
+                if p == "null" {
+                    r = end
+                    continue
+                }
+                let t: String = out[r].trim().clone()
+                let arrow = t.find("=>") ?? 0
+                let rest: String = t[arrow..<t.len()].clone()
+                let mut np: String = p.clone()
+                if np.ends_with("|null") {
+                    np = np[0..<np.len() - 5].clone()
+                }
+                if np == "_" {
+                    np = "else"
+                }
+                new.push(f"{arm}{np} {rest}")
+            } else {
+                new.push(out[r].clone())
+            }
+            r = r + 1
+        }
+        let mut rebuilt: Vec[String] = []
+        r = 0
+        while r < i {
+            rebuilt.push(out[r].clone())
+            r = r + 1
+        }
+        for l in new {
+            rebuilt.push(l.clone())
+        }
+        r = j
+        while r < out.len() {
+            rebuilt.push(out[r].clone())
+            r = r + 1
+        }
+        out = rebuilt
+        rs2nika_hit(ctx, "R55")
+        i = i + 1
+    }
+    return out
+}
+
 fn rs2nika_arm_body(mut new: Vec[String], out: ref Vec[String], k: i64, end: i64, first: ref String, arm: ref String) {
     let mut body: Vec[String] = []
     if first.starts_with("{") {
@@ -2155,7 +2326,8 @@ pub fn rs2nika_convert(src: ref String, profile: ref String, prefix: ref String,
     let first = rs2nika_join_chains(ctx, hoisted)
     let split = rs2nika_join_split(ctx, first)
     let chained = rs2nika_join_chains(ctx, split)
-    let joined = rs2nika_option_matches(ctx, chained)
+    let joined0 = rs2nika_option_matches(ctx, chained)
+    let joined = rs2nika_some_matches(ctx, joined0)
     let mut out: Vec[String] = []
     for raw in joined {
         let st: String = raw.trim().clone()

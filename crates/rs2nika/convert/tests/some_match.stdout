@@ -1,0 +1,23 @@
+fn how(claim: ref Claim) -> String sync {
+    let given = claim.held ?? return "refused"
+    return match given {
+        Held::Proved => "proved",
+        Held::AtRunTime(why) => f"checked at run time: {why}",
+        Held::Refused => {
+            "refused"
+        }
+    }
+}
+
+fn first(rows: ref Vec[Row]) -> i64 sync {
+    for row in rows {
+        let given = row.kind ?? continue
+        let n = match given {
+            Kind::A => 1,
+            Kind::B(x) => x,
+        }
+        return n
+    }
+    return 0
+}
+
