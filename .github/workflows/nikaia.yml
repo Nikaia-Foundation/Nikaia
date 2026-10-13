@@ -33,6 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       unsafe: ${{ steps.decide.outputs.unsafe }}
+      rs2nika: ${{ steps.decide.outputs.rs2nika }}
       floor: ${{ steps.decide.outputs.floor }}
       arm64: ${{ steps.decide.outputs.arm64 }}
     steps:
@@ -207,6 +208,30 @@ jobs:
 
       - name: Check every crate under crates/unsafe
         run: sh scripts/check-unsafe-crates.sh
+
+  # The Rust-to-Nikaia tools (#579): `convert` and `facts`, whose Rust types
+  # come from rust-analyzer on stable (ADR-001 D5). Only when they changed.
+  rs2nika:
+    needs: changes
+    if: needs.changes.outputs.rs2nika == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install the toolchain and rust-analyzer
+        run: |
+          rustup show
+          rustup component add rust-analyzer
+
+      - name: Build nikaia
+        run: cargo build --release -p nikaia
+
+      - name: Test facts and convert
+        run: |
+          (cd crates/rs2nika/facts && ../../../target/release/nikaia test)
+          (cd crates/rs2nika/convert && ../../../target/release/nikaia test)
 
   # The compiler, on the toolchain a clone of this repository builds with.
   #

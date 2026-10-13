@@ -1,0 +1,459 @@
+// crates/rs2nika/facts/src/main.nika
+//
+// Rust's types for the Rust-to-Nikaia converter (ADR-001 D5, #579), read from
+// the LSIF dump of rust-analyzer on stable (`rust-analyzer lsif CRATE`). One
+// line a fact: `FILE\tL:C-L:C\tKIND\tVALUE`, lines and columns from 1, columns
+// in UTF-16 units as LSIF gives them. Kinds: `method` (resolved path and
+// signature of a called method), `local` (the type of a `let` or a parameter,
+// at its definition), `op` (the result type of an operator).
+// Run: `nikaia run crates/rs2nika/facts -- [--stats] [--src DIR] FILE.lsif`.
+//
+// Nikaia's std has no JSON reader: this one reads exactly the line form
+// rust-analyzer writes (one object a line, the fields it uses).
+
+use std::fs
+use std::cli
+use std::collections
+
+/// What one dump says, by vertex id.
+struct FactsDump {
+    root: String,
+    under: String,
+    ranges: collections::BTreeMap[i64, String],
+    starts: collections::BTreeMap[i64, String],
+    next: collections::BTreeMap[i64, i64],
+    hover_of: collections::BTreeMap[i64, i64],
+    hovers: collections::BTreeMap[i64, String],
+    docs: collections::BTreeMap[i64, String],
+    doc_of: collections::BTreeMap[i64, i64],
+    def_results: collections::BTreeSet[i64],
+    defined: collections::BTreeSet[i64],
+    def_edges: Vec[i64],
+}
+
+/// The digit a scalar stands for, or -1.
+fn facts_digit(ch: scalar) -> i64 {
+    let digits: Vec[scalar] = "0123456789".chars().collect()
+    let mut k = 0
+    while k < 10 {
+        if ch == digits[k] {
+            return k
+        }
+        k = k + 1
+    }
+    return -1
+}
+
+/// The number that follows `key` in `line`, or -1.
+fn facts_int(line: ref String, key: ref String) -> i64 {
+    let at = line.find(key) ?? return -1
+    let rest: String = line[at + key.len()..<line.len()].clone()
+    let mut n = 0
+    let mut seen = false
+    for ch in rest.chars() {
+        let d = facts_digit(ch)
+        if d < 0 {
+            break
+        }
+        n = n * 10 + d
+        seen = true
+    }
+    if !seen {
+        return -1
+    }
+    return n
+}
+
+/// The numbers of the list that follows `key`, as in `"inVs":[4,7]`.
+fn facts_ints(line: ref String, key: ref String) -> Vec[i64] {
+    let mut out: Vec[i64] = []
+    let at = line.find(key) ?? return out
+    let rest: String = line[at + key.len()..<line.len()].clone()
+    let mut n = 0
+    let mut seen = false
+    for ch in rest.chars() {
+        let d = facts_digit(ch)
+        if d >= 0 {
+            n = n * 10 + d
+            seen = true
+        } else {
+            if seen {
+                out.push(n)
+            }
+            n = 0
+            seen = false
+            if ch == ']' {
+                break
+            }
+        }
+    }
+    return out
+}
+
+/// The JSON string that follows `key` (which ends in its opening quote),
+/// unescaped, or "".
+fn facts_str(line: ref String, key: ref String) -> String {
+    let mut out: String = ""
+    let at = line.find(key) ?? return out
+    let rest: String = line[at + key.len()..<line.len()].clone()
+    let mut escaped = false
+    let mut hex = 0
+    for ch in rest.chars() {
+        if hex > 0 {
+            hex = hex - 1
+            if hex == 0 {
+                out.push('?')
+            }
+        } else if escaped {
+            escaped = false
+            if ch == 'n' {
+                out.push('\n')
+            } else if ch == 't' {
+                out.push('\t')
+            } else if ch == 'u' {
+                hex = 4
+            } else {
+                out.push(ch)
+            }
+        } else if ch == '\\' {
+            escaped = true
+        } else if ch == '"' {
+            break
+        } else {
+            out.push(ch)
+        }
+    }
+    return out
+}
+
+/// Reads the dump into its maps.
+fn facts_read(text: ref String) -> FactsDump {
+    let mut d = FactsDump {
+        root: "",
+        under: "",
+        ranges: collections::BTreeMap(),
+        starts: collections::BTreeMap(),
+        next: collections::BTreeMap(),
+        hover_of: collections::BTreeMap(),
+        hovers: collections::BTreeMap(),
+        docs: collections::BTreeMap(),
+        doc_of: collections::BTreeMap(),
+        def_results: collections::BTreeSet(),
+        defined: collections::BTreeSet(),
+        def_edges: [],
+    }
+    for line in text.lines() {
+        let id = facts_int(line, "\"id\":")
+        let label = facts_str(line, "\"label\":\"")
+        if label == "range" {
+            let l1 = facts_int(line, "\"start\":{\"line\":") + 1
+            let c1 = facts_int(line, "\"character\":") + 1
+            let endpart: String = line[(line.find("\"end\"") ?? 0)..<line.len()].clone()
+            let l2 = facts_int(endpart, "\"line\":") + 1
+            let c2 = facts_int(endpart, "\"character\":") + 1
+            d.ranges.insert(id, f"{l1}:{c1}-{l2}:{c2}")
+            d.starts.insert(id, f"{l1}:{c1}")
+        } else if label == "next" {
+            d.next.insert(facts_int(line, "\"outV\":"), facts_int(line, "\"inV\":"))
+        } else if label == "textDocument/hover" {
+            d.hover_of.insert(facts_int(line, "\"outV\":"), facts_int(line, "\"inV\":"))
+        } else if label == "hoverResult" {
+            d.hovers.insert(id, facts_str(line, "\"value\":\""))
+        } else if label == "document" {
+            d.docs.insert(id, facts_str(line, "\"uri\":\""))
+        } else if label == "metaData" {
+            d.root = facts_str(line, "\"projectRoot\":\"")
+        } else if label == "definitionResult" {
+            d.def_results.insert(id)
+        } else if label == "contains" {
+            let outer = facts_int(line, "\"outV\":")
+            for r in facts_ints(line, "\"inVs\":[") {
+                d.doc_of.insert(r, outer)
+            }
+        } else if label == "item" && !line.contains("\"property\"") {
+            let outer = facts_int(line, "\"outV\":")
+            d.def_edges.push(outer)
+            for r in facts_ints(line, "\"inVs\":[") {
+                d.def_edges.push(r)
+            }
+            d.def_edges.push(-1)
+        }
+    }
+    d.under = f"{d.root}/"
+    let mut owner = -2
+    let mut keep = false
+    for v in d.def_edges {
+        if owner == -2 {
+            owner = v
+            keep = d.def_results.contains(v)
+        } else if v == -1 {
+            owner = -2
+        } else if keep {
+            d.defined.insert(v)
+        }
+    }
+    return d
+}
+
+/// The hover text a range reaches through `next`, or "".
+fn facts_hover(d: ref FactsDump, range: i64) -> String {
+    let mut at = range
+    let mut steps = 0
+    while steps < 8 {
+        let h = d.hover_of.get(at) ?? -1
+        if h >= 0 {
+            return (d.hovers.get(h) ?? "").clone()
+        }
+        at = d.next.get(at) ?? return ""
+        steps = steps + 1
+    }
+    return ""
+}
+
+/// The ```rust code blocks of a hover text.
+fn facts_blocks(hover: ref String) -> Vec[String] {
+    let mut out: Vec[String] = []
+    let parts: Vec[ref String] = hover.split("```rust\n").collect()
+    let mut k = 1
+    while k < parts.len() {
+        let part: String = parts[k].clone()
+        let whole = part.len()
+        let end = part.find("\n```") ?? whole
+        let block: String = part[0..<end].clone()
+        out.push(block)
+        k = k + 1
+    }
+    return out
+}
+
+/// The name a `fn` line declares.
+fn facts_fn_name(line: ref String) -> String {
+    let mut out: String = ""
+    let at = line.find("fn ") ?? return out
+    let rest: String = line[at + 3..<line.len()].clone()
+    for ch in rest.chars() {
+        if ch.is_alphanumeric() || ch == '_' {
+            out.push(ch)
+        } else {
+            break
+        }
+    }
+    return out
+}
+
+/// Whether a trait method of `core::ops`/`core::cmp` is an operator's.
+fn facts_is_op(path: ref String, name: ref String) -> bool {
+    if !path.starts_with("core::ops") && !path.starts_with("core::cmp") {
+        return false
+    }
+    for op in ["add", "sub", "mul", "div", "rem", "neg", "not", "bitand", "bitor", "bitxor", "shl", "shr", "add_assign", "sub_assign", "mul_assign", "div_assign", "rem_assign", "deref", "deref_mut", "index", "index_mut", "eq", "ne", "lt", "le", "gt", "ge"] {
+        if name == op {
+            return true
+        }
+    }
+    return false
+}
+
+/// Whether the last segment of a path names a type (starts upper-case).
+fn facts_typed(path: ref String) -> bool {
+    let mut upper = false
+    let mut first = true
+    for ch in path.chars() {
+        if ch == ':' {
+            first = true
+        } else if first {
+            upper = false
+            for u in "ABCDEFGHIJKLMNOPQRSTUVWXYZ".chars() {
+                if ch == u {
+                    upper = true
+                }
+            }
+            first = false
+        }
+    }
+    return upper
+}
+
+/// The fact a hover text gives a range: `KIND\tVALUE`, or "".
+fn facts_classify(hover: ref String, defined: bool) -> String {
+    let blocks = facts_blocks(hover)
+    if blocks.len() == 1 {
+        if !defined {
+            return ""
+        }
+        let mut b: String = blocks[0].clone()
+        if b.starts_with("let ") {
+            b = b[4..<b.len()].clone()
+        } else if b.starts_with("const ") || b.starts_with("static ") || b.starts_with("extern ") || b.contains("\n") {
+            return ""
+        }
+        let colon = b.find(": ") ?? return ""
+        let ty: String = b[colon + 2..<b.len()].clone()
+        return f"local\t{ty}"
+    }
+    if blocks.len() < 2 || defined {
+        return ""
+    }
+    let path: String = blocks[0].clone()
+    let mut sig: String = ""
+    let mut is_impl = false
+    for l in blocks[1].lines() {
+        let t: String = l.trim().clone()
+        if t.starts_with("impl") {
+            is_impl = true
+        }
+        if sig == "" && t.contains("fn ") {
+            sig = t
+        }
+    }
+    if sig == "" {
+        return ""
+    }
+    let name = facts_fn_name(sig)
+    if facts_is_op(path, name) {
+        let arrow = sig.find("-> ") ?? return "op\t()"
+        let ty: String = sig[arrow + 3..<sig.len()].clone()
+        return f"op\t{ty}"
+    }
+    // rust-analyzer leaves the `impl` line out for many methods; the receiver
+    // or a type as the path's last segment marks them as well.
+    let receiver = sig.contains("(self") || sig.contains("(&self") || sig.contains("(&mut self") || sig.contains("(mut self")
+    if !is_impl && !receiver && !facts_typed(path) {
+        return ""
+    }
+    return f"method\t{path} {sig}"
+}
+
+/// `starts_with` with a prefix that is not a literal (NK1102 refuses a
+/// field on the method itself).
+fn facts_starts(text: ref String, prefix: ref String) -> bool {
+    return text.starts_with(prefix)
+}
+
+/// The path of a document, relative to the project root.
+fn facts_rel(d: ref FactsDump, uri: ref String) -> String {
+    let cut = d.under.len()
+    if facts_starts(uri, d.under) && uri.len() > cut {
+        let rel: String = uri[cut..<uri.len()].clone()
+        return rel
+    }
+    return uri.clone()
+}
+
+/// Counts the method-call shapes `.name(` of one source file and those that
+/// start at a resolved `method` fact; returns `[all, resolved]`.
+fn facts_calls(source: ref String, resolved: ref collections::BTreeSet[String], doc: ref String) -> Vec[i64] {
+    let mut all = 0
+    let mut hit = 0
+    let mut row = 0
+    for line in source.lines() {
+        row = row + 1
+        if line.trim().starts_with("//") {
+            continue
+        }
+        let c: Vec[scalar] = line.chars().collect()
+        let mut k = 0
+        while k + 1 < c.len() {
+            if c[k] == '.' && (c[k + 1].is_alphabetic() || c[k + 1] == '_') {
+                let mut j = k + 1
+                while j < c.len() && (c[j].is_alphanumeric() || c[j] == '_') {
+                    j = j + 1
+                }
+                if j < c.len() && (c[j] == '(' || (c[j] == ':' && j + 1 < c.len() && c[j + 1] == ':')) {
+                    all = all + 1
+                    let col = k + 2
+                    if resolved.contains(f"{doc}:{row}:{col}") {
+                        hit = hit + 1
+                    }
+                }
+                k = j
+            } else {
+                k = k + 1
+            }
+        }
+    }
+    return [all, hit]
+}
+
+fn main() throws {
+    let mut stats = false
+    let mut src: String = ""
+    let mut path: String = ""
+    let mut args: Vec[String] = []
+    for a in cli::args() {
+        args.push(a)
+    }
+    let mut at = 1
+    while at < args.len() {
+        let arg: String = args[at].clone()
+        if arg == "--stats" {
+            stats = true
+        } else if arg == "--src" {
+            at = at + 1
+            src = args[at].clone()
+        } else {
+            path = arg
+        }
+        at = at + 1
+    }
+    if path == "" {
+        eprintln("usage: facts [--stats] [--src DIR] FILE.lsif")
+        return
+    }
+    let text = fs::read_to_string(ref path, fs::Root::Anywhere) catch {
+        eprintln(f"cannot read {path}: {error}")
+        return
+    }
+    let d = facts_read(text)
+    let mut counts: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    let mut resolved: collections::BTreeSet[String] = collections::BTreeSet()
+    for (range, span) in d.ranges {
+        let hover = facts_hover(d, range)
+        if hover == "" {
+            continue
+        }
+        let fact = facts_classify(hover, d.defined.contains(range))
+        if fact == "" {
+            continue
+        }
+        let doc = d.doc_of.get(range) ?? -1
+        let uri: String = (d.docs.get(doc) ?? "").clone()
+        let file = facts_rel(d, uri)
+        println(f"{file}\t{span}\t{fact}")
+        let kind: String = fact[0..<(fact.find("\t") ?? 0)].clone()
+        let before = counts.get(kind) ?? 0
+        counts.insert(kind.clone(), before + 1)
+        if kind == "method" {
+            let start: String = (d.starts.get(range) ?? "").clone()
+            resolved.insert(f"{file}:{start}")
+        }
+    }
+    if !stats {
+        return
+    }
+    for (kind, n) in counts {
+        eprintln(f"{kind}: {n}")
+    }
+    let mut all = 0
+    let mut hit = 0
+    // One file can be several documents (one per target that includes it).
+    let mut done: collections::BTreeSet[String] = collections::BTreeSet()
+    for (_, uri) in d.docs {
+        let rel = facts_rel(d, uri)
+        let mut file: String = uri[7..<uri.len()].clone()
+        if src != "" {
+            file = f"{src}/{rel}"
+        }
+        if !file.ends_with(".rs") || !facts_starts(uri, d.under) || done.contains(rel) {
+            continue
+        }
+        done.insert(rel.clone())
+        let source = fs::read_to_string(ref file, fs::Root::Anywhere) catch {
+            continue
+        }
+        let n = facts_calls(source, resolved, rel)
+        all = all + n[0]
+        hit = hit + n[1]
+    }
+    eprintln(f"method calls: {all}, resolved: {hit}, unresolved: {all - hit}")
+}
