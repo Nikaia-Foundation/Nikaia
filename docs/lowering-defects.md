@@ -36,6 +36,9 @@ finds two D8 casts in `check_numbers4.nika`.
 | D17 | `s.starts_with(['a', 'b'])` passes the checker, lowers to `starts_with(vec![..])` (E0277) | verified (new) | d_un_pass.nika `draft_an_or_a` |
 | D18 | a two-parameter lambda over a list of tuples, `filter fn(name, ty) {..}`, lowers to `\|name, ty\|` (E0593) | verified (new) | `draft_a_root_is_one_of_two` |
 | D19 | `match name { "i32" \| "i64" => .. }` with `name: ref String` lowers to `matches!(name, "i32" \| ..)` on `&String` (E0308) | verified (new) | `draft_a_copied_part` |
+| D20 | `x ?? s.len()` / `x ?? (0 - 1)` lowered to `|| s.len() as i64.into()` / `0 - 1.into()` | **built** (0.0.874) | expressions.rs |
+| D21 | `a ?? 0 - 1` read as `a ?? 0` and a statement `-1` | **built** (0.0.874: refused, ADR-279 D1) | coalesce_fallback.rs |
+| D22 | `cli::args().nth(at)` with `at: i64` lowered to Rust's `usize` `nth` (E0308) | **built** (0.0.875: `cli::Args`) | cli.rs |
 
 ---
 
