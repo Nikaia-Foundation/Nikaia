@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part III: Tooling, Ecosystem & Interoperability**
-**Version:** 0.0.881 (Draft)
+**Version:** 0.0.882 (Draft)
 **Date:** 2026-10-13
 
 ---
@@ -1497,7 +1497,7 @@ fn query_data() {
 
 An official package's source is `packages/<name>/` in the toolchain's repository, with a version of its own.
 
-**`json`.** `json::read[T](text)` reads a text into a `T` and throws `json::Error` with the line, the column and the path of the value where it fails; `json::write[T](value)` writes a `T` as text, fields in declared order. The decoder and the encoder for `T` are generated from `T::fields` while the program is built (Part II 10.3). A member matches the field of its name, or the name `@json::Name` gives; never by position. Every field takes exactly one member: a member given twice, a field with no member and a member with no field are errors where the text is read, unless `T` is marked `@json::Open`, which skips unknown members of that type. `null` goes only into a `T?`. A field's type is `bool`, an integer or float type, `String`, a declared struct or enum, `json::Value`, or a `T?`, `Vec[T]` or `Map[String, T]` of one; any other is `NK1250`.
+**`json`.** `json::read[T](text)` reads a text into a `T` and throws `json::Error` where it fails; `json::write[T](value)` writes a `T` as text, fields in declared order. `json::Error` has the form of a grammar's `ParseError` (Appendix C): the line and the column, and the stack of what was being read there, its object members and list elements written as a path (`$.contacts[3].email`). The decoder and the encoder for `T` are generated from `T::fields` while the program is built (Part II 10.3). A member matches the field of its name, or the name `@json::Name` gives; never by position. A member given twice and a member with no field are errors where the text is read. A field with no member takes its default if it has one (Part I), is `null` if its type is a `T?`, and is otherwise an error where the text is read. `null` goes only into a `T?`. A field's type is `bool`, an integer or float type, `String`, a declared struct or enum, or a `T?`, `Vec[T]` or `Map[String, T]` of one; any other is `NK1250`.
 
 ```nika
 comptime SCHEMA = asset("contact.schema.json")
@@ -1505,7 +1505,7 @@ struct Contact { name: String, email: String? }
 let c = json::read[Contact](text; schema: SCHEMA)
 ```
 
-A `schema:` is a JSON Schema read while the program is built; `T` is checked against it by the same rules and a mismatch is `NK1251`. `json::parse(text)` reads a text of any shape into `enum json::Value { Null, Bool(bool), Int(i64), Float(f64), Text(String), List(Vec[Value]), Object(Map[String, Value]) }`: a number without fraction or exponent that fits an `i64` is `Int`, any other `Float`; an object keeps the order of the text.
+A `schema:` is a JSON Schema read while the program is built; `T` is checked against it by the same rules and a mismatch is `NK1251`.
 
 ---
 

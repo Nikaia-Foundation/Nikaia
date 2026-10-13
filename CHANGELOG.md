@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.882] — 2026-10-13
+
+**json: a missing member takes the default or null in a T?, json::Value put back (#604)**
+- ADR-344 D4 and Part III 17.3: a field with no member takes its default, is null in a T?, and is otherwise an error; @json::Open/@json::Rest are a proposal, not decided, and unknown members stay an error
+- json::Error has the form of a grammar's ParseError (line, column, rule stack), the JSON path written as that stack
+- json::Value and json::parse removed from the specification; the dynamic form is not decided (ADR-344)
+
 ## [0.0.881] — 2026-10-13
 
 **process::exit built (ADR-343)**
