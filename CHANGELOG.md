@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.888] — 2026-10-13
+
+**check: an arm of an unworked-out type beside a null is wrapped, so a lambda's if/else with null lowers (#586)**
+- An `if`/`match` arm whose type the checker did not work out, beside a `null` arm, is written as `Some(..)`: a `filter_map` lambda `if … { x / 2 } else { null }` no longer reaches rustc with mixed arms.
+
 ## [0.0.887] — 2026-10-13
 
 **check: a T? as an operand or a hole, a list as a text pattern and impl Fatal without impl Error are refused (#586)**

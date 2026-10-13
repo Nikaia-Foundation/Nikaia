@@ -1540,3 +1540,13 @@ fn a_list_is_no_pattern_of_text() {
         found.iter().map(|f| &f.message).collect::<Vec<_>>()
     );
 }
+
+/// **An arm of a type not worked out beside a `null` is a plain value** (#586):
+/// a `filter_map` lambda `if … { x / 2 } else { null }` wrote `x / 2` beside
+/// `None`, which rustc refused; a function's own `T?` result already wrapped it.
+#[test]
+fn a_lambdas_arm_beside_a_null_is_wrapped() {
+    let source = "fn main() {\n    let v = [1, 2, 3, 4]\n    let h: Vec[i64] = v.iter().filter_map(fn(x) { if x % 2 == 0 { x / 2 } else { null } }).collect()\n    println(f\"{h.len()} {h[0]} {h[1]}\")\n}\n";
+    assert!(findings(source).is_empty(), "{:?}", findings(source));
+    assert_eq!(ran("lambda-arm-beside-null", source), "2 1 2\n");
+}

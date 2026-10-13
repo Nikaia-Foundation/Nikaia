@@ -119,8 +119,16 @@ impl CheckState {
                 continue
             }
             let inner = the_type_inside(arm.ty)
-            if inner.is_unknown() || arm.tail == null {
+            if arm.tail == null {
                 return null
+            }
+            // **An arm of a type not worked out beside a `null`** is a plain
+            // value too (#586): `if even { x } else { null }` in a lambda,
+            // whose parameter has no written type, wrote `x` beside `None`.
+            // A `T?` arm is known as one (`an_arm_is_a_nullable`), so what is
+            // left is plain.
+            if inner.is_unknown() {
+                continue
             }
             if !the_plain_type_agrees(plain, inner) {
                 return null

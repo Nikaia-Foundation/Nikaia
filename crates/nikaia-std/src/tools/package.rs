@@ -9948,7 +9948,8 @@ impl CheckState {
                 continue;
             }
             let inner = the_type_inside(&arm.ty);
-            if inner.is_unknown() || arm.tail.is_none() { return None; }
+            if arm.tail.is_none() { return None; }
+            if inner.is_unknown() { continue; }
             if !the_plain_type_agrees((plain).as_ref(), &inner) { return None; }
             if plain.is_none() { plain = Some(inner); }
         }
