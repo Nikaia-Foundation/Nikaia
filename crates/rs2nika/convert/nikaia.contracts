@@ -15,6 +15,12 @@ locks = true
 exits = true
 signature = "()"
 
+[fn."rs2nika_adapter_mark"]
+sync = "inferred"
+touches = []
+views = ["raw: borrowed"]
+signature = "(raw: ref String, signature: bool) -> String"
+
 [fn."rs2nika_adapters"]
 sync = "inferred"
 touches = []

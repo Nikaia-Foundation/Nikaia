@@ -104,6 +104,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R55  `match` on an option with `Some(P)` arms -> `let given = e ?? <None arm>` then `match given { P => .. }`",
         "R56  `while let P = e && let Some(t) = f {` -> `while true {` + `let t = f ?? break` / `match e { P => x, else => break }`",
         "R57  a byte literal `b'x'` -> its number (`b'\\\\'` -> `92`)",
+        "R58  a line on Rust-only types (`&[&Parsed]`, `Ledger`, `check(..)`, `once(..)`) -> `// ADAPTER: bleibt in Rust`",
     ]
 }
 
@@ -2294,6 +2295,41 @@ fn rs2nika_arm_body(mut new: Vec[String], out: ref Vec[String], k: i64, end: i64
 
 /// R22 and R23: `let Some(x) = e else { return y }` and `if let Some(x) = e {`;
 /// the lines it becomes, or none.
+/// R58: what makes a line Rust-only, so that the cut between the Rust adapter
+/// and the Nikaia core shows: the parsed files (`Parsed`, beyond the one
+/// `parsed: &Parsed` the profile maps to its world), the ledgers, the whole
+/// checker `check(..)` and iterator chains over files; "" where none.
+fn rs2nika_adapter_mark(raw: ref String, signature: bool) -> String {
+    let st: String = raw.trim().clone()
+    if st.starts_with("//") {
+        return ""
+    }
+    if raw.contains("[&Parsed]") || raw.contains("Vec<&Parsed>") {
+        return "a list of `Parsed` files: the Nikaia core takes one `ref ParsedView`"
+    }
+    if raw.contains("Ledger") {
+        return "`Ledger`"
+    }
+    if signature {
+        return ""
+    }
+    let c: Vec[scalar] = raw.chars().collect()
+    for w in ["Parsed", "check(", "once(", "std::iter::once(", "check_package("] {
+        let mut from = 0
+        while true {
+            let at = rs2nika_find_from(c, w, from)
+            if at < 0 {
+                break
+            }
+            if at == 0 || !(rs2nika_word(c[at - 1]) || c[at - 1] == '.' || c[at - 1] == ':') {
+                return f"`{w}`"
+            }
+            from = at + 1
+        }
+    }
+    return ""
+}
+
 /// The names a pattern binds: lowercase words not after `::`, not `_`.
 fn rs2nika_bound(pat: ref String) -> Vec[String] {
     let c: Vec[scalar] = pat.chars().collect()
@@ -2514,6 +2550,11 @@ pub fn rs2nika_convert(src: ref String, profile: ref String, prefix: ref String,
             let below = rs2nika_shift(ctx, 1)
             if sig == "" && iflet.len() == 0 {
                 closing = rs2nika_close_iflet(ctx, raw)
+            }
+            let adapter = rs2nika_adapter_mark(raw, sig != "")
+            if adapter != "" {
+                out.push(f"{rs2nika_indent(raw)}// ADAPTER: bleibt in Rust ({adapter})")
+                rs2nika_hit(ctx, "R58")
             }
             if sig != "" {
                 if raw.contains("-> Option<&") {
