@@ -1,0 +1,28 @@
+    fn files(ref self, world: ref CheckWorld) -> (Vec[ref CheckWorld], i64) sync {
+        let mut files: Vec[ref CheckWorld] = self.beside.to_vec()
+        let here = if self.here != null {
+            let here = self.here ?? panic("rs2nika: checked above")
+            here
+        } else {
+                files.insert(0, world)
+                0
+        }
+        return (files, here)
+    }
+}
+
+/// What a grammar's wall is, as the report of it is given it.
+fn a_wall(why: ref crate::grammar_run::Wall) -> CheckWall sync {
+    use grammar_run::Wall
+    return match why {
+        Wall::Refused { detail } => CheckWall::Refused { detail: detail.clone() },
+        Wall::NoCrossedForm { ty, because } => CheckWall::NoCrossedForm { ty: ty.clone(), because: because.clone() },
+        Wall::InsideAnother { grammar } => CheckWall::InsideAnother { outer: grammar.clone() },
+        Wall::NowhereToBuild => CheckWall::NowhereToBuild,
+        Wall::DidNotBuild { detail } => CheckWall::DidNotBuild { detail: detail.clone() },
+        Wall::Unreadable { detail } => CheckWall::Unreadable { detail: detail.clone() },
+    }
+}
+
+impl CheckHost for Host<'_> {
+

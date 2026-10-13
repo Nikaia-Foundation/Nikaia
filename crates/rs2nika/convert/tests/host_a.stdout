@@ -1,0 +1,58 @@
+    fn somewhere(ref self, world: ref CheckWorld) -> bool sync {
+        return self.reads.workshop().somewhere()
+    }
+
+    fn decoded(ref self, world: ref CheckWorld, literal: ref String) -> String? sync {
+        return build_time::decoded(literal)
+    }
+
+    fn read(ref self, world: ref CheckWorld, path: ref String) -> BtRead sync {
+        return match self.reads.read(path) {
+            Ok(text) => BtRead { text: (text), denied: null },
+            Err(why) => BtRead { text: null, denied: (why) },
+        }
+    }
+
+    fn assets_read_in(ref self, world: ref CheckWorld, value: ref Expr, read: ref collections::BTreeMap[String, String]) -> Expr sync {
+        let mut value = value.clone()
+        if !read.is_empty() {
+            let parsed = world
+            // TODO(rs2nika): let-chain (`&& let`): nest `match`es
+            // TODO(rs2nika): `Option::map`/`and_then`: `let x = e ?? <none>` then the body
+            // TODO(rs2nika): slice pattern: index by position after a `len()` check
+            text_tiers::visit_expr_mut(value, mut |expr: Expr| { if let Expr::Call { func, args, .. } = expr && (match &*func { Expr::Variable(name, _) if parsed.words.resolve(name) == assets::ASSET => true, else => false }) && let [Expr::LitStr { text, .. }] = args && let Some(content) = build_time::decoded(text).and_then(fn(path) { read.get(path) }) { expr = Expr::LitStr { text: build_time::written(content), id: NodeId::fresh() } } }, mut |_, _| {})
+        }
+        return value
+    }
+
+    fn value_fn(ref self, world: ref CheckWorld) -> String sync {
+        return comptime_run::VALUE_FN.to_string()
+    }
+
+    fn place_of(ref self, world: ref CheckWorld, place: ref String, here: i64) -> CheckPlace sync {
+        let (files, _) = self.files()
+        let here = here
+        // TODO(rs2nika): `Option::map`/`and_then`: `let x = e ?? <none>` then the body
+        let stopped = (place).and_then(fn(place) { place.strip_prefix(comptime_run::STOPPED_AT) }).and_then(fn(rest) { rest.split_once(':') }).and_then(fn(unit, byte) { Some((unit.parse().ok()?, byte.parse().ok()?)) })
+        let at = stopped.filter(fn(unit, _) { unit == here }).map(fn(_, byte) { byte })
+        // `@<file>:<byte>`: a place in this file is shown, and one in another
+        // is named by the function it is in.
+        // TODO(rs2nika): `Option::map`/`and_then`: `let x = e ?? <none>` then the body
+        // TODO(rs2nika): `match` on `Some`/`None`: `let x = e ?? <none arm>`
+        // TODO(rs2nika): iterator adapter with no `Seq` method: a `for` loop
+        let function = stopped.filter(fn(unit, _) { unit != here }).and_then(fn(unit, byte) { let file = files.get(unit)?; file.program.items.iter().find_map(|item| match item.node { Item::Fn { name: Some(name), .. } if (item.span.start..item.span.end).contains(byte) => { Some(file.text(name).to_string()) } else => null }) })
+        // TODO(rs2nika): `is_some_and`/`map_or`: `let x = e ?? <false>` then the test
+        return CheckPlace { at: at.map_or(-1, i64::from), function }
+    }
+
+    fn written(ref self, world: ref CheckWorld, value: ref Expr) -> String sync {
+        return super::written_by(world, value)
+    }
+
+    fn newly_throws(ref self, world: ref CheckWorld, key: ref String) -> Vec[String]? sync {
+        return self.newly.throws.get(key) ?? return null.clone()
+    }
+
+    /// Code below the core never walks an expression: the hubs are the core's
+    /// host's (`core::Core`), until the dispatcher moves (U-c7, U-c11).
+
