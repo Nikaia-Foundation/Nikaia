@@ -1480,3 +1480,22 @@ fn main() {
     assert!(lowered.contains("text_of(Some(&owned))"), "{lowered}");
     assert!(lowered.contains("name_of((found).as_ref())"), "{lowered}");
 }
+
+/// **`None` names the way out**: the absent value is `null`, and a reader
+/// coming from Rust writes `== None` first (found writing `rs2nika`, #125).
+#[test]
+fn none_is_answered_with_null() {
+    let source = "fn f(line: ref String) -> bool {\n    return line.find(\"k\") == None\n}\n";
+    let parsed = parse_to_ast(source).expect("parses");
+    let own = Ledger::infer(&parsed);
+    let library = Ledger::parse(STD).expect("std's shipped ledger parses");
+    let findings = check::check(&parsed, &own, &library).findings;
+    let found = findings
+        .iter()
+        .find(|f| f.code == "NK1117")
+        .expect("`None` is not a name");
+    assert!(
+        found.help.as_deref().unwrap_or("").contains("`null`"),
+        "{found:#?}"
+    );
+}

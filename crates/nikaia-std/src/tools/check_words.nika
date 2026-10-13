@@ -17,6 +17,9 @@ pub fn reserved_elsewhere(name: ref String) -> String? {
     if name == "macro" || name == "quote" {
         return "Nikaia has no macros. To generate code from a type's shape, use `comptime` and a bound; to turn text into a program, use a grammar. (Both words are ordinary names.)"
     }
+    if name == "None" || name == "nil" || name == "Nil" {
+        return "The absent value is written `null`: `x == null`, `return null`, `let y: T? = null`. (`None` is an ordinary name in Nikaia.)"
+    }
     return null
 }
 

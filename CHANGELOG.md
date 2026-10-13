@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.877] — 2026-10-13
+
+**check: `None` is answered with `null` (#125)**
+- `NK1117` on `None`, `nil` or `Nil` says that the absent value is written `null`.
+
 ## [0.0.876] — 2026-10-13
 
 **std: `rfind` and `replacen` on text, `is_uppercase`, `is_lowercase`, `is_ascii_digit` on `scalar` (#125)**

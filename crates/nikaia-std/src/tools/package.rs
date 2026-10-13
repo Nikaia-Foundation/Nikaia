@@ -20390,6 +20390,7 @@ pub fn reserved_elsewhere(name: &str) -> Option<String> {
     if name == "loop" { return Some(String::from("Nikaia has no `loop` keyword. Write `while true { … }`. (`loop` is an ordinary name, so `let loop = 3` is fine.)")); }
     if name == "const" { return Some(String::from("A value computed while the program is built is written `comptime X = …`. (`const` is an ordinary name in Nikaia.)")); }
     if name == "macro" || name == "quote" { return Some(String::from("Nikaia has no macros. To generate code from a type's shape, use `comptime` and a bound; to turn text into a program, use a grammar. (Both words are ordinary names.)")); }
+    if name == "None" || name == "nil" || name == "Nil" { return Some(String::from("The absent value is written `null`: `x == null`, `return null`, `let y: T? = null`. (`None` is an ordinary name in Nikaia.)")); }
     None
 }
 
