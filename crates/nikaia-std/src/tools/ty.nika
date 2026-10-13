@@ -1095,6 +1095,9 @@ pub struct FnContract {
     /// puts into each** (ADR-010 D9, Part III 13.5 `maps`): `a | b: either`,
     /// `t.counts: from(word)`, `seen: keyed`. A map no line covers is keyed.
     pub maps: Vec[String],
+    /// **It may end the program**: it calls `process::exit`, or a function
+    /// that may (ADR-343 D2). Refused in a task (`NK2607`).
+    pub exits: bool,
     pub ends_by_length: bool,
     /// **A grammar entry whose body is a `par_fold`** (ADR-296 D19, #521):
     /// a consumer in another package drives it in pieces, as the grammar's own
@@ -1133,6 +1136,7 @@ impl FnContract {
             views: [],
             sharing: [],
             maps: [],
+            exits: false,
             ends_by_length: false,
             pieces: false,
             requires: [],

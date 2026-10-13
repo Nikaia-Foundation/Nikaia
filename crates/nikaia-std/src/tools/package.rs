@@ -26562,8 +26562,9 @@ impl EmitState {
         text = format!("{}fn main(){} {{\n", text, ret);
         text = format!("{}    nikaia_std::abort::report_in_nikaia_terms(__NIKAIA_SITES);\n", text);
         text = format!("{}    let nikaia_runtime = nikaia_std::rt::{}(nikaia_std::rt::UserCode::{});\n", text, start, user_code);
-        if call_pauses(&self.own_contracts, "main") { text = format!("{}    let outcome = nikaia_std::rt::exec::block_on(__nikaia_main());\n", text); } else { text = format!("{}    let outcome = __nikaia_main();\n", text); }
-        text = format!("{}    nikaia_runtime.finish();\n    outcome\n}}\n", text);
+        let exits = main_exits(&self.own_contracts);
+        if exits && call_pauses(&self.own_contracts, "main") { text = format!("{}    let outcome = nikaia_std::rt::exec::block_on(nikaia_std::process::guarded(__nikaia_main()));\n", text); } else if exits { text = format!("{}    let outcome = nikaia_std::process::guarded_sync(__nikaia_main);\n", text); } else if call_pauses(&self.own_contracts, "main") { text = format!("{}    let outcome = nikaia_std::rt::exec::block_on(__nikaia_main());\n", text); } else { text = format!("{}    let outcome = __nikaia_main();\n", text); }
+        if exits { text = format!("{}    nikaia_runtime.finish();\n    nikaia_std::process::ended(outcome)\n}}\n", text); } else { text = format!("{}    nikaia_runtime.finish();\n    outcome\n}}\n", text); }
         text
     }
     pub fn held_structs(&self, world: &EmitWorld<'_>) -> String {
@@ -26600,6 +26601,11 @@ impl EmitState {
         text = format!("{}    fn hold(self, keeps: [std::sync::Arc<nikaia_std::tether::Keep>; N]) -> Self::Held {{\n        nikaia_std::tether::Holding::new(keeps, move |keeps| nikaia_std::tether::Rebase::rebase(self, &keeps))\n    }}\n}}\n", text);
         text
     }
+}
+
+fn main_exits(own: &Ledger) -> bool {
+    let contract = match own.functions.get("main") { Some(__nikaia_value) => __nikaia_value, None => return false };
+    contract.exits
 }
 
 
@@ -31238,7 +31244,7 @@ fn function_key(entry: &mut FnContract, name: &str, key: &str, value: &str, n: i
             classes.push(nikaia_std::index::or(read, || Class { members: vec![], count: Count::Atomic }));
         }
         entry.sharing = classes;
-    } else if key == "maps" { entry.maps = entries(value, n)?; } else if key == "ends_by_length" { entry.ends_by_length = value == "true"; } else if key == "pieces" { entry.pieces = value == "true"; } else if key == "requires" { entry.requires = entries(value, n)?; } else if key == "ensures" { entry.ensures = entries(value, n)?; } else if key == "from" { entry.from = entries(value, n)?; } else { return Err(nikaia_std::error::throwing(Refused::Because(format!("line {}: unknown key `{}` on a fn", n, key)), &"function_key")); }
+    } else if key == "maps" { entry.maps = entries(value, n)?; } else if key == "exits" { entry.exits = value == "true"; } else if key == "ends_by_length" { entry.ends_by_length = value == "true"; } else if key == "pieces" { entry.pieces = value == "true"; } else if key == "requires" { entry.requires = entries(value, n)?; } else if key == "ensures" { entry.ensures = entries(value, n)?; } else if key == "from" { entry.from = entries(value, n)?; } else { return Err(nikaia_std::error::throwing(Refused::Because(format!("line {}: unknown key `{}` on a fn", n, key)), &"function_key")); }
     Ok(())
 }
 
@@ -32542,6 +32548,7 @@ fn function_text(name: &str, contract: &FnContract) -> String {
         out.push_str(&format!("sharing = [{}]\n", quoted_all(&classes)));
     }
     if !contract.maps.is_empty() { out.push_str(&format!("maps = [{}]\n", quoted_all(&contract.maps))); }
+    if contract.exits { out.push_str("exits = true\n"); }
     if contract.ends_by_length { out.push_str("ends_by_length = true\n"); }
     if contract.pieces { out.push_str("pieces = true\n"); }
     out.push_str(&claims_text("requires", &contract.requires));
@@ -47001,6 +47008,7 @@ pub struct FnContract {
     pub views: Vec<Held>,
     pub sharing: Vec<Class>,
     pub maps: Vec<String>,
+    pub exits: bool,
     pub ends_by_length: bool,
     pub pieces: bool,
     pub requires: Vec<String>,
@@ -47009,7 +47017,7 @@ pub struct FnContract {
 }
 
 impl FnContract {
-    pub fn empty() -> FnContract { FnContract { public: false, sync_claim: Sync::No, fails_with: vec![], touches: vec![], touches_known: false, provenance: None, signature: None, borrows: vec![], keeps: vec![], mutates: false, touches_a_lock: Lock::No, threads: Threads::Undecided, views: vec![], sharing: vec![], maps: vec![], ends_by_length: false, pieces: false, requires: vec![], ensures: vec![], from: vec![] } }
+    pub fn empty() -> FnContract { FnContract { public: false, sync_claim: Sync::No, fails_with: vec![], touches: vec![], touches_known: false, provenance: None, signature: None, borrows: vec![], keeps: vec![], mutates: false, touches_a_lock: Lock::No, threads: Threads::Undecided, views: vec![], sharing: vec![], maps: vec![], exits: false, ends_by_length: false, pieces: false, requires: vec![], ensures: vec![], from: vec![] } }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

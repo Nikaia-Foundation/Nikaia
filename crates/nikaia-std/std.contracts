@@ -4157,6 +4157,16 @@ provenance = "untrusted"
 keeps = ["args"]
 signature = "(program: ref String, args: Vec[String]; dir: ref String = \".\") -> process::Output"
 
+# End `main` now with `code`, from 0 to 255, the way a return from `main` ends
+# it: the cleanups run, then the tasks nobody joined, then the process ends with
+# the code (ADR-343). It may end the program, so code that calls it is refused
+# in a task (`NK2607`).
+[fn."process::exit"]
+pub = true
+sync = true
+exits = true
+signature = "(code: i64)"
+
 # --- `net`: the socket `std` lends (ADR-289 D6) ------------------------------
 #
 # [ADR-289](../../docs/specification/adr/adr-289.md) D2's subtraction carried one

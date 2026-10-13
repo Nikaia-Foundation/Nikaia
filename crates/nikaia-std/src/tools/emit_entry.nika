@@ -53,12 +53,23 @@ impl EmitState {
         text = f"{text}fn main(){ret} {{\n"
         text = f"{text}    nikaia_std::abort::report_in_nikaia_terms(__NIKAIA_SITES);\n"
         text = f"{text}    let nikaia_runtime = nikaia_std::rt::{start}(nikaia_std::rt::UserCode::{user_code});\n"
-        if call_pauses(self.own_contracts, "main") {
+        // ADR-343 D1: where `main` may end by `exit`, its body runs guarded,
+        // so the drain follows and the process ends with the code after it.
+        let exits = main_exits(self.own_contracts)
+        if exits && call_pauses(self.own_contracts, "main") {
+            text = f"{text}    let outcome = nikaia_std::rt::exec::block_on(nikaia_std::process::guarded(__nikaia_main()));\n"
+        } else if exits {
+            text = f"{text}    let outcome = nikaia_std::process::guarded_sync(__nikaia_main);\n"
+        } else if call_pauses(self.own_contracts, "main") {
             text = f"{text}    let outcome = nikaia_std::rt::exec::block_on(__nikaia_main());\n"
         } else {
             text = f"{text}    let outcome = __nikaia_main();\n"
         }
-        text = f"{text}    nikaia_runtime.finish();\n    outcome\n}}\n"
+        if exits {
+            text = f"{text}    nikaia_runtime.finish();\n    nikaia_std::process::ended(outcome)\n}}\n"
+        } else {
+            text = f"{text}    nikaia_runtime.finish();\n    outcome\n}}\n"
+        }
         return text
     }
 
@@ -112,4 +123,10 @@ impl EmitState {
         text = f"{text}    fn hold(self, keeps: [std::sync::Arc<nikaia_std::tether::Keep>; N]) -> Self::Held {{\n        nikaia_std::tether::Holding::new(keeps, move |keeps| nikaia_std::tether::Rebase::rebase(self, &keeps))\n    }}\n}}\n"
         return text
     }
+}
+
+/// Whether `main` may end by `process::exit` (ADR-343 D1).
+fn main_exits(own: ref Ledger) -> bool {
+    let contract = own.functions.get("main") ?? return false
+    return contract.exits
 }

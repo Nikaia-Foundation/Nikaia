@@ -25,7 +25,10 @@
 //! bug, but a set that said "something I cannot name" about a call the compiler
 //! had already named.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+
+/// The mark a call that may end the program leaves among the errors (ADR-343).
+const EXITS: &str = "\u{0}exits";
 
 use super::sync::{Reached, reached};
 use super::{Ledger, UNNAMED_ERROR};
@@ -73,10 +76,83 @@ pub fn infer(
             &mut graph,
         );
     }
+    // **`exits`** (ADR-343 D2): a call of a library function that may end the
+    // program is marked in `direct` by `EXITS`; the mark is taken out before
+    // the error sets are folded, and travels over the same call graph here.
+    // `unit_throws` walks only the functions that declare `throws`, so every
+    // function is walked here for its calls.
+    let mut exits: BTreeSet<String> = BTreeSet::new();
+    let mut edges: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for parsed in units.iter().copied() {
+        let own: &Ledger = ledger;
+        let mut walk = |key: String, body: &crate::ast::Block| {
+            let thrown = nika::thrown_by(
+                body,
+                &parsed.interner,
+                &|expr: &Expr| crate::emit::literal_expressions(parsed, expr),
+                &|expr: &Expr| contribution(parsed, expr, own, library),
+            );
+            if thrown.direct.contains(EXITS) {
+                exits.insert(key.clone());
+            }
+            let mut called = thrown.calls;
+            if let Some(methods) = graph.methods.get(&key) {
+                called.extend(methods.resolved.iter().cloned());
+            }
+            edges.entry(key).or_default().extend(called);
+        };
+        for item in &parsed.program.items {
+            match &item.node {
+                crate::ast::Item::Fn { name, body, .. } => {
+                    walk(function_key(parsed, name.as_ref(), ""), body);
+                }
+                crate::ast::Item::Impl {
+                    target, methods, ..
+                } => {
+                    let owner = parsed.interner.resolve(target.name).to_string();
+                    for method in methods {
+                        if let crate::ast::Item::Fn { name, body, .. } = &method.node {
+                            walk(function_key(parsed, name.as_ref(), &owner), body);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    for errors in graph.direct.values_mut() {
+        errors.remove(EXITS);
+    }
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for (name, callees) in &edges {
+            if !exits.contains(name) && callees.iter().any(|callee| exits.contains(callee)) {
+                exits.insert(name.clone());
+                changed = true;
+            }
+        }
+    }
+    for name in &exits {
+        if let Some(contract) = ledger.functions.get_mut(name) {
+            contract.exits = true;
+        }
+    }
     for (name, errors) in nika::error_sets(&graph.direct, &graph.calls, ledger) {
         if let Some(contract) = ledger.functions.get_mut(&name) {
             contract.fails_with = errors;
         }
+    }
+}
+
+/// The ledger's key of a function, `Owner::name` for a method.
+fn function_key(parsed: &Parsed, name: Option<&winnow_grammar::Symbol>, owner: &str) -> String {
+    let own = name
+        .map(|symbol| parsed.interner.resolve(*symbol).to_string())
+        .unwrap_or_else(|| "new".to_string());
+    match owner {
+        "" => own,
+        _ => format!("{owner}::{own}"),
     }
 }
 
@@ -93,7 +169,13 @@ fn contribution(
             library
                 .functions
                 .get(&key)
-                .map(|contract| contract.fails_with.clone())
+                .map(|contract| {
+                    let mut errors = contract.fails_with.clone();
+                    if contract.exits {
+                        errors.push(EXITS.to_string());
+                    }
+                    errors
+                })
                 .unwrap_or_default(),
         ),
         Some(Reached::Opaque(_)) => (None, vec![UNNAMED_ERROR.to_string()]),

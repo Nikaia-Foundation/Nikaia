@@ -12,6 +12,7 @@ version = 3
 [fn."main"]
 throws = ["?"]
 locks = true
+exits = true
 signature = "()"
 
 [fn."rs2nika_adapters"]

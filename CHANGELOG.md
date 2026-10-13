@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.881] — 2026-10-13
+
+**process::exit built (ADR-343)**
+- `process::exit(code)` built: `main` ends with the code after its cleanups and the drain; the ledger's `exits` column; `NK2607` in a task; a constant code outside 0..=255 is `NK1116` (#603).
+
 ## [0.0.880] — 2026-10-13
 
 **check: payload_of, claims_report, byte_literal, peeled and an_or_a in Nikaia (#125, #558)**

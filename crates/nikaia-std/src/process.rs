@@ -69,3 +69,96 @@ pub async fn run(program: &str, args: Vec<String>, dir: &str) -> Result<Output, 
         stderr,
     })
 }
+
+// **`exit`: `main` ends now, with a code** ([ADR-343](../../../docs/specification/adr/adr-343.md)).
+//
+// The call unwinds `main`'s frames with a payload of its own, which runs no
+// panic hook. A value with a pausable cleanup that dies on the way parks it as
+// at a `return` ([`exiting`]), and the emitted `fn main` catches the payload
+// ([`guarded`]), hands what was parked to the drain at program end, and only
+// after that drain ends the process with the code ([`ended`]). A task never
+// gets here: code that may call `exit` is refused in one (`NK2607`, D3).
+
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
+
+/// The payload `exit` unwinds with.
+struct Exit;
+
+static EXITING: AtomicBool = AtomicBool::new(false);
+static CODE: AtomicI32 = AtomicI32::new(0);
+
+/// Whether the unwinding under way is an `exit` and not a panic: a value dying
+/// on it parks its cleanup (D1).
+pub fn exiting() -> bool {
+    EXITING.load(Ordering::Relaxed)
+}
+
+/// End `main` now with `code`, on the path a return from `main` takes (D1).
+/// A code outside `0..=255` is an unrecoverable error (D4).
+pub fn exit(code: i64) -> ! {
+    if !(0..=255).contains(&code) {
+        panic!("process::exit: the exit code {code} is not in 0..=255");
+    }
+    CODE.store(code as i32, Ordering::Relaxed);
+    EXITING.store(true, Ordering::Relaxed);
+    std::panic::resume_unwind(Box::new(Exit))
+}
+
+/// What `main`'s frames parked on the way out goes to the drain at program end.
+fn settle_exit(payload: Box<dyn std::any::Any + Send>) {
+    if !payload.is::<Exit>() {
+        std::panic::resume_unwind(payload);
+    }
+    use crate::cleanup::Queue;
+    let mut parked = crate::cleanup::Queues::default();
+    parked.swap();
+    parked.orphan();
+    EXITING.store(false, Ordering::Relaxed);
+}
+
+/// `main`'s body, synchronous: `None` where it ended by `exit`.
+pub fn guarded_sync<T>(body: impl FnOnce() -> T) -> Option<T> {
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(body)) {
+        Ok(value) => Some(value),
+        Err(payload) => {
+            settle_exit(payload);
+            None
+        }
+    }
+}
+
+/// `main`'s body, pausing: `None` where it ended by `exit`. Polled inside
+/// `block_on`, so the drain of unjoined tasks and parked cleanups follows.
+pub async fn guarded<T>(body: impl std::future::Future<Output = T>) -> Option<T> {
+    let mut body = std::pin::pin!(body);
+    std::future::poll_fn(move |cx| {
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| body.as_mut().poll(cx))) {
+            Ok(std::task::Poll::Ready(value)) => std::task::Poll::Ready(Some(value)),
+            Ok(std::task::Poll::Pending) => std::task::Poll::Pending,
+            Err(payload) => {
+                settle_exit(payload);
+                std::task::Poll::Ready(None)
+            }
+        }
+    })
+    .await
+}
+
+/// After the runtime finished: `main`'s outcome, or the end with `exit`'s code.
+pub fn ended<T>(outcome: Option<T>) -> T {
+    match outcome {
+        Some(value) => value,
+        None => std::process::exit(CODE.load(Ordering::Relaxed)),
+    }
+}
+
+#[cfg(test)]
+mod exit_tests {
+    #[test]
+    fn exit_unwinds_to_the_guard_with_its_code() {
+        let outcome: Option<()> = super::guarded_sync(|| super::exit(3));
+        assert!(outcome.is_none());
+        assert_eq!(super::CODE.load(std::sync::atomic::Ordering::Relaxed), 3);
+        assert!(!super::exiting());
+    }
+}

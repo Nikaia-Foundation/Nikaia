@@ -10,6 +10,7 @@
 
 use std::fs
 use std::cli
+use std::process
 use std::collections
 
 /// What a run made: the draft and the rules it applied, one entry a hit.
@@ -3243,6 +3244,7 @@ fn main() throws {
         }
         if n > 0 {
             eprintln(f"{n} findings")
+            process::exit(1)
         }
         return
     }
