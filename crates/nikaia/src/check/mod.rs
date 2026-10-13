@@ -11825,11 +11825,9 @@ impl<'a> Checker<'a> {
                     "What is not known is not checked, so the value of a `{word}` whose arms \
                      disagree is refused rather than left to the language below."
                 )],
-                help: Some(
-                    "Make the arms the same type, or write the type down where the value goes, \
-                     such as `let x: T = …`."
-                        .to_string(),
-                ),
+                // A written type does not make arms of two known types meet,
+                // and where one is written each arm is asked against it.
+                help: Some(format!("Make the arms of the {article} the same type.")),
                 labels: Vec::new(),
             },
         );

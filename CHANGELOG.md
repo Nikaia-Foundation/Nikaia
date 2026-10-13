@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.864] — 2026-10-13
+
+**checker: NK1245's help for disagreeing arms asks for no annotation**
+- NK1245 for an if or match whose arms are known and disagree no longer asks to write the type down; it asks to make the arms the same type.
+
 ## [0.0.863] — 2026-10-12
 
 **checker: into_either over an if/match of views and text is each arm's; an annotated mixed let works (Part of #562)**

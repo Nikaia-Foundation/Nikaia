@@ -1985,3 +1985,29 @@ fn an_arm_that_returns_gives_no_value() {
     );
     assert!(found.iter().all(|f| f.code == "NK1103"), "{found:#?}");
 }
+
+/// **No help asks to write a type that is written** (found after #596): arms
+/// of two known types do not meet under any annotation, so where the value
+/// stands in an annotated `let`, an assignment to a typed name or a typed
+/// list, no finding asks for `let x: T = …`.
+#[test]
+fn arms_that_disagree_under_a_written_type_ask_for_no_annotation() {
+    for body in [
+        "let y: i64 = if c { 1 } else { \"x\" }\n    return y",
+        "let mut y: i64 = 0\n    y = if c { true } else { 1.5 }\n    return y",
+        "let y: Vec[i64] = [if c { true } else { 2.5 }]\n    return y.len()",
+        "let y: i64 = match c { true => true, false => 2.5 }\n    return y",
+    ] {
+        let source = format!("fn f(c: bool) -> i64 {{\n    {body}\n}}\n");
+        let found = findings(&source);
+        assert!(!found.is_empty(), "{body} is refused");
+        for f in &found {
+            let help = f.help.clone().unwrap_or_default();
+            assert!(
+                !help.contains("let x: T") && !help.contains("write the type down"),
+                "{body}: {} asks to write the type: {help}",
+                f.code
+            );
+        }
+    }
+}
