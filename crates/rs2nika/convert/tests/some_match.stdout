@@ -1,10 +1,10 @@
 fn how(claim: ref Claim) -> String sync {
-    let given = claim.held ?? return "refused"
+    let given = claim.held ?? return "refused".clone()
     return match given {
-        Held::Proved => "proved",
+        Held::Proved => "proved".clone(),
         Held::AtRunTime(why) => f"checked at run time: {why}",
         Held::Refused => {
-            "refused"
+            "refused".clone()
         }
     }
 }

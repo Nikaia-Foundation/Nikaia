@@ -62,7 +62,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R13  `_ =>` -> `else =>`",
         "R14  `matches!(e, P)` / `matches!(e, P if g)` -> `match e { P => true, else => false }`",
         "R15  `format!(\"..{}..\", a)` -> `f\"..{a}..\"`; `&format!` -> `f\"..\"`",
-        "R16  `.to_owned()`/`.into_owned()`/`String::from(x)` -> `.clone()`; `\"lit\".to_string()` -> `\"lit\"`; `.to_string()` after a name lookup -> `.clone()`",
+        "R16  `.to_owned()`/`.into_owned()`/`String::from(x)` -> `.clone()`; `\"lit\".to_string()` -> `\"lit\".clone()` (a literal is a view); `.to_string()` after a name lookup -> `.clone()`",
         "R17  `String::new()` -> `\"\"`, `Vec::new()`/`vec![]` -> `[]`, `vec![a, b]` -> `[a, b]`, `BTreeMap::new()` -> `collections::BTreeMap()`",
         "R18  `*x` deref dropped",
         "R19  `&x`/`&mut x` at a use dropped (Nikaia lends implicitly)",
@@ -1648,8 +1648,9 @@ fn rs2nika_expr(mut ctx: Rs2nikaCtx, line: ref String) -> String {
         s = rs2nika_rep(ctx, s, m, "collections::BTreeSet()", "R17")
     }
     s = rs2nika_rep(ctx, s, "Box::new(", "(", "R9")
+    s = rs2nika_rep(ctx, s, " as char", " as scalar", "R57")
     if s.contains("\".to_string()") {
-        s = s.replace("\".to_string()", "\"")
+        s = s.replace("\".to_string()", "\".clone()")
         rs2nika_hit(ctx, "R16")
     }
     s = rs2nika_rep(ctx, s, ".to_owned()", ".clone()", "R16")
