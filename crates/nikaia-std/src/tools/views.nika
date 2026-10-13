@@ -599,7 +599,14 @@ fn walk_block(unit: ref Unit, asked: ref Asked, block: ref Block, tail: bool, ow
                         here.carriers.insert(asked.names.resolve(name).clone())
                     }
                 }
-                stores(unit, asked, value, span, own_buffer, here)
+                // **A struct that never leaves keeps nothing past the call**
+                // (#585): its fields are no store where the name is read only
+                // through them; where those reads go is asked on their own.
+                if views_a_local_struct(asked, block, i, names, value) {
+                    descend(unit, asked, value, span, own_buffer, here)
+                } else {
+                    stores(unit, asked, value, span, own_buffer, here)
+                }
             }
             Stmt::Comptime { name, value, .. } => {
                 if mentions(unit, asked, here, value) {
@@ -644,6 +651,52 @@ fn walk_block(unit: ref Unit, asked: ref Asked, block: ref Block, tail: bool, ow
             Stmt::Break => {}
             Stmt::Continue => {}
         }
+    }
+}
+
+// Whether `let name = Struct { … }` at statement `at` binds a struct the
+// rest of the block reads only through its fields: the value itself is never
+// returned, handed on, stored or called a method on.
+fn views_a_local_struct(asked: ref Asked, block: ref Block, at: i64, names: ref Vec[winnow_grammar::Symbol], value: ref Expr) -> bool {
+    let literal = match value {
+        Expr::StructLit { .. } => true,
+        else => false,
+    }
+    if !literal || names.len() != 1 {
+        return false
+    }
+    let name = asked.names.resolve(names[0]).clone()
+    let mut uses = 0
+    let mut through = 0
+    for j in (at + 1)..<block.stmts.len() {
+        for each in visited_in_stmt(block.stmts[j].node) {
+            match each {
+                Expr::Variable(n, _) => {
+                    if asked.names.resolve(n) == name {
+                        uses += 1
+                    }
+                },
+                Expr::Field { base, .. } => {
+                    if views_names(asked, base, name) {
+                        through += 1
+                    }
+                },
+                Expr::SafeField { base, .. } => {
+                    if views_names(asked, base, name) {
+                        through += 1
+                    }
+                },
+                else => {},
+            }
+        }
+    }
+    return uses == through
+}
+
+fn views_names(asked: ref Asked, expr: ref Expr, name: ref String) -> bool {
+    return match expr {
+        Expr::Variable(n, _) => asked.names.resolve(n) == name,
+        else => false,
     }
 }
 

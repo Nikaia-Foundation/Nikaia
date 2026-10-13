@@ -1194,3 +1194,34 @@ fn main() {
     );
     assert_eq!(said.trim(), "5");
 }
+
+/// #585's fifth over-refusal: a view stored in a local struct that never
+/// leaves the function, read only through its fields, is no store past the
+/// call (no `NK2302`); `Holder.name` gets a view and text of its own.
+#[test]
+fn a_view_in_a_local_struct_that_never_leaves_is_not_kept() {
+    let said = printed(
+        "view-in-a-local-struct",
+        r#"
+struct Holder {
+    name: String,
+}
+
+fn two(s: ref String, c: bool) -> i64 {
+    if c {
+        let h = Holder { name: s }
+        return h.name.len()
+    }
+    let g = Holder { name: f"{c}" }
+    return g.name.len()
+}
+
+fn main() {
+    let a = "ab".clone()
+    println(f"{two(a, true)}")
+    println(f"{two(a, false)}")
+}
+"#,
+    );
+    assert_eq!(said.trim(), "2\n5");
+}

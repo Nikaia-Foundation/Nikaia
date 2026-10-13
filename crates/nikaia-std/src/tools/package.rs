@@ -28432,7 +28432,7 @@ pub fn visited_in_block(block: &Block) -> Vec<&Expr> {
     out
 }
 
-fn visited_in_stmt(stmt: &Stmt) -> Vec<&Expr> {
+pub fn visited_in_stmt(stmt: &Stmt) -> Vec<&Expr> {
     let mut out: Vec<&Expr> = vec![];
     match stmt {
         Stmt::Let { value, .. } => out.extend(visited_in_expr(value)),
@@ -48008,11 +48008,11 @@ fn walk_block(unit: &Unit, asked: &Asked<'_>, block: &Block, tail: bool, own_buf
     let count = block.stmts.len() as i64;
     for i in 0..count {
         let returning = tail && i + 1 == count;
-        let span = nikaia_std::index::get(&block.stmts, (i) as usize).span.clone();
-        match &nikaia_std::index::get(&block.stmts, (i) as usize).node {
+        let span = nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).span.clone();
+        match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).node {
             Stmt::Let { names, value, .. } => {
                 if mentions(unit, asked, &here, value) && !own_buffer(value) { for name in names.iter() { here.carriers.insert(asked.names.resolve(*name).to_owned()); } }
-                stores(unit, asked, value, &span, own_buffer, here);
+                if views_a_local_struct(asked, block, i, names, value) { descend(unit, asked, value, &span, own_buffer, here); } else { stores(unit, asked, value, &span, own_buffer, here); }
             },
             Stmt::Comptime { name, value, .. } => {
                 let name = *name;
@@ -48046,6 +48046,41 @@ fn walk_block(unit: &Unit, asked: &Asked<'_>, block: &Block, tail: bool, own_buf
             Stmt::Break => { },
             Stmt::Continue => { },
         }
+    }
+}
+
+fn views_a_local_struct(asked: &Asked<'_>, block: &Block, at: i64, names: &[winnow_grammar::Symbol], value: &Expr) -> bool {
+    let literal = matches!(value, Expr::StructLit { .. });
+    if !literal || names.len() != 1 { return false; }
+    let name = asked.names.resolve(*nikaia_std::index::get(&names, 0)).to_owned();
+    let mut uses = 0;
+    let mut through = 0;
+    for j in at + 1..block.stmts.len() as i64 {
+        for each in visited_in_stmt(&nikaia_std::index::get(&block.stmts, nikaia_std::index::at(j)).node) {
+            match each {
+                Expr::Variable(n, _) => {
+                    let n = *n;
+                    if asked.names.resolve(n) == name { uses += 1; }
+                },
+                Expr::Field { base, .. } => {
+                    let base = nikaia_std::boxed::open(base);
+                    if views_names(asked, base, &name) { through += 1; }
+                },
+                Expr::SafeField { base, .. } => {
+                    let base = nikaia_std::boxed::open(base);
+                    if views_names(asked, base, &name) { through += 1; }
+                },
+                _ => { },
+            }
+        }
+    }
+    uses == through
+}
+
+fn views_names(asked: &Asked<'_>, expr: &Expr, name: &str) -> bool {
+    match expr {
+        Expr::Variable(n, _) => { let n = *n; asked.names.resolve(n) == name },
+        _ => false,
     }
 }
 
@@ -50037,7 +50072,7 @@ pub mod emit_types {
 }
 pub mod emit_walk {
     #[allow(unused_imports)]
-    pub use super::{visited_in_block, visited_in_expr, template_holes_bound};
+    pub use super::{visited_in_block, visited_in_stmt, visited_in_expr, template_holes_bound};
 }
 pub mod escapes {
     #[allow(unused_imports)]

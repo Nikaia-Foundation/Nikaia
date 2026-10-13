@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.866] — 2026-10-13
+
+**checker: a view in a local struct that never leaves is no store (#585)**
+- A struct literal bound by a let and read only through its fields keeps no view past the call: NK2302 no longer refuses it (#585).
+
 ## [0.0.865] — 2026-10-13
 
 **lowering: a view into a String parameter only read is lent as it is (#598)**

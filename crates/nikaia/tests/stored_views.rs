@@ -555,3 +555,25 @@ impl Holder {
     );
     assert_eq!(refused.len(), 1, "{refused:#?}");
 }
+
+/// #585: a local struct read only through its fields keeps nothing; one that
+/// leaves - returned, handed to a kept list, stored in another struct - still
+/// keeps the view it holds.
+#[test]
+fn a_local_struct_keeps_a_view_only_where_it_leaves() {
+    let head = "struct Holder {\n    name: String,\n}\n\nstruct Outer {\n    held: Holder,\n}\n\n";
+    let local = "fn two(s: ref String) -> i64 {\n    let h = Holder { name: s }\n    return h.name.len()\n}\n";
+    assert!(findings(&format!("{head}{local}")).is_empty());
+    for leaves in [
+        "fn keep(s: ref String) -> Holder {\n    let h = Holder { name: s }\n    return h\n}\n",
+        "fn keep(s: ref String, mut l: Vec[Holder]) {\n    let h = Holder { name: s }\n    l.push(h)\n}\n",
+        "fn keep(s: ref String) -> Outer {\n    let h = Holder { name: s }\n    return Outer { held: h }\n}\n",
+    ] {
+        let found = one(&format!("{head}{leaves}"));
+        assert!(
+            found.message.contains("keeps `s`"),
+            "{leaves}: {}",
+            found.message
+        );
+    }
+}

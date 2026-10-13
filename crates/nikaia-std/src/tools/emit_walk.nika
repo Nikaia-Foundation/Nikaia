@@ -17,7 +17,8 @@ pub fn visited_in_block(block: ref Block) -> Vec[ref Expr] {
     return out
 }
 
-fn visited_in_stmt(stmt: ref Stmt) -> Vec[ref Expr] {
+/// Every expression inside this statement, in the order a walk meets them.
+pub fn visited_in_stmt(stmt: ref Stmt) -> Vec[ref Expr] {
     let mut out: Vec[ref Expr] = []
     match stmt {
         Stmt::Let { value, .. } => out.extend(visited_in_expr(value)),
