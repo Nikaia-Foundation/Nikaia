@@ -20,8 +20,8 @@ before the 40 s `lower-std` (no false hits on today's `tools/*.nika`).
 | D4 | a `for` over `Vec[Symbol]` yields `ref Symbol` | verified (as a checker type) | probe_symkey.nika |
 | D5 | `(A, B)?` does not parse | by design; message does not name the way out | d05_tuple_opt.nika |
 | D6 | `HashSet`/`HashMap` fields lower to `TrustedSet`/`TrustedMap` | verified: the type follows each file's own trust analysis; decided in ADR-010 D9, build #581 | probe_hash.nika |
-| D7 | `x.len() as i64` writes `(x.len() as i64) as i64` | verified (clippy) | d07_len_cast.nika |
-| D8 | `get(x.span.start as i64)` lowers to `&x.span.start as i64` | verified | d08_u32_key.nika |
+| D7 | `x.len() as i64` writes `(x.len() as i64) as i64` | **built** (0.0.871: the cast is written once) | expressions.rs |
+| D8 | `get(x.span.start as i64)` lowers to `&x.span.start as i64` | **built** (0.0.871: `&(x as i64)`) | expressions.rs |
 | D9 | `Type?` parameter lowers to `Option<&Type>` | not reproduced as named; same root cause as D1 (`&Option<T>`) | d09_opt_param.nika, probe_tools.nika |
 | D10 | `x ?? 0` on `Integer?` lowers to a plain integer | verified; also not refused by the checker | probe_tools.nika |
 | D11 | typed `throw` in a trait impl of a `throws` method is not boxed | verified | d11_typed_throw.nika |
@@ -136,7 +136,7 @@ Decided: [ADR-010](specification/adr/adr-010.md) D9, Part III 17.1. The build or
 
 ### Today
 `return xs.len() as i64` lowers to `(xs.len() as i64) as i64`, and clippy's `unnecessary_cast` stops CI (`-D warnings`).
-Workaround: write `xs.len()` (already `i64`).
+Built in 0.0.871: the emitter writes the length once (`emit_core_cast`); test `a_cast_of_a_length_to_i64_is_written_once`.
 
 ### To build
 1. The checker warns that the cast does nothing (`len()` is `i64`), or the emitter drops an `as` to the type the operand already has.
@@ -150,7 +150,7 @@ return m.get(x.span.start as i64)?.clone() ?? "none"     // start: u32
 ```
 Actual: `m.get(&x.span.start as i64)`, which gives rustc E0606 (casting `&u32` as `i64` is invalid), plus D2's two errors.
 Expected: `m.get(&(x.span.start as i64))`.
-Workaround: `let at = x.span.start as i64`, then `m[at]?.clone() ?? "none"`.
+Built in 0.0.871: a cast written after a `&` is bracketed; test `a_borrowed_cast_is_bracketed`. D2's errors remain.
 
 ### To build
 1. The emitter brackets a cast before it borrows a key: `&(e as T)`.

@@ -519,3 +519,27 @@ fn text_bound_through_a_lent_value_is_read_where_it_is_compared() {
     );
     assert!(emitted.contains("== *wanted"), "{emitted}");
 }
+
+/// `xs.len() as i64` is cast once: the length is already an `i64`, and a
+/// second `as` is clippy's `unnecessary_cast` (lowering defect D7).
+#[test]
+fn a_cast_of_a_length_to_i64_is_written_once() {
+    let emitted = emit("fn f(xs: ref Vec[String]) -> i64 { return xs.len() as i64 }");
+    assert!(emitted.contains("xs.len() as i64"), "{emitted}");
+    assert!(!emitted.contains("as i64) as i64"), "{emitted}");
+    assert!(!emitted.contains("as i64 as i64"), "{emitted}");
+}
+
+/// A cast used as a map key is borrowed whole: `&(x as i64)`, since
+/// `&x as i64` casts the reference (lowering defect D8).
+#[test]
+fn a_borrowed_cast_is_bracketed() {
+    let emitted = emit(
+        "use std::collections\n\
+         struct At { start: u32 }\n\
+         fn f(m: ref collections::HashMap[i64, String], x: ref At) -> bool {\n\
+             return m.contains_key(x.start as i64)\n\
+         }\n",
+    );
+    assert!(emitted.contains("&(x.start as i64)"), "{emitted}");
+}

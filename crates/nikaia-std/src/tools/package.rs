@@ -25512,12 +25512,19 @@ impl EmitState {
             out.push(&format!("nikaia_std::num::to_{}(", into));
             self.emit_core_operand(world, walk, out, host, operand, viewed, depth, flow, scope)?;
             out.push(")");
-        } else if viewed {
-            self.emit_core_operand(world, walk, out, host, operand, viewed, depth, flow, scope)?;
-            out.push(&format!(" as {}", into));
         } else {
-            self.emit_core_nested(world, walk, out, host, operand, 255, depth, flow, scope)?;
+            let lent = out.buf.ends_with("&") && !out.buf.ends_with("&&");
+            if lent { out.push("("); }
+            if viewed { self.emit_core_operand(world, walk, out, host, operand, viewed, depth, flow, scope)?; } else if !lent && emit_read_a_length(world, operand) {
+                let mut written = EmitOut::empty();
+                self.emit_core_nested(world, walk, &mut written, host, operand, 0, depth, flow, scope)?;
+                let open = format!(" as {}", into);
+                let already = written.buf.ends_with(&open);
+                out.append(written);
+                if already { return Ok(()); }
+            } else { self.emit_core_nested(world, walk, out, host, operand, 255, depth, flow, scope)?; }
             out.push(&format!(" as {}", into));
+            if lent { out.push(")"); }
         }
         Ok(())
     }

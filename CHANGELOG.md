@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.872] — 2026-10-13
+
+**emit: a cast is cast once and borrowed whole (lowering defects D7, D8; #125)**
+- `xs.len() as i64` lowers to `xs.len() as i64`, not `(xs.len() as i64) as i64` (clippy `unnecessary_cast`).
+- A cast passed by reference, such as a map key `m.get(x.start as i64)`, lowers to `&(x.start as i64)`, not `&x.start as i64` (E0606).
+
 ## [0.0.871] — 2026-10-13
 
 **Check leaves in Nikaia: wholly_known, a_map, a_copied_part, is_a_literal_other_than**
