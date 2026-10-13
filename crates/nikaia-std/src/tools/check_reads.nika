@@ -351,7 +351,7 @@ impl CheckState {
     /// **A cast's width** (ADR-233): a cast that always fits is a widening,
     /// every other between two numbers is recorded as narrowing, out of a
     /// floating-point number silent three ways and so of its own kind.
-    pub fn record_cast(ref mut self, from: ref Ty, into: ref Ty, span: ref Span) sync {
+    pub fn record_cast(ref mut self, from: ref Ty, into: ref Ty, operand: i64) sync {
         let from_name = match from {
             Ty::Named { name, .. } => name.clone(),
             else => return,
@@ -365,7 +365,7 @@ impl CheckState {
         let fits_from_u32 = from_name == "u32" && (into_name == "i64" || into_name == "u64")
         let always_fits = from_name == into_name || into_name == "f64" || fits_i64 || fits_from_u8 || fits_from_u32
         let checked = check_numeric(from_name) && check_numeric(into_name) && !always_fits
-        let at = (span.start as i64, into_name.clone())
+        let at = operand
         if !checked {
             let added = self.flow.widening_casts.insert(at)
         } else if from_name == "f64" {

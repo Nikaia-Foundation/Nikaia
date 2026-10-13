@@ -12266,7 +12266,7 @@ pub struct CheckFacts {
     pub held_reaches: collections::BTreeSet<i64>,
     pub nullable_fields: collections::BTreeMap<(i64, String), FactWrap>,
     pub nullable_args: collections::BTreeMap<i64, FactWrap>,
-    pub narrowing_casts: collections::BTreeMap<(i64, String), FactNarrowing>,
+    pub narrowing_casts: collections::BTreeMap<i64, FactNarrowing>,
     pub task_handles: collections::BTreeSet<(i64, String)>,
     pub method_options: collections::BTreeMap<(i64, String), Vec<(String, String)>>,
     pub lent_args: collections::BTreeSet<i64>,
@@ -12905,7 +12905,7 @@ pub struct CheckFlow {
     pub reaching: Option<String>,
     pub reached: Option<String>,
     pub grown_text: collections::BTreeSet<String>,
-    pub widening_casts: collections::BTreeSet<(i64, String)>,
+    pub widening_casts: collections::BTreeSet<i64>,
     pub unsigned_slots: collections::BTreeMap<i64, Vec<CheckUnsignedSlot>>,
     pub at_a_write_door: bool,
     pub pushed_into: Option<String>,
@@ -17085,7 +17085,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn record_cast(&mut self, from: &Ty, into: &Ty, span: &Span) {
+    pub fn record_cast(&mut self, from: &Ty, into: &Ty, operand: i64) {
         let from_name = match from {
             Ty::Named { name, .. } => name.to_owned(),
             _ => return,
@@ -17099,7 +17099,7 @@ impl CheckState {
         let fits_from_u32 = from_name == "u32" && (into_name == "i64" || into_name == "u64");
         let always_fits = from_name == into_name || into_name == "f64" || fits_i64 || fits_from_u8 || fits_from_u32;
         let checked = check_numeric(&from_name) && check_numeric(&into_name) && !always_fits;
-        let at = (span.start as i64, into_name.to_owned());
+        let at = operand;
         if !checked { let added = self.flow.widening_casts.insert(at); } else if from_name == "f64" { self.facts.narrowing_casts.insert(at, FactNarrowing::FromFloat); } else { self.facts.narrowing_casts.insert(at, FactNarrowing::Integer); }
     }
 }
@@ -25427,8 +25427,8 @@ impl EmitState {
         }
         Ok(())
     }
-    fn emit_place_narrowing(&self, statement: i64, into: &str) -> i64 {
-        let found = match self.narrows(statement, into) { Some(__nikaia_value) => __nikaia_value, None => return 0 };
+    fn emit_place_narrowing(&self, operand: &Expr) -> i64 {
+        let found = match self.narrows(operand) { Some(__nikaia_value) => __nikaia_value, None => return 0 };
         match found {
             FactNarrowing::Integer => 1,
             FactNarrowing::FromFloat => 2,
@@ -25447,7 +25447,7 @@ impl EmitState {
             },
             _ => { },
         }
-        let kind = self.emit_place_narrowing(flow.statement, &into);
+        let kind = self.emit_place_narrowing(operand);
         if kind == 1 {
             out.push(&format!("{}::try_from(", into));
             self.emit_core_operand(world, walk, out, host, operand, viewed, depth, flow, scope)?;
@@ -27489,8 +27489,8 @@ impl EmitState {
         }
         (last, String::from(""))
     }
-    pub fn narrows(&self, statement: i64, into: &str) -> Option<FactNarrowing> {
-        let found = match self.facts.narrowing_casts.get(&(statement, into.to_owned())) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    pub fn narrows(&self, operand: &Expr) -> Option<FactNarrowing> {
+        let found = match self.facts.narrowing_casts.get(&node_key(operand)) { Some(__nikaia_value) => __nikaia_value, None => return None };
         Some(found.clone())
     }
     pub fn a_code_parameter_taken_whole(&self, world: &EmitWorld<'_>, function: &str, name: &str) -> bool {

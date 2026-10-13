@@ -724,3 +724,28 @@ fn a_named_method_on_a_written_number_takes_the_type_its_use_asks() {
     assert!(!rust.contains("async fn f"), "{rust}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// **Each cast of one statement has its own answer** (#558, ADR-340 D5): a
+/// widening `u8 as i32` beside a narrowing `i64 as i32` in the same
+/// statement left both unchecked while the fact was keyed by (statement,
+/// type). Keyed by the operand's node, the narrowing one still aborts.
+#[test]
+fn a_widening_cast_beside_a_narrowing_one_leaves_it_checked() {
+    let dir = common::scratch_dir("narrowing-beside-widening");
+    let source = "\
+fn both(big: i64, small: u8) -> i32 {
+    return (big as i32) + (small as i32)
+}
+
+fn main() {
+    println(f\"{both(5000000000, 1)}\")
+}
+";
+    let (clean, said) = run_optimized(&dir, source);
+    assert!(!clean, "`5000000000 as i32` must not come through");
+    assert!(
+        said.contains("the value does not fit in an `i32`"),
+        "it failed, but not of the conversion:\n{said}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

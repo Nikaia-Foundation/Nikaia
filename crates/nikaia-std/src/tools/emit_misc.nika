@@ -241,10 +241,10 @@ impl EmitState {
         return (last, "")
     }
 
-    /// How a cast at the statement narrows into `into`, if the checker found
-    /// it does.
-    pub fn narrows(ref self, statement: i64, into: ref String) -> FactNarrowing? {
-        let found = self.facts.narrowing_casts.get((statement, into.clone())) ?? return null
+    /// How the cast of `operand` narrows, if the checker found it does
+    /// (keyed by the operand's node, ADR-340 D5).
+    pub fn narrows(ref self, operand: ref Expr) -> FactNarrowing? {
+        let found = self.facts.narrowing_casts.get(node_key(operand)) ?? return null
         return found.clone()
     }
 

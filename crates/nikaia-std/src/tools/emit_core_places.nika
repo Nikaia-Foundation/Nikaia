@@ -291,8 +291,8 @@ impl EmitState {
 
     /// 0 for a conversion that cannot lose, 1 for a narrowing integer one, 2
     /// for one from a float.
-    fn emit_place_narrowing(ref self, statement: i64, into: ref String) -> i64 {
-        let found = self.narrows(statement, into) ?? return 0
+    fn emit_place_narrowing(ref self, operand: ref Expr) -> i64 {
+        let found = self.narrows(operand) ?? return 0
         return match found {
             FactNarrowing::Integer => 1,
             FactNarrowing::FromFloat => 2,
@@ -312,7 +312,7 @@ impl EmitState {
             },
             else => {}
         }
-        let kind = self.emit_place_narrowing(flow.statement, into)
+        let kind = self.emit_place_narrowing(operand)
         if kind == 1 {
             // **A narrowing conversion is checked, and an unchecked one aborts**
             // (ADR-285 D12). `unwrap_or_else` and not `expect`: `expect`

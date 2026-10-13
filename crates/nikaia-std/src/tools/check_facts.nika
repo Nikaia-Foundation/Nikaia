@@ -146,7 +146,7 @@ pub struct CheckFacts {
     pub held_reaches: collections::BTreeSet[i64],
     pub nullable_fields: collections::BTreeMap[(i64, String), FactWrap],
     pub nullable_args: collections::BTreeMap[i64, FactWrap],
-    pub narrowing_casts: collections::BTreeMap[(i64, String), FactNarrowing],
+    pub narrowing_casts: collections::BTreeMap[i64, FactNarrowing],
     pub task_handles: collections::BTreeSet[(i64, String)],
     pub method_options: collections::BTreeMap[(i64, String), Vec[(String, String)]],
     pub lent_args: collections::BTreeSet[i64],

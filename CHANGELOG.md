@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.867] — 2026-10-13
+
+**checker: casts keyed by the operand's node (#558)**
+- A narrowing cast beside a widening one into the same type in one statement is checked again: cast facts are keyed by the operand's node, not by (statement, type) (#558).
+
 ## [0.0.866] — 2026-10-13
 
 **checker: a view in a local struct that never leaves is no store (#585)**

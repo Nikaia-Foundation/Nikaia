@@ -166,7 +166,7 @@ pub struct CheckFlow {
     /// The names this function's body gives text of its own later on.
     pub grown_text: collections::BTreeSet[String],
     /// The conversions that do not narrow.
-    pub widening_casts: collections::BTreeSet[(i64, String)],
+    pub widening_casts: collections::BTreeSet[i64],
     /// Signed values put where an unsigned type is stated, by the statement.
     pub unsigned_slots: collections::BTreeMap[i64, Vec[CheckUnsignedSlot]],
     /// Whether the lambda being walked is a write door's block (ADR-281 D12).

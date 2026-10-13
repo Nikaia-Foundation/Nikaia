@@ -2294,8 +2294,8 @@ impl<'a> Checker<'a> {
     /// called fitting (D7): digits go at large values without anything
     /// overflowing, there is no sensible point to stop at, and every language
     /// does it this way. That is a written limit and not a check.
-    fn record_cast(&mut self, from: &Ty, into: &Ty, span: &Span) {
-        self.s.record_cast(from, into, span);
+    fn record_cast(&mut self, from: &Ty, into: &Ty, operand: &Expr) {
+        self.s.record_cast(from, into, value_node(operand));
     }
 
     /// **`NK1117` for a function nothing declares** (0.0.244).
@@ -8014,7 +8014,7 @@ impl<'a> Checker<'a> {
                 {
                     self.s.cast_names_a_foreign_type(name, span);
                 }
-                self.record_cast(&from, &into, span);
+                self.record_cast(&from, &into, expr);
                 if matches!(&from, Ty::Named { name, .. } if name == "char" || name == "scalar")
                     && matches!(&into, Ty::Named { name, .. } if INTEGERS.contains(&name.as_str()))
                 {
