@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part II: Advanced Features & Metaprogramming**
-**Version:** 0.0.888 (Draft)
+**Version:** 0.0.889 (Draft)
 **Date:** 2026-10-13
 
 ---
@@ -1060,7 +1060,7 @@ task::scope fn(s) {
 }
 ```
 
-The scope waits for both kinds. A task that panics cancels the others, and the scope throws `task::Crashed` where it ends. Where tasks run in parallel, the pausing tasks of one scope take turns on one thread: they run at the same time as each other, but not on separate cores, so a pausing task that computes long between its pauses holds back the others. Computation that should use the cores belongs in a task that does not pause.
+The scope waits for both kinds. A task that panics cancels the others, and the scope throws `task::Crashed` where it ends. A task that ends with an error hands it to the scope as an `overlap` branch does (Part I 8.1.2): where the scope ends it throws the first error in the order the tasks were started, and the others travel as its secondary errors (Part I 7.1). Where tasks run in parallel, the pausing tasks of one scope take turns on one thread: they run at the same time as each other, but not on separate cores, so a pausing task that computes long between its pauses holds back the others. Computation that should use the cores belongs in a task that does not pause.
 
 ### 12.8. Supervision Trees
 A **supervisor** runs tasks and restarts them when they end ([ADR-328](adr/adr-328.md)).
@@ -1085,6 +1085,6 @@ fn main() throws {
 
 **A child's kind says which ends are restarted** (`restart:`): `Kind::Permanent`, the default, every end; `Kind::Transient` a panic or a thrown error, not a normal end; `Kind::Temporary` none, and a crash is reported.
 
-**When, a policy decides** (`policy:`): a value implementing `supervisor::Restart`, whose `decide` gets the history of failures - how long the last attempt ran, how many failures this cycle has had, how long since its first - and answers `Immediate`, `Delay(d)` or `Escalate`. `std`'s default restarts the first failure at once, then after a delay that grows, with jitter, up to a ceiling, starts a new cycle after an attempt that ran long enough, and gives up when a cycle lasts too long. The policy of the child that crashed decides for the siblings it takes along. `SharedMut::supervised` is rebuilt by the same policy; a door to it during a delay panics, and a value whose policy gives up stays poisoned (Part I 6.3).
+**When, a policy decides** (`policy:`): a value implementing `supervisor::Restart`, whose `decide` gets the history of failures - how long the last attempt ran, how many failures this cycle has had, how long since its first - and answers `Immediate`, `Delay(d)` or `Escalate`. A child that ends with a **fatal** error (Part I 7.1) is not restarted and no policy is asked: the supervisor ends and hands the error on to its own receiver ([ADR-346](adr/adr-346.md) D7). A child that wants a restart catches the type by name. `std`'s default restarts the first failure at once, then after a delay that grows, with jitter, up to a ceiling, starts a new cycle after an attempt that ran long enough, and gives up when a cycle lasts too long. The policy of the child that crashed decides for the siblings it takes along. `SharedMut::supervised` is rebuilt by the same policy; a door to it during a delay panics, and a value whose policy gives up stays poisoned (Part I 6.3).
 
 **A child keeps no changeable state across a restart.** Its function is called again for every attempt. A binding it captures without `mut` is lent to every attempt, and a `Shared` handle is duplicated. A captured `mut` binding, or a value an attempt would keep, hand on or use up, is refused with `NK1229`; what must be fresh is built inside the function.

@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.889] — 2026-10-13
+
+**spec: every task error has a receiver, ADR-346 (#605)**
+- ADR-346: a statement spawn is detached; a bound TaskHandle must be taken (join, join(within:), detach, cancel) or handed on, else NK2109; join throws the body's errors; join(within:) cancels and throws task::TimedOut; a detached task's error is logged and a fatal one sets the exit status at main's end; supervisors do not restart a fatal error; task::scope hands errors on as overlap does.
+
 ## [0.0.888] — 2026-10-13
 
 **check: an arm of an unworked-out type beside a null is wrapped, so a lambda's if/else with null lowers (#586)**

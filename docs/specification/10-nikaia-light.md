@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.888 (Draft)
+**Version:** 0.0.889 (Draft)
 **Date:** 2026-10-13
 
 ---
@@ -2818,7 +2818,23 @@ or several.
 spawn fn { println("I am running in the background!") }
 ```
 
-A task does not end the program. An error that arrives in a task ends the task, `process::Exit` (7.1) included, and whoever joins the task receives it (Part III A.2).
+A task does not end the program. An error that arrives in a task ends the task, `process::Exit` (7.1) included, and every such error has a receiver ([ADR-346](adr/adr-346.md)):
+
+* **A `spawn` whose result is not bound is detached:** nobody waits for it. If it ends with an error, the error is printed on standard error in the long form of an uncaught error; a fatal one (7.1) also replaces the exit status, at the end of `main` and not earlier, the first one counting (Part III A.2).
+* **A bound handle is used up before it leaves its scope.** `let h = spawn fn { … }` binds a `TaskHandle[T]`, and on every path out of the scope it is taken by `h.join()`, `h.join(within: d)`, `h.detach()` or `h.cancel()`, or handed on: returned, stored in a field or a container, or passed to a function. A handle taken in only one branch is not taken; otherwise `NK2109`.
+* **`h.join()` throws what the task's body throws**, beside `task::Crashed` for a task that panicked, and takes the ordinary way: a `catch`, or `throws` on the joiner. A fatal error nobody catches reaches `main` and sets the exit status there.
+* **`h.join(within: d)` waits at most `d`.** When it runs out, the task is cancelled as `cancel()` cancels it, its cleanups run, and the call throws `task::TimedOut`.
+* **`h.detach()`** makes a bound handle's task detached, as an unbound `spawn` is.
+
+```nika
+let h = spawn fn { fetch(url) }
+let page = h.join(within: 5.seconds()) catch {
+    match error { task::TimedOut => "", else => throw error }
+}
+spawn fn { log_forever() }            // detached
+let w = spawn fn { watch() }
+w.detach()                            // detached as well
+```
 
 ### 8.3. Data Ownership in Tasks (Implicit Move)
 A background task may keep running after the function that started it has
