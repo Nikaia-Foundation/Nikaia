@@ -8,11 +8,14 @@
 
 use std::fs
 use std::cli
+use std::collections
 
 /// What a run made: the draft and the rules it applied, one entry a hit.
 pub struct Rs2nikaOut {
     pub text: String,
     pub hits: Vec[String],
+    pub missing: Vec[String],
+    pub twins: Vec[String],
 }
 
 /// The state of one run.
@@ -25,6 +28,17 @@ struct Rs2nikaCtx {
     methods: Vec[String],
     renamed_from: Vec[String],
     renamed_to: Vec[String],
+    stack_ind: Vec[String],
+    stack_kind: Vec[String],
+    tool_fns: collections::BTreeSet[String],
+    tool_names: Vec[String],
+    tool_docs: Vec[String],
+    tool_files: Vec[String],
+    alias_from: Vec[String],
+    alias_to: Vec[String],
+    equiv_from: Vec[String],
+    equiv_to: Vec[String],
+    todo_extra: Vec[String],
 }
 
 /// The rules, as `--rules` prints them.
@@ -37,21 +51,53 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R5   lifetimes dropped (`<'a>`, `&'a`, `'_`)",
         "R6   `Vec<T>` -> `Vec[T]` (any generic `<..>` in a type -> `[..]`)",
         "R7   `Option<T>` -> `T?`",
-        "R8   `HashMap`/`HashSet`/`BTreeMap`/`BTreeSet` -> `collections::BTreeMap`/`BTreeSet`",
+        "R8   `HashMap`/`HashSet`/`BTreeMap`/`BTreeSet` -> `collections::BTreeMap`/`BTreeSet` (TrustedMap otherwise)",
         "R9   `Box<T>` -> `T`, `Box::new(x)` -> `x`",
         "R10  `usize`/`u32`/`u16`/`isize`/`i32` -> `i64` in types; `as usize` casts dropped",
         "R11  signature: ` sync` added; `-> Result<T>` -> `-> T sync throws`",
-        "R12  `None` -> `null`",
+        "R12  `None` -> `null`, `Some(x)` as a value -> `x`",
         "R13  `_ =>` -> `else =>`",
-        "R16  `.to_owned()`/`.into_owned()` -> `.clone()`",
-        "R17  `String::new()` -> `\"\"`, `Vec::new()`/`vec![]` -> `[]`, `vec![a, b]` -> `[a, b]`",
+        "R14  `matches!(e, P)` / `matches!(e, P if g)` -> `match e { P => true, else => false }`",
+        "R15  `format!(\"..{}..\", a)` -> `f\"..{a}..\"`; `&format!` -> `f\"..\"`",
+        "R16  `.to_owned()`/`.into_owned()`/`String::from(x)` -> `.clone()`; `\"lit\".to_string()` -> `\"lit\"`; `.to_string()` after a name lookup -> `.clone()`",
+        "R17  `String::new()` -> `\"\"`, `Vec::new()`/`vec![]` -> `[]`, `vec![a, b]` -> `[a, b]`, `BTreeMap::new()` -> `collections::BTreeMap()`",
+        "R18  `*x` deref dropped",
+        "R19  `&x`/`&mut x` at a use dropped (Nikaia lends implicitly)",
+        "R20  `.unwrap_or(d)` / `.unwrap_or_else(|| d)` -> `?? d`; `.cloned()` -> `?.clone()`; `.copied()` dropped",
         "R21  `.is_some()` -> `!= null`, `.is_none()` -> `== null`",
+        "R22  `let Some(x) = e else { return y };` -> `let x = e ?? return y` (also continue/break)",
+        "R23  `if let Some(x) = e {` -> `if e != null {` + `let x = e ?? panic(..)`",
+        "R24  `if let P = e {` ... `} else {` ... `}` -> `match e { P => {..}, else => {..} }` (single let, optional `&& guard`)",
+        "R25  `for x in &xs` / `xs.iter()` -> `for x in xs`",
+        "R26  closures `|x| e` -> `fn(x) { e }`; `.any(|x| p)` -> `.filter fn(x) { p }.count() > 0`; `.all(..)` likewise",
+        "R27  `.collect::<T>()` -> `.collect()`",
+        "R28  path prefixes `crate::ast::`, `ast::`, `crate::types::`, `ty::` dropped",
         "R29  `.as_ref()`, `.as_slice()`, `.as_str()`, `.as_deref()`, `.borrow()` dropped",
         "R30  `#[...]` attributes dropped; `pub(crate)`/`pub(super)` -> `pub`/none",
-        "R33  profile: methods get `world: ref <World>` after `self`",
+        "R31  profile: `self.parsed.text(x)`/`self.text(x)`/`self.name(x)` -> `world.words.resolve(x)`",
+        "R32  profile: `self.s.f` -> `self.f`, `self.parsed.program.items` -> `world.items`, `self.world.` -> `world.`",
+        "R33  profile: methods get `world: ref <World>` after `self`; calls `self.m(` to methods in the same input pass `world`",
+        "R34  profile: `impl<'a> Checker<'a>` / `impl Emitter` -> `impl CheckState` / `impl EmitState`",
+        "R35  postfix `?` in a `T?` function -> `?? return null`",
         "R36  `loop {` -> `while true {`",
-        "R40  `.unwrap()` -> `?? panic(\"unwrap\")`",
+        "R37  rustfmt-split patterns and struct literals joined onto one line",
+        "R38  `X::default()` of a moved struct -> `X::empty()`",
+        "R39  `.iter().enumerate()` / slice patterns / `match` on `Some` / `.entry()` / `is_some_and` -> TODO marker",
+        "R40  `.len() as i64` cast dropped, `.unwrap()` -> `?? panic(\"unwrap\")`",
         "R41  function name prefixed (`--prefix`): tools/*.nika is one global namespace",
+        "R42  a function's tail expression -> `return expr` (the style of tools/*.nika)",
+        "R43  zero-argument local closures (`let f = || e;`) inlined at `f()`",
+        "R44  `--file`: a whole tools file, free items on top and `self` methods in `impl <State>`",
+        "R45  a Rust alias of a moved type (`use nikaia_std::tools::m::{CheckX as X}`) -> its Nikaia name",
+        "R46  a path call `a::b::f(..)` -> `f(..)` where tools/*.nika has `fn f` (one global namespace)",
+        "R47  the equivalence table rs2nika.names (`value_node node_key`): Rust helpers that Nikaia has under another name",
+        "R48  `match e { Some(x) => a, None => b }` -> `if e != null { let x = .. a } else { b }`",
+        "R49  `Ty::named(x)` / `Ty::view(x)` -> `Ty::Named { name: x, args: [], view: false/true }`",
+        "R50  `&Span` -> `Span` (a span is copied, never lent)",
+        "R51  a `fn` nested in a `fn` is hoisted to the top level",
+        "R52  profile: a `parsed: &Parsed` parameter -> `parsed: ref CheckWorld`, `parsed.text(x)` -> `parsed.words.resolve(x)`",
+        "R53  ranges: Rust's `a..b` stops before `b`, Nikaia's includes it: `a..b` -> `a..<b`, `a..=b` -> `a..b`",
+        "R54  idioms Nikaia spells otherwise: `[\"A\", \"B\"].contains(&x)` -> `(x == \"A\" || x == \"B\")`, `x.rsplit(\"::\").next().unwrap_or(x)` -> `type_last_segment(x)`",
     ]
 }
 
@@ -1119,9 +1165,12 @@ fn rs2nika_holes(text: ref String, pos: ref Vec[String], named_k: ref Vec[String
                 if colon < inner.len() {
                     spec = inner[colon + 1..<inner.len()].clone()
                 }
-                if spec != "" && spec != "?" {
-                    out.push_str(f"{{{inner}}}")
-                } else {
+                if spec == "?" {
+                    spec = ""
+                }
+                // A width or a precision keeps its argument (`{:>4}` of
+                // `n` -> `{n:>4}`): Nikaia's f-string takes the same spec.
+                {
                     let mut v: String = nm.clone()
                     if nm == "" {
                         if next < pos.len() {
@@ -1152,7 +1201,11 @@ fn rs2nika_holes(text: ref String, pos: ref Vec[String], named_k: ref Vec[String
                     while v.starts_with("*") {
                         v = v[1..<v.len()].clone()
                     }
-                    out.push_str(f"{{{v}}}")
+                    if spec != "" {
+                        out.push_str(f"{{{v}:{spec}}}")
+                    } else {
+                        out.push_str(f"{{{v}}}")
+                    }
                 }
                 at = e + 1
                 continue
@@ -1422,6 +1475,7 @@ fn rs2nika_expr(mut ctx: Rs2nikaCtx, line: ref String) -> String {
         }
     }
     s = rs2nika_ty_paths(s)
+    s = rs2nika_ranges(ctx, s)
     if ctx.profile != "none" {
         let mut s2: String = s.clone()
         for p in ["self.parsed.text(*", "self.parsed.text(", "self.parsed.name(*", "self.parsed.name(", "self.text(*", "self.text(", "self.name(*", "self.name(", "self.parsed.interner.resolve(*", "self.parsed.interner.resolve("] {
@@ -1460,6 +1514,7 @@ fn rs2nika_expr(mut ctx: Rs2nikaCtx, line: ref String) -> String {
     }
     s = rs2nika_matches(ctx, s)
     s = rs2nika_format(ctx, s)
+    s = rs2nika_names(ctx, s)
     s = rs2nika_rep(ctx, s, "String::new()", "\"\"", "R17")
     s = rs2nika_rep(ctx, s, "Vec::new()", "[]", "R17")
     s = rs2nika_rep(ctx, s, "vec![", "[", "R17")
@@ -1509,10 +1564,13 @@ fn rs2nika_expr(mut ctx: Rs2nikaCtx, line: ref String) -> String {
     s = rs2nika_rep(ctx, s, ".len() as i64", ".len()", "R40")
     s = rs2nika_rep(ctx, s, ".unwrap()", " ?? panic(\"unwrap\")", "R40")
     s = rs2nika_rep(ctx, s, "::default()", "::empty()", "R38")
+    s = rs2nika_ty_named(ctx, s)
     s = rs2nika_replace_word(s, "self.parsed", "world")
+    s = rs2nika_adapters(ctx, s)
     s = rs2nika_closures(ctx, s)
     s = rs2nika_some(ctx, s)
     s = rs2nika_derefs(ctx, s)
+    s = rs2nika_idioms(ctx, s)
     if ctx.fn_opt {
         s = rs2nika_question(ctx, s)
     }
@@ -1721,7 +1779,37 @@ fn rs2nika_todos(line: ref String) -> Vec[String] {
     if line.contains("is_some_and") || line.contains("is_ok_and") || line.contains("map_or") {
         todo.push("`is_some_and`/`map_or`: `let x = e ?? <false>` then the test")
     }
-    for a in [".find(", ".position(", ".find_map(", ".filter_map(", ".flat_map(", ".any(", ".fold(", ".take_while(", ".skip(", ".last(", ".max(", ".min(", ".sum("] {
+    if head_end > 0 && (head.contains("} | ") || head.contains(") | ")) && head.contains("::") {
+        todo.push("or-pattern over variants: one arm per variant")
+    }
+    if head_end > 0 && head.contains(" if ") && (head.contains(": false") || head.contains(": true") || head.contains(": \"")) {
+        todo.push("a literal field in a pattern with a guard: bind the field and test it in the arm (`view } => if !view && ..`)")
+    }
+    // `.any`/`.all`/`.find` with a closure or a function name are rewritten
+    // (R26); `.find` with anything else is `str::find`, which Nikaia has.
+    let c: Vec[scalar] = line.chars().collect()
+    for a in [".any(", ".find("] {
+        let mut from = 0
+        while true {
+            let at = rs2nika_find_from(c, a, from)
+            if at < 0 {
+                break
+            }
+            let b = at + a.len()
+            let mut e = b
+            while e < c.len() && rs2nika_path_char(c[e]) {
+                e = e + 1
+            }
+            let closure = b < c.len() && c[b] == '|'
+            let named = e > b && e < c.len() && c[e] == ')'
+            if !closure && !(named && a == ".any(") && a == ".any(" {
+                todo.push("iterator adapter with no `Seq` method: a `for` loop")
+                return todo
+            }
+            from = at + 1
+        }
+    }
+    for a in [".position(", ".find_map(", ".filter_map(", ".flat_map(", ".fold(",".take_while(", ".skip(", ".last(", ".max(", ".min(", ".sum("] {
         if line.contains(a) {
             todo.push("iterator adapter with no `Seq` method: a `for` loop")
             return todo
@@ -1931,36 +2019,87 @@ fn rs2nika_if_let(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String] {
         rs2nika_hit(ctx, "R22")
         return ["=", f"{ind}let {name} = {value} ?? {jump}"]
     }
-    let at = st.find("if let Some(") ?? return []
-    if !st.ends_with(" {") || st.contains(" && ") || st.starts_with("}") {
+    let at = st.find("if let ") ?? return []
+    if !st.ends_with(" {") || st.contains(" && let ") || (at > 0 && st[at - 1..<at] != " ") {
         return []
     }
     let pre: String = st[0..<at].clone()
-    let rest: String = st[at + 12..<st.len() - 2].clone()
-    let close = rest.find(")") ?? return []
-    let name: String = rest[0..<close].clone()
-    if !rs2nika_is_path(name) || name.contains(":") || !rest[close..<rest.len()].starts_with(") = ") {
+    let body: String = st[at + 7..<st.len() - 2].clone()
+    let eq = body.find(" = ") ?? return []
+    let pat: String = body[0..<eq].trim().clone()
+    let mut value: String = body[eq + 3..<body.len()].trim().clone()
+    let mut guard: String = ""
+    let and = value.find(" && ") ?? -1
+    if and >= 0 {
+        guard = value[and + 4..<value.len()].trim().clone()
+        value = value[0..<and].trim().clone()
+    }
+    let mut name: String = ""
+    if pat.starts_with("Some(") && pat.ends_with(")") {
+        let inner: String = pat[5..<pat.len() - 1].clone()
+        if rs2nika_is_path(inner) && !inner.contains(":") {
+            name = inner
+        }
+    }
+    if pre.starts_with("}") {
+        ctx.todo_extra.push("`else if let`: nest it inside the `else`")
         return []
     }
-    let value: String = rest[close + 4..<rest.len()].trim().clone()
+    if pre != "" && name == "" {
+        ctx.todo_extra.push("`if let` with a pattern as a value: write a `match`")
+        return []
+    }
     let p = rs2nika_expr(ctx, pre)
-    let v = rs2nika_expr(ctx, value)
-    rs2nika_hit(ctx, "R23")
-    if name == "_" {
+    if name == "_" && guard == "" {
+        let v = rs2nika_expr(ctx, value)
+        rs2nika_hit(ctx, "R23")
+        ctx.stack_ind.push(ind.clone())
+        ctx.stack_kind.push("if")
         return [f"{ind}{p}if {v} != null {{"]
     }
-    return [f"{ind}{p}if {v} != null {{", f"{ind}    let {name} = {v} ?? panic(\"rs2nika: checked above\")"]
+    if name != "" && guard == "" {
+        let v = rs2nika_expr(ctx, value)
+        rs2nika_hit(ctx, "R23")
+        ctx.stack_ind.push(ind.clone())
+        ctx.stack_kind.push("if")
+        return [f"{ind}{p}if {v} != null {{", f"{ind}    let {name} = {v} ?? panic(\"rs2nika: checked above\")"]
+    }
+    if name != "" {
+        ctx.todo_extra.push("`if let Some(..) = e && guard`: write `let x = e ?? ..` then `if`")
+        return []
+    }
+    // `match &x` is Rust's; Nikaia lends implicitly (R19).
+    while value.starts_with("&") {
+        value = value[1..<value.len()].trim_start().clone()
+        if value.starts_with("mut ") {
+            value = value[4..<value.len()].clone()
+        }
+    }
+    let v = rs2nika_expr(ctx, value)
+    let pt = rs2nika_expr(ctx, pat)
+    let mut g: String = ""
+    if guard != "" {
+        let ge = rs2nika_expr(ctx, guard)
+        g = f" if {ge}"
+    }
+    rs2nika_hit(ctx, "R24")
+    ctx.stack_ind.push(ind.clone())
+    ctx.stack_kind.push("iflet")
+    return [f"{ind}match {v} {{", f"{ind}    {pt}{g} => {{"]
 }
 
 /// A Rust function, or several, as a Nikaia draft.
-pub fn rs2nika_convert(src: ref String, profile: ref String, prefix: ref String) -> Rs2nikaOut {
+pub fn rs2nika_convert(src: ref String, profile: ref String, prefix: ref String, repo: ref String) -> Rs2nikaOut {
     let mut world: String = ""
     if profile == "check" {
         world = "CheckWorld"
     } else if profile == "emit" {
         world = "EmitWorld"
     }
-    let mut ctx = Rs2nikaCtx { profile: profile.clone(), world: world, prefix: prefix.clone(), hits: [], fn_opt: false, methods: [], renamed_from: [], renamed_to: [] }
+    let mut ctx = Rs2nikaCtx { profile: profile.clone(), world: world, prefix: prefix.clone(), hits: [], fn_opt: false, methods: [], renamed_from: [], renamed_to: [], stack_ind: [], stack_kind: [], tool_fns: collections::BTreeSet(), tool_names: [], tool_docs: [], tool_files: [], alias_from: [], alias_to: [], equiv_from: [], equiv_to: [], todo_extra: [] }
+    if repo != "" {
+        rs2nika_load(ctx, repo)
+    }
     let mut lines: Vec[String] = []
     for raw in src.split("\n") {
         lines.push(raw.clone())
@@ -1975,7 +2114,9 @@ pub fn rs2nika_convert(src: ref String, profile: ref String, prefix: ref String)
             }
         }
     }
-    let first = rs2nika_join_chains(ctx, lines)
+    let inlined = rs2nika_inline_closures(ctx, lines)
+    let hoisted = rs2nika_hoist(ctx, inlined)
+    let first = rs2nika_join_chains(ctx, hoisted)
     let split = rs2nika_join_split(ctx, first)
     let chained = rs2nika_join_chains(ctx, split)
     let joined = rs2nika_option_matches(ctx, chained)
@@ -1989,20 +2130,47 @@ pub fn rs2nika_convert(src: ref String, profile: ref String, prefix: ref String)
         } else if st.starts_with("//") {
             out.push(raw.clone())
         } else {
+            let head = rs2nika_impl_head(ctx, raw)
+            if head != "" {
+                out.push(head)
+                continue
+            }
             let sig = rs2nika_signature(ctx, raw)
-            let iflet = rs2nika_if_let(ctx, raw)
+            let shift = rs2nika_shift(ctx, 0)
+            ctx.todo_extra = []
+            let mut iflet: Vec[String] = []
+            if sig == "" {
+                iflet = rs2nika_if_let(ctx, raw)
+            }
             let mut line: String = raw.clone()
             if iflet.len() == 2 && iflet[0] == "=" {
                 line = iflet[1].clone()
             }
+            let mut closing: Vec[String] = []
+            let below = rs2nika_shift(ctx, 1)
+            if sig == "" && iflet.len() == 0 {
+                closing = rs2nika_close_iflet(ctx, raw)
+            }
             if sig != "" {
+                if raw.contains("-> Option<&") {
+                    let si = rs2nika_indent(raw)
+                    out.push(f"{si}// TODO(rs2nika): no optional view `ref T?` in tools/*.nika: return `T?` with `.clone()` at each return; the Rust caller then lends it (`f(&m)`)")
+                }
                 out.push(sig)
             } else if iflet.len() > 0 && iflet[0] != "=" {
                 for l in iflet {
-                    out.push(l.clone())
+                    out.push(f"{shift}{l}")
+                }
+            } else if closing.len() > 0 {
+                for l in closing {
+                    out.push(f"{below}{l}")
                 }
             } else {
-                let ind = rs2nika_indent(raw)
+                line = f"{shift}{line}"
+                let ind = rs2nika_indent(line)
+                for t in ctx.todo_extra.clone() {
+                    out.push(f"{ind}// TODO(rs2nika): {t}")
+                }
                 for t in rs2nika_todos(line) {
                     out.push(f"{ind}// TODO(rs2nika): {t}")
                 }
@@ -2018,14 +2186,1013 @@ pub fn rs2nika_convert(src: ref String, profile: ref String, prefix: ref String)
         }
     }
     let done = rs2nika_tail_returns(ctx, out)
-    return Rs2nikaOut { text: rs2nika_join(done, "\n"), hits: ctx.hits }
+    let text = rs2nika_aliases(ctx, rs2nika_join(done, "\n"))
+    let mut missing: Vec[String] = []
+    let mut twins: Vec[String] = []
+    if ctx.tool_names.len() > 0 {
+        missing = rs2nika_missing(ctx, text)
+        twins = rs2nika_twins(ctx, src)
+    }
+    return Rs2nikaOut { text: text, hits: ctx.hits, missing: missing, twins: twins }
+}
+
+fn rs2nika_lower(c: scalar) -> bool {
+    return (c >= 'a' && c <= 'z') || c == '_'
+}
+
+fn rs2nika_upper(c: scalar) -> bool {
+    return c >= 'A' && c <= 'Z'
+}
+
+/// Whether `c` may stand in a path: a word character or `:`.
+fn rs2nika_path_char(c: scalar) -> bool {
+    return rs2nika_word(c) || c == ':'
+}
+
+/// `from` replaced where it is a whole name: not after a word character, `.`
+/// or `:`, and not followed by a word character when it ends in one.
+fn rs2nika_replace_name(text: ref String, from: ref String, to: ref String) -> String {
+    let c: Vec[scalar] = text.chars().collect()
+    let f: Vec[scalar] = from.chars().collect()
+    if f.len() == 0 {
+        return text.clone()
+    }
+    let mut out: String = ""
+    let mut at = 0
+    while at < c.len() {
+        let mut same = at + f.len() <= c.len()
+        let mut k = 0
+        while same && k < f.len() {
+            if c[at + k] != f[k] {
+                same = false
+            }
+            k = k + 1
+        }
+        if same && at > 0 && (rs2nika_path_char(c[at - 1]) || c[at - 1] == '.') {
+            same = false
+        }
+        if same && rs2nika_word(f[f.len() - 1]) && at + f.len() < c.len() && rs2nika_word(c[at + f.len()]) {
+            same = false
+        }
+        if same {
+            out.push_str(to)
+            at = at + f.len()
+        } else {
+            out.push(c[at])
+            at = at + 1
+        }
+    }
+    return out
+}
+
+/// R54: `["A", "B"].contains(x)` -> `(x == "A" || x == "B")`, and
+/// `x.rsplit("::").next() ?? x` -> `type_last_segment(x)` (check_types.nika).
+fn rs2nika_idioms(mut ctx: Rs2nikaCtx, given: ref String) -> String {
+    let mut s: String = given.clone()
+    let mut from = 0
+    while true {
+        let c: Vec[scalar] = s.chars().collect()
+        let at = rs2nika_find_from(c, "].contains(", from)
+        if at < 0 {
+            break
+        }
+        from = at + 1
+        let mut open = at - 1
+        let mut d = 0
+        while open >= 0 && !(c[open] == '[' && d == 0) {
+            if c[open] == ']' {
+                d = d + 1
+            } else if c[open] == '[' {
+                d = d - 1
+            }
+            open = open - 1
+        }
+        if open < 0 || (open > 0 && (rs2nika_word(c[open - 1]) || c[open - 1] == ')' || c[open - 1] == ']')) {
+            continue
+        }
+        let items: String = rs2nika_text(c, open + 1, at)
+        let mut lits: Vec[String] = []
+        let mut plain = true
+        for it in items.split(",") {
+            let t: String = it.trim().clone()
+            if t != "" {
+                if t.len() >= 2 && t.starts_with("\"") && t.ends_with("\"") && rs2nika_count(t, '"') == 2 {
+                    lits.push(t)
+                } else {
+                    plain = false
+                }
+            }
+        }
+        let arg_open = at + 10
+        let close = rs2nika_closing(c, arg_open, '(', ')')
+        if !plain || lits.len() == 0 || close < 0 {
+            continue
+        }
+        let mut arg: String = rs2nika_text(c, arg_open + 1, close).trim().clone()
+        while arg.starts_with("&") {
+            arg = arg[1..<arg.len()].clone()
+        }
+        let mut tests: Vec[String] = []
+        for l in lits {
+            tests.push(f"{arg} == {l}")
+        }
+        let joined = rs2nika_join(tests, " || ")
+        let pre: String = rs2nika_text(c, 0, open)
+        let post: String = rs2nika_text(c, close + 1, c.len())
+        s = f"{pre}({joined}){post}"
+        rs2nika_hit(ctx, "R54")
+    }
+    while true {
+        let c: Vec[scalar] = s.chars().collect()
+        let at = rs2nika_find_from(c, ".rsplit(\"::\").next() ?? ", 0)
+        if at < 0 {
+            break
+        }
+        let mut b = at
+        while b > 0 && (rs2nika_word(c[b - 1]) || c[b - 1] == '.') {
+            b = b - 1
+        }
+        let recv: String = rs2nika_text(c, b, at)
+        let after = at + 24
+        let e = after + recv.len()
+        if recv == "" || e > c.len() || rs2nika_text(c, after, e) != recv || (e < c.len() && rs2nika_word(c[e])) {
+            break
+        }
+        let pre: String = rs2nika_text(c, 0, b)
+        let post: String = rs2nika_text(c, e, c.len())
+        s = f"{pre}type_last_segment({recv}){post}"
+        rs2nika_hit(ctx, "R54")
+    }
+    return s
+}
+
+/// R53: Rust's `a..b` stops before `b`, Nikaia's includes it: `a..b` ->
+/// `a..<b`, `a..=b` -> `a..b`. A `..` with no end (`x..`, `{ .. }`, `..base`)
+/// is left as it is; strings are skipped.
+fn rs2nika_ranges(mut ctx: Rs2nikaCtx, given: ref String) -> String {
+    let c: Vec[scalar] = given.chars().collect()
+    let mut out: String = ""
+    let mut at = 0
+    let mut quoted = false
+    while at < c.len() {
+        let ch = c[at]
+        if ch == '"' && (at == 0 || c[at - 1] != '\\') {
+            quoted = !quoted
+        }
+        let dots = !quoted && ch == '.' && at + 1 < c.len() && c[at + 1] == '.' && (at + 2 >= c.len() || c[at + 2] != '.') && (at == 0 || c[at - 1] != '.')
+        if dots {
+            let before = at > 0 && (rs2nika_word(c[at - 1]) || c[at - 1] == ')' || c[at - 1] == ']' || c[at - 1] == '[')
+            let mut next = at + 2
+            let inclusive = next < c.len() && c[next] == '='
+            if inclusive {
+                next = next + 1
+            }
+            let after = next < c.len() && (rs2nika_word(c[next]) || c[next] == '(' || c[next] == '-')
+            if before && after && c[at + 2] != '<' {
+                if inclusive {
+                    out.push_str("..")
+                } else {
+                    out.push_str("..<")
+                }
+                rs2nika_hit(ctx, "R53")
+                at = next
+                continue
+            }
+        }
+        out.push(ch)
+        at = at + 1
+    }
+    return out
+}
+
+/// R43: zero-argument local closures (`let f = || e;`) inlined where they
+/// are called, and their `let` dropped.
+fn rs2nika_inline_closures(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[String] {
+    let mut names: Vec[String] = []
+    let mut bodies: Vec[String] = []
+    let mut keep: Vec[String] = []
+    for l in given {
+        let st: String = l.trim().clone()
+        let eq = st.find(" = ") ?? -1
+        let mut taken = false
+        if st.starts_with("let ") && eq > 4 && st.ends_with(";") {
+            let name: String = st[4..<eq].trim().clone()
+            let mut rest: String = st[eq + 3..<st.len() - 1].trim().clone()
+            if rest.starts_with("move ") {
+                rest = rest[5..<rest.len()].trim().clone()
+            }
+            if rs2nika_is_path(name) && !name.contains(":") && rest.starts_with("||") {
+                let body: String = rest[2..<rest.len()].trim().clone()
+                if body != "" {
+                    names.push(name)
+                    bodies.push(body)
+                    rs2nika_hit(ctx, "R43")
+                    taken = true
+                }
+            }
+        }
+        if !taken {
+            keep.push(l.clone())
+        }
+    }
+    let mut out: Vec[String] = []
+    for l in keep {
+        let mut s: String = l.clone()
+        let mut k = 0
+        while k < names.len() {
+            let n: String = names[k].clone()
+            s = rs2nika_replace_free(s, f"{n}()", bodies[k])
+            k = k + 1
+        }
+        out.push(s)
+    }
+    return out
+}
+
+/// The braces a line opens, net, with strings and comments left out.
+fn rs2nika_depth_of(line: ref String) -> i64 {
+    let b = rs2nika_blank(line)
+    let mut code: String = b.clone()
+    let cut = b.find("//") ?? -1
+    if cut >= 0 {
+        code = b[0..<cut].clone()
+    }
+    return rs2nika_count(code, '{') - rs2nika_count(code, '}')
+}
+
+/// R51: a `fn` declared inside a `fn` becomes a top-level `fn` after it.
+fn rs2nika_hoist(mut ctx: Rs2nikaCtx, lines: ref Vec[String]) -> Vec[String] {
+    let mut out: Vec[String] = []
+    let mut moved: Vec[String] = []
+    let mut depth = 0
+    let mut i = 0
+    while i < lines.len() {
+        let l: String = lines[i].clone()
+        let ind = rs2nika_indent(l)
+        let st: String = l.trim().clone()
+        if depth > 0 && ind != "" && st.starts_with("fn ") {
+            let close: String = f"{ind}}}"
+            let mut j = i + 1
+            while j < lines.len() && lines[j].trim_end() != close {
+                j = j + 1
+            }
+            moved.push("")
+            let mut k = i
+            while k <= j && k < lines.len() {
+                let x: String = lines[k].clone()
+                if rs2nika_starts(x, ind) {
+                    let y: String = x[ind.len()..<x.len()].clone()
+                    moved.push(y)
+                } else {
+                    moved.push(x.clone())
+                }
+                k = k + 1
+            }
+            rs2nika_hit(ctx, "R51")
+            i = j + 1
+            continue
+        }
+        let before = depth
+        depth = depth + rs2nika_depth_of(l)
+        out.push(l)
+        if before > 0 && depth == 0 && moved.len() > 0 {
+            for m in moved {
+                out.push(m.clone())
+            }
+            moved = []
+        }
+        i = i + 1
+    }
+    return out
+}
+
+/// R26: `.any(|x| p)` -> `.filter(|x| p).count() > 0`, `.all(|x| p)` ->
+/// `.filter(|x| !(p)).count() == 0`, `.find(|x| p)` -> `.filter(|x| p).next()`;
+/// `.any(f)`/`.all(f)` with a function name call it with the element.
+fn rs2nika_adapters(mut ctx: Rs2nikaCtx, given: ref String) -> String {
+    let mut s: String = given.clone()
+    for name in ["any", "all", "find"] {
+        let mut from = 0
+        while true {
+            let c: Vec[scalar] = s.chars().collect()
+            let at = rs2nika_find_from(c, f".{name}(", from)
+            if at < 0 {
+                break
+            }
+            let open = at + name.len() + 1
+            let mut b = open + 1
+            let mut head: String = ""
+            let mut body: String = ""
+            let mut end = 0
+            if b < c.len() && c[b] == '|' {
+                let mut bar = b + 1
+                while bar < c.len() && c[bar] != '|' {
+                    bar = bar + 1
+                }
+                let mut e = bar + 1
+                while e < c.len() && c[e] == ' ' {
+                    e = e + 1
+                }
+                head = rs2nika_text(c, b, e)
+                end = rs2nika_closing(c, open, '(', ')')
+                if end < 0 {
+                    break
+                }
+                body = rs2nika_text(c, e, end).trim().clone()
+                if body.starts_with("{") && body.ends_with("}") {
+                    body = body[1..<body.len() - 1].trim().clone()
+                }
+            } else {
+                let mut e = b
+                while e < c.len() && rs2nika_path_char(c[e]) {
+                    e = e + 1
+                }
+                let f: String = rs2nika_text(c, b, e)
+                if name == "find" || e == b || e >= c.len() || c[e] != ')' || !rs2nika_word(c[b]) {
+                    from = at + 1
+                    continue
+                }
+                let callee = rs2nika_renamed(ctx, f)
+                head = "|x| "
+                body = f"{callee}(x)"
+                end = e
+            }
+            let pre: String = rs2nika_text(c, 0, at)
+            let post: String = rs2nika_text(c, end + 1, c.len())
+            if name == "any" {
+                s = f"{pre}.filter({head}{body}).count() > 0{post}"
+            } else if name == "all" {
+                s = f"{pre}.filter({head}!({body})).count() == 0{post}"
+            } else {
+                s = f"{pre}.filter({head}{body}).next(){post}"
+            }
+            rs2nika_hit(ctx, "R26")
+            from = at + 1
+        }
+    }
+    return s
+}
+
+/// R49: `Ty::named(x)` / `Ty::view(x)` -> `Ty::Named { name: x, args: [], view: false/true }`.
+fn rs2nika_ty_named(mut ctx: Rs2nikaCtx, given: ref String) -> String {
+    let mut s: String = given.clone()
+    for which in ["named", "view"] {
+        while true {
+            let c: Vec[scalar] = s.chars().collect()
+            let mut at = rs2nika_find_from(c, f"Ty::{which}(", 0)
+            while at > 0 && rs2nika_word(c[at - 1]) {
+                at = rs2nika_find_from(c, f"Ty::{which}(", at + 1)
+            }
+            if at < 0 {
+                break
+            }
+            let open = at + which.len() + 4
+            let end = rs2nika_closing(c, open, '(', ')')
+            if end < 0 {
+                break
+            }
+            let arg: String = rs2nika_text(c, open + 1, end)
+            let pre: String = rs2nika_text(c, 0, at)
+            let post: String = rs2nika_text(c, end + 1, c.len())
+            let view = which == "view"
+            s = f"{pre}Ty::Named {{ name: {arg}, args: [], view: {view} }}{post}"
+            rs2nika_hit(ctx, "R49")
+        }
+    }
+    return s
+}
+
+/// R46: a path call `a::b::f(..)` -> `f(..)` where tools/*.nika has `fn f`;
+/// R47: the names rs2nika.names gives Nikaia's spelling of.
+fn rs2nika_names(mut ctx: Rs2nikaCtx, given: ref String) -> String {
+    let c: Vec[scalar] = given.chars().collect()
+    let mut out: String = ""
+    let mut at = 0
+    while at < c.len() {
+        let free = at == 0 || !(rs2nika_word(c[at - 1]) || c[at - 1] == '.')
+        if free && rs2nika_lower(c[at]) {
+            let mut e = at
+            let mut last = at
+            let mut segs = 0
+            while true {
+                let mut w = e
+                while w < c.len() && rs2nika_lower(c[w]) {
+                    w = w + 1
+                }
+                if w > e && w + 1 < c.len() && c[w] == ':' && c[w + 1] == ':' {
+                    e = w + 2
+                    last = e
+                    segs = segs + 1
+                } else {
+                    break
+                }
+            }
+            let mut n = last
+            if segs > 0 && n < c.len() && rs2nika_lower(c[n]) {
+                while n < c.len() && rs2nika_word(c[n]) {
+                    n = n + 1
+                }
+                let name: String = rs2nika_text(c, last, n)
+                if n < c.len() && c[n] == '(' && (ctx.tool_fns.contains(name) || ctx.equiv_from.contains(name)) {
+                    out.push_str(name)
+                    rs2nika_hit(ctx, "R46")
+                    at = n
+                    continue
+                }
+            }
+        }
+        out.push(c[at])
+        at = at + 1
+    }
+    let mut s: String = out.clone()
+    let mut k = 0
+    while k < ctx.equiv_from.len() {
+        let s2 = rs2nika_replace_name(s, ctx.equiv_from[k], ctx.equiv_to[k])
+        if !rs2nika_same(s2, s) {
+            rs2nika_hit(ctx, "R47")
+        }
+        s = s2.clone()
+        k = k + 1
+    }
+    return s
+}
+
+/// R45: a Rust alias of a moved type -> its Nikaia name, over the whole draft.
+fn rs2nika_aliases(mut ctx: Rs2nikaCtx, given: ref String) -> String {
+    let mut s: String = given.clone()
+    let mut k = 0
+    while k < ctx.alias_from.len() {
+        let y: String = ctx.alias_from[k].clone()
+        let x: String = ctx.alias_to[k].clone()
+        let yc: Vec[scalar] = y.chars().collect()
+        let xc: Vec[scalar] = x.chars().collect()
+        if yc.len() > 0 && xc.len() > 0 && rs2nika_upper(yc[0]) && rs2nika_upper(xc[0]) {
+            let s2 = rs2nika_replace_name(s, y, x)
+            if !rs2nika_same(s2, s) {
+                rs2nika_hit(ctx, "R45")
+            }
+            s = s2.clone()
+        }
+        k = k + 1
+    }
+    return s
+}
+
+/// R24: `if let P = e {` (not `Some(x)`) -> `match e {` + `P => {`; the
+/// closing lines it becomes when `line` closes one, or none.
+fn rs2nika_close_iflet(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String] {
+    let st: String = line.trim().clone()
+    let ind = rs2nika_indent(line)
+    let n = ctx.stack_ind.len()
+    if n == 0 || !st.starts_with("}") || ind != ctx.stack_ind[n - 1] {
+        return []
+    }
+    let kind: String = ctx.stack_kind[n - 1].clone()
+    let rest: String = st[1..<st.len()].clone()
+    let mut tail: String = rest.clone()
+    if tail.ends_with(";") {
+        tail = tail[0..<tail.len() - 1].clone()
+    }
+    let is_else = rest.trim_start().starts_with("else")
+    if kind == "iflet" {
+        let e: String = rest.trim().clone()
+        if e == "else {" {
+            ctx.stack_kind[n - 1] = "iflet-else"
+            return [f"{ind}    }},", f"{ind}    else => {{"]
+        }
+        if e.starts_with("else if") {
+            let mut cond: String = e[7..<e.len()].clone()
+            if cond.ends_with("{") {
+                cond = cond[0..<cond.len() - 1].clone()
+            }
+            let c2 = rs2nika_expr(ctx, cond.trim())
+            ctx.stack_kind[n - 1] = "iflet-elseif"
+            return [f"{ind}    }},", f"{ind}    // TODO(rs2nika): `else if` after `if let`", f"{ind}    else => {{ if {c2} {{"]
+        }
+        ctx.stack_ind.pop()
+        ctx.stack_kind.pop()
+        return [f"{ind}    }},", f"{ind}    else => {{}},", f"{ind}}}{tail}"]
+    }
+    if kind == "iflet-else" && !is_else {
+        ctx.stack_ind.pop()
+        ctx.stack_kind.pop()
+        return [f"{ind}    }},", f"{ind}}}{tail}"]
+    }
+    if kind == "iflet-elseif" && !is_else {
+        ctx.stack_ind.pop()
+        ctx.stack_kind.pop()
+        return [f"{ind}    }} }},", f"{ind}}}{tail}"]
+    }
+    if kind == "if" && !is_else {
+        ctx.stack_ind.pop()
+        ctx.stack_kind.pop()
+    }
+    return []
+}
+
+/// Whether the innermost open block is an `if let` turned `match`.
+fn rs2nika_in_match(ctx: ref Rs2nikaCtx) -> bool {
+    let n = ctx.stack_kind.len()
+    return n > 0 && ctx.stack_kind[n - 1].starts_with("iflet")
+}
+
+/// R44: a whole tools file: `use std::collections`, free items at the top
+/// level, methods of `self` inside `impl <State> { }`.
+fn rs2nika_as_file(text: ref String, state: ref String) -> String {
+    let mut free: Vec[String] = []
+    let mut meth: Vec[String] = []
+    let mut pending: Vec[String] = []
+    let mut cur: Vec[String] = []
+    let mut cur_method = false
+    let mut cur_ind = 0
+    let mut open = false
+    let mut depth = 0
+    for l in text.split("\n") {
+        let st: String = l.trim().clone()
+        if depth == 0 {
+            let mut head: String = st.clone()
+            if head.starts_with("pub ") {
+                head = head[4..<head.len()].clone()
+            }
+            let item = head.starts_with("fn ") || head.starts_with("struct ") || head.starts_with("enum ") || head.starts_with("impl ") || head.starts_with("impl[")
+            if item {
+                if open {
+                    rs2nika_flush(cur, cur_method, cur_ind, free, meth)
+                }
+                cur = []
+                for p in pending {
+                    cur.push(p.clone())
+                }
+                pending = []
+                cur.push(l.clone())
+                cur_method = l.contains("(self") || l.contains("(ref self") || l.contains("(ref mut self")
+                cur_ind = rs2nika_indent(l).len()
+                open = true
+            } else if st.starts_with("//") {
+                pending.push(l.clone())
+                continue
+            } else {
+                continue
+            }
+        } else {
+            cur.push(l.clone())
+        }
+        depth = depth + rs2nika_depth_of(l)
+        if depth < 0 {
+            depth = 0
+        }
+    }
+    if open {
+        rs2nika_flush(cur, cur_method, cur_ind, free, meth)
+    }
+    let mut out: Vec[String] = ["use std::collections", ""]
+    for x in free {
+        out.push(x.clone())
+    }
+    if meth.len() > 0 {
+        out.push(f"impl {state} {{")
+        for x in meth {
+            if x.trim() == "" {
+                out.push("")
+            } else {
+                out.push(f"    {x}")
+            }
+        }
+        let last = out.len() - 1
+        out[last] = "}"
+    }
+    let joined = rs2nika_join(out, "\n")
+    return f"{joined}\n"
+}
+
+/// One item of `rs2nika_as_file`, dedented, with a blank line after it.
+fn rs2nika_flush(cur: ref Vec[String], method: bool, ind: i64, mut free: Vec[String], mut meth: Vec[String]) {
+    let mut pad: String = ""
+    while pad.len() < ind {
+        pad.push_str(" ")
+    }
+    for x in cur {
+        let mut y: String = x.trim_start().clone()
+        if rs2nika_starts(x, pad) {
+            y = x[ind..<x.len()].clone()
+        }
+        if method {
+            meth.push(y)
+        } else {
+            free.push(y)
+        }
+    }
+    if method {
+        meth.push("")
+    } else {
+        free.push("")
+    }
+}
+
+/// Four spaces for each `if let` turned `match` that holds the current line;
+/// `skip` leaves out that many of the innermost blocks.
+fn rs2nika_shift(ctx: ref Rs2nikaCtx, skip: i64) -> String {
+    let mut out: String = ""
+    let mut k = 0
+    while k + skip < ctx.stack_kind.len() {
+        if ctx.stack_kind[k].starts_with("iflet") {
+            out.push_str("    ")
+        }
+        k = k + 1
+    }
+    return out
+}
+
+/// R34: an `impl` header; `Checker`/`Emitter` become the state struct.
+fn rs2nika_impl_head(mut ctx: Rs2nikaCtx, line: ref String) -> String {
+    let st: String = line.trim().clone()
+    if !(st.starts_with("impl ") || st.starts_with("impl<")) || !st.ends_with("{") || st.contains(" for ") {
+        return ""
+    }
+    let mut rest: String = st[4..<st.len() - 1].trim().clone()
+    if rest.starts_with("<") {
+        let c: Vec[scalar] = rest.chars().collect()
+        let close = rs2nika_closing(c, 0, '<', '>')
+        if close < 0 {
+            return ""
+        }
+        rest = rest[close + 1..<rest.len()].trim().clone()
+    }
+    let c: Vec[scalar] = rest.chars().collect()
+    let mut e = 0
+    while e < c.len() && rs2nika_word(c[e]) {
+        e = e + 1
+    }
+    let mut name: String = rs2nika_text(c, 0, e)
+    if name == "" {
+        return ""
+    }
+    if ctx.profile != "none" && (name == "Checker" || name == "Emitter") {
+        rs2nika_hit(ctx, "R34")
+        if ctx.profile == "check" {
+            name = "CheckState"
+        } else {
+            name = "EmitState"
+        }
+    }
+    let ind = rs2nika_indent(line)
+    return f"{ind}impl {name} {{"
+}
+
+/// The name a `fn` line declares, or "".
+fn rs2nika_declared(line: ref String) -> String {
+    let mut st: String = line.trim().clone()
+    if st.starts_with("pub ") {
+        st = st[4..<st.len()].clone()
+    }
+    if !st.starts_with("fn ") {
+        return ""
+    }
+    let c: Vec[scalar] = st.chars().collect()
+    let mut e = 3
+    while e < c.len() && rs2nika_word(c[e]) {
+        e = e + 1
+    }
+    return rs2nika_text(c, 3, e)
+}
+
+/// R45-R47: what the repository already has in Nikaia, read from the tree:
+/// the functions of tools/*.nika (with their doc comments, for `rs2nika_twins`),
+/// the Rust aliases of moved types and the table rs2nika.names.
+fn rs2nika_load(mut ctx: Rs2nikaCtx, repo: ref String) {
+    let tools: String = f"{repo}/crates/nikaia-std/src/tools"
+    let files = fs::walk(tools, fs::Root::Anywhere) catch {
+        return
+    }
+    for name in files {
+        if !name.ends_with(".nika") {
+            continue
+        }
+        let text = fs::read_to_string(f"{tools}/{name}", fs::Root::Anywhere) catch {
+            continue
+        }
+        let file = name.to_text() catch {
+            continue
+        }
+        let mut doc: String = ""
+        for l in text.split("\n") {
+            let st: String = l.trim().clone()
+            if l.starts_with("///") {
+                if doc == "" {
+                    doc = st[3..<st.len()].trim().clone()
+                }
+            } else if l.starts_with("fn ") || l.starts_with("pub fn ") {
+                let n = rs2nika_declared(l)
+                ctx.tool_fns.insert(n.clone())
+                ctx.tool_names.push(n)
+                ctx.tool_docs.push(doc.clone())
+                ctx.tool_files.push(file.clone())
+                doc = ""
+            } else if !st.starts_with("#[") {
+                doc = ""
+            }
+        }
+    }
+    let src: String = f"{repo}/crates/nikaia/src"
+    let rust = fs::walk(src, fs::Root::Anywhere) catch {
+        return
+    }
+    for name in rust {
+        if !name.ends_with(".rs") {
+            continue
+        }
+        let text = fs::read_to_string(f"{src}/{name}", fs::Root::Anywhere) catch {
+            continue
+        }
+        let mut rest: String = text.clone()
+        while true {
+            let at = rest.find("use nikaia_std::tools::") ?? -1
+            if at < 0 {
+                break
+            }
+            let tail: String = rest[at..<rest.len()].clone()
+            let whole = tail.len()
+            let end = tail.find(";") ?? whole
+            let u: String = tail[0..<end].replace("{", " ").replace("}", " ").replace(",", " ").replace("\n", " ")
+            let mut toks: Vec[String] = []
+            for t in u.split(" ") {
+                if t != "" {
+                    toks.push(t.clone())
+                }
+            }
+            let mut i = 1
+            while i + 1 < toks.len() {
+                if toks[i] == "as" {
+                    let a: String = toks[i - 1].clone()
+                    let cut = rs2nika_rfind(a, "::")
+                    let mut short: String = a.clone()
+                    if cut >= 0 {
+                        short = a[cut + 2..<a.len()].clone()
+                    }
+                    ctx.alias_from.push(toks[i + 1].clone())
+                    ctx.alias_to.push(short)
+                }
+                i = i + 1
+            }
+            rest = tail[end..<tail.len()].clone()
+        }
+    }
+    let table = fs::read_to_string(f"{repo}/crates/rs2nika/convert/rs2nika.names", fs::Root::Anywhere) catch {
+        return
+    }
+    for l in table.split("\n") {
+        if l.trim() == "" || l.starts_with("#") {
+            continue
+        }
+        let mut parts: Vec[String] = []
+        for p in l.split_whitespace() {
+            parts.push(p.clone())
+        }
+        if parts.len() >= 2 {
+            ctx.equiv_from.push(parts[0].clone())
+            ctx.equiv_to.push(parts[1].clone())
+        }
+    }
+}
+
+/// The functions the draft calls that neither it nor tools/*.nika declares.
+pub fn rs2nika_missing(ctx: ref Rs2nikaCtx, draft: ref String) -> Vec[String] {
+    let mut own: collections::BTreeSet[String] = collections::BTreeSet()
+    for l in draft.split("\n") {
+        let n = rs2nika_declared(l)
+        if n != "" {
+            own.insert(n)
+        }
+    }
+    for k in ["fn", "if", "match", "while", "for", "return", "panic", "println", "sync", "f", "in", "and", "or", "not"] {
+        own.insert(k.clone())
+    }
+    let mut found: collections::BTreeSet[String] = collections::BTreeSet()
+    for l in draft.split("\n") {
+        let c: Vec[scalar] = rs2nika_blank(l).chars().collect()
+        let mut at = 0
+        while at < c.len() {
+            if rs2nika_lower(c[at]) && (at == 0 || !(rs2nika_path_char(c[at - 1]) || c[at - 1] == '.')) {
+                let mut e = at
+                while e < c.len() && rs2nika_word(c[e]) {
+                    e = e + 1
+                }
+                let n: String = rs2nika_text(c, at, e)
+                if e < c.len() && c[e] == '(' && !own.contains(n) && !ctx.tool_fns.contains(n) {
+                    found.insert(n)
+                }
+                at = e
+            } else {
+                at = at + 1
+            }
+        }
+    }
+    let mut out: Vec[String] = []
+    for n in found {
+        out.push(n.clone())
+    }
+    return out
+}
+
+/// Functions of the input that tools/*.nika may have already: the same name,
+/// the same name with the prefix, or the same first doc line.
+pub fn rs2nika_twins(ctx: ref Rs2nikaCtx, src: ref String) -> Vec[String] {
+    let mut out: Vec[String] = []
+    let mut doc: String = ""
+    for l in src.split("\n") {
+        let st: String = l.trim().clone()
+        if st.starts_with("///") {
+            if doc == "" {
+                doc = st[3..<st.len()].trim().clone()
+            }
+            continue
+        }
+        if st.starts_with("#[") {
+            continue
+        }
+        let name = rs2nika_fn_name(l)
+        if name != "" {
+            let pre: String = ctx.prefix.clone()
+            // A method's bare name is no clash: tools/*.nika's free functions
+            // share one namespace, the methods of a state struct do not.
+            let method = rs2nika_takes_self(l)
+            let mut k = 0
+            while k < ctx.tool_names.len() {
+                let t: String = ctx.tool_names[k].clone()
+                let mut why: String = ""
+                if (t == name && !method) || (pre != "" && t == f"{pre}{name}") {
+                    why = "the same name"
+                } else if doc != "" && ctx.tool_docs[k] == doc {
+                    why = "the same doc comment"
+                }
+                if why != "" {
+                    let file: String = ctx.tool_files[k].clone()
+                    out.push(f"`{name}` may be in Nikaia already: tools/{file} `fn {t}` ({why})")
+                }
+                k = k + 1
+            }
+        }
+        doc = ""
+    }
+    return out
+}
+
+/// Whether `code` has `what` followed, after spaces, by one of `next`.
+fn rs2nika_then(code: ref String, what: ref String, next: ref String) -> bool {
+    let mut rest: String = code.clone()
+    while true {
+        let at = rest.find(what) ?? -1
+        if at < 0 {
+            return false
+        }
+        let after: String = rest[at + what.len()..<rest.len()].trim_start().clone()
+        if after.starts_with(next) {
+            return true
+        }
+        rest = rest[at + what.len()..<rest.len()].clone()
+    }
+    return false
+}
+
+/// The lint messages one line of hand-written Nikaia earns (strings emptied).
+pub fn rs2nika_lint_line(code: ref String, params: ref Vec[String]) -> Vec[String] {
+    let mut out: Vec[String] = []
+    let c: Vec[scalar] = code.chars().collect()
+    let get = code.find(".get(") ?? -1
+    if get >= 0 && code[get..<code.len()].contains(")?.clone()") {
+        out.push("D2: `m.get(k)?.clone()` lowers to a clone of a reference; write `m[k]?.clone()`")
+    }
+    if code.contains(".len() as i64") {
+        out.push("D7: `.len()` is already `i64`; the cast is doubled (clippy unnecessary_cast)")
+    }
+    let g = code.find("get(") ?? -1
+    if (g >= 0 && code[g..<code.len()].contains(" as i64)")) || code.contains(" as i64]") {
+        out.push("D8: a cast inside a map read lowers as `&x as i64`; bind `let k = x as i64` first")
+    }
+    let arrow = code.find("=>") ?? -1
+    if arrow >= 0 {
+        let after: Vec[scalar] = code[arrow + 2..<code.len()].trim_start().chars().collect()
+        let mut e = 0
+        while e < after.len() && (rs2nika_word(after[e]) || after[e] == '.') {
+            e = e + 1
+        }
+        let run = rs2nika_text(after, 0, e)
+        if e < after.len() && after[e] == '(' && run.ends_with(".insert") && run.len() > 7 {
+            out.push("D3: `insert` as an arm value yields `bool` against `()`; write `=> { let _added = s.insert(..) }`")
+        }
+    }
+    let w = code.find(" with {") ?? -1
+    if w > 0 {
+        let mut b = w
+        while b > 0 && rs2nika_word(c[b - 1]) {
+            b = b - 1
+        }
+        let x = rs2nika_text(c, b, w)
+        if x != "self" && params.contains(x) {
+            out.push("D1: `p with {..}` on a by-value parameter writes `..p` of a `&T`; on a parameter write the struct literal in full")
+        }
+    }
+    if code.contains(".to_owned()") {
+        out.push("NK1189: `.to_owned()` is `.clone()`")
+    }
+    if rs2nika_replace_word(code, "if let", "@") != code {
+        out.push("no `if let`: `x ?? return`, or `if x != null` then `x ?? panic(..)`")
+    }
+    let mut star = false
+    let mut k = 0
+    while k + 1 < c.len() {
+        if c[k] == '*' && rs2nika_lower(c[k + 1]) && (k == 0 || !(rs2nika_word(c[k - 1]) || c[k - 1] == ')' || c[k - 1] == ']' || c[k - 1] == ' ' || c[k - 1] == '\t')) {
+            star = true
+        }
+        k = k + 1
+    }
+    if star {
+        out.push("no `*x`")
+    }
+    if rs2nika_replace_word(code, "if match", "@") != code {
+        out.push("a `match` in a guard or condition needs parentheses: `if (match ..)`")
+    }
+    if rs2nika_then(code, ")?", "sync") || rs2nika_then(code, ")?", "{") || rs2nika_then(code, ")?", "throws") {
+        out.push("`(A, B)?` is not written (ADR-278 D1): a named struct")
+    }
+    return out
+}
+
+/// `--lint FILE.nika`: the known lowering defects and syntax gaps in
+/// hand-written Nikaia, before a lower-std; how many it found.
+pub fn rs2nika_lint(path: ref String, text: ref String) -> i64 {
+    let mut n = 0
+    let mut params: Vec[String] = []
+    let mut in_str = false
+    let mut no = 0
+    for l in text.split("\n") {
+        no = no + 1
+        let was = in_str
+        let c: Vec[scalar] = l.chars().collect()
+        let mut quotes = 0
+        let mut k = 0
+        while k < c.len() {
+            if c[k] == '"' && (k == 0 || c[k - 1] != '\\') {
+                quotes = quotes + 1
+            }
+            k = k + 1
+        }
+        if quotes % 2 == 1 {
+            in_str = !in_str
+        }
+        if was || l.trim().starts_with("//") {
+            continue
+        }
+        if rs2nika_declared(l) != "" {
+            params = []
+            let open = l.find("(") ?? -1
+            let close = rs2nika_rfind(l, ")")
+            if open >= 0 && close > open {
+                for p in l[open + 1..<close].split(",") {
+                    let mut q: String = p.trim().clone()
+                    if q.starts_with("mut ") {
+                        q = q[4..<q.len()].clone()
+                    }
+                    let colon = q.find(": ") ?? -1
+                    if colon > 0 && !q[colon + 2..<q.len()].starts_with("ref") {
+                        let pn: String = q[0..<colon].clone()
+                        params.push(pn)
+                    }
+                }
+            }
+        }
+        let code = rs2nika_blank(l)
+        for m in rs2nika_lint_line(code, params) {
+            println(f"{path}:{no}: {m}")
+            n = n + 1
+        }
+    }
+    return n
+}
+
+/// The checkout the names come from: the first of `.` and its parents that
+/// holds `crates/nikaia-std/src/tools`, or "".
+fn rs2nika_find_repo() -> String {
+    for d in [".", "..", "../..", "../../..", "../../../.."] {
+        let there = fs::exists(f"{d}/crates/nikaia-std/src/tools", fs::Root::Anywhere) catch {
+            false
+        }
+        if there {
+            return d.clone()
+        }
+    }
+    return ""
 }
 
 fn main() throws {
     let mut profile: String = "check"
     let mut prefix: String = ""
     let mut stats = false
+    let mut whole = false
+    let mut lint = false
+    let mut repo: String = "?"
     let mut path: String = ""
+    let mut lints: Vec[String] = []
     let mut args: Vec[String] = []
     for a in cli::args() {
         args.push(a)
@@ -2043,27 +3210,70 @@ fn main() throws {
             return
         } else if arg == "--stats" {
             stats = true
+        } else if arg == "--file" {
+            whole = true
+        } else if arg == "--lint" {
+            lint = true
         } else if arg == "--profile" {
             at = at + 1
             profile = args[at].clone()
         } else if arg == "--prefix" {
             at = at + 1
             prefix = args[at].clone()
+        } else if arg == "--repo" {
+            at = at + 1
+            repo = args[at].clone()
+        } else if lint {
+            lints.push(arg)
         } else {
             path = arg
         }
         at = at + 1
     }
+    if lint {
+        let mut n = 0
+        for f in lints {
+            let text = fs::read_to_string(ref f, fs::Root::Anywhere) catch {
+                eprintln(f"cannot read {f}: {error}")
+                return
+            }
+            n = n + rs2nika_lint(f, text)
+        }
+        if n > 0 {
+            eprintln(f"{n} findings")
+        }
+        return
+    }
     if profile != "check" && profile != "emit" && profile != "none" {
         eprintln(f"`--profile` is `check`, `emit` or `none`, not `{profile}`")
         return
+    }
+    if repo == "?" {
+        repo = rs2nika_find_repo()
     }
     let text = fs::read_to_string(ref path, fs::Root::Anywhere) catch {
         eprintln(f"cannot read {path}: {error}")
         return
     }
-    let out = rs2nika_convert(text, profile, prefix)
-    println(out.text)
+    let out = rs2nika_convert(text, profile, prefix, repo)
+    if whole {
+        let mut state: String = "State"
+        if profile == "check" {
+            state = "CheckState"
+        } else if profile == "emit" {
+            state = "EmitState"
+        }
+        print(rs2nika_as_file(out.text, state))
+    } else {
+        println(out.text)
+    }
+    for t in out.twins {
+        eprintln(f"// rs2nika: {t}")
+    }
+    if out.missing.len() > 0 {
+        let names = rs2nika_join(out.missing, ", ")
+        eprintln(f"// rs2nika: called but not in Nikaia yet (move them first, or name the equivalent in rs2nika.names): {names}")
+    }
     if stats {
         eprintln(rs2nika_stats(out.hits))
     }

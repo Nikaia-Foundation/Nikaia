@@ -98,7 +98,7 @@ def load_names(repo):
         for u in re.findall(r'use nikaia_std::tools::[\w:]*\{[^}]*\}|use nikaia_std::tools::[\w:]+ as \w+', t):
             for a, b in re.findall(r'(\w+) as (\w+)', u):
                 NAMES['alias'][b] = a
-    eq = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'rs2nika.names')
+    eq = os.path.join(repo, 'crates/rs2nika/convert/rs2nika.names')
     if os.path.exists(eq):
         for l in open(eq):
             if l.strip() and not l.startswith('#'):
