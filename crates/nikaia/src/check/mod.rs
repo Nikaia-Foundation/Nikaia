@@ -3669,7 +3669,7 @@ impl<'a> Checker<'a> {
             if matches!(entry, "message" | "full") && args.is_empty() {
                 return Ty::named("String");
             }
-            let members = members_named(members);
+            let members = members_named(&members);
             self.s.findings.push(Finding {
                 severity: Severity::Error,
                 span: *span,
@@ -6227,7 +6227,7 @@ impl<'a> Checker<'a> {
                 // **An error, one of several, is taken apart by member**
                 // (ADR-280 D30, D17): an arm whose pattern names a member's
                 // variant reads its parts from that member.
-                let several: Option<Vec<Ty>> = several_errors(&on).map(<[Ty]>::to_vec);
+                let several: Option<Vec<Ty>> = several_errors(&on);
                 for (taken, arm) in arms.iter().enumerate() {
                     let typed = match &several {
                         Some(members) => {
@@ -7161,7 +7161,7 @@ impl<'a> Checker<'a> {
                 // **A field of one member is reached through the `match`**
                 // (ADR-280 D30).
                 if let Some(members) = several_errors(&on) {
-                    let members = members_named(members);
+                    let members = members_named(&members);
                     self.s.findings.push(Finding {
                         severity: Severity::Error,
                         span: *span,
@@ -13905,15 +13905,8 @@ pub fn an_or_a(ty: &str) -> &'static str {
 
 /// **A handler's `error` where several error types arrive** (ADR-280 D30):
 /// an `Error` with its members.
-fn several_errors(ty: &Ty) -> Option<&[Ty]> {
-    match ty {
-        Ty::Named {
-            name,
-            args,
-            view: false,
-        } if name == "Error" && args.len() > 1 => Some(args.as_slice()),
-        _ => None,
-    }
+fn several_errors(ty: &Ty) -> Option<Vec<Ty>> {
+    Some(nikaia_std::tools::check_expect::several_errors_of(ty)).filter(|m| !m.is_empty())
 }
 
 /// The members, as a message names them: `` `ConfigError`, `io::IoError` ``.
@@ -13934,13 +13927,7 @@ fn peeled(mut value: &Expr) -> &Expr {
 
 /// Whether a type is known all the way down.
 fn wholly_known(ty: &Ty) -> bool {
-    match ty {
-        Ty::Unknown => false,
-        Ty::Nullable(inner) => wholly_known(inner),
-        Ty::Tuple(parts) => parts.iter().all(wholly_known),
-        Ty::Named { args, .. } => args.iter().all(wholly_known),
-        _ => true,
-    }
+    nikaia_std::tools::check_types::wholly_known(ty)
 }
 
 fn tail_of(block: &Block) -> Option<&Expr> {
@@ -13983,7 +13970,7 @@ impl Checker<'_> {
 /// By the last segment: the type is `collections::HashMap` where the `use`
 /// named the module.
 fn a_map(name: &str) -> bool {
-    ["HashMap", "BTreeMap", "Map"].contains(&name.rsplit("::").next().unwrap_or(name))
+    nikaia_std::tools::check_types::a_map_type(name)
 }
 
 fn value_of_a_copy(ty: Ty) -> Ty {
@@ -14067,12 +14054,7 @@ pub fn claims_report(
 /// or `"text"`): the one answer a literal whose type is settled below gives
 /// here.
 fn is_a_literal_other_than(expr: &Expr, kind: &str) -> bool {
-    match expr {
-        Expr::LitBool(_, _) => kind != "bool",
-        Expr::LitStr { .. } | Expr::LitInterpolated { .. } => kind != "text",
-        Expr::LitInt { .. } | Expr::LitFloat(_, _) | Expr::LitChar(_, _) | Expr::LitNull(_) => true,
-        _ => false,
-    }
+    nikaia_std::tools::check_types::is_a_literal_other_than(expr, kind)
 }
 
 /// The prelude's claim ([ADR-269](../../docs/specification/adr/adr-269.md) D2).
@@ -14465,25 +14447,7 @@ impl Comparable<'_> {
 /// Never a view, a type variable, an unknown or any other Rust crate's type:
 /// each is a claim nothing here can back.
 fn a_copied_part(ty: &Ty, copies: &BTreeSet<String>) -> bool {
-    match ty {
-        Ty::Named { name, args, .. } if name == ty::ARRAY => args
-            .iter()
-            .all(|arg| matches!(arg, Ty::Count(_)) || a_copied_part(arg, copies)),
-        Ty::Named {
-            name,
-            args,
-            view: false,
-        } => {
-            args.is_empty()
-                && (matches!(
-                    name.as_str(),
-                    "i32" | "i64" | "u8" | "u32" | "u64" | "f64" | "bool" | "char" | "scalar"
-                ) || copies.contains(name))
-        }
-        Ty::Nullable(inner) => a_copied_part(inner, copies),
-        Ty::Tuple(parts) => parts.iter().all(|part| a_copied_part(part, copies)),
-        _ => false,
-    }
+    nikaia_std::tools::check_types::a_copied_part(ty, copies)
 }
 
 /// is one this says nothing about only when it is also unknown.
@@ -14534,8 +14498,5 @@ fn unpromised(contract: &FnContract) -> bool {
 /// The whole-number types an operation may be written unchecked in
 /// (ADR-306 D10).
 fn is_a_whole_number(name: &str) -> bool {
-    matches!(
-        name,
-        "i8" | "i16" | "i32" | "i64" | "isize" | "u8" | "u16" | "u32" | "u64" | "usize"
-    )
+    nikaia_std::tools::bounds_shape::is_whole_number(name)
 }

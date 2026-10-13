@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.871] — 2026-10-13
+
+**Check leaves in Nikaia: wholly_known, a_map, a_copied_part, is_a_literal_other_than**
+- `wholly_known`, `a_map`, `a_copied_part` and `is_a_literal_other_than` move from `check/mod.rs` to `tools/check_types.nika`; `several_errors` and `is_a_whole_number` call the Nikaia functions that already existed (#125, #558).
+
 ## [0.0.870] — 2026-10-13
 
 **Checker: an open-number arm is asked against the written type**

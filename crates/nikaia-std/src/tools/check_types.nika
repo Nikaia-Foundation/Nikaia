@@ -335,3 +335,87 @@ fn tuple_parts(ty: ref Ty) -> Vec[Ty] {
         else => [],
     }
 }
+
+/// Whether a type is known all the way down.
+pub fn wholly_known(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Unknown => false,
+        Ty::Nullable(inner) => wholly_known(inner),
+        Ty::Tuple(parts) => all_wholly_known(parts),
+        Ty::Named { args, .. } => all_wholly_known(args),
+        else => true,
+    }
+}
+
+fn all_wholly_known(types: ref Vec[Ty]) -> bool {
+    for ty in types {
+        if !wholly_known(ty) {
+            return false
+        }
+    }
+    return true
+}
+
+/// The map types whose key and value a first `insert` decides (#543).
+/// By the last segment: the type is `collections::HashMap` where the `use`
+/// named the module.
+pub fn a_map_type(name: ref String) -> bool {
+    let last = type_last_segment(name)
+    return last == "HashMap" || last == "BTreeMap" || last == "Map"
+}
+
+/// A literal of another kind than `kind` (`bool` or `text`): a number, a
+/// character and `null` are never what a truth value or text wants.
+pub fn is_a_literal_other_than(expr: ref Expr, kind: ref String) -> bool {
+    return match expr {
+        Expr::LitBool(_, _) => kind != "bool",
+        Expr::LitStr { .. } => kind != "text",
+        Expr::LitInterpolated { .. } => kind != "text",
+        Expr::LitInt { .. } => true,
+        Expr::LitFloat(_, _) => true,
+        Expr::LitChar(_, _) => true,
+        Expr::LitNull(_) => true,
+        else => false,
+    }
+}
+
+/// A part a value copies with: a plain number, `bool`, `char`, an array of
+/// such, or a type the program declared as copying.
+pub fn a_copied_part(ty: ref Ty, copies: ref collections::BTreeSet[String]) -> bool {
+    return match ty {
+        Ty::Named { name, args, view } => if name == "Array" { array_parts_copied(args, copies) } else { !view && args.len() == 0 && (a_copied_scalar(name) || copies.contains(name)) },
+        Ty::Nullable(inner) => a_copied_part(inner, copies),
+        Ty::Tuple(parts) => all_copied_parts(parts, copies),
+        else => false,
+    }
+}
+
+fn a_copied_scalar(name: ref String) -> bool {
+    return match name {
+        "i32" => true, "i64" => true, "u8" => true, "u32" => true, "u64" => true,
+        "f64" => true, "bool" => true, "char" => true, "scalar" => true,
+        else => false,
+    }
+}
+
+fn all_copied_parts(types: ref Vec[Ty], copies: ref collections::BTreeSet[String]) -> bool {
+    for ty in types {
+        if !a_copied_part(ty, copies) {
+            return false
+        }
+    }
+    return true
+}
+
+fn array_parts_copied(args: ref Vec[Ty], copies: ref collections::BTreeSet[String]) -> bool {
+    for arg in args {
+        let counted = match arg {
+            Ty::Count(_) => true,
+            else => false,
+        }
+        if !counted && !a_copied_part(arg, copies) {
+            return false
+        }
+    }
+    return true
+}

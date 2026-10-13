@@ -19364,6 +19364,63 @@ fn tuple_parts(ty: &Ty) -> Vec<Ty> {
     }
 }
 
+pub fn wholly_known(ty: &Ty) -> bool {
+    match ty {
+        Ty::Unknown => false,
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); wholly_known(inner) },
+        Ty::Tuple(parts) => all_wholly_known(parts),
+        Ty::Named { args, .. } => all_wholly_known(args),
+        _ => true,
+    }
+}
+
+fn all_wholly_known(types: &[Ty]) -> bool {
+    for ty in types.iter() { if !wholly_known(ty) { return false; } }
+    true
+}
+
+pub fn a_map_type(name: &str) -> bool {
+    let last = type_last_segment(name);
+    last == "HashMap" || last == "BTreeMap" || last == "Map"
+}
+
+pub fn is_a_literal_other_than(expr: &Expr, kind: &str) -> bool {
+    match expr {
+        Expr::LitBool(_, _) => kind != "bool",
+        Expr::LitStr { .. } => kind != "text",
+        Expr::LitInterpolated { .. } => kind != "text",
+        Expr::LitInt { .. } => true,
+        Expr::LitFloat(_, _) => true,
+        Expr::LitChar(_, _) => true,
+        Expr::LitNull(_) => true,
+        _ => false,
+    }
+}
+
+pub fn a_copied_part(ty: &Ty, copies: &collections::BTreeSet<String>) -> bool {
+    match ty {
+        Ty::Named { name, args, view } => { let view = *view; if name == "Array" { array_parts_copied(args, copies) } else { !view && args.is_empty() && (a_copied_scalar(name) || copies.contains(name)) } },
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); a_copied_part(inner, copies) },
+        Ty::Tuple(parts) => all_copied_parts(parts, copies),
+        _ => false,
+    }
+}
+
+fn a_copied_scalar(name: &str) -> bool { matches!(name, "i32" | "i64" | "u8" | "u32" | "u64" | "f64" | "bool" | "char" | "scalar") }
+
+fn all_copied_parts(types: &[Ty], copies: &collections::BTreeSet<String>) -> bool {
+    for ty in types.iter() { if !a_copied_part(ty, copies) { return false; } }
+    true
+}
+
+fn array_parts_copied(args: &[Ty], copies: &collections::BTreeSet<String>) -> bool {
+    for arg in args.iter() {
+        let counted = matches!(arg, Ty::Count(_));
+        if !counted && !a_copied_part(arg, copies) { return false; }
+    }
+    true
+}
+
 
 // --- check_values.nika ---
 
@@ -49924,7 +49981,7 @@ pub mod check_texts {
 }
 pub mod check_types {
     #[allow(unused_imports)]
-    pub use super::{a_number_name, type_last_segment, view_of_type, viewed_from_type, unviewed_type, copies_as_a_view, value_of_a_copy, is_a_view_of_a_string, a_copy_by_value, moves_away, copies_plainly, holds_an_array, is_a_list_type, is_a_collection_type, is_text_type, is_a_hull, locked_content_of, is_a_handle, locked_content, becomes_shared, way_out_of_a_mismatch, element_walked, elements_walked};
+    pub use super::{a_number_name, type_last_segment, view_of_type, viewed_from_type, unviewed_type, copies_as_a_view, value_of_a_copy, is_a_view_of_a_string, a_copy_by_value, moves_away, copies_plainly, holds_an_array, is_a_list_type, is_a_collection_type, is_text_type, is_a_hull, locked_content_of, is_a_handle, locked_content, becomes_shared, way_out_of_a_mismatch, element_walked, elements_walked, wholly_known, a_map_type, is_a_literal_other_than, a_copied_part};
 }
 pub mod check_values {
     #[allow(unused_imports)]
