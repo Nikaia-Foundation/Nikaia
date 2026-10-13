@@ -936,22 +936,14 @@ fn the_checker_says_which_method_calls_can_fail() {
     )
     .fallible_methods;
 
-    let names: Vec<&str> = fallible.iter().map(|(_, name)| name.as_str()).collect();
+    // Keyed by the receiver's node (ADR-340 D5, #558): `a.add(1)` in
+    // `one_of_them` and `a.add(1)` in `both_names` fail, `b.add(2)` beside it
+    // and `b.plain()` do not, so the pair in `both_names` is no longer one
+    // answer for two calls.
     assert_eq!(
-        names,
-        vec!["add"],
-        "only the resolved fallible call belongs in the set: {fallible:?}"
-    );
-
-    // And it is the one in `one_of_them`, not the pair in `both_names`: the
-    // statement there writes `add` twice and one of the two cannot fail, so the
-    // pair is removed rather than guessed at.
-    let at = fallible.iter().next().expect("one entry").0;
-    let line = source[..at as usize].lines().count();
-    assert_eq!(
-        source.lines().nth(line - 1).unwrap_or_default().trim(),
-        "fn one_of_them(a: A) -> i64 throws { return a.add(1) }",
-        "the entry should be the statement in `one_of_them`"
+        fallible.len(),
+        2,
+        "only the two calls on `a` belong in the set: {fallible:?}"
     );
 }
 
