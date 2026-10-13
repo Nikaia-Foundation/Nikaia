@@ -9861,7 +9861,19 @@ impl<'a> Checker<'a> {
             };
             match arms.is_empty() {
                 true => expanded.push((at, given.get(at), found.clone())),
-                false => expanded.extend(arms.into_iter().map(|(arm, ty)| (at, Some(arm), ty))),
+                // A number literal as an arm is an `i64` written there (#600).
+                false => {
+                    let no_number = wanted
+                        .get(at)
+                        .is_some_and(|(_, want)| self.s.no_number_is(want));
+                    expanded.extend(arms.into_iter().map(|(arm, ty)| {
+                        let literal = matches!(peeled(arm), Expr::LitInt { .. });
+                        match ty.is_unknown() && literal && no_number {
+                            true => (at, Some(arm), Ty::named("i64")),
+                            false => (at, Some(arm), ty),
+                        }
+                    }))
+                }
             }
         }
         for (at, given_here, found) in &expanded {
@@ -10313,8 +10325,31 @@ impl<'a> Checker<'a> {
                     .any(|(_, ty)| views_into_text(ty, &Ty::named("String")));
                 for (arm, ty) in arms {
                     let ty = self.text_literal(want, arm, true).unwrap_or(ty);
+                    // **An open-number arm is asked as a number written there**
+                    // (#600): `if c { "a".clone() } else { 1 }` under `String`
+                    // is refused as `let s: String = 3` is.
+                    let ty = match ty.is_unknown()
+                        && matches!(peeled(arm), Expr::LitInt { .. })
+                        && self.s.no_number_is(want)
+                    {
+                        true => Ty::named("i64"),
+                        false => ty,
+                    };
                     if what == "field" {
                         self.s.flow.field_either = mixed;
+                    }
+                    let at = self.span_at(arm, span);
+                    // A name of one (`let n = 12`) is #554's refusal.
+                    if ty.is_unknown() {
+                        let pushed = self.s.findings.len();
+                        let refused = self
+                            .an_open_number_where_none_fits(&ty, want, arm, span, what, &message);
+                        for finding in &mut self.s.findings[pushed..] {
+                            finding.span = at;
+                        }
+                        if refused {
+                            continue;
+                        }
                     }
                     let at = self.span_at(arm, span);
                     self.moved_to(span, at, |checker| {

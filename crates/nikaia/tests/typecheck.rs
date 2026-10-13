@@ -2077,3 +2077,44 @@ fn arms_that_disagree_under_a_written_type_ask_for_no_annotation() {
         }
     }
 }
+
+// --- an open-number arm beside a typed one is asked where it goes (#600) ------
+
+/// `let s: String = 3` is NK1103; so is a `1` standing as an arm beside text.
+#[test]
+fn an_open_number_arm_under_written_text_is_refused() {
+    let source = "fn f(c: bool) -> i64 {\n    let y: String = if c { \"a\".clone() } else { 1 }\n    \
+                  return y.len()\n}\n\nfn main() {\n    println(f\"{f(true)}\")\n}\n";
+    assert_eq!(one(source).0, "NK1103");
+    assert_eq!(
+        one("fn main() {\n    let s: String = 3\n    println(s)\n}\n").0,
+        "NK1103"
+    );
+}
+
+#[test]
+fn an_open_number_arm_into_a_return_or_an_argument_is_refused() {
+    let returned = "fn f(c: bool) -> String {\n    return if c { \"a\".clone() } else { 1 }\n}\n";
+    assert_eq!(one(returned).0, "NK1104");
+    let passed = "fn g(s: String) -> String {\n    return s\n}\n\n\
+                  fn f(c: bool) -> String {\n    return g(if c { \"a\".clone() } else { 1 })\n}\n";
+    assert_eq!(one(passed).0, "NK1102");
+}
+
+#[test]
+fn number_arms_under_a_number_still_pass() {
+    for source in [
+        "fn f(c: bool) -> i64 {\n    let y: i64 = if c { 1 } else { 2 }\n    return y\n}\n",
+        "fn f(c: bool) -> f64 {\n    let y: f64 = if c { 1.5 } else { 2 }\n    return y\n}\n",
+    ] {
+        assert!(findings(source).is_empty(), "{:#?}", findings(source));
+    }
+}
+
+/// A name of an open number as the arm is #554's refusal, with the `let`'s code.
+#[test]
+fn a_name_of_an_open_number_as_an_arm_is_refused() {
+    let source = "fn f(c: bool) -> String {\n    let n = 12\n    \
+                  let y: String = if c { \"a\".clone() } else { n }\n    return y\n}\n";
+    assert_eq!(one(source).0, "NK1103");
+}

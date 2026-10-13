@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.870] — 2026-10-13
+
+**Checker: an open-number arm is asked against the written type**
+- An `if` or `match` arm that is a number nothing typed, beside an arm of a type, is asked against the written type of an annotated `let`, a `return` or an argument as a number written there would be: `let y: String = if c { "a".clone() } else { 1 }` is `NK1103` as `let s: String = 3` is (#600).
+
 ## [0.0.869] — 2026-10-13
 
 **Expressions carry spans**
