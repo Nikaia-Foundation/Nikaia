@@ -1,0 +1,93 @@
+// crates/rs2nika/survival/src/main.nika
+//
+// **How many rs2nika drafts survive `nikaia check`** (#579). The material is
+// the Rust of `check/mod.rs` before the three commits of
+// docs/selfhosting-gaps.md; each function is converted alone
+// (`rs2nika --profile check --file --only NAME`) and the draft is checked.
+//
+//     cd crates/rs2nika/convert && nikaia build
+//     cd ../survival && nikaia run [-- NIKAIA]     # NIKAIA defaults to `nikaia`
+
+use std::cli
+use std::fs
+use std::process
+
+struct Survival_Case {
+    commit: String,
+    name: String,
+}
+
+fn survival_cases() -> Vec[Survival_Case] {
+    let mut cases: Vec[Survival_Case] = []
+    for name in ["several_errors", "wholly_known", "a_map_type", "is_a_literal_other_than", "a_copied_part"] {
+        cases.push(Survival_Case { commit: "5755b65", name: name.clone() })
+    }
+    for name in ["tail_of", "articles", "unpromised"] {
+        cases.push(Survival_Case { commit: "3e26691", name: name.clone() })
+    }
+    for name in ["payload_of", "claims_report", "byte_literal", "peeled", "an_or_a"] {
+        cases.push(Survival_Case { commit: "07c5b14", name: name.clone() })
+    }
+    return cases
+}
+
+fn survival_dir(root: ref fs::Root) -> String throws {
+    return match root {
+        fs::Root::Dir(path) => path.to_text(),
+        else => panic("fs::scratch() hands back a Dir"),
+    }
+}
+
+/// The first line that names an error, and how many lines start with `error`.
+fn survival_first(said: ref String) -> String {
+    let mut first: String = ""
+    let mut count = 0
+    for line in said.lines() {
+        if line.starts_with("error") {
+            count += 1
+            if first == "" {
+                first = line.clone()
+            }
+        }
+    }
+    if first == "" {
+        first = (said.lines().next() ?? "").clone()
+    }
+    return f"{count} error(s), first: {first}"
+}
+
+fn main() throws {
+    let mut nikaia: String = "nikaia"
+    for a in cli::args() {
+        nikaia = a.clone()
+    }
+    let rs2nika = "../convert/target/nikaia/bin/rs2nika"
+    let root = fs::scratch()
+    let dir = survival_dir(root)
+    let mut passed = 0
+    let mut total = 0
+    for case in survival_cases() {
+        total += 1
+        let rust = f"{dir}/{case.commit}.rs"
+        let shown = process::run("git", ["show", f"{case.commit}^:crates/nikaia/src/check/mod.rs"]; dir: ".")
+        if !shown.ok {
+            println(f"GIT   {case.commit}: {shown.stderr}")
+            continue
+        }
+        fs::write(f"{case.commit}.rs", root, shown.stdout)
+        let draft = process::run(rs2nika, ["--profile", "check", "--file", "--only", case.name.clone(), rust.clone()])
+        if !draft.ok {
+            println(f"NONE  {case.name}: {draft.stderr.trim()}")
+            continue
+        }
+        fs::write(f"{case.name}.nika", root, draft.stdout)
+        let checked = process::run(nikaia, ["check", f"{dir}/{case.name}.nika"])
+        if checked.ok {
+            passed += 1
+            println(f"PASS  {case.name}")
+        } else {
+            println(f"FAIL  {case.name}: {survival_first(f"{checked.stdout}\n{checked.stderr}")}")
+        }
+    }
+    println(f"{passed} of {total} drafts pass `nikaia check`")
+}

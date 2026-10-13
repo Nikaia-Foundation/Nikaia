@@ -274,10 +274,3 @@ consider borrowing"): the call does not borrow `xs[0]` for the `ref String`
 parameter, as a call of a named function does. Found with rs2nika's R62
 (#579). **To build:** a `nikaia run` test, and the borrow at the call.
 
-## D21 (new, std). No way to run a program and read its exit status
-
-rs2nika's survival measurement (#579: a draft survives when `nikaia check`
-accepts it) cannot be a Nikaia program: `std::process` has `exit` and `ended`
-only, so the loop around `rs2nika --only NAME` and `nikaia check` stays in the
-shell. Not decided here: arguments, captured output, the effect marker and
-what `fs::Root` means for it. Needs an issue (`decision`).
