@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.875] — 2026-10-13
+
+**std: `cli::args().nth(at)` takes an `i64` (#125)**
+- `cli::args()` returns `cli::Args`, whose `nth` counts in `i64` as the ledger says; `nth(at)` with `at: i64` lowered to Rust's `usize` one (E0308).
+
 ## [0.0.874] — 2026-10-13
 
 **emit, parser: a composite `??` fallback is bracketed, and a `-` after one is refused (#125)**
