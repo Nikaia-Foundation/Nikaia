@@ -177,6 +177,8 @@ fn the_pausing_sequence_is_refused_where_the_language_refuses_it() {
         "NK2105",
     );
     assert!(used_again.message.contains("`map`"), "{used_again:#?}");
+    // #558: `pausing_walks` gets no two-expression test: this refusal is
+    // the only walk that would record one, so no statement can hold two.
     refused(
         &program(
             "    let xs: Vec[i64] = [1, 2]\n\

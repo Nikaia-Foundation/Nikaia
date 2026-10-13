@@ -11,6 +11,11 @@ use std::process::Command;
 /// Lowers `source` as a one-file program, compiles the Rust it came to and
 /// returns what the program printed.
 fn printed(purpose: &str, source: &str) -> String {
+    printed_and_lowered(purpose, source).0
+}
+
+/// What the program prints, and the Rust it was lowered to.
+fn printed_and_lowered(purpose: &str, source: &str) -> (String, String) {
     let dir = common::scratch_dir(&format!("selfhosting-{purpose}"));
     std::fs::write(dir.join("p.nika"), source).expect("write the source");
     let lowered = Command::new(env!("CARGO_BIN_EXE_nikaia"))
@@ -35,8 +40,9 @@ fn printed(purpose: &str, source: &str) -> String {
     );
     let out = Command::new(&binary).output().expect("run it");
     assert!(out.status.success(), "{purpose} did not run");
+    let rust = std::fs::read_to_string(dir.join("p.rs")).expect("read the lowering");
     std::fs::remove_dir_all(&dir).ok();
-    String::from_utf8_lossy(&out.stdout).into_owned()
+    (String::from_utf8_lossy(&out.stdout).into_owned(), rust)
 }
 
 /// #559: a view cut from a call's result is used after the statement, so the
@@ -1265,4 +1271,214 @@ fn main() {
 "#,
     );
     assert_eq!(said.trim(), "5");
+}
+
+/// #558: `kept_calls` is keyed by the expression (ADR-340 D5), so two in one
+/// statement get their own answers: `f(5) + g(5)` where `f` may pause and `g` is `sync`: only `f(5)` is awaited.
+#[test]
+fn two_kept_calls_in_a_statement_pause_each_on_its_own() {
+    let (said, rust) = printed_and_lowered(
+        "kept-calls-by-callee",
+        r#"
+use std::time
+
+fn slow(n: i64) -> i64 {
+    time::sleep(1.millis())
+    return n + 1
+}
+
+fn double(n: i64) -> i64 sync { return n * 2 }
+
+fn main() {
+    let f: fn(i64) -> i64 = slow
+    let g: fn(i64) -> i64 sync = double
+    println(f"{f(5) + g(5)}")
+}
+"#,
+    );
+    assert_eq!(said.trim(), "16");
+    assert!(rust.contains("f(5).await + g(5)"), "{rust}");
+}
+
+/// #558: `kept_functions` is keyed by the expression (ADR-340 D5), so two in one
+/// statement get their own answers: `Pair { f: slow, g: double }`: `slow` is kept as a boxed future, `double` as a plain closure.
+#[test]
+fn two_kept_functions_in_a_statement_are_wrapped_each_on_its_own() {
+    let (said, rust) = printed_and_lowered(
+        "kept-functions-by-name",
+        r#"
+use std::time
+
+struct Pair {
+    f: fn(i64) -> i64,
+    g: fn(i64) -> i64 sync,
+}
+
+fn slow(n: i64) -> i64 {
+    time::sleep(1.millis())
+    return n + 1
+}
+
+fn double(n: i64) -> i64 sync { return n * 2 }
+
+fn main() {
+    let p = Pair { f: slow, g: double }
+    let f = p.f
+    let g = p.g
+    println(f"{f(5)} {g(5)}")
+}
+"#,
+    );
+    assert_eq!(said.trim(), "6 10");
+    assert!(
+        rust.contains("Box::pin(async move { slow(") && rust.contains("{ double(__nikaia_arg0) }"),
+        "{rust}"
+    );
+}
+
+/// #558: `future_lambdas` is keyed by the expression (ADR-340 D5), so two in one
+/// statement get their own answers: `both(fn .., fn ..)`: the lambda for a parameter that may pause is `async`, the one for a `sync` parameter is not.
+#[test]
+fn two_lambdas_in_a_statement_are_futures_each_on_its_own() {
+    let (said, rust) = printed_and_lowered(
+        "future-lambdas-by-node",
+        r#"
+use std::time
+
+fn both(f: fn(i64) -> i64, g: fn(i64) -> i64 sync) -> i64 {
+    return f(1) + g(2)
+}
+
+fn main() {
+    let r = both(fn(x) {
+        time::sleep(1.millis())
+        return x + 10
+    }, fn(x) { return x * 3 })
+    println(f"{r}")
+}
+"#,
+    );
+    assert_eq!(said.trim(), "17");
+    assert!(
+        rust.contains("both(&async |x|") && rust.contains("&|x| { x * 3 }"),
+        "{rust}"
+    );
+}
+
+/// #558: `run_lambdas` is keyed by the expression (ADR-340 D5), so two in one
+/// statement get their own answers: `both(fn .., fn ..)` where `both` runs `f` and keeps `g`: `f` is an `async` closure, `g` a kept boxed future.
+#[test]
+fn a_run_and_a_kept_lambda_in_a_statement_differ() {
+    let (said, rust) = printed_and_lowered(
+        "run-lambdas-by-node",
+        r#"
+use std::time
+
+struct Holder {
+    g: fn(i64) -> i64,
+}
+
+fn both(f: fn(i64) -> i64, g: fn(i64) -> i64) -> Holder {
+    println(f"{f(1)}")
+    return Holder { g: g }
+}
+
+fn main() {
+    let h = both(fn(x) {
+        time::sleep(1.millis())
+        return x + 10
+    }, fn(x) {
+        time::sleep(1.millis())
+        return x * 3
+    })
+    let k = h.g
+    println(f"{k(2)}")
+}
+"#,
+    );
+    assert_eq!(said.trim(), "11\n6");
+    assert!(
+        rust.contains("both(&async |x|")
+            && rust.contains("Kept(std::sync::Arc::new(move |x| Box::pin"),
+        "{rust}"
+    );
+}
+
+/// #558: `pausing_methods` is keyed by the expression (ADR-340 D5), so two in one
+/// statement get their own answers: `a.map(slow..)[2] * 100 + b.map(plain..)[2]`: only `a.map` is the pausing `map_list`.
+#[test]
+fn two_maps_in_a_statement_pause_each_on_its_own() {
+    let (said, rust) = printed_and_lowered(
+        "pausing-methods-by-receiver",
+        r#"
+use std::time
+
+fn slow(n: i64) -> i64 {
+    time::sleep(1.millis())
+    return n + 1
+}
+
+fn main() {
+    let a = [1, 2, 3]
+    let b = [4, 5, 6]
+    let total = a.map(fn(x) { return slow(x) })[2] * 100 + b.map(fn(x) { return x * 2 })[2]
+    println(f"{total}")
+}
+"#,
+    );
+    assert_eq!(said.trim(), "412");
+    assert!(
+        rust.contains("map_list(a,") && rust.contains("b.map(|x|"),
+        "{rust}"
+    );
+}
+
+/// #558: `unrolled_calls` is keyed by the expression (ADR-340 D5), so two in one
+/// statement get their own answers: `size(User ..) * 10 + size(Point ..)`: each call names its own copy.
+#[test]
+fn two_shape_walks_in_a_statement_unroll_each_on_its_own() {
+    let (said, rust) = printed_and_lowered(
+        "unrolled-calls-by-call",
+        r#"
+struct User { name: String, age: i64 }
+struct Point { x: i64, y: i64, z: i64 }
+
+fn size[T: Struct](value: T) -> i64 {
+    let mut n = 0
+    for field in T::fields { n = n + 1 }
+    return n
+}
+
+fn main() {
+    let r = size(User { name: "ada".clone(), age: 36 }) * 10 + size(Point { x: 1, y: 2, z: 3 })
+    println(f"{r}")
+}
+"#,
+    );
+    assert_eq!(said.trim(), "23");
+    assert!(
+        rust.contains("size__User(User") && rust.contains("size__Point(Point"),
+        "{rust}"
+    );
+}
+
+/// #558: `task_handles` is keyed by the expression (ADR-340 D5), so two in one
+/// statement get their own answers: two `spawn`s in one list: each task duplicates only the handle it reads.
+#[test]
+fn two_tasks_in_a_statement_take_each_its_own_handles() {
+    let (said, rust) = printed_and_lowered(
+        "task-handles-by-task",
+        r#"
+fn main() {
+    let db = Shared(1)
+    let other = Shared(2)
+    let _ts = [spawn fn { println(f"{db}") }, spawn fn { println(f"{other}") }]
+    println(f"{db} {other}")
+}
+"#,
+    );
+    let mut lines: Vec<&str> = said.lines().collect();
+    lines.sort();
+    assert_eq!(lines, ["1", "1 2", "2"]);
+    assert!(rust.contains("{ let db = db.clone(); nikaia_std::task::TaskHandle::start(async move { println!(\"{}\", db) }) }"), "{rust}");
 }
