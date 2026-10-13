@@ -1,0 +1,17 @@
+enum Shape { Named { name: String, args: Vec[i64] }, Other }
+
+fn is_short(s: ref String) -> bool sync {
+    return s.len() < 3
+}
+
+fn small(s: ref Shape, wanted: ref Shape) -> bool sync {
+    return match s {
+        Shape::Named { name, .. } if (match wanted { Shape::Named { name: other, .. } if is_short(other) => true, else => false }) => is_short(name),
+        else => false,
+    }
+}
+
+fn main() {
+    let a = Shape::Named { name: "ab", args: [] }
+    println(f"{small(a, Shape::Named { name: "x", args: [] })}")
+}

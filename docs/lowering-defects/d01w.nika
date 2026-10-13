@@ -1,0 +1,11 @@
+struct Flow { a: bool, b: bool }
+
+fn flipped(f: Flow) -> Flow sync {
+    return Flow { a: !f.a, b: f.b }
+}
+
+fn main() {
+    let f = Flow { a: true, b: false }
+    let g = flipped(f)
+    println(f"{g.a} {g.b}")
+}

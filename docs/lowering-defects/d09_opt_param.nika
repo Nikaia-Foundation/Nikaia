@@ -1,0 +1,16 @@
+struct Ty { name: String }
+
+fn shown(t: Ty?) -> String sync {
+    let n = t?.name ?? "none"
+    return n.clone()
+}
+
+fn keep(t: Ty?) -> Ty? sync {
+    return t
+}
+
+fn main() {
+    let t = Ty { name: "A" }
+    println(shown(t))
+    println(keep(null)?.name ?? "absent")
+}

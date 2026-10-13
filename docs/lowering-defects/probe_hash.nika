@@ -1,0 +1,13 @@
+use std::collections
+
+pub struct ProbeNames {
+    pub seen: collections::HashSet[String],
+    pub ids: collections::HashMap[String, i64],
+}
+
+pub fn probe_names() -> ProbeNames sync {
+    let mut n = ProbeNames { seen: collections::HashSet(), ids: collections::HashMap() }
+    n.seen.insert("a")
+    n.ids["a"] = 1
+    return n
+}

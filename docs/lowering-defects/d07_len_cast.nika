@@ -1,0 +1,7 @@
+fn count(xs: ref Vec[i64]) -> i64 sync {
+    return xs.len() as i64
+}
+
+fn main() {
+    println(f"{count([1, 2])}")
+}

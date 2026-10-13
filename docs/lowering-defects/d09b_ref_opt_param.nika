@@ -1,0 +1,11 @@
+struct Ty { name: String }
+
+fn shown(t: ref Ty?) -> String sync {
+    let n = t?.name ?? "none"
+    return n.clone()
+}
+
+fn main() {
+    let t: Ty? = Ty { name: "A" }
+    println(shown(t))
+}

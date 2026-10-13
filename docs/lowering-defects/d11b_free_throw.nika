@@ -1,0 +1,13 @@
+struct Bad { code: i64 }
+
+fn go(n: i64) -> i64 sync throws {
+    if n < 0 {
+        throw Bad { code: 1 }
+    }
+    return n
+}
+
+fn main() {
+    let v = go(2) catch { 0 }
+    println(f"{v}")
+}

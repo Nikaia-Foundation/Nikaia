@@ -1,0 +1,5 @@
+fn main() {
+    let grammar = 1
+    let test = 2
+    println(f"{grammar} {test}")
+}

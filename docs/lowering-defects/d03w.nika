@@ -1,0 +1,14 @@
+use std::collections
+
+fn note(mut seen: collections::BTreeSet[String], k: i64) sync {
+    match k {
+        0 => { let _added = seen.insert("zero") },
+        else => { let _added = seen.insert("other") },
+    }
+}
+
+fn main() {
+    let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
+    note(seen, 0)
+    println(f"{seen.len()}")
+}

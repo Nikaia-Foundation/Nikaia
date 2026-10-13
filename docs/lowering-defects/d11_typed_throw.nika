@@ -1,0 +1,30 @@
+enum Bad { Negative(i64) }
+
+impl Error for Bad {
+    fn message(ref self) -> String {
+        return match self {
+            Bad::Negative(n) => f"negative: {n}",
+        }
+    }
+}
+
+trait Step {
+    fn go(ref self) -> i64 sync throws
+}
+
+struct One { n: i64 }
+
+impl Step for One {
+    fn go(ref self) -> i64 sync throws {
+        if self.n < 0 {
+            throw Bad::Negative(self.n)
+        }
+        return self.n
+    }
+}
+
+fn main() {
+    let o = One { n: -2 }
+    let v = o.go() catch { 0 }
+    println(f"{v}")
+}

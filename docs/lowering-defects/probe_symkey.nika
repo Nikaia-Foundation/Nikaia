@@ -1,0 +1,13 @@
+use std::collections
+
+pub fn probe_symkey(names: ref Vec[winnow_grammar::Symbol]) -> i64 sync {
+    let mut m: collections::BTreeMap[winnow_grammar::Symbol, i64] = collections::BTreeMap()
+    for n in names {
+        m[n.clone()] = 1
+    }
+    let mut h: collections::HashMap[winnow_grammar::Symbol, i64] = collections::HashMap()
+    for n in names {
+        h[n.clone()] = 1
+    }
+    return m.len() + h.len()
+}

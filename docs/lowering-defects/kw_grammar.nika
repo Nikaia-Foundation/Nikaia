@@ -1,0 +1,7 @@
+struct S { grammar: i64 }
+fn f(grammar: i64) -> i64 sync {
+    return grammar
+}
+fn main() {
+    println(f"{f(1)}")
+}

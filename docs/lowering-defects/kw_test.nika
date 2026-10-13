@@ -1,0 +1,7 @@
+struct S { test: i64 }
+fn f(test: i64) -> i64 sync {
+    return test
+}
+fn main() {
+    println(f"{f(1)}")
+}
