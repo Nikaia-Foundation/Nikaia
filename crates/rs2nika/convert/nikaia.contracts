@@ -384,6 +384,12 @@ touches = []
 views = ["t: borrowed"]
 signature = "(t: ref String) -> i64"
 
+[fn."rs2nika_only"]
+sync = "inferred"
+touches = []
+views = ["text: borrowed", "name: borrowed"]
+signature = "(text: ref String, name: ref String) -> String"
+
 [fn."rs2nika_opens"]
 sync = "inferred"
 touches = []

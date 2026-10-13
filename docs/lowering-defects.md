@@ -265,3 +265,19 @@ Found by running rs2nika's drafts of unmoved `check/mod.rs` functions through
   `matches!`) lowers without `.as_str()` (E0308).
 **To build:** each a test through `nikaia run`, and the lowering fix named above,
 or a checker refusal that names the spelling that works.
+
+## D20 (new). A let-bound lambda called with an index argument fails in rustc
+
+`let f: fn(ref String, i64) -> i64 sync = fn(a, b) { a.len() + b }` then
+`f(xs[0], 1)` passes `nikaia check` and fails in rustc ("Mismatched types,
+consider borrowing"): the call does not borrow `xs[0]` for the `ref String`
+parameter, as a call of a named function does. Found with rs2nika's R62
+(#579). **To build:** a `nikaia run` test, and the borrow at the call.
+
+## D21 (new, std). No way to run a program and read its exit status
+
+rs2nika's survival measurement (#579: a draft survives when `nikaia check`
+accepts it) cannot be a Nikaia program: `std::process` has `exit` and `ended`
+only, so the loop around `rs2nika --only NAME` and `nikaia check` stays in the
+shell. Not decided here: arguments, captured output, the effect marker and
+what `fs::Root` means for it. Needs an issue (`decision`).

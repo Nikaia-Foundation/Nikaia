@@ -110,6 +110,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R61  a call or a literal in a `format!` argument -> `let hole_N = ..` before the line, `{hole_N}` in the f-string",
         "R64  `let x = match e { Some(v) => v, None => return y }` (also `continue`/`break`, in loops too) -> `let x = e ?? return y`",
         "R63  what R59 leaves of `o.is_some_and(..)`: `o.is_some_and(|x| p)` -> `(o != null && p)` with `x` read as `(o ?? panic(..))`, `o.is_some_and(f)` -> `(o != null && f(o ?? panic(..)))`",
+        "--only NAME converts the one function NAME of the file (line numbers kept, for `--facts`)",
         "R62  a local closure with arguments -> `let f: fn(ref T) -> R sync = fn(a) { .. }`, its type from the `--facts` file (rust-analyzer) or from its own annotations",
     ]
 }
@@ -3970,6 +3971,55 @@ fn rs2nika_find_repo() -> String {
     return ""
 }
 
+/// `--only NAME`: the function `NAME` of `text` with its doc comments and
+/// attributes, the other lines blanked so that line numbers (and `--facts`)
+/// still fit; "" when there is none.
+fn rs2nika_only(text: ref String, name: ref String) -> String {
+    let lines: Vec[String] = text.lines().map(fn(l) { l.clone() }).collect()
+    let mut start = -1
+    let mut i = 0
+    while i < lines.len() {
+        let t: String = lines[i].trim_start().trim_start_matches("pub(crate) ").trim_start_matches("pub ").clone()
+        let call: String = f"fn {name}("
+        let generic: String = f"fn {name}<"
+        if t.starts_with(ref call) || t.starts_with(ref generic) {
+            start = i
+            break
+        }
+        i = i + 1
+    }
+    if start < 0 {
+        return ""
+    }
+    let mut first = start
+    while first > 0 && (lines[first - 1].trim().starts_with("///") || lines[first - 1].trim().starts_with("#[")) {
+        first = first - 1
+    }
+    let mut last = start
+    let mut depth = 0
+    let mut opened = false
+    while last < lines.len() {
+        depth = depth + rs2nika_depth_of(lines[last])
+        if lines[last].contains("{") {
+            opened = true
+        }
+        if opened && depth <= 0 {
+            break
+        }
+        last = last + 1
+    }
+    let mut out: String = ""
+    let mut k = 0
+    while k < lines.len() {
+        if k >= first && k <= last {
+            out.push_str(lines[k])
+        }
+        out.push_str("\n")
+        k = k + 1
+    }
+    return out
+}
+
 /// The `local` facts of `facts` (the output of `../facts`) on the file
 /// `path`, each as `<line>\t<type>`; none without a facts file.
 fn rs2nika_read_facts(facts: ref String, path: ref String) -> Vec[String] {
@@ -4006,6 +4056,7 @@ fn main() throws {
     let mut lint = false
     let mut repo: String = "?"
     let mut facts_path: String = ""
+    let mut only: String = ""
     let mut path: String = ""
     let mut lints: Vec[String] = []
     let mut args: Vec[String] = []
@@ -4035,6 +4086,9 @@ fn main() throws {
         } else if arg == "--prefix" {
             at = at + 1
             prefix = args[at].clone()
+        } else if arg == "--only" {
+            at = at + 1
+            only = args[at].clone()
         } else if arg == "--facts" {
             at = at + 1
             facts_path = args[at].clone()
@@ -4070,9 +4124,16 @@ fn main() throws {
     if repo == "?" {
         repo = rs2nika_find_repo()
     }
-    let text = fs::read_to_string(ref path, fs::Root::Anywhere) catch {
+    let mut text = fs::read_to_string(ref path, fs::Root::Anywhere) catch {
         eprintln(f"cannot read {path}: {error}")
         return
+    }
+    if only != "" {
+        text = rs2nika_only(text, only)
+        if text == "" {
+            eprintln(f"no function `{only}` in {path}")
+            process::exit(1)
+        }
     }
     let out = rs2nika_convert(text, profile, prefix, repo, rs2nika_read_facts(facts_path, path))
     if whole {
