@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.885] — 2026-10-13
+
+**json: an explicit null takes a field's default (ADR-344 D4, #604)**
+- `json::read`: a member that is `null` for a field that is not a `T?` takes the field's default if it has one, and is an error only without one (ADR-344 D4, D8; Part III 17.3).
+
 ## [0.0.884] — 2026-10-13
 
 **json: a member the type has no field for is skipped (ADR-344 D8, #604)**
