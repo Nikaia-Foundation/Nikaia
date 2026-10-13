@@ -1,0 +1,6 @@
+    pub fn decoded(ref self, world: ref CheckWorld, xs: ref Vec[i64], mut m: collections::BTreeMap[String, Vec[i64]]) -> Ty? sync throws {
+        let mut v = []
+        while true {
+            else => s.clone(),
+        }
+

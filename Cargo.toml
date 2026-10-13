@@ -17,7 +17,7 @@ members = [
 ]
 # One crate per `unsafe` topic, each its own workspace with its own checks
 # (ADR-218). The crates here reach them as path dependencies.
-exclude = ["crates/unsafe"]
+exclude = ["crates/unsafe", "crates/rs2nika"]
 
 [workspace.dependencies]
 orchestrator = { path = "crates/orchestrator" }
