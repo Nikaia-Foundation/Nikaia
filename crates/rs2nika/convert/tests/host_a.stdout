@@ -8,8 +8,8 @@
 
     fn read(ref self, world: ref CheckWorld, path: ref String) -> BtRead sync {
         return match self.reads.read(path) {
-            Ok(text) => BtRead { text: (text), denied: null },
-            Err(why) => BtRead { text: null, denied: (why) },
+            Ok(text) => BtRead { text: text, denied: null },
+            Err(why) => BtRead { text: null, denied: why },
         }
     }
 
@@ -33,7 +33,7 @@
         let (files, _) = self.files()
         let here = here
         // TODO(rs2nika): `Option::map`/`and_then`: `let x = e ?? <none>` then the body
-        let stopped = (place)?.strip_prefix(comptime_run::STOPPED_AT)?.split_once(':').and_then(fn(unit, byte) { Some((unit.parse().ok()?, byte.parse().ok()?)) })
+        let stopped = place?.strip_prefix(comptime_run::STOPPED_AT)?.split_once(':').and_then(fn(unit, byte) { Some((unit.parse().ok()?, byte.parse().ok()?)) })
         let at = stopped.filter(fn(unit, _) { unit == here }).map(fn(_, byte) { byte })
         // `@<file>:<byte>`: a place in this file is shown, and one in another
         // is named by the function it is in.

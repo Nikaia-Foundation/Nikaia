@@ -1,6 +1,6 @@
 fn args_of(t: ref Ty) -> Vec[Ty]? sync {
     return match t {
-        Ty::Named { args, .. } => (args.clone()),
+        Ty::Named { args, .. } => args.clone(),
         else => null,
     }
 }
@@ -9,6 +9,6 @@ fn first_arg(t: ref Ty) -> Ty? sync {
     if t.args.is_empty() {
         return null
     }
-    return (t.args[0].clone())
+    return t.args[0].clone()
 }
 

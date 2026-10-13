@@ -1420,6 +1420,17 @@ fn rs2nika_some(mut ctx: Rs2nikaCtx, given: ref String) -> String {
             if lead {
                 ok = true
             }
+            let close = rs2nika_closing(c, at + 4, '(', ')')
+            if ok && close > at + 5 {
+                let inner: String = rs2nika_text(c, at + 5, close)
+                let ic: Vec[scalar] = inner.chars().collect()
+                if rs2nika_recv_start(ic, ic.len()) == 0 {
+                    out.push_str(inner)
+                    at = close + 1
+                    changed = true
+                    continue
+                }
+            }
             if ok {
                 out.push('(')
                 at = at + 5

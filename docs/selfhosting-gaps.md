@@ -41,6 +41,14 @@ more than its line: the finished code moves the loop into a helper function,
 so one Rust line becomes 6-8 lines, which is most of the low survival rate in
 `wholly_known`, `a_copied_part` and `payload_of`.
 
+Re-measured after the converter took items 1-4, 7 and the f-string half of 5
+below (code lines of the draft, comments left out, found verbatim in the
+finished function; ten of the functions, `several_errors`, `a_map_type` and
+`an_or_a` could not be cut automatically): 42 of 125 lines (34 %) before, 44 of
+130 (34 %) after, with 22 -> 11 TODO lines on the reference inputs; the rate
+barely moves because the finished code was written before the `Seq` methods and
+`?.` chains the draft now uses, and TODO comments were never counted.
+
 ## TOOL (19)
 
 | form | n | Rust | the draft | by hand |
