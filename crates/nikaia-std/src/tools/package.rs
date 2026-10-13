@@ -22382,6 +22382,8 @@ fn emit_arg_opening_inside(inner: &Ty) -> String {
     }
 }
 
+fn emit_arg_lends_own(contract: &FnContract, at: i64, library: &Ledger, described: &Ledger) -> bool { lends_in_own(contract, at, &vec![library, described]) }
+
 fn emit_arg_opening_in(contract: &FnContract, i: i64) -> String {
     let signature = match match contract.signature.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -22438,6 +22440,15 @@ impl EmitState {
             Expr::Variable(name, _) => { let name = *name; self.a_code_parameter_taken_whole(world, function, &emit_text(world, name)) && self.runs_code_at(callee, i) },
             _ => false,
         }
+    }
+    fn emit_arg_only_read(&self, world: &EmitWorld<'_>, callee: &str, i: i64) -> bool {
+        let contract = match self.own_contracts.functions.get(callee) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let signature = match match contract.signature.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        } { Some(__nikaia_value) => __nikaia_value, None => return false };
+        if signature.takes_a_receiver() { return false; }
+        emit_arg_lends_own(&contract, i, world.library, &self.described)
     }
     fn emit_arg_opening(&self, callee: &str, i: i64) -> String {
         if self.own_contracts.functions.contains_key(callee) {
@@ -22517,7 +22528,7 @@ impl EmitState {
                 pointer = emit_arg_pointer_code((self.pointer_for(world, callee, &ty)).as_ref());
             }
         }
-        let either = !lend && !change && !emit_arg_is_null(arg) && self.either_param(world, callee, i) && !self.facts.mixed_choices.contains(&node_key(arg));
+        let either = !lend && !change && !emit_arg_is_null(arg) && self.either_param(world, callee, i) && !self.emit_arg_only_read(world, callee, i) && !self.facts.mixed_choices.contains(&node_key(arg));
         out.push(&before);
         if either { out.push("nikaia_std::either_text::either("); }
         let mut how: String = String::from("");

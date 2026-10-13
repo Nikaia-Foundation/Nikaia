@@ -1141,3 +1141,56 @@ fn main() {
     );
     assert_eq!(said.trim(), "2 1\n2 2\n2 3 4\n2 3 4\n2 4 1");
 }
+
+/// #598: a view handed to a `String` parameter the callee only reads goes as
+/// it is: the parameter is a `&str` (ADR-282 D5, D11), not wrapped in
+/// `either(…)`. The same for one call alone and for a `String?` only read.
+#[test]
+fn a_view_into_a_text_parameter_only_read_is_not_wrapped() {
+    let said = printed(
+        "view-into-a-read-parameter",
+        r#"
+fn size(x: String) -> i64 {
+    return x.len()
+}
+
+fn main() {
+    let owned = "abc".clone()
+    let s = owned[0..<2]
+    println(f"{size(s) + size(owned)}")
+}
+"#,
+    );
+    assert_eq!(said.trim(), "5");
+    let said = printed(
+        "view-into-a-read-parameter-alone",
+        r#"
+fn size(x: String) -> i64 {
+    return x.len()
+}
+
+fn main() {
+    let owned = "abc".clone()
+    let s = owned[0..<2]
+    println(f"{size(s)}")
+}
+"#,
+    );
+    assert_eq!(said.trim(), "2");
+    let said = printed(
+        "view-into-a-nullable-read-parameter",
+        r#"
+fn size(x: String?) -> i64 {
+    return (x ?? "").len()
+}
+
+fn main() {
+    let owned = "abc".clone()
+    let s = owned[0..<2]
+    let none: String? = null
+    println(f"{size(s) + size(owned) + size(none)}")
+}
+"#,
+    );
+    assert_eq!(said.trim(), "5");
+}

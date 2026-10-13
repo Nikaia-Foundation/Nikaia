@@ -45,6 +45,10 @@ fn emit_arg_opening_inside(inner: ref Ty) -> String {
     }
 }
 
+fn emit_arg_lends_own(contract: ref FnContract, at: i64, library: ref Ledger, described: ref Ledger) -> bool {
+    return lends_in_own(contract, at, [library, described])
+}
+
 /// The opening of argument `i` in one contract.
 fn emit_arg_opening_in(contract: ref FnContract, i: i64) -> String {
     let signature = contract.signature?.clone() ?? return ""
@@ -139,6 +143,18 @@ impl EmitState {
             Expr::Variable(name, _) => self.a_code_parameter_taken_whole(world, function, emit_text(world, name)) && self.runs_code_at(callee, i),
             else => false,
         }
+    }
+
+    /// Whether this unit's function `callee` only reads its parameter `i`,
+    /// which is then lowered a `&str` (`Option<&str>`) below whatever text
+    /// flows in (ADR-282 D5, D11): a view is lent as it is, not wrapped (#598).
+    fn emit_arg_only_read(ref self, world: ref EmitWorld, callee: ref String, i: i64) -> bool {
+        let contract = self.own_contracts.functions.get(callee) ?? return false
+        let signature = contract.signature?.clone() ?? return false
+        if signature.takes_a_receiver() {
+            return false
+        }
+        return emit_arg_lends_own(contract, i, world.library, self.described)
     }
 
     /// The opening a lent view gets inside the option a nullable parameter is:
@@ -257,7 +273,7 @@ impl EmitState {
         }
         // **Into a parameter both kinds of text flow into, each argument goes as
         // it is** (ADR-282 D2): a view borrowed, text of its own moved in.
-        let either = !lend && !change && !emit_arg_is_null(arg) && self.either_param(world, callee, i) && !self.facts.mixed_choices.contains(node_key(arg))
+        let either = !lend && !change && !emit_arg_is_null(arg) && self.either_param(world, callee, i) && !self.emit_arg_only_read(world, callee, i) && !self.facts.mixed_choices.contains(node_key(arg))
         out.push(before)
         if either {
             out.push("nikaia_std::either_text::either(")

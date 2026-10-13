@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.865] — 2026-10-13
+
+**lowering: a view into a String parameter only read is lent as it is (#598)**
+- A view handed to a String parameter the callee only reads is no longer wrapped in either(…), and a plain view into a String? parameter goes inside its option (#598).
+
 ## [0.0.864] — 2026-10-13
 
 **checker: NK1245's help for disagreeing arms asks for no annotation**

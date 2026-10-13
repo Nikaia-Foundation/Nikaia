@@ -10003,6 +10003,16 @@ impl<'a> Checker<'a> {
                     && !std::ptr::eq(whole, arm)
                 {
                     self.note_mixed(whole, matches!(want, Ty::Nullable(_)));
+                } else if let Some(value) = given_here
+                    && matches!(want, Ty::Nullable(_))
+                    && !matches!(found, Ty::Nullable(_))
+                {
+                    // A plain view into a `String?` goes inside its option
+                    // (#598): `Some(either(s))`, as text of its own does.
+                    self.s
+                        .facts
+                        .nullable_args
+                        .insert(value_node(value), Wrap::Constructor);
                 }
                 continue;
             }
