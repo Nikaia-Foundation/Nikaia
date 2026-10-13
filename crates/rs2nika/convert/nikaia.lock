@@ -4,7 +4,7 @@
 # what Cargo resolved, listed per name because one name can resolve twice.
 version = 1
 toolchain = "rustc 1.97.0 (2d8144b78 2026-07-07)"
-compiler = "31276d84090ebf2923ca50b19627490ee915d67f628d146dc6a8f67260d9a93d"
+compiler = "ce9c382b6bbc807aca85a3b9aea8faf662c3d6f740dd1a2281723bbc6dd4b7c9"
 
 [dependencies]
 ahash = ["0.8.12"]
@@ -63,8 +63,8 @@ winnow-grammar = ["0.1.0"]
 winnow-grammar-macros = ["0.1.0"]
 winnow-grammar-model = ["0.1.0"]
 wit-bindgen = ["0.57.1"]
-zerocopy = ["0.8.62"]
-zerocopy-derive = ["0.8.62"]
+zerocopy = ["0.8.63"]
+zerocopy-derive = ["0.8.63"]
 
 [units."src/main.nika"]
-source = "f5d3e945de6b77c00fc6ed42fde9a2b46d3229382b34a8449f9910e600995146"
+source = "fe62d3cdfd773071be33bee27408d307367e9916428ba57013e9505312a14f5c"

@@ -108,6 +108,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R59  Option combinators with a field or method body: `o.map(|x| x.f)` -> `o?.f`, `.is_some_and(|x| x.p())` -> `(o?.p() ?? false)`, `.map_or(d, ..)` -> `(o?.. ?? d)`",
         "R60  `String::with_capacity(n)` -> `\"\"`",
         "R61  a call or a literal in a `format!` argument -> `let hole_N = ..` before the line, `{hole_N}` in the f-string",
+        "R62  a local closure with arguments -> `let f: fn(ref T) -> R sync = fn(a) { .. }`, its type from the `--facts` file (rust-analyzer) or from its own annotations",
     ]
 }
 
@@ -1998,11 +1999,16 @@ fn rs2nika_closures(mut ctx: Rs2nikaCtx, given: ref String) -> String {
                 continue
             }
             let mut body: String = rs2nika_text(c, b, j).trim().clone()
+            let mut semi: String = ""
+            if !block && j == c.len() && body.ends_with(";") {
+                body = body[0..<body.len() - 1].trim_end().clone()
+                semi = ";"
+            }
             if block {
                 body = body[1..<body.len() - 1].trim().clone()
             }
             let args = rs2nika_join(names, ", ")
-            out.push_str(f"fn({args}) {{ {body} }}")
+            out.push_str(f"fn({args}) {{ {body} }}{semi}")
             rs2nika_hit(ctx, "R26")
             at = j
             continue
@@ -2673,7 +2679,7 @@ fn rs2nika_if_let(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String] {
 }
 
 /// A Rust function, or several, as a Nikaia draft.
-pub fn rs2nika_convert(src: ref String, profile: ref String, prefix: ref String, repo: ref String) -> Rs2nikaOut {
+pub fn rs2nika_convert(src: ref String, profile: ref String, prefix: ref String, repo: ref String, facts: ref Vec[String]) -> Rs2nikaOut {
     let mut world: String = ""
     if profile == "check" {
         world = "CheckWorld"
@@ -2698,7 +2704,8 @@ pub fn rs2nika_convert(src: ref String, profile: ref String, prefix: ref String,
             }
         }
     }
-    let inlined = rs2nika_inline_closures(ctx, lines)
+    let typed = rs2nika_typed_closures(ctx, lines, facts)
+    let inlined = rs2nika_inline_closures(ctx, typed)
     let hoisted = rs2nika_hoist(ctx, inlined)
     let first = rs2nika_join_chains(ctx, hoisted)
     let split = rs2nika_join_split(ctx, first)
@@ -2959,6 +2966,86 @@ fn rs2nika_ranges(mut ctx: Rs2nikaCtx, given: ref String) -> String {
         }
         out.push(ch)
         at = at + 1
+    }
+    return out
+}
+
+/// R62: a local closure with arguments (`let f = |a: &T| -> R { .. };`) gets
+/// its type on the `let`: `let f: fn(ref T) -> R sync = |a| { .. };` (R26
+/// then writes the lambda). The type is the `local` fact of rust-analyzer
+/// for that line (`--facts`), or the closure's own annotations when every
+/// argument and the result are written down; otherwise the line is kept.
+fn rs2nika_typed_closures(mut ctx: Rs2nikaCtx, given: ref Vec[String], facts: ref Vec[String]) -> Vec[String] {
+    let mut out: Vec[String] = []
+    let mut at = 0
+    for l in given {
+        at = at + 1
+        let st: String = l.trim().clone()
+        let eq = st.find(" = ") ?? -1
+        if !st.starts_with("let ") || eq < 5 {
+            out.push(l.clone())
+            continue
+        }
+        let name: String = st[4..<eq].trim().clone()
+        let mut rest: String = st[eq + 3..<st.len()].trim().clone()
+        if rest.starts_with("move ") {
+            rest = rest[5..<rest.len()].trim().clone()
+        }
+        if !rs2nika_is_path(name) || name.contains(":") || !rest.starts_with("|") || rest.starts_with("||") {
+            out.push(l.clone())
+            continue
+        }
+        let inner: String = rest[1..<rest.len()].clone()
+        let bar = inner.find("|") ?? -1
+        if bar < 0 {
+            out.push(l.clone())
+            continue
+        }
+        let params: String = inner[0..<bar].clone()
+        let mut body: String = inner[bar + 1..<inner.len()].trim().clone()
+        let mut ret: String = ""
+        if body.starts_with("->") {
+            let brace = body.find("{") ?? -1
+            if brace < 0 {
+                out.push(l.clone())
+                continue
+            }
+            ret = body[2..<brace].trim().clone()
+            body = body[brace..<body.len()].clone()
+        }
+        // the type: the fact first, then the closure's own annotations
+        let mut ty: String = ""
+        let key: String = f"{at}\t"
+        for fact in facts {
+            if fact.starts_with(ref key) && fact.contains("Fn") {
+                ty = fact[key.len()..<fact.len()].trim().clone()
+            }
+        }
+        let mut names: Vec[String] = []
+        let mut types: Vec[String] = []
+        for p in rs2nika_split_args(params) {
+            let colon = p.find(":") ?? -1
+            if colon < 0 {
+                names.push(p.trim().clone())
+            } else {
+                names.push(p[0..<colon].trim().clone())
+                types.push(p[colon + 1..<p.len()].trim().clone())
+            }
+        }
+        if ty == "" && ret != "" && types.len() == names.len() {
+            let joined = rs2nika_join(types, ", ")
+            ty = f"impl Fn({joined}) -> {ret}"
+        }
+        let fopen = ty.find("Fn") ?? -1
+        if fopen < 0 {
+            out.push(l.clone())
+            continue
+        }
+        let decl = rs2nika_fn_param(ctx, name, ty[fopen..<ty.len()].clone())
+        let ind = rs2nika_indent(l)
+        let args = rs2nika_join(names, ", ")
+        out.push(f"{ind}let {decl} = |{args}| {body}")
+        rs2nika_hit(ctx, "R62")
     }
     return out
 }
@@ -3802,6 +3889,34 @@ fn rs2nika_find_repo() -> String {
     return ""
 }
 
+/// The `local` facts of `facts` (the output of `../facts`) on the file
+/// `path`, each as `<line>\t<type>`; none without a facts file.
+fn rs2nika_read_facts(facts: ref String, path: ref String) -> Vec[String] {
+    let mut out: Vec[String] = []
+    if facts == "" {
+        return out
+    }
+    let text = fs::read_to_string(ref facts, fs::Root::Anywhere) catch {
+        eprintln(f"cannot read {facts}: {error}")
+        return out
+    }
+    for line in text.lines() {
+        let cols: Vec[String] = line.split("\t").map(fn(c) { c.clone() }).collect()
+        if cols.len() < 4 || cols[2] != "local" {
+            continue
+        }
+        let file: String = cols[0].clone()
+        if !(path.ends_with(ref file) || file.ends_with(path)) {
+            continue
+        }
+        let colon = cols[1].find(":") ?? 0
+        let at: String = cols[1][0..<colon].clone()
+        let ty: String = cols[3].clone()
+        out.push(f"{at}\t{ty}")
+    }
+    return out
+}
+
 fn main() throws {
     let mut profile: String = "check"
     let mut prefix: String = ""
@@ -3809,6 +3924,7 @@ fn main() throws {
     let mut whole = false
     let mut lint = false
     let mut repo: String = "?"
+    let mut facts_path: String = ""
     let mut path: String = ""
     let mut lints: Vec[String] = []
     let mut args: Vec[String] = []
@@ -3838,6 +3954,9 @@ fn main() throws {
         } else if arg == "--prefix" {
             at = at + 1
             prefix = args[at].clone()
+        } else if arg == "--facts" {
+            at = at + 1
+            facts_path = args[at].clone()
         } else if arg == "--repo" {
             at = at + 1
             repo = args[at].clone()
@@ -3874,7 +3993,7 @@ fn main() throws {
         eprintln(f"cannot read {path}: {error}")
         return
     }
-    let out = rs2nika_convert(text, profile, prefix, repo)
+    let out = rs2nika_convert(text, profile, prefix, repo, rs2nika_read_facts(facts_path, path))
     if whole {
         let mut state: String = "State"
         if profile == "check" {
