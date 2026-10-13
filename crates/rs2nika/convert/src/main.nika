@@ -4,7 +4,9 @@
 // a Rust function, line by line, by the rules `--rules` lists. What it cannot
 // translate it marks with `TODO(rs2nika)`; the draft is read and finished by
 // hand. Run: `nikaia run crates/rs2nika/convert -- [--profile check|emit|none]
-// [--prefix X_] [--stats] [--rules] FILE.rs`.
+// [--prefix X_] [--stats] [--file] [--repo DIR] FILE.rs`, `-- --rules`,
+// `-- --lint F.nika..`. Names (R45-R47) come from the checkout found at `.`
+// or above it, or `--repo DIR`.
 
 use std::fs
 use std::cli

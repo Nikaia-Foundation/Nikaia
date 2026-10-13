@@ -248,8 +248,14 @@ Rules from the sessions that moved the most; they save tokens, not just time.
   (`scripts/tokenspeed.py`); add a snapshot when a run ends.
   `scripts/bump.py new` raises the version everywhere (spec lines, **Date:**,
   CHANGELOG, `self_hosting.py` row, badges); after a rebase `scripts/bump.py
-  rebase-fix` repairs a collision, `check` verifies. `scripts/rs2nika.py`
-  writes a first draft of a Rust function in Nikaia (about half the lines
-  survive; TODO markers where it cannot); the known lowering defects and
+  rebase-fix` repairs a collision, `check` verifies. The converter
+  `crates/rs2nika/convert` (a Nikaia project: `nikaia build` there, then
+  `target/nikaia/bin/rs2nika [--profile check|emit] [--prefix X_] [--file] F.rs`)
+  writes a first draft of a Rust function in Nikaia (TODO markers where it
+  cannot), names on stderr the callees not yet in Nikaia and the functions
+  tools/*.nika may already have; `--rules` lists its rules, `--lint F.nika`
+  flags known defects in hand-written Nikaia, and `rs2nika.names` beside it
+  maps Rust helpers to their Nikaia names. Rust's types come from
+  rust-analyzer (ADR-001 D5, `crates/rs2nika/facts`); the known lowering defects and
   their workarounds are in `docs/lowering-defects.md`, the language options
   against the usual hurdles in `docs/history/mitigation-hurdles.md`.

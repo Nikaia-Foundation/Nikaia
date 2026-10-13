@@ -3,6 +3,13 @@
 Decided by read-only architecture reviews on 2026-10-11. No owner decision is
 open. A builder reads only its own section.
 
+A first draft of a Rust function comes from the converter
+`crates/rs2nika/convert` (`nikaia build` there; `target/nikaia/bin/rs2nika
+--profile check|emit --prefix X_ F.rs`, `--file` for a whole tools file). It
+names on stderr the callees not yet in Nikaia and the functions tools/*.nika
+may already have; check those before moving a duplicate. Rust's types for it
+come from rust-analyzer (ADR-001 D5, `crates/rs2nika/facts`).
+
 ## Done
 
 * `CheckFacts` (`tools/check_facts.nika`) is the one set of tables the checker

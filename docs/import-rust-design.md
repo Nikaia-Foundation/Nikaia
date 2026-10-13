@@ -4,12 +4,12 @@
 
 ### 0. The feature, from zero
 
-Today `scripts/rs2nika.py` reads Rust a line at a time, applies 52 rules and prints a draft, which a builder finishes by hand. **[V]** Example:
+Today the converter `crates/rs2nika/convert` (a Nikaia project; it replaced `scripts/rs2nika.py`) reads Rust a line at a time, applies 54 rules and prints a draft, which a builder finishes by hand. **[V]** Example:
 
 ```rust
 fn sum_to(n: usize) -> usize { let mut s = 0; for i in 0..n { s += i; } s }   // prints 45 for 10
 ```
-The draft is `fn sum_to(n: i64) -> i64 sync { … for i in 0..n { s += i } return s }`. It passes the checker and prints **55**. In Nikaia, `0..n` includes `n` and the exclusive range is written `0..<n` (ADR-291 D13). rs2nika has no rule for ranges. A builder who reviews every line catches this. A product would hand the user a wrong value without a word. That is the design question in one line: **in the output, every line either means what the Rust meant, or it is refused with a reason, or it carries a named obligation that a check discharges.** On the one piece of human-written Rust in the repository that has a Nikaia twin with the same output (`benches/brc/src/bin/naive.rs`, twin `examples/1brc.nika`), the draft **does not parse**, and none of its 3 functions is usable as written **[V]**: `if let` inside `let (..) =`, `std::env`, `entry()`, `impl Iterator`, tuple fields. And `format!("{}={:.1}", name, min)` became `f"{name}={:.1}"`, which **dropped the arguments without a word**.
+The draft is `fn sum_to(n: i64) -> i64 sync { … for i in 0..n { s += i } return s }`. It passes the checker and prints **55**. In Nikaia, `0..n` includes `n` and the exclusive range is written `0..<n` (ADR-291 D13). rs2nika had no rule for ranges then; R53 now writes `0..<n`. A builder who reviews every line catches this. A product would hand the user a wrong value without a word. That is the design question in one line: **in the output, every line either means what the Rust meant, or it is refused with a reason, or it carries a named obligation that a check discharges.** On the one piece of human-written Rust in the repository that has a Nikaia twin with the same output (`benches/brc/src/bin/naive.rs`, twin `examples/1brc.nika`), the draft **does not parse**, and none of its 3 functions is usable as written **[V]**: `if let` inside `let (..) =`, `std::env`, `entry()`, `impl Iterator`, tuple fields. And `format!("{}={:.1}", name, min)` became `f"{name}={:.1}"`, which **dropped the arguments without a word**.
 
 The command: `nikaia import rust <crate|file>` reads a crate and writes Nikaia. It checks the Nikaia, lowers it back to Rust, compiles that with rustc and runs the crate's own tests against the result. Then it prints, per function, what was proven, what was tested and what was refused.
 
@@ -42,7 +42,7 @@ The command: `nikaia import rust <crate|file>` reads a crate and writes Nikaia. 
 | `char`, `b'x'` | `scalar`, `'x'` as `u8` | E | Part I 2.6 |
 | `&str`/`String`, `s.len()` | `ref String`/`String`, `s.len()` | E | **[V]** `"äb".len()` = 3 bytes in both (Part I 2.6 says *there is no `s.len()`*, and the checker accepts it: report it as a spec/compiler mismatch) |
 | `&s[a..b]` on text | `s[a..<b]` | P | `NK1214`: only positions the text handed out cut it |
-| `a..b`, `a..=b` | `a..<b`, `a..b` | E | ADR-291 D13. Missing in rs2nika: the silent bug above |
+| `a..b`, `a..=b` | `a..<b`, `a..b` | E | ADR-291 D13. rs2nika R53 (was the silent bug above) |
 | `Option<T>`, `None`, `Some(x)` | `T?`, `null`, `x` | E | ADR-278. `(A, B)?` → a named struct (P, lowering defect D5) |
 | `Result<T,E>` returned, `?` | `-> T throws`, an error enum + `impl Error` | E | Part I 7.1 |
 | `Result` stored as a value | — | P | a program never holds a `Result` (ADR-290 D21): rewritten as an enum |
@@ -169,9 +169,9 @@ Each topic below goes into its own decision round. Nothing here blocks the self-
 
 #### To build 1: the round-trip harness
 * **Found:** by the 2026-10-11 design probe. A draft that passes `lower-std` can print a different number (`sum_to`: 55 against 45).
-* **Today:** `rs2nika_passrate.py` stops at `lower-std`, and nothing runs a draft.
+* **Today:** nothing runs a draft (`rs2nika_passrate.py`, which stopped at `lower-std`, went with `rs2nika.py`).
 * **To build:**
-  1. `scripts/rs2nika_roundtrip.py FILE.rs`. Per function: draft → `nikaia lower` → `cargo build` → run both binaries (original with `-C overflow-checks=on`) → print L0-L3 per function.
+  1. `a round-trip mode of the converter (in Nikaia), `rs2nika --roundtrip FILE.rs``. Per function: draft → `nikaia lower` → `cargo build` → run both binaries (original with `-C overflow-checks=on`) → print L0-L3 per function.
   2. Tests (a script run in CI): `sum_to` is reported **L2 pass / L3 fail**; `last_index` over an empty `Vec` is reported as an obligation, since the original panics or wraps and Nikaia gives `-1`; the hand-accepted Nikaia of 5 gold commits reaches L3 against the suite.
   3. Record the starting values in this issue.
 

@@ -9,8 +9,10 @@ copied into `crates/nikaia-std/src/tools/`, then `nikaia lower-std` and
 
 Status: **verified** (reproduced today), **not reproduced** (the form named in the
 commit messages works today), **by design** (a written rule, no defect).
-`rs2nika.py --lint FILE.nika` flags D1, D2, D3, D7 and D8 in hand-written Nikaia
-before the 40 s `lower-std` (no false hits on today's `tools/*.nika`).
+`crates/rs2nika/convert/target/nikaia/bin/rs2nika --lint FILE.nika` (build it
+with `nikaia build` in `crates/rs2nika/convert`) flags D1, D2, D3, D7 and D8 in
+hand-written Nikaia before the 40 s `lower-std`; on today's `tools/*.nika` it
+finds two D8 casts in `check_numbers4.nika`.
 
 | # | Defect | Status | Probe |
 | :--- | :--- | :--- | :--- |
