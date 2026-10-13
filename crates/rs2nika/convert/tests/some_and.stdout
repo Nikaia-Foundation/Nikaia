@@ -1,0 +1,10 @@
+fn probe(o: String?, n: i64?) -> bool sync {
+    if (n != null && (n ?? panic("rs2nika: checked above")) > 3) {
+        return true
+    }
+    if (o != null && self.known(o ?? panic("rs2nika: checked above"))) {
+        return true
+    }
+    return (o != null && is_word(o ?? panic("rs2nika: checked above")))
+}
+

@@ -85,7 +85,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R36  `loop {` -> `while true {`",
         "R37  rustfmt-split patterns and struct literals joined onto one line",
         "R38  `X::default()` of a moved struct -> `X::empty()`",
-        "R39  `.iter().enumerate()` / slice patterns / `match` on `Some` / `.entry()` / `is_some_and` -> TODO marker",
+        "R39  `.iter().enumerate()` / slice patterns / `match` on `Some` / `.entry()` / `is_ok_and` / `map_or` R59 cannot take -> TODO marker",
         "R40  `.len() as i64` cast dropped, `.unwrap()` -> `?? panic(\"unwrap\")`",
         "R41  function name prefixed (`--prefix`): tools/*.nika is one global namespace",
         "R42  a function's tail expression -> `return expr` (the style of tools/*.nika)",
@@ -108,6 +108,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R59  Option combinators with a field or method body: `o.map(|x| x.f)` -> `o?.f`, `.is_some_and(|x| x.p())` -> `(o?.p() ?? false)`, `.map_or(d, ..)` -> `(o?.. ?? d)`",
         "R60  `String::with_capacity(n)` -> `\"\"`",
         "R61  a call or a literal in a `format!` argument -> `let hole_N = ..` before the line, `{hole_N}` in the f-string",
+        "R63  what R59 leaves of `o.is_some_and(..)`: `o.is_some_and(|x| p)` -> `(o != null && p)` with `x` read as `(o ?? panic(..))`, `o.is_some_and(f)` -> `(o != null && f(o ?? panic(..)))`",
         "R62  a local closure with arguments -> `let f: fn(ref T) -> R sync = fn(a) { .. }`, its type from the `--facts` file (rust-analyzer) or from its own annotations",
     ]
 }
@@ -1769,7 +1770,69 @@ fn rs2nika_opt_comb_hit(mut ctx: Rs2nikaCtx, given: ref String) -> String {
     if out != given {
         rs2nika_hit(ctx, "R59")
     }
-    return out
+    let general: String = rs2nika_some_and(out)
+    if general != out {
+        rs2nika_hit(ctx, "R63")
+    }
+    return general
+}
+
+/// R63: what R59 leaves of `o.is_some_and(f)` on a plain path `o`:
+/// `o.is_some_and(|x| p)` -> `(o != null && p)` with `x` read as
+/// `(o ?? panic(..))`, and `o.is_some_and(f)` -> `(o != null && f(o ?? panic(..)))`.
+fn rs2nika_some_and(given: ref String) -> String {
+    let mut s: String = given.clone()
+    let mut from = 0
+    while true {
+        let c: Vec[scalar] = s.chars().collect()
+        let at = rs2nika_find_from(c, ".is_some_and(", from)
+        if at < 0 {
+            break
+        }
+        from = at + 1
+        let open = at + 12
+        let end = rs2nika_closing(c, open, '(', ')')
+        if end < 0 {
+            break
+        }
+        let start = rs2nika_recv_start(c, at)
+        let mut recv: String = rs2nika_text(c, start, at)
+        for tail in [".as_ref()", ".as_deref()", ".as_mut()"] {
+            if recv.ends_with(tail) {
+                recv = recv[0..<recv.len() - tail.len()].clone()
+            }
+        }
+        if recv == "" || recv.contains("(") || recv.contains("[") {
+            continue
+        }
+        let arg: String = rs2nika_text(c, open + 1, end).trim().clone()
+        let some: String = f"({recv} ?? panic(\"rs2nika: checked above\"))"
+        let mut cond: String = ""
+        if arg.starts_with("|") {
+            let after: String = arg[1..<arg.len()].clone()
+            let bar = after.find("|") ?? continue
+            let v: String = after[0..<bar].replace("&", "").trim().clone()
+            let mut body: String = after[bar + 1..<after.len()].trim().clone()
+            if body.starts_with("{") && body.ends_with("}") {
+                body = body[1..<body.len() - 1].trim().clone()
+            }
+            if !rs2nika_is_path(v) || v.contains(":") || body.contains(";") {
+                continue
+            }
+            let bare: String = some[1..<some.len() - 1].clone()
+            cond = rs2nika_replace_word(body.replace(f"*{v}", v).replace(f"({v})", f"(#{v}#)"), v, some).replace(f"(#{some}#)", f"({bare})")
+        } else if rs2nika_is_path(arg) {
+            let bare: String = some[1..<some.len() - 1].clone()
+            cond = f"{arg}({bare})"
+        } else {
+            continue
+        }
+        let pre: String = rs2nika_text(c, 0, start)
+        let post: String = rs2nika_text(c, end + 1, c.len())
+        s = f"{pre}({recv} != null && {cond}){post}"
+        from = 0
+    }
+    return s
 }
 
 fn rs2nika_opt_comb(given: ref String) -> String {
@@ -2067,7 +2130,7 @@ fn rs2nika_simple_slice(text: ref String) -> bool {
 
 /// The `TODO(rs2nika)` markers a Rust line asks for.
 fn rs2nika_todos(line: ref String) -> Vec[String] {
-    let comb: String = rs2nika_opt_comb(line)
+    let comb: String = rs2nika_some_and(rs2nika_opt_comb(line))
     let mut todo: Vec[String] = []
     let st: String = line.trim().clone()
     if line.contains(" && let ") || ((st.starts_with("if let ") || st.starts_with("} else if let ")) && st.ends_with("&&")) || st.starts_with("&& let ") {

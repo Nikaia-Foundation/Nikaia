@@ -522,6 +522,12 @@ touches = []
 views = ["given: borrowed"]
 signature = "(mut ctx: Rs2nikaCtx, given: ref String) -> String"
 
+[fn."rs2nika_some_and"]
+sync = "inferred"
+touches = []
+views = ["given: borrowed"]
+signature = "(given: ref String) -> String"
+
 [fn."rs2nika_some_matches"]
 sync = "inferred"
 touches = []
