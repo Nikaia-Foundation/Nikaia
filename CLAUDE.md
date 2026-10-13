@@ -67,6 +67,15 @@
   branch (`git fetch origin develop && git checkout -B work-<name> origin/develop`),
   rebases with `git pull --rebase origin develop` and pushes with
   `git push origin HEAD:develop`.
+* **Helper tools are written in Nikaia, not in Python or shell.** A new tool
+  (a migration aid, a checker, a generator) is a `tools/*.nika` behind a
+  `nikaia` subcommand or a program run with `nikaia run`; the existing Python
+  in `scripts/` moves to Nikaia when it is next reworked. This is a principle,
+  not a convenience: writing our own tools in the language shows where it has
+  to be sharpened. What blocks or chafes on the way (a missing `std` entry, a
+  syntax gap, a lowering defect) is a finding: fix it in the compiler, or file
+  it in `docs/lowering-defects.md` or an issue - do not route around it in
+  another language.
 
 ## Decision rounds with the owner
 
@@ -189,8 +198,8 @@ Rules from the sessions that moved the most; they save tokens, not just time.
   SVG by hand. Add each new `.nika` to the table in `scripts/self_hosting.py`.
   The share counts code lines, not comments.
 * **Tooling traps:** complex shell (computed `sed` ranges, `awk -v`, heredocs
-  chained with `&&`) is refused in a worktree: write a small Python script and
-  run it. Replace blocks bottom-up with exact-string asserts.
+  chained with `&&`) is refused in a worktree: write a small script in a file
+  and run it. Replace blocks bottom-up with exact-string asserts.
 * **Reproduce a lowering defect in seconds**, not with a cargo build:
   `target/release/nikaia lower f.nika` or `nikaia run f.nika`. A defect that
   shows only in `tools/*.nika` needs a throwaway probe function in a tools
