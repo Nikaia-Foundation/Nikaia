@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.883] — 2026-10-13
+
+**Fatal errors; process::exit throws process::Exit (ADR-345, #606)**
+- ADR-345: impl Fatal for T marks a fatal error; a catch takes one only in a match arm naming its type; process::exit throws process::Exit::Code; NK2607 and the ledger's exits retired (Part I 7.1, 8.2; Part III 13.5, 17.1, A.2, C.3).
+
 ## [0.0.882] — 2026-10-13
 
 **json: a missing member takes the default or null in a T?, json::Value put back (#604)**

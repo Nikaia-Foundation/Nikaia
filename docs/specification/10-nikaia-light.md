@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.882 (Draft)
+**Version:** 0.0.883 (Draft)
 **Date:** 2026-10-13
 
 ---
@@ -2609,6 +2609,38 @@ a file hands its failure on as an `io::IoError`. No `throw` in the program
 raised it, so it has no site, and `error.full()` says so; the failures that
 joined it travel with it through every caller that hands it on.
 
+**Fatal errors.** An error type is fatal where `impl Fatal for T` says so,
+beside its `impl Error for T`. `Fatal` has no methods.
+
+```nika
+enum Abort { Now(String) }
+impl Error for Abort { fn message(ref self) -> String { return "aborted" } }
+impl Fatal for Abort {}
+```
+
+A `catch` takes a fatal error only in a `match` arm over `error` whose pattern
+names a variant of its type. A handler without such an arm, an `else` arm, a
+bare name and `throw error` do not take it: it passes the `catch` as if no
+`catch` stood there, the handler does not run, and the error leaves the
+function, which declares `throws` (`NK2605` otherwise).
+
+```nika
+let n = run() catch { 0 }                    // an `Abort` passes on
+let m = run() catch {
+    match error {
+        Abort::Now(why) => {
+            eprintln(why)
+            1
+        }
+        else => 0                            // not for `Abort`
+    }
+}
+```
+
+`process::exit(code)` throws `process::Exit::Code(code)`, which is fatal
+(Part III 17.1). At the end of `main` it ends the program with `code`; every
+other error that leaves `main` ends it with `1` (Part III A.2).
+
 **Two sets differ.** The **variants of an error type** are closed: a `match`
 over them is exhaustive, and adding one is a breaking change. The **set of
 error types** arriving at a `catch` is open, and it grows when a callee gains a
@@ -2786,7 +2818,7 @@ or several.
 spawn fn { println("I am running in the background!") }
 ```
 
-A task does not end the program: code that may call `process::exit` is refused in `spawn`, in a branch of `overlap`, in a `par_iter` lambda and in a supervisor's child (`NK2607`, Part III A.2).
+A task does not end the program. An error that arrives in a task ends the task, `process::Exit` (7.1) included, and whoever joins the task receives it (Part III A.2).
 
 ### 8.3. Data Ownership in Tasks (Implicit Move)
 A background task may keep running after the function that started it has

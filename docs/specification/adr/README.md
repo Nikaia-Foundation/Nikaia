@@ -62,6 +62,7 @@ implementation.
 
 | ADR | Decides | Status | Built |
 | :--- | :--- | :--- | :--- |
+| [345](adr-345.md) | A type is fatal where `impl Fatal for T` says so; a `catch` takes a fatal error only in a `match` arm naming its type, and otherwise it passes on (`throws`, `NK2605`); `process::exit(code)` throws the fatal `process::Exit::Code(code)`, which ends `main` with the code on ADR-343 D1's ordered path; in a task it ends the task; `NK2607` and the ledger's `exits` are retired. | Accepted | no |
 | [344](adr-344.md) | Official packages live in `packages/<name>/` with their own version; `json::read[T]` reads into the caller's struct with a decoder generated at build time, matched by ADR-299 D16-D18 (`NK1250`); a JSON Schema is a build-time input `T` is checked against (`NK1251`); `json::Value` for text of unknown shape; `json::write[T]` writes. | Accepted | no |
 | [343](adr-343.md) | `process::exit(code)` ends `main` now with that code on the path a normal end of `main` takes: cleanups run, unjoined tasks run out under `cleanup-deadline`; a code outside `0..=255` panics, a constant one is refused; code that may end the program (a ledger column, derived over calls) is refused in a task (`NK2607`). | Accepted | partly: D1-D4 (#603), a callback's function type carries no `exits` yet |
 | [342](adr-342.md) | A list's `map` whose result goes straight into the next step runs element by element with it, with no list between; where a chain's lambdas touch nothing, the order they run in and which panic stops it are not fixed, an overflow may stop it after its last element, and a filter's conditions may be read without a branch; what can be slower than today's code is measured first. | Accepted | no |
@@ -260,6 +261,7 @@ either finds the other. Records replaced as a whole are not here: they are in
 
 | Changed | By | What holds now |
 | :--- | :--- | :--- |
+| [343](adr-343.md) D1-D3 | [345](adr-345.md) D3-D5 | `exit` throws the fatal `process::Exit`; no `exits` column, no `NK2607` |
 | [296](adr-296.md) D25 | [299](adr-299.md) D21 | the author may mark one entry `main`; the compiler still picks none |
 | [299](adr-299.md) D4, D8 | [338](adr-338.md) D2 | the database protocol is the official package `db` |
 | [017](adr-017.md), [289](adr-289.md) | [338](adr-338.md) D2 | `std::html`, `std::http1` and `std::db` are the official packages `html`, `http1` and `db` |
