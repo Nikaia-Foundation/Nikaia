@@ -1,0 +1,18 @@
+fn shown(byte: u8) -> String sync {
+    return match byte {
+        92 | 39 => f"b'\\{byte as char}'",
+        0x20..0x7e => f"b'{byte as char}'",
+        127 | 10 => "odd",
+        else => f"b'\\x{byte:02x}'",
+    }
+}
+
+fn peeled(mut value: ref Expr) -> ref Expr sync {
+    while true {
+        let block = match value { Expr::Block(block, _) => block, else => break }
+        let tail = tail_of(block) ?? break
+        value = tail
+    }
+    return value
+}
+

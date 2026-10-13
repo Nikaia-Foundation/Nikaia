@@ -102,6 +102,8 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R53  ranges: Rust's `a..b` stops before `b`, Nikaia's includes it: `a..b` -> `a..<b`, `a..=b` -> `a..b`",
         "R54  idioms Nikaia spells otherwise: `[\"A\", \"B\"].contains(&x)` -> `(x == \"A\" || x == \"B\")`, `x.rsplit(\"::\").next().unwrap_or(x)` -> `type_last_segment(x)`",
         "R55  `match` on an option with `Some(P)` arms -> `let given = e ?? <None arm>` then `match given { P => .. }`",
+        "R56  `while let P = e && let Some(t) = f {` -> `while true {` + `let t = f ?? break` / `match e { P => x, else => break }`",
+        "R57  a byte literal `b'x'` -> its number (`b'\\\\'` -> `92`)",
     ]
 }
 
@@ -1495,8 +1497,99 @@ fn rs2nika_same(a: ref String, b: ref String) -> bool {
 }
 
 /// The rewrites of an expression line.
+/// The number of a byte literal's body (`a`, `\\`, `\x7f`), or -1.
+fn rs2nika_byte_value(body: ref String) -> i64 {
+    let c: Vec[scalar] = body.chars().collect()
+    if c.len() == 1 && c[0] != '\\' {
+        return c[0] as i64
+    }
+    if c.len() == 2 && c[0] == '\\' {
+        let e = c[1]
+        if e == 'n' {
+            return 10
+        } else if e == 't' {
+            return 9
+        } else if e == 'r' {
+            return 13
+        } else if e == '0' {
+            return 0
+        } else if e == '\\' || e == '\'' || e == '"' {
+            return e as i64
+        }
+        return -1
+    }
+    if c.len() == 4 && c[0] == '\\' && c[1] == 'x' {
+        let mut n = 0
+        for d in [c[2], c[3]] {
+            let mut v = -1
+            if d >= '0' && d <= '9' {
+                v = (d as i64) - 48
+            } else if d >= 'a' && d <= 'f' {
+                v = (d as i64) - 87
+            } else if d >= 'A' && d <= 'F' {
+                v = (d as i64) - 55
+            }
+            if v < 0 {
+                return -1
+            }
+            n = n * 16 + v
+        }
+        return n
+    }
+    return -1
+}
+
+/// R57: a byte literal `b'x'` outside a string -> its number.
+fn rs2nika_bytes(mut ctx: Rs2nikaCtx, given: ref String) -> String {
+    let c: Vec[scalar] = given.chars().collect()
+    let mut out: String = ""
+    let mut quoted = false
+    let mut at = 0
+    while at < c.len() {
+        let ch = c[at]
+        if quoted {
+            out.push(ch)
+            if ch == '\\' && at + 1 < c.len() {
+                out.push(c[at + 1])
+                at = at + 2
+                continue
+            }
+            if ch == '"' {
+                quoted = false
+            }
+            at = at + 1
+            continue
+        }
+        if ch == '"' {
+            quoted = true
+        } else if ch == 'b' && at + 2 < c.len() && c[at + 1] == '\'' && (at == 0 || !rs2nika_word(c[at - 1])) {
+            let mut e = at + 2
+            if c[e] == '\\' {
+                e = e + 1
+            }
+            e = e + 1
+            while e < c.len() && c[e] != '\'' {
+                e = e + 1
+            }
+            if e < c.len() {
+                let n = rs2nika_byte_value(rs2nika_text(c, at + 2, e))
+                if n >= 0 {
+                    out.push_str(f"{n}")
+                    rs2nika_hit(ctx, "R57")
+                    at = e + 1
+                    continue
+                }
+                ctx.todo_extra.push("byte literal `b'x'` with an escape rs2nika does not know: its number")
+            }
+        }
+        out.push(ch)
+        at = at + 1
+    }
+    return out
+}
+
 fn rs2nika_expr(mut ctx: Rs2nikaCtx, line: ref String) -> String {
-    let mut s: String = line.clone()
+    let mut s: String = rs2nika_bytes(ctx, line)
     for p in ["crate::ast::", "ast::", "crate::types::", "crate::"] {
         if s.contains(p) {
             s = s.replace(p, "")
@@ -1784,9 +1877,6 @@ fn rs2nika_todos(line: ref String) -> Vec[String] {
     }
     if st.starts_with("static ") {
         todo.push("`static`: no globals in tools/*.nika; a field of the state struct")
-    }
-    if line.contains(" b'") || line.contains("(b'") {
-        todo.push("byte literal `b'x'`: its number")
     }
     let map_end = line.trim_end().ends_with(")") && line.contains(".map(|")
     if line.contains(".and_then(") || (line.contains(".map(|") && (line.contains("?") || line.contains("unwrap_or") || map_end) && !line.contains("iter()")) {
@@ -2204,9 +2294,75 @@ fn rs2nika_arm_body(mut new: Vec[String], out: ref Vec[String], k: i64, end: i64
 
 /// R22 and R23: `let Some(x) = e else { return y }` and `if let Some(x) = e {`;
 /// the lines it becomes, or none.
+/// The names a pattern binds: lowercase words not after `::`, not `_`.
+fn rs2nika_bound(pat: ref String) -> Vec[String] {
+    let c: Vec[scalar] = pat.chars().collect()
+    let mut out: Vec[String] = []
+    let mut at = 0
+    while at < c.len() {
+        if rs2nika_word(c[at]) {
+            let mut e = at
+            while e < c.len() && rs2nika_word(c[e]) {
+                e = e + 1
+            }
+            let w = rs2nika_text(c, at, e)
+            let after_path = at > 1 && c[at - 1] == ':'
+            let field = e < c.len() && c[e] == ':' && !(e + 1 < c.len() && c[e + 1] == ':')
+            let is_path = e + 1 < c.len() && c[e] == ':' && c[e + 1] == ':'
+            if rs2nika_lower(c[at]) && w != "_" && !after_path && !field && !is_path && !rs2nika_is_int(w) && w != "ref" && w != "mut" {
+                out.push(w.clone())
+            }
+            at = e
+        } else {
+            at = at + 1
+        }
+    }
+    return out
+}
+
+/// R56: `while let P = e && let Some(t) = f(..) {` -> `while true {` and one
+/// `let .. ?? break` or `match .. else => break` per condition.
+fn rs2nika_while_let(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String] {
+    let ind = rs2nika_indent(line)
+    let st: String = line.trim().clone()
+    let conds: String = st[6..<st.len() - 2].clone()
+    let mut out: Vec[String] = [f"{ind}while true {{"]
+    for part in conds.split(" && ") {
+        let p: String = part.trim().clone()
+        if !p.starts_with("let ") {
+            let code = rs2nika_expr(ctx, p)
+            out.push(f"{ind}    if !({code}) {{ break }}")
+            continue
+        }
+        let eq = p.find(" = ") ?? return []
+        let pat: String = p[4..<eq].trim().clone()
+        let value: String = rs2nika_expr(ctx, p[eq + 3..<p.len()].trim().clone())
+        if pat.starts_with("Some(") && pat.ends_with(")") && rs2nika_is_path(pat[5..<pat.len() - 1].clone()) {
+            let inner: String = pat[5..<pat.len() - 1].clone()
+            out.push(f"{ind}    let {inner} = {value} ?? break")
+            continue
+        }
+        let pat_n = rs2nika_expr(ctx, pat)
+        let names = rs2nika_bound(pat)
+        if names.len() == 0 {
+            out.push(f"{ind}    if !(match {value} {{ {pat_n} => true, else => false }}) {{ break }}")
+        } else if names.len() == 1 {
+            out.push(f"{ind}    let {names[0]} = match {value} {{ {pat_n} => {names[0]}, else => break }}")
+        } else {
+            let tuple = rs2nika_join(names, ", ")
+            out.push(f"{ind}    let ({tuple}) = match {value} {{ {pat_n} => ({tuple}), else => break }}")
+        }
+    }
+    rs2nika_hit(ctx, "R56")
+    return out
+}
+
 fn rs2nika_if_let(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String] {
     let ind = rs2nika_indent(line)
     let st: String = line.trim().clone()
+    if st.starts_with("while let ") && st.ends_with(" {") {
+        return rs2nika_while_let(ctx, line)
+    }
     if st.starts_with("let Some(") && st.contains(" else {") {
         let close = st.find(")") ?? return []
         let name: String = st[9..<close].clone()
