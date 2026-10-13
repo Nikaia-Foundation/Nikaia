@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.877 (Draft)
+**Version:** 0.0.878 (Draft)
 **Date:** 2026-10-13
 
 ---
@@ -2785,6 +2785,8 @@ or several.
 ```nika
 spawn fn { println("I am running in the background!") }
 ```
+
+A task does not end the program: code that may call `process::exit` is refused in `spawn`, in a branch of `overlap`, in a `par_iter` lambda and in a supervisor's child (`NK2607`, Part III A.2).
 
 ### 8.3. Data Ownership in Tasks (Implicit Move)
 A background task may keep running after the function that started it has

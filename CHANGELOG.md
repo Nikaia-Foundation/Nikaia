@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.878] — 2026-10-13
+
+**process::exit(code) decided (ADR-343)**
+- ADR-343: `process::exit(code)` ends `main` with that code on the path a normal end of `main` takes; the ledger's `exits` column; `NK2607` refuses code that may end the program in a task (Part III 13.5, 17.1, A.2, C.3; Part I 8.2).
+
 ## [0.0.877] — 2026-10-13
 
 **check: `None` is answered with `null` (#125)**
