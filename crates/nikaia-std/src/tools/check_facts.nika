@@ -300,3 +300,67 @@ impl CheckFacts {
         }
     }
 }
+
+/// How the compiler holds one `assert`, as `--asserts` says it (ADR-269 D7).
+fn check_claim_held(held: ref ClaimHeld?) -> String {
+    let given = held ?? return "refused: a claim about data from outside the program".clone()
+    return match given {
+        ClaimHeld::Proved => "proved".clone(),
+        ClaimHeld::Precondition(f, n) => {
+            if n == 0 {
+                f"precondition of `{f}`: proved at every call the compiler sees; any other reaches the entry that checks it"
+            } else if n == 1 {
+                f"precondition of `{f}`: one call checks it when it runs; any other call proves it or reaches the entry that checks it"
+            } else {
+                f"precondition of `{f}`: {n} calls check it when they run; any other call proves it or reaches the entry that checks it"
+            }
+        }
+        ClaimHeld::AtRunTime(why) => f"checked at run time: {why}",
+        ClaimHeld::ByTheTest => "checked when the test runs".clone(),
+        ClaimHeld::Refused => "refused: a claim about data from outside the program".clone(),
+    }
+}
+
+/// **`--asserts`** (ADR-269 D7): every `assert` of one file, by line, how the
+/// compiler holds it, and how many of each. The claims are keyed by their
+/// start, so they come in the order of their lines.
+pub fn check_claims_report(claims: ref collections::BTreeMap[(i64, i64), FactClaim], source: ref String, path: ref String) -> String {
+    let mut proved = 0
+    let mut preconditions = 0
+    let mut at_run_time = 0
+    let mut by_the_test = 0
+    let mut refused = 0
+    let mut rows: String = ""
+    let mut line = 1
+    let mut at = 0
+    for (key, claim) in claims {
+        let mut start = key.0
+        if start > source.len() {
+            start = source.len()
+        }
+        if start > at {
+            for c in source[at..<start].chars() {
+                if c == '\n' {
+                    line = line + 1
+                }
+            }
+            at = start
+        }
+        let how = check_claim_held(claim.held)
+        if how == "proved" {
+            proved = proved + 1
+        } else if how.starts_with("precondition") {
+            preconditions = preconditions + 1
+        } else if how.starts_with("checked at run time") {
+            at_run_time = at_run_time + 1
+        } else if how.starts_with("checked when") {
+            by_the_test = by_the_test + 1
+        } else if claim.held != null {
+            refused = refused + 1
+        }
+        rows.push_str(f"  {path}:{line}  {claim.written}  {how}\n")
+    }
+    let mut out: String = f"asserts in {path}: {claims.len()} - proved {proved}, preconditions {preconditions}, checked at run time {at_run_time}, checked by a test {by_the_test}, refused {refused}\n"
+    out.push_str(rows)
+    return out
+}

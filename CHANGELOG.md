@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.880] — 2026-10-13
+
+**check: payload_of, claims_report, byte_literal, peeled and an_or_a in Nikaia (#125, #558)**
+- payload_of reads one file through check_items::check_payload_in; claims_report formats in check_facts::check_claims_report; byte_literal is check_texts::check_byte_literal; peeled is check_types::check_peeled; an_or_a calls render::an_or_a.
+
 ## [0.0.879] — 2026-10-13
 
 **json: an official package in packages/json, read[T]/write[T] by ADR-299's rules, a build-time schema, json::Value (ADR-344, #604)**

@@ -26,6 +26,32 @@ pub fn literal_is_a_byte(written: ref String) -> bool sync {
     return text.chars().count() == 1 && text.len() == 1
 }
 
+/// A `'…'` that is a byte, as the language below writes it: `b'x'`, with `\`
+/// and `'` escaped and anything not printable as `\xNN`.
+pub fn check_byte_literal(written: ref String) -> String sync {
+    let text = decoded(written) fn(n) { ascii_scalar(n) } ?? ""
+    let mut byte: i64 = -1
+    for b in text.bytes() {
+        if byte < 0 {
+            byte = b as i64
+        }
+    }
+    if byte < 0 {
+        byte = 0
+    }
+    let c = (byte as u8) as scalar
+    if byte == 92 || byte == 39 {
+        return f"b'\\{c}'"
+    }
+    if byte >= 32 && byte <= 126 {
+        return f"b'{c}'"
+    }
+    let digits = "0123456789abcdef"
+    let high = byte / 16
+    let low = byte % 16
+    return f"b'\\x{digits[high..<high + 1]}{digits[low..<low + 1]}'"
+}
+
 /// The last expression of a block, as a list of none or one.
 fn block_tail(block: ref Block) -> Vec[ref Expr] sync {
     if block.stmts.len() == 0 {

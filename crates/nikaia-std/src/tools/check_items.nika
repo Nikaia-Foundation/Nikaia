@@ -385,6 +385,40 @@ fn item_plain_name(subject: ref Ty) -> String? {
     }
 }
 
+/// What one variant declares it carries, by position, where this file
+/// declares the enum; `null` where it does not.
+pub fn check_payload_in(view: ref ParsedView, ty: ref String, variant: ref String) -> Vec[Ty]? {
+    for item in view.items {
+        match item.node {
+            Item::Enum { name, variants, .. } => {
+                if view.text(name) == ty {
+                    for held in variants {
+                        if view.text(held.name) == variant {
+                            let mut tys: Vec[Ty] = []
+                            match held.fields {
+                                VariantFields::Unit => {},
+                                VariantFields::Tuple(types) => {
+                                    for t in types {
+                                        tys.push(written_ty(view.words, view.aliases, t))
+                                    }
+                                },
+                                VariantFields::Named(fields) => {
+                                    for f in fields {
+                                        tys.push(written_ty(view.words, view.aliases, f.ty))
+                                    }
+                                },
+                            }
+                            return tys
+                        }
+                    }
+                }
+            }
+            else => {}
+        }
+    }
+    return null
+}
+
 /// The text of a placeholder for the variants of an enum: the one that holds
 /// the fewest parts, or nothing.
 fn item_placeholder_of_enum(view: ref ParsedView, name: ref String, variants: ref Vec[EnumVariant]) -> String? {

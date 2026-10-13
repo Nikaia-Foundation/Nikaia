@@ -430,3 +430,14 @@ pub fn tail_value_of(block: ref Block) -> ref Expr? {
         else => null,
     }
 }
+
+/// A block's value, through every block that only hands on its tail.
+pub fn check_peeled(value: ref Expr) -> ref Expr {
+    return match value {
+        Expr::Block(block, _) => {
+            let tail = tail_value_of(block) ?? return value
+            check_peeled(tail)
+        }
+        else => value,
+    }
+}

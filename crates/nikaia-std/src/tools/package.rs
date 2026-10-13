@@ -12306,6 +12306,45 @@ impl CheckFacts {
     pub fn empty() -> CheckFacts { CheckFacts { held_across_a_pause: collections::BTreeSet::new(), comptime_values: collections::BTreeMap::new(), dsl_values: collections::BTreeMap::new(), with_types: collections::BTreeMap::new(), unrolled: collections::BTreeMap::new(), walks_fields: collections::BTreeMap::new(), unrolled_calls: collections::BTreeMap::new(), fallible_loops: collections::BTreeSet::new(), pausing_walks: collections::BTreeSet::new(), pausing_loops: collections::BTreeSet::new(), owned_loops: collections::BTreeSet::new(), copied_loop_bindings: collections::BTreeSet::new(), copied_view_bindings: collections::BTreeSet::new(), unsigned_literals: collections::BTreeMap::new(), number_lets: collections::BTreeMap::new(), changed_elements: collections::BTreeSet::new(), text_finds: collections::BTreeSet::new(), standard_compares: collections::BTreeMap::new(), count_args: collections::BTreeSet::new(), path_methods: collections::BTreeMap::new(), map_keys: collections::BTreeMap::new(), slice_indices: collections::BTreeSet::new(), list_indices: collections::BTreeSet::new(), copied_tuple_parts: collections::BTreeSet::new(), std_lengths: collections::BTreeSet::new(), sized_lengths: collections::BTreeSet::new(), char_codes: collections::BTreeSet::new(), arithmetic: collections::BTreeMap::new(), negations: collections::BTreeMap::new(), copied_slots: collections::BTreeSet::new(), owned_copies: collections::BTreeSet::new(), text_as_is: collections::BTreeSet::new(), lent_coalesces: collections::BTreeMap::new(), plain_reaches: collections::BTreeSet::new(), copied_jump_reads: collections::BTreeSet::new(), view_coalesces: collections::BTreeSet::new(), lent_map_fallbacks: collections::BTreeSet::new(), optional_fallbacks: collections::BTreeSet::new(), flat_reads: collections::BTreeSet::new(), copied_reads: collections::BTreeSet::new(), text_in_lists: collections::BTreeSet::new(), counted: collections::BTreeSet::new(), lent_bindings: collections::BTreeMap::new(), taking_arms: collections::BTreeMap::new(), views_handed_on: collections::BTreeSet::new(), comptime_uses: collections::BTreeMap::new(), lent_scrutinees: collections::BTreeSet::new(), guards_inside_boxes: collections::BTreeMap::new(), collected_into: collections::BTreeSet::new(), copied_walks: collections::BTreeSet::new(), filter_patterns: collections::BTreeSet::new(), kept_lambdas: collections::BTreeMap::new(), kept_hulls: collections::BTreeMap::new(), kept_owned: collections::BTreeMap::new(), field_calls: collections::BTreeMap::new(), kept_calls: collections::BTreeMap::new(), kept_args: collections::BTreeSet::new(), kept_functions: collections::BTreeMap::new(), fallible_methods: collections::BTreeSet::new(), future_lambdas: collections::BTreeSet::new(), run_lambdas: collections::BTreeSet::new(), sync_functions_run_async: collections::BTreeMap::new(), pausing_lambdas: collections::BTreeMap::new(), paused_scopes: collections::BTreeSet::new(), witnessed_sets: collections::BTreeSet::new(), pausing_methods: collections::BTreeSet::new(), nullable_sites: collections::BTreeMap::new(), concatenations: collections::BTreeSet::new(), path_comparisons: collections::BTreeSet::new(), mixed_comparisons: collections::BTreeMap::new(), path_holes: collections::BTreeMap::new(), flattened_reaches: collections::BTreeSet::new(), copied_reaches: collections::BTreeSet::new(), viewed_reaches: collections::BTreeMap::new(), lent_reaches: collections::BTreeSet::new(), held_reaches: collections::BTreeSet::new(), nullable_fields: collections::BTreeMap::new(), nullable_args: collections::BTreeMap::new(), narrowing_casts: collections::BTreeMap::new(), task_handles: collections::BTreeSet::new(), method_options: collections::BTreeMap::new(), lent_args: collections::BTreeSet::new(), lookup_keys: collections::BTreeSet::new(), boxed_members: collections::BTreeMap::new(), boxed_reads: collections::BTreeSet::new(), copied_bindings: collections::BTreeSet::new(), some_tails: collections::BTreeSet::new(), mixed_leaves: collections::BTreeMap::new(), mixed_choices: collections::BTreeSet::new(), lent_options: collections::BTreeSet::new(), wrapped: collections::BTreeMap::new(), compared_views: collections::BTreeSet::new(), compared_numbers: collections::BTreeSet::new(), claims: collections::BTreeMap::new(), entries: collections::BTreeMap::new(), reaches: collections::BTreeMap::new(), published: collections::BTreeMap::new(), mut_args: collections::BTreeSet::new(), copied_args: collections::BTreeSet::new(), settle_fns: collections::BTreeMap::new(), settle_lets: collections::BTreeMap::new(), lent_lets: collections::BTreeSet::new(), lent_returns: collections::BTreeSet::new(), compares: collections::BTreeSet::new(), compares_totally: collections::BTreeSet::new(), copies: collections::BTreeSet::new(), viewed_numbers: collections::BTreeSet::new(), array_literals: collections::BTreeSet::new(), byte_literals: collections::BTreeSet::new(), owned_texts: collections::BTreeSet::new(), lent_list_reads: collections::BTreeSet::new(), view_fallbacks: collections::BTreeSet::new() } }
 }
 
+fn check_claim_held(held: Option<&ClaimHeld>) -> String {
+    let given = match held { Some(__nikaia_value) => __nikaia_value, None => return "refused: a claim about data from outside the program".to_owned() };
+    match given {
+        ClaimHeld::Proved => "proved".to_owned(),
+        ClaimHeld::Precondition(f, n) => {
+            let n = *n;
+            if n == 0 { format!("precondition of `{}`: proved at every call the compiler sees; any other reaches the entry that checks it", f) } else if n == 1 { format!("precondition of `{}`: one call checks it when it runs; any other call proves it or reaches the entry that checks it", f) } else { format!("precondition of `{}`: {} calls check it when they run; any other call proves it or reaches the entry that checks it", f, n) }
+        },
+        ClaimHeld::AtRunTime(why) => format!("checked at run time: {}", why),
+        ClaimHeld::ByTheTest => "checked when the test runs".to_owned(),
+        ClaimHeld::Refused => "refused: a claim about data from outside the program".to_owned(),
+    }
+}
+
+pub fn check_claims_report(claims: &collections::BTreeMap<(i64, i64), FactClaim>, source: &str, path: &str) -> String {
+    let mut proved = 0;
+    let mut preconditions = 0;
+    let mut at_run_time = 0;
+    let mut by_the_test = 0;
+    let mut refused = 0;
+    let mut rows: String = String::from("");
+    let mut line = 1;
+    let mut at: i64 = 0;
+    for (key, claim) in claims.iter() {
+        let mut start = key.0;
+        if start > source.len() as i64 { start = source.len() as i64; }
+        if start > at {
+            for c in nikaia_std::index::get(&source, nikaia_std::index::at(at..start)).chars() { if c == '\n' { line = line + 1; } }
+            at = start;
+        }
+        let how = check_claim_held((claim.held).as_ref());
+        if how == "proved" { proved = proved + 1; } else if how.starts_with("precondition") { preconditions = preconditions + 1; } else if how.starts_with("checked at run time") { at_run_time = at_run_time + 1; } else if how.starts_with("checked when") { by_the_test = by_the_test + 1; } else if claim.held.is_some() { refused = refused + 1; }
+        rows.push_str(&format!("  {}:{}  {}  {}\n", path, line, claim.written, how));
+    }
+    let mut out: String = format!("asserts in {}: {} - proved {}, preconditions {}, checked at run time {}, checked by a test {}, refused {}\n", path, claims.len() as i64, proved, preconditions, at_run_time, by_the_test, refused);
+    out.push_str(&rows);
+    out
+}
+
 
 // --- check_fallible.nika ---
 
@@ -13803,6 +13842,31 @@ fn item_plain_name(subject: &Ty) -> Option<String> {
         Ty::Named { name, args, view } => { let view = *view; if view || !args.is_empty() { None } else { Some(name.to_owned()) } },
         _ => None,
     }
+}
+
+pub fn check_payload_in(view: &ParsedView<'_>, ty: &str, variant: &str) -> Option<Vec<Ty>> {
+    for item in view.items.iter() {
+        match &item.node {
+            Item::Enum { name, variants, .. } => {
+                let name = *name;
+                if view.text(name) == ty {
+                    for held in variants.iter() {
+                        if view.text(held.name) == variant {
+                            let mut tys: Vec<Ty> = vec![];
+                            match &held.fields {
+                                VariantFields::Unit => { },
+                                VariantFields::Tuple(types) => { for t in types.iter() { tys.push(written_ty(view.words, view.aliases, t)); } },
+                                VariantFields::Named(fields) => { for f in fields.iter() { tys.push(written_ty(view.words, view.aliases, &f.ty)); } },
+                            }
+                            return Some(tys);
+                        }
+                    }
+                }
+            },
+            _ => { },
+        }
+    }
+    None
 }
 
 fn item_placeholder_of_enum(view: &ParsedView<'_>, name: &str, variants: &[EnumVariant]) -> Option<String> {
@@ -18867,6 +18931,22 @@ pub fn literal_is_a_byte(written: &str) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub fn check_byte_literal(written: &str) -> String {
+    let text = nikaia_std::index::or(decoded(written, &|n| { ascii_scalar(n) }), || "".into());
+    let mut byte: i64 = -1;
+    for b in text.bytes() { if byte < 0 { byte = b as i64; } }
+    if byte < 0 { byte = 0; }
+    let c = (u8::try_from(byte).unwrap_or_else(|_| panic!("the value does not fit in an `u8`"))) as scalar;
+    if byte == 92 || byte == 39 { return format!("b'\\{}'", c); }
+    if byte >= 32 && byte <= 126 { return format!("b'{}'", c); }
+    let digits = "0123456789abcdef";
+    let high = byte / 16;
+    let low = byte % 16;
+    format!("b'\\x{}{}'", nikaia_std::index::get(&digits, nikaia_std::index::at(high..high + 1)), nikaia_std::index::get(&digits, nikaia_std::index::at(low..low + 1)))
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 fn block_tail(block: &Block) -> Vec<&Expr> {
     if block.stmts.is_empty() { return vec![]; }
     match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1)).node {
@@ -19426,6 +19506,16 @@ pub fn tail_value_of(block: &Block) -> Option<&Expr> {
     match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1)).node {
         Stmt::Expr(value) => Some(value),
         _ => None,
+    }
+}
+
+pub fn check_peeled(value: &Expr) -> &Expr {
+    match value {
+        Expr::Block(block, _) => {
+            let tail = match tail_value_of(block) { Some(__nikaia_value) => __nikaia_value, None => return value };
+            check_peeled(tail)
+        },
+        _ => value,
     }
 }
 
@@ -49962,7 +50052,7 @@ pub mod check_exprs {
 pub mod check_extern {}
 pub mod check_facts {
     #[allow(unused_imports)]
-    pub use super::{FactWrap, FactKeyForm, FactViewed, FactNarrowing, FactPausing, FactClaim, CheckFacts};
+    pub use super::{FactWrap, FactKeyForm, FactViewed, FactNarrowing, FactPausing, FactClaim, CheckFacts, check_claims_report};
 }
 pub mod check_fallible {
     #[allow(unused_imports)]
@@ -49981,7 +50071,7 @@ pub mod check_host {
 pub mod check_imports {}
 pub mod check_items {
     #[allow(unused_imports)]
-    pub use super::{declares_a_type, declared_with_no_arithmetic, either_param, either_field, imports_a_package, imports_exactly, an_extern_struct_named, a_c_value, implements_error, fields_by_base, ItemGeneric};
+    pub use super::{declares_a_type, declared_with_no_arithmetic, either_param, either_field, imports_a_package, imports_exactly, an_extern_struct_named, a_c_value, implements_error, fields_by_base, check_payload_in, ItemGeneric};
 }
 pub mod check_kinds {
     #[allow(unused_imports)]
@@ -50067,11 +50157,11 @@ pub mod check_takes {
 pub mod check_task_pauses {}
 pub mod check_texts {
     #[allow(unused_imports)]
-    pub use super::{literal_is_a_byte, ends_in_text, ends_in_null};
+    pub use super::{literal_is_a_byte, check_byte_literal, ends_in_text, ends_in_null};
 }
 pub mod check_types {
     #[allow(unused_imports)]
-    pub use super::{a_number_name, type_last_segment, view_of_type, viewed_from_type, unviewed_type, copies_as_a_view, value_of_a_copy, is_a_view_of_a_string, a_copy_by_value, moves_away, copies_plainly, holds_an_array, is_a_list_type, is_a_collection_type, is_text_type, is_a_hull, locked_content_of, is_a_handle, locked_content, becomes_shared, way_out_of_a_mismatch, element_walked, elements_walked, wholly_known, a_map_type, is_a_literal_other_than, a_copied_part, tail_value_of};
+    pub use super::{a_number_name, type_last_segment, view_of_type, viewed_from_type, unviewed_type, copies_as_a_view, value_of_a_copy, is_a_view_of_a_string, a_copy_by_value, moves_away, copies_plainly, holds_an_array, is_a_list_type, is_a_collection_type, is_text_type, is_a_hull, locked_content_of, is_a_handle, locked_content, becomes_shared, way_out_of_a_mismatch, element_walked, elements_walked, wholly_known, a_map_type, is_a_literal_other_than, a_copied_part, tail_value_of, check_peeled};
 }
 pub mod check_values {
     #[allow(unused_imports)]

@@ -104,25 +104,7 @@ fn payload_of(
     std::iter::once(parsed_here)
         .chain(beside.iter().copied())
         .find_map(|parsed| {
-            parsed
-                .program
-                .items
-                .iter()
-                .find_map(|item| match &item.node {
-                    Item::Enum { name, variants, .. } if parsed.text(*name) == ty => variants
-                        .iter()
-                        .find(|held| parsed.text(held.name) == variant)
-                        .map(|held| match &held.fields {
-                            ast::VariantFields::Unit => Vec::new(),
-                            ast::VariantFields::Tuple(types) => {
-                                types.iter().map(|t| Ty::from_ast(parsed, t)).collect()
-                            }
-                            ast::VariantFields::Named(fields) => {
-                                fields.iter().map(|f| Ty::from_ast(parsed, &f.ty)).collect()
-                            }
-                        }),
-                    _ => None,
-                })
+            nikaia_std::tools::check_items::check_payload_in(&parsed_view_of(parsed), ty, variant)
         })
 }
 
@@ -10597,7 +10579,7 @@ impl<'a> Checker<'a> {
             finding.notes.push(format!(
                 "{} `{}` goes into {} `{into}` on its own only where the compiler can show it \
                  is not negative.",
-                match an_or_a(&slot.found.text()) {
+                match an_or_a(&slot.found.text()).as_str() {
                     "an" => "An",
                     _ => "A",
                 },
@@ -13877,14 +13859,7 @@ pub fn a_byte(written: &str) -> bool {
 
 /// The byte a `'…'` that [`a_byte`] took is, as the language below writes one.
 pub fn byte_literal(written: &str) -> String {
-    let byte = crate::build_time::decoded(written)
-        .and_then(|text| text.bytes().next())
-        .unwrap_or(0);
-    match byte {
-        b'\\' | b'\'' => format!("b'\\{}'", byte as char),
-        0x20..=0x7e => format!("b'{}'", byte as char),
-        _ => format!("b'\\x{byte:02x}'"),
-    }
+    nikaia_std::tools::check_texts::check_byte_literal(written)
 }
 
 /// **What a table about an expression is keyed on**: the id the parser gave the
@@ -13896,11 +13871,8 @@ pub fn value_node(expr: &Expr) -> i64 {
 
 /// **`an i32` and `a u64`**: the article as the name is said (`NK1116`'s rule).
 /// A `u` is said *you*, so it takes `a`; the other vowels take `an`.
-pub fn an_or_a(ty: &str) -> &'static str {
-    match ty.starts_with(['i', 'a', 'e', 'o', 'I', 'A', 'E', 'O']) {
-        true => "an",
-        false => "a",
-    }
+pub fn an_or_a(ty: &str) -> String {
+    nikaia_std::tools::render::an_or_a(ty)
 }
 
 /// **A handler's `error` where several error types arrive** (ADR-280 D30):
@@ -13916,13 +13888,8 @@ fn members_named(members: &[Ty]) -> String {
 
 /// The value a block ends in: its last statement, where that is an expression.
 /// The value a braced arm ends in: `{ { x } }` is `x`.
-fn peeled(mut value: &Expr) -> &Expr {
-    while let Expr::Block(block, _) = value
-        && let Some(tail) = tail_of(block)
-    {
-        value = tail;
-    }
-    value
+fn peeled(value: &Expr) -> &Expr {
+    nikaia_std::tools::check_types::check_peeled(value)
 }
 
 /// Whether a type is known all the way down.
@@ -13992,59 +13959,7 @@ pub fn claims_report(
     library: &Ledger,
 ) -> String {
     let checked = check(parsed, own, library);
-    let mut rows: Vec<(usize, &Claim)> = checked
-        .facts
-        .claims
-        .iter()
-        .map(|((start, _), claim)| {
-            let line = source[..(*start as usize).min(source.len())]
-                .matches('\n')
-                .count()
-                + 1;
-            (line, claim)
-        })
-        .collect();
-    rows.sort_by_key(|(line, _)| *line);
-    use crate::prove::Held;
-    let count = |want: fn(&Held) -> bool| {
-        rows.iter()
-            .filter(|(_, c)| c.held.as_ref().is_some_and(want))
-            .count()
-    };
-    let mut out = format!(
-        "asserts in {path}: {} - proved {}, preconditions {}, checked at run time {}, \
-         checked by a test {}, refused {}\n",
-        rows.len(),
-        count(|h| matches!(h, Held::Proved)),
-        count(|h| matches!(h, Held::Precondition(..))),
-        count(|h| matches!(h, Held::AtRunTime(_))),
-        count(|h| matches!(h, Held::ByTheTest)),
-        count(|h| matches!(h, Held::Refused)),
-    );
-    for (line, claim) in rows {
-        let how = match &claim.held {
-            Some(Held::Proved) => "proved".to_string(),
-            Some(Held::Precondition(f, 0)) => format!(
-                "precondition of `{f}`: proved at every call the compiler sees; any other \
-                 reaches the entry that checks it"
-            ),
-            Some(Held::Precondition(f, 1)) => format!(
-                "precondition of `{f}`: one call checks it when it runs; any other call \
-                 proves it or reaches the entry that checks it"
-            ),
-            Some(Held::Precondition(f, n)) => format!(
-                "precondition of `{f}`: {n} calls check it when they run; any other call \
-                 proves it or reaches the entry that checks it"
-            ),
-            Some(Held::AtRunTime(why)) => format!("checked at run time: {why}"),
-            Some(Held::ByTheTest) => "checked when the test runs".to_string(),
-            Some(Held::Refused) | None => {
-                "refused: a claim about data from outside the program".to_string()
-            }
-        };
-        out.push_str(&format!("  {path}:{line}  {}  {how}\n", claim.written));
-    }
-    out
+    nikaia_std::tools::check_facts::check_claims_report(&checked.facts.claims, source, path)
 }
 
 /// Whether an expression is a literal of a kind other than `kind` (`"bool"`
