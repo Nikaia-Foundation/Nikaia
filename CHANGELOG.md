@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.884] — 2026-10-13
+
+**json: a member the type has no field for is skipped (ADR-344 D8, #604)**
+- `json::read[T]` skips an object member `T` has no field for instead of refusing it (ADR-344 D8, Part III 17.3); a deliberate departure from ADR-299 D17, since JSON from outside grows by protocol extensions.
+
 ## [0.0.883] — 2026-10-13
 
 **Fatal errors; process::exit throws process::Exit (ADR-345, #606)**
