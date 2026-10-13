@@ -2,3 +2,4 @@
 value_node node_key
 contracts::base type_last_segment
 contracts::TEXT "String"
+tail_of tail_value_of

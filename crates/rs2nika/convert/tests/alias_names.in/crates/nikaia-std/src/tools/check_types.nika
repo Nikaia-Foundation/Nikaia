@@ -1,0 +1,3 @@
+pub fn tail_value_of(block: ref Block) -> ref Expr? {
+    return null
+}

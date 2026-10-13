@@ -2836,6 +2836,18 @@ fn rs2nika_names(mut ctx: Rs2nikaCtx, given: ref String) -> String {
 fn rs2nika_aliases(mut ctx: Rs2nikaCtx, given: ref String) -> String {
     let mut s: String = given.clone()
     let mut k = 0
+    // a `use m::Alias` in the body names a type Nikaia spells otherwise
+    let mut kept: Vec[String] = []
+    for l in given.split("\n") {
+        let st: String = l.trim().clone()
+        let cut = st.rfind("::") ?? -1
+        if st.starts_with("use ") && cut > 0 && !st.contains("{") && ctx.alias_from.contains(st[cut + 2..<st.len()].clone()) {
+            rs2nika_hit(ctx, "R45")
+            continue
+        }
+        kept.push(l.clone())
+    }
+    s = rs2nika_join(kept, "\n")
     while k < ctx.alias_from.len() {
         let y: String = ctx.alias_from[k].clone()
         let x: String = ctx.alias_to[k].clone()
@@ -3074,6 +3086,33 @@ fn rs2nika_declared(line: ref String) -> String {
 /// R45-R47: what the repository already has in Nikaia, read from the tree:
 /// the functions of tools/*.nika (with their doc comments, for `rs2nika_twins`),
 /// the Rust aliases of moved types and the table rs2nika.names.
+/// A Rust function whose whole body calls `nikaia_std::tools::m::g(..)` is
+/// a thin adapter: its name is an equivalent of `g`, as in rs2nika.names.
+fn rs2nika_thin_adapters(mut ctx: Rs2nikaCtx, text: ref String) {
+    let lines: Vec[String] = text.lines().map(fn(l) { l.trim().clone() }).collect()
+    let mut i = 0
+    while i + 2 < lines.len() {
+        let l: String = lines[i].clone()
+        let pre = "nikaia_std::tools::"
+        if (l.starts_with("fn ") || l.starts_with("pub fn ") || l.starts_with("pub(crate) fn ")) && l.ends_with("{") && lines[i + 1].starts_with(pre) && lines[i + 2] == "}" {
+            let name = rs2nika_fn_name(l)
+            let call: String = lines[i + 1][pre.len()..<lines[i + 1].len()].clone()
+            let open = call.find("(") ?? 0
+            let path: String = call[0..<open].clone()
+            let cut = path.rfind("::") ?? -1
+            if open > 0 && cut >= 0 {
+                let g: String = path[cut + 2..<path.len()].clone()
+                if name != "" && g != name {
+                    // a call only: a local of the same name stays
+                    ctx.equiv_from.push(f"{name}(")
+                    ctx.equiv_to.push(f"{g}(")
+                }
+            }
+        }
+        i = i + 1
+    }
+}
+
 fn rs2nika_load(mut ctx: Rs2nikaCtx, repo: ref String) {
     let tools: String = f"{repo}/crates/nikaia-std/src/tools"
     let files = fs::walk(tools, fs::Root::Anywhere) catch {
@@ -3119,6 +3158,7 @@ fn rs2nika_load(mut ctx: Rs2nikaCtx, repo: ref String) {
         let text = fs::read_to_string(f"{src}/{name}", fs::Root::Anywhere) catch {
             continue
         }
+        rs2nika_thin_adapters(ctx, text)
         let mut rest: String = text.clone()
         while true {
             let at = rest.find("use nikaia_std::tools::") ?? -1
@@ -3139,7 +3179,7 @@ fn rs2nika_load(mut ctx: Rs2nikaCtx, repo: ref String) {
             while i + 1 < toks.len() {
                 if toks[i] == "as" {
                     let a: String = toks[i - 1].clone()
-                    let cut = rs2nika_rfind(a, "::")
+                    let cut = a.rfind("::") ?? -1
                     let mut short: String = a.clone()
                     if cut >= 0 {
                         short = a[cut + 2..<a.len()].clone()

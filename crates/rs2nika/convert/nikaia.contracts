@@ -532,6 +532,12 @@ touches = []
 views = ["code: borrowed", "what: borrowed", "next: borrowed"]
 signature = "(code: ref String, what: ref String, next: ref String) -> bool"
 
+[fn."rs2nika_thin_adapters"]
+sync = "inferred"
+touches = []
+views = ["text: borrowed"]
+signature = "(mut ctx: Rs2nikaCtx, text: ref String)"
+
 [fn."rs2nika_tidy"]
 sync = "inferred"
 touches = []

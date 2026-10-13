@@ -1,0 +1,4 @@
+fn f(h: ref ClaimHeld, b: ref Block) -> bool sync {
+    return tail_value_of(b) != null && (match h { ClaimHeld::Proved => true, else => false })
+}
+
