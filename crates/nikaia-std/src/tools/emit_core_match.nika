@@ -283,6 +283,15 @@ impl EmitState {
         // own arms are statements too: an `if` without an `else` that ends one of
         // them is a statement and not the arm's value.
         let body_flow = if statements && emit_match_is_match(body) { inside with { arms_are_statements: true } } else { inside }
+        // **An arm of a statement `match` is a statement** (lowering-defects
+        // D34): `k => seen.insert(k, v)` hands back an `Option`, which would make
+        // the arms disagree with `else => {}`, so its value is dropped with `;`.
+        if plain && statements {
+            out.push("{ ")
+            host.expr(walk, out, body, depth, body_flow, scope)
+            out.push("; }")
+            return
+        }
         if plain {
             host.expr(walk, out, body, depth, body_flow, scope)
             return
@@ -315,6 +324,9 @@ impl EmitState {
             out.push(f"let {name} = *{name}; ")
         }
         host.expr(walk, out, body, depth, body_flow, scope)
+        if statements {
+            out.push(";")
+        }
         out.push(" }")
     }
 

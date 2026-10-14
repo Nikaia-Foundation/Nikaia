@@ -322,7 +322,10 @@ tuple variant has 2 fields*). The checker should name the arity itself (a
 `NK` refusal), the more so while D27 leaves no rest pattern. Found with rs2nika
 (#579) while trying `(_)` for `(..)`.
 
-## D34 (new). A by-value enum parameter, and a `match` arm that is a call returning a value: **open**
+## D34. A by-value enum parameter, and a `match` arm that is a call returning a value: arm **built**, parameter **not reproduced**
+
+Built: an arm of a statement `match` is lowered as `{ expr; }` (`emit_core_match.nika`, test in `match_patterns.rs`). The parameter half did not reproduce on 0.0.908 (`fn f(op: BinaryOp)` called with a pattern-bound `op`, free function and method in a tools file, lowers `op: BinaryOp` and `f(*op)`); it needs the exact function that failed.
+
 
 `fn f(op: BinaryOp)` lowers its parameter as `&BinaryOp`, while a call with an
 `op` bound by a `match` pattern writes `f(*op)`: E0308. And a statement `match`

@@ -112,6 +112,27 @@ fn a_variant_pattern_with_too_few_parts_is_refused() {
     assert!(fine.iter().all(|f| f.code != "NK1253"), "{fine:#?}");
 }
 
+/// **An arm of a statement `match` is a statement** (lowering-defects D34):
+/// an arm that is a call handing back a value drops it with `;`, so it agrees
+/// with `else => {}`.
+#[test]
+fn a_statement_arm_that_hands_back_a_value_drops_it() {
+    let source = "use std::collections\n\
+                  fn f(k: i64, mut seen: collections::BTreeMap[i64, i64]) {\n\
+                  \x20   match k {\n\
+                  \x20       1 => seen.insert(k, 2),\n\
+                  \x20       else => {},\n\
+                  \x20   }\n\
+                  }\n\
+                  fn main() { let mut m: collections::BTreeMap[i64, i64] = collections::BTreeMap()\n f(1, m)\n println(f\"{m.len()}\") }\n";
+    assert!(findings(source).is_empty(), "{:#?}", findings(source));
+    assert!(
+        lowered(source).contains("1 => { seen.insert(k, 2); },"),
+        "{}",
+        lowered(source)
+    );
+}
+
 /// **A guard is `if`** (D2), and it stands on the arm.
 #[test]
 fn a_guard_is_written_if() {
