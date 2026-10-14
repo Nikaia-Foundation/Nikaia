@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.941 (Draft)
+**Version:** 0.0.942 (Draft)
 **Date:** 2026-10-14
 
 ---
@@ -1428,6 +1428,12 @@ The standard library provides types for groups of values.
     **owns** — a `HashMap[String, V]`, a `HashMap[i64, V]` — takes a key
     written into it as its own and is lent one it is read with; `m[k] ?? "-"`
     over a map of text is a view of text.
+
+    **A key is hashed from what it holds.** A number, text, a `bool`, a
+    `char`, and a tuple, list or option of such is a key; a `struct` or an
+    `enum` the program declares is one where every field is, hashed from its
+    fields as `==` compares them. A float is not, nor a type with an
+    `impl Eq` of its own (`NK1260`).
 
     A map's hash function follows where its keys came from. Keys derived from
     data a remote peer supplied are hashed with a random per-run key. Keys from

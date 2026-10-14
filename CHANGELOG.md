@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.942] — 2026-10-14
+
+**spec: a hash map hashes a declared type from its fields (ADR-010 D11, NK1260, #591)**
+- The owner's decision on #591: a `HashMap`/`HashSet` key is checked by the structural walk `==` uses; a declared `struct` or `enum` hashes, derived from its fields in the order written, where every field hashes; a float, a map, a set and a declared type with a hand-written `impl Eq` (ADR-341 D5) do not. A key that does not hash is `NK1260`, at every position a type is written. Library types answer from a new ledger column `hashes`. Part I (map keys), Part III 13.5 and C.3; ADR-204 §4 and ADR-341 §6 point to it. Not built yet.
+
 ## [0.0.941] — 2026-10-14
 
 **a parameter of code fails with what its callers hand it (ADR-351 D4, part of #620)**
