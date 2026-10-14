@@ -8,6 +8,10 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.914] — 2026-10-14
+
+**The pool's error registration is quiet in rustc**
+
 ## [0.0.913] — 2026-10-14
 
 **lowering: a field option of a get local past a jump (D35); `(A, B)?` refused with NK1254 (D5)**

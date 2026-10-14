@@ -29528,7 +29528,7 @@ impl EmitState {
                 },
                 _ => { },
             }
-            if !bare.is_empty() && errors.contains(&bare) && !self.borrowing.contains(&bare) { text = format!("{}    {{ use nikaia_std::task::{{CrossNot as _, CrossSend as _}}; (&&nikaia_std::task::Cross::<{}>::new()).register(); }}\n", text, escaped_name(&bare)); }
+            if !bare.is_empty() && errors.contains(&bare) && !self.borrowing.contains(&bare) { text = format!("{}    {{ #[allow(unused_imports)] use nikaia_std::task::{{CrossNot as _, CrossSend as _}}; (&&nikaia_std::task::Cross::<{}>::new()).register(); }}\n", text, escaped_name(&bare)); }
         }
         text
     }

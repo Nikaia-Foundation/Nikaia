@@ -118,7 +118,7 @@ impl EmitState {
                 else => {},
             }
             if bare.len() > 0 && errors.contains(bare) && !self.borrowing.contains(bare) {
-                text = f"{text}    {{ use nikaia_std::task::{{CrossNot as _, CrossSend as _}}; (&&nikaia_std::task::Cross::<{escaped_name(bare)}>::new()).register(); }}\n"
+                text = f"{text}    {{ #[allow(unused_imports)] use nikaia_std::task::{{CrossNot as _, CrossSend as _}}; (&&nikaia_std::task::Cross::<{escaped_name(bare)}>::new()).register(); }}\n"
             }
         }
         return text
