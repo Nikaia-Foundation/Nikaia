@@ -514,6 +514,79 @@ pub struct Carried {
     message: String,
     exit: Option<i32>,
     fatal: Option<i32>,
+    /// The error itself, when its type is one of the program's that can
+    /// cross threads ([`crossing`]): a typed `catch` at the join takes it.
+    itself: Option<Box<dyn std::error::Error + Send>>,
+}
+
+type Crosser = fn(
+    Box<dyn std::error::Error>,
+) -> Result<Box<dyn std::error::Error + Send>, Box<dyn std::error::Error>>;
+
+/// The program's own error types that can cross threads: `main` registers
+/// each before its first statement ([`Cross`]).
+static CROSSING: std::sync::Mutex<Vec<Crosser>> = std::sync::Mutex::new(Vec::new());
+
+/// **Register one of the program's error types** so that a task on the pool
+/// hands it to its joiner as itself (ADR-346 D5).
+pub fn crossing<T: std::error::Error + Send + 'static>() {
+    CROSSING
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .push(|error| match error.downcast::<T>() {
+            Ok(found) => Ok(found),
+            Err(other) => Err(other),
+        });
+}
+
+/// **The emitter's way to [`crossing`]** for a type whose `Send` it cannot
+/// see: `(&&Cross::<T>::new()).register()` with both traits in scope registers
+/// a `Send` type and passes over any other, which crosses as its message.
+pub struct Cross<T>(std::marker::PhantomData<fn() -> T>);
+
+impl<T> Cross<T> {
+    #[allow(clippy::new_without_default)]
+    pub fn new() -> Self {
+        Cross(std::marker::PhantomData)
+    }
+}
+
+/// The [`Cross`] of a type that can cross threads.
+pub trait CrossSend {
+    fn register(&self);
+}
+
+impl<T: std::error::Error + Send + 'static> CrossSend for &Cross<T> {
+    fn register(&self) {
+        crossing::<T>()
+    }
+}
+
+/// The [`Cross`] of any other type.
+pub trait CrossNot {
+    fn register(&self);
+}
+
+impl<T> CrossNot for Cross<T> {
+    fn register(&self) {}
+}
+
+/// The error under a `Raised` envelope as its own box, if a registered type.
+pub(crate) fn crossed(
+    error: Box<dyn std::error::Error>,
+) -> Option<Box<dyn std::error::Error + Send>> {
+    let mut error = match error.downcast::<crate::error::Raised>() {
+        Ok(raised) => raised.into_inner(),
+        Err(error) => error,
+    };
+    let crossers = CROSSING.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    for crosser in crossers {
+        match crosser(error) {
+            Ok(found) => return Some(found),
+            Err(back) => error = back,
+        }
+    }
+    None
 }
 
 impl crate::process::Ending for Carried {
@@ -529,14 +602,21 @@ impl crate::process::Ending for Carried {
 impl Carried {
     fn from_box(error: Box<dyn std::error::Error>) -> Self {
         use crate::process::Ending;
+        let message = error.to_string();
+        let exit = error.exit_code();
+        let fatal = error.fatal_code();
         Carried {
-            message: error.to_string(),
-            exit: error.exit_code(),
-            fatal: error.fatal_code(),
+            message,
+            exit,
+            fatal,
+            itself: crossed(error),
         }
     }
 
     fn into_box(self) -> Box<dyn std::error::Error> {
+        if let Some(itself) = self.itself {
+            return itself;
+        }
         match self.exit {
             Some(code) => Box::new(crate::process::Exit::Code(i64::from(code))),
             None => Box::new(self),

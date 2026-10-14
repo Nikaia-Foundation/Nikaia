@@ -193,6 +193,11 @@ impl Raised {
         &*self.inner
     }
 
+    /// The error that was raised, without its envelope.
+    pub(crate) fn into_inner(self) -> Box<dyn Error> {
+        self.inner
+    }
+
     /// Everything, for an operator: the message, where it was raised, and the
     /// trace if this process captured one.
     ///
@@ -652,6 +657,19 @@ pub fn holds<E: Error + 'static>(error: &(dyn Error + 'static)) -> bool {
             Some(crate::task::Late::TimedOut(e)) => (e as &dyn Error).is::<E>(),
             None => false,
         }
+        || error
+            .downcast_ref::<crate::supervisor::Handed>()
+            .and_then(crate::supervisor::Handed::itself)
+            .is_some_and(|itself| itself.is::<E>())
+}
+
+/// **The child's own error a supervisor's hand-over carries**, if it is an
+/// `E` ([ADR-346](../../docs/specification/adr/adr-346.md) D7): what a `catch`
+/// arm naming the child's type over a typed channel looks at.
+pub fn handed<E: Error + 'static>(handed: &crate::supervisor::Handed) -> Option<&E> {
+    handed
+        .itself()
+        .and_then(|itself| itself.downcast_ref::<E>())
 }
 
 /// **The `E` out of that box**; the emitter asks [`holds`] first.
@@ -666,6 +684,17 @@ pub fn opened<E: Error + 'static>(error: Box<dyn Error>) -> E {
             crate::task::Late::TimedOut(e) => Box::new(e),
         },
         Err(error) => error,
+    };
+    let error: Box<dyn Error> = if error.is::<E>() {
+        error
+    } else {
+        match error.downcast::<crate::supervisor::Handed>() {
+            Ok(handed) => match handed.into_itself() {
+                Some(itself) => itself,
+                None => unreachable!("the emitter asked `holds` first"),
+            },
+            Err(error) => error,
+        }
     };
     match error.downcast::<E>() {
         Ok(found) => *found,

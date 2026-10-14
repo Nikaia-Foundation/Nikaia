@@ -376,6 +376,34 @@ impl EmitState {
             let named_member: String? = member.clone()
             let inside_scope = scope.clone() with { caught_member: named_member }
             let variant = sum_variant(member)
+            // **A supervisor's hand-over carries the child's own error** (ADR-346
+            // D7): an arm naming a type that is not a member takes it from there,
+            // ahead of the hand-over's own arm. One with a guard stays with the
+            // catch-all.
+            if own && member == "supervisor::Handed" {
+                let mut k = 0
+                for arm in arms {
+                    let at = home[k]
+                    k += 1
+                    let foreign = member_of(world.words, self.declared_errors, world.library, arm.pattern)
+                    if at >= 0 || foreign == null || arm.guard != null {
+                        continue
+                    }
+                    let ty = (foreign ?? "").clone()
+                    if ty.contains("::") {
+                        continue
+                    }
+                    let mut tested = EmitOut::empty()
+                    self.emit_core_pattern_written(world, walk, tested, host, arm.pattern, false, node_key(arm.body), false, 0, depth + 2, inside, inside_scope)
+                    out.push(f"{pad}#[allow(unused_variables)] crate::{sum}::{variant}(error) if nikaia_std::error::handed::<{ty}>(error.held()).is_some_and(|error| matches!(error, ")
+                    out.append(tested)
+                    out.push(f")) => {{ let error = nikaia_std::error::opened::<{ty}>(Box::new(error.split().0)); #[allow(unreachable_patterns)] match error {{\n{inner}")
+                    self.emit_core_pattern_written(world, walk, out, host, arm.pattern, false, node_key(arm.body), false, 0, depth + 2, inside, inside_scope)
+                    out.push(" => ")
+                    self.emit_core_arm_body_led(world, walk, out, host, arm.pattern, 0, arm.body, depth + 2, inside, inside_scope, "")
+                    out.push(f",\n{inner}_ => unreachable!(\"the guard asked\"),\n{pad}}} }},\n")
+                }
+            }
             if own {
                 out.push(f"{pad}crate::{sum}::{variant}(error) => {{ let (error, __nikaia_site) = error.split(); match error {{\n")
             } else {
@@ -388,6 +416,10 @@ impl EmitState {
                     let mine = if pass == 0 { home[k] == m } else { home[k] < 0 }
                     k += 1
                     if !mine {
+                        continue
+                    }
+                    // An arm naming a type outside the set cannot match here.
+                    if pass == 1 && arm.guard == null && member_of(world.words, self.declared_errors, world.library, arm.pattern) != null {
                         continue
                     }
                     out.push(inner)

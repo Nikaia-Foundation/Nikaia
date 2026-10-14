@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.909] — 2026-10-14
+
+**task: a typed error crosses the pool; a supervisor's hand-over carries the child's error (#605)**
+- A task on the pool hands its body's error itself to the joiner, so a typed catch arm at join takes it: main registers the program's error types that can cross threads (task::Cross); one that cannot crosses as its message, status and fatality (ADR-346 D5).
+- supervisor::Handed carries the child's fatal error itself; a catch arm naming the child's own type takes it, ahead of the hand-over passing on (ADR-346 D7, Part II 12.8).
+
 ## [0.0.908] — 2026-10-14
 
 **A variant pattern names every part**

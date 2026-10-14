@@ -655,7 +655,24 @@ impl EmitState {
             } else {
                 let held_sum = (caught_in ?? "").clone()
                 for member in passing {
-                    out.push(f"{pad}Err(crate::{held_sum}::{sum_variant(member)}(error)) => return Err(error.into()),\n")
+                    // **A hand-over whose child's own type the handler names is
+                    // the handler's** (ADR-346 D7).
+                    let mut unless: String = ""
+                    if member == "supervisor::Handed" {
+                        for ty in fatal_named(handler, world.words) {
+                            if !ty.contains("::") && emit_is_fatal(self.own_contracts, ty) {
+                                if unless.len() > 0 {
+                                    unless = f"{unless} && "
+                                }
+                                unless = f"{unless}nikaia_std::error::handed::<{ty}>(error.held()).is_none()"
+                            }
+                        }
+                    }
+                    if unless.len() > 0 {
+                        out.push(f"{pad}Err(crate::{held_sum}::{sum_variant(member)}(error)) if {unless} => return Err(error.into()),\n")
+                    } else {
+                        out.push(f"{pad}Err(crate::{held_sum}::{sum_variant(member)}(error)) => return Err(error.into()),\n")
+                    }
                 }
             }
         }

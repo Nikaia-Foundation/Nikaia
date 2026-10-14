@@ -26539,7 +26539,18 @@ impl EmitState {
                 out.push(&format!("{}#[allow(unreachable_patterns)]\n", pad));
             } else {
                 let held_sum = nikaia_std::index::or(caught_in.as_deref(), || "").to_owned();
-                for member in passing.iter() { out.push(&format!("{}Err(crate::{}::{}(error)) => return Err(error.into()),\n", pad, held_sum, sum_variant(member))); }
+                for member in passing.iter() {
+                    let mut unless: String = String::from("");
+                    if member == "supervisor::Handed" {
+                        for ty in fatal_named(handler, world.words) {
+                            if !ty.contains("::") && emit_is_fatal(&self.own_contracts, &ty) {
+                                if !unless.is_empty() { unless = format!("{} && ", unless); }
+                                unless = format!("{}nikaia_std::error::handed::<{}>(error.held()).is_none()", unless, ty);
+                            }
+                        }
+                    }
+                    if !unless.is_empty() { out.push(&format!("{}Err(crate::{}::{}(error)) if {} => return Err(error.into()),\n", pad, held_sum, sum_variant(member), unless)); } else { out.push(&format!("{}Err(crate::{}::{}(error)) => return Err(error.into()),\n", pad, held_sum, sum_variant(member))); }
+                }
             }
         }
         out.push(&format!("{}{}", pad, handler_takes));
@@ -27390,6 +27401,26 @@ impl EmitState {
             let named_member: Option<String> = Some(member.to_owned());
             let inside_scope = EmitScope { caught_member: named_member, ..scope.clone() };
             let variant = sum_variant(member);
+            if own && member == "supervisor::Handed" {
+                let mut k: i64 = 0;
+                for arm in arms.iter() {
+                    let at = *nikaia_std::index::get(&home, nikaia_std::index::at(k));
+                    k += 1;
+                    let foreign = member_of(world.words, &self.declared_errors, world.library, &arm.pattern);
+                    if at >= 0 || foreign.is_none() || arm.guard.is_some() { continue; }
+                    let ty = nikaia_std::index::or(foreign.as_deref(), || "").to_owned();
+                    if ty.contains("::") { continue; }
+                    let mut tested = EmitOut::empty();
+                    self.emit_core_pattern_written(world, walk, &mut tested, host, &arm.pattern, false, node_key(&arm.body), false, 0, depth + 2, inside, &inside_scope)?;
+                    out.push(&format!("{}#[allow(unused_variables)] crate::{}::{}(error) if nikaia_std::error::handed::<{}>(error.held()).is_some_and(|error| matches!(error, ", pad, sum, variant, ty));
+                    out.append(tested);
+                    out.push(&format!(")) => {{ let error = nikaia_std::error::opened::<{}>(Box::new(error.split().0)); #[allow(unreachable_patterns)] match error {{\n{}", ty, inner));
+                    self.emit_core_pattern_written(world, walk, out, host, &arm.pattern, false, node_key(&arm.body), false, 0, depth + 2, inside, &inside_scope)?;
+                    out.push(" => ");
+                    self.emit_core_arm_body_led(world, walk, out, host, &arm.pattern, 0, &arm.body, depth + 2, inside, &inside_scope, "")?;
+                    out.push(&format!(",\n{}_ => unreachable!(\"the guard asked\"),\n{}}} }},\n", inner, pad));
+                }
+            }
             if own { out.push(&format!("{}crate::{}::{}(error) => {{ let (error, __nikaia_site) = error.split(); match error {{\n", pad, sum, variant)); } else { out.push(&format!("{}crate::{}::{}(error) => match error {{\n", pad, sum, variant)); }
             for pass in 0..2 {
                 let mut k: i64 = 0;
@@ -27397,6 +27428,7 @@ impl EmitState {
                     let mine = if pass == 0 { *nikaia_std::index::get(&home, nikaia_std::index::at(k)) == m } else { *nikaia_std::index::get(&home, nikaia_std::index::at(k)) < 0 };
                     k += 1;
                     if !mine { continue; }
+                    if pass == 1 && arm.guard.is_none() && member_of(world.words, &self.declared_errors, world.library, &arm.pattern).is_some() { continue; }
                     out.push(&inner);
                     if pass == 1 { out.push("#[allow(unreachable_patterns)] "); }
                     self.emit_core_pattern_written(world, walk, out, host, &arm.pattern, false, node_key(&arm.body), false, 0, depth + 2, inside, &inside_scope)?;
@@ -28701,7 +28733,7 @@ impl EmitState {
         let mut text: String = String::from("\n// ADR-303 D4: the runtime is running before the program's first\n// statement, so an operation inside it costs no thread wake-up. What\n// starts is what `user_parallelism` allows (ADR-037 D2): the I/O\n// worker always, a pool for user code only at `yes`.\n");
         text = format!("{}fn main(){} {{\n", text, ret);
         text = format!("{}    nikaia_std::abort::report_in_nikaia_terms(__NIKAIA_SITES);\n", text);
-        text = format!("{}{}", text, self.fatal_registrations(world));
+        text = format!("{}{}{}", text, self.fatal_registrations(world), self.crossing_registrations(world));
         text = format!("{}    let nikaia_runtime = nikaia_std::rt::{}(nikaia_std::rt::UserCode::{});\n", text, start, user_code);
         let exits = main_exits(&self.own_contracts);
         if call_pauses(&self.own_contracts, "main") { text = format!("{}    let outcome = nikaia_std::rt::exec::block_on(__nikaia_main());\n", text); } else { text = format!("{}    let outcome = __nikaia_main();\n", text); }
@@ -28725,6 +28757,26 @@ impl EmitState {
                 },
                 _ => { },
             }
+        }
+        text
+    }
+    fn crossing_registrations(&self, world: &EmitWorld<'_>) -> String {
+        let errors = match self.own_contracts.implementations.get("Error") { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
+        let mut text: String = String::from("");
+        for item in world.items.iter() {
+            let mut bare: String = String::from("");
+            match &item.node {
+                Item::Struct { name, generics, .. } => {
+                    let name = *name;
+                    if generics.is_empty() { bare = world.words.resolve(name).to_owned(); }
+                },
+                Item::Enum { name, .. } => {
+                    let name = *name;
+                    bare = world.words.resolve(name).to_owned();
+                },
+                _ => { },
+            }
+            if !bare.is_empty() && errors.contains(&bare) && !self.borrowing.contains(&bare) { text = format!("{}    {{ use nikaia_std::task::{{CrossNot as _, CrossSend as _}}; (&&nikaia_std::task::Cross::<{}>::new()).register(); }}\n", text, escaped_name(&bare)); }
         }
         text
     }

@@ -63,14 +63,37 @@ impl crate::process::Ending for Escalated {
 
 /// **A child's fatal error, handed on** (ADR-346 D7): it is not restarted, every
 /// child stops, and `run` throws this, which is fatal itself, so only a `catch`
-/// arm that names it takes it. It says what the child's error said, and ends
-/// the program as that error would have (an `Exit`'s code, or `1`).
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// arm that names it takes it, or one that names the child's own error type,
+/// which it carries. It says what the child's error said, and ends the program
+/// as that error would have (an `Exit`'s code, or `1`).
+#[derive(Debug)]
 pub struct Handed {
     /// What the child's error said.
     pub message: String,
     exit: Option<i32>,
     code: i32,
+    /// The child's error itself, where its type can cross threads.
+    itself: Option<Box<dyn std::error::Error + Send>>,
+}
+
+impl Handed {
+    /// The child's error itself, if it was carried.
+    pub(crate) fn itself(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.itself
+            .as_deref()
+            .map(|e| e as &(dyn std::error::Error + 'static))
+    }
+
+    /// The child's error itself, taken out.
+    pub(crate) fn into_itself(self) -> Option<Box<dyn std::error::Error>> {
+        self.itself.map(|e| e as Box<dyn std::error::Error>)
+    }
+}
+
+impl PartialEq for Handed {
+    fn eq(&self, other: &Self) -> bool {
+        self.message == other.message && self.exit == other.exit && self.code == other.code
+    }
 }
 
 impl crate::process::Ending for Handed {
@@ -92,7 +115,7 @@ impl std::fmt::Display for Handed {
 impl std::error::Error for Handed {}
 
 /// How `run` ends: it gave up, or it handed a fatal error on.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 pub enum Stopped {
     Escalated(Escalated),
     Handed(Handed),
@@ -178,16 +201,22 @@ pub fn child_on_pool(
     }
 }
 
+/// A fatal error's `Exit` code, the status it sets, and the error itself.
+type Fatal = (Option<i32>, i32, Option<Box<dyn std::error::Error + Send>>);
+
 /// How one attempt of a child ended: normally, or with what it said and, for a
-/// fatal error, its `Exit` code and the status it sets.
-type Ended = Option<(String, Option<(Option<i32>, i32)>)>;
+/// fatal error, what [`Fatal`] keeps of it.
+type Ended = Option<(String, Option<Fatal>)>;
 
 /// The message a child's outcome carries, where it is a failure.
 fn ended(outcome: Outcome) -> Ended {
     use crate::process::Ending;
     outcome.err().map(|error| {
-        let fatal = error.fatal_code().map(|code| (error.exit_code(), code));
-        (error.to_string(), fatal)
+        let said = error.to_string();
+        let fatal = error
+            .fatal_code()
+            .map(|code| (error.exit_code(), code, crate::task::crossed(error)));
+        (said, fatal)
     })
 }
 
@@ -257,7 +286,7 @@ pub(crate) async fn supervise(
             Ok(Some((thrown, None))) => Some(thrown),
             // **A fatal error is not restarted** (ADR-346 D7): every child
             // stops and the supervisor hands it on.
-            Ok(Some((thrown, Some((exit, code))))) => {
+            Ok(Some((thrown, Some((exit, code, itself))))) => {
                 for handle in running.iter_mut().rev() {
                     if let Some(handle) = handle.take() {
                         handle.cancel();
@@ -267,6 +296,7 @@ pub(crate) async fn supervise(
                     message: thrown,
                     exit,
                     code,
+                    itself,
                 }));
             }
             Err(crashed) => Some(crashed.message),

@@ -316,6 +316,27 @@ fn a_program_fatal_type_is_fatal_in_tasks() {
     }
 }
 
+/// ADR-346 D5: on the pool a body failing in the opaque channel hands its
+/// error itself to the joiner, so a typed arm at `join` takes it; and a
+/// supervisor's child's fatal error reaches an arm that names its own type
+/// (D7).
+#[test]
+fn a_typed_error_crosses_the_pool() {
+    let source = "enum Bad { Oops(i64) }\nimpl Error for Bad {\n    fn message(ref self) -> String { return \"bad\" }\n}\n\nfn work(n: i64) -> i64 throws {\n    if n > 1 {\n        throw Bad::Oops(n)\n    }\n    return n\n}\n\nfn main() throws {\n    let b = spawn fn { work(7) }\n    let y = b.join() catch {\n        match error {\n            Bad::Oops(c) => c,\n            else => 0,\n        }\n    }\n    println(f\"{y}\")\n}\n";
+    let (out, err, code) = ran("spawn-join-typed-pool", source, Build::parallel());
+    assert_eq!(code, Some(0), "{err}");
+    assert_eq!(out.trim(), "7");
+    let supervised = "use std::supervisor\n\nenum Doom { Over(i64) }\nimpl Error for Doom {\n    fn message(ref self) -> String { return \"doom\" }\n}\nimpl Fatal for Doom {}\n\nfn stop() throws {\n    throw Doom::Over(3)\n}\n\nfn watch() throws {\n    supervisor::run([\n        supervisor::child(fn { stop() }; restart: supervisor::Kind::Permanent),\n    ])\n}\n\nfn main() throws {\n    watch() catch {\n        match error {\n            Doom::Over(c) => println(f\"taken {c}\"),\n            else => throw error,\n        }\n    }\n}\n";
+    for (purpose, how) in [
+        ("supervisor-own-type", Build::default()),
+        ("supervisor-own-type-pool", Build::parallel()),
+    ] {
+        let (out, err, code) = ran(purpose, supervised, how);
+        assert_eq!(code, Some(0), "{err}");
+        assert_eq!(out.trim(), "taken 3", "{err}");
+    }
+}
+
 /// ADR-346 D4: `join(within: d)` hands the value back in time, and throws
 /// `task::TimedOut` (the task cancelled) once `d` ran out.
 #[test]

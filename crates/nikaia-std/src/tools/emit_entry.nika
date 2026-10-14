@@ -52,7 +52,7 @@ impl EmitState {
         let mut text: String = "\n// ADR-303 D4: the runtime is running before the program's first\n// statement, so an operation inside it costs no thread wake-up. What\n// starts is what `user_parallelism` allows (ADR-037 D2): the I/O\n// worker always, a pool for user code only at `yes`.\n"
         text = f"{text}fn main(){ret} {{\n"
         text = f"{text}    nikaia_std::abort::report_in_nikaia_terms(__NIKAIA_SITES);\n"
-        text = f"{text}{self.fatal_registrations(world)}"
+        text = f"{text}{self.fatal_registrations(world)}{self.crossing_registrations(world)}"
         text = f"{text}    let nikaia_runtime = nikaia_std::rt::{start}(nikaia_std::rt::UserCode::{user_code});\n"
         // ADR-345 D4: where `process::Exit` may leave `main`, the process ends
         // with its code after the drain.
@@ -92,6 +92,33 @@ impl EmitState {
                     }
                 },
                 else => {},
+            }
+        }
+        return text
+    }
+
+    /// **The program's own error types** (ADR-346 D5), registered so that a
+    /// task on the pool hands one to its joiner as itself, where a typed
+    /// `catch` takes it. One that cannot cross threads passes over and crosses
+    /// as its message.
+    fn crossing_registrations(ref self, world: ref EmitWorld) -> String {
+        let errors = self.own_contracts.implementations.get("Error") ?? return ""
+        let mut text: String = ""
+        for item in world.items {
+            let mut bare: String = ""
+            match item.node {
+                Item::Struct { name, generics, .. } => {
+                    if generics.len() == 0 {
+                        bare = world.words.resolve(name).clone()
+                    }
+                },
+                Item::Enum { name, .. } => {
+                    bare = world.words.resolve(name).clone()
+                },
+                else => {},
+            }
+            if bare.len() > 0 && errors.contains(bare) && !self.borrowing.contains(bare) {
+                text = f"{text}    {{ use nikaia_std::task::{{CrossNot as _, CrossSend as _}}; (&&nikaia_std::task::Cross::<{escaped_name(bare)}>::new()).register(); }}\n"
             }
         }
         return text
