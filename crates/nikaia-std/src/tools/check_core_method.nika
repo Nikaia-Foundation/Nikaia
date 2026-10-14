@@ -1,0 +1,624 @@
+// crates/nikaia-std/src/tools/check_core_method.nika
+//
+// **A method call, `x.m(…)` and `x?.m(…)`** (ADR-294, #125, #558, C-6,
+// U-c6): the arm `MethodCall | SafeMethod` of the checker's walk. The form is
+// the pilot's (`check_core_pilot.nika`): a free function over the state, the
+// world and a host; the walk comes back through the hub `host.expr`. What
+// stays Rust is asked through the host: `an_attribute_read`, and through
+// `check_core_call_on` the task work (#605).
+//
+// `args` is the call's argument list without the receiver everywhere here,
+// as it was in Rust: a method call's receiver is never one of its arguments.
+// A witness (`set(…; after:)`, `join(within:)`) joins the arguments once the
+// receiver says it is one; from there on `args` is that longer list.
+
+use std::collections
+
+/// A type by its bare name.
+fn check_core_method_named(name: ref String) -> Ty {
+    return Ty::Named { name: name.clone(), args: [], view: false }
+}
+
+/// The last segment of a path, `ty::base`.
+fn check_core_method_base(name: ref String) -> String {
+    let parts: Vec[ref String] = name.split("::").collect()
+    if parts.len() == 0 {
+        return name.clone()
+    }
+    let last = parts.len() as i64 - 1
+    return f"{parts[last]}"
+}
+
+/// Whether a type is a view of `str`.
+fn check_core_method_str_view(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Named { name, args, view } => view && name == "str" && args.len() == 0,
+        else => false,
+    }
+}
+
+/// Whether a type is a plain `String`.
+fn check_core_method_string(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Named { name, args, view } => !view && name == "String" && args.len() == 0,
+        else => false,
+    }
+}
+
+/// The receiver's name, where it is a name; `null` where it is a temporary.
+fn check_core_method_receiver_name(world: ref CheckWorld, receiver: ref Expr) -> String? sync {
+    match receiver {
+        Expr::Variable(name, _) => {
+            return f"{world.words.resolve(name)}"
+        },
+        else => {}
+    }
+    return null
+}
+
+/// **An empty list's first `push`** (#523, ADR-135 D2), **and an empty
+/// map's first `insert`** (#543): the name, held for `call_on`.
+fn check_core_method_pushed_into(state: ref CheckState, world: ref CheckWorld, receiver: ref Expr, method: ref String, count: i64) -> String? sync {
+    let push = method == "push" && count == 1
+    let insert = method == "insert" && count == 2
+    if !push && !insert {
+        return null
+    }
+    let name: String = check_core_method_receiver_name(world, receiver) ?? return null
+    let local: CheckLocal = state.binding(name) ?? return null
+    let fits = match local.ty {
+        Ty::Named { name, args, .. } => {
+            if push {
+                name == "Vec" && (args.len() == 0 || (args.len() == 1 && args[0].is_unknown()))
+            } else {
+                a_map_type(name) && (args.len() == 0 || (args.len() == 2 && args[0].is_unknown() && args[1].is_unknown()))
+            }
+        },
+        else => false,
+    }
+    if fits {
+        return name
+    }
+    return null
+}
+
+/// The option that is a witness: `set`'s `after`, `join`'s `within`; `-1`
+/// none.
+fn check_core_method_witness(world: ref CheckWorld, method: ref String, config: ref Vec[ConfigArg]) -> i64 sync {
+    let mut wanted: String = ""
+    if method == "set" {
+        wanted = "after".clone()
+    } else if method == "join" {
+        wanted = "within".clone()
+    } else {
+        return -1
+    }
+    let mut at = 0
+    while at < config.len() as i64 {
+        if world.words.resolve(config[at].name) == wanted {
+            return at
+        }
+        at += 1
+    }
+    return -1
+}
+
+/// **A number written as a receiver takes the first type that holds it**
+/// (Part I 2.4, #417), written on the literal.
+fn check_core_method_literal(mut state: CheckState, receiver: ref Expr, on: Ty) -> Ty sync {
+    let unknown = match on {
+        Ty::Unknown => true,
+        else => false,
+    }
+    if !unknown {
+        return on
+    }
+    match receiver {
+        Expr::LitInt { value, negative, .. } => {
+            let number = integer(value, negative)
+            let mut ty: String = "u64"
+            if integer_fits(number, "i64") {
+                if integer_fits(number, "i32") {
+                    ty = "i32".clone()
+                } else {
+                    ty = "i64".clone()
+                }
+            }
+            state.facts.unsigned_literals.insert(id_of(receiver) as i64, ty.clone())
+            return check_core_method_named(ty)
+        },
+        else => {}
+    }
+    return on
+}
+
+/// **A length `std` counts**: of a list, a run, text or a map.
+fn check_core_method_counted(on: ref Ty) -> bool {
+    return match on {
+        Ty::Named { name, .. } => {
+            let b = check_core_method_base(name)
+            b == "Vec" || b == "List" || b == "Array" || b == "String" || b == "str" || b == "HashMap" || b == "Map" || b == "BTreeMap" || b == "HashSet" || b == "Set" || b == "BTreeSet"
+        },
+        Ty::Pointed { slice, .. } => slice,
+        else => false,
+    }
+}
+
+/// Whether the type is a map, by its last segment.
+fn check_core_method_a_map(on: ref Ty) -> bool {
+    return match on {
+        Ty::Named { name, .. } => {
+            let b = check_core_method_base(name)
+            b == "HashMap" || b == "Map" || b == "BTreeMap"
+        },
+        else => false,
+    }
+}
+
+/// A view of text handed over as text of its own (ADR-282 D15).
+fn check_core_method_own(ty: Ty) -> Ty {
+    if check_core_method_str_view(ty) {
+        return check_core_method_named("String")
+    }
+    match ty {
+        Ty::Nullable(inner) => {
+            if check_core_method_str_view(inner) {
+                return Ty::Nullable(check_core_method_named("String"))
+            }
+        },
+        else => {}
+    }
+    return ty
+}
+
+/// Of a pair, only the half the name says.
+fn check_core_method_own_item(which: ref String, item: Ty) -> Ty {
+    if which == "either_items" {
+        return check_core_method_own(item)
+    }
+    match item {
+        Ty::Tuple(parts) => {
+            let mut out: Vec[Ty] = []
+            let mut at = 0
+            for part in parts {
+                if (which == "either_keys" && at == 0) || (which == "either_values" && at == 1) || which == "either_pairs" {
+                    out.push(check_core_method_own(part.clone()))
+                } else {
+                    out.push(part.clone())
+                }
+                at += 1
+            }
+            return Ty::Tuple(out)
+        },
+        else => {}
+    }
+    return item
+}
+
+/// `either_items` and its kin over a sequence: the items as text of their
+/// own.
+fn check_core_method_either_items(which: ref String, on: Ty) -> Ty {
+    match on {
+        Ty::Seq { item, is_sync, pauses, can_throw, parallel, shape } => {
+            return Ty::Seq { item: check_core_method_own_item(which, item.clone()), is_sync: is_sync, pauses: pauses, can_throw: can_throw, parallel: parallel, shape: shape.clone() }
+        },
+        else => {}
+    }
+    return on
+}
+
+/// What `field.attribute(X)` and `attributes(X)` answer (ADR-331 D6).
+fn check_core_method_attribute(named: ref String, read: ref String) -> Ty {
+    if named == "attribute" {
+        return Ty::Nullable(check_core_method_named(read))
+    }
+    return Ty::Named { name: "Vec".clone(), args: [check_core_method_named(read)], view: false }
+}
+
+/// The item of a run (ADR-184 D3, ADR-282 D9), `null` where it is none.
+fn check_core_method_run(on: ref Ty) -> Ty? {
+    match on {
+        Ty::Pointed { item, slice, .. } => {
+            if slice {
+                return item.clone()
+            }
+        },
+        Ty::Named { name, args, view } => {
+            if view && name == ARRAY && args.len() == 1 {
+                return args[0].clone()
+            }
+        },
+        else => {}
+    }
+    return null
+}
+
+/// Whether the type is a task's handle.
+fn check_core_method_task_handle(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Named { name, .. } => name == "TaskHandle",
+        else => false,
+    }
+}
+
+/// Whether a list's argument is a name of text, a view or its own.
+fn check_core_method_text_local(state: ref CheckState, world: ref CheckWorld, arg: ref Expr) -> bool sync {
+    let name: String = check_core_method_receiver_name(world, arg) ?? return false
+    let local: CheckLocal = state.binding(name) ?? return false
+    return check_core_method_str_view(local.ty) || check_core_method_string(local.ty)
+}
+
+/// **D3**: a method that changes its subject, called on a parameter, where
+/// every candidate for the name agrees.
+fn check_core_method_changes(mut state: CheckState, world: ref CheckWorld, receiver: ref Expr, name: ref String, span: ref Span) sync {
+    let root: String = state.rooted_at(world, receiver) ?? return
+    let mut count = 0
+    let mut all = true
+    for key in ledger_candidates(world.own, name) {
+        count += 1
+        let contract = world.own.functions[key] ?? continue
+        if !contract.mutates {
+            all = false
+        }
+    }
+    for key in ledger_candidates(world.library, name) {
+        count += 1
+        let contract = world.library.functions[key] ?? continue
+        if !contract.mutates {
+            all = false
+        }
+    }
+    if count == 0 || !all {
+        return
+    }
+    state.a_changed_binding_says_mut(root, f"changed here, by `{name}`", span.clone())
+    state.a_shared_name_changed_in_parallel(root, span)
+    // **An element a call changes is a place** (0.0.250, #526).
+    if an_element_beneath(receiver) {
+        state.facts.changed_elements.insert(id_of(receiver) as i64)
+    }
+}
+
+/// What `std` resolved the call to: copies, lists of text, counts.
+fn check_core_method_resolved(mut state: CheckState, world: ref CheckWorld, receiver: ref Expr, args: ref Vec[Expr]) sync {
+    let last: String? = state.flow.last_resolved?.clone()
+    state.flow.last_resolved = null
+    let key: String = last ?? return
+    // **A copy of `std`'s is a copy whatever the receiver is** (ADR-293 D24).
+    let library = key.ends_with("::clone") && world.library.functions.contains_key(key) && !world.own.functions.contains_key(key)
+    if library && args.len() == 0 {
+        state.facts.owned_copies.insert(id_of(receiver) as i64)
+    }
+    // **A list of text asked for a view of text** (#125, #375).
+    if (key == "Vec::contains" || key == "Array::contains") && args.len() == 1 {
+        let named = match args[0] {
+            Expr::Variable(_, _) => true,
+            else => false,
+        }
+        if named && check_core_method_text_local(state, world, args[0]) {
+            state.facts.text_in_lists.insert(id_of(receiver) as i64)
+        }
+    }
+    // **A sequence's count is an `i64`** (Part I 2.2), and `position`'s.
+    let counts = key == f"{SEQ}::count" || key == f"{SEQ}::position" || key == f"{PAR}::count" || key == f"{PAR}::position"
+    if counts && !world.own.functions.contains_key(key) {
+        state.facts.counted.insert(id_of(receiver) as i64)
+    }
+}
+
+/// The half after the receiver is typed and the witness has joined the
+/// arguments (`args`), with the door's flags set around the call.
+fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, on: Ty, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], written: ref String, span: ref Span) -> Ty sync {
+    let name: String = f"{world.words.resolve(method)}"
+    // **A `set` given a stamped value** (D4): the receiver's name, carried.
+    let outer_receiver: String? = state.set_receiver?.clone()
+    let lock_name: String? = check_core_method_receiver_name(world, receiver)
+    state.set_receiver = (lock_name ?? "this lock").clone()
+    // The same carrying, for D2's once-only rule.
+    let outer_named: String? = state.flow.receiver_name?.clone()
+    state.flow.receiver_name = check_core_method_receiver_name(world, receiver)
+    state.a_door_that_is_not_written(on, written, span)
+    // **`NK2203`, the method half** (ADR-288).
+    if state.inside_a_door {
+        match on {
+            Ty::Named { name, .. } => {
+                let found: CheckResolved? = resolve_method(world, f"{name}::{written}")
+                if found != null {
+                    let resolved: CheckResolved = found ?? return Ty::Unknown
+                    state.a_lock_inside_a_lock(resolved.key, resolved.contract.touches_a_lock, span)
+                }
+            },
+            else => {}
+        }
+    }
+    // **And a method on a mapping reads the file** (ADR-281 D35).
+    state.io_inside_a_door(world, on, f"`{written}`", span)
+    // **`update`'s block is a write door's** (ADR-281 D12).
+    let at_a_door = name == "update" && locked_content_of(on) != null
+    if at_a_door && args.len() > 0 {
+        match args[args.len() as i64 - 1] {
+            Expr::Closure { params, body, .. } => {
+                state.an_update_block_returns_nothing(body, span)
+                state.an_update_block_reads_what_it_writes(world, params, body, span)
+            },
+            else => {}
+        }
+    }
+    let outer_door = state.flow.at_a_write_door
+    state.flow.at_a_write_door = at_a_door
+    // **And `access` holds one open too** (ADR-281 D10).
+    let holding = (name == "update" || name == "access") && locked_content_of(on) != null
+    let outer_inside = state.inside_a_door
+    state.inside_a_door = holding
+    check_core_method_changes(state, world, receiver, name, span)
+    state.a_copy_under_another_name(world, receiver, method, args, span)
+    // **The text form of text is the text** (ADR-282 D8).
+    let text = match on {
+        Ty::Named { name, args, .. } => args.len() == 0 && (name == "String" || name == "str"),
+        else => false,
+    }
+    if text && (name == "find" || name == "rfind" || name == "replacen") {
+        state.facts.text_finds.insert(id_of(receiver) as i64)
+    }
+    if text && args.len() == 0 && name == "to_string" && ledger_candidates(world.own, "to_string").len() == 0 {
+        state.facts.text_as_is.insert(id_of(receiver) as i64)
+        state.flow.receiver_name = outer_named
+        state.flow.at_a_write_door = outer_door
+        state.inside_a_door = outer_inside
+        return on
+    }
+    // **A field that holds a function is called as one**.
+    let called: Ty? = check_core_a_called_field(state, world, host, on, receiver, method, args, outer_inside, span)
+    if called != null {
+        state.flow.receiver_name = outer_named
+        state.flow.at_a_write_door = outer_door
+        state.inside_a_door = outer_inside
+        return called ?? Ty::Unknown
+    }
+    // **A copy of a slice is a list** (ADR-282 D9).
+    let a_run: Ty? = check_core_method_run(on)
+    if a_run != null && name == "clone" && args.len() == 0 {
+        state.facts.owned_copies.insert(id_of(receiver) as i64)
+        state.flow.receiver_name = outer_named
+        state.flow.at_a_write_door = outer_door
+        state.inside_a_door = outer_inside
+        let item: Ty = a_run ?? Ty::Unknown
+        return Ty::Named { name: "Vec".clone(), args: [item], view: false }
+    }
+    state.flow.last_resolved = null
+    state.flow.receiver_from_text = state.made_from_text(world, receiver)
+    let value: Ty = check_core_call_on(state, world, host, on.clone(), receiver, method, args, written, span)
+    state.flow.receiver_from_text = false
+    check_core_method_resolved(state, world, receiver, args)
+    state.flow.receiver_name = outer_named
+    state.flow.at_a_write_door = outer_door
+    state.inside_a_door = outer_inside
+    state.set_receiver = outer_receiver
+    // **A walk over views of values that copy yields the values** (ADR-231
+    // D1).
+    let mut walked: Ty = value.clone()
+    match value {
+        Ty::Seq { item, is_sync, pauses, can_throw, parallel, shape } => {
+            if copies_as_a_view(item) {
+                state.facts.copied_walks.insert(id_of(expr) as i64)
+                walked = Ty::Seq { item: unviewed_type(item), is_sync: is_sync, pauses: pauses, can_throw: can_throw, parallel: parallel, shape: shape.clone() }
+            }
+        },
+        else => {}
+    }
+    // **`filter` is handed a reference to the item** (ADR-231 D2), and so
+    // are `find`'s, `take_while`'s and `skip_while`'s.
+    if (name == "filter" || name == "find" || name == "take_while" || name == "skip_while") && args.len() == 1 {
+        match on {
+            Ty::Seq { item, .. } => {
+                match args[0] {
+                    Expr::Closure { params, .. } => {
+                        if params.len() == 1 && !item.is_unknown() && (item.is_a_view() || !moves(item)) {
+                            state.facts.filter_patterns.insert(id_of(args[0]) as i64)
+                        }
+                    },
+                    else => {}
+                }
+            },
+            else => {}
+        }
+    }
+    // **And what `access` hands back came out of a lock** (D1).
+    if name == "access" && locked_content_of(on) != null {
+        return Ty::Named { name: SEEN.clone(), args: [walked.unseen()], view: false }
+    }
+    return walked
+}
+
+/// **`x.m(…)` and `x?.m(…)`**: the arm `MethodCall | SafeMethod`. `safe` is
+/// `?.`; `expr` is the whole call.
+pub fn check_core_method[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, safe: bool, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: ref Span) -> Ty sync {
+    let name: String = f"{world.words.resolve(method)}"
+    // **`after:` on a `set` is a witness and not an option** (ADR-281 D26),
+    // and the first `push` or `insert` of an empty list or map is held.
+    state.flow.pushed_into = check_core_method_pushed_into(state, world, receiver, name, args.len() as i64)
+    // `join(within: d)` is `TaskHandle::join(within)` the same way (ADR-346
+    // D4).
+    let witness = check_core_method_witness(world, name, config)
+    // ADR-296 D5: a DSL's deferred parameters are walked like any other.
+    let mut at = 0
+    while at < config.len() as i64 {
+        if at != witness {
+            host.expr(state, config[at].value, span)
+        }
+        at += 1
+    }
+    // **A grammar is entered by an ordinary call** (ADR-296 D24); both ways
+    // out of here owe the witness its walk.
+    let entered: String? = state.grammar_entry(world, receiver, method)
+    if entered != null {
+        let entry: String = entered ?? return Ty::Unknown
+        if witness >= 0 {
+            host.expr(state, config[witness].value, span)
+        }
+        // **The dot is gone** (ADR-140 D3).
+        let mut owner: String = entry.clone()
+        let mut rule: String = ""
+        let cut = entry.find("::")
+        if cut != null {
+            let split = cut ?? 0
+            owner = entry[0..<split].clone()
+            rule = entry[split + 2..<entry.len()].clone()
+        }
+        state.a_grammar_reached_through_a_dot(owner, rule, span)
+        return check_core_grammar_call(state, world, host, entry, args, span)
+    }
+    let mut on: Ty = host.expr(state, receiver, span)
+    on = check_core_method_literal(state, receiver, on)
+    // **`x?.m(…)`** (Part I 3.5, ADR-279 D13).
+    if safe {
+        let mut unknown = false
+        let mut plain = true
+        match on {
+            Ty::Nullable(inner) => {
+                return check_core_a_safe_call(state, world, host, inner.clone(), receiver, method, args, config, witness, span)
+            },
+            Ty::Unknown => {
+                unknown = true
+                plain = false
+            },
+            else => {}
+        }
+        if unknown {
+            for a in args {
+                host.expr(state, a, span)
+            }
+            if witness >= 0 {
+                host.expr(state, config[witness].value, span)
+            }
+            return Ty::Unknown
+        }
+        if plain {
+            state.reaches_through_a_plain_value(world, on, receiver, name, true, expr, span)
+        }
+    }
+    // **A length `std` counts** (ADR-306 D4).
+    if args.len() == 0 && name == "len" && check_core_method_counted(on) {
+        state.facts.std_lengths.insert(id_of(receiver) as i64)
+        if state.elements_take_space(on) {
+            state.facts.sized_lengths.insert(id_of(receiver) as i64)
+        }
+    }
+    // **`m.get(k)` reads the map as `m[k]` does** (#297).
+    if name == "get" && check_core_method_a_map(on) {
+        state.flow.read_a_map = true
+    }
+    // **A receiver the method only reads is lent** (ADR-279 D5).
+    let coalesced = match receiver {
+        Expr::Coalesce { .. } => true,
+        else => false,
+    }
+    if coalesced && state.only_reads_its_receiver(world, name) {
+        state.a_pending_coalesce_is_lent(receiver)
+    }
+    // **The tier pass's own conversion** (ADR-282 D5, D15), and over an `if`
+    // or a `match` whose arms are views and text of its own, each arm's
+    // (#562).
+    let bare = args.len() == 0 && config.len() == 0
+    if (name == "into_either" || name == "into_either_maybe") && on.is_unknown() && bare {
+        on = state.views_meet_owned_text(world, check_peeled(receiver)) ?? Ty::Unknown
+    }
+    if bare {
+        if name == "into_either" {
+            return check_core_method_own(on)
+        }
+        if name == "into_either_maybe" {
+            let owned = check_core_method_own(on)
+            let nullable = match owned {
+                Ty::Nullable(_) => true,
+                else => false,
+            }
+            if nullable {
+                return owned
+            }
+            return Ty::Nullable(owned)
+        }
+        if name == "either_items" || name == "either_keys" || name == "either_values" || name == "either_pairs" {
+            return check_core_method_either_items(name, on)
+        }
+    }
+    let type_name = match on {
+        Ty::Named { name, .. } => name.clone(),
+        else => "".clone(),
+    }
+    // **`variant.is(value)`, the one method a reflected variant has**, and
+    // its attributes (ADR-304, ADR-331 D6).
+    if type_name == "$Variant" {
+        if name == "attribute" || name == "attributes" {
+            let read: String = host.an_attribute_read(state, args, span) ?? return Ty::Unknown
+            return check_core_method_attribute(name, read)
+        }
+        for a in args {
+            host.expr(state, a, span)
+        }
+        if witness >= 0 {
+            host.expr(state, config[witness].value, span)
+        }
+        if name != "is" || args.len() != 1 {
+            state.a_reflected_variant_has_two_members(f"{name}(…)", span)
+            return Ty::Unknown
+        }
+        return check_core_method_named("bool")
+    }
+    // **`field.of(value)`, the one method a reflected field has** (ADR-304
+    // D2): the field's type on this unrolling, `?` on the generic walk.
+    if type_name == "$Field" {
+        if name == "attribute" || name == "attributes" {
+            let read: String = host.an_attribute_read(state, args, span) ?? return Ty::Unknown
+            return check_core_method_attribute(name, read)
+        }
+        for a in args {
+            host.expr(state, a, span)
+        }
+        if witness >= 0 {
+            host.expr(state, config[witness].value, span)
+        }
+        if name != "of" {
+            state.a_reflected_field_has_two_members(f"{name}(…)", span)
+            return Ty::Unknown
+        }
+        let unrolling: CheckUnrolling = state.flow.unrolling?.clone() ?? return Ty::Unknown
+        return unrolling.field.ty.clone()
+    }
+    let nullable = match on {
+        Ty::Nullable(_) => true,
+        else => false,
+    }
+    if nullable {
+        state.reaches_into_a_nullable(on, "method", name, span)
+        // The arguments are still walked.
+        for a in args {
+            host.expr(state, a, span)
+        }
+        if witness >= 0 {
+            host.expr(state, config[witness].value, span)
+        }
+        return Ty::Unknown
+    }
+    // **The witness door, now that the receiver is typed** (ADR-281 D26),
+    // before `NK2203`.
+    let within = witness >= 0 && check_core_method_task_handle(on) && name == "join"
+    let door = witness >= 0 && locked_content_of(on) != null && name == "set"
+    if witness >= 0 && !within && !door {
+        // Not a lock after all, so it was an option like any other.
+        host.expr(state, config[witness].value, span)
+    }
+    if door {
+        state.the_witness_takes_no_reference(config[witness].value, span)
+        state.facts.witnessed_sets.insert(span.start as i64)
+        let mut given: Vec[Expr] = args.clone()
+        given.push(config[witness].value.clone())
+        return check_core_method_called(state, world, host, expr, on, receiver, method, given, "set(after)", span)
+    }
+    if within {
+        let mut given: Vec[Expr] = args.clone()
+        given.push(config[witness].value.clone())
+        return check_core_method_called(state, world, host, expr, on, receiver, method, given, "join(within)", span)
+    }
+    return check_core_method_called(state, world, host, expr, on, receiver, method, args, name, span)
+}

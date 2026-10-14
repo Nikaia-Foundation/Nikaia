@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.924] — 2026-10-14
+
+**check: a method call, `x.m(…)` and `x?.m(…)`, in Nikaia (U-c6, #125, #558)**
+- The arm `MethodCall | SafeMethod` of the checker's walk moves to `tools/check_core_method.nika` (about 670 Rust lines out, with the dead wrappers `a_safe_call`, `grammar_call`, `call_on`, `a_called_field`, `method` and the enum `Reached`). Nothing a program sees changes: `lower-std` and the oracle over 143 files are byte-identical.
+
 ## [0.0.923] — 2026-10-14
 
 **cache: evict on write, `nikaia cache clean` (#615)**

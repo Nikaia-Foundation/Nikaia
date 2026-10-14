@@ -14617,6 +14617,469 @@ pub fn check_core_an_assert<H: CheckHost>(state: &mut CheckState, world: &CheckW
 }
 
 
+// --- check_core_method.nika ---
+
+fn check_core_method_named(name: &str) -> Ty { Ty::Named { name: name.to_owned(), args: vec![], view: false } }
+
+fn check_core_method_base(name: &str) -> String {
+    let parts: Vec<&str> = name.split("::").collect::<Vec<_>>();
+    if parts.is_empty() { return name.to_owned(); }
+    let last = parts.len() as i64 - 1;
+    format!("{}", *nikaia_std::index::get(&parts, nikaia_std::index::at(last)))
+}
+
+fn check_core_method_str_view(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { name, args, view } => { let view = *view; view && name == "str" && args.is_empty() },
+        _ => false,
+    }
+}
+
+fn check_core_method_string(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { name, args, view } => { let view = *view; !view && name == "String" && args.is_empty() },
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_method_receiver_name(world: &CheckWorld<'_>, receiver: &Expr) -> Option<String> {
+    match receiver {
+        Expr::Variable(name, _) => {
+            let name = *name;
+            return Some(format!("{}", world.words.resolve(name)));
+        },
+        _ => { },
+    }
+    None
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_method_pushed_into(state: &CheckState, world: &CheckWorld<'_>, receiver: &Expr, method: &str, count: i64) -> Option<String> {
+    let push = method == "push" && count == 1;
+    let insert = method == "insert" && count == 2;
+    if !push && !insert { return None; }
+    let name: String = match check_core_method_receiver_name(world, receiver) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let local: CheckLocal = match state.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let fits = match local.ty {
+        Ty::Named { ref name, ref args, .. } => { if push { name == "Vec" && (args.is_empty() || args.len() == 1 && (*nikaia_std::index::get(&args, 0)).is_unknown()) } else { a_map_type(name) && (args.is_empty() || args.len() == 2 && (*nikaia_std::index::get(&args, 0)).is_unknown() && (*nikaia_std::index::get(&args, 1)).is_unknown()) } },
+        _ => false,
+    };
+    if fits { return Some(name); }
+    None
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_method_witness(world: &CheckWorld<'_>, method: &str, config: &[ConfigArg]) -> i64 {
+    let mut wanted: String = String::from("");
+    if method == "set" { wanted = "after".to_owned(); } else if method == "join" { wanted = "within".to_owned(); } else { return -1; }
+    let mut at: i64 = 0;
+    while at < config.len() as i64 {
+        if world.words.resolve(nikaia_std::index::get(&config, (at) as usize).name) == wanted { return at; }
+        at += 1;
+    }
+    -1
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_method_literal(state: &mut CheckState, receiver: &Expr, on: Ty) -> Ty {
+    let unknown = matches!(on, Ty::Unknown);
+    if !unknown { return on; }
+    match receiver {
+        Expr::LitInt { value, negative, .. } => {
+            let negative = *negative; let value = *value;
+            let number = integer(value, negative);
+            let mut ty: String = String::from("u64");
+            if integer_fits(&number, "i64") { if integer_fits(&number, "i32") { ty = "i32".to_owned(); } else { ty = "i64".to_owned(); } }
+            state.facts.unsigned_literals.insert(id_of(receiver) as i64, ty.to_owned());
+            return check_core_method_named(&ty);
+        },
+        _ => { },
+    }
+    on
+}
+
+fn check_core_method_counted(on: &Ty) -> bool {
+    match on {
+        Ty::Named { name, .. } => {
+            let b = check_core_method_base(name);
+            b == "Vec" || b == "List" || b == "Array" || b == "String" || b == "str" || b == "HashMap" || b == "Map" || b == "BTreeMap" || b == "HashSet" || b == "Set" || b == "BTreeSet"
+        },
+        Ty::Pointed { slice, .. } => { let slice = *slice; slice },
+        _ => false,
+    }
+}
+
+fn check_core_method_a_map(on: &Ty) -> bool {
+    match on {
+        Ty::Named { name, .. } => {
+            let b = check_core_method_base(name);
+            b == "HashMap" || b == "Map" || b == "BTreeMap"
+        },
+        _ => false,
+    }
+}
+
+fn check_core_method_own(ty: Ty) -> Ty {
+    if check_core_method_str_view(&ty) { return check_core_method_named("String"); }
+    match ty {
+        Ty::Nullable(ref inner) => {
+            let inner = nikaia_std::boxed::open(inner);
+            if check_core_method_str_view(inner) { return Ty::Nullable(Box::new(check_core_method_named("String"))); }
+        },
+        _ => { },
+    }
+    ty
+}
+
+fn check_core_method_own_item(which: &str, item: Ty) -> Ty {
+    if which == "either_items" { return check_core_method_own(item); }
+    match item {
+        Ty::Tuple(ref parts) => {
+            let mut out: Vec<Ty> = vec![];
+            let mut at = 0;
+            for part in parts.iter() {
+                if which == "either_keys" && at == 0 || which == "either_values" && at == 1 || which == "either_pairs" { out.push(check_core_method_own(part.clone())); } else { out.push(part.clone()); }
+                at += 1;
+            }
+            return Ty::Tuple(out);
+        },
+        _ => { },
+    }
+    item
+}
+
+fn check_core_method_either_items(which: &str, on: Ty) -> Ty {
+    match on {
+        Ty::Seq { ref item, is_sync, pauses, can_throw, parallel, shape } => {
+            let item = nikaia_std::boxed::open(item);
+            return Ty::Seq { item: Box::new(check_core_method_own_item(which, item.clone())), is_sync, pauses, can_throw, parallel, shape: shape.clone() };
+        },
+        _ => { },
+    }
+    on
+}
+
+fn check_core_method_attribute(named: &str, read: &str) -> Ty {
+    if named == "attribute" { return Ty::Nullable(Box::new(check_core_method_named(read))); }
+    Ty::Named { name: "Vec".to_owned(), args: vec![check_core_method_named(read)], view: false }
+}
+
+fn check_core_method_run(on: &Ty) -> Option<Ty> {
+    match on {
+        Ty::Pointed { item, slice, .. } => {
+            let item = nikaia_std::boxed::open(item); let slice = *slice;
+            if slice { return Some(item.clone()); }
+        },
+        Ty::Named { name, args, view } => {
+            let view = *view;
+            if view && name == ARRAY && args.len() == 1 { return Some((*nikaia_std::index::get(&args, 0)).clone()); }
+        },
+        _ => { },
+    }
+    None
+}
+
+fn check_core_method_task_handle(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { name, .. } => name == "TaskHandle",
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_method_text_local(state: &CheckState, world: &CheckWorld<'_>, arg: &Expr) -> bool {
+    let name: String = match check_core_method_receiver_name(world, arg) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let local: CheckLocal = match state.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    check_core_method_str_view(&local.ty) || check_core_method_string(&local.ty)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_method_changes(state: &mut CheckState, world: &CheckWorld<'_>, receiver: &Expr, name: &str, span: &Span) {
+    let root: String = match state.rooted_at(world, receiver) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let mut count = 0;
+    let mut all = true;
+    for key in ledger_candidates(world.own, name) {
+        count += 1;
+        let contract = match *nikaia_std::index::get(&world.own.functions, &key) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if !contract.mutates { all = false; }
+    }
+    for key in ledger_candidates(world.library, name) {
+        count += 1;
+        let contract = match *nikaia_std::index::get(&world.library.functions, &key) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if !contract.mutates { all = false; }
+    }
+    if count == 0 || !all { return; }
+    state.a_changed_binding_says_mut(&root, &format!("changed here, by `{}`", name), span.clone());
+    state.a_shared_name_changed_in_parallel(&root, span);
+    if an_element_beneath(receiver) { state.facts.changed_elements.insert(id_of(receiver) as i64); }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_method_resolved(state: &mut CheckState, world: &CheckWorld<'_>, receiver: &Expr, args: &[Expr]) {
+    let last: Option<String> = match state.flow.last_resolved.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    };
+    state.flow.last_resolved = None;
+    let key: String = match last { Some(__nikaia_value) => __nikaia_value, None => return };
+    let library = key.ends_with("::clone") && world.library.functions.contains_key(&key) && !world.own.functions.contains_key(&key);
+    if library && args.is_empty() { state.facts.owned_copies.insert(id_of(receiver) as i64); }
+    if (key == "Vec::contains" || key == "Array::contains") && args.len() == 1 {
+        let named = matches!(*nikaia_std::index::get(&args, 0), Expr::Variable(_, _));
+        if named && check_core_method_text_local(&state, world, nikaia_std::index::get(&args, 0)) { state.facts.text_in_lists.insert(id_of(receiver) as i64); }
+    }
+    let counts = key == format!("{}::count", SEQ) || key == format!("{}::position", SEQ) || key == format!("{}::count", PAR) || key == format!("{}::position", PAR);
+    if counts && !world.own.functions.contains_key(&key) { state.facts.counted.insert(id_of(receiver) as i64); }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+fn check_core_method_called<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, expr: &Expr, on: Ty, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], written: &str, span: &Span) -> Ty {
+    let name: String = format!("{}", world.words.resolve(method));
+    let outer_receiver: Option<String> = match state.set_receiver.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    };
+    let lock_name: Option<String> = check_core_method_receiver_name(world, receiver);
+    state.set_receiver = Some(nikaia_std::index::or(lock_name.as_deref(), || "this lock").to_owned());
+    let outer_named: Option<String> = match state.flow.receiver_name.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    };
+    state.flow.receiver_name = check_core_method_receiver_name(world, receiver);
+    state.a_door_that_is_not_written(&on, written, span);
+    if state.inside_a_door {
+        match on {
+            Ty::Named { ref name, .. } => {
+                let found: Option<CheckResolved> = resolve_method(world, &format!("{}::{}", name, written));
+                if found.is_some() {
+                    let resolved: CheckResolved = match found { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
+                    state.a_lock_inside_a_lock(&resolved.key, &resolved.contract.touches_a_lock, span);
+                }
+            },
+            _ => { },
+        }
+    }
+    state.io_inside_a_door(world, &on, &format!("`{}`", written), span);
+    let at_a_door = name == "update" && locked_content_of(&on).is_some();
+    if at_a_door && !args.is_empty() {
+        match nikaia_std::index::get(&args, nikaia_std::index::at(args.len() as i64 - 1)) {
+            Expr::Closure { params, body, .. } => {
+                state.an_update_block_returns_nothing(body, span);
+                state.an_update_block_reads_what_it_writes(world, params, body, span);
+            },
+            _ => { },
+        }
+    }
+    let outer_door = state.flow.at_a_write_door;
+    state.flow.at_a_write_door = at_a_door;
+    let holding = (name == "update" || name == "access") && locked_content_of(&on).is_some();
+    let outer_inside = state.inside_a_door;
+    state.inside_a_door = holding;
+    check_core_method_changes(state, world, receiver, &name, span);
+    state.a_copy_under_another_name(world, receiver, method, args, span);
+    let text = match on {
+        Ty::Named { ref name, ref args, .. } => args.is_empty() && (name == "String" || name == "str"),
+        _ => false,
+    };
+    if text && (name == "find" || name == "rfind" || name == "replacen") { state.facts.text_finds.insert(id_of(receiver) as i64); }
+    if text && args.is_empty() && name == "to_string" && ledger_candidates(world.own, "to_string").is_empty() {
+        state.facts.text_as_is.insert(id_of(receiver) as i64);
+        state.flow.receiver_name = outer_named;
+        state.flow.at_a_write_door = outer_door;
+        state.inside_a_door = outer_inside;
+        return on;
+    }
+    let called: Option<Ty> = check_core_a_called_field(state, world, host, &on, receiver, method, args, outer_inside, span);
+    if called.is_some() {
+        state.flow.receiver_name = outer_named;
+        state.flow.at_a_write_door = outer_door;
+        state.inside_a_door = outer_inside;
+        return nikaia_std::index::or(called, || Ty::Unknown);
+    }
+    let a_run: Option<Ty> = check_core_method_run(&on);
+    if a_run.is_some() && name == "clone" && args.is_empty() {
+        state.facts.owned_copies.insert(id_of(receiver) as i64);
+        state.flow.receiver_name = outer_named;
+        state.flow.at_a_write_door = outer_door;
+        state.inside_a_door = outer_inside;
+        let item: Ty = nikaia_std::index::or(a_run, || Ty::Unknown);
+        return Ty::Named { name: "Vec".to_owned(), args: vec![item], view: false };
+    }
+    state.flow.last_resolved = None;
+    state.flow.receiver_from_text = state.made_from_text(world, receiver);
+    let value: Ty = check_core_call_on(state, world, host, on.clone(), receiver, method, args, written, span);
+    state.flow.receiver_from_text = false;
+    check_core_method_resolved(state, world, receiver, args);
+    state.flow.receiver_name = outer_named;
+    state.flow.at_a_write_door = outer_door;
+    state.inside_a_door = outer_inside;
+    state.set_receiver = outer_receiver;
+    let mut walked: Ty = value.clone();
+    match value {
+        Ty::Seq { ref item, is_sync, pauses, can_throw, parallel, shape } => {
+            let item = nikaia_std::boxed::open(item);
+            if copies_as_a_view(item) {
+                state.facts.copied_walks.insert(id_of(expr) as i64);
+                walked = Ty::Seq { item: Box::new(unviewed_type(item)), is_sync, pauses, can_throw, parallel, shape: shape.clone() };
+            }
+        },
+        _ => { },
+    }
+    if (name == "filter" || name == "find" || name == "take_while" || name == "skip_while") && args.len() == 1 {
+        match on {
+            Ty::Seq { ref item, .. } => {
+                let item = nikaia_std::boxed::open(item);
+                match nikaia_std::index::get(&args, 0) {
+                    Expr::Closure { params, .. } => { if params.len() == 1 && !item.is_unknown() && (item.is_a_view() || !moves(item)) { state.facts.filter_patterns.insert(id_of(nikaia_std::index::get(&args, 0)) as i64); } },
+                    _ => { },
+                }
+            },
+            _ => { },
+        }
+    }
+    if name == "access" && locked_content_of(&on).is_some() { return Ty::Named { name: SEEN.to_owned(), args: vec![walked.unseen()], view: false }; }
+    walked
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+pub fn check_core_method<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, expr: &Expr, safe: bool, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], span: &Span) -> Ty {
+    let name: String = format!("{}", world.words.resolve(method));
+    state.flow.pushed_into = check_core_method_pushed_into(&state, world, receiver, &name, args.len() as i64);
+    let witness = check_core_method_witness(world, &name, config);
+    let mut at: i64 = 0;
+    while at < config.len() as i64 {
+        if at != witness { host.expr(state, &nikaia_std::index::get(&config, (at) as usize).value, span); }
+        at += 1;
+    }
+    let entered: Option<String> = state.grammar_entry(world, receiver, method);
+    if entered.is_some() {
+        let entry: String = match entered { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
+        if witness >= 0 { host.expr(state, &nikaia_std::index::get(&config, nikaia_std::index::at(witness)).value, span); }
+        let mut owner: String = entry.to_owned();
+        let mut rule: String = String::from("");
+        let cut = nikaia_std::search::find(&entry, &"::", 0);
+        if cut.is_some() {
+            let split = nikaia_std::index::or(cut, || 0);
+            owner = nikaia_std::index::get(&entry, nikaia_std::index::at(0..split)).to_owned();
+            rule = nikaia_std::index::get(&entry, nikaia_std::index::at(split + 2..)).to_owned();
+        }
+        state.a_grammar_reached_through_a_dot(&owner, &rule, span);
+        return check_core_grammar_call(state, world, host, &entry, args, span);
+    }
+    let mut on: Ty = host.expr(state, receiver, span);
+    on = check_core_method_literal(state, receiver, on);
+    if safe {
+        let mut unknown = false;
+        let mut plain = true;
+        match on {
+            Ty::Nullable(ref inner) => {
+                let inner = nikaia_std::boxed::open(inner);
+                return check_core_a_safe_call(state, world, host, inner.clone(), receiver, method, args, config, witness, span);
+            },
+            Ty::Unknown => {
+                unknown = true;
+                plain = false;
+            },
+            _ => { },
+        }
+        if unknown {
+            for a in args.iter() { host.expr(state, a, span); }
+            if witness >= 0 { host.expr(state, &nikaia_std::index::get(&config, nikaia_std::index::at(witness)).value, span); }
+            return Ty::Unknown;
+        }
+        if plain { state.reaches_through_a_plain_value(world, &on, receiver, &name, true, expr, span); }
+    }
+    if args.is_empty() && name == "len" && check_core_method_counted(&on) {
+        state.facts.std_lengths.insert(id_of(receiver) as i64);
+        if state.elements_take_space(&on) { state.facts.sized_lengths.insert(id_of(receiver) as i64); }
+    }
+    if name == "get" && check_core_method_a_map(&on) { state.flow.read_a_map = true; }
+    let coalesced = matches!(receiver, Expr::Coalesce { .. });
+    if coalesced && state.only_reads_its_receiver(world, &name) { state.a_pending_coalesce_is_lent(receiver); }
+    let bare = args.is_empty() && config.is_empty();
+    if (name == "into_either" || name == "into_either_maybe") && on.is_unknown() && bare { on = nikaia_std::index::or(state.views_meet_owned_text(world, check_peeled(receiver)), || Ty::Unknown); }
+    if bare {
+        if name == "into_either" { return check_core_method_own(on); }
+        if name == "into_either_maybe" {
+            let owned = check_core_method_own(on);
+            let nullable = matches!(owned, Ty::Nullable(_));
+            if nullable { return owned; }
+            return Ty::Nullable(Box::new(owned));
+        }
+        if name == "either_items" || name == "either_keys" || name == "either_values" || name == "either_pairs" { return check_core_method_either_items(&name, on); }
+    }
+    let type_name = match on {
+        Ty::Named { ref name, .. } => name.to_owned(),
+        _ => "".to_owned(),
+    };
+    if type_name == "$Variant" {
+        if name == "attribute" || name == "attributes" {
+            let read: String = match host.an_attribute_read(state, args, span) { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
+            return check_core_method_attribute(&name, &read);
+        }
+        for a in args.iter() { host.expr(state, a, span); }
+        if witness >= 0 { host.expr(state, &nikaia_std::index::get(&config, nikaia_std::index::at(witness)).value, span); }
+        if name != "is" || args.len() != 1 {
+            state.a_reflected_variant_has_two_members(&format!("{}(…)", name), span);
+            return Ty::Unknown;
+        }
+        return check_core_method_named("bool");
+    }
+    if type_name == "$Field" {
+        if name == "attribute" || name == "attributes" {
+            let read: String = match host.an_attribute_read(state, args, span) { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
+            return check_core_method_attribute(&name, &read);
+        }
+        for a in args.iter() { host.expr(state, a, span); }
+        if witness >= 0 { host.expr(state, &nikaia_std::index::get(&config, nikaia_std::index::at(witness)).value, span); }
+        if name != "of" {
+            state.a_reflected_field_has_two_members(&format!("{}(…)", name), span);
+            return Ty::Unknown;
+        }
+        let unrolling: CheckUnrolling = match match state.flow.unrolling.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        } { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
+        return unrolling.field.ty.clone();
+    }
+    let nullable = matches!(on, Ty::Nullable(_));
+    if nullable {
+        state.reaches_into_a_nullable(&on, "method", &name, span);
+        for a in args.iter() { host.expr(state, a, span); }
+        if witness >= 0 { host.expr(state, &nikaia_std::index::get(&config, nikaia_std::index::at(witness)).value, span); }
+        return Ty::Unknown;
+    }
+    let within = witness >= 0 && check_core_method_task_handle(&on) && name == "join";
+    let door = witness >= 0 && locked_content_of(&on).is_some() && name == "set";
+    if witness >= 0 && !within && !door { host.expr(state, &nikaia_std::index::get(&config, nikaia_std::index::at(witness)).value, span); }
+    if door {
+        state.the_witness_takes_no_reference(&nikaia_std::index::get(&config, nikaia_std::index::at(witness)).value, span);
+        state.facts.witnessed_sets.insert(span.start as i64);
+        let mut given: Vec<Expr> = args.to_owned();
+        given.push(nikaia_std::index::get(&config, nikaia_std::index::at(witness)).value.clone());
+        return check_core_method_called(state, world, host, expr, on, receiver, method, &given, "set(after)", span);
+    }
+    if within {
+        let mut given: Vec<Expr> = args.to_owned();
+        given.push(nikaia_std::index::get(&config, nikaia_std::index::at(witness)).value.clone());
+        return check_core_method_called(state, world, host, expr, on, receiver, method, &given, "join(within)", span);
+    }
+    check_core_method_called(state, world, host, expr, on, receiver, method, args, &name, span)
+}
+
+
 // --- check_core_pilot.nika ---
 
 pub fn check_specialised(function: &str, on: &str) -> String {
@@ -54326,6 +54789,10 @@ pub mod check_core_comptime {
 pub mod check_core_leaves {
     #[allow(unused_imports)]
     pub use super::{check_core_a_field_of_a_borrowed_subject, check_core_a_field_of_a_lent_place_handed_back, check_core_a_kept_lambda, check_core_literal_by_use, check_core_holes, check_core_lambda, check_core_returns, check_core_an_assert};
+}
+pub mod check_core_method {
+    #[allow(unused_imports)]
+    pub use super::{check_core_method};
 }
 pub mod check_core_pilot {
     #[allow(unused_imports)]

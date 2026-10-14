@@ -207,6 +207,7 @@ COMPILER_NIKA = {
     "check_core_args.nika": "check: a call's arguments, access_all and update_all, list literals, called fields (U-c3) (0.0.912)",
     "check_core_call.nika": "check: a free call, tuples and list literals (U-c4) (0.0.916)",
     "check_core_call_on.nika": "check: a method call on a known receiver, and `?.` (U-c5) (0.0.922)",
+    "check_core_method.nika": "check: a method call, `x.m(…)` and `x?.m(…)` (U-c6) (0.0.924)",
 }
 
 

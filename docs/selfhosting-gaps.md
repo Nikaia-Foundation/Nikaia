@@ -238,6 +238,12 @@ checker refusal (`NK1125`) if `!= null` is not meant to narrow.
 | U-c5 nested `if` inside `else if` of the push/insert binding | conditions joined with `&&` | yes: clippy `collapsible_if` on the lowered code |
 | U-c5 the `task::Scope::spawn` half of `call_on` | host method `a_task_of_a_scope` | yes: #605's task work |
 | U-c5 `a_lambda_that_pauses_at_an_entry` | host method, stays Rust | yes: not in the unit |
+| U-c6 a local named `grammar` (`split_once` of the entry) | renamed `owner`; `find("::")` and two ranges | yes: `grammar` is a keyword |
+| U-c6 `self.s.set_receiver.clone()` and the other `String?` fields kept for restoring | `?.clone()` | yes: NK1125, no method on a `T?` |
+| U-c6 `matches!(args.as_slice(), [] \| [Ty::Unknown])` | `args.len()` and `is_unknown()` | yes: no slice patterns (#618) |
+| U-c6 `std::mem::replace` of four flags | read into a `let`, then assigned | yes: no `mem::replace` |
+| U-c6 the `(args, written)` rebinding to the list with the witness | the half after the door is its own function, called with `args` or the longer list | yes: no shadowing a `ref` parameter by a local slice |
+| U-c6 `Constant::of(..).first_type()` | `integer_fits` for `i64` and `i32` | yes: `Constant` is Rust's |
 
 ## Method
 
