@@ -89,6 +89,29 @@ fn alternatives_that_bind_different_names_are_refused() {
     );
 }
 
+/// **`NK1253`: a positional variant's pattern names every part**
+/// (lowering-defects D33): `E::A(_)` against `A(i64, i64)` reached rustc.
+#[test]
+fn a_variant_pattern_with_too_few_parts_is_refused() {
+    let found: Vec<_> = findings(
+        "enum E { A(i64, i64), B }\n\
+         fn f(e: E) -> i64 { return match e { E::A(_) => 1, else => 0 } }\n",
+    )
+    .into_iter()
+    .filter(|f| f.code == "NK1253")
+    .collect();
+    assert_eq!(found.len(), 1, "{found:#?}");
+    assert!(
+        found[0].message.contains("1 part") && found[0].message.contains("carries 2"),
+        "{found:#?}"
+    );
+    let fine = findings(
+        "enum E { A(i64, i64), B }\n\
+         fn f(e: E) -> i64 { return match e { E::A(x, _) => x, else => 0 } }\n",
+    );
+    assert!(fine.iter().all(|f| f.code != "NK1253"), "{fine:#?}");
+}
+
 /// **A guard is `if`** (D2), and it stands on the arm.
 #[test]
 fn a_guard_is_written_if() {

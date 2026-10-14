@@ -282,6 +282,31 @@ impl CheckState {
         self.a_member_this_type_does_not_have(world, ty, member, span)
     }
 
+    /// **A positional variant's pattern names every part** (Part I 3.4):
+    /// `E::A(_)` against `A(i64, i64)` is refused with `NK1253`, which names
+    /// both counts; there is no rest pattern for the parts left out.
+    fn a_variant_pattern_with_other_parts(ref mut self, world: ref CheckWorld, path: ref Vec[winnow_grammar::Symbol], written: i64, span: ref Span) sync {
+        if path.len() != 2 {
+            return
+        }
+        let ty = world.words.resolve(path[0]).clone()
+        let member = world.words.resolve(path[1]).clone()
+        let key = f"{ty}::{member}"
+        if !self.variant_parts.contains_key(key) {
+            return
+        }
+        let declared = (self.variant_parts[key]?.clone() ?? []).len()
+        if declared == written {
+            return
+        }
+        let mut blanks: Vec[String] = []
+        while blanks.len() < declared {
+            blanks.push("_".clone())
+        }
+        let shape = blanks.join(", ")
+        self.findings.push(check_refusal("NK1253", span, f"The pattern `{key}` names {written} part(s), but the variant carries {declared}.", [f"A pattern names every part of a positional variant, in order; `_` ignores one."], f"Write `{key}({shape})` and bind the parts you need."))
+    }
+
     /// The same question asked of a `match` arm's pattern (ADR-291 D10's shapes),
     /// which is where a misspelled variant is most likely to be written. The
     /// parts are patterns, so the walk goes into them.
@@ -291,6 +316,7 @@ impl CheckState {
             MatchPattern::Named { path, .. } => self.a_path_in_a_pattern(world, path, span),
             MatchPattern::Tuple { path, parts } => {
                 self.a_path_in_a_pattern(world, path, span)
+                self.a_variant_pattern_with_other_parts(world, path, parts.len(), span)
                 for part in parts {
                     self.a_pattern_naming_a_member_a_type_does_not_have(world, part, span)
                 }

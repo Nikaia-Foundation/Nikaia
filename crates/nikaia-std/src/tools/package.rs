@@ -16844,12 +16844,31 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    fn a_variant_pattern_with_other_parts(&mut self, world: &CheckWorld<'_>, path: &[winnow_grammar::Symbol], written: i64, span: &Span) {
+        if path.len() != 2 { return; }
+        let ty = world.words.resolve(*nikaia_std::index::get(&path, 0)).to_owned();
+        let member = world.words.resolve(*nikaia_std::index::get(&path, 1)).to_owned();
+        let key = format!("{}::{}", ty, member);
+        if !self.variant_parts.contains_key(&key) { return; }
+        let declared = nikaia_std::index::or(match *nikaia_std::index::get(&self.variant_parts, &key) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || vec![].into()).len() as i64;
+        if declared == written { return; }
+        let mut blanks: Vec<String> = vec![];
+        while (blanks.len() as i64) < declared { blanks.push("_".to_owned()); }
+        let shape = blanks.join(", ");
+        self.findings.push(check_refusal("NK1253", span, format!("The pattern `{}` names {} part(s), but the variant carries {}.", key, written, declared), vec!["A pattern names every part of a positional variant, in order; `_` ignores one.".to_string()], Some(format!("Write `{}({})` and bind the parts you need.", key, shape))));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub fn a_pattern_naming_a_member_a_type_does_not_have(&mut self, world: &CheckWorld<'_>, pattern: &MatchPattern, span: &Span) {
         match pattern {
             MatchPattern::Path(path) => self.a_path_in_a_pattern(world, path, span),
             MatchPattern::Named { path, .. } => self.a_path_in_a_pattern(world, path, span),
             MatchPattern::Tuple { path, parts } => {
                 self.a_path_in_a_pattern(world, path, span);
+                self.a_variant_pattern_with_other_parts(world, path, parts.len() as i64, span);
                 for part in parts.iter() { self.a_pattern_naming_a_member_a_type_does_not_have(world, part, span); }
             },
             MatchPattern::Or(alternatives) => { for alternative in alternatives.iter() { self.a_pattern_naming_a_member_a_type_does_not_have(world, alternative, span); } },

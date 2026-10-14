@@ -311,7 +311,10 @@ beside a literal fallback could be `Option<&String>` or `Option<String>`, and
 own first (`.map(|v| v.to_string())`), so a typed `let x: T? = ..` is no
 longer needed (`views_kept.rs`).
 
-## D33 (new). A tuple-variant pattern with too few fields passes the checker
+## D33. A tuple-variant pattern with too few fields passes the checker: built
+
+Built: the checker refuses it with `NK1253` (`check_members.nika`, test in `crates/nikaia/tests/match_patterns.rs`).
+
 
 `match e { E::A(_) => 1, else => 0 }` with `A(i64, i64)` passes `nikaia check`;
 rustc refuses the lowering (*this pattern has 1 field, but the corresponding
