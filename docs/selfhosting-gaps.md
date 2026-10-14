@@ -258,6 +258,8 @@ checker refusal (`NK1125`) if `!= null` is not meant to narrow.
 | U-c8 `let outer = self.s.stamped_condition` and back | `?? -1`, then `null` or the value | no: a plain read of an `i64?` field is a move here |
 | U-c8 `scope.last_mut()` with `frame[at].ty = ..` for a guard | the frame rebuilt (`check_core_flow_viewed`, `_restored`) | untried: a write through two indices; one index write is used |
 | U-c8 `handed_over.as_mut().map(\|h\| mem::replace(..))` | `?.clone()`, the field set, the option written back | yes: no `as_mut` |
+| U-c10 `whole(side, ty) -> Option<Option<String>>` | two functions, a `bool` and a name with `""` for none | no: a `T??` is not written |
+| U-c10 `narrow::proved_names` + `with_proved` for `&&` / `\|\|` | `host.proved_here`, the frame pushed in Nikaia; `a_proof_taken_back` and `a_type_that_does_not_compare` are host methods | yes: narrowing stays in `narrow.rs` (#621); the parts beside stay Rust |
 | U-c8 `arms.iter().skip(1).find_map(..)?` | a `while` over the arms | no: closures that return `?` |
 
 ## Method

@@ -48,6 +48,7 @@ use nikaia_std::tools::check_core_comptime;
 use nikaia_std::tools::check_core_flow;
 use nikaia_std::tools::check_core_leaves;
 use nikaia_std::tools::check_core_method;
+use nikaia_std::tools::check_core_ops;
 use nikaia_std::tools::check_core_places;
 use nikaia_std::tools::check_core_stmt;
 use nikaia_std::tools::check_flow::{
@@ -62,12 +63,11 @@ pub use nikaia_std::tools::check_state::{
     CheckFinding as Finding, CheckLabel as Label, CheckSeverity as Severity,
 };
 use nikaia_std::tools::check_state::{
-    CheckImmutable as Immutable, CheckKind as Kind, CheckLocal as Local,
-    CheckPendingCoalesce as PendingCoalesce, CheckPromises as Promises, CheckRepeats as Repeats,
+    CheckImmutable as Immutable, CheckKind as Kind, CheckLocal as Local, CheckPromises as Promises,
     CheckState, CheckWorld, a_body_never_ends,
 };
 use nikaia_std::tools::check_texts::{self};
-use nikaia_std::tools::check_widen::{self, names_a_path};
+use nikaia_std::tools::check_widen::{self};
 use nikaia_std::tools::parsed_view::ParsedView;
 
 /// A finding's code as the `&'static str` the compiler's tables and its tests
@@ -922,7 +922,6 @@ impl From<CheckConstant> for Constant {
     }
 }
 
-use nikaia_std::tools::check_binds::CheckBoundary as Boundary;
 struct Checker<'a> {
     /// **The checker's state that is Nikaia** (`tools/check_state.nika`, #558).
     s: core::Baton,
@@ -1731,55 +1730,6 @@ impl<'a> Checker<'a> {
         self.s.run_code = outer_run_code;
     }
 
-    /// **`NK1191`: an arithmetic operator on something that has none**
-    /// (0.0.234; a declared `struct` or `enum` too, under the same code).
-    ///
-    /// Only where a side is **known** to be a list, a map or a set, or a
-    /// `struct` or an `enum` this program declares: a value whose type this
-    /// checker could not work out is not refused on a guess
-    /// ([Part III C.4](../../docs/specification/30-nikaia-tooling.md)).
-    ///
-    /// **A declared type has no operators because the language gives it no
-    /// way to have one**: there is no overloading
-    /// ([ADR-094](../../docs/specification/adr/adr-094.md) §1,
-    /// [ADR-286](../../docs/specification/adr/adr-286.md)) and no trait an
-    /// `impl` could name to give a type `+` (Part I 4.7). `a -= 30` on an
-    /// `Account` lowered as it was written and `rustc` said *binary assignment
-    /// operation `-=` cannot be applied* (E0368, E0369) about a file nobody
-    /// wrote (C.1). A type another file of this program, a package or a
-    /// described crate declares is not asked: only this unit's own
-    /// declarations are known to be Nikaia's.
-    ///
-    /// `sides` is each operand with what it was written as, and `compound` is
-    /// whether the operator was written `-=`, which is what the help writes back.
-    fn arithmetic_on_something_that_has_none(
-        &mut self,
-        op: BinaryOp,
-        sides: [(&Expr, &Ty); 2],
-        compound: bool,
-        span: &Span,
-    ) {
-        let [(left_expr, left), (right_expr, right)] = sides;
-        self.s.arithmetic_on_something_that_has_none(
-            self.world, op, left_expr, left, right_expr, right, compound, span,
-        );
-    }
-
-    /// A list, a map, a set, or a `struct` or an `enum` this unit declares.
-    fn has_no_arithmetic(&self, ty: &Ty) -> bool {
-        is_a_collection(ty) || self.declared_with_no_arithmetic(ty).is_some()
-    }
-
-    /// `"struct"` or `"enum"` where a type is known to be one **this unit**
-    /// declares, the types Part I gives no operator and no way to have one.
-    fn declared_with_no_arithmetic(&self, ty: &Ty) -> Option<&'static str> {
-        match check_items::declared_with_no_arithmetic(&self.world.here, ty).as_deref() {
-            Some("struct") => Some("struct"),
-            Some(_) => Some("enum"),
-            None => None,
-        }
-    }
-
     /// **A type that holds itself holds itself through a box the compiler
     /// writes** ([ADR-246](../../docs/specification/adr/adr-246.md) D1).
     ///
@@ -1809,18 +1759,6 @@ impl<'a> Checker<'a> {
         matches!(func, Expr::Variable(name, _) if self.parsed.text(*name) == ASSERT)
             && self.s.lookup(ASSERT).is_none()
             && !self.world.own.functions.contains_key(ASSERT)
-    }
-
-    fn a_view_compared_with_a_value(
-        &mut self,
-        lhs: &Expr,
-        left: &Ty,
-        rhs: &Expr,
-        right: &Ty,
-        at: &Span,
-    ) {
-        self.s
-            .a_view_compared_with_a_value(self.world, lhs, left, rhs, right, at);
     }
 
     /// **An `impl` of a trait nothing declares** (0.0.231).
@@ -2032,48 +1970,6 @@ impl<'a> Checker<'a> {
         });
     }
 
-    /// `??` over a value that is never absent (`tools/check_fields.nika`).
-    fn nothing_to_fall_back_from(
-        &mut self,
-        value: &Expr,
-        left: &Ty,
-        coalesce: &Expr,
-        span: &Span,
-    ) -> bool {
-        self.s
-            .nothing_to_fall_back_from(self.world, value, left, coalesce, span)
-    }
-
-    /// One lambda parameter, bound — and refusable where it is changed without
-    /// `mut` ([ADR-281](../../docs/specification/adr/adr-281.md) D12).
-    ///
-    /// `kasse.update fn(mut v) { v += 100 }` is where the word earns its place:
-    /// the block changes the value in place and the caller whose value changes
-    /// is the **lock**. D1 says a block that changes `v` without the word is
-    /// `NK1138`, and it says it **about a door** — which is where this asks it
-    /// and nowhere else.
-    ///
-    /// **Held for every lambda it would refuse correct programs**, and the
-    /// corpus is what said so: `par_fold(…, fn(acc, m) { acc.record(m) })` in
-    /// `examples/1brc.nika` changes `acc` and has no `mut`, and it compiles,
-    /// because the **emitter** writes the word itself where it recognises a
-    /// fold's accumulator; `and_modify fn(tally) { tally.bump() }` in
-    /// `k-nucleotide.nika` is the same shape one library over. So *a lambda
-    /// parameter changed without `mut` is already broken Rust* is false, and a
-    /// rule built on it would be [Part III
-    /// C.4](../../docs/specification/30-nikaia-tooling.md)'s correct program
-    /// refused. Widening it is a question for whoever takes that `mut` out of
-    /// the emitter, and it belongs with that work rather than ahead of it.
-    fn lambda_parameter(
-        &mut self,
-        name: winnow_grammar::Symbol,
-        mutable: &[winnow_grammar::Symbol],
-        ty: Ty,
-        span: &Span,
-    ) -> Local {
-        self.s.lambda_parameter(self.world, name, mutable, ty, span)
-    }
-
     /// **Whether a type's values have a cleanup**, and whether it can fail
     /// ([ADR-297](../../docs/specification/adr/adr-297.md) D1): an `impl
     /// Cleanup` for it in any ledger this build reads - or for what it holds,
@@ -2156,19 +2052,6 @@ impl<'a> Checker<'a> {
             span,
         );
         self.s.findings.extend(refused);
-    }
-
-    /// **`NK1248`: a comparison on a type parameter that no bound allows**
-    /// ([ADR-341](../../docs/specification/adr/adr-341.md) D3).
-    ///
-    /// `fn lt[T](a: T, b: T) -> bool { return a < b }` passed the checker and
-    /// reached `rustc` as *binary operation `<` cannot be applied to type `T`*
-    /// (Part III C.1). `==` and `!=` need `Eq` or `Ord`, the order operators
-    /// need `Ord`; a trait of the program's own with one of those names gives
-    /// no operator.
-    fn an_operator_needs_a_bound(&mut self, op: BinaryOp, left: &Ty, right: &Ty, at: &Span) {
-        self.s
-            .an_operator_needs_a_bound(self.world, op, left, right, at);
     }
 
     /// **`NK1249`: an `impl Eq` or `impl Ord` the language cannot honour**
@@ -2396,20 +2279,6 @@ impl<'a> Checker<'a> {
         })
     }
 
-    /// **The open numbers a value is made of**: a name bound to one, through
-    /// the operations whose result is of their operands' type - arithmetic, a
-    /// bit operation, a negation. A call, a cast and a comparison make a value
-    /// of a type of their own and stop it; so does a shift's count, which is
-    /// any integer (ADR-285 D9).
-    fn open_numbers_in(&self, expr: &Expr, out: &mut Vec<usize>) {
-        out.extend(
-            self.s
-                .open_numbers_in(self.world, expr)
-                .into_iter()
-                .map(|at| at as usize),
-        );
-    }
-
     /// **A value that is nothing but numbers**: literals and open numbers,
     /// joined by the operations [`Self::open_numbers_in`] walks. A `let` of one
     /// is an open number itself (D1).
@@ -2423,58 +2292,10 @@ impl<'a> Checker<'a> {
         self.s.number_asked(self.world, value, want, at, beside);
     }
 
-    /// **One operation, one type**: the open numbers on both sides of it are
-    /// one question from here on (D1).
-    fn open_numbers_joined(&mut self, numbers: &[usize]) {
-        let numbers: Vec<i64> = numbers.iter().map(|&at| at as i64).collect();
-        self.s.open_numbers_joined(&numbers);
-    }
-
     /// **Every open number of a body, decided** once the body has been walked
     /// ([ADR-285](../../docs/specification/adr/adr-285.md) D24, D25, D27).
     fn numbers_typed_by_their_uses(&mut self) {
         self.s.numbers_typed_by_their_uses();
-    }
-
-    /// ADR-285 D29.5: a division whose divisor is a constant zero is refused
-    /// here, in this language's words.
-    ///
-    /// It was already refused where it was written, and by the same mechanism as
-    /// the sum `constant_fits` takes back: `rustc`'s `unconditional_panic`, with
-    /// *"attempt to divide `1_i32` by zero"* about a file nobody wrote
-    /// (Part III, C.1).
-    ///
-    /// **`NK1118`, and the polarity is the fold's.** A divisor that does not
-    /// fold to a constant says nothing: a division by something this checker
-    /// cannot evaluate is the ordinary case, and it aborts at run time with the
-    /// Nikaia line the table names (ADR-300). Only a zero it can *prove* is
-    /// refused.
-    /// **`NK1116` at the operation that overflows**, wherever it stands
-    /// (0.0.251, issue #176): in an `f"…"` hole, a condition, a list,
-    /// a receiver - not only where a `let`, a `return` or a parameter stands
-    /// beside it. Where a name pinned the type
-    /// ([ADR-285](../../docs/specification/adr/adr-285.md) D26) the operation
-    /// has one, and a constant that does not fit it is refused here rather than
-    /// by `rustc`'s *this arithmetic operation will overflow* about the
-    /// generated file.
-    ///
-    /// **The innermost that overflows, once**: the operands are walked first,
-    /// so one that overflowed has already said so for this statement, and the
-    /// operation around it says nothing more.
-    fn an_operation_that_overflows(
-        &mut self,
-        op: BinaryOp,
-        lhs: &Expr,
-        rhs: &Expr,
-        reach: Option<&str>,
-        span: &Span,
-    ) {
-        self.s
-            .an_operation_that_overflows(self.world, op, lhs, rhs, reach, span);
-    }
-
-    fn divisor_is_not_zero(&mut self, op: BinaryOp, rhs: &Expr, span: &Span) {
-        self.s.divisor_is_not_zero(self.world, op, rhs, span);
     }
 
     // --- statements ---------------------------------------------------------
@@ -3069,50 +2890,11 @@ impl<'a> Checker<'a> {
                 mutable,
                 body,
                 ..
-            } => {
-                // **Its parameters are what the place it stands in says**
-                // (#497), as a callee's signature says for an argument.
-                let declared = self.s.flow.lambda_expected.take();
-                let given = match &declared {
-                    Some(Ty::Fn { params: given, .. }) if given.len() == params.len() => {
-                        given.clone()
-                    }
-                    _ => Vec::new(),
-                };
-                let frame: Vec<Local> = params
-                    .iter()
-                    .enumerate()
-                    .map(|(at, p)| {
-                        let ty = given.get(at).cloned().unwrap_or(Ty::Unknown);
-                        let local = self.lambda_parameter(*p, mutable, ty, span);
-                        if local.ty.is_unknown() {
-                            self.s.flow.unknown_bound.insert(local.id as usize as i64);
-                        }
-                        local
-                    })
-                    .collect();
-                for local in &frame {
-                    self.s
-                        .nameable(&local.name.clone(), span, "a lambda's argument");
-                }
-                let depth = self.s.scope.len() as i64;
-                self.s.repeats.push(Repeats::a_lambda(depth));
-                self.s.scope.push(frame);
-                // Part I 3.3: a lambda is a closure below, and a jump does not
-                // leave one.
-                let saved = self.enter_boundary("lambda");
-                self.block(body);
-                self.leave_boundary(saved);
-                self.s.scope.pop();
-                self.s.repeats.pop();
-                // And it is of the type the place declares.
-                match declared {
-                    Some(fn_type @ Ty::Fn { .. }) if !given.is_empty() || params.is_empty() => {
-                        fn_type
-                    }
-                    _ => Ty::Unknown,
-                }
-            }
+            } => self.nikaia(|state, world, host| {
+                check_core_ops::check_core_ops_closure(
+                    state, world, host, params, mutable, body, span,
+                )
+            }),
 
             whole @ Expr::Unary { op, expr, .. } => {
                 if matches!(op, UnaryOp::Neg) {
@@ -3168,265 +2950,9 @@ impl<'a> Checker<'a> {
                 rhs,
                 span: at,
                 ..
-            } => {
-                let arithmetic = matches!(
-                    op,
-                    BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Rem
-                );
-                let reach = self.s.flow.reached.take().filter(|_| arithmetic);
-                self.s.flow.reaching = reach.clone();
-                let left = self.expr(lhs, span);
-                self.s.flow.reaching = reach.clone();
-                // **The right of `&&` runs where the left held, and the right
-                // of `||` where it did not** (ADR-350 D2).
-                let right = match op {
-                    BinaryOp::And | BinaryOp::Or => {
-                        let names = narrow::proved_names(self.parsed, lhs, *op == BinaryOp::And);
-                        self.with_proved(&names, |this| this.expr(rhs, span))
-                    }
-                    _ => self.expr(rhs, span),
-                };
-                // **A `'…'` beside a byte is a byte** (ADR-320, Part I 2.6):
-                // `b[0] == 'a'` compares two `u8`s, as `x == 7` beside an
-                // `i32` compares two `i32`s.
-                let byte = Ty::named("u8");
-                let left = match value_of_a_copy(right.unseen()) == byte
-                    && self.text_literal(&byte, lhs, false).is_some()
-                {
-                    true => byte.clone(),
-                    false => left,
-                };
-                let right = match value_of_a_copy(left.unseen()) == byte
-                    && self.text_literal(&byte, rhs, false).is_some()
-                {
-                    true => byte.clone(),
-                    false => right,
-                };
-                self.divisor_is_not_zero(*op, rhs, span);
-                self.an_operation_that_overflows(*op, lhs, rhs, reach.as_deref(), span);
-                // **The stamp sticks**
-                // ([ADR-281](../../docs/specification/adr/adr-281.md) D23):
-                // `stand + 100` is a `Seen[i64]` and `stand > 100` a
-                // `Seen[bool]`. An operator cannot put a value back into the
-                // lock it came from, so what it makes still carries where it
-                // came from — which is what lets `set` refuse it and every
-                // other sink take it.
-                let stamped = left.is_seen() || right.is_seen();
-                // **A `T?` has no operator but `==` and `!=`** (Part I 2.3).
-                if !matches!(
-                    op,
-                    BinaryOp::Eq | BinaryOp::Ne | BinaryOp::And | BinaryOp::Or
-                ) {
-                    let before = self.s.findings.len();
-                    self.s.a_maybe_in_an_operation(*op, &left, &right, at);
-                    self.a_proof_taken_back([lhs, rhs], before);
-                }
-                // **A bit operator beside a comparison is parenthesised**
-                // ([ADR-285](../../docs/specification/adr/adr-285.md) D10).
-                if op.is_comparison() {
-                    self.a_bit_operation_beside_a_comparison(*op, lhs, rhs, at);
-                    self.two_integer_types_compared([(lhs, &left), (rhs, &right)], at);
-                }
-                // **Two number types in one operation** (D1): `u64 + i64` is
-                // `rustc`'s *mismatched types* about the generated file.
-                // **Unless they have a common type** (ADR-285 D32): `u32 + i64`
-                // is computed in `i64`, and the narrower side is widened.
-                let common =
-                    match !op.is_comparison() && !matches!(op, BinaryOp::And | BinaryOp::Or) {
-                        true => self.two_number_types(*op, [(lhs, &left), (rhs, &right)], at),
-                        false => None,
-                    };
-                // **A literal beside an unsigned side is of that side's type**
-                // (ADR-285 D3), and the emitter is told so.
-                if !matches!(op, BinaryOp::And | BinaryOp::Or) {
-                    for (side, other, count) in [(lhs, &right, false), (rhs, &left, true)] {
-                        let other = value_of_a_copy(other.unseen());
-                        if count && matches!(op, BinaryOp::Shl | BinaryOp::Shr) {
-                            continue;
-                        }
-                        if let Some(unsigned) =
-                            integer_named(&other).filter(|n| matches!(n.as_str(), "u32" | "u64"))
-                        {
-                            self.literals_are(side, &unsigned, span);
-                        }
-                    }
-                }
-                // **An operation is a use of the numbers on both sides**
-                // ([ADR-285](../../docs/specification/adr/adr-285.md) D23, D24):
-                // a side with a type asks the other for it, and two open sides
-                // are one number's question from here on. A shift's count is
-                // any integer and is neither.
-                if !matches!(
-                    op,
-                    BinaryOp::And | BinaryOp::Or | BinaryOp::Shl | BinaryOp::Shr
-                ) {
-                    self.number_asked(lhs, &right, at, true);
-                    self.number_asked(rhs, &left, at, true);
-                    let mut both = Vec::new();
-                    self.open_numbers_in(lhs, &mut both);
-                    self.open_numbers_in(rhs, &mut both);
-                    self.open_numbers_joined(&both);
-                }
-                let outcome = match op {
-                    // **`&`, `|`, `^` and the shifts take integers** (D3): a
-                    // `bool` has `&&` and `||`, which say it once.
-                    BinaryOp::BitAnd
-                    | BinaryOp::BitOr
-                    | BinaryOp::BitXor
-                    | BinaryOp::Shl
-                    | BinaryOp::Shr => {
-                        self.s
-                            .a_bit_operator_on_something_else(*op, &left, &right, at);
-                        let left = value_of_a_copy(left.unseen());
-                        let right = value_of_a_copy(right.unseen());
-                        match (op, left.is_unknown()) {
-                            // A shift is its left side's, whatever counts it.
-                            (BinaryOp::Shl | BinaryOp::Shr, _) => left,
-                            (_, true) => right,
-                            _ => left,
-                        }
-                    }
-                    BinaryOp::And | BinaryOp::Or => {
-                        let (on_left, on_right) =
-                            (self.span_at(lhs, *span), self.span_at(rhs, *span));
-                        self.expect_bool(&left, &on_left, "`&&` and `||` join two `bool`s.");
-                        self.expect_bool(&right, &on_right, "`&&` and `||` join two `bool`s.");
-                        Ty::named("bool")
-                    }
-                    BinaryOp::Eq | BinaryOp::Ne => {
-                        // **A comparison only reads its sides** (ADR-279 D5):
-                        // a `??` of text on either side lends its left side.
-                        // Text alone, because the language below compares a
-                        // view of text with text and with a view, and a view of
-                        // anything else with nothing but a view.
-                        for side in [lhs, rhs] {
-                            self.a_pending_coalesce_of_text_is_lent(side);
-                        }
-                        // **`x == null` asks whether there is one**, and the
-                        // emitter writes it `x.is_none()` (0.0.250): nothing
-                        // of what `x` holds is compared, so a type that does
-                        // not compare is no reason to refuse it.
-                        let asks_for_null = matches!(lhs.as_ref(), Expr::LitNull(_))
-                            || matches!(rhs.as_ref(), Expr::LitNull(_));
-                        if !asks_for_null {
-                            self.an_operator_needs_a_bound(*op, &left, &right, at);
-                            self.a_type_that_does_not_compare(&left, &right, at);
-                        }
-                        if !asks_for_null {
-                            self.s.a_maybe_compared_with_a_value(&left, &right, span);
-                        }
-                        self.a_view_compared_with_a_value(lhs, &left, rhs, &right, at);
-                        if names_a_path(&left, &right) {
-                            self.s.facts.path_comparisons.insert(at.at() as i64);
-                        }
-                        Ty::named("bool")
-                    }
-                    BinaryOp::Lt | BinaryOp::Le | BinaryOp::Gt | BinaryOp::Ge => {
-                        self.an_operator_needs_a_bound(*op, &left, &right, at);
-                        self.s.a_maybe_compared_with_a_value(&left, &right, span);
-                        self.a_view_compared_with_a_value(lhs, &left, rhs, &right, at);
-                        Ty::named("bool")
-                    }
-                    // **A `+` where either side is text is a concatenation**
-                    // ([ADR-081](../../docs/specification/adr/adr-081.md) D2),
-                    // and it comes to a `String` whichever side was owned. This
-                    // used to be the `_ => Ty::Unknown` below, with a comment
-                    // saying that guessing which side names the result was the
-                    // one guess this checker does not make. It was not a guess
-                    // that was missing but a **decision**: a concatenation makes
-                    // a new value, so `String` is the only thing it can be, and
-                    // saying `&str` - which is what two borrowed sides used to
-                    // come to - made `-> String` a false refusal (`NK1104`).
-                    //
-                    // Recorded by the operator's own span, because `a + b + c`
-                    // is two of them and the statement they stand in is one.
-                    BinaryOp::Add if is_text(&left) || is_text(&right) => {
-                        self.s.facts.concatenations.insert(at.at() as i64);
-                        Ty::named("String")
-                    }
-                    // **`NK1191`: arithmetic on something that has none**
-                    // (0.0.234). `[1] + [2]` lowered as it was written and the
-                    // language below said *cannot add `Vec<i64>` to `Vec<i64>`*
-                    // about a file nobody wrote. Part I gives a list no
-                    // operator, and ADR-253 keeps it that way for `+` on two
-                    // lists; a declared `struct` or `enum` has none either.
-                    BinaryOp::Add
-                    | BinaryOp::Sub
-                    | BinaryOp::Mul
-                    | BinaryOp::Div
-                    | BinaryOp::Rem
-                        if self.has_no_arithmetic(&left) || self.has_no_arithmetic(&right) =>
-                    {
-                        self.arithmetic_on_something_that_has_none(
-                            *op,
-                            [(lhs, &left), (rhs, &right)],
-                            false,
-                            span,
-                        );
-                        Ty::Unknown
-                    }
-                    // Arithmetic on two of the same thing is that thing, and
-                    // a bare number is neither - so one known side decides. Two
-                    // known sides that disagree still decide nothing, now that
-                    // the one case anybody met is taken above.
-                    //
-                    // **And a view of a number is the number here**
-                    // ([ADR-233](../../docs/specification/adr/adr-233.md) D4):
-                    // `0 - y` over a `ref i64` makes an `i64`, which is what
-                    // the language below's operators make of a `&i64` too.
-                    _ => {
-                        // **One whole-number type on both sides**, or one side
-                        // a literal: what an unchecked operation may name
-                        // (ADR-306 D10). A view is not the number here - the
-                        // operation would be handed a reference.
-                        if matches!(op, BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul) {
-                            let whole = |side: &Expr, ty: &Ty| match (side, ty.unseen()) {
-                                (Expr::LitInt { .. }, _) => Some(None),
-                                (
-                                    _,
-                                    Ty::Named {
-                                        name,
-                                        args,
-                                        view: false,
-                                    },
-                                ) if args.is_empty() && is_a_whole_number(&name) => {
-                                    Some(Some(name))
-                                }
-                                _ => None,
-                            };
-                            if let (Some(a), Some(b)) = (whole(lhs, &left), whole(rhs, &right)) {
-                                let named = match (a, b) {
-                                    (Some(a), Some(b)) if a == b => Some(a),
-                                    (Some(a), None) | (None, Some(a)) => Some(a),
-                                    _ => None,
-                                };
-                                if let Some(name) = named {
-                                    self.s.facts.arithmetic.insert(at.at() as i64, name);
-                                }
-                            }
-                        }
-                        match (
-                            left.is_unknown(),
-                            right.is_unknown(),
-                            value_of_a_copy(left),
-                            value_of_a_copy(right),
-                        ) {
-                            (true, _, _, right) => right,
-                            (_, true, left, _) => left,
-                            (_, _, left, right) if left == right => left,
-                            _ => Ty::Unknown,
-                        }
-                    }
-                };
-                let outcome = match common {
-                    Some(common) => Ty::named(common),
-                    None => outcome,
-                };
-                match stamped {
-                    true => Ty::seen(outcome.unseen()),
-                    false => outcome,
-                }
-            }
+            } => self.nikaia(|state, world, host| {
+                check_core_ops::check_core_ops_binary(state, world, host, *op, lhs, rhs, at, span)
+            }),
 
             Expr::Cast { expr, ty, .. } => self.nikaia(|state, world, host| {
                 check_core_places::check_core_cast(state, world, host, expr, ty, span)
@@ -3483,262 +3009,11 @@ impl<'a> Checker<'a> {
             }
             Expr::Coalesce {
                 value, fallback, ..
-            } => {
-                let outer = std::mem::replace(&mut self.s.flow.read_a_map, false);
-                let left = self.expr(value, span);
-                let read_now = std::mem::replace(&mut self.s.flow.read_a_map, outer);
-                // **The left side alone** (D13): the fallback is still checked,
-                // and what it would take is not taken, because it never runs.
-                if self.nothing_to_fall_back_from(value, &left, expr, span) {
-                    let from = self.s.taken_so_far();
-                    self.expr(fallback, span);
-                    self.s.walked.truncate(from.0 as usize);
-                    self.s.handed.truncate(from.1 as usize);
-                    return left;
-                }
-                // **A map read, or a name a `let` bound to one** (#297): the
-                // left side is a view of what the map keeps either way.
-                let from_a_map = match &**value {
-                    Expr::Index { .. } | Expr::MethodCall { .. } => read_now,
-                    Expr::Variable(name, _) => {
-                        self.s
-                            .binding(self.parsed.text(*name))
-                            .is_some_and(|local| {
-                                self.s
-                                    .flow
-                                    .map_views
-                                    .contains(&((local.id as usize) as i64))
-                            })
-                    }
-                    _ => false,
-                };
-                // **A fallback that jumps takes its takings with it**
-                // (ADR-293 D30), as a branch that leaves does: `let c = f(k) ??
-                // return Refused(k)` hands `k` over only on the path that
-                // leaves, so a use of `k` on the next line is no use after it -
-                // it was `NK2105` (found moving `contracts::order`'s walk into
-                // Nikaia, #125). A block that ends in a jump is one (#457).
-                let from = self.s.taken_so_far();
-                let other = self.expr(fallback, span);
-                let leaves = self.s.leaves(self.world, fallback);
-                self.s.a_branch_that_leaves(from, leaves, span);
-                // **A name on the left of `??` is taken where the answer is
-                // kept and lent where it is only read** (ADR-279 D5), which is
-                // the rule an argument follows (ADR-094 D1). Which one is known
-                // once the position is: a call that only reads the answer lends
-                // it (`the_compiler_writes_the_reference`), and every other `??`
-                // is taken when its statement ends (`block`). Taken, a use of
-                // the name after the line is `NK2105` (0.0.286). A view and a
-                // copy are neither, which `hands_over` asks.
-                // A field is a place as a name is: `self.parameter ?? ""` over
-                // a `ref self` lends the field where the answer is read, and
-                // where it is kept it is a part of a loan handed over, which is
-                // refused in the language's words - unrecorded, it reached
-                // `rustc` as *cannot move out of `self.parameter`* (found moving
-                // the ledger's records into Nikaia, ADR-294).
-                // **A loan on the left and a jump on the right is a view**
-                // ([ADR-279](../../docs/specification/adr/adr-279.md) D10):
-                // `let s = c.signature ?? return false` over a lent `c` cannot
-                // take the field, and a jump has no value, so the answer is a
-                // view of the left side wherever it stands - a `let` binds a
-                // view, as `let found = m[k]` does.
-                let lent_and_jumps = matches!(&**value, Expr::Variable(_, _) | Expr::Field { .. })
-                    && self.s.jumps(self.world, fallback)
-                    && matches!(&left, Ty::Nullable(inner) if self.s.takes_away(self.world, &inner.unseen()))
-                    && self
-                        .s
-                        .rooted_at(self.world, value)
-                        // **So is a local `get` handed back past a jump** (D35).
-                        .is_some_and(|root| {
-                            self.s.lent_here(&root) || self.s.got_past_a_jump.contains(&root)
-                        });
-                if lent_and_jumps {
-                    let text = matches!(&left, Ty::Nullable(inner)
-                        if matches!(inner.as_ref(), Ty::Named { name, args, view: false }
-                            if args.is_empty() && name == ty::TEXT));
-                    self.s.facts.lent_coalesces.insert(
-                        value_node(expr),
-                        if text {
-                            ".as_deref()".to_string()
-                        } else {
-                            ".as_ref()".to_string()
-                        },
-                    );
-                    if let Ty::Nullable(inner) = &left {
-                        return view_of(inner);
-                    }
-                }
-                if matches!(&**value, Expr::Variable(_, _) | Expr::Field { .. }) {
-                    match self
-                        .s
-                        .a_coalesce_that_may_lend(self.world, &left, fallback, &other)
-                    {
-                        Some(opened) => self.s.flow.pending_coalesces.push(PendingCoalesce {
-                            key: value_node(expr),
-                            left: value_node(value),
-                            ty: left.clone(),
-                            span: *span,
-                            opened: opened.to_string(),
-                        }),
-                        None => self.hands_over(value, &left, "given to `??`", span),
-                    }
-                }
-                if let (Ty::Nullable(inner), Expr::LitStr { .. }) = (&left, &**fallback) {
-                    if **inner == Ty::view("str") {
-                        self.s.facts.view_fallbacks.insert(value_node(fallback));
-                    }
-                    // **A map's text, read, is a view of it** (ADR-293 D28): the
-                    // map hands out its `String` and keeps it, so the literal
-                    // after `??` is the other view the answer can be, and the
-                    // whole is a view of text - `m[k] ?? "-"`. It used to be
-                    // built into a `String` below and handed to a place that
-                    // wanted the map's reference: `rustc`'s words, about a file
-                    // nobody wrote.
-                    if **inner == Ty::named("String") && from_a_map {
-                        self.s.facts.view_fallbacks.insert(value_node(fallback));
-                        return Ty::view("str");
-                    }
-                    // **And a list's** (#342, ADR-279 D12): `ys[1] ?? "none"`
-                    // over a `Vec[String?]` is a view - the read is written as
-                    // the element lent, not moved out of the list.
-                    if **inner == Ty::named("String")
-                        && !from_a_map
-                        && matches!(&**value, Expr::Index { .. })
-                    {
-                        self.s.facts.view_fallbacks.insert(value_node(fallback));
-                        self.s.facts.lent_list_reads.insert(value_node(expr));
-                        return Ty::view("str");
-                    }
-                }
-                // **And a name that is a view of text beside it** (#297):
-                // `imports.get(call) ?? call` for a `call: ref String` is a
-                // view whichever side answers, written as it is.
-                if let Ty::Nullable(inner) = &left
-                    && **inner == Ty::named("String")
-                    && from_a_map
-                    && other.is_a_view()
-                    && matches!(&**fallback, Expr::Variable(_, _) | Expr::Field { .. })
-                    && matches!(&other, Ty::Named { name, .. }
-                        if matches!(crate::contracts::ty::base(name), "String" | "str"))
-                {
-                    self.s.facts.view_coalesces.insert(value_node(expr));
-                    return Ty::view("str");
-                }
-                // **And a name of the type the map holds** (ADR-279 D7):
-                // `m[k] ?? spare` reads the map's value, a view, and a view
-                // of `spare` exists for as long as the answer does - it is a
-                // name in scope at the `??` - so the name is lent, as
-                // `r ?? spare` lends it over a `ref T?`, rather than refused
-                // as a value of its own. Text has its own answers above.
-                if let Ty::Nullable(inner) = &left
-                    && from_a_map
-                    && matches!(&**fallback, Expr::Variable(_, _))
-                    && !other.is_a_view()
-                    && let Ty::Named { name, args, .. } = inner.as_ref()
-                    && !matches!(name.as_str(), "str" | "String")
-                    && other
-                        == (Ty::Named {
-                            name: name.clone(),
-                            args: args.clone(),
-                            view: false,
-                        })
-                    && crate::contracts::keeps::moves(&other)
-                {
-                    self.s.facts.lent_map_fallbacks.insert(value_node(expr));
-                    return view_of(&other);
-                }
-                // **A value written out beside a view of a type of the program's
-                // own** (#574): `x ?? BinaryOp::Add` for an `x: ref BinaryOp?`
-                // is a view whichever side answers, so the fallback is lent
-                // too - a constant the language below promotes to a `&'static`.
-                // It was the value, and `rustc` expected the reference.
-                if let Ty::Nullable(inner) = &left
-                    && !from_a_map
-                    && inner.is_a_view()
-                    && !other.is_a_view()
-                    && let Ty::Named { name, .. } = inner.as_ref()
-                    && !is_number(name)
-                    && !matches!(
-                        crate::contracts::ty::base(name),
-                        "bool" | "char" | "scalar" | "String" | "str"
-                    )
-                    && self.a_value_written_out(fallback)
-                {
-                    self.s.facts.lent_map_fallbacks.insert(value_node(expr));
-                    return *inner.clone();
-                }
-                if let Ty::Nullable(inner) = &left {
-                    match from_a_map {
-                        // **What a map holds has its own sentence**, whether
-                        // the read is written here or a name holds it (#297).
-                        true => {
-                            // A view of text is `str` to this checker and
-                            // `String` to the language (ADR-184 D2).
-                            let held = match inner.as_ref() {
-                                Ty::Named { name, .. } if name == "str" => {
-                                    Ty::named(crate::contracts::ty::TEXT)
-                                }
-                                Ty::Named { name, args, .. } => Ty::Named {
-                                    name: name.clone(),
-                                    args: args.clone(),
-                                    view: false,
-                                },
-                                other => other.clone(),
-                            };
-                            self.a_fallback_beside_what_a_map_holds(value, &held, &other, span);
-                            // Text has its own answer, a view beside a view;
-                            // a name holding the read is one already.
-                            if held == Ty::named(crate::contracts::ty::TEXT) {
-                                self.a_fallback_that_owns_what_the_left_side_views(
-                                    inner, &other, fallback, span,
-                                );
-                            }
-                        }
-                        false => self.a_fallback_that_owns_what_the_left_side_views(
-                            inner, &other, fallback, span,
-                        ),
-                    }
-                }
-                // **`a ?? b` where `b` may be `null` too is a `T?`** (Part I
-                // 3.5): the first that has a value, and there may be none. It
-                // was read as a `T` whatever the fallback was, and the fallback
-                // was converted into what the option holds - which an option
-                // is not, so `rustc` refused the file (found moving `dsl` into
-                // Nikaia, #125).
-                if let (Ty::Nullable(_), Ty::Nullable(_)) = (&left, &other) {
-                    self.s.facts.optional_fallbacks.insert(value_node(expr));
-                    return other;
-                }
-                // **`a ?? b` on a `T?` is a `T`** (Part I 3.5): that is what
-                // ending the chain means, and claiming nothing about it cost
-                // everything downstream — the day a map read became a `T?`
-                // ([ADR-293](../../docs/specification/adr/adr-293.md) D1),
-                // `let s = m[k] ?? panic(…)` made `s` unknown and `s.mean()`
-                // one more method call nobody could answer.
-                //
-                // **Only that shape.** A `??` over something this checker could
-                // not type claims nothing, which is
-                // [Part III C.4](../../../docs/specification/30-nikaia-tooling.md):
-                // the answer is more information than before and no new claim.
-                //
-                // **A view of a number beside a value is the number**
-                // (ADR-233 D4): `let found = m[k]` binds a view of what the
-                // map keeps, and `found ?? 0` is `index::or`'s copy of it, as
-                // `m[k] ?? 0` is - it was typed a `ref i64`, and `return found
-                // ?? 0` from an `-> i64` was `NK1104` (found moving `sharing`'s
-                // classes into Nikaia, #125). A view beside it is the other
-                // impl, whose answer stays the reference.
-                match left {
-                    // **What the left side holds is not known, and the
-                    // fallback says it** (#497): `rx.recv() ?? "none"` over a
-                    // channel nothing typed is text, because both sides are
-                    // one value's.
-                    Ty::Nullable(inner) if inner.is_unknown() && !other.is_unknown() => other,
-                    Ty::Nullable(inner) if !other.is_a_view() => value_of_a_copy(*inner),
-                    Ty::Nullable(inner) => *inner,
-                    _ => Ty::Unknown,
-                }
-            }
+            } => self.nikaia(|state, world, host| {
+                check_core_ops::check_core_ops_coalesce(
+                    state, world, host, expr, value, fallback, span,
+                )
+            }),
             // Indexing a container yields what the container holds - but only
             // where the container's type says so.
             //
@@ -3775,77 +3050,9 @@ impl<'a> Checker<'a> {
                 check_core_flow::check_core_flow_try_catch(state, world, host, expr, handler, span)
             }),
 
-            Expr::Spawn { body, .. } => {
-                // **Before** the body is walked, so that the task's own `let`s
-                // are not yet in scope: a name bound inside the task is the
-                // task's own and crosses nothing.
-                self.crosses_into_a_task(body, span);
-
-                // **A `spawn` hands back a `TaskHandle` of what the task's body
-                // comes to** (Part I 8.2, ADR-055 D5), and that is why the body
-                // is walked here rather than through the generic closure arm:
-                // what a lambda hands back is not written down anywhere
-                // (ADR-288 D13), but a task's body is a *block*, and a block's
-                // value is a thing this checker already knows. So `spawn fn {
-                // work(21) }` is a `TaskHandle[i64]` and `handle.join()` is an
-                // `i64`, with nothing inferred that a signature did not say.
-                // The handles a task duplicates are keyed by its lambda's node
-                // (ADR-340 D5), the one the emitter is handed.
-                let task = value_node(body);
-                let Expr::Closure { params, body, .. } = body.as_ref() else {
-                    self.expr(body, span);
-                    return Ty::Unknown;
-                };
-                // A task is handed nothing, so a parameter has nothing to be
-                // bound from. Refused rather than dropped: `spawn fn (x) { … }`
-                // reads as though `x` arrives from somewhere.
-                self.s.a_task_takes_no_arguments(self.world, params, span);
-                // **What the task takes with it** (`NK2101`), read off the body
-                // before it is walked: a name the body binds for itself is the
-                // task's own, and the frame pushed below is what keeps the two
-                // apart.
-                self.a_task_takes_these(
-                    &Expr::Closure {
-                        params: params.clone(),
-                        // A task is handed nothing, so no parameter of one is
-                        // ever `mut` - `a_task_takes_no_arguments` above has
-                        // already refused the list that is not empty.
-                        mutable: Vec::new(),
-                        body: body.clone(),
-                        id: crate::ast::fresh_id(),
-                    },
-                    task,
-                    span,
-                );
-                self.s.scope.push(Vec::new());
-                self.s.task_bindings.push(Vec::new());
-                // **A task started with `spawn` runs later and elsewhere**
-                // ([ADR-281](../../docs/specification/adr/adr-281.md) D29), so
-                // taking a lock inside one is the ordinary case and not this
-                // door's reach. `contracts::locks` makes the same split when it
-                // builds the column; this is it at the refusal.
-                //
-                // A **scope**'s tasks are the other way round and are not this:
-                // a scope waits for them, so they run during the call.
-                let outer_inside = std::mem::replace(&mut self.s.inside_a_door, false);
-                // A task's body is an `async` block below (ADR-055 §6), which
-                // is a function too: `break` may not leave it either.
-                let saved = self.enter_boundary("task");
-                let value = self.block(body);
-                self.leave_boundary(saved);
-                self.s.scope.pop();
-                self.s.inside_a_door = outer_inside;
-                let bound = self.s.task_bindings.pop().unwrap_or_default();
-                // **After** the walk, because the question needs both halves of
-                // what the walk found: the types of what the body bound, and
-                // which of its method calls pause (`pausing_methods`).
-                self.a_task_holds_these_across_a_pause(body, &bound, span);
-                Ty::Named {
-                    name: "TaskHandle".to_string(),
-                    args: vec![value],
-                    view: false,
-                }
-            }
+            Expr::Spawn { body, .. } => self.nikaia(|state, world, host| {
+                check_core_ops::check_core_ops_spawn(state, world, host, body, span)
+            }),
 
             // A template's holes are Nikaia too (ADR-017), and what the
             // template *produces* is still the emitter's business.
@@ -3936,78 +3143,6 @@ impl<'a> Checker<'a> {
     ) -> bool {
         self.s
             .a_package_where_a_grammar_stands(&self.world.here, target, span)
-    }
-
-    /// Every integer literal a constant expression is made of, recorded as
-    /// being of an unsigned type ([`Checked::unsigned_literals`]).
-    fn literals_are(&mut self, value: &Expr, ty: &str, _span: &Span) {
-        self.s.literals_are(value, ty);
-    }
-
-    /// `NK1197` (`tools/check_exprs.nika`).
-    fn a_bit_operation_beside_a_comparison(
-        &mut self,
-        op: BinaryOp,
-        lhs: &Expr,
-        rhs: &Expr,
-        at: &Span,
-    ) {
-        self.s
-            .a_bit_operation_beside_a_comparison(self.world, op, lhs, rhs, at);
-    }
-
-    /// A comparison of two integer types (`tools/check_numbers2.nika`).
-    fn two_integer_types_compared(
-        &mut self,
-        [(lhs, left), (rhs, right)]: [(&Expr, &Ty); 2],
-        at: &Span,
-    ) {
-        self.s.two_integer_types_compared(lhs, left, rhs, right, at);
-    }
-
-    /// Two sides of one operation of different number types
-    /// (`tools/check_numbers2.nika`).
-    fn two_number_types(
-        &mut self,
-        op: BinaryOp,
-        [(lhs, left), (rhs, right)]: [(&Expr, &Ty); 2],
-        at: &Span,
-    ) -> Option<&'static str> {
-        self.s
-            .two_number_types(op, lhs, left, rhs, right, at)
-            .map(|common| a_static_integer(&common))
-    }
-
-    /// Whether an expression is a variant of an enum this file declares, with
-    /// or without its parts, or a struct written out: a value that stands for
-    /// itself, and that the language below can lend as a constant.
-    fn a_value_written_out(&self, written: &Expr) -> bool {
-        self.s.a_value_written_out(self.world, written)
-    }
-
-    /// `NK1185` (`tools/check_fields.nika`).
-    fn a_fallback_that_owns_what_the_left_side_views(
-        &mut self,
-        viewed: &Ty,
-        fallback: &Ty,
-        written: &Expr,
-        span: &Span,
-    ) {
-        self.s.a_fallback_that_owns_what_the_left_side_views(
-            self.world, viewed, fallback, written, span,
-        );
-    }
-
-    /// `NK1185` (`tools/check_exprs.nika`).
-    fn a_fallback_beside_what_a_map_holds(
-        &mut self,
-        read: &Expr,
-        held: &Ty,
-        fallback: &Ty,
-        span: &Span,
-    ) {
-        self.s
-            .a_fallback_beside_what_a_map_holds(self.world, read, held, fallback, span);
     }
 
     /// `NK1184` for an escape in a literal that nothing names
@@ -4191,18 +3326,6 @@ impl<'a> Checker<'a> {
 
     // --- the one shape every check has --------------------------------------
 
-    /// [`Checker::expect`], for a position that has the value in hand, so a
-    /// view of text kept where text of its own is wanted can say **why** here
-    /// ([ADR-282](../../docs/specification/adr/adr-282.md) D25). `keeper` is the
-    /// position's own words for what keeps it.
-    /// **Where `expr` was written, or the statement's `span`** (#107): the
-    /// parser's span of the expression when it made the node and the node
-    /// stands inside the statement; a node the compiler built, or one from
-    /// another file, is reported at the statement as before.
-    fn span_at(&self, expr: &Expr, span: Span) -> Span {
-        nikaia_std::tools::check_arm_leaves::check_span_at(self.world, expr, &span)
-    }
-
     #[allow(clippy::too_many_arguments)]
     fn expect_kept(
         &mut self,
@@ -4267,59 +3390,6 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// `NK1108` for a condition that is not a `bool` (`tools/check_exprs.nika`).
-    fn expect_bool(&mut self, found: &Ty, span: &Span, why: &str) {
-        self.s.expect_bool(found, span, why);
-    }
-
-    /// **What a task takes with it** (Part I 8.3, `NK2101`).
-    ///
-    /// Every name the body reads that is a local or a parameter **of the
-    /// enclosing function**, with its type - because the type decides whether
-    /// taking it is taking it away:
-    ///
-    ///   * **Data that is copied** - a number, a `bool`, a `char`, a view -
-    ///     goes into the task and stays here too. Rust copies it, so there is
-    ///     nothing to refuse, and `let n = 7` followed by a `spawn` that prints
-    ///     `n` and a `println` that prints it again is a correct program.
-    ///   * **A handle on a `Shared[T]`** is *duplicated* rather than moved
-    ///     ([ADR-312](../../docs/specification/adr/adr-312.md) D1, D5), so the
-    ///     name outside the task keeps working. Part I 8.3 says `NK2101`
-    ///     belongs to the data case only, and this is where that holds.
-    ///   * **A type nothing describes** is not claimed about at all. Refusing
-    ///     one would be refusing on a guess (Part III, C.4).
-    ///
-    /// What is left is data that a move takes away, which is what the
-    /// diagnostic is about.
-    fn a_task_takes_these(&mut self, body: &Expr, task: i64, span: &Span) {
-        self.s.a_task_takes_these(self.world, body, task, span);
-    }
-
-    /// **A value handed to something that keeps it**
-    /// ([ADR-293](../../docs/specification/adr/adr-293.md) D29, which builds
-    /// [ADR-094](../../docs/specification/adr/adr-094.md) D2's last paragraph).
-    ///
-    /// Called at the places a value is given away rather than lent: an argument
-    /// the callee keeps, a key or a value written into a map or a list, a field
-    /// of a struct being built, an element of a list or a tuple, a `let` that
-    /// names it again and an assignment. Only a **name**, and only data a move
-    /// takes away - a number, a `bool`, a `char` and a view are copied
-    /// (`moves_away`, the rule `NK2101` has for a task).
-    ///
-    /// What is recorded is asked at the end of the body, as `NK2702` is: a later
-    /// read on the same path is `NK2105`. And, as for a sequence, a name from
-    /// outside a loop or a lambda handed over inside it is refused where it is
-    /// handed, because the next turn hands over what is already gone.
-    fn hands_over(&mut self, value: &Expr, ty: &Ty, to: &str, span: &Span) {
-        self.s.hands_over(self.world, value, ty, to, span)
-    }
-
-    /// The same for a `??` of text, where the position is a comparison
-    /// (issue #98).
-    fn a_pending_coalesce_of_text_is_lent(&mut self, given: &Expr) -> bool {
-        self.s.a_pending_coalesce_of_text_is_lent(given)
-    }
-
     /// A read of a name, recorded once per expression and statement.
     fn a_read(&mut self, expr: &Expr, path: String, span: &Span) {
         self.s.a_read(expr, &path, span);
@@ -4354,57 +3424,6 @@ impl<'a> Checker<'a> {
     // whose type no ledger describes would need the same question asked of its
     // arguments, and nothing in the corpus reaches it - ADR-288 D11's rule, that
     // an entry exists because a program asked for it.
-
-    /// Part II 11.2: a task runs on a thread of its own, so everything it takes
-    /// with it has to be able to cross one (`NK2501`).
-    ///
-    /// Over-approximate in the direction that costs nothing: the walk collects
-    /// every name the body mentions, including function and field names, and a
-    /// name that is not in scope is not found and says nothing.
-    fn crosses_into_a_task(&mut self, body: &Expr, span: &Span) {
-        self.s.crosses_into_a_task(self.world, body, span);
-    }
-
-    /// **What a task holds across a pause** ([ADR-055](../../docs/specification/adr/adr-055.md)
-    /// §2 D6's third sharp edge), which is `NK2501`'s question asked of what a
-    /// body **binds** rather than of what it captures.
-    ///
-    /// A task's body is an `async` block below, and a value bound inside it and
-    /// still live at a suspension point further down is held **inside the
-    /// future**. The pool's starter asks for `Send` of that whole future, so
-    /// such a value crosses a thread exactly as a captured one does — and until
-    /// now the only thing that said so was the backend, about the generated
-    /// file, which [Part III C.1](../../docs/specification/30-nikaia-tooling.md)
-    /// calls a bug in this compiler.
-    ///
-    /// **Live is over-approximated, and the over-approximation is bounded by
-    /// the verdict rather than by the walk.** *Bound before a pause and named
-    /// after it* is all this asks; Rust's own answer is narrower. That would be
-    /// a *correct program refused* ([Part III
-    /// C.4](../../docs/specification/30-nikaia-tooling.md)) if the refusal
-    /// stood on it alone — it does not. It stands on `contracts::send`'s
-    /// `MayNot`, which is a claim about a **type** and is never `Undecided`'s
-    /// silence, so a name this walk is too generous about is refused only if a
-    /// value of its type could not have crossed from anywhere.
-    ///
-    /// **It reports nothing today, and that is why it is built now.** No type
-    /// answers `MayNot` at `Destination::Ours`: `Shared` stopped being one when
-    /// [ADR-037](../../docs/specification/adr/adr-037.md) D6 gave it one
-    /// representation at both settings, and a lock is `MayNot` only at a
-    /// *foreign* destination. A refusal costs nothing before there are programs
-    /// it would reject, and the same refusal added afterwards breaks them. What
-    /// reaches it first is a type from outside this language, which is what
-    /// [ADR-290](../../docs/specification/adr/adr-290.md) is for.
-    fn a_task_holds_these_across_a_pause(
-        &mut self,
-        body: &Block,
-        bound: &[(String, Ty, i64)],
-        span: &Span,
-    ) {
-        self.nikaia(|state, world, host| {
-            state.a_task_holds_these_across_a_pause(world, host, body, bound, span)
-        })
-    }
 
     /// **What an entry point may be** ([ADR-284](../../docs/specification/adr/adr-284.md)
     /// D4, D5): `extern` before a function with a body exports it to C, and four
@@ -4726,21 +3745,6 @@ impl<'a> Checker<'a> {
                 state, world, host, params, mutable, body, given, &promised, span,
             )
         })
-    }
-
-    /// Walk something the language below makes **a function of its own**.
-    ///
-    /// A lambda, a task, an `overlap` branch: three constructs that are one
-    /// block above and a closure or an `async` block below. A loop outside one
-    /// of them is not reachable from inside it, so the count starts again at
-    /// zero and the word for what stands in the way is carried for the message.
-    fn enter_boundary(&mut self, what: &str) -> Boundary {
-        self.s.enter_boundary(what)
-    }
-
-    /// Back out of what [`Checker::enter_boundary`] went into.
-    fn leave_boundary(&mut self, saved: Boundary) {
-        self.s.leave_boundary(&saved);
     }
 
     /// **Every item-level `comptime`, in a frame that stays under the whole
@@ -5137,10 +4141,6 @@ pub fn written(parsed: &Parsed, expr: &Expr) -> String {
     nikaia_std::tools::written::written_expression(&parsed.interner, expr)
 }
 
-fn is_number(name: &str) -> bool {
-    nikaia_std::tools::check_types::a_number_name(name)
-}
-
 /// Every `a` or `an` in front of a word in backticks, chosen by that word
 /// (`check_words::article`): `a `i64`` becomes `an `i64``, and `an `u8`` `a
 /// `u8``. Only the article directly before a backtick, so prose and code
@@ -5171,26 +4171,6 @@ pub fn boxed_member(owner: &str, at: Option<usize>, field: Option<&str>) -> Stri
         at.map_or(-1, |at| at as i64),
         field.unwrap_or_default(),
     )
-}
-
-/// A list, a map or a set - the types Part I gives no operator.
-fn is_a_collection(ty: &Ty) -> bool {
-    nikaia_std::tools::check_types::is_a_collection_type(ty)
-}
-
-/// Whether a type is one this language calls text.
-///
-/// `String` and `&str`, and nothing else. A `T?` is deliberately **not** text:
-/// `maybe + "x"` is a member reached off a nullable, which Part I 2.3 answers
-/// and this must not quietly paper over.
-fn is_text(ty: &Ty) -> bool {
-    nikaia_std::tools::check_types::is_text_type(ty)
-}
-
-/// The whole-number types an operation may be written unchecked in
-/// (ADR-306 D10).
-fn is_a_whole_number(name: &str) -> bool {
-    nikaia_std::tools::bounds_shape::is_whole_number(name)
 }
 
 /// Where a task handle stands on the paths through some statements (`NK2109`).

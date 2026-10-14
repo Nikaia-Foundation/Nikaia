@@ -414,4 +414,22 @@ impl CheckHost for Core<'_, '_> {
             checker.proved_from_here(&names)
         })
     }
+
+    fn a_proof_taken_back(&self, state: &mut CheckState, lhs: &Expr, rhs: &Expr, before: i64) {
+        self.hosted(state, |checker| {
+            checker.a_proof_taken_back([lhs, rhs], before as usize)
+        })
+    }
+
+    fn a_type_that_does_not_compare(
+        &self,
+        state: &mut CheckState,
+        left: &Ty,
+        right: &Ty,
+        span: &Span,
+    ) {
+        self.hosted(state, |checker| {
+            checker.a_type_that_does_not_compare(left, right, span)
+        })
+    }
 }

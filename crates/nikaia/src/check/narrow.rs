@@ -100,6 +100,7 @@ impl Checker<'_> {
     }
 
     /// Walk `walk` with `names` proved, in a frame of their own.
+    #[allow(dead_code)]
     pub(super) fn with_proved<T>(
         &mut self,
         names: &[String],

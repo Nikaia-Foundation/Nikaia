@@ -15990,6 +15990,501 @@ fn check_core_method_char_literal(c: scalar) -> String {
 }
 
 
+// --- check_core_ops.nika ---
+
+fn check_core_ops_named(name: &str) -> Ty { Ty::Named { name: name.to_owned(), args: vec![], view: false } }
+
+fn check_core_ops_view(name: &str) -> Ty { Ty::Named { name: name.to_owned(), args: vec![], view: true } }
+
+fn check_core_ops_base(name: &str) -> String {
+    let parts: Vec<&str> = name.split("::").collect::<Vec<_>>();
+    if parts.is_empty() { return name.to_owned(); }
+    let last = parts.len() as i64 - 1;
+    format!("{}", *nikaia_std::index::get(&parts, nikaia_std::index::at(last)))
+}
+
+fn check_core_ops_arithmetic(op: BinaryOp) -> bool { matches!(op, BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Rem) }
+
+fn check_core_ops_unchecked(op: BinaryOp) -> bool { matches!(op, BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul) }
+
+fn check_core_ops_logical(op: BinaryOp) -> bool { matches!(op, BinaryOp::And | BinaryOp::Or) }
+
+fn check_core_ops_and(op: BinaryOp) -> bool { matches!(op, BinaryOp::And) }
+
+fn check_core_ops_shift(op: BinaryOp) -> bool { matches!(op, BinaryOp::Shl | BinaryOp::Shr) }
+
+fn check_core_ops_bits(op: BinaryOp) -> bool { matches!(op, BinaryOp::BitAnd | BinaryOp::BitOr | BinaryOp::BitXor | BinaryOp::Shl | BinaryOp::Shr) }
+
+fn check_core_ops_equality(op: BinaryOp) -> bool { matches!(op, BinaryOp::Eq | BinaryOp::Ne) }
+
+fn check_core_ops_ordering(op: BinaryOp) -> bool { matches!(op, BinaryOp::Lt | BinaryOp::Le | BinaryOp::Gt | BinaryOp::Ge) }
+
+fn check_core_ops_add(op: BinaryOp) -> bool { matches!(op, BinaryOp::Add) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_ops_null(value: &Expr) -> bool { matches!(value, Expr::LitNull(_)) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_ops_lit_int(value: &Expr) -> bool { matches!(value, Expr::LitInt { .. }) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_ops_lit_str(value: &Expr) -> bool { matches!(value, Expr::LitStr { .. }) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_ops_variable(value: &Expr) -> bool { matches!(value, Expr::Variable(_, _)) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_ops_place(value: &Expr) -> bool { matches!(value, Expr::Variable(_, _) | Expr::Field { .. }) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_ops_index(value: &Expr) -> bool { matches!(value, Expr::Index { .. }) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_ops_has_no_arithmetic(world: &CheckWorld<'_>, ty: &Ty) -> bool { is_a_collection_type(ty) || declared_with_no_arithmetic(&world.here, ty).is_some() }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_ops_nullable(ty: &Ty) -> bool { matches!(ty, Ty::Nullable(_)) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_ops_inside(ty: &Ty) -> Ty {
+    match ty {
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); inner.clone() },
+        _ => Ty::Unknown,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_ops_unsigned(ty: &Ty) -> Option<String> {
+    let name: String = match integer_named(ty) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    if name == "u32" || name == "u64" { return Some(name); }
+    None
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_ops_whole(side: &Expr, ty: &Ty) -> bool {
+    if check_core_ops_lit_int(side) { return true; }
+    let plain = ty.unseen();
+    match plain {
+        Ty::Named { ref name, ref args, view } => !view && args.is_empty() && is_whole_number(name),
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_ops_whole_name(side: &Expr, ty: &Ty) -> String {
+    if check_core_ops_lit_int(side) { return "".to_owned(); }
+    let plain = ty.unseen();
+    match plain {
+        Ty::Named { ref name, .. } => name.to_owned(),
+        _ => "".to_owned(),
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_ops_literal_beside(state: &mut CheckState, op: BinaryOp, side: &Expr, other: &Ty, count: bool) {
+    let value = value_of_a_copy(&other.unseen());
+    if count && check_core_ops_shift(op) { return; }
+    let unsigned: String = match check_core_ops_unsigned(&value) { Some(__nikaia_value) => __nikaia_value, None => return };
+    state.literals_are(side, &unsigned);
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_ops_proved_expr<H: CheckHost>(state: &mut CheckState, host: &H, cond: &Expr, holds: bool, value: &Expr, span: &Span) -> Ty {
+    let markers = host.proved_here(state, cond, holds);
+    if markers.is_empty() { return host.expr(state, value, span); }
+    state.scope.push(markers);
+    let found = host.expr(state, value, span);
+    state.scope.pop();
+    found
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_ops_same(state: &CheckState, op: BinaryOp, lhs: &Expr, left: &Ty, rhs: &Expr, right: &Ty, at: &Span) -> (Ty, String) {
+    let mut named: String = String::from("");
+    if check_core_ops_unchecked(op) && check_core_ops_whole(lhs, left) && check_core_ops_whole(rhs, right) {
+        let a = check_core_ops_whole_name(lhs, left);
+        let b = check_core_ops_whole_name(rhs, right);
+        if a != "" && b != "" { if a == b { named = a.to_owned(); } } else if a != "" { named = a.to_owned(); } else if b != "" { named = b.to_owned(); }
+    }
+    if left.is_unknown() { return (value_of_a_copy(right), named); }
+    if right.is_unknown() { return (value_of_a_copy(left), named); }
+    let l = value_of_a_copy(left);
+    let r = value_of_a_copy(right);
+    if l == r { return (l, named); }
+    (Ty::Unknown, named)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+fn check_core_ops_equal<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, op: BinaryOp, lhs: &Expr, left: &Ty, rhs: &Expr, right: &Ty, at: &Span, span: &Span) -> Ty {
+    state.a_pending_coalesce_of_text_is_lent(lhs);
+    state.a_pending_coalesce_of_text_is_lent(rhs);
+    let asks_for_null = check_core_ops_null(lhs) || check_core_ops_null(rhs);
+    if !asks_for_null {
+        state.an_operator_needs_a_bound(world, op, left, right, at);
+        host.a_type_that_does_not_compare(state, left, right, at);
+    }
+    if !asks_for_null { state.a_maybe_compared_with_a_value(left, right, span); }
+    state.a_view_compared_with_a_value(world, lhs, left, rhs, right, at);
+    if names_a_path(left, right) { state.facts.path_comparisons.insert(at.start as i64); }
+    check_core_ops_named("bool")
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+fn check_core_ops_outcome<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, op: BinaryOp, lhs: &Expr, left: &Ty, rhs: &Expr, right: &Ty, at: &Span, span: &Span) -> Ty {
+    if check_core_ops_bits(op) {
+        state.a_bit_operator_on_something_else(op, left, right, at);
+        let l = value_of_a_copy(&left.unseen());
+        let r = value_of_a_copy(&right.unseen());
+        if check_core_ops_shift(op) { return l; }
+        if l.is_unknown() { return r; }
+        return l;
+    }
+    if check_core_ops_logical(op) {
+        let on_left = check_span_at(world, lhs, span);
+        let on_right = check_span_at(world, rhs, span);
+        state.expect_bool(left, &on_left, "`&&` and `||` join two `bool`s.");
+        state.expect_bool(right, &on_right, "`&&` and `||` join two `bool`s.");
+        return check_core_ops_named("bool");
+    }
+    if check_core_ops_equality(op) { return check_core_ops_equal(state, world, host, op, lhs, left, rhs, right, at, span); }
+    if check_core_ops_ordering(op) {
+        state.an_operator_needs_a_bound(world, op, left, right, at);
+        state.a_maybe_compared_with_a_value(left, right, span);
+        state.a_view_compared_with_a_value(world, lhs, left, rhs, right, at);
+        return check_core_ops_named("bool");
+    }
+    if check_core_ops_add(op) && (is_text_type(left) || is_text_type(right)) {
+        state.facts.concatenations.insert(at.start as i64);
+        return check_core_ops_named("String");
+    }
+    if check_core_ops_arithmetic(op) && (check_core_ops_has_no_arithmetic(world, left) || check_core_ops_has_no_arithmetic(world, right)) {
+        state.arithmetic_on_something_that_has_none(world, op, lhs, left, rhs, right, false, span);
+        return Ty::Unknown;
+    }
+    let (found, named) = check_core_ops_same(&state, op, lhs, left, rhs, right, at);
+    if named != "" { state.facts.arithmetic.insert(at.start as i64, named); }
+    found
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+pub fn check_core_ops_binary<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, op: BinaryOp, lhs: &Expr, rhs: &Expr, at: &Span, span: &Span) -> Ty {
+    let arithmetic = check_core_ops_arithmetic(op);
+    let reached: Option<String> = match state.flow.reached.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    };
+    state.flow.reached = None;
+    let mut reach: Option<String> = None;
+    if arithmetic { reach = reached; }
+    state.flow.reaching = match reach.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    };
+    let walked_left = host.expr(state, lhs, span);
+    state.flow.reaching = match reach.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    };
+    let mut walked_right: Ty = Ty::Unknown;
+    if check_core_ops_logical(op) { walked_right = check_core_ops_proved_expr(state, host, lhs, check_core_ops_and(op), rhs, span); } else { walked_right = host.expr(state, rhs, span); }
+    let byte = check_core_ops_named("u8");
+    let mut left: Ty = walked_left;
+    if value_of_a_copy(&walked_right.unseen()) == byte && state.text_literal(world, &byte, lhs, false).is_some() { left = byte.clone(); }
+    let mut right: Ty = walked_right;
+    if value_of_a_copy(&left.unseen()) == byte && state.text_literal(world, &byte, rhs, false).is_some() { right = byte.clone(); }
+    state.divisor_is_not_zero(world, op, rhs, span);
+    state.an_operation_that_overflows(world, op, lhs, rhs, (reach).as_deref(), span);
+    let stamped = left.is_seen() || right.is_seen();
+    if !check_core_ops_equality(op) && !check_core_ops_logical(op) {
+        let before = state.findings.len() as i64;
+        state.a_maybe_in_an_operation(op, &left, &right, at);
+        host.a_proof_taken_back(state, lhs, rhs, before);
+    }
+    if op.is_comparison() {
+        state.a_bit_operation_beside_a_comparison(world, op, lhs, rhs, at);
+        state.two_integer_types_compared(lhs, &left, rhs, &right, at);
+    }
+    let mut common: Option<String> = None;
+    if !op.is_comparison() && !check_core_ops_logical(op) { common = state.two_number_types(op, lhs, &left, rhs, &right, at); }
+    if !check_core_ops_logical(op) {
+        check_core_ops_literal_beside(state, op, lhs, &right, false);
+        check_core_ops_literal_beside(state, op, rhs, &left, true);
+    }
+    if !check_core_ops_logical(op) && !check_core_ops_shift(op) {
+        state.number_asked(world, lhs, &right, at, true);
+        state.number_asked(world, rhs, &left, at, true);
+        let mut both: Vec<i64> = state.open_numbers_in(world, lhs);
+        let more: Vec<i64> = state.open_numbers_in(world, rhs);
+        for n in more.iter() {
+            let n = nikaia_std::num::value(n);
+            both.push(n);
+        }
+        state.open_numbers_joined(&both);
+    }
+    let mut outcome = check_core_ops_outcome(state, world, host, op, lhs, &left, rhs, &right, at, span);
+    if common.is_some() { outcome = check_core_ops_named(&nikaia_std::index::or(common.as_deref(), || "").to_owned()); }
+    if stamped { return Ty::Named { name: SEEN.to_owned(), args: vec![outcome.unseen()], view: false }; }
+    outcome
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_ops_from_a_map(state: &CheckState, world: &CheckWorld<'_>, value: &Expr, read_now: bool) -> bool {
+    match value {
+        Expr::Index { .. } => read_now,
+        Expr::MethodCall { .. } => read_now,
+        Expr::Variable(name, _) => { let name = *name; check_core_ops_a_map_view(state, world.words.resolve(name)) },
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_ops_a_map_view(state: &CheckState, name: &str) -> bool {
+    let local = match state.binding(name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    state.flow.map_views.contains(&local.id)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_ops_lent_root(state: &CheckState, world: &CheckWorld<'_>, value: &Expr) -> bool {
+    let root: String = match state.rooted_at(world, value) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    state.lent_here(&root) || state.got_past_a_jump.contains(&root)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_ops_plain_text(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { name, args, view } => { let view = *view; !view && args.is_empty() && name == TEXT },
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_ops_text_base(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { name, .. } => check_core_ops_base(name) == "String" || check_core_ops_base(name) == "str",
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_ops_held_matches(inner: &Ty, other: &Ty) -> bool {
+    match inner {
+        Ty::Named { name, args, .. } => name != "str" && name != "String" && *other == Ty::Named { name: name.to_owned(), args: args.to_owned(), view: false },
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_ops_not_plain(inner: &Ty) -> bool {
+    match inner {
+        Ty::Named { name, .. } => !a_number_name(name) && !check_core_ops_plain_base(&check_core_ops_base(name)),
+        _ => false,
+    }
+}
+
+fn check_core_ops_plain_base(base: &str) -> bool { base == "bool" || base == "char" || base == "scalar" || base == "String" || base == "str" }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_ops_held(inner: &Ty) -> Ty {
+    match inner {
+        Ty::Named { name, args, .. } => check_core_ops_held_named(name, args),
+        _ => inner.clone(),
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_ops_held_named(name: &str, args: &[Ty]) -> Ty {
+    if name == "str" { return check_core_ops_named(TEXT); }
+    Ty::Named { name: name.to_owned(), args: args.to_owned(), view: false }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, expr: &Expr, value: &Expr, fallback: &Expr, span: &Span) -> Ty {
+    let outer = state.flow.read_a_map;
+    state.flow.read_a_map = false;
+    let left = host.expr(state, value, span);
+    let read_now = state.flow.read_a_map;
+    state.flow.read_a_map = outer;
+    if state.nothing_to_fall_back_from(world, value, &left, expr, span) {
+        let (walked, handed) = state.taken_so_far();
+        host.expr(state, fallback, span);
+        state.walked.truncate(nikaia_std::count::of(walked));
+        state.handed.truncate(nikaia_std::count::of(handed));
+        return left;
+    }
+    let from_a_map = check_core_ops_from_a_map(&state, world, value, read_now);
+    let from = state.taken_so_far();
+    let other = host.expr(state, fallback, span);
+    let leaves = state.leaves(world, fallback);
+    state.a_branch_that_leaves(from, leaves, span);
+    let nullable = check_core_ops_nullable(&left);
+    let inner = check_core_ops_inside(&left);
+    let place = check_core_ops_place(value);
+    if place && state.jumps(world, fallback) && nullable && state.takes_away(world, &inner.unseen()) && check_core_ops_lent_root(&state, world, value) {
+        if check_core_ops_plain_text(&inner) { state.facts.lent_coalesces.insert(id_of(expr) as i64, ".as_deref()".to_owned()); } else { state.facts.lent_coalesces.insert(id_of(expr) as i64, ".as_ref()".to_owned()); }
+        return view_of_type(&inner);
+    }
+    if place {
+        let opened: Option<String> = state.a_coalesce_that_may_lend(world, &left, fallback, &other);
+        if opened.is_some() { state.flow.pending_coalesces.push(CheckPendingCoalesce { key: id_of(expr) as i64, left: id_of(value) as i64, ty: left.clone(), span: Span { start: span.start, end: span.end }, opened: nikaia_std::index::or(opened.as_deref(), || "").to_owned() }); } else { state.hands_over(world, value, &left, "given to `??`", span); }
+    }
+    if nullable && check_core_ops_lit_str(fallback) {
+        if inner == check_core_ops_view("str") { state.facts.view_fallbacks.insert(id_of(fallback) as i64); }
+        if inner == check_core_ops_named("String") && from_a_map {
+            state.facts.view_fallbacks.insert(id_of(fallback) as i64);
+            return check_core_ops_view("str");
+        }
+        if inner == check_core_ops_named("String") && !from_a_map && check_core_ops_index(value) {
+            state.facts.view_fallbacks.insert(id_of(fallback) as i64);
+            state.facts.lent_list_reads.insert(id_of(expr) as i64);
+            return check_core_ops_view("str");
+        }
+    }
+    if nullable && inner == check_core_ops_named("String") && from_a_map && other.is_a_view() && check_core_ops_place(fallback) && check_core_ops_text_base(&other) {
+        state.facts.view_coalesces.insert(id_of(expr) as i64);
+        return check_core_ops_view("str");
+    }
+    if nullable && from_a_map && check_core_ops_variable(fallback) && !other.is_a_view() && check_core_ops_held_matches(&inner, &other) && moves(&other) {
+        state.facts.lent_map_fallbacks.insert(id_of(expr) as i64);
+        return view_of_type(&other);
+    }
+    if nullable && !from_a_map && inner.is_a_view() && !other.is_a_view() && check_core_ops_not_plain(&inner) && state.a_value_written_out(world, fallback) {
+        state.facts.lent_map_fallbacks.insert(id_of(expr) as i64);
+        return inner;
+    }
+    if nullable {
+        if from_a_map {
+            let held = check_core_ops_held(&inner);
+            state.a_fallback_beside_what_a_map_holds(world, value, &held, &other, span);
+            if held == check_core_ops_named(TEXT) { state.a_fallback_that_owns_what_the_left_side_views(world, &inner, &other, fallback, span); }
+        } else { state.a_fallback_that_owns_what_the_left_side_views(world, &inner, &other, fallback, span); }
+    }
+    if nullable && check_core_ops_nullable(&other) {
+        state.facts.optional_fallbacks.insert(id_of(expr) as i64);
+        return other;
+    }
+    if !nullable { return Ty::Unknown; }
+    if inner.is_unknown() && !other.is_unknown() { return other; }
+    if !other.is_a_view() { return value_of_a_copy(&inner); }
+    inner
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_ops_given(declared: Option<&Ty>, count: i64) -> Vec<Ty> {
+    let ty: &Ty = match declared { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
+    match ty {
+        Ty::Fn { params, .. } => { if (params.len() as i64) == count { return params.to_owned(); } },
+        _ => { },
+    }
+    vec![]
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_ops_a_fn(declared: Option<&Ty>) -> bool {
+    let ty: &Ty = match declared { Some(__nikaia_value) => __nikaia_value, None => return false };
+    matches!(ty, Ty::Fn { .. })
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_core_ops_closure<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, params: &[winnow_grammar::Symbol], mutable: &[winnow_grammar::Symbol], body: &Block, span: &Span) -> Ty {
+    let declared: Option<Ty> = match state.flow.lambda_expected.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    };
+    state.flow.lambda_expected = None;
+    let given: Vec<Ty> = check_core_ops_given((declared).as_ref(), params.len() as i64);
+    let mut frame: Vec<CheckLocal> = vec![];
+    let mut names: Vec<String> = vec![];
+    let mut at: i64 = 0;
+    for p in params.iter() {
+        let mut ty: Ty = Ty::Unknown;
+        if at < given.len() as i64 { ty = (*nikaia_std::index::get(&given, (at) as usize)).clone(); }
+        let local = state.lambda_parameter(world, *p, mutable, ty, span);
+        if local.ty.is_unknown() { state.flow.unknown_bound.insert(local.id); }
+        names.push(local.name.to_owned());
+        frame.push(local);
+        at += 1;
+    }
+    for name in names.iter() { state.nameable(name, span, "a lambda's argument"); }
+    let depth = state.scope.len() as i64;
+    state.repeats.push(CheckRepeats::a_lambda(depth));
+    state.scope.push(frame);
+    let saved = state.enter_boundary("lambda");
+    check_core_block(state, world, host, body);
+    state.leave_boundary(&saved);
+    state.scope.pop();
+    state.repeats.pop();
+    if check_core_ops_a_fn((declared).as_ref()) && (!given.is_empty() || params.is_empty()) { return nikaia_std::index::or(declared, || Ty::Unknown); }
+    Ty::Unknown
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_ops_task<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, task: i64, params: &[winnow_grammar::Symbol], body: &Block, span: &Span) -> Ty {
+    state.a_task_takes_no_arguments(world, params, span);
+    let closure = Expr::Closure { params: params.to_owned(), mutable: vec![], body: body.clone(), id: fresh_id() };
+    state.a_task_takes_these(world, &closure, task, span);
+    state.scope.push(vec![]);
+    state.task_bindings.push(vec![]);
+    let outer_inside = state.inside_a_door;
+    state.inside_a_door = false;
+    let saved = state.enter_boundary("task");
+    let value = check_core_block(state, world, host, body);
+    state.leave_boundary(&saved);
+    state.scope.pop();
+    state.inside_a_door = outer_inside;
+    let bound: Vec<(String, Ty, i64)> = nikaia_std::index::or(state.task_bindings.pop(), || vec![].into());
+    state.a_task_holds_these_across_a_pause(world, host, body, &bound, span);
+    Ty::Named { name: "TaskHandle".to_owned(), args: vec![value], view: false }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_core_ops_spawn<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, spawned: &Expr, span: &Span) -> Ty {
+    state.crosses_into_a_task(world, spawned, span);
+    let task = id_of(spawned) as i64;
+    match spawned {
+        Expr::Closure { params, body, .. } => { return check_core_ops_task(state, world, host, task, params, body, span); },
+        _ => { },
+    }
+    host.expr(state, spawned, span);
+    Ty::Unknown
+}
+
+
 // --- check_core_pilot.nika ---
 
 pub fn check_specialised(function: &str, on: &str) -> String {
@@ -19313,6 +19808,8 @@ pub trait CheckHost {
     fn proved_in_a_loop(&self, state: &mut CheckState, cond: &Expr) -> Vec<CheckLocal>;
     fn proved_here(&self, state: &mut CheckState, cond: &Expr, holds: bool) -> Vec<CheckLocal>;
     fn proved_from_here(&self, state: &mut CheckState, cond: &Expr, holds: bool);
+    fn a_proof_taken_back(&self, state: &mut CheckState, lhs: &Expr, rhs: &Expr, before: i64);
+    fn a_type_that_does_not_compare(&self, state: &mut CheckState, left: &Ty, right: &Ty, span: &Span);
     fn written(&self, value: &Expr) -> String;
     fn newly_throws(&self, key: &str) -> Option<Vec<String>>;
     fn holes_read(&self, literal: &Expr) -> Vec<(Expr, Vec<(String, String)>)>;
@@ -57247,6 +57744,10 @@ pub mod check_core_leaves {
 pub mod check_core_method {
     #[allow(unused_imports)]
     pub use super::{check_core_method};
+}
+pub mod check_core_ops {
+    #[allow(unused_imports)]
+    pub use super::{check_core_ops_binary, check_core_ops_coalesce, check_core_ops_closure, check_core_ops_spawn};
 }
 pub mod check_core_pilot {
     #[allow(unused_imports)]

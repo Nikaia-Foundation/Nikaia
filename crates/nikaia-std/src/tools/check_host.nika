@@ -112,6 +112,12 @@ pub trait CheckHost {
     /// **And for the rest of the block** (ADR-350 D3, U-c8): an `if` above
     /// left it where `cond` did not hold.
     fn proved_from_here(ref self, mut state: CheckState, cond: ref Expr, holds: bool) sync
+    /// **`NK1102` over an operand whose proof a write took back** (ADR-350,
+    /// U-c10): the findings past `before` get the note, `check/narrow.rs`'s.
+    fn a_proof_taken_back(ref self, mut state: CheckState, lhs: ref Expr, rhs: ref Expr, before: i64) sync
+    /// **Two sides of a type that does not compare** (U-c10): the parts beside
+    /// stay Rust's.
+    fn a_type_that_does_not_compare(ref self, mut state: CheckState, left: ref Ty, right: ref Ty, span: ref Span) sync
     /// The value as the author wrote it, where this compiler can say so: a
     /// literal, a name, a negation, and an ellipsis for the rest. A query that
     /// stays Rust until `written` moves (C-5e): the text of a string literal is

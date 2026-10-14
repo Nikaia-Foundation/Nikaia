@@ -395,4 +395,18 @@ impl CheckHost for Host<'_> {
     fn proved_from_here(&self, _state: &mut CheckState, _cond: &Expr, _holds: bool) {
         unreachable!("only the core's host keeps the checker")
     }
+
+    fn a_proof_taken_back(&self, _state: &mut CheckState, _lhs: &Expr, _rhs: &Expr, _before: i64) {
+        unreachable!("only the core's host keeps the checker")
+    }
+
+    fn a_type_that_does_not_compare(
+        &self,
+        _state: &mut CheckState,
+        _left: &Ty,
+        _right: &Ty,
+        _span: &Span,
+    ) {
+        unreachable!("only the core's host keeps the checker")
+    }
 }

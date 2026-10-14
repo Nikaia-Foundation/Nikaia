@@ -304,7 +304,7 @@ gives what each core unit calls.
 | U-c7 (done, 0.0.927) | `check_core_stmt.nika` | `stmt` (one function per `Stmt` variant) and `block`; the host method `block` is deleted | 884 |
 | U-c8 (done, 0.0.943) | `check_core_flow.nika` | the arms `Match`, `If`, `Select`, `Overlap`, `TryCatch`, `Block`, `Unsafe` | 609 |
 | U-c9 (done, 0.0.930) | `check_core_places.nika` | the arms `Field \| SafeField`, `StructLit`, `With`, `Index`, `Cast`, `Range` | 709 |
-| U-c10 | `check_core_ops.nika` | the arms `Binary`, `Coalesce`, `Closure`, `Spawn` | 683 |
+| U-c10 (done, 0.0.948) | `check_core_ops.nika` | the arms `Binary`, `Coalesce`, `Closure`, `Spawn` | 683 |
 | U-c11 | `check_core_expr.nika` | the literals, `Variable`, `Path`, `Try`, `Throw`, `Return`, `Break \| Continue`, `Dsl` (3 arms), `Asm`; the dispatcher `value_of` and `expr`. Every `host.expr(` becomes `check_core_expr(`, the host method `expr` is deleted, and callgrind runs | 387 |
 
 **Oracle per unit:**

@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.948] — 2026-10-14
+
+**check: operators, `??`, the lambda and `spawn` in Nikaia (U-c10, #125, #558)**
+- The arms `Binary`, `Coalesce`, `Closure` and `Spawn` of the checker's walk move to `tools/check_core_ops.nika`; narrowing stays in `check/narrow.rs`, asked through `host.proved_here` and the new host methods `a_proof_taken_back` and `a_type_that_does_not_compare`.
+
 ## [0.0.947] — 2026-10-14
 
 **a function named as a value, a published field and an open set make a catch need else (ADR-351 D4, part of #620)**

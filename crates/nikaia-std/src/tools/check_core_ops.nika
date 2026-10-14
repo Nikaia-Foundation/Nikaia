@@ -1,0 +1,695 @@
+// crates/nikaia-std/src/tools/check_core_ops.nika
+//
+// **The operators, the lambda and the task** (ADR-294, #125, #558, C-6,
+// U-c10): `Binary`, `Coalesce`, `Closure` and `Spawn` of the checker's walk.
+// The form is the pilot's (`check_core_pilot.nika`): a free function over the
+// state, the world and a host; the walk comes back through the hub
+// `host.expr`. What the left side of `&&` and `||` proves not `null` (ADR-350)
+// stays Rust in `check/narrow.rs` and is asked through `host.proved_here`; a
+// proof a write took back is `host.a_proof_taken_back`, and whether two types
+// compare is `host.a_type_that_does_not_compare`, which reads the parts beside.
+
+/// A type by its bare name.
+fn check_core_ops_named(name: ref String) -> Ty {
+    return Ty::Named { name: name.clone(), args: [], view: false }
+}
+
+/// A view of a type by its bare name, `Ty::view`.
+fn check_core_ops_view(name: ref String) -> Ty {
+    return Ty::Named { name: name.clone(), args: [], view: true }
+}
+
+/// The last segment of a path, `ty::base`.
+fn check_core_ops_base(name: ref String) -> String {
+    let parts: Vec[ref String] = name.split("::").collect()
+    if parts.len() == 0 {
+        return name.clone()
+    }
+    let last = parts.len() as i64 - 1
+    return f"{parts[last]}"
+}
+
+/// `+`, `-`, `*`, `/` and `%`.
+fn check_core_ops_arithmetic(op: BinaryOp) -> bool {
+    return match op {
+        BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Rem => true,
+        else => false,
+    }
+}
+
+/// `+`, `-` and `*`: what an unchecked operation may name (ADR-306 D10).
+fn check_core_ops_unchecked(op: BinaryOp) -> bool {
+    return match op {
+        BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul => true,
+        else => false,
+    }
+}
+
+/// `&&` and `||`.
+fn check_core_ops_logical(op: BinaryOp) -> bool {
+    return match op {
+        BinaryOp::And | BinaryOp::Or => true,
+        else => false,
+    }
+}
+
+/// `&&`.
+fn check_core_ops_and(op: BinaryOp) -> bool {
+    return match op {
+        BinaryOp::And => true,
+        else => false,
+    }
+}
+
+/// `<<` and `>>`.
+fn check_core_ops_shift(op: BinaryOp) -> bool {
+    return match op {
+        BinaryOp::Shl | BinaryOp::Shr => true,
+        else => false,
+    }
+}
+
+/// `&`, `|`, `^` and the shifts.
+fn check_core_ops_bits(op: BinaryOp) -> bool {
+    return match op {
+        BinaryOp::BitAnd | BinaryOp::BitOr | BinaryOp::BitXor | BinaryOp::Shl | BinaryOp::Shr => true,
+        else => false,
+    }
+}
+
+/// `==` and `!=`.
+fn check_core_ops_equality(op: BinaryOp) -> bool {
+    return match op {
+        BinaryOp::Eq | BinaryOp::Ne => true,
+        else => false,
+    }
+}
+
+/// `<`, `<=`, `>` and `>=`.
+fn check_core_ops_ordering(op: BinaryOp) -> bool {
+    return match op {
+        BinaryOp::Lt | BinaryOp::Le | BinaryOp::Gt | BinaryOp::Ge => true,
+        else => false,
+    }
+}
+
+/// `+`.
+fn check_core_ops_add(op: BinaryOp) -> bool {
+    return match op {
+        BinaryOp::Add => true,
+        else => false,
+    }
+}
+
+/// The literal `null`.
+fn check_core_ops_null(value: ref Expr) -> bool sync {
+    return match value {
+        Expr::LitNull(_) => true,
+        else => false,
+    }
+}
+
+/// A whole-number literal.
+fn check_core_ops_lit_int(value: ref Expr) -> bool sync {
+    return match value {
+        Expr::LitInt { .. } => true,
+        else => false,
+    }
+}
+
+/// A text literal.
+fn check_core_ops_lit_str(value: ref Expr) -> bool sync {
+    return match value {
+        Expr::LitStr { .. } => true,
+        else => false,
+    }
+}
+
+/// A name.
+fn check_core_ops_variable(value: ref Expr) -> bool sync {
+    return match value {
+        Expr::Variable(_, _) => true,
+        else => false,
+    }
+}
+
+/// A name or a field: a place.
+fn check_core_ops_place(value: ref Expr) -> bool sync {
+    return match value {
+        Expr::Variable(_, _) => true,
+        Expr::Field { .. } => true,
+        else => false,
+    }
+}
+
+/// An index.
+fn check_core_ops_index(value: ref Expr) -> bool sync {
+    return match value {
+        Expr::Index { .. } => true,
+        else => false,
+    }
+}
+
+/// A list, a map, a set, or a `struct` or an `enum` this unit declares.
+fn check_core_ops_has_no_arithmetic(world: ref CheckWorld, ty: ref Ty) -> bool sync {
+    return is_a_collection_type(ty) || declared_with_no_arithmetic(world.here, ty) != null
+}
+
+/// A `T?`.
+fn check_core_ops_nullable(ty: ref Ty) -> bool sync {
+    return match ty {
+        Ty::Nullable(_) => true,
+        else => false,
+    }
+}
+
+/// What is inside a `T?`, or `Unknown`.
+fn check_core_ops_inside(ty: ref Ty) -> Ty sync {
+    return match ty {
+        Ty::Nullable(inner) => inner.clone(),
+        else => Ty::Unknown,
+    }
+}
+
+/// `u32` or `u64`, where the type is one.
+fn check_core_ops_unsigned(ty: ref Ty) -> String? sync {
+    let name: String = integer_named(ty) ?? return null
+    if name == "u32" || name == "u64" {
+        return name
+    }
+    return null
+}
+
+/// Whether a side may stand in an unchecked operation: a literal, or one
+/// whole-number type that is not a view.
+fn check_core_ops_whole(side: ref Expr, ty: ref Ty) -> bool sync {
+    if check_core_ops_lit_int(side) {
+        return true
+    }
+    let plain = ty.unseen()
+    return match plain {
+        Ty::Named { name, args, view } => !view && args.is_empty() && is_whole_number(name),
+        else => false,
+    }
+}
+
+/// The whole-number type a side names, or the empty text for a literal.
+fn check_core_ops_whole_name(side: ref Expr, ty: ref Ty) -> String sync {
+    if check_core_ops_lit_int(side) {
+        return "".clone()
+    }
+    let plain = ty.unseen()
+    return match plain {
+        Ty::Named { name, .. } => name.clone(),
+        else => "".clone(),
+    }
+}
+
+/// **A literal beside an unsigned side is of that side's type** (ADR-285 D3).
+fn check_core_ops_literal_beside(mut state: CheckState, op: BinaryOp, side: ref Expr, other: ref Ty, count: bool) sync {
+    let value = value_of_a_copy(other.unseen())
+    if count && check_core_ops_shift(op) {
+        return
+    }
+    let unsigned: String = check_core_ops_unsigned(value) ?? return
+    state.literals_are(side, unsigned)
+}
+
+/// **The right of `&&` runs where the left held, and the right of `||` where
+/// it did not** (ADR-350 D2).
+fn check_core_ops_proved_expr[H: CheckHost](mut state: CheckState, host: ref H, cond: ref Expr, holds: bool, value: ref Expr, span: ref Span) -> Ty sync {
+    let markers = host.proved_here(state, cond, holds)
+    if markers.len() == 0 {
+        return host.expr(state, value, span)
+    }
+    state.scope.push(markers)
+    let found = host.expr(state, value, span)
+    state.scope.pop()
+    return found
+}
+
+/// **Arithmetic on two of the same thing is that thing**, and a bare number is
+/// neither, so one known side decides (ADR-233 D4).
+fn check_core_ops_same(state: ref CheckState, op: BinaryOp, lhs: ref Expr, left: ref Ty, rhs: ref Expr, right: ref Ty, at: ref Span) -> (Ty, String) sync {
+    let mut named: String = ""
+    if check_core_ops_unchecked(op) && check_core_ops_whole(lhs, left) && check_core_ops_whole(rhs, right) {
+        let a = check_core_ops_whole_name(lhs, left)
+        let b = check_core_ops_whole_name(rhs, right)
+        if a != "" && b != "" {
+            if a == b {
+                named = a.clone()
+            }
+        } else if a != "" {
+            named = a.clone()
+        } else if b != "" {
+            named = b.clone()
+        }
+    }
+    if left.is_unknown() {
+        return (value_of_a_copy(right), named)
+    }
+    if right.is_unknown() {
+        return (value_of_a_copy(left), named)
+    }
+    let l = value_of_a_copy(left)
+    let r = value_of_a_copy(right)
+    if l == r {
+        return (l, named)
+    }
+    return (Ty::Unknown, named)
+}
+
+/// **`==` and `!=`** (ADR-279 D5): a comparison only reads its sides.
+fn check_core_ops_equal[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, op: BinaryOp, lhs: ref Expr, left: ref Ty, rhs: ref Expr, right: ref Ty, at: ref Span, span: ref Span) -> Ty sync {
+    state.a_pending_coalesce_of_text_is_lent(lhs)
+    state.a_pending_coalesce_of_text_is_lent(rhs)
+    // **`x == null` asks whether there is one** (0.0.250).
+    let asks_for_null = check_core_ops_null(lhs) || check_core_ops_null(rhs)
+    if !asks_for_null {
+        state.an_operator_needs_a_bound(world, op, left, right, at)
+        host.a_type_that_does_not_compare(state, left, right, at)
+    }
+    if !asks_for_null {
+        state.a_maybe_compared_with_a_value(left, right, span)
+    }
+    state.a_view_compared_with_a_value(world, lhs, left, rhs, right, at)
+    if names_a_path(left, right) {
+        state.facts.path_comparisons.insert(at.start as i64)
+    }
+    return check_core_ops_named("bool")
+}
+
+/// What an operation comes to, before the common type and the stamp.
+fn check_core_ops_outcome[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, op: BinaryOp, lhs: ref Expr, left: ref Ty, rhs: ref Expr, right: ref Ty, at: ref Span, span: ref Span) -> Ty sync {
+    // **`&`, `|`, `^` and the shifts take integers** (ADR-285 D3).
+    if check_core_ops_bits(op) {
+        state.a_bit_operator_on_something_else(op, left, right, at)
+        let l = value_of_a_copy(left.unseen())
+        let r = value_of_a_copy(right.unseen())
+        if check_core_ops_shift(op) {
+            return l
+        }
+        if l.is_unknown() {
+            return r
+        }
+        return l
+    }
+    if check_core_ops_logical(op) {
+        let on_left = check_span_at(world, lhs, span)
+        let on_right = check_span_at(world, rhs, span)
+        state.expect_bool(left, on_left, "`&&` and `||` join two `bool`s.")
+        state.expect_bool(right, on_right, "`&&` and `||` join two `bool`s.")
+        return check_core_ops_named("bool")
+    }
+    if check_core_ops_equality(op) {
+        return check_core_ops_equal(state, world, host, op, lhs, left, rhs, right, at, span)
+    }
+    if check_core_ops_ordering(op) {
+        state.an_operator_needs_a_bound(world, op, left, right, at)
+        state.a_maybe_compared_with_a_value(left, right, span)
+        state.a_view_compared_with_a_value(world, lhs, left, rhs, right, at)
+        return check_core_ops_named("bool")
+    }
+    // **A `+` where either side is text is a concatenation** (ADR-081 D2).
+    if check_core_ops_add(op) && (is_text_type(left) || is_text_type(right)) {
+        state.facts.concatenations.insert(at.start as i64)
+        return check_core_ops_named("String")
+    }
+    // **`NK1191`: arithmetic on something that has none** (0.0.234).
+    if check_core_ops_arithmetic(op) && (check_core_ops_has_no_arithmetic(world, left) || check_core_ops_has_no_arithmetic(world, right)) {
+        state.arithmetic_on_something_that_has_none(world, op, lhs, left, rhs, right, false, span)
+        return Ty::Unknown
+    }
+    let (found, named) = check_core_ops_same(state, op, lhs, left, rhs, right, at)
+    if named != "" {
+        state.facts.arithmetic.insert(at.start as i64, named)
+    }
+    return found
+}
+
+/// **`a op b`** (ADR-081, ADR-285): both sides walked, then what the operator
+/// asks of them.
+pub fn check_core_ops_binary[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, op: BinaryOp, lhs: ref Expr, rhs: ref Expr, at: ref Span, span: ref Span) -> Ty sync {
+    let arithmetic = check_core_ops_arithmetic(op)
+    let reached: String? = state.flow.reached?.clone()
+    state.flow.reached = null
+    let mut reach: String? = null
+    if arithmetic {
+        reach = reached
+    }
+    state.flow.reaching = reach?.clone()
+    let walked_left = host.expr(state, lhs, span)
+    state.flow.reaching = reach?.clone()
+    let mut walked_right: Ty = Ty::Unknown
+    if check_core_ops_logical(op) {
+        walked_right = check_core_ops_proved_expr(state, host, lhs, check_core_ops_and(op), rhs, span)
+    } else {
+        walked_right = host.expr(state, rhs, span)
+    }
+    // **A `'…'` beside a byte is a byte** (ADR-320, Part I 2.6).
+    let byte = check_core_ops_named("u8")
+    let mut left: Ty = walked_left
+    if value_of_a_copy(walked_right.unseen()) == byte && state.text_literal(world, byte, lhs, false) != null {
+        left = byte.clone()
+    }
+    let mut right: Ty = walked_right
+    if value_of_a_copy(left.unseen()) == byte && state.text_literal(world, byte, rhs, false) != null {
+        right = byte.clone()
+    }
+    state.divisor_is_not_zero(world, op, rhs, span)
+    state.an_operation_that_overflows(world, op, lhs, rhs, reach, span)
+    // **The stamp sticks** (ADR-281 D23).
+    let stamped = left.is_seen() || right.is_seen()
+    // **A `T?` has no operator but `==` and `!=`** (Part I 2.3).
+    if !check_core_ops_equality(op) && !check_core_ops_logical(op) {
+        let before = state.findings.len() as i64
+        state.a_maybe_in_an_operation(op, left, right, at)
+        host.a_proof_taken_back(state, lhs, rhs, before)
+    }
+    // **A bit operator beside a comparison is parenthesised** (ADR-285 D10).
+    if op.is_comparison() {
+        state.a_bit_operation_beside_a_comparison(world, op, lhs, rhs, at)
+        state.two_integer_types_compared(lhs, left, rhs, right, at)
+    }
+    // **Two number types in one operation** (ADR-285 D1, D32).
+    let mut common: String? = null
+    if !op.is_comparison() && !check_core_ops_logical(op) {
+        common = state.two_number_types(op, lhs, left, rhs, right, at)
+    }
+    if !check_core_ops_logical(op) {
+        check_core_ops_literal_beside(state, op, lhs, right, false)
+        check_core_ops_literal_beside(state, op, rhs, left, true)
+    }
+    // **An operation is a use of the numbers on both sides** (ADR-285 D23, D24).
+    if !check_core_ops_logical(op) && !check_core_ops_shift(op) {
+        state.number_asked(world, lhs, right, at, true)
+        state.number_asked(world, rhs, left, at, true)
+        let mut both: Vec[i64] = state.open_numbers_in(world, lhs)
+        let more: Vec[i64] = state.open_numbers_in(world, rhs)
+        for n in more {
+            both.push(n)
+        }
+        state.open_numbers_joined(both)
+    }
+    let mut outcome = check_core_ops_outcome(state, world, host, op, lhs, left, rhs, right, at, span)
+    if common != null {
+        outcome = check_core_ops_named((common ?? "").clone())
+    }
+    if stamped {
+        return Ty::Named { name: SEEN.clone(), args: [outcome.unseen()], view: false }
+    }
+    return outcome
+}
+
+/// **A map read, or a name a `let` bound to one** (#297).
+fn check_core_ops_from_a_map(state: ref CheckState, world: ref CheckWorld, value: ref Expr, read_now: bool) -> bool sync {
+    return match value {
+        Expr::Index { .. } => read_now,
+        Expr::MethodCall { .. } => read_now,
+        Expr::Variable(name, _) => check_core_ops_a_map_view(state, world.words.resolve(name)),
+        else => false,
+    }
+}
+
+/// Whether the binding `name` is a view of what a map keeps.
+fn check_core_ops_a_map_view(state: ref CheckState, name: ref String) -> bool sync {
+    let local = state.binding(name) ?? return false
+    return state.flow.map_views.contains(local.id)
+}
+
+/// A place lent here, or a local `get` handed back past a jump (ADR-279 D35).
+fn check_core_ops_lent_root(state: ref CheckState, world: ref CheckWorld, value: ref Expr) -> bool sync {
+    let root: String = state.rooted_at(world, value) ?? return false
+    return state.lent_here(root) || state.got_past_a_jump.contains(root)
+}
+
+/// Owned text, plainly: `String` with nothing around it.
+fn check_core_ops_plain_text(ty: ref Ty) -> bool sync {
+    return match ty {
+        Ty::Named { name, args, view } => !view && args.is_empty() && name == TEXT,
+        else => false,
+    }
+}
+
+/// Text by its last segment, owned or viewed.
+fn check_core_ops_text_base(ty: ref Ty) -> bool sync {
+    return match ty {
+        Ty::Named { name, .. } => check_core_ops_base(name) == "String" || check_core_ops_base(name) == "str",
+        else => false,
+    }
+}
+
+/// Whether `other` is what a map holds as `inner`, text aside.
+fn check_core_ops_held_matches(inner: ref Ty, other: ref Ty) -> bool sync {
+    return match inner {
+        Ty::Named { name, args, .. } => name != "str" && name != "String" && other == Ty::Named { name: name.clone(), args: args.clone(), view: false },
+        else => false,
+    }
+}
+
+/// A view of a type of the program's own: not a number, not text, no scalar.
+fn check_core_ops_not_plain(inner: ref Ty) -> bool sync {
+    return match inner {
+        Ty::Named { name, .. } => !a_number_name(name) && !check_core_ops_plain_base(check_core_ops_base(name)),
+        else => false,
+    }
+}
+
+/// `bool`, `char`, `scalar`, `String` or `str`.
+fn check_core_ops_plain_base(base: ref String) -> bool {
+    return base == "bool" || base == "char" || base == "scalar" || base == "String" || base == "str"
+}
+
+/// What a map holds, as the language says it (ADR-184 D2).
+fn check_core_ops_held(inner: ref Ty) -> Ty sync {
+    return match inner {
+        Ty::Named { name, args, .. } => check_core_ops_held_named(name, args),
+        else => inner.clone(),
+    }
+}
+
+/// A named type a map holds: `str` is `String`, a view is the value.
+fn check_core_ops_held_named(name: ref String, args: ref Vec[Ty]) -> Ty sync {
+    if name == "str" {
+        return check_core_ops_named(TEXT)
+    }
+    return Ty::Named { name: name.clone(), args: args.clone(), view: false }
+}
+
+/// **`a ?? b`** (Part I 3.5, ADR-279, ADR-293): the first that has a value.
+pub fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, value: ref Expr, fallback: ref Expr, span: ref Span) -> Ty sync {
+    let outer = state.flow.read_a_map
+    state.flow.read_a_map = false
+    let left = host.expr(state, value, span)
+    let read_now = state.flow.read_a_map
+    state.flow.read_a_map = outer
+    // **The left side alone** (D13): the fallback is still checked, and what
+    // it would take is not taken, because it never runs.
+    if state.nothing_to_fall_back_from(world, value, left, expr, span) {
+        let (walked, handed) = state.taken_so_far()
+        host.expr(state, fallback, span)
+        state.walked.truncate(walked)
+        state.handed.truncate(handed)
+        return left
+    }
+    let from_a_map = check_core_ops_from_a_map(state, world, value, read_now)
+    // **A fallback that jumps takes its takings with it** (ADR-293 D30).
+    let from = state.taken_so_far()
+    let other = host.expr(state, fallback, span)
+    let leaves = state.leaves(world, fallback)
+    state.a_branch_that_leaves(from, leaves, span)
+    let nullable = check_core_ops_nullable(left)
+    let inner = check_core_ops_inside(left)
+    let place = check_core_ops_place(value)
+    // **A loan on the left and a jump on the right is a view** (ADR-279 D10).
+    if place && state.jumps(world, fallback) && nullable && state.takes_away(world, inner.unseen()) && check_core_ops_lent_root(state, world, value) {
+        if check_core_ops_plain_text(inner) {
+            state.facts.lent_coalesces.insert(id_of(expr) as i64, ".as_deref()".clone())
+        } else {
+            state.facts.lent_coalesces.insert(id_of(expr) as i64, ".as_ref()".clone())
+        }
+        return view_of_type(inner)
+    }
+    // **A name on the left of `??` is taken where the answer is kept and lent
+    // where it is only read** (ADR-279 D5).
+    if place {
+        let opened: String? = state.a_coalesce_that_may_lend(world, left, fallback, other)
+        if opened != null {
+            state.flow.pending_coalesces.push(CheckPendingCoalesce {
+                key: id_of(expr) as i64,
+                left: id_of(value) as i64,
+                ty: left.clone(),
+                span: Span { start: span.start, end: span.end },
+                opened: (opened ?? "").clone(),
+            })
+        } else {
+            state.hands_over(world, value, left, "given to `??`", span)
+        }
+    }
+    if nullable && check_core_ops_lit_str(fallback) {
+        if inner == check_core_ops_view("str") {
+            state.facts.view_fallbacks.insert(id_of(fallback) as i64)
+        }
+        // **A map's text, read, is a view of it** (ADR-293 D28).
+        if inner == check_core_ops_named("String") && from_a_map {
+            state.facts.view_fallbacks.insert(id_of(fallback) as i64)
+            return check_core_ops_view("str")
+        }
+        // **And a list's** (#342, ADR-279 D12).
+        if inner == check_core_ops_named("String") && !from_a_map && check_core_ops_index(value) {
+            state.facts.view_fallbacks.insert(id_of(fallback) as i64)
+            state.facts.lent_list_reads.insert(id_of(expr) as i64)
+            return check_core_ops_view("str")
+        }
+    }
+    // **And a name that is a view of text beside it** (#297).
+    if nullable && inner == check_core_ops_named("String") && from_a_map && other.is_a_view() && check_core_ops_place(fallback) && check_core_ops_text_base(other) {
+        state.facts.view_coalesces.insert(id_of(expr) as i64)
+        return check_core_ops_view("str")
+    }
+    // **And a name of the type the map holds** (ADR-279 D7).
+    if nullable && from_a_map && check_core_ops_variable(fallback) && !other.is_a_view() && check_core_ops_held_matches(inner, other) && moves(other) {
+        state.facts.lent_map_fallbacks.insert(id_of(expr) as i64)
+        return view_of_type(other)
+    }
+    // **A value written out beside a view of a type of the program's own**
+    // (#574).
+    if nullable && !from_a_map && inner.is_a_view() && !other.is_a_view() && check_core_ops_not_plain(inner) && state.a_value_written_out(world, fallback) {
+        state.facts.lent_map_fallbacks.insert(id_of(expr) as i64)
+        return inner
+    }
+    if nullable {
+        if from_a_map {
+            // **What a map holds has its own sentence** (#297).
+            let held = check_core_ops_held(inner)
+            state.a_fallback_beside_what_a_map_holds(world, value, held, other, span)
+            if held == check_core_ops_named(TEXT) {
+                state.a_fallback_that_owns_what_the_left_side_views(world, inner, other, fallback, span)
+            }
+        } else {
+            state.a_fallback_that_owns_what_the_left_side_views(world, inner, other, fallback, span)
+        }
+    }
+    // **`a ?? b` where `b` may be `null` too is a `T?`** (Part I 3.5).
+    if nullable && check_core_ops_nullable(other) {
+        state.facts.optional_fallbacks.insert(id_of(expr) as i64)
+        return other
+    }
+    // **`a ?? b` on a `T?` is a `T`** (Part I 3.5, ADR-233 D4, #497).
+    if !nullable {
+        return Ty::Unknown
+    }
+    if inner.is_unknown() && !other.is_unknown() {
+        return other
+    }
+    if !other.is_a_view() {
+        return value_of_a_copy(inner)
+    }
+    return inner
+}
+
+/// The parameter types the place a lambda stands in declares (#497).
+fn check_core_ops_given(declared: ref Ty?, count: i64) -> Vec[Ty] sync {
+    let ty: ref Ty = declared ?? return []
+    match ty {
+        Ty::Fn { params, .. } => {
+            if params.len() as i64 == count {
+                return params.clone()
+            }
+        },
+        else => {},
+    }
+    return []
+}
+
+/// A function type the place declares, where it is one.
+fn check_core_ops_a_fn(declared: ref Ty?) -> bool sync {
+    let ty: ref Ty = declared ?? return false
+    return match ty {
+        Ty::Fn { .. } => true,
+        else => false,
+    }
+}
+
+/// **A lambda** (ADR-277): its arguments are the ones it names, of the types
+/// the place it stands in says (#497).
+pub fn check_core_ops_closure[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, params: ref Vec[winnow_grammar::Symbol], mutable: ref Vec[winnow_grammar::Symbol], body: ref Block, span: ref Span) -> Ty sync {
+    let declared: Ty? = state.flow.lambda_expected?.clone()
+    state.flow.lambda_expected = null
+    let given: Vec[Ty] = check_core_ops_given(declared, params.len() as i64)
+    let mut frame: Vec[CheckLocal] = []
+    let mut names: Vec[String] = []
+    let mut at = 0
+    for p in params {
+        let mut ty: Ty = Ty::Unknown
+        if at < given.len() as i64 {
+            ty = given[at].clone()
+        }
+        let local = state.lambda_parameter(world, p, mutable, ty, span)
+        if local.ty.is_unknown() {
+            state.flow.unknown_bound.insert(local.id)
+        }
+        names.push(local.name.clone())
+        frame.push(local)
+        at += 1
+    }
+    for name in names {
+        state.nameable(name, span, "a lambda's argument")
+    }
+    let depth = state.scope.len() as i64
+    state.repeats.push(CheckRepeats::a_lambda(depth))
+    state.scope.push(frame)
+    // Part I 3.3: a lambda is a closure below, and a jump does not leave one.
+    let saved = state.enter_boundary("lambda")
+    check_core_block(state, world, host, body)
+    state.leave_boundary(saved)
+    state.scope.pop()
+    state.repeats.pop()
+    // And it is of the type the place declares.
+    if check_core_ops_a_fn(declared) && (given.len() > 0 || params.len() == 0) {
+        return declared ?? Ty::Unknown
+    }
+    return Ty::Unknown
+}
+
+/// **A task's lambda, walked** (Part I 8.2, ADR-055 D5, ADR-312, ADR-281 D29):
+/// its body's value is what the handle hands back.
+fn check_core_ops_task[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, task: i64, params: ref Vec[winnow_grammar::Symbol], body: ref Block, span: ref Span) -> Ty sync {
+    // A task is handed nothing, so a parameter has nothing to be bound from.
+    state.a_task_takes_no_arguments(world, params, span)
+    // **What the task takes with it** (`NK2101`), read off the body before it
+    // is walked. No parameter of a task is ever `mut`.
+    let closure = Expr::Closure { params: params.clone(), mutable: [], body: body.clone(), id: fresh_id() }
+    state.a_task_takes_these(world, closure, task, span)
+    state.scope.push([])
+    state.task_bindings.push([])
+    // A task runs later and elsewhere: taking a lock in one is not a door's.
+    let outer_inside = state.inside_a_door
+    state.inside_a_door = false
+    // A task's body is an `async` block below (ADR-055 §6).
+    let saved = state.enter_boundary("task")
+    let value = check_core_block(state, world, host, body)
+    state.leave_boundary(saved)
+    state.scope.pop()
+    state.inside_a_door = outer_inside
+    let bound: Vec[(String, Ty, i64)] = state.task_bindings.pop() ?? []
+    state.a_task_holds_these_across_a_pause(world, host, body, bound, span)
+    return Ty::Named { name: "TaskHandle".clone(), args: [value], view: false }
+}
+
+/// **`spawn`** hands back a `TaskHandle` of what the task's body comes to.
+pub fn check_core_ops_spawn[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, spawned: ref Expr, span: ref Span) -> Ty sync {
+    // **Before** the body is walked, so that the task's own `let`s are not
+    // yet in scope.
+    state.crosses_into_a_task(world, spawned, span)
+    // The handles a task duplicates are keyed by its lambda's node (ADR-340 D5).
+    let task = id_of(spawned) as i64
+    match spawned {
+        Expr::Closure { params, body, .. } => {
+            return check_core_ops_task(state, world, host, task, params, body, span)
+        },
+        else => {},
+    }
+    host.expr(state, spawned, span)
+    return Ty::Unknown
+}
