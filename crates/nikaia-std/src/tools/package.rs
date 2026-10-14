@@ -25962,6 +25962,11 @@ fn emit_call_tasks_channel(flow: &EmitFlow, scope: &EmitScope) -> String {
     String::from("nikaia_std::task::Crashed")
 }
 
+fn emit_call_scope_channel(channel: &str) -> String {
+    if channel == "Box<dyn std::error::Error>" { return String::from("nikaia_std::task::Boxed"); }
+    channel.to_owned()
+}
+
 fn emit_call_not_computed_yet() -> String { String::from("a default not computed yet") }
 
 fn emit_call_owned_text(ty: &Ty) -> bool {
@@ -25998,7 +26003,7 @@ impl EmitState {
                         self.emit_core_args(world, walk, &mut probe, host, &self.emit_call_callee(world, func), args, &self.takes_a_handle_at(world, func), depth, flow, &tried)?;
                         if !probe.buf.contains("?") { channel = "nikaia_std::task::Crashed".to_owned(); }
                     }
-                    out.push(&format!("::<_, {}>", channel));
+                    out.push(&format!("::<_, {}>", emit_call_scope_channel(&channel)));
                     tasks = Some(channel);
                 }
             },
@@ -26115,7 +26120,7 @@ impl EmitState {
                     if !probe.buf.contains("?") { channel = "nikaia_std::task::Crashed".to_owned(); }
                 }
                 let boxed = flow.handled_here && channel == "Box<dyn std::error::Error>";
-                out.push(&format!("{{ let {} = &nikaia_std::task::{}::<{}>::new(); nikaia_std::task::{}({}, async ", named, made, channel, run, named));
+                out.push(&format!("{{ let {} = &nikaia_std::task::{}::<{}>::new(); nikaia_std::task::{}({}, async ", named, made, emit_call_scope_channel(&channel), run, named));
                 let inner = EmitScope { changed: scope.changed.to_owned(), tasks_channel: channel, tasks_function: owner, ..EmitScope::plain() };
                 self.emit_core_block(world, walk, out, host, body, depth, EmitFlow::plain().at(flow.statement), &inner, EmitTail::Return)?;
                 walk.boxed_scope = boxed;
@@ -27754,13 +27759,13 @@ impl EmitState {
         } else if a_scope && scope.channel == "Box<dyn std::error::Error>" {
             let mut unless: String = String::from("");
             for ty in fatal_named(handler, world.words) { if !ty.contains("::") && emit_is_fatal(&self.own_contracts, &ty) { unless = format!("{} && !nikaia_std::error::holds::<{}>(&*error)", unless, ty); } }
-            out.push(&format!("{}Err(error) if nikaia_std::process::Ending::fatal_code(&error).is_some(){} => return Err(error),\n", pad, unless));
+            out.push(&format!("{}Err(nikaia_std::task::Boxed(error)) if nikaia_std::process::Ending::fatal_code(&error).is_some(){} => return Err(error),\n", pad, unless));
         } else if a_scope {
             let named = fatal_named(handler, world.words);
             let own = self.own_contracts.functions.get(&scope.function);
             if own.is_some() {
                 let contract = match own { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
-                for ty in contract.fails_with.iter() { if !ty.contains("::") && !named.contains(ty) && emit_is_fatal(&self.own_contracts, ty) { out.push(&format!("{}Err(error) if nikaia_std::error::holds::<{}>(&*error) => return Err(nikaia_std::error::Thrown::from(nikaia_std::error::opened::<{}>(error)).into()),\n", pad, ty, ty)); } }
+                for ty in contract.fails_with.iter() { if !ty.contains("::") && !named.contains(ty) && emit_is_fatal(&self.own_contracts, ty) { out.push(&format!("{}Err(nikaia_std::task::Boxed(error)) if nikaia_std::error::holds::<{}>(&*error) => return Err(nikaia_std::error::reopened::<{}>(error).into()),\n", pad, ty, ty)); } }
             }
         } else if !passing.is_empty() {
             let caught_in = self.caught_sum(world, guarded_expr);
@@ -31749,7 +31754,13 @@ impl EmitState {
             }
             out.push(&format!("        }}\n    }}\n}}\nimpl{} std::error::Error for {}{} {{}}\n", decl, name, params));
             if crashed {
-                out.push(&format!("impl{} nikaia_std::error::Joined for {}{} {{\n    fn joined_by(&mut self, _later: Self) {{}}\n}}\n", decl, name, params));
+                out.push(&format!("impl{} nikaia_std::error::Joined for {}{} {{\n    fn joined_by(&mut self, later: Self) {{\n        #[allow(unreachable_patterns)]\n        match (self, later) {{\n", decl, name, params));
+                for member in members.iter() {
+                    let variant = sum_variant(member);
+                    let held = self.sum_member_held(world, member, &params);
+                    if held.starts_with("nikaia_std::error::Thrown<") { out.push(&format!("            ({}::{}(first), {}::{}(later)) => nikaia_std::error::Joined::joined_by(first, later),\n", name, variant, name, variant)); }
+                }
+                out.push("            _ => {}\n        }\n    }\n}\n");
                 out.push(&format!("impl{} nikaia_std::task::Crosses for {}{} {{\n    type Sent = Self;\n    fn sent(self) -> Self {{ self }}\n    fn back(sent: Self) -> Self {{ sent }}\n}}\n", decl, name, params));
             }
             out.push(&format!("impl{} {}{} {{\n    #[allow(dead_code)]\n    fn message(&self) -> String {{ self.to_string() }}\n}}\n", decl, name, params));

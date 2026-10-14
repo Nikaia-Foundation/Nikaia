@@ -517,6 +517,8 @@ pub struct Carried {
     /// The error itself, when its type is one of the program's that can
     /// cross threads ([`crossing`]): a typed `catch` at the join takes it.
     itself: Option<Box<dyn std::error::Error + Send>>,
+    /// Where it was raised, so that it is raised there again on this side.
+    site: Option<&'static str>,
 }
 
 type Crosser = fn(
@@ -605,17 +607,22 @@ impl Carried {
         let message = error.to_string();
         let exit = error.exit_code();
         let fatal = error.fatal_code();
+        let site = crate::error::raised_origin(&*error);
         Carried {
             message,
             exit,
             fatal,
             itself: crossed(error),
+            site,
         }
     }
 
     fn into_box(self) -> Box<dyn std::error::Error> {
         if let Some(itself) = self.itself {
-            return itself;
+            return match self.site {
+                Some(origin) => crate::error::raised_at(itself, origin),
+                None => itself,
+            };
         }
         match self.exit {
             Some(code) => Box::new(crate::process::Exit::Code(i64::from(code))),
@@ -1143,6 +1150,48 @@ impl Crosses for Box<dyn std::error::Error> {
     }
     fn back(sent: Carried) -> Self {
         sent.into_box()
+    }
+}
+
+/// **The box as a scope's channel** (ADR-346 D7), where a `catch` sits on the
+/// scope: its tasks fail in `Box<dyn Error>`, the scope in this. The box's
+/// object lifetime is inferred inside a function, and a `for<'scope>` closure
+/// that names it asks everything its tasks borrow to be `'static` (E0373); a
+/// type with no lifetime of its own lets them borrow, as a typed channel does.
+#[derive(Debug)]
+pub struct Boxed(pub Box<dyn std::error::Error>);
+
+impl From<Crashed> for Boxed {
+    fn from(crash: Crashed) -> Boxed {
+        Boxed(Box::new(crash))
+    }
+}
+
+impl From<Boxed> for Box<dyn std::error::Error> {
+    fn from(boxed: Boxed) -> Box<dyn std::error::Error> {
+        boxed.0
+    }
+}
+
+impl crate::error::Joined for Boxed {
+    fn joined_by(&mut self, later: Boxed) {
+        crate::error::Joined::joined_by(&mut self.0, later.0)
+    }
+}
+
+impl Outcome<Boxed> for Result<(), Box<dyn std::error::Error>> {
+    fn failed(self) -> Option<Boxed> {
+        self.err().map(Boxed)
+    }
+}
+
+impl Crosses for Boxed {
+    type Sent = Carried;
+    fn sent(self) -> Carried {
+        Carried::from_box(self.0)
+    }
+    fn back(sent: Carried) -> Self {
+        Boxed(sent.into_box())
     }
 }
 

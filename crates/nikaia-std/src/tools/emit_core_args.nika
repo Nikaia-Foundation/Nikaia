@@ -505,6 +505,16 @@ fn emit_call_tasks_channel(flow: EmitFlow, scope: ref EmitScope) -> String {
     return "nikaia_std::task::Crashed"
 }
 
+/// **The scope's own channel**: the box's twin with no lifetime of its own
+/// where a `catch` opens it, so its tasks may borrow (`task::Boxed`); its
+/// tasks still fail in the box.
+fn emit_call_scope_channel(channel: ref String) -> String {
+    if channel == "Box<dyn std::error::Error>" {
+        return "nikaia_std::task::Boxed"
+    }
+    return channel.clone()
+}
+
 /// A default that stands in a run that computes another one (#468); the text
 /// is `comptime_run::NOT_COMPUTED_YET`.
 fn emit_call_not_computed_yet() -> String {
@@ -569,7 +579,7 @@ impl EmitState {
                             channel = "nikaia_std::task::Crashed".clone()
                         }
                     }
-                    out.push(f"::<_, {channel}>")
+                    out.push(f"::<_, {emit_call_scope_channel(channel)}>")
                     tasks = channel
                 }
             },
@@ -742,7 +752,7 @@ impl EmitState {
                     }
                 }
                 let boxed = flow.handled_here && channel == "Box<dyn std::error::Error>"
-                out.push(f"{{ let {named} = &nikaia_std::task::{made}::<{channel}>::new(); nikaia_std::task::{run}({named}, async ")
+                out.push(f"{{ let {named} = &nikaia_std::task::{made}::<{emit_call_scope_channel(channel)}>::new(); nikaia_std::task::{run}({named}, async ")
                 let inner = EmitScope::plain() with { changed: scope.changed.clone(), tasks_channel: channel, tasks_function: owner }
                 self.emit_core_block(world, walk, out, host, body, depth, EmitFlow::plain().at(flow.statement), inner, EmitTail::Return)
                 walk.boxed_scope = boxed

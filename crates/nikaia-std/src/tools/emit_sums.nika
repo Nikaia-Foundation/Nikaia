@@ -180,7 +180,17 @@ impl EmitState {
             // **A scope's tasks fail in it** (ADR-346 D7): the first failure is
             // the scope's, and one channel crosses the pool as itself.
             if crashed {
-                out.push(f"impl{decl} nikaia_std::error::Joined for {name}{params} {{\n    fn joined_by(&mut self, _later: Self) {{}}\n}}\n")
+                // A later failure of the first one's member joins its list; one
+                // of another member has no place in that envelope's list.
+                out.push(f"impl{decl} nikaia_std::error::Joined for {name}{params} {{\n    fn joined_by(&mut self, later: Self) {{\n        #[allow(unreachable_patterns)]\n        match (self, later) {{\n")
+                for member in members {
+                    let variant = sum_variant(member)
+                    let held = self.sum_member_held(world, member, params)
+                    if held.starts_with("nikaia_std::error::Thrown<") {
+                        out.push(f"            ({name}::{variant}(first), {name}::{variant}(later)) => nikaia_std::error::Joined::joined_by(first, later),\n")
+                    }
+                }
+                out.push("            _ => {}\n        }\n    }\n}\n")
                 out.push(f"impl{decl} nikaia_std::task::Crosses for {name}{params} {{\n    type Sent = Self;\n    fn sent(self) -> Self {{ self }}\n    fn back(sent: Self) -> Self {{ sent }}\n}}\n")
             }
             // `error.message()` on an error, one of several (ADR-280 D30).

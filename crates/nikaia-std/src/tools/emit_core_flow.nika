@@ -697,7 +697,7 @@ impl EmitState {
                     unless = f"{unless} && !nikaia_std::error::holds::<{ty}>(&*error)"
                 }
             }
-            out.push(f"{pad}Err(error) if nikaia_std::process::Ending::fatal_code(&error).is_some(){unless} => return Err(error),\n")
+            out.push(f"{pad}Err(nikaia_std::task::Boxed(error)) if nikaia_std::process::Ending::fatal_code(&error).is_some(){unless} => return Err(error),\n")
         } else if a_scope {
             // In a typed channel, each of the function's own fatal types the
             // handler does not name passes as itself.
@@ -707,7 +707,7 @@ impl EmitState {
                 let contract = own ?? return
                 for ty in contract.fails_with {
                     if !ty.contains("::") && !named.contains(ty) && emit_is_fatal(self.own_contracts, ty) {
-                        out.push(f"{pad}Err(error) if nikaia_std::error::holds::<{ty}>(&*error) => return Err(nikaia_std::error::Thrown::from(nikaia_std::error::opened::<{ty}>(error)).into()),\n")
+                        out.push(f"{pad}Err(nikaia_std::task::Boxed(error)) if nikaia_std::error::holds::<{ty}>(&*error) => return Err(nikaia_std::error::reopened::<{ty}>(error).into()),\n")
                     }
                 }
             }

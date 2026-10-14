@@ -702,6 +702,47 @@ pub fn opened<E: Error + 'static>(error: Box<dyn Error>) -> E {
     }
 }
 
+/// Where the error in the box was raised, if it went in with a site.
+pub(crate) fn raised_origin(error: &(dyn Error + 'static)) -> Option<&'static str> {
+    error
+        .downcast_ref::<Raised>()
+        .map(|raised| raised.tail.origin())
+}
+
+/// The box again with the site it was raised at, after a thread crossing that
+/// carried only the error.
+pub(crate) fn raised_at(inner: Box<dyn Error>, origin: &'static str) -> Box<dyn Error> {
+    Box::new(Raised {
+        inner,
+        tail: Tail::cold(Cold {
+            origin,
+            trace: None,
+            secondary: Vec::new(),
+        }),
+    })
+}
+
+/// **[`opened`] in its envelope, keeping where it was raised**: what passes a
+/// `catch` into a typed channel is the error the program threw, with its site.
+pub fn reopened<E: Error + 'static>(error: Box<dyn Error>) -> Thrown<E> {
+    match error.downcast::<Raised>() {
+        Ok(raised) => {
+            let Raised { inner, mut tail } = *raised;
+            let origin = tail.origin();
+            let trace = tail.word.boxed_mut().and_then(|cold| cold.trace.take());
+            Thrown {
+                inner: opened::<E>(inner),
+                tail: Tail::cold(Cold {
+                    origin,
+                    trace,
+                    secondary: Vec::new(),
+                }),
+            }
+        }
+        Err(error) => Thrown::from(opened::<E>(error)),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

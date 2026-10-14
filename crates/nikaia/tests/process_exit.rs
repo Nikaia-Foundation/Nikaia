@@ -493,8 +493,9 @@ fn work(n: i64) -> i64 throws {
 }
 
 fn main() throws {
+    let base = 6
     let y = task::scope fn(s) {
-        s.spawn fn { work(1) }
+        s.spawn fn { work(base - 5) }
         s.spawn fn {
             let n = work(7)
             println(f"never {n}")
@@ -537,5 +538,84 @@ fn a_scope_hands_its_tasks_errors_on() {
         let (out, err, code) = ran("scope-fatal", &fatal, how);
         assert_eq!(code, Some(1), "{err}");
         assert_eq!(out, "");
+    }
+}
+
+const SCOPE_JOINS: &str = r#"use std::task
+
+enum Bad { Oops(i64) }
+impl Error for Bad {
+    fn message(ref self) -> String { return "bad" }
+}
+enum Worse { Ugh }
+impl Error for Worse {
+    fn message(ref self) -> String { return "worse" }
+}
+
+fn work(n: i64) -> i64 throws {
+    if n > 1 {
+        throw Bad::Oops(n)
+    }
+    return n
+}
+
+fn other() throws {
+    throw Worse::Ugh
+}
+
+fn main() throws {
+    task::scope fn(s) {
+        s.spawn fn { work(7) }
+        s.spawn fn { other() }
+        s.spawn fn { work(9) }
+        5
+    }
+}
+"#;
+
+const SCOPE_FATAL_SITE: &str = r#"use std::task
+
+enum Bad { Oops(i64) }
+impl Fatal for Bad {}
+impl Error for Bad {
+    fn message(ref self) -> String { return "bad" }
+}
+
+fn work(n: i64) -> i64 throws {
+    if n > 1 {
+        throw Bad::Oops(n)
+    }
+    return n
+}
+
+fn inner() -> i64 throws {
+    let base = 6
+    let y = task::scope fn(s) {
+        s.spawn fn { work(base + 1) }
+        5
+    } catch { 0 }
+    return y
+}
+
+fn main() throws {
+    let y = inner()
+    println(f"{y}")
+}
+"#;
+
+/// ADR-346 D7: in a sum channel a later failure of the first one's type joins
+/// it; a fatal one passing a scope's `catch` into a typed channel keeps the
+/// site it was raised at.
+#[test]
+fn a_scope_joins_in_a_sum_and_keeps_a_fatal_site() {
+    for how in [Build::default(), Build::parallel()] {
+        let (out, err, code) = ran("scope-joins", SCOPE_JOINS, how);
+        assert_eq!(code, Some(1), "{err}");
+        assert_eq!(out, "");
+        assert!(err.contains("and then:"), "{err}");
+        let (out, err, code) = ran("scope-fatal-site", SCOPE_FATAL_SITE, how);
+        assert_eq!(code, Some(1), "{err}");
+        assert_eq!(out, "");
+        assert!(err.contains("raised at work"), "{err}");
     }
 }
