@@ -307,25 +307,43 @@ impl CheckState {
         self.findings.push(check_refusal("NK1253", span, f"The pattern `{key}` names {written} part(s), but the variant carries {declared}.", [f"A pattern names every part of a positional variant, in order; `_` ignores one."], f"Write `{key}({shape})` and bind the parts you need."))
     }
 
-    /// **`NK1255`: `..` is the whole of a variant's values** (ADR-349 D1).
-    /// `E::V(..)` matches any values of a variant that has some; it is
-    /// refused on a variant without values, and wherever it is not the only
-    /// part (`E::V(a, ..)`, `(..)`), since a positional rest is not part of
-    /// the language. `NK1253`'s count is not asked of a rest.
-    fn a_rest_pattern(ref mut self, world: ref CheckWorld, path: ref Vec[winnow_grammar::Symbol], written: i64, span: ref Span) sync {
-        if written != 1 || path.len() == 0 {
-            self.findings.push(check_refusal("NK1255", span, "`..` stands only for all of a variant's values, alone in the brackets.".clone(), ["A positional rest such as `E::V(a, ..)` is not part of the language: a pattern names every value in order, or none of them with `E::V(..)`.".clone()], "Write each value, with `_` for the ones you ignore, or `E::V(..)` for all of them.".clone()))
-            return
-        }
-        if path.len() != 2 {
+    /// **`..` is the rest of a variant's values** (ADR-349 D1, ADR-355 D3):
+    /// alone, `E::V(..)`, all of them; beside other parts, `E::V(a, ..)`, the
+    /// ones not named. A variant without values has nothing for it to stand
+    /// for (`NK1255`); a second `..` is `NK1258`; the parts named besides it may
+    /// not outnumber the variant's (`NK1253`).
+    fn a_rest_pattern(ref mut self, world: ref CheckWorld, path: ref Vec[winnow_grammar::Symbol], parts: ref Vec[MatchPattern], span: ref Span) sync {
+        if !self.one_rest_at_most(parts, span) || path.len() != 2 {
             return
         }
         let ty = world.words.resolve(path[0]).clone()
         let member = world.words.resolve(path[1]).clone()
         let key = f"{ty}::{member}"
         if self.is_variant(ty, member) && !self.variant_parts.contains_key(key) && !self.structs.contains_key(key) {
-            self.findings.push(check_refusal("NK1255", span, f"`{key}` carries no values, so `{key}(..)` has nothing to stand for.", ["`(..)` matches the values of a variant that has some.".clone()], f"Write `{key}`.".clone()))
+            self.findings.push(check_refusal("NK1255", span, f"`{key}` carries no values, so `..` in `{key}(..)` has nothing to stand for.", ["`..` matches the values of a variant that has some.".clone()], f"Write `{key}`.".clone()))
+            return
         }
+        let declared = (self.variant_parts[key]?.clone() ?? []).len()
+        let named = parts.len() - 1
+        if self.variant_parts.contains_key(key) && named > declared {
+            self.findings.push(check_refusal("NK1253", span, f"The pattern `{key}` names {named} part(s) besides `..`, but the variant carries {declared}.", ["`..` stands for the values not named; it cannot make room for more.".clone()], "Name at most as many parts as the variant carries.".clone()))
+        }
+    }
+
+    /// **`NK1258`: at most one `..` in a list, tuple or variant pattern**
+    /// (ADR-355 D4): with two, which values each stands for is not said.
+    pub fn one_rest_at_most(ref mut self, parts: ref Vec[MatchPattern], span: ref Span) -> bool sync {
+        let mut rests = 0
+        for part in parts {
+            if pattern_is_rest(part) {
+                rests += 1
+            }
+        }
+        if rests > 1 {
+            self.findings.push(check_refusal("NK1258", span, "A pattern has more than one `..`.".clone(), ["One `..` stands for the values between those named before and after it; with two, which values each one takes is not said.".clone()], "Keep one `..`, and name the other values: `[first, .., last]`.".clone()))
+            return false
+        }
+        return true
     }
 
     /// The same question asked of a `match` arm's pattern (ADR-291 D10's shapes),
@@ -338,10 +356,16 @@ impl CheckState {
             MatchPattern::Tuple { path, parts } => {
                 self.a_path_in_a_pattern(world, path, span)
                 if parts_hold_a_rest(parts) {
-                    self.a_rest_pattern(world, path, parts.len(), span)
+                    self.a_rest_pattern(world, path, parts, span)
                 } else {
                     self.a_variant_pattern_with_other_parts(world, path, parts.len(), span)
                 }
+                for part in parts {
+                    self.a_pattern_naming_a_member_a_type_does_not_have(world, part, span)
+                }
+            },
+            MatchPattern::List(parts) => {
+                self.one_rest_at_most(parts, span)
                 for part in parts {
                     self.a_pattern_naming_a_member_a_type_does_not_have(world, part, span)
                 }

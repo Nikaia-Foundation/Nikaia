@@ -18,3 +18,10 @@ fn first_of(s: &Shape) -> bool {
         Shape::Index(_, i, ..) => is_call(i),
     }
 }
+
+fn count(xs: &[Expr]) -> i64 {
+    match xs {
+        [first, rest @ ..] => 1 + count(rest),
+        [] => 0,
+    }
+}

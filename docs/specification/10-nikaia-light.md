@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.936 (Draft)
+**Version:** 0.0.937 (Draft)
 **Date:** 2026-10-14
 
 ---
@@ -1048,12 +1048,13 @@ enum with more than one variant is refused with `NK1252`.
 | `200..299` | a range, **inclusive at both ends**. An exclusive one is written by moving the end; `..<` is never written in a pattern |
 | `(x, y) if x == y` | a **guard**: the arm matches only where the condition holds, and the word is `if` |
 | `Event::Click(Point { x, .. })` | a pattern inside a pattern, and `..` for the fields this one does not name |
-| `Held::Precondition(..)` | that variant, whatever values it carries, binding none (ADR-349). `..` stands alone in the brackets: on a variant without values, and beside other parts (`E::V(a, ..)`), it is refused with `NK1255` |
+| `Held::Precondition(..)`, `Held::Precondition(c, ..)` | that variant, whatever values it carries, binding none (ADR-349); beside other parts, `..` is the values they do not name, as in `(a, ..)`. On a variant without values it is refused with `NK1255` |
+| `[]`, `[x]`, `[first, .., last]`, `[h, ..rest]` | a `Vec[T]`, an `Array[T]` or a view of either, element by element (ADR-355). `..` is the elements not named and binds nothing; `..rest` binds them as a view, `ref Array[T]`. A pattern has at most one `..` (`NK1258`), and a `match` with a list pattern needs `else` |
 | `Point { x: 0, y }`, `Move { x: px, .. }` | a field against a pattern: `x: 0` matches where the field is `0`, `x: px` binds the field to the name `px`, and `x: Op::Times` or `x: (0, y)` reaches inside it |
 
 **`..` means two different things**: in a range pattern it is the range, and
-in a struct pattern it is *the rest of the fields*, and alone in a variant's
-brackets *the rest of its values*. The position says which.
+in a struct pattern it is *the rest of the fields*, in a tuple's, a variant's
+or a list's brackets *the rest of its values*. The position says which.
 
 **A `match` reads what it binds.** Over a name the function owns, an arm that
 only reads a part it binds takes a view of it (6.5), and the name is whole

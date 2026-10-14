@@ -319,10 +319,10 @@ fn a_rest_matches_a_whole_payload() {
     assert!(rust.contains("Held::Three(..)"), "{rust}");
 }
 
-/// **`NK1255`: no rest on a variant without values** (ADR-349 D2), **and no
-/// positional rest** (D3), which parses so that the message can say why.
+/// **`NK1255`: no rest on a variant without values** (ADR-349 D2); a
+/// positional rest beside other parts is the remaining values (ADR-355 D3).
 #[test]
-fn a_rest_on_a_unit_variant_or_beside_a_part_is_refused() {
+fn a_rest_on_a_unit_variant_is_refused_and_beside_a_part_matches() {
     let nk1255 = |source: &str| -> Vec<nikaia::check::Finding> {
         findings(source)
             .into_iter()
@@ -335,16 +335,49 @@ fn a_rest_on_a_unit_variant_or_beside_a_part_is_refused() {
     );
     assert_eq!(unit.len(), 1, "{unit:#?}");
     assert!(unit[0].message.contains("no values"), "{unit:#?}");
-    let positional = nk1255(
-        "enum E { A(i64, i64), B }\n\
-         fn f(e: E) -> i64 { return match e { E::A(x, ..) => x, else => 0 } }\n",
+    let source = "enum E { A(i64, i64), B }\n\
+         fn f(e: E) -> i64 { return match e { E::A(x, ..) => x, else => 0 } }\n\
+         fn g(t: (i64, i64, i64)) -> i64 { return match t { (.., z) => z } }\n";
+    let found = findings(source);
+    assert!(found.is_empty(), "{found:#?}");
+    let rust = lowered(source);
+    assert!(rust.contains("E::A(x, ..)"), "{rust}");
+    assert!(rust.contains("(.., z)"), "{rust}");
+}
+
+/// **A list pattern** (ADR-355 D1, D2, D5): a slice pattern over the subject,
+/// the named rest Rust's `rest @ ..`.
+#[test]
+fn a_list_pattern_lowers_to_a_slice_pattern() {
+    let source = "fn f(xs: ref Vec[i64]) -> i64 {\n\
+         return match xs { [] => 0, [x] => x, [a, .., z] => a + z, [h, ..rest] => h + rest.len(), else => 0 }\n}\n";
+    let found = findings(source);
+    assert!(found.is_empty(), "{found:#?}");
+    let rust = lowered(source);
+    assert!(rust.contains("match &(xs)[..]"), "{rust}");
+    assert!(rust.contains("[a, .., z]"), "{rust}");
+    assert!(rust.contains("[h, rest @ ..]"), "{rust}");
+}
+
+/// **`NK1258`: one `..` per pattern** (ADR-355 D4); **a list `match` needs
+/// `else`** (D5, `NK1151`).
+#[test]
+fn two_rests_and_a_list_match_without_else_are_refused() {
+    let two = findings(
+        "fn f(xs: ref Vec[i64]) -> i64 { return match xs { [a, .., b, ..] => a, else => 0 } }\n",
     );
-    assert_eq!(positional.len(), 1, "{positional:#?}");
-    assert!(
-        positional[0]
-            .notes
-            .iter()
-            .any(|n| n.contains("not part of the language")),
-        "{positional:#?}"
+    assert!(two.iter().any(|f| f.code == "NK1258"), "{two:#?}");
+    let open =
+        findings("fn f(xs: ref Vec[i64]) -> i64 { return match xs { [] => 0, [h, ..] => h } }\n");
+    assert!(open.iter().any(|f| f.code == "NK1151"), "{open:#?}");
+}
+
+/// **A named rest is a view** (ADR-355 D2): keeping it as a list is refused.
+#[test]
+fn a_named_rest_cannot_be_kept_as_a_list() {
+    let found = findings(
+        "struct Keep { tail: Vec[i64] }\n\
+         fn f(xs: Vec[i64]) -> Keep { return match xs { [_, ..rest] => Keep { tail: rest }, else => Keep { tail: [] } } }\n",
     );
+    assert!(found.iter().any(|f| f.code == "NK1106"), "{found:#?}");
 }

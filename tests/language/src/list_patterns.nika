@@ -1,0 +1,77 @@
+// List patterns, and `..` as the rest of positional values (ADR-355): what
+// each shape matches and binds. The refusals and the lowering are
+// `crates/nikaia/tests/match_patterns.rs`.
+
+enum ListPatternsOp { Plus, Times }
+
+enum ListPatternsHeld { Three(i64, i64, String) }
+
+fn list_patterns_shape(xs: ref Vec[i64]) -> String {
+    return match xs {
+        [] => "empty".clone(),
+        [x] => f"one {x}",
+        [a, .., z] if a == z => f"same ends {a}{z}",
+        [h, ..rest] => f"{h} then {rest.len()}",
+        else => "never".clone(),
+    }
+}
+
+fn list_patterns_sum(xs: ref Array[i64]) -> i64 {
+    return match xs {
+        [h, ..rest] => h + list_patterns_sum(rest),
+        else => 0,
+    }
+}
+
+fn list_patterns_ops(xs: ref Vec[ListPatternsOp]) -> i64 {
+    return match xs {
+        [ListPatternsOp::Times, ListPatternsOp::Plus] => 1,
+        [ListPatternsOp::Plus, ..] => 2,
+        else => 3,
+    }
+}
+
+test "a list pattern matches by length and elements" {
+    assert(list_patterns_shape([]) == "empty")
+    assert(list_patterns_shape([4]) == "one 4")
+    assert(list_patterns_shape([5, 0, 5]) == "same ends 55")
+    assert(list_patterns_shape([1, 2, 3]) == "1 then 2")
+}
+
+test "a named rest is a view of the remaining elements" {
+    let v: Vec[i64] = [1, 2, 3]
+    assert(list_patterns_sum(v) == 6)
+}
+
+test "elements are patterns" {
+    assert(list_patterns_ops([ListPatternsOp::Times, ListPatternsOp::Plus]) == 1)
+    assert(list_patterns_ops([ListPatternsOp::Plus, ListPatternsOp::Times]) == 2)
+    assert(list_patterns_ops([ListPatternsOp::Times]) == 3)
+}
+
+test "a match over a list leaves it usable" {
+    let v: Vec[i64] = [7, 8]
+    let first = match v {
+        [h, ..] => h,
+        else => 0,
+    }
+    assert(first == 7)
+    assert(v.len() == 2)
+}
+
+test "a positional rest in a tuple and a variant" {
+    let t = (1, 2, 3)
+    let a = match t {
+        (a, ..) => a,
+    }
+    let z = match t {
+        (.., z) => z,
+    }
+    assert(a == 1)
+    assert(z == 3)
+    let held = ListPatternsHeld::Three(7, 8, "s")
+    let second = match held {
+        ListPatternsHeld::Three(_, b, ..) => b,
+    }
+    assert(second == 8)
+}

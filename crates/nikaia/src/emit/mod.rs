@@ -3547,33 +3547,6 @@ impl<'p> Emitter<'p> {
                 }),
             _ => None,
         };
-        // **A value holding views of several parameters at once**
-        // ([ADR-352](../../docs/specification/adr/adr-352.md)): every one of
-        // them and the result share the one lifetime `'r`. Only where each is
-        // a plain view, so that `'r` is the whole of what it lends.
-        let several_at: Vec<usize> = match result_borrows {
-            Some(named)
-                if plain_signature
-                    && named.len() >= 2
-                    && receiver.is_none()
-                    && kept.is_none()
-                    && source_at.is_none() =>
-            {
-                let found: Vec<usize> = named
-                    .iter()
-                    .filter_map(|n| args.iter().position(|a| self.text(a.name) == n))
-                    .filter(|at| lowered_as_a_view(*at, &args[*at]))
-                    .filter(|at| {
-                        !self.borrows(args[*at].ty.name) && args[*at].ty.generics.is_empty()
-                    })
-                    .collect();
-                match found.len() == named.len() {
-                    true => found,
-                    false => Vec::new(),
-                }
-            }
-            _ => Vec::new(),
-        };
         // **An option is a parameter too**: a view among them is the source
         // where the body hands it back.
         let source_option: Option<usize> = match result_borrows {
@@ -3593,7 +3566,6 @@ impl<'p> Emitter<'p> {
                 && ret_type.as_ref().is_some_and(|r| r.name != a.ty.name)
         });
         let source_name: Option<Symbol> = source_at
-            .or(several_at.first().copied())
             .map(|at| args[at].name)
             .or(source_option.map(|at| config[at].name));
         // **Tied to the keep** where a way out hands back a view of a buffer
@@ -3665,7 +3637,7 @@ impl<'p> Emitter<'p> {
             .collect();
         let mut either_first: Vec<String> = Vec::new();
         params.extend(args.iter().enumerate().map(|(at, a)| {
-            let is_source = source_at == Some(at) || several_at.contains(&at);
+            let is_source = source_at == Some(at);
             // The **source** name is what a `Shared` position is counted by
             // (`count_at`), and the **escaped** one is what is written: two uses
             // of one name that must not be collapsed, or the lookup misses on

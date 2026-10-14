@@ -196,6 +196,11 @@ impl CheckState {
                     self.an_or_pattern_that_binds_unevenly(world, part, span)
                 }
             }
+            MatchPattern::List(parts) => {
+                for part in parts {
+                    self.an_or_pattern_that_binds_unevenly(world, part, span)
+                }
+            }
             MatchPattern::Named { fields, .. } => {
                 for field in fields {
                     self.an_or_pattern_that_binds_unevenly(world, field.pat, span)

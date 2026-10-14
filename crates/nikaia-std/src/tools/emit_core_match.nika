@@ -87,6 +87,40 @@ fn emit_match_yes_or_no(arms: ref Vec[MatchArm]) -> bool? {
 }
 
 /// The path of a pattern, as Rust writes it.
+/// **A list pattern matches a slice** (ADR-355 D5): where an arm writes one,
+/// the subject is matched as `&x[..]`, which a `Vec`, an array and a view all
+/// give, and leaves the list where it was.
+fn emit_match_subject[H: EmitHost](mut walk: EmitWalk, mut out: EmitOut, host: ref H, value: ref Expr, arms: ref Vec[MatchArm], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    let mut list = false
+    for arm in arms {
+        if emit_match_is_list(arm.pattern) {
+            list = true
+        }
+    }
+    if list {
+        out.push("&(")
+    }
+    host.expr(walk, out, value, depth, flow, scope)
+    if list {
+        out.push(")[..]")
+    }
+}
+
+fn emit_match_is_list(pattern: ref MatchPattern) -> bool {
+    match pattern {
+        MatchPattern::List(_) => return true,
+        MatchPattern::Or(alternatives) => {
+            for alternative in alternatives {
+                if emit_match_is_list(alternative) {
+                    return true
+                }
+            }
+        }
+        else => {}
+    }
+    return false
+}
+
 fn emit_match_path(world: ref EmitWorld, path: ref Vec[winnow_grammar::Symbol]) -> String {
     let mut parts: Vec[String] = []
     for each in path {
@@ -126,6 +160,27 @@ impl EmitState {
             MatchPattern::Otherwise => out.push("_"),
             // ADR-349 D1: Rust writes the whole payload's rest the same way.
             MatchPattern::Rest => out.push(".."),
+            // ADR-355 D2: Rust spells the named rest `rest @ ..`.
+            MatchPattern::RestNamed(name) => {
+                if wild {
+                    out.push("..")
+                } else {
+                    out.push(f"{emit_text(world, name)} @ ..")
+                }
+            },
+            // A slice pattern, over the subject as a slice (ADR-355 D5).
+            MatchPattern::List(parts) => {
+                out.push("[")
+                let mut i = 0
+                for part in parts {
+                    if i > 0 {
+                        out.push(", ")
+                    }
+                    i += 1
+                    n = self.emit_core_pattern_written(world, walk, out, host, part, wild, lent_key, collect, n, depth, flow, scope)
+                }
+                out.push("]")
+            },
             MatchPattern::Literal(value) => host.expr(walk, out, value, depth, flow, scope),
             MatchPattern::Path(p) => {
                 if p.len() == 1 {
@@ -592,7 +647,7 @@ impl EmitState {
                     out.push("!")
                 }
                 out.push("matches!(")
-                host.expr(walk, out, value, depth, flow, scope)
+                emit_match_subject(walk, out, host, value, arms, depth, flow, scope)
                 out.push(", ")
                 let mut i = 0
                 for arm in arms {
@@ -614,12 +669,23 @@ impl EmitState {
         if self.facts.lent_scrutinees.contains(node_key(value)) {
             out.push("&")
         }
-        host.expr(walk, out, value, depth, flow, scope)
+        emit_match_subject(walk, out, host, value, arms, depth, flow, scope)
         let pad = "    ".repeat(depth + 1)
         let close = "    ".repeat(depth)
         out.push(" {\n")
+        let mut over_a_list = false
+        for arm in arms {
+            if emit_match_is_list(arm.pattern) {
+                over_a_list = true
+            }
+        }
         for arm in arms {
             out.push(pad)
+            // A slice's lengths may all be named already, `[]` and `[h, ..]`;
+            // `else` is still the language's rule (ADR-355 D5).
+            if over_a_list && emit_match_is_otherwise(arm.pattern) {
+                out.push("#[allow(unreachable_patterns)] ")
+            }
             let key = node_key(arm.body)
             // **An arm that takes a part out of a `mut` parameter works on the value
             // taken out of the place** (ADR-094 D7, #576): the place holds a

@@ -45,14 +45,6 @@ fn result_findings(source: &str) -> Vec<Finding> {
         .collect()
 }
 
-/// Whether some function's ledger entry names two or more parameters as its
-/// result's sources (ADR-353 D2): the walk followed the view to both.
-fn two_sources(source: &str) -> bool {
-    let parsed = parse_to_ast(source).expect("the source parses");
-    let own = Ledger::infer(&parsed);
-    own.functions.values().any(|c| c.borrows.len() >= 2)
-}
-
 fn lowered(source: &str) -> String {
     let parsed = parse_to_ast(source).expect("the source parses");
     emit_program(&parsed, Build::default())
@@ -299,38 +291,8 @@ impl Summary {
 
 // --- what stays NK2302 ---------------------------------------------------------
 
-/// ADR-353 D1, D2: the ledger writes every parameter a result may point into,
-/// and the lowering ties them and the result to one buffer group.
 #[test]
-fn longest_and_pair_lower_with_every_source() {
-    let source = r#"struct Pair { left: ref String, right: ref String }
-fn pair(a: ref String, b: ref String) -> Pair {
-    return Pair { left: a, right: b }
-}
-fn longest(a: ref String, b: ref String) -> ref String {
-    if a.len() >= b.len() {
-        return a
-    }
-    return b
-}
-pub fn total(x: ref String, y: ref String) -> i64 {
-    let p = pair(x, y)
-    return p.left.len() + p.right.len() + longest(x, y).len()
-}
-"#;
-    let found = all_findings(source);
-    assert!(found.is_empty(), "{found:#?}");
-    compiled("longest_and_pair_lower_with_every_source", source);
-    let parsed = parse_to_ast(source).expect("the source parses");
-    let own = Ledger::infer(&parsed);
-    for (key, want) in [("pair", vec!["a", "b"]), ("longest", vec!["a", "b"])] {
-        let contract = own.functions.get(key).expect("an entry");
-        assert_eq!(contract.borrows, want, "{key}");
-    }
-}
-
-#[test]
-fn two_ways_is_accepted() {
+fn two_ways_stays_nk2302() {
     let source = r#"fn longest(a: ref String, b: ref String) -> ref String {
     if a.len() >= b.len() {
         return a
@@ -339,11 +301,18 @@ fn two_ways_is_accepted() {
 }
 "#;
     let found = result_findings(source);
-    assert!(found.is_empty(), "{found:#?}");
+    assert_eq!(found.len(), 1, "{found:#?}");
+    for finding in &found {
+        let shown = nikaia::diagnostics::render_finding(finding, "p.nika", source);
+        assert!(!says_a_lifetime(&shown), "{shown}");
+    }
+    let shown = nikaia::diagnostics::render_finding(&found[0], "p.nika", source);
+    assert!(shown.contains("--> p.nika:3:9"), "{shown}");
+    assert!(shown.contains("return a"), "{shown}");
 }
 
 #[test]
-fn loop_best_is_accepted() {
+fn loop_best_stays_nk2302() {
     let source = r#"fn last_piece(a: ref String, b: ref String) -> ref String {
     let mut best = a
     for w in b.split(" ") {
@@ -353,21 +322,35 @@ fn loop_best_is_accepted() {
 }
 "#;
     let found = result_findings(source);
-    assert!(found.is_empty(), "{found:#?}");
+    assert_eq!(found.len(), 1, "{found:#?}");
+    for finding in &found {
+        let shown = nikaia::diagnostics::render_finding(finding, "p.nika", source);
+        assert!(!says_a_lifetime(&shown), "{shown}");
+    }
+    let shown = nikaia::diagnostics::render_finding(&found[0], "p.nika", source);
+    assert!(shown.contains("--> p.nika:6:5"), "{shown}");
+    assert!(shown.contains("return best"), "{shown}");
 }
 
 #[test]
-fn coalesce_is_accepted() {
+fn coalesce_stays_nk2302() {
     let source = r#"fn either(opt_a: ref String?, b: ref String) -> ref String {
     return opt_a ?? b
 }
 "#;
     let found = result_findings(source);
-    assert!(found.is_empty(), "{found:#?}");
+    assert_eq!(found.len(), 1, "{found:#?}");
+    for finding in &found {
+        let shown = nikaia::diagnostics::render_finding(finding, "p.nika", source);
+        assert!(!says_a_lifetime(&shown), "{shown}");
+    }
+    let shown = nikaia::diagnostics::render_finding(&found[0], "p.nika", source);
+    assert!(shown.contains("--> p.nika:2:5"), "{shown}");
+    assert!(shown.contains("return opt_a ?? b"), "{shown}");
 }
 
 #[test]
-fn struct_field_then_a_is_accepted() {
+fn struct_field_then_a_stays_nk2302() {
     let source = r#"struct Pair { l: ref String }
 fn pick_l(a: ref String, b: ref String) -> ref String {
     if a.len() > 2 {
@@ -378,11 +361,18 @@ fn pick_l(a: ref String, b: ref String) -> ref String {
 }
 "#;
     let found = result_findings(source);
-    assert!(found.is_empty(), "{found:#?}");
+    assert_eq!(found.len(), 1, "{found:#?}");
+    for finding in &found {
+        let shown = nikaia::diagnostics::render_finding(finding, "p.nika", source);
+        assert!(!says_a_lifetime(&shown), "{shown}");
+    }
+    let shown = nikaia::diagnostics::render_finding(&found[0], "p.nika", source);
+    assert!(shown.contains("--> p.nika:4:9"), "{shown}");
+    assert!(shown.contains("return a"), "{shown}");
 }
 
 #[test]
-fn lambda_is_accepted() {
+fn lambda_stays_nk2302() {
     let source = r#"fn via_lambda(a: ref String, b: ref String) -> ref String {
     let pick = fn() { b }
     if a.len() > 2 {
@@ -392,11 +382,18 @@ fn lambda_is_accepted() {
 }
 "#;
     let found = result_findings(source);
-    assert!(found.is_empty(), "{found:#?}");
+    assert_eq!(found.len(), 1, "{found:#?}");
+    for finding in &found {
+        let shown = nikaia::diagnostics::render_finding(finding, "p.nika", source);
+        assert!(!says_a_lifetime(&shown), "{shown}");
+    }
+    let shown = nikaia::diagnostics::render_finding(&found[0], "p.nika", source);
+    assert!(shown.contains("--> p.nika:4:9"), "{shown}");
+    assert!(shown.contains("return a"), "{shown}");
 }
 
 #[test]
-fn call_either_is_accepted() {
+fn call_either_stays_nk2302() {
     let source = r#"fn either(x: ref String, y: ref String) -> ref String {
     if x.len() > y.len() {
         return x
@@ -408,11 +405,18 @@ fn through(a: ref String, b: ref String) -> ref String {
 }
 "#;
     let found = result_findings(source);
-    assert!(found.is_empty(), "{found:#?}");
+    assert_eq!(found.len(), 2, "{found:#?}");
+    for finding in &found {
+        let shown = nikaia::diagnostics::render_finding(finding, "p.nika", source);
+        assert!(!says_a_lifetime(&shown), "{shown}");
+    }
+    let shown = nikaia::diagnostics::render_finding(&found[found.len() - 1], "p.nika", source);
+    assert!(shown.contains("--> p.nika:8:5"), "{shown}");
+    assert!(shown.contains("return either(a, b)"), "{shown}");
 }
 
 #[test]
-fn recursion_swapped_is_accepted() {
+fn recursion_swapped_stays_nk2302() {
     let source = r#"fn swap(a: ref String, b: ref String, n: i64) -> ref String {
     if n == 0 {
         return a
@@ -421,22 +425,36 @@ fn recursion_swapped_is_accepted() {
 }
 "#;
     let found = result_findings(source);
-    assert!(found.is_empty(), "{found:#?}");
+    assert_eq!(found.len(), 1, "{found:#?}");
+    for finding in &found {
+        let shown = nikaia::diagnostics::render_finding(finding, "p.nika", source);
+        assert!(!says_a_lifetime(&shown), "{shown}");
+    }
+    let shown = nikaia::diagnostics::render_finding(&found[0], "p.nika", source);
+    assert!(shown.contains("--> p.nika:3:9"), "{shown}");
+    assert!(shown.contains("return a"), "{shown}");
 }
 
 #[test]
-fn struct_of_both_is_accepted() {
+fn struct_of_both_stays_nk2302() {
     let source = r#"struct Pair { l: ref String, r: ref String }
 fn both(a: ref String, b: ref String) -> Pair {
     return Pair { l: a, r: b }
 }
 "#;
     let found = result_findings(source);
-    assert!(found.is_empty(), "{found:#?}");
+    assert_eq!(found.len(), 1, "{found:#?}");
+    for finding in &found {
+        let shown = nikaia::diagnostics::render_finding(finding, "p.nika", source);
+        assert!(!says_a_lifetime(&shown), "{shown}");
+    }
+    let shown = nikaia::diagnostics::render_finding(&found[0], "p.nika", source);
+    assert!(shown.contains("--> p.nika:3:5"), "{shown}");
+    assert!(shown.contains("return Pair"), "{shown}");
 }
 
 #[test]
-fn self_and_world_is_accepted() {
+fn self_and_world_stays_nk2302() {
     let source = r#"use std::collections
 struct World { default: String }
 struct Checker { cache: collections::HashMap[String, String] }
@@ -447,17 +465,31 @@ impl Checker {
 }
 "#;
     let found = result_findings(source);
-    assert!(found.is_empty(), "{found:#?}");
+    assert_eq!(found.len(), 1, "{found:#?}");
+    for finding in &found {
+        let shown = nikaia::diagnostics::render_finding(finding, "p.nika", source);
+        assert!(!says_a_lifetime(&shown), "{shown}");
+    }
+    let shown = nikaia::diagnostics::render_finding(&found[0], "p.nika", source);
+    assert!(shown.contains("--> p.nika:6:9"), "{shown}");
+    assert!(shown.contains("return ref (self.cache"), "{shown}");
 }
 
 #[test]
-fn function_type_is_accepted() {
+fn function_type_stays_nk2302() {
     let source = r#"fn apply(f: fn(ref String, ref String) -> ref String sync) -> i64 {
     return 1
 }
 "#;
     let found = result_findings(source);
-    assert!(found.is_empty(), "{found:#?}");
+    assert_eq!(found.len(), 1, "{found:#?}");
+    for finding in &found {
+        let shown = nikaia::diagnostics::render_finding(finding, "p.nika", source);
+        assert!(!says_a_lifetime(&shown), "{shown}");
+    }
+    let shown = nikaia::diagnostics::render_finding(&found[0], "p.nika", source);
+    assert!(shown.contains("--> p.nika:1:10"), "{shown}");
+    assert!(shown.contains("fn(ref String, ref String)"), "{shown}");
 }
 
 #[test]
@@ -484,24 +516,20 @@ impl Picks for Holder {
 }
 
 #[test]
-fn trait_decl_is_accepted() {
+fn trait_decl_stays_nk2302() {
     let source = r#"trait Chooses {
     fn choose(a: ref String, b: ref String) -> ref String
 }
-
-// --- the one behaviour change the owner has not confirmed -----------------------
-
-/// **OPEN POINT of the review of #580, kept apart so it can be reverted.**
-///
-/// `fn longest(a: String, b: String) -> ref String` compiled before D25: two
-/// parameters lowered as views (ADR-283 D24) shared one lifetime in the
-/// emitter, which is the union tethering D25 rejects, while the same function
-/// written with `ref` was refused. D25 as written refuses both. The owner has
-/// not yet confirmed that a program that compiled is refused; to keep it, delete
-/// this test and make D24 parameters count only when written `ref`.
 "#;
     let found = result_findings(source);
-    assert!(found.is_empty(), "{found:#?}");
+    assert_eq!(found.len(), 1, "{found:#?}");
+    for finding in &found {
+        let shown = nikaia::diagnostics::render_finding(finding, "p.nika", source);
+        assert!(!says_a_lifetime(&shown), "{shown}");
+    }
+    let shown = nikaia::diagnostics::render_finding(&found[0], "p.nika", source);
+    assert!(shown.contains("--> p.nika:2:5"), "{shown}");
+    assert!(shown.contains("fn choose(a"), "{shown}");
 }
 
 // --- the one behaviour change the owner has not confirmed -----------------------
@@ -515,20 +543,19 @@ fn trait_decl_is_accepted() {
 /// not yet confirmed that a program that compiled is refused; to keep it, delete
 /// this test and make D24 parameters count only when written `ref`.
 #[test]
-fn plain_string_longest_is_accepted_since_adr353() {
+fn plain_string_longest_is_refused_since_d25() {
     let source = r#"fn longest(a: String, b: String) -> ref String {
     if a.len() >= b.len() {
         return ref a
     }
     return ref b
 }
-
-// --- the lowering and the ledger: #580 steps 5 and 6 ---------------------------
-
-/// The signature names the lifetime on the source only.
 "#;
     let found = result_findings(source);
-    assert!(found.is_empty(), "{found:#?}");
+    assert_eq!(found.len(), 1, "{found:#?}");
+    let shown = nikaia::diagnostics::render_finding(&found[0], "p.nika", source);
+    assert!(shown.contains("--> p.nika:3:9"), "{shown}");
+    assert!(!says_a_lifetime(&shown), "{shown}");
 }
 
 // --- the lowering and the ledger: #580 steps 5 and 6 ---------------------------
@@ -588,7 +615,7 @@ fn the_ledger_names_the_source() {
 }
 
 // --- holes the review found: a view that reaches a second parameter by a way the
-// walk has to follow, each one found (ADR-353 D2) -------------------------------------------
+// walk has to follow, each one NK2302 -------------------------------------------
 
 /// A method that changes a local list may keep its argument: `v.push(b)` makes `v` carry `b`.
 #[test]
@@ -602,8 +629,12 @@ fn hole_push_into_a_local_list() {
     return v[0]
 }
 "#;
-    assert!(result_findings(source).is_empty());
-    assert!(two_sources(source), "the walk lost a source");
+    let found = all_findings(source);
+    assert!(!found.is_empty(), "accepted, and it should not be");
+    for finding in &found {
+        let shown = nikaia::diagnostics::render_finding(finding, "p.nika", source);
+        assert!(!says_a_lifetime(&shown), "{shown}");
+    }
 }
 
 /// Same for a map: `m.insert(1, b)`.
@@ -619,8 +650,12 @@ fn f(a: ref String, b: ref String) -> ref String {
     return m[1] ?? a
 }
 "#;
-    assert!(result_findings(source).is_empty());
-    assert!(two_sources(source), "the walk lost a source");
+    let found = all_findings(source);
+    assert!(!found.is_empty(), "accepted, and it should not be");
+    for finding in &found {
+        let shown = nikaia::diagnostics::render_finding(finding, "p.nika", source);
+        assert!(!says_a_lifetime(&shown), "{shown}");
+    }
 }
 
 /// `fill(v, b)` with a `mut` parameter: the local passed to it carries `b`.
@@ -638,8 +673,12 @@ fn f(a: ref String, b: ref String) -> ref String {
     return v[0]
 }
 "#;
-    assert!(result_findings(source).is_empty());
-    assert!(two_sources(source), "the walk lost a source");
+    let found = all_findings(source);
+    assert!(!found.is_empty(), "accepted, and it should not be");
+    for finding in &found {
+        let shown = nikaia::diagnostics::render_finding(finding, "p.nika", source);
+        assert!(!says_a_lifetime(&shown), "{shown}");
+    }
 }
 
 /// A copy of a value whose type is not known may hold views: it reaches what the value did.
@@ -654,8 +693,12 @@ fn hole_clone_of_an_unknown_type() {
     return u.0
 }
 "#;
-    assert!(result_findings(source).is_empty());
-    assert!(two_sources(source), "the walk lost a source");
+    let found = all_findings(source);
+    assert!(!found.is_empty(), "accepted, and it should not be");
+    for finding in &found {
+        let shown = nikaia::diagnostics::render_finding(finding, "p.nika", source);
+        assert!(!says_a_lifetime(&shown), "{shown}");
+    }
 }
 
 /// `p.clone()` with `p: ref Pair`: the copy is a `Pair`, whose view is still `p`'s.
@@ -670,8 +713,12 @@ fn f(p: ref Pair, a: ref String) -> ref String {
     return q.l
 }
 "#;
-    assert!(result_findings(source).is_empty());
-    assert!(two_sources(source), "the walk lost a source");
+    let found = all_findings(source);
+    assert!(!found.is_empty(), "accepted, and it should not be");
+    for finding in &found {
+        let shown = nikaia::diagnostics::render_finding(finding, "p.nika", source);
+        assert!(!says_a_lifetime(&shown), "{shown}");
+    }
 }
 
 /// `self` by value of a struct of views is a source.
@@ -687,8 +734,12 @@ impl Pair {
     }
 }
 "#;
-    assert!(result_findings(source).is_empty());
-    assert!(two_sources(source), "the walk lost a source");
+    let found = all_findings(source);
+    assert!(!found.is_empty(), "accepted, and it should not be");
+    for finding in &found {
+        let shown = nikaia::diagnostics::render_finding(finding, "p.nika", source);
+        assert!(!says_a_lifetime(&shown), "{shown}");
+    }
 }
 
 /// An option written as a view is a parameter and a source.
@@ -701,8 +752,12 @@ fn hole_a_view_option() {
     return sep
 }
 "#;
-    assert!(result_findings(source).is_empty());
-    assert!(two_sources(source), "the walk lost a source");
+    let found = all_findings(source);
+    assert!(!found.is_empty(), "accepted, and it should not be");
+    for finding in &found {
+        let shown = nikaia::diagnostics::render_finding(finding, "p.nika", source);
+        assert!(!says_a_lifetime(&shown), "{shown}");
+    }
 }
 
 /// A chain of reassignments longer than a few rounds of the walk still reaches `b`.
@@ -732,8 +787,12 @@ fn hole_a_long_reassignment_chain() {
     return x8
 }
 "#;
-    assert!(result_findings(source).is_empty());
-    assert!(two_sources(source), "the walk lost a source");
+    let found = all_findings(source);
+    assert!(!found.is_empty(), "accepted, and it should not be");
+    for finding in &found {
+        let shown = nikaia::diagnostics::render_finding(finding, "p.nika", source);
+        assert!(!says_a_lifetime(&shown), "{shown}");
+    }
 }
 
 /// A chain of twelve functions that ends in `b` is followed to its end.
@@ -782,8 +841,12 @@ fn g12(a: ref String, b: ref String) -> ref String {
     return b
 }
 "#;
-    assert!(result_findings(source).is_empty());
-    assert!(two_sources(source), "the walk lost a source");
+    let found = all_findings(source);
+    assert!(!found.is_empty(), "accepted, and it should not be");
+    for finding in &found {
+        let shown = nikaia::diagnostics::render_finding(finding, "p.nika", source);
+        assert!(!says_a_lifetime(&shown), "{shown}");
+    }
 }
 
 /// `let p = mk(b)` hides the parameter `p`: the field read is of the local, not of the declared `Num`.
@@ -802,8 +865,12 @@ fn f(p: ref Num, a: ref String, b: ref String) -> ref String {
     return p.n
 }
 "#;
-    assert!(result_findings(source).is_empty());
-    assert!(two_sources(source), "the walk lost a source");
+    let found = all_findings(source);
+    assert!(!found.is_empty(), "accepted, and it should not be");
+    for finding in &found {
+        let shown = nikaia::diagnostics::render_finding(finding, "p.nika", source);
+        assert!(!says_a_lifetime(&shown), "{shown}");
+    }
 }
 
 /// `fn() -> ref String` says nothing about whose data the result is, and has nothing to be elided from.
@@ -943,19 +1010,48 @@ fn main() {
 /// parameters: the headline, a caret under each way out named with its
 /// parameter, the note and both ways out. No word of the language below.
 #[test]
-fn longest_is_accepted_since_adr353() {
+fn the_catalogue_row_for_two_sources_is_reproduced() {
     let source = "fn longest(a: ref String, b: ref String) -> ref String {\n    if a.len() >= b.len() {\n        return a\n    }\n    return b\n}\n";
     let found = result_findings(source);
-    assert!(found.is_empty(), "{found:#?}");
+    assert_eq!(found.len(), 1, "{found:#?}");
+    let shown = nikaia::diagnostics::render_finding(&found[0], "p.nika", source);
+    assert!(
+        shown.contains(
+            "error[NK2302]: `longest` hands back a view of `a`'s data here and of `b`'s there, so a caller can't tell whose data it gets."
+        ),
+        "{shown}"
+    );
+    assert!(shown.contains("--> p.nika:3:9"), "{shown}");
+    assert!(shown.contains("^^^^^^^^ a view of `a`"), "{shown}");
+    assert!(shown.contains("-------- a view of `b`"), "{shown}");
+    assert!(
+        shown.contains("here that's decided only when the program runs."),
+        "{shown}"
+    );
+    assert!(
+        shown.contains("Split it, so each part hands back views"),
+        "{shown}"
+    );
+    assert!(
+        shown.contains("Or hand back a copy: declare `-> String`"),
+        "{shown}"
+    );
+    assert!(!says_a_lifetime(&shown), "{shown}");
 }
 
-/// A declaration with no body and two views points into both (ADR-353 D2).
+/// A declaration with no body names no way out: the caret is the declaration.
 #[test]
-fn a_declaration_with_two_views_is_accepted() {
+fn the_declaration_site_variant_names_the_declaration() {
     let source = "trait Picks {\n    fn pick(a: ref String, b: ref String) -> ref String\n}\n";
     let found = result_findings(source);
-    assert!(found.is_empty(), "{found:#?}");
+    assert_eq!(found.len(), 1, "{found:#?}");
+    let shown = nikaia::diagnostics::render_finding(&found[0], "p.nika", source);
+    assert!(shown.contains("--> p.nika:2:"), "{shown}");
+    assert!(shown.contains("is declared without a body"), "{shown}");
+    assert!(!says_a_lifetime(&shown), "{shown}");
 }
+
+// --- a result type another file declares (B12) -----------------------------------
 
 /// Write a two-file package and read it: `(directory, program)`.
 fn package(name: &str, files: &[(&str, &str)]) -> (std::path::PathBuf, nikaia::modules::Program) {
@@ -1012,15 +1108,20 @@ const HELPER: &str = "pub struct Txt { pub n: ref String }\n\
 
 /// **A struct of views another file declares is judged like one declared here**
 /// (B12): a result holding the views of `a` on one way out and of `b` on
-/// another points into both (ADR-353 D2), and compiles.
+/// another is `NK2302`, not a rustc error about a file nobody wrote.
 #[test]
-fn a_foreign_struct_result_with_two_sources_is_accepted() {
+fn a_foreign_struct_result_with_two_sources_stays_nk2302() {
     let main = "fn hole(a: ref String, b: ref String) -> Txt {\n    if a.len() > 9 {\n        return Txt { n: a }\n    }\n    return mk(b)\n}\n\
         fn main() {\n    let x = \"hello\".clone()\n    let y = \"hi\".clone()\n    let t = hole(x, y)\n    println(t.n)\n}\n";
     let (dir, program) = package("xfile-two", &[("helper.nika", HELPER), ("main.nika", main)]);
     let found = package_findings(&program);
-    assert!(found.is_empty(), "{found:#?}");
-    package_compiled("a_foreign_struct_result_with_two_sources", &dir, &program);
+    assert_eq!(found.len(), 1, "{found:#?}");
+    assert!(
+        found[0].message.contains("whose data it gets"),
+        "{}",
+        found[0].message
+    );
+    assert!(!says_a_lifetime(&found[0].message), "{}", found[0].message);
     let _ = std::fs::remove_dir_all(dir);
 }
 

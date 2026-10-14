@@ -321,6 +321,8 @@ pub struct PatternField {
 pub enum MatchPattern {
     Otherwise,
     Rest,
+    RestNamed(winnow_grammar::Symbol),
+    List(Vec<MatchPattern>),
     Literal(Expr),
     Path(Vec<winnow_grammar::Symbol>),
     Tuple { path: Vec<winnow_grammar::Symbol>, parts: Vec<MatchPattern> },
@@ -1963,6 +1965,8 @@ fn bind_pattern(pattern: &MatchPattern, words: &winnow_grammar::InternerContext,
     match pattern {
         MatchPattern::Path(segments) => { bind_all(segments, words, seen); },
         MatchPattern::Tuple { parts, .. } => { for p in parts.iter() { bind_pattern(p, words, seen); } },
+        MatchPattern::List(parts) => { for p in parts.iter() { bind_pattern(p, words, seen); } },
+        MatchPattern::RestNamed(name) => { let name = *name; bind_all(&vec![name], words, seen); },
         MatchPattern::Named { fields, .. } => { for field in fields.iter() { bind_pattern(&field.pat, words, seen); } },
         MatchPattern::Or(alternatives) => { for p in alternatives.iter() { bind_pattern(p, words, seen); } },
         _ => { },
@@ -9587,6 +9591,7 @@ impl CheckState {
                 for alternative in alternatives.iter() { self.an_or_pattern_that_binds_unevenly(world, alternative, span); }
             },
             MatchPattern::Tuple { parts, .. } => { for part in parts.iter() { self.an_or_pattern_that_binds_unevenly(world, part, span); } },
+            MatchPattern::List(parts) => { for part in parts.iter() { self.an_or_pattern_that_binds_unevenly(world, part, span); } },
             MatchPattern::Named { fields, .. } => { for field in fields.iter() { self.an_or_pattern_that_binds_unevenly(world, &field.pat, span); } },
             _ => { },
         }
@@ -20394,16 +20399,32 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn a_rest_pattern(&mut self, world: &CheckWorld<'_>, path: &[winnow_grammar::Symbol], written: i64, span: &Span) {
-        if written != 1 || path.is_empty() {
-            self.findings.push(check_refusal("NK1255", span, "`..` stands only for all of a variant's values, alone in the brackets.".to_owned(), vec!["A positional rest such as `E::V(a, ..)` is not part of the language: a pattern names every value in order, or none of them with `E::V(..)`.".to_owned()], Some("Write each value, with `_` for the ones you ignore, or `E::V(..)` for all of them.".to_owned())));
-            return;
-        }
-        if path.len() != 2 { return; }
+    fn a_rest_pattern(&mut self, world: &CheckWorld<'_>, path: &[winnow_grammar::Symbol], parts: &[MatchPattern], span: &Span) {
+        if !self.one_rest_at_most(parts, span) || path.len() != 2 { return; }
         let ty = world.words.resolve(*nikaia_std::index::get(&path, 0)).to_owned();
         let member = world.words.resolve(*nikaia_std::index::get(&path, 1)).to_owned();
         let key = format!("{}::{}", ty, member);
-        if self.is_variant(&ty, &member) && !self.variant_parts.contains_key(&key) && !self.structs.contains_key(&key) { self.findings.push(check_refusal("NK1255", span, format!("`{}` carries no values, so `{}(..)` has nothing to stand for.", key, key), vec!["`(..)` matches the values of a variant that has some.".to_owned()], Some(format!("Write `{}`.", key).to_owned()))); }
+        if self.is_variant(&ty, &member) && !self.variant_parts.contains_key(&key) && !self.structs.contains_key(&key) {
+            self.findings.push(check_refusal("NK1255", span, format!("`{}` carries no values, so `..` in `{}(..)` has nothing to stand for.", key, key), vec!["`..` matches the values of a variant that has some.".to_owned()], Some(format!("Write `{}`.", key).to_owned())));
+            return;
+        }
+        let declared = nikaia_std::index::or(match *nikaia_std::index::get(&self.variant_parts, &key) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || vec![].into()).len() as i64;
+        let named = parts.len() as i64 - 1;
+        if self.variant_parts.contains_key(&key) && named > declared { self.findings.push(check_refusal("NK1253", span, format!("The pattern `{}` names {} part(s) besides `..`, but the variant carries {}.", key, named, declared), vec!["`..` stands for the values not named; it cannot make room for more.".to_owned()], Some("Name at most as many parts as the variant carries.".to_owned()))); }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn one_rest_at_most(&mut self, parts: &[MatchPattern], span: &Span) -> bool {
+        let mut rests = 0;
+        for part in parts.iter() { if pattern_is_rest(part) { rests += 1; } }
+        if rests > 1 {
+            self.findings.push(check_refusal("NK1258", span, "A pattern has more than one `..`.".to_owned(), vec!["One `..` stands for the values between those named before and after it; with two, which values each one takes is not said.".to_owned()], Some("Keep one `..`, and name the other values: `[first, .., last]`.".to_owned())));
+            return false;
+        }
+        true
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -20413,7 +20434,11 @@ impl CheckState {
             MatchPattern::Named { path, .. } => { self.a_path_in_a_pattern(world, path, span); },
             MatchPattern::Tuple { path, parts } => {
                 self.a_path_in_a_pattern(world, path, span);
-                if parts_hold_a_rest(parts) { self.a_rest_pattern(world, path, parts.len() as i64, span); } else { self.a_variant_pattern_with_other_parts(world, path, parts.len() as i64, span); }
+                if parts_hold_a_rest(parts) { self.a_rest_pattern(world, path, parts, span); } else { self.a_variant_pattern_with_other_parts(world, path, parts.len() as i64, span); }
+                for part in parts.iter() { self.a_pattern_naming_a_member_a_type_does_not_have(world, part, span); }
+            },
+            MatchPattern::List(parts) => {
+                self.one_rest_at_most(parts, span);
                 for part in parts.iter() { self.a_pattern_naming_a_member_a_type_does_not_have(world, part, span); }
             },
             MatchPattern::Or(alternatives) => { for alternative in alternatives.iter() { self.a_pattern_naming_a_member_a_type_does_not_have(world, alternative, span); } },
@@ -22026,16 +22051,29 @@ impl CheckState {
                 match pattern {
                     MatchPattern::Tuple { path, parts } => {
                         if path.is_empty() {
-                            let mut at: i64 = 0;
-                            while at < parts.len() as i64 && at < types.len() as i64 {
-                                self.bind_a_part(world, nikaia_std::index::get(&parts, nikaia_std::index::at(at)), nikaia_std::index::get(&types, nikaia_std::index::at(at)), &mut out);
-                                at = at + 1;
-                            }
+                            self.bind_positional(world, parts, types, &mut out);
                             return out;
                         }
                     },
                     _ => { },
                 }
+            },
+            _ => { },
+        }
+        match pattern {
+            MatchPattern::List(parts) => {
+                let element = match pattern_list_element(on) { Some(__nikaia_value) => __nikaia_value, None => return out };
+                for part in parts.iter() {
+                    match part {
+                        MatchPattern::RestNamed(name) => {
+                            let name = *name;
+                            out.insert(world.words.resolve(name).to_owned(), Ty::Named { name: "Array".to_owned(), args: vec![element.clone()], view: true });
+                        },
+                        MatchPattern::Rest => { },
+                        _ => { self.bind_a_part(world, part, &element, &mut out); },
+                    }
+                }
+                return out;
             },
             _ => { },
         }
@@ -22060,11 +22098,7 @@ impl CheckState {
                         }, || vec![].into());
                         for field in fields.iter() { types.push(field.ty.clone()); }
                     }
-                    let mut at: i64 = 0;
-                    while at < parts.len() as i64 && at < types.len() as i64 {
-                        self.bind_a_part(world, nikaia_std::index::get(&parts, nikaia_std::index::at(at)), nikaia_std::index::get(&types, nikaia_std::index::at(at)), &mut out);
-                        at = at + 1;
-                    }
+                    self.bind_positional(world, parts, &types, &mut out);
                 }
             },
             MatchPattern::Named { path, fields, .. } => {
@@ -22089,6 +22123,23 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    fn bind_positional(&self, world: &CheckWorld<'_>, parts: &[MatchPattern], types: &[Ty], out: &mut collections::BTreeMap<String, Ty>) {
+        let mut rest_at: i64 = -1;
+        let mut at: i64 = 0;
+        while at < parts.len() as i64 {
+            if pattern_is_rest(nikaia_std::index::get(&parts, nikaia_std::index::at(at))) { rest_at = at; }
+            at = at + 1;
+        }
+        at = 0;
+        while at < parts.len() as i64 {
+            let mut place: i64 = at;
+            if rest_at >= 0 && at > rest_at { place = types.len() as i64 - (parts.len() as i64 - at); }
+            if (rest_at < 0 || at != rest_at) && place >= 0 && place < types.len() as i64 { self.bind_a_part(world, nikaia_std::index::get(&parts, nikaia_std::index::at(at)), nikaia_std::index::get(&types, nikaia_std::index::at(place)), out); }
+            at = at + 1;
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     fn pattern_variant(&self, world: &CheckWorld<'_>, path: &[winnow_grammar::Symbol], owner: &str) -> String {
         let mut written: Vec<String> = vec![];
         for part in path.iter() { written.push(world.words.resolve(*part).to_owned()); }
@@ -22102,6 +22153,7 @@ impl CheckState {
             MatchPattern::Path(one) => { if one.len() == 1 { out.insert(world.words.resolve(*nikaia_std::index::get(&one, 0)).to_owned(), ty.clone()); } },
             MatchPattern::Tuple { .. } => { for (entry_name, entry_value) in self.pattern_parts(world, part, ty) { out.insert(entry_name.to_owned(), entry_value.clone()); } },
             MatchPattern::Named { .. } => { for (entry_name, entry_value) in self.pattern_parts(world, part, ty) { out.insert(entry_name.to_owned(), entry_value.clone()); } },
+            MatchPattern::List(_) => { for (entry_name, entry_value) in self.pattern_parts(world, part, ty) { out.insert(entry_name.to_owned(), entry_value.clone()); } },
             _ => { },
         }
     }
@@ -22113,6 +22165,8 @@ pub fn pattern_names(world: &CheckWorld<'_>, pattern: &MatchPattern) -> Vec<Stri
     match pattern {
         MatchPattern::Path(segments) => if segments.len() == 1 { vec![world.words.resolve(*nikaia_std::index::get(&segments, 0)).to_owned()] } else { vec![] },
         MatchPattern::Tuple { parts, .. } => names_of_parts(world, parts),
+        MatchPattern::List(parts) => names_of_parts(world, parts),
+        MatchPattern::RestNamed(name) => { let name = *name; vec![world.words.resolve(name).to_owned()] },
         MatchPattern::Named { fields, .. } => names_of_fields(world, fields),
         MatchPattern::Or(alternatives) => if !alternatives.is_empty() { pattern_names(world, nikaia_std::index::get(&alternatives, 0)) } else { vec![] },
         _ => vec![],
@@ -22133,6 +22187,16 @@ fn names_of_fields(world: &CheckWorld<'_>, fields: &[PatternField]) -> Vec<Strin
     let mut out: Vec<String> = vec![];
     for field in fields.iter() { for name in pattern_names(world, &field.pat) { out.push(name); } }
     out
+}
+
+pub fn pattern_is_rest(part: &MatchPattern) -> bool { matches!(part, MatchPattern::Rest | MatchPattern::RestNamed(_)) }
+
+pub fn pattern_list_element(on: &Ty) -> Option<Ty> {
+    match on {
+        Ty::Named { name, args, .. } => { if (name == "Vec" || name == "Array" || name == "List") && !args.is_empty() { return Some((*nikaia_std::index::get(&args, 0)).clone()); } },
+        _ => { },
+    }
+    None
 }
 
 
@@ -30925,6 +30989,27 @@ fn emit_match_yes_or_no(arms: &[MatchArm]) -> Option<bool> {
     Some(!otherwise)
 }
 
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+fn emit_match_subject<H: EmitHost>(walk: &mut EmitWalk, out: &mut EmitOut, host: &H, value: &Expr, arms: &[MatchArm], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    let mut list = false;
+    for arm in arms.iter() { if emit_match_is_list(&arm.pattern) { list = true; } }
+    if list { out.push("&("); }
+    host.expr(walk, out, value, depth, flow, scope)?;
+    if list { out.push(")[..]"); }
+    Ok(())
+}
+
+fn emit_match_is_list(pattern: &MatchPattern) -> bool {
+    match pattern {
+        MatchPattern::List(_) => { return true; },
+        MatchPattern::Or(alternatives) => { for alternative in alternatives.iter() { if emit_match_is_list(alternative) { return true; } } },
+        _ => { },
+    }
+    false
+}
+
 fn emit_match_path(world: &EmitWorld<'_>, path: &[winnow_grammar::Symbol]) -> String {
     let mut parts: Vec<String> = vec![];
     for each in path.iter() { parts.push(emit_text(world, *each)); }
@@ -30948,6 +31033,20 @@ impl EmitState {
         match pattern {
             MatchPattern::Otherwise => { out.push("_"); },
             MatchPattern::Rest => { out.push(".."); },
+            MatchPattern::RestNamed(name) => {
+                let name = *name;
+                if wild { out.push(".."); } else { out.push(&format!("{} @ ..", emit_text(world, name))); }
+            },
+            MatchPattern::List(parts) => {
+                out.push("[");
+                let mut i = 0;
+                for part in parts.iter() {
+                    if i > 0 { out.push(", "); }
+                    i += 1;
+                    n = self.emit_core_pattern_written(world, walk, out, host, part, wild, lent_key, collect, n, depth, flow, scope)?;
+                }
+                out.push("]");
+            },
             MatchPattern::Literal(value) => { host.expr(walk, out, value, depth, flow, scope)?; },
             MatchPattern::Path(p) => { if p.len() == 1 { for one in p.iter() { out.push(&self.emit_match_bound(world, *one, wild, lent_key)); } } else { out.push(&emit_match_path(world, p)); } },
             MatchPattern::Tuple { path, parts } => {
@@ -31268,7 +31367,7 @@ impl EmitState {
             if !inside_a_box {
                 if !nikaia_std::index::or(answer, || true) { out.push("!"); }
                 out.push("matches!(");
-                host.expr(walk, out, value, depth, flow, scope)?;
+                emit_match_subject(walk, out, host, value, arms, depth, flow, scope)?;
                 out.push(", ");
                 let mut i: i64 = 0;
                 for arm in arms.iter() {
@@ -31284,12 +31383,15 @@ impl EmitState {
         }
         out.push("match ");
         if self.facts.lent_scrutinees.contains(&node_key(value)) { out.push("&"); }
-        host.expr(walk, out, value, depth, flow, scope)?;
+        emit_match_subject(walk, out, host, value, arms, depth, flow, scope)?;
         let pad = "    ".repeat(nikaia_std::count::of(depth + 1));
         let close = "    ".repeat(nikaia_std::count::of(depth));
         out.push(" {\n");
+        let mut over_a_list = false;
+        for arm in arms.iter() { if emit_match_is_list(&arm.pattern) { over_a_list = true; } }
         for arm in arms.iter() {
             out.push(&pad);
+            if over_a_list && emit_match_is_otherwise(&arm.pattern) { out.push("#[allow(unreachable_patterns)] "); }
             let key = node_key(&arm.body);
             if arm.guard.is_none() && !self.looks_inside_a_box(world, &arm.pattern) && self.facts.taking_arms.contains_key(&key) {
                 let stand_in = nikaia_std::index::or(self.facts.taking_arms.get(&key), || "").to_owned();
@@ -55157,6 +55259,8 @@ fn rsrc_pattern_names(asked: &Asked<'_>, pattern: &MatchPattern, out: &mut Vec<S
     match pattern {
         MatchPattern::Path(parts) => { if parts.len() == 1 { out.push(asked.names.resolve(*nikaia_std::index::get(&parts, 0)).to_owned()); } },
         MatchPattern::Tuple { parts, .. } => { for part in parts.iter() { rsrc_pattern_names(asked, part, out); } },
+        MatchPattern::List(parts) => { for part in parts.iter() { rsrc_pattern_names(asked, part, out); } },
+        MatchPattern::RestNamed(name) => { let name = *name; out.push(asked.names.resolve(name).to_owned()); },
         MatchPattern::Named { fields, .. } => { for field in fields.iter() { rsrc_pattern_names(asked, &field.pat, out); } },
         MatchPattern::Or(alternatives) => { for alternative in alternatives.iter() { rsrc_pattern_names(asked, alternative, out); } },
         _ => { },
@@ -55654,6 +55758,55 @@ fn rsrc_report(asked: &Asked<'_>, of: &str, sources: &[String], declared_views: 
     }
     let mut named: Vec<String> = vec![];
     for source in sources.iter() { if reach.contains(source) { named.push(source.to_owned()); } }
+    if named.len() >= 2 {
+        let first = (*nikaia_std::index::get(&named, 0)).to_owned();
+        let second = (*nikaia_std::index::get(&named, 1)).to_owned();
+        let mut at_first: i64 = -1;
+        let mut at_second: i64 = -1;
+        for i in 0..ways.len() as i64 {
+            if at_first < 0 && nikaia_std::index::get(&ways, (i) as usize).reach.contains(&first) { at_first = i; }
+            if at_second < 0 && nikaia_std::index::get(&ways, (i) as usize).reach.contains(&second) { at_second = i; }
+        }
+        let mut message: String = String::from("");
+        let mut caret = Span { start: at.start, end: at.end };
+        if at_first >= 0 && at_second >= 0 && at_first != at_second {
+            let mut early: i64 = at_first;
+            let mut late: i64 = at_second;
+            let mut a = first.to_owned();
+            let mut b = second.to_owned();
+            if at_second < at_first {
+                early = at_second;
+                late = at_first;
+                a = second.to_owned();
+                b = first.to_owned();
+            }
+            caret = Span { start: nikaia_std::index::get(&ways, nikaia_std::index::at(early)).span.start, end: nikaia_std::index::get(&ways, nikaia_std::index::at(early)).span.end };
+            message = format!("{} hands back a view of `{}`'s data here and of `{}`'s there, so a caller can't tell whose data it gets.", of, a, b);
+        } else {
+            if at_first >= 0 { caret = Span { start: nikaia_std::index::get(&ways, nikaia_std::index::at(at_first)).span.start, end: nikaia_std::index::get(&ways, nikaia_std::index::at(at_first)).span.end }; }
+            message = format!("{} hands back a value that holds views of `{}`'s data and of `{}`'s, so a caller can't tell whose data it gets.", of, first, second);
+        }
+        let mut labels: Vec<CheckLabel> = vec![];
+        let mut marked = false;
+        for way in ways.iter() {
+            let mut whose: Vec<String> = vec![];
+            for source in named.iter() { if way.reach.contains(source) { whose.push(format!("`{}`", source)); } }
+            if !whose.is_empty() {
+                let joiner: String = String::from(" and ");
+                let joined = whose.join(&joiner);
+                labels.push(CheckLabel { span: Span { start: way.span.start, end: way.span.end }, word: String::from(""), text: format!("a view of {}", joined), main: !marked });
+                marked = true;
+            }
+        }
+        let note = format!("Whoever calls {} has to keep the data the result points into unchanged while it uses the result, and here that's decided only when the program runs.", of);
+        let split = format!("Split it, so each part hands back views of one of `{}` and `{}`: a function that says which of them (`fn …(…) -> bool`), then a call where it is used that picks one.", first, second);
+        let copy = "Or hand back a copy: declare `-> String` and write `.clone()`, one allocation per call.";
+        let help = format!("{}\n           {}", split, copy);
+        let mut found = refusal("NK2302", caret, message, vec![note], help);
+        found.labels = labels;
+        out.push(found);
+        return;
+    }
     if trait_name.is_none() { return; }
     let mut allowed: String = String::from("");
     if takes_a_view_of_itself(receiver) { allowed = String::from("self"); } else if declared_views.len() == 1 { allowed = (*nikaia_std::index::get(&declared_views, 0)).to_owned(); } else if declared_views.len() > 1 { return; }
@@ -55665,6 +55818,24 @@ fn rsrc_report(asked: &Asked<'_>, of: &str, sources: &[String], declared_views: 
             out.push(refusal("NK2302", Span { start: at.start, end: at.end }, message, vec![note], help));
             return;
         }
+    }
+}
+
+fn rsrc_declared_views(unit: &Unit, asked: &Asked<'_>, receiver: Option<&Receiver>, args: &[FnArg], ret_type: Option<&Type>) -> i64 {
+    if receiver.is_some() || !buffered(unit, asked, ret_type) { return 0; }
+    let mut views: i64 = 0;
+    for arg in args.iter() { if (*arg.ty.code).is_none() && brings_buffer(unit, asked, &arg.ty) { views += 1; } }
+    views
+}
+
+fn rsrc_declaration(unit: &Unit, asked: &Asked<'_>, method: &Spanned<TraitMethod>, out: &mut Vec<Finding>) {
+    let views = rsrc_declared_views(unit, asked, (method.node.receiver).as_ref(), &method.node.args, (method.node.ret_type).as_ref());
+    if views >= 2 {
+        let function = asked.names.resolve(method.node.name).to_owned();
+        let message = format!("`{}` is declared without a body, takes {} views and hands one back, so a caller can't tell whose data it gets.", function, views);
+        let note = "Whoever calls it through its declaration has to keep the data the result points into unchanged, and a declaration with no `self` and several views doesn't say which.".to_string();
+        let help: String = String::from("Give it a `ref self` to hand back a view of, take one view only, or declare `-> String` and hand back a copy.");
+        out.push(refusal("NK2302", Span { start: method.span.start, end: method.span.end }, message, vec![note], help));
     }
 }
 
@@ -55681,6 +55852,13 @@ fn rsrc_function_type(unit: &Unit, asked: &Asked<'_>, ty: &Type, at: &Span, out:
             let message: String = String::from("A function type that takes no view and hands one back doesn't say whose data the result points into.");
             let note = "Whoever calls through it has to keep the data the result points into unchanged, and the type has nothing to point at.".to_string();
             let help: String = String::from("Take the view it hands back as a parameter, or hand back a copy: declare `-> String`.");
+            out.push(refusal("NK2302", Span { start: at.start, end: at.end }, message, vec![note], help));
+            return;
+        }
+        if views >= 2 && buffered(unit, asked, (answer).as_ref()) {
+            let message: String = String::from("A function type that takes two views and hands one back doesn't say which one the result points into, so a caller can't tell whose data it gets.");
+            let note = "Whoever calls through it has to keep the data the result points into unchanged, and the type doesn't say which.".to_string();
+            let help: String = String::from("Take one view only, or hand back a copy: declare `-> String`.");
             out.push(refusal("NK2302", Span { start: at.start, end: at.end }, message, vec![note], help));
             return;
         }
@@ -55776,7 +55954,12 @@ fn rsrc_solve(unit: &Unit, asked: &Asked<'_>, items: &[Spanned<Item>], own_buffe
                     }
                 }
             },
-            Item::Trait { methods, .. } => { for method in methods.iter() { rsrc_function_types(unit, asked, &method.node.args, (method.node.ret_type).as_ref(), &method.span, out); } },
+            Item::Trait { methods, .. } => {
+                for method in methods.iter() {
+                    rsrc_declaration(unit, asked, method, out);
+                    rsrc_function_types(unit, asked, &method.node.args, (method.node.ret_type).as_ref(), &method.span, out);
+                }
+            },
             Item::Struct { fields, .. } => { for field in fields.iter() { rsrc_function_type(unit, asked, &field.ty, &field.span, out); } },
             _ => { },
         }
@@ -56184,7 +56367,7 @@ pub mod check_overflow {
 pub mod check_parts {}
 pub mod check_patterns {
     #[allow(unused_imports)]
-    pub use super::{pattern_names};
+    pub use super::{pattern_names, pattern_is_rest, pattern_list_element};
 }
 pub mod check_pauses {
     #[allow(unused_imports)]

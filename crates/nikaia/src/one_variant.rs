@@ -254,7 +254,7 @@ fn pattern(
                 path.push(interner.intern_string(&variant));
             }
         }
-        MatchPattern::Or(alternatives) => {
+        MatchPattern::Or(alternatives) | MatchPattern::List(alternatives) => {
             for alternative in alternatives.iter_mut() {
                 pattern(enums, interner, alternative, refuse);
             }

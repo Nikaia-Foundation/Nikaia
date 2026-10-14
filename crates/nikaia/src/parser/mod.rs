@@ -3546,6 +3546,15 @@ grammar! {
           // may stand.
           | KW_NULL -> { MatchPattern::Literal(Expr::LitNull(_state.user().id())) }
           | l:pattern_lit -> { MatchPattern::Literal(l) }
+          // **A list pattern** (ADR-355 D1): `[]`, `[x]`, `[a, .., z]`,
+          // `[h, ..rest]`. Before a literal, so `[` is never read as one. A
+          // second `..` parses and is refused by the checker with `NK1258`.
+          | "[" "]" -> { MatchPattern::List(Vec::new()) }
+          | "[" head:list_part tail:list_part_tail* ","? "]" -> {
+                let mut parts = vec![head];
+                parts.extend(tail);
+                MatchPattern::List(parts)
+            }
           // **A bare tuple**, which names no type: `(0, 0)`.
           | "(" parts:match_part_list ")" -> {
                 MatchPattern::Tuple { path: Vec::new(), parts }
@@ -3592,9 +3601,16 @@ grammar! {
 
         rule match_part_tail -> MatchPattern = "," p:tuple_part -> { p }
 
-        // **`..` is the rest of a variant's values** (ADR-349 D1): `E::V(..)`.
-        // It parses anywhere in the list so that `E::V(a, ..)` is refused by
-        // the checker with `NK1255`, which says why, rather than as a syntax error.
+        rule list_part_tail -> MatchPattern = "," p:list_part -> { p }
+
+        // `..rest` names the remaining elements (ADR-355 D2); only a list has
+        // a named rest.
+        rule list_part -> MatchPattern =
+            ".." name:NAME -> { MatchPattern::RestNamed(name) }
+          | p:tuple_part -> { p }
+
+        // **`..` is the rest of a variant's or a tuple's values** (ADR-349 D1,
+        // ADR-355 D3): `E::V(..)`, `E::V(a, ..)`, `(.., z)`.
         rule tuple_part -> MatchPattern =
             ".." -> { MatchPattern::Rest }
           | p:match_part -> { p }

@@ -62,9 +62,10 @@ implementation.
 
 | ADR | Decides | Status | Built |
 | :--- | :--- | :--- | :--- |
+| [355](adr-355.md) | List patterns `[]`, `[x]`, `[a, .., z]`, `[h, ..rest]` (the rest a view `ref Array[T]`); `..` in a tuple or variant is the remaining values; one `..` per pattern (`NK1258`); a list `match` needs `else` | Accepted | yes |
 | [352](adr-352.md) | `null` is a pattern in a `match` over a `T?`: the other arms match the `T` (a bare name binds it, a literal compares with it); an unguarded `null` arm and a catch-all make it complete; `null` over a value that is never `null` is `NK1256` | Accepted | yes |
 | [350](adr-350.md) | A test that proves a local or a parameter is not `null` makes it a `T` where the proof holds: the rest of an `&&`, the right of `||` over `x == null`, the branch, a `while` body, the rest of a block after an early exit; a write after the test takes it back (`NK1102` names it); field paths and enum binding in conditions not decided | Accepted | yes |
-| [349](adr-349.md) | `E::V(..)` matches a variant whatever values it carries, as `..` is the rest of a struct's fields; refused on a variant without values and wherever it is not alone in the brackets (`NK1255`); a positional rest `E::V(a, ..)` is left undecided | Accepted | yes |
+| [349](adr-349.md) | `E::V(..)` matches a variant whatever values it carries, as `..` is the rest of a struct's fields; refused on a variant without values and wherever it is not alone in the brackets (`NK1255`); a positional rest is decided by ADR-355 D3 | Accepted | yes |
 | [348](adr-348.md) | What `main` still holds at its end is freed by default; `optimization = "skip-free-at-exit:on"` leaves its memory to the operating system, while every value still dies and every cleanup runs; no `Drop` in `std` has an effect outside the process. | Accepted | yes |
 | [347](adr-347.md) | An enum with exactly one variant is written by its type's name, `Exit(c)` for `Exit::Code(c)`, at the value and in a pattern; a bare name in a pattern still binds; the short form of an enum with several variants is `NK1252` |
 | [346](adr-346.md) | Every task error has a receiver: an unbound `spawn` is detached; a bound `TaskHandle` must be taken by `join`, `join(within:)`, `detach` or `cancel`, or handed on (`NK2109`); `join` throws the body's errors; `join(within:)` cancels on time-out and throws `task::TimedOut`; a detached task's error is logged, a fatal one sets the exit status at `main`'s end; supervisors do not restart a fatal error; `task::scope` hands errors on as `overlap`. | Accepted | in part (#605) |
@@ -270,6 +271,7 @@ either finds the other. Records replaced as a whole are not here: they are in
 
 | Changed | By | What holds now |
 | :--- | :--- | :--- |
+| [349](adr-349.md) D3 | [355](adr-355.md) D3 | `E::V(a, ..)` and `(a, ..)` are the remaining values; `NK1255` only on a variant without values |
 | [283](adr-283.md) D25 | [353](adr-353.md) D1-D4 | a result may point into several parameters, view by view; giving an argument up while viewed is allowed; a change in place is `NK2305` |
 | [346](adr-346.md) D7 | [351](adr-351.md) D5 | a supervisor throws a child's fatal error itself; no `supervisor::Handed` |
 | [343](adr-343.md) D1-D3 | [345](adr-345.md) D3-D5 | `exit` throws the fatal `process::Exit`; no `exits` column, no `NK2607` |

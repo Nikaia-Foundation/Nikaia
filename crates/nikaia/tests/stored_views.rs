@@ -540,7 +540,7 @@ impl Holder {
 /// and this walk runs beside the checker rather than after it — so a call on one
 /// reaches no entry and the parameter is treated as kept.
 #[test]
-fn a_call_on_a_receiver_that_cannot_be_typed_points_into_both() {
+fn a_call_on_a_receiver_that_cannot_be_typed_is_still_a_finding() {
     let refused = findings(
         r#"
 struct Holder { label: ref String }
@@ -553,9 +553,7 @@ impl Holder {
 }
 "#,
     );
-    // ADR-353 D2: the result points into `self` and `name`; nothing is
-    // refused for what it points into any more.
-    assert!(refused.is_empty(), "{refused:#?}");
+    assert_eq!(refused.len(), 1, "{refused:#?}");
 }
 
 /// #585: a local struct read only through its fields keeps nothing; one that

@@ -119,7 +119,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R64  `let x = match e { Some(v) => v, None => return y }` (also `continue`/`break`, in loops too) -> `let x = e ?? return y`",
         "R63  what R59 leaves of `o.is_some_and(..)`: `o.is_some_and(|x| p)` -> `(o != null && p)` with `x` read as `(o ?? panic(..))` (used twice: `match o ?? panic(..) { x => p }`), `o.is_some_and(f)` -> `(o != null && f(o ?? panic(..)))`",
         "--only NAME converts the one function NAME of the file (line numbers kept, for `--facts`)",
-        "R68  a positional rest `V(a, ..)` -> `V(a, _, _)`, the variant's parts counted in tools/*.nika (`--repo`); unknown -> TODO (NK1255)",
+        "R68  a positional rest `V(a, ..)` and a slice pattern pass through; `rest @ ..` -> `..rest` (ADR-355)",
         "R70  a `format!` hole hoisted out of a match arm (R61) -> the arm becomes a block holding it",
         "R71  a `None =>` / `None if guard =>` arm -> `null =>` / `null if guard =>` (ADR-352)",
         "R72  a `Some(p) =>` arm -> `p =>`, `Some(_)` -> `_value` (the other arms of a `match` with `null` match the `T`, ADR-352)",
@@ -2417,28 +2417,6 @@ fn rs2nika_turbofish(mut ctx: Rs2nikaCtx, given: ref String) -> String {
     return out
 }
 
-fn rs2nika_simple_slice(text: ref String) -> bool {
-    // `[a, b]`, `[x, ..]`, `[_]`
-    let c: Vec[scalar] = text.chars().collect()
-    let mut at = 0
-    while at < c.len() {
-        if c[at] == '[' && at > 0 && (c[at - 1] == '(' || c[at - 1] == ',' || c[at - 1] == ' ') {
-            let mut j = at + 1
-            while j < c.len() && (rs2nika_word(c[j]) || c[j] == '.' || c[j] == ',' || c[j] == ' ') {
-                j = j + 1
-            }
-            if j < c.len() && c[j] == ']' {
-                let before: String = rs2nika_text(c, 0, at).trim_end().clone()
-                if before.ends_with("(") || before.ends_with(",") {
-                    return true
-                }
-            }
-        }
-        at = at + 1
-    }
-    return false
-}
-
 /// The `TODO(rs2nika)` markers a Rust line asks for.
 fn rs2nika_todos(line: ref String) -> Vec[String] {
     let comb: String = rs2nika_some_and(rs2nika_opt_comb(line))
@@ -2466,11 +2444,8 @@ fn rs2nika_todos(line: ref String) -> Vec[String] {
     if some_arm {
         todo.push("`match` on `Some`/`None`: `let x = e ?? <none arm>`")
     }
-    let whole = line.len()
-    let arrow = line.find("=>") ?? whole
-    let before: String = line[0..<arrow].clone()
-    if (line.contains("=>") && rs2nika_simple_slice(before)) || line.contains("let [") {
-        todo.push("slice pattern: index by position after a `len()` check")
+    if line.contains("let [") {
+        todo.push("slice pattern in a `let`: a `match` with a list pattern (ADR-355)")
     }
     if line.contains(".entry(") {
         todo.push("`.entry(..)`: read with `??`, then write `m[k] = v`")
@@ -4509,99 +4484,31 @@ fn rs2nika_enum_arity(mut ctx: Rs2nikaCtx, text: ref String) {
     }
 }
 
-/// R68: a positional rest `V(a, ..)` -> `V(a, _, _)` (ADR-349 refuses it,
-/// `NK1255`), the number of parts from `ctx.arity`; a TODO where it is unknown.
+/// R68: a positional rest `V(a, ..)` and a slice pattern pass through
+/// (ADR-355 D3); Rust's named rest `rest @ ..` is written `..rest` (D2).
 fn rs2nika_rest(mut ctx: Rs2nikaCtx, given: ref String) -> String {
-    if !given.contains(", ..)") && !given.contains("(..)") {
+    if !given.contains(" @ ..") {
         return given.clone()
     }
     let c: Vec[scalar] = given.chars().collect()
     let mut out: String = ""
     let mut at = 0
     while at < c.len() {
-        let rest = at + 5 <= c.len() && rs2nika_text(c, at, at + 5) == ", ..)"
-        // `V(..)`: every part is `_` (R68)
-        let all = at > 0 && rs2nika_path_char(c[at - 1]) && at + 4 <= c.len() && rs2nika_text(c, at, at + 4) == "(..)"
-        if all {
-            let mut p0 = at - 1
-            while p0 >= 0 && rs2nika_path_char(c[p0]) {
-                p0 = p0 - 1
+        if at + 5 <= c.len() && rs2nika_text(c, at, at + 5) == " @ .." && at > 0 && rs2nika_word(c[at - 1]) {
+            let o: Vec[scalar] = out.chars().collect()
+            let mut k = o.len()
+            while k > 0 && rs2nika_word(o[k - 1]) {
+                k = k - 1
             }
-            let path0: String = rs2nika_text(c, p0 + 1, at)
-            let segs0: Vec[String] = path0.split("::").map(fn(x) { x.clone() }).collect()
-            let key0: String = if segs0.len() >= 2 { f"{segs0[segs0.len() - 2]}::{segs0[segs0.len() - 1]}\t" } else { f"::{path0}\t" }
-            let mut n0 = -1
-            let last0 = f"::{segs0[segs0.len() - 1]}\t"
-            let mut alike: Vec[i64] = []
-            for a in ctx.arity.clone() {
-                let k0 = rs2nika_number(a[(a.find("\t") ?? 0) + 1..<a.len()].clone())
-                if a.starts_with(ref key0) {
-                    n0 = k0
-                } else if a.contains(ref last0) {
-                    alike.push(k0)
-                }
-            }
-            // a variant named by an alias (`Held::P` for `ClaimHeld::P`): one alike is enough
-            if n0 < 0 && alike.len() == 1 {
-                n0 = alike[0]
-            }
-            if n0 > 0 {
-                let mut holes: Vec[String] = []
-                while holes.len() < n0 {
-                    holes.push("_")
-                }
-                let joined0 = rs2nika_join(holes, ", ")
-                out.push_str(f"({joined0})")
-                rs2nika_hit(ctx, "R68")
-                at = at + 4
-                continue
-            }
-        }
-        if !rest {
-            out.push(c[at])
-            at = at + 1
+            let name: String = rs2nika_text(o, k, o.len())
+            let head: String = rs2nika_text(o, 0, k)
+            out = f"{head}..{name}"
+            rs2nika_hit(ctx, "R68")
+            at = at + 5
             continue
         }
-        let mut j = at - 1
-        let mut depth = 0
-        while j >= 0 {
-            if c[j] == ')' {
-                depth = depth + 1
-            } else if c[j] == '(' {
-                if depth == 0 {
-                    break
-                }
-                depth = depth - 1
-            }
-            j = j - 1
-        }
-        let mut p = j - 1
-        while p >= 0 && rs2nika_path_char(c[p]) {
-            p = p - 1
-        }
-        let path: String = if j > 0 { rs2nika_text(c, p + 1, j) } else { "" }
-        let segs: Vec[String] = path.split("::").map(fn(x) { x.clone() }).collect()
-        let key: String = if segs.len() >= 2 { f"{segs[segs.len() - 2]}::{segs[segs.len() - 1]}\t" } else { f"::{path}\t" }
-        let k = if j >= 0 { rs2nika_split_args(rs2nika_text(c, j + 1, at)).len() } else { 0 }
-        let mut n = -1
-        for a in ctx.arity.clone() {
-            if a.starts_with(ref key) || (segs.len() < 2 && a.contains(ref key)) {
-                n = rs2nika_number(a[(a.find("\t") ?? 0) + 1..<a.len()].clone())
-            }
-        }
-        if n >= k {
-            let mut i = k
-            while i < n {
-                out.push_str(", _")
-                i = i + 1
-            }
-            out.push(')')
-            rs2nika_hit(ctx, "R68")
-        } else {
-            out.push_str(", ..)")
-            ctx.todo_extra.push(f"`{path}(.., ..)`: a positional rest is refused (NK1255): one `_` per part left")
-        }
-        at = at + 5
+        out.push(c[at])
+        at = at + 1
     }
     return out
 }

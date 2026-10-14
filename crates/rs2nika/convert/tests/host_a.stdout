@@ -20,7 +20,7 @@
             let parsed = world
             // TODO(rs2nika): let-chain (`&& let`): nest `match`es
             // TODO(rs2nika): `Option::map`/`and_then`: `let x = e ?? <none>` then the body
-            // TODO(rs2nika): slice pattern: index by position after a `len()` check
+            // TODO(rs2nika): slice pattern in a `let`: a `match` with a list pattern (ADR-355)
             // TODO(rs2nika): `decoded` with `ascii_scalar`: a numbered escape above ASCII reads as no text
             text_tiers::visit_expr_mut(value, mut |expr: Expr| { if let Expr::Call { func, args, .. } = expr && (match &*func { Expr::Variable(name, _) if parsed.words.resolve(name) == assets::ASSET => true, else => false }) && let [Expr::LitStr { text, .. }] = args && let Some(content) = (decoded(text) fn(n) { ascii_scalar(n) }).and_then(fn(path) { read.get(path) }) { expr = Expr::LitStr { text: build_time::written(content), id: NodeId::fresh() } } }, mut |_, _| {})
         }

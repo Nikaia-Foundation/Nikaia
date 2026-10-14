@@ -8,11 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
-## [0.0.936] — 2026-10-14
+## [0.0.937] — 2026-10-14
 
-**A result may point into several parameters (ADR-353 D1, D2, #614)**
+**List patterns, and `..` as the rest of positional values (ADR-355, #618)**
 
-`NK2302` no longer refuses `longest` or `pair`: the ledger lists every parameter the result reaches, and the lowering ties them and the result to one buffer group.
+* `[]`, `[x]`, `[first, .., last]`, `[h, ..rest]` match a `Vec[T]`, an `Array[T]` or a view; `..rest` is a view `ref Array[T]`; one `..` per pattern (`NK1258`); a list `match` needs `else`.
+* `(a, ..)` and `E::V(a, ..)` match the remaining values; `NK1255` is only `..` on a variant without values.
 
 ## [0.0.935] — 2026-10-14
 

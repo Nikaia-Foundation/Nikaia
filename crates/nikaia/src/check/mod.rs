@@ -3414,12 +3414,18 @@ impl<'a> Checker<'a> {
                     // D5): the arm opens the box it was lent, and what it
                     // takes apart is a view too - `Expr::Add(Expr::Num(n), b)
                     // => n` over a `ref Expr` handed back a `&i64`.
-                    if typed.is_a_view() || through_the_reference {
+                    // **And so is an element of a list pattern** (ADR-355
+                    // D5): the list is matched as a slice, which lends.
+                    let a_list = matches!(arm.pattern, MatchPattern::List(_));
+                    if typed.is_a_view() || through_the_reference || a_list {
                         let at = value_node(&arm.body);
                         let mut parts = self.s.pattern_parts(self.world, &arm.pattern, &typed);
                         self.typed_inside_boxes(&arm.pattern, &mut parts);
                         for (name, ty) in parts {
-                            if self.s.copied(self.world, &ty) || ty.is_a_view() {
+                            // A view of a slice, `..rest` (ADR-355 D2), is
+                            // already the reference; `*` would make it unsized.
+                            let a_slice = matches!(&ty, Ty::Named { name, view: true, .. } if name == "Array");
+                            if (self.s.copied(self.world, &ty) || ty.is_a_view()) && !a_slice {
                                 self.s.facts.copied_bindings.insert((at, name));
                             }
                         }
@@ -3510,6 +3516,7 @@ impl<'a> Checker<'a> {
                         // (D30): `let held = m.get(k) ?? continue` then `match
                         // held`, and `ref` there is rustc's error.
                         through_the_reference
+                            || matches!(arm.pattern, MatchPattern::List(_))
                             || match value.as_ref() {
                                 Expr::Variable(name, _) => {
                                     on.is_a_view()

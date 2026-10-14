@@ -42,16 +42,30 @@ impl CheckState {
                 match pattern {
                     MatchPattern::Tuple { path, parts } => {
                         if path.len() == 0 {
-                            let mut at = 0
-                            while at < parts.len() && at < types.len() {
-                                self.bind_a_part(world, parts[at], types[at], out)
-                                at = at + 1
-                            }
+                            self.bind_positional(world, parts, types, out)
                             return out
                         }
                     }
                     else => {}
                 }
+            }
+            else => {}
+        }
+        // **A list's elements are its element type**, and a named rest is a
+        // view of the remaining ones, `ref Array[T]` (ADR-355 D1, D2).
+        match pattern {
+            MatchPattern::List(parts) => {
+                let element = pattern_list_element(on) ?? return out
+                for part in parts {
+                    match part {
+                        MatchPattern::RestNamed(name) => {
+                            out.insert(world.words.resolve(name).clone(), Ty::Named { name: "Array".clone(), args: [element.clone()], view: true })
+                        }
+                        MatchPattern::Rest => {}
+                        else => self.bind_a_part(world, part, element, out),
+                    }
+                }
+                return out
             }
             else => {}
         }
@@ -72,11 +86,7 @@ impl CheckState {
                             types.push(field.ty.clone())
                         }
                     }
-                    let mut at = 0
-                    while at < parts.len() && at < types.len() {
-                        self.bind_a_part(world, parts[at], types[at], out)
-                        at = at + 1
-                    }
+                    self.bind_positional(world, parts, types, out)
                 }
             }
             MatchPattern::Named { path, fields, .. } => {
@@ -95,6 +105,30 @@ impl CheckState {
             else => {}
         }
         return out
+    }
+
+    /// **Positional parts against the types at their places**: those before a
+    /// `..` from the front, those after it from the back (ADR-355 D3).
+    fn bind_positional(ref self, world: ref CheckWorld, parts: ref Vec[MatchPattern], types: ref Vec[Ty], mut out: collections::BTreeMap[String, Ty]) sync {
+        let mut rest_at = -1
+        let mut at = 0
+        while at < parts.len() {
+            if pattern_is_rest(parts[at]) {
+                rest_at = at
+            }
+            at = at + 1
+        }
+        at = 0
+        while at < parts.len() {
+            let mut place = at
+            if rest_at >= 0 && at > rest_at {
+                place = types.len() - (parts.len() - at)
+            }
+            if (rest_at < 0 || at != rest_at) && place >= 0 && place < types.len() {
+                self.bind_a_part(world, parts[at], types[place], out)
+            }
+            at = at + 1
+        }
     }
 
     /// The ledger's key of the variant a pattern names: `Owner::One` for one
@@ -130,6 +164,11 @@ impl CheckState {
                     out.insert(entry_name.clone(), entry_value.clone())
                 }
             }
+            MatchPattern::List(_) => {
+                for (entry_name, entry_value) in self.pattern_parts(world, part, ty) {
+                    out.insert(entry_name.clone(), entry_value.clone())
+                }
+            }
             else => {}
         }
     }
@@ -150,6 +189,8 @@ pub fn pattern_names(world: ref CheckWorld, pattern: ref MatchPattern) -> Vec[St
     return match pattern {
         MatchPattern::Path(segments) => if segments.len() == 1 { [world.words.resolve(segments[0]).clone()] } else { [] },
         MatchPattern::Tuple { parts, .. } => names_of_parts(world, parts),
+        MatchPattern::List(parts) => names_of_parts(world, parts),
+        MatchPattern::RestNamed(name) => [world.words.resolve(name).clone()],
         MatchPattern::Named { fields, .. } => names_of_fields(world, fields),
         MatchPattern::Or(alternatives) => if alternatives.len() > 0 { pattern_names(world, alternatives[0]) } else { [] },
         else => [],
@@ -174,4 +215,27 @@ fn names_of_fields(world: ref CheckWorld, fields: ref Vec[PatternField]) -> Vec[
         }
     }
     return out
+}
+
+/// Whether a part is a rest, `..` or `..name` (ADR-355).
+pub fn pattern_is_rest(part: ref MatchPattern) -> bool {
+    return match part {
+        MatchPattern::Rest => true,
+        MatchPattern::RestNamed(_) => true,
+        else => false,
+    }
+}
+
+/// The element type a list pattern matches: of a `Vec[T]`, an `Array[T]` or a
+/// view of either (ADR-355 D1).
+pub fn pattern_list_element(on: ref Ty) -> Ty? {
+    match on {
+        Ty::Named { name, args, .. } => {
+            if (name == "Vec" || name == "Array" || name == "List") && args.len() > 0 {
+                return args[0].clone()
+            }
+        }
+        else => {}
+    }
+    return null
 }
