@@ -174,7 +174,7 @@ single-core entry that maps the file, skips UTF-8 validation and hashes a word a
 | 1BRC, per row | Nikaia, [`examples/1brc.nika`](examples/1brc.nika) | Rust, tuned |
 | :--- | ---: | ---: |
 | instructions | 300 | **272** |
-| mispredicted branches | **1.58** | 3.70 |
+| mispredicted branches | **1.61** | 3.70 |
 | tokens of source, `use` included | **618** | 809 |
 | `unsafe` | **0** | 1 |
 | UTF-8 checked | **yes** | no |
@@ -189,6 +189,20 @@ cost 1.9 of its 300 instructions.
 Where a proof shows an index or overflow check cannot fail, a build that asks for it
 (`--optimization`, [ADR-306](docs/specification/adr/adr-306.md)) drops the check, so the
 safety a program keeps costs it nothing where the compiler can prove it.
+
+The program you write first does well too. Against the Rust a competent programmer writes
+first, `read_to_string`, `lines`, a cut at the `;` and the standard `HashMap`, with the same
+algorithm on both sides:
+
+| 1BRC, per row | Nikaia, [`naive.nika`](benches/brc/naive.nika) | Rust, [`naive.rs`](benches/brc/src/bin/naive.rs) |
+| :--- | ---: | ---: |
+| instructions | **598** | 860 |
+| mispredicted branches | **8.33** | 8.60 |
+| tokens of source, `use` included | **320** | 486 |
+
+A third less source and 30 % fewer instructions, from the defaults each language chose: the
+hasher, the UTF-8 check, and a one-character pattern searched as a character. Where the
+instructions go is in the [bench's README](benches/brc/README.md).
 
 ---
 
