@@ -14806,6 +14806,7 @@ fn check_core_expr_unary<H: CheckHost>(state: &mut CheckState, world: &CheckWorl
 fn check_core_expr_throw<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, inner: &Expr, span: &Span) -> Ty {
     let thrown = check_core_expr(state, world, host, inner, span);
     state.a_thrown_value_that_is_not_an_error(inner, &thrown, span);
+    state.a_thrown_type_with_no_error(world, &thrown, span);
     state.a_way_out("throw", "", span);
     Ty::Unknown
 }
@@ -15360,8 +15361,6 @@ fn check_core_flow_arm<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
     Some(ty)
 }
 
-fn check_core_flow_answered<'r>(body: &'r Expr, ty: &Ty) -> CheckArm<'r> { CheckArm { tail: Some(body), ty: ty.clone() } }
-
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 fn check_core_flow_caught(state: &CheckState, world: &CheckWorld<'_>, on: &Ty, value: &Expr) -> Ty {
@@ -15411,7 +15410,7 @@ pub fn check_core_flow_match<H: CheckHost>(state: &mut CheckState, world: &Check
         taken += 1;
         if got.is_some() {
             let ty = nikaia_std::index::or(got, || Ty::Unknown);
-            answered.push(check_core_flow_answered(&arm.body, &ty));
+            answered.push(CheckArm { tail: Some(&arm.body), ty: ty.clone() });
             state.arm_types.insert(id_of(check_peeled(&arm.body)) as i64, ty.clone());
             if !any {
                 seen = ty;
@@ -16283,9 +16282,28 @@ fn check_core_method_called<H: CheckHost>(state: &mut CheckState, world: &CheckW
             _ => { },
         }
     }
+    match on {
+        Ty::Seq { ref item, .. } => {
+            let item = nikaia_std::boxed::open(item);
+            if check_core_method_one_item(&name) {
+                for arg in args.iter() {
+                    match arg {
+                        Expr::Closure { params, .. } => {
+                            let handed: Option<Ty> = Some(Ty::Fn { params: vec![unviewed_type(item)], result: Box::new(None), is_sync: true, can_throw: false });
+                            check_core_ops_a_pair_split(state, world, (handed).as_ref(), params, span);
+                        },
+                        _ => { },
+                    }
+                }
+            }
+        },
+        _ => { },
+    }
     if name == "access" && locked_content_of(&on).is_some() { return Ty::Named { name: SEEN.to_owned(), args: vec![walked.unseen()], view: false }; }
     walked
 }
+
+fn check_core_method_one_item(name: &str) -> bool { name == "filter" || name == "find" || name == "take_while" || name == "skip_while" || name == "map" || name == "any" || name == "all" || name == "for_each" || name == "filter_map" || name == "flat_map" || name == "position" || name == "inspect" || name == "max_by_key" || name == "min_by_key" }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
@@ -16794,6 +16812,17 @@ fn check_core_ops_not_plain(inner: &Ty) -> bool {
     }
 }
 
+fn check_core_ops_a_number_written(node: &Expr) -> bool { matches!(node, Expr::LitInt { .. } | Expr::LitFloat { .. }) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_ops_own_type(inner: &Ty) -> bool {
+    match inner {
+        Ty::Named { args, view, .. } => { let view = *view; !view && args.is_empty() && check_core_ops_not_plain(inner) },
+        _ => false,
+    }
+}
+
 fn check_core_ops_plain_base(base: &str) -> bool { base == "bool" || base == "char" || base == "scalar" || base == "String" || base == "str" }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -16874,6 +16903,12 @@ pub fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, world: &Che
             if held == check_core_ops_named(TEXT) { state.a_fallback_that_owns_what_the_left_side_views(world, &inner, &other, fallback, span); }
         } else { state.a_fallback_that_owns_what_the_left_side_views(world, &inner, &other, fallback, span); }
     }
+    if nullable && check_core_ops_own_type(&inner) && !state.jumps(world, fallback) {
+        if check_core_ops_a_number_written(fallback) {
+            let held = inner.text();
+            state.findings.push(check_refusal("NK1103", span, format!("The fallback of this `??` is a number, but the left side holds `{}`.", held), vec!["`a ?? b` is one value, so the fallback is of the type the left side holds (Part I 3.5); a number is not made into another type.".to_owned()], Some(format!("Write a `{}` as the fallback.", held))));
+        } else if !other.is_unknown() && !check_core_ops_nullable(&other) { state.expect_type(world, &other, &inner, span, "let", &|found, wanted| { format!("The fallback of this `??` is `{}`, but the left side holds `{}`.", found, wanted) }); }
+    }
     if nullable && check_core_ops_nullable(&other) {
         state.facts.optional_fallbacks.insert(id_of(expr) as i64);
         return other;
@@ -16882,6 +16917,29 @@ pub fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, world: &Che
     if inner.is_unknown() && !other.is_unknown() { return other; }
     if !other.is_a_view() { return value_of_a_copy(&inner); }
     inner
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_ops_a_pair_split(state: &mut CheckState, world: &CheckWorld<'_>, declared: Option<&Ty>, params: &[winnow_grammar::Symbol], span: &Span) {
+    if params.len() < 2 { return; }
+    let ty: &Ty = match declared { Some(__nikaia_value) => __nikaia_value, None => return };
+    let handed: Vec<Ty> = match ty {
+        Ty::Fn { params, .. } => params.to_owned(),
+        _ => vec![],
+    };
+    if handed.len() != 1 { return; }
+    let parts = match *nikaia_std::index::get(&handed, 0) {
+        Ty::Tuple(ref items) => items.len() as i64,
+        _ => 0,
+    };
+    if parts != params.len() as i64 { return; }
+    let mut names: Vec<String> = vec![];
+    for p in params.iter() { names.push(world.words.resolve(*p).to_owned()); }
+    let joined = names.join(", ");
+    let notes: Vec<String> = vec![format!("The place hands it one value, a `{}`, and a lambda takes what it is handed.", (*nikaia_std::index::get(&handed, 0)).text()).to_owned()];
+    let help: String = format!("Take the tuple and name its parts in the body: `fn(pair) {{ let ({}) = pair … }}`.", joined);
+    state.findings.push(check_refusal("NK1101", span, format!("This lambda takes {} arguments, but it is handed one tuple.", names.len() as i64), notes, Some(help)));
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -16911,6 +16969,7 @@ pub fn check_core_ops_closure<H: CheckHost>(state: &mut CheckState, world: &Chec
     };
     state.flow.lambda_expected = None;
     let given: Vec<Ty> = check_core_ops_given((declared).as_ref(), params.len() as i64);
+    check_core_ops_a_pair_split(state, world, (declared).as_ref(), params, span);
     let mut frame: Vec<CheckLocal> = vec![];
     let mut names: Vec<String> = vec![];
     let mut at: i64 = 0;
@@ -17044,6 +17103,12 @@ pub fn check_core_a_mut_parameter_given_away<H: CheckHost>(state: &mut CheckStat
     let local = match state.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return };
     if !local.changing { return; }
     let ty = check_core_expr(state, world, host, value, span);
+    if ty.is_a_view() && what == "handed back" {
+        let notes: Vec<String> = vec![format!("`mut {}: {}` changes the caller's view in place, so handing it back hands back a view of the caller's view.", name, ty.text()).to_owned()];
+        let help: String = format!("Take `{}: {}` without `mut`, and walk a local of its own: `let mut at = {}`, then `return at`.", name, ty.text(), name);
+        state.findings.push(check_refusal("NK1131", span, format!("You can't hand back `{}` here: a `mut` parameter that is a view is only borrowed.", name), notes, Some(help)));
+        return;
+    }
     if ty.is_unknown() || state.copied(world, &ty) { return; }
     let mut way: String = "".to_owned();
     if what == "handed back" { way = " to return".to_owned(); }
@@ -17444,9 +17509,17 @@ fn check_core_places_a_literal_field<H: CheckHost>(state: &mut CheckState, world
         let v: &Expr = match init.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return true };
         check_core_a_mut_parameter_given_away(state, world, host, v, span, "put into a field");
     }
+    let field_ty: Ty = nikaia_std::index::or(match expected.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || Ty::Unknown);
     if check_core_places_a_closure((init.value).as_ref()) { state.flow.lambda_expected = expected; }
     let given = check_core_places_given(state, world, host, (init.value).as_ref(), &field, span);
     state.flow.lambda_expected = None;
+    if init.value.is_some() && check_core_places_lent_field(&field_ty, &given) {
+        let v: &Expr = match init.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return true };
+        state.facts.lent_fields.insert(id_of(v) as i64);
+    }
     if code_field { check_core_places_stored(state, world, host, (init.value).as_ref(), &format!("{}.{}", name, field)); }
     if declared.is_none() { return true; }
     let d: &Vec<FieldContract> = match declared { Some(__nikaia_value) => __nikaia_value, None => return true };
@@ -17555,6 +17628,24 @@ fn check_core_places_a_with_field<H: CheckHost>(state: &mut CheckState, world: &
     let waiting = state.slots_waiting(span);
     state.expect_type(world, &given, &want, span, "field", &|was, wanted| { format!("`{}.{}` holds `{}`, but you're giving it `{}`.", name, field, wanted, was) });
     state.findings_moved(span, &said, pushed, &waiting);
+    if init.value.is_some() && check_core_places_lent_field(&want, &given) {
+        let v: &Expr = match init.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
+        state.facts.lent_fields.insert(id_of(v) as i64);
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_places_lent_field(want: &Ty, given: &Ty) -> bool {
+    let viewed = match want {
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); inner.is_a_view() },
+        _ => want.is_a_view(),
+    };
+    let owned = match given {
+        Ty::Named { view, .. } => { let view = *view; !view },
+        _ => false,
+    };
+    viewed && owned
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -19451,6 +19542,7 @@ pub struct CheckFacts {
     pub task_handles: collections::BTreeSet<(i64, String)>,
     pub method_options: collections::BTreeMap<(i64, String), Vec<(String, String)>>,
     pub lent_args: collections::BTreeSet<i64>,
+    pub lent_fields: collections::BTreeSet<i64>,
     pub lookup_keys: collections::BTreeSet<i64>,
     pub boxed_members: collections::BTreeMap<String, collections::BTreeSet<String>>,
     pub boxed_reads: collections::BTreeSet<i64>,
@@ -19486,7 +19578,7 @@ pub struct CheckFacts {
 }
 
 impl CheckFacts {
-    pub fn empty() -> CheckFacts { CheckFacts { held_across_a_pause: collections::BTreeSet::new(), comptime_values: collections::BTreeMap::new(), dsl_values: collections::BTreeMap::new(), with_types: collections::BTreeMap::new(), unrolled: collections::BTreeMap::new(), walks_fields: collections::BTreeMap::new(), unrolled_calls: collections::BTreeMap::new(), fallible_loops: collections::BTreeSet::new(), pausing_walks: collections::BTreeSet::new(), pausing_loops: collections::BTreeSet::new(), owned_loops: collections::BTreeSet::new(), copied_loop_bindings: collections::BTreeSet::new(), copied_view_bindings: collections::BTreeSet::new(), unsigned_literals: collections::BTreeMap::new(), number_lets: collections::BTreeMap::new(), changed_elements: collections::BTreeSet::new(), text_finds: collections::BTreeSet::new(), char_patterns: collections::BTreeMap::new(), standard_compares: collections::BTreeMap::new(), count_args: collections::BTreeSet::new(), path_methods: collections::BTreeMap::new(), map_keys: collections::BTreeMap::new(), slice_indices: collections::BTreeSet::new(), list_indices: collections::BTreeSet::new(), copied_tuple_parts: collections::BTreeSet::new(), std_lengths: collections::BTreeSet::new(), sized_lengths: collections::BTreeSet::new(), char_codes: collections::BTreeSet::new(), arithmetic: collections::BTreeMap::new(), negations: collections::BTreeMap::new(), copied_slots: collections::BTreeSet::new(), owned_copies: collections::BTreeSet::new(), text_as_is: collections::BTreeSet::new(), lent_coalesces: collections::BTreeMap::new(), plain_reaches: collections::BTreeSet::new(), copied_jump_reads: collections::BTreeSet::new(), view_coalesces: collections::BTreeSet::new(), lent_map_fallbacks: collections::BTreeSet::new(), optional_fallbacks: collections::BTreeSet::new(), flat_reads: collections::BTreeSet::new(), copied_reads: collections::BTreeSet::new(), text_in_lists: collections::BTreeSet::new(), owned_patterns: collections::BTreeSet::new(), counted: collections::BTreeSet::new(), lent_bindings: collections::BTreeMap::new(), taking_arms: collections::BTreeMap::new(), views_handed_on: collections::BTreeSet::new(), comptime_uses: collections::BTreeMap::new(), lent_scrutinees: collections::BTreeSet::new(), guards_inside_boxes: collections::BTreeMap::new(), collected_into: collections::BTreeSet::new(), copied_walks: collections::BTreeSet::new(), filter_patterns: collections::BTreeSet::new(), kept_lambdas: collections::BTreeMap::new(), kept_hulls: collections::BTreeMap::new(), kept_owned: collections::BTreeMap::new(), field_calls: collections::BTreeMap::new(), kept_calls: collections::BTreeMap::new(), kept_args: collections::BTreeSet::new(), kept_functions: collections::BTreeMap::new(), fallible_methods: collections::BTreeSet::new(), future_lambdas: collections::BTreeSet::new(), run_lambdas: collections::BTreeSet::new(), sync_functions_run_async: collections::BTreeMap::new(), pausing_lambdas: collections::BTreeMap::new(), paused_scopes: collections::BTreeSet::new(), scope_tasks: collections::BTreeSet::new(), witnessed_sets: collections::BTreeSet::new(), pausing_methods: collections::BTreeSet::new(), nullable_sites: collections::BTreeMap::new(), concatenations: collections::BTreeSet::new(), path_comparisons: collections::BTreeSet::new(), mixed_comparisons: collections::BTreeMap::new(), path_holes: collections::BTreeMap::new(), flattened_reaches: collections::BTreeSet::new(), copied_reaches: collections::BTreeSet::new(), viewed_reaches: collections::BTreeMap::new(), lent_reaches: collections::BTreeSet::new(), held_reaches: collections::BTreeSet::new(), nullable_fields: collections::BTreeMap::new(), nullable_args: collections::BTreeMap::new(), narrowing_casts: collections::BTreeMap::new(), narrowed_reads: collections::BTreeMap::new(), task_handles: collections::BTreeSet::new(), method_options: collections::BTreeMap::new(), lent_args: collections::BTreeSet::new(), lookup_keys: collections::BTreeSet::new(), boxed_members: collections::BTreeMap::new(), boxed_reads: collections::BTreeSet::new(), copied_bindings: collections::BTreeSet::new(), cloned_bindings: collections::BTreeSet::new(), some_tails: collections::BTreeSet::new(), mixed_leaves: collections::BTreeMap::new(), mixed_choices: collections::BTreeSet::new(), lent_options: collections::BTreeSet::new(), wrapped: collections::BTreeMap::new(), compared_views: collections::BTreeSet::new(), compared_numbers: collections::BTreeSet::new(), claims: collections::BTreeMap::new(), entries: collections::BTreeMap::new(), reaches: collections::BTreeMap::new(), published: collections::BTreeMap::new(), mut_args: collections::BTreeSet::new(), copied_args: collections::BTreeSet::new(), settle_fns: collections::BTreeMap::new(), settle_lets: collections::BTreeMap::new(), lent_lets: collections::BTreeSet::new(), lent_returns: collections::BTreeSet::new(), compares: collections::BTreeSet::new(), compares_totally: collections::BTreeSet::new(), copies: collections::BTreeSet::new(), viewed_numbers: collections::BTreeSet::new(), array_literals: collections::BTreeSet::new(), byte_literals: collections::BTreeSet::new(), owned_texts: collections::BTreeSet::new(), lent_list_reads: collections::BTreeSet::new(), lent_reads: collections::BTreeSet::new(), view_fallbacks: collections::BTreeSet::new() } }
+    pub fn empty() -> CheckFacts { CheckFacts { held_across_a_pause: collections::BTreeSet::new(), comptime_values: collections::BTreeMap::new(), dsl_values: collections::BTreeMap::new(), with_types: collections::BTreeMap::new(), unrolled: collections::BTreeMap::new(), walks_fields: collections::BTreeMap::new(), unrolled_calls: collections::BTreeMap::new(), fallible_loops: collections::BTreeSet::new(), pausing_walks: collections::BTreeSet::new(), pausing_loops: collections::BTreeSet::new(), owned_loops: collections::BTreeSet::new(), copied_loop_bindings: collections::BTreeSet::new(), copied_view_bindings: collections::BTreeSet::new(), unsigned_literals: collections::BTreeMap::new(), number_lets: collections::BTreeMap::new(), changed_elements: collections::BTreeSet::new(), text_finds: collections::BTreeSet::new(), char_patterns: collections::BTreeMap::new(), standard_compares: collections::BTreeMap::new(), count_args: collections::BTreeSet::new(), path_methods: collections::BTreeMap::new(), map_keys: collections::BTreeMap::new(), slice_indices: collections::BTreeSet::new(), list_indices: collections::BTreeSet::new(), copied_tuple_parts: collections::BTreeSet::new(), std_lengths: collections::BTreeSet::new(), sized_lengths: collections::BTreeSet::new(), char_codes: collections::BTreeSet::new(), arithmetic: collections::BTreeMap::new(), negations: collections::BTreeMap::new(), copied_slots: collections::BTreeSet::new(), owned_copies: collections::BTreeSet::new(), text_as_is: collections::BTreeSet::new(), lent_coalesces: collections::BTreeMap::new(), plain_reaches: collections::BTreeSet::new(), copied_jump_reads: collections::BTreeSet::new(), view_coalesces: collections::BTreeSet::new(), lent_map_fallbacks: collections::BTreeSet::new(), optional_fallbacks: collections::BTreeSet::new(), flat_reads: collections::BTreeSet::new(), copied_reads: collections::BTreeSet::new(), text_in_lists: collections::BTreeSet::new(), owned_patterns: collections::BTreeSet::new(), counted: collections::BTreeSet::new(), lent_bindings: collections::BTreeMap::new(), taking_arms: collections::BTreeMap::new(), views_handed_on: collections::BTreeSet::new(), comptime_uses: collections::BTreeMap::new(), lent_scrutinees: collections::BTreeSet::new(), guards_inside_boxes: collections::BTreeMap::new(), collected_into: collections::BTreeSet::new(), copied_walks: collections::BTreeSet::new(), filter_patterns: collections::BTreeSet::new(), kept_lambdas: collections::BTreeMap::new(), kept_hulls: collections::BTreeMap::new(), kept_owned: collections::BTreeMap::new(), field_calls: collections::BTreeMap::new(), kept_calls: collections::BTreeMap::new(), kept_args: collections::BTreeSet::new(), kept_functions: collections::BTreeMap::new(), fallible_methods: collections::BTreeSet::new(), future_lambdas: collections::BTreeSet::new(), run_lambdas: collections::BTreeSet::new(), sync_functions_run_async: collections::BTreeMap::new(), pausing_lambdas: collections::BTreeMap::new(), paused_scopes: collections::BTreeSet::new(), scope_tasks: collections::BTreeSet::new(), witnessed_sets: collections::BTreeSet::new(), pausing_methods: collections::BTreeSet::new(), nullable_sites: collections::BTreeMap::new(), concatenations: collections::BTreeSet::new(), path_comparisons: collections::BTreeSet::new(), mixed_comparisons: collections::BTreeMap::new(), path_holes: collections::BTreeMap::new(), flattened_reaches: collections::BTreeSet::new(), copied_reaches: collections::BTreeSet::new(), viewed_reaches: collections::BTreeMap::new(), lent_reaches: collections::BTreeSet::new(), held_reaches: collections::BTreeSet::new(), nullable_fields: collections::BTreeMap::new(), nullable_args: collections::BTreeMap::new(), narrowing_casts: collections::BTreeMap::new(), narrowed_reads: collections::BTreeMap::new(), task_handles: collections::BTreeSet::new(), method_options: collections::BTreeMap::new(), lent_args: collections::BTreeSet::new(), lent_fields: collections::BTreeSet::new(), lookup_keys: collections::BTreeSet::new(), boxed_members: collections::BTreeMap::new(), boxed_reads: collections::BTreeSet::new(), copied_bindings: collections::BTreeSet::new(), cloned_bindings: collections::BTreeSet::new(), some_tails: collections::BTreeSet::new(), mixed_leaves: collections::BTreeMap::new(), mixed_choices: collections::BTreeSet::new(), lent_options: collections::BTreeSet::new(), wrapped: collections::BTreeMap::new(), compared_views: collections::BTreeSet::new(), compared_numbers: collections::BTreeSet::new(), claims: collections::BTreeMap::new(), entries: collections::BTreeMap::new(), reaches: collections::BTreeMap::new(), published: collections::BTreeMap::new(), mut_args: collections::BTreeSet::new(), copied_args: collections::BTreeSet::new(), settle_fns: collections::BTreeMap::new(), settle_lets: collections::BTreeMap::new(), lent_lets: collections::BTreeSet::new(), lent_returns: collections::BTreeSet::new(), compares: collections::BTreeSet::new(), compares_totally: collections::BTreeSet::new(), copies: collections::BTreeSet::new(), viewed_numbers: collections::BTreeSet::new(), array_literals: collections::BTreeSet::new(), byte_literals: collections::BTreeSet::new(), owned_texts: collections::BTreeSet::new(), lent_list_reads: collections::BTreeSet::new(), lent_reads: collections::BTreeSet::new(), view_fallbacks: collections::BTreeSet::new() } }
 }
 
 fn check_claim_held(held: Option<&ClaimHeld>) -> String {
@@ -21810,6 +21902,28 @@ impl CheckState {
     pub fn a_thrown_value_that_is_not_an_error(&mut self, value: &Expr, thrown: &Ty, span: &Span) {
         let what = match element_kind(value, thrown) { Some(__nikaia_value) => __nikaia_value, None => return };
         self.findings.push(check_refusal("NK1161", span, format!("You can only throw an error, and this throws {}.", what), vec!["An error is a type with an `impl Error` for it, which says what its message is.".to_owned()], Some("Declare one, such as `enum Refused { NotFound }` with `impl Error for Refused { fn message(ref self) -> String { … } }`, and throw a value of it.".to_owned())));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_thrown_type_with_no_error(&mut self, world: &CheckWorld<'_>, thrown: &Ty, span: &Span) {
+        let name: String = match thrown {
+            Ty::Named { name, view, .. } => { let view = *view; if view { "".to_owned() } else { name.to_owned() } },
+            _ => "".to_owned(),
+        };
+        if name == "" || name.contains("::") || name == "Self" { return; }
+        let declared = self.structs.contains_key(&name) || self.enums.contains_key(&name) || world.own.types.contains_key(&name);
+        if !declared { return; }
+        let own = world.own.implementations.get("Error");
+        if own.is_some() && nikaia_std::index::or(match own {
+            Some(__nikaia_it) => Some(__nikaia_it.contains(&name)),
+            None => None,
+        }, || false) { return; }
+        let library = world.library.implementations.get("Error");
+        if library.is_some() && nikaia_std::index::or(match library {
+            Some(__nikaia_it) => Some(__nikaia_it.contains(&name)),
+            None => None,
+        }, || false) { return; }
+        self.findings.push(check_refusal("NK1161", span, format!("You can only throw an error, and `{}` has no `impl Error`.", name), vec!["What is thrown implements `Error`, and the `impl` line says so (Part I 7.1). No file of this package writes one for it.".to_owned()], Some(format!("Add `impl Error for {} {{ fn message(ref self) -> String {{ … }} }}` beside it.", name))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -32148,6 +32262,16 @@ fn emit_flow_never_returns(world: &EmitWorld<'_>, node: &Expr) -> bool {
 
 fn emit_flow_a_struct_written(node: &Expr) -> bool { matches!(node, Expr::StructLit { .. } | Expr::LitBool(_, _)) }
 
+fn emit_flow_struct_headed(node: &Expr) -> bool {
+    match node {
+        Expr::StructLit { .. } => true,
+        Expr::With { .. } => true,
+        Expr::MethodCall { receiver, .. } => { let receiver = nikaia_std::boxed::open(receiver); emit_flow_struct_headed(receiver) },
+        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); emit_flow_struct_headed(base) },
+        _ => false,
+    }
+}
+
 fn emit_flow_a_lit_str(node: &Expr) -> bool { matches!(node, Expr::LitStr { .. }) }
 
 fn emit_flow_an_index(node: &Expr) -> bool { matches!(node, Expr::Index { .. }) }
@@ -32485,7 +32609,10 @@ impl EmitState {
             _ => { },
         }
         walk.boxed_scope = false;
+        let bracketed = emit_flow_struct_headed(guarded_expr);
+        if bracketed { out.push("("); }
         host.expr(walk, out, guarded_expr, depth, guarded, scope)?;
+        if bracketed { out.push(")"); }
         let a_scope = a_scope_call && walk.boxed_scope;
         walk.boxed_scope = false;
         let pad = "    ".repeat(nikaia_std::count::of(depth + 1));
@@ -34025,6 +34152,7 @@ impl EmitState {
                 }
                 out.push(": ");
                 out.push(&before);
+                if self.facts.lent_fields.contains(&node_key(value)) { out.push("&"); }
                 host.expr(walk, out, value, depth, flow, scope)?;
                 out.push(&after);
             } else if wrapped || boxed {
@@ -38688,8 +38816,10 @@ fn keeps_statement(stmt: &Stmt, interner: &winnow_grammar::InternerContext, hole
     match stmt {
         Stmt::Assign { value, .. } => { hand_over(value, interner, context, walk); },
         Stmt::Return(value) => { if !context.returns_a_view { hand_over_maybe((value).as_ref(), interner, context, walk); } },
-        Stmt::Let { names, value, .. } => {
+        Stmt::Let { names, value, mutable, .. } => {
+            let mutable = *mutable;
             let reached = reached_of(value, interner, context, &walk.aliases);
+            if mutable { for name in reached.iter() { if !context.lent.contains(name) { walk.uses.kept.insert(name.to_owned()); } } }
             if !reached.is_empty() { for bound in names.iter() { alias(interner.resolve(*bound).to_owned(), &reached, walk); } }
         },
         _ => { },

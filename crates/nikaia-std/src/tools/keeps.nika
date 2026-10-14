@@ -79,8 +79,18 @@ fn keeps_statement(stmt: ref Stmt, interner: ref winnow_grammar::InternerContext
         }
         // **A `let` does not keep**: it binds a second name inside this body,
         // and what happens to that name decides.
-        Stmt::Let { names, value, .. } => {
+        Stmt::Let { names, value, mutable, .. } => {
             let reached = reached_of(value, interner, context, walk.aliases)
+            // **A `let mut` changes what it binds**, so a parameter bound to
+            // one is owned: a view cannot be changed (D40). A lent one stays
+            // the reference the author wrote.
+            if mutable {
+                for name in reached {
+                    if !context.lent.contains(name) {
+                        walk.uses.kept.insert(name.clone())
+                    }
+                }
+            }
             if reached.len() > 0 {
                 for bound in names {
                     alias(interner.resolve(bound).clone(), reached, walk)

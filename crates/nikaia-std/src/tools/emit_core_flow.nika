@@ -77,6 +77,19 @@ fn emit_flow_a_struct_written(node: ref Expr) -> bool {
     }
 }
 
+/// Whether a struct literal stands at the head of `node` (D39): Rust refuses one
+/// unbracketed in a `match` scrutinee, so the guarded half of a `catch` is then
+/// written in brackets.
+fn emit_flow_struct_headed(node: ref Expr) -> bool {
+    return match node {
+        Expr::StructLit { .. } => true,
+        Expr::With { .. } => true,
+        Expr::MethodCall { receiver, .. } => emit_flow_struct_headed(receiver),
+        Expr::Field { base, .. } => emit_flow_struct_headed(base),
+        else => false,
+    }
+}
+
 fn emit_flow_a_lit_str(node: ref Expr) -> bool {
     return match node {
         Expr::LitStr { .. } => true,
@@ -625,7 +638,14 @@ impl EmitState {
             else => {}
         }
         walk.boxed_scope = false
+        let bracketed = emit_flow_struct_headed(guarded_expr)
+        if bracketed {
+            out.push("(")
+        }
         host.expr(walk, out, guarded_expr, depth, guarded, scope)
+        if bracketed {
+            out.push(")")
+        }
         // Whether the scope's tasks failed in the box, or `Crashed` came alone.
         let a_scope = a_scope_call && walk.boxed_scope
         walk.boxed_scope = false

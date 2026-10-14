@@ -433,6 +433,7 @@ fn check_core_expr_unary[H: CheckHost](mut state: CheckState, world: ref CheckWo
 fn check_core_expr_throw[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, inner: ref Expr, span: ref Span) -> Ty sync {
     let thrown = check_core_expr(state, world, host, inner, span)
     state.a_thrown_value_that_is_not_an_error(inner, thrown, span)
+    state.a_thrown_type_with_no_error(world, thrown, span)
     state.a_way_out("throw", "", span)
     return Ty::Unknown
 }

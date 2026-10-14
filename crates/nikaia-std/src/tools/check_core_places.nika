@@ -524,11 +524,17 @@ fn check_core_places_a_literal_field[H: CheckHost](mut state: CheckState, world:
         let v: ref Expr = init.value ?? return true
         check_core_a_mut_parameter_given_away(state, world, host, v, span, "put into a field")
     }
+    let field_ty: Ty = expected?.clone() ?? Ty::Unknown
     if check_core_places_a_closure(init.value) {
         state.flow.lambda_expected = expected
     }
     let given = check_core_places_given(state, world, host, init.value, field, span)
     state.flow.lambda_expected = null
+    // **What a `ref` field takes is lent to it** (D37), as a call's argument is.
+    if init.value != null && check_core_places_lent_field(field_ty, given) {
+        let v: ref Expr = init.value ?? return true
+        state.facts.lent_fields.insert(id_of(v) as i64)
+    }
     if code_field {
         check_core_places_stored(state, world, host, init.value, f"{name}.{field}")
     }
@@ -681,6 +687,25 @@ fn check_core_places_a_with_field[H: CheckHost](mut state: CheckState, world: re
     let waiting = state.slots_waiting(span)
     state.expect_type(world, given, want, span, "field", fn(was, wanted) { f"`{name}.{field}` holds `{wanted}`, but you're giving it `{was}`." })
     state.findings_moved(span, said, pushed, waiting)
+    // **What a `ref` field takes is lent to it** (D37), as a call's argument is.
+    if init.value != null && check_core_places_lent_field(want, given) {
+        let v: ref Expr = init.value ?? return
+        state.facts.lent_fields.insert(id_of(v) as i64)
+    }
+}
+
+/// Whether a field that holds a view (or a view's `T?`) is given a value of
+/// its own, known and not itself absent.
+fn check_core_places_lent_field(want: ref Ty, given: ref Ty) -> bool sync {
+    let viewed = match want {
+        Ty::Nullable(inner) => inner.is_a_view(),
+        else => want.is_a_view(),
+    }
+    let owned = match given {
+        Ty::Named { view, .. } => !view,
+        else => false,
+    }
+    return viewed && owned
 }
 
 /// **`xs[i]`, `m[k]` and `xs[a..<b]`** (ADR-293 D1, D3, D23; ADR-320 D7).

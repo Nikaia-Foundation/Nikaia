@@ -8,6 +8,18 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.961] — 2026-10-14
+
+**Lowering defects D10, D11b, D18, D26, D37, D39, D40**
+
+* A struct literal heading the guarded half of a `catch` is written in brackets (D39).
+* A value of its own given to a `ref` field of a struct literal is lent (D37, checker fact `lent_fields`).
+* `??` on a type of the program's own refuses a fallback of another type, a number among them (`NK1103`, Part I 3.5; D10).
+* A thrown `struct` or `enum` of the package with no `impl Error` in any file is refused (`NK1161`; D11b).
+* A `mut` parameter that is a view, handed back, is refused (`NK1131`; D26).
+* A parameter bound by a `let mut` is owned, so the local can be changed (D40).
+* A lambda with a parameter for each part of the one tuple a walk hands it is refused (`NK1101`, help `fn(pair)`; D18, #623).
+
 ## [0.0.960] — 2026-10-14
 
 **a map's read past a jump, bound by a let to a declared owned type, is refused or copied out (ADR-293 D15)**

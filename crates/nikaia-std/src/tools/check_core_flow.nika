@@ -645,12 +645,6 @@ fn check_core_flow_arm[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     return ty
 }
 
-/// An arm that answered. A function of its own: `CheckArm { tail: arm.body }`
-/// in a loop over a `ref Vec` lowered without the `&` (lowering defect D37).
-fn check_core_flow_answered(body: ref Expr, ty: ref Ty) -> CheckArm {
-    return CheckArm { tail: body, ty: ty.clone() }
-}
-
 /// `error` in a handler, untyped at its binding, read as the one type that
 /// arrived.
 fn check_core_flow_caught(state: ref CheckState, world: ref CheckWorld, on: ref Ty, value: ref Expr) -> Ty sync {
@@ -721,7 +715,7 @@ pub fn check_core_flow_match[H: CheckHost](mut state: CheckState, world: ref Che
         taken += 1
         if got != null {
             let ty = got ?? Ty::Unknown
-            answered.push(check_core_flow_answered(arm.body, ty))
+            answered.push(CheckArm { tail: arm.body, ty: ty.clone() })
             state.arm_types.insert(id_of(check_peeled(arm.body)) as i64, ty.clone())
             if !any {
                 seen = ty

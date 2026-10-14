@@ -448,11 +448,34 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
             else => {}
         }
     }
+    // **A walk hands its lambda one item** (D18): a tuple is not split into
+    // the lambda's parameters.
+    match on {
+        Ty::Seq { item, .. } => {
+            if check_core_method_one_item(name) {
+                for arg in args {
+                    match arg {
+                        Expr::Closure { params, .. } => {
+                            let handed: Ty? = Ty::Fn { params: [unviewed_type(item)], result: null, is_sync: true, can_throw: false }
+                            check_core_ops_a_pair_split(state, world, handed, params, span)
+                        },
+                        else => {}
+                    }
+                }
+            }
+        },
+        else => {}
+    }
     // **And what `access` hands back came out of a lock** (D1).
     if name == "access" && locked_content_of(on) != null {
         return Ty::Named { name: SEEN.clone(), args: [walked.unseen()], view: false }
     }
     return walked
+}
+
+/// A walk's method whose lambda is handed one item, and nothing beside it.
+fn check_core_method_one_item(name: ref String) -> bool {
+    return name == "filter" || name == "find" || name == "take_while" || name == "skip_while" || name == "map" || name == "any" || name == "all" || name == "for_each" || name == "filter_map" || name == "flat_map" || name == "position" || name == "inspect" || name == "max_by_key" || name == "min_by_key"
 }
 
 /// **`x.m(…)` and `x?.m(…)`**: the arm `MethodCall | SafeMethod`. `safe` is

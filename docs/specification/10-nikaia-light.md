@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.960 (Draft)
+**Version:** 0.0.961 (Draft)
 **Date:** 2026-10-14
 
 ---
@@ -1094,7 +1094,9 @@ A member of a nullable type is reached through an operator that handles the
   there as it does anywhere.
 * **Null coalescing (`??`):** supplies a fallback value where an expression is
   `null`. A chain may be written: `a ?? b ?? c` takes the first that has a
-  value. Where the last fallback may be `null` too, so may the answer: `a ?? b`
+  value. The fallback is of the type the left side holds: `a ?? b` on an
+  `a: T?` is a `T`, and a `b` of another type is refused. Where the last
+  fallback may be `null` too, so may the answer: `a ?? b`
   with a `b: T?` is a `T?`. The fallback is one value - a literal, a name, a
   call, a field, a jump, or an expression in brackets - so `a ?? 0 > 3` is
   refused and `(a ?? 0) > 3` is written. There is no postfix `??`: `a??` is

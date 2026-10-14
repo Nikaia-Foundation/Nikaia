@@ -57,6 +57,33 @@ impl CheckState {
         self.findings.push(check_refusal("NK1161", span, f"You can only throw an error, and this throws {what}.", ["An error is a type with an `impl Error` for it, which says what its message is.".clone()], "Declare one, such as `enum Refused { NotFound }` with `impl Error for Refused { fn message(ref self) -> String { … } }`, and throw a value of it.".clone()))
     }
 
+    /// **`NK1161` for a type of the program's own** (Part I 7.1, D11b): a
+    /// `struct` or `enum` this package declares, with no `impl Error` in any of
+    /// its files. The checker reads the package's ledger, so an `impl` in
+    /// another file counts; a type from another package is left alone (C.4).
+    pub fn a_thrown_type_with_no_error(ref mut self, world: ref CheckWorld, thrown: ref Ty, span: ref Span) sync {
+        let name: String = match thrown {
+            Ty::Named { name, view, .. } => if view { "".clone() } else { name.clone() },
+            else => "".clone(),
+        }
+        if name == "" || name.contains("::") || name == "Self" {
+            return
+        }
+        let declared = self.structs.contains_key(name) || self.enums.contains_key(name) || world.own.types.contains_key(name)
+        if !declared {
+            return
+        }
+        let own = world.own.implementations.get("Error")
+        if own != null && (own?.contains(name) ?? false) {
+            return
+        }
+        let library = world.library.implementations.get("Error")
+        if library != null && (library?.contains(name) ?? false) {
+            return
+        }
+        self.findings.push(check_refusal("NK1161", span, f"You can only throw an error, and `{name}` has no `impl Error`.", ["What is thrown implements `Error`, and the `impl` line says so (Part I 7.1). No file of this package writes one for it.".clone()], f"Add `impl Error for {name} {{ fn message(ref self) -> String {{ … }} }}` beside it."))
+    }
+
     /// `NK1160`: a field or an index reached on an **opaque handle**
     /// ([ADR-302](../../docs/specification/adr/adr-302.md) D7).
     ///

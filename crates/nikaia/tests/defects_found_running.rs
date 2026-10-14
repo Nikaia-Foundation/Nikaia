@@ -568,3 +568,158 @@ fn an_owned_pattern_to_strip_prefix_is_lent() {
         |_| {},
     );
 }
+
+/// The codes of a program's errors, in order.
+fn codes(source: &str) -> Vec<String> {
+    findings(source)
+        .into_iter()
+        .map(|f| f.code.to_string())
+        .collect()
+}
+
+/// **lowering-defects D39: a struct literal at the head of a `catch`.** The
+/// guarded call is a `match` scrutinee in Rust, where a bare struct literal is
+/// refused, so it is written in brackets.
+#[test]
+fn a_struct_literal_before_a_catch_runs() {
+    runs_in(
+        "struct-catch",
+        "struct One { n: i64 }\n\
+         struct Neg { code: i64 }\n\
+         impl Error for Neg {\n\
+         \x20   fn message(ref self) -> String {\n\
+         \x20       return f\"negative {self.code}\"\n\
+         \x20   }\n\
+         }\n\
+         impl One {\n\
+         \x20   fn go(self) -> i64 sync throws {\n\
+         \x20       if self.n < 0 {\n\
+         \x20           throw Neg { code: self.n }\n\
+         \x20       }\n\
+         \x20       return self.n\n\
+         \x20   }\n\
+         }\n\
+         fn main() {\n\
+         \x20   let a = One { n: -2 }.go() catch { 0 }\n\
+         \x20   let b = One { n: 5 }.go() catch { 0 }\n\
+         \x20   println(f\"{a} {b}\")\n\
+         }\n",
+        "0 5\n",
+        |_| {},
+    );
+}
+
+/// **lowering-defects D10: a number as the fallback of a struct's `T?`** is
+/// refused (`NK1103`); a value of the type is not.
+#[test]
+fn a_number_beside_a_struct_option_is_refused() {
+    let source = |fallback: &str| {
+        format!(
+            "struct Money {{ cents: i64 }}\n\
+             fn probe(v: Money?) -> Money sync {{\n\
+             \x20   let n = v ?? {fallback}\n\
+             \x20   return n\n\
+             }}\n\
+             fn main() {{\n\
+             \x20   println(f\"{{probe(null).cents}}\")\n\
+             }}\n"
+        )
+    };
+    assert_eq!(codes(&source("0")), ["NK1103"]);
+    assert!(codes(&source("Money { cents: 0 }")).is_empty());
+}
+
+/// **lowering-defects D18: a lambda that names the parts of the tuple it is
+/// handed** is refused (`NK1101`), and the help writes the one-argument form.
+#[test]
+fn a_lambda_split_over_a_tuple_is_refused() {
+    let found = findings(
+        "fn main() {\n\
+         \x20   let pairs: Vec[(String, i64)] = [(\"a\".clone(), 1), (\"b\".clone(), 2)]\n\
+         \x20   let n = pairs.iter().filter(fn(name, v) { v > 1 }).count()\n\
+         \x20   println(f\"{n}\")\n\
+         }\n",
+    );
+    assert_eq!(found.len(), 1, "{found:#?}");
+    assert_eq!(found[0].code, "NK1101");
+    assert!(
+        format!("{found:?}").contains("let (name, v) = pair"),
+        "{found:#?}"
+    );
+}
+
+/// **lowering-defects D26: a `mut` view parameter handed back** is refused
+/// (`NK1131`): it would be a view of the caller's view. A local walks instead.
+#[test]
+fn a_mut_view_parameter_handed_back_is_refused() {
+    let found = codes(
+        "enum E { Leaf(i64), Wrap(E) }\n\
+         fn peeled(mut e: ref E) -> ref E sync {\n\
+         \x20   while true {\n\
+         \x20       match e {\n\
+         \x20           E::Wrap(inner) => { e = inner },\n\
+         \x20           else => { return e },\n\
+         \x20       }\n\
+         \x20   }\n\
+         \x20   return e\n\
+         }\n\
+         fn main() {}\n",
+    );
+    assert!(
+        !found.is_empty() && found.iter().all(|c| c == "NK1131"),
+        "{found:?}"
+    );
+}
+
+/// **lowering-defects D11b: a thrown type of the program's own with no
+/// `impl Error`** is refused (`NK1161`) before `rustc` sees it.
+#[test]
+fn a_thrown_struct_without_impl_error_is_refused() {
+    let source = |extra: &str| {
+        format!(
+            "struct Bad {{ code: i64 }}\n{extra}\
+             fn go(n: i64) -> i64 sync throws {{\n\
+             \x20   if n < 0 {{\n\
+             \x20       throw Bad {{ code: 1 }}\n\
+             \x20   }}\n\
+             \x20   return n\n\
+             }}\n\
+             fn main() {{\n\
+             \x20   let v = go(2) catch {{ 0 }}\n\
+             \x20   println(f\"{{v}}\")\n\
+             }}\n"
+        )
+    };
+    assert_eq!(codes(&source("")), ["NK1161"]);
+    assert!(
+        codes(&source(
+            "impl Error for Bad {\n    fn message(ref self) -> String {\n        return \"bad\"\n    }\n}\n"
+        ))
+        .is_empty()
+    );
+}
+
+/// **lowering-defects D40: a parameter bound by a `let mut` and changed** is
+/// owned: lowered as a view, `push_str` on it did not compile.
+#[test]
+fn a_parameter_moved_into_a_let_mut_stays_owned() {
+    runs_in(
+        "let-mut-param",
+        "fn take(s: String) -> String {\n\
+         \x20   let mut t = s\n\
+         \x20   t.push_str(\"!\")\n\
+         \x20   return t\n\
+         }\n\
+         fn shout(s: String) {\n\
+         \x20   let mut t = s\n\
+         \x20   t.push_str(\"!\")\n\
+         \x20   println(t)\n\
+         }\n\
+         fn main() {\n\
+         \x20   println(take(\"hi\".clone()))\n\
+         \x20   shout(\"ho\".clone())\n\
+         }\n",
+        "hi!\nho!\n",
+        |_| {},
+    );
+}

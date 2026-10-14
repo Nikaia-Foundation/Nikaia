@@ -801,6 +801,7 @@ fn a_written_call_that_can_fail_in_a_function_that_does_not_say_so_is_reported()
 fn the_note_quotes_the_callees_contract_and_the_help_is_a_way_out() {
     let found = findings(
         "enum ConfigError { NotFound }\n\
+         impl Error for ConfigError { fn message(ref self) -> String { return \"nf\" } }\n\
          fn liest() -> String throws { throw ConfigError::NotFound }\n\
          fn ruft() -> String { return liest() }",
     );
@@ -853,6 +854,7 @@ fn a_catch_handler_is_not_itself_caught() {
 #[test]
 fn a_method_that_can_fail_is_the_same_rule() {
     let (code, message) = one("enum ZuVoll { Voll }\n\
+         impl Error for ZuVoll { fn message(ref self) -> String { return \"voll\" } }\n\
          struct Stats { n: i64 }\n\
          impl Stats {\n\
              fn add(ref self, v: i64) throws { if self.n > 100 { throw ZuVoll::Voll } }\n\
@@ -875,6 +877,7 @@ fn a_method_that_can_fail_is_the_same_rule() {
 #[test]
 fn the_refusal_does_not_weaken_when_the_method_call_propagates() {
     let body = "enum ZuVoll { Voll }\n\
+         impl Error for ZuVoll { fn message(ref self) -> String { return \"voll\" } }\n\
                 struct Stats { n: i64 }\n\
                 impl Stats {\n\
                     fn add(ref self, v: i64) -> i64 throws {\n\
@@ -909,6 +912,7 @@ fn the_refusal_does_not_weaken_when_the_method_call_propagates() {
 #[test]
 fn the_checker_says_which_method_calls_can_fail() {
     let source = "enum ZuVoll { Voll }\n\
+         impl Error for ZuVoll { fn message(ref self) -> String { return \"voll\" } }\n\
                   struct A { n: i64 }\n\
                   impl A {\n\
                       fn add(ref self, v: i64) -> i64 throws {\n\

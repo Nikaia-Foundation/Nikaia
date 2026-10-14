@@ -164,6 +164,9 @@ pub struct CheckFacts {
     pub task_handles: collections::BTreeSet[(i64, String)],
     pub method_options: collections::BTreeMap[(i64, String), Vec[(String, String)]],
     pub lent_args: collections::BTreeSet[i64],
+    /// **A value lent into a `ref` field of a struct literal** (D37), by the
+    /// value: the counterpart of `lent_args` for a call.
+    pub lent_fields: collections::BTreeSet[i64],
     pub lookup_keys: collections::BTreeSet[i64],
     pub boxed_members: collections::BTreeMap[String, collections::BTreeSet[String]],
     pub boxed_reads: collections::BTreeSet[i64],
@@ -291,6 +294,7 @@ impl CheckFacts {
             task_handles: collections::BTreeSet(),
             method_options: collections::BTreeMap(),
             lent_args: collections::BTreeSet(),
+            lent_fields: collections::BTreeSet(),
             lookup_keys: collections::BTreeSet(),
             boxed_members: collections::BTreeMap(),
             boxed_reads: collections::BTreeSet(),

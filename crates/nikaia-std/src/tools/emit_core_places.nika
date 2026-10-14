@@ -444,6 +444,10 @@ impl EmitState {
                 }
                 out.push(": ")
                 out.push(before)
+                // **A value lent into a `ref` field** (D37).
+                if self.facts.lent_fields.contains(node_key(value)) {
+                    out.push("&")
+                }
                 host.expr(walk, out, value, depth, flow, scope)
                 out.push(after)
             } else if wrapped || boxed {

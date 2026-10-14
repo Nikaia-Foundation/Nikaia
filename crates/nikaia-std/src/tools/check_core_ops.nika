@@ -454,6 +454,23 @@ fn check_core_ops_not_plain(inner: ref Ty) -> bool sync {
     }
 }
 
+/// A number written out, as the fallback of a `??`.
+fn check_core_ops_a_number_written(node: ref Expr) -> bool {
+    return match node {
+        Expr::LitInt { .. } => true,
+        Expr::LitFloat { .. } => true,
+        else => false,
+    }
+}
+
+/// A type of the program's own, owned and without arguments: no number, no text.
+fn check_core_ops_own_type(inner: ref Ty) -> bool sync {
+    return match inner {
+        Ty::Named { args, view, .. } => !view && args.is_empty() && check_core_ops_not_plain(inner),
+        else => false,
+    }
+}
+
 /// `bool`, `char`, `scalar`, `String` or `str`.
 fn check_core_ops_plain_base(base: ref String) -> bool {
     return base == "bool" || base == "char" || base == "scalar" || base == "String" || base == "str"
@@ -569,6 +586,16 @@ pub fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref C
             state.a_fallback_that_owns_what_the_left_side_views(world, inner, other, fallback, span)
         }
     }
+    // **The fallback is of the type the left side holds** (Part I 3.5, D10): a
+    // number beside a type of the program's own is not made into one.
+    if nullable && check_core_ops_own_type(inner) && !state.jumps(world, fallback) {
+        if check_core_ops_a_number_written(fallback) {
+            let held = inner.text()
+            state.findings.push(check_refusal("NK1103", span, f"The fallback of this `??` is a number, but the left side holds `{held}`.", ["`a ?? b` is one value, so the fallback is of the type the left side holds (Part I 3.5); a number is not made into another type.".clone()], f"Write a `{held}` as the fallback."))
+        } else if !other.is_unknown() && !check_core_ops_nullable(other) {
+            state.expect_type(world, other, inner, span, "let", fn(found, wanted) { f"The fallback of this `??` is `{found}`, but the left side holds `{wanted}`." })
+        }
+    }
     // **`a ?? b` where `b` may be `null` too is a `T?`** (Part I 3.5).
     if nullable && check_core_ops_nullable(other) {
         state.facts.optional_fallbacks.insert(id_of(expr) as i64)
@@ -585,6 +612,38 @@ pub fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref C
         return value_of_a_copy(inner)
     }
     return inner
+}
+
+/// **`NK1101`: a lambda that names the parts of the one tuple it is handed**
+/// (D18): `fn(name, ty) { .. }` where the place hands one `(String, Ty)`. A
+/// lambda takes what it is handed; the tuple is taken apart in its body.
+fn check_core_ops_a_pair_split(mut state: CheckState, world: ref CheckWorld, declared: ref Ty?, params: ref Vec[winnow_grammar::Symbol], span: ref Span) sync {
+    if params.len() < 2 {
+        return
+    }
+    let ty: ref Ty = declared ?? return
+    let handed: Vec[Ty] = match ty {
+        Ty::Fn { params, .. } => params.clone(),
+        else => [],
+    }
+    if handed.len() != 1 {
+        return
+    }
+    let parts = match handed[0] {
+        Ty::Tuple(items) => items.len() as i64,
+        else => 0,
+    }
+    if parts != params.len() as i64 {
+        return
+    }
+    let mut names: Vec[String] = []
+    for p in params {
+        names.push(world.words.resolve(p).clone())
+    }
+    let joined = names.join(", ")
+    let notes: Vec[String] = [f"The place hands it one value, a `{handed[0].text()}`, and a lambda takes what it is handed.".clone()]
+    let help: String = f"Take the tuple and name its parts in the body: `fn(pair) {{ let ({joined}) = pair … }}`."
+    state.findings.push(check_refusal("NK1101", span, f"This lambda takes {names.len()} arguments, but it is handed one tuple.", notes, help))
 }
 
 /// The parameter types the place a lambda stands in declares (#497).
@@ -616,6 +675,7 @@ pub fn check_core_ops_closure[H: CheckHost](mut state: CheckState, world: ref Ch
     let declared: Ty? = state.flow.lambda_expected?.clone()
     state.flow.lambda_expected = null
     let given: Vec[Ty] = check_core_ops_given(declared, params.len() as i64)
+    check_core_ops_a_pair_split(state, world, declared, params, span)
     let mut frame: Vec[CheckLocal] = []
     let mut names: Vec[String] = []
     let mut at = 0

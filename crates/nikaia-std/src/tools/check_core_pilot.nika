@@ -105,6 +105,15 @@ pub fn check_core_a_mut_parameter_given_away[H: CheckHost](mut state: CheckState
         return
     }
     let ty = check_core_expr(state, world, host, value, span)
+    // **A `mut` view handed back** (D26): the caller's view is changed in
+    // place, and what is handed back would be a view of that view, which no
+    // signature can name. The view is copied into a local first.
+    if ty.is_a_view() && what == "handed back" {
+        let notes: Vec[String] = [f"`mut {name}: {ty.text()}` changes the caller's view in place, so handing it back hands back a view of the caller's view.".clone()]
+        let help: String = f"Take `{name}: {ty.text()}` without `mut`, and walk a local of its own: `let mut at = {name}`, then `return at`."
+        state.findings.push(check_refusal("NK1131", span, f"You can't hand back `{name}` here: a `mut` parameter that is a view is only borrowed.", notes, help))
+        return
+    }
     if ty.is_unknown() || state.copied(world, ty) {
         return
     }

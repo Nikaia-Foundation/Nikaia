@@ -25,16 +25,16 @@ finds two D8 casts in `check_numbers4.nika`.
 | D7 | `x.len() as i64` writes `(x.len() as i64) as i64` | **built** (0.0.871: the cast is written once) | expressions.rs |
 | D8 | `get(x.span.start as i64)` lowers to `&x.span.start as i64` | **built** (0.0.871: `&(x as i64)`) | expressions.rs |
 | D9 | `Type?` parameter lowers to `Option<&Type>` | not reproduced as named; same root cause as D1 (`&Option<T>`) | d09_opt_param.nika, probe_tools.nika |
-| D10 | `x ?? 0` on `Integer?` lowers to a plain integer | verified; also not refused by the checker | probe_tools.nika |
+| D10 | `x ?? 0` on `Integer?` lowers to a plain integer | **built** (0.0.961: refused, `NK1103`; the fallback is of the left side's type, Part I 3.5) | probe_tools.nika |
 | D11 | typed `throw` in a trait impl of a `throws` method is not boxed | **built** (0.0.951: raised into the box the signature declares) | d11_typed_throw.nika |
-| D11b | a thrown `struct` without `impl Error` is not refused | verified (new) | d11b_free_throw.nika |
+| D11b | a thrown `struct` without `impl Error` is not refused | **built** (0.0.961: `NK1161`, asked of the package's ledger, so an `impl` in another file counts) | d11b_free_throw.nika |
 | D12 | function names are one namespace across `tools/*.nika` | by design (Part I 9.1), clear message | (none) |
 | D13 | `grammar`/`test`/`throws` are reserved | by design, decided in #573; message names the word | kw_*.nika |
 | D14 | a `Copy` value bound in a `match` inside a guard reaches its use as `&T` | **built** (0.0.946, #622: guards read copies) | d14b_guard_copy.nika |
 | D15 | `BTreeMap[Symbol, V]` accepted by the checker, refused by rustc (`Symbol: Ord`) | **built** (0.0.850: `NK1247`, ledger `orders`) | ordered_keys.rs |
 | D16 | `if match x {..} =>` in a guard does not parse; `if (match ..)` does | **built** (0.0.951: by design, ADR-301 D4; the refusal names the parentheses) | (rs2nika R14 writes the parentheses) |
 | D17 | `s.starts_with(['a', 'b'])` passes the checker, lowers to `starts_with(vec![..])` (E0277) | **built** (0.0.887: refused, `NK1102`, #586) | nullable.rs |
-| D18 | a two-parameter lambda over a list of tuples, `filter fn(name, ty) {..}`, lowers to `\|name, ty\|` (E0593) | verified (new) | `draft_a_root_is_one_of_two` |
+| D18 | a two-parameter lambda over a list of tuples, `filter fn(name, ty) {..}`, lowers to `\|name, ty\|` (E0593) | **built** (0.0.961: refused, `NK1101`, help `fn(pair) { let (name, ty) = pair }`; whether it should destructure is #623) | `draft_a_root_is_one_of_two` |
 | D19 | `match name { "i32" \| "i64" => .. }` with `name: ref String` lowers to `matches!(name, "i32" \| ..)` on `&String` (E0308) | not reproduced in a user program (0.0.887, `nikaia run`) | `draft_a_copied_part` |
 | D20 | `x ?? s.len()` / `x ?? (0 - 1)` lowered to `|| s.len() as i64.into()` / `0 - 1.into()` | **built** (0.0.874) | expressions.rs |
 | D21 | `a ?? 0 - 1` read as `a ?? 0` and a statement `-1` | **built** (0.0.874: refused, ADR-279 D1) | coalesce_fallback.rs |
@@ -42,7 +42,10 @@ finds two D8 casts in `check_numbers4.nika`.
 | D23 | a `T?` as an operand (`if o != null { o + 1 }`, a guard `n if n > 3` over an `i64?` scrutinee) or an `f"{o}"` hole passed the checker, rustc E0369/E0277 | **built** (0.0.887: refused, `NK1102`, #586) | nullable.rs |
 | D24 | `for b in text.bytes() { …; break }` lowered as written, clippy `never_loop` (deny) | **built** (0.0.887: allowed on `tools`, lib.rs, #586) | lib.rs |
 | D25 | `impl Fatal for T` without `impl Error for T` not refused (ADR-345 D1) | **built** (0.0.887: `NK1164`, #586) | process_exit.rs |
-| D26 | `mut e: ref E` returned: lowered `fn f(e: &mut &E) -> &E`, rustc "missing lifetime" | verified (#586) | gaps p25 |
+| D26 | `mut e: ref E` returned: lowered `fn f(e: &mut &E) -> &E`, rustc "missing lifetime" | **built** (0.0.961: refused, `NK1131`; a `mut` view handed back is a view of the caller's view) | gaps p25 |
+| D37 | a `ref` field of a struct literal from a part of a loop variable takes no `&` | **built** (0.0.961: checker fact `lent_fields`) | `check_core_flow.nika` |
+| D39 | `One { n: -2 }.go() catch { 0 }`: a struct literal heads a `match` scrutinee (rustc: struct literals are not allowed here) | **built** (0.0.961: written in brackets) | `a_struct_literal_before_a_catch_runs` |
+| D40 | `fn take(s: String) { let mut t = s; t.push_str("!") }` lowered `s` as `&str` (rustc refuses `push_str`) | **built** (0.0.961: a `let mut` of a parameter keeps it, `keeps.nika`) | `a_parameter_moved_into_a_let_mut_stays_owned` |
 
 ---
 
@@ -184,7 +187,9 @@ The checker accepts it. The emitter writes `nikaia_std::index::or(v, || 0)`, and
 Expected: NK1105-style refusal at the checker. `0` is not an `Integer`, and the fallback must have the left side's type.
 Workaround: `v ?? integer(0)` (or an `Integer { .. }` literal).
 
-### To build
+**Built (0.0.961).** The checker refuses it with `NK1103`: a fallback of another type than a type of the program's own that the left side holds, a number written out among them (Part I 3.5 now says the fallback is of the left side's type). Test: `defects_found_running.rs` `a_number_beside_a_struct_option_is_refused`.
+
+### To build (done)
 1. The checker types `??`'s fallback against `T` of a `T?` whose `T` is a struct, as it does for text and numbers.
 2. A test: a refusal for `struct?` + a number literal; a struct literal fallback runs.
 
@@ -205,7 +210,9 @@ Workaround: not verified. A free function whose error set is inferred does not h
 1. A test: a trait method that `throws`, implemented with a typed `throw` and with a call that rethrows, caught at the caller.
 2. Where the enclosing signature is `Box<dyn Error>`, the throw boxes its value.
 
-## D11b (new). A thrown struct without `impl Error` reaches rustc
+## D11b (new). A thrown struct without `impl Error` reaches rustc: **built** (0.0.961)
+
+`NK1161` now also refuses a `struct` or `enum` the package declares with no `impl Error` in any of its files (the checker reads the package's ledger; checked with a two-file project, the `impl` in the other file is accepted). Test: `a_thrown_struct_without_impl_error_is_refused`.
 
 ### Today
 `struct Bad { code: i64 }` … `throw Bad { code: 1 }` passes the checker, and rustc reports E0277 (`Bad: std::error::Error` not satisfied). Part I 7.1: "What is thrown implements `Error`, and the `impl` line says so". NK1161 refuses only numbers, `bool`, characters and text.
@@ -261,8 +268,9 @@ Found by running rs2nika's drafts of unmoved `check/mod.rs` functions through
   to `ty.starts_with(vec!['i', 'a'])`. A `Vec<char>` is not a `Pattern` (E0277). Either
   the checker refuses a list there, or the emitter writes `&['i', 'a'][..]`.
 * D18: `pairs.iter().filter fn(name, ty) { .. }` over `Vec[(String, Ty)]` is accepted, and it
-  lowers to `|name, ty|`. rustc wants one tuple argument (E0593). Either the checker
-  refuses two names for one tuple, or the emitter writes `|(name, ty)|`.
+  lowers to `|name, ty|`. rustc wants one tuple argument (E0593). **Built (0.0.961)**: refused
+  with `NK1101`, the help writing `fn(pair) { let (name, ty) = pair … }`. Whether the short
+  form should take the tuple apart is a language question: #623 (`decision`).
 * D19: a `match` of string literals over `name: ref String` (in a guard or a
   `matches!`) lowers without `.as_str()` (E0308).
 **To build:** each a test through `nikaia run`, and the lowering fix named above,
@@ -360,7 +368,11 @@ Built: a `?.` reach on a `get`, `first` or `last` takes no `.as_ref()`
 (`emit_place_already_lent`, `emit_core_places.nika`); test
 `views_kept::a_cloned_get_with_a_fallback_runs`.
 
-## D37. A `ref` field of a struct literal from a part of a loop variable takes no `&`: **open**
+## D37. A `ref` field of a struct literal from a part of a loop variable takes no `&`: **built** (0.0.961)
+
+The checker records a value of its own given to a field that holds a view (or a view's `T?`)
+in `lent_fields`, the counterpart of `lent_args`, and the emitter writes the `&`. The
+workaround `check_core_flow_answered` is gone.
 
 `answered.push(CheckArm { tail: arm.body, ty: t })`, with `tail: ref Expr?` and
 `arm` a loop variable over a `ref Vec[MatchArm]`, lowers to `CheckArm { tail:
@@ -386,3 +398,22 @@ Forms met here that need a decision, not a lowering fix; the issue holds the cas
 ## `EmitHost::names_read` does not look into statements (#622): **built** (0.0.951: it walks the statements of blocks; the copy a body does not read is not written)
 
 `names_read` (crates/nikaia/src/emit/host.rs) walks with `contracts::sync::visit_expr`, which does not enter the statements of a block. Filtering an arm's copied bindings by it dropped copies the body needed (all of `package.rs`), so a copy the arm body may not read is written `#[allow(unused_variables)] let a = *a;` instead (`emit_core_match.nika`). Fix: a walk over blocks too, then drop the copy instead of allowing it. Test: `match_patterns.rs` `a_kept_element_is_taken_and_a_guard_reads_a_copy`.
+
+## D39 (new). A struct literal at the head of a `catch`: **built** (0.0.961)
+
+`let a = One { n: -2 }.go() catch { 0 }` lowered to `match One { n: -2 }.go() { .. }`, and
+rustc refused it: *struct literals are not allowed here*. The guarded half of a `catch` whose
+head is a struct literal (or a `with`), through method calls and fields, is now written in
+brackets. Test: `defects_found_running.rs` `a_struct_literal_before_a_catch_runs`.
+
+## D40 (new). A parameter bound by a `let mut`: **built** (0.0.961)
+
+`let mut t = s` and a change of `t` lowered `s: String` as a view. A `let mut` changes what it
+binds, so `keeps` now counts a parameter bound by one as kept (owned), unless the author lent it.
+
+## D26 note (0.0.961)
+
+`mut e: ref E` is a view the caller's view is changed through (Part I 6.6: a `mut` parameter is
+passed as `ref mut`), so handing it back would be a view of that view. It is refused with
+`NK1131`, whose help takes `e: ref E` without `mut` and walks a local (`let mut at = e`). Test:
+`a_mut_view_parameter_handed_back_is_refused`.
