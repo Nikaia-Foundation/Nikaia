@@ -6568,7 +6568,11 @@ impl<'p> Emitter<'p> {
             // so the read is the option itself, as it was before the test.
             let copied = how & 1 == 1;
             let operand = how & 2 == 2;
-            let lent = match copied {
+            // **A struct or a list is lent out of the option** (#621), and
+            // given up where the read hands it to something that keeps it.
+            let other = how & 4 == 4;
+            let given_up = how & 8 == 8;
+            let lent = match copied || other {
                 true => "Option::as_ref(&",
                 false => "Option::as_deref(&",
             };
@@ -6580,8 +6584,13 @@ impl<'p> Emitter<'p> {
                     return Ok(());
                 }
             }
+            // Lent where a `&` asked for a reference: `as_ref` is that
+            // reference already.
+            if other && !given_up && out.buf.ends_with('&') && !out.buf.ends_with("&&") {
+                out.buf.truncate(out.buf.len() - 1);
+            }
             out.push(self.parsed.text(*name));
-            out.push(match copied {
+            out.push(match copied || given_up {
                 true => ".unwrap()",
                 false => ".as_ref().unwrap()",
             });

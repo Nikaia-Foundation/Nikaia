@@ -584,8 +584,18 @@ fn check_core_flow_frame(mut state: CheckState, world: ref CheckWorld, pattern: 
 }
 
 /// **A part lent where it is not kept** (ADR-291).
-fn check_core_flow_lent_parts[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, body: ref Expr, parts: ref collections::BTreeMap[String, Ty], from: i64, changed_from: i64, bound_by_reference: bool) sync {
+fn check_core_flow_lent_parts[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, body: ref Expr, parts: ref collections::BTreeMap[String, Ty], from: i64, changed_from: i64, bound_by_reference: bool, a_list: bool) sync {
     let lent = state.parts_lent(world, body, parts, from, changed_from)
+    // **An element a list pattern keeps is taken** (ADR-355 D5, Part I 3.4,
+    // #622): the slice below lends it, so the arm opens with its clone, and
+    // the list, which the arm took, is gone afterwards as anywhere else.
+    if a_list {
+        for (name, part) in parts {
+            if !lent.contains(name) && !part.is_a_view() && !state.copied(world, part) {
+                state.facts.cloned_bindings.insert((id_of(body) as i64, name.clone()))
+            }
+        }
+    }
     if lent.len() > 0 {
         state.a_lent_part_is_handed_on_as_it_is(world, host, body, lent)
         if !bound_by_reference {
@@ -622,7 +632,7 @@ fn check_core_flow_arm[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     // **A name that is a view binds by reference by itself** (D30).
     let name = check_core_flow_variable(world, value)
     let by_reference = through_the_reference || a_list || (name != "" && (on.is_a_view() || state.got_past_a_jump.contains(name)))
-    check_core_flow_lent_parts(state, world, host, arm.body, parts, handed_from, changed_from, by_reference)
+    check_core_flow_lent_parts(state, world, host, arm.body, parts, handed_from, changed_from, by_reference, a_list)
     let leaves = state.exits(world, arm.body)
     state.a_branch_that_leaves(from, leaves, span)
     if mut_subject != null {

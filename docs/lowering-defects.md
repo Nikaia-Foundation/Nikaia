@@ -376,3 +376,7 @@ Forms met here that need a decision, not a lowering fix; the issue holds the cas
 * `null` as a pattern in a `match` over a `T?`: [#612](https://github.com/Nikaia-Foundation/Nikaia/issues/612).
 * An element read from a borrowed list as a view, `let y: ref Expr = given[0]`: [#613](https://github.com/Nikaia-Foundation/Nikaia/issues/613).
 * A result that views one of two `ref` parameters (`NK2302`, the `p/` probes above): [#614](https://github.com/Nikaia-Foundation/Nikaia/issues/614).
+
+## `EmitHost::names_read` does not look into statements (#622)
+
+`names_read` (crates/nikaia/src/emit/host.rs) walks with `contracts::sync::visit_expr`, which does not enter the statements of a block. Filtering an arm's copied bindings by it dropped copies the body needed (all of `package.rs`), so a copy the arm body may not read is written `#[allow(unused_variables)] let a = *a;` instead (`emit_core_match.nika`). Fix: a walk over blocks too, then drop the copy instead of allowing it. Test: `match_patterns.rs` `a_kept_element_is_taken_and_a_guard_reads_a_copy`.

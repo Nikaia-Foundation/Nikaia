@@ -175,6 +175,16 @@ fn a_name_or_a_field(value: ref Expr) -> bool sync {
 }
 
 impl CheckState {
+    /// **A struct or a list a test proved not `null`, handed over, returned or
+    /// bound, is given up by the option that holds it** (ADR-350, #621): the
+    /// lowering reads it with `unwrap()` there and with `as_ref()` elsewhere.
+    pub fn a_narrowed_read_given_up(ref mut self, value: ref Expr) sync {
+        let narrowed = self.facts.narrowed_reads.get(node_key(value)) ?? 0
+        if narrowed % 8 >= 4 && narrowed < 8 {
+            self.facts.narrowed_reads.insert(node_key(value), narrowed + 8)
+        }
+    }
+
     /// **A value handed to something that keeps it** (ADR-293 D29): a name or
     /// a field path read here is handed over; `name.to_string()` is `name`
     /// (ADR-282 D8).
@@ -188,6 +198,7 @@ impl CheckState {
             },
             else => {},
         }
+        self.a_narrowed_read_given_up(value)
         let at = self.flow.read_index.get((node_key(value), span.start as i64)) ?? return
         if !a_name_or_a_field(value) {
             return

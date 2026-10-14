@@ -312,6 +312,7 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
             check_core_stmt_place_unseen(state, key)
         }
     }
+    state.a_narrowed_read_given_up(value)
     // **A name bound to a map read is a view of the map** (#297).
     let was_read = state.flow.read_a_map
     state.flow.read_a_map = outer_read
@@ -996,6 +997,10 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
 /// **`return`**: `Ty::Unknown`, a statement that jumps is not a value.
 pub fn check_core_stmt_return[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr?, span: ref Span) -> Ty sync {
     check_core_returns(state, world, host, value, span, false)
+    if value != null {
+        let returned = value ?? return Ty::Unknown
+        state.a_narrowed_read_given_up(returned)
+    }
     state.a_way_out("return", "", span)
     return Ty::Unknown
 }

@@ -359,6 +359,37 @@ fn a_list_pattern_lowers_to_a_slice_pattern() {
     assert!(rust.contains("[h, rest @ ..]"), "{rust}");
 }
 
+/// **An arm that keeps an element takes it** (ADR-355 D5, Part I 3.4, #622):
+/// over an owned list the slice lends it and the arm opens with its clone;
+/// over a lent list the element is a view, and keeping it is refused. **And
+/// a name only the guard reads** is copied out for the guard alone.
+#[test]
+fn a_kept_element_is_taken_and_a_guard_reads_a_copy() {
+    let owned = "fn f(xs: Vec[String]) -> Vec[String] {\n\
+         let mut out: Vec[String] = []\n\
+         match xs { [first, ..] => out.push(first), else => {} }\n\
+         return out\n}\n\
+         fn g(xs: ref Vec[i64]) -> i64 { return match xs { [a, ..] if a > 3 => 1, else => 0 } }\n";
+    let found = findings(owned);
+    assert!(found.is_empty(), "{found:#?}");
+    let rust = lowered(owned);
+    assert!(
+        rust.contains("let first = first.clone(); out.push(first)"),
+        "{rust}"
+    );
+    assert!(
+        rust.contains("[a, ..] if { let a = *a; a > 3 } => "),
+        "{rust}"
+    );
+    let lent = findings(
+        "fn f(xs: ref Vec[String]) -> Vec[String] {\n\
+         let mut out: Vec[String] = []\n\
+         match xs { [first, ..] => out.push(first), else => {} }\n\
+         return out\n}\n",
+    );
+    assert!(lent.iter().any(|f| f.code == "NK1102"), "{lent:#?}");
+}
+
 /// **`NK1258`: one `..` per pattern** (ADR-355 D4); **a list `match` needs
 /// `else`** (D5, `NK1151`).
 #[test]

@@ -321,12 +321,31 @@ impl EmitState {
         let opened = self.boxed_bindings(world, pattern)
         // **And a number bound out of a lent value is copied out** (0.0.236,
         // `check::Checked::copied_bindings`).
-        let copied = host.copied_bindings(node_key(body))
+        // One the arm's value does not name may be read by the guard alone, and
+        // `rustc` warned that the copy is unused (#622); `names_read` does not
+        // look into statements, so such a copy is only allowed to be unused.
+        let read = host.names_read(body)
+        let mut copied: Vec[String] = []
+        for name in host.copied_bindings(node_key(body)) {
+            if read.contains(name) {
+                copied.push(f"let {name} = *{name}; ")
+            } else {
+                copied.push(f"#[allow(unused_variables)] let {name} = *{name}; ")
+            }
+        }
+        // **And an element a list pattern keeps is cloned out of the slice**
+        // (ADR-355 D5, #622): the slice lends it, the arm keeps it.
+        let mut cloned: Vec[String] = []
+        for one in self.facts.cloned_bindings {
+            if one.0 == node_key(body) {
+                cloned.push(one.1.clone())
+            }
+        }
         // Only the arm's own block is a statement; what it holds is emitted as it
         // would be anywhere.
         let statements = flow.arms_are_statements
         let inside = flow with { arms_are_statements: false }
-        let plain = opened.len() == 0 && copied.len() == 0 && nest_count == 0 && lead.len() == 0
+        let plain = opened.len() == 0 && copied.len() == 0 && cloned.len() == 0 && nest_count == 0 && lead.len() == 0
         if statements && plain {
             match body {
                 Expr::Block(block, _) => {
@@ -362,8 +381,11 @@ impl EmitState {
                 for name in opened {
                     opening.push_str(f"let {name} = nikaia_std::boxed::open({name}); ")
                 }
-                for name in copied {
-                    opening.push_str(f"let {name} = *{name}; ")
+                for copy in copied {
+                    opening.push_str(copy)
+                }
+                for name in cloned {
+                    opening.push_str(f"let {name} = {name}.clone(); ")
                 }
                 let tail = if statements { EmitTail::Statement } else { EmitTail::Value }
                 let trimmed: String? = opening.trim_end().clone()
@@ -377,8 +399,11 @@ impl EmitState {
         for name in opened {
             out.push(f"let {name} = nikaia_std::boxed::open({name}); ")
         }
-        for name in copied {
-            out.push(f"let {name} = *{name}; ")
+        for copy in copied {
+            out.push(copy)
+        }
+        for name in cloned {
+            out.push(f"let {name} = {name}.clone(); ")
         }
         host.expr(walk, out, body, depth, body_flow, scope)
         if statements {
@@ -772,7 +797,25 @@ impl EmitState {
                 let guard = arm.guard ?? return
                 // In parentheses only beside the conditions above, where an `||` in
                 // it would otherwise bind wider.
-                if nests == 0 {
+                // **A number bound out of a lent value is copied out for the
+                // guard as well** (#622): `[a, ..] if a > 3` over a slice binds
+                // a `&i64`, and the guard compares it with a number.
+                let guard_read = host.names_read(guard)
+                let mut guard_copied: Vec[String] = []
+                for name in host.copied_bindings(node_key(arm.body)) {
+                    if guard_read.contains(name) {
+                        guard_copied.push(name)
+                    }
+                }
+                if nests == 0 && guard_copied.len() > 0 {
+                    out.push(" if { ")
+                    for name in guard_copied {
+                        let escaped = escaped_name(name)
+                        out.push(f"let {escaped} = *{escaped}; ")
+                    }
+                    self.emit_core_guard_written(world, walk, out, host, arm.pattern, guard, depth + 1, flow, scope)
+                    out.push(" }")
+                } else if nests == 0 {
                     out.push(" if ")
                     self.emit_core_guard_written(world, walk, out, host, arm.pattern, guard, depth + 1, flow, scope)
                 } else {

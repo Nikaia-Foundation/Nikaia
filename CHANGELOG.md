@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.946] — 2026-10-14
+
+**list patterns keep elements, guards read copies; a struct or list proved not null is a T (#622, #621)**
+- an arm that keeps a list element takes it (clone out of the slice); a guard reads copied numbers; a struct or list narrowed by != null lowers through as_ref().unwrap(), unwrap() where handed over
+
 ## [0.0.945] — 2026-10-14
 
 **a result built from a call handing back views of its arguments makes no buffer; a method's result may view its receiver and a parameter (ADR-353 D1, part of #614)**

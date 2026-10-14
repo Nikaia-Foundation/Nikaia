@@ -203,17 +203,27 @@ impl Checker<'_> {
                 let copied = matches!(&inner, Ty::Named { name, .. } if matches!(name.as_str(),
                     "i8" | "i16" | "i32" | "i64" | "u8" | "u16" | "u32" | "u64" | "usize"
                     | "isize" | "f64" | "bool" | "char" | "scalar"));
-                // **What the lowering reads as a `T` today**: a value a word
-                // holds, and text. A struct or a list proved not `null` keeps
-                // its `T?` below until the lowering knows each binding's Rust
-                // form (owned, or a reference to the option).
-                if !copied && !matches!(inner.text().as_str(), "String" | "ref String") {
+                // **A value a word holds is copied out, text is read as the
+                // view it is, and anything else is lent out of the option**
+                // (#621): a read, a field or a method sees the `T` through
+                // `as_ref`; where the read is handed to something that keeps
+                // it, the name owns the option and gives it up
+                // (`CheckState::hands_over` adds the bit 8).
+                let text = matches!(inner.text().as_str(), "String" | "ref String");
+                let lent = !copied && !text;
+                // **Only where the name holds the option itself**: a `ref T?`
+                // is an `Option<&T>` below and a name bound out of a lent value
+                // a reference to the option, and either is put back into an
+                // option slot as it is. Both keep their `T?` here.
+                if lent
+                    && (inner.is_a_view() || self.s.binding(name).is_some_and(|local| local.lent))
+                {
                     return ty;
                 }
                 let operand = self.operand_reads.contains(&value_node(expr));
                 self.s.facts.narrowed_reads.insert(
                     value_node(expr),
-                    i64::from(copied) | (i64::from(operand) << 1),
+                    i64::from(copied) | (i64::from(operand) << 1) | (i64::from(lent) << 2),
                 );
                 inner
             }

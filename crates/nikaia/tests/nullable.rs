@@ -1636,6 +1636,87 @@ fn main() {
     );
 }
 
+/// **A struct or a list proved not `null` is a `T` too** (ADR-350, #621): a
+/// `Rect?` parameter and a `Vec[i64]?` local, narrowed by `!= null &&`, by an
+/// early return and in a `while`; a field read, a method call, a call that
+/// lends it, and a hand-over that keeps it (`push`, `return`).
+#[test]
+fn a_struct_or_a_list_proved_not_null_is_a_t() {
+    let source = r#"struct Rect {
+    w: i64,
+    h: i64,
+}
+impl Rect {
+    fn area(ref self) -> i64 {
+        return self.w * self.h
+    }
+}
+fn wide(r: Rect) -> i64 {
+    return r.w
+}
+fn total(xs: Vec[i64]) -> i64 {
+    let mut t = 0
+    for x in xs {
+        t += x
+    }
+    return t
+}
+fn width(r: Rect?) -> i64 {
+    if r != null && r.w > 0 {
+        println(r.area())
+    }
+    if r == null {
+        return 0
+    }
+    return r.w + wide(r)
+}
+fn lists(n: i64) -> i64 {
+    let mut xs: Vec[i64]? = null
+    if n > 0 {
+        xs = [1, 2, n]
+    }
+    if xs != null && xs.len() > 2 {
+        println(xs.len())
+    }
+    let mut i = 0
+    while xs != null && i < 2 {
+        i += xs.len()
+    }
+    if xs == null {
+        return 0
+    }
+    println(xs[0])
+    return total(xs)
+}
+fn keep(r: Rect?) -> Vec[Rect] {
+    let mut out: Vec[Rect] = []
+    if r != null {
+        out.push(r)
+    }
+    return out
+}
+fn back(xs: Vec[i64]?) -> Vec[i64] {
+    if xs == null {
+        return []
+    }
+    return xs
+}
+fn main() {
+    let r: Rect? = Rect { w: 2, h: 3 }
+    println(width(r))
+    println(width(null))
+    println(lists(3))
+    println(lists(0))
+    println(keep(Rect { w: 1, h: 2 }).len())
+    println(back([1, 2]).len())
+}
+"#;
+    assert_eq!(
+        ran("narrowed_structs", source),
+        "6\n4\n0\n3\n1\n6\n0\n1\n2\n"
+    );
+}
+
 /// **Where nothing proves it, the `T?` stays** (ADR-350 D2, D3): `||` over a
 /// test that is not about `null`, the `else` of `!= null`, and a name
 /// assigned after the test, whose refusal names the assignment.

@@ -31,6 +31,36 @@ fn list_patterns_ops(xs: ref Vec[ListPatternsOp]) -> i64 {
     }
 }
 
+fn list_patterns_firsts(xs: Vec[String]) -> Vec[String] {
+    let mut out: Vec[String] = []
+    match xs {
+        [first, ..] => out.push(first),
+        else => {}
+    }
+    return out
+}
+
+fn list_patterns_big(xs: ref Vec[i64]) -> i64 {
+    return match xs {
+        [a, ..] if a > 3 => 1,
+        [a, b] if a == b => 2,
+        else => 0,
+    }
+}
+
+test "an arm that keeps an element takes it" {
+    let v: Vec[String] = ["a", "b"]
+    let firsts = list_patterns_firsts(v)
+    assert(firsts.len() == 1)
+    assert(firsts[0] == "a")
+}
+
+test "a name only the guard reads" {
+    assert(list_patterns_big([4, 1]) == 1)
+    assert(list_patterns_big([2, 2]) == 2)
+    assert(list_patterns_big([1, 2]) == 0)
+}
+
 test "a list pattern matches by length and elements" {
     assert(list_patterns_shape([]) == "empty")
     assert(list_patterns_shape([4]) == "one 4")
