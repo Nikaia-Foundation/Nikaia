@@ -49,54 +49,29 @@ finished function; ten of the functions, `several_errors`, `a_map_type` and
 barely moves because the finished code was written before the `Seq` methods and
 `?.` chains the draft now uses, and TODO comments were never counted.
 
-## TOOL (19)
+## TOOL (19 found, 17 since written by the converter or the compiler)
 
 | form | n | Rust | the draft | by hand |
 | :--- | ---: | :--- | :--- | :--- |
-| `Option` combinators (`map`, `and_then`, `is_some_and`, `map_or`) | 5 | `block.stmts.last().map(\|s\| &s.node)` | `.map(fn(s) {..}) ?? return null` + TODO | index arithmetic; `block.stmts.last()?.node` works (probe `q33`) |
-| or-pattern over variants marked TODO | 3 | `Expr::LitStr { .. } \| Expr::LitInterpolated { .. } =>` | TODO "one arm per variant" | one arm each; the or-pattern works (Part I pattern table, probe `p02`) |
-| literal field under a guard marked TODO | 2 | `Ty::Named { name, args, view: false } if name == "Error"` | TODO "bind the field" | `view } => if !view && ..`; the form works (probe `q06`) |
-| `Some(x)` kept in a `T?` result | 2 | `=> Some(args)` | `Some(args)` | `args` |
-| stale TODO "no optional view `ref T?`" | 2 | `-> Option<&Expr>` | TODO | `tail_value_of(..) -> ref Expr?` is in the finished code |
-| f-string hole with a call, local lambda without a type | 2 | `let count = \|want: fn(&Held) -> bool\| ..` | 5 TODOs, `let count = fn(want) {..}` (`NK1245`) | counters in the loop; `let count: fn(i64) -> i64 = fn(want) {..}` works (probe `q17b`) |
-| `String::with_capacity(n)` | 1 | `String::with_capacity(text.len() + 8)` | kept (`NK1171`) | `let mut out: String = ""` |
-| `byte as char` | 1 | `byte as char` | `byte as scalar` | `(byte as u8) as scalar` |
-| `Refused \| None` arm over an `Option` | 1 | `Some(Held::Refused) \| None =>` | `?? return` inside the loop (wrong: returns from the function) | a function of its own with `?? return` (the converter's own hint) |
-| `--prefix` applied inside a string literal | 1 | `Some("Give \`process::exit\` ..")` | `"CheckGive .."` (wrong text) | the literal as written (`an_exit_code_out_of_range`) |
-| iterator chain `.iter().filter(..).cloned().collect()` | 1 | `guarded.thrown.iter().filter(..).cloned().collect()` | `.filter(..)?.clone().collect()` | a `for` loop with `push` (`a_fatal_error_passes`) |
 | `Option::as_mut()` on a field | 1 | `if let Some(outer) = self.s.flow.guarded.as_mut()` | `as_mut()` kept | clone, change, assign back (as `may_fail_here`) |
-| `self.parsed.interner` | 1 | `&self.parsed.interner` | `world.interner` | `world.words` |
 | `crate::ast::int_value` (`i128`) not in Nikaia | 1 | `int_value(*value, *negative)` | kept, listed as missing | compare the `u64` literal and its sign directly |
-| COMPILER: `s.starts_with(p)` with `p` a local `let p = f"..."` | 1 | `taken.path.starts_with(&format!("{name}."))` | `NK1102` (*expects `ref String`, passing `String`*), also inside the loop; outside it `NK2105` | a helper taking `p: ref String`, called with the f-string (`compare_path_within`) |
-| COMPILER: `match` on a binding from `map.get(k) ?? continue` | 1 | `match held { Ty::Named { name, args, .. } if .. }` | lowers `ref name` inside an implicitly borrowing pattern (rustc: *cannot explicitly borrow within an implicitly-borrowing pattern*) | a helper with a `ref Ty` parameter (`compare_parameter_bounds`) |
 | LANGUAGE: `ref mut` parameter for a recursive walk's `seen` set | 1 | `seen: &mut BTreeSet<String>` | `NK1158` (*`ref mut` only for C*) | `mut seen: collections::BTreeSet[String]` |
 | LANGUAGE: a method on `CheckState` handing back a struct of views of `self` and `world` | 1 | `Comparable { structs: &self.s.structs, own: self.world.own, .. }` | `NK2302`, and `self.structs` is not a `ref` field value (`NK1106`) | Rust builds `CheckComparable`; Nikaia takes it as `ref` in free functions |
 | STYLE: `f"{name}{args:?}"` as a memo key | 1 | Debug of `Vec<Ty>` | not available | `name[` + `Ty::text` joined `]`, unique the same way |
 | STYLE: `Vec::extend` with a `T?` | 1 | `refused.extend(found)` (Option is an iterator) | `NK1102` | `if found != null { push(found ?? continue) }` |
-| COMPILER: `list[i].field ?? continue` on a non-copy field | 1 | `if let Some(refusal) = &mut slot.refusal` | E0507 in rustc (D31) | `slots[i].refusal?.clone() ?? continue` |
 | LANGUAGE: a struct of views built from `self`'s fields inside a method | 1 | `Comparable { structs: &self.s.structs, .. }` in `declared` | `NK1106` (`state.structs` is not a `ref`) | the maps passed as `ref` parameters to a free function that builds it (`collect_keys_unordered`) |
-| STYLE: `loop { .. }` | 1 | `loop` in `collect_copies` | `NK1117` | `while true` |
 | STYLE: `match op { Add => .., Sub => .. }` returning a tuple | 1 | `let (value, heading) = match op {..}` | kept as `if` chain over `op ==` | an `if`/`else if` chain assigning two `let mut` |
-| STYLE: `matches!(want, Ty::Nullable(_))` | 2 | `matches!` | none | `match want { Ty::Nullable(_) => true, else => false }` |
 
 ### For the converter, by frequency
 
-1. Rewrite `Option` combinators to `?.` and `??`: `o.map(|x| x.f)` -> `o?.f`,
-   `o.and_then(|x| g(x))` -> a `let` and `??`, `o.is_some_and(p)` ->
-   `(o?.p() ?? false)`, `o.map_or(d, f)` -> `(o?.f() ?? d)`. Each `?.` step of
-   a chain needs its own `?.` (probe `q31`, `NK1125` names it).
-2. Drop the TODO for or-patterns over variants and for a literal field under a
-   guard; both are Part I patterns and compile.
-3. Drop the TODO "no optional view `ref T?`": `-> ref T?` compiles in
-   `tools/*.nika` (`check_types::tail_value_of`).
-4. Strip `Some(..)` in arms and returns of a `T?` function.
-5. Give a lambda bound to a `let` its function type from the closure's
-   parameter types; bind a call in an f-string hole to a `let` itself rather than
-   leaving a TODO.
-6. Never write `?? return` where the Rust arm is a value of the loop body: move
-   the `match` into a function first, or write `match` with `null =>`.
-7. `String::with_capacity(..)` -> `""` with a type; `x as char` from a byte ->
-   `(x as u8) as scalar`.
+Rows the converter now writes are gone from the table (items 1-7 of the first
+round; the `filter(..).cloned().collect()` loop is R59; a lambda takes its
+type from rust-analyzer's facts). Left for the converter:
+
+1. `Option::as_mut()` on a field: still a TODO naming the hand pattern (clone,
+   change, assign back); a rewrite needs the block's extent.
+2. `crate::ast::int_value` (`i128`): a callee with no Nikaia twin; name one in
+   `rs2nika.names` once it exists.
 
 ## LANGUAGE (11): `std` entries, no syntax
 

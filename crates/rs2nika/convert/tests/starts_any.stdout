@@ -7,7 +7,6 @@ fn wide(o: String?) -> bool sync {
 }
 
 fn head(v: ref Vec[ref String]) -> i64? sync {
-    // TODO(rs2nika): iterator adapter with no `Seq` method: a `for` loop
     return v.iter().find_map(fn(s) { let t = s.strip_prefix("a") ?? return null; Some(t.len()) })
 }
 

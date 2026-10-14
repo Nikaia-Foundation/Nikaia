@@ -105,6 +105,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R56  `while let P = e && let Some(t) = f {` -> `while true {` + `let t = f ?? break` / `match e { P => x, else => break }`",
         "R57  a byte literal `b'x'` -> its number (`b'\\\\'` -> `92`)",
         "R58  a line on Rust-only types (`&[&Parsed]`, `Ledger`, `check(..)`, `once(..)`) -> `// ADAPTER: bleibt in Rust`",
+        "R59  `let v: T = xs.iter().filter(|x| p).cloned().collect()` -> `let mut v: T = []` and a `for` with `push(x.clone())`",
         "R59  Option combinators with a field or method body: `o.map(|x| x.f)` -> `o?.f`, `.is_some_and(|x| x.p())` -> `(o?.p() ?? false)`, `.map_or(d, ..)` -> `(o?.. ?? d)`",
         "R60  `String::with_capacity(n)` -> `\"\"`",
         "R61  a call or a literal in a `format!` argument -> `let hole_N = ..` before the line, `{hole_N}` in the f-string",
@@ -2355,7 +2356,7 @@ fn rs2nika_todos(line: ref String) -> Vec[String] {
             from = at + 1
         }
     }
-    for a in [".find_map(", ".flat_map(", ".fold(", ".skip("] {
+    for a in [".flat_map(", ".fold(", ".skip("] {
         if line.contains(a) {
             todo.push("iterator adapter with no `Seq` method: a `for` loop")
             return todo
@@ -2854,8 +2855,56 @@ fn rs2nika_while_let(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String] {
     return out
 }
 
+/// R59: `let v: T = xs.iter().filter(|x| p).cloned().collect();` -> a `for`
+/// loop with `push(x.clone())`: `Seq` has no `cloned`.
+fn rs2nika_filter_cloned(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String] {
+    let ind = rs2nika_indent(line)
+    let mut st: String = line.trim().clone()
+    if st.ends_with(";") {
+        st = st[0..<st.len() - 1].clone()
+    }
+    let tail = ".cloned().collect()"
+    let mid = ".iter().filter(|"
+    if !st.starts_with("let ") || !st.ends_with(tail) {
+        return []
+    }
+    let eq = st.find(" = ") ?? return []
+    let colon = st.find(": ") ?? return []
+    let at = st.find(mid) ?? return []
+    if colon > eq || eq > at {
+        return []
+    }
+    let name: String = st[4..<colon].trim().clone()
+    let ty: String = st[colon + 2..<eq].trim().clone()
+    let recv: String = st[eq + 3..<at].trim().clone()
+    let rest: String = st[at + mid.len()..<st.len() - tail.len()].clone()
+    let bar = rest.find("|") ?? return []
+    let mut var: String = rest[0..<bar].trim().clone()
+    while var.starts_with("&") {
+        var = var[1..<var.len()].clone()
+    }
+    let mut body: String = rest[bar + 1..<rest.len()].trim().clone()
+    if !body.ends_with(")") || !rs2nika_is_path(var) || name.starts_with("mut ") {
+        return []
+    }
+    body = body[0..<body.len() - 1].trim().clone()
+    while body.contains(f"*{var}") {
+        body = body.replace(f"*{var}", var)
+    }
+    let typed = rs2nika_let_type(ctx, f"let mut {name}: {ty} = []")
+    let head: String = rs2nika_expr(ctx, typed)
+    let r = rs2nika_expr(ctx, recv)
+    let b = rs2nika_expr(ctx, body)
+    rs2nika_hit(ctx, "R59")
+    return [f"{ind}{head.trim()}", f"{ind}for {var} in {r} {{", f"{ind}    if {b} {{", f"{ind}        {name}.push({var}.clone())", f"{ind}    }}", f"{ind}}}"]
+}
+
 fn rs2nika_if_let(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String] {
     let ind = rs2nika_indent(line)
+    let filtered = rs2nika_filter_cloned(ctx, line)
+    if filtered.len() > 0 {
+        return filtered
+    }
     let st: String = line.trim().clone()
     if st.starts_with("while let ") && st.ends_with(" {") {
         return rs2nika_while_let(ctx, line)
@@ -3946,6 +3995,18 @@ pub fn rs2nika_missing(ctx: ref Rs2nikaCtx, draft: ref String) -> Vec[String] {
         let n = rs2nika_declared(l)
         if n != "" {
             own.insert(n)
+        }
+        // a lambda's parameters (`fn(want) {..}`) are called, not missing
+        for part in l.split("fn(") {
+            let close = part.find(")") ?? continue
+            for p in part[0..<close].split(",") {
+                let mut name: String = p.trim().clone()
+                let colon = name.find(":") ?? name.len()
+                name = name[0..<colon].trim().clone()
+                if rs2nika_is_path(name) {
+                    own.insert(name)
+                }
+            }
         }
     }
     for k in ["fn", "if", "match", "while", "for", "return", "panic", "println", "sync", "f", "in", "and", "or", "not"] {

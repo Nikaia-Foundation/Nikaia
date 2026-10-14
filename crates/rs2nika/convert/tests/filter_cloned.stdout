@@ -1,0 +1,11 @@
+fn kept(thrown: ref Vec[Thrown], items: ref Vec[Item]) -> Vec[Thrown] sync {
+    let mut fatal: Vec[Thrown] = []
+    for t in thrown {
+        if t.fatal {
+            fatal.push(t.clone())
+        }
+    }
+    let first = items.iter().find_map(fn(item) { item.name.clone() })
+    return fatal
+}
+

@@ -158,6 +158,12 @@ touches = []
 views = ["line: borrowed"]
 signature = "(mut ctx: Rs2nikaCtx, line: ref String) -> String"
 
+[fn."rs2nika_filter_cloned"]
+sync = "inferred"
+touches = []
+views = ["line: borrowed"]
+signature = "(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String]"
+
 [fn."rs2nika_find_from"]
 sync = "inferred"
 keeps = ["from"]
