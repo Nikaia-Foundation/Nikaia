@@ -25476,6 +25476,24 @@ fn emit_flow_a_lit_str(node: &Expr) -> bool { matches!(node, Expr::LitStr { .. }
 
 fn emit_flow_an_index(node: &Expr) -> bool { matches!(node, Expr::Index { .. }) }
 
+fn emit_flow_a_field_of_an_index(node: &Expr) -> bool {
+    match node {
+        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); emit_flow_an_index(base) || emit_flow_a_field_of_an_index(base) },
+        _ => false,
+    }
+}
+
+fn emit_flow_an_iterator_answer(world: &EmitWorld<'_>, node: &Expr) -> bool {
+    match node {
+        Expr::MethodCall { method, .. } => {
+            let method = *method;
+            let name = emit_text(world, method);
+            name == "find_map" || name == "find" || name == "next" || name == "last" || name == "nth" || name == "max" || name == "min"
+        },
+        _ => false,
+    }
+}
+
 impl EmitState {
     fn emit_flow_pair(&self, key: i64) -> (bool, bool) {
         let pair = match self.facts.kept_lambdas.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return (false, false) };
@@ -25700,7 +25718,9 @@ impl EmitState {
         if jumps_at_the_end(fallback) || emit_flow_never_returns(world, fallback) {
             out.push("match ");
             host.expr(walk, out, value, depth, flow, scope)?;
-            out.push(&self.emit_flow_opened(node));
+            let opened_jump = self.emit_flow_opened(node);
+            if opened_jump == "" && emit_flow_a_field_of_an_index(value) { out.push(".clone()"); }
+            out.push(&opened_jump);
             if self.facts.copied_jump_reads.contains(&node_key(node)) { out.push(" { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => "); } else { out.push(" { Some(__nikaia_value) => __nikaia_value, None => "); }
             host.expr(walk, out, fallback, depth, flow, scope)?;
             out.push(" }");
@@ -25740,6 +25760,7 @@ impl EmitState {
         out.push("nikaia_std::index::or(");
         if self.facts.lent_list_reads.contains(&node_key(node)) { out.push("&"); }
         host.expr(walk, out, value, depth, flow, scope)?;
+        if !bare && emit_flow_a_lit_str(fallback) && emit_flow_an_iterator_answer(world, value) { out.push(".map(|__nikaia_found| __nikaia_found.to_string())"); }
         out.push(", || ");
         if self.facts.lent_map_fallbacks.contains(&node_key(node)) {
             out.push("&");

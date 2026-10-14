@@ -212,13 +212,12 @@ Rules from the sessions that moved the most; they save tokens, not just time.
   and re-run `python3 scripts/badges.py` with the next free number.
 * **A worktree-isolated agent cannot run compound shell** (heredocs, `$(...)`,
   pipes that look like git): put multi-step work in a script file and call it.
-* **Known compiler defects, to fix in the compiler** (ADR-294 D3), meanwhile
-  bind to a `let` first: `let v = f().trim_start()` drops a temporary (E0716);
-  `??` with an index read as fallback emits an ambiguous `.into()`; a `match`
-  in a `T?` function mixing optional and plain arms; a `String` reassigned from
-  a `strip_prefix` view in a loop lowers as `EitherText`; `mut` parameter plus
-  `.drain()`; `Spanned(x, span)` lowers to invalid Rust; "never read" and
-  unreachable-code warnings in the generated package.
+* **Known compiler defects, to fix in the compiler** (ADR-294 D3): the
+  generated package still has "never read" and unreachable-code warnings,
+  allowed on the `tools` module. The rest of this list (`f().trim_start()`,
+  an index fallback after `??`, mixed arms in a `T?` match, `strip_prefix` in a
+  loop, `mut` parameter plus `.drain()`, `Spanned(x, span)`) runs today; the
+  open ones are in `docs/lowering-defects.md`.
 * **The disk is shared and small.** It ran out twice mid-test and once for the
   whole session (no command output at all). Delete `target/` of a worktree you
   no longer use, `target/nikaia-project-tests` and `target/release/nikaia-scratch`

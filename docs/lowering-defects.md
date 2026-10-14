@@ -290,24 +290,23 @@ the check reads, so a function calling only a described `sync` entry
 (`InternerContext::resolve`) was inferred to pause. It reads them now
 (`described_entries.rs`).
 
-## D30 (new). D28 for `starts_with`, and `match` on a `?? continue` binding
+## D30 (new). D28 for `starts_with`, and `match` on a `?? continue` binding: **built** (0.0.904)
 
-Two found moving `Comparable` (C-5g, `check_compare.nika`). `let p = f"{name}."`
-then `path.starts_with(p)` is refused with `NK1102` (*expects `ref String`,
-passing `String`*), and `NK2105` where `p` stands outside the loop; a `ref
-String` parameter works. `let held = map.get(k) ?? continue` then `match held
-{ Ty::Named { name, .. } => .. }` lowers `Ty::Named { ref name, .. }` against a
-reference, which rustc refuses (*cannot explicitly borrow within an
-implicitly-borrowing pattern*); a helper taking `ref Ty` works. **To build:**
-a `nikaia run` test for each, then the argument coercion and the pattern.
+A local f-string handed to `starts_with` is lent since D28. A `let` that binds
+what `get` hands back past a jump (`let held = m.get(k) ?? continue`) is a
+reference below, so a `match held` binds by reference by itself and writes no
+`ref` (`views_kept.rs`).
 
-## D31 (new). `list[i].field ?? continue` moves out of the element
+## D31 (new). `list[i].field ?? continue` moves out of the element: **built** (0.0.904)
 
-Found moving `moved_to` (C-5g, `check_overflow.nika`): with `slots:
-Vec[CheckUnsignedSlot]` and `refusal: CheckFinding?`, `let refusal =
-slots[index].refusal ?? continue` lowers to `match index::get(&slots,
-..).refusal { Some(v) => v, .. }`, which rustc refuses (E0507, *cannot move out
-of a shared reference*). The checker accepts it, so the lowering owes either a
-borrow (the value is only read) or a clone. `slots[index].refusal?.clone() ??
-continue` works. **To build:** a `nikaia run` test, then the coalesce on an
-indexed place.
+An option read out of a list element before a jumping fallback is cloned out of
+the element (`.clone()` before the `match`) unless the coalesce lends it
+(`views_kept.rs`).
+
+## D32 (new). `xs.iter().find_map(..) ?? "lit"` ambiguous in rustc: **built** (0.0.904)
+
+An iterator's answer (`find_map`, `find`, `next`, `last`, `nth`, `max`, `min`)
+beside a literal fallback could be `Option<&String>` or `Option<String>`, and
+`"lit".into()` matched both `Or` impls. The answer is mapped to text of its
+own first (`.map(|v| v.to_string())`), so a typed `let x: T? = ..` is no
+longer needed (`views_kept.rs`).

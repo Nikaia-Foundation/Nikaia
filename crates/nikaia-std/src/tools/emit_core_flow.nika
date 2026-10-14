@@ -91,6 +91,28 @@ fn emit_flow_an_index(node: ref Expr) -> bool {
     }
 }
 
+/// A field read out of a list element, `xs[i].f` or `xs[i].a.b` (D31): a place
+/// behind a shared borrow, which a `match` cannot move out of.
+fn emit_flow_a_field_of_an_index(node: ref Expr) -> bool {
+    return match node {
+        Expr::Field { base, .. } => emit_flow_an_index(base) || emit_flow_a_field_of_an_index(base),
+        else => false,
+    }
+}
+
+/// An answer an iterator hands back, `xs.iter().find_map(..)` or
+/// `..filter_map(..).next()`: below it may be an `Option<&String>` or an
+/// `Option<String>`, which a literal fallback cannot tell apart.
+fn emit_flow_an_iterator_answer(world: ref EmitWorld, node: ref Expr) -> bool {
+    return match node {
+        Expr::MethodCall { method, .. } => {
+            let name = emit_text(world, method)
+            name == "find_map" || name == "find" || name == "next" || name == "last" || name == "nth" || name == "max" || name == "min"
+        },
+        else => false,
+    }
+}
+
 impl EmitState {
     /// What the checker recorded of a kept lambda: `(pauses, fails)`.
     fn emit_flow_pair(ref self, key: i64) -> (bool, bool) {
@@ -435,7 +457,13 @@ impl EmitState {
             host.expr(walk, out, value, depth, flow, scope)
             // **A loan on the left is opened, and the answer is a view** (ADR-279
             // D10).
-            out.push(self.emit_flow_opened(node))
+            let opened_jump = self.emit_flow_opened(node)
+            // **An option in a list element is cloned out of it** (D31): the element
+            // is behind a borrow, and the `match` would move out of it.
+            if opened_jump == "" && emit_flow_a_field_of_an_index(value) {
+                out.push(".clone()")
+            }
+            out.push(opened_jump)
             // **A number read past a jump is read out of the view** (#456).
             if self.facts.copied_jump_reads.contains(node_key(node)) {
                 out.push(" { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => ")
@@ -503,6 +531,12 @@ impl EmitState {
             out.push("&")
         }
         host.expr(walk, out, value, depth, flow, scope)
+        // **Text an iterator found is made text of its own** before a literal
+        // fallback: `Or` for both `Option<&String>` and `Option<String>` left
+        // `"none".into()` ambiguous in rustc.
+        if !bare && emit_flow_a_lit_str(fallback) && emit_flow_an_iterator_answer(world, value) {
+            out.push(".map(|__nikaia_found| __nikaia_found.to_string())")
+        }
         out.push(", || ")
         // **A name lent beside what a map holds**: the answer is a view, and so is
         // the fallback.

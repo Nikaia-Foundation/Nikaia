@@ -444,6 +444,7 @@ fn walked<'a>(
         world: &world,
         s: core::Baton::new(s),
         spares: Vec::new(),
+        got_past_a_jump: BTreeSet::new(),
         discarded: BTreeSet::new(),
     };
     checker.collect_types();
@@ -966,6 +967,10 @@ struct Checker<'a> {
     world: &'a CheckWorld<'a>,
     /// States with nothing in them, for the crossings into Nikaia (`core.rs`).
     spares: Vec<Box<CheckState>>,
+    /// **Names a `let` bound to what `get` hands back past a jump** (D30):
+    /// `let held = m.get(k) ?? continue` is a reference below, so a `match` on
+    /// the name binds by reference by itself and writes no `ref`.
+    got_past_a_jump: BTreeSet<String>,
     /// The statements whose value nothing reads.
     discarded: BTreeSet<i64>,
     /// What each callee has **newly** gained since the committed ledger
@@ -4210,6 +4215,19 @@ impl<'a> Checker<'a> {
                 // the read itself, not one somewhere inside the value.
                 let of_a_map = std::mem::replace(&mut self.s.flow.read_a_map, outer_read)
                     && matches!(value, Expr::Index { .. } | Expr::MethodCall { .. });
+                // **A value `get` hands back past a jump is a reference** (D30).
+                let got = matches!(value, Expr::Coalesce { value: read, fallback, .. }
+                    if matches!(&**read, Expr::MethodCall { method, .. }
+                        if self.parsed.text(*method) == "get")
+                    && self.s.jumps(self.world, fallback));
+                for name in names {
+                    let name = self.parsed.text(*name).to_string();
+                    if got {
+                        self.got_past_a_jump.insert(name);
+                    } else {
+                        self.got_past_a_jump.remove(&name);
+                    }
+                }
                 // **A value with a cleanup, bound here, dies where this block
                 // ends** (ADR-297 D2).
                 if let [single] = names.as_slice() {
@@ -5797,7 +5815,17 @@ impl<'a> Checker<'a> {
                         &parts,
                         from,
                         changed_from,
-                        through_the_reference,
+                        // **A name that is a view binds by reference by itself**
+                        // (D30): `let held = m.get(k) ?? continue` then `match
+                        // held`, and `ref` there is rustc's error.
+                        through_the_reference
+                            || match value.as_ref() {
+                                Expr::Variable(name, _) => {
+                                    on.is_a_view()
+                                        || self.got_past_a_jump.contains(self.parsed.text(*name))
+                                }
+                                _ => false,
+                            },
                     );
                     let leaves = self.s.exits(self.world, &arm.body);
                     self.s.a_branch_that_leaves(from, leaves, span);

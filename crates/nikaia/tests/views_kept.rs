@@ -131,3 +131,33 @@ fn owned_text_and_index_reads_are_lent() {
         "4 3 xy\ntrue true\nfalse false\nfalse false\nb1\n"
     );
 }
+
+/// **Reads past a jump and an iterator's text run** (D30, D31): an option in a
+/// list element is cloned out of it, a `match` on what `get` handed back past a
+/// jump writes no `ref`, a local f-string is lent to `starts_with`, and
+/// `find_map(..) ?? "lit"` written directly is not ambiguous.
+#[test]
+fn reads_past_a_jump_and_found_text_run() {
+    let dir = common::scratch_dir("past-a-jump");
+    std::fs::write(
+        dir.join("main.nika"),
+        "use std::collections\n\nstruct Slot {\n    refusal: String?,\n    n: i64,\n}\n\nenum Shape {\n    Named { name: String, n: i64 },\n    Other,\n}\n\nfn has(path: ref String, names: ref Vec[String]) -> bool {\n    for name in names {\n        let p = f\"{name}.\"\n        if path.starts_with(p) {\n            return true\n        }\n    }\n    false\n}\n\nfn main() {\n    let slots: Vec[Slot] = [Slot { refusal: \"a\", n: 1 }, Slot { refusal: null, n: 2 }]\n    for index in 0..<slots.len() {\n        let r = slots[index].refusal ?? continue\n        println(f\"{r} {slots[index].n}\")\n    }\n    let mut m: collections::HashMap[String, Shape] = collections::HashMap()\n    m.insert(\"k\", Shape::Named { name: \"x\", n: 1 })\n    m.insert(\"o\", Shape::Other)\n    let ks: Vec[String] = [\"k\", \"z\", \"o\"]\n    for k in ks {\n        let held = m.get(k) ?? continue\n        match held {\n            Shape::Named { name, .. } => println(name),\n            Shape::Other => println(\"o\"),\n        }\n    }\n    let ns: Vec[String] = [\"a\", \"b\"]\n    println(f\"{has(\"b.c\", ns)}\")\n    let xs: Vec[String] = [\"a\", \"bc\", \"de\"]\n    let a = xs.iter().find_map(fn(s) { if s.len() > 1 { s } else { null } }) ?? \"none\"\n    let b = xs.iter().filter_map(fn(s) { if s.len() > 2 { s } else { null } }).next() ?? \"none\"\n    println(f\"{a} {b}\")\n}\n",
+    )
+    .expect("the source");
+    let run = std::process::Command::new(env!("CARGO_BIN_EXE_nikaia"))
+        .current_dir(&dir)
+        .arg("run")
+        .arg("main.nika")
+        .output()
+        .expect("the nikaia binary runs");
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(
+        run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&run.stdout),
+        "a 1\nx\no\ntrue\nbc none\n"
+    );
+}

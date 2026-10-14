@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.904] — 2026-10-14
+
+**lowering: an option in a list element past a jump, a match on what get handed back, an iterator's text beside a literal (D30, D31, D32)**
+- D31: `xs[i].f ?? continue` clones the option out of the element. D30: `let held = m.get(k) ?? continue` then `match held` writes no `ref`. D32: `xs.iter().find_map(..) ?? "lit"` maps the answer to text of its own, no longer ambiguous in rustc.
+
 ## [0.0.903] — 2026-10-14
 
 **check: a view kept where the receiver says text in Nikaia (#125, #558)**
