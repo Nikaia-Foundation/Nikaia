@@ -230,7 +230,11 @@ Rules from the sessions that moved the most; they save tokens, not just time.
   unused-variable clippy error in the lowering.
 * **After any `*.nika` or `described.contracts` change**, run `lower-std` with a
   binary built from that tree, or the sysroot test fails on a stale
-  `package.rs`. A layout change breaks tests keyed on an address by allocator
+  `package.rs`. `lower-std` reads and writes the checkout the binary was
+  **built in** (`CARGO_MANIFEST_DIR`, unless `NIKAIA_SYSROOT` says otherwise),
+  not the working directory: a worktree agent running the main checkout's
+  `target/release/nikaia` lowers the main checkout's sources and rewrites its
+  `package.rs`. Use the worktree's own binary. A layout change breaks tests keyed on an address by allocator
   luck. Never `str.replace('', ...)` in an edit script (an empty-slice replace
   corrupted `emit/mod.rs` once). A full test run takes about 45 minutes: batch
   the edits and run the touched tests in between.
