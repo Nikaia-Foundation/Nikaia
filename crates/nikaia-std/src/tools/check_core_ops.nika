@@ -4,7 +4,7 @@
 // U-c10): `Binary`, `Coalesce`, `Closure` and `Spawn` of the checker's walk.
 // The form is the pilot's (`check_core_pilot.nika`): a free function over the
 // state, the world and a host; the walk comes back through the hub
-// `host.expr`. What the left side of `&&` and `||` proves not `null` (ADR-350)
+// `check_core_expr`. What the left side of `&&` and `||` proves not `null` (ADR-350)
 // stays Rust in `check/narrow.rs` and is asked through `host.proved_here`; a
 // proof a write took back is `host.a_proof_taken_back`, and whether two types
 // compare is `host.a_type_that_does_not_compare`, which reads the parts beside.
@@ -217,13 +217,13 @@ fn check_core_ops_literal_beside(mut state: CheckState, op: BinaryOp, side: ref 
 
 /// **The right of `&&` runs where the left held, and the right of `||` where
 /// it did not** (ADR-350 D2).
-fn check_core_ops_proved_expr[H: CheckHost](mut state: CheckState, host: ref H, cond: ref Expr, holds: bool, value: ref Expr, span: ref Span) -> Ty sync {
+fn check_core_ops_proved_expr[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, cond: ref Expr, holds: bool, value: ref Expr, span: ref Span) -> Ty sync {
     let markers = host.proved_here(state, cond, holds)
     if markers.len() == 0 {
-        return host.expr(state, value, span)
+        return check_core_expr(state, world, host, value, span)
     }
     state.scope.push(markers)
-    let found = host.expr(state, value, span)
+    let found = check_core_expr(state, world, host, value, span)
     state.scope.pop()
     return found
 }
@@ -338,13 +338,13 @@ pub fn check_core_ops_binary[H: CheckHost](mut state: CheckState, world: ref Che
         reach = reached
     }
     state.flow.reaching = reach?.clone()
-    let walked_left = host.expr(state, lhs, span)
+    let walked_left = check_core_expr(state, world, host, lhs, span)
     state.flow.reaching = reach?.clone()
     let mut walked_right: Ty = Ty::Unknown
     if check_core_ops_logical(op) {
-        walked_right = check_core_ops_proved_expr(state, host, lhs, check_core_ops_and(op), rhs, span)
+        walked_right = check_core_ops_proved_expr(state, world, host, lhs, check_core_ops_and(op), rhs, span)
     } else {
-        walked_right = host.expr(state, rhs, span)
+        walked_right = check_core_expr(state, world, host, rhs, span)
     }
     // **A `'…'` beside a byte is a byte** (ADR-320, Part I 2.6).
     let byte = check_core_ops_named("u8")
@@ -480,14 +480,14 @@ fn check_core_ops_held_named(name: ref String, args: ref Vec[Ty]) -> Ty sync {
 pub fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, value: ref Expr, fallback: ref Expr, span: ref Span) -> Ty sync {
     let outer = state.flow.read_a_map
     state.flow.read_a_map = false
-    let left = host.expr(state, value, span)
+    let left = check_core_expr(state, world, host, value, span)
     let read_now = state.flow.read_a_map
     state.flow.read_a_map = outer
     // **The left side alone** (D13): the fallback is still checked, and what
     // it would take is not taken, because it never runs.
     if state.nothing_to_fall_back_from(world, value, left, expr, span) {
         let (walked, handed) = state.taken_so_far()
-        host.expr(state, fallback, span)
+        check_core_expr(state, world, host, fallback, span)
         state.walked.truncate(walked)
         state.handed.truncate(handed)
         return left
@@ -495,7 +495,7 @@ pub fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref C
     let from_a_map = check_core_ops_from_a_map(state, world, value, read_now)
     // **A fallback that jumps takes its takings with it** (ADR-293 D30).
     let from = state.taken_so_far()
-    let other = host.expr(state, fallback, span)
+    let other = check_core_expr(state, world, host, fallback, span)
     let leaves = state.leaves(world, fallback)
     state.a_branch_that_leaves(from, leaves, span)
     let nullable = check_core_ops_nullable(left)
@@ -690,6 +690,6 @@ pub fn check_core_ops_spawn[H: CheckHost](mut state: CheckState, world: ref Chec
         },
         else => {},
     }
-    host.expr(state, spawned, span)
+    check_core_expr(state, world, host, spawned, span)
     return Ty::Unknown
 }

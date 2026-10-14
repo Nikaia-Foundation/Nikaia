@@ -366,8 +366,30 @@ impl CheckHost for Host<'_> {
         unreachable!("`a_task_of_a_scope` is asked of the core's host")
     }
 
-    fn expr(&self, _state: &mut CheckState, _node: &Expr, _span: &Span) -> Ty {
-        unreachable!("the hub `expr` is asked of the core's host, not of the services")
+    fn reads_of_the_maybe(&self, _expr: &Expr) {
+        unreachable!("only the core's host keeps the checker")
+    }
+
+    fn read_as_proved(
+        &self,
+        _state: &mut CheckState,
+        _expr: &Expr,
+        _name: &str,
+        _ty: &Ty,
+        _span: &Span,
+    ) -> Ty {
+        unreachable!("only the core's host keeps the checker")
+    }
+
+    fn a_value_with_a_cleanup_made(&self, _state: &mut CheckState, _ty: &Ty) {
+        unreachable!("only the core's host keeps the checker")
+    }
+
+    fn an_escape_nothing_names(
+        &self,
+        text: &str,
+    ) -> Option<nikaia_std::tools::escapes::NotAnEscape> {
+        crate::build_time::an_escape_nothing_names(text)
     }
 
     fn a_value_with_a_cleanup_bound(

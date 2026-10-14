@@ -4,7 +4,7 @@
 // C-6, U-c5): `call_on`, which `x.m(…)` and `x?.m(…)` share, and
 // `a_safe_call`, the `?.` half. The form is the pilot's
 // (`check_core_pilot.nika`): a free function over the state, the world and a
-// host; the walk comes back through the hub `host.expr`. What stays Rust is
+// host; the walk comes back through the hub `check_core_expr`. What stays Rust is
 // asked through the host: `arguments` (C-5h), `a_standard_bound_not_met`,
 // `a_lambda_that_pauses_at_an_entry`, and the task of a `task::scope` (#605).
 //
@@ -237,7 +237,7 @@ fn check_core_call_on_undescribed[H: CheckHost](mut state: CheckState, world: re
     if (entry == "compare" || entry == "eq") && args.len() == 1 {
         let wants_order = entry == "compare"
         if check_core_call_on_comparable(state, world, on, wants_order) {
-            let given = host.expr(state, args[0], span)
+            let given = check_core_expr(state, world, host, args[0], span)
             let code = check_core_call_on_view(on) + check_core_call_on_view(given) * 2
             state.facts.standard_compares.insert(id_of(receiver) as i64, code)
             if wants_order {
@@ -269,7 +269,7 @@ fn check_core_call_on_undescribed[H: CheckHost](mut state: CheckState, world: re
     state.a_list_collected(type_name, entry, args, span)
     state.a_member_nothing_writes_down(world, type_name, entry, true, span)
     for a in args {
-        host.expr(state, a, span)
+        check_core_expr(state, world, host, a, span)
     }
     check_core_call_on_reached(state, null)
     check_core_call_on_quiet(state, receiver)
@@ -616,7 +616,7 @@ pub fn check_core_call_on[H: CheckHost](mut state: CheckState, world: ref CheckW
     let members = several_errors_of(on)
     if members.len() > 0 {
         for a in args {
-            host.expr(state, a, span)
+            check_core_expr(state, world, host, a, span)
         }
         check_core_call_on_reached(state, null)
         check_core_call_on_quiet(state, receiver)
@@ -640,7 +640,7 @@ pub fn check_core_call_on[H: CheckHost](mut state: CheckState, world: ref CheckW
     }
     if !has_name {
         for a in args {
-            host.expr(state, a, span)
+            check_core_expr(state, world, host, a, span)
         }
         check_core_call_on_reached(state, null)
         state.method_propagates(id_of(receiver) as i64, false)
@@ -670,7 +670,7 @@ pub fn check_core_a_safe_call[H: CheckHost](mut state: CheckState, world: ref Ch
     let within = witness >= 0 && check_core_call_on_task_handle(inner) && name == "join"
     let door = witness >= 0 && locked_content_of(inner) != null && name == "set"
     if witness >= 0 && !within && !door {
-        host.expr(state, config[witness].value, span)
+        check_core_expr(state, world, host, config[witness].value, span)
     }
     let mut given: Vec[Expr] = args.clone()
     let mut written: String = name.clone()

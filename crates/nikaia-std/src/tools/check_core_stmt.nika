@@ -4,7 +4,7 @@
 // `stmt`, one function per `Stmt` variant, and `block`, which stops being a
 // hub of the host. The form is the pilot's (`check_core_pilot.nika`): a free
 // function over the state, the world and a host; an expression is walked
-// through the hub `host.expr`. What stays Rust is asked through the host: a
+// through the hub `check_core_expr`. What stays Rust is asked through the host: a
 // value with a cleanup bound by a `let` (`a_value_with_a_cleanup_bound`) and
 // the spawn work's `NK2109` (`a_bound_handle_is_taken`, #605).
 
@@ -300,7 +300,7 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
     if code_place {
         state.stored_frames.push(CheckStoredCode::empty())
     }
-    let found = host.expr(state, value, span)
+    let found = check_core_expr(state, world, host, value, span)
     state.flow.lambda_expected = null
     if code_place && !check_core_stmt_holds_code(found) {
         state.stored_frames.pop()
@@ -705,7 +705,7 @@ pub fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref Ch
     state.reading_only = check_core_stmt_a_name(target)
     // **A key written is handed to the map** (ADR-293 D27).
     state.flow.writing_index = op == null && check_core_stmt_an_index(target)
-    let mut into = host.expr(state, target, span)
+    let mut into = check_core_expr(state, world, host, target, span)
     if check_core_stmt_an_index(target) {
         let slot: Ty = match into {
             Ty::Nullable(inner) => inner.clone(),
@@ -715,7 +715,7 @@ pub fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref Ch
     }
     state.reading_only = outer
     state.flow.writing_index = false
-    let mut found = host.expr(state, value, span)
+    let mut found = check_core_expr(state, world, host, value, span)
     if op == null {
         state.a_map_read_assigned(world, into, value, span)
         state.a_map_first_written(world, target, found)
@@ -810,7 +810,7 @@ pub fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref Ch
 
 /// **`while`** (Part I 3.3).
 pub fn check_core_stmt_while[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, cond: ref Expr, body: ref Block, span: ref Span) -> Ty sync {
-    let cond_ty = host.expr(state, cond, span)
+    let cond_ty = check_core_expr(state, world, host, cond, span)
     let at = check_span_at(world, cond, span)
     state.expect_bool(cond_ty, at, "A `while` loop repeats while a `bool` is `true`.")
     let depth = state.scope.len() as i64
@@ -860,7 +860,7 @@ fn check_core_stmt_for_a_range(mut state: CheckState, world: ref CheckWorld, ite
 /// **`for`** (Part I 3.3).
 pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, bindings: ref Vec[winnow_grammar::Symbol], shape: ref Vec[i64], iter: ref Expr, body: ref Block, span: ref Span) -> Ty sync {
     state.the_caller_writes_no_reference(iter, span, "a `for` lends what it iterates")
-    let over = host.expr(state, iter, span)
+    let over = check_core_expr(state, world, host, iter, span)
     state.a_loop_over_a_nullable(world, over, iter, span)
     // **A nested head walks its top-level width** (ADR-356).
     let mut width = bindings.len() as i64
@@ -1027,7 +1027,7 @@ pub fn check_core_stmt[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         Stmt::Break => check_core_stmt_jump(state, "break", span),
         Stmt::Continue => check_core_stmt_jump(state, "continue", span),
         // **One site, not two.**
-        Stmt::Expr(expr) => host.expr(state, expr, span),
+        Stmt::Expr(expr) => check_core_expr(state, world, host, expr, span),
     }
 }
 

@@ -1,0 +1,480 @@
+// crates/nikaia-std/src/tools/check_core_expr.nika
+//
+// **The hub of the checker's walk** (ADR-294, #125, #558, C-6, U-c11):
+// `check_core_expr`, which every arm calls for the expressions inside it, and
+// the dispatcher `check_core_value_of` with the arms that are left: the
+// literals, a name, a path, `-`/`!`/`&`, `?`, `throw`, `return`, `break` and
+// `continue`, a `dsl` block and `asm`. The form is the pilot's
+// (`check_core_pilot.nika`): a free function over the state, the world and a
+// host. What a test proves not `null` (ADR-350) stays Rust in
+// `check/narrow.rs`, asked through `host.reads_of_the_maybe` and
+// `host.read_as_proved`; a value's cleanup is `host.a_value_with_a_cleanup_made`.
+// One function per arm, so a deep expression's frames stay small.
+
+/// The escapes a literal may write (`build_time::ESCAPES`).
+comptime CHECK_CORE_EXPR_ESCAPES: ref String = "\\n \\r \\t \\0 \\\\ \\' \\\" \\xNN \\u{…}"
+
+/// A type by its bare name.
+fn check_core_expr_named(name: ref String) -> Ty {
+    return Ty::Named { name: name.clone(), args: [], view: false }
+}
+
+/// A view of a type by its bare name, `Ty::view`.
+fn check_core_expr_view(name: ref String) -> Ty {
+    return Ty::Named { name: name.clone(), args: [], view: true }
+}
+
+/// **The guarded half of a `catch` has no answer here** (ADR-308): what this
+/// becomes is decided after the checker has run.
+fn check_core_expr_unanswered(mut state: CheckState) sync {
+    if state.flow.guarded != null {
+        let held: CheckGuarded? = state.flow.guarded?.clone()
+        let mut guarded = held ?? CheckGuarded::nothing()
+        guarded.unanswered = true
+        state.flow.guarded = guarded
+    }
+}
+
+/// `NK1184` for an escape in a literal that nothing names.
+fn check_core_expr_escapes[H: CheckHost](mut state: CheckState, host: ref H, text: ref String, span: ref Span) sync {
+    let refused = host.an_escape_nothing_names(text) ?? return
+    state.an_escape_nothing_names(text, refused.written, refused.why, CHECK_CORE_EXPR_ESCAPES, span)
+}
+
+/// **The walk of one expression**, and what every arm asks of the ones inside
+/// it: the arm's type, and what holds of every expression whatever it is.
+pub fn check_core_expr[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, span: ref Span) -> Ty sync {
+    let reaching: String? = state.flow.reaching?.clone()
+    state.flow.reaching = null
+    state.flow.reached = reaching
+    host.reads_of_the_maybe(expr)
+    let said_before = state.flow.unknown_said
+    let walked = check_core_value_of(state, world, host, expr, span)
+    let said_inside = state.flow.unknown_said > said_before
+    let opened = check_core_expr_open_receiver(state, expr, walked)
+    let ty = check_core_expr_flat_get(state, world, expr, opened)
+    if state.flow.read_a_map && check_core_expr_a_map_read(world, expr) {
+        state.flow.map_read_sites.insert(id_of(expr) as i64)
+    }
+    // **A value with a cleanup made here may die in this function**
+    // (ADR-297 D2): by a call or a literal, which is where one comes from.
+    if check_core_expr_makes_a_value(expr) {
+        host.a_value_with_a_cleanup_made(state, ty)
+    }
+    if ty.is_unknown() && !said_inside {
+        state.a_value_of_no_known_type(world, expr, span)
+    }
+    return ty
+}
+
+/// A call, a method call or a struct literal: where a value is made.
+fn check_core_expr_makes_a_value(expr: ref Expr) -> bool {
+    return match expr {
+        Expr::Call { .. } | Expr::MethodCall { .. } | Expr::SafeMethod { .. } | Expr::StructLit { .. } => true,
+        else => false,
+    }
+}
+
+/// An index or a `get`: a read of a map, where the walk read one.
+fn check_core_expr_a_map_read(world: ref CheckWorld, expr: ref Expr) -> bool {
+    return match expr {
+        Expr::Index { .. } => true,
+        Expr::MethodCall { method, .. } => world.words.resolve(method) == "get",
+        else => false,
+    }
+}
+
+/// Whether `ty`, or the `T` of a `T?`, is the named integer `own`.
+fn check_core_expr_its_own(ty: ref Ty, own: ref String) -> bool {
+    return match ty {
+        Ty::Nullable(inner) => match inner {
+            Ty::Named { name, args, view } => !view && args.len() == 0 && name == own,
+            else => false,
+        },
+        Ty::Named { name, args, view } => !view && args.len() == 0 && name == own,
+        else => false,
+    }
+}
+
+/// **A call on a number written as its receiver is as open as the number**
+/// (#417): `7.wrapping_add(1)` is whatever integer its use asks for, as
+/// `7 + 1` is, so its type is not claimed here and the first use that asks
+/// decides the literal's.
+fn check_core_expr_open_receiver(mut state: CheckState, expr: ref Expr, ty: Ty) -> Ty sync {
+    match expr {
+        Expr::MethodCall { receiver, .. } => {
+            match receiver {
+                Expr::LitInt { value, negative, .. } => {
+                    let key = id_of(receiver) as i64
+                    let own: String = (state.facts.unsigned_literals.get(key) ?? "").clone()
+                    if own != "" && check_core_expr_its_own(ty, own) {
+                        state.flow.literal_receivers.push((key, integer(value, negative)))
+                        return Ty::Unknown
+                    }
+                },
+                else => {},
+            }
+        },
+        else => {},
+    }
+    return ty
+}
+
+/// Whether `ty` is a `T?` of a `T?`.
+fn check_core_expr_doubly(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Nullable(inner) => match inner {
+            Ty::Nullable(_) => true,
+            else => false,
+        },
+        else => false,
+    }
+}
+
+/// The `T` of a `T?`.
+fn check_core_expr_inside(ty: ref Ty) -> Ty {
+    return match ty {
+        Ty::Nullable(inner) => inner.clone(),
+        else => ty.clone(),
+    }
+}
+
+/// **`get` on a map of `T?` is one `T?`, as the brackets are** (ADR-293 D12):
+/// the signature hands back `V?`, and a `V` that is a `T?` would make it a
+/// `T?` of a `T?`.
+fn check_core_expr_flat_get(mut state: CheckState, world: ref CheckWorld, expr: ref Expr, ty: Ty) -> Ty sync {
+    match expr {
+        Expr::MethodCall { method, args, .. } => {
+            if world.words.resolve(method) == "get" && args.len() == 1 && check_core_expr_doubly(ty) {
+                state.facts.flat_reads.insert(id_of(expr) as i64)
+                return check_core_expr_inside(ty)
+            }
+        },
+        else => {},
+    }
+    return ty
+}
+
+/// **The type of one expression, by its shape.** Each arm is a function of
+/// its own, here or in the unit that moved it.
+pub fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, span: ref Span) -> Ty sync {
+    return match expr {
+        // A bare number fits every numeric type, exactly as it does in the
+        // language below.
+        Expr::LitInt { .. } => Ty::Unknown,
+        // **A float literal is an `f64`** (#503).
+        Expr::LitFloat(_, _) => check_core_expr_named("f64"),
+        // **The type comes from the syntax** (ADR-309 D2): `"…"` is a view
+        // of static text and `f"…"` is a `String`.
+        Expr::LitStr { text, .. } => check_core_expr_text(state, world, host, text, span),
+        Expr::LitInterpolated { parts, .. } => check_core_expr_interpolated(state, world, host, expr, parts, span),
+        Expr::LitChar(text, _) => {
+            check_core_expr_escapes(state, host, text, span)
+            check_core_expr_named("scalar")
+        },
+        Expr::LitBool(_, _) => check_core_expr_named("bool"),
+        // **A nullable of it-does-not-say** (Part III, C.4).
+        Expr::LitNull(_) => Ty::Nullable(Ty::Unknown),
+        Expr::Variable(name, _) => check_core_expr_variable(state, world, host, expr, name, span),
+        Expr::Path(segments, _) => check_core_expr_path(state, world, segments, span),
+        Expr::Block(block, _) => check_core_block(state, world, host, block),
+        Expr::Unsafe(block, _) => check_core_flow_unsafe(state, world, host, block),
+        Expr::Overlap(block, _) => check_core_flow_overlap(state, world, host, block, span),
+        Expr::Select(arms, _) => check_core_flow_select(state, world, host, arms, span),
+        Expr::If { cond, then_branch, else_branch, .. } => check_core_flow_if(state, world, host, expr, cond, then_branch, else_branch, span),
+        Expr::Match { value, arms, .. } => check_core_flow_match(state, world, host, expr, value, arms, span),
+        Expr::Call { func, args, config, .. } => check_core_call(state, world, host, func, args, config, span),
+        Expr::MethodCall { receiver, method, args, config, .. } => check_core_method(state, world, host, expr, false, receiver, method, args, config, span),
+        Expr::SafeMethod { receiver, method, args, config, .. } => check_core_method(state, world, host, expr, true, receiver, method, args, config, span),
+        Expr::Field { base, name, .. } => check_core_field(state, world, host, expr, false, base, name, span),
+        Expr::SafeField { base, name, .. } => check_core_field(state, world, host, expr, true, base, name, span),
+        Expr::StructLit { name, fields, .. } => check_core_struct_literal(state, world, host, expr, name, fields, span),
+        Expr::With { base, fields, .. } => check_core_with(state, world, host, expr, base, fields, span),
+        Expr::Closure { params, mutable, body, .. } => check_core_ops_closure(state, world, host, params, mutable, body, span),
+        Expr::Unary { op, expr: inner, .. } => check_core_expr_unary(state, world, host, expr, op, inner, span),
+        Expr::Binary { op, lhs, rhs, span: at, .. } => check_core_ops_binary(state, world, host, op, lhs, rhs, at, span),
+        Expr::Cast { expr: inner, ty, .. } => check_core_cast(state, world, host, inner, ty, span),
+        Expr::Tuple(parts, _) => check_core_tuple(state, world, host, parts, span),
+        Expr::ListLit { items, .. } => check_core_list_literal(state, world, host, items, span),
+        // A `?` unwraps a failure: Stage 0 has no signature for it.
+        Expr::Try(inner, _) => {
+            check_core_expr(state, world, host, inner, span)
+            Ty::Unknown
+        },
+        Expr::Throw(inner, _) => check_core_expr_throw(state, world, host, inner, span),
+        // **`return`, `break` and `continue` where an expression stands**
+        // (ADR-276 D20): each asks exactly what its statement form asks.
+        Expr::Return(value, _) => {
+            check_core_returns(state, world, host, value, span, true)
+            state.a_way_out("return", "", span)
+            Ty::Unknown
+        },
+        Expr::Break(_) => check_core_expr_jump(state, "break", span),
+        Expr::Continue(_) => check_core_expr_jump(state, "continue", span),
+        Expr::Coalesce { value, fallback, .. } => check_core_ops_coalesce(state, world, host, expr, value, fallback, span),
+        Expr::Index { base, index, .. } => check_core_index(state, world, host, expr, base, index, span),
+        Expr::Range { start, end, .. } => check_core_range(state, world, host, start, end, span),
+        Expr::TryCatch { expr: guarded, handler, .. } => check_core_flow_try_catch(state, world, host, guarded, handler, span),
+        Expr::Spawn { body, .. } => check_core_ops_spawn(state, world, host, body, span),
+        Expr::Dsl { target, package, context, content, .. } => check_core_expr_dsl(state, world, host, expr, target, package, context, content, span),
+        // An `asm` block: what it produces is the business of the emitter
+        // that compiles it.
+        Expr::Asm { .. } => {
+            check_core_expr_unanswered(state)
+            Ty::Unknown
+        },
+    }
+}
+
+/// `"…"`: its escapes, and a hole written the old way (ADR-309 D15).
+fn check_core_expr_text[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, text: ref String, span: ref Span) -> Ty sync {
+    check_core_expr_escapes(state, host, text, span)
+    state.unmarked_hole(world, host, text, span)
+    return check_core_expr_view("str")
+}
+
+/// **A hole is checked like anything else** (ADR-309 D13); with a file's name
+/// in a hole the literal builds a name (ADR-319 D4).
+fn check_core_expr_interpolated[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, parts: ref Vec[FPart], span: ref Span) -> Ty sync {
+    for part in parts {
+        match part {
+            FPart::Text(text) => check_core_expr_escapes(state, host, text, span),
+            else => {},
+        }
+    }
+    check_core_holes(state, world, host, expr, span)
+    if state.facts.path_holes.contains_key(id_of(expr) as i64) {
+        return check_core_expr_named("fs::Path")
+    }
+    return check_core_expr_named("String")
+}
+
+/// Where a name is read, an empty list it binds, or -1.
+fn check_core_expr_empty_list(state: ref CheckState, name: ref String) -> i64 sync {
+    let local = state.binding(name) ?? return -1
+    return local.empty_list ?? -1
+}
+
+/// **A name read.**
+fn check_core_expr_variable[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, symbol: winnow_grammar::Symbol, span: ref Span) -> Ty sync {
+    let name = world.words.resolve(symbol).clone()
+    // `NK2101`: where this name is read, for the question a `spawn` asks
+    // about what comes after it.
+    state.read_at.push((name.clone(), span.start as i64))
+    // **D2's question, answered where every name is read** (ADR-135): an
+    // empty list takes its element type from its first use.
+    let at = check_core_expr_empty_list(state, name)
+    if at >= 0 {
+        state.flow.empty_lists.remove(at)
+    }
+    let found: Ty? = state.lookup(name)
+    if found != null {
+        let ty: Ty = found ?? Ty::Unknown
+        state.a_read(expr, name, span)
+        state.a_sequence_is_taken(name, ty, span)
+        // What a test proves not `null` is read as the `T` (ADR-350).
+        let nullable = match ty {
+            Ty::Nullable(_) => true,
+            else => false,
+        }
+        if !nullable || state.reading_only {
+            return ty
+        }
+        return host.read_as_proved(state, expr, name, ty, span)
+    }
+    // **`assert` is called** (ADR-269 D2).
+    if check_core_call_the_prelude_assert(state, world, expr) {
+        state.an_assert_of_another_shape("`assert` is a function, and is called: write `assert(cond)`".clone(), span)
+        return Ty::Unknown
+    }
+    // **A function or a type's constructor named as a value** (#502, #507).
+    let as_value: Ty? = state.function_as_a_value(world, name)
+    if as_value != null {
+        // **Its callers are no longer all in sight** (ADR-351 D4).
+        let mut entry: CheckStoredCode = state.stored_code.remove(AS_VALUE) ?? CheckStoredCode::empty()
+        entry.free.insert(name.clone())
+        state.stored_code.insert(AS_VALUE.clone(), entry)
+        return as_value ?? Ty::Unknown
+    }
+    // **The specific message wins** (ADR-277).
+    if !state.withdrawn_automatic_name(name, span) {
+        state.nothing_declares_it(world, expr, span)
+    }
+    return Ty::Unknown
+}
+
+/// The element of the member a shape bound makes reachable, or `""`.
+fn check_core_expr_shape_element(state: ref CheckState, ty: ref String, member: ref String) -> String {
+    let bounds = state.type_parameters.get(ty) ?? return ""
+    for bound in bounds {
+        if bound == "Struct" && member == "fields" {
+            return "$Field"
+        }
+        if bound == "Enum" && member == "variants" {
+            return "$Variant"
+        }
+    }
+    return ""
+}
+
+/// Whether a ledger declares `owner` with a case `variant` that holds nothing.
+fn check_core_expr_a_bare_case(ledger: ref Ledger, owner: ref String, variant: ref String) -> bool {
+    let declared = ledger.types.get(owner) ?? return false
+    for one in declared.variants {
+        if one.name == variant && one.holds.len() == 0 {
+            return true
+        }
+    }
+    return false
+}
+
+/// **A path**: `Op::Times` is a value of the enum that declares it.
+fn check_core_expr_path(mut state: CheckState, world: ref CheckWorld, segments: ref Vec[winnow_grammar::Symbol], span: ref Span) -> Ty sync {
+    let mut names: Vec[String] = []
+    for segment in segments {
+        names.push(world.words.resolve(segment).clone())
+    }
+    // **A constructor handed over as a value** (ADR-140 D2).
+    state.a_constructor_written_as_new(world, names.join("::"), span)
+    if names.len() == 2 {
+        let ty = names[0].clone()
+        let member = names[1].clone()
+        if state.is_variant(ty, member) {
+            return check_core_expr_named(ty)
+        }
+        // **A method named as a value** (#507): `Summary::merge`.
+        let as_value: Ty? = state.function_as_a_value(world, f"{ty}::{member}")
+        if as_value != null {
+            return as_value ?? Ty::Unknown
+        }
+        // **`T::fields` is a list of the type's fields** (ADR-304 D2).
+        let mut walks = false
+        for (_, walked) in state.walks_fields {
+            if walked == ty {
+                walks = true
+            }
+        }
+        if walks {
+            let element = check_core_expr_shape_element(state, ty, member)
+            if element != "" {
+                return Ty::Named { name: "Vec".clone(), args: [check_core_expr_named(element)], view: false }
+            }
+        }
+        state.a_member_this_type_does_not_have(world, ty, member, span)
+        return Ty::Unknown
+    }
+    // **A `std` enum's case is a value of that enum** (#507), and a
+    // package's (#497).
+    if names.len() == 3 {
+        let owner = world.here.unaliased(f"{names[0]}::{names[1]}")
+        if check_core_expr_a_bare_case(world.library, owner, names[2]) || check_core_expr_a_bare_case(world.own, owner, names[2]) {
+            return check_core_expr_named(owner)
+        }
+    }
+    return Ty::Unknown
+}
+
+/// `-x`, `!x` and `&x`.
+fn check_core_expr_unary[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, whole: ref Expr, op: UnaryOp, inner: ref Expr, span: ref Span) -> Ty sync {
+    let negation = match op {
+        UnaryOp::Neg => true,
+        else => false,
+    }
+    if negation {
+        let reached: String? = state.flow.reached?.clone()
+        state.flow.reached = null
+        state.flow.reaching = reached
+    }
+    // `&s` looks at a sequence without taking it (ADR-293 D19). Only a name
+    // directly under the `&`: `&f(s)` still hands `s` over.
+    let looks = match op {
+        UnaryOp::Ref => match inner {
+            Expr::Variable(_, _) => true,
+            else => false,
+        },
+        else => false,
+    }
+    let outer = state.reading_only
+    state.reading_only = looks
+    let found = check_core_expr(state, world, host, inner, span)
+    state.reading_only = outer
+    return match op {
+        UnaryOp::Neg => {
+            let literal = match inner {
+                Expr::LitInt { .. } => true,
+                else => false,
+            }
+            match value_of_a_copy(found.unseen()) {
+                Ty::Named { name, args, view } => {
+                    if !view && args.len() == 0 && (name == "i32" || name == "i64") && !literal {
+                        state.facts.negations.insert(id_of(whole) as i64, name.clone())
+                    }
+                },
+                else => {},
+            }
+            found
+        },
+        // **`!` on an integer flips its bits** (ADR-285 D3).
+        UnaryOp::Not => {
+            let boolean = check_core_expr_named("bool")
+            let value = value_of_a_copy(found.unseen())
+            if integer_named(value) != null {
+                value
+            } else if found.fits(boolean) {
+                boolean
+            } else {
+                Ty::Unknown
+            }
+        },
+        UnaryOp::Ref => view_of_type(found),
+    }
+}
+
+/// `throw`: what it throws is walked, and it leaves the function (Kap 7.1).
+fn check_core_expr_throw[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, inner: ref Expr, span: ref Span) -> Ty sync {
+    let thrown = check_core_expr(state, world, host, inner, span)
+    state.a_thrown_value_that_is_not_an_error(inner, thrown, span)
+    state.a_way_out("throw", "", span)
+    return Ty::Unknown
+}
+
+/// `break` and `continue` where an expression stands.
+fn check_core_expr_jump(mut state: CheckState, word: ref String, span: ref Span) -> Ty sync {
+    if state.flow.loops == 0 {
+        state.a_jump_with_nowhere_to_go(word, span)
+    }
+    return Ty::Unknown
+}
+
+/// Whether the program declares the grammar `name` with one entry.
+fn check_core_expr_one_entry(state: ref CheckState, name: ref String) -> bool {
+    let entries = state.grammars.get(name) ?? return false
+    return entries.len() == 1
+}
+
+/// **A `dsl` block.** A package where a grammar stands is `NK1228`; a block
+/// over a grammar this program declares is run while the program is built
+/// (Part II 10.5, ADR-299 D20, #518); `dsl html` builds a `String` (#505) and
+/// a statement with `:name` holes is its own text (ADR-296 D5).
+fn check_core_expr_dsl[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, target: winnow_grammar::Symbol, package: winnow_grammar::Symbol?, context: winnow_grammar::Symbol?, content: ref String, span: ref Span) -> Ty sync {
+    let bare = package == null
+    if bare && state.a_package_where_a_grammar_stands(world.here, target, span) {
+        check_core_expr_unanswered(state)
+        return Ty::Unknown
+    }
+    let name = world.words.resolve(target).clone()
+    let plain = bare && context == null
+    let deferred = is_deferred(name, content)
+    if plain && !deferred && check_core_expr_one_entry(state, name) {
+        return check_core_a_block_over_a_grammar(state, world, host, expr, target, content, span)
+    }
+    check_core_expr_unanswered(state)
+    check_core_holes(state, world, host, expr, span)
+    if plain && name == "html" && !is_deferred("html", content) {
+        return check_core_expr_named("String")
+    }
+    if plain && deferred {
+        return check_core_expr_view("str")
+    }
+    return Ty::Unknown
+}

@@ -93,10 +93,18 @@ pub trait CheckHost {
     /// Where a run that stopped at `place` (`@<file>:<byte>`) stopped, seen
     /// from file `here`.
     fn place_of(ref self, place: ref String, here: i64) -> CheckPlace sync
-    /// **The expression, walked** (U-c0): the hub the core comes back through
-    /// until the dispatcher itself is Nikaia (U-c11). Only the host the core
-    /// runs under answers it.
-    fn expr(ref self, mut state: CheckState, node: ref Expr, span: ref Span) -> Ty sync
+    /// **The reads below `expr` that ask about the `T?` itself** (ADR-350,
+    /// U-c11): `check/narrow.rs` keeps them, and no state crosses.
+    fn reads_of_the_maybe(ref self, expr: ref Expr) sync
+    /// **A read of a `T?` name, as the `T` where a test proves it** (ADR-350,
+    /// U-c11): `check/narrow.rs`'s.
+    fn read_as_proved(ref self, mut state: CheckState, expr: ref Expr, name: ref String, ty: ref Ty, span: ref Span) -> Ty sync
+    /// **A value with a cleanup, made here** (ADR-297 D2, U-c11): the
+    /// cleanup's questions stay Rust.
+    fn a_value_with_a_cleanup_made(ref self, mut state: CheckState, ty: ref Ty) sync
+    /// The first escape in a literal that this language's set does not name
+    /// (`build_time::an_escape_nothing_names`, U-c11).
+    fn an_escape_nothing_names(ref self, text: ref String) -> NotAnEscape? sync
     /// **A value with a cleanup, bound by a `let`, dies where its block ends**
     /// (ADR-297 D2, U-c7): the cleanup's questions stay Rust.
     fn a_value_with_a_cleanup_bound(ref self, mut state: CheckState, name: ref String, ty: ref Ty, span: ref Span) sync

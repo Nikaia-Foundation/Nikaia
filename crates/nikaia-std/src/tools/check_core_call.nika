@@ -4,7 +4,7 @@
 // U-c4): `call` and the arms `Call`, `ListLit` and `Tuple` of `value_of`. The
 // form is the pilot's (`check_core_pilot.nika`): a free function over the
 // state, the world and a host; the walk comes back through the hub
-// `host.expr`. What stays Rust is asked through the host: `arguments` (C-5h),
+// `check_core_expr`. What stays Rust is asked through the host: `arguments` (C-5h),
 // `an_attribute_read`, `a_call_that_hands_its_number_back`,
 // `a_standard_bound_not_met`, and the half of a `task::scope` call that
 // belongs to the task work (#605).
@@ -370,7 +370,7 @@ fn check_core_call_passed[H: CheckHost](mut state: CheckState, world: ref CheckW
     let mut passed: Vec[(String, Ty)] = []
     for option in config {
         check_core_a_field_of_a_borrowed_subject(state, world, host, option.value, span, "passed")
-        let ty = host.expr(state, option.value, span)
+        let ty = check_core_expr(state, world, host, option.value, span)
         passed.push((f"{world.words.resolve(option.name)}", ty))
     }
     return passed
@@ -416,7 +416,7 @@ fn check_core_call_named_call[H: CheckHost](mut state: CheckState, world: ref Ch
     if config.len() > 0 && args.len() == 0 && state.declares_a_type(world, name) {
         state.a_literal_written_like_a_call(world, name, config, span)
         for option in config {
-            host.expr(state, option.value, span)
+            check_core_expr(state, world, host, option.value, span)
         }
         return check_core_call_named(name)
     }
@@ -544,7 +544,7 @@ pub fn check_core_free_call[H: CheckHost](mut state: CheckState, world: ref Chec
         Expr::Variable(word, _) => { name = f"{world.words.resolve(word)}" },
         Expr::Path(segments, _) => { name = world.here.unaliased(check_core_call_joined(world, segments)) },
         else => {
-            host.expr(state, func, span)
+            check_core_expr(state, world, host, func, span)
             return Ty::Unknown
         }
     }
@@ -579,7 +579,7 @@ pub fn check_core_call[H: CheckHost](mut state: CheckState, world: ref CheckWorl
 pub fn check_core_tuple[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, parts: ref Vec[Expr], span: ref Span) -> Ty sync {
     let mut found: Vec[Ty] = []
     for part in parts {
-        found.push(host.expr(state, part, span))
+        found.push(check_core_expr(state, world, host, part, span))
     }
     let mut i = 0
     for part in parts {

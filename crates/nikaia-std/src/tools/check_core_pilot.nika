@@ -6,7 +6,7 @@
 // the form every later unit takes: a free function over the state
 // (`mut state: CheckState`, which lowers to `&mut CheckState`), the world, and
 // a host `H: CheckHost`; what has not moved yet is asked of the host
-// (`host.expr` is the hub the walk comes back through), what has is called as
+// (`check_core_expr` is the hub the walk comes back through), what has is called as
 // `check_core_*`, and what is below the core is a method of the state.
 
 use std::collections
@@ -24,7 +24,7 @@ pub fn check_specialised(function: ref String, on: ref String) -> String {
 /// to is the contract's result.
 pub fn check_core_grammar_call[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, key: ref String, args: ref Vec[Expr], span: ref Span) -> Ty sync {
     for arg in args {
-        host.expr(state, arg, span)
+        check_core_expr(state, world, host, arg, span)
     }
     let contract = world.own.functions[key]?.clone() ?? return Ty::Unknown
     if contract.fails_with.len() > 0 && state.flow.guarded != null {
@@ -49,7 +49,7 @@ pub fn check_core_a_compound_write_to_a_map_slot[H: CheckHost](mut state: CheckS
         Expr::Index { base, index, .. } => {
             // Only where the read is nullable, which is only a map. Where the
             // container's type is not known, nothing is claimed.
-            let read = host.expr(state, target, span)
+            let read = check_core_expr(state, world, host, target, span)
             let nullable = match read {
                 Ty::Nullable(_) => true,
                 else => false,
@@ -79,7 +79,7 @@ pub fn check_core_an_instantiation[H: CheckHost](mut state: CheckState, world: r
     // Walked with the walk switched off, because the argument is walked again
     // by the ordinary path and a message said twice is two problems to a reader.
     let before = state.findings.len()
-    let given = host.expr(state, args[0], span)
+    let given = check_core_expr(state, world, host, args[0], span)
     state.findings.truncate(before)
     let on: String = match given {
         Ty::Named { name, .. } => name.clone(),
@@ -104,7 +104,7 @@ pub fn check_core_a_mut_parameter_given_away[H: CheckHost](mut state: CheckState
     if !local.changing {
         return
     }
-    let ty = host.expr(state, value, span)
+    let ty = check_core_expr(state, world, host, value, span)
     if ty.is_unknown() || state.copied(world, ty) {
         return
     }

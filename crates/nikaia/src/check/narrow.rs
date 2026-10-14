@@ -99,24 +99,6 @@ impl Checker<'_> {
         markers
     }
 
-    /// Walk `walk` with `names` proved, in a frame of their own.
-    #[allow(dead_code)]
-    pub(super) fn with_proved<T>(
-        &mut self,
-        names: &[String],
-        walk: impl FnOnce(&mut Self) -> T,
-    ) -> T {
-        let frame = self.s.scope.len();
-        let markers = self.proofs_for(names, frame);
-        if markers.is_empty() {
-            return walk(self);
-        }
-        self.s.scope.push(markers);
-        let value = walk(self);
-        self.s.scope.pop();
-        value
-    }
-
     /// `names` proved for the rest of the block being walked: an `if` above
     /// left it where they were `null`.
     pub(super) fn proved_from_here(&mut self, names: &[String]) {

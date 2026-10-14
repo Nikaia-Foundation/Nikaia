@@ -305,7 +305,7 @@ gives what each core unit calls.
 | U-c8 (done, 0.0.943) | `check_core_flow.nika` | the arms `Match`, `If`, `Select`, `Overlap`, `TryCatch`, `Block`, `Unsafe` | 609 |
 | U-c9 (done, 0.0.930) | `check_core_places.nika` | the arms `Field \| SafeField`, `StructLit`, `With`, `Index`, `Cast`, `Range` | 709 |
 | U-c10 (done, 0.0.948) | `check_core_ops.nika` | the arms `Binary`, `Coalesce`, `Closure`, `Spawn` | 683 |
-| U-c11 | `check_core_expr.nika` | the literals, `Variable`, `Path`, `Try`, `Throw`, `Return`, `Break \| Continue`, `Dsl` (3 arms), `Asm`; the dispatcher `value_of` and `expr`. Every `host.expr(` becomes `check_core_expr(`, the host method `expr` is deleted, and callgrind runs | 387 |
+| U-c11 (done, 0.0.954) | `check_core_expr.nika` | the literals, `Variable`, `Path`, `Try`, `Throw`, `Return`, `Break \| Continue`, `Dsl` (3 arms), `Asm`; the dispatcher `value_of` and `expr`. Every `host.expr(` becomes `check_core_expr(`, the host method `expr` is deleted, and callgrind runs | 387 |
 
 **Oracle per unit:**
 
@@ -328,7 +328,17 @@ gives what each core unit calls.
 | Whole run | 42,643,414 |
 | `check::walked`, inclusive | 20,462,992 |
 
-Measure again after U-c11 only.
+After U-c11 (0.0.954, same file, `lower --no-cache`, release, no LTO
+change), against the binary of 0.0.948 (U-c10) on the same day:
+
+| Count | 0.0.948 | 0.0.954 |
+| :--- | ---: | ---: |
+| Whole run, Ir | 48,890,123 | 48,531,833 |
+| `check::walked`, inclusive, Ir | 24,801,374 | 24,421,249 |
+| Mispredicted branches (Bcm + Bim), whole run | 409,901 | 419,213 |
+
+The arms now call each other directly instead of crossing back through
+`host.expr`; a name read crosses only when its type is a `T?`.
 
 **The deep-nesting test (`check_deep_nesting.rs`, in U-c0).** It runs at the
 default 8 MB main stack. Today's limits:

@@ -5,7 +5,7 @@
 // `a_kept_lambda`, `literal_by_use`, `holes`, `lambda`, `returns` and
 // `an_assert`. The form is the pilot's (`check_core_pilot.nika`): a free
 // function over the state, the world and a host; the walk comes back through
-// the hubs `host.expr` and `host.block`.
+// the hubs `check_core_expr` and `host.block`.
 
 use std::collections
 
@@ -28,7 +28,7 @@ pub fn check_core_a_field_of_a_borrowed_subject[H: CheckHost](mut state: CheckSt
         return
     }
     let field = check_core_field_of_self(world, value) ?? return
-    let ty = host.expr(state, value, span)
+    let ty = check_core_expr(state, world, host, value, span)
     if ty.is_unknown() || copies_plainly(ty) {
         return
     }
@@ -62,7 +62,7 @@ pub fn check_core_a_field_of_a_lent_place_handed_back[H: CheckHost](mut state: C
     if root == "self" || !state.lent_here(root) {
         return
     }
-    let ty = host.expr(state, value, span)
+    let ty = check_core_expr(state, world, host, value, span)
     if ty.is_unknown() || copies_plainly(ty) {
         return
     }
@@ -129,7 +129,7 @@ pub fn check_core_a_kept_lambda[H: CheckHost](mut state: CheckState, world: ref 
                         state.flow.caught = true
                         state.flow.guarded = null
                         state.handed_over = null
-                        host.expr(state, call, span)
+                        check_core_expr(state, world, host, call, span)
                         state.flow.caught = was_caught
                         state.flow.guarded = enclosing
                         state.handed_over = handed
@@ -224,7 +224,7 @@ pub fn check_core_holes[H: CheckHost](mut state: CheckState, world: ref CheckWor
             frame.push(CheckLocal::free(name.clone(), element, id))
         }
         state.scope.push(frame)
-        let held = host.expr(state, hole, span)
+        let held = check_core_expr(state, world, host, hole, span)
         match hole {
             Expr::Variable(name, _) => {
                 seen.insert(world.words.resolve(name).clone(), held.clone())
@@ -326,7 +326,7 @@ pub fn check_core_returns[H: CheckHost](mut state: CheckState, world: ref CheckW
     let mut found: Ty = Ty::Tuple([])
     if value != null {
         let given = value ?? return
-        found = host.expr(state, given, span)
+        found = check_core_expr(state, world, host, given, span)
     }
     state.flow.lambda_expected = null
     let expected: Ty = state.expected?.clone() ?? return
@@ -395,13 +395,13 @@ pub fn check_core_an_assert[H: CheckHost](mut state: CheckState, world: ref Chec
     if args.len() != 1 {
         state.an_assert_of_another_shape(f"`assert` claims one condition, and this hands it {args.len()}", span)
         for arg in args {
-            host.expr(state, arg, span)
+            check_core_expr(state, world, host, arg, span)
         }
         return unit
     }
     let condition = args[0]
     state.stored_frames.push(CheckStoredCode::empty())
-    let found = host.expr(state, condition, span)
+    let found = check_core_expr(state, world, host, condition, span)
     let frame: CheckStoredCode = state.stored_frames.pop() ?? CheckStoredCode::empty()
     let at = check_span_at(world, condition, span)
     state.expect_bool(found, at, "An `assert` checks a `bool`.")
@@ -414,7 +414,7 @@ pub fn check_core_an_assert[H: CheckHost](mut state: CheckState, world: ref Chec
     let mut index = 0
     for option in config {
         let name = world.words.resolve(option.name).clone()
-        let given = host.expr(state, option.value, span)
+        let given = check_core_expr(state, world, host, option.value, span)
         if name != "message" {
             state.an_assert_of_another_shape(f"`assert` has no option called `{name}`. Its only option is `message:`.", span)
             index += 1

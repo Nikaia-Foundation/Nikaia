@@ -3,7 +3,7 @@
 // **A method call, `x.m(…)` and `x?.m(…)`** (ADR-294, #125, #558, C-6,
 // U-c6): the arm `MethodCall | SafeMethod` of the checker's walk. The form is
 // the pilot's (`check_core_pilot.nika`): a free function over the state, the
-// world and a host; the walk comes back through the hub `host.expr`. What
+// world and a host; the walk comes back through the hub `check_core_expr`. What
 // stays Rust is asked through the host: `an_attribute_read`, and through
 // `check_core_call_on` the task work (#605).
 //
@@ -469,7 +469,7 @@ pub fn check_core_method[H: CheckHost](mut state: CheckState, world: ref CheckWo
     let mut at = 0
     while at < config.len() as i64 {
         if at != witness {
-            host.expr(state, config[at].value, span)
+            check_core_expr(state, world, host, config[at].value, span)
         }
         at += 1
     }
@@ -479,7 +479,7 @@ pub fn check_core_method[H: CheckHost](mut state: CheckState, world: ref CheckWo
     if entered != null {
         let entry: String = entered ?? return Ty::Unknown
         if witness >= 0 {
-            host.expr(state, config[witness].value, span)
+            check_core_expr(state, world, host, config[witness].value, span)
         }
         // **The dot is gone** (ADR-140 D3).
         let mut owner: String = entry.clone()
@@ -493,7 +493,7 @@ pub fn check_core_method[H: CheckHost](mut state: CheckState, world: ref CheckWo
         state.a_grammar_reached_through_a_dot(owner, rule, span)
         return check_core_grammar_call(state, world, host, entry, args, span)
     }
-    let mut on: Ty = host.expr(state, receiver, span)
+    let mut on: Ty = check_core_expr(state, world, host, receiver, span)
     on = check_core_method_literal(state, receiver, on)
     // **`x?.m(…)`** (Part I 3.5, ADR-279 D13).
     if safe {
@@ -511,10 +511,10 @@ pub fn check_core_method[H: CheckHost](mut state: CheckState, world: ref CheckWo
         }
         if unknown {
             for a in args {
-                host.expr(state, a, span)
+                check_core_expr(state, world, host, a, span)
             }
             if witness >= 0 {
-                host.expr(state, config[witness].value, span)
+                check_core_expr(state, world, host, config[witness].value, span)
             }
             return Ty::Unknown
         }
@@ -579,10 +579,10 @@ pub fn check_core_method[H: CheckHost](mut state: CheckState, world: ref CheckWo
             return check_core_method_attribute(name, read)
         }
         for a in args {
-            host.expr(state, a, span)
+            check_core_expr(state, world, host, a, span)
         }
         if witness >= 0 {
-            host.expr(state, config[witness].value, span)
+            check_core_expr(state, world, host, config[witness].value, span)
         }
         if name != "is" || args.len() != 1 {
             state.a_reflected_variant_has_two_members(f"{name}(…)", span)
@@ -598,10 +598,10 @@ pub fn check_core_method[H: CheckHost](mut state: CheckState, world: ref CheckWo
             return check_core_method_attribute(name, read)
         }
         for a in args {
-            host.expr(state, a, span)
+            check_core_expr(state, world, host, a, span)
         }
         if witness >= 0 {
-            host.expr(state, config[witness].value, span)
+            check_core_expr(state, world, host, config[witness].value, span)
         }
         if name != "of" {
             state.a_reflected_field_has_two_members(f"{name}(…)", span)
@@ -618,10 +618,10 @@ pub fn check_core_method[H: CheckHost](mut state: CheckState, world: ref CheckWo
         state.reaches_into_a_nullable(on, "method", name, span)
         // The arguments are still walked.
         for a in args {
-            host.expr(state, a, span)
+            check_core_expr(state, world, host, a, span)
         }
         if witness >= 0 {
-            host.expr(state, config[witness].value, span)
+            check_core_expr(state, world, host, config[witness].value, span)
         }
         return Ty::Unknown
     }
@@ -631,7 +631,7 @@ pub fn check_core_method[H: CheckHost](mut state: CheckState, world: ref CheckWo
     let door = witness >= 0 && locked_content_of(on) != null && name == "set"
     if witness >= 0 && !within && !door {
         // Not a lock after all, so it was an option like any other.
-        host.expr(state, config[witness].value, span)
+        check_core_expr(state, world, host, config[witness].value, span)
     }
     if door {
         state.the_witness_takes_no_reference(config[witness].value, span)

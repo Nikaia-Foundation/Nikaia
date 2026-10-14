@@ -4,7 +4,7 @@
 // of a field that holds a function** (ADR-294, #125, #558, C-6, U-c3):
 // `arguments_given`, `locks`, `list_literal` and `a_called_field`. The form is
 // the pilot's (`check_core_pilot.nika`): a free function over the state, the
-// world and a host; the walk comes back through the hub `host.expr`.
+// world and a host; the walk comes back through the hub `check_core_expr`.
 
 use std::collections
 
@@ -125,7 +125,7 @@ fn check_core_args_other[H: CheckHost](mut state: CheckState, world: ref CheckWo
     if !lends {
         check_core_a_field_of_a_borrowed_subject(state, world, host, arg, span, "passed")
     }
-    let found = host.expr(state, arg, span)
+    let found = check_core_expr(state, world, host, arg, span)
     let named = check_core_args_named(state, world, arg)
     let runs = check_core_args_runs(callee, at)
     let mut found_fn = false
@@ -200,7 +200,7 @@ fn check_core_args_door_block[H: CheckHost](mut state: CheckState, world: ref Ch
     let mut at = 0
     while at < count {
         let lock = args[at]
-        let found = host.expr(state, lock, span)
+        let found = check_core_expr(state, world, host, lock, span)
         let content = locked_content_of(found)
         if content != null {
             let inside: Ty = content ?? Ty::Unknown
@@ -329,7 +329,7 @@ pub fn check_core_list_literal[H: CheckHost](mut state: CheckState, world: ref C
         if check_core_args_a_closure(item) {
             state.flow.lambda_expected = element?.clone()
         }
-        let found = host.expr(state, item, span)
+        let found = check_core_expr(state, world, host, item, span)
         state.flow.lambda_expected = null
         walked.push(found)
     }

@@ -4,7 +4,7 @@
 // U-c9): the arms `Field | SafeField`, `StructLit`, `With`, `Index`, `Cast`
 // and `Range` of the checker's walk. The form is the pilot's
 // (`check_core_pilot.nika`): a free function over the state, the world and a
-// host; the walk comes back through the hub `host.expr`, a written type
+// host; the walk comes back through the hub `check_core_expr`, a written type
 // through `host.declared`, and a lambda's free calls through
 // `host.free_calls`. One function per arm, and the per-field work of a
 // literal in a function of its own, so a deep expression's frames stay small.
@@ -96,12 +96,12 @@ fn check_core_places_an_integer(name: ref String) -> bool {
 }
 
 /// A field's value, or the name of its shorthand: `Reading { name }`.
-fn check_core_places_given[H: CheckHost](mut state: CheckState, host: ref H, value: ref Expr?, field: ref String, span: ref Span) -> Ty sync {
+fn check_core_places_given[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr?, field: ref String, span: ref Span) -> Ty sync {
     if value == null {
         return state.lookup(field) ?? Ty::Unknown
     }
     let v: ref Expr = value ?? return Ty::Unknown
-    return host.expr(state, v, span)
+    return check_core_expr(state, world, host, v, span)
 }
 
 /// **A tuple's part is the type written at its position**, and a position
@@ -182,7 +182,7 @@ fn check_core_places_a_named_field(mut state: CheckState, world: ref CheckWorld,
 
 /// **`x.field` and `x?.field`** (Part I 3.5).
 pub fn check_core_field[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, safe: bool, base: ref Expr, name: winnow_grammar::Symbol, span: ref Span) -> Ty sync {
-    let on = host.expr(state, base, span)
+    let on = check_core_expr(state, world, host, base, span)
     let field: String = f"{world.words.resolve(name)}"
     // **`x?.field`**: over a `T?` the field of what is inside, as a `T?`; over
     // a plain value the plain read, with `NK1217` (ADR-279 D13).
@@ -443,7 +443,7 @@ fn check_core_places_a_literal_field[H: CheckHost](mut state: CheckState, world:
     if check_core_places_a_closure(init.value) {
         state.flow.lambda_expected = expected
     }
-    let given = check_core_places_given(state, host, init.value, field, span)
+    let given = check_core_places_given(state, world, host, init.value, field, span)
     state.flow.lambda_expected = null
     if code_field {
         check_core_places_stored(state, world, host, init.value, f"{name}.{field}")
@@ -509,7 +509,7 @@ pub fn check_core_struct_literal[H: CheckHost](mut state: CheckState, world: ref
 /// **`value with { field: … }`** (ADR-118 D1): a copy of a struct with named
 /// fields changed, of the same type.
 pub fn check_core_with[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, base: ref Expr, fields: ref Vec[FieldInit], span: ref Span) -> Ty sync {
-    let found = host.expr(state, base, span)
+    let found = check_core_expr(state, world, host, base, span)
     let mut written: String = ""
     let mut view = false
     match found {
@@ -561,7 +561,7 @@ fn check_core_places_a_with_field[H: CheckHost](mut state: CheckState, world: re
         seen.insert(field.clone())
     }
     // `user with { name }` - the shorthand is the literal's.
-    let given = check_core_places_given(state, host, init.value, field, span)
+    let given = check_core_places_given(state, world, host, init.value, field, span)
     // **Code put into a function field here is code the lock column does not
     // read** (ADR-230 D1).
     let mut code_field = false
@@ -608,8 +608,8 @@ fn check_core_places_a_with_field[H: CheckHost](mut state: CheckState, world: re
 pub fn check_core_index[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, base: ref Expr, index: ref Expr, span: ref Span) -> Ty sync {
     let writing = state.flow.writing_index
     state.flow.writing_index = false
-    let first = host.expr(state, base, span)
-    let key = host.expr(state, index, span)
+    let first = check_core_expr(state, world, host, base, span)
+    let key = check_core_expr(state, world, host, index, span)
     // **An index of a mapping is a page fault** (ADR-281 D35).
     state.io_inside_a_door(world, first, "this index", span)
     // A type seen through is indexed as what it holds (#497).
@@ -709,7 +709,7 @@ pub fn check_core_index[H: CheckHost](mut state: CheckState, world: ref CheckWor
 
 /// **`value as T`**: what may be named, and what a cast records.
 pub fn check_core_cast[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, inner: ref Expr, ty: ref Type, span: ref Span) -> Ty sync {
-    let from = host.expr(state, inner, span)
+    let from = check_core_expr(state, world, host, inner, span)
     let into = host.declared(state, ty, span)
     state.a_cast_over_a_lent_binding(world, inner, span)
     match into {
@@ -737,9 +737,9 @@ pub fn check_core_cast[H: CheckHost](mut state: CheckState, world: ref CheckWorl
 
 /// **A range is a sequence that replays** (ADR-293 D18): the item is
 /// whichever end says one.
-pub fn check_core_range[H: CheckHost](mut state: CheckState, host: ref H, start: ref Expr, end: ref Expr, span: ref Span) -> Ty sync {
-    let from = host.expr(state, start, span)
-    let to = host.expr(state, end, span)
+pub fn check_core_range[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, start: ref Expr, end: ref Expr, span: ref Span) -> Ty sync {
+    let from = check_core_expr(state, world, host, start, span)
+    let to = check_core_expr(state, world, host, end, span)
     let mut item: Ty = from
     if item.is_unknown() {
         item = to

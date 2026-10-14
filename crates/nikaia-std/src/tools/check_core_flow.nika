@@ -5,7 +5,7 @@
 // `Unsafe` of the checker's walk (`Block` is the hub `check_core_block`). The
 // form is the pilot's (`check_core_pilot.nika`): a free function over the
 // state, the world and a host; the walk comes back through the hub
-// `host.expr`. What a test proves not `null` (ADR-350) stays Rust in
+// `check_core_expr`. What a test proves not `null` (ADR-350) stays Rust in
 // `check/narrow.rs` and is asked through `host.proved_here` and
 // `host.proved_from_here`. One function per arm, and a `match` arm in a
 // function of its own, so a deep expression's frames stay small.
@@ -243,7 +243,7 @@ pub fn check_core_flow_unsafe[H: CheckHost](mut state: CheckState, world: ref Ch
 fn check_core_flow_branch[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, stmt: ref Stmt, span: ref Span) -> Ty sync {
     match stmt {
         Stmt::Expr(value) => {
-            return host.expr(state, value, span)
+            return check_core_expr(state, world, host, value, span)
         },
         else => {
             check_core_stmt(state, world, host, stmt, span)
@@ -279,7 +279,7 @@ fn check_core_flow_select_frame(mut state: CheckState, world: ref CheckWorld, bi
 /// known type.
 fn check_core_flow_select_arm[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, arm: ref SelectArm, span: ref Span) -> Ty? sync {
     let saved = state.enter_boundary("`select` arm")
-    let raced = host.expr(state, arm.value, span)
+    let raced = check_core_expr(state, world, host, arm.value, span)
     state.leave_boundary(saved)
     let frame = check_core_flow_select_frame(state, world, arm.binding, raced)
     state.scope.push(frame)
@@ -356,7 +356,7 @@ fn check_core_flow_else[H: CheckHost](mut state: CheckState, world: ref CheckWor
 /// (ADR-281 D25), and what the test proves holds in each branch and, after an
 /// early exit, in the rest of the block (ADR-350).
 pub fn check_core_flow_if[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, cond: ref Expr, then_branch: ref Block, else_branch: ref Block?, span: ref Span) -> Ty sync {
-    let cond_ty = host.expr(state, cond, span)
+    let cond_ty = check_core_expr(state, world, host, cond, span)
     let at = check_span_at(world, cond, span)
     state.expect_bool(cond_ty, at, "An `if` decides on a `bool`.")
     let outer_condition = state.stamped_condition ?? -1
@@ -492,7 +492,7 @@ fn check_core_flow_guard[H: CheckHost](mut state: CheckState, world: ref CheckWo
         saved = state.scope[last].clone()
         state.scope[last] = check_core_flow_viewed(saved, boxed)
     }
-    let found = host.expr(state, guard, span)
+    let found = check_core_expr(state, world, host, guard, span)
     if last >= 0 {
         let now = state.scope[last].clone()
         state.scope[last] = check_core_flow_restored(now, saved, boxed)
@@ -628,7 +628,7 @@ fn check_core_flow_arm[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     let (_, handed_from) = state.taken_so_far()
     let changed_from = state.changed.len() as i64
     check_core_flow_a_guard(state, world, host, arm.pattern, arm.guard, span)
-    let ty = host.expr(state, arm.body, span)
+    let ty = check_core_expr(state, world, host, arm.body, span)
     // **A name that is a view binds by reference by itself** (D30).
     let name = check_core_flow_variable(world, value)
     let by_reference = through_the_reference || a_list || (name != "" && (on.is_a_view() || state.got_past_a_jump.contains(name)))
@@ -664,7 +664,7 @@ fn check_core_flow_caught(state: ref CheckState, world: ref CheckWorld, on: ref 
 /// **`match`** (Part I 3.4): the subject, read as what it is below; each arm
 /// in a scope of its own; and the arms' types, met.
 pub fn check_core_flow_match[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, value: ref Expr, arms: ref Vec[MatchArm], span: ref Span) -> Ty sync {
-    let on = host.expr(state, value, span)
+    let on = check_core_expr(state, world, host, value, span)
     let several: Vec[Ty] = several_errors_of(on)
     let mut typed = check_core_flow_caught(state, world, on, value)
     // Several: each arm's pattern names its member (D17, D18).
@@ -811,7 +811,7 @@ pub fn check_core_flow_try_catch[H: CheckHost](mut state: CheckState, world: ref
     // **A guard of its own, and the enclosing one set aside** (ADR-308).
     let enclosing: CheckGuarded? = state.flow.guarded?.clone()
     state.flow.guarded = CheckGuarded::nothing()
-    let answers = host.expr(state, guarded_expr, span)
+    let answers = check_core_expr(state, world, host, guarded_expr, span)
     let held: CheckGuarded? = state.flow.guarded?.clone()
     state.flow.guarded = enclosing
     if state.flow.guarded != null {

@@ -372,8 +372,32 @@ impl CheckHost for Core<'_, '_> {
         self.hosted(state, |checker| checker.a_task_of_a_scope(args))
     }
 
-    fn expr(&self, state: &mut CheckState, node: &Expr, span: &Span) -> Ty {
-        self.hosted(state, |checker| checker.expr(node, span))
+    fn reads_of_the_maybe(&self, expr: &Expr) {
+        self.c.borrow_mut().reads_of_the_maybe(expr)
+    }
+
+    fn read_as_proved(
+        &self,
+        state: &mut CheckState,
+        expr: &Expr,
+        name: &str,
+        ty: &Ty,
+        span: &Span,
+    ) -> Ty {
+        self.hosted(state, |checker| {
+            checker.read_as_proved(expr, name, ty.clone(), span)
+        })
+    }
+
+    fn a_value_with_a_cleanup_made(&self, state: &mut CheckState, ty: &Ty) {
+        self.hosted(state, |checker| checker.a_value_with_a_cleanup_made(ty))
+    }
+
+    fn an_escape_nothing_names(
+        &self,
+        text: &str,
+    ) -> Option<nikaia_std::tools::escapes::NotAnEscape> {
+        self.h.an_escape_nothing_names(text)
     }
 
     fn a_value_with_a_cleanup_bound(

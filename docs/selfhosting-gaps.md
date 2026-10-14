@@ -260,6 +260,9 @@ checker refusal (`NK1125`) if `!= null` is not meant to narrow.
 | U-c8 `handed_over.as_mut().map(\|h\| mem::replace(..))` | `?.clone()`, the field set, the option written back | yes: no `as_mut` |
 | U-c10 `whole(side, ty) -> Option<Option<String>>` | two functions, a `bool` and a name with `""` for none | no: a `T??` is not written |
 | U-c10 `narrow::proved_names` + `with_proved` for `&&` / `\|\|` | `host.proved_here`, the frame pushed in Nikaia; `a_proof_taken_back` and `a_type_that_does_not_compare` are host methods | yes: narrowing stays in `narrow.rs` (#621); the parts beside stay Rust |
+| U-c11 `match names.as_slice() { [ty, variant] if .. }` over a path | `names.len()` tests in order | no: no slice patterns |
+| U-c11 `narrow::read_as_proved` and `reads_of_the_maybe` for a name | host methods; a read crosses only when its type is a `T?` and not `reading_only` | yes: narrowing stays in `narrow.rs` (#621) |
+| U-c11 `build_time::an_escape_nothing_names(text)` with `char_of` | a stateless host method; `ESCAPES` written in the `.nika` | no: no `u32` to `scalar?` conversion was tried |
 | U-c8 `arms.iter().skip(1).find_map(..)?` | a `while` over the arms | no: closures that return `?` |
 
 ## Method

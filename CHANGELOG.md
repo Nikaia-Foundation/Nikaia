@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.954] — 2026-10-14
+
+**check: the walk's hub and dispatcher in Nikaia (U-c11, #125, #558)**
+- `check_core_expr` and `check_core_value_of` move to `tools/check_core_expr.nika` with the arms for the literals, a name, a path, `-`/`!`/`&`, `?`, `throw`, `return`, `break`/`continue`, `dsl` and `asm`; the host method `expr` is deleted and the arms call each other directly.
+
 ## [0.0.953] — 2026-10-14
 
 **a parameter handed to a trait's method by value is kept**

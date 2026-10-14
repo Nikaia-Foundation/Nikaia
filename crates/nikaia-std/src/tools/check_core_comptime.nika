@@ -4,7 +4,7 @@
 // program** (ADR-294, #125, #558, C-6, U-c2): `comptime_binding` and
 // `a_block_over_a_grammar`. The form is the pilot's (`check_core_pilot.nika`):
 // a free function over the state, the world and a host; the walk comes back
-// through the hub `host.expr`.
+// through the hub `check_core_expr`.
 
 use std::collections
 
@@ -165,7 +165,7 @@ pub fn check_core_comptime_binding[H: CheckHost](mut state: CheckState, world: r
     let outside = state.flow.inside_a_comptime
     state.flow.inside_a_comptime = true
     let walked_from = state.findings.len()
-    let found = host.expr(state, value, span)
+    let found = check_core_expr(state, world, host, value, span)
     state.flow.inside_a_comptime = outside
     // **A name nothing declares is the one error** (ADR-287 D19, #380).
     let mut said_a_name = false
