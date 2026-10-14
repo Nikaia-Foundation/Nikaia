@@ -561,6 +561,7 @@ impl EmitState {
         // **A scope's tasks fail in one channel** (ADR-346 D7), which the call
         // names: nothing else in it may.
         let mut tasks: String? = null
+        let mut valued = false
         match func {
             Expr::Path(segments, _) => {
                 if unaliased_in(world.aliases, emit_arg_joined(world, segments)) == "task::scope" {
@@ -625,8 +626,28 @@ impl EmitState {
                 owner = scope.function.clone()
             }
             let boxed = flow.handled_here && channel == "Box<dyn std::error::Error>"
-            let inner = scope.clone() with { tasks_channel: channel, tasks_function: owner }
-            self.emit_core_args(world, walk, out, host, callee, args, takes, depth, flow, inner)
+            // **The scope's function may throw itself** (ADR-346 D7): its error
+            // is the scope's, after its tasks' (`settled`).
+            let mut written = false
+            if channel != "nikaia_std::task::Crashed" && args.len() == 1 {
+                match args[0] {
+                    Expr::Closure { params, body, .. } => {
+                        if params.len() == 1 {
+                            let named = escaped_name(emit_text(world, params[0]))
+                            out.push(f"|{named}| {{ let __scope_body: Result<_, {channel}> = (|| {{ let {named} = {named}; Ok(")
+                            self.emit_call_scope_body(world, walk, out, host, body, depth, flow, scope, channel, owner, false)
+                            out.push(f") }})(); {named}.settled(__scope_body) }}")
+                            written = true
+                        }
+                    },
+                    else => {},
+                }
+            }
+            if !written {
+                let inner = scope.clone() with { tasks_channel: channel, tasks_function: owner }
+                self.emit_core_args(world, walk, out, host, callee, args, takes, depth, flow, inner)
+            }
+            valued = written
             walk.boxed_scope = boxed
         } else {
             self.emit_core_args(world, walk, out, host, callee, args, takes, depth, flow, scope)
@@ -667,6 +688,9 @@ impl EmitState {
             out.push(keep)
         }
         out.push(")")
+        if valued {
+            out.push(".map(nikaia_std::task::valued)")
+        }
     }
 
     /// The callee as the source wrote it, which is what the checker keyed its
@@ -718,6 +742,14 @@ impl EmitState {
         out.push(option.default)
     }
 
+    /// **A scope's own function, where it may throw** (ADR-346 D7): written as
+    /// a task's body is, failing in the scope's channel; its value is `Ok`'s.
+    fn emit_call_scope_body[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, body: ref Block, depth: i64, flow: EmitFlow, scope: ref EmitScope, channel: ref String, owner: ref String, paused: bool) sync throws {
+        let failing = EmitFlow::plain().at(flow.statement) with { in_lambda: !paused, can_throw: true }
+        let inner = EmitScope::plain() with { origin: scope.origin.clone(), function: owner.clone(), channel: channel.clone(), changed: scope.changed.clone(), tasks_channel: channel.clone(), tasks_function: owner.clone() }
+        self.emit_core_block(world, walk, out, host, body, depth, failing, inner, EmitTail::Value)
+    }
+
     /// The scope that polls the tasks that pause (ADR-328 D10), where the lambda
     /// is written the way the form wants: one parameter.
     fn emit_call_paused_scope[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, args: ref Vec[Expr], depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
@@ -753,6 +785,15 @@ impl EmitState {
                 }
                 let boxed = flow.handled_here && channel == "Box<dyn std::error::Error>"
                 out.push(f"{{ let {named} = &nikaia_std::task::{made}::<{emit_call_scope_channel(channel)}>::new(); nikaia_std::task::{run}({named}, async ")
+                // **Its function may throw itself** (ADR-346 D7), as `task::scope`'s.
+                if channel != "nikaia_std::task::Crashed" {
+                    out.push(f"{{ let __scope_body: Result<_, {channel}> = async {{ let {named} = {named}; Ok(")
+                    self.emit_call_scope_body(world, walk, out, host, body, depth, flow, scope, channel, owner, true)
+                    out.push(f") }}.await; {named}.settled(__scope_body) }}")
+                    walk.boxed_scope = boxed
+                    out.push(").await.map(nikaia_std::task::valued) }")
+                    return true
+                }
                 let inner = EmitScope::plain() with { changed: scope.changed.clone(), tasks_channel: channel, tasks_function: owner }
                 self.emit_core_block(world, walk, out, host, body, depth, EmitFlow::plain().at(flow.statement), inner, EmitTail::Return)
                 walk.boxed_scope = boxed

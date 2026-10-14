@@ -26015,6 +26015,7 @@ impl EmitState {
             }
         }
         let mut tasks: Option<String> = None;
+        let mut valued = false;
         match func {
             Expr::Path(segments, _) => {
                 if unaliased_in(world.aliases, &emit_arg_joined(world, segments)) == "task::scope" {
@@ -26054,8 +26055,26 @@ impl EmitState {
             let mut owner: String = String::from("");
             if channel == scope.channel { owner = scope.function.to_owned(); }
             let boxed = flow.handled_here && channel == "Box<dyn std::error::Error>";
-            let inner = EmitScope { tasks_channel: channel, tasks_function: owner, ..scope.clone() };
-            self.emit_core_args(world, walk, out, host, &callee, args, &takes, depth, flow, &inner)?;
+            let mut written = false;
+            if channel != "nikaia_std::task::Crashed" && args.len() == 1 {
+                match nikaia_std::index::get(&args, 0) {
+                    Expr::Closure { params, body, .. } => {
+                        if params.len() == 1 {
+                            let named = escaped_name(&emit_text(world, *nikaia_std::index::get(&params, 0)));
+                            out.push(&format!("|{}| {{ let __scope_body: Result<_, {}> = (|| {{ let {} = {}; Ok(", named, channel, named, named));
+                            self.emit_call_scope_body(world, walk, out, host, body, depth, flow, scope, &channel, &owner, false)?;
+                            out.push(&format!(") }})(); {}.settled(__scope_body) }}", named));
+                            written = true;
+                        }
+                    },
+                    _ => { },
+                }
+            }
+            if !written {
+                let inner = EmitScope { tasks_channel: channel, tasks_function: owner, ..scope.clone() };
+                self.emit_core_args(world, walk, out, host, &callee, args, &takes, depth, flow, &inner)?;
+            }
+            valued = written;
             walk.boxed_scope = boxed;
         } else { self.emit_core_args(world, walk, out, host, &callee, args, &takes, depth, flow, scope)?; }
         match func {
@@ -26081,6 +26100,7 @@ impl EmitState {
             out.push(&keep);
         }
         out.push(")");
+        if valued { out.push(".map(nikaia_std::task::valued)"); }
         Ok(())
     }
     fn emit_call_callee(&self, world: &EmitWorld<'_>, func: &Expr) -> String {
@@ -26122,6 +26142,15 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
+    fn emit_call_scope_body<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, body: &Block, depth: i64, flow: EmitFlow, scope: &EmitScope, channel: &str, owner: &str, paused: bool) -> Result<(), Box<dyn std::error::Error>> {
+        let failing = EmitFlow { in_lambda: !paused, can_throw: true, ..EmitFlow::plain().at(flow.statement) };
+        let inner = EmitScope { origin: scope.origin.to_owned(), function: owner.to_owned(), channel: channel.to_owned(), changed: scope.changed.to_owned(), tasks_channel: channel.to_owned(), tasks_function: owner.to_owned(), ..EmitScope::plain() };
+        self.emit_core_block(world, walk, out, host, body, depth, failing, &inner, EmitTail::Value)?;
+        Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
     fn emit_call_paused_scope<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, args: &[Expr], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, Box<dyn std::error::Error>> {
         if args.is_empty() { return Ok(false); }
         Ok(match nikaia_std::index::get(&args, 0) {
@@ -26145,6 +26174,14 @@ impl EmitState {
                 }
                 let boxed = flow.handled_here && channel == "Box<dyn std::error::Error>";
                 out.push(&format!("{{ let {} = &nikaia_std::task::{}::<{}>::new(); nikaia_std::task::{}({}, async ", named, made, emit_call_scope_channel(&channel), run, named));
+                if channel != "nikaia_std::task::Crashed" {
+                    out.push(&format!("{{ let __scope_body: Result<_, {}> = async {{ let {} = {}; Ok(", channel, named, named));
+                    self.emit_call_scope_body(world, walk, out, host, body, depth, flow, scope, &channel, &owner, true)?;
+                    out.push(&format!(") }}.await; {}.settled(__scope_body) }}", named));
+                    walk.boxed_scope = boxed;
+                    out.push(").await.map(nikaia_std::task::valued) }");
+                    return Ok(true);
+                }
                 let inner = EmitScope { changed: scope.changed.to_owned(), tasks_channel: channel, tasks_function: owner, ..EmitScope::plain() };
                 self.emit_core_block(world, walk, out, host, body, depth, EmitFlow::plain().at(flow.statement), &inner, EmitTail::Return)?;
                 walk.boxed_scope = boxed;
@@ -31785,6 +31822,21 @@ impl EmitState {
                     let variant = sum_variant(member);
                     let held = self.sum_member_held(world, member, &params);
                     if held.starts_with("nikaia_std::error::Thrown<") { out.push(&format!("            ({}::{}(first), {}::{}(later)) => nikaia_std::error::Joined::joined_by(first, later),\n", name, variant, name, variant)); }
+                }
+                if params == "" {
+                    for member in members.iter() {
+                        let variant = sum_variant(member);
+                        let held = self.sum_member_held(world, member, &params);
+                        if held.starts_with("nikaia_std::error::Thrown<") {
+                            for other in members.iter() {
+                                let other_held = self.sum_member_held(world, other, &params);
+                                if other != member && other_held.starts_with("nikaia_std::error::Thrown<") {
+                                    let other_variant = sum_variant(other);
+                                    out.push(&format!("            ({}::{}(first), {}::{}(later)) => first.joined_by_other(later),\n", name, variant, name, other_variant));
+                                }
+                            }
+                        }
+                    }
                 }
                 out.push("            _ => {}\n        }\n    }\n}\n");
                 out.push(&format!("impl{} nikaia_std::task::Crosses for {}{} {{\n    type Sent = Self;\n    fn sent(self) -> Self {{ self }}\n    fn back(sent: Self) -> Self {{ sent }}\n}}\n", decl, name, params));

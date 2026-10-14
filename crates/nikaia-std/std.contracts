@@ -3937,12 +3937,13 @@ pub = true
 # Run `body` with a scope, and wait for every task it starts.
 #
 # The tasks may read the function's values without taking them. A task that
-# panicked makes this throw `task::Crashed`.
+# panicked makes this throw `task::Crashed`; `body`'s own error is thrown after
+# its tasks have ended, behind theirs.
 [fn."task::scope"]
 pub = true
 sync = "sync(body)"
 throws = ["task::Crashed"]
-signature = "[T](body: fn(ref task::Scope) -> T) -> T"
+signature = "[T](body: fn(ref task::Scope) -> T throws) -> T"
 
 # Start a task in the scope; the scope waits for it.
 #

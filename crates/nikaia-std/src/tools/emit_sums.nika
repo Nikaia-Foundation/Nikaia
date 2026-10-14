@@ -181,13 +181,29 @@ impl EmitState {
             // the scope's, and one channel crosses the pool as itself.
             if crashed {
                 // A later failure of the first one's member joins its list; one
-                // of another member has no place in that envelope's list.
+                // of another member joins it in the box, so nothing is lost.
                 out.push(f"impl{decl} nikaia_std::error::Joined for {name}{params} {{\n    fn joined_by(&mut self, later: Self) {{\n        #[allow(unreachable_patterns)]\n        match (self, later) {{\n")
                 for member in members {
                     let variant = sum_variant(member)
                     let held = self.sum_member_held(world, member, params)
                     if held.starts_with("nikaia_std::error::Thrown<") {
                         out.push(f"            ({name}::{variant}(first), {name}::{variant}(later)) => nikaia_std::error::Joined::joined_by(first, later),\n")
+                    }
+                }
+                // Boxing asks for `'static`: only a sum without parameters.
+                if params == "" {
+                    for member in members {
+                        let variant = sum_variant(member)
+                        let held = self.sum_member_held(world, member, params)
+                        if held.starts_with("nikaia_std::error::Thrown<") {
+                            for other in members {
+                                let other_held = self.sum_member_held(world, other, params)
+                                if other != member && other_held.starts_with("nikaia_std::error::Thrown<") {
+                                    let other_variant = sum_variant(other)
+                                    out.push(f"            ({name}::{variant}(first), {name}::{other_variant}(later)) => first.joined_by_other(later),\n")
+                                }
+                            }
+                        }
                     }
                 }
                 out.push("            _ => {}\n        }\n    }\n}\n")

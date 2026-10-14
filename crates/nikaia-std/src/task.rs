@@ -1215,6 +1215,101 @@ impl crate::error::Joined for Crashed {
 
 /// **How a scope ends** (D7, as `overlap` does, ADR-292 D5): the first failure
 /// in start order is thrown, every later one joins it in that order.
+/// **The scope's own function failed** (ADR-346 D7): its error is the scope's
+/// like a task's, in the place after every task it started, so a task's
+/// earlier failure comes first and the function's joins it.
+fn body_failed<E, X>(ended: Result<(), X>, mut record: impl FnMut(E)) -> bool
+where
+    Result<(), X>: Outcome<E>,
+{
+    match ended.failed() {
+        Some(error) => {
+            record(error);
+            true
+        }
+        None => false,
+    }
+}
+
+/// What a scope whose function may throw hands back once it has ended: the
+/// function's value, which is there whenever nothing failed.
+pub fn valued<T>(value: Option<T>) -> T {
+    match value {
+        Some(value) => value,
+        None => unreachable!("a scope whose function failed throws"),
+    }
+}
+
+/// The function's value, or its error kept as the scope's.
+fn settled_with<T, X, E>(ended: Result<T, X>, record: impl FnMut(E)) -> Option<T>
+where
+    Result<(), X>: Outcome<E>,
+{
+    match ended {
+        Ok(value) => Some(value),
+        Err(error) => {
+            body_failed(Err(error), record);
+            None
+        }
+    }
+}
+
+impl<'scope, E: From<Crashed>> Scope<'scope, '_, E> {
+    /// The scope's function ended: its value, or its error kept as the scope's.
+    pub fn settled<T, X>(&self, ended: Result<T, X>) -> Option<T>
+    where
+        Result<(), X>: Outcome<E>,
+    {
+        settled_with(ended, |error| {
+            let mut seen = self.seen.borrow_mut();
+            let at = seen.started;
+            seen.failed.push((at, error));
+        })
+    }
+}
+
+impl<'scope, E: Crosses + From<Crashed>> PoolScope<'_, 'scope, E> {
+    /// [`Scope::settled`] where tasks run on the pool.
+    pub fn settled<T, X>(&self, ended: Result<T, X>) -> Option<T>
+    where
+        Result<(), X>: Outcome<E>,
+    {
+        settled_with(ended, |error: E| {
+            let mut seen = locked(&self.seen);
+            let at = seen.started;
+            seen.failed.push((at, error.sent()));
+        })
+    }
+}
+
+impl<'scope, E: From<Crashed> + 'scope> PausedScope<'scope, E> {
+    /// [`Scope::settled`] for a scope whose tasks may pause.
+    pub fn settled<T, X>(&self, ended: Result<T, X>) -> Option<T>
+    where
+        Result<(), X>: Outcome<E>,
+    {
+        settled_with(ended, |error| {
+            let mut seen = locked(&self.seen);
+            let at = seen.started;
+            seen.failed.push((at, error));
+        })
+    }
+}
+
+impl<'scope, E: Crosses + From<Crashed> + 'scope> PausedPoolScope<'scope, E> {
+    /// [`Scope::settled`] for a scope whose tasks may pause, on the pool.
+    pub fn settled<T, X>(&self, ended: Result<T, X>) -> Option<T>
+    where
+        Result<(), X>: Outcome<E>,
+    {
+        settled_with(ended, |error: E| {
+            let mut seen = locked(&self.seen);
+            let at = seen.started;
+            seen.failed.push((at, error.sent()));
+        })
+    }
+}
+
 fn ended<T, E: crate::error::Joined>(value: T, mut failed: Vec<(usize, E)>) -> Result<T, E> {
     failed.sort_by_key(|(at, _)| *at);
     let mut each = failed.into_iter().map(|(_, error)| error);

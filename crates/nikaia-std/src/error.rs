@@ -76,6 +76,11 @@ struct Cold<S> {
     /// waits for every branch, so when it ends every outcome is known and the
     /// list is a **fact** rather than a race.
     secondary: Vec<S>,
+    /// **The failures of another type that joined it**, in the order they
+    /// joined: a sum channel's later failure of a member other than the
+    /// first one's has no place in `secondary`, which holds the first one's
+    /// own type, and is kept here in the box rather than dropped.
+    others: Vec<Box<dyn JoinedLater>>,
 }
 
 impl<S> Tail<S> {
@@ -109,6 +114,7 @@ impl<S> Tail<S> {
             origin,
             trace: Some(trace),
             secondary: Vec::new(),
+            others: Vec::new(),
         })
     }
 
@@ -138,19 +144,28 @@ impl<S> Tail<S> {
         self.as_cold().map_or(&[], |cold| &cold.secondary)
     }
 
+    fn others(&self) -> &[Box<dyn JoinedLater>] {
+        self.as_cold().map_or(&[], |cold| &cold.others)
+    }
+
     /// The same site, trace and list, each joined failure converted: what a
     /// hop from one channel to another keeps (ADR-280 D28). Always the cold
     /// form, which is one allocation on a path that allocates a box anyway.
     fn map_into<T>(mut self, convert: impl FnMut(S) -> T) -> Tail<T> {
         let origin = self.origin();
-        let (trace, secondary) = match self.word.boxed_mut() {
-            Some(cold) => (cold.trace.take(), std::mem::take(&mut cold.secondary)),
-            None => (None, Vec::new()),
+        let (trace, secondary, others) = match self.word.boxed_mut() {
+            Some(cold) => (
+                cold.trace.take(),
+                std::mem::take(&mut cold.secondary),
+                std::mem::take(&mut cold.others),
+            ),
+            None => (None, Vec::new(), Vec::new()),
         };
         Tail::cold(Cold {
             origin,
             trace,
             secondary: secondary.into_iter().map(convert).collect(),
+            others,
         })
     }
 
@@ -162,6 +177,7 @@ impl<S> Tail<S> {
                 origin: self.origin(),
                 trace: None,
                 secondary: Vec::new(),
+                others: Vec::new(),
             });
         }
         match self.word.boxed_mut() {
@@ -235,6 +251,9 @@ impl Raised {
                 None => later.full(),
             };
             out.push_str(&indented(&long));
+        }
+        for later in self.tail.others() {
+            out.push_str(&indented(&later.long_form()));
         }
         out
     }
@@ -355,6 +374,9 @@ impl<E: fmt::Display> Thrown<E> {
         for later in tail.secondary() {
             out.push_str(&indented(&later.long(false)));
         }
+        for later in tail.others() {
+            out.push_str(&indented(&later.long_form()));
+        }
         out
     }
 }
@@ -406,6 +428,9 @@ impl<E> Site<E> {
         let mut out = full_form(error, self.tail.origin(), self.tail.trace());
         for later in self.tail.secondary() {
             out.push_str(&indented(&later.long(false)));
+        }
+        for later in self.tail.others() {
+            out.push_str(&indented(&later.long_form()));
         }
         out
     }
@@ -566,6 +591,35 @@ impl<E> Joined for Thrown<E> {
     }
 }
 
+impl<E> Thrown<E> {
+    /// **A later failure of another type** joins this one's list in the box:
+    /// what a sum channel does when its later failure is of a member other
+    /// than the first one's (ADR-292 D8, ADR-346 D7), so nothing is lost.
+    pub fn joined_by_other<W: fmt::Display + Send + Sync + 'static>(&mut self, later: Thrown<W>) {
+        self.tail.cold_mut().others.push(Box::new(later));
+    }
+
+    /// The failures of another type that joined this one, in the order they
+    /// joined.
+    pub fn others(&self) -> &[Box<dyn JoinedLater>] {
+        self.tail.others()
+    }
+}
+
+/// **A failure of another type in a sum's list**: its long form, with its own
+/// site and what joined it. `Send` and `Sync` so that the envelope still
+/// crosses threads where its error does.
+pub trait JoinedLater: Send + Sync {
+    /// The long form, without the note about a missing trace.
+    fn long_form(&self) -> String;
+}
+
+impl<W: fmt::Display + Send + Sync> JoinedLater for Thrown<W> {
+    fn long_form(&self) -> String {
+        self.long(false)
+    }
+}
+
 /// **The boxed channel joins through a downcast**: what is inside it is a
 /// [`Raised`] wherever this program raised it into the box. An error that
 /// arrived without one - from below Nikaia, or in a callee's typed channel that
@@ -718,6 +772,7 @@ pub(crate) fn raised_at(inner: Box<dyn Error>, origin: &'static str) -> Box<dyn 
             origin,
             trace: None,
             secondary: Vec::new(),
+            others: Vec::new(),
         }),
     })
 }
@@ -736,6 +791,7 @@ pub fn reopened<E: Error + 'static>(error: Box<dyn Error>) -> Thrown<E> {
                     origin,
                     trace,
                     secondary: Vec::new(),
+                    others: Vec::new(),
                 }),
             }
         }

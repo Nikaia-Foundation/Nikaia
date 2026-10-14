@@ -613,6 +613,10 @@ fn a_scope_joins_in_a_sum_and_keeps_a_fatal_site() {
         assert_eq!(code, Some(1), "{err}");
         assert_eq!(out, "");
         assert!(err.contains("and then:"), "{err}");
+        assert!(
+            err.contains("worse"),
+            "a later failure of another member is kept: {err}"
+        );
         let (out, err, code) = ran("scope-fatal-site", SCOPE_FATAL_SITE, how);
         assert_eq!(code, Some(1), "{err}");
         assert_eq!(out, "");
@@ -721,4 +725,68 @@ fn skip_free_at_exit_is_on_or_off() {
     assert!(!skip_free_at_exit("remove-bounds-checks:on"));
     assert!(optimizations("skip-free-at-exit:on").is_ok());
     assert!(optimizations("skip-free-at-exit:yes").is_err());
+}
+const SCOPE_BODY_THROWS: &str = r#"use std::task
+use std::time
+
+enum Bad { Oops(i64) }
+impl Error for Bad {
+    fn message(ref self) -> String { return "bad" }
+}
+
+fn work(n: i64) -> i64 throws {
+    if n > 1 {
+        throw Bad::Oops(n)
+    }
+    return n
+}
+
+fn main() throws {
+    let base = 6
+    let y = task::scope fn(s) {
+        s.spawn fn { work(base - 5) }
+        let k = work(base)
+        k + 1
+    } catch {
+        match error {
+            Bad::Oops(c) => c,
+            else => 0,
+        }
+    }
+    println(f"{y}")
+}
+"#;
+
+/// ADR-346 D7: the scope's own function may throw; its error is the scope's,
+/// after its tasks', at both settings, with tasks that pause and without.
+#[test]
+fn a_scope_whose_function_throws() {
+    for how in [Build::default(), Build::parallel()] {
+        let (out, err, code) = ran("scope-body-throws", SCOPE_BODY_THROWS, how);
+        assert_eq!(code, Some(0), "{err}");
+        assert_eq!(out, "6\n");
+        let fine = SCOPE_BODY_THROWS.replace("work(base)", "work(1)");
+        let (out, err, code) = ran("scope-body-fine", &fine, how);
+        assert_eq!(code, Some(0), "{err}");
+        assert_eq!(out, "2\n");
+        let first = SCOPE_BODY_THROWS.replace("work(base - 5)", "work(base - 3)");
+        let (out, err, code) = ran("scope-body-second", &first, how);
+        assert_eq!(code, Some(0), "{err}");
+        assert_eq!(out, "3\n", "the task's error comes first");
+        let uncaught = SCOPE_BODY_THROWS.replace(
+            "    } catch {\n        match error {\n            Bad::Oops(c) => c,\n            else => 0,\n        }\n    }\n",
+            "    }\n",
+        );
+        let (out, err, code) = ran("scope-body-uncaught", &uncaught, how);
+        assert_eq!(code, Some(1), "{err}");
+        assert_eq!(out, "");
+        assert!(err.contains("bad"), "{err}");
+        let paused = SCOPE_BODY_THROWS.replace(
+            "s.spawn fn { work(base - 5) }",
+            "s.spawn fn {\n            time::sleep(1.millis())\n            work(base - 5)\n        }",
+        );
+        let (out, err, code) = ran("scope-body-paused", &paused, how);
+        assert_eq!(code, Some(0), "{err}");
+        assert_eq!(out, "6\n");
+    }
 }

@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.921] — 2026-10-14
+
+**task: a scope's function may throw; a sum keeps a later failure of another member (#605)**
+
+`task::scope`'s function may throw (`fn(ref task::Scope) -> T throws`): its error is the scope's, in the place after every task it started (ADR-346 D7, Part II 12.7), at both settings and with tasks that pause. In a sum channel, a later failure of a member other than the first one's joins the first in the envelope's list of other-typed failures (`Thrown::joined_by_other`) instead of being dropped, and prints under it. Open: a `catch` on `supervisor::run` and the type of its `error` (decision basis on #605).
+
 ## [0.0.920] — 2026-10-14
 
 **A variant's rest pattern `E::V(..)` (ADR-349, NK1255, #610)**

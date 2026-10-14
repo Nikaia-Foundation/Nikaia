@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part II: Advanced Features & Metaprogramming**
-**Version:** 0.0.920 (Draft)
+**Version:** 0.0.921 (Draft)
 **Date:** 2026-10-14
 
 ---
@@ -1060,7 +1060,7 @@ task::scope fn(s) {
 }
 ```
 
-The scope waits for both kinds. A task that panics cancels the others, and the scope throws `task::Crashed` where it ends. A task that ends with an error hands it to the scope as an `overlap` branch does (Part I 8.1.2): where the scope ends it throws the first error in the order the tasks were started, and the others travel as its secondary errors (Part I 7.1). Where tasks run in parallel, the pausing tasks of one scope take turns on one thread: they run at the same time as each other, but not on separate cores, so a pausing task that computes long between its pauses holds back the others. Computation that should use the cores belongs in a task that does not pause.
+The scope waits for both kinds. A task that panics cancels the others, and the scope throws `task::Crashed` where it ends. A task that ends with an error hands it to the scope as an `overlap` branch does (Part I 8.1.2): where the scope ends it throws the first error in the order the tasks were started, and the others travel as its secondary errors (Part I 7.1). The scope's function may throw too: its error is the scope's in the place after every task it started, and the scope throws it once those tasks have ended. Where tasks run in parallel, the pausing tasks of one scope take turns on one thread: they run at the same time as each other, but not on separate cores, so a pausing task that computes long between its pauses holds back the others. Computation that should use the cores belongs in a task that does not pause.
 
 ### 12.8. Supervision Trees
 A **supervisor** runs tasks and restarts them when they end ([ADR-328](adr/adr-328.md)).
