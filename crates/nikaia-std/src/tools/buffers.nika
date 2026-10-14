@@ -85,6 +85,7 @@ pub struct BufferAsk {
     pub library: ref Ledger,
     pub items: ref Vec[Spanned[Item]],
     pub context: ref KeepContext,
+    pub given_up: ref collections::BTreeMap[i64, String],
 }
 
 // One local, as far as this walk needs it: the statement that binds it, the
@@ -302,6 +303,7 @@ fn buffer_statement(stmt: ref Stmt, span: ref Span, ask: ref BufferAsk, holes_of
                 let bound = local_of(root, walk)
                 if bound != null && (bound?.buffer ?? false) {
                     walk.reassigned.insert(at, bound?.at ?? 0)
+                    given_up_inside(bound?.at ?? 0, ask, walk)
                 }
                 shed(root, walk)
             }
@@ -580,6 +582,21 @@ fn flow_into(root: ref String, origins: collections::BTreeSet[(i64, String)], mu
         local.origins.insert(origin.clone())
     }
     set_local(root, local, walk)
+}
+
+// **A buffer given a new value inside a block nested below its `let`**, while
+// a view of it made outside that block is used afterwards (ADR-353 D3; which
+// ones is `view_changes`' answer, `ask.given_up`): a binding of its own would
+// end with the inner block, so the buffer lives in the frame's keep from its
+// `let`, and the assignment puts the new value there too (#293). No copy.
+fn given_up_inside(bound_at: i64, ask: ref BufferAsk, mut walk: BufferWalk) {
+    let viewer = (ask.given_up[bound_at] ?? return).clone()
+    let no_callee: String = ""
+    let id = (bound_at, no_callee)
+    if !walk.sources.contains_key(id) {
+        return
+    }
+    escape(id, Escape::Outer(viewer), walk)
 }
 
 fn a_prefix(short: ref Vec[(i64, bool)], long: ref Vec[(i64, bool)]) -> bool {

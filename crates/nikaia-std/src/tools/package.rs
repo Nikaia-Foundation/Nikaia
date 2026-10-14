@@ -4042,6 +4042,7 @@ pub struct BufferAsk<'a> {
     pub library: &'a Ledger,
     pub items: &'a Vec<Spanned<Item>>,
     pub context: &'a KeepContext,
+    pub given_up: &'a collections::BTreeMap<i64, String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -4237,7 +4238,10 @@ fn buffer_statement(stmt: &Stmt, span: &Span, ask: &BufferAsk<'_>, holes_of: &im
             let whole = op.is_none() && matches!(target, Expr::Variable(_, _));
             if whole {
                 let bound = local_of(&root, &walk);
-                if bound.is_some() && nikaia_std::index::or(bound.as_ref().map(|__nikaia_it| __nikaia_it.buffer), || false) { walk.reassigned.insert(at, nikaia_std::index::or(bound.as_ref().map(|__nikaia_it| __nikaia_it.at), || 0)); }
+                if bound.is_some() && nikaia_std::index::or(bound.as_ref().map(|__nikaia_it| __nikaia_it.buffer), || false) {
+                    walk.reassigned.insert(at, nikaia_std::index::or(bound.as_ref().map(|__nikaia_it| __nikaia_it.at), || 0));
+                    given_up_inside(nikaia_std::index::or(bound.as_ref().map(|__nikaia_it| __nikaia_it.at), || 0), ask, walk);
+                }
                 shed(&root, walk);
             }
             if whole && is_the_buffer(value, ask, &walk) {
@@ -4442,6 +4446,14 @@ fn flow_into(root: &str, origins: &collections::BTreeSet<(i64, String)>, walk: &
     }
     for origin in origins.iter() { local.origins.insert(origin.clone()); }
     set_local(root, local, walk);
+}
+
+fn given_up_inside(bound_at: i64, ask: &BufferAsk<'_>, walk: &mut BufferWalk) {
+    let viewer = match *nikaia_std::index::get(&ask.given_up, &bound_at) { Some(__nikaia_value) => __nikaia_value, None => return }.to_owned();
+    let no_callee: String = String::from("");
+    let id = (bound_at, no_callee);
+    if !walk.sources.contains_key(&id) { return; }
+    escape(id, Escape::Outer(viewer), walk);
 }
 
 fn a_prefix(short: &[(i64, bool)], long: &[(i64, bool)]) -> bool {

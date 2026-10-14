@@ -37,6 +37,10 @@ use crate::parser::Parsed;
 pub struct GiveUps {
     pub rebound: HashMap<i64, bool>,
     pub unmuted: HashSet<i64>,
+    /// The `let`s of variables given a new value in a block nested below
+    /// them while a view made outside is used afterwards, with that view's
+    /// name: the buffer lives in the frame's keep from its `let`.
+    pub kept: HashMap<i64, String>,
 }
 
 #[derive(Clone)]
@@ -59,6 +63,8 @@ struct Walk<'a> {
     lent: &'a BTreeSet<i64>,
     findings: Vec<Finding>,
     give_ups: GiveUps,
+    /// Each variable's `let`, by name, as the walk last met it.
+    lets: HashMap<String, i64>,
 }
 
 /// The refusals (`NK2305`) and the give-ups of one unit.
@@ -75,6 +81,7 @@ pub fn analyse(
         lent,
         findings: Vec::new(),
         give_ups: GiveUps::default(),
+        lets: HashMap::new(),
     };
     for item in &parsed.program.items {
         match &item.node {
@@ -120,6 +127,21 @@ fn mentions_stmt(parsed: &Parsed, stmt: &Stmt, name: &str) -> bool {
         });
     }
     found
+}
+
+/// The innermost statement inside `stmt`'s blocks that first names `name`:
+/// where a loop's next round uses a view.
+fn first_use(parsed: &Parsed, stmt: &Stmt, name: &str) -> Option<Span> {
+    let mut nested: Vec<&Block> = Vec::new();
+    visit_stmt_blocks(stmt, &mut |inner| nested.push(inner));
+    for block in nested {
+        for each in &block.stmts {
+            if mentions_stmt(parsed, &each.node, name) {
+                return Some(first_use(parsed, &each.node, name).unwrap_or(each.span));
+            }
+        }
+    }
+    None
 }
 
 fn mentions_block(parsed: &Parsed, block: &Block, name: &str) -> bool {
@@ -284,6 +306,15 @@ impl Walk<'_> {
                             // old binding, the new value is a binding of its own.
                             let changed = later.iter().any(|s| self.changes(&s.node, &root));
                             self.give_ups.rebound.insert(at.start as i64, changed);
+                        } else if whole
+                            && viewed
+                            && let Some(bound) = self.lets.get(&root)
+                            && let Some(view) = views
+                                .iter()
+                                .find(|v| v.used.is_some() && v.roots.contains(&root))
+                        {
+                            // Given up in a nested block: the frame's keep.
+                            self.give_ups.kept.insert(*bound, view.name.clone());
                         }
                         if whole {
                             // The name holds other data now.
@@ -307,6 +338,7 @@ impl Walk<'_> {
                     if let Some(view) = self.view_of(&at, &name, value, &views) {
                         views.push(view);
                     }
+                    self.lets.insert(name.clone(), at.start as i64);
                     declared.insert(name, (at.start as i64, *mutable));
                 }
                 _ => {}
@@ -316,7 +348,7 @@ impl Walk<'_> {
             if looping {
                 for view in inner_views.iter_mut() {
                     if view.used.is_none() && mentions_stmt(parsed, &stmt.node, &view.name) {
-                        view.used = Some(at);
+                        view.used = Some(first_use(parsed, &stmt.node, &view.name).unwrap_or(at));
                     }
                 }
             }

@@ -1353,5 +1353,114 @@ fn a_change_under_an_element_view_or_in_a_loop_is_nk2305() {
 }}
 "
     );
-    assert_eq!(changed_under(&looping).len(), 1);
+    let found = changed_under(&looping);
+    assert_eq!(found.len(), 1);
+    // The use on the next round is `println(r)`, not the `for` line.
+    let used = found[0]
+        .labels
+        .iter()
+        .find(|l| l.text.contains("used here"))
+        .expect("a use label");
+    assert!(
+        looping[used.span.start as usize..].starts_with("println(r)"),
+        "{:?}",
+        &looping[used.span.start as usize..]
+    );
+}
+
+/// D3: `y` given a new value inside a nested block while `r`, made outside,
+/// is used afterwards. `y` lives in the frame's keep from its `let`; no copy.
+#[test]
+fn a_reassignment_in_a_nested_block_keeps_the_old_data() {
+    let source = format!(
+        "{LONGEST}pub fn both(c: bool) -> String {{
+    let x = \"ab\".clone()
+    let mut y = \"short\".clone()
+    let r = longest(x, y)
+    if c {{
+        y = \"replaced\".clone()
+    }}
+    return f\"{{r}} {{y}}\"
+}}
+"
+    );
+    assert!(changed_under(&source).is_empty());
+    let rust = lowered(&source);
+    assert!(rust.contains("__keep_frame.put("), "{rust}");
+    assert!(!rust.contains("y.clone()"), "{rust}");
+    compiled(
+        "a_reassignment_in_a_nested_block_keeps_the_old_data",
+        &source,
+    );
+    // `--tethers` says where the old text lives.
+    let dir = std::env::temp_dir().join(format!("nikaia-nested-give-up-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("a scratch directory");
+    let file = dir.join("nested.nika");
+    std::fs::write(&file, &source).expect("the source is written");
+    let shown = std::process::Command::new(env!("CARGO_BIN_EXE_nikaia"))
+        .arg("--tethers")
+        .arg("lower")
+        .arg(&file)
+        .output()
+        .expect("nikaia runs");
+    let _ = std::fs::remove_dir_all(&dir);
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&shown.stdout),
+        String::from_utf8_lossy(&shown.stderr)
+    );
+    assert!(
+        text.contains("`y` lives in a keep of this function"),
+        "{text}"
+    );
+}
+
+/// D3 in a loop: the reassignment on each round, the view used after it.
+#[test]
+fn a_reassignment_in_a_loop_keeps_the_old_data() {
+    let source = format!(
+        "{LONGEST}pub fn both() -> String {{
+    let x = \"ab\".clone()
+    let mut y = \"short\".clone()
+    let r = longest(x, y)
+    for i in 0..<3 {{
+        y = f\"round {{i}}\"
+    }}
+    return f\"{{r}} {{y}}\"
+}}
+"
+    );
+    assert!(changed_under(&source).is_empty());
+    compiled("a_reassignment_in_a_loop_keeps_the_old_data", &source);
+}
+
+/// Step 3 of #614: a field whose sources are a union (`ref(a | b)`) takes one
+/// lifetime over its group; a field of a third parameter keeps its own.
+#[test]
+fn a_union_field_takes_one_lifetime_over_its_group() {
+    let source = r#"struct Pick {
+    best: ref String,
+    other: ref String,
+}
+
+fn pick(a: ref String, b: ref String, c: ref String) -> Pick {
+    if a.len() >= b.len() {
+        return Pick { best: a, other: c }
+    }
+    return Pick { best: b, other: c }
+}
+
+pub fn run() -> String {
+    let x = "ab".clone()
+    let y = "short".clone()
+    let mut z = "zed".clone()
+    let best = pick(x, y, z).best
+    z = "replaced".clone()
+    return f"{best} {z}"
+}
+"#;
+    let rust = lowered(source);
+    assert!(rust.contains("fn pick<'r, 'r1>("), "{rust}");
+    assert!(rust.contains("-> Pick<'r, 'r1>"), "{rust}");
+    compiled("a_union_field_takes_one_lifetime_over_its_group", source);
 }

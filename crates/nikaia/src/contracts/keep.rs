@@ -288,12 +288,21 @@ pub(crate) fn buffer_plans(
 ) -> Vec<nikaia_std::tools::buffers::BufferPlan> {
     use nikaia_std::tools::buffers::{self as nika, BufferAsk};
     let context = Context::of(&parsed.interner, &parsed.program.items);
+    // The buffers given a new value in a nested block while a view of them is
+    // used afterwards (ADR-353 D3): they live in the frame's keep.
+    let given_up: std::collections::BTreeMap<i64, String> =
+        crate::view_changes::analyse(parsed, ledger, library, &Default::default())
+            .1
+            .kept
+            .into_iter()
+            .collect();
     let ask = BufferAsk {
         names: &parsed.interner,
         own: ledger,
         library,
         items: &parsed.program.items,
         context: &context,
+        given_up: &given_up,
     };
     nika::buffer_plans(
         &parsed.program,

@@ -7525,30 +7525,59 @@ impl<'p> Emitter<'p> {
         let ty = ty.filter(|t| t.generics.is_empty() && !t.is_view)?;
         let slots = self.s.view_slots.get(self.text(ty.name))?;
         let returns = returns.filter(|r| !r.is_empty())?;
-        let own: Vec<(String, String)> = sources
-            .iter()
-            .enumerate()
-            .map(|(at, p)| {
-                let lifetime = match at {
-                    0 => "'r".to_string(),
-                    _ => format!("'r{at}"),
-                };
-                (p.clone(), lifetime)
-            })
-            .collect();
-        let mut of_field: HashMap<&str, &str> = HashMap::new();
+        // Each field's sources, by its path. A union (`ref(a | b)`) is one
+        // lifetime over its group: every parameter a field may view is tied
+        // to the others it may view, and to nothing else (ADR-353 D2).
+        let mut of_field: HashMap<&str, Vec<&str>> = HashMap::new();
         for entry in returns.split("),") {
             let (path, written) = entry.split_once(':')?;
             let inside = written.trim().strip_prefix("ref(")?.trim_end_matches(')');
-            if inside.contains('|') || inside.contains(',') {
+            let params: Vec<&str> = inside
+                .split(['|', ','])
+                .map(str::trim)
+                .filter(|p| !p.is_empty())
+                .collect();
+            if params.is_empty() || params.iter().any(|p| !sources.iter().any(|s| s == p)) {
                 return None;
             }
-            of_field.insert(path.trim(), inside.trim());
+            of_field.insert(path.trim(), params);
+        }
+        // The groups, joined by each field's union; a group is named by its
+        // lowest parameter.
+        fn find(group: &[usize], mut at: usize) -> usize {
+            while group[at] != at {
+                at = group[at];
+            }
+            at
+        }
+        let index = |p: &str| sources.iter().position(|s| s == p);
+        let mut group: Vec<usize> = (0..sources.len()).collect();
+        for params in of_field.values() {
+            for p in &params[1..] {
+                let first = find(&group, index(params[0])?);
+                let other = find(&group, index(p)?);
+                let (low, high) = (first.min(other), first.max(other));
+                group[high] = low;
+            }
+        }
+        let mut named: HashMap<usize, String> = HashMap::new();
+        let mut own: Vec<(String, String)> = Vec::new();
+        for (at, p) in sources.iter().enumerate() {
+            let root = find(&group, at);
+            let next = named.len();
+            let lifetime = named
+                .entry(root)
+                .or_insert_with(|| match next {
+                    0 => "'r".to_string(),
+                    _ => format!("'r{next}"),
+                })
+                .clone();
+            own.push((p.clone(), lifetime));
         }
         let fields = slots
             .iter()
             .map(|f| {
-                let param = of_field.get(f.as_str())?;
+                let param = of_field.get(f.as_str())?[0];
                 own.iter().find(|(p, _)| p == param).map(|(_, l)| l.clone())
             })
             .collect::<Option<Vec<String>>>()?;

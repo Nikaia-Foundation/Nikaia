@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.964] — 2026-10-14
+
+**a viewed argument given a new value in a nested block lives in the frame's keep; a union field takes one lifetime over its group (ADR-353 D2, D3, part of #614)**
+- A variable given a new value inside a block nested below its `let` (`if c { y = v }`), while a view of it made outside is used afterwards, lives in the frame's keep from its `let`; the assignment puts the new value there too. No copy; `--tethers` shows it.
+- A struct result whose field may view either of two parameters (`returns = "best: ref(a | b), other: ref(c)"`) gives that group one lifetime and every other parameter its own: `fn pick<'r, 'r1>(a: &'r str, b: &'r str, c: &'r1 str) -> Pick<'r, 'r1>`.
+- NK2305 in a loop labels the use on the next round at the statement that uses the view, not at the loop's line.
+
 ## [0.0.963] — 2026-10-14
 
 **a function's set names the code it was given, from(p) (ADR-351 D4, part of #620)**
