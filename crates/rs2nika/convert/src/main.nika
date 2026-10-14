@@ -954,17 +954,6 @@ fn rs2nika_join_chains(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[Strin
                 continue
             }
         }
-        // rustfmt's `let P = v` / `else {` / jump / `};`
-        if l.trim().starts_with("let ") && i + 3 < given.len() && given[i + 1].trim() == "else {" {
-            let fourth: String = given[i + 3].trim().clone()
-            if (fourth == "};" || fourth == "}") && rs2nika_is_jump(given[i + 2]) {
-                let jump: String = given[i + 2].trim().clone()
-                lines.push(f"{l.trim_end()} else {{ {jump} }}")
-                rs2nika_hit(ctx, "R37")
-                i = i + 4
-                continue
-            }
-        }
         lines.push(l)
         i = i + 1
     }
@@ -988,7 +977,30 @@ fn rs2nika_join_chains(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[Strin
             out.push(l.clone())
         }
     }
-    return out
+    return rs2nika_join_let_else(ctx, out)
+}
+
+/// rustfmt's `let P = v` / `else {` / jump / `};` as one line, after the
+/// chain of `v` is joined.
+fn rs2nika_join_let_else(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[String] {
+    let mut lines: Vec[String] = []
+    let mut i = 0
+    while i < given.len() {
+        let l: String = given[i].clone()
+        if l.trim().starts_with("let ") && i + 3 < given.len() && given[i + 1].trim() == "else {" {
+            let fourth: String = given[i + 3].trim().clone()
+            if (fourth == "};" || fourth == "}") && rs2nika_is_jump(given[i + 2]) {
+                let jump: String = given[i + 2].trim().clone()
+                lines.push(f"{l.trim_end()} else {{ {jump} }}")
+                rs2nika_hit(ctx, "R37")
+                i = i + 4
+                continue
+            }
+        }
+        lines.push(l)
+        i = i + 1
+    }
+    return lines
 }
 
 /// R42: a function's last expression becomes `return expr`.
@@ -1779,6 +1791,9 @@ fn rs2nika_expr(mut ctx: Rs2nikaCtx, line: ref String) -> String {
         s = rs2nika_rep(ctx, s, m, "collections::BTreeSet()", "R17")
     }
     s = rs2nika_rep(ctx, s, "Box::new(", "(", "R9")
+    for t in [".collect::<Vec<_>>()", ".collect::<String>()", ".collect::<Vec<String>>()"] {
+        s = rs2nika_rep(ctx, s, t, ".collect()", "R17")
+    }
     s = rs2nika_capacity_char(ctx, s)
     if s.contains("\".to_string()") {
         s = s.replace("\".to_string()", "\".clone()")
@@ -2979,7 +2994,13 @@ fn rs2nika_let_else(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String] {
         return []
     }
     let pat: String = st[4..<eq].trim().clone()
-    let value: String = st[eq + 3..<els].trim().clone()
+    let mut value: String = st[eq + 3..<els].trim().clone()
+    while value.starts_with("&") {
+        value = value[1..<value.len()].trim_start().clone()
+        if value.starts_with("mut ") {
+            value = value[4..<value.len()].clone()
+        }
+    }
     let mut jump: String = st[els + 7..<st.len() - 1].trim().clone()
     while jump.ends_with(";") {
         jump = jump[0..<jump.len() - 1].trim().clone()
@@ -3066,7 +3087,10 @@ fn rs2nika_if_let(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String] {
     }
     if st.starts_with("let Some(") && st.contains(" else {") {
         let close = st.find(")") ?? return []
-        let name: String = st[9..<close].clone()
+        let mut name: String = st[9..<close].clone()
+        if name.starts_with("&") {
+            name = name[1..<name.len()].clone()
+        }
         let eq = st.find(" = ") ?? return []
         let els = st.find(" else {") ?? return []
         if !rs2nika_is_path(name) || eq < close {

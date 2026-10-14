@@ -322,6 +322,12 @@ touches = []
 views = ["given: borrowed"]
 signature = "(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[String]"
 
+[fn."rs2nika_join_let_else"]
+sync = "inferred"
+touches = []
+views = ["given: borrowed"]
+signature = "(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[String]"
+
 [fn."rs2nika_join_split"]
 sync = "inferred"
 touches = []
