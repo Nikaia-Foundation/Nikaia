@@ -4544,8 +4544,54 @@ impl<'a> Checker<'a> {
                 tail = ty;
             }
         }
+        self.a_bound_handle_is_taken(block);
         self.s.scope.pop();
         tail
+    }
+
+    /// **`NK2109`: a bound handle is used up before it leaves its scope**
+    /// ([ADR-346](../../docs/specification/adr/adr-346.md) D3). A `let h =
+    /// spawn …` whose name no later statement of the block mentions is
+    /// forgotten: nobody joins, cancels, detaches or hands it on.
+    fn a_bound_handle_is_taken(&mut self, block: &Block) {
+        for (at, stmt) in block.stmts.iter().enumerate() {
+            let Stmt::Let { names, value, .. } = &stmt.node else {
+                continue;
+            };
+            let ([single], Expr::Spawn { .. }) = (names.as_slice(), value) else {
+                continue;
+            };
+            let name = self.parsed.text(*single).to_string();
+            if name == "_" {
+                continue;
+            }
+            let mut later = std::collections::BTreeSet::new();
+            for after in &block.stmts[at + 1..] {
+                nikaia_std::tools::names::names_in_statement(
+                    &after.node,
+                    &self.parsed.interner,
+                    &mut later,
+                );
+            }
+            if later.contains(&name) {
+                continue;
+            }
+            self.s.findings.push(Finding {
+                severity: Severity::Error,
+                span: stmt.span,
+                code: "NK2109".to_string(),
+                message: format!("The task handle `{name}` is never joined, cancelled or detached."),
+                notes: vec![
+                    "An error of a task nobody waits for would be lost, so a bound handle is used up \
+                     before its scope ends."
+                        .to_string(),
+                ],
+                help: Some(format!(
+                    "Write `{name}.join()` to wait for the task, or `{name}.detach()` if nobody waits for it."
+                )),
+                labels: Vec::new(),
+            });
+        }
     }
 
     fn stmt(&mut self, stmt: &Stmt, span: &Span) -> Ty {

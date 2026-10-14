@@ -116,7 +116,7 @@ fn a_continue_in_a_task_cannot_reach_the_loop_outside_it() {
     let (code, message) = one("fn f(n: i64) -> i64 {\n\
          \x20   let mut t = 0\n\
          \x20   while t < n {\n\
-         \x20       let h = spawn fn { continue }\n\
+         \x20       spawn fn { continue }\n\
          \x20       t += 1\n\
          \x20   }\n\
          \x20   return t\n\
@@ -474,4 +474,15 @@ fn a_bare_brace_led_form_is_still_refused_in_a_head() {
         .is_err(),
         "a bare struct literal in a head would take the body's brace"
     );
+}
+
+/// ADR-346 D3: a bound handle nobody takes is `NK2109`.
+#[test]
+fn a_forgotten_handle_is_refused() {
+    let (code, message) = one("fn f() {\n\
+         \x20   let h = spawn fn { 1 }\n\
+         \x20   println(\"x\")\n\
+         }\n");
+    assert_eq!(code, "NK2109");
+    assert!(message.contains("`h`"), "{message}");
 }

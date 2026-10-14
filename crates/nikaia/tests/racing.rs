@@ -270,7 +270,7 @@ fn a_task_that_is_not_cancelled_still_runs() {
         "use std::time\n\
          \n\
          fn main() {\n\
-         \x20   let handle = spawn fn {\n\
+         \x20   spawn fn {\n\
          \x20       time::sleep(10.millis())\n\
          \x20       println(\"the task finished\")\n\
          \x20   }\n\
@@ -293,7 +293,7 @@ fn a_task_that_sleeps_after_main_is_done_is_not_held_to_the_deadline() {
         "use std::time\n\
          \n\
          fn main() {\n\
-         \x20   let handle = spawn fn {\n\
+         \x20   spawn fn {\n\
          \x20       time::sleep(50.millis())\n\
          \x20       println(\"the task finished\")\n\
          \x20   }\n\

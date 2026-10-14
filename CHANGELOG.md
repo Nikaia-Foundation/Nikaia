@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.897] — 2026-10-14
+
+**check: NK2109, a forgotten task handle (#605)**
+- `let h = spawn …` whose name no later statement of its block mentions is refused (`NK2109`, ADR-346 D3); a statement `spawn` stays detached.
+
 ## [0.0.896] — 2026-10-14
 
 **task: join(within: d) (#605)**

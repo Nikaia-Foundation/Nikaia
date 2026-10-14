@@ -88,7 +88,7 @@
 10-nikaia-light.md #88 refused (as written) [NK1117]  use std::panic
 10-nikaia-light.md #89 refused (a body) [NK1117,NK1181]  let (user, rights, prefs) = overlap {
 10-nikaia-light.md #90 lowered (a body)  spawn fn { println("I am running in the background!") }
-10-nikaia-light.md #91 refused (a body) [NK1117,NK1171]  let h = spawn fn { fetch(url) }
+10-nikaia-light.md #91 refused (a body) [NK1117]  let h = spawn fn { fetch(url) }
 10-nikaia-light.md #92 lowered (a body) [about-a-refusal]  let message = "Hello"
 10-nikaia-light.md #93 lowered (a body)  let message = "Hello"
 10-nikaia-light.md #94 lowered (as written)  // file: src/parse.nika      (the same package as src/m…
