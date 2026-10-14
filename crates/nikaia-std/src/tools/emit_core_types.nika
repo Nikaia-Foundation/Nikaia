@@ -239,7 +239,7 @@ impl EmitState {
         let mut params: Vec[String] = []
         // A struct that holds a view carries the input lifetime with it.
         if self.borrowing.contains(name) || self.tethered.contains(name) {
-            params.push(lifetimes.params())
+            params.push(self.lifetime_args(name, lifetimes.params()))
         }
         for part in ty.generics {
             params.push(self.emit_core_ty_counted(world, walk, crossings, overlaps, part, lifetimes, count))

@@ -8,6 +8,17 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.952] — 2026-10-14
+
+**a struct of views takes one lifetime per view field, and a result's fields their parameters' (ADR-353 D1, part of #614)**
+
+- A private struct holding two or more views lowers with one lifetime per view
+  field (`Pair<'a, 'a1>`); every mention, `impl` and tether impl writes as many.
+- A function whose result is such a struct, and whose ledger `returns` names one
+  parameter per field, gives each parameter its own lifetime
+  (`fn pair<'r, 'r1>(a: &'r str, b: &'r1 str) -> Pair<'r, 'r1>`): a caller
+  holding `pair(x, y).left` may give `y` a new value (#614, To build 3).
+
 ## [0.0.951] — 2026-10-14
 
 **lowering defects: with keeps its base, a typed throw into a boxed trait channel, names_read sees statements, a match in a guard names the brackets**

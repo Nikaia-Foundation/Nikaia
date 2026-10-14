@@ -34022,7 +34022,7 @@ impl EmitState {
         }
         out.push_str(&self.written_name(world, crossings, walk.trusting, name, count));
         let mut params: Vec<String> = vec![];
-        if self.borrowing.contains(name) || self.tethered.contains(name) { params.push(lifetimes.params()); }
+        if self.borrowing.contains(name) || self.tethered.contains(name) { params.push(self.lifetime_args(name, &lifetimes.params())); }
         for part in ty.generics.iter() { params.push(self.emit_core_ty_counted(world, walk, crossings, overlaps, part, lifetimes, count)); }
         if !params.is_empty() { out.push_str(&format!("<{}>", params.join(", "))); }
         if self.cleaned_types.contains(name) {
@@ -34132,14 +34132,15 @@ impl EmitState {
                 Item::Struct { name, generics, fields, .. } => {
                     let name = *name;
                     let bare = world.words.resolve(name);
-                    if self.borrowing.contains(bare) && generics.is_empty() { text = format!("{}{}", text, self.emit_held_struct(world, escaped_name(bare), fields)); }
+                    if self.borrowing.contains(bare) && generics.is_empty() { text = format!("{}{}", text, self.emit_held_struct(world, escaped_name(bare), self.lifetime_args(bare, "'a"), self.lifetime_args(bare, "'_"), self.lifetime_args(bare, "'long"), self.lifetime_args(bare, "'s"), fields)); }
                 },
                 _ => { },
             }
         }
         text
     }
-    fn emit_held_struct(&self, world: &EmitWorld<'_>, ty: String, fields: &[FieldDef]) -> String {
+    #[allow(clippy::too_many_arguments)]
+    fn emit_held_struct(&self, world: &EmitWorld<'_>, ty: String, a: String, any: String, long: String, short: String, fields: &[FieldDef]) -> String {
         let mut parts: Vec<String> = vec![];
         for field in fields.iter() {
             let field_name = escaped_name(world.words.resolve(field.name));
@@ -34148,11 +34149,11 @@ impl EmitState {
         let rebased = parts.join(", ");
         let mut text: String = format!("\n/// `{}` held one handle per buffer (ADR-283).\n", ty);
         text = format!("{}#[allow(non_camel_case_types)]\nenum __Views_{} {{}}\n\n", text, ty);
-        text = format!("{}impl nikaia_std::tether::Views for __Views_{} {{\n    type Of<'a> = {}<'a>;\n", text, ty, ty);
-        text = format!("{}    fn shorten<'long: 's, 's>(x: &'s {}<'long>) -> &'s {}<'s> {{\n        x\n    }}\n}}\n\n", text, ty, ty);
-        text = format!("{}impl<'a> nikaia_std::tether::Rebase<'a> for {}<'_> {{\n    type At = {}<'a>;\n", text, ty, ty);
-        text = format!("{}    fn rebase<const N: usize>(self, keeps: &nikaia_std::tether::Keeps<'a, N>) -> {}<'a> {{\n        {} {{ {} }}\n    }}\n}}\n\n", text, ty, ty, rebased);
-        text = format!("{}impl<const N: usize> nikaia_std::tether::Hold<N> for {}<'_> {{\n    type Held = nikaia_std::tether::Holding<__Views_{}, N>;\n", text, ty, ty);
+        text = format!("{}impl nikaia_std::tether::Views for __Views_{} {{\n    type Of<'a> = {}<{}>;\n", text, ty, ty, a);
+        text = format!("{}    fn shorten<'long: 's, 's>(x: &'s {}<{}>) -> &'s {}<{}> {{\n        x\n    }}\n}}\n\n", text, ty, long, ty, short);
+        text = format!("{}impl<'a> nikaia_std::tether::Rebase<'a> for {}<{}> {{\n    type At = {}<{}>;\n", text, ty, any, ty, a);
+        text = format!("{}    fn rebase<const N: usize>(self, keeps: &nikaia_std::tether::Keeps<'a, N>) -> {}<{}> {{\n        {} {{ {} }}\n    }}\n}}\n\n", text, ty, a, ty, rebased);
+        text = format!("{}impl<const N: usize> nikaia_std::tether::Hold<N> for {}<{}> {{\n    type Held = nikaia_std::tether::Holding<__Views_{}, N>;\n", text, ty, any, ty);
         text = format!("{}    fn hold(self, keeps: [std::sync::Arc<nikaia_std::tether::Keep>; N]) -> Self::Held {{\n        nikaia_std::tether::Holding::new(keeps, move |keeps| nikaia_std::tether::Rebase::rebase(self, &keeps))\n    }}\n}}\n", text);
         text
     }
@@ -35688,6 +35689,7 @@ pub struct EmitState {
     pub described: Ledger,
     pub borrowing: collections::BTreeSet<String>,
     pub tethered: collections::BTreeSet<String>,
+    pub view_slots: collections::BTreeMap<String, Vec<String>>,
     pub carries_input: collections::BTreeMap<i64, collections::BTreeSet<String>>,
     pub fold_callees: collections::BTreeSet<String>,
     pub structs: collections::BTreeSet<String>,
@@ -35785,6 +35787,16 @@ impl EmitState {
         if self.tethered.contains(name) || self.borrowing.contains(name) { return true; }
         let contract = match world.library.types.get(name) { Some(__nikaia_value) => __nikaia_value, None => return false };
         !contract.tethered.is_empty()
+    }
+    pub fn lifetime_args(&self, name: &str, lifetime: &str) -> String {
+        let slots = match self.view_slots.get(name) { Some(__nikaia_value) => __nikaia_value, None => return lifetime.to_owned() };
+        let mut parts: Vec<String> = vec![];
+        let mut at: i64 = 0;
+        while ((at) as usize) < slots.len() {
+            parts.push(lifetime.to_owned());
+            at += 1;
+        }
+        parts.join(", ")
     }
     pub fn error_sums(&self, world: &EmitWorld<'_>) -> collections::BTreeMap<Vec<String>, String> {
         let mut out: collections::BTreeMap<Vec<String>, String> = collections::BTreeMap::new();
@@ -39117,40 +39129,40 @@ enum Piece<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct Declared<'a> {
+struct Declared<'a, 'a1> {
     name: &'a str,
-    traits: Vec<&'a str>,
+    traits: Vec<&'a1 str>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct Setting<'a> {
+struct Setting<'a, 'a1, 'a2> {
     name: &'a str,
-    ty: &'a str,
-    default: &'a str,
+    ty: &'a1 str,
+    default: &'a2 str,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct Signed<'a> {
-    declared: Vec<Declared<'a>>,
-    parts: Vec<Piece<'a>>,
-    settings: Vec<Setting<'a>>,
-    result: Option<&'a str>,
+struct Signed<'a, 'a1, 'a2, 'a3> {
+    declared: Vec<Declared<'a, 'a>>,
+    parts: Vec<Piece<'a1>>,
+    settings: Vec<Setting<'a2, 'a2, 'a2>>,
+    result: Option<&'a3 str>,
 }
 
 grammar! {
     grammar SignatureText {
 
-        pub rule signature -> Signed<'a> =
+        pub rule signature -> Signed<'a, 'a, 'a, 'a> =
             d:bracket "(" ps:__nikaia_list<Piece<'a>>(item = part, sep = ",") TRAILING ss:settings ")" r:result? eof
             -> { Signed { declared: d, parts: ps, settings: ss, result: r } }
 
-        rule bracket -> Vec<Declared<'a>> =
-            "[" ds:__nikaia_list<Declared<'a>>(item = declared, sep = ",") "]"
+        rule bracket -> Vec<Declared<'a, 'a>> =
+            "[" ds:__nikaia_list<Declared<'a, 'a>>(item = declared, sep = ",") "]"
             -> { ds }
           | empty
             -> { Vec::new() }
 
-        rule declared -> Declared<'a> =
+        rule declared -> Declared<'a, 'a> =
             n:raw_ident COLON ts:__nikaia_list<&'a str>(item = BOUND, sep = "+")
             -> { Declared { name: n, traits: ts } }
           | n:raw_ident
@@ -39174,13 +39186,13 @@ grammar! {
           | t:TYPE
             -> { Piece::Typed { ty: t, mutates: false } }
 
-        rule settings -> Vec<Setting<'a>> =
-            ";" ss:__nikaia_list<Setting<'a>>(item = setting, sep = ",") TRAILING
+        rule settings -> Vec<Setting<'a, 'a, 'a>> =
+            ";" ss:__nikaia_list<Setting<'a, 'a, 'a>>(item = setting, sep = ",") TRAILING
             -> { ss }
           | empty
             -> { Vec::new() }
 
-        rule setting -> Setting<'a> =
+        rule setting -> Setting<'a, 'a, 'a> =
             n:raw_ident COLON t:SETTING_TYPE "=" d:DEFAULT
             -> { Setting { name: n, ty: t, default: d } }
 

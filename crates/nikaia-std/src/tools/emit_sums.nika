@@ -67,6 +67,19 @@ impl EmitState {
         return contract.tethered.len() != 0
     }
 
+    /// The lifetime arguments a mention of `name` writes: `lifetime` once per
+    /// view field (ADR-353 D1), or once for a struct with one.
+    pub fn lifetime_args(ref self, name: ref String, lifetime: ref String) -> String {
+        let slots = self.view_slots.get(name) ?? return lifetime.clone()
+        let mut parts: Vec[String] = []
+        let mut at = 0
+        while at < slots.len() {
+            parts.push(lifetime.clone())
+            at += 1
+        }
+        return parts.join(", ")
+    }
+
     /// Every set of two or more failures a function can end with, whose members
     /// the emitter can all name, and the sum it is.
     pub fn error_sums(ref self, world: ref EmitWorld) -> collections::BTreeMap[Vec[String], String] {

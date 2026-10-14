@@ -1117,3 +1117,26 @@ fn a_foreign_struct_without_views_is_accepted() {
     package_compiled("xfile-plain", &dir, &program);
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// ADR-353 D1: each view field has a lifetime of its own, so a caller that
+/// keeps `pair(x, y).left` may give `y` a new value while it uses the view
+/// (#614, To build 3).
+#[test]
+fn a_view_field_outlives_the_other_parameter() {
+    let source = r#"struct Pair { left: ref String, right: ref String }
+fn pair(a: ref String, b: ref String) -> Pair {
+    return Pair { left: a, right: b }
+}
+pub fn keep_left() -> String {
+    let x = "left".clone()
+    let mut y = "right".clone()
+    let l = pair(x, y).left
+    y = "replaced".clone()
+    return f"{l} {y}"
+}
+"#;
+    let rust = lowered(source);
+    assert!(rust.contains("struct Pair<'a, 'a1>"), "{rust}");
+    assert!(rust.contains("-> Pair<'r, 'r1>"), "{rust}");
+    compiled("a_view_field_outlives_the_other_parameter", source);
+}

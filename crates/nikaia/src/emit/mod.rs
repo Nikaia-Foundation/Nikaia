@@ -1891,19 +1891,17 @@ impl<'p> Emitter<'p> {
                 crate::contracts::trust::trusted_maps(parsed, library)
             }
         };
+        let units: Vec<&Parsed> = std::iter::once(parsed)
+            .chain(beside.iter().copied())
+            .collect();
+        let package_wide = package_borrowing(&units);
         let state = EmitState {
             described: described.clone(),
-            borrowing: borrowing_structs_beside(
-                parsed,
-                &package_borrowing(
-                    &std::iter::once(parsed)
-                        .chain(beside.iter().copied())
-                        .collect::<Vec<_>>(),
-                ),
-            )
-            .into_iter()
-            .map(|s| parsed.text(s).to_string())
-            .collect(),
+            view_slots: view_slots(&units, &package_wide),
+            borrowing: borrowing_structs_beside(parsed, &package_wide)
+                .into_iter()
+                .map(|s| parsed.text(s).to_string())
+                .collect(),
             tethered: tethered_types(&own_contracts)
                 .into_iter()
                 .chain(beside.iter().flat_map(|other| {
@@ -2550,6 +2548,8 @@ impl<'p> Emitter<'p> {
                 }
                 let vis = if *is_public { "pub " } else { "" };
                 let mut body = Out::empty();
+                // **One lifetime per view field** (ADR-353 D1): `'a`, `'a1`, ...
+                let slots = self.s.view_slots.get(self.text(*name));
                 for field in fields {
                     // Public, because the actions that build this struct are
                     // generated into the grammar's own module.
@@ -2559,6 +2559,16 @@ impl<'p> Emitter<'p> {
                         Lifetimes::Named,
                         self.count_at(SHARED_FIELDS, &slot),
                     );
+                    let lowered = match slots
+                        .and_then(|v| v.iter().position(|f| f == self.text(field.name)))
+                    {
+                        Some(at) if at > 0 => renamed_lifetime(
+                            &lowered,
+                            INPUT_LIFETIME,
+                            &format!("{INPUT_LIFETIME}{at}"),
+                        ),
+                        _ => lowered,
+                    };
                     body.push(&format!(
                         "    {}{}: {},\n",
                         if field.is_public || *is_extern {
@@ -2580,6 +2590,8 @@ impl<'p> Emitter<'p> {
                 let mut parts: Vec<String> = Vec::new();
                 if self.s.borrowing.contains(self.text(*name)) {
                     parts.push(INPUT_LIFETIME.to_string());
+                    let more = slots.map_or(0, Vec::len).saturating_sub(1);
+                    parts.extend((1..=more).map(|at| format!("{INPUT_LIFETIME}{at}")));
                 }
                 parts.extend(generics.iter().map(|g| self.bounded(g)));
                 parts.extend(seeds::Seeds::declared(0, hidden, true));
@@ -2664,7 +2676,7 @@ impl<'p> Emitter<'p> {
                 let declares = angled(&head_parts);
                 let mut target_parts: Vec<String> = Vec::new();
                 if borrows {
-                    target_parts.push(INPUT_LIFETIME.to_string());
+                    target_parts.push(self.s.lifetime_args(&target_name, INPUT_LIFETIME));
                 }
                 target_parts.extend(
                     target
@@ -4035,6 +4047,52 @@ impl<'p> Emitter<'p> {
                 lifetimes,
                 receiver.is_some() || args.iter().any(|a| self.carries_a_view(&a.ty)),
             ),
+        };
+        // **One lifetime per parameter a view field points into**
+        // ([ADR-353](../../docs/specification/adr/adr-353.md) D1): where the
+        // ledger's `returns` names one parameter per field, `pair(a, b)` is
+        // `fn pair<'r, 'r1>(a: &'r str, b: &'r1 str) -> Pair<'r, 'r1>`, so a
+        // caller holding `.left` keeps only `a` borrowed.
+        let (returned, declared) = match self.split_lifetimes(
+            ret_type
+                .as_ref()
+                .filter(|_| shared && !source_nested && several_at.len() >= 2),
+            lent.map(|c| c.returns.as_str()),
+            &several_at
+                .iter()
+                .map(|at| self.text(args[*at].name).to_string())
+                .collect::<Vec<_>>(),
+        ) {
+            Some((own, fields)) => {
+                for (param, lifetime) in &own {
+                    let head = format!("{}: ", escaped(param));
+                    if let Some(p) = params.iter_mut().find(|p| p.starts_with(&head)) {
+                        *p = renamed_lifetime(p, "'r", lifetime);
+                    }
+                }
+                let returned = match ret_type.as_ref().map(|t| t.name) {
+                    Some(t) => returned.replacen(
+                        &format!(
+                            "{}<{}>",
+                            self.name(t),
+                            self.s.lifetime_args(self.text(t), "'r")
+                        ),
+                        &format!("{}<{}>", self.name(t), fields.join(", ")),
+                        1,
+                    ),
+                    None => returned,
+                };
+                let at = declared
+                    .iter()
+                    .position(|d| d == "'r")
+                    .map_or(0, |at| at + 1);
+                let mut declared = declared;
+                for (offset, (_, lifetime)) in own.iter().filter(|(_, l)| l != "'r").enumerate() {
+                    declared.insert(at + offset, lifetime.clone());
+                }
+                (returned, declared)
+            }
+            None => (returned, declared),
         };
         let ret = if *throws {
             format!(" -> Result<{returned}, {channel}>")
@@ -7433,6 +7491,49 @@ impl<'p> Emitter<'p> {
     /// Two sources and one answer: the file's own declarations, and the
     /// package's ledger for the types another file declares
     /// ([`Emitter::tethered`]).
+    /// Each source parameter's own lifetime and the result's lifetime
+    /// arguments, where the result is a struct of several view fields and
+    /// `returns` names one of `sources` for each (ADR-353 D1, D5).
+    #[allow(clippy::type_complexity)]
+    fn split_lifetimes(
+        &self,
+        ty: Option<&Type>,
+        returns: Option<&str>,
+        sources: &[String],
+    ) -> Option<(Vec<(String, String)>, Vec<String>)> {
+        let ty = ty.filter(|t| t.generics.is_empty() && !t.is_view)?;
+        let slots = self.s.view_slots.get(self.text(ty.name))?;
+        let returns = returns.filter(|r| !r.is_empty())?;
+        let own: Vec<(String, String)> = sources
+            .iter()
+            .enumerate()
+            .map(|(at, p)| {
+                let lifetime = match at {
+                    0 => "'r".to_string(),
+                    _ => format!("'r{at}"),
+                };
+                (p.clone(), lifetime)
+            })
+            .collect();
+        let mut of_field: HashMap<&str, &str> = HashMap::new();
+        for entry in returns.split("),") {
+            let (path, written) = entry.split_once(':')?;
+            let inside = written.trim().strip_prefix("ref(")?.trim_end_matches(')');
+            if inside.contains('|') || inside.contains(',') {
+                return None;
+            }
+            of_field.insert(path.trim(), inside.trim());
+        }
+        let fields = slots
+            .iter()
+            .map(|f| {
+                let param = of_field.get(f.as_str())?;
+                own.iter().find(|(p, _)| p == param).map(|(_, l)| l.clone())
+            })
+            .collect::<Option<Vec<String>>>()?;
+        Some((own, fields))
+    }
+
     fn borrows(&self, name: Symbol) -> bool {
         self.s.borrows(&self.world, name)
     }
@@ -7928,6 +8029,64 @@ fn tethered_types(contracts: &crate::contracts::Ledger) -> std::collections::BTr
         .filter(|(_, contract)| !contract.tethered.is_empty())
         .map(|(name, _)| name.clone())
         .collect()
+}
+
+/// `text` with the lifetime `from` written `to`, where it stands as a whole name.
+fn renamed_lifetime(text: &str, from: &str, to: &str) -> String {
+    let mut out = String::new();
+    let mut rest = text;
+    while let Some(at) = rest.find(from) {
+        let after = &rest[at + from.len()..];
+        out.push_str(&rest[..at]);
+        match after
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_alphanumeric() || c == '_')
+        {
+            true => out.push_str(from),
+            false => out.push_str(to),
+        }
+        rest = after;
+    }
+    out.push_str(rest);
+    out
+}
+
+/// **The view-holding fields of each struct that holds two or more**
+/// (ADR-353 D1): one lifetime each. Only a struct the package keeps to itself
+/// and that is no error, whose every mention this emitter writes.
+pub(crate) fn view_slots(
+    units: &[&Parsed],
+    borrowing: &std::collections::BTreeSet<String>,
+) -> std::collections::BTreeMap<String, Vec<String>> {
+    let mut slots = std::collections::BTreeMap::new();
+    for parsed in units {
+        let errors = declared_errors(parsed);
+        for item in &parsed.program.items {
+            if let Item::Struct {
+                name,
+                fields,
+                is_public: false,
+                is_extern: false,
+                ..
+            } = &item.node
+            {
+                let text = parsed.text(*name).to_string();
+                if errors.contains(&text) {
+                    continue;
+                }
+                let held: Vec<String> = fields
+                    .iter()
+                    .filter(|f| holds_view(&f.ty) || names_outside(parsed, &f.ty, borrowing))
+                    .map(|f| parsed.text(f.name).to_string())
+                    .collect();
+                if held.len() >= 2 {
+                    slots.insert(text, held);
+                }
+            }
+        }
+    }
+    slots
 }
 
 /// Which structs hold a view into the parser's input.
