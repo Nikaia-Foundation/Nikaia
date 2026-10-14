@@ -300,3 +300,14 @@ String` parameter works. `let held = map.get(k) ?? continue` then `match held
 reference, which rustc refuses (*cannot explicitly borrow within an
 implicitly-borrowing pattern*); a helper taking `ref Ty` works. **To build:**
 a `nikaia run` test for each, then the argument coercion and the pattern.
+
+## D31 (new). `list[i].field ?? continue` moves out of the element
+
+Found moving `moved_to` (C-5g, `check_overflow.nika`): with `slots:
+Vec[CheckUnsignedSlot]` and `refusal: CheckFinding?`, `let refusal =
+slots[index].refusal ?? continue` lowers to `match index::get(&slots,
+..).refusal { Some(v) => v, .. }`, which rustc refuses (E0507, *cannot move out
+of a shared reference*). The checker accepts it, so the lowering owes either a
+borrow (the value is only read) or a clone. `slots[index].refusal?.clone() ??
+continue` works. **To build:** a `nikaia run` test, then the coalesce on an
+indexed place.

@@ -10902,6 +10902,161 @@ pub fn a_pausing_sequence(result: Ty, on: &Ty) -> Ty {
 }
 
 
+// --- check_collect.nika ---
+
+fn collect_default_written(default: Option<&FieldDefault>) -> String {
+    let given = match default { Some(__nikaia_value) => __nikaia_value, None => return "".to_owned() };
+    if a_literal(&given.value) { return default_text(&given.value); }
+    "computed".to_owned()
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn collect_keys_unordered(beside: &collections::BTreeMap<String, Vec<Ty>>, structs: &collections::BTreeMap<String, Vec<FieldContract>>, enums: &collections::BTreeMap<String, collections::BTreeSet<String>>, payloads: &collections::BTreeMap<String, Vec<Ty>>, parameters: &collections::BTreeMap<String, Vec<String>>, world: &CheckWorld<'_>, ty: &Ty, span: &Span) -> Vec<CheckFinding> {
+    let asking = CheckComparable { beside, structs, enums, payloads, parameters, own: world.own, library: world.library };
+    compare_keys_with_no_order(&asking, ty, span)
+}
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn collect_declared(&mut self, world: &CheckWorld<'_>, beside: &collections::BTreeMap<String, Vec<Ty>>, ty: &Type, span: &Span) -> Ty {
+        self.spelling(world, ty, span);
+        let written = written_ty(world.here.words, world.here.aliases, ty);
+        let refused = collect_keys_unordered(beside, &self.structs, &self.enums, &self.enum_payloads, &self.struct_parameters, world, &written, span);
+        for finding in refused.iter() { self.findings.push(finding.clone()); }
+        written
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn collect_types_beside(&mut self, other: &ParsedView<'_>, item: &Item) {
+        match item {
+            Item::Enum { name, variants, .. } => {
+                let name = *name;
+                let owner = other.text(name);
+                for variant in variants.iter() {
+                    let key = format!("{}::{}", owner, other.text(variant.name));
+                    match &variant.fields {
+                        VariantFields::Named(fields) => {
+                            let mut held: Vec<FieldContract> = vec![];
+                            for field in fields.iter() { held.push(FieldContract { name: other.text(field.name), ty: written_ty(other.words, other.aliases, &field.ty), public: true, default: "".to_owned(), attributes: vec![] }); }
+                            self.variant_owner.insert(key.to_owned(), owner.to_owned());
+                            self.structs.insert(key, held);
+                        },
+                        VariantFields::Tuple(types) => {
+                            let mut parts: Vec<Ty> = vec![];
+                            for ty in types.iter() { parts.push(written_ty(other.words, other.aliases, ty)); }
+                            self.variant_parts.insert(key, parts);
+                        },
+                        _ => { },
+                    }
+                }
+            },
+            Item::Struct { name, generics, fields, .. } => {
+                let name = *name;
+                if generics.is_empty() { return; }
+                let mut order: Vec<String> = vec![];
+                let mut parameters: collections::BTreeSet<String> = collections::BTreeSet::new();
+                for generic in generics.iter() {
+                    order.push(other.text(generic.name));
+                    parameters.insert(other.text(generic.name));
+                }
+                let mut held: Vec<FieldContract> = vec![];
+                for field in fields.iter() { held.push(FieldContract { name: other.text(field.name), ty: written_ty(other.words, other.aliases, &field.ty).parameterise(&parameters), public: field.is_public, default: collect_default_written((field.default).as_ref()), attributes: vec![] }); }
+                let named = other.text(name);
+                self.struct_parameters.insert(named.to_owned(), order);
+                self.structs.insert(named, held);
+            },
+            _ => { },
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn collect_struct(&mut self, world: &CheckWorld<'_>, beside: &collections::BTreeMap<String, Vec<Ty>>, name: winnow_grammar::Symbol, generics: &[GenericParam], fields: &[FieldDef], span: &Span) {
+        let mut order: Vec<String> = vec![];
+        let mut parameters: collections::BTreeSet<String> = collections::BTreeSet::new();
+        for generic in generics.iter() {
+            order.push(world.here.text(generic.name));
+            parameters.insert(world.here.text(generic.name));
+        }
+        for field in fields.iter() { self.nameable(&world.here.text(field.name), &field.span, "a field"); }
+        let mut held: Vec<FieldContract> = vec![];
+        for field in fields.iter() {
+            let ty = self.collect_declared(world, beside, &field.ty, &field.span);
+            held.push(FieldContract { name: world.here.text(field.name), ty: ty.parameterise(&parameters), public: field.is_public, default: collect_default_written((field.default).as_ref()), attributes: vec![] });
+        }
+        let own = world.here.text(name);
+        self.nameable(&own, span, "a struct");
+        if !order.is_empty() { self.struct_parameters.insert(own.to_owned(), order); }
+        self.structs.insert(own, held);
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn collect_enum(&mut self, world: &CheckWorld<'_>, beside: &collections::BTreeMap<String, Vec<Ty>>, name: winnow_grammar::Symbol, variants: &[EnumVariant], span: &Span) {
+        let own = world.here.text(name);
+        self.nameable(&own, span, "an enum");
+        for variant in variants.iter() { self.nameable(&world.here.text(variant.name), span, "a variant"); }
+        for variant in variants.iter() {
+            match &variant.fields {
+                VariantFields::Named(fields) => {
+                    let mut held: Vec<FieldContract> = vec![];
+                    for field in fields.iter() {
+                        let ty = self.collect_declared(world, beside, &field.ty, &field.span);
+                        held.push(FieldContract { name: world.here.text(field.name), ty, public: true, default: "".to_owned(), attributes: vec![] });
+                    }
+                    let key = format!("{}::{}", own, world.here.text(variant.name));
+                    self.variant_owner.insert(key.to_owned(), own.to_owned());
+                    self.structs.insert(key, held);
+                },
+                _ => { },
+            }
+        }
+        let mut payloads: Vec<Ty> = vec![];
+        let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
+        for variant in variants.iter() {
+            names.insert(world.here.text(variant.name));
+            match &variant.fields {
+                VariantFields::Unit => { },
+                VariantFields::Tuple(types) => {
+                    let mut parts: Vec<Ty> = vec![];
+                    for ty in types.iter() {
+                        parts.push(written_ty(world.here.words, world.here.aliases, ty));
+                        payloads.push(written_ty(world.here.words, world.here.aliases, ty));
+                    }
+                    self.variant_parts.insert(format!("{}::{}", own, world.here.text(variant.name)), parts);
+                },
+                VariantFields::Named(fields) => { for field in fields.iter() { payloads.push(written_ty(world.here.words, world.here.aliases, &field.ty)); } },
+            }
+        }
+        self.enum_payloads.insert(own.to_owned(), payloads);
+        self.enums.insert(own, names);
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn collect_types(&mut self, world: &CheckWorld<'_>) {
+        for other in world.beside.iter() { for item in other.items.iter() { self.collect_types_beside(other, &item.node); } }
+        let beside = check_parts_beside(world);
+        for item in world.here.items.iter() {
+            match &item.node {
+                Item::Struct { name, generics, fields, .. } => { let name = *name; self.collect_struct(world, &beside, name, generics, fields, &item.span) },
+                Item::Enum { name, variants, .. } => { let name = *name; self.collect_enum(world, &beside, name, variants, &item.span) },
+                _ => { },
+            }
+        }
+        self.collect_library_enums(world);
+        for item in world.here.items.iter() {
+            match &item.node {
+                Item::Fn { .. } => self.bounds_declared_by(world, &item.node, None),
+                Item::Impl { target, methods, .. } => {
+                    let named = world.here.text(target.name);
+                    for method in methods.iter() { self.bounds_declared_by(world, &method.node, Some(&named)); }
+                },
+                _ => { },
+            }
+        }
+    }
+}
+
+
 // --- check_compare.nika ---
 
 const COMPARE_PLAIN: [&str; 11] = ["i32", "i64", "u8", "u32", "u64", "bool", "char", "scalar", "String", "str", "Bytes"];
@@ -11609,6 +11764,127 @@ impl CheckState {
             written_values.push((*nikaia_std::index::get(&values, nikaia_std::index::at(place))).to_owned());
         }
         CheckTable { found: true, below: format!("Fixed<{}>", value_below), written: format!("Fixed::new({}, &[{}], &[{}], &[{}])", table.seed, disps.join(", "), written_keys.join(", "), written_values.join(", ")), said: false }
+    }
+}
+
+
+// --- check_copies.nika ---
+
+pub fn check_parts_beside(world: &CheckWorld<'_>) -> collections::BTreeMap<String, Vec<Ty>> {
+    let mut parts: collections::BTreeMap<String, Vec<Ty>> = collections::BTreeMap::new();
+    let mut at: i64 = 0;
+    for other in world.beside.iter() {
+        if at != world.here_at { for item in other.items.iter() { copies_parts_of(other, &item.node, &mut parts); } }
+        at = at + 1;
+    }
+    parts
+}
+
+fn copies_parts_of(other: &ParsedView<'_>, item: &Item, parts: &mut collections::BTreeMap<String, Vec<Ty>>) {
+    match item {
+        Item::Struct { name, generics, fields, .. } => {
+            let name = *name;
+            if !generics.is_empty() { return; }
+            let named = other.text(name);
+            if parts.contains_key(&named) { return; }
+            let mut held: Vec<Ty> = vec![];
+            for field in fields.iter() { held.push(written_ty(other.words, other.aliases, &field.ty)); }
+            parts.insert(named, held);
+        },
+        Item::Enum { name, variants, .. } => {
+            let name = *name;
+            let named = other.text(name);
+            if parts.contains_key(&named) { return; }
+            let mut held: Vec<Ty> = vec![];
+            for variant in variants.iter() {
+                match &variant.fields {
+                    VariantFields::Unit => { },
+                    VariantFields::Tuple(types) => { for ty in types.iter() { held.push(written_ty(other.words, other.aliases, ty)); } },
+                    VariantFields::Named(fields) => { for field in fields.iter() { held.push(written_ty(other.words, other.aliases, &field.ty)); } },
+                }
+            }
+            parts.insert(named, held);
+        },
+        _ => { },
+    }
+}
+
+fn copies_declared_in(view: &ParsedView<'_>) -> Vec<String> {
+    let mut names: Vec<String> = vec![];
+    for item in view.items.iter() {
+        match &item.node {
+            Item::Struct { name, .. } => { let name = *name; names.push(view.text(name)) },
+            Item::Enum { name, .. } => { let name = *name; names.push(view.text(name)) },
+            _ => { },
+        }
+    }
+    names
+}
+
+fn copies_dropped_in(view: &ParsedView<'_>, dropped: &mut collections::BTreeSet<String>) {
+    for item in view.items.iter() {
+        match &item.node {
+            Item::Impl { trait_name, target, .. } => {
+                let trait_name = *trait_name;
+                let named = match trait_name { Some(__nikaia_value) => __nikaia_value, None => continue };
+                if view.text(named) == "Drop" { dropped.insert(view.text(target.name)); }
+            },
+            _ => { },
+        }
+    }
+}
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn collect_copies(&mut self, world: &CheckWorld<'_>) {
+        let declared = copies_declared_in(&world.here);
+        let mut package: Vec<String> = declared.to_owned();
+        let mut at: i64 = 0;
+        for other in world.beside.iter() {
+            if at != world.here_at { for name in copies_declared_in(other) { if !nikaia_std::list::contains(&declared, &name) { package.push(name); } } }
+            at = at + 1;
+        }
+        let beside_parts = check_parts_beside(world);
+        let mut dropped: collections::BTreeSet<String> = collections::BTreeSet::new();
+        copies_dropped_in(&world.here, &mut dropped);
+        for unit in world.beside.iter() { copies_dropped_in(unit, &mut dropped); }
+        let mut copies: collections::BTreeSet<String> = collections::BTreeSet::new();
+        for (name, contract) in world.library.types.iter() { if contract.copies { copies.insert(name.to_owned()); } }
+        loop {
+            let mut joining: Vec<String> = vec![];
+            for name in package.iter() {
+                if copies.contains(name) || dropped.contains(name) { continue; }
+                let mut parts: Vec<Ty> = vec![];
+                if nikaia_std::list::contains(&declared, &name) {
+                    if self.enum_payloads.contains_key(name) {
+                        let held = match self.enum_payloads.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                        parts = held.to_owned();
+                    } else {
+                        let fields = match self.structs.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                        for field in fields.iter() { parts.push(field.ty.clone()); }
+                    }
+                } else {
+                    let held = match beside_parts.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                    parts = held.to_owned();
+                }
+                let named = Ty::Named { name: name.to_owned(), args: vec![], view: false };
+                if self.cleanup_of(world, &named).is_some() { continue; }
+                let mut all = true;
+                for ty in parts.iter() { if !a_copied_part(ty, &copies) { all = false; } }
+                if all { joining.push(name.to_owned()); }
+            }
+            if joining.is_empty() { break; }
+            for name in joining.iter() { copies.insert(name.to_owned()); }
+        }
+        let mut in_package: collections::BTreeSet<String> = collections::BTreeSet::new();
+        let mut own: collections::BTreeSet<String> = collections::BTreeSet::new();
+        for name in copies.iter() {
+            if nikaia_std::list::contains(&package, &name) { in_package.insert(name.to_owned()); }
+            if nikaia_std::list::contains(&declared, &name) { own.insert(name.to_owned()); }
+        }
+        self.copies_in_the_package = in_package;
+        self.facts.copies = own;
     }
 }
 
@@ -16910,6 +17186,164 @@ impl CheckState {
             entry.derived.push((folded, span.clone()));
         }
     }
+}
+
+
+// --- check_overflow.nika ---
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn an_operation_that_overflows(&mut self, world: &CheckWorld<'_>, op: BinaryOp, lhs: &Expr, rhs: &Expr, reach: Option<&str>, span: &Span) {
+        let here = span.start as i64;
+        if !(op == BinaryOp::Add || op == BinaryOp::Sub || op == BinaryOp::Mul || op == BinaryOp::Div || op == BinaryOp::Rem) || self.flow.overflowed.contains(&here) { return; }
+        let left = match self.constant_of(world, lhs) { Some(__nikaia_value) => __nikaia_value, None => return };
+        let right = match self.constant_of(world, rhs) { Some(__nikaia_value) => __nikaia_value, None => return };
+        if left.beyond || right.beyond { return; }
+        let a = left.value;
+        let b = right.value;
+        let mut heading = false;
+        let mut folded: Option<Integer> = None;
+        if op == BinaryOp::Add {
+            folded = integer_sum(&a, &b);
+            heading = a.negative;
+        } else if op == BinaryOp::Sub {
+            folded = integer_difference(&a, &b);
+            heading = a.negative;
+        } else if op == BinaryOp::Mul {
+            folded = integer_product(&a, &b);
+            heading = a.negative != b.negative;
+        } else if op == BinaryOp::Div { folded = integer_quotient(&a, &b, false); } else { folded = integer_quotient(&a, &b, true); }
+        let division = op == BinaryOp::Div || op == BinaryOp::Rem;
+        if folded.is_none() && division { return; }
+        let beyond = folded.is_none();
+        let fallback = integer(18446744073709551615u64, heading);
+        let value = CheckConstant { value: nikaia_std::index::or(folded, || fallback.into()), beyond, pinned: None };
+        let mut open = self.open_numbers_in(world, lhs);
+        for number in self.open_numbers_in(world, rhs) { open.push(number); }
+        if !open.is_empty() {
+            for number in open.iter() {
+                let number = nikaia_std::num::value(number);
+                self.overflow_derived(number, &value, span);
+            }
+            return;
+        }
+        let mut pinned: String = nikaia_std::index::or(left.pinned.as_deref(), || "").to_owned();
+        if pinned.is_empty() { pinned = match right.pinned { Some(__nikaia_value) => __nikaia_value, None => return }.to_owned(); }
+        let mut ty = pinned.to_owned();
+        let into: String = nikaia_std::index::or(reach, || "").to_owned();
+        if !into.is_empty() {
+            let common = nikaia_std::index::or(common_integer(&pinned, &into), || "".into());
+            if common == into { ty = into; }
+        }
+        let before = self.findings.len() as i64;
+        self.a_number_not_fitting(&value, false, &ty, span, None);
+        if (self.findings.len() as i64) > before { self.flow.overflowed.insert(here); }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn overflow_derived(&mut self, number: i64, value: &CheckConstant, span: &Span) {
+        let found = match *nikaia_std::index::get(&self.flow.open_numbers, &number) { Some(__nikaia_value) => __nikaia_value, None => return };
+        let mut entry = found.clone();
+        entry.derived.push((value.clone(), span.clone()));
+        self.flow.open_numbers.insert(number, entry);
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn slots_waiting(&self, span: &Span) -> Vec<bool> {
+        let mut waiting: Vec<bool> = vec![];
+        let key = span.start as i64;
+        let slots = match self.flow.unsigned_slots.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return waiting };
+        for slot in slots.iter() { waiting.push(slot.refusal.is_some()); }
+        waiting
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn findings_moved(&mut self, span: &Span, at: &Span, pushed: i64, waiting: &[bool]) {
+        if at == span { return; }
+        for index in pushed..self.findings.len() as i64 { if nikaia_std::index::get(&self.findings, nikaia_std::index::at(index)).span == *span { self.findings[nikaia_std::index::at(index)].span = at.clone(); } }
+        let key = span.start as i64;
+        let held = match self.flow.unsigned_slots.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return };
+        let mut slots: Vec<CheckUnsignedSlot> = held.to_owned();
+        for index in 0..slots.len() as i64 {
+            let was = index < waiting.len() as i64 && *nikaia_std::index::get(&waiting, nikaia_std::index::at(index));
+            let refusal = match match nikaia_std::index::get(&slots, nikaia_std::index::at(index)).refusal.as_ref() {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            } { Some(__nikaia_value) => __nikaia_value, None => continue };
+            if !was && refusal.span == *span {
+                let mut moved = refusal.clone();
+                moved.span = at.clone();
+                slots[nikaia_std::index::at(index)].refusal = Some(moved);
+            }
+        }
+        self.flow.unsigned_slots.insert(key, slots);
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_wrap_for(found: &Ty, want: &Ty, literal: bool) -> Option<FactWrap> {
+    let into = nikaia_std::index::or(widened_into(found, want), || "".into());
+    if !into.is_empty() { return Some(FactWrap::Widen(into.to_owned())); }
+    let path = text_as_a_path(found, want);
+    if path == 1 { return Some(FactWrap::PathView); }
+    if path == 0 { return Some(FactWrap::Path); }
+    let wants_nullable = matches!(want, Ty::Nullable(_));
+    let found_nullable = matches!(found, Ty::Nullable(_));
+    if !wants_nullable || found_nullable { return None; }
+    if !found.is_unknown() || literal { return Some(FactWrap::Constructor); }
+    Some(FactWrap::Conversion)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_widened_slot<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, found: &Ty, want: &Ty, value: Option<&Expr>, span: &Span) -> Option<FactWrap> {
+    let mut literal = false;
+    if value.is_some() {
+        let given = match value { Some(__nikaia_value) => __nikaia_value, None => return None };
+        literal = is_a_literal(given);
+        let into = nikaia_std::index::or(unsigned_from_signed(found, want), || "".into());
+        if !literal && !into.is_empty() {
+            let key = span.start as i64;
+            let slot = CheckUnsignedSlot { node: id_of(given) as i64, found: found.clone(), want: want.clone(), into: into.to_owned(), written: host.written(given), span: span.clone(), refusal: None };
+            let mut slots: Vec<CheckUnsignedSlot> = vec![];
+            if state.flow.unsigned_slots.contains_key(&key) {
+                let held = match state.flow.unsigned_slots.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                slots = held.to_owned();
+            }
+            slots.push(slot);
+            state.flow.unsigned_slots.insert(key, slots);
+            return Some(FactWrap::Unsigned(into.to_owned()));
+        }
+    }
+    let how = match check_wrap_for(found, want, literal) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let widen: String = match how {
+        FactWrap::Widen(ref into) => into.to_owned(),
+        _ => "".to_owned(),
+    };
+    if !widen.is_empty() && value.is_some() {
+        let given = match value { Some(__nikaia_value) => __nikaia_value, None => return None };
+        if state.narrow_by_width(world, given, &widen, span) || state.widen_operands(world, given, &widen, span) { return None; }
+    }
+    Some(how)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_unsigned_slot_refused(slot: &CheckUnsignedSlot) -> CheckFinding {
+    let found = slot.found.text();
+    let want = slot.want.text();
+    let value = slot.written.to_owned();
+    let into = slot.into.to_owned();
+    let mut finding = nikaia_std::index::or(match slot.refusal.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || check_refusal("NK1102", &slot.span, format!("This is `{}`, but `{}` is wanted here.", found, want), vec![], None).into());
+    let article = if an_or_a(&found) == "an" { "An" } else { "A" };
+    finding.notes.push(format!("{} `{}` goes into {} `{}` on its own only where the compiler can show it is not negative.", article, found, an_or_a(&into), into));
+    finding.help = Some(format!("Write `{} as {}`, which stops the program on a negative value, or `assert {} >= 0` before this line.", value, into, value));
+    finding
 }
 
 
@@ -50775,6 +51209,10 @@ pub mod check_calls {
     #[allow(unused_imports)]
     pub use super::{call_arguments, expected_arguments, receiver_bindings, argument_bindings, walks_by_value, shape_through, a_paused_chain, a_pausing_sequence};
 }
+pub mod check_collect {
+    #[allow(unused_imports)]
+    pub use super::{collect_keys_unordered};
+}
 pub mod check_compare {
     #[allow(unused_imports)]
     pub use super::{CompareStrength, CheckComparable, compare_refusal, CompareDeclared, compare_declared, compare_standard_bounds, compare_keys_with_no_order, compare_language_impls};
@@ -50782,6 +51220,10 @@ pub mod check_compare {
 pub mod check_consts {
     #[allow(unused_imports)]
     pub use super::{rust_value, rust_array_type, CheckCrossing, CheckTable, unwritable_in, written_below};
+}
+pub mod check_copies {
+    #[allow(unused_imports)]
+    pub use super::{check_parts_beside};
 }
 pub mod check_core_pilot {
     #[allow(unused_imports)]
@@ -50858,6 +51300,10 @@ pub mod check_numbers4 {
 pub mod check_numbers5 {
     #[allow(unused_imports)]
     pub use super::{CheckOpenComptime};
+}
+pub mod check_overflow {
+    #[allow(unused_imports)]
+    pub use super::{check_wrap_for, check_widened_slot, check_unsigned_slot_refused};
 }
 pub mod check_parts {}
 pub mod check_patterns {

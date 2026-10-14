@@ -49,6 +49,7 @@ use nikaia_std::tools::check_items;
 use nikaia_std::tools::check_literals::element_kind;
 use nikaia_std::tools::check_lookups::names_of;
 use nikaia_std::tools::check_names::{integer_named, is_a_literal as is_literal};
+use nikaia_std::tools::check_overflow;
 use nikaia_std::tools::check_patterns::pattern_names;
 use nikaia_std::tools::check_reports::CheckWall;
 use nikaia_std::tools::check_scope::{resolve_call, resolve_method};
@@ -679,41 +680,6 @@ pub(crate) enum Computing {
     Attribute,
 }
 
-/// A field's default as the checker keeps it (ADR-331 D5): a literal's text,
-/// or a mark that one is there, which is all a literal leaving the field out
-/// asks. The value a computed one has is the ledger's.
-fn default_written(default: &ast::FieldDefault) -> String {
-    match crate::contracts::a_literal(&default.value) {
-        true => nikaia_std::tools::declared::default_text(&default.value),
-        false => "computed".to_string(),
-    }
-}
-
-fn wrap_for(found: &Ty, want: &Ty, literal: bool) -> Option<Wrap> {
-    if let Some(into) = widened_into(found, want) {
-        return Some(Wrap::Widen(into.to_string()));
-    }
-    if let Some(view) = text_as_a_path(found, want) {
-        return Some(match view {
-            true => Wrap::PathView,
-            false => Wrap::Path,
-        });
-    }
-    if !matches!(want, Ty::Nullable(_)) || matches!(found, Ty::Nullable(_)) {
-        return None;
-    }
-    match !found.is_unknown() || literal {
-        true => Some(Wrap::Constructor),
-        false => Some(Wrap::Conversion),
-    }
-}
-
-/// **The unsigned type a signed value goes into where it is not negative**
-/// (`tools/check_widen.nika`).
-fn unsigned_from_signed(found: &Ty, want: &Ty) -> Option<&'static str> {
-    check_widen::unsigned_from_signed(found, want).map(|into| a_static_integer(&into))
-}
-
 /// An integer type's name as a name that lives for the program.
 fn a_static_integer(name: &str) -> &'static str {
     INTEGERS
@@ -732,23 +698,8 @@ pub fn common_integer(a: &str, b: &str) -> Option<&'static str> {
     check_widen::common_integer(a, b).map(|common| a_static_integer(&common))
 }
 
-/// **The integer type a slot states, where a narrower one goes into it without
-/// loss** (`tools/check_widen.nika`).
-fn widened_into(found: &Ty, want: &Ty) -> Option<&'static str> {
-    check_widen::widened_into(found, want).map(|into| a_static_integer(&into))
-}
-
 /// The ledger keys of a file name's methods (ADR-319 D3).
 const PATH_METHODS: &str = "fs::Path::";
-
-/// **Text stands wherever a file's name is asked**: whether `found` is text and
-/// `want` an `fs::Path`, and then whether a view of one is wanted.
-fn text_as_a_path(found: &Ty, want: &Ty) -> Option<bool> {
-    match check_widen::text_as_a_path(found, want) {
-        -1 => None,
-        view => Some(view == 1),
-    }
-}
 
 /// The loops whose step can fail, for a caller that wants only those.
 ///
@@ -1090,216 +1041,7 @@ impl<'a> Checker<'a> {
     }
 
     fn collect_types(&mut self) {
-        // **A generic struct another file of the package declares**
-        // (Part I 9.1): its fields and type parameters, so `item.node` over a
-        // `Spanned[Item]` that `ast.nika` declares is an `Item` in
-        // `traits.nika` as it is in `ast.nika` (found moving `traits` into
-        // Nikaia, #125). This file's own declarations come after, and a name
-        // it declares is its own.
-        for other in self.beside {
-            for item in &other.program.items {
-                // **And an enum's variants**: `Item::Impl { methods, .. }`
-                // over an `Item` `ast.nika` declares binds a `methods` of the
-                // type the variant says, here as there.
-                if let Item::Enum { name, variants, .. } = &item.node {
-                    let owner = other.text(*name).to_string();
-                    for variant in variants {
-                        let key = format!("{owner}::{}", other.text(variant.name));
-                        match &variant.fields {
-                            ast::VariantFields::Named(fields) => {
-                                let held: Vec<FieldContract> = fields
-                                    .iter()
-                                    .map(|f| FieldContract {
-                                        name: other.text(f.name).to_string(),
-                                        ty: Ty::from_ast(other, &f.ty),
-                                        public: true,
-                                        default: String::new(),
-                                        attributes: Vec::new(),
-                                    })
-                                    .collect();
-                                self.s.variant_owner.insert(key.clone(), owner.clone());
-                                self.s.structs.insert(key, held);
-                            }
-                            ast::VariantFields::Tuple(types) => {
-                                let parts =
-                                    types.iter().map(|ty| Ty::from_ast(other, ty)).collect();
-                                self.s.variant_parts.insert(key, parts);
-                            }
-                            _ => {}
-                        }
-                    }
-                    continue;
-                }
-                let Item::Struct {
-                    name,
-                    generics,
-                    fields,
-                    ..
-                } = &item.node
-                else {
-                    continue;
-                };
-                if generics.is_empty() {
-                    continue;
-                }
-                let order: Vec<String> = generics
-                    .iter()
-                    .map(|g| other.text(g.name).to_string())
-                    .collect();
-                let parameters: BTreeSet<String> = order.iter().cloned().collect();
-                let held: Vec<FieldContract> = fields
-                    .iter()
-                    .map(|f| FieldContract {
-                        name: other.text(f.name).to_string(),
-                        ty: Ty::from_ast(other, &f.ty).parameterise(&parameters),
-                        public: f.is_public,
-                        default: f.default.as_ref().map(default_written).unwrap_or_default(),
-                        attributes: Vec::new(),
-                    })
-                    .collect();
-                let named = other.text(*name).to_string();
-                self.s.struct_parameters.insert(named.clone(), order);
-                self.s.structs.insert(named, held);
-            }
-        }
-        for item in &self.parsed.program.items {
-            match &item.node {
-                Item::Struct {
-                    name,
-                    generics,
-                    fields,
-                    ..
-                } => {
-                    // In **declaration order**, because that is what a type
-                    // argument's position means: `Pair[i64]`'s `i64` is the
-                    // first parameter and nothing else says which
-                    // ([ADR-295](../../docs/specification/adr/adr-295.md) D2).
-                    let order: Vec<String> = generics
-                        .iter()
-                        .map(|g| self.parsed.text(g.name).to_string())
-                        .collect();
-                    let parameters: BTreeSet<String> = order.iter().cloned().collect();
-                    for f in fields {
-                        let name = self.parsed.text(f.name).to_string();
-                        self.s.nameable(&name, &f.span, "a field");
-                    }
-                    let fields: Vec<FieldContract> = fields
-                        .iter()
-                        .map(|f| FieldContract {
-                            name: self.parsed.text(f.name).to_string(),
-                            ty: self.declared(&f.ty, &f.span).parameterise(&parameters),
-                            public: f.is_public,
-                            default: f.default.as_ref().map(default_written).unwrap_or_default(),
-                            attributes: Vec::new(),
-                        })
-                        .collect();
-                    let own = self.parsed.text(*name).to_string();
-                    // **An item's own name was never asked**, which `not_self`
-                    // did not have to be: `struct self` cannot parse, because
-                    // the receiver takes the word. `struct crate` parses fine
-                    // and went to the language below (ADR-298 D11).
-                    self.s.nameable(&own, &item.span, "a struct");
-                    if !order.is_empty() {
-                        self.s.struct_parameters.insert(own.clone(), order);
-                    }
-                    self.s.structs.insert(own, fields);
-                }
-                Item::Enum { name, variants, .. } => {
-                    let own = self.parsed.text(*name).to_string();
-                    self.s.nameable(&own, &item.span, "an enum");
-                    let named: Vec<String> = variants
-                        .iter()
-                        .map(|v| self.parsed.text(v.name).to_string())
-                        .collect();
-                    for name in &named {
-                        self.s.nameable(name, &item.span, "a variant");
-                    }
-                    // **A variant with named fields wears a struct literal**,
-                    // and until this was here nothing read it: `Shape::Spot {
-                    // x: 1 }` found no fields, so every field went unchecked,
-                    // and the literal's *type* came out as `Shape::Spot` -
-                    // which no declaration can be written as, so a correct
-                    // program was refused with a way out that cannot be taken
-                    // ([Part III C.2](../../docs/specification/30-nikaia-tooling.md)
-                    // and C.4 at once).
-                    //
-                    // The fields go in the same map a `struct`'s do, under the
-                    // qualified key, so `fields_of` answers for both and there
-                    // is one field check rather than two. **`pub` is not asked
-                    // of them**: a variant carries no visibility word, so its
-                    // fields are as reachable as the `enum` is (Part I 9.2).
-                    for variant in variants {
-                        let ast::VariantFields::Named(fields) = &variant.fields else {
-                            continue;
-                        };
-                        let held: Vec<FieldContract> = fields
-                            .iter()
-                            .map(|f| FieldContract {
-                                name: self.parsed.text(f.name).to_string(),
-                                ty: self.declared(&f.ty, &f.span),
-                                public: true,
-                                default: String::new(),
-                                attributes: Vec::new(),
-                            })
-                            .collect();
-                        let key = format!("{own}::{}", self.parsed.text(variant.name));
-                        self.s.variant_owner.insert(key.clone(), own.clone());
-                        self.s.structs.insert(key, held);
-                    }
-                    for variant in variants {
-                        if let ast::VariantFields::Tuple(types) = &variant.fields {
-                            let key = format!("{own}::{}", self.parsed.text(variant.name));
-                            let parts = types
-                                .iter()
-                                .map(|ty| Ty::from_ast(self.parsed, ty))
-                                .collect();
-                            self.s.variant_parts.insert(key, parts);
-                        }
-                    }
-                    // **Every kind of payload**, positional included — see
-                    // [`Checker::enum_payloads`] for why a map of its own.
-                    let held: Vec<Ty> = variants
-                        .iter()
-                        .flat_map(|variant| match &variant.fields {
-                            ast::VariantFields::Unit => Vec::new(),
-                            ast::VariantFields::Tuple(types) => types
-                                .iter()
-                                .map(|ty| Ty::from_ast(self.parsed, ty))
-                                .collect(),
-                            ast::VariantFields::Named(fields) => fields
-                                .iter()
-                                .map(|f| Ty::from_ast(self.parsed, &f.ty))
-                                .collect(),
-                        })
-                        .collect();
-                    self.s.enum_payloads.insert(own.clone(), held);
-                    let variants = variants
-                        .iter()
-                        .map(|v| self.parsed.text(v.name).to_string())
-                        .collect();
-                    self.s
-                        .enums
-                        .insert(self.parsed.text(*name).to_string(), variants);
-                }
-                _ => {}
-            }
-        }
-        self.s.collect_library_enums(self.world);
-        for item in &self.parsed.program.items {
-            match &item.node {
-                Item::Fn { .. } => self.s.bounds_declared_by(self.world, &item.node, None),
-                Item::Impl {
-                    target, methods, ..
-                } => {
-                    let target = self.parsed.text(target.name).to_string();
-                    for method in methods {
-                        self.s
-                            .bounds_declared_by(self.world, &method.node, Some(&target));
-                    }
-                }
-                _ => {}
-            }
-        }
+        self.s.collect_types(self.world);
         self.collect_field_walks();
         self.collect_comparisons();
         self.collect_copies();
@@ -1330,40 +1072,7 @@ impl<'a> Checker<'a> {
     /// (ADR-286 D1), read off its declaration: the fields of a struct, every
     /// payload of an enum's variants.
     fn parts_beside(&self) -> BTreeMap<String, Vec<Ty>> {
-        let mut beside_parts: BTreeMap<String, Vec<Ty>> = BTreeMap::new();
-        for other in self.others() {
-            for item in &other.program.items {
-                let (name, parts): (String, Vec<Ty>) = match &item.node {
-                    Item::Struct {
-                        name,
-                        generics,
-                        fields,
-                        ..
-                    } if generics.is_empty() => (
-                        other.text(*name).to_string(),
-                        fields.iter().map(|f| Ty::from_ast(other, &f.ty)).collect(),
-                    ),
-                    Item::Enum { name, variants, .. } => (
-                        other.text(*name).to_string(),
-                        variants
-                            .iter()
-                            .flat_map(|v| match &v.fields {
-                                ast::VariantFields::Unit => Vec::new(),
-                                ast::VariantFields::Tuple(types) => {
-                                    types.iter().map(|ty| Ty::from_ast(other, ty)).collect()
-                                }
-                                ast::VariantFields::Named(fields) => {
-                                    fields.iter().map(|f| Ty::from_ast(other, &f.ty)).collect()
-                                }
-                            })
-                            .collect(),
-                    ),
-                    _ => continue,
-                };
-                beside_parts.entry(name).or_insert(parts);
-            }
-        }
-        beside_parts
+        nikaia_std::tools::check_copies::check_parts_beside(self.world)
     }
 
     /// **Which declared types derive `Copy`**
@@ -1377,128 +1086,7 @@ impl<'a> Checker<'a> {
     /// a copy - where [`Comparable`]'s walk, which answers *yes* on a cycle,
     /// would have said it was.
     fn collect_copies(&mut self) {
-        let declared: Vec<String> = self
-            .parsed
-            .program
-            .items
-            .iter()
-            .filter_map(|item| match &item.node {
-                Item::Struct { name, .. } | Item::Enum { name, .. } => {
-                    Some(self.parsed.text(*name).to_string())
-                }
-                _ => None,
-            })
-            .collect();
-        // **And every type another file of the package declares**
-        // (ADR-286 D1): whether `Count` from `ty.nika` copies is the same
-        // answer in `sharing.nika`, and each file decides it alike because
-        // each asks over the whole package. Asked only here; what this unit
-        // derives `Copy` for is still its own (found moving the compiler's
-        // `sharing` into Nikaia, #125).
-        let beside: Vec<String> = self
-            .others()
-            .flat_map(|other| {
-                other
-                    .program
-                    .items
-                    .iter()
-                    .filter_map(|item| match &item.node {
-                        Item::Struct { name, .. } | Item::Enum { name, .. } => {
-                            Some(other.text(*name).to_string())
-                        }
-                        _ => None,
-                    })
-            })
-            .filter(|name| !declared.contains(name))
-            .collect();
-        let package: Vec<String> = declared.iter().chain(&beside).cloned().collect();
-        // What each type beside is made of, read off its declaration: the
-        // fields of a struct, every payload of an enum's variants.
-        let beside_parts = self.parts_beside();
-        // **A type the program writes a `Drop` for** is not one either, for
-        // the reason a cleanup is not: Part I's `FileHandle { fd: i32 }` is a
-        // struct of one number with `impl Drop`, and `rustc` refuses `Copy`
-        // beside it (E0184).
-        let dropped: BTreeSet<String> = std::iter::once(self.parsed)
-            .chain(self.beside.iter().copied())
-            .flat_map(|unit| {
-                unit.program
-                    .items
-                    .iter()
-                    .filter_map(|item| match &item.node {
-                        Item::Impl {
-                            trait_name: Some(name),
-                            target,
-                            ..
-                        } if unit.text(*name) == "Drop" => Some(unit.text(target.name).to_string()),
-                        _ => None,
-                    })
-            })
-            .collect();
-        // **A described Rust type that says it copies** is a part that copies
-        // ([ADR-294](../../docs/specification/adr/adr-294.md) D9.3): `describe`
-        // read its `#[derive(Copy)]`, and the line was reviewed. Nothing else
-        // from a crate is.
-        let mut copies: BTreeSet<String> = self
-            .world
-            .library
-            .types
-            .iter()
-            .filter(|(_, contract)| contract.copies)
-            .map(|(name, _)| name.clone())
-            .collect();
-        loop {
-            let joining: Vec<String> = package
-                .iter()
-                .filter(|name| !copies.contains(*name))
-                .filter(|name| {
-                    let parts: Vec<Ty> = match (
-                        declared.contains(*name),
-                        self.s.enum_payloads.get(*name),
-                        beside_parts.get(*name),
-                    ) {
-                        (true, Some(held), _) => held.clone(),
-                        (true, None, _) => match self.s.structs.get(*name) {
-                            Some(fields) => fields.iter().map(|f| f.ty.clone()).collect(),
-                            // Neither a struct nor an enum this unit knows
-                            // the parts of: nothing is claimed.
-                            None => return false,
-                        },
-                        (false, _, Some(parts)) => parts.clone(),
-                        (false, _, None) => return false,
-                    };
-                    // **Never a type with a cleanup** (ADR-297 D1): its
-                    // cleanup is a `Drop` below, and a copied value would run
-                    // it twice - `rustc` refuses the pair (E0184), which is
-                    // how Part I's own `Connection` found this.
-                    let named = Ty::Named {
-                        name: (*name).clone(),
-                        args: Vec::new(),
-                        view: false,
-                    };
-                    !dropped.contains(*name)
-                        && self.cleanup_of(&named).is_none()
-                        && parts.iter().all(|ty| a_copied_part(ty, &copies))
-                })
-                .cloned()
-                .collect();
-            if joining.is_empty() {
-                break;
-            }
-            copies.extend(joining);
-        }
-        // What the emitter derives `Copy` for: the program's own types. A
-        // described one was a part here, and its derive is its crate's; one
-        // beside is its own file's.
-        self.s.copies_in_the_package = copies
-            .iter()
-            .filter(|name| package.contains(name))
-            .cloned()
-            .collect();
-        self.s.facts.copies = copies
-            .into_iter()
-            .filter(|name| declared.contains(name))
-            .collect();
+        self.s.collect_copies(self.world);
     }
 
     /// **Which declared types compare**
@@ -4210,46 +3798,9 @@ impl<'a> Checker<'a> {
         value: Option<&Expr>,
         span: &Span,
     ) -> Option<Wrap> {
-        // **A signed value into an unsigned slot waits for the walk** (D32).
-        if let Some(value) = value
-            && !is_literal(value)
-            && let Some(into) = unsigned_from_signed(found, want)
-        {
-            self.s
-                .flow
-                .unsigned_slots
-                .entry(span.at() as i64)
-                .or_default()
-                .push(UnsignedSlot {
-                    node: ((value_node(value) as usize) as i64),
-                    found: found.clone(),
-                    want: want.clone(),
-                    into: into.to_string(),
-                    written: written(self.parsed, value),
-                    span: *span,
-                    refusal: None,
-                });
-            return Some(Wrap::Unsigned(into.to_string()));
-        }
-        let how = wrap_for(found, want, value.is_some_and(is_literal))?;
-        if let (Wrap::Widen(into), Some(value)) = (&how, value)
-            && (self.narrow_by_width(value, into, span) || self.widen_operands(value, into, span))
-        {
-            return None;
-        }
-        Some(how)
-    }
-
-    /// The operands of a computation widen to the type it is computed in
-    /// (`tools/check_numbers2.nika`).
-    fn widen_operands(&mut self, value: &Expr, into: &str, span: &Span) -> bool {
-        self.s.widen_operands(self.world, value, into, span)
-    }
-
-    /// `NK1215` for a bit operation computed in a narrower type
-    /// (`tools/check_exprs.nika`).
-    fn narrow_by_width(&mut self, value: &Expr, into: &str, span: &Span) -> bool {
-        self.s.narrow_by_width(self.world, value, into, span)
+        self.nikaia(|state, world, host| {
+            check_overflow::check_widened_slot(state, world, host, found, want, value, span)
+        })
     }
 
     /// A list literal whose elements widen (`tools/check_numbers2.nika`).
@@ -4308,30 +3859,6 @@ impl<'a> Checker<'a> {
     /// the first time somebody writes one.
     fn constant_fits(&mut self, value: &Expr, want: Option<&Ty>, span: &Span) {
         self.s.constant_fits(self.world, value, want, span);
-    }
-
-    /// `NK1116` for a number and the type it has to fit, where it does not;
-    /// nothing where it does (`tools/check_numbers.nika`). `why` is a note
-    /// saying where the type came from, for one the uses decided
-    /// ([ADR-285](../../docs/specification/adr/adr-285.md)).
-    fn a_number_that_does_not_fit(
-        &mut self,
-        number: &Constant,
-        bare: bool,
-        ty: &str,
-        span: &Span,
-        why: Option<String>,
-    ) {
-        if let Some(found) = nikaia_std::tools::check_numbers::a_number_that_does_not_fit(
-            &number.value,
-            number.beyond,
-            bare,
-            ty,
-            *span,
-            why,
-        ) {
-            self.s.findings.push(crate::traits::from_nikaia(found));
-        }
     }
 
     /// What a constant integer expression comes to, and the type an operand's
@@ -4441,71 +3968,8 @@ impl<'a> Checker<'a> {
         reach: Option<&str>,
         span: &Span,
     ) {
-        if !matches!(
-            op,
-            BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Rem
-        ) || self.s.flow.overflowed.contains(&(span.at() as i64))
-        {
-            return;
-        }
-        let (Some(left), Some(right)) = (self.constant_of(lhs), self.constant_of(rhs)) else {
-            return;
-        };
-        // An operand past the 65 bits has said so where it was folded.
-        if left.beyond || right.beyond {
-            return;
-        }
-        // `integers.nika`'s arithmetic. A sum or a difference that leaves the
-        // 65 bits heads the way the left operand does, a product the way the
-        // signs together do; a division by zero is `NK1118`'s, not this.
-        use nikaia_std::tools::integers as int;
-        let (a, b) = (&left.value, &right.value);
-        let (value, heading) = match op {
-            BinaryOp::Add => (int::integer_sum(a, b), a.negative),
-            BinaryOp::Sub => (int::integer_difference(a, b), a.negative),
-            BinaryOp::Mul => (int::integer_product(a, b), a.negative != b.negative),
-            BinaryOp::Div => (int::integer_quotient(a, b, false), false),
-            _ => (int::integer_quotient(a, b, true), false),
-        };
-        let value = match value {
-            Some(value) => Constant::of(value),
-            None if matches!(op, BinaryOp::Div | BinaryOp::Rem) => return,
-            None => Constant {
-                beyond: true,
-                ..Constant::of(int::integer(u64::MAX, heading))
-            },
-        };
-        // **An open number in it is measured with that number**, once its
-        // uses have decided what it is (ADR-285 D25) - and a refusal there
-        // names the cause. **Asked before the pinned type**, which an open
-        // number never has: `a + a - a` for `let a = 2000000000` recorded the
-        // result and not the step, and the step is what the language below
-        // refuses (issue #170).
-        let mut open = Vec::new();
-        self.open_numbers_in(lhs, &mut open);
-        self.open_numbers_in(rhs, &mut open);
-        if !open.is_empty() {
-            for number in open {
-                if let Some(number) = self.s.flow.open_numbers.get_mut(&(number as i64)) {
-                    number.derived.push((value.clone().into(), *span));
-                }
-            }
-            return;
-        }
-        let Some(ty) = left.pinned.clone().or(right.pinned.clone()) else {
-            return;
-        };
-        // **Computed in the type a `let` states, where it holds the operands'**
-        // (D32): `let t: i64 = a * a` over an `i32` constant is an `i64`.
-        let ty = match reach.and_then(|into| common_integer(&ty, into)) {
-            Some(common) if Some(common) == reach => common.to_string(),
-            _ => ty,
-        };
-        let before = self.s.findings.len();
-        self.a_number_that_does_not_fit(&value, false, &ty, span, None);
-        if self.s.findings.len() > before {
-            self.s.flow.overflowed.insert(span.at() as i64);
-        }
+        self.s
+            .an_operation_that_overflows(self.world, op, lhs, rhs, reach, span);
     }
 
     fn divisor_is_not_zero(&mut self, op: BinaryOp, rhs: &Expr, span: &Span) {
@@ -10343,34 +9807,10 @@ impl<'a> Checker<'a> {
     /// slot, which stays keyed by the statement where the walk answers it
     /// (ADR-285 D32).
     fn moved_to(&mut self, span: Span, at: Span, ask: impl FnOnce(&mut Self)) {
-        let key = i64::from(span.start);
-        let pushed = self.s.findings.len();
-        let waiting: Vec<bool> = self
-            .s
-            .flow
-            .unsigned_slots
-            .get(&key)
-            .map(|slots| slots.iter().map(|slot| slot.refusal.is_some()).collect())
-            .unwrap_or_default();
+        let pushed = self.s.findings.len() as i64;
+        let waiting = self.s.slots_waiting(&span);
         ask(self);
-        if at == span {
-            return;
-        }
-        for finding in &mut self.s.findings[pushed..] {
-            if finding.span == span {
-                finding.span = at;
-            }
-        }
-        if let Some(slots) = self.s.flow.unsigned_slots.get_mut(&key) {
-            for (index, slot) in slots.iter_mut().enumerate() {
-                if !waiting.get(index).copied().unwrap_or(false)
-                    && let Some(refusal) = &mut slot.refusal
-                    && refusal.span == span
-                {
-                    refusal.span = at;
-                }
-            }
-        }
+        self.s.findings_moved(&span, &at, pushed, &waiting);
     }
 
     /// **A view kept where the receiver says text of its own**
@@ -10532,35 +9972,9 @@ impl<'a> Checker<'a> {
             if proven.nonnegative.contains(&((slot.node as usize) as i64)) {
                 continue;
             }
-            let (value, into) = (&slot.written, slot.into);
-            let mut finding = slot.refusal.unwrap_or_else(|| Finding {
-                severity: Severity::Error,
-                span: slot.span,
-                code: "NK1102".to_string(),
-                message: format!(
-                    "This is `{}`, but `{}` is wanted here.",
-                    slot.found.text(),
-                    slot.want.text()
-                ),
-                notes: Vec::new(),
-                help: None,
-                labels: Vec::new(),
-            });
-            finding.notes.push(format!(
-                "{} `{}` goes into {} `{into}` on its own only where the compiler can show it \
-                 is not negative.",
-                match an_or_a(&slot.found.text()).as_str() {
-                    "an" => "An",
-                    _ => "A",
-                },
-                slot.found.text(),
-                an_or_a(&into)
-            ));
-            finding.help = Some(format!(
-                "Write `{value} as {into}`, which stops the program on a negative value, or \
-                 `assert {value} >= 0` before this line."
-            ));
-            self.s.findings.push(finding);
+            self.s
+                .findings
+                .push(check_overflow::check_unsigned_slot_refused(&slot));
         }
     }
 
@@ -13974,16 +13388,6 @@ fn expected_arguments(contract: &FnContract) -> Vec<Ty> {
 /// **Whether two values of this type may be compared** (ADR-204 D1):
 /// `tools/check_compare.nika`.
 use nikaia_std::tools::check_compare::CheckComparable as Comparable;
-
-/// **A part that lets the type holding it derive `Copy`**
-/// ([`Checker::collect_copies`]): a number, a truth value, a character, a
-/// declared type already found to be one, a Rust type whose description says
-/// `copies` (ADR-294 D9.3), and a tuple, a nullable or an array of those.
-/// Never a view, a type variable, an unknown or any other Rust crate's type:
-/// each is a claim nothing here can back.
-fn a_copied_part(ty: &Ty, copies: &BTreeSet<String>) -> bool {
-    nikaia_std::tools::check_types::a_copied_part(ty, copies)
-}
 
 /// is one this says nothing about only when it is also unknown.
 fn copies(ty: &Ty) -> bool {

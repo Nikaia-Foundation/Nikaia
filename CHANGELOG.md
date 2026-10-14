@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.900] — 2026-10-14
+
+**check: overflow, slot wraps, Copy and the collected types in Nikaia (#558, #125)**
+- an_operation_that_overflows (NK1116), widened_slot and wrap_for, the unsigned slot refusal (NK1102) and moved_to's span move are tools/check_overflow.nika
+- collect_copies and parts_beside are tools/check_copies.nika; collect_types (structs, enums, variant parts, bounds, NK1247 of a declaration) is tools/check_collect.nika
+
 ## [0.0.899] — 2026-10-14
 
 **check: NK2109 on every path (#605)**

@@ -1,0 +1,215 @@
+// crates/nikaia-std/src/tools/check_overflow.nika
+//
+// **An operation on constants that overflows, and how a value goes into a
+// slot of another type** (ADR-285 D25, D32, ADR-319 D2), moved from the
+// compiler's checker (ADR-294, #125, #558, C-5g): the fold of `+ - * / %` over
+// two constants measured against the type it is computed in, the wrap a slot
+// asks for, a signed value waiting on the walk in an unsigned slot, and the
+// refusals of a check said where the value was written (#107).
+
+impl CheckState {
+    /// **`NK1116` for an operation on constants whose result does not fit**
+    /// the type it is computed in. A sum or a difference that leaves the 65
+    /// bits heads the way the left operand does, a product the way the signs
+    /// together do; a division by zero is `NK1118`'s, not this.
+    pub fn an_operation_that_overflows(ref mut self, world: ref CheckWorld, op: BinaryOp, lhs: ref Expr, rhs: ref Expr, reach: ref String?, span: ref Span) sync {
+        let here = span.start as i64
+        if !(op == BinaryOp::Add || op == BinaryOp::Sub || op == BinaryOp::Mul || op == BinaryOp::Div || op == BinaryOp::Rem) || self.flow.overflowed.contains(here) {
+            return
+        }
+        let left = self.constant_of(world, lhs) ?? return
+        let right = self.constant_of(world, rhs) ?? return
+        // An operand past the 65 bits has said so where it was folded.
+        if left.beyond || right.beyond {
+            return
+        }
+        let a = left.value
+        let b = right.value
+        let mut heading = false
+        let mut folded: Integer? = null
+        if op == BinaryOp::Add {
+            folded = integer_sum(a, b)
+            heading = a.negative
+        } else if op == BinaryOp::Sub {
+            folded = integer_difference(a, b)
+            heading = a.negative
+        } else if op == BinaryOp::Mul {
+            folded = integer_product(a, b)
+            heading = a.negative != b.negative
+        } else if op == BinaryOp::Div {
+            folded = integer_quotient(a, b, false)
+        } else {
+            folded = integer_quotient(a, b, true)
+        }
+        let division = op == BinaryOp::Div || op == BinaryOp::Rem
+        if folded == null && division {
+            return
+        }
+        let beyond = folded == null
+        let fallback = integer(18446744073709551615, heading)
+        let value = CheckConstant { value: folded ?? fallback, beyond: beyond, pinned: null }
+        // **An open number in it is measured with that number**, once its
+        // uses have decided what it is (ADR-285 D25), and asked before the
+        // pinned type, which an open number never has (issue #170).
+        let mut open = self.open_numbers_in(world, lhs)
+        for number in self.open_numbers_in(world, rhs) {
+            open.push(number)
+        }
+        if open.len() > 0 {
+            for number in open {
+                self.overflow_derived(number, value, span)
+            }
+            return
+        }
+        let mut pinned: String = (left.pinned ?? "").clone()
+        if pinned.is_empty() {
+            pinned = (right.pinned ?? return).clone()
+        }
+        // **Computed in the type a `let` states, where it holds the operands'**
+        // (D32): `let t: i64 = a * a` over an `i32` constant is an `i64`.
+        let mut ty = pinned.clone()
+        let into: String = (reach ?? "").clone()
+        if !into.is_empty() {
+            let common = common_integer(pinned, into) ?? ""
+            if common == into {
+                ty = into
+            }
+        }
+        let before = self.findings.len()
+        self.a_number_not_fitting(value, false, ty, span, null)
+        if self.findings.len() > before {
+            self.flow.overflowed.insert(here)
+        }
+    }
+
+    fn overflow_derived(ref mut self, number: i64, value: ref CheckConstant, span: ref Span) sync {
+        let found = self.flow.open_numbers[number] ?? return
+        let mut entry = found.clone()
+        entry.derived.push((value.clone(), span.clone()))
+        self.flow.open_numbers.insert(number, entry)
+    }
+
+    /// Whether each slot waiting at the statement `span` already holds a
+    /// refusal, before a check runs that may add one (#107).
+    pub fn slots_waiting(ref self, span: ref Span) -> Vec[bool] sync {
+        let mut waiting: Vec[bool] = []
+        let key = span.start as i64
+        let slots = self.flow.unsigned_slots.get(key) ?? return waiting
+        for slot in slots {
+            waiting.push(slot.refusal != null)
+        }
+        return waiting
+    }
+
+    /// **What a check refused at the statement `span`, said at `at`** (#107):
+    /// the findings from `pushed` on, and the refusal it left waiting on an
+    /// unsigned slot, which stays keyed by the statement (ADR-285 D32).
+    pub fn findings_moved(ref mut self, span: ref Span, at: ref Span, pushed: i64, waiting: ref Vec[bool]) sync {
+        if at == span {
+            return
+        }
+        for index in pushed..<self.findings.len() {
+            if self.findings[index].span == span {
+                self.findings[index].span = at.clone()
+            }
+        }
+        let key = span.start as i64
+        let held = self.flow.unsigned_slots.get(key) ?? return
+        let mut slots: Vec[CheckUnsignedSlot] = held.clone()
+        for index in 0..<slots.len() {
+            let was = index < waiting.len() && waiting[index]
+            let refusal = slots[index].refusal?.clone() ?? continue
+            if !was && refusal.span == span {
+                let mut moved = refusal.clone()
+                moved.span = at.clone()
+                slots[index].refusal = moved
+            }
+        }
+        self.flow.unsigned_slots.insert(key, slots)
+    }
+}
+
+/// **How a plain value goes into a slot of another type** (Part I 2.3,
+/// ADR-278, ADR-285 D32, ADR-319 D2): widened, as a file's name, wrapped as a
+/// `T?`, or not at all.
+pub fn check_wrap_for(found: ref Ty, want: ref Ty, literal: bool) -> FactWrap? sync {
+    let into = widened_into(found, want) ?? ""
+    if !into.is_empty() {
+        return FactWrap::Widen(into.clone())
+    }
+    let path = text_as_a_path(found, want)
+    if path == 1 {
+        return FactWrap::PathView
+    }
+    if path == 0 {
+        return FactWrap::Path
+    }
+    let wants_nullable = match want {
+        Ty::Nullable(_) => true,
+        else => false,
+    }
+    let found_nullable = match found {
+        Ty::Nullable(_) => true,
+        else => false,
+    }
+    if !wants_nullable || found_nullable {
+        return null
+    }
+    if !found.is_unknown() || literal {
+        return FactWrap::Constructor
+    }
+    return FactWrap::Conversion
+}
+
+/// **The wrap a value takes into a slot of another type**, where it takes one.
+/// **A signed value into an unsigned slot waits for the walk** (D32): the slot
+/// is recorded at the statement, and the bounds answer it once the body is
+/// walked. A widening that a narrower bit operation or the operands decide
+/// takes no wrap of its own.
+pub fn check_widened_slot[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, found: ref Ty, want: ref Ty, value: ref Expr?, span: ref Span) -> FactWrap? sync {
+    let mut literal = false
+    if value != null {
+        let given = value ?? return null
+        literal = is_a_literal(given)
+        let into = unsigned_from_signed(found, want) ?? ""
+        if !literal && !into.is_empty() {
+            let key = span.start as i64
+            let slot = CheckUnsignedSlot { node: id_of(given) as i64, found: found.clone(), want: want.clone(), into: into.clone(), written: host.written(given), span: span.clone(), refusal: null }
+            let mut slots: Vec[CheckUnsignedSlot] = []
+            if state.flow.unsigned_slots.contains_key(key) {
+                let held = state.flow.unsigned_slots.get(key) ?? return null
+                slots = held.clone()
+            }
+            slots.push(slot)
+            state.flow.unsigned_slots.insert(key, slots)
+            return FactWrap::Unsigned(into.clone())
+        }
+    }
+    let how = check_wrap_for(found, want, literal) ?? return null
+    let widen: String = match how {
+        FactWrap::Widen(into) => into.clone(),
+        else => "".clone(),
+    }
+    if !widen.is_empty() && value != null {
+        let given = value ?? return null
+        if state.narrow_by_width(world, given, widen, span) || state.widen_operands(world, given, widen, span) {
+            return null
+        }
+    }
+    return how
+}
+
+/// **A signed value in an unsigned slot the walk could not show is not
+/// negative** (ADR-285 D32): the slot's refusal, or `NK1102`, with the two
+/// ways to say it.
+pub fn check_unsigned_slot_refused(slot: ref CheckUnsignedSlot) -> CheckFinding sync {
+    let found = slot.found.text()
+    let want = slot.want.text()
+    let value = slot.written.clone()
+    let into = slot.into.clone()
+    let mut finding = slot.refusal?.clone() ?? check_refusal("NK1102", slot.span, f"This is `{found}`, but `{want}` is wanted here.", [], null)
+    let article = if an_or_a(found) == "an" { "An" } else { "A" }
+    finding.notes.push(f"{article} `{found}` goes into {an_or_a(into)} `{into}` on its own only where the compiler can show it is not negative.")
+    finding.help = f"Write `{value} as {into}`, which stops the program on a negative value, or `assert {value} >= 0` before this line."
+    return finding
+}

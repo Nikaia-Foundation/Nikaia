@@ -1,0 +1,196 @@
+// crates/nikaia-std/src/tools/check_collect.nika
+//
+// **What the program's types are made of, collected before the walk**
+// (Part I 5, ADR-286 D1, ADR-294 D9), moved from the compiler's checker
+// (ADR-294, #125, #558, C-5g): the fields of every struct, the variants and
+// payloads of every enum, the generic structs and enum variants of the files
+// beside, and the bounds each function declares.
+
+use std::collections
+
+/// **A field's default as the ledger writes it**: a literal's text, or
+/// `computed`.
+fn collect_default_written(default: ref FieldDefault?) -> String {
+    let given = default ?? return "".clone()
+    if a_literal(given.value) {
+        return default_text(given.value)
+    }
+    return "computed".clone()
+}
+
+/// **`NK1247` for a type a declaration writes** (ADR-010 D10): the
+/// comparison asked over what the state has collected so far.
+pub fn collect_keys_unordered(beside: ref collections::BTreeMap[String, Vec[Ty]], structs: ref collections::BTreeMap[String, Vec[FieldContract]], enums: ref collections::BTreeMap[String, collections::BTreeSet[String]], payloads: ref collections::BTreeMap[String, Vec[Ty]], parameters: ref collections::BTreeMap[String, Vec[String]], world: ref CheckWorld, ty: ref Ty, span: ref Span) -> Vec[CheckFinding] {
+    let asking = CheckComparable { beside: beside, structs: structs, enums: enums, payloads: payloads, parameters: parameters, own: world.own, library: world.library }
+    return compare_keys_with_no_order(asking, ty, span)
+}
+
+impl CheckState {
+    /// **A type a declaration writes**: its spelling asked, and a map or a set
+    /// whose key has no order refused.
+    fn collect_declared(ref mut self, world: ref CheckWorld, beside: ref collections::BTreeMap[String, Vec[Ty]], ty: ref Type, span: ref Span) -> Ty sync {
+        self.spelling(world, ty, span)
+        let written = written_ty(world.here.words, world.here.aliases, ty)
+        let refused = collect_keys_unordered(beside, self.structs, self.enums, self.enum_payloads, self.struct_parameters, world, written, span)
+        for finding in refused {
+            self.findings.push(finding.clone())
+        }
+        return written
+    }
+
+    /// **The types of the files beside**: a generic struct's fields and
+    /// parameters, and an enum's variants with named fields or parts
+    /// (ADR-286 D1).
+    fn collect_types_beside(ref mut self, other: ref ParsedView, item: ref Item) sync {
+        match item {
+            Item::Enum { name, variants, .. } => {
+                let owner = other.text(name)
+                for variant in variants {
+                    let key = f"{owner}::{other.text(variant.name)}"
+                    match variant.fields {
+                        VariantFields::Named(fields) => {
+                            let mut held: Vec[FieldContract] = []
+                            for field in fields {
+                                held.push(FieldContract { name: other.text(field.name), ty: written_ty(other.words, other.aliases, field.ty), public: true, default: "".clone(), attributes: [] })
+                            }
+                            self.variant_owner.insert(key.clone(), owner.clone())
+                            self.structs.insert(key, held)
+                        },
+                        VariantFields::Tuple(types) => {
+                            let mut parts: Vec[Ty] = []
+                            for ty in types {
+                                parts.push(written_ty(other.words, other.aliases, ty))
+                            }
+                            self.variant_parts.insert(key, parts)
+                        },
+                        else => {},
+                    }
+                }
+            },
+            Item::Struct { name, generics, fields, .. } => {
+                if generics.len() == 0 {
+                    return
+                }
+                let mut order: Vec[String] = []
+                let mut parameters: collections::BTreeSet[String] = collections::BTreeSet()
+                for generic in generics {
+                    order.push(other.text(generic.name))
+                    parameters.insert(other.text(generic.name))
+                }
+                let mut held: Vec[FieldContract] = []
+                for field in fields {
+                    held.push(FieldContract { name: other.text(field.name), ty: written_ty(other.words, other.aliases, field.ty).parameterise(parameters), public: field.is_public, default: collect_default_written(field.default), attributes: [] })
+                }
+                let named = other.text(name)
+                self.struct_parameters.insert(named.clone(), order)
+                self.structs.insert(named, held)
+            },
+            else => {},
+        }
+    }
+
+    /// A struct of this file: its fields nameable and declared.
+    fn collect_struct(ref mut self, world: ref CheckWorld, beside: ref collections::BTreeMap[String, Vec[Ty]], name: winnow_grammar::Symbol, generics: ref Vec[GenericParam], fields: ref Vec[FieldDef], span: ref Span) sync {
+        let mut order: Vec[String] = []
+        let mut parameters: collections::BTreeSet[String] = collections::BTreeSet()
+        for generic in generics {
+            order.push(world.here.text(generic.name))
+            parameters.insert(world.here.text(generic.name))
+        }
+        for field in fields {
+            self.nameable(world.here.text(field.name), field.span, "a field")
+        }
+        let mut held: Vec[FieldContract] = []
+        for field in fields {
+            let ty = self.collect_declared(world, beside, field.ty, field.span)
+            held.push(FieldContract { name: world.here.text(field.name), ty: ty.parameterise(parameters), public: field.is_public, default: collect_default_written(field.default), attributes: [] })
+        }
+        let own = world.here.text(name)
+        self.nameable(own, span, "a struct")
+        if order.len() > 0 {
+            self.struct_parameters.insert(own.clone(), order)
+        }
+        self.structs.insert(own, held)
+    }
+
+    /// An enum of this file: its name and variants nameable, the named
+    /// fields of a variant declared, the parts and payloads recorded.
+    fn collect_enum(ref mut self, world: ref CheckWorld, beside: ref collections::BTreeMap[String, Vec[Ty]], name: winnow_grammar::Symbol, variants: ref Vec[EnumVariant], span: ref Span) sync {
+        let own = world.here.text(name)
+        self.nameable(own, span, "an enum")
+        for variant in variants {
+            self.nameable(world.here.text(variant.name), span, "a variant")
+        }
+        for variant in variants {
+            match variant.fields {
+                VariantFields::Named(fields) => {
+                    let mut held: Vec[FieldContract] = []
+                    for field in fields {
+                        let ty = self.collect_declared(world, beside, field.ty, field.span)
+                        held.push(FieldContract { name: world.here.text(field.name), ty: ty, public: true, default: "".clone(), attributes: [] })
+                    }
+                    let key = f"{own}::{world.here.text(variant.name)}"
+                    self.variant_owner.insert(key.clone(), own.clone())
+                    self.structs.insert(key, held)
+                },
+                else => {},
+            }
+        }
+        let mut payloads: Vec[Ty] = []
+        let mut names: collections::BTreeSet[String] = collections::BTreeSet()
+        for variant in variants {
+            names.insert(world.here.text(variant.name))
+            match variant.fields {
+                VariantFields::Unit => {},
+                VariantFields::Tuple(types) => {
+                    let mut parts: Vec[Ty] = []
+                    for ty in types {
+                        parts.push(written_ty(world.here.words, world.here.aliases, ty))
+                        payloads.push(written_ty(world.here.words, world.here.aliases, ty))
+                    }
+                    self.variant_parts.insert(f"{own}::{world.here.text(variant.name)}", parts)
+                },
+                VariantFields::Named(fields) => {
+                    for field in fields {
+                        payloads.push(written_ty(world.here.words, world.here.aliases, field.ty))
+                    }
+                },
+            }
+        }
+        self.enum_payloads.insert(own.clone(), payloads)
+        self.enums.insert(own, names)
+    }
+
+    /// **The program's types, collected before the walk**: the generic
+    /// structs and enum variants of every file of the package, then this
+    /// file's structs and enums, `std`'s enums, and the bounds each function
+    /// and method declares.
+    pub fn collect_types(ref mut self, world: ref CheckWorld) sync {
+        for other in world.beside {
+            for item in other.items {
+                self.collect_types_beside(other, item.node)
+            }
+        }
+        let beside = check_parts_beside(world)
+        for item in world.here.items {
+            match item.node {
+                Item::Struct { name, generics, fields, .. } => self.collect_struct(world, beside, name, generics, fields, item.span),
+                Item::Enum { name, variants, .. } => self.collect_enum(world, beside, name, variants, item.span),
+                else => {},
+            }
+        }
+        self.collect_library_enums(world)
+        for item in world.here.items {
+            match item.node {
+                Item::Fn { .. } => self.bounds_declared_by(world, item.node, null),
+                Item::Impl { target, methods, .. } => {
+                    let named = world.here.text(target.name)
+                    for method in methods {
+                        self.bounds_declared_by(world, method.node, named)
+                    }
+                },
+                else => {},
+            }
+        }
+    }
+}

@@ -73,6 +73,11 @@ barely moves because the finished code was written before the `Seq` methods and
 | LANGUAGE: a method on `CheckState` handing back a struct of views of `self` and `world` | 1 | `Comparable { structs: &self.s.structs, own: self.world.own, .. }` | `NK2302`, and `self.structs` is not a `ref` field value (`NK1106`) | Rust builds `CheckComparable`; Nikaia takes it as `ref` in free functions |
 | STYLE: `f"{name}{args:?}"` as a memo key | 1 | Debug of `Vec<Ty>` | not available | `name[` + `Ty::text` joined `]`, unique the same way |
 | STYLE: `Vec::extend` with a `T?` | 1 | `refused.extend(found)` (Option is an iterator) | `NK1102` | `if found != null { push(found ?? continue) }` |
+| COMPILER: `list[i].field ?? continue` on a non-copy field | 1 | `if let Some(refusal) = &mut slot.refusal` | E0507 in rustc (D31) | `slots[i].refusal?.clone() ?? continue` |
+| LANGUAGE: a struct of views built from `self`'s fields inside a method | 1 | `Comparable { structs: &self.s.structs, .. }` in `declared` | `NK1106` (`state.structs` is not a `ref`) | the maps passed as `ref` parameters to a free function that builds it (`collect_keys_unordered`) |
+| STYLE: `loop { .. }` | 1 | `loop` in `collect_copies` | `NK1117` | `while true` |
+| STYLE: `match op { Add => .., Sub => .. }` returning a tuple | 1 | `let (value, heading) = match op {..}` | kept as `if` chain over `op ==` | an `if`/`else if` chain assigning two `let mut` |
+| STYLE: `matches!(want, Ty::Nullable(_))` | 2 | `matches!` | none | `match want { Ty::Nullable(_) => true, else => false }` |
 
 ### For the converter, by frequency
 

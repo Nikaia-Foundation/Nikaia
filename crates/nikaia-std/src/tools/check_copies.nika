@@ -1,0 +1,187 @@
+// crates/nikaia-std/src/tools/check_copies.nika
+//
+// **Which declared types derive `Copy`, and what the types beside are made
+// of** (ADR-294 D9.1, ADR-286 D1, ADR-297 D1), moved from the compiler's
+// checker (ADR-294, #125, #558, C-5g).
+
+use std::collections
+
+/// **What each type another file of the package declares is made of**
+/// (ADR-286 D1), read off its declaration: the fields of a struct, every
+/// payload of an enum's variants. The first file to declare a name says it.
+pub fn check_parts_beside(world: ref CheckWorld) -> collections::BTreeMap[String, Vec[Ty]] {
+    let mut parts: collections::BTreeMap[String, Vec[Ty]] = collections::BTreeMap()
+    let mut at: i64 = 0
+    for other in world.beside {
+        if at != world.here_at {
+            for item in other.items {
+                copies_parts_of(other, item.node, parts)
+            }
+        }
+        at = at + 1
+    }
+    return parts
+}
+
+fn copies_parts_of(other: ref ParsedView, item: ref Item, mut parts: collections::BTreeMap[String, Vec[Ty]]) {
+    match item {
+        Item::Struct { name, generics, fields, .. } => {
+            if generics.len() > 0 {
+                return
+            }
+            let named = other.text(name)
+            if parts.contains_key(named) {
+                return
+            }
+            let mut held: Vec[Ty] = []
+            for field in fields {
+                held.push(written_ty(other.words, other.aliases, field.ty))
+            }
+            parts.insert(named, held)
+        },
+        Item::Enum { name, variants, .. } => {
+            let named = other.text(name)
+            if parts.contains_key(named) {
+                return
+            }
+            let mut held: Vec[Ty] = []
+            for variant in variants {
+                match variant.fields {
+                    VariantFields::Unit => {},
+                    VariantFields::Tuple(types) => {
+                        for ty in types {
+                            held.push(written_ty(other.words, other.aliases, ty))
+                        }
+                    },
+                    VariantFields::Named(fields) => {
+                        for field in fields {
+                            held.push(written_ty(other.words, other.aliases, field.ty))
+                        }
+                    },
+                }
+            }
+            parts.insert(named, held)
+        },
+        else => {},
+    }
+}
+
+/// The names of the structs and enums a file declares, in its order.
+fn copies_declared_in(view: ref ParsedView) -> Vec[String] {
+    let mut names: Vec[String] = []
+    for item in view.items {
+        match item.node {
+            Item::Struct { name, .. } => names.push(view.text(name)),
+            Item::Enum { name, .. } => names.push(view.text(name)),
+            else => {},
+        }
+    }
+    return names
+}
+
+/// The types a file writes an `impl Drop` for.
+fn copies_dropped_in(view: ref ParsedView, mut dropped: collections::BTreeSet[String]) {
+    for item in view.items {
+        match item.node {
+            Item::Impl { trait_name, target, .. } => {
+                let named = trait_name ?? continue
+                if view.text(named) == "Drop" {
+                    dropped.insert(view.text(target.name))
+                }
+            },
+            else => {},
+        }
+    }
+}
+
+impl CheckState {
+    /// **Which declared types derive `Copy`** (ADR-294 D9.1). The least
+    /// answer that holds: a type joins once every part of it is a copy, asked
+    /// again until nothing more joins, so a type that holds itself (through a
+    /// box the compiler wrote, ADR-246) never does. **And every type another
+    /// file of the package declares** (ADR-286 D1), so each file answers alike.
+    /// Never a type with a `Drop` or a cleanup (E0184, ADR-297 D1). A
+    /// described Rust type that says it copies is a part that copies (D9.3).
+    pub fn collect_copies(ref mut self, world: ref CheckWorld) sync {
+        let declared = copies_declared_in(world.here)
+        let mut package: Vec[String] = declared.clone()
+        let mut at: i64 = 0
+        for other in world.beside {
+            if at != world.here_at {
+                for name in copies_declared_in(other) {
+                    if !declared.contains(name) {
+                        package.push(name)
+                    }
+                }
+            }
+            at = at + 1
+        }
+        let beside_parts = check_parts_beside(world)
+        let mut dropped: collections::BTreeSet[String] = collections::BTreeSet()
+        copies_dropped_in(world.here, dropped)
+        for unit in world.beside {
+            copies_dropped_in(unit, dropped)
+        }
+        let mut copies: collections::BTreeSet[String] = collections::BTreeSet()
+        for (name, contract) in world.library.types {
+            if contract.copies {
+                copies.insert(name.clone())
+            }
+        }
+        while true {
+            let mut joining: Vec[String] = []
+            for name in package {
+                if copies.contains(name) || dropped.contains(name) {
+                    continue
+                }
+                let mut parts: Vec[Ty] = []
+                if declared.contains(name) {
+                    if self.enum_payloads.contains_key(name) {
+                        let held = self.enum_payloads.get(name) ?? continue
+                        parts = held.clone()
+                    } else {
+                        let fields = self.structs.get(name) ?? continue
+                        for field in fields {
+                            parts.push(field.ty.clone())
+                        }
+                    }
+                } else {
+                    let held = beside_parts.get(name) ?? continue
+                    parts = held.clone()
+                }
+                let named = Ty::Named { name: name.clone(), args: [], view: false }
+                if self.cleanup_of(world, named) != null {
+                    continue
+                }
+                let mut all = true
+                for ty in parts {
+                    if !a_copied_part(ty, copies) {
+                        all = false
+                    }
+                }
+                if all {
+                    joining.push(name.clone())
+                }
+            }
+            if joining.len() == 0 {
+                break
+            }
+            for name in joining {
+                copies.insert(name.clone())
+            }
+        }
+        // What the emitter derives `Copy` for: the program's own types.
+        let mut in_package: collections::BTreeSet[String] = collections::BTreeSet()
+        let mut own: collections::BTreeSet[String] = collections::BTreeSet()
+        for name in copies {
+            if package.contains(name) {
+                in_package.insert(name.clone())
+            }
+            if declared.contains(name) {
+                own.insert(name.clone())
+            }
+        }
+        self.copies_in_the_package = in_package
+        self.facts.copies = own
+    }
+}
