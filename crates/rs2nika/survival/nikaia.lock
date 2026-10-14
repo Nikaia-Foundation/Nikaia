@@ -4,7 +4,7 @@
 # what Cargo resolved, listed per name because one name can resolve twice.
 version = 1
 toolchain = "rustc 1.97.0 (2d8144b78 2026-07-07)"
-compiler = "f5325065e9264304300e3db60a3a1c41766478a9003d440483dd30e02171bc42"
+compiler = "1fd5c524a68d2a859b460e7fdacd3e74c179675311df3b608d40b5202ece297e"
 
 [dependencies]
 ahash = ["0.8.12"]

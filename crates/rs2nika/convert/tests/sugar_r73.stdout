@@ -1,0 +1,11 @@
+fn r73_shown(literal: bool, p: Point, xs: ref Vec[Item]) -> Point? sync {
+    let moved = p with { x: 1, y: y }
+    for (i, t1) in pairs(xs) {
+        let (t2, c) = t1
+        let (a, b) = t2
+        use_it(i, a, b, c)
+    }
+    apply(xs, fn(ty, n) { width(ty, n) })
+    return (if !literal { moved } else { null })
+}
+

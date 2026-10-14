@@ -123,6 +123,12 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R70  a `format!` hole hoisted out of a match arm (R61) -> the arm becomes a block holding it",
         "R71  a `None if guard =>` arm -> commented out under a TODO (no `null` pattern, #612)",
         "R72  the last arm `None =>` of a `match` -> `else =>` (no `null` pattern, #612)",
+        "R73  `cond.then(|| e)` -> `(if cond { e } else { null })`",
+        "R74  struct update `S { a: x, ..base }` -> `base with { a: x }` (Part I 4.2)",
+        "R75  a callback `&|a: T| e` -> the lambda `fn(a) { e }` (R26)",
+        "R76  `module::f(` where tools/module.nika exists -> `f(` (one namespace for all tools)",
+        "R77  `self.s.m(..)` (a `CheckState` method already in Nikaia) -> `self.m(..)`, name and arguments as written",
+        "R78  a nested tuple pattern in a `for` head -> one level in the head, a `let (a, b) = t1` per inner tuple (#611)",
         "R69  a Rust name Nikaia reserves (`grammar`, `throws`, `with`, ..) -> `name_`",
         "R62  a local closure with arguments -> `let f: fn(ref T) -> R sync = fn(a) { .. }`, its type from the `--facts` file (rust-analyzer) or from its own annotations",
     ]
@@ -1549,7 +1555,7 @@ fn rs2nika_replace_free(text: ref String, from: ref String, to: ref String) -> S
             }
             k = k + 1
         }
-        if same && at > 0 && (rs2nika_word(c[at - 1]) || c[at - 1] == '.') {
+        if same && at > 0 && (rs2nika_word(c[at - 1]) || c[at - 1] == '.' || c[at - 1] == ':') {
             same = false
         }
         if same {
@@ -1737,7 +1743,8 @@ fn rs2nika_char_needle(mut ctx: Rs2nikaCtx, given: ref String) -> String {
 }
 
 fn rs2nika_expr(mut ctx: Rs2nikaCtx, line: ref String) -> String {
-    let mut s: String = rs2nika_bytes(ctx, line)
+    let mut s: String = rs2nika_struct_update(ctx, line)
+    s = rs2nika_bytes(ctx, s)
     s = rs2nika_decoded(ctx, s)
     s = rs2nika_char_needle(ctx, s)
     for p in ["crate::ast::", "ast::", "crate::types::", "crate::", "contracts::"] {
@@ -1762,8 +1769,9 @@ fn rs2nika_expr(mut ctx: Rs2nikaCtx, line: ref String) -> String {
             rs2nika_hit(ctx, "R31")
         }
         s = s2.clone()
-        s2 = s2.replace("self.parsed.program.items", "world.items").replace("self.s.", "self.")
+        s2 = s2.replace("self.parsed.program.items", "world.items").replace("self.s.", "self.§")
         s2 = rs2nika_replace_word(s2, "self.world", "world")
+        s2 = rs2nika_replace_word(s2, "self.s", "self")
         s2 = s2.replace("self.parsed.", "world.")
         if !rs2nika_same(s2, s) {
             rs2nika_hit(ctx, "R32")
@@ -1777,6 +1785,9 @@ fn rs2nika_expr(mut ctx: Rs2nikaCtx, line: ref String) -> String {
             }
             s = s3.clone()
         }
+        // R77: `self.s.m(..)` calls a `CheckState` method that already moved:
+        // its name and arguments stay
+        s = s.replace("self.§", "self.")
     }
     let mut k = 0
     while k < ctx.renamed_from.len() {
@@ -1848,6 +1859,7 @@ fn rs2nika_expr(mut ctx: Rs2nikaCtx, line: ref String) -> String {
     s = rs2nika_replace_word(s, "self.parsed", "world")
     s = rs2nika_opt_comb_hit(ctx, s)
     s = rs2nika_adapters(ctx, s)
+    s = rs2nika_bool_then(ctx, s)
     s = rs2nika_closures(ctx, s)
     s = rs2nika_starts_any(ctx, s)
     s = rs2nika_some(ctx, s)
@@ -1882,6 +1894,106 @@ fn rs2nika_recv_start(c: ref Vec[scalar], at: i64) -> i64 {
         b = b - 1
     }
     return b
+}
+
+/// R74: Rust's struct update `S { a: x, b, ..base }` -> `base with { a: x, b: b }`
+/// (Part I 4.2).
+fn rs2nika_struct_update(mut ctx: Rs2nikaCtx, given: ref String) -> String {
+    if !given.contains("..") || !given.contains("{") {
+        return given.clone()
+    }
+    let c: Vec[scalar] = given.chars().collect()
+    let mut out: String = ""
+    let mut at = 0
+    while at < c.len() {
+        if c[at] != '{' {
+            out.push(c[at])
+            at = at + 1
+            continue
+        }
+        // the type's name before the brace: `S {` or `a::S {`
+        let mut e = at
+        while e > 0 && c[e - 1] == ' ' {
+            e = e - 1
+        }
+        let mut b = e
+        while b > 0 && rs2nika_path_char(c[b - 1]) {
+            b = b - 1
+        }
+        let close = rs2nika_closing(c, at, '{', '}')
+        let named = b < e && rs2nika_upper(c[b])
+        if !named || close < 0 {
+            out.push(c[at])
+            at = at + 1
+            continue
+        }
+        let parts = rs2nika_split_args(rs2nika_text(c, at + 1, close))
+        let last: String = if parts.len() > 0 { parts[parts.len() - 1].trim().clone() } else { "" }
+        if !last.starts_with("..") || last.len() <= 2 || last.starts_with("..=") {
+            out.push(c[at])
+            at = at + 1
+            continue
+        }
+        let base: String = rs2nika_struct_update(ctx, last[2..<last.len()].trim())
+        let mut fields: Vec[String] = []
+        let mut i = 0
+        while i + 1 < parts.len() {
+            let f: String = rs2nika_struct_update(ctx, parts[i].trim())
+            if f.contains(":") {
+                fields.push(f)
+            } else {
+                fields.push(f"{f}: {f}")
+            }
+            i = i + 1
+        }
+        let name_len = rs2nika_text(c, b, at).len()
+        let kept: String = out[0..<out.len() - name_len].clone()
+        let joined = rs2nika_join(fields, ", ")
+        out = f"{kept}{base} with {{ {joined} }}"
+        rs2nika_hit(ctx, "R74")
+        at = close + 1
+    }
+    return out
+}
+
+/// R73: `cond.then(|| e)` -> `if cond { e } else { null }`.
+fn rs2nika_bool_then(mut ctx: Rs2nikaCtx, given: ref String) -> String {
+    if !given.contains(".then(||") {
+        return given.clone()
+    }
+    let c: Vec[scalar] = given.chars().collect()
+    let mut out: String = ""
+    let mut at = 0
+    while at < c.len() {
+        let hit = at + 8 <= c.len() && rs2nika_text(c, at, at + 8) == ".then(||"
+        if !hit {
+            out.push(c[at])
+            at = at + 1
+            continue
+        }
+        let b = rs2nika_recv_start(c, at)
+        let close = rs2nika_closing(c, at + 5, '(', ')')
+        if close < 0 || b >= at {
+            out.push(c[at])
+            at = at + 1
+            continue
+        }
+        let recv: String = rs2nika_text(c, b, at)
+        let mut cond: String = recv.clone()
+        if cond.starts_with("(") && cond.ends_with(")") && rs2nika_closing(c, b, '(', ')') == at - 1 {
+            cond = cond[1..<cond.len() - 1].clone()
+        }
+        let mut body: String = rs2nika_text(c, at + 8, close).trim().clone()
+        if body.starts_with("{") && body.ends_with("}") {
+            body = body[1..<body.len() - 1].trim().clone()
+        }
+        // drop the receiver already copied to `out`
+        let kept: String = out[0..<out.len() - recv.len()].clone()
+        out = f"{kept}(if {cond} {{ {body} }} else {{ null }})"
+        rs2nika_hit(ctx, "R73")
+        at = close + 1
+    }
+    return out
 }
 
 /// A receiver that is an iterator, not an `Option`.
@@ -2150,6 +2262,10 @@ fn rs2nika_closures(mut ctx: Rs2nikaCtx, given: ref String) -> String {
             while bar < c.len() && c[bar] == ' ' {
                 bar = bar + 1
             }
+        }
+        // `&|a: T| e`: a callback passed by reference is the lambda itself
+        if c[at] == '&' && at + 1 < c.len() && c[at + 1] == '|' {
+            bar = at + 1
         }
         let after_open = at > 0 && rs2nika_in(c[at - 1], "(,=")
         let after_space = at > 1 && c[at - 1] == ' ' && rs2nika_in(c[at - 2], "(,=")
@@ -3212,6 +3328,63 @@ fn rs2nika_let_pair(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String] {
     return out
 }
 
+/// R78: a nested tuple pattern in a `for` head (#611 leaves nested heads
+/// undecided) -> one level in the head, a `let` per inner tuple in the body.
+/// `parts` are the head's parts; nested ones become `t1`, `t2`, .. and their
+/// `let`s are pushed onto `lets`.
+fn rs2nika_flat_parts(parts: ref Vec[String], mut lets: Vec[String]) -> Vec[String] {
+    let mut head: Vec[String] = []
+    for p in parts {
+        let t: String = p.trim().clone()
+        if t.starts_with("(") && t.ends_with(")") {
+            let slot = lets.len()
+            let name = f"t{slot + 1}"
+            head.push(name.clone())
+            lets.push("")
+            let inner = rs2nika_split_args(t[1..<t.len() - 1].clone())
+            let flat = rs2nika_flat_parts(inner, lets)
+            let joined = rs2nika_join(flat, ", ")
+            lets[slot] = f"let ({joined}) = {name}"
+        } else {
+            head.push(t.clone())
+        }
+    }
+    return head
+}
+
+fn rs2nika_for_nested(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String] {
+    let ind = rs2nika_indent(line)
+    let st: String = line.trim().clone()
+    if !st.starts_with("for (") || !st.ends_with(" {") {
+        return []
+    }
+    let c: Vec[scalar] = st.chars().collect()
+    let close = rs2nika_closing(c, 4, '(', ')')
+    if close < 0 {
+        return []
+    }
+    let parts = rs2nika_split_args(rs2nika_text(c, 5, close))
+    let mut nested = false
+    for p in parts {
+        if p.trim().starts_with("(") {
+            nested = true
+        }
+    }
+    if !nested {
+        return []
+    }
+    let mut lets: Vec[String] = []
+    let head = rs2nika_flat_parts(parts, lets)
+    let joined = rs2nika_join(head, ", ")
+    let rest = rs2nika_text(c, close + 1, c.len())
+    let mut out: Vec[String] = ["=", f"{ind}for ({joined}){rest}"]
+    for l in lets {
+        out.push(f"{ind}    {l}")
+    }
+    rs2nika_hit(ctx, "R78")
+    return out
+}
+
 fn rs2nika_if_let(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String] {
     let ind = rs2nika_indent(line)
     let filtered = rs2nika_filter_cloned(ctx, line)
@@ -3243,6 +3416,10 @@ fn rs2nika_if_let(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String] {
         }
         rs2nika_hit(ctx, "R22")
         return ["=", f"{ind}let {name} = {value} ?? {jump}"]
+    }
+    let nested = rs2nika_for_nested(ctx, line)
+    if nested.len() > 0 {
+        return nested
     }
     let pair = rs2nika_let_pair(ctx, line)
     if pair.len() > 0 {
@@ -3378,8 +3555,13 @@ pub fn rs2nika_convert(src: ref String, profile: ref String, prefix: ref String,
                 iflet = rs2nika_if_let(ctx, raw)
             }
             let mut line: String = raw.clone()
-            if iflet.len() == 2 && iflet[0] == "=" {
+            if iflet.len() >= 2 && iflet[0] == "=" {
                 line = iflet[1].clone()
+                let mut k = 2
+                while k < iflet.len() {
+                    line = f"{line}\n{shift}{iflet[k]}"
+                    k = k + 1
+                }
             }
             let mut closing: Vec[String] = []
             let below = rs2nika_shift(ctx, 1)
@@ -3942,6 +4124,18 @@ fn rs2nika_names(mut ctx: Rs2nikaCtx, given: ref String) -> String {
                 if n < c.len() && c[n] == '(' && (ctx.tool_fns.contains(name) || ctx.equiv_from.contains(name)) {
                     out.push_str(name)
                     rs2nika_hit(ctx, "R46")
+                    at = n
+                    continue
+                }
+                // R76: a module that is a tools file (`throws::f(`): all
+                // tools/*.nika share one namespace
+                let module: String = rs2nika_text(c, at, last - 2)
+                if segs == 1 && n < c.len() && c[n] == '(' && ctx.tool_files.contains(f"{module}.nika") {
+                    out.push_str(name)
+                    rs2nika_hit(ctx, "R76")
+                    if !name.starts_with(ctx.prefix) {
+                        ctx.todo_extra.push(f"`{module}::{name}`: tools/{module}.nika has no `{name}`; see rs2nika.names")
+                    }
                     at = n
                     continue
                 }
