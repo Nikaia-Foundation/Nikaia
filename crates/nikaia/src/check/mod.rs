@@ -3291,49 +3291,8 @@ impl<'a> Checker<'a> {
     /// need `Ord`; a trait of the program's own with one of those names gives
     /// no operator.
     fn an_operator_needs_a_bound(&mut self, op: BinaryOp, left: &Ty, right: &Ty, at: &Span) {
-        let ordering = matches!(
-            op,
-            BinaryOp::Lt | BinaryOp::Le | BinaryOp::Gt | BinaryOp::Ge
-        );
-        for ty in [left, right] {
-            let Ty::Named { name, args, .. } = ty else {
-                continue;
-            };
-            if !args.is_empty() {
-                continue;
-            }
-            let Some(bounds) = self.s.type_parameters.get(name) else {
-                continue;
-            };
-            let allowed = bounds.iter().any(|bound| {
-                !self.world.own.traits.contains_key(bound)
-                    && (bound == "Ord" || (!ordering && bound == "Eq"))
-            });
-            if allowed {
-                return;
-            }
-            let (symbol, needs) = match (ordering, op) {
-                (true, BinaryOp::Lt) => ("<", "Ord"),
-                (true, BinaryOp::Le) => ("<=", "Ord"),
-                (true, BinaryOp::Gt) => (">", "Ord"),
-                (true, _) => (">=", "Ord"),
-                (false, BinaryOp::Ne) => ("!=", "Eq"),
-                (false, _) => ("==", "Eq"),
-            };
-            let name = name.clone();
-            self.s.findings.push(Finding {
-                severity: Severity::Error,
-                span: *at,
-                code: "NK1248".to_string(),
-                message: format!("`{symbol}` needs `{name}: {needs}`."),
-                notes: vec![format!(
-                    "`{name}` can be any type the caller picks, so it can only be compared where a bound says how."
-                )],
-                help: Some(format!("Write `[{name}: {needs}]`.")),
-                labels: Vec::new(),
-            });
-            return;
-        }
+        self.s
+            .an_operator_needs_a_bound(self.world, op, left, right, at);
     }
 
     /// **`NK1249`: an `impl Eq` or `impl Ord` the language cannot honour**
@@ -12704,80 +12663,14 @@ impl<'a> Checker<'a> {
     /// the function, which says `throws` (`NK2605`), or the `catch` around it
     /// counts it.
     fn a_fatal_error_passes(&mut self, guarded: &Guarded, handler: &Block, span: &Span) {
-        let fatal = crate::contracts::throws::fatal_types(self.world.own, self.world.library);
-        let named = nikaia_std::tools::throws::fatal_named(handler, &self.parsed.interner);
-        let passing: Vec<String> = guarded
-            .thrown
-            .iter()
-            .filter(|error| fatal.contains(*error) && !named.contains(*error))
-            .cloned()
-            .collect();
-        if passing.is_empty() {
-            return;
-        }
-        if let Some(outer) = self.s.flow.guarded.as_mut() {
-            outer.fallible = true;
-            outer.thrown.extend(passing.iter().cloned());
-        }
-        if self.s.flow.throwing || self.s.flow.caught {
-            return;
-        }
-        let list = passing
-            .iter()
-            .map(|error| format!("`{error}`"))
-            .collect::<Vec<_>>()
-            .join(", ");
-        self.s.findings.push(Finding {
-            severity: Severity::Error,
-            span: *span,
-            code: "NK2605".to_string(),
-            message: format!("This function can fail, because {list} passes this `catch`."),
-            notes: vec![format!(
-                "{list} is fatal: a `catch` takes it only in a `match` arm that names its type, and this handler does not."
-            )],
-            help: Some(
-                "Add `throws` to the function, or name the type in a `match error` arm of the handler."
-                    .to_string(),
-            ),
-            labels: Vec::new(),
-        });
+        self.s
+            .a_fatal_error_passes(self.world, guarded, handler, span);
     }
 
     /// The code `process::exit` is given, where it is a constant: `0..=255`
     /// (ADR-343 D4), refused as `NK1116` refuses a constant that cannot fit.
     fn an_exit_code_out_of_range(&mut self, key: &str, args: &[Expr], span: &Span) {
-        if key != "process::exit" {
-            return;
-        }
-        let Some(first) = args.first() else { return };
-        let value = match first {
-            Expr::LitInt {
-                value, negative, ..
-            } => Some(crate::ast::int_value(*value, *negative)),
-            Expr::Unary {
-                op: UnaryOp::Neg,
-                expr,
-                ..
-            } => match expr.as_ref() {
-                Expr::LitInt { value, .. } => Some(-crate::ast::int_value(*value, false)),
-                _ => None,
-            },
-            _ => None,
-        };
-        if let Some(code) = value.filter(|code| !(0..=255).contains(code)) {
-            self.s.findings.push(Finding {
-                severity: Severity::Error,
-                span: *span,
-                code: "NK1116".to_string(),
-                message: format!("The exit code {code} is not in 0..=255."),
-                notes: vec![
-                    "An exit status is one byte; the system would keep only part of it."
-                        .to_string(),
-                ],
-                help: Some("Give `process::exit` a code from 0 to 255.".to_string()),
-                labels: Vec::new(),
-            });
-        }
+        self.s.an_exit_code_out_of_range(key, args, span);
     }
 
     /// `NK2205`: a `set` whose argument reads the same container with `get`

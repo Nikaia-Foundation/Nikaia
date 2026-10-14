@@ -2,9 +2,50 @@
 //
 // **A written call to something that can fail** (`NK2605`, ADR-025 D1), moved
 // from the compiler's checker (ADR-294, #125, #558, C-5f). What the committed
-// ledger lacks (`NK2402`) is asked of the host: `newly_throws`.
+// ledger lacks (`NK2402`) is asked of the host: `newly_throws`. Also a fatal
+// error that passes a `catch` (`NK2605`, ADR-345 D2).
 
 use std::collections
+
+fn check_is_fatal(ledger: ref Ledger, error: ref String) -> bool {
+    let types = ledger.implementations.get("Fatal") ?? return false
+    return types.contains(error)
+}
+
+impl CheckState {
+    /// **`NK2605`: a fatal error passes a `catch`** whose handler names it in
+    /// no `match` arm (ADR-345 D2); an outer `catch` is given it to handle.
+    pub fn a_fatal_error_passes(ref mut self, world: ref CheckWorld, guarded: ref CheckGuarded, handler: ref Block, span: ref Span) {
+        let named = fatal_named(handler, world.words)
+        let mut passing: Vec[String] = []
+        for error in guarded.thrown {
+            if (check_is_fatal(world.own, error) || check_is_fatal(world.library, error)) && !named.contains(error) {
+                passing.push(error.clone())
+            }
+        }
+        if passing.len() == 0 {
+            return
+        }
+        if self.flow.guarded != null {
+            let held: CheckGuarded? = self.flow.guarded?.clone()
+            let mut outer = held ?? CheckGuarded::nothing()
+            outer.fallible = true
+            for error in passing {
+                outer.thrown.insert(error.clone())
+            }
+            self.flow.guarded = outer
+        }
+        if self.flow.throwing || self.flow.caught {
+            return
+        }
+        let mut quoted: Vec[String] = []
+        for error in passing {
+            quoted.push(f"`{error}`")
+        }
+        let list = quoted.join(", ")
+        self.findings.push(check_refusal("NK2605", span, f"This function can fail, because {list} passes this `catch`.", [f"{list} is fatal: a `catch` takes it only in a `match` arm that names its type, and this handler does not."], "Add `throws` to the function, or name the type in a `match error` arm of the handler.".clone()))
+    }
+}
 
 impl CheckState {
     /// **A written call to something that can fail** (`NK2605`). ADR-025 D1

@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.891] — 2026-10-14
+
+**check: a_fatal_error_passes, an_exit_code_out_of_range and an_operator_needs_a_bound in Nikaia (#125, #558)**
+- NK2605 for a fatal error passing a catch (check_may_fail.nika), NK1116 for an exit code out of 0..=255 and NK1248 for a comparison of an unbounded type parameter (check_arith.nika) are found by Nikaia code; the checker keeps one-line adapters.
+
 ## [0.0.890] — 2026-10-13
 
 **An enum with one variant is written by its type's name (ADR-347, #608)**

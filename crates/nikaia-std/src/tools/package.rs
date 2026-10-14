@@ -9641,6 +9641,57 @@ fn a_last_segment(world: &CheckWorld<'_>, path: &[winnow_grammar::Symbol], out: 
 
 // --- check_arith.nika ---
 
+fn arith_exit_code_outside(first: &Expr) -> Option<String> {
+    match first {
+        Expr::LitInt { value, negative, .. } => { let negative = *negative; let value = *value; if negative && value > 0u64 { Some(format!("-{}", value)) } else if !negative && value > 255u64 { Some(format!("{}", value)) } else { None } },
+        Expr::Unary { op, expr, .. } => { let expr = nikaia_std::boxed::open(expr); if *op == UnaryOp::Neg { arith_negated_literal(expr) } else { None } },
+        _ => None,
+    }
+}
+
+fn arith_negated_literal(expr: &Expr) -> Option<String> {
+    match expr {
+        Expr::LitInt { value, .. } => { let value = *value; if value > 0u64 { Some(format!("-{}", value)) } else { None } },
+        _ => None,
+    }
+}
+
+impl CheckState {
+    pub fn an_exit_code_out_of_range(&mut self, key: &str, args: &[Expr], span: &Span) {
+        if key != "process::exit" || args.is_empty() { return; }
+        let code = match arith_exit_code_outside(nikaia_std::index::get(&args, 0)) { Some(__nikaia_value) => __nikaia_value, None => return };
+        let note: String = String::from("An exit status is one byte; the system would keep only part of it.");
+        self.findings.push(check_refusal("NK1116", span, format!("The exit code {} is not in 0..=255.", code), vec![note], Some("Give `process::exit` a code from 0 to 255.".to_owned())));
+    }
+    pub fn an_operator_needs_a_bound(&mut self, world: &CheckWorld<'_>, op: BinaryOp, left: &Ty, right: &Ty, at: &Span) {
+        let ordering = op == BinaryOp::Lt || op == BinaryOp::Le || op == BinaryOp::Gt || op == BinaryOp::Ge;
+        for ty in [left.clone(), right.clone()] {
+            let name: String = match ty {
+                Ty::Named { ref name, ref args, .. } => if args.is_empty() { name.to_owned() } else { "".to_owned() },
+                _ => "".to_owned(),
+            };
+            if name == "" { continue; }
+            let bounds = match self.type_parameters.get(&name) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let mut allowed = false;
+            for bound in bounds.iter() { if !world.own.traits.contains_key(bound) && (bound == "Ord" || !ordering && bound == "Eq") { allowed = true; } }
+            if allowed { return; }
+            let mut symbol: String = String::from("==");
+            let mut needs: String = String::from("Eq");
+            if ordering {
+                needs = "Ord".to_owned();
+                symbol = match op {
+                    BinaryOp::Lt => "<".to_owned(),
+                    BinaryOp::Le => "<=".to_owned(),
+                    BinaryOp::Gt => ">".to_owned(),
+                    _ => ">=".to_owned(),
+                };
+            } else if op == BinaryOp::Ne { symbol = "!=".to_owned(); }
+            self.findings.push(check_refusal("NK1248", at, format!("`{}` needs `{}: {}`.", symbol, name, needs), vec![format!("`{}` can be any type the caller picks, so it can only be compared where a bound says how.", name)], Some(format!("Write `[{}: {}]`.", name, needs))));
+            return;
+        }
+    }
+}
+
 pub fn an_or_a_named(ty: &str) -> String {
     if ty.starts_with("i") || ty.starts_with("a") || ty.starts_with("e") || ty.starts_with("o") || ty.starts_with("I") || ty.starts_with("A") || ty.starts_with("E") || ty.starts_with("O") { return "an".to_owned(); }
     "a".to_owned()
@@ -14904,6 +14955,35 @@ impl CheckState {
 
 
 // --- check_may_fail.nika ---
+
+fn check_is_fatal(ledger: &Ledger, error: &str) -> bool {
+    let types = match ledger.implementations.get("Fatal") { Some(__nikaia_value) => __nikaia_value, None => return false };
+    types.contains(error)
+}
+
+impl CheckState {
+    pub fn a_fatal_error_passes(&mut self, world: &CheckWorld<'_>, guarded: &CheckGuarded, handler: &Block, span: &Span) {
+        let named = fatal_named(handler, world.words);
+        let mut passing: Vec<String> = vec![];
+        for error in guarded.thrown.iter() { if (check_is_fatal(world.own, error) || check_is_fatal(world.library, error)) && !named.contains(error) { passing.push(error.to_owned()); } }
+        if passing.is_empty() { return; }
+        if self.flow.guarded.is_some() {
+            let held: Option<CheckGuarded> = match self.flow.guarded.as_ref() {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            };
+            let mut outer = nikaia_std::index::or(held, || CheckGuarded::nothing());
+            outer.fallible = true;
+            for error in passing.iter() { outer.thrown.insert(error.to_owned()); }
+            self.flow.guarded = Some(outer);
+        }
+        if self.flow.throwing || self.flow.caught { return; }
+        let mut quoted: Vec<String> = vec![];
+        for error in passing.iter() { quoted.push(format!("`{}`", error)); }
+        let list = quoted.join(", ");
+        self.findings.push(check_refusal("NK2605", span, format!("This function can fail, because {} passes this `catch`.", list), vec![format!("{} is fatal: a `catch` takes it only in a `match` arm that names its type, and this handler does not.", list)], Some("Add `throws` to the function, or name the type in a `match error` arm of the handler.".to_owned())));
+    }
+}
 
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

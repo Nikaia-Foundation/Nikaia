@@ -2,9 +2,88 @@
 //
 // **Arithmetic on something that has none, and a value of no known type**
 // (Part I 2.3, `NK1191`, `NK1245`), moved from the compiler's checker (ADR-294,
-// #125, #558, C-5e).
+// #125, #558, C-5e). Also the exit code out of range (`NK1116`) and a
+// comparison of a type parameter without a bound (`NK1248`).
 
 use std::collections
+
+/// The code an exit literal says, as written, where it is not in `0..=255`.
+fn arith_exit_code_outside(first: ref Expr) -> String? {
+    return match first {
+        Expr::LitInt { value, negative, .. } => if negative && value > 0 {
+            f"-{value}"
+        } else if !negative && value > 255 {
+            f"{value}"
+        } else {
+            null
+        },
+        Expr::Unary { op, expr, .. } => if op == UnaryOp::Neg {
+            arith_negated_literal(expr)
+        } else {
+            null
+        },
+        else => null,
+    }
+}
+
+fn arith_negated_literal(expr: ref Expr) -> String? {
+    return match expr {
+        Expr::LitInt { value, .. } => if value > 0 { f"-{value}" } else { null },
+        else => null,
+    }
+}
+
+impl CheckState {
+    /// The code `process::exit` is given, where it is a constant: `0..=255`
+    /// (ADR-343 D4), refused as `NK1116` refuses a constant that cannot fit.
+    pub fn an_exit_code_out_of_range(ref mut self, key: ref String, args: ref Vec[Expr], span: ref Span) {
+        if key != "process::exit" || args.len() == 0 {
+            return
+        }
+        let code = arith_exit_code_outside(args[0]) ?? return
+        let note: String = "An exit status is one byte; the system would keep only part of it."
+        self.findings.push(check_refusal("NK1116", span, f"The exit code {code} is not in 0..=255.", [note], "Give `process::exit` a code from 0 to 255.".clone()))
+    }
+
+    /// **`NK1248`: `<` or `==` on a type parameter no bound lets compare.**
+    pub fn an_operator_needs_a_bound(ref mut self, world: ref CheckWorld, op: BinaryOp, left: ref Ty, right: ref Ty, at: ref Span) {
+        let ordering = op == BinaryOp::Lt || op == BinaryOp::Le || op == BinaryOp::Gt || op == BinaryOp::Ge
+        for ty in [left.clone(), right.clone()] {
+            let name: String = match ty {
+                Ty::Named { name, args, .. } => if args.len() == 0 { name.clone() } else { "".clone() },
+                else => "".clone(),
+            }
+            if name == "" {
+                continue
+            }
+            let bounds = self.type_parameters.get(name) ?? continue
+            let mut allowed = false
+            for bound in bounds {
+                if !world.own.traits.contains_key(bound) && (bound == "Ord" || (!ordering && bound == "Eq")) {
+                    allowed = true
+                }
+            }
+            if allowed {
+                return
+            }
+            let mut symbol: String = "=="
+            let mut needs: String = "Eq"
+            if ordering {
+                needs = "Ord".clone()
+                symbol = match op {
+                    BinaryOp::Lt => "<".clone(),
+                    BinaryOp::Le => "<=".clone(),
+                    BinaryOp::Gt => ">".clone(),
+                    else => ">=".clone(),
+                }
+            } else if op == BinaryOp::Ne {
+                symbol = "!=".clone()
+            }
+            self.findings.push(check_refusal("NK1248", at, f"`{symbol}` needs `{name}: {needs}`.", [f"`{name}` can be any type the caller picks, so it can only be compared where a bound says how."], f"Write `[{name}: {needs}]`."))
+            return
+        }
+    }
+}
 
 /// **`an i32` and `a u64`**: the article as the name is said (`NK1116`'s
 /// rule). A `u` is said *you*, so it takes `a`; the other vowels take `an`.
