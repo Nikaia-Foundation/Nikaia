@@ -145,6 +145,10 @@ pub struct Build {
     /// `--optimization=remove-overflow-checks:on`
     /// ([ADR-306](../../docs/specification/adr/adr-306.md) D6).
     pub overflow: crate::bounds::OverflowChecks,
+    /// `--optimization=skip-free-at-exit:on`
+    /// ([ADR-348](../../docs/specification/adr/adr-348.md) D1): what `main`
+    /// still holds at its end is not freed.
+    pub skip_free_at_exit: bool,
     /// **Code run while the program is built counts its steps**
     /// ([ADR-321](../../docs/specification/adr/adr-321.md) D7): every function
     /// it enters and every turn of a loop, against the budget
@@ -173,6 +177,7 @@ impl Build {
             reentrancy_check: ReentrancyCheck::parse(reentrancy_check)?,
             bounds: crate::bounds::BoundsChecks::default(),
             overflow: crate::bounds::OverflowChecks::default(),
+            skip_free_at_exit: false,
             counts_steps: false,
             leaves_values: false,
             called_from_c: false,
@@ -585,6 +590,7 @@ type Out = nikaia_std::tools::emit_out::EmitOut;
 trait OutText {
     fn take_lend(&mut self) -> bool;
     fn insert_after_first_brace(&mut self, text: &str);
+    fn insert_before_last_brace(&mut self, text: &str);
 }
 
 impl OutText for Out {
@@ -604,6 +610,13 @@ impl OutText for Out {
     /// Insert text just inside the first `{`, moving the map entries after it.
     fn insert_after_first_brace(&mut self, text: &str) {
         let Some(at) = self.buf.find('{').map(|at| at + 1) else {
+            return;
+        };
+        self.buf.insert_str(at, text);
+        self.shift_entries(at as i64, text.len() as i64);
+    }
+    fn insert_before_last_brace(&mut self, text: &str) {
+        let Some(at) = self.buf.rfind('}') else {
             return;
         };
         self.buf.insert_str(at, text);
@@ -1119,6 +1132,38 @@ const LENGTH_PARAMETER: &str = "__NIKAIA_N";
 
 /// The name a Nikaia program gives its entry point.
 const MAIN: &str = "main";
+
+/// **The allocator of a program built with `skip-free-at-exit:on`**: the
+/// system's, with a free that it skips once `main` has ended
+/// ([ADR-348](../../docs/specification/adr/adr-348.md) D1). Written here and
+/// not in `std`, which has no `unsafe` (ADR-218).
+const ALLOCATOR: &str = "
+struct NikaiaHeap;
+// SAFETY: every call is the system allocator's; a free that is skipped leaves
+// the block allocated until the process ends, which is always sound.
+unsafe impl std::alloc::GlobalAlloc for NikaiaHeap {
+    #[inline]
+    unsafe fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
+        unsafe { std::alloc::GlobalAlloc::alloc(&std::alloc::System, layout) }
+    }
+    #[inline]
+    unsafe fn alloc_zeroed(&self, layout: std::alloc::Layout) -> *mut u8 {
+        unsafe { std::alloc::GlobalAlloc::alloc_zeroed(&std::alloc::System, layout) }
+    }
+    #[inline]
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: std::alloc::Layout) {
+        if nikaia_std::rt::exit::frees() {
+            unsafe { std::alloc::GlobalAlloc::dealloc(&std::alloc::System, ptr, layout) }
+        }
+    }
+    #[inline]
+    unsafe fn realloc(&self, ptr: *mut u8, layout: std::alloc::Layout, size: usize) -> *mut u8 {
+        unsafe { std::alloc::GlobalAlloc::realloc(&std::alloc::System, ptr, layout, size) }
+    }
+}
+#[global_allocator]
+static NIKAIA_HEAP: NikaiaHeap = NikaiaHeap;
+";
 /// **A precondition checked where it stands** (ADR-269 D20), and what its
 /// failure says (ADR-269 D2): the condition, the `assert`'s message, and the
 /// value of each parameter it reads.
@@ -2355,7 +2400,17 @@ impl<'p> Emitter<'p> {
     fn entry_point(&self, out: &mut Out) {
         let concurrent = matches!(self.build.user_parallelism, UserParallelism::Yes);
         let channel = self.error_channel(MAIN, Lifetimes::Elided, false);
-        out.push(&self.s.entry_point(&self.world, concurrent, &channel));
+        let entry = self.s.entry_point(&self.world, concurrent, &channel);
+        if entry.is_empty() {
+            return;
+        }
+        out.push(&entry);
+        // **The program's allocator is the system's**, with a free that
+        // `skip-free-at-exit:on` skips once `main` has ended
+        // ([ADR-348](../../docs/specification/adr/adr-348.md) D1).
+        if self.build.skip_free_at_exit {
+            out.push(ALLOCATOR);
+        }
     }
 
     /// Whether any grammar entry in the program reaches a **parallel** rule,
@@ -4240,6 +4295,24 @@ impl<'p> Emitter<'p> {
                 format!("let __nikaia_frame = nikaia_std::build_time::enter({key:?});"),
             );
         }
+        // **Not after a statement that never comes back** (0.0.240): a body
+        // that ends in `panic(…)`, `throw` or `return` has left before the
+        // `Ok(())`, and `rustc` said *unreachable expression* about a file
+        // nobody wrote ([Part III C.1](../../docs/specification/30-nikaia-tooling.md)).
+        let leaves = body.stmts.last().is_some_and(|stmt| match &stmt.node {
+            Stmt::Return(_) => true,
+            Stmt::Expr(expr) => jumps(expr) || self.never_returns(expr),
+            _ => false,
+        });
+        // **The program's `main` says where its last statement ended**
+        // ([ADR-348](../../docs/specification/adr/adr-348.md) D1): from there,
+        // `skip-free-at-exit:on` leaves the memory of what dies to the system.
+        let main_ends = (self.build.skip_free_at_exit
+            && depth == 0
+            && key == MAIN
+            && self.user_main().is_some()
+            && !leaves)
+            .then_some("nikaia_std::rt::exit::main_ends();");
         if !throws {
             // The function's own settle point stands around the body, so the
             // body is not settled a second time as a block (ADR-297 D2).
@@ -4248,13 +4321,18 @@ impl<'p> Emitter<'p> {
                 true => self.block_plain(out, body, depth, flow, tail, None),
                 false => self.block(out, body, depth, flow, tail),
             };
-            if first.is_empty() {
+            if first.is_empty() && main_ends.is_none() {
                 return body_block(out);
             }
             // Inside the body's own brace, so there is one block and not two.
             let mut written = Out::empty();
             body_block(&mut written)?;
-            written.insert_after_first_brace(&format!(" {}", first.join(" ")));
+            if let Some(call) = main_ends {
+                written.insert_before_last_brace(&format!(" {call} "));
+            }
+            if !first.is_empty() {
+                written.insert_after_first_brace(&format!(" {}", first.join(" ")));
+            }
             out.append(written);
             return Ok(());
         }
@@ -4331,15 +4409,9 @@ impl<'p> Emitter<'p> {
             out.push("\n");
             i += 1;
         }
-        // **Not after a statement that never comes back** (0.0.240): a body
-        // that ends in `panic(…)`, `throw` or `return` has left before the
-        // `Ok(())`, and `rustc` said *unreachable expression* about a file
-        // nobody wrote ([Part III C.1](../../docs/specification/30-nikaia-tooling.md)).
-        let leaves = body.stmts.last().is_some_and(|stmt| match &stmt.node {
-            Stmt::Return(_) => true,
-            Stmt::Expr(expr) => jumps(expr) || self.never_returns(expr),
-            _ => false,
-        });
+        if let Some(call) = main_ends {
+            out.push(&format!("{inner_pad}{call}\n"));
+        }
         if !returns_value && !leaves {
             out.push(&format!("{inner_pad}Ok(())\n"));
         }

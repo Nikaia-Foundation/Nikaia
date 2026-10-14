@@ -184,6 +184,14 @@ pub fn optimizations(
                     )
                 })?;
             }
+            // Read by `skip_free_at_exit`; checked here with the rest.
+            "skip-free-at-exit" => {
+                if !matches!(level, "on" | "off") {
+                    return Err(anyhow!(
+                        "`skip-free-at-exit` is `on` or `off`, not `{level}`"
+                    ));
+                }
+            }
             "remove-overflow-checks" => {
                 overflow = crate::bounds::OverflowChecks::parse(level).ok_or_else(|| {
                     anyhow!(
@@ -195,12 +203,26 @@ pub fn optimizations(
             _ => {
                 return Err(anyhow!(
                     "there is no optimization called `{name}`: the ones there are, are \
-                     `remove-bounds-checks` and `remove-overflow-checks`"
+                     `remove-bounds-checks`, `remove-overflow-checks` and `skip-free-at-exit`"
                 ));
             }
         }
     }
     Ok((bounds, overflow))
+}
+
+/// **`skip-free-at-exit:on`**
+/// ([ADR-348](../../docs/specification/adr/adr-348.md) D1): what `main` still
+/// holds at its end dies, and every cleanup runs, but its memory is left to the
+/// operating system. The last word for the name wins; [`optimizations`] has
+/// already refused a word that is not `on` or `off`.
+pub fn skip_free_at_exit(words: &str) -> bool {
+    words
+        .split(',')
+        .map(str::trim)
+        .filter_map(|w| w.strip_prefix("skip-free-at-exit:"))
+        .next_back()
+        .is_some_and(|level| level == "on")
 }
 
 /// **The words before ADR-306 D14**: `basic` and `aggressive` were levels of
@@ -290,6 +312,7 @@ impl Settings {
         )?;
         let mut build = Build::parse(&target, &user_parallelism, &reentrancy_check)?;
         (build.bounds, build.overflow) = optimizations(&optimization)?;
+        build.skip_free_at_exit = skip_free_at_exit(&optimization);
         build.called_from_c = artifact == "c-library";
         Ok(Settings {
             build,
@@ -326,6 +349,7 @@ impl Settings {
         }
         let words = flags.join(",");
         (self.build.bounds, self.build.overflow) = optimizations(&words)?;
+        self.build.skip_free_at_exit = skip_free_at_exit(&words);
         self.optimization = words;
         Ok(())
     }
@@ -378,6 +402,7 @@ impl Settings {
         let symbol_prefix = symbol_prefix(&word(PREFIX_VAR, "program"))?;
         let mut build = Build::parse(&target, &user_parallelism, &reentrancy_check)?;
         (build.bounds, build.overflow) = optimizations(&optimization)?;
+        build.skip_free_at_exit = skip_free_at_exit(&optimization);
         build.called_from_c = artifact == "c-library";
         Ok(Settings {
             build,
@@ -406,7 +431,7 @@ impl Settings {
     pub fn choices(&self) -> Choices {
         Choices::new(
             format!(
-                "{}/{}/{}{}{}{}{}{}",
+                "{}/{}/{}{}{}{}{}{}{}",
                 self.target,
                 self.user_parallelism,
                 self.reentrancy_check,
@@ -425,6 +450,10 @@ impl Settings {
                 match self.build.overflow {
                     crate::bounds::OverflowChecks::Kept => String::new(),
                     level => format!("/remove-overflow-checks:{}", level.name()),
+                },
+                match self.build.skip_free_at_exit {
+                    true => "/skip-free-at-exit:on",
+                    false => "",
                 },
                 // A library's lowering carries its entry points' wrappers,
                 // named by the prefix.

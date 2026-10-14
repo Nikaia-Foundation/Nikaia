@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.919] — 2026-10-14
+
+**Program end: skip-free-at-exit:on leaves main's memory to the OS (ADR-348, #607)**
+
+The owner's decision on #607: freeing stays the default; the optimization word `skip-free-at-exit:on` (`nikaia.toml` `optimization`, or `--optimization`) writes an allocator into the program whose free is skipped from the end of `main`'s last statement until the drain. Every value still dies and every cleanup runs; output, exit status and the detached-task log are unchanged (`process_exit.rs`). brc: 300 192 748 instructions by default, 300 184 756 with the option.
+
 ## [0.0.918] — 2026-10-14
 
 **check: a method's function parameter is counted past its receiver, so a lambda it only runs is not kept (#125)**

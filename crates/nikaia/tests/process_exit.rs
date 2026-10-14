@@ -619,3 +619,106 @@ fn a_scope_joins_in_a_sum_and_keeps_a_fatal_site() {
         assert!(err.contains("raised at work"), "{err}");
     }
 }
+
+const LEFT_TO_THE_OS: &str = r#"use std::process
+
+struct Noted {
+    name: String,
+}
+
+impl Cleanup for Noted {
+    fn cleanup(ref mut self) {
+        println(f"cleanup {self.name}")
+    }
+}
+
+fn main() throws {
+    let held = Noted { name: f"held" }
+    let mut many: Vec[String] = []
+    for i in 0..1000 {
+        many.push(f"row {i}")
+    }
+    println(f"rows {many.len()} {held.name}")
+}
+
+"#;
+
+const LEFT_TO_THE_OS_PLAIN: &str = r#"struct Noted {
+    name: String,
+}
+
+impl Cleanup for Noted {
+    fn cleanup(ref mut self) {
+        println(f"cleanup {self.name}")
+    }
+}
+
+fn main() {
+    let held = Noted { name: f"plain" }
+    let mut many: Vec[String] = []
+    for i in 0..1000 {
+        many.push(f"row {i}")
+    }
+    println(f"rows {many.len()} {held.name}")
+}
+"#;
+
+/// ADR-348 D1, D2: with `skip-free-at-exit:on` the program's output, its
+/// cleanup at the end of `main` and its exit status are the default's; only
+/// the allocator and the call after `main`'s last statement are new, and a
+/// build without the option carries neither.
+#[test]
+fn skip_free_at_exit_keeps_output_cleanups_and_status() {
+    let on = |how: Build| Build {
+        skip_free_at_exit: true,
+        ..how
+    };
+    for how in [Build::default(), Build::parallel()] {
+        for (purpose, source, expected) in [
+            (
+                "os-throws",
+                LEFT_TO_THE_OS,
+                "rows 1001 held\ncleanup held\n",
+            ),
+            (
+                "os-plain",
+                LEFT_TO_THE_OS_PLAIN,
+                "rows 1001 plain\ncleanup plain\n",
+            ),
+        ] {
+            let default = ran(purpose, source, how);
+            let skipped = ran(purpose, source, on(how));
+            assert_eq!(skipped.0, expected, "at {how:?}: {}", skipped.1);
+            assert_eq!(skipped, default, "at {how:?}");
+            assert_eq!(skipped.2, Some(0));
+        }
+        let (out, err, code) = ran("os-exit", IN_MAIN, on(how));
+        assert_eq!((out.as_str(), code), ("before\n", Some(3)), "{err}");
+    }
+    let lowered = |how: Build| {
+        let parsed = parse_to_ast(LEFT_TO_THE_OS).expect("the source parses");
+        emit_program(&parsed, how).expect("the source lowers").rust
+    };
+    let default = lowered(Build::default());
+    assert!(!default.contains("global_allocator"), "{default}");
+    assert!(!default.contains("main_ends"), "{default}");
+    let skipped = lowered(on(Build::default()));
+    assert!(skipped.contains("#[global_allocator]"), "{skipped}");
+    assert!(
+        skipped.contains("nikaia_std::rt::exit::main_ends();"),
+        "{skipped}"
+    );
+}
+
+/// The word is checked like the other optimizations.
+#[test]
+fn skip_free_at_exit_is_on_or_off() {
+    use nikaia::project::{optimizations, skip_free_at_exit};
+    assert!(skip_free_at_exit("skip-free-at-exit:on"));
+    assert!(!skip_free_at_exit(
+        "skip-free-at-exit:on,skip-free-at-exit:off"
+    ));
+    assert!(!skip_free_at_exit("remove-bounds-checks:on"));
+    assert!(optimizations("skip-free-at-exit:on").is_ok());
+    assert!(optimizations("skip-free-at-exit:yes").is_err());
+}

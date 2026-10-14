@@ -52,6 +52,7 @@
 pub mod config;
 /// The executor (ADR-055 D3): what drives a program that can pause.
 pub mod exec;
+pub mod exit;
 pub mod library;
 pub mod pool;
 pub mod timer;
@@ -264,6 +265,8 @@ impl Started {
     /// fatal one's code ends the process (ADR-346 D6); an expired drain still
     /// ends with `70`.
     pub fn finish(self) {
+        // What `main` held is gone; the drain frees again (ADR-348 D1).
+        exit::drain_begins();
         let deadline = RUNTIME.get().map(|runtime| runtime.config.cleanup_deadline);
         let left = self.drain();
         let code = crate::task::report_detached();
