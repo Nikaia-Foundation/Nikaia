@@ -15,7 +15,7 @@
 
 /// What a grammar's wall is, as the report of it is given it.
 fn a_wall(why: ref crate::grammar_run::Wall) -> CheckWall sync {
-    use grammar_run::Wall
+    // TODO(rs2nika): `use grammar_run::Wall;` belongs at the top of the file
     return match why {
         Wall::Refused { detail } => CheckWall::Refused { detail: detail.clone() },
         Wall::NoCrossedForm { ty, because } => CheckWall::NoCrossedForm { ty: ty.clone(), because: because.clone() },

@@ -108,6 +108,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R59  Option combinators with a field or method body: `o.map(|x| x.f)` -> `o?.f`, `.is_some_and(|x| x.p())` -> `(o?.p() ?? false)`, `.map_or(d, ..)` -> `(o?.. ?? d)`",
         "R60  `String::with_capacity(n)` -> `\"\"`",
         "R61  a call or a literal in a `format!` argument -> `let hole_N = ..` before the line, `{hole_N}` in the f-string",
+        "R66  `build_time::decoded(x)` -> `decoded(x) fn(n) { ascii_scalar(n) }` (escapes.nika), with a TODO: above ASCII it reads no text",
         "R65  `?` in a lambda -> `?? return null`; `x.starts_with([a, b])` -> `(x.starts_with(a) || x.starts_with(b))`; a `use` inside a function -> TODO",
         "R64  `let x = match e { Some(v) => v, None => return y }` (also `continue`/`break`, in loops too) -> `let x = e ?? return y`",
         "R63  what R59 leaves of `o.is_some_and(..)`: `o.is_some_and(|x| p)` -> `(o != null && p)` with `x` read as `(o ?? panic(..))` (used twice: `match o ?? panic(..) { x => p }`), `o.is_some_and(f)` -> `(o != null && f(o ?? panic(..)))`",
@@ -1496,7 +1497,16 @@ fn rs2nika_replace_free(text: ref String, from: ref String, to: ref String) -> S
     let f: Vec[scalar] = from.chars().collect()
     let mut out: String = ""
     let mut at = 0
+    let mut quoted = false
     while at < c.len() {
+        if rs2nika_quote_at(c, at) {
+            quoted = !quoted
+        }
+        if quoted || c[at] == '"' {
+            out.push(c[at])
+            at = at + 1
+            continue
+        }
         let mut same = at + f.len() <= c.len()
         let mut k = 0
         while same && k < f.len() {
@@ -1517,6 +1527,21 @@ fn rs2nika_replace_free(text: ref String, from: ref String, to: ref String) -> S
         }
     }
     return out
+}
+
+/// Whether `c[at]` opens or closes a string literal: a `"` not escaped and
+/// not the char literal `'"'`. A name inside a literal is text, not a name.
+fn rs2nika_quote_at(c: ref Vec[scalar], at: i64) -> bool {
+    if c[at] != '"' {
+        return false
+    }
+    if at > 0 && c[at - 1] == '\\' {
+        return false
+    }
+    if at > 0 && at + 1 < c.len() && c[at - 1] == '\'' && c[at + 1] == '\'' {
+        return false
+    }
+    return true
 }
 
 fn rs2nika_same(a: ref String, b: ref String) -> bool {
@@ -1615,8 +1640,47 @@ fn rs2nika_bytes(mut ctx: Rs2nikaCtx, given: ref String) -> String {
     return out
 }
 
+/// R66: the build-time decoder is `escapes.nika`'s `decoded`, which takes the
+/// reading of a numbered escape as a function; `ascii_scalar` reads a byte.
+fn rs2nika_decoded(mut ctx: Rs2nikaCtx, given: ref String) -> String {
+    let mut s: String = given.clone()
+    for p in ["crate::build_time::decoded(", "build_time::decoded("] {
+        let c: Vec[scalar] = s.chars().collect()
+        let at = rs2nika_find_from(c, p, 0)
+        if at < 0 {
+            continue
+        }
+        let open = at + p.chars().count() - 1
+        let mut depth = 0
+        let mut close = -1
+        let mut k = open
+        while k < c.len() && close < 0 {
+            if c[k] == '(' {
+                depth = depth + 1
+            } else if c[k] == ')' {
+                depth = depth - 1
+                if depth == 0 {
+                    close = k
+                }
+            }
+            k = k + 1
+        }
+        if close < 0 {
+            continue
+        }
+        let pre = rs2nika_text(c, 0, at)
+        let arg = rs2nika_text(c, open + 1, close)
+        let post = rs2nika_text(c, close + 1, c.len())
+        s = f"{pre}(decoded({arg}) fn(n) {{ ascii_scalar(n) }}){post}"
+        ctx.todo_extra.push("`decoded` with `ascii_scalar`: a numbered escape above ASCII reads as no text")
+        rs2nika_hit(ctx, "R66")
+    }
+    return s
+}
+
 fn rs2nika_expr(mut ctx: Rs2nikaCtx, line: ref String) -> String {
     let mut s: String = rs2nika_bytes(ctx, line)
+    s = rs2nika_decoded(ctx, s)
     for p in ["crate::ast::", "ast::", "crate::types::", "crate::"] {
         if s.contains(p) {
             s = s.replace(p, "")
@@ -2423,12 +2487,38 @@ fn rs2nika_some_pattern(pat: ref String) -> String {
         p = p[6..<p.len()].trim().clone()
         with_none = true
     }
-    if !(p.starts_with("Some(") && p.ends_with(")")) || p.contains("| ") {
+    if !p.starts_with("Some(") {
         return ""
     }
-    let inner: String = p[5..<p.len() - 1].trim().clone()
+    // the `)` that closes `Some(`: a guard (`Some(x) if f(x)`) follows it
+    let c: Vec[scalar] = p.chars().collect()
+    let mut depth = 0
+    let mut close = -1
+    let mut at = 4
+    while at < c.len() && close < 0 {
+        if c[at] == '(' {
+            depth = depth + 1
+        } else if c[at] == ')' {
+            depth = depth - 1
+            if depth == 0 {
+                close = at
+            }
+        }
+        at = at + 1
+    }
+    if close < 0 {
+        return ""
+    }
+    let inner: String = rs2nika_text(c, 5, close).trim().clone()
+    let guard: String = rs2nika_text(c, close + 1, c.len()).trim().clone()
+    if inner.contains("| ") || (guard != "" && (with_none || !guard.starts_with("if "))) {
+        return ""
+    }
     if with_none {
         return f"{inner}|null"
+    }
+    if guard != "" {
+        return f"{inner} {guard}"
     }
     return inner
 }
@@ -2969,7 +3059,16 @@ fn rs2nika_replace_name(text: ref String, from: ref String, to: ref String) -> S
     }
     let mut out: String = ""
     let mut at = 0
+    let mut quoted = false
     while at < c.len() {
+        if rs2nika_quote_at(c, at) {
+            quoted = !quoted
+        }
+        if quoted || c[at] == '"' {
+            out.push(c[at])
+            at = at + 1
+            continue
+        }
         let mut same = at + f.len() <= c.len()
         let mut k = 0
         while same && k < f.len() {

@@ -3,7 +3,8 @@
     }
 
     fn decoded(ref self, world: ref CheckWorld, literal: ref String) -> String? sync {
-        return build_time::decoded(literal)
+        // TODO(rs2nika): `decoded` with `ascii_scalar`: a numbered escape above ASCII reads as no text
+        return (decoded(literal) fn(n) { ascii_scalar(n) })
     }
 
     fn read(ref self, world: ref CheckWorld, path: ref String) -> BtRead sync {
@@ -20,7 +21,8 @@
             // TODO(rs2nika): let-chain (`&& let`): nest `match`es
             // TODO(rs2nika): `Option::map`/`and_then`: `let x = e ?? <none>` then the body
             // TODO(rs2nika): slice pattern: index by position after a `len()` check
-            text_tiers::visit_expr_mut(value, mut |expr: Expr| { if let Expr::Call { func, args, .. } = expr && (match &*func { Expr::Variable(name, _) if parsed.words.resolve(name) == assets::ASSET => true, else => false }) && let [Expr::LitStr { text, .. }] = args && let Some(content) = build_time::decoded(text).and_then(fn(path) { read.get(path) }) { expr = Expr::LitStr { text: build_time::written(content), id: NodeId::fresh() } } }, mut |_, _| {})
+            // TODO(rs2nika): `decoded` with `ascii_scalar`: a numbered escape above ASCII reads as no text
+            text_tiers::visit_expr_mut(value, mut |expr: Expr| { if let Expr::Call { func, args, .. } = expr && (match &*func { Expr::Variable(name, _) if parsed.words.resolve(name) == assets::ASSET => true, else => false }) && let [Expr::LitStr { text, .. }] = args && let Some(content) = (decoded(text) fn(n) { ascii_scalar(n) }).and_then(fn(path) { read.get(path) }) { expr = Expr::LitStr { text: build_time::written(content), id: NodeId::fresh() } } }, mut |_, _| {})
         }
         return value
     }
@@ -40,7 +42,7 @@
         // TODO(rs2nika): `Option::map`/`and_then`: `let x = e ?? <none>` then the body
         // TODO(rs2nika): `match` on `Some`/`None`: `let x = e ?? <none arm>`
         // TODO(rs2nika): iterator adapter with no `Seq` method: a `for` loop
-        let function = stopped.filter(fn(unit, _) { unit != here }).and_then(fn(unit, byte) { let file = files.get(unit)?; file.program.items.iter().find_map(|item| match item.node { Item::Fn { name: Some(name), .. } if (item.span.start..<item.span.end).contains(byte) => { Some(file.text(name).to_string()) } else => null }) })
+        let function = stopped.filter(fn(unit, _) { unit != here }).and_then(fn(unit, byte) { let file = files.get(unit) ?? return null; file.program.items.iter().find_map(fn(item) { match item.node { Item::Fn { name: Some(name), .. } if (item.span.start..<item.span.end).contains(byte) => { Some(file.text(name).to_string()) } else => null } }) })
         // TODO(rs2nika): `is_some_and`/`map_or`: `let x = e ?? <false>` then the test
         return CheckPlace { at: at.map_or(-1, i64::from), function }
     }

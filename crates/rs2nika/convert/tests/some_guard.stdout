@@ -1,0 +1,11 @@
+fn first_word(found: (String, i64)?, text: ref String) -> i64 sync {
+    let given = found ?? return 0
+    return match given {
+        // TODO(rs2nika): `is_some_and`/`map_or`: `let x = e ?? <false>` then the test
+        (head, n) if text.chars().next().is_some_and(char::is_alphanumeric) => {
+            n + head.len()
+        }
+        (_, n) => n,
+    }
+}
+
