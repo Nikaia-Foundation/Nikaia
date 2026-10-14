@@ -6516,6 +6516,41 @@ impl<'p> Emitter<'p> {
             out.push(&name);
             return Ok(());
         }
+        // **A `T?` a test proved not `null` is read as the `T`** (ADR-350):
+        // the test runs before the read on every path, so the unwrap never
+        // fails.
+        if let (Some(how), Expr::Variable(name, _)) = (
+            self.s
+                .facts
+                .narrowed_reads
+                .get(&crate::check::value_node(expr))
+                .copied(),
+            expr,
+        ) {
+            // **Put back into an option, it stays the option it is**: the
+            // wrap the slot asked for is already written, and its `)` follows,
+            // so the read is the option itself, as it was before the test.
+            let copied = how & 1 == 1;
+            let operand = how & 2 == 2;
+            let lent = match copied {
+                true => "Option::as_ref(&",
+                false => "Option::as_deref(&",
+            };
+            for (wrap, instead) in [("Some(&", lent), ("Some(", "std::convert::identity(")] {
+                if !operand && out.buf.ends_with(wrap) {
+                    out.buf.truncate(out.buf.len() - wrap.len());
+                    out.push(instead);
+                    out.push(self.parsed.text(*name));
+                    return Ok(());
+                }
+            }
+            out.push(self.parsed.text(*name));
+            out.push(match copied {
+                true => ".unwrap()",
+                false => ".as_ref().unwrap()",
+            });
+            return Ok(());
+        }
         // **An arm of a choice that goes into a mixed position is wrapped on
         // its own** (ADR-282 D14, `check::Checked::mixed_leaves`, #562): a
         // view and text of its own are two types, and only `EitherText` holds

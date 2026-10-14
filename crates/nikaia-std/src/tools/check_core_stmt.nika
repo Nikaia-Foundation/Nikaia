@@ -700,7 +700,9 @@ pub fn check_core_stmt_while[H: CheckHost](mut state: CheckState, world: ref Che
     state.expect_bool(cond_ty, at, "A `while` loop repeats while a `bool` is `true`.")
     let depth = state.scope.len() as i64
     state.repeats.push(CheckRepeats::a_loop(world.words, depth, body))
-    state.scope.push([])
+    // **The body sees what the condition proves not `null`** (ADR-350 D2).
+    let proved = host.proved_in_a_loop(state, cond)
+    state.scope.push(proved)
     // **The body and not the condition.**
     state.flow.loops += 1
     check_core_block(state, world, host, body)

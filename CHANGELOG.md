@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.932] — 2026-10-14
+
+**check: a test that proves a T? not null makes it a T (ADR-350, #619)**
+- The checker reads a local or parameter as T where a test proves it not null (&&, ||, branch, else, while body, after an early exit); a write after the test takes it back and NK1102 names the assignment. The lowering reads it as x.unwrap() (text: x.as_ref().unwrap()). Structs and lists keep T? below for now. rs2nika writes if let Some(x) = x as if x != null.
+
 ## [0.0.931] — 2026-10-14
 
 **D36: a `?.` reach on `get`, `first` or `last` takes no extra `.as_ref()`**

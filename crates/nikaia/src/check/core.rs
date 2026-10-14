@@ -391,4 +391,12 @@ impl CheckHost for Core<'_, '_> {
     fn a_bound_handle_is_taken(&self, state: &mut CheckState, block: &Block) {
         self.hosted(state, |checker| checker.a_bound_handle_is_taken(block))
     }
+
+    fn proved_in_a_loop(&self, state: &mut CheckState, cond: &Expr) -> Vec<Local> {
+        self.hosted(state, |checker| {
+            let names = super::narrow::proved_names(checker.parsed, cond, true);
+            let frame = checker.s.scope.len();
+            checker.proofs_for(&names, frame)
+        })
+    }
 }

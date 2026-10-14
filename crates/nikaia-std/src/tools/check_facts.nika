@@ -156,6 +156,11 @@ pub struct CheckFacts {
     pub nullable_fields: collections::BTreeMap[(i64, String), FactWrap],
     pub nullable_args: collections::BTreeMap[i64, FactWrap],
     pub narrowing_casts: collections::BTreeMap[i64, FactNarrowing],
+    /// **A read of a `T?` a test proved not `null`** (ADR-350), by the read:
+    /// bit 0 whether the value is copied out (`x.unwrap()`) or lent
+    /// (`x.as_ref().unwrap()`), bit 1 whether it is an operand, which no wrap
+    /// into an option stands directly around.
+    pub narrowed_reads: collections::BTreeMap[i64, i64],
     pub task_handles: collections::BTreeSet[(i64, String)],
     pub method_options: collections::BTreeMap[(i64, String), Vec[(String, String)]],
     pub lent_args: collections::BTreeSet[i64],
@@ -276,6 +281,7 @@ impl CheckFacts {
             nullable_fields: collections::BTreeMap(),
             nullable_args: collections::BTreeMap(),
             narrowing_casts: collections::BTreeMap(),
+            narrowed_reads: collections::BTreeMap(),
             task_handles: collections::BTreeSet(),
             method_options: collections::BTreeMap(),
             lent_args: collections::BTreeSet(),

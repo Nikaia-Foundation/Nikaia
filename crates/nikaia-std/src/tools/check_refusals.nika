@@ -43,9 +43,9 @@ impl CheckState {
     }
 
     /// **`NK1102`: a `T?` as an operand of arithmetic, of an ordering or of a bit
-    /// operator** (Part I 2.3). A `T?` has none of `T`'s operators, and a test
-    /// `x != null` before it does not make `x` a `T`: the operand is read with
-    /// `??` first. The same holds for a name a `match` arm binds over a `T?`
+    /// operator** (Part I 2.3). A `T?` has none of `T`'s operators: the
+    /// operand is read with `??` first, or proved not `null` by a test before
+    /// it (ADR-350). The same holds for a name a `match` arm binds over a `T?`
     /// scrutinee, which is the whole `T?` (Part I 3.4).
     pub fn a_maybe_in_an_operation(ref mut self, op: BinaryOp, left: ref Ty, right: ref Ty, span: ref Span) sync {
         let mut maybe = left.clone()
@@ -56,7 +56,7 @@ impl CheckState {
             maybe = right.clone()
         }
         let symbol = binary_op_text(op)
-        self.findings.push(check_refusal("NK1102", span, f"`{symbol}` is given `{maybe.text()}`, which may be `null`.", ["A `T?` is a type of its own (Part I 2.3) and has none of `T`'s operators; a test `x != null` before the use does not change its type, and neither does a `match` arm's name, which binds the whole `T?`.".clone()], "Say what an absent value counts as first: `(x ?? 0) + 1`, or take the value out once with `let v = x ?? return`.".clone()))
+        self.findings.push(check_refusal("NK1102", span, f"`{symbol}` is given `{maybe.text()}`, which may be `null`.", ["A `T?` is a type of its own (Part I 2.3) and has none of `T`'s operators. It is a `T` only where a test before the use proves it is not `null`, as `x != null && x > 3` does; a `match` arm's name binds the whole `T?`.".clone()], "Say what an absent value counts as first: `(x ?? 0) + 1`, or take the value out once with `let v = x ?? return`.".clone()))
     }
 
     /// **`NK1102`: a `T?` as a hole of an `f"…"`** (Part I 2.3): it has no text

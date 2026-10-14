@@ -1,0 +1,11 @@
+fn big(limit: i64?, other: i64?) -> i64 sync {
+    if limit != null && limit > 3 {
+        return limit + 1
+    }
+    if other != null {
+        let n = other
+        return n * 2
+    }
+    return 0
+}
+

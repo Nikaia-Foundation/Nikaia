@@ -28,6 +28,7 @@
 pub(crate) mod attributes;
 mod core;
 mod host;
+mod narrow;
 use crate::contracts::LedgerOps;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -415,6 +416,10 @@ fn walked<'a>(
         world: &world,
         s: core::Baton::new(s),
         spares: Vec::new(),
+        narrows: BTreeMap::new(),
+        lost_reads: BTreeMap::new(),
+        maybe_reads: BTreeSet::new(),
+        operand_reads: BTreeSet::new(),
     };
     checker.collect_types();
     checker.program();
@@ -927,6 +932,17 @@ struct Checker<'a> {
     world: &'a CheckWorld<'a>,
     /// States with nothing in them, for the crossings into Nikaia (`core.rs`).
     spares: Vec<Box<CheckState>>,
+    /// **The proofs that a `T?` is not `null`** (ADR-350, `narrow.rs`), by
+    /// the marker binding's frame, place and id.
+    narrows: BTreeMap<(usize, usize, i64), narrow::Narrow>,
+    /// Reads whose proof a write took back: the name and where it was written.
+    lost_reads: BTreeMap<i64, (String, i64)>,
+    /// Reads that ask about the `T?` itself, which a proof leaves alone: the
+    /// left of `??`, the receiver of `?.`, a side of `== null`, a `match`'s
+    /// subject.
+    maybe_reads: BTreeSet<i64>,
+    /// Reads that are an operand or a receiver: no wrap stands around them.
+    operand_reads: BTreeSet<i64>,
     /// What each callee has **newly** gained since the committed ledger
     /// ([ADR-308](../../docs/specification/adr/adr-308.md) D11). Empty where
     /// there is nothing to compare, which says nothing.
@@ -2702,6 +2718,7 @@ impl<'a> Checker<'a> {
 
     fn expr(&mut self, expr: &Expr, span: &Span) -> Ty {
         self.s.flow.reached = self.s.flow.reaching.take();
+        self.reads_of_the_maybe(expr);
         let said_before = self.s.flow.unknown_said;
         let ty = self.value_of(expr, span);
         let said_inside = self.s.flow.unknown_said > said_before;
@@ -2880,7 +2897,7 @@ impl<'a> Checker<'a> {
                     Some(ty) => {
                         self.a_read(expr, name.to_string(), span);
                         self.s.a_sequence_is_taken(name, &ty, span);
-                        ty
+                        self.read_as_proved(expr, name, ty, span)
                     }
                     // **`assert` is called** (ADR-269 D2): the statement
                     // form Part III 14.1 used to write, `assert c`, is the
@@ -3123,7 +3140,9 @@ impl<'a> Checker<'a> {
                 self.s.flow.next_choice += 1;
                 self.s.branch.push((choice, 0));
                 let from = self.s.taken_so_far();
-                let then = self.block(then_branch);
+                let proved_then = narrow::proved_names(self.parsed, cond, true);
+                let proved_else = narrow::proved_names(self.parsed, cond, false);
+                let then = self.with_proved(&proved_then, |this| this.block(then_branch));
                 // **A `continue` or a `break` leaves the turn as a `return`
                 // leaves the function**: what the branch took is not read
                 // after it on any path (found moving `types` into Nikaia,
@@ -3137,7 +3156,7 @@ impl<'a> Checker<'a> {
                     Some(otherwise) => {
                         self.s.branch.push((choice, 1));
                         let from = self.s.taken_so_far();
-                        let other = self.block(otherwise);
+                        let other = self.with_proved(&proved_else, |this| this.block(otherwise));
                         let leaves = self.s.block_exits(self.world, otherwise)
                             || self.s.block_leaves(self.world, otherwise);
                         self.s.a_branch_that_leaves(from, leaves, span);
@@ -3189,6 +3208,21 @@ impl<'a> Checker<'a> {
                     None => Ty::Unknown,
                 };
                 self.s.stamped_condition = outer_condition;
+                // **An early exit proves the rest of the block** (ADR-350 D3):
+                // after `if x == null { return }` the block goes on only where
+                // `x` was not `null`.
+                let leaves = |this: &Self, block: &Block| {
+                    this.s.block_exits(this.world, block) || this.s.block_leaves(this.world, block)
+                };
+                let then_leaves = leaves(self, then_branch);
+                let else_leaves = else_branch
+                    .as_ref()
+                    .is_some_and(|other| leaves(self, other));
+                if then_leaves && !else_leaves {
+                    self.proved_from_here(&proved_else);
+                } else if else_leaves && !then_leaves {
+                    self.proved_from_here(&proved_then);
+                }
                 branches
             }
 
@@ -3711,7 +3745,15 @@ impl<'a> Checker<'a> {
                 self.s.flow.reaching = reach.clone();
                 let left = self.expr(lhs, span);
                 self.s.flow.reaching = reach.clone();
-                let right = self.expr(rhs, span);
+                // **The right of `&&` runs where the left held, and the right
+                // of `||` where it did not** (ADR-350 D2).
+                let right = match op {
+                    BinaryOp::And | BinaryOp::Or => {
+                        let names = narrow::proved_names(self.parsed, lhs, *op == BinaryOp::And);
+                        self.with_proved(&names, |this| this.expr(rhs, span))
+                    }
+                    _ => self.expr(rhs, span),
+                };
                 // **A `'…'` beside a byte is a byte** (ADR-320, Part I 2.6):
                 // `b[0] == 'a'` compares two `u8`s, as `x == 7` beside an
                 // `i32` compares two `i32`s.
@@ -3743,7 +3785,9 @@ impl<'a> Checker<'a> {
                     op,
                     BinaryOp::Eq | BinaryOp::Ne | BinaryOp::And | BinaryOp::Or
                 ) {
+                    let before = self.s.findings.len();
                     self.s.a_maybe_in_an_operation(*op, &left, &right, at);
+                    self.a_proof_taken_back([lhs, rhs], before);
                 }
                 // **A bit operator beside a comparison is parenthesised**
                 // ([ADR-285](../../docs/specification/adr/adr-285.md) D10).

@@ -1501,13 +1501,13 @@ fn none_is_answered_with_null() {
 }
 
 /// **A `T?` has no operator but `==` and `!=`, and no text of its own** (Part I
-/// 2.3, #586): `o + 1` after `if o != null`, a guard `n if n > 3` over an
+/// 2.3, #586): `o + 1` where `o == null` held (ADR-350), a guard `n if n > 3` over an
 /// `i64?` scrutinee (the name binds the whole `T?`, Part I 3.4) and `f"{o}"`
 /// passed the checker and reached rustc. Each is `NK1102`; `??` is the way out.
 #[test]
 fn a_maybe_is_refused_as_an_operand_and_as_a_hole() {
     let refused = [
-        "fn main() {\n    let o: i64? = 3\n    if o != null { print(o + 1) }\n}\n",
+        "fn main() {\n    let o: i64? = 3\n    if o == null { print(o + 1) }\n}\n",
         "fn f(x: i64?) -> String {\n    return match x {\n        n if n > 3 => \"big\".clone(),\n        else => \"small\".clone(),\n    }\n}\nfn main() { print(f(5)) }\n",
         "fn main() {\n    let o: i64? = 3\n    println(f\"{o}\")\n}\n",
     ];
@@ -1565,5 +1565,106 @@ fn a_nullable_tuple_is_refused_naming_the_way_out() {
     assert!(
         text.contains("struct") && text.contains("(A?, B?)"),
         "{text}"
+    );
+}
+
+/// **What a test proves not `null`, the compiler uses** (ADR-350, #619): the
+/// right of `&&`, the right of `||` over `== null`, the branch, the `else`, the
+/// rest of a block after an early exit, a `while` body, a nested condition,
+/// and a `String?` used as text. Each runs and prints what it computed.
+#[test]
+fn a_test_that_proves_not_null_makes_a_t() {
+    let source = r#"fn above(x: i64?) -> bool {
+    return x != null && x > 3
+}
+fn absent_or_big(x: i64?) -> bool {
+    return x == null || x > 3
+}
+fn twice(x: i64?) -> i64 {
+    if x == null {
+        return 0
+    } else {
+        return x * 2
+    }
+}
+fn early(x: i64?) -> i64 {
+    if x == null { return -1 }
+    let y = x + 1
+    return y * 10
+}
+fn nested(a: i64?, b: i64?) -> i64 {
+    if a != null {
+        if b != null && b > a {
+            return b - a
+        }
+        return a
+    }
+    return 0
+}
+fn shout(s: String?) -> String {
+    if s != null && s.len() > 0 {
+        return f"{s}!"
+    }
+    return "-".clone()
+}
+fn count_down(start: i64?) -> i64 {
+    let mut x = start
+    let mut steps = 0
+    while x != null {
+        if x > 0 { x = x - 1 } else { x = null }
+        steps += 1
+    }
+    return steps
+}
+fn keep(x: i64?) -> i64? {
+    if x != null && x > 0 { return x }
+    return null
+}
+fn main() {
+    println(f"{above(5)} {above(2)} {above(null)}")
+    println(f"{absent_or_big(null)} {absent_or_big(1)} {absent_or_big(9)}")
+    println(f"{twice(4)} {twice(null)} {early(2)} {early(null)}")
+    println(f"{nested(2, 5)} {nested(2, 1)} {nested(null, 1)}")
+    let t: String? = "hi".clone()
+    println(f"{shout(t)} {shout(null)}")
+    println(f"{count_down(3)} {count_down(null)} {keep(4) ?? 0}")
+}
+"#;
+    assert_eq!(
+        ran("narrowed", source),
+        "true false false\ntrue false true\n8 0 30 -1\n3 2 0\nhi! -\n4 0 4\n"
+    );
+}
+
+/// **Where nothing proves it, the `T?` stays** (ADR-350 D2, D3): `||` over a
+/// test that is not about `null`, the `else` of `!= null`, and a name
+/// assigned after the test, whose refusal names the assignment.
+#[test]
+fn a_maybe_stays_where_nothing_proves_it() {
+    let refused = [
+        "fn f(x: i64?, c: bool) -> bool {\n    return c || x > 3\n}\nfn main() { print(f(1, true)) }\n",
+        "fn f(x: i64?) -> i64 {\n    if x != null { return 1 } else { return x + 1 }\n}\nfn main() { print(f(1)) }\n",
+        "fn f(x: i64?) -> i64 {\n    if x != null && x > 1 { return 1 }\n    return x + 1\n}\nfn main() { print(f(1)) }\n",
+    ];
+    for source in refused {
+        let found = findings(source);
+        assert!(
+            found.iter().any(|f| f.code == "NK1102"),
+            "{source}\n{:?}",
+            found.iter().map(|f| &f.message).collect::<Vec<_>>()
+        );
+    }
+    let reassigned = "fn other() -> i64? { return null }\nfn f(start: i64?) -> i64 {\n    let mut x = start\n    if x == null { return 0 }\n    x = other()\n    return x + 1\n}\nfn main() { print(f(1)) }\n";
+    let found = findings(reassigned);
+    let refusal = found
+        .iter()
+        .find(|f| f.code == "NK1102")
+        .unwrap_or_else(|| panic!("{found:#?}"));
+    assert!(
+        refusal
+            .notes
+            .iter()
+            .any(|n| n.contains("assigned after the test")),
+        "{refusal:#?}"
     );
 }

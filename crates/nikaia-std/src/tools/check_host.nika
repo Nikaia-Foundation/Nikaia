@@ -103,6 +103,9 @@ pub trait CheckHost {
     /// **`NK2109`: a bound handle is used up before it leaves its scope**
     /// (ADR-346 D3, U-c7): the spawn work's (#605), which stays Rust.
     fn a_bound_handle_is_taken(ref self, mut state: CheckState, block: ref Block) sync
+    /// **What a `while` condition proves not `null` in the body** (ADR-350
+    /// D2): the marker bindings of the body's first frame.
+    fn proved_in_a_loop(ref self, mut state: CheckState, cond: ref Expr) -> Vec[CheckLocal] sync
     /// The value as the author wrote it, where this compiler can say so: a
     /// literal, a name, a negation, and an ellipsis for the rest. A query that
     /// stays Rust until `written` moves (C-5e): the text of a string literal is

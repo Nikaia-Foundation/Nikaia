@@ -70,7 +70,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R20  `.unwrap_or(d)` / `.unwrap_or_else(|| d)` -> `?? d`; `.cloned()` -> `?.clone()`; `.copied()` dropped",
         "R21  `.is_some()` -> `!= null`, `.is_none()` -> `== null`",
         "R22  `let Some(x) = e else { return y };` -> `let x = e ?? return y` (also continue/break)",
-        "R23  `if let Some(x) = e {` -> `if e != null {` + `let x = e ?? panic(..)`",
+        "R23  `if let Some(x) = x [&& g] {` -> `if x != null [&& g] {` (ADR-350); over another name + `let x = e`; else + `let x = e ?? panic(..)`",
         "R24  `if let P = e {` ... `} else {` ... `}` -> `match e { P => {..}, else => {..} }` (single let, optional `&& guard`)",
         "R25  `for x in &xs` / `xs.iter()` -> `for x in xs`",
         "R26  closures `|x| e` -> `fn(x) { e }`; `.any`/`.all`/`.find` pass through (`Seq`), a function name `.any(f)` -> `.any(fn(x) { f(x) })`",
@@ -3465,6 +3465,23 @@ fn rs2nika_if_let(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String] {
         ctx.stack_ind.push(ind.clone())
         ctx.stack_kind.push("if")
         return [f"{ind}{p}if {v} != null {{"]
+    }
+    // **A test that proves the option not `null` makes it a `T`** (ADR-350):
+    // over a plain name the binding is the name itself.
+    let plain = rs2nika_is_path(value) && !value.contains(".") && !value.contains(":") && !value.contains("(")
+    if name != "" && plain && (name == value || guard == "") {
+        let v = rs2nika_expr(ctx, value)
+        rs2nika_hit(ctx, "R23")
+        ctx.stack_ind.push(ind.clone())
+        ctx.stack_kind.push("if")
+        if name == value {
+            if guard == "" {
+                return [f"{ind}{p}if {v} != null {{"]
+            }
+            let ge = rs2nika_expr(ctx, guard)
+            return [f"{ind}{p}if {v} != null && {ge} {{"]
+        }
+        return [f"{ind}{p}if {v} != null {{", f"{ind}    let {name} = {v}"]
     }
     if name != "" && guard == "" {
         let v = rs2nika_expr(ctx, value)
