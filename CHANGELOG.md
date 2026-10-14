@@ -8,6 +8,10 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.957] — 2026-10-14
+
+**std ledger: Restart::decide keeps its history**
+
 ## [0.0.956] — 2026-10-14
 
 **a function value's set meets what reaches it: `mut` names, push, field assignment and `with` carry the union (ADR-351 D3, part of #620)**
