@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.933 (Draft)
+**Version:** 0.0.934 (Draft)
 **Date:** 2026-10-14
 
 ---
@@ -2395,16 +2395,15 @@ of `seq`, and the result points into `seq` and nothing else. The same holds for
 a struct literal handed back: `fn make(name: ref String) -> Reading` returns a
 `Reading` that points into `name`.
 
-**A result points into one parameter at most, and the body says which.** Every
-way out of the body - a `return`, the last expression - is followed back to the
-parameters whose views reach what it hands back: the receiver, a parameter
-written `ref`, and a parameter lowered as a view (6.5). A literal, a buffer the
-body made and a copy reach none. Where the ways out reach one parameter, the
-result points into it and nothing else: a caller keeps that argument, unchanged,
-while it uses the result, and every other argument is free when the call
-returns. Where they reach none, the result points into nothing a caller passed.
-Where they reach two - two ways out, one value that may be a view of either, or
-one value holding views of both - the function is refused with `NK2302`:
+**A result points where the body says, view by view.** Every way out of the
+body - a `return`, the last expression - is followed back to the parameters
+whose views reach what it hands back: the receiver, a parameter written `ref`,
+and a parameter lowered as a view (6.5). A literal, a buffer the body made and
+a copy reach none. Each view the result holds - the result itself, or each view
+in a field, an element or a variant's value - points into the parameters that
+reach it, and only those. Where the body chooses at run time, by two ways out
+or one value given either, the view points into each of them. Where no
+parameter reaches it, it points into nothing a caller passed.
 
 ```nika
 impl Checker {
@@ -2413,19 +2412,53 @@ impl Checker {
     }
 }
 
+struct Pair { left: ref String, right: ref String }
+
+fn pair(a: ref String, b: ref String) -> Pair {
+    return Pair { left: a, right: b }   // `left` points into `a`, `right` into `b`
+}
+
 fn longest(a: ref String, b: ref String) -> ref String {
     if a.len() >= b.len() {
         return a
     }
-    return b                            // NK2302: `a` here, `b` there
+    return b                            // points into `a` or `b`
 }
 ```
 
-The ledger (6.7) writes the answer, `-> ref(world) String`. A trait's method
-and a function type have no body: their result points into the receiver, or
-else into the one parameter that is a view, and one with no receiver and two
-views whose result holds a view is refused with `NK2302`. A method implementing
-a trait hands back views of what the trait's declaration names.
+Every argument no view of the result points into is free when the call
+returns. The ledger (6.7) writes each view's sources: `-> ref(world) String`,
+`-> ref(a | b) String`, and for a value holding views each by its path,
+`left: ref(a), right: ref(b)`. A trait's method and a function type have no
+body: their result points into the receiver, or else into every parameter that
+is a view. A method implementing a trait hands back views of what the trait's
+declaration names.
+
+**While a view is used, the data it may point into stays as it was.** Giving
+an argument up is not changing it: a caller may assign its variable a new
+value, move it, or leave its scope while a view of it is still used, and the
+old buffer moves into the keep of whatever holds the view, to be freed with
+the last such view. Nothing is copied:
+
+```nika
+let mut y = "short".clone()
+let r = longest(x, y)
+y = "replaced".clone()      // the old text of `y` lives on while `r` is used
+println(r)
+```
+
+**Changing that data in place while the view is still used is refused** with
+`NK2305`, at the change: a method that changes the value, or an assignment to a
+part of it. The message names the view, the call that made it and the way out
+of the callee that may hand back that argument. Use the view before the
+change, or take a copy of it with `.clone()` before the change:
+
+```nika
+let mut y = "short".clone()
+let r = longest(x, y)
+y.push_str("er")            // NK2305: `r` may point into `y` (`longest`: `return b`)
+println(r)
+```
 
 Where the destination **already carries a buffer**, there is nothing to refuse.
 A method of a struct that holds a view has that struct's buffer in hand, so

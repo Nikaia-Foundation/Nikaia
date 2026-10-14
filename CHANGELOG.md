@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.934] — 2026-10-14
+
+**spec: a result's views point where the body says; a viewed buffer outlives its owner's name (ADR-353, #614)**
+- The owner's decision on #614, reopening ADR-283 D25 and this morning's one-lifetime rule: each view a result holds points into the parameters that reach it (per view, not per value); a run-time choice points into their union, and no function is refused for it. A caller may assign, move or leave an argument while a view of it is used: the old buffer moves into the keep of what holds the view, with no copy. Changing that data in place while the view is still used is `NK2305`, at the change. The ledger writes each view's sources (`-> ref(a | b) String`, `returns = "left: ref(a), right: ref(b)"`). Part I 6.6, Part III 13.5 and C.3. Not built yet.
+
 ## [0.0.933] — 2026-10-14
 
 **`null` is a pattern in a `match` over a `T?` (ADR-352)**

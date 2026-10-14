@@ -229,6 +229,7 @@ implementation.
 
 | ADR | Decides | Status | Built |
 | :--- | :--- | :--- | :--- |
+| [353](adr-353.md) | Each view a result holds points into the parameters that reach it, a run-time choice into their union; no function is refused for it; a caller may give an argument up while a view of it lives (the buffer moves to the keep); a change in place of viewed data is `NK2305` at the change; the ledger writes each view's sources | Accepted | no |
 | [288](adr-288.md) | `sync` means a function never pauses: it is inferred from the body, decided by a lambda where one runs, and promised across packages only where written. | Accepted | yes |
 | [020](adr-020.md) | The ledger records what the compiler knows, and a library brings its own. | Accepted | yes |
 | [100](adr-100.md) | A consumer reads a dependency's ledger and derives it only where its source hashes do not match, and the inference graph is the package. | Accepted | yes |
@@ -268,6 +269,7 @@ either finds the other. Records replaced as a whole are not here: they are in
 
 | Changed | By | What holds now |
 | :--- | :--- | :--- |
+| [283](adr-283.md) D25 | [353](adr-353.md) D1-D4 | a result may point into several parameters, view by view; giving an argument up while viewed is allowed; a change in place is `NK2305` |
 | [346](adr-346.md) D7 | [351](adr-351.md) D5 | a supervisor throws a child's fatal error itself; no `supervisor::Handed` |
 | [343](adr-343.md) D1-D3 | [345](adr-345.md) D3-D5 | `exit` throws the fatal `process::Exit`; no `exits` column, no `NK2607` |
 | [296](adr-296.md) D25 | [299](adr-299.md) D21 | the author may mark one entry `main`; the compiler still picks none |
