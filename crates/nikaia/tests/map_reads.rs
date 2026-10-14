@@ -365,6 +365,32 @@ fn main() {
     );
 }
 
+/// …and so is one a `let` binds to a type it declares, which owns its value.
+#[test]
+fn a_read_past_a_jump_bound_to_a_declared_type_is_refused() {
+    let source = "\
+use std::collections
+struct Named {
+    name: String,
+}
+fn pick(all: ref collections::BTreeMap[String, Named], key: ref String) -> i64 {
+    let chosen: Named = all.get(key) ?? return -1
+    return chosen.name.len()
+}
+fn main() {
+    let all: collections::BTreeMap[String, Named] = collections::BTreeMap()
+    println(f\"{pick(all, \"a\")}\")
+}
+";
+    let found = findings(source);
+    assert_eq!(found.len(), 1, "{found:#?}");
+    assert_eq!(found[0].code, "NK1102");
+    assert!(
+        found[0].message.contains("a map's read is a view"),
+        "{found:#?}"
+    );
+}
+
 /// **An empty map's first write gives it its key and value types** (#543),
 /// as a list's first `push` gives it its element type (ADR-135 D2): by
 /// `insert` and by a write through the brackets, and a read of it is the value

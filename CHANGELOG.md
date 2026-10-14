@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.960] — 2026-10-14
+
+**a map's read past a jump, bound by a let to a declared owned type, is refused or copied out (ADR-293 D15)**
+- `let x: T = m.get(k) ?? return ..` was accepted and lowered to a `&T` where `T` was declared; it now gets the assignment's rule: a value that copies is copied out, another is `NK1102` with `?.clone()` to write.
+
 ## [0.0.959] — 2026-10-14
 
 **check: what a test proves not null in Nikaia (C-7 U-d0, #125, #558)**

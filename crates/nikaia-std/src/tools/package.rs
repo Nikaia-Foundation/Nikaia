@@ -17899,6 +17899,11 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     if code_place { state.stored_frames.push(CheckStoredCode::empty()); }
     let found = check_core_expr(state, world, host, value, span);
     state.flow.lambda_expected = None;
+    if ty.is_some() && names.len() == 1 && shape.is_empty() {
+        let t: &Type = match ty { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_unit() };
+        let declared = written_ty(world.words, world.here.aliases, t);
+        state.a_map_read_assigned(world, &declared, value, span);
+    }
     if code_place && !check_core_stmt_holds_code(&found) { state.stored_frames.pop(); } else if code_place {
         let current: String = nikaia_std::index::or(match state.current.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),

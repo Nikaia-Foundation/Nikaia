@@ -294,6 +294,13 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
     }
     let found = check_core_expr(state, world, host, value, span)
     state.flow.lambda_expected = null
+    // **A map's read past a jump, bound to a declared type that owns its
+    // value** (ADR-293 D15): refused or copied out as an assignment's is.
+    if ty != null && names.len() == 1 && shape.len() == 0 {
+        let t: ref Type = ty ?? return check_core_stmt_unit()
+        let declared = written_ty(world.words, world.here.aliases, t)
+        state.a_map_read_assigned(world, declared, value, span)
+    }
     if code_place && !check_core_stmt_holds_code(found) {
         state.stored_frames.pop()
     } else if code_place {
