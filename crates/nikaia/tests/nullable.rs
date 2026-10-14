@@ -1550,3 +1550,20 @@ fn a_lambdas_arm_beside_a_null_is_wrapped() {
     assert!(findings(source).is_empty(), "{:?}", findings(source));
     assert_eq!(ran("lambda-arm-beside-null", source), "2 1 2\n");
 }
+
+/// `(A, B)?` is not written (Part I 2.3): refused with `NK1254`, which names
+/// a struct and `(A?, B?)`, not a parse error at the `?`.
+#[test]
+fn a_nullable_tuple_is_refused_naming_the_way_out() {
+    let found =
+        findings("fn pair(n: i64) -> (i64, i64)? {\n    return null\n}\n\nfn main() {\n}\n");
+    let refusal = found
+        .iter()
+        .find(|f| f.code == "NK1254")
+        .unwrap_or_else(|| panic!("{found:#?}"));
+    let text = format!("{refusal:?}");
+    assert!(
+        text.contains("struct") && text.contains("(A?, B?)"),
+        "{text}"
+    );
+}

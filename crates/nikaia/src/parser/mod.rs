@@ -1776,16 +1776,16 @@ grammar! {
           // `(A, B)`. The parts go where a named type's arguments go, so
           // everything that walks a type's arguments walks a tuple's parts.
           //
-          // **No `?` here**, and that is Part I 2.3's own scope: `(A, B)?` is
-          // not in the specification, and a form the emitter would have to
-          // invent a lowering for is worse unwritten than written wrong.
-          | "(" parts:type_refs ")" -> {
+          // **`(A, B)?` parses and the checker refuses it** (`NK1254`): Part I
+          // 2.3 does not write it, and the refusal says so in words rather
+          // than as a parse error at the `?`.
+          | "(" parts:type_refs ")" nullable:question? -> {
                 Type {
                     name: _state.intern("tuple"),
                     generics: parts,
                     is_view: false,
                     is_tuple: true,
-                    is_nullable: false,
+                    is_nullable: nullable.is_some(),
                     code: Box::new(None),
                     count: None,
                     is_mut: false,

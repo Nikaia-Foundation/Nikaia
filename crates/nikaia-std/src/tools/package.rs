@@ -50864,6 +50864,10 @@ fn written_at_the_boundary(names: &winnow_grammar::InternerContext, ty: &Type, k
         out.push(refusal("NK1158", span.clone(), String::from("`ref mut` can only be used when talking to C."), vec![String::from("`ref mut` is only for `extern \"C\"` declarations. Everywhere else, Nikaia has its own way to say it.")], String::from("Put `mut` in front of the name instead: `fn fill(mut out: Vec[i64])`.")));
         return;
     }
+    if ty.is_tuple && ty.is_nullable {
+        out.push(refusal("NK1254", span.clone(), String::from("A tuple cannot be nullable: `(A, B)?` is not written."), vec![String::from("The `?` makes a named type nullable (Part I 2.3); a tuple type has no `?`.")], String::from("Declare a struct for the parts and write `Name?`, or make the parts nullable: `(A?, B?)`.")));
+        return;
+    }
     let name = names.resolve(ty.name).to_owned();
     if name == "char" {
         out.push(refusal("NK1135", span.clone(), String::from("There's no type called `char`."), vec![String::from("One Unicode character is a `scalar`, and one byte of text is a `u8`: which of the two a character is depends on how the text is read (Part I 2.6).")], String::from("Write `scalar` for a character, or `u8` for a byte.")));

@@ -20,7 +20,7 @@ finds two D8 casts in `check_numbers4.nika`.
 | D2 | `m.get(k)?.clone() ?? d` clones a reference | verified | d02_get_clone.nika |
 | D3 | `set.insert(..)` as an arm value: `bool` against `()` | verified | d03_insert_tail.nika |
 | D4 | a `for` over `Vec[Symbol]` yields `ref Symbol` | verified (as a checker type) | probe_symkey.nika |
-| D5 | `(A, B)?` does not parse | by design; message does not name the way out | d05_tuple_opt.nika |
+| D5 | `(A, B)?` does not parse | **built** (0.0.913: refused, `NK1254`, naming a struct or `(A?, B?)`) | nullable.rs |
 | D6 | `HashSet`/`HashMap` fields lower to `TrustedSet`/`TrustedMap` | verified: the type follows each file's own trust analysis; decided in ADR-010 D9, build #581 | probe_hash.nika |
 | D7 | `x.len() as i64` writes `(x.len() as i64) as i64` | **built** (0.0.871: the cast is written once) | expressions.rs |
 | D8 | `get(x.span.start as i64)` lowers to `&x.span.start as i64` | **built** (0.0.871: `&(x as i64)`) | expressions.rs |
@@ -122,6 +122,8 @@ Workaround: `n.clone()` (a copy of the handle).
 2. A loop variable over a `ref Vec[T]` with `T` a copy type (ledger `copies`) has type `T`.
 
 ## D5. `(A, B)?` does not parse: by design, but the message does not name the way out
+
+Built (0.0.913): the checker refuses it with `NK1254`, naming a struct and `Name?` or `(A?, B?)` (`types.nika`, test in `nullable.rs`).
 
 ### Today
 `fn pair(n: i64) -> (i64, i64)? sync` is refused with `Expected { here, but found ?`. Part I 2.3 says `(A, B)?` is not written (ADR-278 D1), so the refusal is the rule. Only the message is short of it.
@@ -275,7 +277,8 @@ call of a named function does (`views_kept.rs`).
 
 Rust's `Held::Precondition(..)` has no Nikaia spelling: the parser stops at
 the `..` and a draft must name every field with `_`, which a converter cannot
-know without the type. Found with rs2nika (#579, `claims_report`). Not decided here.
+know without the type. Found with rs2nika (#579, `claims_report`). Not decided here;
+the question is [#610](https://github.com/Nikaia-Foundation/Nikaia/issues/610).
 
 ## D28 (new, small). An owned `String` passed to `contains`: **built** (0.0.895)
 
@@ -333,7 +336,9 @@ whose arm is `map.insert(k, v)` (an `Option`) lowers the arm without `;`, so
 the arms disagree with `_ => { }`. Workaround: the test inline, and a block
 arm. Met in U-c1 (`check_core_leaves.nika`).
 
-## D35 (new). A field option of a `get(..) ??` local moves out of the reference: **open**
+## D35 (new). A field option of a `get(..) ??` local moves out of the reference: **built** (0.0.913)
+
+Built: a local bound from `get(..) ??` past a jump counts as lent, so `c.f ?? return` opens the field (`.as_ref()` / `.as_deref()`) as over a `ref` parameter (`check/mod.rs`, test in `views_kept.rs`).
 
 `let c = map.get(k) ?? return x` then `let s = c.signature ?? return x` lowers
 the second to `match c.signature { Some(v) => v, .. }`: E0507, *cannot move
@@ -341,3 +346,11 @@ out of `c.signature` behind a shared reference*. The same read on a `ref`
 parameter lends (`match &c.signature`), so the lowering does not know that a
 local bound from `get(..) ??` is a reference. Workaround: a helper function
 over `ref T`. Met in U-c2 (`check_core_comptime.nika`).
+
+## Language questions filed as issues
+
+Forms met here that need a decision, not a lowering fix; the issue holds the case.
+* Nested tuple patterns in a `for` head, `for (a, (b, c)) in xs`: [#611](https://github.com/Nikaia-Foundation/Nikaia/issues/611).
+* `null` as a pattern in a `match` over a `T?`: [#612](https://github.com/Nikaia-Foundation/Nikaia/issues/612).
+* An element read from a borrowed list as a view, `let y: ref Expr = given[0]`: [#613](https://github.com/Nikaia-Foundation/Nikaia/issues/613).
+* A result that views one of two `ref` parameters (`NK2302`, the `p/` probes above): [#614](https://github.com/Nikaia-Foundation/Nikaia/issues/614).

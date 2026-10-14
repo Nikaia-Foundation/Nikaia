@@ -7291,7 +7291,10 @@ impl<'a> Checker<'a> {
                     && self
                         .s
                         .rooted_at(self.world, value)
-                        .is_some_and(|root| self.s.lent_here(&root));
+                        // **So is a local `get` handed back past a jump** (D35).
+                        .is_some_and(|root| {
+                            self.s.lent_here(&root) || self.got_past_a_jump.contains(&root)
+                        });
                 if lent_and_jumps {
                     let text = matches!(&left, Ty::Nullable(inner)
                         if matches!(inner.as_ref(), Ty::Named { name, args, view: false }

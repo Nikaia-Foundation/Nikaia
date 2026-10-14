@@ -161,3 +161,24 @@ fn reads_past_a_jump_and_found_text_run() {
         "a 1\nx\no\ntrue\nbc none\n"
     );
 }
+
+/// D35: a field option of a local `get` handed back past a jump is opened as
+/// over a `ref` parameter, not moved out of the reference (E0507).
+#[test]
+fn a_field_of_a_get_local_past_a_jump_runs() {
+    let dir = common::scratch_dir("get-local-field");
+    std::fs::write(dir.join("main.nika"), "use std::collections\n\nstruct C {\n    signature: String?,\n    n: i64?,\n}\n\nfn f(m: ref collections::HashMap[String, C], k: ref String) -> i64 {\n    let c = m.get(k) ?? return 0\n    let s = c.signature ?? return 1\n    let n = c.n ?? return 2\n    return s.len() + n\n}\n\nfn main() {\n    let mut m: collections::HashMap[String, C] = collections::HashMap()\n    m.insert(\"a\", C { signature: \"xyz\", n: 4 })\n    m.insert(\"b\", C { signature: null, n: 4 })\n    println(f\"{f(m, \"a\")} {f(m, \"b\")} {f(m, \"c\")}\")\n}\n").expect("the source");
+    let run = std::process::Command::new(env!("CARGO_BIN_EXE_nikaia"))
+        .current_dir(&dir)
+        .arg("run")
+        .arg("main.nika")
+        .output()
+        .expect("the nikaia binary runs");
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(
+        run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&run.stdout), "7 1 0\n");
+}

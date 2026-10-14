@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.913] — 2026-10-14
+
+**lowering: a field option of a get local past a jump (D35); `(A, B)?` refused with NK1254 (D5)**
+- D35: `let c = m.get(k) ?? return` then `c.f ?? return` opens the field (`.as_ref()`/`.as_deref()`) instead of moving out of the reference (E0507).
+- D5: `(A, B)?` parses and is refused with `NK1254`, naming a struct and `Name?` or `(A?, B?)` (Part I 2.3, Part III code table).
+
 ## [0.0.912] — 2026-10-14
 
 **check: a call's arguments, a door over several locks, a list literal and a called field in Nikaia (U-c3, #125, #558)**
