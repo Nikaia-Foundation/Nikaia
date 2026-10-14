@@ -2070,11 +2070,24 @@ fn newly(root: &Path, inferred: &Ledger) -> check::Newly {
         .iter()
         .filter_map(|(name, contract)| {
             let before = committed.functions.get(name)?;
+            // **A parameter's code newly reaching the set is a member gained
+            // too** (ADR-351 D4, Consequences): what such a function throws
+            // now depends on what its callers hand it.
+            let anything_before =
+                before.throws_from.is_empty() && before.fails_with.iter().any(|e| e == "?");
             let gained: Vec<String> = contract
                 .fails_with
                 .iter()
                 .filter(|error| !before.fails_with.contains(error))
+                .filter(|error| contract.throws_from.is_empty() || *error != "?")
                 .cloned()
+                .chain(
+                    contract
+                        .throws_from
+                        .iter()
+                        .filter(|p| !anything_before && !before.throws_from.contains(p))
+                        .map(|p| format!("from({p})")),
+                )
                 .collect();
             (!gained.is_empty()).then(|| (name.clone(), gained))
         })

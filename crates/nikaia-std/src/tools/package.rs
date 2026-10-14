@@ -13197,6 +13197,50 @@ fn check_core_call_takes_code(callee: Option<&FnContract>) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+fn check_core_call_from_given<H: CheckHost>(state: &CheckState, world: &CheckWorld<'_>, host: &H, contract: &FnContract, args: &[Expr]) -> FnContract {
+    let mut given = contract.clone();
+    if contract.throws_from.is_empty() { return given; }
+    let signature: &Signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return given };
+    let mut set: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for error in contract.fails_with.iter() { if error != "?" { set.insert(error.to_owned()); } }
+    let mut i: i64 = -1;
+    for (param, _) in signature.params.iter() {
+        i += 1;
+        if !check_core_call_listed(&contract.throws_from, param) { continue; }
+        if i >= args.len() as i64 {
+            set.insert("?".to_owned());
+            continue;
+        }
+        let mut stored = CheckStoredCode::empty();
+        check_core_places_code_into(state, world, host, nikaia_std::index::get(&args, nikaia_std::index::at(i)), &mut stored);
+        if stored.unresolved { set.insert("?".to_owned()); }
+        for name in stored.free.iter() { check_core_call_set_into(world, name, &mut set); }
+        for name in stored.resolved.iter() { check_core_call_set_into(world, name, &mut set); }
+    }
+    let mut errors: Vec<String> = vec![];
+    for error in set.iter() { errors.push(error.to_owned()); }
+    given.fails_with = errors;
+    given.throws_from = vec![];
+    given
+}
+
+fn check_core_call_listed(names: &[String], name: &str) -> bool {
+    for each in names.iter() { if each == name { return true; } }
+    false
+}
+
+fn check_core_call_set_into(world: &CheckWorld<'_>, name: &str, set: &mut collections::BTreeSet<String>) {
+    if world.own.functions.contains_key(name) {
+        let own = match *nikaia_std::index::get(&world.own.functions, name) { Some(__nikaia_value) => __nikaia_value, None => return };
+        for error in own.fails_with.iter() { set.insert(error.to_owned()); }
+        return;
+    }
+    let contract = match *nikaia_std::index::get(&world.library.functions, name) { Some(__nikaia_value) => __nikaia_value, None => return };
+    for error in contract.fails_with.iter() { set.insert(error.to_owned()); }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 fn check_core_call_feed_params<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, key: &str, contract: &FnContract, args: &[Expr], frame: &CheckStoredCode) {
     let signature: &Signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
     let mut i: i64 = -1;
@@ -13293,7 +13337,8 @@ fn check_core_call_unresolved<H: CheckHost>(state: &mut CheckState, world: &Chec
 fn check_core_call_described<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, name: &str, key: &str, contract: &FnContract, args: &[Expr], found: &[Ty], config: &[ConfigArg], passed: &[(String, Ty)], span: &Span) -> Ty {
     state.reachable(name, contract, span);
     if contract.threads.may() { state.crosses_into_an_unseen_call(world, name, args, found, config, passed, span, &format!("`{}` is described as starting a thread of its own (`threads = true`), so what it is given may be looked at from one", name)); }
-    state.may_fail_here(world, host, key, contract, span);
+    let given = check_core_call_from_given(&state, world, host, contract, args);
+    state.may_fail_here(world, host, key, &given, span);
     state.a_call_that_may_pause(name, !contract.sync_claim.is_sync(), contract.sync_claim.is_unpromised(), span);
     state.a_pausing_call_in_an_action(name, contract, span);
     let mut constructed: Option<Ty> = None;
@@ -15711,8 +15756,12 @@ fn check_core_method_resolved(state: &mut CheckState, world: &CheckWorld<'_>, re
     let library = key.ends_with("::clone") && world.library.functions.contains_key(&key) && !world.own.functions.contains_key(&key);
     if library && args.is_empty() { state.facts.owned_copies.insert(id_of(receiver) as i64); }
     if (key == "Vec::contains" || key == "Array::contains") && args.len() == 1 {
-        let named = matches!(*nikaia_std::index::get(&args, 0), Expr::Variable(_, _));
-        if named && check_core_method_text_local(&state, world, nikaia_std::index::get(&args, 0)) { state.facts.text_in_lists.insert(id_of(receiver) as i64); }
+        let text = match nikaia_std::index::get(&args, 0) {
+            Expr::Variable(_, _) => check_core_method_text_local(&state, world, nikaia_std::index::get(&args, 0)),
+            Expr::LitStr { .. } => true,
+            _ => false,
+        };
+        if text { state.facts.text_in_lists.insert(id_of(receiver) as i64); }
     }
     let counts = key == format!("{}::count", SEQ) || key == format!("{}::position", SEQ) || key == format!("{}::count", PAR) || key == format!("{}::position", PAR);
     if counts && !world.own.functions.contains_key(&key) { state.facts.counted.insert(id_of(receiver) as i64); }
@@ -26100,7 +26149,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn a_pattern_of_owned_text(&mut self, key: &str, given: &[Expr], found: &[Ty], span: &Span) {
         let mut param: String = String::from("");
-        if key == "str::starts_with" { param = String::from("prefix"); } else if key == "str::ends_with" { param = String::from("suffix"); } else if key == "str::contains" { param = String::from("part"); } else { return; }
+        if key == "str::starts_with" { param = String::from("prefix"); } else if key == "str::ends_with" { param = String::from("suffix"); } else if key == "str::contains" { param = String::from("part"); } else if key == "str::strip_prefix" { param = String::from("prefix"); } else if key == "str::strip_suffix" { param = String::from("suffix"); } else { return; }
         if found.is_empty() { return; }
         let a_list = match nikaia_std::index::get(&found, 0) {
             Ty::Named { name, .. } => name == "Vec" || name == "Array",
@@ -38324,7 +38373,25 @@ fn implemented(name: &str, n: i64) -> Result<(String, String), nikaia_std::error
 }
 
 fn function_key(entry: &mut FnContract, name: &str, key: &str, value: &str, n: i64) -> Result<(), nikaia_std::error::Thrown<Refused>> {
-    if key == "pub" { entry.public = value == "true"; } else if key == "sync" { entry.sync_claim = sync_of(value, n)?; } else if key == "throws" { entry.fails_with = throws_of(value, n)?; } else if key == "returns" { entry.borrows = borrows_of(&unquoted(value, n)?, n)?; } else if key == "signature" {
+    let __keep_frame = nikaia_std::tether::Keep::new();
+    if key == "pub" { entry.public = value == "true"; } else if key == "sync" { entry.sync_claim = sync_of(value, n)?; } else if key == "throws" {
+        let mut named: Vec<String> = vec![];
+        let mut given: Vec<String> = vec![];
+        for error in throws_of(value, n)? {
+            if error.starts_with("from(") && error.ends_with(')') {
+                let inner = __keep_frame.put(nikaia_std::index::or(error.strip_prefix("from("), || "").to_owned());
+                given.push(nikaia_std::index::or(inner.strip_suffix(')'), || "").to_owned());
+            } else { named.push(error); }
+        }
+        let mut unnamed_too = false;
+        for error in named.iter() { if error == "?" { unnamed_too = true; } }
+        if unnamed_too { given = vec![]; } else if !given.is_empty() {
+            let unnamed: String = String::from("?");
+            named.push(unnamed);
+        }
+        entry.fails_with = named;
+        entry.throws_from = given;
+    } else if key == "returns" { entry.borrows = borrows_of(&unquoted(value, n)?, n)?; } else if key == "signature" {
         let spelled = spelled_signature(&unquoted(value, n)?, name)?;
         if spelled.mutates { entry.mutates = true; }
         if !spelled.borrows.is_empty() { entry.borrows = spelled.borrows.to_owned(); }
@@ -39573,6 +39640,14 @@ pub fn description_text(ledger: &Ledger, crate_name: &str, version: &str, notes:
 
 fn no_notes() -> Notes { Notes { about_the_crate: vec![], about_a_function: collections::BTreeMap::new() } }
 
+fn published_throws(contract: &FnContract) -> Vec<String> {
+    if contract.throws_from.is_empty() { return contract.fails_with.to_owned(); }
+    let mut out: Vec<String> = vec![];
+    for error in contract.fails_with.iter() { if error != "?" { out.push(error.to_owned()); } }
+    for param in contract.throws_from.iter() { out.push(format!("from({})", param)); }
+    out
+}
+
 pub fn throws_text(errors: &[String]) -> String { format!("[{}]", quoted_all(errors)) }
 
 fn quoted_all(items: &[String]) -> String {
@@ -39617,7 +39692,7 @@ fn function_text(name: &str, contract: &FnContract) -> String {
         Sync::From(lambda) => { out.push_str(&format!("sync = \"sync({})\"\n", lambda)); },
         Sync::No => { },
     }
-    if !contract.fails_with.is_empty() { out.push_str(&format!("throws = {}\n", throws_text(&contract.fails_with))); }
+    if !contract.fails_with.is_empty() { out.push_str(&format!("throws = {}\n", throws_text(&published_throws(contract)))); }
     let spelled = spelled_of(name, contract);
     let mut borrows_said = false;
     let mut mutates_said = false;
@@ -51884,7 +51959,8 @@ pub fn stored_throws(field: &str, resolved: &collections::BTreeSet<String>, unre
     graph.calls.insert(field.to_owned(), called);
 }
 
-pub fn params_as_places(own: &Ledger, stored: &mut collections::BTreeMap<String, CheckStoredCode>) {
+pub fn params_as_places(own: &Ledger, stored: &mut collections::BTreeMap<String, CheckStoredCode>) -> collections::BTreeSet<String> {
+    let mut open: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut kept: collections::BTreeSet<String> = collections::BTreeSet::new();
     let named: CheckStoredCode = nikaia_std::index::or(stored.remove(AS_VALUE), || CheckStoredCode::empty());
     for free in named.free.iter() { kept.insert(free.to_owned()); }
@@ -51906,10 +51982,29 @@ pub fn params_as_places(own: &Ledger, stored: &mut collections::BTreeMap<String,
             if !check_core_stmt_holds_code(ty) { continue; }
             let key = format!("{}::{}", name, param);
             let mut entry: CheckStoredCode = nikaia_std::index::or(stored.remove(&key), || CheckStoredCode::empty());
-            if contract.public || kept.contains(name) { entry.unresolved = true; }
+            if contract.public || kept.contains(name) { open.insert(key.to_owned()); }
             stored.insert(key, entry);
         }
     }
+    open
+}
+
+pub fn throws_from(given: &collections::BTreeMap<String, Vec<String>>, name: &str) -> Vec<String> {
+    let __keep_frame = nikaia_std::tether::Keep::new();
+    let set = match *nikaia_std::index::get(&given, name) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
+    let prefix = format!("from({}::", name);
+    let mut params: Vec<String> = vec![];
+    for error in set.iter() {
+        if error == UNNAMED { return vec![]; }
+        if error.starts_with("from(") {
+            if !error.starts_with(&prefix) { return vec![]; }
+            let rest: String = nikaia_std::index::or(error.strip_prefix("from("), || "").to_owned();
+            let after: String = nikaia_std::index::or(rest.strip_prefix(name), || "").to_owned();
+            let param = __keep_frame.put(nikaia_std::index::or(after.strip_prefix("::"), || "").to_owned());
+            params.push(nikaia_std::index::or(param.strip_suffix(')'), || "").to_owned());
+        }
+    }
+    params
 }
 
 fn fails_with_of(library: &Ledger, callee: &str) -> Vec<String> {
@@ -54229,6 +54324,7 @@ pub struct FnContract {
     pub public: bool,
     pub sync_claim: Sync,
     pub fails_with: Vec<String>,
+    pub throws_from: Vec<String>,
     pub touches: Vec<Touch>,
     pub touches_known: bool,
     pub provenance: Option<Provenance>,
@@ -54249,7 +54345,7 @@ pub struct FnContract {
 }
 
 impl FnContract {
-    pub fn empty() -> FnContract { FnContract { public: false, sync_claim: Sync::No, fails_with: vec![], touches: vec![], touches_known: false, provenance: None, signature: None, borrows: vec![], keeps: vec![], mutates: false, touches_a_lock: Lock::No, threads: Threads::Undecided, views: vec![], sharing: vec![], maps: vec![], ends_by_length: false, pieces: false, requires: vec![], ensures: vec![], from: vec![] } }
+    pub fn empty() -> FnContract { FnContract { public: false, sync_claim: Sync::No, fails_with: vec![], throws_from: vec![], touches: vec![], touches_known: false, provenance: None, signature: None, borrows: vec![], keeps: vec![], mutates: false, touches_a_lock: Lock::No, threads: Threads::Undecided, views: vec![], sharing: vec![], maps: vec![], ends_by_length: false, pieces: false, requires: vec![], ensures: vec![], from: vec![] } }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -57782,7 +57878,7 @@ pub mod threads {
 }
 pub mod throws {
     #[allow(unused_imports)]
-    pub use super::{AS_VALUE, MethodsCalled, ThrowsGraph, unit_throws, stored_throws, params_as_places, error_sets, error_type, Thrown, Contribution, thrown_by, fatal_named};
+    pub use super::{AS_VALUE, MethodsCalled, ThrowsGraph, unit_throws, stored_throws, params_as_places, throws_from, error_sets, error_type, Thrown, Contribution, thrown_by, fatal_named};
 }
 pub mod tiers {
     #[allow(unused_imports)]

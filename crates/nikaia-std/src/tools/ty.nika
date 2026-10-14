@@ -1079,6 +1079,10 @@ pub struct FnContract {
     pub sync_claim: Sync,
     /// What it may fail with: the error types that can leave it (Kap 7.1).
     pub fails_with: Vec[String],
+    /// **The parameters whose code its set includes** (ADR-351 D4): written
+    /// `"from(p)"` in the ledger and read back as a `"?"` in `fails_with`
+    /// plus `p` here, which a caller replaces with what it passed.
+    pub throws_from: Vec[String],
     pub touches: Vec[Touch],
     /// Whether `touches` is what somebody wrote rather than what was inferred.
     pub touches_known: bool,
@@ -1121,6 +1125,7 @@ impl FnContract {
             public: false,
             sync_claim: Sync::No,
             fails_with: [],
+            throws_from: [],
             touches: [],
             touches_known: false,
             provenance: null,

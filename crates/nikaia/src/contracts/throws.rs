@@ -68,7 +68,7 @@ pub fn infer(
     // **Each function field, name and parameter of code is a place of the
     // graph** (ADR-351 D1, D3, D4).
     let mut stored = stored.clone();
-    nika::params_as_places(ledger, &mut stored);
+    let open = nika::params_as_places(ledger, &mut stored);
     let stored = &stored;
     let places: BTreeSet<String> = stored.keys().cloned().collect();
     for (field, code) in stored {
@@ -94,6 +94,28 @@ pub fn infer(
             &mut graph,
         );
     }
+    // **An open parameter place is `"?"` here and `"from(p)"` in the ledger**
+    // (ADR-351 D4): the same graph, filled both ways.
+    let mut given = graph.direct.clone();
+    for key in &open {
+        graph
+            .direct
+            .entry(key.clone())
+            .or_default()
+            .insert(UNNAMED_ERROR.to_string());
+        given
+            .entry(key.clone())
+            .or_default()
+            .insert(format!("from({key})"));
+    }
+    let given = nika::error_sets(
+        &given,
+        &graph.calls,
+        &graph.fatal_calls,
+        &fatal,
+        ledger,
+        &places,
+    );
     for (name, errors) in nika::error_sets(
         &graph.direct,
         &graph.calls,
@@ -106,8 +128,10 @@ pub fn infer(
             ledger.code_throws.insert(name, errors);
             continue;
         }
+        let from = nika::throws_from(&given, &name);
         if let Some(contract) = ledger.functions.get_mut(&name) {
             contract.fails_with = errors;
+            contract.throws_from = from;
         }
     }
 }

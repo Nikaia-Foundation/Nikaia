@@ -374,7 +374,32 @@ fn function_key(mut entry: FnContract, name: ref String, key: ref String, value:
     } else if key == "sync" {
         entry.sync_claim = sync_of(value, n)
     } else if key == "throws" {
-        entry.fails_with = throws_of(value, n)
+        // **`"from(p)"` is read back as a `"?"`** that a caller may replace
+        // with what it passed for `p` (ADR-351 D4).
+        let mut named: Vec[String] = []
+        let mut given: Vec[String] = []
+        for error in throws_of(value, n) {
+            if error.starts_with("from(") && error.ends_with(")") {
+                let inner: String = (error.strip_prefix("from(") ?? "").clone()
+                given.push((inner.strip_suffix(")") ?? "").clone())
+            } else {
+                named.push(error)
+            }
+        }
+        let mut unnamed_too = false
+        for error in named {
+            if error == "?" {
+                unnamed_too = true
+            }
+        }
+        if unnamed_too {
+            given = []
+        } else if given.len() > 0 {
+            let unnamed: String = "?"
+            named.push(unnamed)
+        }
+        entry.fails_with = named
+        entry.throws_from = given
     } else if key == "returns" {
         entry.borrows = borrows_of(unquoted(value, n), n)
     } else if key == "signature" {

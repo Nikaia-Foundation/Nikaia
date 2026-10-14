@@ -91,6 +91,25 @@ fn no_notes() -> Notes {
 /// The `throws` list exactly as the ledger writes it: a diagnostic quoting
 /// the contract quotes the bytes a reader finds in `nikaia.contracts`, which
 /// is Part III C.4's rule that **the note is the contract**.
+/// **What a function publishes it throws** (ADR-351 D4): where the `"?"` of
+/// its set stands only for the code its parameters were given, each such
+/// parameter is written `"from(p)"` in its place.
+fn published_throws(contract: ref FnContract) -> Vec[String] {
+    if contract.throws_from.len() == 0 {
+        return contract.fails_with.clone()
+    }
+    let mut out: Vec[String] = []
+    for error in contract.fails_with {
+        if error != "?" {
+            out.push(error.clone())
+        }
+    }
+    for param in contract.throws_from {
+        out.push(f"from({param})")
+    }
+    return out
+}
+
 pub fn throws_text(errors: ref Vec[String]) -> String {
     return f"[{quoted_all(errors)}]"
 }
@@ -171,7 +190,7 @@ fn function_text(name: ref String, contract: ref FnContract) -> String {
         Sync::No => {}
     }
     if contract.fails_with.len() > 0 {
-        out.push_str(f"throws = {throws_text(contract.fails_with)}\n")
+        out.push_str(f"throws = {throws_text(published_throws(contract))}\n")
     }
     // **In Nikaia's spelling** (ADR-251 D4): what the result points into is
     // written `ref(a | b)` in the signature's result, and the receiver as the

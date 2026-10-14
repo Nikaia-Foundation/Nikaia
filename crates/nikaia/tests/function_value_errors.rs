@@ -288,3 +288,28 @@ fn a_published_field_is_stored_into_by_other_packages() {
         "pub struct Task { pub run: fn() throws }\n",
     );
 }
+
+/// **A caller replaces `from(p)` with what it passed** (ADR-351 D4): `now` is
+/// `pub`, so its parameter's code is `?` for `now` itself, but the call
+/// `now(fail)` fails with what `fail` fails with, and the `catch` over it
+/// needs no `else`. Handing it `worse` makes the one arm too few.
+#[test]
+fn a_caller_replaces_from_with_what_it_passed() {
+    let now = "pub fn now(f: fn() throws) throws {\n    f()\n}\n";
+    let source = format!("{JOB}{WORSE}{now}fn main() {{\n    now(fail) {ONLY_BAD}\n}}\n");
+    assert!(codes(&source).is_empty(), "{:?}", findings(&source));
+    refused_without_else(&format!("    now(worse) {ONLY_BAD}"), now);
+}
+
+/// **The ledger writes `from(p)` and reads it back** (ADR-351 D4).
+#[test]
+fn the_ledger_says_from_the_parameter() {
+    let parsed = parse_to_ast("pub fn now(f: fn() throws) throws {\n    f()\n}\nfn main() {\n}\n")
+        .expect("the source parses");
+    let text = Ledger::infer(&parsed).render();
+    assert!(text.contains("throws = [\"from(f)\"]"), "{text}");
+    let back = Ledger::parse(&text).expect("it reads back");
+    let now = &back.functions["now"];
+    assert_eq!(now.throws_from, vec!["f".to_string()]);
+    assert_eq!(now.fails_with, vec!["?".to_string()]);
+}

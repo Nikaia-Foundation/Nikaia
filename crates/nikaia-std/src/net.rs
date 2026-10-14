@@ -218,11 +218,27 @@ pub type Handler = crate::func::Kept<dyn Fn(Connection) -> crate::func::Boxed<Ou
 pub type PoolHandler =
     crate::func::Kept<dyn Fn(Connection) -> crate::func::SendBoxed<Outcome> + Send + Sync>;
 
-/// **A handler that threw ends its connection**, and the error is said on
-/// standard error; the server goes on.
+/// **A handler that threw ends its connection** as a detached task does
+/// ([ADR-351](../../../docs/specification/adr/adr-351.md) D6, ADR-346 D6): the
+/// error is said on standard error at `main`'s end, a fatal one sets the exit
+/// status there, and the server goes on.
 fn said(outcome: Outcome) {
     if let Err(error) = outcome {
-        eprintln!("net::serve: a connection ended with an error: {error}");
+        use crate::process::Ending;
+        crate::task::detached_error(error.to_string(), error.fatal_code());
+    }
+}
+
+#[cfg(test)]
+mod said_tests {
+    /// **A handler's fatal error sets the exit status at `main`'s end**
+    /// (ADR-351 D6): `said` hands it to the detached tasks' errors, with its
+    /// code.
+    #[test]
+    fn a_handler_that_exits_sets_the_status() {
+        let error: Box<dyn std::error::Error> = Box::new(crate::process::Exit::Code(3));
+        super::said(Err(error));
+        assert_eq!(crate::task::report_detached(), Some(3));
     }
 }
 

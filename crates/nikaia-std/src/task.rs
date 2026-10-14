@@ -809,6 +809,12 @@ impl Drop for Watch {
 /// The errors of detached tasks, in the order they arrived.
 static DETACHED: std::sync::Mutex<Vec<Report>> = std::sync::Mutex::new(Vec::new());
 
+/// **An error nobody joins**, from a task `std` runs itself (ADR-351 D6: a
+/// server's handler): said at `main`'s end with the detached tasks' errors.
+pub(crate) fn detached_error(text: String, code: Option<i32>) {
+    detached_failed(Report { text, code });
+}
+
 fn detached_failed(report: Report) {
     DETACHED
         .lock()

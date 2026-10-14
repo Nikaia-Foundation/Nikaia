@@ -140,8 +140,11 @@ pub fn stored_throws(field: ref String, resolved: ref collections::BTreeSet[Stri
 
 /// **A parameter of code is a place** (ADR-351 D1, D4), given what every
 /// caller of this package hands it. One whose callers this package cannot
-/// all see - a `pub` function, or one used as a value - cannot be named.
-pub fn params_as_places(own: ref Ledger, mut stored: collections::BTreeMap[String, CheckStoredCode]) {
+/// all see - a `pub` function, or one used as a value - cannot be named
+/// here: those places are returned, for the caller to fill with `"?"` for
+/// this package and with `"from(p)"` for the ledger.
+pub fn params_as_places(own: ref Ledger, mut stored: collections::BTreeMap[String, CheckStoredCode]) -> collections::BTreeSet[String] {
+    let mut open: collections::BTreeSet[String] = collections::BTreeSet()
     let mut kept: collections::BTreeSet[String] = collections::BTreeSet()
     // The functions named as a value anywhere - returned, handed on, kept.
     let named: CheckStoredCode = stored.remove(AS_VALUE) ?? CheckStoredCode::empty()
@@ -181,11 +184,37 @@ pub fn params_as_places(own: ref Ledger, mut stored: collections::BTreeMap[Strin
             let key = f"{name}::{param}"
             let mut entry: CheckStoredCode = stored.remove(key) ?? CheckStoredCode::empty()
             if contract.public || kept.contains(name) {
-                entry.unresolved = true
+                open.insert(key.clone())
             }
             stored.insert(key, entry)
         }
     }
+    return open
+}
+
+/// **The sets a ledger publishes** (ADR-351 D4): `sets` filled the open
+/// parameter places with `"?"`, `given` the same graph with `"from(F::p)"`.
+/// Where a function's only unnamed member is its own parameters' code, it
+/// says which, and a caller replaces them with what it passed.
+pub fn throws_from(given: ref collections::BTreeMap[String, Vec[String]], name: ref String) -> Vec[String] {
+    let set = given[name] ?? return []
+    let prefix = f"from({name}::"
+    let mut params: Vec[String] = []
+    for error in set {
+        if error == UNNAMED {
+            return []
+        }
+        if error.starts_with("from(") {
+            if !error.starts_with(prefix) {
+                return []
+            }
+            let rest: String = (error.strip_prefix("from(") ?? "").clone()
+            let after: String = (rest.strip_prefix(name) ?? "").clone()
+            let param: String = (after.strip_prefix("::") ?? "").clone()
+            params.push((param.strip_suffix(")") ?? "").clone())
+        }
+    }
+    return params
 }
 
 // What a library's ledger says a callee fails with, and `?` for one it does
