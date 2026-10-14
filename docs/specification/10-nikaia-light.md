@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.943 (Draft)
+**Version:** 0.0.944 (Draft)
 **Date:** 2026-10-14
 
 ---
@@ -1433,7 +1433,7 @@ The standard library provides types for groups of values.
     `char`, and a tuple, list or option of such is a key; a `struct` or an
     `enum` the program declares is one where every field is, hashed from its
     fields as `==` compares them. A float is not, nor a type with an
-    `impl Eq` of its own (`NK1260`).
+    `impl Eq` of its own unless it also has an `impl Hash` (`NK1260`).
 
     A map's hash function follows where its keys came from. Keys derived from
     data a remote peer supplied are hashed with a random per-run key. Keys from
@@ -1635,7 +1635,7 @@ with `NK1130`. A method whose implementation **pauses** where the declaration
 says `sync` is refused with `NK1129`. A trait method has no **default body**,
 and a trait is not a type: there is no `dyn` and no `fn f(x: Summarize)`.
 
-**`Eq` and `Ord` are traits of the language**, in scope everywhere (a program that declares a trait or an enum of the same name keeps its own): `Eq` has `eq(ref self, other: ref Self) -> bool sync`, `Ord` has `compare(ref self, other: ref Self) -> Ordering sync`, and `Ordering` is the enum `Less | Equal | Greater`; they are the standard library's `Eq`, `Ord` and `std::cmp::Ordering` in the Rust a program lowers to, so a type with an `impl Ord` is an `Ord` type to Rust code. A bound `[T: Eq]` gives the body `==` and `!=` on two `T`; `[T: Ord]` gives `<`, `<=`, `>`, `>=`, `compare`, and also `==` and `!=`, because an ordered type is an `Eq` one. An operator on a type parameter that no bound allows is refused with `NK1248`. A bound is answered by an `impl`, and where there is none by the language: the numbers except the floats, `bool`, `char`, `String` and `Bytes` are `Eq` and `Ord`, a float is neither, and a container is when what it holds is. A `struct` or an `enum` the program declares is `Eq` where its parts are, and `Ord` only where the program writes `impl Ord` for it. `impl Eq` and `impl Ord` are written for a type the program declares, and `impl Ord` only for a type that is `Eq`; any other is `NK1249`. An `impl Eq` replaces the equality the type would have had, and a body of either that can pause is `NK1129`. The laws are the program's: equality is reflexive, symmetric and transitive, the order is total, and `compare` is `Equal` exactly where `eq` is `true`. The compiler does not check them.
+**`Eq` and `Ord` are traits of the language**, in scope everywhere (a program that declares a trait or an enum of the same name keeps its own): `Eq` has `eq(ref self, other: ref Self) -> bool sync`, `Ord` has `compare(ref self, other: ref Self) -> Ordering sync`, and `Ordering` is the enum `Less | Equal | Greater`; they are the standard library's `Eq`, `Ord` and `std::cmp::Ordering` in the Rust a program lowers to, so a type with an `impl Ord` is an `Ord` type to Rust code. A bound `[T: Eq]` gives the body `==` and `!=` on two `T`; `[T: Ord]` gives `<`, `<=`, `>`, `>=`, `compare`, and also `==` and `!=`, because an ordered type is an `Eq` one. An operator on a type parameter that no bound allows is refused with `NK1248`. A bound is answered by an `impl`, and where there is none by the language: the numbers except the floats, `bool`, `char`, `String` and `Bytes` are `Eq` and `Ord`, a float is neither, and a container is when what it holds is. A `struct` or an `enum` the program declares is `Eq` where its parts are, and `Ord` only where the program writes `impl Ord` for it. `impl Eq` and `impl Ord` are written for a type the program declares, and `impl Ord` only for a type that is `Eq`; any other is `NK1249`. An `impl Eq` replaces the equality the type would have had, and a body of either that can pause is `NK1129`. The laws are the program's: equality is reflexive, symmetric and transitive, the order is total, and `compare` is `Equal` exactly where `eq` is `true`. The compiler does not check them. **`Hash` is a trait of the language too**: `hash(ref self, mut into: Hasher) sync`, where the body hands the parts that make a value what it is to `into.add(x)`, each of a type that hashes; it is Rust's `Hash`. `impl Hash` is written for a type the program declares and that is `Eq`, any other is `NK1249`; it replaces the hash the type would have had, and a type with an `impl Eq` is a hash map's key only through one. Its law is the program's as well: two values `eq` calls equal feed `add` the same values.
 
 ---
 

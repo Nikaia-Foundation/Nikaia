@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.944] — 2026-10-14
+
+**impl Hash: a hand-written hash for a type with a hand-written equality (#591)**
+- ADR-010 D12: `Hash` is a trait of the language, `hash(ref self, mut into: Hasher) sync` with `into.add(x)`; a declared type with an `impl Eq` is a hash map's key only through an `impl Hash`. `NK1249` and `NK1260` cover it.
+
 ## [0.0.943] — 2026-10-14
 
 **check: match, if, select, overlap, catch and unsafe in Nikaia (U-c8, #125, #558)**
