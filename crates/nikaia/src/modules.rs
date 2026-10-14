@@ -595,19 +595,23 @@ impl Program {
     /// 13.5 makes the ledger a pure function of the source tree, which is a
     /// promise about the tree and not about each file in it.
     pub fn read(entry: &Path) -> Result<Program> {
-        Self::of(collect(entry)?, &[])
+        Self::of(collect(entry)?, &[], &crate::contracts::Ledger::blank())
     }
 
     /// The same, with the packages this program depends on
     /// ([ADR-286](../../../docs/specification/adr/adr-286.md) D15).
     pub fn read_with(entry: &Path, dependencies: &[Dependency]) -> Result<Program> {
-        Self::of(collect_with(entry, dependencies)?, dependencies)
+        Self::of(
+            collect_with(entry, dependencies)?,
+            dependencies,
+            &described_beside(entry),
+        )
     }
 
     /// The entry compiled on its own - what `nikaia lower` outside a project is
     /// (see [`collect_one`]).
     pub fn read_one(entry: &Path) -> Result<Program> {
-        Self::of(collect_one(entry)?, &[])
+        Self::of(collect_one(entry)?, &[], &crate::contracts::Ledger::blank())
     }
 
     /// **The program as `nikaia test` builds it**
@@ -623,17 +627,21 @@ impl Program {
         dependencies: &[Dependency],
         in_project: bool,
     ) -> Result<Program> {
-        let units = match in_project {
-            true => collect_with(entry, dependencies)?,
-            false => collect_one(entry)?,
+        let (units, described) = match in_project {
+            true => (collect_with(entry, dependencies)?, described_beside(entry)),
+            false => (collect_one(entry)?, crate::contracts::Ledger::blank()),
         };
         let (units, tests) = with_tests_as_functions(units)?;
-        let mut program = Self::of(units, dependencies)?;
+        let mut program = Self::of(units, dependencies, &described)?;
         program.tests = tests;
         Ok(program)
     }
 
-    fn of(mut units: Vec<Unit>, dependencies: &[Dependency]) -> Result<Program> {
+    fn of(
+        mut units: Vec<Unit>,
+        dependencies: &[Dependency],
+        described: &crate::contracts::Ledger,
+    ) -> Result<Program> {
         // **A `test` block is compiled only by `nikaia test`** (ADR-269 D1),
         // which has turned every one it runs into a function by now: what is
         // left is left out.
@@ -675,6 +683,24 @@ impl Program {
         // rather than a worse one derived here from half the graph. That order
         // is the whole of why this is two passes over the groups and not one.
         let mut library = crate::contracts::std_library();
+        // **And the described crates' answers** (D29 of
+        // `docs/lowering-defects.md`): the check reads `contracts/<crate>.contracts`
+        // beside `std`, so the program's own `sync` inference does too, or a
+        // function that only calls a described `sync` entry is inferred to pause
+        // and a `sync` caller is refused (`NK2202`). `std` wins a collision, as
+        // in [`crate::project::Foreign::library`].
+        for (name, contract) in &described.functions {
+            library
+                .functions
+                .entry(name.clone())
+                .or_insert_with(|| contract.clone());
+        }
+        for (name, contract) in &described.types {
+            library
+                .types
+                .entry(name.clone())
+                .or_insert_with(|| contract.clone());
+        }
         let mut plain: std::collections::BTreeMap<String, crate::contracts::Ledger> =
             std::collections::BTreeMap::new();
 
@@ -1269,4 +1295,15 @@ fn names_in(files: &[&crate::parser::Parsed]) -> std::collections::BTreeSet<Stri
         }
     }
     names
+}
+
+/// The descriptions of the crates the project around `entry` declares
+/// (`contracts/<crate>.contracts`), or none outside a project.
+fn described_beside(entry: &Path) -> crate::contracts::Ledger {
+    entry
+        .ancestors()
+        .skip(1)
+        .find(|dir| dir.join("nikaia.toml").is_file())
+        .map(|root| crate::project::Foreign::of(root).descriptions)
+        .unwrap_or_else(crate::contracts::Ledger::blank)
 }

@@ -356,3 +356,37 @@ fn a_view_crosses_to_a_described_view_and_is_refused_where_the_crate_keeps() {
         "{kept:#?}"
     );
 }
+
+/// **A function that only calls a described `sync` entry is inferred `sync`**
+/// in a project (D29 of `docs/lowering-defects.md`): the program's own
+/// inference reads `contracts/<crate>.contracts` as the check does, so a `sync`
+/// caller of it is not `NK2202`. One that calls the described pausing entry
+/// still is.
+#[test]
+fn the_sync_inference_reads_the_descriptions() {
+    for (callee, refused) in [("zwei(1, 2)", false), ("pausiert()", true)] {
+        let root = project(&format!("sync-{refused}"), Some(DESCRIPTION));
+        std::fs::write(
+            root.join("src/main.nika"),
+            format!(
+                "fn plain() -> i64 {{\n    return fremd::{callee}\n}}\n\n\
+                 fn caller() -> i64 sync {{\n    return plain()\n}}\n\n\
+                 fn main() {{\n    println(f\"{{caller()}}\")\n}}\n"
+            ),
+        )
+        .expect("the source");
+        let checked = std::process::Command::new(env!("CARGO_BIN_EXE_nikaia"))
+            .current_dir(&root)
+            .arg("check")
+            .arg("src/main.nika")
+            .output()
+            .expect("the nikaia binary runs");
+        let _ = std::fs::remove_dir_all(&root);
+        let said = format!(
+            "{}{}",
+            String::from_utf8_lossy(&checked.stdout),
+            String::from_utf8_lossy(&checked.stderr)
+        );
+        assert_eq!(said.contains("NK2202"), refused, "{callee}: {said}");
+    }
+}

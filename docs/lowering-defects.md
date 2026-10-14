@@ -282,9 +282,13 @@ know without the type. Found with rs2nika (#579, `claims_report`). Not decided h
 Owned text handed to `starts_with`, `ends_with` or `contains` is lent, as to any
 `ref String` parameter, and stays the caller's (`views_kept.rs`).
 
-## D29 (new). `tools/*.nika` checked as a project finds what `lower-std` does not
+## D29 (new). `tools/*.nika` checked as a project: **built** (0.0.898)
 
-The tools copied into a project with `node_id`/`winnow_grammar` described in `contracts/` give 11 NK2202 (a `sync` function calls one that "can pause", e.g. `CheckState::through_a_package_unread`) that `nikaia lower-std` accepts: the two inferences of `sync` differ. `rs2nika/survival` counts only findings in the draft (#579).
+The cause: a project's own `sync` inference (`modules::Program::of`) read `std`
+and the dependency packages, not the described crates' `contracts/*.contracts`
+the check reads, so a function calling only a described `sync` entry
+(`InternerContext::resolve`) was inferred to pause. It reads them now
+(`described_entries.rs`).
 
 ## D30 (new). D28 for `starts_with`, and `match` on a `?? continue` binding
 

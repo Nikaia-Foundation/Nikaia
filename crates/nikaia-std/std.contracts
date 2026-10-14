@@ -2507,7 +2507,7 @@ signature = "[T](self: Seq[T], f: fn(T) -> bool) -> i64?"
 pub = true
 sync = "sync(f)"
 touches = []
-signature = "[T, U](self: Seq[T], f: fn(T) -> U?) -> Seq[U] ends"
+signature = "[T, U](self: Seq[T], f: fn(T) -> (U?)) -> Seq[U] ends"
 
 # The first value the function gives that is not `null`, or nothing; it stops
 # there.
@@ -2515,7 +2515,7 @@ signature = "[T, U](self: Seq[T], f: fn(T) -> U?) -> Seq[U] ends"
 pub = true
 sync = "sync(f)"
 touches = []
-signature = "[T, U](self: Seq[T], f: fn(T) -> U?) -> U?"
+signature = "[T, U](self: Seq[T], f: fn(T) -> (U?)) -> U?"
 
 # The elements up to the first one the function says no to.
 [fn."Seq::take_while"]

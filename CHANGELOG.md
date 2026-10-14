@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.898] — 2026-10-14
+
+**contracts: filter_map/find_map lambdas read as lambdas; the project sync inference reads described crates (#579)**
+- `Seq::filter_map` and `Seq::find_map` declare `f: fn(T) -> (U?)`: written `fn(T) -> U?` it parsed as an optional function and `from(f)` refused it (red develop).
+- A project's own `sync` inference reads `contracts/<crate>.contracts` as the check does: a function calling only a described `sync` entry is no longer inferred to pause (NK2202 on its `sync` callers, D29).
+
 ## [0.0.897] — 2026-10-14
 
 **check: NK2109, a forgotten task handle (#605)**

@@ -1355,6 +1355,7 @@ fn the_lengths_are_i64_and_are_all_called_len() {
     assert_eq!(
         lengths,
         vec![
+            "Args::len",
             "Array::len",
             "Bytes::len",
             "Fixed::len",
