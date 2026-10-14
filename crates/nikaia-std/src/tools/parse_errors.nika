@@ -423,7 +423,7 @@ pub fn a_parse_error(error: ref Failure, source: ref String, stops_at: fn(ref St
         notes.push(ref_note ?? "")
     }
     if error.has_found {
-        let pairs = [coalesce_fallback_note(said_word, before), let_names_note(said_word, before)]
+        let pairs = [coalesce_fallback_note(said_word, before)]
         for pair in pairs {
             if pair.len() >= 2 {
                 notes.push(pair[0].clone())

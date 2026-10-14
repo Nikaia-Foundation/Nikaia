@@ -865,7 +865,7 @@ fn bt_block[H: BtHost](block: ref Block, mut frame: collections::BTreeMap[String
             Stmt::Continue => {
                 return BtFlow::Continued
             },
-            Stmt::For { bindings, iter, body } => {
+            Stmt::For { bindings, iter, body, .. } => {
                 let flow = bt_walk(bindings, iter, body, frame, host, state)
                 match flow {
                     BtFlow::Value(_) => {

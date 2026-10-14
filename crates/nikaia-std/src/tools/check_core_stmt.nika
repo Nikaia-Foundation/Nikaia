@@ -247,7 +247,7 @@ fn check_core_stmt_read_shown(world: ref CheckWorld, value: ref Expr) -> String 
 }
 
 /// **`let`** (Part I 2.1).
-pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, names: ref Vec[winnow_grammar::Symbol], mutable: bool, ty: ref Type?, value: ref Expr, span: ref Span) -> Ty sync {
+pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, names: ref Vec[winnow_grammar::Symbol], shape: ref Vec[i64], mutable: bool, ty: ref Type?, value: ref Expr, span: ref Span) -> Ty sync {
     check_core_a_field_of_a_borrowed_subject(state, world, host, value, span, "bound")
     check_core_a_mut_parameter_given_away(state, world, host, value, span, "bound")
     let outer_read = state.flow.read_a_map
@@ -323,8 +323,8 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
         check_core_stmt_lent_let(state, world, names, span)
     }
     // **A tuple of names takes the value apart** (ADR-291).
-    if names.len() >= 2 {
-        return state.tuple_let(world, names, ty != null, found, value, span)
+    if names.len() >= 2 || shape.len() > 0 {
+        return state.tuple_let(world, names, shape, ty != null, found, value, span)
     }
     let name: String = f"{world.words.resolve(names[0])}"
     // **`let _ = expr` is a statement wearing a `let`** (ADR-291 D7).
@@ -804,15 +804,23 @@ fn check_core_stmt_for_a_range(mut state: CheckState, world: ref CheckWorld, ite
 }
 
 /// **`for`** (Part I 3.3).
-pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, bindings: ref Vec[winnow_grammar::Symbol], iter: ref Expr, body: ref Block, span: ref Span) -> Ty sync {
+pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, bindings: ref Vec[winnow_grammar::Symbol], shape: ref Vec[i64], iter: ref Expr, body: ref Block, span: ref Span) -> Ty sync {
     state.the_caller_writes_no_reference(iter, span, "a `for` lends what it iterates")
     let over = host.expr(state, iter, span)
     state.a_loop_over_a_nullable(world, over, iter, span)
-    state.fallible_step(world, over, bindings.len() as i64, span)
+    // **A nested head walks its top-level width** (ADR-356).
+    let mut width = bindings.len() as i64
+    if shape.len() > 0 && shape[0] > 0 {
+        width = shape[0]
+    }
+    state.fallible_step(world, over, width, span)
     state.pausing_step(over, span)
     // **A `for` walks a produced sequence, and that consumes it** (ADR-105 D2).
     state.a_sequence_is_walked(iter, over, span, world)
-    let elements = elements_walked(over, bindings.len() as i64)
+    let mut elements = elements_walked(over, width)
+    if shape.len() > 0 {
+        elements = state.nested_pattern_parts(world, elements, shape, bindings.len() as i64, "A `for`", span)
+    }
     // **A name that holds a sequence is handed over, not lent** (ADR-293 D19).
     let a_seq = match over {
         Ty::Seq { .. } => true,
@@ -929,12 +937,12 @@ pub fn check_core_stmt_jump(mut state: CheckState, word: ref String, span: ref S
 pub fn check_core_stmt[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, stmt: ref Stmt, span: ref Span) -> Ty sync {
     state.flow.literal_receivers.clear()
     return match stmt {
-        Stmt::Let { names, mutable, ty, value } => check_core_stmt_let(state, world, host, names, mutable, ty, value, span),
+        Stmt::Let { names, shape, mutable, ty, value } => check_core_stmt_let(state, world, host, names, shape, mutable, ty, value, span),
         // **`comptime` is a `let` that has to fold** (ADR-287 D4, D5).
         Stmt::Comptime { name, ty, value, bounds } => check_core_comptime_binding(state, world, host, name, ty, value, bounds, span),
         Stmt::Assign { target, op, value, .. } => check_core_stmt_assign(state, world, host, target, op, value, span),
         Stmt::While { cond, body } => check_core_stmt_while(state, world, host, cond, body, span),
-        Stmt::For { bindings, iter, body } => check_core_stmt_for(state, world, host, bindings, iter, body, span),
+        Stmt::For { bindings, shape, iter, body } => check_core_stmt_for(state, world, host, bindings, shape, iter, body, span),
         Stmt::Return(value) => check_core_stmt_return(state, world, host, value, span),
         Stmt::Break => check_core_stmt_jump(state, "break", span),
         Stmt::Continue => check_core_stmt_jump(state, "continue", span),

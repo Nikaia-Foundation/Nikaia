@@ -106,6 +106,7 @@ implementation.
 | [284](adr-284.md) | A Nikaia library for other languages is one C artifact, safe at its boundary, whose entry points answer with a status into the caller's memory, and every other host is a file generated over it. | Accepted | no |
 | [293](adr-293.md) | A map read is a `T?` and a key is not a position, a sequence says what it is as a whole, and what is handed over is gone, part by part. | Accepted | yes |
 | [283](adr-283.md) | A view that escapes is tethered: its buffer lives in the keep of whatever keeps the view, the compiler decides where with nothing written, and `Bytes` is the language's buffer. | Accepted | partly: the retention lint (D6), `Mapped`'s deref to `Bytes` |
+| [356](adr-356.md) | A `let` and a `for` head take a nested tuple of names and `_`, as deep as it is written; a variant there is refused (`NK1259`), naming `match`. | Accepted | yes |
 | [291](adr-291.md) | A `let` takes names or a flat tuple, `_` ignores a value, and a `match` takes nested patterns, ends in `else`, covers every case and lends what an arm only reads; `..` is inclusive and `..<` exclusive. | Accepted | yes |
 | [354](adr-354.md) | An index or a field read off a place is a view where a `let` declares `ref T` or `ref T?`, in the `let` and in an arm; a word by its kind written so is `NK1257`; a generic `T` is a view whatever it becomes | Accepted | yes |
 | [279](adr-279.md) | `??` takes one value as its fallback, has no postfix form, and lends its left side where the answer is read and takes it where it is kept; after a type that is not `T?` it is a warning (`NK1216`), after a list's index refused (`NK1211`); `?.` alike (D13). | Accepted | partly: D12 (#342), D13 not built (#476) |
@@ -271,6 +272,7 @@ either finds the other. Records replaced as a whole are not here: they are in
 
 | Changed | By | What holds now |
 | :--- | :--- | :--- |
+| [291](adr-291.md) D1, D5 | [356](adr-356.md) D1, D2 | a `let` and a `for` head take a nested tuple; a variant there is `NK1259` |
 | [349](adr-349.md) D3 | [355](adr-355.md) D3 | `E::V(a, ..)` and `(a, ..)` are the remaining values; `NK1255` only on a variant without values |
 | [283](adr-283.md) D25 | [353](adr-353.md) D1-D4 | a result may point into several parameters, view by view; giving an argument up while viewed is allowed; a change in place is `NK2305` |
 | [346](adr-346.md) D7 | [351](adr-351.md) D5 | a supervisor throws a child's fatal error itself; no `supervisor::Handed` |

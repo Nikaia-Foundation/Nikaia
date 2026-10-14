@@ -634,7 +634,7 @@ fn walk_block(unit: ref Unit, asked: ref Asked, block: ref Block, tail: bool, ow
                     stores(unit, asked, expr, span, own_buffer, here)
                 }
             }
-            Stmt::For { bindings, iter, body } => {
+            Stmt::For { bindings, iter, body, .. } => {
                 if mentions(unit, asked, here, iter) {
                     for binding in bindings {
                         here.carriers.insert(asked.names.resolve(binding).clone())
@@ -1759,7 +1759,7 @@ fn rsrc_block(unit: ref Unit, asked: ref Asked, here: ref Here, known: ref colle
                     tail = reach
                 }
             }
-            Stmt::For { bindings, iter, body } => {
+            Stmt::For { bindings, iter, body, .. } => {
                 let reach = rsrc_eval(unit, asked, here, known, own_buffer, iter, flow)
                 for binding in bindings {
                     rsrc_shadow(asked, here, asked.names.resolve(binding), flow)

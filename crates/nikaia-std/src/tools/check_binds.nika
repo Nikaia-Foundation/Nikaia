@@ -48,11 +48,18 @@ impl CheckState {
     /// or a view is lent (#465): its parts are views of the tuple's, and a
     /// number, a `bool` or a `char` among them is read out of its view where it
     /// is bound, as a loop binding is.
-    pub fn tuple_let(ref mut self, world: ref CheckWorld, names: ref Vec[winnow_grammar::Symbol], written: bool, found: ref Ty, value: ref Expr, span: ref Span) -> Ty sync {
+    pub fn tuple_let(ref mut self, world: ref CheckWorld, names: ref Vec[winnow_grammar::Symbol], shape: ref Vec[i64], written: bool, found: ref Ty, value: ref Expr, span: ref Span) -> Ty sync {
         if written {
             self.findings.push(check_refusal("NK1136", span, "A `let` that binds several names can't have a type.".clone(), ["The names are taken apart by position, and one type can't say which name it belongs to.".clone()], "Remove the type, or bind one name and read the parts from it.".clone()))
         }
-        let parts = binds_tuple_parts(found, names.len())
+        let mut parts = binds_tuple_parts(found, names.len())
+        if shape.len() > 0 {
+            let mut width = 1
+            if shape[0] > 0 {
+                width = shape[0]
+            }
+            parts = self.nested_pattern_parts(world, binds_tuple_parts(found, width), shape, names.len(), "A `let`", span)
+        }
         let at = span.start as i64
         let lent = self.facts.lent_lets.contains(at) || self.a_tuple_over_a_lent_name(world, value)
         let mut frame = 0
@@ -66,6 +73,49 @@ impl CheckState {
             self.bind_with(bound, parts[index].clone(), null)
         }
         return Ty::Tuple([])
+    }
+
+    /// **Each name of a nested tuple pattern takes its part** (ADR-356): `top`
+    /// are the parts of the outermost tuple, `shape` the pattern in prefix
+    /// order. A part whose type is not a tuple of that width is `?` all the way
+    /// down, as one level is (ADR-291 D3). `[-1]` is a variant in the head:
+    /// **`NK1259`**, and every name is `?`.
+    pub fn nested_pattern_parts(ref mut self, world: ref CheckWorld, top: Vec[Ty], shape: ref Vec[i64], count: i64, site: ref String, span: ref Span) -> Vec[Ty] sync {
+        let mut out: Vec[Ty] = []
+        if shape.len() == 1 && shape[0] == -1 {
+            self.findings.push(check_refusal("NK1259", span, f"{site} can't take a variant apart.", ["A variant may not be the one the value holds, and a binding has no other branch to go to.".clone()], "Take the value apart with a `match`, which has an arm for each case.".clone()))
+            for _ in 0..<count {
+                out.push(Ty::Unknown)
+            }
+            return out
+        }
+        // What is still to be matched, the next part last.
+        let mut pending: Vec[Ty] = []
+        let mut index = top.len()
+        while index > 0 {
+            index -= 1
+            pending.push(top[index].clone())
+        }
+        let mut at = 1
+        while at < shape.len() {
+            let width = shape[at]
+            at += 1
+            let part: Ty = pending.pop() ?? Ty::Unknown
+            if width == 0 {
+                out.push(part)
+            } else {
+                let inner = binds_tuple_parts(part, width)
+                let mut back = width
+                while back > 0 {
+                    back -= 1
+                    pending.push(inner[back].clone())
+                }
+            }
+        }
+        while out.len() < count {
+            out.push(Ty::Unknown)
+        }
+        return out
     }
 
     fn a_tuple_over_a_lent_name(ref self, world: ref CheckWorld, value: ref Expr) -> bool sync {

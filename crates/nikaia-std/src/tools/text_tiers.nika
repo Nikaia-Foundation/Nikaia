@@ -842,7 +842,7 @@ fn tier_statement(stmt: ref Stmt, at: i64, ask: ref TierAsk, mut walk: TierWalk)
     match stmt {
         Stmt::Let { names, value, ty, .. } => tier_let(names, value, ty, at, ask, walk),
         Stmt::Assign { target, value, .. } => tier_assign(target, value, ask, walk),
-        Stmt::For { bindings, iter, body } => {
+        Stmt::For { bindings, iter, body, .. } => {
             let kinds = tier_expr(iter, ask, walk)
             open_tier_scope(walk)
             for binding in bindings {

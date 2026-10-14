@@ -128,10 +128,10 @@ pub struct Block {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Stmt {
-    Let { names: Vec<winnow_grammar::Symbol>, mutable: bool, ty: Option<Type>, value: Expr },
+    Let { names: Vec<winnow_grammar::Symbol>, shape: Vec<i64>, mutable: bool, ty: Option<Type>, value: Expr },
     Comptime { name: winnow_grammar::Symbol, ty: Option<Type>, value: Expr, bounds: Vec<ConfigArg> },
     Assign { target: Expr, op: Option<BinaryOp>, value: Expr },
-    For { bindings: Vec<winnow_grammar::Symbol>, iter: Expr, body: Block },
+    For { bindings: Vec<winnow_grammar::Symbol>, shape: Vec<i64>, iter: Expr, body: Block },
     While { cond: Expr, body: Block },
     Return(Option<Expr>),
     Break,
@@ -622,7 +622,7 @@ fn copied(over: &[CountedLoop]) -> Vec<CountedLoop> {
 
 fn counted_statement(stmt: &Stmt, over: &mut Vec<CountedLoop>, words: &winnow_grammar::InternerContext, out: &mut collections::BTreeSet<i64>) {
     match stmt {
-        Stmt::For { bindings, iter, body } => {
+        Stmt::For { bindings, iter, body, .. } => {
             counted_expr(iter, &over, words, out);
             let mut inner = copied(&over);
             for b in bindings.iter() { inner = without(&inner, words.resolve(*b)); }
@@ -2053,7 +2053,7 @@ fn look_statement_here(stmt: &Stmt, look: &Look, words: &winnow_grammar::Interne
             _ => { },
         }; },
         Look::Lets => { match stmt {
-            Stmt::Let { names, mutable, ty, value } => {
+            Stmt::Let { names, mutable, ty, value, .. } => {
                 let mutable = *mutable;
                 if names.len() == 1 { read_let(words.resolve(*nikaia_std::index::get(&names, 0)), mutable, (ty).as_ref(), value, words, seen); }
             },
@@ -3188,7 +3188,7 @@ fn bounding_stmt(walk: &mut BoundsWalk, stmt: &Stmt, facts: &mut BoundsFacts, co
             }
             return false;
         },
-        Stmt::For { bindings, iter, body } => {
+        Stmt::For { bindings, iter, body, .. } => {
             bounding_for(walk, bindings, iter, body, facts, context, program, words, ask);
             return false;
         },
@@ -4247,7 +4247,7 @@ fn buffer_statement(stmt: &Stmt, span: &Span, ask: &BufferAsk<'_>, holes_of: &im
                 set_local(&root, local, walk);
             } else { flow_into(&root, &origins, walk); }
         },
-        Stmt::For { bindings, iter, body } => {
+        Stmt::For { bindings, iter, body, .. } => {
             let origins = origins_of(iter, ask, holes_of, unaliased, walk);
             walk.path.push((at, true));
             open_scope(walk);
@@ -5784,7 +5784,7 @@ fn bt_block<H: BtHost>(block: &Block, frame: &mut collections::BTreeMap<String, 
             },
             Stmt::Break => { return Ok(BtFlow::Broke); },
             Stmt::Continue => { return Ok(BtFlow::Continued); },
-            Stmt::For { bindings, iter, body } => {
+            Stmt::For { bindings, iter, body, .. } => {
                 let flow = bt_walk(bindings, iter, body, frame, host, state)?;
                 match flow {
                     BtFlow::Value(_) => { return Ok(flow); },
@@ -10753,9 +10753,15 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn tuple_let(&mut self, world: &CheckWorld<'_>, names: &[winnow_grammar::Symbol], written: bool, found: &Ty, value: &Expr, span: &Span) -> Ty {
+    #[allow(clippy::too_many_arguments)]
+    pub fn tuple_let(&mut self, world: &CheckWorld<'_>, names: &[winnow_grammar::Symbol], shape: &[i64], written: bool, found: &Ty, value: &Expr, span: &Span) -> Ty {
         if written { self.findings.push(check_refusal("NK1136", span, "A `let` that binds several names can't have a type.".to_owned(), vec!["The names are taken apart by position, and one type can't say which name it belongs to.".to_owned()], Some("Remove the type, or bind one name and read the parts from it.".to_owned()))); }
-        let parts = binds_tuple_parts(found, names.len() as i64);
+        let mut parts = binds_tuple_parts(found, names.len() as i64);
+        if !shape.is_empty() {
+            let mut width: i64 = 1;
+            if *nikaia_std::index::get(&shape, 0) > 0 { width = *nikaia_std::index::get(&shape, 0); }
+            parts = self.nested_pattern_parts(world, binds_tuple_parts(found, width), shape, names.len() as i64, "A `let`", span);
+        }
         let at = span.start as i64;
         let lent = self.facts.lent_lets.contains(&at) || self.a_tuple_over_a_lent_name(world, value);
         let mut frame: i64 = 0;
@@ -10767,6 +10773,38 @@ impl CheckState {
             self.bind_with(bound, (*nikaia_std::index::get(&parts, (index) as usize)).clone(), None);
         }
         Ty::Tuple(vec![])
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn nested_pattern_parts(&mut self, world: &CheckWorld<'_>, top: Vec<Ty>, shape: &[i64], count: i64, site: &str, span: &Span) -> Vec<Ty> {
+        let mut out: Vec<Ty> = vec![];
+        if shape.len() == 1 && *nikaia_std::index::get(&shape, 0) == -1 {
+            self.findings.push(check_refusal("NK1259", span, format!("{} can't take a variant apart.", site), vec!["A variant may not be the one the value holds, and a binding has no other branch to go to.".to_owned()], Some("Take the value apart with a `match`, which has an arm for each case.".to_owned())));
+            for _ in 0..count { out.push(Ty::Unknown); }
+            return out;
+        }
+        let mut pending: Vec<Ty> = vec![];
+        let mut index = top.len() as i64;
+        while index > 0 {
+            index -= 1;
+            pending.push((*nikaia_std::index::get(&top, nikaia_std::index::at(index))).clone());
+        }
+        let mut at: i64 = 1;
+        while ((at) as usize) < shape.len() {
+            let width = *nikaia_std::index::get(&shape, (at) as usize);
+            at += 1;
+            let part: Ty = nikaia_std::index::or(pending.pop(), || Ty::Unknown);
+            if width == 0 { out.push(part); } else {
+                let inner = binds_tuple_parts(&part, width);
+                let mut back = width;
+                while back > 0 {
+                    back -= 1;
+                    pending.push((*nikaia_std::index::get(&inner, nikaia_std::index::at(back))).clone());
+                }
+            }
+        }
+        while (out.len() as i64) < count { out.push(Ty::Unknown); }
+        out
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -15942,7 +15980,7 @@ fn check_core_stmt_read_shown(world: &CheckWorld<'_>, value: &Expr) -> String {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, names: &[winnow_grammar::Symbol], mutable: bool, ty: Option<&Type>, value: &Expr, span: &Span) -> Ty {
+pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, names: &[winnow_grammar::Symbol], shape: &[i64], mutable: bool, ty: Option<&Type>, value: &Expr, span: &Span) -> Ty {
     check_core_a_field_of_a_borrowed_subject(state, world, host, value, span, "bound");
     check_core_a_mut_parameter_given_away(state, world, host, value, span, "bound");
     let outer_read = state.flow.read_a_map;
@@ -15988,7 +16026,7 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     }
     for n in bound_names.iter() { if n != "_" { state.written_at.push((n.to_owned(), span.start as i64)); } }
     if check_core_stmt_a_place(value) && state.takes_away(world, &found) { check_core_stmt_lent_let(state, world, names, span); }
-    if names.len() >= 2 { return state.tuple_let(world, names, ty.is_some(), &found, value, span); }
+    if names.len() >= 2 || !shape.is_empty() { return state.tuple_let(world, names, shape, ty.is_some(), &found, value, span); }
     let name: String = format!("{}", world.words.resolve(*nikaia_std::index::get(&names, 0)));
     if name == "_" { state.a_let_that_binds_nothing(span); }
     state.nameable(&name, span, "a `let`");
@@ -16361,14 +16399,18 @@ fn check_core_stmt_for_a_range(state: &mut CheckState, world: &CheckWorld<'_>, i
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, bindings: &[winnow_grammar::Symbol], iter: &Expr, body: &Block, span: &Span) -> Ty {
+#[allow(clippy::too_many_arguments)]
+pub fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, bindings: &[winnow_grammar::Symbol], shape: &[i64], iter: &Expr, body: &Block, span: &Span) -> Ty {
     state.the_caller_writes_no_reference(iter, span, "a `for` lends what it iterates");
     let over = host.expr(state, iter, span);
     state.a_loop_over_a_nullable(world, &over, iter, span);
-    state.fallible_step(world, &over, bindings.len() as i64, span);
+    let mut width = bindings.len() as i64;
+    if !shape.is_empty() && *nikaia_std::index::get(&shape, 0) > 0 { width = *nikaia_std::index::get(&shape, 0); }
+    state.fallible_step(world, &over, width, span);
     state.pausing_step(&over, span);
     state.a_sequence_is_walked(iter, &over, span, world);
-    let elements = elements_walked(&over, bindings.len() as i64);
+    let mut elements = elements_walked(&over, width);
+    if !shape.is_empty() { elements = state.nested_pattern_parts(world, elements, shape, bindings.len() as i64, "A `for`", span); }
     let a_seq = matches!(over, Ty::Seq { .. });
     let owned = is_a_place(iter) && a_seq;
     if owned { state.facts.owned_loops.insert(span.start as i64); }
@@ -16454,11 +16496,11 @@ pub fn check_core_stmt_jump(state: &mut CheckState, word: &str, span: &Span) -> 
 pub fn check_core_stmt<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, stmt: &Stmt, span: &Span) -> Ty {
     state.flow.literal_receivers.clear();
     match stmt {
-        Stmt::Let { names, mutable, ty, value } => { let mutable = *mutable; check_core_stmt_let(state, world, host, names, mutable, (ty).as_ref(), value, span) },
+        Stmt::Let { names, shape, mutable, ty, value } => { let mutable = *mutable; check_core_stmt_let(state, world, host, names, shape, mutable, (ty).as_ref(), value, span) },
         Stmt::Comptime { name, ty, value, bounds } => { let name = *name; check_core_comptime_binding(state, world, host, name, (ty).as_ref(), value, bounds, span) },
         Stmt::Assign { target, op, value, .. } => check_core_stmt_assign(state, world, host, target, (op).as_ref(), value, span),
         Stmt::While { cond, body } => check_core_stmt_while(state, world, host, cond, body, span),
-        Stmt::For { bindings, iter, body } => check_core_stmt_for(state, world, host, bindings, iter, body, span),
+        Stmt::For { bindings, shape, iter, body } => check_core_stmt_for(state, world, host, bindings, shape, iter, body, span),
         Stmt::Return(value) => check_core_stmt_return(state, world, host, (value).as_ref(), span),
         Stmt::Break => check_core_stmt_jump(state, "break", span),
         Stmt::Continue => check_core_stmt_jump(state, "continue", span),
@@ -42495,7 +42537,7 @@ pub fn a_parse_error(error: &Failure, source: &str, stops_at: &impl Fn(&str) -> 
     let ref_note = the_spelling_ref_replaced_note(&said_word);
     if ref_note.is_some() { notes.push(nikaia_std::index::or(ref_note, || "".into())); }
     if error.has_found {
-        let pairs = vec![coalesce_fallback_note(&said_word, &before), let_names_note(&said_word, &before)];
+        let pairs = vec![coalesce_fallback_note(&said_word, &before)];
         for pair in pairs.iter() {
             if pair.len() >= 2 {
                 notes.push((*nikaia_std::index::get(&pair, 0)).to_owned());
@@ -42650,11 +42692,6 @@ pub fn coalesce_fallback_note(found: &str, before: &str) -> Vec<String> {
         if found == operator { return vec![String::from("The fallback after `??` is a single value unless you use brackets, so `a ?? 0 > 3` would mean `a ?? (0 > 3)`."), String::from("Put brackets around the part you mean: `(a ?? 0) > 3`, or `a ?? (0 > 3)`.")]; }
     }
     vec![]
-}
-
-pub fn let_names_note(found: &str, before: &str) -> Vec<String> {
-    if found != "(" || !(before.contains("let (") || before.contains("let mut (")) { return vec![]; }
-    vec![String::from("A `let` binds one name, or a flat list of names like `let (tx, rx) = …`. A tuple inside a tuple can't be taken apart here."), String::from("Bind the outer parts to one name each, and read the inner parts from those names.")]
 }
 
 
@@ -44951,7 +44988,7 @@ fn prover_stmt(walk: &mut ProverWalk, stmt: &Spanned<Stmt>, scope: &mut ProverSc
     let span = stmt.span;
     let nested = at.inside(false);
     match &stmt.node {
-        Stmt::Let { names, mutable, ty, value } => {
+        Stmt::Let { names, mutable, ty, value, .. } => {
             let mutable = *mutable;
             prover_let(walk, names, mutable, (ty).as_ref(), value, span, scope, &nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
             false
@@ -44977,7 +45014,7 @@ fn prover_stmt(walk: &mut ProverWalk, stmt: &Spanned<Stmt>, scope: &mut ProverSc
             }
             false
         },
-        Stmt::For { bindings, iter, body } => {
+        Stmt::For { bindings, iter, body, .. } => {
             prover_for(walk, bindings, iter, body, span, scope, at, &nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
             false
         },
@@ -49975,7 +50012,7 @@ fn tier_statement(stmt: &Stmt, at: i64, ask: &TierAsk<'_>, walk: &mut TierWalk) 
     match stmt {
         Stmt::Let { names, value, ty, .. } => { tier_let(names, value, (ty).as_ref(), at, ask, walk); },
         Stmt::Assign { target, value, .. } => { tier_assign(target, value, ask, walk); },
-        Stmt::For { bindings, iter, body } => {
+        Stmt::For { bindings, iter, body, .. } => {
             let kinds = tier_expr(iter, ask, walk);
             open_tier_scope(walk);
             for binding in bindings.iter() { bind_tier_local(ask.names.resolve(*binding).to_owned(), plain_local(kinds.clone()), walk); }
@@ -52264,7 +52301,7 @@ fn tm_walk_block(block: &Block, words: &winnow_grammar::InternerContext, library
                     _ => { },
                 }
             },
-            Stmt::For { bindings, iter, body } => {
+            Stmt::For { bindings, iter, body, .. } => {
                 match iter {
                     Expr::Variable(name, _) => {
                         let name = *name;
@@ -54526,7 +54563,7 @@ fn walk_block(unit: &Unit, asked: &Asked<'_>, block: &Block, tail: bool, own_buf
             },
             Stmt::Return(value) => { handed_back_maybe(unit, asked, (value).as_ref(), &span, own_buffer, here); },
             Stmt::Expr(expr) => { if returning { handed_back(unit, asked, expr, &span, own_buffer, here); } else { stores(unit, asked, expr, &span, own_buffer, here); } },
-            Stmt::For { bindings, iter, body } => {
+            Stmt::For { bindings, iter, body, .. } => {
                 if mentions(unit, asked, &here, iter) { for binding in bindings.iter() { here.carriers.insert(asked.names.resolve(*binding).to_owned()); } }
                 stores(unit, asked, iter, &span, own_buffer, here);
                 walk_block(unit, asked, body, false, own_buffer, here);
@@ -55412,7 +55449,7 @@ fn rsrc_block(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::
                 let reach = rsrc_eval(unit, asked, here, known, own_buffer, expr, flow);
                 if last { tail = reach; }
             },
-            Stmt::For { bindings, iter, body } => {
+            Stmt::For { bindings, iter, body, .. } => {
                 let reach = rsrc_eval(unit, asked, here, known, own_buffer, iter, flow);
                 for binding in bindings.iter() {
                     rsrc_shadow(asked, here, asked.names.resolve(*binding), flow);
@@ -56742,7 +56779,7 @@ pub mod parse_errors {
 }
 pub mod parse_notes {
     #[allow(unused_imports)]
-    pub use super::{previous_token, unclosed_quote, unclosed_bracket, opening_of_an_unclosed_comment, first_sentence, the_spelling_ref_replaced_note, an_effect_on_a_lambda_note, coalesce_fallback_note, let_names_note};
+    pub use super::{previous_token, unclosed_quote, unclosed_bracket, opening_of_an_unclosed_comment, first_sentence, the_spelling_ref_replaced_note, an_effect_on_a_lambda_note, coalesce_fallback_note};
 }
 pub mod parse_numbers {
     #[allow(unused_imports)]

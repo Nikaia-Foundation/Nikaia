@@ -16,6 +16,17 @@ pub use nikaia_std::tools::tree_build::{Postfix, grouped, params_of, split_mut};
 /// The folds, with the ids they give their nodes set aside from the file's
 /// count first ([ADR-340](../../../docs/specification/adr/adr-340.md) D1): the
 /// numbers are the parser's, the nodes are `tools/tree_build.nika`'s.
+/// One name or a flat tuple keeps no shape (ADR-356): only a nested pattern
+/// carries one, so every reader that knew the flat form reads it unchanged.
+fn flat_shape((names, shape): (Vec<Symbol>, Vec<i64>)) -> (Vec<Symbol>, Vec<i64>) {
+    let tuples = shape.iter().filter(|w| **w > 0).count();
+    if tuples <= 1 {
+        (names, Vec::new())
+    } else {
+        (names, shape)
+    }
+}
+
 fn fold_binary(
     user: &mut Trivia,
     head: ast::Expr,
@@ -2335,48 +2346,69 @@ grammar! {
         rule let_stmt -> Stmt =
             KW_LET
             mutable:kw_mut?
-            names:let_names
+            head:let_names
             ty:type_annotation?
             "="
             val:expr
             ";"?
             -> {
+                let (names, shape) = head;
                 Stmt::Let {
                     names,
+                    shape,
                     mutable: mutable.is_some(),
                     ty,
                     value: val
                 }
             }
 
-        // **One name, or a flat tuple of them**
-        // ([ADR-291](../../../../docs/specification/adr/adr-291.md)).
+        // **One name, or a tuple of names nested as deep as it is written**
+        // ([ADR-291](../../../../docs/specification/adr/adr-291.md),
+        // [ADR-356](../../../../docs/specification/adr/adr-356.md)): the same
+        // irrefutable pattern as a `for` head - names, `_` and tuples of them.
+        // No variant: a variant can fail to match, and that is `match`'s job.
+        // A variant written here still parses, as shape `[-1]`, so that the
+        // checker refuses it with `NK1259`'s sentence rather than a list of
+        // tokens.
         //
-        // Part I 8.1.2 writes `let (user, rights, prefs) = overlap { … }` and
-        // Part II 12.5 writes `let (tx, rx) = channel::bounded(100)`; Part I
-        // 2.1 introduces `let` with a name and says nothing about a pattern.
-        // So this is a tuple of **names** and not a pattern language: `match`
-        // has patterns already and these two sites need neither.
-        //
-        // Nesting and `_` do not parse, and the note beside a `let`'s parse
-        // error is what says so in a sentence rather than in a list of tokens.
         // **`_` is a position of a destructured tuple**
         // ([ADR-291](../../../../docs/specification/adr/adr-291.md) D6), and the
         // single-name form takes it too - so that `let _ = f()` reaches the
         // checker and gets `NK1144`'s sentence rather than a parse error at a
-        // character. D2 is a refusal *with a message*, and only the checker can
-        // give one.
-        //
-        // Two `_` in one list are fine: nothing is bound, so nothing collides.
-        rule let_names -> Vec<Symbol> =
-            one:let_name -> { vec![one] }
-          | "(" first:let_name rest:let_name_tail* ")" -> {
-                let mut names = vec![first];
-                names.extend(rest);
-                names
+        // character. Two `_` in one list are fine: nothing is bound.
+        rule let_names -> (Vec<Symbol>, Vec<i64>) =
+            v:variant_head -> { v }
+          | p:tuple_pattern -> { flat_shape(p) }
+
+        // A variant in a head, kept only to be refused (`NK1259`).
+        rule variant_head -> (Vec<Symbol>, Vec<i64>) =
+            NAME path_segment* "(" first:tuple_pattern rest:tuple_pattern_tail* ")" -> {
+                let mut names = first.0;
+                for (n, _) in rest {
+                    names.extend(n);
+                }
+                (names, vec![-1])
             }
 
-        rule let_name_tail -> Symbol = "," n:let_name -> { n }
+        // Names in written order and the shape in prefix order (a tuple's
+        // width, `0` for a name). `(p)` is `p`.
+        rule tuple_pattern -> (Vec<Symbol>, Vec<i64>) =
+            n:let_name -> { (vec![n], vec![0]) }
+          | "(" first:tuple_pattern rest:tuple_pattern_tail* ")" -> {
+                if rest.is_empty() {
+                    first
+                } else {
+                    let mut names = Vec::new();
+                    let mut shape = vec![1 + rest.len() as i64];
+                    for (n, sh) in std::iter::once(first).chain(rest) {
+                        names.extend(n);
+                        shape.extend(sh);
+                    }
+                    (names, shape)
+                }
+            }
+
+        rule tuple_pattern_tail -> (Vec<Symbol>, Vec<i64>) = "," p:tuple_pattern -> { p }
 
         // The ignore pattern carries the symbol `_`, which is what the emitter
         // writes below and what `NK1144` looks for. It is a symbol no `NAME` can
@@ -2403,24 +2435,15 @@ grammar! {
             }
 
         rule for_stmt -> Stmt =
-            KW_FOR bindings:for_bindings KW_IN
+            KW_FOR head:let_names KW_IN
             iter:head_expr body:block ";"?
             -> {
-                Stmt::For { bindings, iter, body }
+                let (bindings, shape) = head;
+                Stmt::For { bindings, shape, iter, body }
             }
 
-        // **`_` is a position of a destructured tuple here too** (Part I 2.1,
-        // 0.0.250): `for (_, bucket) in order` ignores the half it does not
-        // need, as `let (name, _) = pair()` does. It parsed in the `let` and
-        // not here, and a name nobody reads is a warning below.
-        rule for_bindings -> Vec<Symbol> =
-            "(" head:let_name tail:let_name_tail* ")" -> {
-                let mut names = vec![head];
-                names.extend(tail);
-                names
-            }
-          | n:let_name -> { vec![n] }
-
+        // **A `for` head is a `let`'s pattern** (ADR-356): `for (_, bucket) in
+        // order`, `for (name, (line, col)) in places`.
         rule ident_tail -> Symbol = "," n:NAME -> { n }
 
         rule assign_stmt -> Stmt =

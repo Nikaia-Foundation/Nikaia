@@ -8,6 +8,10 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.939] — 2026-10-14
+
+**a let and a for head take a nested tuple of names; a variant there is NK1259 (ADR-356, #611)**
+
 ## [0.0.938] — 2026-10-14
 
 **a call through a function field fails with what was stored there (ADR-351 D1-D3, part of #620)**

@@ -579,7 +579,7 @@ fn tm_walk_block(block: ref Block, words: ref winnow_grammar::InternerContext, l
                     else => {}
                 }
             },
-            Stmt::For { bindings, iter, body } => {
+            Stmt::For { bindings, iter, body, .. } => {
                 match iter {
                     Expr::Variable(name, _) => {
                         let id = tm_resolve(name.clone(), walk)

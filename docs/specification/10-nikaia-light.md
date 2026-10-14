@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.938 (Draft)
+**Version:** 0.0.939 (Draft)
 **Date:** 2026-10-14
 
 ---
@@ -145,7 +145,7 @@ let mut y = 10
 y = 20     // This is allowed
 ```
 
-**Taking a tuple apart.** `let (a, b) = pair()` binds each name to the part at its position. A `let` takes one name or a flat tuple of names; a nested tuple is refused, and so is a written type (`NK1136`), because one type cannot say which name it is about.
+**Taking a tuple apart.** `let (a, b) = pair()` binds each name to the part at its position. The names may nest as the tuple does, `let (a, (b, c)) = (1, (2, 3))`: a `let` takes a name, `_`, or a parenthesised list of these, as deep as it is written. A written type on a tuple is refused (`NK1136`), because one type cannot say which name it is about. A variant is refused (`NK1259`): it may not be the one the value holds, and taking it apart is a `match`'s.
 
 **Reserved words**
 
@@ -902,7 +902,7 @@ A `for` over a list **lends** it: the elements are looked at, and the list is
 still there when the loop is over. A binding is a view of its element, so an
 element kept past the turn, text in a field for instance, is kept as a copy,
 `.clone()`; a number, a `bool` and a `scalar` are the element itself. A map is
-walked as pairs, `for (key, value) in scores`. Taking the elements away is written,
+walked as pairs, `for (key, value) in scores`. A `for` head takes the pattern a `let` takes, nested tuples and `_` included, `for (name, (line, col)) in places`, and no variant (`NK1259`). Taking the elements away is written,
 `for x in xs.drain()` (6.5). A `ref` written in front of the list is refused with
 `NK1137`, because the compiler writes that reference.
 
@@ -1028,7 +1028,7 @@ A pattern is one of seven things, and each is read the way it is written:
 | `Message::Write(text)` | that variant, binding what it carries |
 | `Message::Move { x, y }` | that variant, binding its fields by name: `x` is short for `x: x` |
 | `other` | anything, and **binds it** to that name |
-| `null` | over a `T?`, the value that is not set; every other arm of that `match` matches the `T` inside, so a bare name binds the `T` and `0` compares with it (ADR-352). Over a type that is never `null` it is refused with `NK1256` |
+| `null` | over a `T?`, the value that is not set; every other arm of that `match` matches the `T` inside, so a bare name binds the `T` and `0` compares with it (ADR-352). Over a type that is never `null` it is refused with `NK1259` |
 
 The last two rows are one rule: a path with `::` in it names a variant, and a
 bare name binds. `Quit` is a variant *of* `Message`, never on its own.

@@ -500,6 +500,7 @@ impl<'a> Body<'a> {
                     bindings,
                     iter,
                     body,
+                    ..
                 } => {
                     let dep = self.iterated(iter);
                     for b in bindings {

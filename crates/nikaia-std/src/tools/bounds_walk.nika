@@ -1281,7 +1281,7 @@ fn bounding_stmt(mut walk: BoundsWalk, stmt: ref Stmt, mut facts: BoundsFacts, c
             }
             return false
         },
-        Stmt::For { bindings, iter, body } => {
+        Stmt::For { bindings, iter, body, .. } => {
             bounding_for(walk, bindings, iter, body, facts, context, program, words, ask)
             return false
         },

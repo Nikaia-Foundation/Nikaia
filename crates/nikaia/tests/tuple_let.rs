@@ -1,5 +1,6 @@
-//! A `let` takes one name, or a flat tuple of them
-//! ([ADR-291](../../../docs/specification/adr/adr-291.md)).
+//! A `let` takes one name, or a tuple of them nested as deep as it is written
+//! ([ADR-291](../../../docs/specification/adr/adr-291.md),
+//! [ADR-356](../../../docs/specification/adr/adr-356.md)).
 //!
 //! Part I 8.1.2 writes `let (user, rights, prefs) = overlap { … }` and Part II
 //! 12.5 writes `let (tx, rx) = channel::bounded(100)`. Neither parsed: Part I
@@ -7,9 +8,7 @@
 //! specification used a form twice, for two different constructs, and defined
 //! it nowhere.
 //!
-//! **It is not a pattern language.** `match` has patterns already and neither
-//! site needs them; what the two write is a tuple whose arity is known, taken
-//! apart by position.
+//! **No variant**: a variant can fail to match, and that is `match`'s job.
 //!
 //! What the parts hold when it runs is `tests/language/src/tuple_let.nika`.
 
@@ -109,21 +108,50 @@ fn a_tuple_let_takes_no_type() {
     assert!(found.iter().any(|f| f.code == "NK1136"), "{found:#?}");
 }
 
-/// **A nested tuple is refused with a sentence**, not with a list of tokens —
-/// which is this compiler's rule for a form nobody decided.
+/// **A tuple inside a tuple is taken apart too** (ADR-356 D1): a `let` and a
+/// `for` head take one pattern, as deep as it is written, and lower to Rust's
+/// own nested tuple pattern.
 #[test]
-fn a_nested_tuple_is_refused_and_says_why() {
-    let source = "fn main() {\n    let ((a, b), c) = ((1, 2), 3)\n}\n";
-    let refused = parse_to_ast(source).expect_err("a nested tuple is not this form");
-    let said = rendered(&refused, source);
-    assert!(
-        said.contains("A tuple inside a tuple can't be taken apart here"),
-        "the shape is named, not the token:\n{said}"
+fn a_nested_tuple_is_taken_apart() {
+    let rust =
+        lowered("fn main() {\n    let (a, (b, c)) = (1, (2, 3))\n    println(f\"{a}{b}{c}\")\n}\n");
+    assert!(rust.contains("let (a, (b, c)) ="), "{rust}");
+    let rust = lowered(
+        "fn main() {\n    let places = [(\"a\", (1, 2))]\n    for (name, (line, _)) in places {\n        println(f\"{name}{line}\")\n    }\n}\n",
     );
-    assert!(
-        said.contains("`let (tx, rx) = …`"),
-        "and the form that does work is shown:\n{said}"
-    );
+    assert!(rust.contains("for (name, (line, _)) in"), "{rust}");
+}
+
+/// **Each name takes the type of its own part**, at any depth.
+#[test]
+fn a_nested_part_carries_its_type() {
+    let source = "fn takes(n: i64) -> i64 { return n }\nfn main() {\n    let (a, (b, word)) = (1, (2, \"x\"))\n    println(f\"{takes(word)}{a}{b}\")\n}\n";
+    let found = findings(source);
+    assert!(found.iter().any(|f| f.code == "NK1102"), "{found:#?}");
+}
+
+/// **A variant in a head is refused, `NK1259`**, and the help names `match`
+/// (ADR-356 D2): it can fail to match, and a binding has no other branch.
+#[test]
+fn a_variant_in_a_head_is_refused() {
+    for source in [
+        "fn main() {\n    let o: i64? = 1\n    let Some(x) = o\n}\n",
+        "fn main() {\n    let xs: Vec[i64?] = [1]\n    for Some(x) in xs {\n        println(f\"{x}\")\n    }\n}\n",
+    ] {
+        let found = findings(source);
+        let refusal = found.iter().find(|f| f.code == "NK1259");
+        assert!(
+            refusal.is_some_and(|f| format!("{f:?}").contains("match")),
+            "{found:#?}"
+        );
+    }
+}
+
+/// **A written type on a nested destructure is still `NK1136`.**
+#[test]
+fn a_nested_tuple_let_takes_no_type() {
+    let found = findings("fn main() {\n    let (a, (b, c)): i64 = (1, (2, 3))\n}\n");
+    assert!(found.iter().any(|f| f.code == "NK1136"), "{found:#?}");
 }
 
 /// **And an ordinary bracket that fails to parse gets no such note**, which is

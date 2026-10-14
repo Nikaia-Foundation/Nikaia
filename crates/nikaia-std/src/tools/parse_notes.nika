@@ -214,12 +214,3 @@ pub fn coalesce_fallback_note(found: ref String, before: ref String) -> Vec[Stri
     }
     return []
 }
-
-/// The note and the help a `let` gets that takes apart something a flat
-/// tuple of names cannot (ADR-291).
-pub fn let_names_note(found: ref String, before: ref String) -> Vec[String] {
-    if found != "(" || !(before.contains("let (") || before.contains("let mut (")) {
-        return []
-    }
-    return ["A `let` binds one name, or a flat list of names like `let (tx, rx) = …`. A tuple inside a tuple can't be taken apart here.", "Bind the outer parts to one name each, and read the inner parts from those names."]
-}

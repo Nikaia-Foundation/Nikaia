@@ -108,6 +108,7 @@ fn constants_as_lets(
             Some(Spanned::new(
                 Stmt::Let {
                     names: vec![name(named)],
+                    shape: Vec::new(),
                     mutable: false,
                     ty: ty.clone(),
                     value: Expr::Call {

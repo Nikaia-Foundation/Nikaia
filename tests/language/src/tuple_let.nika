@@ -1,5 +1,7 @@
-// A `let` takes one name, or a flat tuple of them (ADR-291): what the parts
+// A `let` takes one name, or a tuple of them nested as deep as written (ADR-291, ADR-356): what the parts
 // hold. How it lowers and what is refused is `crates/nikaia/tests/tuple_let.rs`.
+use std::collections
+
 
 fn tuple_let_pair() -> (i64, String) {
     return (7, "seven".to_string())
@@ -12,4 +14,24 @@ test "a tuple of names binds the parts and runs" {
     let (a, b, c) = (1, 2, 3)
     let line = f"{n} {word} {a} {b} {c}"
     assert(line == "7 seven 1 2 3")
+}
+
+// **A nested tuple, at a `let` and in a `for` head** (ADR-356), with `_`
+// inside, over a list and over a map whose values are tuples.
+test "a nested tuple is taken apart at a let and in a for head" {
+    let (a, (b, c)) = (1, (2, 3))
+    assert(a + b + c == 6)
+    let places = [("x", (1, 2)), ("y", (3, 4))]
+    let mut seen = ""
+    for (name, (line, _)) in places {
+        seen = f"{seen}{name}{line}"
+    }
+    assert(seen == "x1y3")
+    let mut totals: collections::HashMap[String, (i64, i64)] = collections::HashMap()
+    totals.insert("k".to_string(), (5, 6))
+    let mut sum = 0
+    for (_, (first, second)) in totals {
+        sum += first + second
+    }
+    assert(sum == 11)
 }

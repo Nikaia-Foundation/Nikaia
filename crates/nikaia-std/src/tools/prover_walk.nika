@@ -160,7 +160,7 @@ fn prover_stmt(mut walk: ProverWalk, stmt: ref Spanned[Stmt], mut scope: ProverS
     let span = stmt.span
     let nested = at.inside(false)
     return match stmt.node {
-        Stmt::Let { names, mutable, ty, value } => {
+        Stmt::Let { names, mutable, ty, value, .. } => {
             prover_let(walk, names, mutable, ty, value, span, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
             false
         },
@@ -185,7 +185,7 @@ fn prover_stmt(mut walk: ProverWalk, stmt: ref Spanned[Stmt], mut scope: ProverS
             }
             false
         },
-        Stmt::For { bindings, iter, body } => {
+        Stmt::For { bindings, iter, body, .. } => {
             prover_for(walk, bindings, iter, body, span, scope, at, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
             false
         },

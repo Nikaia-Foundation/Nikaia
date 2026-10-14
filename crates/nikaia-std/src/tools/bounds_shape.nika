@@ -369,7 +369,7 @@ fn look_statement_here(stmt: ref Stmt, look: ref Look, words: ref winnow_grammar
             else => {},
         },
         Look::Lets => match stmt {
-            Stmt::Let { names, mutable, ty, value } => {
+            Stmt::Let { names, mutable, ty, value, .. } => {
                 if names.len() == 1 {
                     read_let(words.resolve(names[0]), mutable, ty, value, words, seen)
                 }

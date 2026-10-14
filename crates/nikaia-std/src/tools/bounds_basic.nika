@@ -58,7 +58,7 @@ fn copied(over: ref Vec[CountedLoop]) -> Vec[CountedLoop] {
 
 fn counted_statement(stmt: ref Stmt, mut over: Vec[CountedLoop], words: ref winnow_grammar::InternerContext, mut out: collections::BTreeSet[i64]) {
     match stmt {
-        Stmt::For { bindings, iter, body } => {
+        Stmt::For { bindings, iter, body, .. } => {
             counted_expr(iter, over, words, out)
             // A binding of this loop hides an outer loop's of the same name.
             let mut inner = copied(over)

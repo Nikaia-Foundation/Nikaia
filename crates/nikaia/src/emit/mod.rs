@@ -5458,6 +5458,7 @@ impl<'p> Emitter<'p> {
         match stmt {
             Stmt::Let {
                 names,
+                shape,
                 mutable,
                 ty,
                 value,
@@ -5471,12 +5472,13 @@ impl<'p> Emitter<'p> {
                 // count is decided per **value** and a destructure names none -
                 // which is the same answer `contracts::sharing` gives, and the
                 // two have to agree.
-                if let [_, _, ..] = names.as_slice() {
+                if names.len() > 1 || !shape.is_empty() {
                     let bound: Vec<String> = names
                         .iter()
                         .map(|n| escaped(self.text(*n)).into_owned())
                         .collect();
-                    out.push(&format!("let {mutable}({}) = ", bound.join(", ")));
+                    let pattern = tuple_pattern(&bound, shape);
+                    out.push(&format!("let {mutable}{pattern} = "));
                     let (before, after) = Self::around_value(
                         self.s.facts.nullable_sites.get(&(span.at() as i64)),
                         value,
@@ -6015,6 +6017,7 @@ impl<'p> Emitter<'p> {
 
             Stmt::For {
                 bindings,
+                shape,
                 iter,
                 body,
             } => {
@@ -6042,15 +6045,12 @@ impl<'p> Emitter<'p> {
                     }
                     return Ok(());
                 }
-                let names = bindings
+                let each: Vec<String> = bindings
                     .iter()
-                    .map(|b| self.name(*b))
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                let bound = match bindings.len() > 1 {
-                    true => format!("({names})"),
-                    false => names.clone(),
-                };
+                    .map(|b| self.name(*b).into_owned())
+                    .collect();
+                let names = each.join(", ");
+                let bound = tuple_pattern(&each, shape);
                 // **A step that pauses is a loop that gives its thread up**
                 // ([ADR-172](../../docs/specification/adr/adr-172.md) D1). The
                 // language below has no `for` that awaits, so the shape is the
@@ -6098,11 +6098,7 @@ impl<'p> Emitter<'p> {
                     out.push("}");
                     return Ok(());
                 }
-                if bindings.len() > 1 {
-                    out.push(&format!("for ({names}) in "));
-                } else {
-                    out.push(&format!("for {names} in "));
-                }
+                out.push(&format!("for {bound} in "));
                 // **A `for` lends** ([ADR-094](../../docs/specification/adr/adr-094.md)
                 // D4). `for e in entries { … }` leaves `entries` where it was,
                 // so `entries.len()` on the next line is a program rather than
@@ -8389,4 +8385,26 @@ fn nonnegative_locals(body: &Block) -> HashSet<Symbol> {
 /// ([ADR-299](../../docs/specification/adr/adr-299.md) D20).
 pub(crate) fn dsl_name(parsed: &Parsed, package: Option<Symbol>, target: Symbol) -> String {
     nikaia_std::tools::emit_items::dsl_name(&parsed.interner, package, target)
+}
+
+/// **Rust's own tuple pattern for a head** (ADR-291, ADR-356): one name as it
+/// is, a flat tuple in parentheses, and a nested one rebuilt from its shape -
+/// a tuple's width, `0` for a name, in prefix order.
+fn tuple_pattern(names: &[String], shape: &[i64]) -> String {
+    fn one(names: &[String], shape: &[i64], at: &mut usize, next: &mut usize) -> String {
+        let width = shape.get(*at).copied().unwrap_or(0);
+        *at += 1;
+        if width <= 0 {
+            let name = names.get(*next).cloned().unwrap_or_else(|| "_".to_string());
+            *next += 1;
+            return name;
+        }
+        let parts: Vec<String> = (0..width).map(|_| one(names, shape, at, next)).collect();
+        format!("({})", parts.join(", "))
+    }
+    match (names, shape.first()) {
+        ([name], None) => name.clone(),
+        (_, None) | (_, Some(-1)) => format!("({})", names.join(", ")),
+        _ => one(names, shape, &mut 0, &mut 0),
+    }
 }

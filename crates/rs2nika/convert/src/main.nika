@@ -128,7 +128,6 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R75  a callback `&|a: T| e` -> the lambda `fn(a) { e }` (R26)",
         "R76  `module::f(` where tools/module.nika exists -> `f(` (one namespace for all tools)",
         "R77  `self.s.m(..)` (a `CheckState` method already in Nikaia) -> `self.m(..)`, name and arguments as written",
-        "R78  a nested tuple pattern in a `for` head -> one level in the head, a `let (a, b) = t1` per inner tuple (#611)",
         "R69  a Rust name Nikaia reserves (`grammar`, `throws`, `with`, ..) -> `name_`",
         "R62  a local closure with arguments -> `let f: fn(ref T) -> R sync = fn(a) { .. }`, its type from the `--facts` file (rust-analyzer) or from its own annotations",
     ]
@@ -3310,63 +3309,6 @@ fn rs2nika_let_pair(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String] {
     return out
 }
 
-/// R78: a nested tuple pattern in a `for` head (#611 leaves nested heads
-/// undecided) -> one level in the head, a `let` per inner tuple in the body.
-/// `parts` are the head's parts; nested ones become `t1`, `t2`, .. and their
-/// `let`s are pushed onto `lets`.
-fn rs2nika_flat_parts(parts: ref Vec[String], mut lets: Vec[String]) -> Vec[String] {
-    let mut head: Vec[String] = []
-    for p in parts {
-        let t: String = p.trim().clone()
-        if t.starts_with("(") && t.ends_with(")") {
-            let slot = lets.len()
-            let name = f"t{slot + 1}"
-            head.push(name.clone())
-            lets.push("")
-            let inner = rs2nika_split_args(t[1..<t.len() - 1].clone())
-            let flat = rs2nika_flat_parts(inner, lets)
-            let joined = rs2nika_join(flat, ", ")
-            lets[slot] = f"let ({joined}) = {name}"
-        } else {
-            head.push(t.clone())
-        }
-    }
-    return head
-}
-
-fn rs2nika_for_nested(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String] {
-    let ind = rs2nika_indent(line)
-    let st: String = line.trim().clone()
-    if !st.starts_with("for (") || !st.ends_with(" {") {
-        return []
-    }
-    let c: Vec[scalar] = st.chars().collect()
-    let close = rs2nika_closing(c, 4, '(', ')')
-    if close < 0 {
-        return []
-    }
-    let parts = rs2nika_split_args(rs2nika_text(c, 5, close))
-    let mut nested = false
-    for p in parts {
-        if p.trim().starts_with("(") {
-            nested = true
-        }
-    }
-    if !nested {
-        return []
-    }
-    let mut lets: Vec[String] = []
-    let head = rs2nika_flat_parts(parts, lets)
-    let joined = rs2nika_join(head, ", ")
-    let rest = rs2nika_text(c, close + 1, c.len())
-    let mut out: Vec[String] = ["=", f"{ind}for ({joined}){rest}"]
-    for l in lets {
-        out.push(f"{ind}    {l}")
-    }
-    rs2nika_hit(ctx, "R78")
-    return out
-}
-
 fn rs2nika_if_let(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String] {
     let ind = rs2nika_indent(line)
     let filtered = rs2nika_filter_cloned(ctx, line)
@@ -3398,10 +3340,6 @@ fn rs2nika_if_let(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String] {
         }
         rs2nika_hit(ctx, "R22")
         return ["=", f"{ind}let {name} = {value} ?? {jump}"]
-    }
-    let nested = rs2nika_for_nested(ctx, line)
-    if nested.len() > 0 {
-        return nested
     }
     let pair = rs2nika_let_pair(ctx, line)
     if pair.len() > 0 {

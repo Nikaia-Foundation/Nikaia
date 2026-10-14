@@ -319,7 +319,7 @@ fn buffer_statement(stmt: ref Stmt, span: ref Span, ask: ref BufferAsk, holes_of
                 flow_into(root, origins, walk)
             }
         }
-        Stmt::For { bindings, iter, body } => {
+        Stmt::For { bindings, iter, body, .. } => {
             let origins = origins_of(iter, ask, holes_of, unaliased, walk)
             walk.path.push((at, true))
             open_scope(walk)

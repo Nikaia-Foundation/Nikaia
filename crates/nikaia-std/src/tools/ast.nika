@@ -282,15 +282,22 @@ pub struct Block {
 pub enum Stmt {
     // Kap 2.1: let mut x = 10
     Let {
-        /// **One name, or a flat tuple of them**
-        /// ([ADR-291](../../../docs/specification/adr/adr-291.md)):
-        /// `let x = 1` and `let (tx, rx) = channel::bounded(100)`.
+        /// **One name, or a tuple of names, nested as deep as it is written**
+        /// ([ADR-291](../../../docs/specification/adr/adr-291.md),
+        /// [ADR-356](../../../docs/specification/adr/adr-356.md)):
+        /// `let x = 1`, `let (tx, rx) = channel::bounded(100)` and
+        /// `let (a, (b, c)) = t`. The names in the order they are written.
         ///
         /// A `Vec` rather than a second variant, because the two are one
         /// statement and a walk that has to remember a second one is a walk
         /// that will forget it. Never empty - the grammar has no way to write
         /// `let () = …`.
         names: Vec[winnow_grammar::Symbol],
+        /// **How the names nest** (ADR-356): empty for one name or a flat
+        /// tuple, otherwise the pattern in prefix order - a tuple's width, `0`
+        /// for a name. `(a, (b, c))` is `[2, 0, 2, 0, 0]`. `[-1]` is a variant
+        /// written in the head, which the checker refuses (`NK1259`).
+        shape: Vec[i64],
         mutable: bool,
         ty: Type?, // Type Inference macht dies optional
         value: Expr,
@@ -321,6 +328,8 @@ pub enum Stmt {
     // Kap 3.3: for x in xs { ... }, for (k, v) in map { ... }
     For {
         bindings: Vec[winnow_grammar::Symbol],
+        /// How the bindings nest, as `Let::shape` (ADR-356).
+        shape: Vec[i64],
         iter: Expr,
         body: Block,
     },
