@@ -198,3 +198,93 @@ fn a_catch_over_a_variable_nothing_failing_reaches_is_nk1134() {
     let found = codes(&source);
     assert_eq!(found, vec!["NK1134".to_string()], "{:?}", findings(&source));
 }
+
+const WORSE: &str = "enum Boom { Bang }\n\
+                     impl Error for Boom {\n\
+                     \x20   fn message(ref self) -> String { \"boom\" }\n\
+                     }\n\
+                     fn worse() throws {\n\
+                     \x20   throw Boom::Bang\n\
+                     }\n";
+
+const ONLY_BAD: &str = "catch {\n\
+                        \x20       match error {\n\
+                        \x20           Bad::Oops => print(\"oops\")\n\
+                        \x20       }\n\
+                        \x20   }";
+
+/// **Every way more code reaches a place must reach its set, or the set is
+/// `?`** (ADR-351 D4): an arm list naming only `Bad` would otherwise lower to
+/// an `unreachable!` that a `Boom` hits at run time.
+fn refused_without_else(body: &str, extra: &str) {
+    let source = format!("{JOB}{WORSE}{extra}fn main() {{\n{body}\n}}\n");
+    let found = codes(&source);
+    assert!(!found.is_empty(), "accepted, would panic:\n{source}");
+}
+
+#[test]
+fn a_function_returned_as_a_value_has_callers_nobody_sees() {
+    refused_without_else(
+        "    guard(fail)\n    let g = pick()\n    g(worse)",
+        &format!(
+            "fn guard(run: fn() throws) {{\n    run() {ONLY_BAD}\n}}\n\
+             fn pick() -> fn(fn() throws) {{\n    return guard\n}}\n"
+        ),
+    );
+}
+
+#[test]
+fn a_mut_name_given_other_code_later() {
+    refused_without_else(
+        &format!("    let mut run: fn() throws = fail\n    run = worse\n    run() {ONLY_BAD}"),
+        "",
+    );
+}
+
+#[test]
+fn a_mut_list_pushed_other_code() {
+    refused_without_else(
+        &format!(
+            "    let mut all: Vec[fn() throws] = [fail]\n    all.push(worse)\n    for run in all {{\n        run() {ONLY_BAD}\n    }}"
+        ),
+        "",
+    );
+}
+
+#[test]
+fn a_field_assigned_other_code() {
+    refused_without_else(
+        &format!(
+            "    let mut job = Job {{ run: fail }}\n    job.run = worse\n    job.run() {ONLY_BAD}"
+        ),
+        "",
+    );
+}
+
+#[test]
+fn a_field_given_other_code_by_with() {
+    refused_without_else(
+        &format!(
+            "    let job = Job {{ run: fail }}\n    let other = job with {{ run: worse }}\n    other.run() {ONLY_BAD}"
+        ),
+        "",
+    );
+}
+
+#[test]
+fn a_list_field_pushed_other_code() {
+    refused_without_else(
+        &format!(
+            "    let mut jobs = Jobs {{ all: [fail] }}\n    jobs.all.push(worse)\n    for run in jobs.all {{\n        run() {ONLY_BAD}\n    }}"
+        ),
+        "struct Jobs { all: Vec[fn() throws] }\n",
+    );
+}
+
+#[test]
+fn a_published_field_is_stored_into_by_other_packages() {
+    refused_without_else(
+        &format!("    let job = Task {{ run: fail }}\n    job.run() {ONLY_BAD}"),
+        "pub struct Task { pub run: fn() throws }\n",
+    );
+}

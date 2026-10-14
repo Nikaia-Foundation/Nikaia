@@ -2870,10 +2870,20 @@ impl<'a> Checker<'a> {
                     // **A function or a type's constructor named as a value**
                     // (#502, #507): `xs.map(double)`, `par_fold(M, Summary, …)`
                     // - what its declaration says it takes and gives.
-                    None if self.s.function_as_a_value(self.world, name).is_some() => self
-                        .s
-                        .function_as_a_value(self.world, name)
-                        .unwrap_or(Ty::Unknown),
+                    None if self.s.function_as_a_value(self.world, name).is_some() => {
+                        // **Its callers are no longer all in sight** (ADR-351
+                        // D4): what its parameters of code are handed is
+                        // whatever reaches this value.
+                        self.s
+                            .stored_code
+                            .entry(nikaia_std::tools::throws::AS_VALUE.to_string())
+                            .or_insert_with(StoredCode::empty)
+                            .free
+                            .insert(name.to_string());
+                        self.s
+                            .function_as_a_value(self.world, name)
+                            .unwrap_or(Ty::Unknown)
+                    }
                     None => {
                         // **The specific message wins.** A free `a`, `b` or `c`
                         // is the mistake a reader of the old specification

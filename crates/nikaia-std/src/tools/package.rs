@@ -15066,7 +15066,8 @@ pub fn check_core_flow_try_catch<H: CheckHost>(state: &mut CheckState, world: &C
     state.nothing_here_can_fail(&guarded, span);
     let id = state.a_new_binding();
     state.scope.push(vec![CheckLocal::free("error".to_owned(), caught, id)]);
-    let arriving = state.several_arrive(world, guarded_expr);
+    let open = guarded.thrown.contains("?");
+    let arriving = state.several_arrive(world, guarded_expr) || open;
     let one: Option<Ty> = state.the_one_error(world, guarded_expr);
     let several = state.flow.caught_several;
     state.flow.caught_several = arriving;
@@ -51809,6 +51810,8 @@ pub fn held_across_a_pause(bound: &[(String, i64)], pauses: &[i64], named: &coll
 
 const UNNAMED: &str = "?";
 
+pub const AS_VALUE: &str = "<as a value>";
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MethodsCalled {
     pub resolved: collections::BTreeSet<String>,
@@ -51883,7 +51886,19 @@ pub fn stored_throws(field: &str, resolved: &collections::BTreeSet<String>, unre
 
 pub fn params_as_places(own: &Ledger, stored: &mut collections::BTreeMap<String, CheckStoredCode>) {
     let mut kept: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let named: CheckStoredCode = nikaia_std::index::or(stored.remove(AS_VALUE), || CheckStoredCode::empty());
+    for free in named.free.iter() { kept.insert(free.to_owned()); }
     for (_, code) in stored.iter() { for free in code.free.iter() { kept.insert(free.to_owned()); } }
+    for (owner, contract) in own.types.iter() {
+        if !contract.public { continue; }
+        for field in contract.fields.iter() {
+            if !field.public || !check_core_stmt_holds_code(&field.ty) { continue; }
+            let key = format!("{}.{}", owner, field.name);
+            let mut entry: CheckStoredCode = nikaia_std::index::or(stored.remove(&key), || CheckStoredCode::empty());
+            entry.unresolved = true;
+            stored.insert(key, entry);
+        }
+    }
     for (name, contract) in own.functions.iter() {
         if name.contains("::") { continue; }
         let signature: &Signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -57767,7 +57782,7 @@ pub mod threads {
 }
 pub mod throws {
     #[allow(unused_imports)]
-    pub use super::{MethodsCalled, ThrowsGraph, unit_throws, stored_throws, params_as_places, error_sets, error_type, Thrown, Contribution, thrown_by, fatal_named};
+    pub use super::{AS_VALUE, MethodsCalled, ThrowsGraph, unit_throws, stored_throws, params_as_places, error_sets, error_type, Thrown, Contribution, thrown_by, fatal_named};
 }
 pub mod tiers {
     #[allow(unused_imports)]

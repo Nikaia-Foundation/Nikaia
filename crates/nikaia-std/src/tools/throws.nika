@@ -22,6 +22,10 @@ use std::collections
 /// does not fail" (ADR-010 D1).
 comptime UNNAMED: ref String = "?"
 
+/// The checker's entry for the functions of this package named as a value
+/// (ADR-351 D4): not a place, the list of whose callers are not all seen.
+pub comptime AS_VALUE: ref String = "<as a value>"
+
 /// The method calls of one body as the type checker resolved them
 /// (ADR-288): the entries reached, and whether something could not be seen
 /// - a call that did not resolve, or code handed in that may fail.
@@ -139,9 +143,30 @@ pub fn stored_throws(field: ref String, resolved: ref collections::BTreeSet[Stri
 /// all see - a `pub` function, or one used as a value - cannot be named.
 pub fn params_as_places(own: ref Ledger, mut stored: collections::BTreeMap[String, CheckStoredCode]) {
     let mut kept: collections::BTreeSet[String] = collections::BTreeSet()
+    // The functions named as a value anywhere - returned, handed on, kept.
+    let named: CheckStoredCode = stored.remove(AS_VALUE) ?? CheckStoredCode::empty()
+    for free in named.free {
+        kept.insert(free.clone())
+    }
     for (_, code) in stored {
         for free in code.free {
             kept.insert(free.clone())
+        }
+    }
+    // **A published field of a published type is stored into by packages this
+    // one does not see** (ADR-351 D4): its set cannot be named here.
+    for (owner, contract) in own.types {
+        if !contract.public {
+            continue
+        }
+        for field in contract.fields {
+            if !field.public || !check_core_stmt_holds_code(field.ty) {
+                continue
+            }
+            let key = f"{owner}.{field.name}"
+            let mut entry: CheckStoredCode = stored.remove(key) ?? CheckStoredCode::empty()
+            entry.unresolved = true
+            stored.insert(key, entry)
         }
     }
     for (name, contract) in own.functions {

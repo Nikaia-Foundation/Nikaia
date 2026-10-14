@@ -8,6 +8,10 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.947] — 2026-10-14
+
+**a function named as a value, a published field and an open set make a catch need else (ADR-351 D4, part of #620)**
+
 ## [0.0.946] — 2026-10-14
 
 **list patterns keep elements, guards read copies; a struct or list proved not null is a T (#622, #621)**
