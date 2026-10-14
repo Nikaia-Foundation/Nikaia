@@ -54,15 +54,12 @@ impl CheckState {
         }
     }
 
-    /// **Owned text is not a pattern** (found moving `Ty::parse` into Nikaia,
-    /// ADR-294). `starts_with`, `ends_with` and `contains` take a view of text
-    /// or a character, which is why the ledger writes their parameter `?`, and
-    /// `line.starts_with(f"{word}[")` passed and reached `rustc` as *the trait
-    /// `Pattern` is not implemented for `String`* about a file nobody wrote
-    /// (Part III C.1). It is the ordinary argument refusal, with the way out
-    /// every method argument has: a view, written `ref`. A literal is a view
-    /// already (ADR-282 D5), and a type this compiler could not work out is
-    /// left alone (C.4).
+    /// **Owned text is lent to a pattern** (D28, #579). `starts_with`,
+    /// `ends_with` and `contains` take a view of text or a character, which is
+    /// why the ledger writes their parameter `?`. Text of its own handed to one
+    /// is lent, as it is to any `ref String` parameter (ADR-094 D1): the
+    /// argument is recorded in `owned_patterns`, the call writes `&` in front of
+    /// it, and the value stays the caller's. A list is refused (D17).
     pub fn a_pattern_of_owned_text(ref mut self, key: ref String, given: ref Vec[Expr], found: ref Vec[Ty], span: ref Span) sync {
         let mut param: String = ""
         if key == "str::starts_with" {
@@ -102,7 +99,7 @@ impl CheckState {
         if !owned || literal {
             return
         }
-        self.findings.push(check_refusal("NK1102", span, f"`{key}` expects `{param}` to be `ref String` here, but you're passing `String`.", ["What it looks for is a view of text or a character; text of its own is neither.".clone()], "Write `ref` in front of it to pass a view of it.".clone()))
+        self.facts.owned_patterns.insert(node_key(given[0]))
     }
 
     /// **A view of a value that does not copy, where the receiver keeps the

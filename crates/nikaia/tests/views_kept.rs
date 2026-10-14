@@ -4,6 +4,8 @@
 //! The programs that are lowered, and what they compute, are
 //! `tests/language/src/views_kept.nika`; this file keeps what is refused.
 
+mod common;
+
 use nikaia::contracts::LedgerOps;
 use nikaia::parser::parse_to_ast;
 
@@ -33,16 +35,15 @@ fn a_view_from_one_of_two_buffers_is_accepted() {
     assert!(!found.iter().any(|f| f.code == "NK2302"), "{found:#?}");
 }
 
-/// **Owned text is not a pattern**: `starts_with`, `ends_with` and `contains`
-/// take a view of text or a character, and text of its own handed to one
-/// reached `rustc` as *`Pattern` is not implemented for `String`*. It is
-/// `NK1102` with *write `ref`*; each shape that is accepted runs in
-/// `views_kept.nika`.
+/// **Owned text is lent to a pattern** (D28): `starts_with`, `ends_with` and
+/// `contains` take a view of text or a character, and text of its own handed
+/// to one is lent as to any `ref String` parameter - no `NK1102`, and it stays
+/// the caller's, in a loop too.
 #[test]
 fn owned_text_handed_to_a_pattern_is_refused() {
     for (argument, refused) in [
-        ("f\"{w}[\"", true),
-        ("w", true),
+        ("f\"{w}[\"", false),
+        ("w", false),
         ("ref w", false),
         ("ref f\"{w}\"", false),
         ("\"ab\"", false),
@@ -101,4 +102,32 @@ fn a_subject_declared_in_another_file_is_known_from_the_ledger() {
         .collect();
     assert_eq!(refused.len(), 1, "{refused:#?}");
     assert!(refused[0].message.contains("Holds.show"), "{refused:#?}");
+}
+
+/// **Owned text lent to a pattern runs** (D28), and a let-bound function value
+/// is lent what it takes as a view, an index read too (D20).
+#[test]
+fn owned_text_and_index_reads_are_lent() {
+    let dir = common::scratch_dir("lent-to-views");
+    std::fs::write(
+        dir.join("main.nika"),
+        "fn main() {\n    let xs: Vec[String] = [\"abc\", \"de\"]\n    let f: fn(ref String, i64) -> i64 sync = fn(a, b) { a.len() + b }\n    let s: String = \"xy\"\n    println(f\"{f(xs[0], 1)} {f(s, 1)} {s}\")\n    let mark = f\"b{1}\"\n    let line = \"ab1c\"\n    println(f\"{line.contains(mark)} {line.starts_with(f\"a{mark}\")}\")\n    for l in xs {\n        println(f\"{l.contains(mark)} {l.ends_with(mark)}\")\n    }\n    println(mark)\n}\n",
+    )
+    .expect("the source");
+    let run = std::process::Command::new(env!("CARGO_BIN_EXE_nikaia"))
+        .current_dir(&dir)
+        .arg("run")
+        .arg("main.nika")
+        .output()
+        .expect("the nikaia binary runs");
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(
+        run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&run.stdout),
+        "4 3 xy\ntrue true\nfalse false\nfalse false\nb1\n"
+    );
 }

@@ -161,6 +161,23 @@ touches = ["args read"]
 provenance = "trusted"
 signature = "(ref mut self, at: i64) -> String?"
 
+# How many arguments are left to read, the program's name among them until it
+# is read: `cli::args().len()` is the whole command line's count.
+[fn."Args::len"]
+pub = true
+sync = true
+touches = ["args read"]
+provenance = "trusted"
+signature = "(ref self) -> i64"
+
+# Whether no argument is left to read.
+[fn."Args::is_empty"]
+pub = true
+sync = true
+touches = ["args read"]
+provenance = "trusted"
+signature = "(ref self) -> bool"
+
 # Write text to standard error, with no line break after it.
 [fn."eprint"]
 pub = true
@@ -2491,6 +2508,14 @@ pub = true
 sync = "sync(f)"
 touches = []
 signature = "[T, U](self: Seq[T], f: fn(T) -> U?) -> Seq[U] ends"
+
+# The first value the function gives that is not `null`, or nothing; it stops
+# there.
+[fn."Seq::find_map"]
+pub = true
+sync = "sync(f)"
+touches = []
+signature = "[T, U](self: Seq[T], f: fn(T) -> U?) -> U?"
 
 # The elements up to the first one the function says no to.
 [fn."Seq::take_while"]

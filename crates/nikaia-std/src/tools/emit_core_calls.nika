@@ -408,6 +408,10 @@ impl EmitState {
                         out.push(", ")
                     }
                     at += 1
+                    // **What it takes as a view is lent to it** (D20).
+                    if self.facts.lent_args.contains(node_key(arg)) {
+                        out.push("&")
+                    }
                     host.expr(walk, out, arg, depth, flow, scope)
                 }
                 out.push(")")
@@ -645,6 +649,16 @@ impl EmitState {
                 out.push(")")
                 return
             }
+        }
+        // **Owned text is lent to a pattern** (D28, `owned_patterns`): `&` in
+        // front of it, as for any `ref String` parameter.
+        if receiver != null && args.len() == 1 && self.facts.owned_patterns.contains(node_key(args[0])) {
+            let text = receiver ?? return
+            self.emit_core_postfix_base(world, walk, out, host, text, depth, flow, scope)
+            out.push(f".{name}(&")
+            host.expr(walk, out, args[0], depth, flow, scope)
+            out.push(")")
+            return
         }
         // **Where the container stays the caller's, `drain` empties it** (#564,
         // ADR-094 D3, D4): `drain(..)` neither takes the elements away nor hands

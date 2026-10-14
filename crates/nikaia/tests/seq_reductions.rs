@@ -8,7 +8,7 @@ mod common;
 fn run(purpose: &str, body: &str) -> String {
     let dir = common::scratch_dir(purpose);
     let source = format!(
-        "fn half(x: i64) -> i64? {{\n    if x % 2 == 0 {{\n        return x / 2\n    }}\n    return null\n}}\n\n\
+        "use std::cli\n\nfn half(x: i64) -> i64? {{\n    if x % 2 == 0 {{\n        return x / 2\n    }}\n    return null\n}}\n\n\
          fn main() {{\n    let xs: Vec[i64] = [3, 8, 1, 9, 4]\n    let none: Vec[i64] = []\n{body}\n}}\n"
     );
     std::fs::write(dir.join("main.nika"), source).expect("the source");
@@ -70,6 +70,24 @@ fn filter_map_leaves_out_null() {
         "    let halves: Vec[i64] = xs.iter().filter_map(fn(x) { half(x) }).collect()\n    let empty: Vec[i64] = none.iter().filter_map(fn(x) { half(x) }).collect()\n    println(f\"{halves.len()} {halves[0]} {halves[1]} {empty.len()}\")",
     );
     assert_eq!(out, "2 4 2 0\n");
+}
+
+#[test]
+fn find_map_stops_at_the_first_value() {
+    let out = run(
+        "seq-find-map",
+        "    let first: i64? = xs.iter().find_map(fn(x) { half(x) })\n    let not: i64? = none.iter().find_map(fn(x) { half(x) })\n    println(f\"{first ?? -1} {not ?? -1}\")",
+    );
+    assert_eq!(out, "4 -1\n");
+}
+
+#[test]
+fn args_has_a_length() {
+    let out = run(
+        "cli-args-len",
+        "    let n: i64 = cli::args().len()\n    println(f\"{n > 0} {cli::args().is_empty()}\")",
+    );
+    assert_eq!(out, "true false\n");
 }
 
 #[test]

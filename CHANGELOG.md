@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.895] — 2026-10-14
+
+**lowering: a let-bound function value is lent its views, owned text lent to a pattern; Seq::find_map, Args::len (#579)**
+- A call of a let-bound function value writes the `&` a named function's call writes for a `ref` parameter: `f(xs[0], 1)` and `f(s, 1)` reached rustc as mismatched types (D20).
+- Owned text handed to `starts_with`, `ends_with` or `contains` is lent, as to any `ref String` parameter, instead of NK1102 with *write `ref`* (D28).
+- `Seq::find_map`, and `len`/`is_empty` on `cli::Args`.
+
 ## [0.0.894] — 2026-10-14
 
 **check: whether a type compares, in Nikaia (#125, #558)**

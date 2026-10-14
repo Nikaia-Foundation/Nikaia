@@ -20,6 +20,17 @@ impl Args {
         let at = usize::try_from(at).ok()?;
         self.0.nth(at)
     }
+
+    /// How many arguments are left to read, the program's name among them
+    /// until it is read. A count is an `i64`, as every count is.
+    pub fn len(&self) -> i64 {
+        self.0.len() as i64
+    }
+
+    /// Whether no argument is left to read.
+    pub fn is_empty(&self) -> bool {
+        self.0.len() == 0
+    }
 }
 
 impl Iterator for Args {

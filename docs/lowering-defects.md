@@ -266,14 +266,10 @@ Found by running rs2nika's drafts of unmoved `check/mod.rs` functions through
 **To build:** each a test through `nikaia run`, and the lowering fix named above,
 or a checker refusal that names the spelling that works.
 
-## D20 (new). A let-bound lambda called with an index argument fails in rustc
+## D20 (new). A let-bound lambda called with an index argument: **built** (0.0.895)
 
-`let f: fn(ref String, i64) -> i64 sync = fn(a, b) { a.len() + b }` then
-`f(xs[0], 1)` passes `nikaia check` and fails in rustc ("Mismatched types,
-consider borrowing"): the call does not borrow `xs[0]` for the `ref String`
-parameter, as a call of a named function does. Found with rs2nika's R62
-(#579). **To build:** a `nikaia run` test, and the borrow at the call.
-
+A call of a let-bound function value lends what its type takes as a view, as a
+call of a named function does (`views_kept.rs`).
 
 ## D27 (new, language). No rest pattern `V(..)`
 
@@ -281,9 +277,10 @@ Rust's `Held::Precondition(..)` has no Nikaia spelling: the parser stops at
 the `..` and a draft must name every field with `_`, which a converter cannot
 know without the type. Found with rs2nika (#579, `claims_report`). Not decided here.
 
-## D28 (new, small). An owned `String` passed to `contains` needs `ref`
+## D28 (new, small). An owned `String` passed to `contains`: **built** (0.0.895)
 
-`line.contains(mark)` with `let mark = f"..."` is NK1102 (and NK2105 in a loop); `line.contains(ref mark)` passes. A literal or a `ref String` needs no `ref`. Found writing `rs2nika/survival` (#579).
+Owned text handed to `starts_with`, `ends_with` or `contains` is lent, as to any
+`ref String` parameter, and stays the caller's (`views_kept.rs`).
 
 ## D29 (new). `tools/*.nika` checked as a project finds what `lower-std` does not
 

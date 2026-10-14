@@ -9068,7 +9068,17 @@ impl<'a> Checker<'a> {
             }) = self.s.lookup(&name)
         {
             self.s.read_at.push((name.clone(), span.at() as i64));
-            self.arguments_given(args, &params, false, None, span);
+            let found = self.arguments_given(args, &params, false, None, span);
+            // **What it takes as a view is lent to it** (D20), as for a
+            // parameter of code run in place below.
+            for ((given, wanted), had) in args.iter().zip(&params).zip(&found) {
+                if wanted.is_a_view()
+                    && !had.is_a_view()
+                    && !matches!(had, Ty::Unknown | Ty::Fn { .. })
+                {
+                    self.s.facts.lent_args.insert(value_node(given));
+                }
+            }
             self.kept_arguments_are_its_own(args, &params);
             self.s
                 .facts
@@ -9687,7 +9697,9 @@ impl<'a> Checker<'a> {
                     &[self.world.library],
                 ),
             } || (at == 0 && is_a_lookup(key))
-                || matches!(key, "println" | "eprintln" | "print" | "eprint");
+                || matches!(key, "println" | "eprintln" | "print" | "eprint")
+                // **A pattern is only read** (D28): owned text is lent to it.
+                || (at == 0 && matches!(key, "str::starts_with" | "str::ends_with" | "str::contains"));
             let kept = !lent;
             // **What the callee keeps, it is given** (ADR-293 D29): no `&` is
             // written for this position, so a name here moves.
