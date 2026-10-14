@@ -348,6 +348,59 @@ impl<T: Send + 'static> TaskHandle<T> {
     }
 }
 
+impl<T> TaskHandle<T> {
+    /// **Nobody waits for this task** ([ADR-346](../../../docs/specification/adr/adr-346.md)
+    /// D2): it runs on, and the handle is given up.
+    pub fn detach(self) {}
+}
+
+/// **A task whose body can fail** ([ADR-346](../../../docs/specification/adr/adr-346.md)
+/// D5): `join` hands on the body's error, in the channel of the function that
+/// started it, beside [`Crashed`].
+pub struct FailingTask<T, E> {
+    handle: TaskHandle<Result<T, E>>,
+}
+
+impl<T: 'static, E: 'static> FailingTask<T, E> {
+    /// Start a body that hands back a `Result`.
+    pub fn start(body: impl std::future::Future<Output = Result<T, E>> + 'static) -> Self {
+        FailingTask {
+            handle: TaskHandle::start(body),
+        }
+    }
+}
+
+impl<T: Send + 'static, E: Send + 'static> FailingTask<T, E> {
+    /// The same, on the pool.
+    pub fn start_on_pool(
+        body: impl std::future::Future<Output = Result<T, E>> + Send + 'static,
+    ) -> Self {
+        FailingTask {
+            handle: TaskHandle::start_on_pool(body),
+        }
+    }
+}
+
+impl<T, E> FailingTask<T, E> {
+    /// Stop the task, as [`TaskHandle::cancel`].
+    pub fn cancel(self) {
+        self.handle.cancel()
+    }
+
+    /// Nobody waits for this task.
+    pub fn detach(self) {}
+}
+
+impl<T: 'static, E: 'static + From<Crashed>> FailingTask<T, E> {
+    /// The task's value, or its body's error, or [`Crashed`] in that channel.
+    pub async fn join(self) -> Result<T, E> {
+        match crate::rt::exec::Waiting::on(self.handle.slot).await {
+            Ok(outcome) => outcome,
+            Err(crashed) => Err(E::from(crashed)),
+        }
+    }
+}
+
 thread_local! {
     /// How many `overlap` and `select` blocks this thread is polling a branch
     /// of right now.

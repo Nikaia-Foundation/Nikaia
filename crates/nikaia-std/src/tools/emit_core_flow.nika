@@ -757,19 +757,40 @@ impl EmitState {
         }
         // **And which of the two starters**, which is the one place
         // `user_parallelism` reaches a `spawn` (ADR-037 D2).
+        // **A task whose body can fail hands its error to `join`** (ADR-346
+        // D5): the body runs in the starter's channel. Whether it can fail is
+        // read off the body written that way: a `?` or a `return` in it.
+        let mut failing = false
+        let mut inner = EmitOut::empty()
+        if flow.can_throw {
+            let inside = EmitFlow::plain() with { statement: flow.statement, can_throw: true }
+            let inside_scope = EmitScope::plain() with { origin: scope.origin.clone(), function: scope.function.clone(), channel: scope.channel.clone() }
+            self.emit_core_block(world, walk, inner, host, body, depth, inside, inside_scope, EmitTail::Value)
+            failing = inner.buf.contains("?") || inner.buf.contains("return")
+        }
+        let mut kind: String = "TaskHandle"
+        if failing {
+            kind = "FailingTask"
+        }
         if host.overlaps_user_code() {
-            out.push("nikaia_std::task::TaskHandle::start_on_pool(async move ")
+            out.push(f"nikaia_std::task::{kind}::start_on_pool(async move ")
         } else {
-            out.push("nikaia_std::task::TaskHandle::start(async move ")
+            out.push(f"nikaia_std::task::{kind}::start(async move ")
         }
         // Plain, like any other lambda body: a `return` inside the task leaves the
         // task, and a failure in it is the task's. `in_lambda` is deliberately
         // **not** set - the body is a future, so a call that pauses is exactly what
         // it may hold.
-        let inside = EmitFlow::plain() with { statement: flow.statement }
-        let inside_scope = EmitScope::plain()
-        self.emit_core_block(world, walk, out, host, body, depth, inside, inside_scope, EmitTail::Return)
-        out.push(")")
+        if failing {
+            out.push("{ let __nikaia_task = ")
+            out.append(inner)
+            out.push(f"; Ok::<_, {scope.channel}>(__nikaia_task) }})")
+        } else {
+            let inside = EmitFlow::plain() with { statement: flow.statement }
+            let inside_scope = EmitScope::plain()
+            self.emit_core_block(world, walk, out, host, body, depth, inside, inside_scope, EmitTail::Return)
+            out.push(")")
+        }
         if host.task_handles(task).len() > 0 {
             out.push(" }")
         }

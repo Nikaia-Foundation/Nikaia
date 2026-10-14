@@ -122,6 +122,19 @@ impl Ending for crate::error::Thrown<Exit> {
     }
 }
 
+/// The opaque channel: an `Exit` inside it, as itself or thrown, still ends the
+/// program with its code (ADR-346 D5: a joined task's `Exit` arrives this way).
+impl Ending for Box<dyn std::error::Error> {
+    fn exit_code(&self) -> Option<i32> {
+        if let Some(exit) = self.downcast_ref::<Exit>() {
+            return exit.exit_code();
+        }
+        self.downcast_ref::<crate::error::Raised>()
+            .and_then(|raised| raised.inner().downcast_ref::<Exit>())
+            .and_then(Ending::exit_code)
+    }
+}
+
 /// `main`'s outcome after the runtime finished: an `Exit` ends the process with
 /// its code; anything else is handed back for the usual end.
 pub fn ended<T, E: Ending>(outcome: Result<T, E>) -> Result<T, E> {

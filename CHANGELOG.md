@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.892] — 2026-10-14
+
+**task: a task's error reaches join, and detach (#605)**
+- ADR-346 D5: a spawn whose body can fail runs in the starter's error channel (nikaia_std::task::FailingTask); join hands the body's error on, so an Exit in a joined task ends main with its code; the ledger counts a spawn body's errors at the starter. TaskHandle::detach (D2). Open: a catch naming the body's error type at join (the joiner's set is still opaque).
+
 ## [0.0.891] — 2026-10-14
 
 **check: a_fatal_error_passes, an_exit_code_out_of_range and an_operator_needs_a_bound in Nikaia (#125, #558)**

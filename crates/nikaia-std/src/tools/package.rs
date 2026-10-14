@@ -24797,11 +24797,27 @@ impl EmitState {
             out.push("{ ");
             for name in handles.iter() { out.push(&format!("let {} = {}.clone(); ", name, name)); }
         }
-        if host.overlaps_user_code() { out.push("nikaia_std::task::TaskHandle::start_on_pool(async move "); } else { out.push("nikaia_std::task::TaskHandle::start(async move "); }
-        let inside = EmitFlow { statement: flow.statement, ..EmitFlow::plain() };
-        let inside_scope = EmitScope::plain();
-        self.emit_core_block(world, walk, out, host, body, depth, inside, &inside_scope, EmitTail::Return)?;
-        out.push(")");
+        let mut failing = false;
+        let mut inner = EmitOut::empty();
+        if flow.can_throw {
+            let inside = EmitFlow { statement: flow.statement, can_throw: true, ..EmitFlow::plain() };
+            let inside_scope = EmitScope { origin: scope.origin.to_owned(), function: scope.function.to_owned(), channel: scope.channel.to_owned(), ..EmitScope::plain() };
+            self.emit_core_block(world, walk, &mut inner, host, body, depth, inside, &inside_scope, EmitTail::Value)?;
+            failing = inner.buf.contains("?") || inner.buf.contains("return");
+        }
+        let mut kind: String = String::from("TaskHandle");
+        if failing { kind = String::from("FailingTask"); }
+        if host.overlaps_user_code() { out.push(&format!("nikaia_std::task::{}::start_on_pool(async move ", kind)); } else { out.push(&format!("nikaia_std::task::{}::start(async move ", kind)); }
+        if failing {
+            out.push("{ let __nikaia_task = ");
+            out.append(inner);
+            out.push(&format!("; Ok::<_, {}>(__nikaia_task) }})", scope.channel));
+        } else {
+            let inside = EmitFlow { statement: flow.statement, ..EmitFlow::plain() };
+            let inside_scope = EmitScope::plain();
+            self.emit_core_block(world, walk, out, host, body, depth, inside, &inside_scope, EmitTail::Return)?;
+            out.push(")");
+        }
         if !host.task_handles(task).is_empty() { out.push(" }"); }
         Ok(())
     }
@@ -45149,6 +45165,7 @@ fn thrown_in_blocks(expr: &Expr, names: &winnow_grammar::InternerContext, holes_
         Expr::Unsafe(block, _) => thrown_in_block(block, names, holes_of, contribution_of, in_a_handler, out),
         Expr::Overlap(block, _) => thrown_in_block(block, names, holes_of, contribution_of, in_a_handler, out),
         Expr::Closure { body, .. } => thrown_in_block(body, names, holes_of, contribution_of, in_a_handler, out),
+        Expr::Spawn { body, .. } => { let body = nikaia_std::boxed::open(body); thrown_in_blocks(body, names, holes_of, contribution_of, in_a_handler, out) },
         Expr::Call { func, args, config, .. } => {
             let func = nikaia_std::boxed::open(func);
             thrown_in_blocks(func, names, holes_of, contribution_of, in_a_handler, out);

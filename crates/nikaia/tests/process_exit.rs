@@ -228,6 +228,25 @@ fn exit_in_a_spawn_is_an_ordinary_error() {
     );
 }
 
+/// ADR-346 D5: the joiner receives the task's `Exit`, and `main` ends with it.
+#[test]
+fn exit_in_a_spawn_reaches_the_joiner() {
+    let source = "use std::process\n\nfn stop() -> i64 throws {\n    process::exit(3)\n    return 1\n}\n\nfn main() throws {\n    let h = spawn fn { stop() }\n    let v = h.join()\n    println(f\"never {v}\")\n}\n";
+    let (out, err, code) = ran("spawn-exit", source, Build::default());
+    assert_eq!(code, Some(3), "{err}");
+    assert_eq!(out, "");
+}
+
+/// ADR-346 D5: a task's own error reaches `join`'s `catch`; `detach` gives a
+/// handle up.
+#[test]
+fn a_task_error_reaches_join() {
+    let source = "enum Bad { Oops(i64) }\nimpl Error for Bad {\n    fn message(ref self) -> String { return \"bad\" }\n}\n\nfn work(n: i64) -> i64 throws {\n    if n > 1 {\n        throw Bad::Oops(n)\n    }\n    return n\n}\n\nfn main() throws {\n    let a = spawn fn { work(1) }\n    let b = spawn fn { work(7) }\n    let x = a.join()\n    let y = b.join() catch { 5 }\n    let w = spawn fn { work(0) }\n    w.detach()\n    println(f\"{x} {y}\")\n}\n";
+    let (out, err, code) = ran("spawn-join-error", source, Build::default());
+    assert_eq!(code, Some(0), "{err}");
+    assert_eq!(out.trim(), "1 5");
+}
+
 const OWN_FATAL: &str = r#"enum Abort { Now(i64) }
 impl Error for Abort {
     fn message(ref self) -> String { return "aborted" }

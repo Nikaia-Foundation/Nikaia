@@ -3934,6 +3934,14 @@ pub = true
 sync = true
 signature = "[T](self: TaskHandle[T])"
 
+# **Nobody waits for this task** (ADR-346 D2): it runs on, and an error it ends
+# with goes to the log; a fatal one sets the exit status at `main`'s end.
+# Give the task up: it runs on and nobody waits for it.
+[fn."TaskHandle::detach"]
+pub = true
+sync = true
+signature = "[T](self: TaskHandle[T])"
+
 # A value several parts of a program own at once.
 #
 # A caller is not meant to notice it: a function taking `ref Connection` accepts a

@@ -424,6 +424,9 @@ fn thrown_in_blocks(expr: ref Expr, names: ref winnow_grammar::InternerContext, 
         Expr::Unsafe(block, _) => thrown_in_block(block, names, holes_of, contribution_of, in_a_handler, out),
         Expr::Overlap(block, _) => thrown_in_block(block, names, holes_of, contribution_of, in_a_handler, out),
         Expr::Closure { body, .. } => thrown_in_block(body, names, holes_of, contribution_of, in_a_handler, out),
+        // ADR-346 D5: a task's errors reach whoever joins it; the starter is
+        // where its handle is joined or handed on.
+        Expr::Spawn { body, .. } => thrown_in_blocks(body, names, holes_of, contribution_of, in_a_handler, out),
         Expr::Call { func, args, config, .. } => {
             thrown_in_blocks(func, names, holes_of, contribution_of, in_a_handler, out)
             for arg in args {
