@@ -3107,14 +3107,27 @@ impl<'p> Emitter<'p> {
             // (ADR-094 D3): a declaration that wrote the value would be a
             // signature the impl disagrees with.
             let reference = if arg.mutable && !foreign { "&mut " } else { "" };
-            params.push(format!(
-                "{}: {reference}{}",
-                self.name(arg.name),
-                match foreign {
-                    true => self.foreign_ty(&arg.ty),
-                    false => self.ty(&arg.ty, Lifetimes::Elided),
-                }
-            ));
+            let written = match foreign {
+                true => self.foreign_ty(&arg.ty),
+                false => self.ty(&arg.ty, Lifetimes::Elided),
+            };
+            // **A list the method only reads is a slice**, as it is in the
+            // impl and in every function that hands it on: a declaration that
+            // kept `&Vec<T>` disagreed with both, and `rustc` refused the call
+            // from a function whose `ref Vec[T]` is already a `&[T]`.
+            let plain_list = !foreign
+                && self.text(arg.ty.name) == "Vec"
+                && arg.ty.generics.len() == 1
+                && !arg.ty.is_nullable
+                && !arg.ty.is_slice;
+            let written = match written
+                .strip_prefix("&Vec<")
+                .and_then(|w| w.strip_suffix('>'))
+            {
+                Some(element) if plain_list => format!("&[{element}]"),
+                _ => written,
+            };
+            params.push(format!("{}: {reference}{written}", self.name(arg.name)));
         }
         // Kap 5.1: the language below has neither named arguments nor defaults,
         // so an option is an ordinary parameter here too - the same rule a

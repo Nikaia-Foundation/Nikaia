@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.916] — 2026-10-14
+
+**check: a free call, a tuple and a list literal in Nikaia (U-c4, #125, #558)**
+- `call` and the arms `Call`, `ListLit` and `Tuple` move to `tools/check_core_call.nika`; `arguments`, `an_attribute_read`, `a_call_that_hands_its_number_back`, `a_standard_bound_not_met` and the `task::scope` half of a call (#605) are host methods.
+- Lowering: a trait method's `ref Vec[T]` parameter is a slice in the declaration, as in the impl; it was `&Vec<T>`, and a call from a function holding a `&[T]` did not compile.
+
 ## [0.0.915] — 2026-10-14
 
 **task: task::scope hands its tasks' errors on**

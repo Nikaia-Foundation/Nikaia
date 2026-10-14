@@ -207,6 +207,7 @@ pub mod text {
     clippy::comparison_to_empty,
     clippy::only_used_in_recursion,
     clippy::too_many_arguments,
+    clippy::useless_format,
     unreachable_patterns
 )]
 pub mod tools {

@@ -216,7 +216,7 @@ impl EmitHost for Emitter<'_> {
         })
     }
 
-    fn wrap_hole(&self, hole: &Expr, wraps: &Vec<(i64, winnow_grammar::Symbol)>) -> Expr {
+    fn wrap_hole(&self, hole: &Expr, wraps: &[(i64, winnow_grammar::Symbol)]) -> Expr {
         let wraps: Vec<(usize, winnow_grammar::Symbol)> = wraps
             .iter()
             .map(|(at, name)| (*at as usize, *name))

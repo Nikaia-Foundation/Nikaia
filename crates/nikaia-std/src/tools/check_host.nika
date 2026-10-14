@@ -117,6 +117,19 @@ pub trait CheckHost {
     fn payload_of(ref self, ty: ref String, variant: ref String) -> Vec[Ty]? sync
     /// A finite float as the language below writes it.
     fn float_text(ref self, number: f64) -> String sync
+    /// **`field.attribute(X)`'s `X`** (U-c4): one type, an attribute, or
+    /// `null` where it is refused.
+    fn an_attribute_read(ref self, mut state: CheckState, args: ref Vec[Expr], span: ref Span) -> String? sync
+    /// **A call's arguments against its contract** (U-c4): `arguments`, which
+    /// stays Rust until C-5h.
+    fn arguments(ref self, mut state: CheckState, key: ref String, written: ref String, contract: ref FnContract, given: ref Vec[Expr], found: ref Vec[Ty], passed: ref Vec[(String, Ty)], span: ref Span) -> Ty sync
+    /// A generic call whose result only an open number binds (#497, U-c4).
+    fn a_call_that_hands_its_number_back(ref self, mut state: CheckState, contract: ref FnContract, bound: ref collections::BTreeMap[String, Ty], args: ref Vec[Expr]) sync
+    /// A standard bound the argument does not meet (U-c4).
+    fn a_standard_bound_not_met(ref self, mut state: CheckState, key: ref String, bound: ref collections::BTreeMap[String, Ty], span: ref Span) sync
+    /// **A `task::scope` whose lambda paused** (ADR-328 D10, U-c4): the task
+    /// work's (#605), which stays Rust while it is built.
+    fn a_scope_that_pauses(ref self, mut state: CheckState, args: ref Vec[Expr], paused: ref Vec[i64], span: ref Span) sync
 }
 
 /// What the build worked out a local is: the whole value, or the integer the

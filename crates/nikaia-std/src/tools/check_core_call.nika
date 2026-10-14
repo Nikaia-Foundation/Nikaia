@@ -1,0 +1,503 @@
+// crates/nikaia-std/src/tools/check_core_call.nika
+//
+// **A free call, a tuple and a list literal** (ADR-294, #125, #558, C-6,
+// U-c4): `call` and the arms `Call`, `ListLit` and `Tuple` of `value_of`. The
+// form is the pilot's (`check_core_pilot.nika`): a free function over the
+// state, the world and a host; the walk comes back through the hub
+// `host.expr`. What stays Rust is asked through the host: `arguments` (C-5h),
+// `an_attribute_read`, `a_call_that_hands_its_number_back`,
+// `a_standard_bound_not_met`, and the half of a `task::scope` call that
+// belongs to the task work (#605).
+
+use std::collections
+
+/// A type by its bare name.
+fn check_core_call_named(name: ref String) -> Ty {
+    return Ty::Named { name: name.clone(), args: [], view: false }
+}
+
+/// A path as written, `a::b::c`.
+fn check_core_call_joined(world: ref CheckWorld, segments: ref Vec[winnow_grammar::Symbol]) -> String {
+    let mut parts: Vec[String] = []
+    for segment in segments {
+        parts.push(f"{world.words.resolve(segment)}")
+    }
+    return parts.join("::")
+}
+
+/// The names this language offers as types of its own, which a path may
+/// start with (`OFFERED`).
+fn check_core_call_offered(head: ref String) -> bool {
+    return head == "i32" || head == "i64" || head == "u8" || head == "u32" || head == "u64" || head == "f64" || head == "bool" || head == "char" || head == "scalar" || head == "String" || head == "str"
+}
+
+/// Whether a found type says nothing a view could be lent for.
+fn check_core_call_opaque(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Unknown => true,
+        Ty::Fn { .. } => true,
+        else => false,
+    }
+}
+
+/// Whether the callee is a bare name.
+fn check_core_call_is_variable(func: ref Expr) -> bool {
+    return match func {
+        Expr::Variable(_, _) => true,
+        else => false,
+    }
+}
+
+/// `assert(…)` of the prelude: the name, with nothing of the program's own
+/// called that.
+fn check_core_call_the_prelude_assert(state: ref CheckState, world: ref CheckWorld, func: ref Expr) -> bool {
+    return match func {
+        Expr::Variable(name, _) => world.words.resolve(name) == "assert" && state.lookup("assert") == null && !world.own.functions.contains_key("assert"),
+        else => false,
+    }
+}
+
+/// The member of `T::attribute(X)` or `T::attributes(X)` for a type
+/// parameter `T` (ADR-331 D6), or empty.
+fn check_core_call_attribute_member(state: ref CheckState, world: ref CheckWorld, func: ref Expr) -> String {
+    match func {
+        Expr::Path(segments, _) => {
+            if segments.len() == 2 {
+                let parameter: String = f"{world.words.resolve(segments[0])}"
+                let member: String = f"{world.words.resolve(segments[1])}"
+                if state.type_parameters.contains_key(parameter) && (member == "attribute" || member == "attributes") {
+                    return member
+                }
+            }
+        }
+        else => {}
+    }
+    return "".clone()
+}
+
+/// The name a free call reaches, unaliased, or `null` for anything but a
+/// name or a path.
+fn check_core_call_free_callee(world: ref CheckWorld, func: ref Expr) -> String? {
+    return match func {
+        Expr::Variable(name, _) => world.here.unaliased(f"{world.words.resolve(name)}"),
+        Expr::Path(segments, _) => world.here.unaliased(check_core_call_joined(world, segments)),
+        else => null,
+    }
+}
+
+/// What a declared function says about taking a lock.
+fn check_core_call_holds(world: ref CheckWorld, name: ref String) -> Lock {
+    if world.own.functions.contains_key(name) {
+        let contract = world.own.functions[name] ?? return Lock::No
+        return contract.touches_a_lock.clone()
+    }
+    if world.library.functions.contains_key(name) {
+        let contract = world.library.functions[name] ?? return Lock::No
+        return contract.touches_a_lock.clone()
+    }
+    return Lock::No
+}
+
+/// `Op::Plus` names a variant of an enum declared here: the enum's name.
+fn check_core_call_variant(state: ref CheckState, name: ref String) -> String? {
+    if !name.contains("::") {
+        return null
+    }
+    let parts: Vec[ref String] = name.split("::").collect()
+    let ty: String = f"{parts[0]}"
+    let rest = check_core_call_after(name, f"{ty}::")
+    if state.is_variant(ty, rest) {
+        return ty
+    }
+    return null
+}
+
+/// What follows `prefix` in `name`, or empty.
+fn check_core_call_after(name: ref String, prefix: ref String) -> String {
+    return (name.strip_prefix(prefix) ?? "").clone()
+}
+
+/// What comes before the last `::`, or the whole name.
+fn check_core_call_owner(name: ref String) -> String {
+    let parts: Vec[ref String] = name.split("::").collect()
+    if parts.len() < 2 {
+        return name.clone()
+    }
+    let last = parts.len() as i64 - 1
+    let mut owner: String = "".clone()
+    let mut i = 0
+    for part in parts {
+        if i == last {
+            break
+        }
+        if i > 0 {
+            owner.push_str("::")
+        }
+        owner.push_str(part)
+        i += 1
+    }
+    return owner
+}
+
+/// The result a contract declares, where it is a type that names one.
+fn check_core_call_declared(contract: ref FnContract) -> Ty? {
+    let signature = contract.signature ?? return null
+    let result = signature.result ?? return null
+    let mut keep = true
+    match result {
+        Ty::Unknown => { keep = false },
+        Ty::Named { name, .. } => {
+            if name == "Self" {
+                keep = false
+            }
+        }
+        else => {}
+    }
+    if !keep {
+        return null
+    }
+    return result.clone()
+}
+
+/// What a `ref` parameter of code takes is lent to it (D20).
+fn check_core_call_lent(mut state: CheckState, args: ref Vec[Expr], params: ref Vec[Ty], found: ref Vec[Ty]) sync {
+    let mut i = -1
+    for given in args {
+        i += 1
+        if i >= params.len() as i64 || i >= found.len() as i64 {
+            break
+        }
+        if params[i].is_a_view() && !found[i].is_a_view() && !check_core_call_opaque(found[i]) {
+            state.facts.lent_args.insert(id_of(given) as i64)
+        }
+    }
+}
+
+/// **A kept function value called by name**: a `let`, or a parameter the
+/// function keeps. What its type says is what the call does.
+fn check_core_call_kept[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, func: ref Expr, args: ref Vec[Expr], name: ref String, params: ref Vec[Ty], gives: Ty, is_sync: bool, fails: bool, span: ref Span) -> Ty sync {
+    state.read_at.push((name.clone(), span.start as i64))
+    let found = check_core_arguments_given(state, world, host, args, params, false, null, span)
+    check_core_call_lent(state, args, params, found)
+    state.kept_arguments_are_its_own(world, args, params)
+    state.facts.kept_calls.insert(id_of(func) as i64, (!is_sync, fails))
+    if state.current != null {
+        let current: String = state.current?.clone() ?? ""
+        check_core_args_code_said(state, current, !is_sync, fails)
+    }
+    return gives
+}
+
+/// **A variant is built by its constructor, and its parts are what it keeps**
+/// (0.0.236).
+fn check_core_call_variant_parts[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, args: ref Vec[Expr], name: ref String, span: ref Span) -> Ty sync {
+    let parts: Vec[Ty] = state.variant_parts[name]?.clone() ?? []
+    let found = check_core_arguments_given(state, world, host, args, parts, false, null, span)
+    let mut i = -1
+    for arg in args {
+        i += 1
+        if i >= parts.len() as i64 || i >= found.len() as i64 {
+            break
+        }
+        if state.text_literal(world, parts[i], arg, true) == null {
+            state.hands_over(world, arg, found[i], "put into a variant", span)
+        }
+        // **A part that holds a `T?` takes a plain value as `Some`.**
+        let how = check_widened_slot(state, world, host, found[i], parts[i], arg, span)
+        if how != null {
+            state.facts.wrapped.insert(id_of(arg) as i64, how ?? continue)
+        }
+    }
+    return check_core_call_named(check_core_call_owner(name))
+}
+
+/// A call nothing resolved: refused or crossed into, and typed from a
+/// parameter of code run in place where that is what it is.
+fn check_core_call_unresolved[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, func: ref Expr, name: ref String, args: ref Vec[Expr], found: ref Vec[Ty], config: ref Vec[ConfigArg], passed: ref Vec[(String, Ty)], shadowed: bool, span: ref Span) -> Ty sync {
+    let is_variable = check_core_call_is_variable(func)
+    if is_variable {
+        state.a_function_nothing_declares(world.here, world, name, span)
+    }
+    match func {
+        Expr::Path(segments, _) => {
+            if segments.len() == 2 && !shadowed {
+                let head = world.here.unaliased(f"{world.words.resolve(segments[0])}")
+                let member: String = f"{world.words.resolve(segments[1])}"
+                state.a_member_nothing_writes_down(world, head, member, false, span)
+            }
+        }
+        else => {}
+    }
+    // A call nothing describes may start a thread of its own (ADR-303 D7).
+    state.crosses_into_an_unseen_call(world, name, args, found, config, passed, span, f"The compiler knows nothing about `{name}`, so it has to assume it might start a thread of its own.")
+    // …and says nothing about whether it can fail (ADR-308).
+    if state.flow.guarded != null {
+        let held: CheckGuarded? = state.flow.guarded?.clone()
+        let mut guarded = held ?? CheckGuarded::nothing()
+        guarded.unanswered = true
+        state.flow.guarded = guarded
+    }
+    // **A parameter of code, run in place, hands back what its type says.**
+    if is_variable && state.run_code.contains(name) {
+        let looked: Ty = state.lookup(name) ?? Ty::Unknown
+        match looked {
+            Ty::Fn { params, result, .. } => {
+                check_core_call_lent(state, args, params, found)
+                return result?.clone() ?? Ty::Named { name: "()".clone(), args: [], view: false }
+            }
+            else => {}
+        }
+    }
+    return Ty::Unknown
+}
+
+/// A call the ledger describes: reached, asked, and typed from its signature
+/// and what the arguments bind.
+fn check_core_call_described[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, name: ref String, key: ref String, contract: ref FnContract, args: ref Vec[Expr], found: ref Vec[Ty], config: ref Vec[ConfigArg], passed: ref Vec[(String, Ty)], span: ref Span) -> Ty sync {
+    state.reachable(name, contract, span)
+    // **A described call is asked too, where the description says the word**
+    // (ADR-290 D7).
+    if contract.threads.may() {
+        state.crosses_into_an_unseen_call(world, name, args, found, config, passed, span, f"`{name}` is described as starting a thread of its own (`threads = true`), so what it is given may be looked at from one")
+    }
+    state.may_fail_here(world, host, key, contract, span)
+    state.a_call_that_may_pause(name, !contract.sync_claim.is_sync(), contract.sync_claim.is_unpromised(), span)
+    state.a_pausing_call_in_an_action(name, contract, span)
+    // `Stats(first)` is the anonymous constructor, which hands back the type
+    // it is on, unless the declaration names it with its arguments (ADR-140
+    // D2).
+    let mut constructed: Ty? = null
+    if key.ends_with("::new") && !name.ends_with("::new") {
+        let declared: Ty? = check_core_call_declared(contract)
+        let base: String = (key.strip_suffix("::new") ?? "").clone()
+        constructed = declared ?? check_core_call_named(base)
+    }
+    let mut options: Vec[i64] = []
+    for option in config {
+        options.push(id_of(option.value) as i64)
+    }
+    state.flow.option_values = options
+    let result = host.arguments(state, key, name, contract, args, found, passed, span)
+    state.flow.option_values = []
+    // **What the arguments tell the signature** (ADR-295 D2), and a bound
+    // (D16).
+    let bound = argument_bindings(contract, found)
+    host.a_call_that_hands_its_number_back(state, contract, bound, args)
+    state.a_bound_the_argument_does_not_meet(world, key, bound, span)
+    host.a_standard_bound_not_met(state, key, bound, span)
+    let typed: Ty = constructed ?? substitute(result, bound)
+    return state.stamped_through(contract, found, typed)
+}
+
+/// What a call's named options were handed, walked.
+fn check_core_call_passed[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, config: ref Vec[ConfigArg], span: ref Span) -> Vec[(String, Ty)] sync {
+    let mut passed: Vec[(String, Ty)] = []
+    for option in config {
+        check_core_a_field_of_a_borrowed_subject(state, world, host, option.value, span, "passed")
+        let ty = host.expr(state, option.value, span)
+        passed.push((f"{world.words.resolve(option.name)}", ty))
+    }
+    return passed
+}
+
+/// The questions asked of a name before anything is resolved: `extern`,
+/// `Type::new`, `std` modules, the head of a path and the prelude.
+fn check_core_call_names(mut state: CheckState, world: ref CheckWorld, func: ref Expr, name: ref String, args: ref Vec[Expr], span: ref Span) sync {
+    state.a_foreign_call_outside_unsafe(name, span)
+    state.a_constructor_written_as_new(world, name, span)
+    state.a_std_name_without_its_module(world, name, span)
+    state.a_module_used_before_it_is_introduced(name, span)
+    match func {
+        Expr::Path(segments, _) => {
+            if segments.len() >= 2 {
+                let head: String = f"{world.words.resolve(segments[0])}"
+                if head != "Self" && !check_core_call_offered(head) {
+                    let written = check_core_call_joined(world, segments)
+                    state.a_head_nothing_declares(world.here, world, head, written, span)
+                }
+            }
+        }
+        else => {}
+    }
+    state.a_prelude_name_with_a_module_in_front(world, name, span)
+    state.a_constructor_nothing_describes(world, name, args, span)
+}
+
+/// The call once its name is in hand and it is neither a kept value nor a
+/// variant's constructor.
+fn check_core_call_named_call[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, func: ref Expr, name: ref String, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: ref Span) -> Ty sync {
+    check_core_call_names(state, world, func, name, args, span)
+    // **A grammar is entered by an ordinary call** (ADR-296 D24).
+    let entered: String? = state.grammar_path(name)
+    if entered != null {
+        let entered_path: String = entered ?? ""
+        return check_core_grammar_call(state, world, host, entered_path, args, span)
+    }
+    // **A call to a function that walks a type's fields is an
+    // instantiation** (ADR-304 D2).
+    check_core_an_instantiation(state, world, host, name, id_of(func) as i64, args, span)
+    // **A struct literal written like a call** (ADR-140 D1).
+    if config.len() > 0 && args.len() == 0 && state.declares_a_type(world, name) {
+        state.a_literal_written_like_a_call(world, name, config, span)
+        for option in config {
+            host.expr(state, option.value, span)
+        }
+        return check_core_call_named(name)
+    }
+    // **A type of the program's own with no constructor, called** (0.0.240).
+    if args.len() > 0 && state.structs.contains_key(name) && resolve_call(world, name) == null {
+        state.a_struct_called_without_a_constructor(name, span)
+    }
+    let variant: String? = check_core_call_variant(state, name)
+    // **A binding in scope hides an item of its name** (#451).
+    let is_variable = check_core_call_is_variable(func)
+    let shadowed = is_variable && state.lookup(name) != null
+    let mut key: String = "".clone()
+    let mut callee: FnContract? = null
+    let mut expected: Vec[Ty] = []
+    if !(variant != null || is_hull(name) || shadowed) {
+        let resolved: CheckResolved? = resolve_call(world, name)
+        if resolved != null {
+            let found_one = resolved ?? return Ty::Unknown
+            expected = expected_arguments(found_one.contract)
+            key = found_one.key.clone()
+            callee = found_one.contract.clone()
+        }
+    }
+    let have = callee != null
+    // **A parameter of code, run in place, takes what its type says** (#125).
+    if !have && is_variable && state.run_code.contains(name) {
+        let looked: Ty = state.lookup(name) ?? Ty::Unknown
+        match looked {
+            Ty::Fn { params, .. } => { expected = params.clone() },
+            else => {}
+        }
+    }
+    let outer_paused: Vec[i64] = state.flow.paused_args.clone()
+    state.flow.paused_args = []
+    if have {
+        state.an_exit_code_out_of_range(key, args, span)
+    }
+    let declared_here = have && world.own.functions.contains_key(key)
+    let found = check_core_arguments_given(state, world, host, args, expected, declared_here, callee, span)
+    let paused_here: Vec[i64] = state.flow.paused_args.clone()
+    state.flow.paused_args = outer_paused
+    // **A scope with a task that pauses polls it, and pauses itself**
+    // (ADR-328 D10): the task work's (#605), asked of the host.
+    if have && key == "task::scope" {
+        host.a_scope_that_pauses(state, args, paused_here, span)
+    }
+    if have && key == "supervisor::child" && args.len() > 0 {
+        state.a_child_that_keeps_state(world, args[0], span)
+    }
+    let passed = check_core_call_passed(state, world, host, config, span)
+    if variant != null {
+        let ty: String = variant ?? ""
+        return check_core_call_named(ty)
+    }
+    // **A handle is not constructed** (ADR-302 D7).
+    if state.opaque_handles.contains(name) {
+        state.a_handle_is_not_made_here(name, span)
+        return check_core_call_named(name)
+    }
+    // **A hull you can observe, you write** (ADR-281 D2).
+    if is_hull(name) {
+        return state.hull(name, args.len() as i64, found, span)
+    }
+    if !have {
+        return check_core_call_unresolved(state, world, host, func, name, args, found, config, passed, shadowed, span)
+    }
+    let contract: FnContract = callee ?? return Ty::Unknown
+    return check_core_call_described(state, world, host, name, key, contract, args, found, config, passed, span)
+}
+
+/// **`f(a, b)`, `Stats(first)`, `io::read_to_string()`**: a free call.
+pub fn check_core_free_call[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, func: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: ref Span) -> Ty sync {
+    // **`T::attribute(X)` and `T::attributes(X)`, a walked type's own**
+    // (ADR-331 D6): `X` is a type, not a value, and is not walked as one.
+    let member = check_core_call_attribute_member(state, world, func)
+    if member != "" {
+        let read: String = host.an_attribute_read(state, args, span) ?? return Ty::Unknown
+        if member == "attribute" {
+            return Ty::Nullable(check_core_call_named(read))
+        }
+        return Ty::Named { name: "Vec".clone(), args: [check_core_call_named(read)], view: false }
+    }
+    let mut written: String = "".clone()
+    if check_core_call_is_variable(func) {
+        match func {
+            Expr::Variable(word, _) => { written = f"{world.words.resolve(word)}" },
+            else => {}
+        }
+        // **A door over several locks types its own lambda** (ADR-281 D17).
+        if written == "access_all" || written == "update_all" {
+            return check_core_locks(state, world, host, written == "update_all", args, span)
+        }
+        // **`asset("…")` stands in a `comptime` initialiser and nowhere
+        // else** (ADR-310 D3).
+        if written == "asset" && !state.flow.inside_a_comptime {
+            state.an_asset_outside_a_comptime(span)
+            return Ty::Unknown
+        }
+    }
+    // **`NK2203`**: a free call inside a door's block, to something that
+    // takes a lock (ADR-281 D28).
+    if state.inside_a_door {
+        let callee: String? = check_core_call_free_callee(world, func)
+        if callee != null {
+            let called: String = callee ?? ""
+            let holds = check_core_call_holds(world, called)
+            state.a_lock_inside_a_lock(called, holds, span)
+        }
+    }
+    // **The callee is named and resolved before the arguments are walked**
+    // (ADR-288).
+    let mut name: String = "".clone()
+    match func {
+        Expr::Variable(word, _) => { name = f"{world.words.resolve(word)}" },
+        Expr::Path(segments, _) => { name = world.here.unaliased(check_core_call_joined(world, segments)) },
+        else => {
+            host.expr(state, func, span)
+            return Ty::Unknown
+        }
+    }
+    // **A kept function value called by name.**
+    if check_core_call_is_variable(func) && !state.run_code.contains(name) {
+        let looked: Ty = state.lookup(name) ?? Ty::Unknown
+        match looked {
+            Ty::Fn { params, result, is_sync, can_throw } => {
+                let pauses_not: bool = is_sync
+                let fails: bool = can_throw
+                let gives: Ty = result?.clone() ?? Ty::Named { name: "()".clone(), args: [], view: false }
+                return check_core_call_kept(state, world, host, func, args, name, params, gives, pauses_not, fails, span)
+            }
+            else => {}
+        }
+    }
+    if state.variant_parts.contains_key(name) {
+        return check_core_call_variant_parts(state, world, host, args, name, span)
+    }
+    return check_core_call_named_call(state, world, host, func, name, args, config, span)
+}
+
+/// **The arm `Call`**: the prelude's `assert`, or a free call.
+pub fn check_core_call[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, func: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: ref Span) -> Ty sync {
+    if check_core_call_the_prelude_assert(state, world, func) {
+        return check_core_an_assert(state, world, host, args, config, span)
+    }
+    return check_core_free_call(state, world, host, func, args, config, span)
+}
+
+/// **The arm `Tuple`**: each part walked, then handed over.
+pub fn check_core_tuple[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, parts: ref Vec[Expr], span: ref Span) -> Ty sync {
+    let mut found: Vec[Ty] = []
+    for part in parts {
+        found.push(host.expr(state, part, span))
+    }
+    let mut i = 0
+    for part in parts {
+        state.hands_over(world, part, found[i], "put into a tuple", span)
+        i += 1
+    }
+    return Ty::Tuple(found)
+}

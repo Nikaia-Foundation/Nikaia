@@ -31,7 +31,7 @@ mod host;
 use crate::contracts::LedgerOps;
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::assets::{ASSET, Reads};
+use crate::assets::Reads;
 use crate::ast::{self, BinaryOp, Block, Expr, Item, MatchPattern, Span, Stmt, UnaryOp};
 use crate::build_time;
 use crate::contracts::SignatureOps;
@@ -42,6 +42,7 @@ use crate::parser::Parsed;
 use nikaia_std::tools::check_arguments;
 use nikaia_std::tools::check_consts;
 use nikaia_std::tools::check_core_args;
+use nikaia_std::tools::check_core_call;
 use nikaia_std::tools::check_core_comptime;
 use nikaia_std::tools::check_core_leaves;
 use nikaia_std::tools::check_core_pilot;
@@ -54,7 +55,7 @@ use nikaia_std::tools::check_names::{integer_named, is_a_literal as is_literal};
 use nikaia_std::tools::check_overflow;
 use nikaia_std::tools::check_patterns::pattern_names;
 use nikaia_std::tools::check_reports::CheckWall;
-use nikaia_std::tools::check_scope::{resolve_call, resolve_method};
+use nikaia_std::tools::check_scope::resolve_method;
 use nikaia_std::tools::check_shapes::{
     an_element_beneath, is_growable, roots_in_a_binding, slice_element,
 };
@@ -122,19 +123,6 @@ use winnow_grammar::Symbol as Ident;
 const OFFERED: [&str; 11] = [
     "i32", "i64", "u8", "u32", "u64", "f64", "bool", "char", "scalar", "String", "str",
 ];
-
-/// **What one call was handed**, positional and named, with the types found for
-/// each.
-///
-/// One parameter rather than four, because the two callers of
-/// [`Checker::crosses_into_an_unseen_call`] pass the same four and the question
-/// they differ on is *why* — which is the argument beside this one.
-struct Arguments<'a> {
-    args: &'a [Expr],
-    found: &'a [Ty],
-    config: &'a [ast::ConfigArg],
-    passed: &'a [(String, Ty)],
-}
 
 /// What one pass of the checker learned: its findings, the facts the emitter
 /// reads (`tools/check_facts.nika`), and what each function calls.
@@ -1795,20 +1783,6 @@ impl<'a> Checker<'a> {
         self.s.record_cast(from, into, value_node(operand));
     }
 
-    /// **`NK1117` for a function nothing declares** (0.0.244).
-    ///
-    /// `frobnicate(1)` lowered as written and `rustc` said *cannot find
-    /// function* about a file nobody wrote (Part III C.1). A call nothing
-    /// describes is left alone where it is written through a path - a package
-    /// or a crate may have it - but a **bare** name has nowhere else to come
-    /// from: a `use` brings no name in (ADR-140 D5), so it is this program's,
-    /// a value in scope, the prelude's or nothing. Everything this checker
-    /// knows declares one is asked first, so what is left is certain (C.4).
-    fn a_function_nothing_declares(&mut self, name: &str, span: &Span) {
-        self.s
-            .a_function_nothing_declares(&self.world.here, self.world, name, span)
-    }
-
     /// **A lookup's key is lent** (0.0.235, issue #169).
     ///
     /// `m.get(k)`, `m.contains_key(k)` and a set's `contains(k)` and
@@ -1960,21 +1934,6 @@ impl<'a> Checker<'a> {
             && !self.world.own.functions.contains_key(ASSERT)
     }
 
-    /// **`assert(cond; message: …)`** ([ADR-269](../../docs/specification/adr/adr-269.md)
-    /// D2, D3): one `bool`, one option, and a condition that changes nothing.
-    ///
-    /// Typed here and not through [`Checker::call`], because what the
-    /// condition calls is the question: a frame of [`StoredCode`] around it
-    /// collects every method it resolves, and its free calls are read off the
-    /// tree. A condition that pauses, fails, touches anything or changes a
-    /// value is `NK1194`: the rule that keeps a proof possible (D3), and the
-    /// reason evaluating it a second time for the failure message is harmless.
-    fn an_assert(&mut self, args: &[Expr], config: &[ast::ConfigArg], span: &Span) -> Ty {
-        self.nikaia(|state, world, host| {
-            check_core_leaves::check_core_an_assert(state, world, host, args, config, span)
-        })
-    }
-
     fn a_view_compared_with_a_value(
         &mut self,
         lhs: &Expr,
@@ -2009,32 +1968,6 @@ impl<'a> Checker<'a> {
     fn a_trait_nothing_declares(&mut self, written: &str, span: &Span) {
         self.s
             .a_trait_nothing_declares(&self.world.here, self.world, written, span)
-    }
-
-    /// **`NK1181`: nothing declares the head of this path.**
-    ///
-    /// [`Checker::nothing_declares_it`] one segment down, and the same
-    /// fail-safe direction: `nowhere::wobble` used to lower, and the language
-    /// below answered *failed to resolve: use of unresolved module or unlinked
-    /// crate* — a sentence with *crate* in it about a file nobody wrote
-    /// ([Part III C.1](../../docs/specification/30-nikaia-tooling.md)).
-    ///
-    /// **What a head may legally be**, asked in order and every one of them
-    /// something this compiler has already read: a **type** declared here or
-    /// recorded by either ledger, a **package** `use` brings in, a **package**
-    /// the manifest declares, a **crate** a description covers, a `std`
-    /// module, a **grammar**, an opaque handle, or a type parameter. A ledger
-    /// that records *anything* under `head::` answers too, because a crate is
-    /// known by its items rather than by a list of its names.
-    ///
-    /// **Anything this cannot see is a name it must not refuse**
-    /// ([Part III C.4](../../docs/specification/30-nikaia-tooling.md)), which
-    /// is why the list fails open rather than closed: a head nobody has told
-    /// this compiler about is the one case, and every other reading of an
-    /// absent key had to be ruled out first.
-    fn a_head_nothing_declares(&mut self, head: &str, written: &str, span: &Span) {
-        self.s
-            .a_head_nothing_declares(&self.world.here, self.world, head, written, span)
     }
 
     /// **`x?.m(…)` over a `T?`** (Part I 3.5): the call happens only where
@@ -2399,20 +2332,6 @@ impl<'a> Checker<'a> {
         self.nikaia(|state, world, host| {
             check_core_pilot::check_core_grammar_call(state, world, host, key, args, span)
         })
-    }
-
-    /// The name a free call names, unaliased — or nothing where this is not one.
-    fn free_callee(&self, func: &Expr) -> Option<String> {
-        let name = match func {
-            Expr::Variable(name, _) => self.parsed.text(*name).to_string(),
-            Expr::Path(segments, _) => segments
-                .iter()
-                .map(|s| self.parsed.text(*s))
-                .collect::<Vec<_>>()
-                .join("::"),
-            _ => return None,
-        };
-        Some(self.parsed.unaliased(&name))
     }
 
     /// One lambda parameter, bound — and refusable where it is changed without
@@ -5587,10 +5506,9 @@ impl<'a> Checker<'a> {
 
             Expr::Call {
                 func, args, config, ..
-            } => match self.the_prelude_assert(func) {
-                true => self.an_assert(args, config, span),
-                false => self.call(func, args, config, span),
-            },
+            } => self.nikaia(|state, world, host| {
+                check_core_call::check_core_call(state, world, host, func, args, config, span)
+            }),
 
             Expr::MethodCall {
                 receiver,
@@ -7177,18 +7095,16 @@ impl<'a> Checker<'a> {
                 into
             }
 
-            Expr::Tuple(parts, _) => {
-                let found: Vec<Ty> = parts.iter().map(|p| self.expr(p, span)).collect();
-                for (part, ty) in parts.iter().zip(&found) {
-                    self.hands_over(part, ty, "put into a tuple", span);
-                }
-                Ty::Tuple(found)
-            }
+            Expr::Tuple(parts, _) => self.nikaia(|state, world, host| {
+                check_core_call::check_core_tuple(state, world, host, parts, span)
+            }),
 
             // **`[1, 2, 3]` is a `Vec[T]`**
             // ([ADR-135](../../docs/specification/adr/adr-135.md) D1), and `T`
             // is what the elements agree on.
-            Expr::ListLit { items, .. } => self.list_literal(items, span),
+            Expr::ListLit { items, .. } => self.nikaia(|state, world, host| {
+                check_core_args::check_core_list_literal(state, world, host, items, span)
+            }),
 
             // A `?` unwraps a failure, a `??` unwraps an absence, an index
             // reaches into a container and a range is an iterator: four things
@@ -8065,27 +7981,6 @@ impl<'a> Checker<'a> {
         self.s.a_name_in_text(self.world, want, value, span)
     }
 
-    /// `f(a, b)`, `Stats(first)`, `io::read_to_string()`, `write(p, d; append: true)`.
-    /// A door over several locks: `access_all` reads them, `update_all` writes
-    /// them ([ADR-281](../../docs/specification/adr/adr-281.md)).
-    ///
-    /// **It is typed here and not in the ledger**, for the reason the hull
-    /// constructors are: a signature binds its type variables from the
-    /// **receiver** (ADR-288), and a door over several locks has none - the
-    /// locks are arguments, they hold different types, and how many there are is
-    /// open. What a written signature cannot say, this says.
-    ///
-    /// `access_all` hands each value as a **view**, the way `access` does;
-    /// `update_all` hands each in **by value** and takes a new one back per lock
-    /// (D2). Both refuse anything that is not a lock, because a door that let a
-    /// plain value through would be a door about nothing.
-    fn locks(&mut self, door: MultiLock, args: &[Expr], span: &Span) -> Ty {
-        let writing = matches!(door, MultiLock::Writing);
-        self.nikaia(|state, world, host| {
-            check_core_args::check_core_locks(state, world, host, writing, args, span)
-        })
-    }
-
     /// `Shared(x)`, `SharedMut(x)` and `Locked(x)` make a hull
     /// ([ADR-281](../../docs/specification/adr/adr-281.md) D2).
     ///
@@ -8138,499 +8033,20 @@ impl<'a> Checker<'a> {
         self.s.findings.extend(refused);
     }
 
-    fn call(&mut self, func: &Expr, args: &[Expr], config: &[ast::ConfigArg], span: &Span) -> Ty {
-        // **`T::attribute(X)` and `T::attributes(X)`, a walked type's own**
-        // (ADR-331 D6): `X` is a type, not a value, and is not walked as one.
-        if let Expr::Path(segments, _) = func
-            && let [parameter, member] = segments.as_slice()
-            && self
-                .s
-                .type_parameters
-                .contains_key(self.parsed.text(*parameter))
-            && matches!(self.parsed.text(*member), "attribute" | "attributes")
-        {
-            let Some(read) = self.an_attribute_read(args, span) else {
-                return Ty::Unknown;
-            };
-            return match self.parsed.text(*member) {
-                "attribute" => Ty::Nullable(Box::new(Ty::named(&read))),
-                _ => Ty::Named {
-                    name: "Vec".to_string(),
-                    args: vec![Ty::named(&read)],
-                    view: false,
-                },
-            };
-        }
-        // **A door over several locks types its own lambda**
-        // ([ADR-281](../../docs/specification/adr/adr-281.md) D17), and it has to
-        // be answered before the arguments are walked: what the lambda is handed
-        // comes from what the *locks* hold, so the locks are typed first and the
-        // lambda after. Every other call can walk its arguments in one pass.
-        if let Expr::Variable(name, _) = func {
-            if let Some(door) = MultiLock::named(self.parsed.text(*name)) {
-                return self.locks(door, args, span);
-            }
-            // **`asset("…")` stands in a `comptime` initialiser and nowhere
-            // else** ([ADR-310](../../docs/specification/adr/adr-310.md) D3).
-            // The evaluator reads it where it belongs, so anything that reaches
-            // *here* is one written somewhere it does not — and the file a
-            // program reads while it **runs** has a name of its own.
-            if self.parsed.text(*name) == ASSET && !self.s.flow.inside_a_comptime {
-                self.s.an_asset_outside_a_comptime(span);
-                return Ty::Unknown;
-            }
-        }
-        // **`NK2203`**: a free call inside a door's block, to something that
-        // takes a lock (ADR-281 D28). `println` is the one every program writes,
-        // and ADR-288 D21 is where it was pinned down: it never pauses, so
-        // `sync` says nothing about it, and it takes standard output's own lock
-        // while yours is open.
-        if self.s.inside_a_door
-            && let Some(name) = self.free_callee(func)
-        {
-            let holds = self
-                .world
-                .own
-                .functions
-                .get(&name)
-                .or_else(|| self.world.library.functions.get(&name))
-                .map(|c| c.touches_a_lock)
-                .unwrap_or(crate::contracts::Lock::No);
-            self.s.a_lock_inside_a_lock(&name, &holds, span);
-        }
-        // **The callee is named and resolved before the arguments are walked**
-        // ([ADR-288](../../docs/specification/adr/adr-288.md), the free half).
-        // A lambda's parameters are typed from the callee's signature, so the
-        // signature has to be in hand first — which is exactly the ordering the
-        // *method* path was given when that record landed, and which this one
-        // did not have: `hand(fn(n) { … })` left `n` with no type at all, and
-        // [ADR-277](../../docs/specification/adr/adr-277.md) D7's promises had
-        // nothing to be asked of.
-        let name = match func {
-            Expr::Variable(name, _) => self.parsed.text(*name).to_string(),
-            // `unaliased`: `h::serve()` is `http::serve()` where the file wrote
-            // `use http as h` (ADR-286 D12), and the ledger knows only the
-            // package's own name.
-            Expr::Path(segments, _) => self.parsed.unaliased(
-                &segments
-                    .iter()
-                    .map(|s| self.parsed.text(*s))
-                    .collect::<Vec<_>>()
-                    .join("::"),
-            ),
-            other => {
-                self.expr(other, span);
-                return Ty::Unknown;
-            }
-        };
-
-        // **A kept function value called by name**: a `let`, or a parameter
-        // the function keeps. What its type says is what the call does.
-        if matches!(func, Expr::Variable(_, _))
-            && !self.s.run_code.contains(&name)
-            && let Some(Ty::Fn {
-                params,
-                result,
-                is_sync,
-                can_throw: throws,
-            }) = self.s.lookup(&name)
-        {
-            self.s.read_at.push((name.clone(), span.at() as i64));
-            let found = self.arguments_given(args, &params, false, None, span);
-            // **What it takes as a view is lent to it** (D20), as for a
-            // parameter of code run in place below.
-            for ((given, wanted), had) in args.iter().zip(&params).zip(&found) {
-                if wanted.is_a_view()
-                    && !had.is_a_view()
-                    && !matches!(had, Ty::Unknown | Ty::Fn { .. })
-                {
-                    self.s.facts.lent_args.insert(value_node(given));
-                }
-            }
-            self.kept_arguments_are_its_own(args, &params);
-            self.s
-                .facts
-                .kept_calls
-                .insert(value_node(func), (!is_sync, throws));
-            if let Some(current) = self.s.current.clone() {
-                let entry = self
-                    .s
-                    .methods
-                    .entry(current)
-                    .or_insert_with(MethodCalls::empty);
-                entry.code_pauses |= !is_sync;
-                entry.code_fails |= throws;
-            }
-            return (*result).unwrap_or_else(|| Ty::named("()"));
-        }
-
-        // **A variant is built by its constructor, and its parts are what it
-        // keeps** (0.0.236). `Stmt::Say("a")` resolved to nothing, so its
-        // argument was walked with no type to meet: the literal went below as
-        // a `&str` where the variant holds a `String`, and `rustc` said
-        // *mismatched types* about a file nobody wrote. The parts are the
-        // variant's declared types, a literal handed to text is built into
-        // text of its own there (ADR-282 D4), and a name handed in is given.
-        if let Some(parts) = self.s.variant_parts.get(&name).cloned() {
-            let found = self.arguments_given(args, &parts, false, None, span);
-            for ((arg, want), ty) in args.iter().zip(&parts).zip(&found) {
-                if self.text_literal(want, arg, true).is_none() {
-                    self.hands_over(arg, ty, "put into a variant", span);
-                }
-                // **A part that holds a `T?` takes a plain value as `Some`**,
-                // as a parameter does (Part I 2.3).
-                if let Some(how) = self.widened_slot(ty, want, Some(arg), span) {
-                    self.s.facts.wrapped.insert(value_node(arg), how);
-                }
-            }
-            let owner = name
-                .rsplit_once("::")
-                .map_or(name.as_str(), |(owner, _)| owner);
-            return Ty::named(owner);
-        }
-
-        // **A call to an `extern` name is written inside `unsafe { … }`**
-        // ([ADR-302](../../docs/specification/adr/adr-302.md) D3), and this is
-        // where that is asked: the name is in hand and the block is a flag the
-        // walk carries.
-        self.s.a_foreign_call_outside_unsafe(&name, span);
-
-        // **A type is constructed by its anonymous constructor**
-        // ([ADR-140](../../docs/specification/adr/adr-140.md) D2), so a written
-        // `Type::new` is the other spelling and is refused — in `std` as in a
-        // `.nika` file, which is the whole of what D2 evens out.
-        self.s.a_constructor_written_as_new(self.world, &name, span);
-
-        // **What needs no `use` is the list on Part I's first page**
-        // ([ADR-313](../../docs/specification/adr/adr-313.md) D1), and these two
-        // are the halves of the rule: a name that lives in a module written
-        // without it, and a module used without being introduced.
-        self.s
-            .a_std_name_without_its_module(self.world, &name, span);
-        self.s.a_module_used_before_it_is_introduced(&name, span);
-        // **The head of a call path is one of five things, as a value's is**
-        // ([ADR-286](../../docs/specification/adr/adr-286.md) D31, #488):
-        // `nowhere::wobble(1)` lowered, and the language below said *cannot
-        // find module or crate* about a file nobody wrote. Whether a head
-        // exists is always known, so this is no guess (C.4 is about types).
-        // `Self` and a built-in type name a type that is always there.
-        if let Expr::Path(segments, _) = func
-            && let [head, _, ..] = segments.as_slice()
-        {
-            let head = self.parsed.text(*head);
-            if head != "Self" && !OFFERED.contains(&head) {
-                let head = head.to_string();
-                let written = segments
-                    .iter()
-                    .map(|s| self.parsed.text(*s))
-                    .collect::<Vec<_>>()
-                    .join("::");
-                self.a_head_nothing_declares(&head, &written, span);
-            }
-        }
-        self.s
-            .a_prelude_name_with_a_module_in_front(self.world, &name, span);
-        self.s
-            .a_constructor_nothing_describes(self.world, &name, args, span);
-
-        // **A grammar is entered by an ordinary call**
-        // ([ADR-296](../../docs/specification/adr/adr-296.md) D24), through a
-        // **path** since [ADR-140](../../docs/specification/adr/adr-140.md) D3.
-        // Answered before anything is resolved, because a grammar is not a
-        // ledger entry a `resolve` would find.
-        if let Some(entered) = self.s.grammar_path(&name) {
-            return self.grammar_call(&entered, args, span);
-        }
-
-        // **A call to a function that walks a type's fields is an
-        // *instantiation*** ([ADR-304](../../docs/specification/adr/adr-304.md)
-        // D2): the shape is the caller's to supply, so the loop is unrolled
-        // once per type argument actually used and this is where the type
-        // argument is known.
-        //
-        // Recorded here and walked afterwards, because the body has to be read
-        // with the fields in hand and this walk is in the middle of another
-        // one. What is refused at the call itself is `NK1164` — *you passed
-        // something that is not a struct*
-        // ([ADR-304](../../docs/specification/adr/adr-304.md) D3) — which the
-        // bound already answers and which is why this can assume a struct.
-        self.an_instantiation(&name, func, args, span);
-
-        // **A struct literal written like a call**
-        // ([ADR-140](../../docs/specification/adr/adr-140.md) D1). `Stats(min: 1)`
-        // parsed as Kap 4.2's named literal until D1 took that spelling out of the
-        // language; it is a call with options now, and where the name is a **type**
-        // that is the old form rather than a call anybody meant. Asked here because
-        // the parser cannot ask it - the two forms are one spelling and a name
-        // denotes one of them - and asked before the resolution below, which would
-        // otherwise answer about the anonymous constructor: the silent lowering was
-        // `Stats::new()` with the fields dropped, which `rustc` then refused about a
-        // file nobody wrote ([Part III C.1](../../docs/specification/30-nikaia-tooling.md)).
-        if !config.is_empty() && args.is_empty() && self.declares_a_type(&name) {
-            self.s
-                .a_literal_written_like_a_call(self.world, &name, config, span);
-            for option in config {
-                self.expr(&option.value, span);
-            }
-            return Ty::named(&name);
-        }
-
-        // **A type of the program's own with no constructor, called** (0.0.240):
-        // `NotANumber(text)` against `struct NotANumber { text: String }`
-        // lowered to `NotANumber::new(…)`, and `rustc` said *no function named
-        // `new`* about a file nobody wrote. A struct is built with a literal.
-        if !args.is_empty() && self.s.structs.contains_key(&name) && self.resolve(&name).is_none() {
-            self.s.a_struct_called_without_a_constructor(&name, span);
-        }
-
-        // A tuple variant of an enum declared here - `Op::Plus(1)` - is a value
-        // of that enum, not a call to a function. Its arguments are still
-        // walked, below, with the rest.
-        let variant = name
-            .split_once("::")
-            .filter(|(ty, variant)| self.s.is_variant(ty, variant))
-            .map(|(ty, _)| ty.to_string());
-        // Neither a variant nor a hull is a ledger entry, so neither has a
-        // signature to type an argument from.
-        // **A binding in scope hides an item of its name** (#451), as a
-        // `let` hides one and as Rust's scope does: `twice(4)` inside `fn
-        // apply(twice: fn(i64) -> i64 sync)` is the parameter, not a free
-        // `fn twice(a, b, c)` - which it was, and the call was checked
-        // against the wrong signature.
-        let shadowed = matches!(func, Expr::Variable(_, _)) && self.s.lookup(&name).is_some();
-        let resolved = match variant.is_some() || is_hull(&name) || shadowed {
-            true => None,
-            false => self.resolve(&name),
-        };
-        let mut expected: Vec<Ty> = resolved
-            .as_ref()
-            .map(|(_, contract)| expected_arguments(contract))
-            .unwrap_or_default();
-        // **A parameter of code, run in place, takes what its type says**
-        // (#125): `root_at(name)` for a `root_at: fn(ref String) -> i64` and
-        // an owned `name` is a view handed over, which the walk below writes
-        // the reference for - typed from nothing, the text went below by
-        // value and `rustc` refused it.
-        if resolved.is_none()
-            && matches!(func, Expr::Variable(_, _))
-            && self.s.run_code.contains(&name)
-            && let Some(Ty::Fn { params, .. }) = self.s.lookup(&name)
-        {
-            expected = params;
-        }
-        // The same walk the method path uses, so the same questions are asked
-        // in both - or `takes(self.name)` slips past `NK1131` while
-        // `x.takes(self.name)` does not.
-        let outer_paused = std::mem::take(&mut self.s.flow.paused_args);
-        if let Some((key, _)) = &resolved {
-            self.an_exit_code_out_of_range(key, args, span);
-        }
-        let found = self.arguments_given(
-            args,
-            &expected,
-            resolved
-                .as_ref()
-                .is_some_and(|(key, _)| self.world.own.functions.contains_key(key)),
-            resolved.as_ref().map(|(_, contract)| contract),
-            span,
-        );
-        let paused_here = std::mem::replace(&mut self.s.flow.paused_args, outer_paused);
-        // **A scope with a task that pauses polls it, and pauses itself**
-        // (ADR-328 D10): its lambda paused because a task in it did.
-        if resolved
-            .as_ref()
-            .is_some_and(|(key, _)| key == "task::scope")
-            && let Some(body) = args
-                .first()
-                .filter(|arg| paused_here.contains(&value_node(arg)))
-        {
+    /// **A generic call whose result only an open number binds** (#497):
+    /// `hand(7)` for `fn hand[T](x: T) -> T` hands back the `7`, whose type
+    /// its uses decide (ADR-285 D1), so the call is that open number.
+    /// **A scope with a task that pauses polls it, and pauses itself**
+    /// (ADR-328 D10): its lambda paused because a task in it did. Asked by
+    /// `tools/check_core_call.nika` and kept here for the task work (#605).
+    pub(super) fn a_scope_that_pauses(&mut self, args: &[Expr], paused: &[i64], span: &Span) {
+        if let Some(body) = args.first().filter(|arg| paused.contains(&value_node(arg))) {
             self.s.facts.paused_scopes.insert(value_node(body));
             self.s
                 .a_call_that_may_pause("task::scope", true, false, span);
         }
-        if resolved
-            .as_ref()
-            .is_some_and(|(key, _)| key == "supervisor::child")
-            && let Some(body) = args.first()
-        {
-            self.a_child_that_keeps_state(body, span);
-        }
-        let passed: Vec<(String, Ty)> = config
-            .iter()
-            .map(|a| {
-                self.a_field_of_a_borrowed_subject(&a.value, span, "passed");
-                (
-                    self.parsed.text(a.name).to_string(),
-                    self.expr(&a.value, span),
-                )
-            })
-            .collect();
-
-        if let Some(ty) = variant {
-            return Ty::named(&ty);
-        }
-
-        // **A handle is not constructed** (ADR-302 D7): it is an address a C
-        // function hands back, so there is no value of one this language can
-        // make. Refused here rather than below, where `rustc` would say the
-        // tuple struct takes one field and name a type the source never wrote.
-        if self.s.opaque_handles.contains(&name) {
-            self.s.a_handle_is_not_made_here(&name, span);
-            return Ty::named(&name);
-        }
-
-        // **A hull you can observe, you write**
-        // ([ADR-281](../../docs/specification/adr/adr-281.md) D2). The three hull
-        // types are made by a call, and it is this compiler's to type rather than
-        // the ledger's: the ledger binds `$T` from a **receiver** (ADR-288) and a
-        // constructor has none, so the type argument would have to come from what
-        // is handed in.
-        if is_hull(&name) {
-            return self.s.hull(&name, args.len() as i64, &found, span);
-        }
-
-        let Some((key, contract)) = resolved else {
-            if matches!(func, Expr::Variable(_, _)) {
-                self.a_function_nothing_declares(&name, span);
-            }
-            if let Expr::Path(segments, _) = func
-                && let [head, member] = segments.as_slice()
-                && !shadowed
-            {
-                let head = self.parsed.unaliased(self.parsed.text(*head)).to_string();
-                let member = self.parsed.text(*member).to_string();
-                self.a_member_nothing_writes_down(&head, &member, false, span);
-            }
-            // A call nothing describes is a call this compiler cannot see the
-            // end of, and a thread of its own is among the things it may do
-            // (ADR-303 D7). What it is handed is therefore handed across.
-            self.crosses_into_an_unseen_call(
-                &name,
-                Arguments {
-                    args,
-                    found: &found,
-                    config,
-                    passed: &passed,
-                },
-                span,
-                &format!(
-                    "The compiler knows nothing about `{name}`, so it has to assume it \
-                     might start a thread of its own."
-                ),
-            );
-            // And a call this compiler cannot see the end of says nothing about
-            // whether it can **fail**, either
-            // ([ADR-308](../../docs/specification/adr/adr-308.md)).
-            self.guard_has_no_answer();
-            // **A parameter of code, run in place, hands back what its type
-            // says.** Typed as nothing, `let name = f(s)` left `name.contains`
-            // unresolved, and an unresolved method is read as one that may
-            // pause - so the function came out `async` with nothing in it that
-            // pauses (found moving `foreign`'s walk into Nikaia, #125).
-            if let Expr::Variable(_, _) = func
-                && self.s.run_code.contains(&name)
-                && let Some(Ty::Fn { params, result, .. }) = self.s.lookup(&name)
-            {
-                // **And what it takes as a view is lent to it**: an owned
-                // argument for a `ref` parameter gains the `&` a declared
-                // function's would (`the_compiler_writes_the_reference`).
-                for (at, (given, wanted)) in args.iter().zip(&params).enumerate() {
-                    let had = found.get(at).cloned().unwrap_or(Ty::Unknown);
-                    if wanted.is_a_view()
-                        && !had.is_a_view()
-                        && !matches!(had, Ty::Unknown | Ty::Fn { .. })
-                    {
-                        self.s.facts.lent_args.insert(value_node(given));
-                    }
-                }
-                return (*result).unwrap_or_else(|| Ty::named("()"));
-            }
-            return Ty::Unknown;
-        };
-        self.s.reachable(&name, &contract, span);
-        // **A described call is asked too, where the description says the word**
-        // ([ADR-290](../../docs/specification/adr/adr-290.md) D7). It fires on
-        // the **claim** and never on its absence: a description that does not
-        // say is a description that was not asked, and the program keeps the
-        // answer it has today. Before this, a crate that answered every other
-        // question honestly turned `NK2502` off by being described, which is
-        // the half of [ADR-303](../../docs/specification/adr/adr-303.md) D7
-        // that was left open.
-        if contract.threads.may() {
-            self.crosses_into_an_unseen_call(
-                &name,
-                Arguments {
-                    args,
-                    found: &found,
-                    config,
-                    passed: &passed,
-                },
-                span,
-                &format!(
-                    "`{name}` is described as starting a thread of its own (`threads = true`), \
-                     so what it is given may be looked at from one"
-                ),
-            );
-        }
-        self.may_fail_here(&key, &contract, span);
-        self.s.a_call_that_may_pause(
-            &name,
-            !contract.sync_claim.is_sync(),
-            unpromised(&contract),
-            span,
-        );
-        self.s.a_pausing_call_in_an_action(&name, &contract, span);
-        // `Stats(first)` is the anonymous constructor of Kap 4.2, which the
-        // lowering names `Stats::new` - and which hands back the type it is on,
-        // whatever its declaration says about `Self`.
-        //
-        // **Unless the declaration already names it with its arguments**
-        // ([ADR-140](../../docs/specification/adr/adr-140.md) D2). A `.nika`
-        // file's constructor is on a type with no parameters, so naming the type
-        // is the whole answer; `std`'s own entries are not — `Vec::new` declares
-        // `-> Vec[?]`, and `Ty::named("Vec")` threw the `[?]` away, so
-        // `let xs = Vec()` came out as a `Vec` and `NK1106` refused it against
-        // every `Vec[T]` it was given to. The rule was right for the one case it
-        // had and wrong for the one D2 brought in.
-        let declared = contract
-            .signature
-            .as_ref()
-            .and_then(|s| s.result.as_ref())
-            .filter(|ty| !matches!(ty, Ty::Unknown))
-            .filter(|ty| !matches!(ty, Ty::Named { name, .. } if name == "Self"));
-        let constructed = key
-            .strip_suffix("::new")
-            .filter(|_| !name.ends_with("::new"))
-            .map(|ty| match declared {
-                Some(declared) => declared.clone(),
-                None => Ty::named(ty),
-            });
-        self.s.flow.option_values = config.iter().map(|a| value_node(&a.value)).collect();
-        let result = self.arguments(&key, &name, &contract, args, &found, &passed, span);
-        self.s.flow.option_values.clear();
-        // **What the arguments tell the signature**
-        // ([ADR-295](../../docs/specification/adr/adr-295.md) D2). A free
-        // function has no receiver, so ADR-288's binding had nothing to work
-        // from and `hand(7)` handed back `?`; the same `bind` pointed at the
-        // parameters answers `i64`. After `arguments` rather than before it,
-        // because a variable fits everything and the check is therefore the
-        // same either way round - while the *types* are not: a lambda's
-        // parameters are typed from the signature (ADR-288), so the signature
-        // has to reach them unsubstituted.
-        let bound = from_arguments(&contract, &found);
-        self.a_call_that_hands_its_number_back(&contract, &bound, args);
-        // …and what the arguments tell a **bound** (ADR-295 D16), which is the
-        // same binding read for the other question a type parameter raises.
-        self.s
-            .a_bound_the_argument_does_not_meet(self.world, &key, &bound, span);
-        self.a_standard_bound_not_met(&key, &bound, span);
-        let result = constructed.unwrap_or_else(|| ty::substitute(&result, &bound));
-        self.stamped_through(&contract, &found, result)
     }
 
-    /// **A generic call whose result only an open number binds** (#497):
-    /// `hand(7)` for `fn hand[T](x: T) -> T` hands back the `7`, whose type
-    /// its uses decide (ADR-285 D1), so the call is that open number.
     fn a_call_that_hands_its_number_back(
         &mut self,
         contract: &FnContract,
@@ -9223,45 +8639,6 @@ impl<'a> Checker<'a> {
         })
     }
 
-    /// ADR-303 D7: a value handed to a call this compiler cannot see the end of
-    /// may reach a thread that call owns (`NK2502`).
-    ///
-    /// A Rust dependency may bring its own runtime, so "what does it do with
-    /// what I gave it" has no answer here - and a thread of its own is among the
-    /// answers. D7's first rule is therefore the same rule as `NK2501`'s, asked
-    /// at a call instead of at a task.
-    ///
-    /// **Unlike `NK2501` this is not hypothetical at `user_parallelism = no`.**
-    /// The switch bounds what the *program* runs at once (ADR-037 D2); a foreign
-    /// runtime's threads are not the program's, so the crossing is real at both
-    /// settings and so is the refusal.
-    fn crosses_into_an_unseen_call(
-        &mut self,
-        callee: &str,
-        handed: Arguments<'_>,
-        span: &Span,
-        why: &str,
-    ) {
-        self.s.crosses_into_an_unseen_call(
-            self.world,
-            callee,
-            handed.args,
-            handed.found,
-            handed.config,
-            handed.passed,
-            span,
-            why,
-        );
-    }
-
-    /// **`NK1229`: a supervisor's child that would not start fresh**
-    /// ([ADR-328](../../docs/specification/adr/adr-328.md), Part II 12.8): its
-    /// function is called again for every attempt, so a `mut` binding it
-    /// captures carries one attempt's changes into the next.
-    fn a_child_that_keeps_state(&mut self, body: &Expr, span: &Span) {
-        self.s.a_child_that_keeps_state(self.world, body, span);
-    }
-
     /// **What an entry point may be** ([ADR-284](../../docs/specification/adr/adr-284.md)
     /// D4, D5): `extern` before a function with a body exports it to C, and four
     /// shapes are refused at the declaration.
@@ -9436,26 +8813,6 @@ impl<'a> Checker<'a> {
     ) -> (Option<build_time::Value>, bool) {
         let host = self.host();
         self.s.build_time_value(&host, value, bound, span)
-    }
-
-    /// **`[1, 2, 3]`**, and what its type is
-    /// ([ADR-135](../../docs/specification/adr/adr-135.md) D1).
-    ///
-    /// The elements are walked in order and the first one that has a type is
-    /// what the rest answer to. A type this checker could not work out is
-    /// **silence** and not a disagreement: Stage 0 knows the type of rather
-    /// less than half of what a program writes, and a refusal on doubt is
-    /// [Part III C.4](../../docs/specification/30-nikaia-tooling.md)'s correct
-    /// program refused.
-    ///
-    /// **Once per literal.** Three elements that disagree with the first are
-    /// one mistake, so the walk stops reporting after the first pair - but it
-    /// keeps *walking*, because an element is an expression and a mistake
-    /// inside one is still a mistake.
-    fn list_literal(&mut self, items: &[Expr], span: &Span) -> Ty {
-        self.nikaia(|state, world, host| {
-            check_core_args::check_core_list_literal(state, world, host, items, span)
-        })
     }
 
     /// Whether this program writes `impl Error for` the type, in this file or
@@ -9841,15 +9198,6 @@ impl<'a> Checker<'a> {
         })
     }
 
-    fn an_instantiation(&mut self, name: &str, func: &Expr, args: &[Expr], span: &Span) {
-        let call = value_node(func);
-        self.nikaia(|state, world, host| {
-            check_core_pilot::check_core_an_instantiation(
-                state, world, host, name, call, args, span,
-            )
-        })
-    }
-
     /// **A cast whose operand is a `for` binding**
     /// ([ADR-182](../../docs/specification/adr/adr-182.md) D1).
     ///
@@ -9945,10 +9293,6 @@ impl<'a> Checker<'a> {
         self.s.bind_local(local);
     }
 
-    fn resolve(&self, name: &str) -> Option<(String, FnContract)> {
-        resolve_call(self.world, name).map(|found| (found.key, found.contract))
-    }
-
     /// Walk a call's arguments, telling a lambda what it will be handed.
     ///
     /// The types come from the callee's signature, so this can only run once
@@ -9985,12 +9329,6 @@ impl<'a> Checker<'a> {
                 span,
             )
         })
-    }
-
-    /// **A kept function takes its arguments by value**, so a text literal
-    /// handed to one where it keeps text is built there (ADR-282 D4).
-    fn kept_arguments_are_its_own(&mut self, args: &[Expr], params: &[Ty]) {
-        self.s.kept_arguments_are_its_own(self.world, args, params);
     }
 
     /// A lambda whose parameters have types, because the callee said so.
@@ -10040,12 +9378,6 @@ impl<'a> Checker<'a> {
     fn a_fatal_error_passes(&mut self, guarded: &Guarded, handler: &Block, span: &Span) {
         self.s
             .a_fatal_error_passes(self.world, guarded, handler, span);
-    }
-
-    /// The code `process::exit` is given, where it is a constant: `0..=255`
-    /// (ADR-343 D4), refused as `NK1116` refuses a constant that cannot fit.
-    fn an_exit_code_out_of_range(&mut self, key: &str, args: &[Expr], span: &Span) {
-        self.s.an_exit_code_out_of_range(key, args, span);
     }
 
     /// `NK2205`: a `set` whose argument reads the same container with `get`
@@ -10583,18 +9915,6 @@ const LOCKED: &str = "Locked";
 /// message about the language's most common type
 /// ([ADR-281](../../../docs/specification/adr/adr-281.md) D1).
 const SHARED_MUT: &str = "SharedMut";
-
-/// The three types whose hull a program writes by calling their name
-/// ([ADR-281](../../../docs/specification/adr/adr-281.md) D2).
-///
-/// **A hull you cannot observe, the compiler writes; a hull you can observe, you
-/// write.** A `T?` costs nothing and hides nothing - the same value, possibly
-/// absent - so its `Some(…)` is written for you (ADR-278). These three change
-/// **when a value is cleaned up**, which Part I 6.2 says a program can see, so the
-/// word stands where it happens.
-fn is_hull(name: &str) -> bool {
-    HULLS.contains(&name)
-}
 
 /// The same three, as a list something outside this module can read
 /// ([ADR-313](../../docs/specification/adr/adr-313.md) D6).

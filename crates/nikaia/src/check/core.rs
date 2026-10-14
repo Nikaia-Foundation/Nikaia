@@ -209,7 +209,7 @@ impl CheckHost for Core<'_, '_> {
         self.h.intern(text)
     }
 
-    fn wrap_hole(&self, hole: &Expr, wraps: &Vec<(i64, winnow_grammar::Symbol)>) -> Expr {
+    fn wrap_hole(&self, hole: &Expr, wraps: &[(i64, winnow_grammar::Symbol)]) -> Expr {
         self.h.wrap_hole(hole, wraps)
     }
 
@@ -280,6 +280,68 @@ impl CheckHost for Core<'_, '_> {
 
     fn float_text(&self, number: f64) -> String {
         self.h.float_text(number)
+    }
+
+    fn an_attribute_read(
+        &self,
+        state: &mut CheckState,
+        args: &[Expr],
+        span: &Span,
+    ) -> Option<String> {
+        self.hosted(state, |checker| checker.an_attribute_read(args, span))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn arguments(
+        &self,
+        state: &mut CheckState,
+        key: &str,
+        written: &str,
+        contract: &FnContract,
+        given: &[Expr],
+        found: &[Ty],
+        passed: &[(String, Ty)],
+        span: &Span,
+    ) -> Ty {
+        self.hosted(state, |checker| {
+            checker.arguments(key, written, contract, given, found, passed, span)
+        })
+    }
+
+    fn a_call_that_hands_its_number_back(
+        &self,
+        state: &mut CheckState,
+        contract: &FnContract,
+        bound: &BTreeMap<String, Ty>,
+        args: &[Expr],
+    ) {
+        self.hosted(state, |checker| {
+            checker.a_call_that_hands_its_number_back(contract, bound, args)
+        })
+    }
+
+    fn a_standard_bound_not_met(
+        &self,
+        state: &mut CheckState,
+        key: &str,
+        bound: &BTreeMap<String, Ty>,
+        span: &Span,
+    ) {
+        self.hosted(state, |checker| {
+            checker.a_standard_bound_not_met(key, bound, span)
+        })
+    }
+
+    fn a_scope_that_pauses(
+        &self,
+        state: &mut CheckState,
+        args: &[Expr],
+        paused: &[i64],
+        span: &Span,
+    ) {
+        self.hosted(state, |checker| {
+            checker.a_scope_that_pauses(args, paused, span)
+        })
     }
 
     fn expr(&self, state: &mut CheckState, node: &Expr, span: &Span) -> Ty {

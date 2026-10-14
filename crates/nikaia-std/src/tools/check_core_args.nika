@@ -463,7 +463,7 @@ fn check_core_args_a_field_called(mut state: CheckState, current: ref String, ke
 }
 
 /// Record whether the field's code pauses or fails for the function walked.
-fn check_core_args_code_said(mut state: CheckState, current: ref String, pauses: bool, fails: bool) sync {
+pub fn check_core_args_code_said(mut state: CheckState, current: ref String, pauses: bool, fails: bool) sync {
     let mut calls: CheckMethodCalls = state.methods.remove(current) ?? CheckMethodCalls::empty()
     calls.code_pauses = calls.code_pauses || pauses
     calls.code_fails = calls.code_fails || fails

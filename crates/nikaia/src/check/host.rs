@@ -74,7 +74,7 @@ impl CheckHost for Host<'_> {
         self.parsed.interner.intern_string(text)
     }
 
-    fn wrap_hole(&self, hole: &Expr, wraps: &Vec<(i64, winnow_grammar::Symbol)>) -> Expr {
+    fn wrap_hole(&self, hole: &Expr, wraps: &[(i64, winnow_grammar::Symbol)]) -> Expr {
         let mut hole = hole.clone();
         let wraps: Vec<(usize, winnow_grammar::Symbol)> = wraps
             .iter()
@@ -287,6 +287,60 @@ impl CheckHost for Host<'_> {
 
     fn float_text(&self, number: f64) -> String {
         format!("{number:?}")
+    }
+
+    fn an_attribute_read(
+        &self,
+        _state: &mut CheckState,
+        _args: &[Expr],
+        _span: &Span,
+    ) -> Option<String> {
+        unreachable!("`an_attribute_read` is asked of the core's host, not of the services")
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn arguments(
+        &self,
+        _state: &mut CheckState,
+        _key: &str,
+        _written: &str,
+        _contract: &FnContract,
+        _given: &[Expr],
+        _found: &[Ty],
+        _passed: &[(String, Ty)],
+        _span: &Span,
+    ) -> Ty {
+        unreachable!("`arguments` is asked of the core's host, not of the services")
+    }
+
+    fn a_call_that_hands_its_number_back(
+        &self,
+        _state: &mut CheckState,
+        _contract: &FnContract,
+        _bound: &BTreeMap<String, Ty>,
+        _args: &[Expr],
+    ) {
+        unreachable!("`a_call_that_hands_its_number_back` is asked of the core's host")
+    }
+
+    fn a_standard_bound_not_met(
+        &self,
+        _state: &mut CheckState,
+        _key: &str,
+        _bound: &BTreeMap<String, Ty>,
+        _span: &Span,
+    ) {
+        unreachable!("`a_standard_bound_not_met` is asked of the core's host")
+    }
+
+    fn a_scope_that_pauses(
+        &self,
+        _state: &mut CheckState,
+        _args: &[Expr],
+        _paused: &[i64],
+        _span: &Span,
+    ) {
+        unreachable!("`a_scope_that_pauses` is asked of the core's host")
     }
 
     fn expr(&self, _state: &mut CheckState, _node: &Expr, _span: &Span) -> Ty {

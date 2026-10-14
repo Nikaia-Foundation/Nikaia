@@ -205,6 +205,7 @@ COMPILER_NIKA = {
     "check_core_leaves.nika": "check: the leaves of the core: NK1131 fields, kept lambdas, literals by use, holes, lambdas, returns, assert (U-c1) (0.0.907)",
     "check_core_comptime.nika": "check: a comptime wherever it stands, and a dsl block over a grammar (U-c2) (0.0.910)",
     "check_core_args.nika": "check: a call's arguments, access_all and update_all, list literals, called fields (U-c3) (0.0.912)",
+    "check_core_call.nika": "check: a free call, tuples and list literals (U-c4) (0.0.916)",
 }
 
 
