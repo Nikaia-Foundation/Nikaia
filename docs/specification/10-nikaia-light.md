@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.957 (Draft)
+**Version:** 0.0.958 (Draft)
 **Date:** 2026-10-14
 
 ---
@@ -2461,9 +2461,11 @@ declaration names.
 
 **While a view is used, the data it may point into stays as it was.** Giving
 an argument up is not changing it: a caller may assign its variable a new
-value, move it, or leave its scope while a view of it is still used, and the
-old buffer moves into the keep of whatever holds the view, to be freed with
-the last such view. Nothing is copied:
+value, leave its scope, move it into another variable, or pass it to a
+parameter that is a view (6.5) while a view of it is still used, and the old
+buffer moves into the keep of whatever holds the view, to be freed with the
+last such view. A variable it moved into is held to the same rule as the
+argument. Nothing is copied:
 
 ```nika
 let mut y = "short".clone()
@@ -2474,9 +2476,12 @@ println(r)
 
 **Changing that data in place while the view is still used is refused** with
 `NK2305`, at the change: a method that changes the value, or an assignment to a
-part of it. The message names the view, the call that made it and the way out
-of the callee that may hand back that argument. Use the view before the
-change, or take a copy of it with `.clone()` before the change:
+part of it. So is **handing the data to a new owner**, at the call: a callee
+whose parameter keeps or changes it (`push` on a list too), since it may change
+or discard the data. The message names the view, the call that made it and the
+way out of the callee that may hand back that argument. Use the view before the
+change, or take a copy of it with `.clone()` before the change; for a
+hand-over, a copy may also be what is handed over (`take(y.clone())`):
 
 ```nika
 let mut y = "short".clone()

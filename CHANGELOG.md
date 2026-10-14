@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.958] — 2026-10-14
+
+**Handing viewed data to a new owner is NK2305 (#614)**
+- ADR-353 D6: passing data a view may still point into to a callee that keeps or changes it is refused with `NK2305` at the call; a move into another variable of the same function, or to a parameter lowered as a view, gives the buffer to the keep. Part I 6.6, Part III C.3.
+
 ## [0.0.957] — 2026-10-14
 
 **std ledger: Restart::decide keeps its history**
