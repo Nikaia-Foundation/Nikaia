@@ -4157,7 +4157,8 @@ pub fn rs2nika_lint(path: ref String, text: ref String) -> i64 {
 /// The checkout the names come from: the first of `.` and its parents that
 /// holds `crates/nikaia-std/src/tools`, or "".
 fn rs2nika_find_repo() -> String {
-    for d in [".", "..", "../..", "../../..", "../../../.."] {
+    let parents = [".", "..", "../..", "../../..", "../../../.."]
+    for d in parents {
         let there = fs::exists(f"{d}/crates/nikaia-std/src/tools", fs::Root::Anywhere) catch {
             false
         }
