@@ -1,0 +1,364 @@
+// crates/nikaia-std/src/tools/check_narrow.nika
+//
+// **A `T?` is a `T` where a test proves it** (ADR-350, Part I 2.3, #619;
+// ADR-294, #125, #558, C-7, U-d0): after `x != null`, in the rest of an `&&`,
+// the branch the test leads into, a `while` body, and the rest of a block an
+// `x == null { return }` left.
+//
+// A proof is a **marker binding**: a copy of the name's binding, `T?` as it
+// was, pushed into a frame of the scope. A frame lives as long as its block,
+// so the proof ends where the region ends. Reading the name finds the marker
+// first, and the marker's key says it is proved. A write after the test
+// (`written_at`), or one in a loop opened inside the region that the next
+// turn reaches before the read, takes the proof back.
+
+use std::collections
+
+/// One proof: what the name is where it is proved, and how many writes the
+/// function had seen when it was made.
+pub struct CheckNarrow {
+    pub inner: Ty,
+    pub written_from: i64,
+    /// The frame the marker was pushed into.
+    pub frame: i64,
+}
+
+/// What the walk knows about proofs, carried in `CheckState`.
+pub struct CheckNarrowing {
+    /// The proofs, by the marker binding's frame, place and id.
+    pub narrows: collections::BTreeMap[(i64, i64, i64), CheckNarrow],
+    /// Reads whose proof a write took back: the name and where it was written.
+    pub lost_reads: collections::BTreeMap[i64, CheckLost],
+    /// Reads that ask about the `T?` itself, which a proof leaves alone: the
+    /// left of `??`, the receiver of `?.`, a side of `== null`, a `match`'s
+    /// subject.
+    pub maybe_reads: collections::BTreeSet[i64],
+    /// Reads that are an operand or a receiver: no wrap stands around them.
+    pub operand_reads: collections::BTreeSet[i64],
+}
+
+impl CheckNarrowing {
+    /// Nothing proved yet.
+    pub fn nothing() -> CheckNarrowing {
+        return CheckNarrowing {
+            narrows: collections::BTreeMap(),
+            lost_reads: collections::BTreeMap(),
+            maybe_reads: collections::BTreeSet(),
+            operand_reads: collections::BTreeSet(),
+        }
+    }
+}
+
+/// A proof a write took back: the name and where it was written (-1 for a
+/// loop around the read).
+pub struct CheckLost {
+    pub name: String,
+    pub at: i64,
+}
+
+/// Where a binding is: its frame, its place and its id.
+pub struct CheckBoundAt {
+    pub frame: i64,
+    pub at: i64,
+    pub id: i64,
+}
+
+/// What a read of a name finds.
+pub enum CheckProved {
+    /// Proved: the `T`.
+    Yes(Ty),
+    /// Proved once, but written after the test (where; -1 for a loop).
+    Lost(i64),
+    No,
+}
+
+/// The name a `x == null` side holds, where the other side is `null`.
+fn check_narrow_tested(world: ref CheckWorld, side: ref Expr, other: ref Expr) -> String? {
+    let null_other = match other {
+        Expr::LitNull(_) => true,
+        else => false,
+    }
+    if !null_other {
+        return null
+    }
+    let mut name: String = ""
+    match side {
+        Expr::Variable(word, _) => { name = f"{world.words.resolve(word)}" },
+        else => { return null },
+    }
+    return name
+}
+
+/// The names a condition proves not `null` where it is `holds`.
+pub fn check_narrow_proved_names(world: ref CheckWorld, cond: ref Expr, holds: bool) -> Vec[String] {
+    let mut names: Vec[String] = []
+    match cond {
+        Expr::Binary { op, lhs, rhs, .. } => {
+            if (op == BinaryOp::Ne && holds) || (op == BinaryOp::Eq && !holds) {
+                let left: String? = check_narrow_tested(world, lhs, rhs)
+                if left != null {
+                    names.push((left ?? "").clone())
+                } else {
+                    let right: String? = check_narrow_tested(world, rhs, lhs)
+                    if right != null {
+                        names.push((right ?? "").clone())
+                    }
+                }
+            } else if (op == BinaryOp::And && holds) || (op == BinaryOp::Or && !holds) {
+                names.extend(check_narrow_proved_names(world, lhs, holds))
+                names.extend(check_narrow_proved_names(world, rhs, holds))
+            }
+        },
+        Expr::Unary { op, expr, .. } => {
+            if op == UnaryOp::Not {
+                names.extend(check_narrow_proved_names(world, expr, !holds))
+            }
+        },
+        else => {},
+    }
+    return names
+}
+
+/// Where the innermost binding of `name` is: its frame, its place and its id.
+fn check_narrow_bound_where(state: ref CheckState, name: ref String) -> CheckBoundAt? sync {
+    let mut frame_at = state.scope.len()
+    while frame_at > 0 {
+        frame_at = frame_at - 1
+        let frame = state.scope[frame_at]
+        let mut at = frame.len()
+        while at > 0 {
+            at = at - 1
+            if frame[at].name == name {
+                return CheckBoundAt { frame: frame_at, at: at, id: frame[at].id }
+            }
+        }
+    }
+    return null
+}
+
+/// The markers for `names`, each a `T?` binding proved here, for a frame
+/// that will be pushed at `frame`.
+pub fn check_narrow_proofs_for(mut state: CheckState, names: ref Vec[String], frame: i64) -> Vec[CheckLocal] sync {
+    let mut markers: Vec[CheckLocal] = []
+    for name in names {
+        let found: CheckLocal? = state.binding(name)
+        if found == null {
+            continue
+        }
+        let local: CheckLocal = found ?? continue
+        let inner: Ty = match local.ty {
+            Ty::Nullable(inner) => inner.clone(),
+            else => Ty::Unknown,
+        }
+        let unknown = match inner {
+            Ty::Unknown => true,
+            else => false,
+        }
+        let mut twice = false
+        for marker in markers {
+            if marker.name == name {
+                twice = true
+            }
+        }
+        if unknown || twice {
+            continue
+        }
+        let mut at = markers.len() as i64
+        if frame < state.scope.len() as i64 {
+            at = at + state.scope[frame].len() as i64
+        }
+        state.narrowing.narrows.insert((frame, at, local.id), CheckNarrow {
+            inner: inner,
+            written_from: state.written_at.len() as i64,
+            frame: frame,
+        })
+        markers.push(local)
+    }
+    return markers
+}
+
+/// The markers a condition proves where it `holds`, for the frame pushed next.
+pub fn check_narrow_proved_here(mut state: CheckState, world: ref CheckWorld, cond: ref Expr, holds: bool) -> Vec[CheckLocal] sync {
+    let names = check_narrow_proved_names(world, cond, holds)
+    let frame = state.scope.len() as i64
+    return check_narrow_proofs_for(state, names, frame)
+}
+
+/// What `cond` proves for the rest of the block being walked: an `if` above
+/// left it where the names were `null`.
+pub fn check_narrow_proved_from_here(mut state: CheckState, world: ref CheckWorld, cond: ref Expr, holds: bool) sync {
+    let names = check_narrow_proved_names(world, cond, holds)
+    if state.scope.len() == 0 {
+        return
+    }
+    let frame = state.scope.len() - 1
+    let markers = check_narrow_proofs_for(state, names, frame)
+    for marker in markers {
+        state.scope[frame].push(marker.clone())
+    }
+}
+
+/// Whether a read of `name` at `here` is proved.
+fn check_narrow_proved(state: ref CheckState, name: ref String, here: i64) -> CheckProved sync {
+    let bound: CheckBoundAt = check_narrow_bound_where(state, name) ?? return CheckProved::No
+    let narrow: CheckNarrow = state.narrowing.narrows.get((bound.frame, bound.at, bound.id))?.clone() ?? return CheckProved::No
+    let mut from = narrow.written_from
+    if from > state.written_at.len() {
+        from = state.written_at.len()
+    }
+    while from < state.written_at.len() {
+        let written = state.written_at[from]
+        if written.0 == name && written.1 != here {
+            return CheckProved::Lost(written.1)
+        }
+        from = from + 1
+    }
+    // A loop opened inside the region that writes the name reaches this
+    // read again after the write.
+    for repeats in state.repeats {
+        if repeats.what == "loop" && repeats.frame > narrow.frame && repeats.revived.contains(name) {
+            return CheckProved::Lost(-1)
+        }
+    }
+    return CheckProved::Yes(narrow.inner.clone())
+}
+
+/// A read `expr` asks about the `T?` itself where it is a name.
+fn check_narrow_a_maybe_read(mut state: CheckState, read: ref Expr) sync {
+    match read {
+        Expr::Variable(_, _) => { state.narrowing.maybe_reads.insert(id_of(read) as i64) },
+        else => {},
+    }
+}
+
+/// The reads below `expr` that ask about the `T?` itself, and are not
+/// read as the `T` a proof makes it.
+pub fn check_narrow_reads_of_the_maybe(mut state: CheckState, expr: ref Expr) sync {
+    match expr {
+        Expr::Coalesce { value, .. } => check_narrow_a_maybe_read(state, value),
+        Expr::SafeField { base, .. } => check_narrow_a_maybe_read(state, base),
+        Expr::SafeMethod { receiver, .. } => check_narrow_a_maybe_read(state, receiver),
+        Expr::Match { value, .. } => check_narrow_a_maybe_read(state, value),
+        Expr::Binary { op, lhs, rhs, .. } => {
+            let null_left = match lhs {
+                Expr::LitNull(_) => true,
+                else => false,
+            }
+            let null_right = match rhs {
+                Expr::LitNull(_) => true,
+                else => false,
+            }
+            if (op == BinaryOp::Eq || op == BinaryOp::Ne) && (null_left || null_right) {
+                check_narrow_a_maybe_read(state, lhs)
+                check_narrow_a_maybe_read(state, rhs)
+            } else {
+                state.narrowing.operand_reads.insert(id_of(lhs) as i64)
+                state.narrowing.operand_reads.insert(id_of(rhs) as i64)
+            }
+        },
+        Expr::MethodCall { receiver, .. } => { state.narrowing.operand_reads.insert(id_of(receiver) as i64) },
+        Expr::Unary { expr: receiver, .. } => { state.narrowing.operand_reads.insert(id_of(receiver) as i64) },
+        else => {},
+    }
+}
+
+/// Whether a proved `T` is a word copied out of the option.
+fn check_narrow_copied(inner: ref Ty) -> bool {
+    return match inner {
+        Ty::Named { name, .. } => name == "i8" || name == "i16" || name == "i32" || name == "i64" || name == "u8" || name == "u16" || name == "u32" || name == "u64" || name == "usize" || name == "isize" || name == "f64" || name == "bool" || name == "char" || name == "scalar",
+        else => false,
+    }
+}
+
+/// A read of a name whose binding is `ty`: the `T` where a test proves it.
+///
+/// The written name of an assignment is not read (`reading_only`), and the
+/// assignment's own write is after the value it is given is read.
+pub fn check_narrow_read_as_proved(mut state: CheckState, expr: ref Expr, name: ref String, ty: ref Ty, span: ref Span) -> Ty sync {
+    let nullable = match ty {
+        Ty::Nullable(_) => true,
+        else => false,
+    }
+    let node = id_of(expr) as i64
+    if !nullable || state.reading_only || state.narrowing.maybe_reads.contains(node) {
+        return ty.clone()
+    }
+    match check_narrow_proved(state, name, span.start as i64) {
+        CheckProved::Yes(inner) => {
+            let copied = check_narrow_copied(inner)
+            // **A value a word holds is copied out, text is read as the
+            // view it is, and anything else is lent out of the option**
+            // (#621): a read, a field or a method sees the `T` through
+            // `as_ref`; where the read is handed to something that keeps
+            // it, the name owns the option and gives it up
+            // (`CheckState::hands_over` adds the bit 8).
+            let written = inner.text()
+            let text = written == "String" || written == "ref String"
+            let lent = !copied && !text
+            // **Only where the name holds the option itself**: a `ref T?`
+            // is an `Option<&T>` below and a name bound out of a lent value
+            // a reference to the option, and either is put back into an
+            // option slot as it is. Both keep their `T?` here.
+            if lent {
+                let bound: CheckLocal? = state.binding(name)
+                let lent_binding = if bound != null { (bound ?? return ty.clone()).lent } else { false }
+                if inner.is_a_view() || lent_binding {
+                    return ty.clone()
+                }
+            }
+            let operand = state.narrowing.operand_reads.contains(node)
+            let mut bits = 0
+            if copied {
+                bits = bits + 1
+            }
+            if operand {
+                bits = bits + 2
+            }
+            if lent {
+                bits = bits + 4
+            }
+            state.facts.narrowed_reads.insert(node, bits)
+            return inner.clone()
+        },
+        CheckProved::Lost(at) => {
+            state.narrowing.lost_reads.insert(node, CheckLost { name: name.clone(), at: at })
+            return ty.clone()
+        },
+        CheckProved::No => {
+            return ty.clone()
+        },
+    }
+}
+
+/// `NK1102` over an operand whose proof a write took back: the note and
+/// the label say where.
+pub fn check_narrow_a_proof_taken_back(mut state: CheckState, lhs: ref Expr, rhs: ref Expr, before: i64) sync {
+    if state.findings.len() as i64 == before {
+        return
+    }
+    let mut key = id_of(lhs) as i64
+    if !state.narrowing.lost_reads.contains_key(key) {
+        key = id_of(rhs) as i64
+    }
+    let found: CheckLost? = state.narrowing.lost_reads.get(key)?.clone()
+    let lost: CheckLost = found ?? return
+    if state.findings.len() == 0 {
+        return
+    }
+    let name = lost.name.clone()
+    let at = lost.at
+    let last = state.findings.len() - 1
+    if at == -1 {
+        state.findings[last].notes.push(f"A test before proved `{name}` is not `null`, but a loop around this use assigns `{name}`, so the next turn may read it `null`.")
+    } else {
+        state.findings[last].notes.push(f"A test before proved `{name}` is not `null`, but `{name}` is assigned after the test, and from there on it is a `T?` again.")
+    }
+    if at >= 0 {
+        state.findings[last].labels.push(CheckLabel {
+            span: Span { start: at as u32, end: at as u32 + name.len() as u32 },
+            word: name.clone(),
+            text: "assigned here, after the test".clone(),
+            main: false,
+        })
+    }
+}

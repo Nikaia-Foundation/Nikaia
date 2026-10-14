@@ -6,9 +6,8 @@
 // literals, a name, a path, `-`/`!`/`&`, `?`, `throw`, `return`, `break` and
 // `continue`, a `dsl` block and `asm`. The form is the pilot's
 // (`check_core_pilot.nika`): a free function over the state, the world and a
-// host. What a test proves not `null` (ADR-350) stays Rust in
-// `check/narrow.rs`, asked through `host.reads_of_the_maybe` and
-// `host.read_as_proved`; a value's cleanup is `host.a_value_with_a_cleanup_made`.
+// host. What a test proves not `null` (ADR-350) is `check_narrow.nika`'s;
+// a value's cleanup is `host.a_value_with_a_cleanup_made`.
 // One function per arm, so a deep expression's frames stay small.
 
 /// The escapes a literal may write (`build_time::ESCAPES`).
@@ -47,7 +46,7 @@ pub fn check_core_expr[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     let reaching: String? = state.flow.reaching?.clone()
     state.flow.reaching = null
     state.flow.reached = reaching
-    host.reads_of_the_maybe(expr)
+    check_narrow_reads_of_the_maybe(state, expr)
     let said_before = state.flow.unknown_said
     let walked = check_core_value_of(state, world, host, expr, span)
     let said_inside = state.flow.unknown_said > said_before
@@ -280,7 +279,7 @@ fn check_core_expr_variable[H: CheckHost](mut state: CheckState, world: ref Chec
         if !nullable || state.reading_only {
             return ty
         }
-        return host.read_as_proved(state, expr, name, ty, span)
+        return check_narrow_read_as_proved(state, expr, name, ty, span)
     }
     // **`assert` is called** (ADR-269 D2).
     if check_core_call_the_prelude_assert(state, world, expr) {

@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.959] — 2026-10-14
+
+**check: what a test proves not null in Nikaia (C-7 U-d0, #125, #558)**
+- `check/narrow.rs` (ADR-350) moves to `tools/check_narrow.nika`; its four `Checker` fields travel with the baton as `CheckState.narrowing`, and six host methods are gone.
+
 ## [0.0.958] — 2026-10-14
 
 **Handing viewed data to a new owner is NK2305 (#614)**

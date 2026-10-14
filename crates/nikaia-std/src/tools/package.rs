@@ -14511,7 +14511,7 @@ pub fn check_core_expr<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
     };
     state.flow.reaching = None;
     state.flow.reached = reaching;
-    host.reads_of_the_maybe(expr);
+    check_narrow_reads_of_the_maybe(state, expr);
     let said_before = state.flow.unknown_said;
     let walked = check_core_value_of(state, world, host, expr, span);
     let said_inside = state.flow.unknown_said > said_before;
@@ -14703,7 +14703,7 @@ fn check_core_expr_variable<H: CheckHost>(state: &mut CheckState, world: &CheckW
         state.a_sequence_is_taken(&name, &ty, span);
         let nullable = matches!(ty, Ty::Nullable(_));
         if !nullable || state.reading_only { return ty; }
-        return host.read_as_proved(state, expr, &name, &ty, span);
+        return check_narrow_read_as_proved(state, expr, &name, &ty, span);
     }
     if check_core_call_the_prelude_assert(&state, world, expr) {
         state.an_assert_of_another_shape("`assert` is a function, and is called: write `assert(cond)`".to_owned(), span);
@@ -14929,7 +14929,7 @@ fn check_core_flow_leaves(state: &CheckState, world: &CheckWorld<'_>, block: &Bl
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 fn check_core_flow_proved_block<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, cond: &Expr, holds: bool, block: &Block) -> Ty {
-    let markers = host.proved_here(state, cond, holds);
+    let markers = check_narrow_proved_here(state, world, cond, holds);
     if markers.is_empty() { return check_core_block(state, world, host, block); }
     state.scope.push(markers);
     let value = check_core_block(state, world, host, block);
@@ -15149,7 +15149,7 @@ pub fn check_core_flow_if<H: CheckHost>(state: &mut CheckState, world: &CheckWor
     }
     if outer_condition < 0 { state.stamped_condition = None; } else { state.stamped_condition = Some(outer_condition); }
     let then_leaves = check_core_flow_leaves(&state, world, then_branch);
-    if then_leaves && !else_leaves { host.proved_from_here(state, cond, false); } else if else_leaves && !then_leaves { host.proved_from_here(state, cond, true); }
+    if then_leaves && !else_leaves { check_narrow_proved_from_here(state, world, cond, false); } else if else_leaves && !then_leaves { check_narrow_proved_from_here(state, world, cond, true); }
     branches
 }
 
@@ -16589,7 +16589,7 @@ fn check_core_ops_literal_beside(state: &mut CheckState, op: BinaryOp, side: &Ex
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 fn check_core_ops_proved_expr<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, cond: &Expr, holds: bool, value: &Expr, span: &Span) -> Ty {
-    let markers = host.proved_here(state, cond, holds);
+    let markers = check_narrow_proved_here(state, world, cond, holds);
     if markers.is_empty() { return check_core_expr(state, world, host, value, span); }
     state.scope.push(markers);
     let found = check_core_expr(state, world, host, value, span);
@@ -16704,7 +16704,7 @@ pub fn check_core_ops_binary<H: CheckHost>(state: &mut CheckState, world: &Check
     if !check_core_ops_equality(op) && !check_core_ops_logical(op) {
         let before = state.findings.len() as i64;
         state.a_maybe_in_an_operation(op, &left, &right, at);
-        host.a_proof_taken_back(state, lhs, rhs, before);
+        check_narrow_a_proof_taken_back(state, lhs, rhs, before);
     }
     if op.is_comparison() {
         state.a_bit_operation_beside_a_comparison(world, op, lhs, rhs, at);
@@ -18246,7 +18246,7 @@ pub fn check_core_stmt_while<H: CheckHost>(state: &mut CheckState, world: &Check
     state.expect_bool(&cond_ty, &at, "A `while` loop repeats while a `bool` is `true`.");
     let depth = state.scope.len() as i64;
     state.repeats.push(CheckRepeats::a_loop(world.words, depth, body));
-    let proved = host.proved_in_a_loop(state, cond);
+    let proved = check_narrow_proved_here(state, world, cond, true);
     state.scope.push(proved);
     state.flow.loops += 1;
     check_core_block(state, world, host, body);
@@ -20316,16 +20316,10 @@ pub trait CheckHost {
     fn assets_read_in(&self, value: &Expr, read: &collections::BTreeMap<String, String>) -> Expr;
     fn value_fn(&self) -> String;
     fn place_of(&self, place: &str, here: i64) -> CheckPlace;
-    fn reads_of_the_maybe(&self, expr: &Expr);
-    fn read_as_proved(&self, state: &mut CheckState, expr: &Expr, name: &str, ty: &Ty, span: &Span) -> Ty;
     fn a_value_with_a_cleanup_made(&self, state: &mut CheckState, ty: &Ty);
     fn an_escape_nothing_names(&self, text: &str) -> Option<NotAnEscape>;
     fn a_value_with_a_cleanup_bound(&self, state: &mut CheckState, name: &str, ty: &Ty, span: &Span);
     fn a_bound_handle_is_taken(&self, state: &mut CheckState, block: &Block);
-    fn proved_in_a_loop(&self, state: &mut CheckState, cond: &Expr) -> Vec<CheckLocal>;
-    fn proved_here(&self, state: &mut CheckState, cond: &Expr, holds: bool) -> Vec<CheckLocal>;
-    fn proved_from_here(&self, state: &mut CheckState, cond: &Expr, holds: bool);
-    fn a_proof_taken_back(&self, state: &mut CheckState, lhs: &Expr, rhs: &Expr, before: i64);
     fn a_type_that_does_not_compare(&self, state: &mut CheckState, left: &Ty, right: &Ty, span: &Span);
     fn written(&self, value: &Expr) -> String;
     fn newly_throws(&self, key: &str) -> Option<Vec<String>>;
@@ -22646,6 +22640,264 @@ pub fn integer_named(ty: &Ty) -> Option<String> {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn is_a_literal(expr: &Expr) -> bool { matches!(expr, Expr::LitInt { .. } | Expr::LitFloat(_, _) | Expr::LitStr { .. } | Expr::LitInterpolated { .. } | Expr::LitChar(_, _) | Expr::LitBool(_, _)) }
+
+
+// --- check_narrow.nika ---
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CheckNarrow {
+    pub inner: Ty,
+    pub written_from: i64,
+    pub frame: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CheckNarrowing {
+    pub narrows: collections::BTreeMap<(i64, i64, i64), CheckNarrow>,
+    pub lost_reads: collections::BTreeMap<i64, CheckLost>,
+    pub maybe_reads: collections::BTreeSet<i64>,
+    pub operand_reads: collections::BTreeSet<i64>,
+}
+
+impl CheckNarrowing {
+    pub fn nothing() -> CheckNarrowing { CheckNarrowing { narrows: collections::BTreeMap::new(), lost_reads: collections::BTreeMap::new(), maybe_reads: collections::BTreeSet::new(), operand_reads: collections::BTreeSet::new() } }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CheckLost {
+    pub name: String,
+    pub at: i64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CheckBoundAt {
+    pub frame: i64,
+    pub at: i64,
+    pub id: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CheckProved {
+    Yes(Ty),
+    Lost(i64),
+    No,
+}
+
+fn check_narrow_tested(world: &CheckWorld<'_>, side: &Expr, other: &Expr) -> Option<String> {
+    let null_other = matches!(other, Expr::LitNull(_));
+    if !null_other { return None; }
+    let mut name: String = String::from("");
+    match side {
+        Expr::Variable(word, _) => {
+            let word = *word;
+            name = format!("{}", world.words.resolve(word));
+        },
+        _ => { return None; },
+    }
+    Some(name)
+}
+
+pub fn check_narrow_proved_names(world: &CheckWorld<'_>, cond: &Expr, holds: bool) -> Vec<String> {
+    let mut names: Vec<String> = vec![];
+    match cond {
+        Expr::Binary { op, lhs, rhs, .. } => {
+            let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
+            if *op == BinaryOp::Ne && holds || *op == BinaryOp::Eq && !holds {
+                let left: Option<String> = check_narrow_tested(world, lhs, rhs);
+                if left.is_some() { names.push(nikaia_std::index::or(left.as_deref(), || "").to_owned()); } else {
+                    let right: Option<String> = check_narrow_tested(world, rhs, lhs);
+                    if right.is_some() { names.push(nikaia_std::index::or(right.as_deref(), || "").to_owned()); }
+                }
+            } else if *op == BinaryOp::And && holds || *op == BinaryOp::Or && !holds {
+                names.extend(check_narrow_proved_names(world, lhs, holds));
+                names.extend(check_narrow_proved_names(world, rhs, holds));
+            }
+        },
+        Expr::Unary { op, expr, .. } => {
+            let expr = nikaia_std::boxed::open(expr);
+            if *op == UnaryOp::Not { names.extend(check_narrow_proved_names(world, expr, !holds)); }
+        },
+        _ => { },
+    }
+    names
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_narrow_bound_where(state: &CheckState, name: &str) -> Option<CheckBoundAt> {
+    let mut frame_at = state.scope.len() as i64;
+    while frame_at > 0 {
+        frame_at = frame_at - 1;
+        let frame = nikaia_std::index::get(&state.scope, nikaia_std::index::at(frame_at));
+        let mut at = frame.len() as i64;
+        while at > 0 {
+            at = at - 1;
+            if nikaia_std::index::get(&frame, nikaia_std::index::at(at)).name == name { return Some(CheckBoundAt { frame: frame_at, at, id: nikaia_std::index::get(&frame, nikaia_std::index::at(at)).id }); }
+        }
+    }
+    None
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_narrow_proofs_for(state: &mut CheckState, names: &[String], frame: i64) -> Vec<CheckLocal> {
+    let mut markers: Vec<CheckLocal> = vec![];
+    for name in names.iter() {
+        let found: Option<CheckLocal> = state.binding(name);
+        if found.is_none() { continue; }
+        let local: CheckLocal = match found { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let inner: Ty = match local.ty {
+            Ty::Nullable(ref inner) => { let inner = nikaia_std::boxed::open(inner); inner.clone() },
+            _ => Ty::Unknown,
+        };
+        let unknown = matches!(inner, Ty::Unknown);
+        let mut twice = false;
+        for marker in markers.iter() { if marker.name == *name { twice = true; } }
+        if unknown || twice { continue; }
+        let mut at = markers.len() as i64;
+        if frame < state.scope.len() as i64 { at = at + (*nikaia_std::index::get(&state.scope, nikaia_std::index::at(frame))).len() as i64; }
+        state.narrowing.narrows.insert((frame, at, local.id), CheckNarrow { inner, written_from: state.written_at.len() as i64, frame });
+        markers.push(local);
+    }
+    markers
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_narrow_proved_here(state: &mut CheckState, world: &CheckWorld<'_>, cond: &Expr, holds: bool) -> Vec<CheckLocal> {
+    let names = check_narrow_proved_names(world, cond, holds);
+    let frame = state.scope.len() as i64;
+    check_narrow_proofs_for(state, &names, frame)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_narrow_proved_from_here(state: &mut CheckState, world: &CheckWorld<'_>, cond: &Expr, holds: bool) {
+    let names = check_narrow_proved_names(world, cond, holds);
+    if state.scope.is_empty() { return; }
+    let frame = state.scope.len() as i64 - 1;
+    let markers = check_narrow_proofs_for(state, &names, frame);
+    for marker in markers.iter() { state.scope[nikaia_std::index::at(frame)].push(marker.clone()); }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_narrow_proved(state: &CheckState, name: &str, here: i64) -> CheckProved {
+    let bound: CheckBoundAt = match check_narrow_bound_where(state, name) { Some(__nikaia_value) => __nikaia_value, None => return CheckProved::No };
+    let narrow: CheckNarrow = match match state.narrowing.narrows.get(&(bound.frame, bound.at, bound.id)) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return CheckProved::No };
+    let mut from = narrow.written_from;
+    if from > state.written_at.len() as i64 { from = state.written_at.len() as i64; }
+    while from < state.written_at.len() as i64 {
+        let written = nikaia_std::index::get(&state.written_at, nikaia_std::index::at(from));
+        if written.0 == name && written.1 != here { return CheckProved::Lost(written.1); }
+        from = from + 1;
+    }
+    for repeats in state.repeats.iter() { if repeats.what == "loop" && repeats.frame > narrow.frame && repeats.revived.contains(name) { return CheckProved::Lost(-1); } }
+    CheckProved::Yes(narrow.inner.clone())
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_narrow_a_maybe_read(state: &mut CheckState, read: &Expr) {
+    match read {
+        Expr::Variable(_, _) => { state.narrowing.maybe_reads.insert(id_of(read) as i64); },
+        _ => { },
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_narrow_reads_of_the_maybe(state: &mut CheckState, expr: &Expr) {
+    match expr {
+        Expr::Coalesce { value, .. } => { let value = nikaia_std::boxed::open(value); check_narrow_a_maybe_read(state, value); },
+        Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); check_narrow_a_maybe_read(state, base); },
+        Expr::SafeMethod { receiver, .. } => { let receiver = nikaia_std::boxed::open(receiver); check_narrow_a_maybe_read(state, receiver); },
+        Expr::Match { value, .. } => { let value = nikaia_std::boxed::open(value); check_narrow_a_maybe_read(state, value); },
+        Expr::Binary { op, lhs, rhs, .. } => {
+            let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
+            let null_left = matches!(lhs, Expr::LitNull(_));
+            let null_right = matches!(rhs, Expr::LitNull(_));
+            if (*op == BinaryOp::Eq || *op == BinaryOp::Ne) && (null_left || null_right) {
+                check_narrow_a_maybe_read(state, lhs);
+                check_narrow_a_maybe_read(state, rhs);
+            } else {
+                state.narrowing.operand_reads.insert(id_of(lhs) as i64);
+                state.narrowing.operand_reads.insert(id_of(rhs) as i64);
+            }
+        },
+        Expr::MethodCall { receiver, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver);
+            state.narrowing.operand_reads.insert(id_of(receiver) as i64);
+        },
+        Expr::Unary { expr: receiver, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver);
+            state.narrowing.operand_reads.insert(id_of(receiver) as i64);
+        },
+        _ => { },
+    }
+}
+
+fn check_narrow_copied(inner: &Ty) -> bool {
+    match inner {
+        Ty::Named { name, .. } => name == "i8" || name == "i16" || name == "i32" || name == "i64" || name == "u8" || name == "u16" || name == "u32" || name == "u64" || name == "usize" || name == "isize" || name == "f64" || name == "bool" || name == "char" || name == "scalar",
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_narrow_read_as_proved(state: &mut CheckState, expr: &Expr, name: &str, ty: &Ty, span: &Span) -> Ty {
+    let nullable = matches!(ty, Ty::Nullable(_));
+    let node = id_of(expr) as i64;
+    if !nullable || state.reading_only || state.narrowing.maybe_reads.contains(&node) { return ty.clone(); }
+    match check_narrow_proved(&state, name, span.start as i64) {
+        CheckProved::Yes(ref inner) => {
+            let copied = check_narrow_copied(inner);
+            let written = inner.text();
+            let text = written == "String" || written == "ref String";
+            let lent = !copied && !text;
+            if lent {
+                let bound: Option<CheckLocal> = state.binding(name);
+                let lent_binding = if bound.is_some() { match bound { Some(__nikaia_value) => __nikaia_value, None => return ty.clone() }.lent } else { false };
+                if inner.is_a_view() || lent_binding { return ty.clone(); }
+            }
+            let operand = state.narrowing.operand_reads.contains(&node);
+            let mut bits = 0;
+            if copied { bits = bits + 1; }
+            if operand { bits = bits + 2; }
+            if lent { bits = bits + 4; }
+            state.facts.narrowed_reads.insert(node, bits);
+            return inner.clone();
+        },
+        CheckProved::Lost(at) => {
+            state.narrowing.lost_reads.insert(node, CheckLost { name: name.to_owned(), at });
+            return ty.clone();
+        },
+        CheckProved::No => { return ty.clone(); },
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_narrow_a_proof_taken_back(state: &mut CheckState, lhs: &Expr, rhs: &Expr, before: i64) {
+    if (state.findings.len() as i64) == before { return; }
+    let mut key = id_of(lhs) as i64;
+    if !state.narrowing.lost_reads.contains_key(&key) { key = id_of(rhs) as i64; }
+    let found: Option<CheckLost> = match state.narrowing.lost_reads.get(&key) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    };
+    let lost: CheckLost = match found { Some(__nikaia_value) => __nikaia_value, None => return };
+    if state.findings.is_empty() { return; }
+    let name = lost.name.to_owned();
+    let at = lost.at;
+    let last = state.findings.len() as i64 - 1;
+    if at == -1 { state.findings[nikaia_std::index::at(last)].notes.push(format!("A test before proved `{}` is not `null`, but a loop around this use assigns `{}`, so the next turn may read it `null`.", name, name)); } else { state.findings[nikaia_std::index::at(last)].notes.push(format!("A test before proved `{}` is not `null`, but `{}` is assigned after the test, and from there on it is a `T?` again.", name, name)); }
+    if at >= 0 { state.findings[nikaia_std::index::at(last)].labels.push(CheckLabel { span: Span { start: u32::try_from(at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) + u32::try_from(name.len() as i64).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) }, word: name.to_owned(), text: "assigned here, after the test".to_owned(), main: false }); }
+}
 
 
 // --- check_notes.nika ---
@@ -25990,6 +26242,7 @@ pub struct CheckState {
     pub stored_code: collections::BTreeMap<String, CheckStoredCode>,
     pub stored_frames: Vec<CheckStoredCode>,
     pub flow: CheckFlow,
+    pub narrowing: CheckNarrowing,
     pub arm_types: collections::BTreeMap<i64, Ty>,
     pub arm_disagreements: collections::BTreeMap<i64, CheckFinding>,
     pub got_past_a_jump: collections::BTreeSet<String>,
@@ -58479,6 +58732,10 @@ pub mod check_name_in_text {}
 pub mod check_names {
     #[allow(unused_imports)]
     pub use super::{integer_named, is_a_literal};
+}
+pub mod check_narrow {
+    #[allow(unused_imports)]
+    pub use super::{CheckNarrow, CheckNarrowing, CheckLost, CheckBoundAt, CheckProved, check_narrow_proved_names, check_narrow_proofs_for, check_narrow_proved_here, check_narrow_proved_from_here, check_narrow_reads_of_the_maybe, check_narrow_read_as_proved, check_narrow_a_proof_taken_back};
 }
 pub mod check_notes {}
 pub mod check_numbers {

@@ -213,6 +213,7 @@ COMPILER_NIKA = {
     "check_core_flow.nika": "check: `match`, `if`, `select`, `overlap`, `catch` and `unsafe` (U-c8) (0.0.943)",
     "check_core_ops.nika": "check: `a op b`, `??`, the lambda and `spawn` (U-c10) (0.0.948)",
     "check_core_expr.nika": "check: the hub `expr`, the dispatcher and the remaining arms (U-c11) (0.0.954)",
+    "check_narrow.nika": "check: what a test proves not `null` (ADR-350, U-d0) (0.0.959)",
 }
 
 

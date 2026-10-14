@@ -264,6 +264,9 @@ checker refusal (`NK1125`) if `!= null` is not meant to narrow.
 | U-c11 `narrow::read_as_proved` and `reads_of_the_maybe` for a name | host methods; a read crosses only when its type is a `T?` and not `reading_only` | yes: narrowing stays in `narrow.rs` (#621) |
 | U-c11 `build_time::an_escape_nothing_names(text)` with `char_of` | a stateless host method; `ESCAPES` written in the `.nika` | no: no `u32` to `scalar?` conversion was tried |
 | U-c8 `arms.iter().skip(1).find_map(..)?` | a `while` over the arms | no: closures that return `?` |
+| U-d0 `self.s.written_at[from..].iter().find(..)` | a `while` over the indices | no: no slice of a field in a condition was tried |
+| U-d0 `enum Proved` and `Checker.narrows` keyed by `(usize, usize, i64)` | `CheckProved`, `CheckNarrowing` in `CheckState`, keys as `(i64, i64, i64)` | yes: the four fields travel with the baton |
+| U-d0 `let Some(..) = .. else { continue }` | `?? continue` after a `!= null` test | no |
 
 ## Method
 

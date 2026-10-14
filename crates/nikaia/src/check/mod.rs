@@ -28,7 +28,6 @@
 pub(crate) mod attributes;
 mod core;
 mod host;
-mod narrow;
 use crate::contracts::LedgerOps;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -410,10 +409,6 @@ fn walked<'a>(
         world: &world,
         s: core::Baton::new(s),
         spares: Vec::new(),
-        narrows: BTreeMap::new(),
-        lost_reads: BTreeMap::new(),
-        maybe_reads: BTreeSet::new(),
-        operand_reads: BTreeSet::new(),
     };
     checker.collect_types();
     checker.program();
@@ -930,17 +925,6 @@ struct Checker<'a> {
     world: &'a CheckWorld<'a>,
     /// States with nothing in them, for the crossings into Nikaia (`core.rs`).
     spares: Vec<Box<CheckState>>,
-    /// **The proofs that a `T?` is not `null`** (ADR-350, `narrow.rs`), by
-    /// the marker binding's frame, place and id.
-    narrows: BTreeMap<(usize, usize, i64), narrow::Narrow>,
-    /// Reads whose proof a write took back: the name and where it was written.
-    lost_reads: BTreeMap<i64, (String, i64)>,
-    /// Reads that ask about the `T?` itself, which a proof leaves alone: the
-    /// left of `??`, the receiver of `?.`, a side of `== null`, a `match`'s
-    /// subject.
-    maybe_reads: BTreeSet<i64>,
-    /// Reads that are an operand or a receiver: no wrap stands around them.
-    operand_reads: BTreeSet<i64>,
     /// What each callee has **newly** gained since the committed ledger
     /// ([ADR-308](../../docs/specification/adr/adr-308.md) D11). Empty where
     /// there is nothing to compare, which says nothing.

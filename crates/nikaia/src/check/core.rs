@@ -20,6 +20,7 @@
 use super::*;
 use nikaia_std::tools::build_eval::BtRead;
 use nikaia_std::tools::check_host::{CheckBuilt, CheckComputed, CheckHost, CheckPlace};
+use nikaia_std::tools::check_narrow::CheckNarrowing;
 use std::cell::RefCell;
 use std::ops::{Deref, DerefMut};
 
@@ -62,6 +63,7 @@ impl DerefMut for Baton {
 pub(super) fn hollow() -> Box<CheckState> {
     Box::new(CheckState {
         flow: CheckFlow::start(false, false),
+        narrowing: CheckNarrowing::nothing(),
         arm_types: BTreeMap::new(),
         got_past_a_jump: BTreeSet::new(),
         discarded: BTreeSet::new(),
@@ -372,23 +374,6 @@ impl CheckHost for Core<'_, '_> {
         self.hosted(state, |checker| checker.a_task_of_a_scope(args))
     }
 
-    fn reads_of_the_maybe(&self, expr: &Expr) {
-        self.c.borrow_mut().reads_of_the_maybe(expr)
-    }
-
-    fn read_as_proved(
-        &self,
-        state: &mut CheckState,
-        expr: &Expr,
-        name: &str,
-        ty: &Ty,
-        span: &Span,
-    ) -> Ty {
-        self.hosted(state, |checker| {
-            checker.read_as_proved(expr, name, ty.clone(), span)
-        })
-    }
-
     fn a_value_with_a_cleanup_made(&self, state: &mut CheckState, ty: &Ty) {
         self.hosted(state, |checker| checker.a_value_with_a_cleanup_made(ty))
     }
@@ -414,35 +399,6 @@ impl CheckHost for Core<'_, '_> {
 
     fn a_bound_handle_is_taken(&self, state: &mut CheckState, block: &Block) {
         self.hosted(state, |checker| checker.a_bound_handle_is_taken(block))
-    }
-
-    fn proved_in_a_loop(&self, state: &mut CheckState, cond: &Expr) -> Vec<Local> {
-        self.hosted(state, |checker| {
-            let names = super::narrow::proved_names(checker.parsed, cond, true);
-            let frame = checker.s.scope.len();
-            checker.proofs_for(&names, frame)
-        })
-    }
-
-    fn proved_here(&self, state: &mut CheckState, cond: &Expr, holds: bool) -> Vec<Local> {
-        self.hosted(state, |checker| {
-            let names = super::narrow::proved_names(checker.parsed, cond, holds);
-            let frame = checker.s.scope.len();
-            checker.proofs_for(&names, frame)
-        })
-    }
-
-    fn proved_from_here(&self, state: &mut CheckState, cond: &Expr, holds: bool) {
-        self.hosted(state, |checker| {
-            let names = super::narrow::proved_names(checker.parsed, cond, holds);
-            checker.proved_from_here(&names)
-        })
-    }
-
-    fn a_proof_taken_back(&self, state: &mut CheckState, lhs: &Expr, rhs: &Expr, before: i64) {
-        self.hosted(state, |checker| {
-            checker.a_proof_taken_back([lhs, rhs], before as usize)
-        })
     }
 
     fn a_type_that_does_not_compare(

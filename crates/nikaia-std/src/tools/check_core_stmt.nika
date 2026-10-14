@@ -775,7 +775,7 @@ pub fn check_core_stmt_while[H: CheckHost](mut state: CheckState, world: ref Che
     let depth = state.scope.len() as i64
     state.repeats.push(CheckRepeats::a_loop(world.words, depth, body))
     // **The body sees what the condition proves not `null`** (ADR-350 D2).
-    let proved = host.proved_in_a_loop(state, cond)
+    let proved = check_narrow_proved_here(state, world, cond, true)
     state.scope.push(proved)
     // **The body and not the condition.**
     state.flow.loops += 1

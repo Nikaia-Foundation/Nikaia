@@ -792,6 +792,8 @@ pub struct CheckState {
     pub stored_frames: Vec[CheckStoredCode],
     /// Where the walk of the body stands (`check_flow.nika`).
     pub flow: CheckFlow,
+    /// What a test proves not `null` (ADR-350, `check_narrow.nika`).
+    pub narrowing: CheckNarrowing,
     /// The type each arm of a choice came to, by the arm's value (#596).
     pub arm_types: collections::BTreeMap[i64, Ty],
     /// Arms that are known and disagree, by the choice, said at the end unless

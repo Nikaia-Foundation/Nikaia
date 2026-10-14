@@ -366,21 +366,6 @@ impl CheckHost for Host<'_> {
         unreachable!("`a_task_of_a_scope` is asked of the core's host")
     }
 
-    fn reads_of_the_maybe(&self, _expr: &Expr) {
-        unreachable!("only the core's host keeps the checker")
-    }
-
-    fn read_as_proved(
-        &self,
-        _state: &mut CheckState,
-        _expr: &Expr,
-        _name: &str,
-        _ty: &Ty,
-        _span: &Span,
-    ) -> Ty {
-        unreachable!("only the core's host keeps the checker")
-    }
-
     fn a_value_with_a_cleanup_made(&self, _state: &mut CheckState, _ty: &Ty) {
         unreachable!("only the core's host keeps the checker")
     }
@@ -403,22 +388,6 @@ impl CheckHost for Host<'_> {
     }
 
     fn a_bound_handle_is_taken(&self, _state: &mut CheckState, _block: &Block) {
-        unreachable!("only the core's host keeps the checker")
-    }
-
-    fn proved_in_a_loop(&self, _state: &mut CheckState, _cond: &Expr) -> Vec<Local> {
-        unreachable!("only the core's host keeps the checker")
-    }
-
-    fn proved_here(&self, _state: &mut CheckState, _cond: &Expr, _holds: bool) -> Vec<Local> {
-        unreachable!("only the core's host keeps the checker")
-    }
-
-    fn proved_from_here(&self, _state: &mut CheckState, _cond: &Expr, _holds: bool) {
-        unreachable!("only the core's host keeps the checker")
-    }
-
-    fn a_proof_taken_back(&self, _state: &mut CheckState, _lhs: &Expr, _rhs: &Expr, _before: i64) {
         unreachable!("only the core's host keeps the checker")
     }
 

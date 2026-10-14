@@ -93,12 +93,6 @@ pub trait CheckHost {
     /// Where a run that stopped at `place` (`@<file>:<byte>`) stopped, seen
     /// from file `here`.
     fn place_of(ref self, place: ref String, here: i64) -> CheckPlace sync
-    /// **The reads below `expr` that ask about the `T?` itself** (ADR-350,
-    /// U-c11): `check/narrow.rs` keeps them, and no state crosses.
-    fn reads_of_the_maybe(ref self, expr: ref Expr) sync
-    /// **A read of a `T?` name, as the `T` where a test proves it** (ADR-350,
-    /// U-c11): `check/narrow.rs`'s.
-    fn read_as_proved(ref self, mut state: CheckState, expr: ref Expr, name: ref String, ty: ref Ty, span: ref Span) -> Ty sync
     /// **A value with a cleanup, made here** (ADR-297 D2, U-c11): the
     /// cleanup's questions stay Rust.
     fn a_value_with_a_cleanup_made(ref self, mut state: CheckState, ty: ref Ty) sync
@@ -111,18 +105,6 @@ pub trait CheckHost {
     /// **`NK2109`: a bound handle is used up before it leaves its scope**
     /// (ADR-346 D3, U-c7): the spawn work's (#605), which stays Rust.
     fn a_bound_handle_is_taken(ref self, mut state: CheckState, block: ref Block) sync
-    /// **What a `while` condition proves not `null` in the body** (ADR-350
-    /// D2): the marker bindings of the body's first frame.
-    fn proved_in_a_loop(ref self, mut state: CheckState, cond: ref Expr) -> Vec[CheckLocal] sync
-    /// **What `cond` proves not `null` where it `holds`** (ADR-350 D1, U-c8):
-    /// the marker bindings of a frame pushed next, kept by `check/narrow.rs`.
-    fn proved_here(ref self, mut state: CheckState, cond: ref Expr, holds: bool) -> Vec[CheckLocal] sync
-    /// **And for the rest of the block** (ADR-350 D3, U-c8): an `if` above
-    /// left it where `cond` did not hold.
-    fn proved_from_here(ref self, mut state: CheckState, cond: ref Expr, holds: bool) sync
-    /// **`NK1102` over an operand whose proof a write took back** (ADR-350,
-    /// U-c10): the findings past `before` get the note, `check/narrow.rs`'s.
-    fn a_proof_taken_back(ref self, mut state: CheckState, lhs: ref Expr, rhs: ref Expr, before: i64) sync
     /// **Two sides of a type that does not compare** (U-c10): the parts beside
     /// stay Rust's.
     fn a_type_that_does_not_compare(ref self, mut state: CheckState, left: ref Ty, right: ref Ty, span: ref Span) sync

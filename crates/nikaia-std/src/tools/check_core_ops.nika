@@ -5,8 +5,7 @@
 // The form is the pilot's (`check_core_pilot.nika`): a free function over the
 // state, the world and a host; the walk comes back through the hub
 // `check_core_expr`. What the left side of `&&` and `||` proves not `null` (ADR-350)
-// stays Rust in `check/narrow.rs` and is asked through `host.proved_here`; a
-// proof a write took back is `host.a_proof_taken_back`, and whether two types
+// and a proof a write took back are `check_narrow.nika`'s, and whether two types
 // compare is `host.a_type_that_does_not_compare`, which reads the parts beside.
 
 /// A type by its bare name.
@@ -218,7 +217,7 @@ fn check_core_ops_literal_beside(mut state: CheckState, op: BinaryOp, side: ref 
 /// **The right of `&&` runs where the left held, and the right of `||` where
 /// it did not** (ADR-350 D2).
 fn check_core_ops_proved_expr[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, cond: ref Expr, holds: bool, value: ref Expr, span: ref Span) -> Ty sync {
-    let markers = host.proved_here(state, cond, holds)
+    let markers = check_narrow_proved_here(state, world, cond, holds)
     if markers.len() == 0 {
         return check_core_expr(state, world, host, value, span)
     }
@@ -364,7 +363,7 @@ pub fn check_core_ops_binary[H: CheckHost](mut state: CheckState, world: ref Che
     if !check_core_ops_equality(op) && !check_core_ops_logical(op) {
         let before = state.findings.len() as i64
         state.a_maybe_in_an_operation(op, left, right, at)
-        host.a_proof_taken_back(state, lhs, rhs, before)
+        check_narrow_a_proof_taken_back(state, lhs, rhs, before)
     }
     // **A bit operator beside a comparison is parenthesised** (ADR-285 D10).
     if op.is_comparison() {
