@@ -129,9 +129,15 @@ impl Ending for Box<dyn std::error::Error> {
         if let Some(exit) = self.downcast_ref::<Exit>() {
             return exit.exit_code();
         }
-        self.downcast_ref::<crate::error::Raised>()
-            .and_then(|raised| raised.inner().downcast_ref::<Exit>())
-            .and_then(Ending::exit_code)
+        // A supervisor that handed a child's `Exit` on (ADR-346 D7).
+        if let Some(escalated) = self.downcast_ref::<crate::supervisor::Escalated>() {
+            return escalated.exit;
+        }
+        let inner = self.downcast_ref::<crate::error::Raised>()?.inner();
+        if let Some(escalated) = inner.downcast_ref::<crate::supervisor::Escalated>() {
+            return escalated.exit;
+        }
+        inner.downcast_ref::<Exit>().and_then(Ending::exit_code)
     }
 }
 

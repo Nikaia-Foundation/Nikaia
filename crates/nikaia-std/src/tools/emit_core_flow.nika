@@ -581,7 +581,7 @@ impl EmitState {
         // D5): a sum is taken apart as any other, an envelope opened, and the box
         // is opened by the type each arm names (`""` says the box).
         let mut boxed = false
-        if caught && sum == null && emit_catch_is_a_join(world, guarded_expr) {
+        if caught && sum == null && emit_catch_is_a_join(world, guarded_expr) && !walk.plain_tasks.contains(emit_join_receiver(world, guarded_expr)) {
             let own_sum = self.sum_of(scope.function)
             if own_sum != null {
                 sum = own_sum
@@ -810,7 +810,9 @@ impl EmitState {
         if failing {
             out.push("{ let __nikaia_task = ")
             out.append(inner)
-            out.push(f"; Ok::<_, {scope.channel}>(__nikaia_task) }})")
+            out.push(f"; Ok::<_, {scope.channel}>(__nikaia_task) }}")
+            // What its error says in the log if nobody waits (ADR-346 D6).
+            out.push(f", |e: &{scope.channel}| {{ use nikaia_std::task::{{ProbeEnding as _, ProbePlain as _}}; (&&nikaia_std::task::Probe(e)).report() }})")
         } else {
             let inside = EmitFlow::plain() with { statement: flow.statement }
             let inside_scope = EmitScope::plain()
@@ -827,6 +829,18 @@ impl EmitState {
 fn emit_is_fatal(ledger: ref Ledger, error: ref String) -> bool {
     let types = ledger.implementations.get("Fatal") ?? return false
     return types.contains(error)
+}
+
+/// The name a plain `join()` is called on, or "" for anything else
+/// (`join(within:)` throws `Late`, which goes through the box).
+fn emit_join_receiver(world: ref EmitWorld, guarded: ref Expr) -> String {
+    return match guarded {
+        Expr::MethodCall { receiver, config, .. } => match receiver {
+            Expr::Variable(name, _) if config.len() == 0 => emit_text(world, name).clone(),
+            else => "".clone(),
+        },
+        else => "".clone(),
+    }
 }
 
 /// Whether a `catch` guards a `join` of a task handle (ADR-346 D5).

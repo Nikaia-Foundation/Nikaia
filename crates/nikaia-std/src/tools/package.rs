@@ -25744,7 +25744,7 @@ impl EmitState {
         let mut sum: Option<String> = None;
         if caught { sum = self.caught_sum(world, guarded_expr); }
         let mut boxed = false;
-        if caught && sum.is_none() && emit_catch_is_a_join(world, guarded_expr) {
+        if caught && sum.is_none() && emit_catch_is_a_join(world, guarded_expr) && !walk.plain_tasks.contains(&emit_join_receiver(world, guarded_expr)) {
             let own_sum = self.sum_of(&scope.function);
             if own_sum.is_some() { sum = own_sum; } else if scope.channel == "Box<dyn std::error::Error>" {
                 sum = Some("".to_owned());
@@ -25905,7 +25905,8 @@ impl EmitState {
         if failing {
             out.push("{ let __nikaia_task = ");
             out.append(inner);
-            out.push(&format!("; Ok::<_, {}>(__nikaia_task) }})", scope.channel));
+            out.push(&format!("; Ok::<_, {}>(__nikaia_task) }}", scope.channel));
+            out.push(&format!(", |e: &{}| {{ use nikaia_std::task::{{ProbeEnding as _, ProbePlain as _}}; (&&nikaia_std::task::Probe(e)).report() }})", scope.channel));
         } else {
             let inside = EmitFlow { statement: flow.statement, ..EmitFlow::plain() };
             let inside_scope = EmitScope::plain();
@@ -25920,6 +25921,16 @@ impl EmitState {
 fn emit_is_fatal(ledger: &Ledger, error: &str) -> bool {
     let types = match ledger.implementations.get("Fatal") { Some(__nikaia_value) => __nikaia_value, None => return false };
     types.contains(error)
+}
+
+fn emit_join_receiver(world: &EmitWorld<'_>, guarded: &Expr) -> String {
+    match guarded {
+        Expr::MethodCall { receiver, config, .. } => { let receiver = nikaia_std::boxed::open(receiver); match receiver {
+            Expr::Variable(name, _) if config.is_empty() => { let name = *name; emit_text(world, name).to_owned() },
+            _ => "".to_owned(),
+        } },
+        _ => "".to_owned(),
+    }
 }
 
 fn emit_catch_is_a_join(world: &EmitWorld<'_>, guarded: &Expr) -> bool {
@@ -27959,7 +27970,7 @@ impl EmitState {
 
 fn main_exits(own: &Ledger) -> bool {
     let contract = match own.functions.get("main") { Some(__nikaia_value) => __nikaia_value, None => return false };
-    for error in contract.fails_with.iter() { if error == "process::Exit" { return true; } }
+    for error in contract.fails_with.iter() { if error == "process::Exit" || error == "supervisor::Escalated" { return true; } }
     false
 }
 
@@ -29522,6 +29533,7 @@ pub struct EmitState {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EmitWalk {
+    pub plain_tasks: collections::BTreeSet<String>,
     pub reached_copy: bool,
     pub either_prelude: Vec<String>,
     pub in_a_kept_call: bool,
@@ -29545,7 +29557,7 @@ pub struct EmitWalk {
 }
 
 impl EmitWalk {
-    pub fn fresh() -> EmitWalk { EmitWalk { reached_copy: false, either_prelude: vec![], in_a_kept_call: false, in_parameter: false, grammar_rule_types: collections::BTreeMap::new(), preluded: collections::BTreeSet::new(), wrappers: vec![], holding: None, hold_args: None, keep_function: String::from(""), nonnegative: collections::BTreeMap::new(), specialising: None, at_field: None, code_parameter_runs: false, held: collections::BTreeMap::new(), boxed_args: None, variant_counts: None, hull_count: None, trusting: false, unpinned: false } }
+    pub fn fresh() -> EmitWalk { EmitWalk { plain_tasks: collections::BTreeSet::new(), reached_copy: false, either_prelude: vec![], in_a_kept_call: false, in_parameter: false, grammar_rule_types: collections::BTreeMap::new(), preluded: collections::BTreeSet::new(), wrappers: vec![], holding: None, hold_args: None, keep_function: String::from(""), nonnegative: collections::BTreeMap::new(), specialising: None, at_field: None, code_parameter_runs: false, held: collections::BTreeMap::new(), boxed_args: None, variant_counts: None, hull_count: None, trusting: false, unpinned: false } }
 }
 
 
@@ -29643,12 +29655,14 @@ impl EmitState {
                 out.push(&format!("            {}::{}(e) => {},\n", name, variant, held));
             }
             out.push("        }\n    }\n}\n\n");
-            let mut ends = false;
-            for member in members.iter() { if member == "process::Exit" { ends = true; } }
-            if ends {
-                let exit_variant = sum_variant("process::Exit");
-                out.push(&format!("impl{} nikaia_std::process::Ending for {}{} {{\n    fn exit_code(&self) -> Option<i32> {{\n        match self {{\n            {}::{}(e) => nikaia_std::process::Ending::exit_code(e),\n            #[allow(unreachable_patterns)] _ => None,\n        }}\n    }}\n}}\n\n", decl, name, params, name, exit_variant));
+            let mut arms: String = String::from("");
+            for member in members.iter() {
+                if member == "process::Exit" || member == "supervisor::Escalated" {
+                    let variant = sum_variant(member);
+                    arms = format!("{}            {}::{}(e) => nikaia_std::process::Ending::exit_code(e),\n", arms, name, variant);
+                }
             }
+            if !arms.is_empty() { out.push(&format!("impl{} nikaia_std::process::Ending for {}{} {{\n    fn exit_code(&self) -> Option<i32> {{\n        match self {{\n{}            #[allow(unreachable_patterns)] _ => None,\n        }}\n    }}\n}}\n\n", decl, name, params, arms)); }
         }
     }
     pub fn channel_of(&self, world: &EmitWorld<'_>, thrown: &[String], elided: bool, params: &str, static_params: &str, borrows: bool) -> String {

@@ -5249,9 +5249,45 @@ impl<'p> Emitter<'p> {
         self.crossed(crossed)
     }
 
+    /// A statement; a `let` of a task whose body cannot fail is remembered,
+    /// since its `join` throws `task::Crashed` alone (ADR-328 D8).
+    fn stmt(
+        &self,
+        out: &mut Out,
+        stmt: &Stmt,
+        span: &Span,
+        depth: usize,
+        tail: Tail,
+        flow: Flow<'_>,
+    ) -> Result<()> {
+        let mark = out.buf.len();
+        self.stmt_written(out, stmt, span, depth, tail, flow)?;
+        if let Stmt::Let {
+            names,
+            value: Expr::Spawn { .. },
+            ..
+        } = stmt
+            && let [name] = names.as_slice()
+        {
+            let written = &out.buf[mark..];
+            let first = |what: &str| written.find(what).unwrap_or(usize::MAX);
+            let plain = first("task::TaskHandle::start")
+                < first("task::FailingTask::").min(first("task::BoxedTask::"));
+            let name = self.text(*name).to_string();
+            self.walking(|w| {
+                if plain {
+                    w.plain_tasks.insert(name);
+                } else {
+                    w.plain_tasks.remove(&name);
+                }
+            });
+        }
+        Ok(())
+    }
+
     /// A statement, and the map a `let` of [`Emitter::trusted_lets`] makes
     /// under its fast hash (#431).
-    fn stmt(
+    fn stmt_written(
         &self,
         out: &mut Out,
         stmt: &Stmt,

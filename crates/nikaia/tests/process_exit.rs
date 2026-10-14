@@ -262,6 +262,32 @@ fn a_catch_at_join_names_the_body_error() {
     assert_eq!(out, "");
 }
 
+/// ADR-346 D6: a detached task's error goes to standard error at `main`'s end,
+/// and the first fatal one's code is the program's; `main` itself runs on.
+#[test]
+fn a_detached_error_reaches_the_log_at_the_end() {
+    let source = "use std::process\nuse std::time\n\nenum Bad { Oops(i64) }\nimpl Error for Bad {\n    fn message(ref self) -> String { return \"bad\" }\n}\n\nfn work(n: i64) -> i64 throws {\n    if n > 1 {\n        throw Bad::Oops(n)\n    }\n    return n\n}\n\nfn stop() -> i64 throws {\n    process::exit(5)\n    return 1\n}\n\nfn main() throws {\n    let w = spawn fn { work(7) }\n    w.detach()\n    time::sleep(20.millis())\n    spawn fn { stop() }\n    time::sleep(20.millis())\n    println(\"end\")\n}\n";
+    for (purpose, how) in [
+        ("detached", Build::default()),
+        ("detached-pool", Build::parallel()),
+    ] {
+        let (out, err, code) = ran(purpose, source, how);
+        assert_eq!(out.trim(), "end", "{err}");
+        assert_eq!(code, Some(5), "{err}");
+        assert!(err.contains("Error in a detached task: bad"), "{err}");
+    }
+}
+
+/// ADR-346 D7: a supervisor does not restart a child's fatal `Exit`; it hands
+/// it on, and `main` ends with its code.
+#[test]
+fn a_supervisor_hands_a_fatal_error_on() {
+    let source = "use std::process\nuse std::supervisor\n\nfn stop(tries: SharedMut[i64]) throws {\n    tries.update fn(mut v) { v += 1 }\n    process::exit(6)\n}\n\nfn main() throws {\n    let tries = SharedMut(0)\n    let seen = tries.clone()\n    supervisor::run([\n        supervisor::child(fn { stop(tries) }; restart: supervisor::Kind::Permanent),\n    ]) catch {\n        let n = seen.get()\n        println(f\"tries {n}\")\n        throw error\n    }\n}\n";
+    let (out, err, code) = ran("supervisor-fatal", source, Build::default());
+    assert_eq!(code, Some(6), "{err}");
+    assert_eq!(out.trim(), "tries 1", "{err}");
+}
+
 /// ADR-346 D4: `join(within: d)` hands the value back in time, and throws
 /// `task::TimedOut` (the task cancelled) once `d` ran out.
 #[test]

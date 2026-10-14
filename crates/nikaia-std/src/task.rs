@@ -359,13 +359,27 @@ impl<T> TaskHandle<T> {
 /// started it, beside [`Crashed`].
 pub struct FailingTask<T, E> {
     handle: TaskHandle<Result<T, E>>,
+    watch: Watch,
 }
 
 impl<T: 'static, E: 'static> FailingTask<T, E> {
-    /// Start a body that hands back a `Result`.
-    pub fn start(body: impl std::future::Future<Output = Result<T, E>> + 'static) -> Self {
+    /// Start a body that hands back a `Result`; `report` is what its error
+    /// says in the log if nobody waits for it (ADR-346 D6).
+    pub fn start(
+        body: impl std::future::Future<Output = Result<T, E>> + 'static,
+        report: fn(&E) -> Report,
+    ) -> Self {
+        let watch = Watch::armed();
+        let told = watch.clone_state();
         FailingTask {
-            handle: TaskHandle::start(body),
+            handle: TaskHandle::start(async move {
+                let outcome = body.await;
+                if let Err(error) = &outcome {
+                    told.failed(report(error));
+                }
+                outcome
+            }),
+            watch,
         }
     }
 }
@@ -374,9 +388,19 @@ impl<T: Send + 'static, E: Send + 'static> FailingTask<T, E> {
     /// The same, on the pool.
     pub fn start_on_pool(
         body: impl std::future::Future<Output = Result<T, E>> + Send + 'static,
+        report: fn(&E) -> Report,
     ) -> Self {
+        let watch = Watch::armed();
+        let told = watch.clone_state();
         FailingTask {
-            handle: TaskHandle::start_on_pool(body),
+            handle: TaskHandle::start_on_pool(async move {
+                let outcome = body.await;
+                if let Err(error) = &outcome {
+                    told.failed(report(error));
+                }
+                outcome
+            }),
+            watch,
         }
     }
 }
@@ -384,16 +408,19 @@ impl<T: Send + 'static, E: Send + 'static> FailingTask<T, E> {
 impl<T, E> FailingTask<T, E> {
     /// Stop the task, as [`TaskHandle::cancel`].
     pub fn cancel(self) {
+        self.watch.disarm();
         self.handle.cancel()
     }
 
-    /// Nobody waits for this task.
+    /// **Nobody waits for this task** (ADR-346 D6): its error goes to the log
+    /// at `main`'s end. Dropping the handle - a bare `spawn` (D2) - is the same.
     pub fn detach(self) {}
 }
 
 impl<T: 'static, E: 'static + From<Crashed>> FailingTask<T, E> {
     /// The task's value, or its body's error, or [`Crashed`] in that channel.
     pub async fn join(self) -> Result<T, E> {
+        self.watch.disarm();
         match crate::rt::exec::Waiting::on(self.handle.slot).await {
             Ok(outcome) => outcome,
             Err(crashed) => Err(E::from(crashed)),
@@ -470,6 +497,7 @@ impl<T> TaskHandle<T> {
 impl<T: 'static, E: 'static + From<Crashed> + From<TimedOut>> FailingTask<T, E> {
     /// `join(within:)` of a task whose body can fail.
     pub async fn join_within(self, span: std::time::Duration) -> Result<T, E> {
+        self.watch.disarm();
         match self.handle.within(span).await {
             Some(Ok(outcome)) => outcome,
             Some(Err(crashed)) => Err(E::from(crashed)),
@@ -517,15 +545,29 @@ impl std::error::Error for Carried {}
 /// `Box<dyn Error>` is not `Send`, so it crosses as [`Carried`].
 pub struct BoxedTask<T> {
     handle: TaskHandle<Result<T, Carried>>,
+    watch: Watch,
 }
 
 impl<T: Send + 'static> BoxedTask<T> {
     /// Start a body that hands back a `Result` in the opaque channel.
     pub fn start_on_pool(
         body: impl std::future::Future<Output = Result<T, Box<dyn std::error::Error>>> + Send + 'static,
+        _report: fn(&Box<dyn std::error::Error>) -> Report,
     ) -> Self {
+        let watch = Watch::armed();
+        let told = watch.clone_state();
         BoxedTask {
-            handle: TaskHandle::start_on_pool(async move { body.await.map_err(Carried::from_box) }),
+            handle: TaskHandle::start_on_pool(async move {
+                let outcome = body.await.map_err(Carried::from_box);
+                if let Err(carried) = &outcome {
+                    told.failed(Report {
+                        text: carried.message.clone(),
+                        code: carried.exit,
+                    });
+                }
+                outcome
+            }),
+            watch,
         }
     }
 
@@ -534,6 +576,7 @@ impl<T: Send + 'static> BoxedTask<T> {
         self,
         span: std::time::Duration,
     ) -> Result<T, Box<dyn std::error::Error>> {
+        self.watch.disarm();
         match self.handle.within(span).await {
             Some(Ok(Ok(value))) => Ok(value),
             Some(Ok(Err(carried))) => Err(carried.into_box()),
@@ -544,6 +587,7 @@ impl<T: Send + 'static> BoxedTask<T> {
 
     /// The task's value, or its body's error, or [`Crashed`] in the box.
     pub async fn join(self) -> Result<T, Box<dyn std::error::Error>> {
+        self.watch.disarm();
         match crate::rt::exec::Waiting::on(self.handle.slot).await {
             Ok(Ok(value)) => Ok(value),
             Ok(Err(carried)) => Err(carried.into_box()),
@@ -555,11 +599,137 @@ impl<T: Send + 'static> BoxedTask<T> {
 impl<T> BoxedTask<T> {
     /// Stop the task, as [`TaskHandle::cancel`].
     pub fn cancel(self) {
+        self.watch.disarm();
         self.handle.cancel()
     }
 
     /// Nobody waits for this task.
     pub fn detach(self) {}
+}
+
+/// **What a detached task's error leaves for the log** (ADR-346 D6): its long
+/// form, and the code of a fatal `Exit` in it.
+pub struct Report {
+    text: String,
+    code: Option<i32>,
+}
+
+/// **The emitter's way to a [`Report`]** for a channel it names: written as
+/// `(&&Probe(e)).report()` with both traits in scope, a channel that can hold
+/// an `Exit` ([`crate::process::Ending`]) answers with its code, any other
+/// with none.
+pub struct Probe<'a, E>(pub &'a E);
+
+/// The [`Probe`] of a channel that can end the program.
+pub trait ProbeEnding {
+    fn report(&self) -> Report;
+}
+
+impl<E: crate::process::Ending + std::fmt::Display> ProbeEnding for &Probe<'_, E> {
+    fn report(&self) -> Report {
+        Report {
+            text: self.0.to_string(),
+            code: self.0.exit_code(),
+        }
+    }
+}
+
+/// The [`Probe`] of any other channel.
+pub trait ProbePlain {
+    fn report(&self) -> Report;
+}
+
+impl<E: std::fmt::Display> ProbePlain for Probe<'_, E> {
+    fn report(&self) -> Report {
+        Report {
+            text: self.0.to_string(),
+            code: None,
+        }
+    }
+}
+
+#[derive(Default)]
+struct WatchState {
+    disarmed: bool,
+    detached: bool,
+    report: Option<Report>,
+}
+
+/// **Whether anybody waits for a failing task** (ADR-346 D6): disarmed by
+/// `join` and `cancel`; dropped armed, the task is detached, and an error it
+/// had or will have goes to [`DETACHED`].
+pub(crate) struct Watch(std::sync::Arc<std::sync::Mutex<WatchState>>);
+
+impl Watch {
+    fn armed() -> Watch {
+        Watch(std::sync::Arc::default())
+    }
+
+    /// The body's side of the watch, which does not detach when dropped.
+    fn clone_state(&self) -> Told {
+        Told(self.0.clone())
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, WatchState> {
+        self.0.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    fn disarm(&self) {
+        self.lock().disarmed = true;
+    }
+}
+
+/// The body's side of a [`Watch`].
+pub(crate) struct Told(std::sync::Arc<std::sync::Mutex<WatchState>>);
+
+impl Told {
+    /// The body ended with an error.
+    fn failed(&self, report: Report) {
+        let mut state = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        if state.detached {
+            detached_failed(report);
+        } else {
+            state.report = Some(report);
+        }
+    }
+}
+
+impl Drop for Watch {
+    fn drop(&mut self) {
+        let mut state = self.lock();
+        if state.disarmed || state.detached {
+            return;
+        }
+        state.detached = true;
+        if let Some(report) = state.report.take() {
+            detached_failed(report);
+        }
+    }
+}
+
+/// The errors of detached tasks, in the order they arrived.
+static DETACHED: std::sync::Mutex<Vec<Report>> = std::sync::Mutex::new(Vec::new());
+
+fn detached_failed(report: Report) {
+    DETACHED
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .push(report);
+}
+
+/// **At `main`'s end, after the drain** (ADR-346 D6): every detached task's
+/// error on standard error, and the code of the first fatal one, which
+/// replaces the status the program would end with.
+pub fn report_detached() -> Option<i32> {
+    let reports = std::mem::take(&mut *DETACHED.lock().unwrap_or_else(|e| e.into_inner()));
+    let mut first = None;
+    for report in reports {
+        eprintln!("Error in a detached task: {}", report.text);
+        if first.is_none() {
+            first = report.code;
+        }
+    }
+    first
 }
 
 thread_local! {

@@ -53,6 +53,21 @@ pub enum Kind {
 pub struct Escalated {
     /// What the last crash said.
     pub message: String,
+    /// The code of a fatal `Exit` a child ended with: it is not restarted, and
+    /// the supervisor hands it on (ADR-346 D7).
+    pub exit: Option<i32>,
+}
+
+impl crate::process::Ending for crate::error::Thrown<Escalated> {
+    fn exit_code(&self) -> Option<i32> {
+        self.held().exit
+    }
+}
+
+impl crate::process::Ending for Escalated {
+    fn exit_code(&self) -> Option<i32> {
+        self.exit
+    }
 }
 
 impl std::fmt::Display for Escalated {
@@ -108,12 +123,16 @@ pub fn child_on_pool(
     }
 }
 
-/// How one attempt of a child ended: normally, or with what it said.
-type Ended = Option<String>;
+/// How one attempt of a child ended: normally, or with what it said and the
+/// code of a fatal `Exit` in it.
+type Ended = Option<(String, Option<i32>)>;
 
 /// The message a child's outcome carries, where it is a failure.
 fn ended(outcome: Outcome) -> Ended {
-    outcome.err().map(|error| error.to_string())
+    use crate::process::Ending;
+    outcome
+        .err()
+        .map(|error| (error.to_string(), error.exit_code()))
 }
 
 /// **Run the supervisor** until it gives up (ADR-328 D1-D4).
@@ -179,7 +198,20 @@ pub(crate) async fn supervise(
         running[at] = None;
         let crash = match outcome {
             Ok(None) => None,
-            Ok(Some(thrown)) => Some(thrown),
+            Ok(Some((thrown, None))) => Some(thrown),
+            // **A fatal error is not restarted** (ADR-346 D7): every child
+            // stops and the supervisor hands it on.
+            Ok(Some((thrown, Some(code)))) => {
+                for handle in running.iter_mut().rev() {
+                    if let Some(handle) = handle.take() {
+                        handle.cancel();
+                    }
+                }
+                return Err(Escalated {
+                    message: thrown,
+                    exit: Some(code),
+                });
+            }
             Err(crashed) => Some(crashed.message),
         };
         let restarted = match kinds[at] {
@@ -212,7 +244,10 @@ pub(crate) async fn supervise(
                         handle.cancel();
                     }
                 }
-                return Err(Escalated { message: said });
+                return Err(Escalated {
+                    message: said,
+                    exit: None,
+                });
             }
             Next::Delay(span) => crate::time::sleep(span).await,
             Next::Immediate => {}
@@ -431,7 +466,7 @@ mod tests {
                     0 => None,
                     n => {
                         left.set(n - 1);
-                        Some("it broke".to_string())
+                        Some(("it broke".to_string(), None))
                     }
                 }
             })
@@ -474,7 +509,8 @@ mod tests {
         assert_eq!(
             outcome,
             Err(Escalated {
-                message: "it broke".to_string()
+                message: "it broke".to_string(),
+                exit: None,
             })
         );
     }

@@ -125,7 +125,7 @@ impl EmitState {
 fn main_exits(own: ref Ledger) -> bool {
     let contract = own.functions.get("main") ?? return false
     for error in contract.fails_with {
-        if error == "process::Exit" {
+        if error == "process::Exit" || error == "supervisor::Escalated" {
             return true
         }
     }

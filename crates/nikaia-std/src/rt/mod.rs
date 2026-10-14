@@ -259,13 +259,21 @@ pub struct Started {
 impl Started {
     /// Drain, bounded by the configured deadline, and warn about what did not
     /// finish (ADR-297 D6).
+    ///
+    /// Then the errors of detached tasks go to standard error, and the first
+    /// fatal one's code ends the process (ADR-346 D6); an expired drain still
+    /// ends with `70`.
     pub fn finish(self) {
-        let Some(deadline) = RUNTIME.get().map(|runtime| runtime.config.cleanup_deadline) else {
-            return;
-        };
+        let deadline = RUNTIME.get().map(|runtime| runtime.config.cleanup_deadline);
         let left = self.drain();
-        if left > 0 {
+        let code = crate::task::report_detached();
+        if let Some(deadline) = deadline
+            && left > 0
+        {
             expired(left, deadline);
+        }
+        if let Some(code) = code {
+            std::process::exit(code);
         }
     }
 

@@ -142,6 +142,9 @@ pub struct EmitState {
 
 /// The places the walk writes to as it goes.
 pub struct EmitWalk {
+    /// The `let` names bound to a task whose body cannot fail: their `join`
+    /// throws `task::Crashed` alone (ADR-328 D8), never the box.
+    pub plain_tasks: collections::BTreeSet[String],
     /// A reach was read through a copy.
     pub reached_copy: bool,
     /// The lines an `Either` parameter needs before the body.
@@ -188,6 +191,6 @@ pub struct EmitWalk {
 impl EmitWalk {
     /// Nothing written yet.
     pub fn fresh() -> EmitWalk {
-        return EmitWalk { reached_copy: false, either_prelude: [], in_a_kept_call: false, in_parameter: false, grammar_rule_types: collections::BTreeMap(), preluded: collections::BTreeSet(), wrappers: [], holding: null, hold_args: null, keep_function: "", nonnegative: collections::BTreeMap(), specialising: null, at_field: null, code_parameter_runs: false, held: collections::BTreeMap(), boxed_args: null, variant_counts: null, hull_count: null, trusting: false, unpinned: false }
+        return EmitWalk { plain_tasks: collections::BTreeSet(), reached_copy: false, either_prelude: [], in_a_kept_call: false, in_parameter: false, grammar_rule_types: collections::BTreeMap(), preluded: collections::BTreeSet(), wrappers: [], holding: null, hold_args: null, keep_function: "", nonnegative: collections::BTreeMap(), specialising: null, at_field: null, code_parameter_runs: false, held: collections::BTreeMap(), boxed_args: null, variant_counts: null, hull_count: null, trusting: false, unpinned: false }
     }
 }

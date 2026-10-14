@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.902] — 2026-10-14
+
+**task: detached errors reach the log at main's end; a supervisor hands a fatal Exit on (#605)**
+- A detached task's error (detach(), a bare spawn) is printed on standard error at main's end after the drain; the first fatal Exit's code replaces the exit status (ADR-346 D6).
+- A supervisor does not restart a child that ended with process::Exit: it stops every child and throws supervisor::Escalated carrying the code, which ends main with it (ADR-346 D7).
+- A catch at the join() of a task whose body cannot fail sees task::Crashed again, not the box.
+
 ## [0.0.901] — 2026-10-14
 
 **check: the leaves of a choice, arms asked one by one, map keys and handing over in Nikaia (#125, #558)**
