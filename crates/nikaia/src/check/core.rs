@@ -262,6 +262,10 @@ impl CheckHost for Core<'_, '_> {
         self.h.written(value)
     }
 
+    fn holes_read(&self, literal: &Expr) -> Vec<(Expr, Vec<(String, String)>)> {
+        self.h.holes_read(literal)
+    }
+
     fn newly_throws(&self, key: &str) -> Option<Vec<String>> {
         self.h.newly_throws(key)
     }

@@ -1,0 +1,459 @@
+// crates/nikaia-std/src/tools/check_core_leaves.nika
+//
+// **The leaves of the checker's core** (ADR-294, #125, #558, C-6, U-c1):
+// `a_field_of_a_borrowed_subject`, `a_field_of_a_lent_place_handed_back`,
+// `a_kept_lambda`, `literal_by_use`, `holes`, `lambda`, `returns` and
+// `an_assert`. The form is the pilot's (`check_core_pilot.nika`): a free
+// function over the state, the world and a host; the walk comes back through
+// the hubs `host.expr` and `host.block`.
+
+use std::collections
+
+/// The field of `self` that `value` reads, where it is `self.<field>`.
+fn check_core_field_of_self(world: ref CheckWorld, value: ref Expr) -> String? {
+    return match value {
+        Expr::Field { base, name, .. } => match base {
+            Expr::Variable(subject, _) => if world.words.resolve(subject) == "self" { world.words.resolve(name).clone() } else { null },
+            else => null,
+        },
+        else => null,
+    }
+}
+
+/// **`NK1131`: a field of `self` given away where the method only borrows
+/// `self`** (ADR-083 D2). Where it is handed back, a declared view is the
+/// third way out.
+pub fn check_core_a_field_of_a_borrowed_subject[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr, span: ref Span, what: ref String) sync {
+    if !state.borrowing_self {
+        return
+    }
+    let field = check_core_field_of_self(world, value) ?? return
+    let ty = host.expr(state, value, span)
+    if ty.is_unknown() || copies_plainly(ty) {
+        return
+    }
+    let notes: Vec[String] = [f"`ref self` borrows the value, and `{field}` is a `{ty.text()}`. Giving it away would take a piece out of something this method doesn't own."]
+    let mut help: String = f"Write `self.{field}.clone()` for a copy, or take `self` instead of `ref self` if the method is meant to use up its value."
+    if what == "handed back" {
+        help = f"Declare the result `ref {ty.text()}` to return a view of it, write `self.{field}.clone()` for a copy, or take `self` instead of `ref self` if the method is meant to use up its value."
+    }
+    state.findings.push(check_refusal("NK1131", span, f"You can't give away `self.{field}` here: this method only borrows `self`.", notes, help))
+}
+
+/// **`NK1131` for a place that is lent here and is not `self`** (ADR-083,
+/// #576): a field of a `ref` parameter, of a `for` binding over a list or of a
+/// `let` over a place, handed back by value, where the function does not
+/// declare a view.
+pub fn check_core_a_field_of_a_lent_place_handed_back[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr, span: ref Span) sync {
+    let expected: Ty? = state.expected?.clone()
+    if expected != null {
+        let declared = expected ?? return
+        if declared.is_a_view() {
+            return
+        }
+    }
+    match value {
+        Expr::Field { .. } => {}
+        else => return,
+    }
+    let path = state.place_path(world, value) ?? return
+    let at = path.find(".") ?? return
+    let root: String = path[0..<at].clone()
+    if root == "self" || !state.lent_here(root) {
+        return
+    }
+    let ty = host.expr(state, value, span)
+    if ty.is_unknown() || copies_plainly(ty) {
+        return
+    }
+    let notes: Vec[String] = [f"`{root}` belongs to whoever lent it (a `ref` parameter, a `for` over a list, a `let` over a place), and `{path}` is a `{ty.text()}`. Giving it away would take a piece out of something this function doesn't own."]
+    let help: String = f"Declare the result `ref {ty.text()}` to return a view of it, or write `{path}.clone()` for a copy."
+    state.findings.push(check_refusal("NK1131", span, f"You can't give away `{path}` here: `{root}` is only borrowed.", notes, help))
+}
+
+/// **A lambda where a function value is kept** is one shared closure below,
+/// and one that may pause hands back a boxed future. An element of a list is
+/// kept by the list (Part I 5.3), and a function of this program, named, is
+/// the closure that calls it: the call is typed here.
+pub fn check_core_a_kept_lambda[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, want: ref Ty, value: ref Expr, span: ref Span) sync {
+    let inner: Ty = match want {
+        Ty::Nullable(held) => held.clone(),
+        else => want.clone(),
+    }
+    match inner {
+        Ty::Named { name, args, .. } => {
+            if name == "Vec" || name == "List" || name == ARRAY {
+                match value {
+                    Expr::ListLit { items, .. } => {
+                        if args.len() > 0 {
+                            for item in items {
+                                check_core_a_kept_lambda(state, world, host, args[0], item, span)
+                            }
+                            return
+                        }
+                    }
+                    else => {}
+                }
+            }
+        }
+        Ty::Fn { params, is_sync, can_throw, .. } => {
+            match value {
+                Expr::Closure { .. } => {
+                    state.facts.kept_lambdas.insert(id_of(value) as i64, (!is_sync, can_throw))
+                    state.a_lambdas_text_is_its_own(world, inner, value)
+                    state.a_kept_lambdas_hulls(world, value)
+                    state.a_kept_lambda_takes_these(world, value, !is_sync, span)
+                }
+                Expr::Variable(name, _) => {
+                    let named = world.words.resolve(name).clone()
+                    if state.lookup(named) == null && world.own.functions.contains_key(named) {
+                        state.facts.kept_functions.insert(id_of(value) as i64, (!is_sync, can_throw, params.len() as i64))
+                        let (names, call) = host.kept_call(name, params.len() as i64)
+                        let mut frame: Vec[CheckLocal] = []
+                        let mut at = 0
+                        for n in names {
+                            if at < params.len() {
+                                let id = state.a_new_binding()
+                                frame.push(CheckLocal::free(world.words.resolve(n).clone(), params[at].clone(), id))
+                            }
+                            at += 1
+                        }
+                        state.scope.push(frame)
+                        host.expr(state, call, span)
+                        state.scope.pop()
+                    }
+                }
+                else => {}
+            }
+        }
+        else => {}
+    }
+}
+
+/// **A literal takes the use's type, whichever literal it is**: an array where
+/// an `Array[T, N]` is wanted (ADR-152 D4), and text of its own where a
+/// `String` is (ADR-282 D4). One entry for every position that is a use.
+pub fn check_core_literal_by_use[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, found: ref Ty, want: ref Ty, value: ref Expr, span: ref Span) -> Ty? sync {
+    check_core_a_kept_lambda(state, world, host, want, value, span)
+    let array = state.array_literal(found, want, value, span)
+    if array != null {
+        return array
+    }
+    let text = state.text_literal(world, want, value, true)
+    if text != null {
+        return text
+    }
+    let tuple = state.tuple_literal(world, found, want, value)
+    if tuple != null {
+        return tuple
+    }
+    let tuples = state.list_of_tuple_literals(world, found, want, value)
+    if tuples != null {
+        return tuples
+    }
+    let collected = state.collect_by_use(world, found, want, value)
+    if collected != null {
+        return collected
+    }
+    return number_where_no_number_is(want, value)
+}
+
+/// Whether a type is a file's name (ADR-319 D4).
+fn check_core_is_a_path(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Named { name, .. } => name == "fs::Path",
+        else => false,
+    }
+}
+
+/// The element a `<for>` binds over a collection whose type is `held`: a view
+/// of the element of a `Vec` or an `Array`.
+fn check_core_element_of(held: ref Ty?) -> Ty {
+    let ty = held ?? return Ty::Unknown
+    return match ty {
+        Ty::Named { name, args, .. } => if (name == "Vec" || name == "Array") && args.len() == 1 { view_of_type(args[0]) } else { Ty::Unknown },
+        else => Ty::Unknown,
+    }
+}
+
+/// **Every expression a literal hides, walked where it stands.** The result is
+/// discarded: what the checker is here for is everything inside a hole. A
+/// template's `<for>` declares a name (ADR-017), bound in a frame around the
+/// holes inside it; the collection it walks is a hole of its own, walked first
+/// (#524).
+pub fn check_core_holes[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, literal: ref Expr, span: ref Span) sync {
+    let mut interpolated = false
+    let mut specs: Vec[String?] = []
+    match literal {
+        Expr::LitInterpolated { parts, .. } => {
+            interpolated = true
+            for part in parts {
+                match part {
+                    FPart::Hole { spec, .. } => specs.push(spec?.clone()),
+                    else => {}
+                }
+            }
+        }
+        else => {}
+    }
+    let walked = host.holes_read(literal)
+    let mut names: Vec[bool] = []
+    let mut seen: collections::BTreeMap[String, Ty] = collections::BTreeMap()
+    let mut index = 0
+    for (hole, bound) in walked {
+        let mut frame: Vec[CheckLocal] = []
+        for (name, collection) in bound {
+            let trimmed = collection.trim()
+            let key: String = trimmed.clone()
+            let held: Ty? = seen[key]?.clone()
+            let element = check_core_element_of(held)
+            let id = state.a_new_binding()
+            frame.push(CheckLocal::free(name.clone(), element, id))
+        }
+        state.scope.push(frame)
+        let held = host.expr(state, hole, span)
+        match hole {
+            Expr::Variable(name, _) => {
+                seen.insert(world.words.resolve(name).clone(), held.clone())
+            }
+            else => {}
+        }
+        // A hole is formatted by reference (ADR-279 D5): a `??` that is the
+        // hole lends its left side, as a print call's argument does.
+        if interpolated {
+            state.a_pending_coalesce_is_lent(hole)
+            state.a_maybe_in_a_hole(held, span)
+        }
+        state.scope.pop()
+        if index < specs.len() {
+            state.a_collection_in_a_hole(world, hole, held, specs[index], span)
+        }
+        names.push(check_core_is_a_path(held))
+        index += 1
+    }
+    // An `f"…"` with a file's name in it is joined in the platform's encoding
+    // (ADR-319 D4).
+    if interpolated && names.contains(true) {
+        state.facts.path_holes.insert(id_of(literal) as i64, names)
+    }
+}
+
+/// **A lambda whose parameters have types, because the callee said so**: the
+/// names are bound in order to what the signature hands the lambda. What it
+/// comes to is what its body comes to (ADR-293 D5), beside whether it paused
+/// (ADR-233 D1).
+pub fn check_core_lambda[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, params: ref Vec[winnow_grammar::Symbol], mutable: ref Vec[winnow_grammar::Symbol], body: ref Block, given: ref Vec[Ty], promised: ref CheckPromises, span: ref Span) -> (Ty, bool) sync {
+    let mut frame: Vec[CheckLocal] = []
+    let mut at = 0
+    for p in params {
+        let mut ty: Ty = Ty::Unknown
+        if at < given.len() {
+            ty = given[at].clone()
+        }
+        let local = state.lambda_parameter(world, p, mutable, ty, span)
+        if local.ty.is_unknown() {
+            state.flow.unknown_bound.insert(local.id)
+        }
+        frame.push(local)
+        at += 1
+    }
+    let depth = state.scope.len() as i64
+    state.repeats.push(CheckRepeats::a_lambda(depth))
+    state.scope.push(frame)
+    // The other door into a lambda's body, with the same boundary as `expr`'s.
+    let saved = state.enter_boundary("lambda")
+    state.handed_over = CheckHanded { pauses: false, fails: false, caught: false, promised: promised.clone() }
+    let tail = host.block(state, body)
+    let seen: CheckHanded? = state.handed_over?.clone()
+    state.handed_over = null
+    state.leave_boundary(saved)
+    state.scope.pop()
+    state.repeats.pop()
+    let mut paused = false
+    if seen != null {
+        let handed = seen ?? return (tail, false)
+        paused = handed.pauses
+        state.a_handler_that_does_more_than_the_type_allows(promised, handed, span)
+    }
+    return (tail, paused)
+}
+
+/// **A `return`**: what it hands back is checked against what the function
+/// declares, after the refusals of giving away what is only borrowed
+/// (ADR-083), and a view of the subject is lent rather than given (D1).
+pub fn check_core_returns[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr?, span: ref Span, in_an_expression: bool) sync {
+    let mut lending = false
+    let mut closure = false
+    if value != null {
+        let given = value ?? return
+        lending = state.hands_back_a_view_of_the_subject(world, given)
+        if lending {
+            state.facts.lent_returns.insert(span.start as i64)
+        }
+        match given {
+            Expr::Unary { op, expr, .. } => {
+                if op == UnaryOp::Ref && state.hands_back_a_view_of_the_subject(world, expr) {
+                    state.the_caller_writes_no_reference(given, span, "a place inside what this function borrows is handed back as a view of it")
+                }
+            }
+            Expr::Closure { .. } => {
+                closure = true
+            }
+            else => {}
+        }
+        if !lending {
+            check_core_a_field_of_a_borrowed_subject(state, world, host, given, span, "handed back")
+            check_core_a_field_of_a_lent_place_handed_back(state, world, host, given, span)
+            check_core_a_mut_parameter_given_away(state, world, host, given, span, "handed back")
+        }
+    }
+    if closure {
+        state.flow.lambda_expected = state.expected?.clone()
+    }
+    let mut found: Ty = Ty::Tuple([])
+    if value != null {
+        let given = value ?? return
+        found = host.expr(state, given, span)
+    }
+    state.flow.lambda_expected = null
+    let expected: Ty = state.expected?.clone() ?? return
+    if lending {
+        found = view_of_type(found)
+    }
+    if value != null {
+        let given = value ?? return
+        let want: Ty? = expected.clone()
+        state.constant_fits(world, given, want, span)
+        if in_an_expression {
+            let how = check_widened_slot(state, world, host, found, expected, value, span)
+            if how != null {
+                let wrap = how ?? return
+                state.facts.wrapped.insert(id_of(given) as i64, wrap)
+            }
+        } else {
+            state.a_map_read_kept(world, found, expected, given, span)
+            let how = check_widened_slot(state, world, host, found, expected, value, span)
+            if how != null {
+                let wrap = how ?? return
+                state.facts.nullable_sites.insert(span.start as i64, wrap)
+            }
+        }
+        let by_use = check_core_literal_by_use(state, world, host, found, expected, given, span)
+        if by_use != null {
+            found = by_use ?? Ty::Unknown
+        }
+    }
+    state.expect_kept_asked(world, found, expected, value, "the function returns it, and the caller keeps it after the call ends", span, "returns", fn(was, wanted) { f"You're returning `{was}`, but the function is declared to return `{wanted}`." })
+}
+
+/// Whether an operand is a number literal, negated.
+fn check_core_a_number_literal(expr: ref Expr) -> bool {
+    return match expr {
+        Expr::LitInt { .. } => true,
+        Expr::LitFloat(_, _) => true,
+        else => false,
+    }
+}
+
+/// An operand of a claim as written, where it is not a literal: what a failed
+/// `assert` shows beside the claim.
+fn check_core_shown_operand(world: ref CheckWorld, operand: ref Expr) -> String? {
+    let literal: bool = match operand {
+        Expr::LitInt { .. } => true,
+        Expr::LitFloat(_, _) => true,
+        Expr::LitStr { .. } => true,
+        Expr::LitChar(_, _) => true,
+        Expr::LitBool(_, _) => true,
+        Expr::LitNull(_) => true,
+        Expr::Unary { op, expr, .. } => op == UnaryOp::Neg && check_core_a_number_literal(expr),
+        else => false,
+    }
+    if literal {
+        return null
+    }
+    return written_expression(world.words, operand)
+}
+
+/// **`assert(condition; message: text)`** (ADR-269): one `bool` condition that
+/// changes nothing (`NK1194`), an optional text message, and the claim as
+/// written kept for the run.
+pub fn check_core_an_assert[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: ref Span) -> Ty sync {
+    let unit = Ty::Named { name: "()", args: [], view: false }
+    if args.len() != 1 {
+        state.an_assert_of_another_shape(f"`assert` claims one condition, and this hands it {args.len()}", span)
+        for arg in args {
+            host.expr(state, arg, span)
+        }
+        return unit
+    }
+    let condition = args[0]
+    state.stored_frames.push(CheckStoredCode::empty())
+    let found = host.expr(state, condition, span)
+    let frame: CheckStoredCode = state.stored_frames.pop() ?? CheckStoredCode::empty()
+    let at = check_span_at(world, condition, span)
+    state.expect_bool(found, at, "An `assert` checks a `bool`.")
+    if is_a_literal_other_than(condition, "bool") {
+        state.an_assert_of_another_shape("An `assert` checks a `bool`, but this is a literal of another type.".clone(), span)
+    }
+    let owned = Ty::Named { name: "String", args: [], view: false }
+    let viewed = Ty::Named { name: "str", args: [], view: true }
+    let mut message: i64 = -1
+    let mut index = 0
+    for option in config {
+        let name = world.words.resolve(option.name).clone()
+        let given = host.expr(state, option.value, span)
+        if name != "message" {
+            state.an_assert_of_another_shape(f"`assert` has no option called `{name}`. Its only option is `message:`.", span)
+            index += 1
+            continue
+        }
+        let not_text = is_a_literal_other_than(option.value, "text") || (!given.is_unknown() && !given.fits(owned) && !given.fits(viewed))
+        if not_text {
+            let mut said: String = "An `assert`'s `message:` has to be text, but this is a literal of another type.".clone()
+            if !given.is_unknown() {
+                said = f"An `assert`'s `message:` has to be text, but this is `{given.text()}`."
+            }
+            state.an_assert_of_another_shape(said, span)
+        }
+        message = index
+        index += 1
+    }
+    let mut not_pure: Vec[String] = []
+    if frame.unresolved {
+        not_pure.push("It calls a method the compiler knows nothing about, so it might change something.".clone())
+    }
+    for key in frame.resolved {
+        let resolved = resolve_method(world, key)
+        if resolved != null {
+            let method = resolved ?? return unit
+            let why = check_not_pure_because(method.contract)
+            if why != null {
+                let because = why ?? ""
+                not_pure.push(f"`{key}` {because}")
+            }
+        }
+    }
+    state.a_claim_reaches(world, host, condition, not_pure)
+    if not_pure.len() > 0 {
+        not_pure.push("An `assert` states something that's true. Its condition may not pause, fail, touch the outside world or change a value.".clone())
+        state.findings.push(check_refusal("NK1194", span, "An `assert` condition can't change anything.".clone(), not_pure, "Compute the value first with `let`, then `assert` something about it.".clone()))
+    }
+    let mut left: String? = null
+    let mut right: String? = null
+    match condition {
+        Expr::Binary { op, lhs, rhs, .. } => {
+            if op == BinaryOp::Eq || op == BinaryOp::Ne || op == BinaryOp::Lt || op == BinaryOp::Le || op == BinaryOp::Gt || op == BinaryOp::Ge {
+                left = check_core_shown_operand(world, lhs)
+                right = check_core_shown_operand(world, rhs)
+            }
+        }
+        else => {}
+    }
+    let mut claimed: String = f"assert({written_expression(world.words, condition)}"
+    if message >= 0 {
+        claimed = f"{claimed}; message: {written_expression(world.words, config[message].value)}"
+    }
+    claimed = f"{claimed})"
+    state.facts.claims.insert((span.start as i64, id_of(condition) as i64), FactClaim { held: null, written: claimed, left: left, right: right })
+    return unit
+}

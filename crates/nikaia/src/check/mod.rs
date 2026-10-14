@@ -41,6 +41,7 @@ use crate::fold::Constant;
 use crate::parser::Parsed;
 use nikaia_std::tools::check_arguments;
 use nikaia_std::tools::check_consts::{self, CheckCrossing as Crossing};
+use nikaia_std::tools::check_core_leaves;
 use nikaia_std::tools::check_core_pilot;
 use nikaia_std::tools::check_flow::{
     CheckConstant, CheckFlow, CheckOpenNumber as OpenNumber, CheckUnrolling,
@@ -61,14 +62,13 @@ pub use nikaia_std::tools::check_state::{
     CheckFinding as Finding, CheckLabel as Label, CheckSeverity as Severity,
 };
 use nikaia_std::tools::check_state::{
-    CheckGive as Give, CheckGuarded as Guarded, CheckHanded as Handed, CheckImmutable as Immutable,
-    CheckKind as Kind, CheckLocal as Local, CheckPendingCoalesce as PendingCoalesce,
-    CheckPromises as Promises, CheckRepeats as Repeats, CheckState, CheckWorld, a_body_never_ends,
+    CheckGive as Give, CheckGuarded as Guarded, CheckImmutable as Immutable, CheckKind as Kind,
+    CheckLocal as Local, CheckPendingCoalesce as PendingCoalesce, CheckPromises as Promises,
+    CheckRepeats as Repeats, CheckState, CheckWorld, a_body_never_ends,
 };
 use nikaia_std::tools::check_texts::{self, ends_in_text};
 use nikaia_std::tools::check_widen::{
-    self, an_integer_that_does_not_widen, names_a_path, number_where_no_number_is,
-    views_into_nullable_text,
+    self, an_integer_that_does_not_widen, names_a_path, views_into_nullable_text,
 };
 use nikaia_std::tools::check_with::CheckCopyable as Copyable;
 use nikaia_std::tools::parsed_view::ParsedView;
@@ -1976,162 +1976,9 @@ impl<'a> Checker<'a> {
     /// value is `NK1194`: the rule that keeps a proof possible (D3), and the
     /// reason evaluating it a second time for the failure message is harmless.
     fn an_assert(&mut self, args: &[Expr], config: &[ast::ConfigArg], span: &Span) -> Ty {
-        let unit = Ty::named("()");
-        let [condition] = args else {
-            self.s.an_assert_of_another_shape(
-                format!(
-                    "`assert` claims one condition, and this hands it {}",
-                    args.len()
-                ),
-                span,
-            );
-            for arg in args {
-                self.expr(arg, span);
-            }
-            return unit;
-        };
-        self.s.stored_frames.push(StoredCode::empty());
-        let found = self.expr(condition, span);
-        let frame = self.s.stored_frames.pop().unwrap_or_else(StoredCode::empty);
-        let at = self.span_at(condition, *span);
-        self.expect_bool(&found, &at, "An `assert` checks a `bool`.");
-        // A number's type is settled below, so the check above cannot see
-        // `assert(5)`; the literal is its own answer.
-        if is_a_literal_other_than(condition, "bool") {
-            self.s.an_assert_of_another_shape(
-                "An `assert` checks a `bool`, but this is a literal of another type.".to_string(),
-                span,
-            );
-        }
-        let mut message = None;
-        for option in config {
-            let name = self.parsed.text(option.name).to_string();
-            let found = self.expr(&option.value, span);
-            if name != "message" {
-                self.s.an_assert_of_another_shape(
-                    format!(
-                        "`assert` has no option called `{name}`. Its only option is `message:`."
-                    ),
-                    span,
-                );
-                continue;
-            }
-            let not_text = is_a_literal_other_than(&option.value, "text")
-                || (!found.is_unknown()
-                    && !found.fits(&Ty::named("String"))
-                    && !found.fits(&Ty::view("str")));
-            if not_text {
-                self.s.an_assert_of_another_shape(
-                    match found.is_unknown() {
-                        true => "An `assert`'s `message:` has to be text, but this is a \
-                                 literal of another type."
-                            .to_string(),
-                        false => format!(
-                            "An `assert`'s `message:` has to be text, but this is `{found}`."
-                        ),
-                    },
-                    span,
-                );
-            }
-            message = Some(&option.value);
-        }
-
-        let mut not_pure: Vec<String> = Vec::new();
-        if frame.unresolved {
-            not_pure.push(
-                "It calls a method the compiler knows nothing about, so it might change \
-                 something."
-                    .to_string(),
-            );
-        }
-        for key in &frame.resolved {
-            if let Some((_, contract)) = self.method(key)
-                && let Some(why) = not_pure_because(&contract)
-            {
-                not_pure.push(format!("`{key}` {why}"));
-            }
-        }
-        self.a_claim_reaches(condition, &mut not_pure);
-        if !not_pure.is_empty() {
-            self.s.findings.push(Finding {
-                severity: Severity::Error,
-                span: *span,
-                code: "NK1194".to_string(),
-                message: "An `assert` condition can't change anything.".to_string(),
-                notes: not_pure
-                    .into_iter()
-                    .chain(std::iter::once(
-                        "An `assert` states something that's true. Its condition may not pause, \
-                         fail, touch the outside world or change a value."
-                            .to_string(),
-                    ))
-                    .collect(),
-                help: Some(
-                    "Compute the value first with `let`, then `assert` something about it."
-                        .to_string(),
-                ),
-                labels: Vec::new(),
-            });
-        }
-
-        // **What the failure shows** (D2): the operands of a comparison, by
-        // the names they were written with, where their value can be printed.
-        let (left, right) = match condition {
-            Expr::Binary {
-                op:
-                    BinaryOp::Eq
-                    | BinaryOp::Ne
-                    | BinaryOp::Lt
-                    | BinaryOp::Le
-                    | BinaryOp::Gt
-                    | BinaryOp::Ge,
-                lhs,
-                rhs,
-                ..
-            } => (self.shown_operand(lhs), self.shown_operand(rhs)),
-            _ => (None, None),
-        };
-        let mut claimed = format!("{ASSERT}({}", written(self.parsed, condition));
-        if let Some(value) = message {
-            claimed.push_str(&format!("; message: {}", written(self.parsed, value)));
-        }
-        claimed.push(')');
-        self.s.facts.claims.insert(
-            ((span.at() as i64), value_node(condition)),
-            Claim {
-                held: None,
-                written: claimed,
-                left,
-                right,
-            },
-        );
-        unit
-    }
-
-    /// An operand whose value an `assert`'s failure can show: anything but a
-    /// literal, which shows nothing it does not already say. Whether its type
-    /// can be printed is the language below's to answer
-    /// (`nikaia_std::abort::Operand`), because an integer literal's type is
-    /// not settled here.
-    fn shown_operand(&self, operand: &Expr) -> Option<String> {
-        let literal = matches!(
-            operand,
-            Expr::LitInt { .. }
-                | Expr::LitFloat(_, _)
-                | Expr::LitStr { .. }
-                | Expr::LitChar(_, _)
-                | Expr::LitBool(_, _)
-                | Expr::LitNull(_)
-        ) || matches!(operand, Expr::Unary { op: UnaryOp::Neg, expr, .. }
-            if matches!(**expr, Expr::LitInt { .. } | Expr::LitFloat(_, _)));
-        (!literal).then(|| written(self.parsed, operand))
-    }
-
-    /// The free calls and the forms in a claim that are not a read
-    /// ([ADR-269](../../docs/specification/adr/adr-269.md) D3). Methods are
-    /// the frame's; this is what the tree says.
-    fn a_claim_reaches(&mut self, condition: &Expr, not_pure: &mut Vec<String>) {
-        self.nikaia(|state, world, host| state.a_claim_reaches(world, host, condition, not_pure))
+        self.nikaia(|state, world, host| {
+            check_core_leaves::check_core_an_assert(state, world, host, args, config, span)
+        })
     }
 
     fn a_view_compared_with_a_value(
@@ -2753,67 +2600,11 @@ impl<'a> Checker<'a> {
     }
 
     fn a_field_of_a_borrowed_subject(&mut self, value: &Expr, span: &Span, what: &str) {
-        if !self.s.borrowing_self {
-            return;
-        }
-        let Expr::Field { base, name, .. } = value else {
-            return;
-        };
-        let Expr::Variable(subject, _) = base.as_ref() else {
-            return;
-        };
-        if self.parsed.text(*subject) != "self" {
-            return;
-        }
-        let field = self.parsed.text(*name).to_string();
-        let ty = self.expr(value, span);
-        if ty.is_unknown() || copies(&ty) {
-            return;
-        }
-        self.s.findings.push(Finding {
-            severity: Severity::Error,
-            span: *span,
-            code: "NK1131".to_string(),
-            message: format!(
-                "You can't give away `self.{field}` here: this method only borrows `self`."
-            ),
-            notes: vec![format!(
-                "`ref self` borrows the value, and `{field}` is a `{}`. Giving it away \
-                 would take a piece out of something this method doesn't own.",
-                ty.text()
-            )],
-            // **[ADR-083](../../docs/specification/adr/adr-083.md) D2's two ways
-            // out — and, where this is a `return`, the third that is now real.**
-            //
-            // The third stood here once and could not be taken: it said *declare
-            // the result `&str` and write `return &self.field`*, and `&str`
-            // stopped being a spelling at
-            // [ADR-184](../../docs/specification/adr/adr-184.md) D4 while a `&` a
-            // program writes is `NK1137` since
-            // [ADR-094](../../docs/specification/adr/adr-094.md) D1. What it was
-            // reaching for is built now: **declaring the result a view is
-            // enough**, and the `&` is the compiler's
-            // ([`Checked::lent_returns`], D1's third position). So the sentence
-            // is back, with the half the author writes and without the half the
-            // author cannot.
-            //
-            // **Only where the value is handed back.** A field *bound* to a name
-            // or *passed* to a call is not a result, so a view of it has nowhere
-            // declared to point — the two ways out are the whole answer there.
-            help: Some(match what {
-                "handed back" => format!(
-                    "Declare the result `ref {}` to return a view of it, write \
-                     `self.{field}.clone()` for a copy, or take `self` instead of \
-                     `ref self` if the method is meant to use up its value.",
-                    ty.text()
-                ),
-                _ => format!(
-                    "Write `self.{field}.clone()` for a copy, or take `self` instead of \
-                     `ref self` if the method is meant to use up its value."
-                ),
-            }),
-            labels: Vec::new(),
-        });
+        self.nikaia(|state, world, host| {
+            check_core_leaves::check_core_a_field_of_a_borrowed_subject(
+                state, world, host, value, span, what,
+            )
+        })
     }
 
     /// **`NK1131` for a place that is lent here and is not `self`**
@@ -2828,44 +2619,11 @@ impl<'a> Checker<'a> {
     /// **And not where the function declares a view**, which is what a field of
     /// a lent place is the answer to (D1's third position).
     fn a_field_of_a_lent_place_handed_back(&mut self, value: &Expr, span: &Span) {
-        if self.s.expected.as_ref().is_some_and(Ty::is_a_view) {
-            return;
-        }
-        let Expr::Field { .. } = value else {
-            return;
-        };
-        let Some(path) = self.s.place_path(self.world, value) else {
-            return;
-        };
-        let Some((root, _)) = path.split_once('.') else {
-            return;
-        };
-        if root == "self" || !self.s.lent_here(root) {
-            return;
-        }
-        let ty = self.expr(value, span);
-        if ty.is_unknown() || copies(&ty) {
-            return;
-        }
-        let root = root.to_string();
-        self.s.findings.push(Finding {
-            severity: Severity::Error,
-            span: *span,
-            code: "NK1131".to_string(),
-            message: format!("You can't give away `{path}` here: `{root}` is only borrowed."),
-            notes: vec![format!(
-                "`{root}` belongs to whoever lent it (a `ref` parameter, a `for` over a list, \
-                 a `let` over a place), and `{path}` is a `{}`. Giving it away would take a \
-                 piece out of something this function doesn't own.",
-                ty.text()
-            )],
-            help: Some(format!(
-                "Declare the result `ref {}` to return a view of it, or write `{path}.clone()` \
-                 for a copy.",
-                ty.text()
-            )),
-            labels: Vec::new(),
-        });
+        self.nikaia(|state, world, host| {
+            check_core_leaves::check_core_a_field_of_a_lent_place_handed_back(
+                state, world, host, value, span,
+            )
+        })
     }
 
     /// **A `mut` parameter given away whole** (issue #161, Part I
@@ -8283,88 +8041,9 @@ impl<'a> Checker<'a> {
     /// business - `Render` decides for a template and `Display` for a string -
     /// and what the checker is here for is everything *inside* it.
     fn holes(&mut self, literal: &Expr, span: &Span) {
-        // **A template's `<for>` declares a name**, and the holes inside it use
-        // it: `<for r in :rows>{r.name}</for>` (ADR-017). That is the fifth
-        // thing that counts as declaring one, after the four
-        // `nothing_declares_it` lists - and the one a reader of a hole cannot
-        // see, because the binding is in the markup around it.
-        //
-        // Measured: widening `NK1117` to a name in an expression refused
-        // `examples/escaping/src/main.nika` for its `{r.shade}` until this frame existed.
-        //
-        // What each of an f-string's holes says after its `:`, beside the holes
-        // that parse - the ones the walk below is handed, in the same order.
-        let specs: Vec<Option<String>> = match literal {
-            // As the grammar parsed them (ADR-309 D6): every hole parses.
-            Expr::LitInterpolated { parts, .. } => parts
-                .iter()
-                .filter_map(|part| match part {
-                    crate::ast::FPart::Hole { spec, .. } => Some(spec.clone()),
-                    crate::ast::FPart::Text(_) => None,
-                })
-                .collect(),
-            _ => Vec::new(),
-        };
-        // **An f-string's hole is read where it stands in the tree**, unless
-        // the tier pass wraps something inside it: what is recorded against a
-        // node - an unsigned literal's suffix, an index into a list - is keyed
-        // by its address ([`value_node`]), and a copy made here and another
-        // made by the emitter met only where the allocator happened to hand
-        // back the same address (found moving `sharing`'s walk into Nikaia,
-        // #125: `double(3000000000)` in a hole lost its `u32`).
-        let walked: Vec<(std::borrow::Cow<'_, Expr>, LoopNames)> = match literal {
-            Expr::LitInterpolated { parts, .. } => crate::emit::interpolated_holes(parts)
-                .into_iter()
-                .map(|(at, hole)| (crate::emit::hole_as_read(self.parsed, at, hole), Vec::new()))
-                .collect(),
-            _ => crate::emit::literal_expressions_bound(self.parsed, literal)
-                .into_iter()
-                .map(|(hole, bound)| (std::borrow::Cow::Owned(hole), bound))
-                .collect(),
-        };
-        let mut names: Vec<bool> = Vec::new();
-        // **What each collection a `<for>` walks came to** (#524): it is a hole
-        // of its own, walked before the body that binds its element, so the
-        // name is a view of that element, as a `for` over a list binds it.
-        let mut collections: BTreeMap<String, Ty> = BTreeMap::new();
-        for (index, (hole, bound)) in walked.into_iter().enumerate() {
-            let hole: &Expr = &hole;
-            let frame: Vec<Local> = bound
-                .into_iter()
-                .map(|(name, collection)| {
-                    let element = match collections.get(collection.trim()) {
-                        Some(Ty::Named { name, args, .. })
-                            if matches!(name.as_str(), "Vec" | "Array") && args.len() == 1 =>
-                        {
-                            view_of(&args[0])
-                        }
-                        _ => Ty::Unknown,
-                    };
-                    self.local_free(name, element)
-                })
-                .collect();
-            self.s.scope.push(frame);
-            let held = self.expr(hole, span);
-            if let Expr::Variable(name, _) = hole {
-                collections.insert(self.parsed.text(*name).to_string(), held.clone());
-            }
-            // **A hole is formatted by reference** (ADR-279 D5): a `??` that
-            // is the hole lends its left side, as a print call's argument does.
-            if matches!(literal, Expr::LitInterpolated { .. }) {
-                self.a_pending_coalesce_is_lent(hole);
-                self.s.a_maybe_in_a_hole(&held, span);
-            }
-            self.s.scope.pop();
-            if let Some(spec) = specs.get(index) {
-                self.a_collection_in_a_hole(hole, &held, spec.as_deref(), span);
-            }
-            names.push(matches!(&held, Ty::Named { name, .. } if name == "fs::Path"));
-        }
-        // **An `f"…"` with a file's name in it is joined in the platform's
-        // encoding** (ADR-319 D4), so a name that is not text keeps its bytes.
-        if matches!(literal, Expr::LitInterpolated { .. }) && names.contains(&true) {
-            self.s.facts.path_holes.insert(value_node(literal), names);
-        }
+        self.nikaia(|state, world, host| {
+            check_core_leaves::check_core_holes(state, world, host, literal, span)
+        })
     }
 
     /// **Whether a file's name is made from text** (ADR-319 D5), followed as
@@ -8383,12 +8062,6 @@ impl<'a> Checker<'a> {
     /// with `to_text()` or `display()`.
     fn a_name_in_text(&mut self, want: &Ty, value: Option<&Expr>, span: &Span) -> bool {
         self.s.a_name_in_text(self.world, want, value, span)
-    }
-
-    /// `NK1201` (`tools/check_exprs.nika`).
-    fn a_collection_in_a_hole(&mut self, hole: &Expr, held: &Ty, spec: Option<&str>, span: &Span) {
-        self.s
-            .a_collection_in_a_hole(self.world, hole, held, spec, span);
     }
 
     /// `f(a, b)`, `Stats(first)`, `io::read_to_string()`, `write(p, d; append: true)`.
@@ -10106,26 +9779,11 @@ impl<'a> Checker<'a> {
     /// One entry for every position that is a use, so a position cannot ask
     /// one of the two questions and forget the other.
     fn literal_by_use(&mut self, found: &Ty, want: &Ty, value: &Expr, span: &Span) -> Option<Ty> {
-        self.a_kept_lambda(want, value, span);
-        self.array_literal(found, want, value, span)
-            .or_else(|| self.text_literal(want, value, true))
-            .or_else(|| self.tuple_literal(found, want, value))
-            .or_else(|| self.list_of_tuple_literals(found, want, value))
-            .or_else(|| self.collect_by_use(found, want, value))
-            .or_else(|| number_where_no_number_is(want, value))
-    }
-
-    /// A list of tuple literals where a list of tuples with text is wanted
-    /// (`tools/check_texts.nika`).
-    fn list_of_tuple_literals(&mut self, found: &Ty, want: &Ty, value: &Expr) -> Option<Ty> {
-        self.s
-            .list_of_tuple_literals(self.world, found, want, value)
-    }
-
-    /// A `collect` that builds what its position asks
-    /// (`tools/check_numbers2.nika`).
-    fn collect_by_use(&mut self, found: &Ty, want: &Ty, value: &Expr) -> Option<Ty> {
-        self.s.collect_by_use(self.world, found, want, value)
+        self.nikaia(|state, world, host| {
+            check_core_leaves::check_core_literal_by_use(
+                state, world, host, found, want, value, span,
+            )
+        })
     }
 
     /// **A hull a kept lambda captures, it captures a handle of** (ADR-230
@@ -10150,69 +9808,9 @@ impl<'a> Checker<'a> {
     /// **A lambda where a function value is kept** is one shared closure
     /// below, and one that may pause hands back a boxed future.
     fn a_kept_lambda(&mut self, want: &Ty, value: &Expr, span: &Span) {
-        let want = match want {
-            Ty::Nullable(inner) => inner.as_ref(),
-            other => other,
-        };
-        // **An element of a list is kept by the list** (Part I 5.3): `let fs:
-        // Vec[fn(i64) -> i64] = [fn(x) { x + 1 }]` holds each lambda as the
-        // shared closure a field holds, and a bare closure among them was a
-        // type of its own below.
-        if let (Ty::Named { name, args, .. }, Expr::ListLit { items, .. }) = (want, value)
-            && matches!(name.as_str(), "Vec" | "List" | ty::ARRAY)
-            && let Some(element) = args.first()
-        {
-            for item in items {
-                self.a_kept_lambda(element, item, span);
-            }
-            return;
-        }
-        if let (
-            Ty::Fn {
-                is_sync,
-                can_throw: throws,
-                ..
-            },
-            Expr::Closure { .. },
-        ) = (want, value)
-        {
-            self.s
-                .facts
-                .kept_lambdas
-                .insert(value_node(value), (!is_sync, *throws));
-            self.a_lambdas_text_is_its_own(want, value);
-            self.a_kept_lambdas_hulls(value);
-            self.a_kept_lambda_takes_these(value, !is_sync, span);
-        }
-        // **A function of this program, named**, is the closure that calls it:
-        // the call is typed here so that it is lowered as a written one is.
-        if let (
-            Ty::Fn {
-                params,
-                is_sync,
-                can_throw: throws,
-                ..
-            },
-            Expr::Variable(name, _),
-        ) = (want, value)
-        {
-            let named = self.parsed.text(*name).to_string();
-            if self.s.lookup(&named).is_none() && self.world.own.functions.contains_key(&named) {
-                self.s.facts.kept_functions.insert(
-                    value_node(value),
-                    (!is_sync, *throws, (params.len() as i64)),
-                );
-                let (names, call) = kept_function_call(self.parsed, *name, params.len());
-                let frame = names
-                    .iter()
-                    .zip(params)
-                    .map(|(n, ty)| self.local_free(self.parsed.text(*n).to_string(), ty.clone()))
-                    .collect();
-                self.s.scope.push(frame);
-                self.expr(&call, span);
-                self.s.scope.pop();
-            }
-        }
+        self.nikaia(|state, world, host| {
+            check_core_leaves::check_core_a_kept_lambda(state, world, host, want, value, span)
+        })
     }
 
     /// **A lambda's text literal is built where its type keeps text**: the
@@ -10997,57 +10595,11 @@ impl<'a> Checker<'a> {
         promised: Promises,
         span: &Span,
     ) -> (Ty, bool) {
-        let frame = params
-            .iter()
-            .enumerate()
-            .map(|(at, p)| {
-                let local = self.lambda_parameter(
-                    *p,
-                    mutable,
-                    given.get(at).cloned().unwrap_or(Ty::Unknown),
-                    span,
-                );
-                if local.ty.is_unknown() {
-                    self.s.flow.unknown_bound.insert(local.id as usize as i64);
-                }
-                local
-            })
-            .collect();
-
-        let depth = self.s.scope.len() as i64;
-        self.s.repeats.push(Repeats::a_lambda(depth));
-        self.s.scope.push(frame);
-        // The other door into a lambda's body, and it needs the same boundary
-        // as the one in `expr`: which of the two a lambda arrives through is
-        // whether the callee's signature typed its parameters, and that has
-        // nothing to do with what a `break` in it may reach.
-        let saved = self.enter_boundary("lambda");
-        self.s.handed_over = Some(Handed {
-            pauses: false,
-            fails: false,
-            caught: false,
-            promised,
-        });
-        let tail = self.block(body);
-        let seen = self.s.handed_over.take();
-        self.leave_boundary(saved);
-        self.s.scope.pop();
-        self.s.repeats.pop();
-        let paused = seen.as_ref().is_some_and(|seen| seen.pauses);
-        if let Some(seen) = seen {
-            self.s
-                .a_handler_that_does_more_than_the_type_allows(&promised, &seen, span);
-        }
-        // **What its body comes to** ([ADR-293](../../docs/specification/adr/adr-293.md)
-        // D5), which is not a claim about the lambda's type but a fact about a
-        // block this checker has just walked - the same one `spawn` reads for
-        // a task. ADR-288 D13 was about *writing* a lambda's result down, which
-        // nothing does; a `map` still has to know what its elements are.
-        //
-        // **And whether it paused** ([ADR-233](../../docs/specification/adr/adr-233.md)
-        // D1): a `std` entry that takes the lambda is lowered to its pausing
-        // counterpart where it did.
-        (tail, paused)
+        self.nikaia(|state, world, host| {
+            check_core_leaves::check_core_lambda(
+                state, world, host, params, mutable, body, given, &promised, span,
+            )
+        })
     }
 
     /// Walk something the language below makes **a function of its own**.
@@ -11742,88 +11294,9 @@ impl<'a> Checker<'a> {
     /// and the expression are the same `return`, so they ask the same
     /// questions in the same order rather than in two places that drift.
     fn returns(&mut self, value: Option<&Expr>, span: &Span, in_an_expression: bool) {
-        // **The `&` at a `return`** ([ADR-094](../../docs/specification/adr/adr-094.md)
-        // D1's third position), asked before the refusal it takes the place of:
-        // a place inside a borrowed subject, handed back where the function
-        // declares a view, is a view *of* the subject and not a move out of it.
-        let lending =
-            value.is_some_and(|value| self.s.hands_back_a_view_of_the_subject(self.world, value));
-        if lending {
-            self.s.facts.lent_returns.insert(span.at() as i64);
-        }
-        // **And a `ref` written there is the compiler's line said twice**
-        // (#96, ADR-094 D4): `return ref row.name` where `return row.name`
-        // already lends.
-        if let Some(
-            written @ Expr::Unary {
-                op: crate::ast::UnaryOp::Ref,
-                expr: inner,
-                ..
-            },
-        ) = value
-            && self.s.hands_back_a_view_of_the_subject(self.world, inner)
-        {
-            self.s.the_caller_writes_no_reference(
-                written,
-                span,
-                "a place inside what this function borrows is handed back as a view of it",
-            );
-        }
-        if let Some(value) = value
-            && !lending
-        {
-            self.a_field_of_a_borrowed_subject(value, span, "handed back");
-            self.a_field_of_a_lent_place_handed_back(value, span);
-            self.a_mut_parameter_given_away(value, span, "handed back");
-        }
-        if let Some(Expr::Closure { .. }) = value {
-            self.s.flow.lambda_expected = self.s.expected.clone();
-        }
-        let found = match value {
-            Some(value) => self.expr(value, span),
-            None => Ty::Tuple(Vec::new()),
-        };
-        self.s.flow.lambda_expected = None;
-        let Some(expected) = self.s.expected.clone() else {
-            return;
-        };
-        // The line hands back the **view**, so that is what answers to the
-        // declared type. `view_of` and not a `&` pasted on the front, for the
-        // reason the argument position has it: a view of a `String` is a `ref
-        // String` and the one rewrite Part I 6.5 makes.
-        let found = match lending {
-            true => view_of(&found),
-            false => found,
-        };
-        let mut found = found;
-        if let Some(value) = value {
-            self.constant_fits(value, Some(&expected), span);
-            match in_an_expression {
-                false => self.wraps_into_nullable(&found, &expected, value, span),
-                true => {
-                    if let Some(how) = self.widened_slot(&found, &expected, Some(value), span) {
-                        self.s.facts.wrapped.insert(value_node(value), how);
-                    }
-                }
-            }
-            // **The declared result is a use** (ADR-152 D4).
-            found = self
-                .literal_by_use(&found, &expected, value, span)
-                .unwrap_or(found);
-        }
-        self.expect_kept(
-            &found,
-            &expected,
-            value,
-            "the function returns it, and the caller keeps it after the call ends",
-            *span,
-            "returns",
-            |found, want| {
-                format!(
-                    "You're returning `{found}`, but the function is declared to return `{want}`."
-                )
-            },
-        );
+        self.nikaia(|state, world, host| {
+            check_core_leaves::check_core_returns(state, world, host, value, span, in_an_expression)
+        })
     }
 
     /// `NK1132`: a `break` or a `continue` with no loop to act on.
@@ -12297,23 +11770,8 @@ pub fn claims_report(
     nikaia_std::tools::check_facts::check_claims_report(&checked.facts.claims, source, path)
 }
 
-/// Whether an expression is a literal of a kind other than `kind` (`"bool"`
-/// or `"text"`): the one answer a literal whose type is settled below gives
-/// here.
-fn is_a_literal_other_than(expr: &Expr, kind: &str) -> bool {
-    nikaia_std::tools::check_types::is_a_literal_other_than(expr, kind)
-}
-
 /// The prelude's claim ([ADR-269](../../docs/specification/adr/adr-269.md) D2).
 pub const ASSERT: &str = "assert";
-
-/// Why a call cannot stand in an `assert`'s condition, or nothing where it can
-/// ([ADR-269](../../docs/specification/adr/adr-269.md) D3): it may pause, may
-/// fail, touches something or changes a value. A `touches` nobody wrote is not
-/// an answer, and counts as touching.
-fn not_pure_because(contract: &FnContract) -> Option<String> {
-    nikaia_std::tools::check_walks::check_not_pure_because(contract)
-}
 
 /// In Nikaia (`tools/written.nika`, ADR-294, #125).
 pub fn written(parsed: &Parsed, expr: &Expr) -> String {
@@ -12331,10 +11789,6 @@ fn is_number(name: &str) -> bool {
 fn articles(text: &str) -> String {
     nikaia_std::tools::check_words::articles(text)
 }
-
-/// What a template's `<for>` binds around a hole: each name beside the
-/// collection it walks (#524).
-type LoopNames = Vec<(String, String)>;
 
 fn plural(n: usize, what: &str) -> String {
     nikaia_std::tools::check_words::counted(n as i64, what)
@@ -12386,11 +11840,6 @@ fn expected_arguments(contract: &FnContract) -> Vec<Ty> {
 /// **Whether two values of this type may be compared** (ADR-204 D1):
 /// `tools/check_compare.nika`.
 use nikaia_std::tools::check_compare::CheckComparable as Comparable;
-
-/// is one this says nothing about only when it is also unknown.
-fn copies(ty: &Ty) -> bool {
-    nikaia_std::tools::check_types::copies_plainly(ty)
-}
 
 /// How a member that may be boxed is named, the same in the checker and the
 /// emitter ([ADR-246](../../docs/specification/adr/adr-246.md)): a struct's

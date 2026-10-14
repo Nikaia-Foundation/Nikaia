@@ -256,6 +256,21 @@ impl CheckHost for Host<'_> {
         super::written_by(self.parsed, value)
     }
 
+    fn holes_read(&self, literal: &Expr) -> Vec<(Expr, Vec<(String, String)>)> {
+        match literal {
+            Expr::LitInterpolated { parts, .. } => crate::emit::interpolated_holes(parts)
+                .into_iter()
+                .map(|(at, hole)| {
+                    (
+                        crate::emit::hole_as_read(self.parsed, at, hole).into_owned(),
+                        Vec::new(),
+                    )
+                })
+                .collect(),
+            _ => crate::emit::literal_expressions_bound(self.parsed, literal),
+        }
+    }
+
     fn newly_throws(&self, key: &str) -> Option<Vec<String>> {
         self.newly.throws.get(key).cloned()
     }

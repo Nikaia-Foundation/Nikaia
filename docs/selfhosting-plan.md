@@ -227,8 +227,9 @@ emit.
   * U-c0:
     `fn expr(ref self, mut state: CheckState, node: ref Expr, span: ref Span) -> Ty sync`
     and `fn block(ref self, mut state: CheckState, block: ref Block) -> Ty sync`.
-  * U-c1: `hole_wraps(at: u32) -> Vec[(i64, Symbol)]?`, for `holes`, in place
-    of `emit::hole_as_read` together with the existing `wrap_hole`.
+  * U-c1 (built): `holes_read(literal) -> Vec[(Expr, Vec[(String, String)])]`,
+    for `holes`: an `f"…"`'s holes as `emit::hole_as_read` reads them, and a
+    template's with the names its `<for>` binds (`literal_expressions_bound`).
   * C-5f: `newly_throws(key) -> Vec[String]?`.
 * **`host::Host` implements `expr` and `block` as `unreachable!`:** code below
   the core never calls a hub. U-c7 deletes `block` and U-c11 deletes `expr`.
@@ -294,7 +295,7 @@ gives what each core unit calls.
 | Unit | File (`tools/`) | What moves | Lines |
 | :--- | :--- | :--- | ---: |
 | U-c0 | `check_core_pilot.nika` | Scaffolding: `world` as a reference, the boxed baton, `core.rs`, the hubs `expr` and `block`, `scripts/c6/`, the oracle, `check_deep_nesting.rs`, the callgrind baseline. Pilot: `grammar_call`, `a_compound_write_to_a_map_slot`, `an_instantiation`, `a_mut_parameter_given_away` (needs `specialised` and `written`). U-c0 may come before C-5e. | 115 |
-| U-c1 | `check_core_leaves.nika` | `a_field_of_a_borrowed_subject`, `a_field_of_a_lent_place_handed_back`, `a_kept_lambda`, `literal_by_use`, `holes`, `lambda`, `returns`, `an_assert` | 537 |
+| U-c1 (done, 0.0.907) | `check_core_leaves.nika` | `a_field_of_a_borrowed_subject`, `a_field_of_a_lent_place_handed_back`, `a_kept_lambda`, `literal_by_use`, `holes`, `lambda`, `returns`, `an_assert` | 537 |
 | U-c2 | `check_core_comptime.nika` | `comptime_binding`, `a_block_over_a_grammar` | 429 |
 | U-c3 | `check_core_args.nika` | `arguments_given`, `locks`, `list_literal`, `a_called_field` | 524 |
 | U-c4 | `check_core_call.nika` | `call`; the arms `Call`, `ListLit`, `Tuple` | 499 |

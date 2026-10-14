@@ -318,3 +318,11 @@ rustc refuses the lowering (*this pattern has 1 field, but the corresponding
 tuple variant has 2 fields*). The checker should name the arity itself (a
 `NK` refusal), the more so while D27 leaves no rest pattern. Found with rs2nika
 (#579) while trying `(_)` for `(..)`.
+
+## D34 (new). A by-value enum parameter, and a `match` arm that is a call returning a value: **open**
+
+`fn f(op: BinaryOp)` lowers its parameter as `&BinaryOp`, while a call with an
+`op` bound by a `match` pattern writes `f(*op)`: E0308. And a statement `match`
+whose arm is `map.insert(k, v)` (an `Option`) lowers the arm without `;`, so
+the arms disagree with `_ => { }`. Workaround: the test inline, and a block
+arm. Met in U-c1 (`check_core_leaves.nika`).

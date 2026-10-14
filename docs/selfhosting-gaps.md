@@ -188,6 +188,7 @@ checker refusal (`NK1125`) if `!= null` is not meant to narrow.
 | `several_errors` -> `Option<Vec<Ty>>` with `.filter(\|m\| !m.is_empty())` | Rust callers expect an `Option` of a slice |
 | `payload_of` builds `parsed_view_of(parsed)` | `ParsedView` is the bridge to the Rust AST |
 | `an_or_a -> &'static str` became `String` | no `'static` in Nikaia; the adapter converts |
+| U-c1 `holes`: `hole_as_read` (a `Cow` over `parsed.hole_wraps`) and `literal_expressions_bound` | one host query `holes_read`, not the plan's `hole_wraps` + `wrap_hole`: a template's `<for>` names need the parsed `Parsed` too |
 
 ## STYLE (9)
 
@@ -202,6 +203,13 @@ checker refusal (`NK1125`) if `!= null` is not meant to narrow.
 | `count(\|h\| matches!(h, Held::Proved))` x5 | counters by `how.starts_with(..)` | no; a typed lambda works (`q17b`) |
 | `from[1..]` byte slicing with `find` | the whole text as `Vec[scalar]` | partly: follows from no `split_at` |
 | `Item::Enum { .. } if text == ty =>` | `if` inside the arm | no (`q06`) |
+| U-c1 `Expr::Closure { .. } => closure = true,` | a block arm | yes: an assignment is not an arm expression |
+| U-c1 `match hole { V(n, _) => seen.insert(..), _ => {} }` | the insert in a block arm | no: the arm lowered without `;`, `Option` against `()` (lowering-defects D34) |
+| U-c1 `fn compares(op: BinaryOp)` called with a bound `op` | the comparison inline | no: param lowered `&BinaryOp`, call `*op` (lowering-defects D34) |
+| U-c1 `spec.clone()` on a `String?` from a pattern | `spec?.clone()` | yes (NK1125) |
+| U-c1 `.or_else` chain of five literal kinds | `if x != null { return x }` per kind | no, but no lazy `??` chain exists |
+| U-c1 `let [condition] = args else {..}` | `if args.len() != 1` then `args[0]` | no slice patterns |
+| U-c1 `message = Some(&option.value)` | the index of the option | yes: no `ref Expr?` local from a loop |
 
 ## Method
 

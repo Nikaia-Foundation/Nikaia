@@ -12497,6 +12497,396 @@ impl CheckState {
 }
 
 
+// --- check_core_leaves.nika ---
+
+fn check_core_field_of_self(world: &CheckWorld<'_>, value: &Expr) -> Option<String> {
+    match value {
+        Expr::Field { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; match base {
+            Expr::Variable(subject, _) => { let subject = *subject; if world.words.resolve(subject) == "self" { Some(world.words.resolve(name).to_owned()) } else { None } },
+            _ => None,
+        } },
+        _ => None,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_core_a_field_of_a_borrowed_subject<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, value: &Expr, span: &Span, what: &str) {
+    if !state.borrowing_self { return; }
+    let field = match check_core_field_of_self(world, value) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let ty = host.expr(state, value, span);
+    if ty.is_unknown() || copies_plainly(&ty) { return; }
+    let notes: Vec<String> = vec![format!("`ref self` borrows the value, and `{}` is a `{}`. Giving it away would take a piece out of something this method doesn't own.", field, ty.text())];
+    let mut help: String = format!("Write `self.{}.clone()` for a copy, or take `self` instead of `ref self` if the method is meant to use up its value.", field);
+    if what == "handed back" { help = format!("Declare the result `ref {}` to return a view of it, write `self.{}.clone()` for a copy, or take `self` instead of `ref self` if the method is meant to use up its value.", ty.text(), field); }
+    state.findings.push(check_refusal("NK1131", span, format!("You can't give away `self.{}` here: this method only borrows `self`.", field), notes, Some(help)));
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_core_a_field_of_a_lent_place_handed_back<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, value: &Expr, span: &Span) {
+    let expected: Option<Ty> = match state.expected.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    };
+    if expected.is_some() {
+        let declared = match expected { Some(__nikaia_value) => __nikaia_value, None => return };
+        if declared.is_a_view() { return; }
+    }
+    match value {
+        Expr::Field { .. } => { },
+        _ => return,
+    }
+    let path = match state.place_path(world, value) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let at = match nikaia_std::search::find(&path, &".", 0) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let root: String = nikaia_std::index::get(&path, nikaia_std::index::at(0..at)).to_owned();
+    if root == "self" || !state.lent_here(&root) { return; }
+    let ty = host.expr(state, value, span);
+    if ty.is_unknown() || copies_plainly(&ty) { return; }
+    let notes: Vec<String> = vec![format!("`{}` belongs to whoever lent it (a `ref` parameter, a `for` over a list, a `let` over a place), and `{}` is a `{}`. Giving it away would take a piece out of something this function doesn't own.", root, path, ty.text())];
+    let help: String = format!("Declare the result `ref {}` to return a view of it, or write `{}.clone()` for a copy.", ty.text(), path);
+    state.findings.push(check_refusal("NK1131", span, format!("You can't give away `{}` here: `{}` is only borrowed.", path, root), notes, Some(help)));
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_core_a_kept_lambda<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, want: &Ty, value: &Expr, span: &Span) {
+    let inner: Ty = match want {
+        Ty::Nullable(held) => { let held = nikaia_std::boxed::open(held); held.clone() },
+        _ => want.clone(),
+    };
+    match inner {
+        Ty::Named { ref name, ref args, .. } => {
+            if name == "Vec" || name == "List" || name == ARRAY {
+                match value {
+                    Expr::ListLit { items, .. } => {
+                        if !args.is_empty() {
+                            for item in items.iter() { check_core_a_kept_lambda(state, world, host, nikaia_std::index::get(&args, 0), item, span); }
+                            return;
+                        }
+                    },
+                    _ => { },
+                }
+            }
+        },
+        Ty::Fn { ref params, is_sync, can_throw, .. } => {
+            match value {
+                Expr::Closure { .. } => {
+                    state.facts.kept_lambdas.insert(id_of(value) as i64, (!is_sync, can_throw));
+                    state.a_lambdas_text_is_its_own(world, &inner, value);
+                    state.a_kept_lambdas_hulls(world, value);
+                    state.a_kept_lambda_takes_these(world, value, !is_sync, span);
+                },
+                Expr::Variable(name, _) => {
+                    let name = *name;
+                    let named = world.words.resolve(name).to_owned();
+                    if state.lookup(&named).is_none() && world.own.functions.contains_key(&named) {
+                        state.facts.kept_functions.insert(id_of(value) as i64, (!is_sync, can_throw, params.len() as i64));
+                        let (names, call) = host.kept_call(name, params.len() as i64);
+                        let mut frame: Vec<CheckLocal> = vec![];
+                        let mut at: i64 = 0;
+                        for n in names.iter() {
+                            if ((at) as usize) < params.len() {
+                                let id = state.a_new_binding();
+                                frame.push(CheckLocal::free(world.words.resolve(*n).to_owned(), (*nikaia_std::index::get(&params, (at) as usize)).clone(), id));
+                            }
+                            at += 1;
+                        }
+                        state.scope.push(frame);
+                        host.expr(state, &call, span);
+                        state.scope.pop();
+                    }
+                },
+                _ => { },
+            }
+        },
+        _ => { },
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_core_literal_by_use<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, found: &Ty, want: &Ty, value: &Expr, span: &Span) -> Option<Ty> {
+    check_core_a_kept_lambda(state, world, host, want, value, span);
+    let array = state.array_literal(found, want, value, span);
+    if array.is_some() { return array; }
+    let text = state.text_literal(world, want, value, true);
+    if text.is_some() { return text; }
+    let tuple = state.tuple_literal(world, found, want, value);
+    if tuple.is_some() { return tuple; }
+    let tuples = state.list_of_tuple_literals(world, found, want, value);
+    if tuples.is_some() { return tuples; }
+    let collected = state.collect_by_use(world, found, want, value);
+    if collected.is_some() { return collected; }
+    number_where_no_number_is(want, value)
+}
+
+fn check_core_is_a_path(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { name, .. } => name == "fs::Path",
+        _ => false,
+    }
+}
+
+fn check_core_element_of(held: Option<&Ty>) -> Ty {
+    let ty = match held { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
+    match ty {
+        Ty::Named { name, args, .. } => if (name == "Vec" || name == "Array") && args.len() == 1 { view_of_type(nikaia_std::index::get(&args, 0)) } else { Ty::Unknown },
+        _ => Ty::Unknown,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_core_holes<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, literal: &Expr, span: &Span) {
+    let mut interpolated = false;
+    let mut specs: Vec<Option<String>> = vec![];
+    match literal {
+        Expr::LitInterpolated { parts, .. } => {
+            interpolated = true;
+            for part in parts.iter() {
+                match part {
+                    FPart::Hole { spec, .. } => specs.push(match spec {
+                        Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+                        None => None,
+                    }),
+                    _ => { },
+                }
+            }
+        },
+        _ => { },
+    }
+    let walked = host.holes_read(literal);
+    let mut names: Vec<bool> = vec![];
+    let mut seen: collections::BTreeMap<String, Ty> = collections::BTreeMap::new();
+    let mut index: i64 = 0;
+    for (hole, bound) in walked.iter() {
+        let mut frame: Vec<CheckLocal> = vec![];
+        for (name, collection) in bound.iter() {
+            let trimmed = collection.trim();
+            let key: String = trimmed.to_owned();
+            let held: Option<Ty> = match *nikaia_std::index::get(&seen, &key) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            };
+            let element = check_core_element_of((held).as_ref());
+            let id = state.a_new_binding();
+            frame.push(CheckLocal::free(name.to_owned(), element, id));
+        }
+        state.scope.push(frame);
+        let held = host.expr(state, hole, span);
+        match hole {
+            Expr::Variable(name, _) => {
+                let name = *name;
+                seen.insert(world.words.resolve(name).to_owned(), held.clone());
+            },
+            _ => { },
+        }
+        if interpolated {
+            state.a_pending_coalesce_is_lent(hole);
+            state.a_maybe_in_a_hole(&held, span);
+        }
+        state.scope.pop();
+        if ((index) as usize) < specs.len() { state.a_collection_in_a_hole(world, hole, &held, (*nikaia_std::index::get(&specs, (index) as usize)).as_deref(), span); }
+        names.push(check_core_is_a_path(&held));
+        index += 1;
+    }
+    if interpolated && names.contains(&true) { state.facts.path_holes.insert(id_of(literal) as i64, names); }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+pub fn check_core_lambda<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, params: &[winnow_grammar::Symbol], mutable: &[winnow_grammar::Symbol], body: &Block, given: &[Ty], promised: &CheckPromises, span: &Span) -> (Ty, bool) {
+    let mut frame: Vec<CheckLocal> = vec![];
+    let mut at: i64 = 0;
+    for p in params.iter() {
+        let mut ty: Ty = Ty::Unknown;
+        if ((at) as usize) < given.len() { ty = (*nikaia_std::index::get(&given, (at) as usize)).clone(); }
+        let local = state.lambda_parameter(world, *p, mutable, ty, span);
+        if local.ty.is_unknown() { state.flow.unknown_bound.insert(local.id); }
+        frame.push(local);
+        at += 1;
+    }
+    let depth = state.scope.len() as i64;
+    state.repeats.push(CheckRepeats::a_lambda(depth));
+    state.scope.push(frame);
+    let saved = state.enter_boundary("lambda");
+    state.handed_over = Some(CheckHanded { pauses: false, fails: false, caught: false, promised: promised.clone() });
+    let tail = host.block(state, body);
+    let seen: Option<CheckHanded> = match state.handed_over.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    };
+    state.handed_over = None;
+    state.leave_boundary(&saved);
+    state.scope.pop();
+    state.repeats.pop();
+    let mut paused = false;
+    if seen.is_some() {
+        let handed = match seen { Some(__nikaia_value) => __nikaia_value, None => return (tail, false) };
+        paused = handed.pauses;
+        state.a_handler_that_does_more_than_the_type_allows(promised, &handed, span);
+    }
+    (tail, paused)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_core_returns<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, value: Option<&Expr>, span: &Span, in_an_expression: bool) {
+    let mut lending = false;
+    let mut closure = false;
+    if value.is_some() {
+        let given = match value { Some(__nikaia_value) => __nikaia_value, None => return };
+        lending = state.hands_back_a_view_of_the_subject(world, given);
+        if lending { state.facts.lent_returns.insert(span.start as i64); }
+        match given {
+            Expr::Unary { op, expr, .. } => {
+                let expr = nikaia_std::boxed::open(expr);
+                if *op == UnaryOp::Ref && state.hands_back_a_view_of_the_subject(world, expr) { state.the_caller_writes_no_reference(given, span, "a place inside what this function borrows is handed back as a view of it"); }
+            },
+            Expr::Closure { .. } => { closure = true; },
+            _ => { },
+        }
+        if !lending {
+            check_core_a_field_of_a_borrowed_subject(state, world, host, given, span, "handed back");
+            check_core_a_field_of_a_lent_place_handed_back(state, world, host, given, span);
+            check_core_a_mut_parameter_given_away(state, world, host, given, span, "handed back");
+        }
+    }
+    if closure {
+        state.flow.lambda_expected = match state.expected.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        };
+    }
+    let mut found: Ty = Ty::Tuple(vec![]);
+    if value.is_some() {
+        let given = match value { Some(__nikaia_value) => __nikaia_value, None => return };
+        found = host.expr(state, given, span);
+    }
+    state.flow.lambda_expected = None;
+    let expected: Ty = match match state.expected.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return };
+    if lending { found = view_of_type(&found); }
+    if value.is_some() {
+        let given = match value { Some(__nikaia_value) => __nikaia_value, None => return };
+        let want: Option<Ty> = Some(expected.clone());
+        state.constant_fits(world, given, (want).as_ref(), span);
+        if in_an_expression {
+            let how = check_widened_slot(state, world, host, &found, &expected, value, span);
+            if how.is_some() {
+                let wrap = match how { Some(__nikaia_value) => __nikaia_value, None => return };
+                state.facts.wrapped.insert(id_of(given) as i64, wrap);
+            }
+        } else {
+            state.a_map_read_kept(world, &found, &expected, given, span);
+            let how = check_widened_slot(state, world, host, &found, &expected, value, span);
+            if how.is_some() {
+                let wrap = match how { Some(__nikaia_value) => __nikaia_value, None => return };
+                state.facts.nullable_sites.insert(span.start as i64, wrap);
+            }
+        }
+        let by_use = check_core_literal_by_use(state, world, host, &found, &expected, given, span);
+        if by_use.is_some() { found = nikaia_std::index::or(by_use, || Ty::Unknown); }
+    }
+    state.expect_kept_asked(world, &found, &expected, value, "the function returns it, and the caller keeps it after the call ends", span, "returns", &|was, wanted| { format!("You're returning `{}`, but the function is declared to return `{}`.", was, wanted) });
+}
+
+fn check_core_a_number_literal(expr: &Expr) -> bool { matches!(expr, Expr::LitInt { .. } | Expr::LitFloat(_, _)) }
+
+fn check_core_shown_operand(world: &CheckWorld<'_>, operand: &Expr) -> Option<String> {
+    let literal: bool = match operand {
+        Expr::LitInt { .. } => true,
+        Expr::LitFloat(_, _) => true,
+        Expr::LitStr { .. } => true,
+        Expr::LitChar(_, _) => true,
+        Expr::LitBool(_, _) => true,
+        Expr::LitNull(_) => true,
+        Expr::Unary { op, expr, .. } => { let expr = nikaia_std::boxed::open(expr); *op == UnaryOp::Neg && check_core_a_number_literal(expr) },
+        _ => false,
+    };
+    if literal { return None; }
+    Some(written_expression(world.words, operand))
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_core_an_assert<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, args: &[Expr], config: &[ConfigArg], span: &Span) -> Ty {
+    let unit = Ty::Named { name: String::from("()"), args: vec![], view: false };
+    if args.len() != 1 {
+        state.an_assert_of_another_shape(format!("`assert` claims one condition, and this hands it {}", args.len() as i64), span);
+        for arg in args.iter() { host.expr(state, arg, span); }
+        return unit;
+    }
+    let condition = nikaia_std::index::get(&args, 0);
+    state.stored_frames.push(CheckStoredCode::empty());
+    let found = host.expr(state, &condition, span);
+    let frame: CheckStoredCode = nikaia_std::index::or(state.stored_frames.pop(), || CheckStoredCode::empty());
+    let at = check_span_at(world, &condition, span);
+    state.expect_bool(&found, &at, "An `assert` checks a `bool`.");
+    if is_a_literal_other_than(&condition, "bool") { state.an_assert_of_another_shape("An `assert` checks a `bool`, but this is a literal of another type.".to_owned(), span); }
+    let owned = Ty::Named { name: String::from("String"), args: vec![], view: false };
+    let viewed = Ty::Named { name: String::from("str"), args: vec![], view: true };
+    let mut message: i64 = -1;
+    let mut index: i64 = 0;
+    for option in config.iter() {
+        let name = world.words.resolve(option.name).to_owned();
+        let given = host.expr(state, &option.value, span);
+        if name != "message" {
+            state.an_assert_of_another_shape(format!("`assert` has no option called `{}`. Its only option is `message:`.", name), span);
+            index += 1;
+            continue;
+        }
+        let not_text = is_a_literal_other_than(&option.value, "text") || !given.is_unknown() && !given.fits(&owned) && !given.fits(&viewed);
+        if not_text {
+            let mut said: String = "An `assert`'s `message:` has to be text, but this is a literal of another type.".to_owned();
+            if !given.is_unknown() { said = format!("An `assert`'s `message:` has to be text, but this is `{}`.", given.text()); }
+            state.an_assert_of_another_shape(said, span);
+        }
+        message = index;
+        index += 1;
+    }
+    let mut not_pure: Vec<String> = vec![];
+    if frame.unresolved { not_pure.push("It calls a method the compiler knows nothing about, so it might change something.".to_owned()); }
+    for key in frame.resolved.iter() {
+        let resolved = resolve_method(world, key);
+        if resolved.is_some() {
+            let method = match resolved { Some(__nikaia_value) => __nikaia_value, None => return unit };
+            let why = check_not_pure_because(&method.contract);
+            if why.is_some() {
+                let because = nikaia_std::index::or(why, || "".into());
+                not_pure.push(format!("`{}` {}", key, because));
+            }
+        }
+    }
+    state.a_claim_reaches(world, host, &condition, &mut not_pure);
+    if !not_pure.is_empty() {
+        not_pure.push("An `assert` states something that's true. Its condition may not pause, fail, touch the outside world or change a value.".to_owned());
+        state.findings.push(check_refusal("NK1194", span, "An `assert` condition can't change anything.".to_owned(), not_pure, Some("Compute the value first with `let`, then `assert` something about it.".to_owned())));
+    }
+    let mut left: Option<String> = None;
+    let mut right: Option<String> = None;
+    match condition {
+        Expr::Binary { op, lhs, rhs, .. } => {
+            let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
+            if *op == BinaryOp::Eq || *op == BinaryOp::Ne || *op == BinaryOp::Lt || *op == BinaryOp::Le || *op == BinaryOp::Gt || *op == BinaryOp::Ge {
+                left = check_core_shown_operand(world, lhs);
+                right = check_core_shown_operand(world, rhs);
+            }
+        },
+        _ => { },
+    }
+    let mut claimed: String = format!("assert({}", written_expression(world.words, &condition));
+    if message >= 0 { claimed = format!("{}; message: {}", claimed, written_expression(world.words, &nikaia_std::index::get(&config, nikaia_std::index::at(message)).value)); }
+    claimed = format!("{})", claimed);
+    state.facts.claims.insert((span.start as i64, id_of(&condition) as i64), FactClaim { held: None, written: claimed, left, right });
+    unit
+}
+
+
 // --- check_core_pilot.nika ---
 
 pub fn check_specialised(function: &str, on: &str) -> String {
@@ -14445,6 +14835,7 @@ pub trait CheckHost {
     fn block(&self, state: &mut CheckState, block: &Block) -> Ty;
     fn written(&self, value: &Expr) -> String;
     fn newly_throws(&self, key: &str) -> Option<Vec<String>>;
+    fn holes_read(&self, literal: &Expr) -> Vec<(Expr, Vec<(String, String)>)>;
 }
 
 fn host_known(local: &CheckLocal) -> Option<BuildValue> {
@@ -51912,6 +52303,10 @@ pub mod check_consts {
 pub mod check_copies {
     #[allow(unused_imports)]
     pub use super::{check_parts_beside};
+}
+pub mod check_core_leaves {
+    #[allow(unused_imports)]
+    pub use super::{check_core_a_field_of_a_borrowed_subject, check_core_a_field_of_a_lent_place_handed_back, check_core_a_kept_lambda, check_core_literal_by_use, check_core_holes, check_core_lambda, check_core_returns, check_core_an_assert};
 }
 pub mod check_core_pilot {
     #[allow(unused_imports)]

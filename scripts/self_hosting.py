@@ -202,6 +202,7 @@ COMPILER_NIKA = {
     "check_copies.nika": "check: which declared types derive Copy, what the types beside are made of (0.0.900)",
     "check_collect.nika": "check: the program's structs, enums and bounds collected before the walk (0.0.900)",
     "check_arm_leaves.nika": "check: the leaves of a choice, arms asked one by one, map keys, handing over (0.0.901)",
+    "check_core_leaves.nika": "check: the leaves of the core: NK1131 fields, kept lambdas, literals by use, holes, lambdas, returns, assert (U-c1) (0.0.907)",
 }
 
 

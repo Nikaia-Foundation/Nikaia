@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.907] — 2026-10-14
+
+**check: the leaves of the core in Nikaia (U-c1, #125, #558)**
+- `a_field_of_a_borrowed_subject`, `a_field_of_a_lent_place_handed_back`, `a_kept_lambda`, `literal_by_use`, `holes`, `lambda`, `returns` and `an_assert` move to `tools/check_core_leaves.nika`; the host answers `holes_read`. Findings and lowered Rust are unchanged (oracle: 143 files, 0 differ).
+
 ## [0.0.906] — 2026-10-14
 
 **task: a program's own fatal types are fatal in tasks; a supervisor hands a fatal error on as supervisor::Handed (#605)**
