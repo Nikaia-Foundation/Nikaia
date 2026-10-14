@@ -12936,7 +12936,7 @@ pub fn check_core_list_literal<H: CheckHost>(state: &mut CheckState, world: &Che
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_args_a_field_called(state: &mut CheckState, current: &str, key: &str) {
+pub fn check_core_args_a_field_called(state: &mut CheckState, current: &str, key: &str) {
     let mut calls: CheckMethodCalls = nikaia_std::index::or(state.methods.remove(current), || CheckMethodCalls::empty());
     calls.fields_called.insert(key.to_owned());
     state.methods.insert(current.to_owned(), calls);
@@ -13131,7 +13131,18 @@ fn check_core_call_kept<H: CheckHost>(state: &mut CheckState, world: &CheckWorld
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         }, || "".into());
-        check_core_args_code_said(state, &current, !is_sync, fails);
+        let key = format!("{}::{}", current, name);
+        if fails && world.own.code_throws.contains_key(&key) {
+            let set = match *nikaia_std::index::get(&world.own.code_throws, &key) { Some(__nikaia_value) => __nikaia_value, None => return gives };
+            let mut contract = FnContract::empty();
+            contract.fails_with = set.to_owned();
+            state.may_fail_here(world, host, &key, &contract, span);
+            check_core_args_a_field_called(state, &current, &key);
+            check_core_args_code_said(state, &current, !is_sync, false);
+        } else if fails && state.stored_code.contains_key(&key) {
+            check_core_args_a_field_called(state, &current, &key);
+            check_core_args_code_said(state, &current, !is_sync, false);
+        } else { check_core_args_code_said(state, &current, !is_sync, fails); }
     }
     gives
 }
@@ -15445,25 +15456,70 @@ pub fn check_core_field<H: CheckHost>(state: &mut CheckState, world: &CheckWorld
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_places_stored<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, value: Option<&Expr>, key: &str) {
+pub fn check_core_places_stored<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, value: Option<&Expr>, key: &str) {
     let mut stored: CheckStoredCode = nikaia_std::index::or(state.stored_frames.pop(), || CheckStoredCode::empty());
     if value.is_none() { stored.unresolved = true; } else {
         let v: &Expr = match value { Some(__nikaia_value) => __nikaia_value, None => return };
-        match v {
-            Expr::Closure { body, .. } => { for called in host.free_calls(body) { stored.free.insert(called); } },
-            Expr::Variable(named, _) => {
-                let named = *named;
-                let written: String = format!("{}", world.words.resolve(named));
-                if state.lookup(&written).is_none() { stored.free.insert(written); } else { stored.unresolved = true; }
-            },
-            _ => { stored.unresolved = true; },
-        }
+        check_core_places_code_into(&state, world, host, v, &mut stored);
     }
     let mut entry: CheckStoredCode = nikaia_std::index::or(state.stored_code.remove(key), || CheckStoredCode::empty());
     for resolved in stored.resolved.iter() { entry.resolved.insert(resolved.to_owned()); }
     entry.unresolved = entry.unresolved || stored.unresolved;
     for free in stored.free.iter() { entry.free.insert(free.to_owned()); }
     state.stored_code.insert(key.to_owned(), entry);
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_core_places_code_into<H: CheckHost>(state: &CheckState, world: &CheckWorld<'_>, host: &H, v: &Expr, stored: &mut CheckStoredCode) {
+    match v {
+        Expr::Closure { body, .. } => { for called in host.free_calls(body) { stored.free.insert(called); } },
+        Expr::Variable(named, _) => {
+            let named = *named;
+            let written: String = format!("{}", world.words.resolve(named));
+            if state.lookup(&written).is_none() { stored.free.insert(written); } else {
+                let current: String = nikaia_std::index::or(match state.current.as_ref() {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                }, || "".into());
+                let key = format!("{}::{}", current, written);
+                if state.stored_code.contains_key(&key) {
+                    let entry: CheckStoredCode = nikaia_std::index::or(match *nikaia_std::index::get(&state.stored_code, &key) {
+                        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                        None => None,
+                    }, || CheckStoredCode::empty());
+                    for resolved in entry.resolved.iter() { stored.resolved.insert(resolved.to_owned()); }
+                    stored.unresolved = stored.unresolved || entry.unresolved;
+                    for free in entry.free.iter() { stored.free.insert(free.to_owned()); }
+                } else { stored.unresolved = true; }
+            }
+        },
+        Expr::ListLit { items, .. } => { for item in items.iter() { check_core_places_code_into(state, world, host, item, stored); } },
+        Expr::Match { arms, .. } => { for arm in arms.iter() { check_core_places_code_into(state, world, host, &arm.body, stored); } },
+        Expr::If { then_branch, else_branch, .. } => {
+            check_core_places_tail_into(state, world, host, then_branch, stored);
+            if else_branch.is_none() { stored.unresolved = true; } else {
+                let other: &Block = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return };
+                check_core_places_tail_into(state, world, host, other, stored);
+            }
+        },
+        _ => { stored.unresolved = true; },
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_places_tail_into<H: CheckHost>(state: &CheckState, world: &CheckWorld<'_>, host: &H, block: &Block, stored: &mut CheckStoredCode) {
+    let n = block.stmts.len() as i64;
+    if n == 0 {
+        stored.unresolved = true;
+        return;
+    }
+    let last = nikaia_std::index::get(&block.stmts, nikaia_std::index::at(n - 1));
+    match last.node {
+        Stmt::Expr(ref e) => { check_core_places_code_into(state, world, host, e, stored); },
+        _ => { stored.unresolved = true; },
+    }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -15977,6 +16033,36 @@ fn check_core_stmt_read_shown(world: &CheckWorld<'_>, value: &Expr) -> String {
     }
 }
 
+fn check_core_stmt_code_given(value: &Expr) -> bool {
+    match value {
+        Expr::Closure { .. } => return true,
+        Expr::Variable(_, _) => return true,
+        Expr::ListLit { .. } => return true,
+        Expr::If { .. } => return true,
+        Expr::Match { .. } => return true,
+        _ => return false,
+    }
+}
+
+pub fn check_core_stmt_holds_code(ty: &Ty) -> bool {
+    match ty {
+        Ty::Fn { .. } => return true,
+        Ty::Named { args, .. } => {
+            for arg in args.iter() { if check_core_stmt_holds_code(arg) { return true; } }
+            return false;
+        },
+        _ => return false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_stmt_place_unseen(state: &mut CheckState, key: &str) {
+    let mut entry: CheckStoredCode = nikaia_std::index::or(state.stored_code.remove(key), || CheckStoredCode::empty());
+    entry.unresolved = true;
+    state.stored_code.insert(key.to_owned(), entry);
+}
+
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
@@ -15990,8 +16076,19 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         let t: &Type = match ty { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_unit() };
         state.flow.lambda_expected = Some(written_ty(world.words, world.here.aliases, t));
     }
+    let code_place = names.len() == 1 && state.current.is_some() && check_core_stmt_code_given(value);
+    if code_place { state.stored_frames.push(CheckStoredCode::empty()); }
     let found = host.expr(state, value, span);
     state.flow.lambda_expected = None;
+    if code_place && !check_core_stmt_holds_code(&found) { state.stored_frames.pop(); } else if code_place {
+        let current: String = nikaia_std::index::or(match state.current.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || "".into());
+        let key = format!("{}::{}", current, world.words.resolve(*nikaia_std::index::get(&names, 0)));
+        check_core_places_stored(state, world, host, Some(value), &key);
+        if mutable { check_core_stmt_place_unseen(state, &key); }
+    }
     let was_read = state.flow.read_a_map;
     state.flow.read_a_map = outer_read;
     let of_a_map = was_read && check_core_stmt_a_map_read(value);
@@ -16411,6 +16508,29 @@ pub fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     state.a_sequence_is_walked(iter, &over, span, world);
     let mut elements = elements_walked(&over, width);
     if !shape.is_empty() { elements = state.nested_pattern_parts(world, elements, shape, bindings.len() as i64, "A `for`", span); }
+    if bindings.len() == 1 && state.current.is_some() && check_core_stmt_holds_code(&over) {
+        match iter {
+            Expr::Variable(named, _) => {
+                let named = *named;
+                let current: String = nikaia_std::index::or(match state.current.as_ref() {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                }, || "".into());
+                let from = format!("{}::{}", current, world.words.resolve(named));
+                let to = format!("{}::{}", current, world.words.resolve(*nikaia_std::index::get(&bindings, 0)));
+                let given: CheckStoredCode = nikaia_std::index::or(match *nikaia_std::index::get(&state.stored_code, &from) {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                }, || CheckStoredCode { resolved: collections::BTreeSet::new(), unresolved: true, free: collections::BTreeSet::new() });
+                let mut entry: CheckStoredCode = nikaia_std::index::or(state.stored_code.remove(&to), || CheckStoredCode::empty());
+                for resolved in given.resolved.iter() { entry.resolved.insert(resolved.to_owned()); }
+                entry.unresolved = entry.unresolved || given.unresolved;
+                for free in given.free.iter() { entry.free.insert(free.to_owned()); }
+                state.stored_code.insert(to, entry);
+            },
+            _ => { },
+        }
+    }
     let a_seq = matches!(over, Ty::Seq { .. });
     let owned = is_a_place(iter) && a_seq;
     if owned { state.facts.owned_loops.insert(span.start as i64); }
@@ -56351,7 +56471,7 @@ pub mod check_copies {
 }
 pub mod check_core_args {
     #[allow(unused_imports)]
-    pub use super::{check_core_arguments_given, check_core_locks, check_core_list_literal, check_core_args_code_said, check_core_a_called_field};
+    pub use super::{check_core_arguments_given, check_core_locks, check_core_list_literal, check_core_args_a_field_called, check_core_args_code_said, check_core_a_called_field};
 }
 pub mod check_core_call {
     #[allow(unused_imports)]
@@ -56379,11 +56499,11 @@ pub mod check_core_pilot {
 }
 pub mod check_core_places {
     #[allow(unused_imports)]
-    pub use super::{check_core_field, check_core_struct_literal, check_core_with, check_core_index, check_core_cast, check_core_range};
+    pub use super::{check_core_field, check_core_places_stored, check_core_places_code_into, check_core_struct_literal, check_core_with, check_core_index, check_core_cast, check_core_range};
 }
 pub mod check_core_stmt {
     #[allow(unused_imports)]
-    pub use super::{check_core_stmt_element_view, check_core_stmt_let, check_core_stmt_assign, check_core_stmt_while, check_core_stmt_for, check_core_stmt_return, check_core_stmt_jump, check_core_stmt, check_core_block};
+    pub use super::{check_core_stmt_element_view, check_core_stmt_holds_code, check_core_stmt_let, check_core_stmt_assign, check_core_stmt_while, check_core_stmt_for, check_core_stmt_return, check_core_stmt_jump, check_core_stmt, check_core_block};
 }
 pub mod check_decls {
     #[allow(unused_imports)]

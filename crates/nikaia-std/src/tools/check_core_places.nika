@@ -239,32 +239,13 @@ pub fn check_core_field[H: CheckHost](mut state: CheckState, world: ref CheckWor
 
 /// **The code a function field is given, remembered with the field**
 /// (ADR-230 D1): what it calls is what a call through the field reaches.
-fn check_core_places_stored[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr?, key: ref String) sync {
+pub fn check_core_places_stored[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr?, key: ref String) sync {
     let mut stored: CheckStoredCode = state.stored_frames.pop() ?? CheckStoredCode::empty()
     if value == null {
         stored.unresolved = true
     } else {
         let v: ref Expr = value ?? return
-        match v {
-            Expr::Closure { body, .. } => {
-                for called in host.free_calls(body) {
-                    stored.free.insert(called)
-                }
-            },
-            // A function of this program, named: it is what runs.
-            Expr::Variable(named, _) => {
-                let written: String = f"{world.words.resolve(named)}"
-                if state.lookup(written) == null {
-                    stored.free.insert(written)
-                } else {
-                    stored.unresolved = true
-                }
-            },
-            // Anything else is code this walk did not see.
-            else => {
-                stored.unresolved = true
-            },
-        }
+        check_core_places_code_into(state, world, host, v, stored)
     }
     let mut entry: CheckStoredCode = state.stored_code.remove(key) ?? CheckStoredCode::empty()
     for resolved in stored.resolved {
@@ -275,6 +256,82 @@ fn check_core_places_stored[H: CheckHost](mut state: CheckState, world: ref Chec
         entry.free.insert(free.clone())
     }
     state.stored_code.insert(key.clone(), entry)
+}
+
+/// **Where code values meet, their sets meet** (ADR-351 D1, D4): what an
+/// expression that gives a function value can give, added to `stored` - a
+/// lambda's calls, a named function, the place a name was given, each element
+/// of a list and each arm of an `if` or a `match`.
+pub fn check_core_places_code_into[H: CheckHost](state: ref CheckState, world: ref CheckWorld, host: ref H, v: ref Expr, mut stored: CheckStoredCode) sync {
+    match v {
+        Expr::Closure { body, .. } => {
+            for called in host.free_calls(body) {
+                stored.free.insert(called)
+            }
+        },
+        // A function of this program, named: it is what runs. A name of this
+        // function that was given code passes on what it was given.
+        Expr::Variable(named, _) => {
+            let written: String = f"{world.words.resolve(named)}"
+            if state.lookup(written) == null {
+                stored.free.insert(written)
+            } else {
+                let current: String = state.current?.clone() ?? ""
+                let key = f"{current}::{written}"
+                if state.stored_code.contains_key(key) {
+                    let entry: CheckStoredCode = state.stored_code[key]?.clone() ?? CheckStoredCode::empty()
+                    for resolved in entry.resolved {
+                        stored.resolved.insert(resolved.clone())
+                    }
+                    stored.unresolved = stored.unresolved || entry.unresolved
+                    for free in entry.free {
+                        stored.free.insert(free.clone())
+                    }
+                } else {
+                    stored.unresolved = true
+                }
+            }
+        },
+        Expr::ListLit { items, .. } => {
+            for item in items {
+                check_core_places_code_into(state, world, host, item, stored)
+            }
+        },
+        Expr::Match { arms, .. } => {
+            for arm in arms {
+                check_core_places_code_into(state, world, host, arm.body, stored)
+            }
+        },
+        Expr::If { then_branch, else_branch, .. } => {
+            check_core_places_tail_into(state, world, host, then_branch, stored)
+            if else_branch == null {
+                stored.unresolved = true
+            } else {
+                let other: ref Block = else_branch ?? return
+                check_core_places_tail_into(state, world, host, other, stored)
+            }
+        },
+        // Anything else is code this walk did not see.
+        else => {
+            stored.unresolved = true
+        },
+    }
+}
+
+// What a block gives: its last statement, where that is an expression.
+fn check_core_places_tail_into[H: CheckHost](state: ref CheckState, world: ref CheckWorld, host: ref H, block: ref Block, mut stored: CheckStoredCode) sync {
+    let n = block.stmts.len() as i64
+    if n == 0 {
+        stored.unresolved = true
+        return
+    }
+    let last = block.stmts[n - 1]
+    match last.node {
+        Stmt::Expr(e) => check_core_places_code_into(state, world, host, e, stored),
+        else => {
+            stored.unresolved = true
+        },
+    }
 }
 
 /// **One field of a struct literal against its declaration**: what it binds,

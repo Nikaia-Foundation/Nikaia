@@ -104,3 +104,77 @@ fn a_catch_over_a_field_nothing_failing_reaches_is_nk1134() {
     let found = codes(&source);
     assert_eq!(found, vec!["NK1134".to_string()], "{:?}", findings(&source));
 }
+
+/// **A name bound to a function value is a place too** (D1): a call through
+/// it is caught by the type that was stored there, with no `else`.
+#[test]
+fn a_call_through_a_variable_fails_with_what_it_was_given() {
+    let source = format!(
+        "{JOB}fn main() {{\n\
+         \x20   let run = fail\n\
+         \x20   run() catch {{\n\
+         \x20       match error {{\n\
+         \x20           Bad::Oops => print(\"oops\")\n\
+         \x20       }}\n\
+         \x20   }}\n\
+         }}\n"
+    );
+    let found = codes(&source);
+    assert!(found.is_empty(), "{:?}", findings(&source));
+}
+
+/// **The elements of a list of code meet** (D4): a catch over a call of an
+/// element takes what each of them fails with, by name.
+#[test]
+fn a_list_of_functions_fails_with_the_union() {
+    let source = format!(
+        "{JOB}enum Worse {{ Boom }}\n\
+         impl Error for Worse {{\n\
+         \x20   fn message(ref self) -> String {{ \"boom\" }}\n\
+         }}\n\
+         fn worse() throws {{\n\
+         \x20   throw Worse::Boom\n\
+         }}\n\
+         fn main() {{\n\
+         \x20   let all: Vec[fn() throws] = [fail, worse]\n\
+         \x20   for run in all {{\n\
+         \x20       run() catch {{\n\
+         \x20           match error {{\n\
+         \x20               Bad::Oops => print(\"oops\")\n\
+         \x20               Worse::Boom => print(\"boom\")\n\
+         \x20           }}\n\
+         \x20       }}\n\
+         \x20   }}\n\
+         }}\n"
+    );
+    let found = codes(&source);
+    assert!(found.is_empty(), "{:?}", findings(&source));
+}
+
+/// **A list of functions that cannot fail carries the empty set**: `NK1134`.
+#[test]
+fn a_list_of_quiet_functions_is_nk1134() {
+    let source = format!(
+        "{JOB}fn main() {{\n\
+         \x20   let all: Vec[fn() throws] = [quiet, quiet]\n\
+         \x20   for run in all {{\n\
+         \x20       run() catch {{ print(\"never\") }}\n\
+         \x20   }}\n\
+         }}\n"
+    );
+    let found = codes(&source);
+    assert_eq!(found, vec!["NK1134".to_string()], "{:?}", findings(&source));
+}
+
+/// **A variable given a function that cannot fail carries the empty set**.
+#[test]
+fn a_catch_over_a_variable_nothing_failing_reaches_is_nk1134() {
+    let source = format!(
+        "{JOB}fn main() {{\n\
+         \x20   let run: fn() throws = quiet\n\
+         \x20   run() catch {{ print(\"never\") }}\n\
+         }}\n"
+    );
+    let found = codes(&source);
+    assert_eq!(found, vec!["NK1134".to_string()], "{:?}", findings(&source));
+}

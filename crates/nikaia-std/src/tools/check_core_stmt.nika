@@ -247,6 +247,42 @@ fn check_core_stmt_read_shown(world: ref CheckWorld, value: ref Expr) -> String 
 }
 
 /// **`let`** (Part I 2.1).
+// A value that is code where it is written: a lambda, or a name.
+fn check_core_stmt_code_given(value: ref Expr) -> bool {
+    match value {
+        Expr::Closure { .. } => return true,
+        Expr::Variable(_, _) => return true,
+        Expr::ListLit { .. } => return true,
+        Expr::If { .. } => return true,
+        Expr::Match { .. } => return true,
+        else => return false,
+    }
+}
+
+/// Whether a value is code, or a list or map of it (ADR-351 D1).
+pub fn check_core_stmt_holds_code(ty: ref Ty) -> bool {
+    match ty {
+        Ty::Fn { .. } => return true,
+        Ty::Named { args, .. } => {
+            for arg in args {
+                if check_core_stmt_holds_code(arg) {
+                    return true
+                }
+            }
+            return false
+        },
+        else => return false,
+    }
+}
+
+// A `mut` name can be given other code later; until those meet (ADR-351 D4)
+// its set cannot be named.
+fn check_core_stmt_place_unseen(mut state: CheckState, key: ref String) sync {
+    let mut entry: CheckStoredCode = state.stored_code.remove(key) ?? CheckStoredCode::empty()
+    entry.unresolved = true
+    state.stored_code.insert(key.clone(), entry)
+}
+
 pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, names: ref Vec[winnow_grammar::Symbol], shape: ref Vec[i64], mutable: bool, ty: ref Type?, value: ref Expr, span: ref Span) -> Ty sync {
     check_core_a_field_of_a_borrowed_subject(state, world, host, value, span, "bound")
     check_core_a_mut_parameter_given_away(state, world, host, value, span, "bound")
@@ -257,8 +293,25 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
         let t: ref Type = ty ?? return check_core_stmt_unit()
         state.flow.lambda_expected = written_ty(world.words, world.here.aliases, t)
     }
+    // **A name bound to a function value is a place of the error-set
+    // calculation** (ADR-351 D1): what it is given is what a call through it
+    // reaches.
+    let code_place = names.len() == 1 && state.current != null && check_core_stmt_code_given(value)
+    if code_place {
+        state.stored_frames.push(CheckStoredCode::empty())
+    }
     let found = host.expr(state, value, span)
     state.flow.lambda_expected = null
+    if code_place && !check_core_stmt_holds_code(found) {
+        state.stored_frames.pop()
+    } else if code_place {
+        let current: String = state.current?.clone() ?? ""
+        let key = f"{current}::{world.words.resolve(names[0])}"
+        check_core_places_stored(state, world, host, value, key)
+        if mutable {
+            check_core_stmt_place_unseen(state, key)
+        }
+    }
     // **A name bound to a map read is a view of the map** (#297).
     let was_read = state.flow.read_a_map
     state.flow.read_a_map = outer_read
@@ -820,6 +873,28 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
     let mut elements = elements_walked(over, width)
     if shape.len() > 0 {
         elements = state.nested_pattern_parts(world, elements, shape, bindings.len() as i64, "A `for`", span)
+    }
+    // **An element of a list of code is given what the list was** (ADR-351
+    // D1, D4).
+    if bindings.len() == 1 && state.current != null && check_core_stmt_holds_code(over) {
+        match iter {
+            Expr::Variable(named, _) => {
+                let current: String = state.current?.clone() ?? ""
+                let from = f"{current}::{world.words.resolve(named)}"
+                let to = f"{current}::{world.words.resolve(bindings[0])}"
+                let given: CheckStoredCode = state.stored_code[from]?.clone() ?? CheckStoredCode { resolved: collections::BTreeSet(), unresolved: true, free: collections::BTreeSet() }
+                let mut entry: CheckStoredCode = state.stored_code.remove(to) ?? CheckStoredCode::empty()
+                for resolved in given.resolved {
+                    entry.resolved.insert(resolved.clone())
+                }
+                entry.unresolved = entry.unresolved || given.unresolved
+                for free in given.free {
+                    entry.free.insert(free.clone())
+                }
+                state.stored_code.insert(to, entry)
+            },
+            else => {}
+        }
     }
     // **A name that holds a sequence is handed over, not lent** (ADR-293 D19).
     let a_seq = match over {

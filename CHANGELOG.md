@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.940] — 2026-10-14
+
+**a call through a variable or a list element fails with what it was given (ADR-351 D1, D4, part of #620)**
+- A name bound to a function value, and a list of them, is a place of the error-set calculation: a call through it, or through the element a `for` takes from the list, fails with the union of the functions given there, and a `catch` takes them by name or is NK1134 when none fails. Lists, `if` and `match` arms meet; a `mut` name stays unnamed (`?`) until reassignment is counted.
+
 ## [0.0.939] — 2026-10-14
 
 **a let and a for head take a nested tuple of names; a variant there is NK1259 (ADR-356, #611)**

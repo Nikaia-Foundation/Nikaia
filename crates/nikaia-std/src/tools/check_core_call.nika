@@ -183,7 +183,24 @@ fn check_core_call_kept[H: CheckHost](mut state: CheckState, world: ref CheckWor
     state.facts.kept_calls.insert(id_of(func) as i64, (!is_sync, fails))
     if state.current != null {
         let current: String = state.current?.clone() ?? ""
-        check_core_args_code_said(state, current, !is_sync, fails)
+        // **A call through a name fails with what the name was given**
+        // (ADR-351 D1, D3): the union the ledger settled for that place.
+        let key = f"{current}::{name}"
+        if fails && world.own.code_throws.contains_key(key) {
+            let set = world.own.code_throws[key] ?? return gives
+            let mut contract = FnContract::empty()
+            contract.fails_with = set.clone()
+            state.may_fail_here(world, host, key, contract, span)
+            check_core_args_a_field_called(state, current, key)
+            check_core_args_code_said(state, current, !is_sync, false)
+        } else {
+            if fails && state.stored_code.contains_key(key) {
+                check_core_args_a_field_called(state, current, key)
+                check_core_args_code_said(state, current, !is_sync, false)
+            } else {
+                check_core_args_code_said(state, current, !is_sync, fails)
+            }
+        }
     }
     return gives
 }

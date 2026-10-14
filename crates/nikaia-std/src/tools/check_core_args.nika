@@ -456,7 +456,7 @@ pub fn check_core_list_literal[H: CheckHost](mut state: CheckState, world: ref C
 }
 
 /// Record that the function being walked calls the field `key`.
-fn check_core_args_a_field_called(mut state: CheckState, current: ref String, key: ref String) sync {
+pub fn check_core_args_a_field_called(mut state: CheckState, current: ref String, key: ref String) sync {
     let mut calls: CheckMethodCalls = state.methods.remove(current) ?? CheckMethodCalls::empty()
     calls.fields_called.insert(key.clone())
     state.methods.insert(current.clone(), calls)
