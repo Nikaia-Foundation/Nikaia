@@ -13,6 +13,7 @@
 /// past the end finds nothing. A one-byte needle is searched as the `char` it
 /// is, which is `memchr`; the language below builds a two-way searcher for any
 /// `&str`, one byte or not (#617).
+#[inline]
 pub fn find(text: &str, needle: &str, from: i64) -> Option<i64> {
     let mut start = usize::try_from(from.max(0)).ok()?;
     if start > text.len() {
@@ -31,6 +32,7 @@ pub fn find(text: &str, needle: &str, from: i64) -> Option<i64> {
 
 /// The `char` a one-byte needle is. A byte of valid UTF-8 that is a whole
 /// scalar is ASCII, so the two match the same places.
+#[inline]
 fn one_byte(needle: &str) -> Option<char> {
     match needle.as_bytes() {
         [byte] => Some(char::from(*byte)),
@@ -41,6 +43,7 @@ fn one_byte(needle: &str) -> Option<char> {
 /// `text` cut in two at the byte position `at` (#616): what stands before it
 /// and what from it on. A position before the start, past the end or off a
 /// scalar's start stops the program, as the language below's `split_at` does.
+#[inline]
 pub fn split_at(text: &str, at: i64) -> (&str, &str) {
     let Ok(at) = usize::try_from(at) else {
         panic!("byte index {at} is before the start of the text")
@@ -49,6 +52,7 @@ pub fn split_at(text: &str, at: i64) -> (&str, &str) {
 }
 
 /// The byte position of the last match of `needle` in `text`.
+#[inline]
 pub fn rfind(text: &str, needle: &str) -> Option<i64> {
     let at = match one_byte(needle) {
         Some(byte) => text.rfind(byte)?,
@@ -59,6 +63,7 @@ pub fn rfind(text: &str, needle: &str) -> Option<i64> {
 
 /// `text` with the first `count` matches of `from` replaced by `to`; a `count`
 /// of 0 or less replaces nothing.
+#[inline]
 pub fn replacen(text: &str, from: &str, to: &str, count: i64) -> String {
     let count = usize::try_from(count).unwrap_or(0);
     match one_byte(from) {

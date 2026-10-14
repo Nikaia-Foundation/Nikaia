@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.926] — 2026-10-14
+
+**std: text search is inlined; brc's naive.nika reads the temperature as naive.rs does**
+- `nikaia_std::search`'s `find`, `rfind`, `replacen` and `split_at` are `#[inline]`: a call from a program crossed the crate boundary for every line (about 27 instructions a row in brc's naive program).
+- brc: `naive.nika` reads the temperature digit by digit, the algorithm `naive.rs` uses, instead of `replace` and `parse_i32`: 597.8 instructions a row against 860.3, at 320 tokens against 486.
+
 ## [0.0.925] — 2026-10-14
 
 **Text search: a one-character pattern is a char, and split_at takes find's i64 (#616, #617)**

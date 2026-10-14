@@ -8,7 +8,7 @@ in Rust:
 | program | what it is |
 |---|---|
 | [`naive.rs`](src/bin/naive.rs) | what a competent Rust programmer writes first: `read_to_string`, `str::lines`, `split_once`, a `HashMap` with the default hasher |
-| [`naive.nika`](naive.nika) | the same in Nikaia: `fs::read_to_string`, `lines`, `find` and `split_at` at the `;`, the temperature's `.` dropped with `replace`, `std`'s `HashMap` |
+| [`naive.nika`](naive.nika) | the same in Nikaia: `fs::read_to_string`, `lines`, `find` and `split_at` at the `;`, the temperature read digit by digit as `naive.rs` reads it, `std`'s `HashMap` |
 | [`tuned.rs`](src/bin/tuned.rs) | what a 1BRC entry looks like before it is parallelised: `mmap` (`unsafe`), raw bytes with **no UTF-8 validation**, one `memchr` searcher over the whole file, the separator found by walking back from the line's end, integer temperatures, a word-at-a-time hash |
 | [`examples/1brc.nika`](../../examples/1brc.nika) | a grammar over the whole file, a `par_fold`, names that are slices of a mapped file |
 
@@ -48,20 +48,19 @@ benches/brc/brc.sh 200000     # quicker
 
 ## The table
 
-Nikaia 0.0.925, rustc 1.97.0, Intel Xeon @ 2.80 GHz; callgrind, 1 000 000 rows,
+Nikaia 0.0.926, rustc 1.97.0, Intel Xeon @ 2.80 GHz; callgrind, 1 000 000 rows,
 per row:
 
 | | instructions | mispredictions | tokens |
 |---|---:|---:|---:|
-| Rust, `naive` | 860.6 | 8.63 | 486 |
-| Nikaia, `naive.nika` | 1 022.9 | 8.73 | **291** |
+| Rust, `naive` | 860.3 | 8.60 | 486 |
+| **Nikaia**, `naive.nika` | **597.8** | **8.33** | **320** |
 | Rust, `tuned` | 272.2 | 3.70 | 809 |
 | **Nikaia**, `examples/1brc.nika` | **300.1** | **1.61** | **618** |
 | Nikaia, overflow checks off | 298.1 | 1.58 | |
 
-The naive programs: Nikaia's is two fifths shorter and runs a fifth more
-instructions, almost all of it the `replace` that makes a new text of every
-temperature, where `naive.rs` reads the digits in place (below).
+The naive programs: Nikaia's is a third shorter and runs 30 % fewer
+instructions, from the same algorithm (below).
 
 Against `tuned`, Nikaia runs a tenth more instructions and less than half the
 mispredictions, from a quarter fewer tokens, with no `unsafe`, with UTF-8 and
@@ -92,17 +91,20 @@ way.
 
 ## Where `naive.nika` differs from `naive.rs`
 
-Callgrind's attribution, per row, of what the two naive programs do not share:
+Callgrind's attribution, per row:
 
 | | `naive.nika` | `naive.rs` |
 |---|---:|---:|
-| the new text `replace(".", "")` makes, its growing and freeing (`malloc`, `free`, `RawVec`, `memcpy`) | 240 | - |
-| reading the temperature (`text::parse_i32`; `naive.rs` in its loop) | 87 | - |
-| `std`'s `find` and the two `split_at`s, not inlined | 87 | - |
-| hashing a name: Fx in Nikaia, SipHash in Rust | - | 185 |
+| finding the line's end (`memchr`) | 147.7 | 147.7 |
+| finding the `;` (`CharSearcher`); `naive.rs` also finds the `.` | 163.7 | 247.6 |
+| hashing a name: Fx in the table's entry, SipHash in Rust's default | in the entry | 185.4 |
+| the hash table's entry | 91.9 | 74.6 |
+| the loop: cutting, the digits, the stats | 141.5 | 117.3 |
+| the UTF-8 check: `simdutf8`, `str::from_utf8` | 10.3 | 35.5 |
 
-Both find the line's end with `memchr` (148) and the `;` with a `char`
-searcher: a one-character pattern reaches Rust as a `char` (#617).
+The same algorithm on both sides; what differs is the default each language
+chose: the hasher, the UTF-8 check, and Nikaia's one-character pattern as a
+`char` (#617).
 
 ## What is left to build
 

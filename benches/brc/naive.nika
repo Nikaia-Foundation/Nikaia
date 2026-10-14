@@ -3,8 +3,9 @@
 // the `;`, and the map `std` gives you. No grammar, no fold, no parallelism;
 // `examples/1brc.nika` is the program that has them. See `README.md`.
 //
-// The temperature is read in tenths by dropping its `.`, so the arithmetic is
-// the integer arithmetic `naive.rs` does and the two print the same.
+// The temperature is read in tenths, digit by digit, as `naive.rs` reads it:
+// the same integer arithmetic, so the two print the same, and the comparison is
+// of the languages and not of two algorithms.
 
 use std::fs
 use std::cli
@@ -27,7 +28,11 @@ fn main() throws {
         let at = line.find(";") ?? panic("a separator")
         let (name, _) = line.split_at(at)
         let (_, reading) = line.split_at(at + 1)
-        let temp = text::parse_i32(reading.replace(".", "")) ?? panic("a temperature")
+        let mut temp = 0
+        for c in reading.chars() {
+            if c != '-' && c != '.' { temp = temp * 10 + text::digit_value(c) }
+        }
+        if reading.starts_with("-") { temp = -temp }
         stations.entry(name)
             .and_modify fn(s) {
                 s.min = s.min.min(temp)
