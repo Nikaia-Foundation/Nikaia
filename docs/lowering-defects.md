@@ -16,9 +16,9 @@ finds two D8 casts in `check_numbers4.nika`.
 
 | # | Defect | Status | Probe |
 | :--- | :--- | :--- | :--- |
-| D1 | by-value read-only parameter lowers as `&T`; `p with {..}` writes `..p` | verified | d01_with_param.nika, probe_tools.nika |
+| D1 | by-value read-only parameter lowers as `&T`; `p with {..}` writes `..p` | **built** (0.0.951: a `with` keeps its base, so the parameter stays a value) | d01_with_param.nika, probe_tools.nika |
 | D2 | `m.get(k)?.clone() ?? d` clones a reference | verified | d02_get_clone.nika |
-| D3 | `set.insert(..)` as an arm value: `bool` against `()` | verified | d03_insert_tail.nika |
+| D3 | `set.insert(..)` as an arm value: `bool` against `()` | not reproduced (0.0.951: runs) | d03_insert_tail.nika |
 | D4 | a `for` over `Vec[Symbol]` yields `ref Symbol` | verified (as a checker type) | probe_symkey.nika |
 | D5 | `(A, B)?` does not parse | **built** (0.0.913: refused, `NK1254`, naming a struct or `(A?, B?)`) | nullable.rs |
 | D6 | `HashSet`/`HashMap` fields lower to `TrustedSet`/`TrustedMap` | verified: the type follows each file's own trust analysis; decided in ADR-010 D9, build #581 | probe_hash.nika |
@@ -26,13 +26,13 @@ finds two D8 casts in `check_numbers4.nika`.
 | D8 | `get(x.span.start as i64)` lowers to `&x.span.start as i64` | **built** (0.0.871: `&(x as i64)`) | expressions.rs |
 | D9 | `Type?` parameter lowers to `Option<&Type>` | not reproduced as named; same root cause as D1 (`&Option<T>`) | d09_opt_param.nika, probe_tools.nika |
 | D10 | `x ?? 0` on `Integer?` lowers to a plain integer | verified; also not refused by the checker | probe_tools.nika |
-| D11 | typed `throw` in a trait impl of a `throws` method is not boxed | verified | d11_typed_throw.nika |
+| D11 | typed `throw` in a trait impl of a `throws` method is not boxed | **built** (0.0.951: raised into the box the signature declares) | d11_typed_throw.nika |
 | D11b | a thrown `struct` without `impl Error` is not refused | verified (new) | d11b_free_throw.nika |
 | D12 | function names are one namespace across `tools/*.nika` | by design (Part I 9.1), clear message | (none) |
 | D13 | `grammar`/`test`/`throws` are reserved | by design, decided in #573; message names the word | kw_*.nika |
-| D14 | a `Copy` value bound in a `match` inside a guard reaches its use as `&T` | verified (new; #578's family) | d14b_guard_copy.nika |
+| D14 | a `Copy` value bound in a `match` inside a guard reaches its use as `&T` | **built** (0.0.946, #622: guards read copies) | d14b_guard_copy.nika |
 | D15 | `BTreeMap[Symbol, V]` accepted by the checker, refused by rustc (`Symbol: Ord`) | **built** (0.0.850: `NK1247`, ledger `orders`) | ordered_keys.rs |
-| D16 | `if match x {..} =>` in a guard does not parse; `if (match ..)` does | verified (new, small) | (rs2nika R14 writes the parentheses) |
+| D16 | `if match x {..} =>` in a guard does not parse; `if (match ..)` does | **built** (0.0.951: by design, ADR-301 D4; the refusal names the parentheses) | (rs2nika R14 writes the parentheses) |
 | D17 | `s.starts_with(['a', 'b'])` passes the checker, lowers to `starts_with(vec![..])` (E0277) | **built** (0.0.887: refused, `NK1102`, #586) | nullable.rs |
 | D18 | a two-parameter lambda over a list of tuples, `filter fn(name, ty) {..}`, lowers to `\|name, ty\|` (E0593) | verified (new) | `draft_a_root_is_one_of_two` |
 | D19 | `match name { "i32" \| "i64" => .. }` with `name: ref String` lowers to `matches!(name, "i32" \| ..)` on `&String` (E0308) | not reproduced in a user program (0.0.887, `nikaia run`) | `draft_a_copied_part` |
@@ -369,6 +369,12 @@ parameter `body: ref Expr` handed in the same place lowers as `Some(body)` and
 compiles. Workaround: a function that builds the struct from a `ref`
 parameter (`check_core_flow_answered`). Met in U-c8 (`check_core_flow.nika`).
 
+## D38. `strip_prefix(f"...")` lowers to a `String` pattern: **built** (0.0.949, 0.0.950)
+
+`line.strip_prefix(f"{key}=")` reached `rustc` as a `String` pattern (E0277).
+The f-string is lent since 0.0.949 (#614), an owned `String` since 0.0.950;
+`an_owned_pattern_to_strip_prefix_is_lent` runs both.
+
 ## Language questions filed as issues
 
 Forms met here that need a decision, not a lowering fix; the issue holds the case.
@@ -377,6 +383,6 @@ Forms met here that need a decision, not a lowering fix; the issue holds the cas
 * An element read from a borrowed list as a view, `let y: ref Expr = given[0]`: [#613](https://github.com/Nikaia-Foundation/Nikaia/issues/613).
 * A result that views one of two `ref` parameters (`NK2302`, the `p/` probes above): [#614](https://github.com/Nikaia-Foundation/Nikaia/issues/614).
 
-## `EmitHost::names_read` does not look into statements (#622)
+## `EmitHost::names_read` does not look into statements (#622): **built** (0.0.951: it walks the statements of blocks; the copy a body does not read is not written)
 
 `names_read` (crates/nikaia/src/emit/host.rs) walks with `contracts::sync::visit_expr`, which does not enter the statements of a block. Filtering an arm's copied bindings by it dropped copies the body needed (all of `package.rs`), so a copy the arm body may not read is written `#[allow(unused_variables)] let a = *a;` instead (`emit_core_match.nika`). Fix: a walk over blocks too, then drop the copy instead of allowing it. Test: `match_patterns.rs` `a_kept_element_is_taken_and_a_guard_reads_a_copy`.

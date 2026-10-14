@@ -8,6 +8,14 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.951] — 2026-10-14
+
+**lowering defects: with keeps its base, a typed throw into a boxed trait channel, names_read sees statements, a match in a guard names the brackets**
+- `p with { .. }` keeps `p`: a by-value parameter it reads whole stays a value (lowering-defects D1).
+- A typed `throw` in a function whose channel is the box is raised into it (D11).
+- `names_read` walks block statements; a guard-only copy is not written (#622).
+- A bare `match` in a guard or condition is refused with a message naming the parentheses (D16).
+
 ## [0.0.950] — 2026-10-14
 
 **Owned text is lent to strip_prefix and strip_suffix; a literal asked of a list of text is a view**

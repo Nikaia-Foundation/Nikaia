@@ -322,13 +322,32 @@ impl EmitHost for Emitter<'_> {
         )
     }
 
+    /// Every name read anywhere inside `expr`, the statements of its blocks
+    /// included (a copy an arm body reads in a statement is still read).
     fn names_read(&self, expr: &Expr) -> Vec<String> {
-        let mut names = Vec::new();
-        crate::contracts::sync::visit_expr(self.parsed, expr, &mut |each| {
-            if let Expr::Variable(name, _) = each {
-                names.push(self.text(*name).to_string());
+        use crate::contracts::sync::{
+            visit_expr, visit_expr_blocks, visit_stmt, visit_stmt_blocks,
+        };
+        fn names_in(host: &Emitter<'_>, expr: &Expr, names: &mut Vec<String>) {
+            visit_expr(host.parsed, expr, &mut |each| {
+                if let Expr::Variable(name, _) = each {
+                    names.push(host.text(*name).to_string());
+                }
+            });
+            visit_expr_blocks(expr, &mut |block| names_in_block(host, block, names));
+        }
+        fn names_in_block(host: &Emitter<'_>, block: &crate::ast::Block, names: &mut Vec<String>) {
+            for stmt in &block.stmts {
+                visit_stmt(host.parsed, &stmt.node, &mut |each| {
+                    if let Expr::Variable(name, _) = each {
+                        names.push(host.text(*name).to_string());
+                    }
+                });
+                visit_stmt_blocks(&stmt.node, &mut |inner| names_in_block(host, inner, names));
             }
-        });
+        }
+        let mut names = Vec::new();
+        names_in(self, expr, &mut names);
         names
     }
 }

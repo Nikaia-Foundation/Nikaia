@@ -3371,6 +3371,13 @@ grammar! {
           // error has: `if { }` answered *"expected one of `!`, `-`, `dsl`,
           // `false`, `true`, identifier"*, leading with the rarest of the six.
           | d:dsl_from_expr -> { d }
+          // **The way out, named** (D4; lowering-defects D16): a `match` in a
+          // condition or a guard is one of the brace-led forms a head leaves
+          // out, and the parentheses are what takes it.
+          | KW_MATCH fail(
+                "A `match` in a condition or a guard is written in parentheses: \
+                 `if (match x { .. }) => ..` or `if (match x { .. }) { .. }`."
+            ) e:head_primary_bare -> { e }
 
         // `(a, b)` before `(a)`: a PEG keeps the first alternative that
         // matches, and a tuple is a parenthesised expression until the comma.

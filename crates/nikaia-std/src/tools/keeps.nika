@@ -401,6 +401,17 @@ fn classify(expr: ref Expr, interner: ref winnow_grammar::InternerContext, holes
         Expr::Coalesce { value, .. } => keep_named(value, interner, context, uses),
         Expr::SafeField { base, .. } => keep_named(base, interner, context, uses),
         Expr::Try(value, _) => keep_named(value, interner, context, uses),
+        // **`p with { .. }` builds a value out of the whole of `p`** (Part I
+        // 4.1): `..p` moves it below, so `p` stays a value (lowering-defects
+        // D1). A field the literal names is a part like any other.
+        Expr::With { base, fields, .. } => {
+            keep_named(base, interner, context, uses)
+            for field in fields {
+                if field.value != null {
+                    keep_part(field.value, interner, context, uses)
+                }
+            }
+        }
         // **A parameter a `match` takes apart counts as kept** - the
         // over-approximation D2's fail-closed clause licenses: Rust matches
         // through a reference with its default binding modes, and this compiler

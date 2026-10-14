@@ -321,16 +321,13 @@ impl EmitState {
         let opened = self.boxed_bindings(world, pattern)
         // **And a number bound out of a lent value is copied out** (0.0.236,
         // `check::Checked::copied_bindings`).
-        // One the arm's value does not name may be read by the guard alone, and
-        // `rustc` warned that the copy is unused (#622); `names_read` does not
-        // look into statements, so such a copy is only allowed to be unused.
+        // One the arm's value does not read is read by the guard alone, and
+        // is not copied (#622).
         let read = host.names_read(body)
         let mut copied: Vec[String] = []
         for name in host.copied_bindings(node_key(body)) {
             if read.contains(name) {
                 copied.push(f"let {name} = *{name}; ")
-            } else {
-                copied.push(f"#[allow(unused_variables)] let {name} = *{name}; ")
             }
         }
         // **And an element a list pattern keeps is cloned out of the slice**

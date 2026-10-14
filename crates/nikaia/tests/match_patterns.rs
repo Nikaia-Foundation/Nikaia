@@ -151,6 +151,33 @@ fn a_guard_is_written_if() {
     );
 }
 
+/// **A `match` as a guard is written in brackets, and the refusal says so**
+/// (ADR-301 D4; lowering-defects D16).
+#[test]
+fn a_match_in_a_guard_without_brackets_names_them() {
+    let source = "fn small(n: i64) -> bool { return n < 3 }\n\
+                  fn f(a: i64, b: i64) -> bool {\n\
+                  \x20   return match a {\n\
+                  \x20       n if match b { 1 => true, else => false } => small(n),\n\
+                  \x20       else => false,\n\
+                  \x20   }\n\
+                  }\n";
+    let error = parse_to_ast(source).expect_err("a bare `match` in a guard");
+    let finding =
+        nikaia::diagnostics::refused_finding(&error).expect("a parse error carries its finding");
+    let shown = nikaia::diagnostics::render_finding(finding, "app.nika", source);
+    assert!(shown.contains("written in parentheses"), "{shown}");
+    let bracketed = source.replace(
+        "if match b { 1 => true, else => false }",
+        "if (match b { 1 => true, else => false })",
+    );
+    assert!(
+        findings(&bracketed).is_empty(),
+        "{:#?}",
+        findings(&bracketed)
+    );
+}
+
 /// **A guarded arm covers nothing**, which is Rust's reading and has to be this
 /// one too: the pattern says which values reach the arm and the guard says
 /// which of those it takes, so the rest reach the arms below.

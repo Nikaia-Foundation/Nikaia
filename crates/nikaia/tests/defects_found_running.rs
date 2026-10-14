@@ -486,3 +486,85 @@ fn a_maybe_compared_with_a_value_is_refused() {
     );
     assert!(found.is_empty(), "{found:#?}");
 }
+
+/// **lowering-defects D1: `p with { .. }` over a by-value parameter that is
+/// only read.** `..p` moves the whole of `p`, so the parameter stays a value
+/// rather than a `&T` that `..p` cannot take - for a `Copy` struct and for one
+/// with text in it.
+#[test]
+fn a_with_over_a_by_value_parameter_runs() {
+    runs_in(
+        "with-param",
+        "struct Flow { a: bool, b: bool }\n\
+         struct Named { name: String, n: i64 }\n\
+         fn flipped(f: Flow) -> Flow sync {\n\
+         \x20   return f with { a: !f.a }\n\
+         }\n\
+         fn bumped(p: Named) -> Named sync {\n\
+         \x20   return p with { n: p.n + 1 }\n\
+         }\n\
+         fn main() {\n\
+         \x20   let g = flipped(Flow { a: true, b: false })\n\
+         \x20   let q = bumped(Named { name: \"x\", n: 1 })\n\
+         \x20   println(f\"{g.a} {g.b} {q.name} {q.n}\")\n\
+         }\n",
+        "false false x 2\n",
+        |_| {},
+    );
+}
+
+/// **lowering-defects D11: a typed `throw` in a trait impl of a `throws`
+/// method.** The trait declares the opaque channel, so what the impl throws
+/// is raised into it, and the caller catches it.
+#[test]
+fn a_typed_throw_in_a_trait_impl_is_boxed() {
+    runs_in(
+        "trait-throw",
+        "enum Bad { Negative(i64) }\n\
+         impl Error for Bad {\n\
+         \x20   fn message(ref self) -> String {\n\
+         \x20       return match self { Bad::Negative(n) => f\"negative: {n}\" }\n\
+         \x20   }\n\
+         }\n\
+         trait Step { fn go(ref self) -> i64 sync throws }\n\
+         struct One { n: i64 }\n\
+         impl Step for One {\n\
+         \x20   fn go(ref self) -> i64 sync throws {\n\
+         \x20       if self.n < 0 {\n\
+         \x20           throw Bad::Negative(self.n)\n\
+         \x20       }\n\
+         \x20       return self.n\n\
+         \x20   }\n\
+         }\n\
+         fn main() {\n\
+         \x20   let neg = One { n: -2 }\n\
+         \x20   let pos = One { n: 5 }\n\
+         \x20   let a = neg.go() catch { 0 }\n\
+         \x20   let b = pos.go() catch { 0 }\n\
+         \x20   println(f\"{a} {b}\")\n\
+         }\n",
+        "0 5\n",
+        |_| {},
+    );
+}
+
+/// **`strip_prefix` / `strip_suffix` lend owned text to their pattern** (D28's
+/// rule, which `starts_with` already had): an f-string reached `rustc` as a
+/// `String` pattern (E0277).
+#[test]
+fn an_owned_pattern_to_strip_prefix_is_lent() {
+    runs_in(
+        "strip-owned",
+        "fn rest(line: ref String, key: ref String) -> String {\n\
+         \x20   let front = (line.strip_prefix(f\"{key}=\") ?? \"\").clone()\n\
+         \x20   let tail: String = f\";{key}\"\n\
+         \x20   let back = front.strip_suffix(tail) ?? \"\"\n\
+         \x20   return back.clone()\n\
+         }\n\
+         fn main() {\n\
+         \x20   println(rest(\"a=1;a\", \"a\"))\n\
+         }\n",
+        "1\n",
+        |_| {},
+    );
+}
