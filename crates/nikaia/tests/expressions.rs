@@ -574,3 +574,43 @@ fn rfind_and_replacen_count_in_i64() {
         "{emitted}"
     );
 }
+
+/// `split_at` on text takes the `i64` position `find` gives (#616): it lowers to
+/// `std`'s helper, not to the language below's `usize` method.
+#[test]
+fn split_at_takes_an_i64_position() {
+    let emitted = emit(
+        "fn f(line: ref String) -> i64 {\n\
+             let at = line.find(\";\") ?? 0\n\
+             let (name, rest) = line.split_at(at)\n\
+             return name.len() + rest.len()\n\
+         }\n",
+    );
+    assert!(
+        emitted.contains("nikaia_std::search::split_at(&"),
+        "{emitted}"
+    );
+}
+
+/// A text pattern of one scalar is that character (#617): Rust searches a
+/// `char` with `memchr` and builds a two-way searcher for every `&str`. A
+/// longer pattern stays text, and so does a pattern on a list.
+#[test]
+fn a_pattern_of_one_scalar_is_a_char() {
+    let emitted = emit(
+        "fn f(line: ref String, names: ref Vec[String]) -> i64 {\n\
+             let parts: Vec[ref String] = line.split(\";\").collect()\n\
+             let path: Vec[ref String] = line.split(\"::\").collect()\n\
+             let quote = line.replace(\"'\", \"\")\n\
+             let tail = line.splitn(2, \"=\").count()\n\
+             if line.starts_with(\"#\") || names.contains(\"x\") { return 0 }\n\
+             return parts.len() + path.len() + quote.len() + tail\n\
+         }\n",
+    );
+    assert!(emitted.contains("split(';')"), "{emitted}");
+    assert!(emitted.contains("split(\"::\")"), "{emitted}");
+    assert!(emitted.contains("replace('\\'', \"\")"), "{emitted}");
+    assert!(emitted.contains("splitn(2, '=')"), "{emitted}");
+    assert!(emitted.contains("starts_with('#')"), "{emitted}");
+    assert!(!emitted.contains("contains('x')"), "{emitted}");
+}

@@ -137,8 +137,8 @@ What the owner expects from such a round:
   checks; measure them off as a second row (`RUSTFLAGS="-C overflow-checks=off"`)
   rather than leaving them out.
 * **The same output first**, byte for byte, or the counts mean nothing.
-* **Length in tokens, not lines**: `scripts/tokens.py`, the same rule for both
-  languages, whole files, `use` lines included.
+* **Length in tokens, not lines**: `nikaia run scripts/tokens.nika -- F...`, the
+  same rule for both languages, whole files, `use` lines included.
 * **A benchmark's README holds the current table and the method, not a diary.**
   Re-measuring replaces the table; how a number got there is the commit's and
   the issue's. Quote only that table, and before recommending a change from an

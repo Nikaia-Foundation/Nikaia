@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.925] — 2026-10-14
+
+**Text search: a one-character pattern is a char, and split_at takes find's i64 (#616, #617)**
+- A text method's pattern that is a literal of one scalar (`split`, `rsplit`, `splitn`, `replace`, `contains`, `starts_with`, `ends_with`, `matches`, `trim_start_matches`, `trim_end_matches`, `strip_prefix`, `strip_suffix`) reaches Rust as that `char` (`split(';')`): Rust builds a two-way searcher for every `&str` pattern and searches a `char` with `memchr`. `std`'s `find`, `rfind` and `replacen` take the same path for a one-byte needle (#617).
+- `text.split_at(at)` lowers to `nikaia_std::search::split_at`, which takes the `i64` `find` gives; it reached `rustc` as a `usize` mismatch (#616).
+- brc: `benches/brc/naive.nika`, the naive program in Nikaia: 1 022.9 instructions a row (1 726.9 before these two), `naive.rs` 860.6, at 291 tokens against 486. `scripts/tokens.py` is `scripts/tokens.nika`.
+
 ## [0.0.924] — 2026-10-14
 
 **check: a method call, `x.m(…)` and `x?.m(…)`, in Nikaia (U-c6, #125, #558)**

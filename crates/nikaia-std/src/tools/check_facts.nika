@@ -82,6 +82,11 @@ pub struct CheckFacts {
     pub number_lets: collections::BTreeMap[i64, String],
     pub changed_elements: collections::BTreeSet[i64],
     pub text_finds: collections::BTreeSet[i64],
+    /// **A text pattern of one scalar is that character** (#617), by the
+    /// argument: `split(";")` on text is written `split(';')`, the character
+    /// literal kept here as Rust spells it. A `&str` pattern is Rust's two-way
+    /// searcher, built for every call; a `char` is a `memchr`.
+    pub char_patterns: collections::BTreeMap[i64, String],
     /// **`a.compare(b)` and `a.eq(b)` on a type the language orders or equates**
     /// (ADR-341 D2), by the receiver: which side is a view (bit 0 the receiver,
     /// bit 1 the argument), so the emitter writes `std::cmp::Ord::cmp(&*a, &b)`.
@@ -206,6 +211,7 @@ impl CheckFacts {
             number_lets: collections::BTreeMap(),
             changed_elements: collections::BTreeSet(),
             text_finds: collections::BTreeSet(),
+            char_patterns: collections::BTreeMap(),
             standard_compares: collections::BTreeMap(),
             count_args: collections::BTreeSet(),
             path_methods: collections::BTreeMap(),

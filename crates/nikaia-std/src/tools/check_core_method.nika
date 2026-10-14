@@ -357,8 +357,26 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
         Ty::Named { name, args, .. } => args.len() == 0 && (name == "String" || name == "str"),
         else => false,
     }
-    if text && (name == "find" || name == "rfind" || name == "replacen") {
+    if text && (name == "find" || name == "rfind" || name == "replacen" || name == "split_at") {
         state.facts.text_finds.insert(id_of(receiver) as i64)
+    }
+    // **A pattern of one scalar is that character** (#617): the same match, and
+    // the language below searches a `char` with `memchr` where it builds a
+    // two-way searcher for every `&str`.
+    let pattern_at = check_core_method_pattern_at(name)
+    if text && pattern_at >= 0 && pattern_at < args.len() {
+        match args[pattern_at] {
+            Expr::LitStr { text: written, .. } => {
+                let scalars: Vec[scalar] = written.chars().collect()
+                if scalars.len() == 1 {
+                    let literal = check_core_method_char_literal(scalars[0])
+                    if literal != "" {
+                        state.facts.char_patterns.insert(id_of(args[pattern_at]) as i64, literal)
+                    }
+                }
+            },
+            else => {}
+        }
     }
     if text && args.len() == 0 && name == "to_string" && ledger_candidates(world.own, "to_string").len() == 0 {
         state.facts.text_as_is.insert(id_of(receiver) as i64)
@@ -621,4 +639,46 @@ pub fn check_core_method[H: CheckHost](mut state: CheckState, world: ref CheckWo
         return check_core_method_called(state, world, host, expr, on, receiver, method, given, "join(within)", span)
     }
     return check_core_method_called(state, world, host, expr, on, receiver, method, args, name, span)
+}
+
+/// Which argument of a text method is its pattern, or -1 (#617).
+fn check_core_method_pattern_at(name: ref String) -> i64 {
+    if name == "splitn" {
+        return 1
+    }
+    let first: Vec[String] = ["split", "rsplit", "replace", "contains", "starts_with", "ends_with",
+        "matches", "trim_start_matches", "trim_end_matches", "strip_prefix", "strip_suffix"]
+    if first.contains(name) {
+        return 0
+    }
+    return -1
+}
+
+/// A scalar as the language below spells its character literal, or "" for one
+/// this does not spell (a control character without an escape above), which
+/// then stays text.
+fn check_core_method_char_literal(c: scalar) -> String {
+    if c == '\'' {
+        return "'\\''"
+    }
+    if c == '\\' {
+        return "'\\\\'"
+    }
+    if c == '\n' {
+        return "'\\n'"
+    }
+    if c == '\t' {
+        return "'\\t'"
+    }
+    if c == '\r' {
+        return "'\\r'"
+    }
+    if c == '\0' {
+        return "'\\0'"
+    }
+    let code = c as i64
+    if code < 32 || code == 127 {
+        return ""
+    }
+    return f"'{c}'"
 }

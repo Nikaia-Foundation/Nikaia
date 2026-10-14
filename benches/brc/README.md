@@ -1,16 +1,19 @@
-# The One Billion Row Challenge: `examples/1brc.nika` against Rust
+# The One Billion Row Challenge: Nikaia against Rust
 
 [`examples/1brc.nika`](../../examples/1brc.nika) describes the whole input file
-as a grammar and aggregates it with a fold. This bench measures it against the
-same aggregation written in Rust, twice:
+as a grammar and aggregates it with a fold. This bench measures it, and the
+program a Nikaia programmer writes first, against the same aggregation written
+in Rust:
 
 | program | what it is |
 |---|---|
 | [`naive.rs`](src/bin/naive.rs) | what a competent Rust programmer writes first: `read_to_string`, `str::lines`, `split_once`, a `HashMap` with the default hasher |
+| [`naive.nika`](naive.nika) | the same in Nikaia: `fs::read_to_string`, `lines`, `find` and `split_at` at the `;`, the temperature's `.` dropped with `replace`, `std`'s `HashMap` |
 | [`tuned.rs`](src/bin/tuned.rs) | what a 1BRC entry looks like before it is parallelised: `mmap` (`unsafe`), raw bytes with **no UTF-8 validation**, one `memchr` searcher over the whole file, the separator found by walking back from the line's end, integer temperatures, a word-at-a-time hash |
+| [`examples/1brc.nika`](../../examples/1brc.nika) | a grammar over the whole file, a `par_fold`, names that are slices of a mapped file |
 
-`tuned` is the comparison that counts. `naive` is there so that neither number
-is read alone.
+Each pair is compared like for like: `naive.nika` with `naive.rs`, `1brc.nika`
+with `tuned.rs`. `tuned` is the comparison that counts for speed.
 
 ## How it is measured
 
@@ -28,14 +31,15 @@ benches/brc/brc.sh 200000     # quicker
   anything is counted.
 * **Release builds on both sides.** The Rust programs are `cargo build
   --release` (`opt-level = 3`, no overflow checks). Nikaia's is a project built
-  with `nikaia build` at `opt-level = 3`, its own optimizations on, no debug
-  assertions; it keeps the overflow checks the language promises. **Neither side
+  with `nikaia build` at `opt-level = 3`, every `optimization` on
+  (`remove-bounds-checks`, `remove-overflow-checks`, `skip-free-at-exit`), no
+  debug assertions; it keeps the overflow checks the language promises. **Neither side
   uses link-time optimisation.** Each Rust program is a binary of its own: in one
   binary with the others, LLVM did not inline `tuned`'s hash-table entry and the
   count rose by 40 a row.
 * **Nikaia without overflow checks** is the same project built with
   `RUSTFLAGS="-C overflow-checks=off"`, to say what the checks cost.
-* **Length in tokens**, by [`scripts/tokens.py`](../../scripts/tokens.py), the
+* **Length in tokens**, by [`scripts/tokens.nika`](../../scripts/tokens.nika), the
   same rule for both languages: identifiers, keywords, numbers, literals and
   operators count, comments and whitespace do not, `use` lines do. Each file is
   counted whole.
@@ -44,23 +48,27 @@ benches/brc/brc.sh 200000     # quicker
 
 ## The table
 
-Nikaia 0.0.575, rustc 1.97.0, Intel Xeon @ 2.10 GHz; callgrind, 1 000 000 rows,
+Nikaia 0.0.925, rustc 1.97.0, Intel Xeon @ 2.80 GHz; callgrind, 1 000 000 rows,
 per row:
 
 | | instructions | mispredictions | tokens |
 |---|---:|---:|---:|
-| Rust, `naive` | 860.5 | 8.62 | 486 |
+| Rust, `naive` | 860.6 | 8.63 | 486 |
+| Nikaia, `naive.nika` | 1 022.9 | 8.73 | **291** |
 | Rust, `tuned` | 272.2 | 3.70 | 809 |
-| **Nikaia** | **300.2** | **1.58** | **618** |
-| Nikaia, overflow checks off | 298.1 | 1.59 | |
+| **Nikaia**, `examples/1brc.nika` | **300.1** | **1.61** | **618** |
+| Nikaia, overflow checks off | 298.1 | 1.58 | |
+
+The naive programs: Nikaia's is two fifths shorter and runs a fifth more
+instructions, almost all of it the `replace` that makes a new text of every
+temperature, where `naive.rs` reads the digits in place (below).
 
 Against `tuned`, Nikaia runs a tenth more instructions and less than half the
 mispredictions, from a quarter fewer tokens, with no `unsafe`, with UTF-8 and
 every overflow checked or proved; the same file also runs on every core. The
 overflow checks left cost 2.1 instructions a row, and they are the
 accumulator's two, `sum += temp` and `count += 1`: the temperature's are
-proved (ADR-314) and cost nothing in either build. `naive` is the shortest program and the
-slowest by far.
+proved (ADR-314) and cost nothing in either build.
 
 ## Where Nikaia's instructions go
 
@@ -82,6 +90,20 @@ Callgrind's attribution by source file, per row, for the table's Nikaia row:
 `tuned` is one function after inlining, so callgrind cannot split it the same
 way.
 
+## Where `naive.nika` differs from `naive.rs`
+
+Callgrind's attribution, per row, of what the two naive programs do not share:
+
+| | `naive.nika` | `naive.rs` |
+|---|---:|---:|
+| the new text `replace(".", "")` makes, its growing and freeing (`malloc`, `free`, `RawVec`, `memcpy`) | 240 | - |
+| reading the temperature (`text::parse_i32`; `naive.rs` in its loop) | 87 | - |
+| `std`'s `find` and the two `split_at`s, not inlined | 87 | - |
+| hashing a name: Fx in Nikaia, SipHash in Rust | - | 185 |
+
+Both find the line's end with `memchr` (148) and the `;` with a `char`
+searcher: a one-character pattern reaches Rust as a `char` (#617).
+
 ## What is left to build
 
 | what | where | issue |
@@ -102,6 +124,7 @@ grammar that describes the file costs you the loop a specialist writes.
 
 * `src/bin/naive.rs`, `src/bin/tuned.rs` - the two Rust programs, each a binary
   of its own.
+* `naive.nika` - the naive Nikaia program; `examples/1brc.nika` is the other.
 * `src/bin/gen.rs` - the input: `gen <rows> <file>`.
 * `brc.sh` - builds everything, checks the outputs agree, counts, prints the
   table.

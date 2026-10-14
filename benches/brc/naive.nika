@@ -1,0 +1,50 @@
+// What a Nikaia programmer writes first for the One Billion Row Challenge, as
+// `src/bin/naive.rs` is for Rust: the whole file as text, `lines`, a cut at
+// the `;`, and the map `std` gives you. No grammar, no fold, no parallelism;
+// `examples/1brc.nika` is the program that has them. See `README.md`.
+//
+// The temperature is read in tenths by dropping its `.`, so the arithmetic is
+// the integer arithmetic `naive.rs` does and the two print the same.
+
+use std::fs
+use std::cli
+use std::text
+use std::collections
+
+struct Stats {
+    min: i32,
+    max: i32,
+    sum: i64,
+    count: i64,
+}
+
+fn main() throws {
+    let path = cli::args().nth(1) ?? "measurements.txt"
+    let data = fs::read_to_string(path, fs::Root::Anywhere)
+    let mut stations: collections::HashMap[ref String, Stats] = collections::HashMap()
+
+    for line in data.lines() {
+        let at = line.find(";") ?? panic("a separator")
+        let (name, _) = line.split_at(at)
+        let (_, reading) = line.split_at(at + 1)
+        let temp = text::parse_i32(reading.replace(".", "")) ?? panic("a temperature")
+        stations.entry(name)
+            .and_modify fn(s) {
+                s.min = s.min.min(temp)
+                s.max = s.max.max(temp)
+                s.sum += temp as i64
+                s.count += 1
+            }
+            .or_insert(Stats { min: temp, max: temp, sum: temp as i64, count: 1 })
+    }
+
+    let mut names = stations.keys().collect()
+    names.sort()
+    let body = names
+        .map fn(name) {
+            let s = stations[name] ?? panic("a key")
+            f"{name}={s.min as f64 / 10.0:.1}/{(s.sum as f64 / s.count as f64) / 10.0:.1}/{s.max as f64 / 10.0:.1}"
+        }
+        .join(", ")
+    println(f"{{{body}}}")
+}

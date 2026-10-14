@@ -228,6 +228,12 @@ impl EmitState {
         } else {
             walk.hull_count = null
         }
+        // **A text pattern of one scalar is that character** (#617).
+        let scalar = self.facts.char_patterns.get(node_key(arg)) ?? ""
+        if scalar != "" {
+            out.push(scalar.clone())
+            return
+        }
         // **A part of a variant that is boxed is built in its box** (ADR-246 D3),
         // around everything else this argument is written with.
         let boxed_here = i < boxed_mask.len() && boxed_mask[i]

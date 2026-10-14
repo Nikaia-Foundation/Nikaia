@@ -917,6 +917,16 @@ impl EmitState {
             out.push(")")
             return
         }
+        // **`split_at` takes its position in `i64`** (#616), as `find` gives it.
+        if name == "split_at" && args.len() == 1 && self.facts.text_finds.contains(node_key(receiver)) {
+            out.push("nikaia_std::search::split_at(&")
+            self.emit_core_nested(world, walk, out, host, receiver, 255, depth, flow, scope)
+            // An argument: nothing binds looser than the call's own parentheses.
+            out.push(", ")
+            self.emit_core_nested(world, walk, out, host, args[0], 0, depth, flow, scope)
+            out.push(")")
+            return
+        }
         if name == "find" && self.facts.text_finds.contains(node_key(receiver)) {
             out.push("nikaia_std::search::find(&")
             self.emit_core_nested(world, walk, out, host, receiver, 255, depth, flow, scope)
