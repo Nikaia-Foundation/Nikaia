@@ -347,7 +347,7 @@ parameter lends (`match &c.signature`), so the lowering does not know that a
 local bound from `get(..) ??` is a reference. Workaround: a helper function
 over `ref T`. Met in U-c2 (`check_core_comptime.nika`).
 
-## D36 (new). `map.get(k)?.clone() ?? fallback` clones the reference: **open**
+## D36. `map.get(k)?.clone() ?? fallback` clones the reference: **built**
 
 `args.push(bound.get(p)?.clone() ?? Ty::Unknown)` over a `BTreeMap[String, Ty]`
 lowers to `match bound.get(p).as_ref() { Some(it) => Some(it.clone()), .. }`:
@@ -356,6 +356,9 @@ lowers to `match bound.get(p).as_ref() { Some(it) => Some(it.clone()), .. }`:
 `.as_ref()` is one level too many for a `get`, which already answers an
 `Option<&T>`. Workaround: a loop over the map, `for (k, v) in m { if k == p {
 return v.clone() } }`. Met in U-c9 (`check_core_places.nika`).
+Built: a `?.` reach on a `get`, `first` or `last` takes no `.as_ref()`
+(`emit_place_already_lent`, `emit_core_places.nika`); test
+`views_kept::a_cloned_get_with_a_fallback_runs`.
 
 ## Language questions filed as issues
 

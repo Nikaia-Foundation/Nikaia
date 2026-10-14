@@ -31272,6 +31272,17 @@ fn emit_place_mixed(choices: &collections::BTreeSet<i64>, value: Option<&Expr>) 
 
 fn emit_place_an_index(node: &Expr) -> bool { matches!(node, Expr::Index { .. }) }
 
+fn emit_place_already_lent(world: &EmitWorld<'_>, node: &Expr) -> bool {
+    match node {
+        Expr::MethodCall { method, .. } => {
+            let method = *method;
+            let name = emit_text(world, method);
+            name == "get" || name == "first" || name == "last"
+        },
+        _ => false,
+    }
+}
+
 impl EmitState {
     fn emit_place_reach(&self, base: &Expr, place: &str, flattens: bool) -> String {
         let view = match self.facts.viewed_reaches.get(&node_key(base)) { Some(__nikaia_value) => __nikaia_value, None => return place.to_owned() };
@@ -31299,7 +31310,7 @@ impl EmitState {
     pub fn emit_core_safe_method<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         let flattens = self.facts.flattened_reaches.contains(&node_key(receiver));
         let mut lent: String = String::from("");
-        if self.facts.lent_reaches.contains(&node_key(receiver)) { lent = ".as_ref()".to_owned(); }
+        if self.facts.lent_reaches.contains(&node_key(receiver)) && !emit_place_already_lent(world, receiver) { lent = ".as_ref()".to_owned(); }
         out.push("match ");
         let name = nikaia_std::index::or(walk.held.get(&node_key(receiver)), || "").to_owned();
         if walk.held.contains_key(&node_key(receiver)) { out.push(&name); } else if lent == "" && emit_place_an_index(receiver) { host.expr(walk, out, receiver, depth, flow, scope)?; } else { self.emit_core_postfix_base(world, walk, out, host, receiver, depth, flow, scope)?; }

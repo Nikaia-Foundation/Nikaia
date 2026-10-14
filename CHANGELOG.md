@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.931] — 2026-10-14
+
+**D36: a `?.` reach on `get`, `first` or `last` takes no extra `.as_ref()`**
+
+`m.get(k)?.clone() ?? x` cloned a `&&T` into a `&T`; a read that already
+lends its value is now matched as it is, so the clone is the value.
+
 ## [0.0.930] — 2026-10-14
 
 **check: fields, struct literals, `with`, an index, a cast and a range, in Nikaia (U-c9, #125, #558)**
