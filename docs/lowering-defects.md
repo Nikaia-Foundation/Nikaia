@@ -310,3 +310,11 @@ beside a literal fallback could be `Option<&String>` or `Option<String>`, and
 `"lit".into()` matched both `Or` impls. The answer is mapped to text of its
 own first (`.map(|v| v.to_string())`), so a typed `let x: T? = ..` is no
 longer needed (`views_kept.rs`).
+
+## D33 (new). A tuple-variant pattern with too few fields passes the checker
+
+`match e { E::A(_) => 1, else => 0 }` with `A(i64, i64)` passes `nikaia check`;
+rustc refuses the lowering (*this pattern has 1 field, but the corresponding
+tuple variant has 2 fields*). The checker should name the arity itself (a
+`NK` refusal), the more so while D27 leaves no rest pattern. Found with rs2nika
+(#579) while trying `(_)` for `(..)`.

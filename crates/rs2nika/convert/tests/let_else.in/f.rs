@@ -3,7 +3,11 @@ fn bound(types: &[Ty]) -> usize {
     for ty in types {
         let Ty::Named { name, args, .. } = ty else { continue; };
         let Ty::Nullable(inner) = ty else { return 0; };
-        numbers += args.len() + name.len();
+        let Ty::Tuple(parts) = inner
+        else {
+            continue;
+        };
+        numbers += args.len() + name.len() + parts.len();
     }
     numbers
 }

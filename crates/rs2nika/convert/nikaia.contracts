@@ -32,6 +32,13 @@ touches = []
 views = ["given: borrowed"]
 signature = "(mut ctx: Rs2nikaCtx, given: ref String) -> String"
 
+[fn."rs2nika_arm_assign"]
+sync = "inferred"
+keeps = ["line"]
+touches = []
+views = ["line: borrowed"]
+signature = "(mut ctx: Rs2nikaCtx, line: ref String) -> String"
+
 [fn."rs2nika_arm_body"]
 sync = "inferred"
 touches = []

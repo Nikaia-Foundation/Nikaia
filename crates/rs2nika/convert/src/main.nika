@@ -107,6 +107,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R58  a line on Rust-only types (`&[&Parsed]`, `Ledger`, `check(..)`, `once(..)`) -> `// ADAPTER: bleibt in Rust`",
         "R59  `let v: T = xs.iter().filter(|x| p).cloned().collect()` -> `let mut v: T = []` and a `for` with `push(x.clone())`",
         "R60  `let P = v else { jump }` -> `let x = match v { P => x, else => jump }` (a tuple of the names it binds)",
+        "R62  a match arm whose value is an assignment -> `P => { n += 1 },`",
         "R61  `let (mut a, mut b): (A, B) = (x, y)` -> one `let` each",
         "R59  Option combinators with a field or method body: `o.map(|x| x.f)` -> `o?.f`, `.is_some_and(|x| x.p())` -> `(o?.p() ?? false)`, `.map_or(d, ..)` -> `(o?.. ?? d)`",
         "R60  `String::with_capacity(n)` -> `\"\"`",
@@ -950,6 +951,17 @@ fn rs2nika_join_chains(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[Strin
                 lines.push(f"{l} {second} }}")
                 rs2nika_hit(ctx, "R37")
                 i = i + 3
+                continue
+            }
+        }
+        // rustfmt's `let P = v` / `else {` / jump / `};`
+        if l.trim().starts_with("let ") && i + 3 < given.len() && given[i + 1].trim() == "else {" {
+            let fourth: String = given[i + 3].trim().clone()
+            if (fourth == "};" || fourth == "}") && rs2nika_is_jump(given[i + 2]) {
+                let jump: String = given[i + 2].trim().clone()
+                lines.push(f"{l.trim_end()} else {{ {jump} }}")
+                rs2nika_hit(ctx, "R37")
+                i = i + 4
                 continue
             }
         }
@@ -2932,6 +2944,27 @@ fn rs2nika_pattern_names(pat: ref String) -> Vec[String] {
     return out
 }
 
+/// R62: a match arm whose value is an assignment (`P => n += 1,`) takes braces.
+fn rs2nika_arm_assign(mut ctx: Rs2nikaCtx, line: ref String) -> String {
+    let arrow = line.find(" => ") ?? return line.clone()
+    let body: String = line[arrow + 4..<line.len()].trim_end().clone()
+    if !body.ends_with(",") || body.starts_with("{") {
+        return line.clone()
+    }
+    let value: String = body[0..<body.len() - 1].trim().clone()
+    let mut assign = false
+    for op in [" = ", " += ", " -= ", " *= ", " /= ", " |= ", " &= "] {
+        if value.contains(op) && !value.contains("(") && !value.contains("{") {
+            assign = true
+        }
+    }
+    if !assign {
+        return line.clone()
+    }
+    rs2nika_hit(ctx, "R62")
+    return f"{line[0..<arrow + 4]}{{ {value} }},"
+}
+
 /// R60: `let P = v else { jump };` with any pattern -> `let x = match v { P => x, else => jump }`
 /// (a tuple of the names when it binds several).
 fn rs2nika_let_else(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String] {
@@ -3234,6 +3267,7 @@ pub fn rs2nika_convert(src: ref String, profile: ref String, prefix: ref String,
                     rs2nika_hit(ctx, "R1")
                 }
                 code = code.replace("};", "}")
+                code = rs2nika_arm_assign(ctx, code)
                 out.push(code)
             }
         }

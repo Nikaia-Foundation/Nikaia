@@ -4,7 +4,8 @@ fn bound(types: ref Vec[Ty]) -> i64 sync {
     for ty in types {
         let (name, args) = match ty { Ty::Named { name, args, .. } => (name, args), else => continue }
         let inner = match ty { Ty::Nullable(inner) => inner, else => return 0 }
-        numbers += args.len() + name.len()
+        let parts = match inner { Ty::Tuple(parts) => parts, else => continue }
+        numbers += args.len() + name.len() + parts.len()
     }
     return numbers
 }
