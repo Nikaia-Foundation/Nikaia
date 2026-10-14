@@ -222,7 +222,7 @@ pub fn throws_published(name: ref String, errors: ref Vec[String]) -> Vec[String
         if !throws_given(error) {
             out.insert(error.clone())
         } else if error.starts_with(prefix) {
-            let rest: String = (error.strip_prefix(prefix.clone()) ?? "").clone()
+            let rest: String = (error.strip_prefix(prefix) ?? "").clone()
             out.insert(f"from({rest}")
         } else {
             out.insert(UNNAMED.clone())

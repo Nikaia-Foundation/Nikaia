@@ -1615,3 +1615,35 @@ fn main() {
     );
     assert_eq!(said.trim(), "a none b int other int");
 }
+
+/// A text method's pattern is only read, in a loop too: `strip_prefix` and
+/// `strip_suffix` of an owned `String` declared outside it (lowering-defects
+/// D41, was `NK2105`).
+#[test]
+fn a_pattern_handed_to_strip_in_a_loop_is_only_read() {
+    let said = printed(
+        "strip-pattern-in-a-loop",
+        r#"
+fn published(name: ref String, errors: ref Vec[String]) -> Vec[String] {
+    let prefix = f"from({name}::"
+    let close = f")"
+    let mut out: Vec[String] = []
+    for error in errors {
+        if error.starts_with(prefix) {
+            let rest: String = (error.strip_prefix(prefix) ?? "").clone()
+            let param: String = (rest.strip_suffix(close) ?? "").clone()
+            out.push(param)
+        }
+    }
+    return out
+}
+
+fn main() {
+    let errors: Vec[String] = ["from(f::p)".clone(), "from(g::q)".clone(), "from(f::r)".clone()]
+    let n: String = "f"
+    println(published(n, errors).join(" "))
+}
+"#,
+    );
+    assert_eq!(said.trim(), "p r");
+}

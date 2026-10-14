@@ -9928,7 +9928,8 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
         }
         let mut lent = if own { lends_in_own(contract, at + offset, &vec![world.library]) } else { lends_in(contract, at + offset, &vec![world.library]) };
         lent = lent || at == 0 && is_a_lookup(key) || check_arguments_a_print(key);
-        lent = lent || at == 0 && (key == "str::starts_with" || key == "str::ends_with" || key == "str::contains");
+        let text_method: String = nikaia_std::index::or(key.strip_prefix("str::"), || "").to_owned();
+        lent = lent || text_method != "" && check_core_method_pattern_at(&text_method) == at;
         let kept = !lent;
         if kept && !want.is_a_view() && !nikaia_std::list::contains(&signature.mutable, &name) && !state.foreign_names.contains(written) && given_here.is_some() {
             let value = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -53695,7 +53696,7 @@ pub fn throws_published(name: &str, errors: &[String]) -> Vec<String> {
     let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
     for error in errors.iter() {
         if !throws_given(error) { out.insert(error.to_owned()); } else if error.starts_with(&prefix) {
-            let rest: String = nikaia_std::index::or(error.strip_prefix(&prefix.to_owned()), || "").to_owned();
+            let rest: String = nikaia_std::index::or(error.strip_prefix(&prefix), || "").to_owned();
             out.insert(format!("from({}", rest));
         } else { out.insert(UNNAMED.to_owned()); }
     }

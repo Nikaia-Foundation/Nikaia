@@ -288,7 +288,9 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         // (ADR-279 D5), and **a pattern is only read** (D28).
         let mut lent = if own { lends_in_own(contract, at + offset, [world.library]) } else { lends_in(contract, at + offset, [world.library]) }
         lent = lent || (at == 0 && is_a_lookup(key)) || check_arguments_a_print(key)
-        lent = lent || (at == 0 && (key == "str::starts_with" || key == "str::ends_with" || key == "str::contains"))
+        // Every text method's pattern, `strip_prefix`'s among them (D41).
+        let text_method: String = (key.strip_prefix("str::") ?? "").clone()
+        lent = lent || (text_method != "" && check_core_method_pattern_at(text_method) == at)
         let kept = !lent
         // **What the callee keeps, it is given** (ADR-293 D29): no `&` is
         // written for this position, so a name here moves. **Not across the C

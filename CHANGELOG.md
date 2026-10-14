@@ -13,6 +13,7 @@ has no heading here; `CLAUDE.md` draws the line.
 **Lowering defects D2, D4, D9, D19; four tools workarounds removed**
 
 * A `for` over a `ref Vec[T]` whose `T` copies by declaration (the package's own `Copy` type, or a described one whose ledger says `copies`, such as `Symbol`) binds the value, as one over numbers does (D4).
+* A text method's pattern is only read, `strip_prefix` and `strip_suffix` in a loop among them (was `NK2105`; D41); `throws.nika` drops its `prefix.clone()`.
 * D2 is D36, built; D9 and D19 are not reproduced and closed. Tests in `selfhosting_defects.rs`.
 * `tools/*.nika`: the D36 loops (`check_core_places_bound`, `check_core_flow_part`), the D38 helper `check_core_call_after`, the D34 inline comparison and the D19 one-arm-per-string match give way to the plain forms.
 

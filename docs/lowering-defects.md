@@ -47,6 +47,7 @@ finds two D8 casts in `check_numbers4.nika`.
 | D39 | `One { n: -2 }.go() catch { 0 }`: a struct literal heads a `match` scrutinee (rustc: struct literals are not allowed here) | **built** (0.0.961: written in brackets) | `a_struct_literal_before_a_catch_runs` |
 | D40 | `fn take(s: String) { let mut t = s; t.push_str("!") }` lowered `s` as `&str` (rustc refuses `push_str`) | **built** (0.0.961: a `let mut` of a parameter keeps it, `keeps.nika`) | `a_parameter_moved_into_a_let_mut_stays_owned` |
 
+| D41 | `strip_prefix(prefix)` with an owned `prefix` declared outside a loop is `NK2105` (passed to a method that keeps it) | **built** (0.0.965: every text method's pattern is only read, `check_core_method_pattern_at`; `throws.nika` drops its `prefix.clone()`) | `selfhosting_defects::a_pattern_handed_to_strip_in_a_loop_is_only_read` |
 ---
 
 ## D1. A by-value parameter that is only read lowers as `&T`, and `p with {..}` then writes `..p`
@@ -424,3 +425,7 @@ binds, so `keeps` now counts a parameter bound by one as kept (owned), unless th
 passed as `ref mut`), so handing it back would be a view of that view. It is refused with
 `NK1131`, whose help takes `e: ref E` without `mut` and walks a local (`let mut at = e`). Test:
 `a_mut_view_parameter_handed_back_is_refused`.
+
+## D41 (new). A text method's pattern in a loop is taken: **built** (0.0.965)
+
+`error.strip_prefix(prefix)` inside a `for`, with `prefix` an `f"..."` declared before it, was refused with `NK2105`: only `starts_with`, `ends_with` and `contains` counted their pattern as read (D28), so `strip_prefix`'s was handed over. Met in `throws.nika` (0.0.963), worked around with `prefix.clone()`. Built: the argument a text method takes as its pattern (`check_core_method_pattern_at`, #617) is lent, for every such method (`check_arguments.nika`); the clone is gone.
