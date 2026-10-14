@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.901] — 2026-10-14
+
+**check: the leaves of a choice, arms asked one by one, map keys and handing over in Nikaia (#125, #558)**
+- `value_leaves`, `arms_to_ask`, `note_mixed`, `views_meet_owned_text`, `expect_kept`, `span_at`, `a_map_key`, `hands_over` and the settle of `a_settle_in_this_function` move from the checker into `tools/check_arm_leaves.nika`; `arm_types` and `arm_disagreements` are `CheckState`'s, and `ParsedView` carries the parser's expression spans.
+
 ## [0.0.900] — 2026-10-14
 
 **check: overflow, slot wraps, Copy and the collected types in Nikaia (#558, #125)**

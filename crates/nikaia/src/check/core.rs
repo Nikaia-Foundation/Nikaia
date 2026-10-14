@@ -62,6 +62,8 @@ impl DerefMut for Baton {
 pub(super) fn hollow() -> Box<CheckState> {
     Box::new(CheckState {
         flow: CheckFlow::start(false, false),
+        arm_types: BTreeMap::new(),
+        arm_disagreements: BTreeMap::new(),
         findings: Vec::new(),
         structs: BTreeMap::new(),
         copies_in_the_package: BTreeSet::new(),

@@ -192,6 +192,9 @@ not as a gap: *as it is today, until someone needs more*.
 | `starts_with([chars])` passes the checker, rustc E0277 (D17) | 1 | `ty.starts_with(['i', 'a', ..])` | `render::an_or_a` |
 | `match name { "i32" \| "i64" => .. }` on `ref String` (D19) | 1 | `matches!(name.as_str(), "i32" \| ..)` | `a_copied_scalar`, one arm per string |
 | `mut e: ref E` reassigned in a loop and returned: rustc "missing lifetime" (new, probe `p25`) | 1 | `fn peeled(mut value: &Expr) -> &Expr { while let .. }` | recursion |
+| `map.get(k)?.clone() ?? x` on a `Ty` or `Span` value lowers to a `&T` (E0277 `&Ty == Ty`, E0308); on an `i64` an index by `&i64` (D31) | 3 | `self.arm_types.get(&k)?` | `check_arm_leaves.nika`: `arm_type_of` returning `Ty?`, plain `?? return` for the `i64` |
+| NK2302 on a method whose result holds `value`'s views and a `Ty` cloned out of `self`'s map | 1 | `fn arms_to_ask<'e>(&mut self, value: &'e Expr) -> Vec<(&'e Expr, Ty)>` | the clone moved into `arm_type_of` |
+| two `self.s` arms of a Rust closure kept across a `self.s` write (E0502) | 1 | `leaves(then_branch)` called again after `arm_types.insert` | the booleans computed once |
 | a guard over a `T?` scrutinee (`n if n > 3` on `i64?`) passes the checker, rustc E0308 (new, probe `p01`) | - | - | - |
 | `if o != null { o + 1 }` passes the checker, rustc cannot add to `Option<i64>` (new, probe `q13`) | - | - | - |
 

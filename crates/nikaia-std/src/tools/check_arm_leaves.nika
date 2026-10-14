@@ -1,0 +1,381 @@
+// crates/nikaia-std/src/tools/check_arm_leaves.nika
+//
+// **The leaves of a choice and the types its arms came to** (#562, #596),
+// moved from the compiler's checker (ADR-294, #125, #558, C-5g).
+
+use std::collections
+
+impl CheckState {
+    /// **The values a choice can come to**, each one written where the whole
+    /// goes: an `if` with an `else` and a `match`, through blocks; an arm that
+    /// leaves comes to nothing.
+    pub fn value_leaves(ref self, world: ref CheckWorld, value: ref Expr) -> Vec[ref Expr] sync {
+        let mut out: Vec[ref Expr] = []
+        match value {
+            Expr::If { then_branch, else_branch, .. } => {
+                let otherwise = else_branch ?? return out
+                for block in [then_branch, otherwise] {
+                    let leaves = self.block_exits(world, block) || self.block_leaves(world, block)
+                    if !leaves {
+                        let tail = tail_value_of(block) ?? continue
+                        out.extend(self.value_leaves(world, tail))
+                    }
+                }
+            },
+            Expr::Match { arms, .. } => {
+                for arm in arms {
+                    if !self.leaves(world, arm.body) {
+                        out.extend(self.value_leaves(world, arm.body))
+                    }
+                }
+            },
+            Expr::Block(block, _) => {
+                let tail = tail_value_of(block) ?? return out
+                out.extend(self.value_leaves(world, tail))
+            },
+            else => out.push(value),
+        }
+        return out
+    }
+
+    /// **The choices `value_leaves` walked through**, by their nodes.
+    pub fn choice_nodes(ref self, world: ref CheckWorld, value: ref Expr) -> Vec[i64] sync {
+        let mut out: Vec[i64] = []
+        match value {
+            Expr::If { then_branch, else_branch, .. } => {
+                let otherwise = else_branch ?? return out
+                out.push(node_key(value))
+                for block in [then_branch, otherwise] {
+                    let leaves = self.block_exits(world, block) || self.block_leaves(world, block)
+                    if !leaves {
+                        let tail = tail_value_of(block) ?? continue
+                        out.extend(self.choice_nodes(world, tail))
+                    }
+                }
+            },
+            Expr::Match { arms, .. } => {
+                out.push(node_key(value))
+                for arm in arms {
+                    if !self.leaves(world, arm.body) {
+                        out.extend(self.choice_nodes(world, arm.body))
+                    }
+                }
+            },
+            Expr::Block(block, _) => {
+                let tail = tail_value_of(block) ?? return out
+                out.extend(self.choice_nodes(world, tail))
+            },
+            else => {},
+        }
+        return out
+    }
+
+    /// The type the arm ending in `leaf` came to, where it has one.
+    pub fn arm_type_of(ref self, leaf: ref Expr) -> Ty? sync {
+        let ty = self.arm_types.get(node_key(leaf)) ?? return null
+        return ty.clone()
+    }
+
+    /// **The arms of an `if` or a `match` are values written in the position
+    /// the whole goes into** (#596): each arm with the type it came to; empty
+    /// where `value` is not a choice or none of its arms has a type. Asking
+    /// them takes back the refusal that the arms disagree.
+    pub fn arms_to_ask(ref mut self, world: ref CheckWorld, value: ref Expr) -> Vec[CheckArm] sync {
+        let mut asked: Vec[CheckArm] = []
+        if !is_a_choice(value) {
+            return asked
+        }
+        for leaf in self.value_leaves(world, value) {
+            let ty = self.arm_type_of(leaf) ?? continue
+            asked.push(CheckArm { tail: leaf, ty: ty })
+        }
+        if asked.len() > 0 {
+            for node in self.choice_nodes(world, value) {
+                self.arm_disagreements.remove(node)
+            }
+        }
+        return asked
+    }
+
+    /// **An `if` or a `match` whose arms are views and text of their own, going
+    /// into a position both kinds flow into** (#562): the lowering wraps each
+    /// leaf on its own (`either(…)`, `either_maybe(…)` in a `T?`, `null`
+    /// stays `None`) instead of the whole value once.
+    pub fn note_mixed(ref mut self, world: ref CheckWorld, value: ref Expr, nullable: bool) sync {
+        for leaf in self.value_leaves(world, value) {
+            if !ends_in_null(check_peeled(leaf)) {
+                self.facts.mixed_leaves.insert(node_key(leaf), nullable)
+            }
+        }
+        self.facts.mixed_choices.insert(node_key(value))
+    }
+
+    /// **Views and text of its own meet as text where nothing asks** (#562):
+    /// `let y = if c { s } else { int_text(1) }` is text, and the position `y`
+    /// goes into decides what it is (ADR-282 D14). The name is bound as the
+    /// view it may be (ADR-282 D22, D25).
+    pub fn views_meet_owned_text(ref mut self, world: ref CheckWorld, value: ref Expr) -> Ty? sync {
+        if !is_a_choice(value) {
+            return null
+        }
+        let text = a_string_type()
+        let maybe_text = Ty::Nullable(a_string_type())
+        let mut views = 0
+        let mut owned = 0
+        let mut absent = false
+        for leaf in self.value_leaves(world, value) {
+            if ends_in_null(check_peeled(leaf)) {
+                absent = true
+                continue
+            }
+            let ty = self.arm_type_of(leaf) ?? return null
+            if views_into_text(ty, text) {
+                views += 1
+            } else if ty == text {
+                owned += 1
+            } else if ty == maybe_text {
+                owned += 1
+                absent = true
+            } else {
+                return null
+            }
+        }
+        if views == 0 || owned == 0 {
+            return null
+        }
+        for node in self.choice_nodes(world, value) {
+            self.arm_disagreements.remove(node)
+        }
+        self.note_mixed(world, value, absent)
+        let view = Ty::Named { name: TEXT_VIEW.clone(), args: [], view: true }
+        if absent {
+            return Ty::Nullable(view)
+        }
+        return view
+    }
+}
+
+fn map_key_message(found: ref String, want: ref String) -> String sync {
+    return f"This key is `{found}`, but the map's keys are `{want}`."
+}
+
+fn names_text(ty: ref Ty) -> bool sync {
+    return match ty {
+        Ty::Named { name, .. } => name == "String" || name == "str" || name.ends_with("::String") || name.ends_with("::str"),
+        else => false,
+    }
+}
+
+fn a_name_or_a_field(value: ref Expr) -> bool sync {
+    return match value {
+        Expr::Variable(_, _) => true,
+        Expr::Field { .. } => true,
+        else => false,
+    }
+}
+
+impl CheckState {
+    /// **A value handed to something that keeps it** (ADR-293 D29): a name or
+    /// a field path read here is handed over; `name.to_string()` is `name`
+    /// (ADR-282 D8).
+    pub fn hands_over(ref mut self, world: ref CheckWorld, value: ref Expr, ty: ref Ty, to: ref String, span: ref Span) sync {
+        match value {
+            Expr::MethodCall { receiver, .. } => {
+                if self.facts.text_as_is.contains(node_key(receiver)) {
+                    self.hands_over(world, receiver, ty, to, span)
+                    return
+                }
+            },
+            else => {},
+        }
+        let at = self.flow.read_index.get((node_key(value), span.start as i64)) ?? return
+        if !a_name_or_a_field(value) {
+            return
+        }
+        let path = self.reads_on_paths[at].path.clone()
+        let seq = self.reads_on_paths[at].seq
+        self.hands_over_path(world, path, ty, seq, to, span)
+    }
+
+    /// **A key in a map's brackets** (issue #169, ADR-282): written, the map
+    /// keeps it - handed over, a literal built into text of its own, a view
+    /// refused; read, the key is lent or goes in as it is where it is a view
+    /// already. A map keyed by views, and one whose key type nothing pinned,
+    /// is keyed by what goes in the brackets.
+    pub fn a_map_key(ref mut self, world: ref CheckWorld, keys: ref Ty, found: ref Ty, index: ref Expr, writing: bool, span: ref Span) sync {
+        if keys.is_unknown() {
+            let mut form = FactKeyForm::Either
+            if writing {
+                form = FactKeyForm::Handed
+            } else if found.is_a_view() {
+                form = FactKeyForm::AsIs
+            }
+            self.facts.map_keys.insert((node_key(index), writing), form)
+            return
+        }
+        if keys.is_a_view() {
+            return
+        }
+        let mut form = FactKeyForm::Lent
+        if writing {
+            if self.text_literal(world, keys, index, true) == null {
+                self.expect_kept_asked(world, found, keys, index, "a map keeps its keys", span, "assign", map_key_message)
+                self.hands_over(world, index, found, "used as a map key", span)
+            }
+            form = FactKeyForm::Handed
+        } else if self.a_key_read_as_it_is(world, found, index) {
+            // **A name that is a view below whatever its type says**, a
+            // parameter the function is lent (ADR-279), or a `let` over a
+            // place (#465) is a reference already.
+            form = FactKeyForm::AsIs
+        }
+        self.facts.map_keys.insert((node_key(index), writing), form)
+    }
+
+    fn a_key_read_as_it_is(ref self, world: ref CheckWorld, found: ref Ty, index: ref Expr) -> bool sync {
+        if found.is_a_view() || self.a_lent_let(world, index) {
+            return true
+        }
+        match index {
+            Expr::LitStr { .. } => return true,
+            Expr::Variable(name, _) => {
+                let local = self.binding(world.words.resolve(name)) ?? return !names_text(found) && self.a_lent_parameter(world, index)
+                if local.lent {
+                    return true
+                }
+            },
+            else => {},
+        }
+        return !names_text(found) && self.a_lent_parameter(world, index)
+    }
+}
+
+fn is_a_choice(value: ref Expr) -> bool sync {
+    return match value {
+        Expr::If { .. } => true,
+        Expr::Match { .. } => true,
+        else => false,
+    }
+}
+
+/// **Where `expr` was written, or the statement's `span`** (#107): the
+/// parser's span of the expression when it made the node and the node
+/// stands inside the statement; a node the compiler built, or one from
+/// another file, is reported at the statement.
+pub fn check_span_at(world: ref CheckWorld, expr: ref Expr, span: ref Span) -> Span sync {
+    let at = world.here.spans.get(id_of(expr)) ?? return Span { start: span.start, end: span.end }
+    if at.start >= span.start && at.end <= span.end {
+        return Span { start: at.start, end: at.end }
+    }
+    return Span { start: span.start, end: span.end }
+}
+
+impl CheckState {
+    /// **A value with a cleanup may die in the function being walked**
+    /// (ADR-297 D2): its body becomes a settle point's, and the settle is a
+    /// call every analysis reads - one that pauses, and one that fails where
+    /// the function says `throws` and the cleanup can fail. The settle the
+    /// function reaches, where a function is being walked.
+    pub fn a_settle_in_this_function(ref mut self, fails: bool) -> String? sync {
+        let current = (self.current ?? return null).clone()
+        let failing = fails && self.flow.throwing
+        let before = self.facts.settle_fns.get(current) ?? false
+        self.facts.settle_fns.insert(current, before || failing)
+        if failing {
+            return "cleanup::settle_failing".clone()
+        }
+        return "cleanup::settle".clone()
+    }
+}
+
+fn arm_is_a_written_integer(arm: ref Expr) -> bool sync {
+    return match check_peeled(arm) {
+        Expr::LitInt { .. } => true,
+        else => false,
+    }
+}
+
+impl CheckState {
+    /// **What `expect_kept` refuses at the statement, said at `at`** (#107):
+    /// the refusals it pushes, and the one it leaves waiting on an unsigned
+    /// slot, which stays keyed by the statement (ADR-285 D32).
+    fn expect_kept_moved(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr?, keeper: ref String, span: ref Span, at: ref Span, what: ref String, message: fn(ref String, ref String) -> String sync) sync {
+        let pushed = self.findings.len() as i64
+        let waiting = self.slots_waiting(span)
+        self.expect_kept(world, found, want, value, keeper, span, what, message)
+        self.findings_moved(span, at, pushed, waiting)
+    }
+
+    /// `expect_kept`, for a position that has the value in hand (ADR-282 D25).
+    /// **An `if` or a `match` whose arms did not agree is asked arm by arm**
+    /// (#596): each is a value written in this position, with this position's
+    /// code and help.
+    pub fn expect_kept_asked(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr?, keeper: ref String, span: ref Span, what: ref String, message: fn(ref String, ref String) -> String sync) sync {
+        let mut arms: Vec[CheckArm] = []
+        let mut at = Span { start: span.start, end: span.end }
+        if value != null {
+            let whole = value ?? return
+            at = check_span_at(world, whole, span)
+            if found.is_unknown() {
+                arms = self.arms_to_ask(world, whole)
+            }
+        }
+        if arms.len() == 0 {
+            self.expect_kept_moved(world, found, want, value, keeper, span, at, what, message)
+            return
+        }
+        // **A position both kinds of text flow into takes each arm as it is**
+        // (ADR-282 D14, #562): the lowering wraps every arm on its own, so the
+        // arms that are views and the ones that are text of their own meet as
+        // `EitherText`.
+        let mut mixed = false
+        if what == "returns" {
+            mixed = self.flow.expected_either
+        } else if what == "field" {
+            mixed = self.flow.field_either
+        }
+        let text = a_string_type()
+        let mut a_view = false
+        for arm in arms {
+            if views_into_text(arm.ty, text) {
+                a_view = true
+            }
+        }
+        for asked in arms {
+            let arm = asked.tail ?? continue
+            let mut ty = self.text_literal(world, want, arm, true) ?? asked.ty.clone()
+            // **An open-number arm is asked as a number written there** (#600):
+            // `if c { "a".clone() } else { 1 }` under `String` is refused as
+            // `let s: String = 3` is.
+            if ty.is_unknown() && arm_is_a_written_integer(arm) && self.no_number_is(want) {
+                ty = Ty::Named { name: "i64".clone(), args: [], view: false }
+            }
+            if what == "field" {
+                self.flow.field_either = mixed
+            }
+            let here = check_span_at(world, arm, span)
+            // A name of one (`let n = 12`) is #554's refusal.
+            if ty.is_unknown() {
+                let pushed = self.findings.len()
+                let refused = self.an_open_number_where_none_fits(world, ty, want, arm, span, what, message)
+                let mut i = pushed
+                while i < self.findings.len() {
+                    self.findings[i].span = Span { start: here.start, end: here.end }
+                    i += 1
+                }
+                if refused {
+                    continue
+                }
+            }
+            self.expect_kept_moved(world, ty, want, arm, keeper, span, here, what, message)
+        }
+        if mixed && a_view {
+            let whole = value ?? return
+            let nullable = match want {
+                Ty::Nullable(_) => true,
+                else => false,
+            }
+            self.note_mixed(world, whole, nullable)
+        }
+    }
+}

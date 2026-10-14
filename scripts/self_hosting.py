@@ -200,6 +200,7 @@ COMPILER_NIKA = {
     "check_overflow.nika": "check: an operation on constants that overflows, the wrap a slot takes, unsigned slots, moved refusals (0.0.900)",
     "check_copies.nika": "check: which declared types derive Copy, what the types beside are made of (0.0.900)",
     "check_collect.nika": "check: the program's structs, enums and bounds collected before the walk (0.0.900)",
+    "check_arm_leaves.nika": "check: the leaves of a choice, arms asked one by one, map keys, handing over (0.0.901)",
 }
 
 

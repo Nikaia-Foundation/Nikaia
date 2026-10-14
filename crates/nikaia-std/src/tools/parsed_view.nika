@@ -17,6 +17,8 @@ pub struct ParsedView {
     pub items: ref Vec[Spanned[Item]],
     /// The package this file is a part of, where it is a dependency's.
     pub package: ref String?,
+    /// Where each expression the parser made was written, by its id (#107).
+    pub spans: ref collections::BTreeMap[u32, Span],
 }
 
 impl ParsedView {

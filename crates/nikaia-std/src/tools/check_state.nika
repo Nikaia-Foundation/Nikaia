@@ -792,4 +792,9 @@ pub struct CheckState {
     pub stored_frames: Vec[CheckStoredCode],
     /// Where the walk of the body stands (`check_flow.nika`).
     pub flow: CheckFlow,
+    /// The type each arm of a choice came to, by the arm's value (#596).
+    pub arm_types: collections::BTreeMap[i64, Ty],
+    /// Arms that are known and disagree, by the choice, said at the end unless
+    /// a position asks the arms one by one (#596, `NK1245`).
+    pub arm_disagreements: collections::BTreeMap[i64, CheckFinding],
 }

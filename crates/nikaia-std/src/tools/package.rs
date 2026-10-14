@@ -9923,6 +9923,274 @@ impl CheckState {
 }
 
 
+// --- check_arm_leaves.nika ---
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn value_leaves<'r>(&self, world: &CheckWorld<'_>, value: &'r Expr) -> Vec<&'r Expr> {
+        let mut out: Vec<&Expr> = vec![];
+        match value {
+            Expr::If { then_branch, else_branch, .. } => {
+                let otherwise = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return out };
+                for block in [then_branch, otherwise] {
+                    let leaves = self.block_exits(world, block) || self.block_leaves(world, block);
+                    if !leaves {
+                        let tail = match tail_value_of(block) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                        out.extend(self.value_leaves(world, tail));
+                    }
+                }
+            },
+            Expr::Match { arms, .. } => { for arm in arms.iter() { if !self.leaves(world, &arm.body) { out.extend(self.value_leaves(world, &arm.body)); } } },
+            Expr::Block(block, _) => {
+                let tail = match tail_value_of(block) { Some(__nikaia_value) => __nikaia_value, None => return out };
+                out.extend(self.value_leaves(world, tail));
+            },
+            _ => out.push(value),
+        }
+        out
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn choice_nodes(&self, world: &CheckWorld<'_>, value: &Expr) -> Vec<i64> {
+        let mut out: Vec<i64> = vec![];
+        match value {
+            Expr::If { then_branch, else_branch, .. } => {
+                let otherwise = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return out };
+                out.push(node_key(value));
+                for block in [then_branch, otherwise] {
+                    let leaves = self.block_exits(world, block) || self.block_leaves(world, block);
+                    if !leaves {
+                        let tail = match tail_value_of(block) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                        out.extend(self.choice_nodes(world, tail));
+                    }
+                }
+            },
+            Expr::Match { arms, .. } => {
+                out.push(node_key(value));
+                for arm in arms.iter() { if !self.leaves(world, &arm.body) { out.extend(self.choice_nodes(world, &arm.body)); } }
+            },
+            Expr::Block(block, _) => {
+                let tail = match tail_value_of(block) { Some(__nikaia_value) => __nikaia_value, None => return out };
+                out.extend(self.choice_nodes(world, tail));
+            },
+            _ => { },
+        }
+        out
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn arm_type_of(&self, leaf: &Expr) -> Option<Ty> {
+        let ty = match self.arm_types.get(&node_key(leaf)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        Some(ty.clone())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn arms_to_ask<'r>(&mut self, world: &CheckWorld<'_>, value: &'r Expr) -> Vec<CheckArm<'r>> {
+        let mut asked: Vec<CheckArm<'_>> = vec![];
+        if !is_a_choice(value) { return asked; }
+        for leaf in self.value_leaves(world, value) {
+            let ty = match self.arm_type_of(leaf) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            asked.push(CheckArm { tail: Some(leaf), ty });
+        }
+        if !asked.is_empty() { for node in self.choice_nodes(world, value) { self.arm_disagreements.remove(&node); } }
+        asked
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn note_mixed(&mut self, world: &CheckWorld<'_>, value: &Expr, nullable: bool) {
+        for leaf in self.value_leaves(world, value) { if !ends_in_null(check_peeled(leaf)) { self.facts.mixed_leaves.insert(node_key(leaf), nullable); } }
+        self.facts.mixed_choices.insert(node_key(value));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn views_meet_owned_text(&mut self, world: &CheckWorld<'_>, value: &Expr) -> Option<Ty> {
+        if !is_a_choice(value) { return None; }
+        let text = a_string_type();
+        let maybe_text = Ty::Nullable(Box::new(a_string_type()));
+        let mut views = 0;
+        let mut owned = 0;
+        let mut absent = false;
+        for leaf in self.value_leaves(world, value) {
+            if ends_in_null(check_peeled(leaf)) {
+                absent = true;
+                continue;
+            }
+            let ty = match self.arm_type_of(leaf) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            if views_into_text(&ty, &text) { views += 1; } else if ty == text { owned += 1; } else if ty == maybe_text {
+                owned += 1;
+                absent = true;
+            } else { return None; }
+        }
+        if views == 0 || owned == 0 { return None; }
+        for node in self.choice_nodes(world, value) { self.arm_disagreements.remove(&node); }
+        self.note_mixed(world, value, absent);
+        let view = Ty::Named { name: TEXT_VIEW.to_owned(), args: vec![], view: true };
+        if absent { return Some(Ty::Nullable(Box::new(view))); }
+        Some(view)
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn map_key_message(found: &str, want: &str) -> String { format!("This key is `{}`, but the map's keys are `{}`.", found, want) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn names_text(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { name, .. } => name == "String" || name == "str" || name.ends_with("::String") || name.ends_with("::str"),
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn a_name_or_a_field(value: &Expr) -> bool { matches!(value, Expr::Variable(_, _) | Expr::Field { .. }) }
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn hands_over(&mut self, world: &CheckWorld<'_>, value: &Expr, ty: &Ty, to: &str, span: &Span) {
+        match value {
+            Expr::MethodCall { receiver, .. } => {
+                let receiver = nikaia_std::boxed::open(receiver);
+                if self.facts.text_as_is.contains(&node_key(receiver)) {
+                    self.hands_over(world, receiver, ty, to, span);
+                    return;
+                }
+            },
+            _ => { },
+        }
+        let at = match self.flow.read_index.get(&(node_key(value), span.start as i64)) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => return };
+        if !a_name_or_a_field(value) { return; }
+        let path = nikaia_std::index::get(&self.reads_on_paths, nikaia_std::index::at(at)).path.to_owned();
+        let seq = nikaia_std::index::get(&self.reads_on_paths, nikaia_std::index::at(at)).seq;
+        self.hands_over_path(world, path, ty, seq, to, span);
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_map_key(&mut self, world: &CheckWorld<'_>, keys: &Ty, found: &Ty, index: &Expr, writing: bool, span: &Span) {
+        if keys.is_unknown() {
+            let mut form = FactKeyForm::Either;
+            if writing { form = FactKeyForm::Handed; } else if found.is_a_view() { form = FactKeyForm::AsIs; }
+            self.facts.map_keys.insert((node_key(index), writing), form);
+            return;
+        }
+        if keys.is_a_view() { return; }
+        let mut form = FactKeyForm::Lent;
+        if writing {
+            if self.text_literal(world, keys, index, true).is_none() {
+                self.expect_kept_asked(world, found, keys, Some(index), "a map keeps its keys", span, "assign", &map_key_message);
+                self.hands_over(world, index, found, "used as a map key", span);
+            }
+            form = FactKeyForm::Handed;
+        } else if self.a_key_read_as_it_is(world, found, index) { form = FactKeyForm::AsIs; }
+        self.facts.map_keys.insert((node_key(index), writing), form);
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn a_key_read_as_it_is(&self, world: &CheckWorld<'_>, found: &Ty, index: &Expr) -> bool {
+        if found.is_a_view() || self.a_lent_let(world, index) { return true; }
+        match index {
+            Expr::LitStr { .. } => return true,
+            Expr::Variable(name, _) => {
+                let name = *name;
+                let local = match self.binding(world.words.resolve(name)) { Some(__nikaia_value) => __nikaia_value, None => return !names_text(found) && self.a_lent_parameter(world, index) };
+                if local.lent { return true; }
+            },
+            _ => { },
+        }
+        !names_text(found) && self.a_lent_parameter(world, index)
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn is_a_choice(value: &Expr) -> bool { matches!(value, Expr::If { .. } | Expr::Match { .. }) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_span_at(world: &CheckWorld<'_>, expr: &Expr, span: &Span) -> Span {
+    let at = match world.here.spans.get(&id_of(expr)) { Some(__nikaia_value) => __nikaia_value, None => return Span { start: span.start, end: span.end } };
+    if at.start >= span.start && at.end <= span.end { return Span { start: at.start, end: at.end }; }
+    Span { start: span.start, end: span.end }
+}
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_settle_in_this_function(&mut self, fails: bool) -> Option<String> {
+        let current = match self.current.as_deref() { Some(__nikaia_value) => __nikaia_value, None => return None }.to_owned();
+        let failing = fails && self.flow.throwing;
+        let before = nikaia_std::index::or(self.facts.settle_fns.get(&current), || false);
+        self.facts.settle_fns.insert(current, before || failing);
+        if failing { return Some("cleanup::settle_failing".to_owned()); }
+        Some("cleanup::settle".to_owned())
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn arm_is_a_written_integer(arm: &Expr) -> bool { matches!(check_peeled(arm), Expr::LitInt { .. }) }
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    fn expect_kept_moved(&mut self, world: &CheckWorld<'_>, found: &Ty, want: &Ty, value: Option<&Expr>, keeper: &str, span: &Span, at: &Span, what: &str, message: &impl Fn(&str, &str) -> String) {
+        let pushed = self.findings.len() as i64;
+        let waiting = self.slots_waiting(span);
+        self.expect_kept(world, found, want, value, keeper, span, what, &message);
+        self.findings_moved(span, at, pushed, &waiting);
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn expect_kept_asked(&mut self, world: &CheckWorld<'_>, found: &Ty, want: &Ty, value: Option<&Expr>, keeper: &str, span: &Span, what: &str, message: &impl Fn(&str, &str) -> String) {
+        let mut arms: Vec<CheckArm<'_>> = vec![];
+        let mut at = Span { start: span.start, end: span.end };
+        if value.is_some() {
+            let whole = match value { Some(__nikaia_value) => __nikaia_value, None => return };
+            at = check_span_at(world, whole, span);
+            if found.is_unknown() { arms = self.arms_to_ask(world, whole); }
+        }
+        if arms.is_empty() {
+            self.expect_kept_moved(world, found, want, value, keeper, span, &at, what, &message);
+            return;
+        }
+        let mut mixed = false;
+        if what == "returns" { mixed = self.flow.expected_either; } else if what == "field" { mixed = self.flow.field_either; }
+        let text = a_string_type();
+        let mut a_view = false;
+        for arm in arms.iter() { if views_into_text(&arm.ty, &text) { a_view = true; } }
+        for asked in arms.iter() {
+            let arm = match asked.tail { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let mut ty = nikaia_std::index::or(self.text_literal(world, want, arm, true), || asked.ty.clone().into());
+            if ty.is_unknown() && arm_is_a_written_integer(arm) && self.no_number_is(want) { ty = Ty::Named { name: "i64".to_owned(), args: vec![], view: false }; }
+            if what == "field" { self.flow.field_either = mixed; }
+            let here = check_span_at(world, arm, span);
+            if ty.is_unknown() {
+                let pushed = self.findings.len() as i64;
+                let refused = self.an_open_number_where_none_fits(world, &ty, want, arm, span, what, &message);
+                let mut i = pushed;
+                while i < self.findings.len() as i64 {
+                    self.findings[nikaia_std::index::at(i)].span = Span { start: here.start, end: here.end };
+                    i += 1;
+                }
+                if refused { continue; }
+            }
+            self.expect_kept_moved(world, &ty, want, Some(arm), keeper, span, &here, what, &message);
+        }
+        if mixed && a_view {
+            let whole = match value { Some(__nikaia_value) => __nikaia_value, None => return };
+            let nullable = matches!(want, Ty::Nullable(_));
+            self.note_mixed(world, whole, nullable);
+        }
+    }
+}
+
+
 // --- check_arms.nika ---
 
 #[derive(Debug, Clone, PartialEq)]
@@ -19367,6 +19635,8 @@ pub struct CheckState {
     pub stored_code: collections::BTreeMap<String, CheckStoredCode>,
     pub stored_frames: Vec<CheckStoredCode>,
     pub flow: CheckFlow,
+    pub arm_types: collections::BTreeMap<i64, Ty>,
+    pub arm_disagreements: collections::BTreeMap<i64, CheckFinding>,
 }
 
 
@@ -37934,6 +38204,7 @@ pub struct ParsedView<'a> {
     pub aliases: &'a collections::BTreeMap<String, String>,
     pub items: &'a Vec<Spanned<Item>>,
     pub package: Option<&'a str>,
+    pub spans: &'a collections::BTreeMap<u32, Span>,
 }
 
 impl<'a> ParsedView<'a> {
@@ -51186,6 +51457,10 @@ pub mod check_access {
 pub mod check_arith {
     #[allow(unused_imports)]
     pub use super::{an_or_a_named};
+}
+pub mod check_arm_leaves {
+    #[allow(unused_imports)]
+    pub use super::{check_span_at};
 }
 pub mod check_arms {
     #[allow(unused_imports)]

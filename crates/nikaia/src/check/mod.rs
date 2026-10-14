@@ -444,8 +444,6 @@ fn walked<'a>(
         world: &world,
         s: core::Baton::new(s),
         spares: Vec::new(),
-        arm_types: BTreeMap::new(),
-        arm_disagreements: BTreeMap::new(),
         discarded: BTreeSet::new(),
     };
     checker.collect_types();
@@ -534,7 +532,7 @@ fn walked<'a>(
     // **What no function body held**, typed the same way (ADR-285).
     checker.numbers_typed_by_their_uses();
     // **Arms that disagree, where no position asked them** (#596).
-    let disagreeing = std::mem::take(&mut checker.arm_disagreements);
+    let disagreeing = std::mem::take(&mut checker.s.arm_disagreements);
     checker.s.findings.extend(disagreeing.into_values());
     // **`NK1245` comes after every other refusal** (ADR-286 D41): a type
     // nothing can tell is most often what another refusal left behind - a
@@ -968,13 +966,6 @@ struct Checker<'a> {
     world: &'a CheckWorld<'a>,
     /// States with nothing in them, for the crossings into Nikaia (`core.rs`).
     spares: Vec<Box<CheckState>>,
-    /// **The type each arm of an `if` or a `match` came to**, by the node of
-    /// the value the arm ends in (#596). The value of the whole has no type
-    /// where its arms disagree, and the position it goes into asks each arm.
-    arm_types: BTreeMap<i64, Ty>,
-    /// **Arms that are known and disagree** (#596), by the `if` or `match`: a
-    /// refusal that stands unless a position asks the arms one by one.
-    arm_disagreements: BTreeMap<i64, Finding>,
     /// The statements whose value nothing reads.
     discarded: BTreeSet<i64>,
     /// What each callee has **newly** gained since the committed ledger
@@ -2689,20 +2680,9 @@ impl<'a> Checker<'a> {
     /// every analysis reads - one that pauses, and one that fails where the
     /// function says `throws` and the cleanup can fail.
     fn a_settle_in_this_function(&mut self, fails: bool) {
-        let Some(current) = self.s.current.clone() else {
-            return;
-        };
-        // **Whether the function's settle point can fail it**: only where a
-        // cleanup can fail and the function says `throws`. Its channel is
-        // otherwise whatever its body raises, and the settle point hands the
-        // body's result back untouched.
-        let failing = fails && self.s.flow.throwing;
-        *self.s.facts.settle_fns.entry(current).or_insert(false) |= failing;
-        let key = match failing {
-            true => "cleanup::settle_failing",
-            false => "cleanup::settle",
-        };
-        self.reached_method(Some(key));
+        if let Some(key) = self.s.a_settle_in_this_function(fails) {
+            self.reached_method(Some(&key));
+        }
     }
 
     /// A value with a cleanup, made by a call or a literal (ADR-297 D2).
@@ -5514,12 +5494,14 @@ impl<'a> Checker<'a> {
                             (otherwise, &other, other_leaves),
                         ] {
                             if let (Some(tail), false) = (tail_of(block), leaving) {
-                                self.arm_types.insert(value_node(peeled(tail)), ty.clone());
+                                self.s
+                                    .arm_types
+                                    .insert(value_node(peeled(tail)), ty.clone());
                             }
                         }
-                        if then == other || (leaves(otherwise) && !leaves(then_branch)) {
+                        if then == other || (other_leaves && !then_leaves) {
                             then
-                        } else if leaves(then_branch) && !leaves(otherwise) {
+                        } else if then_leaves && !other_leaves {
                             other
                         } else if let Some(typed) = self.a_number_beside_a_number(
                             (tail_of(then_branch), &then),
@@ -5841,7 +5823,8 @@ impl<'a> Checker<'a> {
                         continue;
                     }
                     answered.push((Some(&arm.body), ty.clone()));
-                    self.arm_types
+                    self.s
+                        .arm_types
                         .insert(value_node(peeled(&arm.body)), ty.clone());
                     match &result {
                         None => result = Some(ty),
@@ -9702,10 +9685,7 @@ impl<'a> Checker<'a> {
     /// stands inside the statement; a node the compiler built, or one from
     /// another file, is reported at the statement as before.
     fn span_at(&self, expr: &Expr, span: Span) -> Span {
-        match self.parsed.span_of(ast::id_of(expr)) {
-            Some(at) if at.start >= span.start && at.end <= span.end => at,
-            _ => span,
-        }
+        nikaia_std::tools::check_arm_leaves::check_span_at(self.world, expr, &span)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -9719,87 +9699,16 @@ impl<'a> Checker<'a> {
         what: &str,
         message: impl Fn(&str, &str) -> String,
     ) {
-        // **An `if` or a `match` whose arms did not agree is asked arm by arm**
-        // (#596): each is a value written in this position, with this
-        // position's code and help.
-        if found.is_unknown()
-            && let Some(value) = value
-        {
-            let arms = self.arms_to_ask(value);
-            if !arms.is_empty() {
-                // **A position both kinds of text flow into takes each arm as
-                // it is** (ADR-282 D14, #562): the lowering wraps every arm on
-                // its own, so the arms that are views and the ones that are
-                // text of their own meet as `EitherText`.
-                let mixed = match what {
-                    "returns" => self.s.flow.expected_either,
-                    "field" => self.s.flow.field_either,
-                    _ => false,
-                };
-                let a_view = arms
-                    .iter()
-                    .any(|(_, ty)| views_into_text(ty, &Ty::named("String")));
-                for (arm, ty) in arms {
-                    let ty = self.text_literal(want, arm, true).unwrap_or(ty);
-                    // **An open-number arm is asked as a number written there**
-                    // (#600): `if c { "a".clone() } else { 1 }` under `String`
-                    // is refused as `let s: String = 3` is.
-                    let ty = match ty.is_unknown()
-                        && matches!(peeled(arm), Expr::LitInt { .. })
-                        && self.s.no_number_is(want)
-                    {
-                        true => Ty::named("i64"),
-                        false => ty,
-                    };
-                    if what == "field" {
-                        self.s.flow.field_either = mixed;
-                    }
-                    let at = self.span_at(arm, span);
-                    // A name of one (`let n = 12`) is #554's refusal.
-                    if ty.is_unknown() {
-                        let pushed = self.s.findings.len();
-                        let refused = self
-                            .an_open_number_where_none_fits(&ty, want, arm, span, what, &message);
-                        for finding in &mut self.s.findings[pushed..] {
-                            finding.span = at;
-                        }
-                        if refused {
-                            continue;
-                        }
-                    }
-                    let at = self.span_at(arm, span);
-                    self.moved_to(span, at, |checker| {
-                        checker.s.expect_kept(
-                            checker.world,
-                            &ty,
-                            want,
-                            Some(arm),
-                            keeper,
-                            &span,
-                            what,
-                            &message,
-                        )
-                    });
-                }
-                if mixed && a_view {
-                    self.note_mixed(value, matches!(want, Ty::Nullable(_)));
-                }
-                return;
-            }
-        }
-        let at = value.map_or(span, |value| self.span_at(value, span));
-        self.moved_to(span, at, |checker| {
-            checker.s.expect_kept(
-                checker.world,
-                found,
-                want,
-                value,
-                keeper,
-                &span,
-                what,
-                &message,
-            )
-        });
+        self.s.expect_kept_asked(
+            self.world,
+            found,
+            want,
+            value,
+            keeper,
+            &span,
+            what,
+            &|hole, ty| message(hole, ty),
+        )
     }
 
     /// **What `ask` refuses at the statement `span`, said at `at`** (#107):
@@ -10108,84 +10017,8 @@ impl<'a> Checker<'a> {
     /// A map keyed by **views** is left exactly as it was: every example keys
     /// its maps that way, and a view goes through `at` untouched.
     fn a_map_key(&mut self, keys: &Ty, found: &Ty, index: &Expr, writing: bool, span: &Span) {
-        // **A map whose key type nothing pinned is keyed by what goes in the
-        // brackets** (0.0.235, issue #169). `collections::HashMap()`
-        // with no annotation has `?` keys, and the brackets went through `at`,
-        // which made `m[1] = 2` a map keyed by `usize` and `m[k]` a read the
-        // language below refused. Where the key is a known value that is not
-        // a view, it is the map's key; a view or a key of no known type goes
-        // through `at` as before, which is the path every map of views takes.
-        // **A map whose key type nothing pinned** (0.0.235, issue #169
-        // issue #169). `collections::HashMap()` with no annotation has `?` keys,
-        // and the brackets went through `at`, which is for a **position**: it
-        // made `m[1] = 2` a map keyed by `usize` and `m[k]` a read the
-        // language below refused. A key is not a position, and the receiver is
-        // known to be a map, so neither side goes through `at` any more: a
-        // write hands the key over as it is, and a read of a key that is not
-        // already a view goes through `index::key`, which lends a number and
-        // passes a view through - the one spelling that is right whatever the
-        // map turns out to be keyed by, since this checker cannot say.
-        if keys.is_unknown() {
-            let form = match (writing, found.is_a_view()) {
-                (true, _) => KeyForm::Handed,
-                (false, true) => KeyForm::AsIs,
-                (false, false) => KeyForm::Either,
-            };
-            self.s
-                .facts
-                .map_keys
-                .insert((value_node(index), writing), form);
-            return;
-        }
-        if keys.is_a_view() {
-            return;
-        }
-        let form = match writing {
-            true => {
-                if self.text_literal(keys, index, true).is_none() {
-                    self.expect_kept(
-                        found,
-                        keys,
-                        Some(index),
-                        "a map keeps its keys",
-                        *span,
-                        "assign",
-                        |found, want| {
-                            format!("This key is `{found}`, but the map's keys are `{want}`.")
-                        },
-                    );
-                    self.hands_over(index, found, "used as a map key", span);
-                }
-                KeyForm::Handed
-            }
-            // **A name that is a view below whatever its type says** - a
-            // `let` bound to a map read beside a jump, `let at = m[k] ??
-            // continue` - is a reference already, and a `&` in front of it
-            // was a `&&String` the map has no `Borrow` for (found moving
-            // `describe`'s draft into Nikaia, #125).
-            //
-            // **And so is a parameter the function is lent** by inference
-            // (ADR-279): `place: (i64, String)` only read is a `&(i64,
-            // String)` below, and `&place` was a key the map has no `Borrow`
-            // for (found moving `contracts::keep`'s plan into Nikaia, #125).
-            false => match found.is_a_view()
-                || matches!(index, Expr::LitStr { .. })
-                || matches!(index, Expr::Variable(name, _)
-                    if self.s.binding(self.parsed.text(*name)).is_some_and(|local| local.lent))
-                // A `let` over a place, or a part of a tuple taken apart out
-                // of one (#465), is a view below too.
-                || self.s.a_lent_let(self.world, index)
-                || (!matches!(found, Ty::Named { name, .. } if matches!(ty::base(name), "String" | "str"))
-                    && self.a_lent_parameter(index))
-            {
-                true => KeyForm::AsIs,
-                false => KeyForm::Lent,
-            },
-        };
         self.s
-            .facts
-            .map_keys
-            .insert((value_node(index), writing), form);
+            .a_map_key(self.world, keys, found, index, writing, span)
     }
 
     /// **A value handed to something that keeps it**
@@ -10204,28 +10037,7 @@ impl<'a> Checker<'a> {
     /// outside a loop or a lambda handed over inside it is refused where it is
     /// handed, because the next turn hands over what is already gone.
     fn hands_over(&mut self, value: &Expr, ty: &Ty, to: &str, span: &Span) {
-        // `name.to_string()` is `name` (ADR-282 D8): what is handed over is it.
-        if let Expr::MethodCall { receiver, .. } = value
-            && self.s.facts.text_as_is.contains(&value_node(receiver))
-        {
-            return self.hands_over(receiver, ty, to, span);
-        }
-        let Some(&at) = self
-            .s
-            .flow
-            .read_index
-            .get(&(value_node(value), span.at() as i64))
-        else {
-            return;
-        };
-        if !matches!(value, Expr::Variable(_, _) | Expr::Field { .. }) {
-            return;
-        }
-        let (path, seq) = (
-            self.s.reads_on_paths[at as usize].path.clone(),
-            self.s.reads_on_paths[at as usize].seq,
-        );
-        self.s.hands_over_path(self.world, path, ty, seq, to, span);
+        self.s.hands_over(self.world, value, ty, to, span)
     }
 
     /// **A `??` in a position that only reads it lends its left side**
@@ -11146,126 +10958,26 @@ impl<'a> Checker<'a> {
         Some((*result).unwrap_or_else(|| Ty::named("()")))
     }
 
-    /// **The values an `if` or a `match` ends in** (#596): each arm's own
-    /// value, following a braced arm to its tail and a nested `if` or `match`
-    /// into its arms. An arm that leaves gives none. `nodes` collects the
-    /// `if`s and `match`es passed through.
-    fn value_leaves<'e>(&self, value: &'e Expr, out: &mut Vec<&'e Expr>, nodes: &mut Vec<i64>) {
-        match value {
-            Expr::If {
-                then_branch,
-                else_branch: Some(otherwise),
-                ..
-            } => {
-                nodes.push(value_node(value));
-                for block in [then_branch, otherwise] {
-                    let leaves = self.s.block_exits(self.world, block)
-                        || self.s.block_leaves(self.world, block);
-                    if let (Some(tail), false) = (tail_of(block), leaves) {
-                        self.value_leaves(tail, out, nodes);
-                    }
-                }
-            }
-            Expr::Match { arms, .. } => {
-                nodes.push(value_node(value));
-                for arm in arms {
-                    if !self.s.leaves(self.world, &arm.body) {
-                        self.value_leaves(&arm.body, out, nodes);
-                    }
-                }
-            }
-            Expr::Block(block, _) => {
-                if let Some(tail) = tail_of(block) {
-                    self.value_leaves(tail, out, nodes);
-                }
-            }
-            Expr::If { .. } => {}
-            _ => out.push(value),
-        }
-    }
-
-    /// **The arms of an `if` or a `match` are values written in the position
-    /// the whole goes into** (#596): where the arms did not agree there is no
-    /// type for the whole, and a position that asked only that said nothing.
-    /// Each arm is returned with the type it came to; empty where `value` is
-    /// not a choice or none of its arms has a type.
+    /// The arms of a choice, each with the type it came to
+    /// (`tools/check_arm_leaves.nika`).
     fn arms_to_ask<'e>(&mut self, value: &'e Expr) -> Vec<(&'e Expr, Ty)> {
-        if !matches!(value, Expr::If { .. } | Expr::Match { .. }) {
-            return Vec::new();
-        }
-        let (mut leaves, mut nodes) = (Vec::new(), Vec::new());
-        self.value_leaves(value, &mut leaves, &mut nodes);
-        let asked: Vec<(&Expr, Ty)> = leaves
+        self.s
+            .arms_to_ask(self.world, value)
             .into_iter()
-            .filter_map(|leaf| Some((leaf, self.arm_types.get(&value_node(leaf))?.clone())))
-            .collect();
-        if !asked.is_empty() {
-            for node in nodes {
-                self.arm_disagreements.remove(&node);
-            }
-        }
-        asked
+            .filter_map(|arm| Some((arm.tail?, arm.ty)))
+            .collect()
     }
 
-    /// **An `if` or a `match` whose arms are views and text of their own, going
-    /// into a position both kinds flow into** (#562): the lowering wraps each
-    /// leaf on its own (`either(…)`, `either_maybe(…)` in a `T?`, `null`
-    /// stays `None`) instead of the whole value once.
+    /// Views and text of their own in one choice, wrapped leaf by leaf
+    /// (`tools/check_arm_leaves.nika`).
     fn note_mixed(&mut self, value: &Expr, nullable: bool) {
-        let (mut leaves, mut nodes) = (Vec::new(), Vec::new());
-        self.value_leaves(value, &mut leaves, &mut nodes);
-        for leaf in leaves {
-            if !matches!(peeled(leaf), Expr::LitNull(_)) {
-                self.s.facts.mixed_leaves.insert(value_node(leaf), nullable);
-            }
-        }
-        self.s.facts.mixed_choices.insert(value_node(value));
+        self.s.note_mixed(self.world, value, nullable)
     }
 
-    /// **Views and text of its own meet as text where nothing asks** (#562):
-    /// `let y = if c { s } else { int_text(1) }` is text, and the position `y`
-    /// goes into decides what it is (ADR-282 D14). The name is bound as the
-    /// view it may be, so a position that takes only text of its own refuses
-    /// it where `y` is used - `return y` in a `pub fn … -> String` is `NK1104`
-    /// naming `.clone()` (ADR-282 D22, D25) - and one both kinds flow into
-    /// takes it as it is.
+    /// Views and text of their own meet as text where nothing asks
+    /// (`tools/check_arm_leaves.nika`).
     fn views_meet_owned_text(&mut self, value: &Expr) -> Option<Ty> {
-        if !matches!(value, Expr::If { .. } | Expr::Match { .. }) {
-            return None;
-        }
-        let text = Ty::named("String");
-        let (mut leaves, mut nodes) = (Vec::new(), Vec::new());
-        self.value_leaves(value, &mut leaves, &mut nodes);
-        let (mut views, mut owned, mut absent) = (0, 0, false);
-        for leaf in leaves {
-            if matches!(peeled(leaf), Expr::LitNull(_)) {
-                absent = true;
-                continue;
-            }
-            let ty = self.arm_types.get(&value_node(leaf))?;
-            if views_into_text(ty, &text) {
-                views += 1;
-            } else if *ty == text {
-                owned += 1;
-            } else if *ty == Ty::Nullable(Box::new(text.clone())) {
-                owned += 1;
-                absent = true;
-            } else {
-                return None;
-            }
-        }
-        if views == 0 || owned == 0 {
-            return None;
-        }
-        for node in nodes {
-            self.arm_disagreements.remove(&node);
-        }
-        self.note_mixed(value, absent);
-        let view = Ty::view(ty::TEXT_VIEW);
-        Some(match absent {
-            true => Ty::Nullable(Box::new(view)),
-            false => view,
-        })
+        self.s.views_meet_owned_text(self.world, value)
     }
 
     /// **Arms that are known and disagree** (#596, `NK1245`): the compiler
@@ -11296,7 +11008,7 @@ impl<'a> Checker<'a> {
             .skip(1)
             .find_map(|(tail, ty)| (Some(ty.unseen()) != first).then_some(*tail)?)
             .map_or_else(|| self.span_at(expr, *span), |arm| self.span_at(arm, *span));
-        self.arm_disagreements.insert(value_node(expr), finding);
+        self.s.arm_disagreements.insert(value_node(expr), finding);
     }
 
     /// A text literal where `String` is wanted, built as text of its own
@@ -13027,6 +12739,7 @@ fn parsed_view_of(parsed: &Parsed) -> ParsedView<'_> {
         aliases: &parsed.aliases,
         items: &parsed.program.items,
         package: parsed.package.as_deref(),
+        spans: &parsed.expr_spans,
     }
 }
 
@@ -13220,14 +12933,6 @@ fn wholly_known(ty: &Ty) -> bool {
 
 fn tail_of(block: &Block) -> Option<&Expr> {
     nikaia_std::tools::check_types::tail_value_of(block)
-}
-
-impl Checker<'_> {
-    /// A name that is a parameter the function only lends on
-    /// (`tools/check_fields.nika`).
-    fn a_lent_parameter(&self, given: &Expr) -> bool {
-        self.s.a_lent_parameter(self.world, given)
-    }
 }
 
 /// A view of a value that copies - a number, a truth value, a character - and
