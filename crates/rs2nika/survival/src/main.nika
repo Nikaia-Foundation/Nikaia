@@ -22,7 +22,8 @@ use std::process
 struct Survival_Case {
     commit: String,
     name: String,
-    /// `old`: the thirteen of docs/selfhosting-gaps.md; `new`: later moves.
+    /// `old`: the thirteen of docs/selfhosting-gaps.md; `new`: later moves;
+    /// `uc`: the moves U-c1..U-c4.
     set: String,
 }
 
@@ -45,6 +46,11 @@ fn survival_cases() -> Vec[Survival_Case] {
     cases = survival_add(cases, "3e9216a", "new", ["an_operation_that_overflows", "collect_copies", "collect_types"])
     cases = survival_add(cases, "0c4c693", "new", ["value_leaves", "arms_to_ask", "note_mixed", "views_meet_owned_text", "hands_over", "a_map_key"])
     cases = survival_add(cases, "a77a8e6", "new", ["a_view_kept_where_the_receiver_says_text"])
+    // The moves U-c1..U-c4 (`an_exit_code_out_of_range` of ee4fa94 is above).
+    cases = survival_add(cases, "768039d", "uc", ["shown_operand", "a_claim_reaches", "a_collection_in_a_hole", "list_of_tuple_literals", "collect_by_use", "not_pure_because", "copies"])
+    cases = survival_add(cases, "66ca847", "uc", ["rust_array_type", "a_table_that_crosses", "array_literal", "unwritable_field", "written_below", "raised_bounds", "plural"])
+    cases = survival_add(cases, "ce122b4", "uc", ["no_door", "a_kept_lambdas_hulls", "a_kept_lambda_takes_these", "a_lambdas_text_is_its_own", "a_field_that_is_code", "a_run_parameter", "runs_the_parameter", "shape"])
+    cases = survival_add(cases, "ee4fa94", "uc", ["a_function_nothing_declares", "an_assert", "a_head_nothing_declares", "free_callee", "locks", "call", "crosses_into_an_unseen_call", "a_child_that_keeps_state", "list_literal", "an_instantiation", "resolve", "kept_arguments_are_its_own", "is_hull"])
     return cases
 }
 
@@ -227,6 +233,8 @@ fn main() throws {
     let mut total = 0
     let mut passed_old = 0
     let mut total_old = 0
+    let mut passed_uc = 0
+    let mut total_uc = 0
     let mut at = 0
     while at < cases.len() {
         let set: String = cases[at].set.clone()
@@ -236,6 +244,9 @@ fn main() throws {
         total += 1
         if set == "old" {
             total_old += 1
+        }
+        if set == "uc" {
+            total_uc += 1
         }
         if !ok {
             continue
@@ -249,11 +260,14 @@ fn main() throws {
             if set == "old" {
                 passed_old += 1
             }
+            if set == "uc" {
+                passed_uc += 1
+            }
             println(f"PASS  {set} {name}")
         } else {
             println(f"FAIL  {set} {name}: {found.len()} error(s), first: {found[0]}")
         }
     }
-    println(f"old set: {passed_old} of {total_old}; new set: {passed - passed_old} of {total - total_old}")
+    println(f"old set: {passed_old} of {total_old}; new set: {passed - passed_old - passed_uc} of {total - total_old - total_uc}; U-c1..U-c4: {passed_uc} of {total_uc}")
     println(f"{passed} of {total} drafts pass `nikaia check` in context")
 }
