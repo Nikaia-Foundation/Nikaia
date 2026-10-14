@@ -334,11 +334,16 @@ pub struct EmitScope {
     pub bound: String,
     pub changed: Vec[winnow_grammar::Symbol],
     pub awaited: Vec[winnow_grammar::Symbol],
+    /// **The channel a `task::scope`'s tasks fail in** (ADR-346 D7), and the
+    /// function whose channel it is (`""` where it is the box): set at the
+    /// scope's call, and carried into its lambdas.
+    pub tasks_channel: String,
+    pub tasks_function: String,
 }
 
 impl EmitScope {
     /// Nothing around: the opaque channel, no names.
     pub fn plain() -> EmitScope {
-        return EmitScope { origin: "", function: "", channel: "Box<dyn std::error::Error>", caught_sum: null, caught_member: null, bound: "", changed: [], awaited: [] }
+        return EmitScope { origin: "", function: "", channel: "Box<dyn std::error::Error>", caught_sum: null, caught_member: null, bound: "", changed: [], awaited: [], tasks_channel: "", tasks_function: "" }
     }
 }

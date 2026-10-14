@@ -477,3 +477,65 @@ fn several_variants_refuse_the_short_form() {
         assert!(refused.contains("`Shape::Circle`"), "{refused}");
     }
 }
+
+const SCOPE_FAILS: &str = r#"use std::task
+
+enum Bad { Oops(i64) }
+impl Error for Bad {
+    fn message(ref self) -> String { return "bad" }
+}
+
+fn work(n: i64) -> i64 throws {
+    if n > 1 {
+        throw Bad::Oops(n)
+    }
+    return n
+}
+
+fn main() throws {
+    let y = task::scope fn(s) {
+        s.spawn fn { work(1) }
+        s.spawn fn {
+            let n = work(7)
+            println(f"never {n}")
+        }
+        s.spawn fn { work(9) }
+        5
+    } catch {
+        match error {
+            Bad::Oops(c) => c,
+            else => 0,
+        }
+    }
+    println(f"{y}")
+}
+"#;
+
+/// ADR-346 D7: `task::scope` hands a task's error on; the first in start
+/// order is what a `catch` around the scope takes, at both settings, and one
+/// nobody catches leaves `main`. A fatal one passes a plain `catch`.
+#[test]
+fn a_scope_hands_its_tasks_errors_on() {
+    for how in [Build::default(), Build::parallel()] {
+        let (out, err, code) = ran("scope-caught", SCOPE_FAILS, how);
+        assert_eq!(code, Some(0), "{err}");
+        assert_eq!(out, "7\n");
+        let uncaught = SCOPE_FAILS.replace(
+            "    } catch {\n        match error {\n            Bad::Oops(c) => c,\n            else => 0,\n        }\n    }\n",
+            "    }\n",
+        );
+        let (out, err, code) = ran("scope-uncaught", &uncaught, how);
+        assert_eq!(code, Some(1), "{err}");
+        assert_eq!(out, "");
+        assert!(err.contains("bad"), "{err}");
+        let fatal = SCOPE_FAILS
+            .replace("impl Error for Bad {", "impl Fatal for Bad {}\nimpl Error for Bad {")
+            .replace(
+                "catch {\n        match error {\n            Bad::Oops(c) => c,\n            else => 0,\n        }\n    }",
+                "catch { 0 }",
+            );
+        let (out, err, code) = ran("scope-fatal", &fatal, how);
+        assert_eq!(code, Some(1), "{err}");
+        assert_eq!(out, "");
+    }
+}

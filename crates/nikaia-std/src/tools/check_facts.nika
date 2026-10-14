@@ -133,6 +133,9 @@ pub struct CheckFacts {
     pub sync_functions_run_async: collections::BTreeMap[i64, i64],
     pub pausing_lambdas: collections::BTreeMap[i64, FactPausing],
     pub paused_scopes: collections::BTreeSet[i64],
+    /// The lambdas handed to `task::Scope::spawn` (ADR-346 D7): each fails in
+    /// its scope's channel.
+    pub scope_tasks: collections::BTreeSet[i64],
     pub witnessed_sets: collections::BTreeSet[i64],
     pub pausing_methods: collections::BTreeSet[i64],
     pub nullable_sites: collections::BTreeMap[i64, FactWrap],
@@ -251,6 +254,7 @@ impl CheckFacts {
             sync_functions_run_async: collections::BTreeMap(),
             pausing_lambdas: collections::BTreeMap(),
             paused_scopes: collections::BTreeSet(),
+            scope_tasks: collections::BTreeSet(),
             witnessed_sets: collections::BTreeSet(),
             pausing_methods: collections::BTreeSet(),
             nullable_sites: collections::BTreeMap(),

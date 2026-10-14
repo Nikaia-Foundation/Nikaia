@@ -1598,10 +1598,16 @@ struct Flow<'a> {
     /// exactly the constructs that are a function below: each of them starts
     /// from [`Flow::PLAIN`], where this is false.
     in_loop: bool,
+    /// The channel a `task::scope`'s tasks fail in, and whose it is
+    /// (`EmitScope::tasks_channel`, ADR-346 D7).
+    tasks_channel: &'a str,
+    tasks_function: &'a str,
 }
 
 impl<'a> Flow<'a> {
     const PLAIN: Flow<'static> = Flow {
+        tasks_channel: "",
+        tasks_function: "",
         changed: &[],
         awaited: &[],
         throws: false,
@@ -4172,6 +4178,8 @@ impl<'p> Emitter<'p> {
         self.walking(|w| w.nonnegative.insert(key.to_string(), locals));
         let flow = Flow {
             changed: &[],
+            tasks_channel: "",
+            tasks_function: "",
             awaited,
             throws,
             origin: key.rsplit("::").next().unwrap_or(key),

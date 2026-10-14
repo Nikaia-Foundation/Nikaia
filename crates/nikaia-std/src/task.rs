@@ -1087,6 +1087,146 @@ pub fn as_text(
     }
 }
 
+/// **What a scope's task hands back** ([ADR-346](../../../docs/specification/adr/adr-346.md)
+/// D7): nothing, or its body's error in the scope's channel `E`.
+pub trait Outcome<E> {
+    /// The body's error, if it ended with one.
+    fn failed(self) -> Option<E>;
+}
+
+impl<E> Outcome<E> for () {
+    fn failed(self) -> Option<E> {
+        None
+    }
+}
+
+impl<E> Outcome<E> for Result<(), E> {
+    fn failed(self) -> Option<E> {
+        self.err()
+    }
+}
+
+/// **A task of a scope that cannot fail**, as the emitter writes it: the bound
+/// says it hands back nothing, so a body that only panics is one too.
+pub fn plain<F: FnOnce()>(body: F) -> F {
+    body
+}
+
+/// [`plain`] for a task that pauses.
+pub fn plain_paused<F: FnOnce() -> P, P: std::future::Future<Output = ()>>(body: F) -> F {
+    body
+}
+
+/// **A scope's channel where its tasks run on the pool**: what crosses a thread
+/// on the way to the scope's end. A typed channel crosses as itself; the box
+/// crosses as [`Carried`], which keeps a registered type as itself.
+pub trait Crosses: Sized {
+    type Sent: Send;
+    fn sent(self) -> Self::Sent;
+    fn back(sent: Self::Sent) -> Self;
+}
+
+impl Crosses for Crashed {
+    type Sent = Crashed;
+    fn sent(self) -> Crashed {
+        self
+    }
+    fn back(sent: Crashed) -> Self {
+        sent
+    }
+}
+
+impl Crosses for Box<dyn std::error::Error> {
+    type Sent = Carried;
+    fn sent(self) -> Carried {
+        Carried::from_box(self)
+    }
+    fn back(sent: Carried) -> Self {
+        sent.into_box()
+    }
+}
+
+impl<E> Crosses for crate::error::Thrown<E>
+where
+    crate::error::Thrown<E>: Send,
+{
+    type Sent = Self;
+    fn sent(self) -> Self {
+        self
+    }
+    fn back(sent: Self) -> Self {
+        sent
+    }
+}
+
+/// A crash has nothing to join: the first one is what the scope throws.
+impl crate::error::Joined for Crashed {
+    fn joined_by(&mut self, _later: Crashed) {}
+}
+
+/// **How a scope ends** (D7, as `overlap` does, ADR-292 D5): the first failure
+/// in start order is thrown, every later one joins it in that order.
+fn ended<T, E: crate::error::Joined>(value: T, mut failed: Vec<(usize, E)>) -> Result<T, E> {
+    failed.sort_by_key(|(at, _)| *at);
+    let mut each = failed.into_iter().map(|(_, error)| error);
+    match each.next() {
+        None => Ok(value),
+        Some(mut first) => {
+            for later in each {
+                first.joined_by(later);
+            }
+            Err(first)
+        }
+    }
+}
+
+/// What a scope has seen of its tasks: how many started, whether one crashed,
+/// and the failures, each with its place in start order.
+struct Seen<E> {
+    started: usize,
+    crashed: bool,
+    failed: Vec<(usize, E)>,
+}
+
+impl<E> Seen<E> {
+    fn new() -> Self {
+        Seen {
+            started: 0,
+            crashed: false,
+            failed: Vec::new(),
+        }
+    }
+
+    /// The next task's place, or `None` where a crash cancelled it.
+    fn start(&mut self) -> Option<usize> {
+        if self.crashed {
+            return None;
+        }
+        self.started += 1;
+        Some(self.started - 1)
+    }
+}
+
+impl<E: From<Crashed>> Seen<E> {
+    fn crash(&mut self, at: usize, crash: Crashed) {
+        self.crashed = true;
+        self.failed.push((at, E::from(crash)));
+    }
+}
+
+/// One task of a scope run where it starts: its crash or its error recorded.
+fn ran<E: From<Crashed>, R: Outcome<E>>(seen: &mut Seen<E>, at: usize, body: impl FnOnce() -> R) {
+    let mut outcome = None;
+    match caught(|| outcome = Some(body())) {
+        Err(crash) => seen.crash(at, crash),
+        Ok(()) => {
+            if let Some(error) = outcome.and_then(Outcome::failed) {
+                seen.failed.push((at, error));
+            }
+        }
+    }
+}
+
 /// **A scope's tasks** (Part II 12.7, ADR-328 D8): they borrow what the
 /// function around the scope holds, and the scope waits for every one of them.
 ///
@@ -1094,43 +1234,44 @@ pub fn as_text(
 /// never pauses runs where it is started, to its end; a scope with a task that
 /// pauses is a [`PausedScope`] (ADR-328 D10). A task that panicked
 /// cancels the ones not yet started, and the scope throws [`Crashed`] where it
-/// ends. `'env` is what the tasks borrow, which outlives the scope, as
+/// ends. A task whose body fails hands its error on in the scope's channel `E`
+/// (ADR-346 D7). `'env` is what the tasks borrow, which outlives the scope, as
 /// `std::thread::scope` has it.
-pub struct Scope<'scope, 'env: 'scope> {
-    crashed: std::cell::RefCell<Option<Crashed>>,
+pub struct Scope<'scope, 'env: 'scope, E = Crashed> {
+    seen: std::cell::RefCell<Seen<E>>,
     scope: std::marker::PhantomData<&'scope mut &'scope ()>,
     env: std::marker::PhantomData<&'env mut &'env ()>,
 }
 
-impl<'scope> Scope<'scope, '_> {
+impl<'scope, E: From<Crashed>> Scope<'scope, '_, E> {
     /// Start a task that never pauses: it runs now, unless a task before it
     /// crashed, which cancelled it.
-    pub fn spawn(&self, body: impl FnOnce() + 'scope) {
-        if self.crashed.borrow().is_some() {
+    pub fn spawn<R: Outcome<E>>(&self, body: impl FnOnce() -> R + 'scope) {
+        let Some(at) = self.seen.borrow_mut().start() else {
             return;
-        }
-        if let Err(crash) = caught(body) {
-            *self.crashed.borrow_mut() = Some(crash);
-        }
+        };
+        let mut seen = Seen::new();
+        ran(&mut seen, at, body);
+        let mut held = self.seen.borrow_mut();
+        held.crashed |= seen.crashed;
+        held.failed.append(&mut seen.failed);
     }
 }
 
-/// **Run `body` with a scope, and wait for its tasks** (Part II 12.7): their
-/// first crash is what this throws, after `body` and every task have ended.
-pub fn scope<'env, T>(
-    body: impl for<'scope> FnOnce(&'scope Scope<'scope, 'env>) -> T,
-) -> Result<T, Crashed> {
+/// **Run `body` with a scope, and wait for its tasks** (Part II 12.7): the
+/// first failure in start order is what this throws, after `body` and every
+/// task have ended; the later ones join it.
+pub fn scope<'env, T, E: From<Crashed> + crate::error::Joined>(
+    body: impl for<'scope> FnOnce(&'scope Scope<'scope, 'env, E>) -> T,
+) -> Result<T, E> {
     let scope = Scope {
-        crashed: std::cell::RefCell::new(None),
+        seen: std::cell::RefCell::new(Seen::new()),
         scope: std::marker::PhantomData,
         env: std::marker::PhantomData,
     };
     let value = body(&scope);
-    let crash = scope.crashed.borrow_mut().take();
-    match crash {
-        Some(crash) => Err(crash),
-        None => Ok(value),
-    }
+    let failed = std::mem::take(&mut scope.seen.borrow_mut().failed);
+    ended(value, failed)
 }
 
 /// **The same scope where tasks run on every core** (`user_parallelism = yes`):
@@ -1138,45 +1279,55 @@ pub fn scope<'env, T>(
 /// never pauses - a scope with one that does is a [`PausedPoolScope`] - so
 /// one that started runs to its end; a crash cancels only the tasks not yet
 /// started.
-pub struct PoolScope<'pool, 'scope> {
+pub struct PoolScope<'pool, 'scope, E: Crosses = Crashed> {
     pool: &'pool rayon::Scope<'scope>,
-    crashed: std::sync::Arc<std::sync::Mutex<Option<Crashed>>>,
+    seen: std::sync::Arc<std::sync::Mutex<Seen<E::Sent>>>,
 }
 
-impl<'scope> PoolScope<'_, 'scope> {
+impl<'scope, E: Crosses + From<Crashed>> PoolScope<'_, 'scope, E>
+where
+    E::Sent: 'scope,
+{
     /// Start a task on the pool.
-    pub fn spawn(&self, body: impl FnOnce() + Send + 'scope) {
-        let crashed = self.crashed.clone();
+    pub fn spawn<R: Outcome<E>>(&self, body: impl FnOnce() -> R + Send + 'scope) {
+        let seen = self.seen.clone();
+        let Some(at) = locked(&seen).start() else {
+            return;
+        };
         self.pool.spawn(move |_| {
-            if crashed.lock().unwrap_or_else(|e| e.into_inner()).is_some() {
+            if locked(&seen).crashed {
                 return;
             }
-            if let Err(crash) = caught(body) {
-                crashed
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner())
-                    .get_or_insert(crash);
+            let mut own = Seen::new();
+            ran::<E, R>(&mut own, at, body);
+            let mut held = locked(&seen);
+            held.crashed |= own.crashed;
+            for (at, error) in own.failed {
+                held.failed.push((at, error.sent()));
             }
         });
     }
 }
 
 /// [`scope`] at `user_parallelism = yes`.
-pub fn scope_on_pool<'scope, T: Send>(
-    body: impl FnOnce(&PoolScope<'_, 'scope>) -> T + Send,
-) -> Result<T, Crashed> {
-    let crashed = std::sync::Arc::new(std::sync::Mutex::new(None));
+pub fn scope_on_pool<'scope, T: Send, E: Crosses + From<Crashed> + crate::error::Joined>(
+    body: impl FnOnce(&PoolScope<'_, 'scope, E>) -> T + Send,
+) -> Result<T, E>
+where
+    E::Sent: 'scope,
+{
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(Seen::new()));
     let value = rayon::scope(|pool| {
         body(&PoolScope {
             pool,
-            crashed: crashed.clone(),
+            seen: seen.clone(),
         })
     });
-    let crash = crashed.lock().unwrap_or_else(|e| e.into_inner()).take();
-    match crash {
-        Some(crash) => Err(crash),
-        None => Ok(value),
-    }
+    let failed: Vec<(usize, E)> = std::mem::take(&mut locked(&seen).failed)
+        .into_iter()
+        .map(|(at, sent)| (at, E::back(sent)))
+        .collect();
+    ended(value, failed)
 }
 
 /// A task of a scope that pauses: a future the scope holds and polls.
@@ -1199,49 +1350,57 @@ type Plain<'scope> = Box<dyn FnOnce() + Send + 'scope>;
 /// empty whenever the scope is not being polled. It is `ManuallyDrop` for the
 /// borrow checker's sake: a task may borrow the scope, and the queue, empty,
 /// needs no destructor that could see one.
-pub struct PausedScope<'scope> {
-    crashed: std::sync::Mutex<Option<Crashed>>,
+pub struct PausedScope<'scope, E = Crashed> {
+    seen: std::sync::Mutex<Seen<E>>,
     arrived: std::mem::ManuallyDrop<std::sync::Mutex<Vec<Paused<'scope>>>>,
 }
 
-impl Default for PausedScope<'_> {
+impl<E> Default for PausedScope<'_, E> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<'scope> PausedScope<'scope> {
+impl<'scope, E> PausedScope<'scope, E> {
     /// A scope, which the call that runs it borrows for as long as its tasks
     /// may: the caller makes it, so `'scope` is a lifetime of the caller's and
     /// not one the scope's function has to be general over.
     pub fn new() -> Self {
         PausedScope {
-            crashed: std::sync::Mutex::new(None),
+            seen: std::sync::Mutex::new(Seen::new()),
             arrived: std::mem::ManuallyDrop::new(std::sync::Mutex::new(Vec::new())),
         }
     }
+}
 
+impl<'scope, E: From<Crashed> + 'scope> PausedScope<'scope, E> {
     /// Start a task that never pauses: it runs now, unless a task crashed.
-    pub fn spawn(&self, body: impl FnOnce() + 'scope) {
-        if locked(&self.crashed).is_some() {
+    pub fn spawn<R: Outcome<E>>(&self, body: impl FnOnce() -> R + 'scope) {
+        let Some(at) = locked(&self.seen).start() else {
             return;
-        }
-        if let Err(crash) = caught(body) {
-            locked(&self.crashed).get_or_insert(crash);
-        }
+        };
+        let mut own = Seen::new();
+        ran(&mut own, at, body);
+        let mut held = locked(&self.seen);
+        held.crashed |= own.crashed;
+        held.failed.append(&mut own.failed);
     }
 
     /// Start a task that pauses: the scope polls it beside the others.
     /// `async` only so that a call that starts one reads as the pausing call
     /// it is; it hands the task over and returns.
-    pub async fn spawn_paused<F>(&self, body: impl FnOnce() -> F + 'scope)
+    pub async fn spawn_paused<F, R: Outcome<E>>(&'scope self, body: impl FnOnce() -> F + 'scope)
     where
-        F: std::future::Future<Output = ()> + 'scope,
+        F: std::future::Future<Output = R> + 'scope,
     {
-        if locked(&self.crashed).is_some() {
+        let Some(at) = locked(&self.seen).start() else {
             return;
-        }
-        locked(&self.arrived).push(Box::pin(async move { body().await }));
+        };
+        locked(&self.arrived).push(Box::pin(async move {
+            if let Some(error) = body().await.failed() {
+                locked(&self.seen).failed.push((at, error));
+            }
+        }));
     }
 }
 
@@ -1249,27 +1408,28 @@ impl<'scope> PausedScope<'scope> {
 /// (Part II 12.7, ADR-328 D10). The scope's function and every task are polled
 /// together, so tasks that wait on each other complete. A task that panicked
 /// drops the ones still running, so their cleanups run, and cancels the ones
-/// not started; this throws [`Crashed`] once the function has ended.
+/// not started; the first failure in start order is thrown once the function
+/// has ended (ADR-346 D7).
 ///
 /// `body` is the scope's function as a future that names `scope` itself, not
 /// a closure handed it: a closure taking the scope by reference is a
 /// higher-ranked one, and `rustc` cannot then show the future `Send`.
-pub async fn scope_paused<'scope, T>(
-    scope: &'scope PausedScope<'scope>,
+pub async fn scope_paused<'scope, T, E: From<Crashed> + crate::error::Joined>(
+    scope: &'scope PausedScope<'scope, E>,
     body: impl std::future::Future<Output = T> + 'scope,
-) -> Result<T, Crashed> {
+) -> Result<T, E> {
     let value = polled(
         body,
         || std::mem::take(&mut *locked(&scope.arrived)),
         |crash| {
-            locked(&scope.crashed).get_or_insert(crash);
+            let mut seen = locked(&scope.seen);
+            let at = seen.started;
+            seen.crash(at, crash);
         },
     )
     .await;
-    match locked(&scope.crashed).take() {
-        Some(crash) => Err(crash),
-        None => Ok(value),
-    }
+    let failed = std::mem::take(&mut locked(&scope.seen).failed);
+    ended(value, failed)
 }
 
 /// **[`PausedScope`] where tasks that never pause run on every core**
@@ -1279,78 +1439,101 @@ pub async fn scope_paused<'scope, T>(
 ///
 /// `arrived` and `plain` are `ManuallyDrop` as [`PausedScope`]'s queue is, and
 /// empty by the time the scope ends.
-pub struct PausedPoolScope<'scope> {
-    crashed: std::sync::Mutex<Option<Crashed>>,
+pub struct PausedPoolScope<'scope, E: Crosses = Crashed> {
+    seen: std::sync::Mutex<Seen<E::Sent>>,
     arrived: std::mem::ManuallyDrop<std::sync::Mutex<Vec<PausedSend<'scope>>>>,
     plain: std::mem::ManuallyDrop<std::sync::Mutex<Vec<Plain<'scope>>>>,
 }
 
-impl Default for PausedPoolScope<'_> {
+impl<E: Crosses> Default for PausedPoolScope<'_, E> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<'scope> PausedPoolScope<'scope> {
+impl<E: Crosses> PausedPoolScope<'_, E> {
     /// A scope, made by the caller as [`PausedScope::new`] is.
     pub fn new() -> Self {
         PausedPoolScope {
-            crashed: std::sync::Mutex::new(None),
+            seen: std::sync::Mutex::new(Seen::new()),
             arrived: std::mem::ManuallyDrop::new(std::sync::Mutex::new(Vec::new())),
             plain: std::mem::ManuallyDrop::new(std::sync::Mutex::new(Vec::new())),
         }
     }
+}
 
+impl<'scope, E: Crosses + From<Crashed> + 'scope> PausedPoolScope<'scope, E>
+where
+    E::Sent: 'scope,
+{
     /// Start a task that never pauses, on the pool.
-    pub fn spawn(&self, body: impl FnOnce() + Send + 'scope) {
-        locked(&self.plain).push(Box::new(body));
+    pub fn spawn<R: Outcome<E>>(&'scope self, body: impl FnOnce() -> R + Send + 'scope) {
+        let Some(at) = locked(&self.seen).start() else {
+            return;
+        };
+        let seen = &self.seen;
+        locked(&self.plain).push(Box::new(move || {
+            if locked(seen).crashed {
+                return;
+            }
+            let mut own = Seen::new();
+            ran::<E, R>(&mut own, at, body);
+            let mut held = locked(seen);
+            held.crashed |= own.crashed;
+            for (at, error) in own.failed {
+                held.failed.push((at, error.sent()));
+            }
+        }));
     }
 
     /// Start a task that pauses: the scope polls it beside the others.
-    pub async fn spawn_paused<F>(&self, body: impl FnOnce() -> F + Send + 'scope)
-    where
-        F: std::future::Future<Output = ()> + Send + 'scope,
+    pub async fn spawn_paused<F, R: Outcome<E>>(
+        &'scope self,
+        body: impl FnOnce() -> F + Send + 'scope,
+    ) where
+        F: std::future::Future<Output = R> + Send + 'scope,
     {
-        if locked(&self.crashed).is_some() {
+        let Some(at) = locked(&self.seen).start() else {
             return;
-        }
-        locked(&self.arrived).push(Box::pin(async move { body().await }));
+        };
+        let seen = &self.seen;
+        locked(&self.arrived).push(Box::pin(async move {
+            if let Some(error) = body().await.failed() {
+                locked(seen).failed.push((at, error.sent()));
+            }
+        }));
     }
 }
 
 /// [`scope_paused`] at `user_parallelism = yes`.
-pub async fn scope_paused_on_pool<'scope, T>(
-    scope: &'scope PausedPoolScope<'scope>,
+pub async fn scope_paused_on_pool<'scope, T, E: Crosses + From<Crashed> + crate::error::Joined>(
+    scope: &'scope PausedPoolScope<'scope, E>,
     body: impl std::future::Future<Output = T> + 'scope,
-) -> Result<T, Crashed> {
+) -> Result<T, E> {
     let value = polled(
         body,
         || std::mem::take(&mut *locked(&scope.arrived)),
         |crash| {
-            locked(&scope.crashed).get_or_insert(crash);
+            let mut seen = locked(&scope.seen);
+            let at = seen.started;
+            seen.crashed = true;
+            seen.failed.push((at, E::from(crash).sent()));
         },
     )
     .await;
     let plain = std::mem::take(&mut *locked(&scope.plain));
-    if !plain.is_empty() && locked(&scope.crashed).is_none() {
-        let crashed = &scope.crashed;
+    if !plain.is_empty() && !locked(&scope.seen).crashed {
         rayon::scope(|pool| {
             for body in plain {
-                pool.spawn(move |_| {
-                    if locked(crashed).is_some() {
-                        return;
-                    }
-                    if let Err(crash) = caught(body) {
-                        locked(crashed).get_or_insert(crash);
-                    }
-                });
+                pool.spawn(move |_| body());
             }
         });
     }
-    match locked(&scope.crashed).take() {
-        Some(crash) => Err(crash),
-        None => Ok(value),
-    }
+    let failed: Vec<(usize, E)> = std::mem::take(&mut locked(&scope.seen).failed)
+        .into_iter()
+        .map(|(at, sent)| (at, E::back(sent)))
+        .collect();
+    ended(value, failed)
 }
 
 /// A scope's lock: a task that panicked holding it changed nothing it guards.
@@ -1423,7 +1606,7 @@ mod scoped {
     fn a_scope_lends_to_its_tasks_and_waits_for_them() {
         let data = [1, 2, 3];
         let sum = std::cell::Cell::new(0);
-        let made = scope(|s| {
+        let made = scope::<_, Crashed>(|s| {
             s.spawn(|| sum.set(sum.get() + data.iter().sum::<i32>()));
             s.spawn(|| sum.set(sum.get() + data.len() as i32));
             7
@@ -1434,9 +1617,9 @@ mod scoped {
     #[test]
     fn a_crash_cancels_the_tasks_after_it_and_is_thrown_at_the_end() {
         let ran = std::cell::Cell::new(0);
-        let made = scope(|s| {
+        let made = scope::<_, Crashed>(|s| {
             s.spawn(|| ran.set(ran.get() + 1));
-            s.spawn(|| panic!("boom"));
+            s.spawn::<()>(|| panic!("boom"));
             s.spawn(|| ran.set(ran.get() + 10));
         });
         assert_eq!(made.map_err(|crash| crash.message), Err("boom".to_string()));
@@ -1447,7 +1630,7 @@ mod scoped {
     fn a_pool_scope_runs_its_tasks_on_the_pool_and_waits() {
         let data: Vec<i64> = (1..=100).collect();
         let total = std::sync::atomic::AtomicI64::new(0);
-        let made = scope_on_pool(|s| {
+        let made = scope_on_pool::<_, Crashed>(|s| {
             for half in data.chunks(50) {
                 let total = &total;
                 s.spawn(move || {
@@ -1457,7 +1640,7 @@ mod scoped {
         });
         assert!(made.is_ok());
         assert_eq!(total.into_inner(), 5050);
-        let crashed = scope_on_pool(|s| s.spawn(|| panic!("on the pool")));
+        let crashed = scope_on_pool::<_, Crashed>(|s| s.spawn::<()>(|| panic!("on the pool")));
         assert_eq!(
             crashed.map_err(|crash| crash.message),
             Err("on the pool".to_string())
@@ -1511,7 +1694,7 @@ mod scoped {
         let config = String::from("abc");
         let seen = std::cell::RefCell::new(Vec::new());
         let made = run(async {
-            let s = &PausedScope::new();
+            let s = &PausedScope::<Crashed>::new();
             scope_paused(s, async {
                 s.spawn(|| seen.borrow_mut().push(0));
                 s.spawn_paused(async || {
@@ -1533,7 +1716,7 @@ mod scoped {
     fn pausing_tasks_that_wait_on_each_other_complete() {
         let (a, b) = (std::cell::Cell::new(false), std::cell::Cell::new(false));
         let made = run(async {
-            let s = &PausedScope::new();
+            let s = &PausedScope::<Crashed>::new();
             scope_paused(s, async {
                 s.spawn_paused(async || {
                     until(&b).await;
@@ -1559,10 +1742,10 @@ mod scoped {
         let cleaned = std::cell::Cell::new(0);
         let finished = std::cell::Cell::new(0);
         let made = run(async {
-            let s = &PausedScope::new();
+            let s = &PausedScope::<Crashed>::new();
             scope_paused(s, async {
                 for _ in 0..2 {
-                    s.spawn_paused(async || {
+                    s.spawn_paused::<_, ()>(async || {
                         let _held = Cleaned(&cleaned);
                         loop {
                             pause().await;
@@ -1570,7 +1753,7 @@ mod scoped {
                     })
                     .await;
                 }
-                s.spawn_paused(async || {
+                s.spawn_paused::<_, ()>(async || {
                     pause().await;
                     panic!("after a pause");
                 })
@@ -1596,7 +1779,7 @@ mod scoped {
         let config = String::from("abcd");
         let total = std::sync::atomic::AtomicUsize::new(0);
         let made = run(crosses(async {
-            let s = &PausedPoolScope::new();
+            let s = &PausedPoolScope::<Crashed>::new();
             scope_paused_on_pool(s, async {
                 s.spawn(|| {
                     total.fetch_add(1, std::sync::atomic::Ordering::SeqCst);

@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.915] — 2026-10-14
+
+**task: task::scope hands its tasks' errors on**
+- A task of task::scope whose body fails hands its error to the scope (ADR-346 D7): the first in start order is thrown where the scope ends, the later ones join it; a catch on the scope opens the box by the types its arms name, and a fatal one passes a plain catch. At both user_parallelism settings, for the four scope runtimes.
+
 ## [0.0.914] — 2026-10-14
 
 **The pool's error registration is quiet in rustc**

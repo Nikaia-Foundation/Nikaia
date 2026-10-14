@@ -3113,6 +3113,10 @@ impl<'a> Checker<'a> {
         if key == "task::Scope::spawn" {
             self.s.in_parallel = outer_parallel.or(Some(self.s.scope.len() as i64));
             self.s.scoped_task = true;
+            // **And it fails in the scope's channel** (ADR-346 D7).
+            if let Some(lambda) = args.first() {
+                self.s.facts.scope_tasks.insert(value_node(lambda));
+            }
         }
         let found = self.arguments_given(
             args,

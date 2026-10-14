@@ -176,18 +176,24 @@ fn a_path_takes_a_named_trailing_lambda() {
          \x20           let _ = body();\n\
          \x20       }\n\
          \x20   }\n\
-         \x20   pub fn scope<R>(body: impl FnOnce(&Scope) -> R) -> R {\n\
+         \x20   pub fn scope<R, E>(body: impl FnOnce(&Scope) -> R) -> R {\n\
          \x20       body(&Scope)\n\
          \x20   }\n\
          }\n",
         "fn work(total: i64) {\n\
          \x20   task::scope fn(s) {\n\
-         \x20       s.spawn fn { total + 1 }\n\
+         \x20       s.spawn fn { println(f\"{total}\") }\n\
          \x20   }\n\
          }\n",
     );
-    assert!(rust.contains("task::scope(|s| {"), "{rust}");
-    assert!(rust.contains("s.spawn(|| { total + 1 })"), "{rust}");
+    assert!(
+        rust.contains("task::scope::<_, nikaia_std::task::Crashed>(|s| {"),
+        "{rust}"
+    );
+    assert!(
+        rust.contains("s.spawn(nikaia_std::task::plain(|| {"),
+        "{rust}"
+    );
 }
 
 /// **A lambda that names nothing takes nothing**, in every position that has one

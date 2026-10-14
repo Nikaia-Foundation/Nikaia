@@ -177,6 +177,12 @@ impl EmitState {
                 out.push(f"            {name}::{variant}(e) => e.fmt(f),\n")
             }
             out.push(f"        }}\n    }}\n}}\nimpl{decl} std::error::Error for {name}{params} {{}}\n")
+            // **A scope's tasks fail in it** (ADR-346 D7): the first failure is
+            // the scope's, and one channel crosses the pool as itself.
+            if crashed {
+                out.push(f"impl{decl} nikaia_std::error::Joined for {name}{params} {{\n    fn joined_by(&mut self, _later: Self) {{}}\n}}\n")
+                out.push(f"impl{decl} nikaia_std::task::Crosses for {name}{params} {{\n    type Sent = Self;\n    fn sent(self) -> Self {{ self }}\n    fn back(sent: Self) -> Self {{ sent }}\n}}\n")
+            }
             // `error.message()` on an error, one of several (ADR-280 D30).
             out.push(f"impl{decl} {name}{params} {{\n    #[allow(dead_code)]\n    fn message(&self) -> String {{ self.to_string() }}\n}}\n")
             // The long form asks the member (D2): a member the program declares

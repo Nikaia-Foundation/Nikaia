@@ -492,6 +492,19 @@ fn emit_call_on_the_pool(key: ref String) -> bool {
     return key == "net::serve" || key == "supervisor::child" || key == "supervisor::run" || key == "task::scope"
 }
 
+/// **The channel a scope's tasks fail in** (ADR-346 D7): the box where a
+/// `catch` on the call opens it, the function's where the error leaves it, and
+/// `Crashed` alone where nothing else can.
+fn emit_call_tasks_channel(flow: EmitFlow, scope: ref EmitScope) -> String {
+    if flow.handled_here {
+        return "Box<dyn std::error::Error>"
+    }
+    if flow.can_throw {
+        return scope.channel.clone()
+    }
+    return "nikaia_std::task::Crashed"
+}
+
 /// A default that stands in a run that computes another one (#468); the text
 /// is `comptime_run::NOT_COMPUTED_YET`.
 fn emit_call_not_computed_yet() -> String {
@@ -535,6 +548,33 @@ impl EmitState {
                 else => {},
             }
         }
+        // **A scope's tasks fail in one channel** (ADR-346 D7), which the call
+        // names: nothing else in it may.
+        let mut tasks: String? = null
+        match func {
+            Expr::Path(segments, _) => {
+                if unaliased_in(world.aliases, emit_arg_joined(world, segments)) == "task::scope" {
+                    let mut channel = emit_call_tasks_channel(flow, scope)
+                    // **Only a scope with a task that can fail fails in a wider
+                    // channel** (ADR-346 D7): read off its tasks written that way.
+                    if channel != "nikaia_std::task::Crashed" {
+                        let mut owner: String = ""
+                        if channel == scope.channel {
+                            owner = scope.function.clone()
+                        }
+                        let tried = scope.clone() with { tasks_channel: channel.clone(), tasks_function: owner }
+                        let mut probe = EmitOut::empty()
+                        self.emit_core_args(world, walk, probe, host, self.emit_call_callee(world, func), args, self.takes_a_handle_at(world, func), depth, flow, tried)
+                        if !probe.buf.contains("?") {
+                            channel = "nikaia_std::task::Crashed".clone()
+                        }
+                    }
+                    out.push(f"::<_, {channel}>")
+                    tasks = channel
+                }
+            },
+            else => {},
+        }
         if unchecked {
             out.push("__unchecked")
         }
@@ -568,7 +608,19 @@ impl EmitState {
         // `h::id_of()` is `http::id_of()` where the file wrote `use http as h`
         // (ADR-286 D3), and a qualified name is one of them.
         let callee = self.emit_call_callee(world, func)
-        self.emit_core_args(world, walk, out, host, callee, args, takes, depth, flow, scope)
+        if tasks != null {
+            let channel = (tasks ?? "").clone()
+            let mut owner: String = ""
+            if channel == scope.channel {
+                owner = scope.function.clone()
+            }
+            let boxed = flow.handled_here && channel == "Box<dyn std::error::Error>"
+            let inner = scope.clone() with { tasks_channel: channel, tasks_function: owner }
+            self.emit_core_args(world, walk, out, host, callee, args, takes, depth, flow, inner)
+            walk.boxed_scope = boxed
+        } else {
+            self.emit_core_args(world, walk, out, host, callee, args, takes, depth, flow, scope)
+        }
         match func {
             Expr::Variable(name, _) => self.emit_core_dsl_parameters(world, walk, out, host, emit_text(world, name), args.len(), config, depth, flow, scope),
             else => {},
@@ -674,9 +726,26 @@ impl EmitState {
                     run = "scope_paused_on_pool"
                 }
                 let named = escaped_name(emit_text(world, params[0]))
-                out.push(f"{{ let {named} = &nikaia_std::task::{made}::new(); nikaia_std::task::{run}({named}, async ")
-                let inner = EmitScope::plain() with { changed: scope.changed.clone() }
+                let mut channel = emit_call_tasks_channel(flow, scope)
+                let mut owner: String = ""
+                if channel == scope.channel {
+                    owner = scope.function.clone()
+                }
+                // **Only a scope with a task that can fail fails in a wider
+                // channel** (ADR-346 D7): read off its body written that way.
+                if channel != "nikaia_std::task::Crashed" {
+                    let mut probe = EmitOut::empty()
+                    let tried = EmitScope::plain() with { changed: scope.changed.clone(), tasks_channel: channel.clone(), tasks_function: owner.clone() }
+                    self.emit_core_block(world, walk, probe, host, body, depth, EmitFlow::plain().at(flow.statement), tried, EmitTail::Return)
+                    if !probe.buf.contains("?") {
+                        channel = "nikaia_std::task::Crashed".clone()
+                    }
+                }
+                let boxed = flow.handled_here && channel == "Box<dyn std::error::Error>"
+                out.push(f"{{ let {named} = &nikaia_std::task::{made}::<{channel}>::new(); nikaia_std::task::{run}({named}, async ")
+                let inner = EmitScope::plain() with { changed: scope.changed.clone(), tasks_channel: channel, tasks_function: owner }
                 self.emit_core_block(world, walk, out, host, body, depth, EmitFlow::plain().at(flow.statement), inner, EmitTail::Return)
+                walk.boxed_scope = boxed
                 out.push(").await }")
                 return true
             },

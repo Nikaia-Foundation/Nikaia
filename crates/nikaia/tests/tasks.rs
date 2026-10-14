@@ -478,11 +478,12 @@ fn a_scope_with_a_pausing_task_is_awaited_and_polls_it() {
     let sequential = lower_at(source, "no");
     let parallel = lower_at(source, "yes");
     assert!(
-        sequential.contains("{ let s = &nikaia_std::task::PausedScope::new(); nikaia_std::task::scope_paused(s, async {"),
+        sequential.contains("{ let s = &nikaia_std::task::PausedScope::<")
+            && sequential.contains(">::new(); nikaia_std::task::scope_paused(s, async {"),
         "{sequential}"
     );
     assert!(
-        sequential.contains("s.spawn_paused(async || {"),
+        sequential.contains("s.spawn_paused(nikaia_std::task::plain_paused(async || {"),
         "{sequential}"
     );
     assert!(sequential.contains("}).await }?;"), "{sequential}");
@@ -509,6 +510,6 @@ fn the_switch_decides_where_a_scopes_tasks_run() {
                   }";
     let sequential = lower_at(source, "no");
     let parallel = lower_at(source, "yes");
-    assert!(sequential.contains("task::scope(|s|"), "{sequential}");
-    assert!(parallel.contains("task::scope_on_pool(|s|"), "{parallel}");
+    assert!(sequential.contains("task::scope::<_, "), "{sequential}");
+    assert!(parallel.contains("task::scope_on_pool::<_, "), "{parallel}");
 }

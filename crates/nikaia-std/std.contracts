@@ -3945,10 +3945,13 @@ throws = ["task::Crashed"]
 signature = "[T](body: fn(ref task::Scope) -> T) -> T"
 
 # Start a task in the scope; the scope waits for it.
+#
+# An error the task's body ends with is the scope's: where the scope ends it
+# throws the first in the order the tasks were started, the others joined to it.
 [fn."task::Scope::spawn"]
 pub = true
 sync = "sync(body)"
-signature = "(self: ref task::Scope, body: fn())"
+signature = "(self: ref task::Scope, body: fn() throws)"
 
 # **One mechanism, said three ways rather than three things**
 # ([ADR-292](../../docs/specification/adr/adr-292.md) D14): a program's own

@@ -57,6 +57,8 @@ impl<'a> Flow<'a> {
                 bound: self.bound.to_string(),
                 changed: self.changed.to_vec(),
                 awaited: self.awaited.to_vec(),
+                tasks_channel: self.tasks_channel.to_string(),
+                tasks_function: self.tasks_function.to_string(),
             },
         )
     }
@@ -82,6 +84,8 @@ impl<'a> Flow<'a> {
             in_lambda: flow.in_lambda,
             changed: &scope.changed,
             awaited: &scope.awaited,
+            tasks_channel: &scope.tasks_channel,
+            tasks_function: &scope.tasks_function,
             bound: &scope.bound,
             widen: flow.widen,
             inferred: flow.inferred,
