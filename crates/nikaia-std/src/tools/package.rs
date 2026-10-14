@@ -4834,11 +4834,11 @@ fn call_origins(func: &Expr, args: &[Expr], ask: &BufferAsk<'_>, holes_of: &impl
         if ask.own.functions.contains_key(&named) {
             let contract = match *nikaia_std::index::get(&ask.own.functions, &named) { Some(__nikaia_value) => __nikaia_value, None => return by_args };
             owned = answered_by(contract, &named, args, ask, &mut out, walk);
-            made_arguments(contract, &named, args, ask, &mut out, walk);
+            made_arguments(contract, &named, args, ask, unaliased, &mut out, walk);
         } else if ask.library.functions.contains_key(&named) {
             let contract = match *nikaia_std::index::get(&ask.library.functions, &named) { Some(__nikaia_value) => __nikaia_value, None => return by_args };
             owned = answered_by(contract, &named, args, ask, &mut out, walk);
-            made_arguments(contract, &named, args, ask, &mut out, walk);
+            made_arguments(contract, &named, args, ask, unaliased, &mut out, walk);
         }
         if owned { return out; }
     }
@@ -4868,14 +4868,14 @@ fn answered_by(contract: &FnContract, named: &str, args: &[Expr], ask: &BufferAs
     !a_ledger_type_with_a_view(result)
 }
 
-fn made_arguments(contract: &FnContract, named: &str, args: &[Expr], ask: &BufferAsk<'_>, out: &mut collections::BTreeSet<(i64, String)>, walk: &mut BufferWalk) {
+fn made_arguments(contract: &FnContract, named: &str, args: &[Expr], ask: &BufferAsk<'_>, unaliased: &impl Fn(&str) -> String, out: &mut collections::BTreeSet<(i64, String)>, walk: &mut BufferWalk) {
     if takes_a_keep(contract) { return; }
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
     let result = match signature.result.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
     if !result.is_a_view() { return; }
     let copying: Vec<&Ledger> = vec![ask.own, ask.library];
     for k in 0..args.len() as i64 {
-        if !made_in_the_call(nikaia_std::index::get(&args, nikaia_std::index::at(k))) || !lends_in(contract, k, &copying) { continue; }
+        if !made_in_the_call(nikaia_std::index::get(&args, nikaia_std::index::at(k))) || !lends_in(contract, k, &copying) || buffers_view_call(nikaia_std::index::get(&args, nikaia_std::index::at(k)), ask, unaliased) { continue; }
         let id = (walk.statement, format!("{}#{}", named, k));
         if !walk.sources.contains_key(&id) {
             let source = Source::Argument { at: walk.statement, callee: named.to_owned(), index: k, span: Span { start: u32::try_from(walk.statement).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(walk.statement).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) } };
@@ -4883,6 +4883,32 @@ fn made_arguments(contract: &FnContract, named: &str, args: &[Expr], ask: &Buffe
         }
         out.insert(id);
     }
+}
+
+fn buffers_view_call(arg: &Expr, ask: &BufferAsk<'_>, unaliased: &impl Fn(&str) -> String) -> bool {
+    match arg {
+        Expr::Call { func, .. } => {
+            let func = nikaia_std::boxed::open(func);
+            let callee = written_callee(ask.names, func, unaliased);
+            let named = nikaia_std::index::or(match callee.as_ref() {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || "".into());
+            match ask.own.functions.contains_key(&named) {
+                true => buffers_hands_back_a_view(*nikaia_std::index::get(&ask.own.functions, &named)),
+                false => buffers_hands_back_a_view(*nikaia_std::index::get(&ask.library.functions, &named)),
+            }
+        },
+        _ => false,
+    }
+}
+
+fn buffers_hands_back_a_view(found: Option<&FnContract>) -> bool {
+    let contract = match found { Some(__nikaia_value) => __nikaia_value, None => return false };
+    if takes_a_keep(contract) { return false; }
+    let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let result = match signature.result.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+    result.is_a_view()
 }
 
 fn made_in_the_call(arg: &Expr) -> bool { !matches!(arg, Expr::Variable(_, _) | Expr::Field { .. } | Expr::SafeField { .. } | Expr::Index { .. } | Expr::Path(_, _) | Expr::LitStr { .. } | Expr::LitInt { .. } | Expr::LitFloat { .. } | Expr::LitBool(_, _) | Expr::LitNull(_)) }
@@ -56733,55 +56759,6 @@ fn rsrc_report(asked: &Asked<'_>, of: &str, sources: &[String], declared_views: 
     }
     let mut named: Vec<String> = vec![];
     for source in sources.iter() { if reach.contains(source) { named.push(source.to_owned()); } }
-    if named.len() >= 2 {
-        let first = (*nikaia_std::index::get(&named, 0)).to_owned();
-        let second = (*nikaia_std::index::get(&named, 1)).to_owned();
-        let mut at_first: i64 = -1;
-        let mut at_second: i64 = -1;
-        for i in 0..ways.len() as i64 {
-            if at_first < 0 && nikaia_std::index::get(&ways, (i) as usize).reach.contains(&first) { at_first = i; }
-            if at_second < 0 && nikaia_std::index::get(&ways, (i) as usize).reach.contains(&second) { at_second = i; }
-        }
-        let mut message: String = String::from("");
-        let mut caret = Span { start: at.start, end: at.end };
-        if at_first >= 0 && at_second >= 0 && at_first != at_second {
-            let mut early: i64 = at_first;
-            let mut late: i64 = at_second;
-            let mut a = first.to_owned();
-            let mut b = second.to_owned();
-            if at_second < at_first {
-                early = at_second;
-                late = at_first;
-                a = second.to_owned();
-                b = first.to_owned();
-            }
-            caret = Span { start: nikaia_std::index::get(&ways, nikaia_std::index::at(early)).span.start, end: nikaia_std::index::get(&ways, nikaia_std::index::at(early)).span.end };
-            message = format!("{} hands back a view of `{}`'s data here and of `{}`'s there, so a caller can't tell whose data it gets.", of, a, b);
-        } else {
-            if at_first >= 0 { caret = Span { start: nikaia_std::index::get(&ways, nikaia_std::index::at(at_first)).span.start, end: nikaia_std::index::get(&ways, nikaia_std::index::at(at_first)).span.end }; }
-            message = format!("{} hands back a value that holds views of `{}`'s data and of `{}`'s, so a caller can't tell whose data it gets.", of, first, second);
-        }
-        let mut labels: Vec<CheckLabel> = vec![];
-        let mut marked = false;
-        for way in ways.iter() {
-            let mut whose: Vec<String> = vec![];
-            for source in named.iter() { if way.reach.contains(source) { whose.push(format!("`{}`", source)); } }
-            if !whose.is_empty() {
-                let joiner: String = String::from(" and ");
-                let joined = whose.join(&joiner);
-                labels.push(CheckLabel { span: Span { start: way.span.start, end: way.span.end }, word: String::from(""), text: format!("a view of {}", joined), main: !marked });
-                marked = true;
-            }
-        }
-        let note = format!("Whoever calls {} has to keep the data the result points into unchanged while it uses the result, and here that's decided only when the program runs.", of);
-        let split = format!("Split it, so each part hands back views of one of `{}` and `{}`: a function that says which of them (`fn …(…) -> bool`), then a call where it is used that picks one.", first, second);
-        let copy = "Or hand back a copy: declare `-> String` and write `.clone()`, one allocation per call.";
-        let help = format!("{}\n           {}", split, copy);
-        let mut found = refusal("NK2302", caret, message, vec![note], help);
-        found.labels = labels;
-        out.push(found);
-        return;
-    }
     if trait_name.is_none() { return; }
     let mut allowed: String = String::from("");
     if takes_a_view_of_itself(receiver) { allowed = String::from("self"); } else if declared_views.len() == 1 { allowed = (*nikaia_std::index::get(&declared_views, 0)).to_owned(); } else if declared_views.len() > 1 { return; }
@@ -56793,24 +56770,6 @@ fn rsrc_report(asked: &Asked<'_>, of: &str, sources: &[String], declared_views: 
             out.push(refusal("NK2302", Span { start: at.start, end: at.end }, message, vec![note], help));
             return;
         }
-    }
-}
-
-fn rsrc_declared_views(unit: &Unit, asked: &Asked<'_>, receiver: Option<&Receiver>, args: &[FnArg], ret_type: Option<&Type>) -> i64 {
-    if receiver.is_some() || !buffered(unit, asked, ret_type) { return 0; }
-    let mut views: i64 = 0;
-    for arg in args.iter() { if (*arg.ty.code).is_none() && brings_buffer(unit, asked, &arg.ty) { views += 1; } }
-    views
-}
-
-fn rsrc_declaration(unit: &Unit, asked: &Asked<'_>, method: &Spanned<TraitMethod>, out: &mut Vec<Finding>) {
-    let views = rsrc_declared_views(unit, asked, (method.node.receiver).as_ref(), &method.node.args, (method.node.ret_type).as_ref());
-    if views >= 2 {
-        let function = asked.names.resolve(method.node.name).to_owned();
-        let message = format!("`{}` is declared without a body, takes {} views and hands one back, so a caller can't tell whose data it gets.", function, views);
-        let note = "Whoever calls it through its declaration has to keep the data the result points into unchanged, and a declaration with no `self` and several views doesn't say which.".to_string();
-        let help: String = String::from("Give it a `ref self` to hand back a view of, take one view only, or declare `-> String` and hand back a copy.");
-        out.push(refusal("NK2302", Span { start: method.span.start, end: method.span.end }, message, vec![note], help));
     }
 }
 
@@ -56827,13 +56786,6 @@ fn rsrc_function_type(unit: &Unit, asked: &Asked<'_>, ty: &Type, at: &Span, out:
             let message: String = String::from("A function type that takes no view and hands one back doesn't say whose data the result points into.");
             let note = "Whoever calls through it has to keep the data the result points into unchanged, and the type has nothing to point at.".to_string();
             let help: String = String::from("Take the view it hands back as a parameter, or hand back a copy: declare `-> String`.");
-            out.push(refusal("NK2302", Span { start: at.start, end: at.end }, message, vec![note], help));
-            return;
-        }
-        if views >= 2 && buffered(unit, asked, (answer).as_ref()) {
-            let message: String = String::from("A function type that takes two views and hands one back doesn't say which one the result points into, so a caller can't tell whose data it gets.");
-            let note = "Whoever calls through it has to keep the data the result points into unchanged, and the type doesn't say which.".to_string();
-            let help: String = String::from("Take one view only, or hand back a copy: declare `-> String`.");
             out.push(refusal("NK2302", Span { start: at.start, end: at.end }, message, vec![note], help));
             return;
         }
@@ -56929,12 +56881,7 @@ fn rsrc_solve(unit: &Unit, asked: &Asked<'_>, items: &[Spanned<Item>], own_buffe
                     }
                 }
             },
-            Item::Trait { methods, .. } => {
-                for method in methods.iter() {
-                    rsrc_declaration(unit, asked, method, out);
-                    rsrc_function_types(unit, asked, &method.node.args, (method.node.ret_type).as_ref(), &method.span, out);
-                }
-            },
+            Item::Trait { methods, .. } => { for method in methods.iter() { rsrc_function_types(unit, asked, &method.node.args, (method.node.ret_type).as_ref(), &method.span, out); } },
             Item::Struct { fields, .. } => { for field in fields.iter() { rsrc_function_type(unit, asked, &field.ty, &field.span, out); } },
             _ => { },
         }

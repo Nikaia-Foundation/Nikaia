@@ -2227,68 +2227,8 @@ fn rsrc_report(asked: ref Asked, of: ref String, sources: ref Vec[String], decla
             named.push(source.clone())
         }
     }
-    if named.len() >= 2 {
-        // The first way out each of the first two parameters is reached by.
-        let first = named[0].clone()
-        let second = named[1].clone()
-        let mut at_first = -1
-        let mut at_second = -1
-        for i in 0..<ways.len() {
-            if at_first < 0 && ways[i].reach.contains(first) {
-                at_first = i
-            }
-            if at_second < 0 && ways[i].reach.contains(second) {
-                at_second = i
-            }
-        }
-        let mut message: String = ""
-        let mut caret = Span { start: at.start, end: at.end }
-        if at_first >= 0 && at_second >= 0 && at_first != at_second {
-            let mut early = at_first
-            let mut late = at_second
-            let mut a = first.clone()
-            let mut b = second.clone()
-            if at_second < at_first {
-                early = at_second
-                late = at_first
-                a = second.clone()
-                b = first.clone()
-            }
-            caret = Span { start: ways[early].span.start, end: ways[early].span.end }
-            message = f"{of} hands back a view of `{a}`'s data here and of `{b}`'s there, so a caller can't tell whose data it gets."
-        } else {
-            if at_first >= 0 {
-                caret = Span { start: ways[at_first].span.start, end: ways[at_first].span.end }
-            }
-            message = f"{of} hands back a value that holds views of `{first}`'s data and of `{second}`'s, so a caller can't tell whose data it gets."
-        }
-        // A caret under every way out that hands back a view, named with the
-        // parameters it hands back.
-        let mut labels: Vec[CheckLabel] = []
-        let mut marked = false
-        for way in ways {
-            let mut whose: Vec[String] = []
-            for source in named {
-                if way.reach.contains(source) {
-                    whose.push(f"`{source}`")
-                }
-            }
-            if whose.len() > 0 {
-                let joiner: String = " and "
-                let joined = whose.join(joiner)
-                labels.push(CheckLabel { span: Span { start: way.span.start, end: way.span.end }, word: "", text: f"a view of {joined}", main: !marked })
-                marked = true
-            }
-        }
-        let note = f"Whoever calls {of} has to keep the data the result points into unchanged while it uses the result, and here that's decided only when the program runs."
-        let split = f"Split it, so each part hands back views of one of `{first}` and `{second}`: a function that says which of them (`fn …(…) -> bool`), then a call where it is used that picks one."
-        let copy = "Or hand back a copy: declare `-> String` and write `.clone()`, one allocation per call."
-        let help = f"{split}\n           {copy}"
-        let mut found = refusal("NK2302", caret, message, [note], help)
-        found.labels = labels
-        out.push(found)
-        return
-    }
+    // Two or more parameters reached is no refusal (ADR-353 D1, D2): the
+    // result points into each of them, and the ledger writes them all.
     // An `impl` of a trait hands back what the trait's declaration names
     // (D26): the receiver, else the only view.
     if trait_name == null {
@@ -2315,33 +2255,8 @@ fn rsrc_report(asked: ref Asked, of: ref String, sources: ref Vec[String], decla
     }
 }
 
-// D26: a declaration with no body - a trait's method, a function type.
-fn rsrc_declared_views(unit: ref Unit, asked: ref Asked, receiver: ref Receiver?, args: ref Vec[FnArg], ret_type: ref Type?) -> i64 {
-    if receiver != null || !buffered(unit, asked, ret_type) {
-        return 0
-    }
-    let mut views = 0
-    for arg in args {
-        if arg.ty.code == null && brings_buffer(unit, asked, arg.ty) {
-            views += 1
-        }
-    }
-    return views
-}
-
-fn rsrc_declaration(unit: ref Unit, asked: ref Asked, method: ref Spanned[TraitMethod], mut out: Vec[Finding]) {
-    let views = rsrc_declared_views(unit, asked, method.node.receiver, method.node.args, method.node.ret_type)
-    if views >= 2 {
-        let function = asked.names.resolve(method.node.name).clone()
-        let message = f"`{function}` is declared without a body, takes {views} views and hands one back, so a caller can't tell whose data it gets."
-        let note = f"Whoever calls it through its declaration has to keep the data the result points into unchanged, and a declaration with no `self` and several views doesn't say which."
-        let help: String = "Give it a `ref self` to hand back a view of, take one view only, or declare `-> String` and hand back a copy."
-        out.push(refusal("NK2302", Span { start: method.span.start, end: method.span.end }, message, [note], help))
-    }
-}
-
-// A function type that takes two views and hands one back says nothing about
-// which.
+// A function type that takes no view and hands one back has nothing to
+// point at; with several, the result points into each (ADR-353 D2).
 fn rsrc_function_type(unit: ref Unit, asked: ref Asked, ty: ref Type, at: ref Span, mut out: Vec[Finding]) {
     if ty.code != null {
         let code = ty.code ?? return
@@ -2356,13 +2271,6 @@ fn rsrc_function_type(unit: ref Unit, asked: ref Asked, ty: ref Type, at: ref Sp
             let message: String = "A function type that takes no view and hands one back doesn't say whose data the result points into."
             let note = f"Whoever calls through it has to keep the data the result points into unchanged, and the type has nothing to point at."
             let help: String = "Take the view it hands back as a parameter, or hand back a copy: declare `-> String`."
-            out.push(refusal("NK2302", Span { start: at.start, end: at.end }, message, [note], help))
-            return
-        }
-        if views >= 2 && buffered(unit, asked, answer) {
-            let message: String = "A function type that takes two views and hands one back doesn't say which one the result points into, so a caller can't tell whose data it gets."
-            let note = f"Whoever calls through it has to keep the data the result points into unchanged, and the type doesn't say which."
-            let help: String = "Take one view only, or hand back a copy: declare `-> String`."
             out.push(refusal("NK2302", Span { start: at.start, end: at.end }, message, [note], help))
             return
         }
@@ -2484,7 +2392,6 @@ fn rsrc_solve(unit: ref Unit, asked: ref Asked, items: ref Vec[Spanned[Item]], o
             }
             Item::Trait { methods, .. } => {
                 for method in methods {
-                    rsrc_declaration(unit, asked, method, out)
                     rsrc_function_types(unit, asked, method.node.args, method.node.ret_type, method.span, out)
                 }
             }

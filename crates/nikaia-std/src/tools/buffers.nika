@@ -1106,11 +1106,11 @@ fn call_origins(func: ref Expr, args: ref Vec[Expr], ask: ref BufferAsk, holes_o
         if ask.own.functions.contains_key(named) {
             let contract = ask.own.functions[named] ?? return by_args
             owned = answered_by(contract, named, args, ask, out, walk)
-            made_arguments(contract, named, args, ask, out, walk)
+            made_arguments(contract, named, args, ask, unaliased, out, walk)
         } else if ask.library.functions.contains_key(named) {
             let contract = ask.library.functions[named] ?? return by_args
             owned = answered_by(contract, named, args, ask, out, walk)
-            made_arguments(contract, named, args, ask, out, walk)
+            made_arguments(contract, named, args, ask, unaliased, out, walk)
         }
         if owned {
             return out
@@ -1153,7 +1153,7 @@ fn answered_by(contract: ref FnContract, named: ref String, args: ref Vec[Expr],
 // back a view and takes no keep of its own, the view may point into it, so it
 // is a source - kept beside the call, or in the keep this function is given
 // where the view leaves through its result.
-fn made_arguments(contract: ref FnContract, named: ref String, args: ref Vec[Expr], ask: ref BufferAsk, mut out: collections::BTreeSet[(i64, String)], mut walk: BufferWalk) {
+fn made_arguments(contract: ref FnContract, named: ref String, args: ref Vec[Expr], ask: ref BufferAsk, unaliased: fn(ref String) -> String sync, mut out: collections::BTreeSet[(i64, String)], mut walk: BufferWalk) {
     if takes_a_keep(contract) {
         return
     }
@@ -1164,7 +1164,7 @@ fn made_arguments(contract: ref FnContract, named: ref String, args: ref Vec[Exp
     }
     let copying: Vec[ref Ledger] = [ask.own, ask.library]
     for k in 0..<args.len() {
-        if !made_in_the_call(args[k]) || !lends_in(contract, k, copying) {
+        if !made_in_the_call(args[k]) || !lends_in(contract, k, copying) || buffers_view_call(args[k], ask, unaliased) {
             continue
         }
         let id = (walk.statement, f"{named}#{k}")
@@ -1174,6 +1174,33 @@ fn made_arguments(contract: ref FnContract, named: ref String, args: ref Vec[Exp
         }
         out.insert(id)
     }
+}
+
+// **A call that hands back a view of its arguments makes no buffer**
+// (ADR-353 D1): `longest(longest(x, y), z)` points into `x`, `y` and `z`,
+// which the inner call's origins already carry.
+fn buffers_view_call(arg: ref Expr, ask: ref BufferAsk, unaliased: fn(ref String) -> String sync) -> bool {
+    return match arg {
+        Expr::Call { func, .. } => {
+            let callee = written_callee(ask.names, func, unaliased)
+            let named = callee?.clone() ?? ""
+            match ask.own.functions.contains_key(named) {
+                true => buffers_hands_back_a_view(ask.own.functions[named]),
+                false => buffers_hands_back_a_view(ask.library.functions[named]),
+            }
+        }
+        else => false,
+    }
+}
+
+fn buffers_hands_back_a_view(found: ref FnContract?) -> bool {
+    let contract = found ?? return false
+    if takes_a_keep(contract) {
+        return false
+    }
+    let signature = contract.signature ?? return false
+    let result = signature.result ?? return false
+    return result.is_a_view()
 }
 
 // A value the argument itself makes: not a name, a part or an element of one,

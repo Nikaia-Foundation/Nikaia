@@ -8,6 +8,19 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.945] — 2026-10-14
+
+**a result built from a call handing back views of its arguments makes no buffer; a method's result may view its receiver and a parameter (ADR-353 D1, part of #614)**
+
+* `longest(longest(x, y), z)` points into `x`, `y` and `z` and takes no keep:
+  an argument that is itself a call handing back a view is no buffer made in
+  the call (`tools/buffers.nika`). It lowered as tethered before and failed
+  below Nikaia (E0621).
+* A method whose result may point into its receiver and a parameter lowers
+  with `&'r self` beside the parameter.
+* The result-source walk of 0.0.936, which 0.0.937's rebase had dropped, is
+  back.
+
 ## [0.0.944] — 2026-10-14
 
 **impl Hash: a hand-written hash for a type with a hand-written equality (#591)**

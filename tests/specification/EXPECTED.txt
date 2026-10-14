@@ -75,7 +75,7 @@
 10-nikaia-light.md #75 fragment (as written) [sketch]  struct Token {
 10-nikaia-light.md #76 lowered (as written)  struct Reading { name: ref String, temp: i32 }
 10-nikaia-light.md #77 fragment (as written) [sketch]  struct Reading { name: ref String, temp: i32 }
-10-nikaia-light.md #78 refused (as written) [NK1135,NK2302]  impl Checker {
+10-nikaia-light.md #78 refused (as written) [NK1135]  impl Checker {
 10-nikaia-light.md #79 refused (a body) [NK1117]  let mut y = "short".clone()
 10-nikaia-light.md #80 refused (a body) [about-a-refusal NK1117]  let mut y = "short".clone()
 10-nikaia-light.md #81 refused (a body) [NK1117]  let mut users = load_users()
