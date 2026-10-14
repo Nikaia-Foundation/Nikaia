@@ -3578,13 +3578,20 @@ grammar! {
         // `Event::Click(Point { x, .. })` is a tuple whose one part is a named
         // pattern ([ADR-291](../../../../docs/specification/adr/adr-291.md) D10).
         rule match_part_list -> Vec<MatchPattern> =
-            head:match_part tail:match_part_tail* ","? -> {
+            head:tuple_part tail:match_part_tail* ","? -> {
                 let mut parts = vec![head];
                 parts.extend(tail);
                 parts
             }
 
-        rule match_part_tail -> MatchPattern = "," p:match_part -> { p }
+        rule match_part_tail -> MatchPattern = "," p:tuple_part -> { p }
+
+        // **`..` is the rest of a variant's values** (ADR-349 D1): `E::V(..)`.
+        // It parses anywhere in the list so that `E::V(a, ..)` is refused by
+        // the checker with `NK1255`, which says why, rather than as a syntax error.
+        rule tuple_part -> MatchPattern =
+            ".." -> { MatchPattern::Rest }
+          | p:match_part -> { p }
 
         // **`_` is the ignore pattern inside a pattern**
         // ([ADR-291](../../../../docs/specification/adr/adr-291.md) D17): a

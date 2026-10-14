@@ -273,12 +273,12 @@ or a checker refusal that names the spelling that works.
 A call of a let-bound function value lends what its type takes as a view, as a
 call of a named function does (`views_kept.rs`).
 
-## D27 (new, language). No rest pattern `V(..)`
+## D27 (new, language). No rest pattern `V(..)`: **built** (0.0.920)
 
-Rust's `Held::Precondition(..)` has no Nikaia spelling: the parser stops at
-the `..` and a draft must name every field with `_`, which a converter cannot
-know without the type. Found with rs2nika (#579, `claims_report`). Not decided here;
-the question is [#610](https://github.com/Nikaia-Foundation/Nikaia/issues/610).
+Rust's `Held::Precondition(..)` had no Nikaia spelling (#579, `claims_report`).
+Decided in [ADR-349](specification/adr/adr-349.md): `E::V(..)` matches all of a
+variant's values and lowers to Rust's `E::V(..)`, so a draft passes it through
+unchanged (`match_patterns.rs`). A positional rest `E::V(a, ..)` is `NK1255`.
 
 ## D28 (new, small). An owned `String` passed to `contains`: **built** (0.0.895)
 
@@ -322,7 +322,7 @@ Built: the checker refuses it with `NK1253` (`check_members.nika`, test in `crat
 `match e { E::A(_) => 1, else => 0 }` with `A(i64, i64)` passes `nikaia check`;
 rustc refuses the lowering (*this pattern has 1 field, but the corresponding
 tuple variant has 2 fields*). The checker should name the arity itself (a
-`NK` refusal), the more so while D27 leaves no rest pattern. Found with rs2nika
+`NK` refusal), though D27's `V(..)` now covers the whole payload. Found with rs2nika
 (#579) while trying `(_)` for `(..)`.
 
 ## D34. A by-value enum parameter, and a `match` arm that is a call returning a value: arm **built**, parameter **not reproduced**

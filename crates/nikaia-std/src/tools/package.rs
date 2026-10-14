@@ -320,6 +320,7 @@ pub struct PatternField {
 #[derive(Debug, Clone, PartialEq)]
 pub enum MatchPattern {
     Otherwise,
+    Rest,
     Literal(Expr),
     Path(Vec<winnow_grammar::Symbol>),
     Tuple { path: Vec<winnow_grammar::Symbol>, parts: Vec<MatchPattern> },
@@ -18014,19 +18015,42 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    fn a_rest_pattern(&mut self, world: &CheckWorld<'_>, path: &[winnow_grammar::Symbol], written: i64, span: &Span) {
+        if written != 1 || path.is_empty() {
+            self.findings.push(check_refusal("NK1255", span, "`..` stands only for all of a variant's values, alone in the brackets.".to_owned(), vec!["A positional rest such as `E::V(a, ..)` is not part of the language: a pattern names every value in order, or none of them with `E::V(..)`.".to_owned()], Some("Write each value, with `_` for the ones you ignore, or `E::V(..)` for all of them.".to_owned())));
+            return;
+        }
+        if path.len() != 2 { return; }
+        let ty = world.words.resolve(*nikaia_std::index::get(&path, 0)).to_owned();
+        let member = world.words.resolve(*nikaia_std::index::get(&path, 1)).to_owned();
+        let key = format!("{}::{}", ty, member);
+        if self.is_variant(&ty, &member) && !self.variant_parts.contains_key(&key) && !self.structs.contains_key(&key) { self.findings.push(check_refusal("NK1255", span, format!("`{}` carries no values, so `{}(..)` has nothing to stand for.", key, key), vec!["`(..)` matches the values of a variant that has some.".to_owned()], Some(format!("Write `{}`.", key).to_owned()))); }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub fn a_pattern_naming_a_member_a_type_does_not_have(&mut self, world: &CheckWorld<'_>, pattern: &MatchPattern, span: &Span) {
         match pattern {
             MatchPattern::Path(path) => { self.a_path_in_a_pattern(world, path, span); },
             MatchPattern::Named { path, .. } => { self.a_path_in_a_pattern(world, path, span); },
             MatchPattern::Tuple { path, parts } => {
                 self.a_path_in_a_pattern(world, path, span);
-                self.a_variant_pattern_with_other_parts(world, path, parts.len() as i64, span);
+                if parts_hold_a_rest(parts) { self.a_rest_pattern(world, path, parts.len() as i64, span); } else { self.a_variant_pattern_with_other_parts(world, path, parts.len() as i64, span); }
                 for part in parts.iter() { self.a_pattern_naming_a_member_a_type_does_not_have(world, part, span); }
             },
             MatchPattern::Or(alternatives) => { for alternative in alternatives.iter() { self.a_pattern_naming_a_member_a_type_does_not_have(world, alternative, span); } },
             _ => { },
         }
     }
+}
+
+fn parts_hold_a_rest(parts: &[MatchPattern]) -> bool {
+    for part in parts.iter() {
+        match part {
+            MatchPattern::Rest => { return true; },
+            _ => { },
+        }
+    }
+    false
 }
 
 fn mem_text_from(head: &str, member: &str) -> bool { (head == "String" || head == "str") && member == "from" }
@@ -28472,6 +28496,7 @@ impl EmitState {
         let mut n = found;
         match pattern {
             MatchPattern::Otherwise => { out.push("_"); },
+            MatchPattern::Rest => { out.push(".."); },
             MatchPattern::Literal(value) => { host.expr(walk, out, value, depth, flow, scope)?; },
             MatchPattern::Path(p) => { if p.len() == 1 { for one in p.iter() { out.push(&self.emit_match_bound(world, *one, wild, lent_key)); } } else { out.push(&emit_match_path(world, p)); } },
             MatchPattern::Tuple { path, parts } => {
@@ -31400,6 +31425,7 @@ pub fn binds_a_part(part: &MatchPattern) -> bool {
     match part {
         MatchPattern::Path(one) => one.len() == 1,
         MatchPattern::Otherwise => true,
+        MatchPattern::Rest => true,
         _ => false,
     }
 }

@@ -219,6 +219,7 @@ pub fn binds_a_part(part: ref MatchPattern) -> bool {
     return match part {
         MatchPattern::Path(one) => one.len() == 1,
         MatchPattern::Otherwise => true,
+        MatchPattern::Rest => true,
         else => false,
     }
 }

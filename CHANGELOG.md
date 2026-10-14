@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.920] — 2026-10-14
+
+**A variant's rest pattern `E::V(..)` (ADR-349, NK1255, #610)**
+
+The owner's decision on #610: `E::V(..)` matches a variant whatever values it carries and binds none, as `..` is already the rest of a struct's fields; it lowers to Rust's `E::V(..)` and `NK1253`'s count is not asked of it. `NK1255` refuses it on a variant without values, and refuses a positional rest `E::V(a, ..)` (left undecided) with a message saying it is not part of the language. Part I 3.4's pattern table and Part III's code table; lowering-defects D27 built (`match_patterns.rs`).
+
 ## [0.0.919] — 2026-10-14
 
 **Program end: skip-free-at-exit:on leaves main's memory to the OS (ADR-348, #607)**

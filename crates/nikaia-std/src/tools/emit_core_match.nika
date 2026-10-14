@@ -124,6 +124,8 @@ impl EmitState {
         match pattern {
             // Rust's own catch-all, which is what the arm was before (ADR-291 D18).
             MatchPattern::Otherwise => out.push("_"),
+            // ADR-349 D1: Rust writes the whole payload's rest the same way.
+            MatchPattern::Rest => out.push(".."),
             MatchPattern::Literal(value) => host.expr(walk, out, value, depth, flow, scope),
             MatchPattern::Path(p) => {
                 if p.len() == 1 {

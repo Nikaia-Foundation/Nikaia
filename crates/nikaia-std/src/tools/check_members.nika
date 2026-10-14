@@ -307,6 +307,27 @@ impl CheckState {
         self.findings.push(check_refusal("NK1253", span, f"The pattern `{key}` names {written} part(s), but the variant carries {declared}.", [f"A pattern names every part of a positional variant, in order; `_` ignores one."], f"Write `{key}({shape})` and bind the parts you need."))
     }
 
+    /// **`NK1255`: `..` is the whole of a variant's values** (ADR-349 D1).
+    /// `E::V(..)` matches any values of a variant that has some; it is
+    /// refused on a variant without values, and wherever it is not the only
+    /// part (`E::V(a, ..)`, `(..)`), since a positional rest is not part of
+    /// the language. `NK1253`'s count is not asked of a rest.
+    fn a_rest_pattern(ref mut self, world: ref CheckWorld, path: ref Vec[winnow_grammar::Symbol], written: i64, span: ref Span) sync {
+        if written != 1 || path.len() == 0 {
+            self.findings.push(check_refusal("NK1255", span, "`..` stands only for all of a variant's values, alone in the brackets.".clone(), ["A positional rest such as `E::V(a, ..)` is not part of the language: a pattern names every value in order, or none of them with `E::V(..)`.".clone()], "Write each value, with `_` for the ones you ignore, or `E::V(..)` for all of them.".clone()))
+            return
+        }
+        if path.len() != 2 {
+            return
+        }
+        let ty = world.words.resolve(path[0]).clone()
+        let member = world.words.resolve(path[1]).clone()
+        let key = f"{ty}::{member}"
+        if self.is_variant(ty, member) && !self.variant_parts.contains_key(key) && !self.structs.contains_key(key) {
+            self.findings.push(check_refusal("NK1255", span, f"`{key}` carries no values, so `{key}(..)` has nothing to stand for.", ["`(..)` matches the values of a variant that has some.".clone()], f"Write `{key}`.".clone()))
+        }
+    }
+
     /// The same question asked of a `match` arm's pattern (ADR-291 D10's shapes),
     /// which is where a misspelled variant is most likely to be written. The
     /// parts are patterns, so the walk goes into them.
@@ -316,7 +337,11 @@ impl CheckState {
             MatchPattern::Named { path, .. } => self.a_path_in_a_pattern(world, path, span),
             MatchPattern::Tuple { path, parts } => {
                 self.a_path_in_a_pattern(world, path, span)
-                self.a_variant_pattern_with_other_parts(world, path, parts.len(), span)
+                if parts_hold_a_rest(parts) {
+                    self.a_rest_pattern(world, path, parts.len(), span)
+                } else {
+                    self.a_variant_pattern_with_other_parts(world, path, parts.len(), span)
+                }
                 for part in parts {
                     self.a_pattern_naming_a_member_a_type_does_not_have(world, part, span)
                 }
@@ -329,6 +354,16 @@ impl CheckState {
             else => {},
         }
     }
+}
+
+fn parts_hold_a_rest(parts: ref Vec[MatchPattern]) -> bool {
+    for part in parts {
+        match part {
+            MatchPattern::Rest => return true,
+            else => {},
+        }
+    }
+    return false
 }
 
 fn mem_text_from(head: ref String, member: ref String) -> bool {

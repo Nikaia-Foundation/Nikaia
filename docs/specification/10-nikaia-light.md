@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.919 (Draft)
+**Version:** 0.0.920 (Draft)
 **Date:** 2026-10-14
 
 ---
@@ -1018,7 +1018,7 @@ bare name binds. `Quit` is a variant *of* `Message`, never on its own.
 unit variant's pattern is written long, or as `else`. The short form of an
 enum with more than one variant is refused with `NK1252`.
 
-**Seven more shapes**:
+**Eight more shapes**:
 
 | pattern | matches |
 | :--- | :--- |
@@ -1027,10 +1027,12 @@ enum with more than one variant is refused with `NK1252`.
 | `200..299` | a range, **inclusive at both ends**. An exclusive one is written by moving the end; `..<` is never written in a pattern |
 | `(x, y) if x == y` | a **guard**: the arm matches only where the condition holds, and the word is `if` |
 | `Event::Click(Point { x, .. })` | a pattern inside a pattern, and `..` for the fields this one does not name |
+| `Held::Precondition(..)` | that variant, whatever values it carries, binding none (ADR-349). `..` stands alone in the brackets: on a variant without values, and beside other parts (`E::V(a, ..)`), it is refused with `NK1255` |
 | `Point { x: 0, y }`, `Move { x: px, .. }` | a field against a pattern: `x: 0` matches where the field is `0`, `x: px` binds the field to the name `px`, and `x: Op::Times` or `x: (0, y)` reaches inside it |
 
 **`..` means two different things**: in a range pattern it is the range, and
-in a struct pattern it is *the rest of the fields*. The position says which.
+in a struct pattern it is *the rest of the fields*, and alone in a variant's
+brackets *the rest of its values*. The position says which.
 
 **A `match` reads what it binds.** Over a name the function owns, an arm that
 only reads a part it binds takes a view of it (6.5), and the name is whole

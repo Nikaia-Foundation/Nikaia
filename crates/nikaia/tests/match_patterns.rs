@@ -299,3 +299,52 @@ fn the_calculator_matches_the_pair() {
         "it still reads `step.0`"
     );
 }
+
+/// **`E::V(..)` matches all of a variant's values** (ADR-349 D1), on one value
+/// and on three, without `NK1253`'s count and with no case missing, and
+/// lowers to Rust's own `E::V(..)`.
+#[test]
+fn a_rest_matches_a_whole_payload() {
+    let source = "enum Held { One(i64), Three(i64, String, bool), Gone }\n\
+         fn f(h: Held) -> i64 { return match h { Held::One(..) => 1, Held::Three(..) => 3, Held::Gone => 0 } }\n";
+    let found = findings(source);
+    assert!(
+        found
+            .iter()
+            .all(|f| f.code != "NK1253" && f.code != "NK1255" && f.code != "NK1151"),
+        "{found:#?}"
+    );
+    let rust = lowered(source);
+    assert!(rust.contains("Held::One(..)"), "{rust}");
+    assert!(rust.contains("Held::Three(..)"), "{rust}");
+}
+
+/// **`NK1255`: no rest on a variant without values** (ADR-349 D2), **and no
+/// positional rest** (D3), which parses so that the message can say why.
+#[test]
+fn a_rest_on_a_unit_variant_or_beside_a_part_is_refused() {
+    let nk1255 = |source: &str| -> Vec<nikaia::check::Finding> {
+        findings(source)
+            .into_iter()
+            .filter(|f| f.code == "NK1255")
+            .collect()
+    };
+    let unit = nk1255(
+        "enum E { A(i64), B }\n\
+         fn f(e: E) -> i64 { return match e { E::B(..) => 1, else => 0 } }\n",
+    );
+    assert_eq!(unit.len(), 1, "{unit:#?}");
+    assert!(unit[0].message.contains("no values"), "{unit:#?}");
+    let positional = nk1255(
+        "enum E { A(i64, i64), B }\n\
+         fn f(e: E) -> i64 { return match e { E::A(x, ..) => x, else => 0 } }\n",
+    );
+    assert_eq!(positional.len(), 1, "{positional:#?}");
+    assert!(
+        positional[0]
+            .notes
+            .iter()
+            .any(|n| n.contains("not part of the language")),
+        "{positional:#?}"
+    );
+}

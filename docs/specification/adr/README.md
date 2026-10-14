@@ -62,6 +62,7 @@ implementation.
 
 | ADR | Decides | Status | Built |
 | :--- | :--- | :--- | :--- |
+| [349](adr-349.md) | `E::V(..)` matches a variant whatever values it carries, as `..` is the rest of a struct's fields; refused on a variant without values and wherever it is not alone in the brackets (`NK1255`); a positional rest `E::V(a, ..)` is left undecided | Accepted | yes |
 | [348](adr-348.md) | What `main` still holds at its end is freed by default; `optimization = "skip-free-at-exit:on"` leaves its memory to the operating system, while every value still dies and every cleanup runs; no `Drop` in `std` has an effect outside the process. | Accepted | yes |
 | [347](adr-347.md) | An enum with exactly one variant is written by its type's name, `Exit(c)` for `Exit::Code(c)`, at the value and in a pattern; a bare name in a pattern still binds; the short form of an enum with several variants is `NK1252` |
 | [346](adr-346.md) | Every task error has a receiver: an unbound `spawn` is detached; a bound `TaskHandle` must be taken by `join`, `join(within:)`, `detach` or `cancel`, or handed on (`NK2109`); `join` throws the body's errors; `join(within:)` cancels on time-out and throws `task::TimedOut`; a detached task's error is logged, a fatal one sets the exit status at `main`'s end; supervisors do not restart a fatal error; `task::scope` hands errors on as `overlap`. | Accepted | in part (#605) |

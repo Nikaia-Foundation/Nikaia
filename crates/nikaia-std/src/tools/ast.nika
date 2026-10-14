@@ -1038,6 +1038,11 @@ pub enum MatchPattern {
     /// that arrived and is ignored matches as `else` does and binds nothing,
     /// so the two are one node and lower to the same `_`.
     Otherwise,
+    /// `..` as a part of a variant's pattern, `Held::Precondition(..)`: the
+    /// rest of the variant's values, whatever they are
+    /// ([ADR-349](../../../docs/specification/adr/adr-349.md) D1). Only the
+    /// whole list is a rest; `E::V(a, ..)` parses and is refused with `NK1255`.
+    Rest,
     /// `1`, `"text"`, `true`
     Literal(Expr),
     /// `Op::Times`, and a bare name - which *binds*, as it does in the
