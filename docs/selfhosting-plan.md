@@ -301,7 +301,7 @@ gives what each core unit calls.
 | U-c4 (done, 0.0.916) | `check_core_call.nika` | `call`; the arms `Call`, `ListLit`, `Tuple` | 499 |
 | U-c5 (done, 0.0.922) | `check_core_call_on.nika` | `call_on`, `a_safe_call` | 688 |
 | U-c6 (done, 0.0.924) | `check_core_method.nika` | the arm `MethodCall \| SafeMethod` | 638 |
-| U-c7 | `check_core_stmt.nika` | `stmt` (one function per `Stmt` variant) and `block`; the host method `block` is deleted | 884 |
+| U-c7 (done, 0.0.927) | `check_core_stmt.nika` | `stmt` (one function per `Stmt` variant) and `block`; the host method `block` is deleted | 884 |
 | U-c8 | `check_core_flow.nika` | the arms `Match`, `If`, `Select`, `Overlap`, `TryCatch`, `Block`, `Unsafe` | 609 |
 | U-c9 | `check_core_places.nika` | the arms `Field \| SafeField`, `StructLit`, `With`, `Index`, `Cast`, `Range` | 709 |
 | U-c10 | `check_core_ops.nika` | the arms `Binary`, `Coalesce`, `Closure`, `Spawn` | 683 |

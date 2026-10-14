@@ -94,9 +94,12 @@ pub trait CheckHost {
     /// until the dispatcher itself is Nikaia (U-c11). Only the host the core
     /// runs under answers it.
     fn expr(ref self, mut state: CheckState, node: ref Expr, span: ref Span) -> Ty sync
-    /// **A block, walked** (U-c0): the second hub, until `stmt` and `block` move
-    /// (U-c7).
-    fn block(ref self, mut state: CheckState, block: ref Block) -> Ty sync
+    /// **A value with a cleanup, bound by a `let`, dies where its block ends**
+    /// (ADR-297 D2, U-c7): the cleanup's questions stay Rust.
+    fn a_value_with_a_cleanup_bound(ref self, mut state: CheckState, name: ref String, ty: ref Ty, span: ref Span) sync
+    /// **`NK2109`: a bound handle is used up before it leaves its scope**
+    /// (ADR-346 D3, U-c7): the spawn work's (#605), which stays Rust.
+    fn a_bound_handle_is_taken(ref self, mut state: CheckState, block: ref Block) sync
     /// The value as the author wrote it, where this compiler can say so: a
     /// literal, a name, a negation, and an ellipsis for the rest. A query that
     /// stays Rust until `written` moves (C-5e): the text of a string literal is

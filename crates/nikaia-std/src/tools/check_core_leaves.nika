@@ -263,7 +263,7 @@ pub fn check_core_lambda[H: CheckHost](mut state: CheckState, world: ref CheckWo
     // The other door into a lambda's body, with the same boundary as `expr`'s.
     let saved = state.enter_boundary("lambda")
     state.handed_over = CheckHanded { pauses: false, fails: false, caught: false, promised: promised.clone() }
-    let tail = host.block(state, body)
+    let tail = check_core_block(state, world, host, body)
     let seen: CheckHanded? = state.handed_over?.clone()
     state.handed_over = null
     state.leave_boundary(saved)

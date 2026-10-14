@@ -1,0 +1,926 @@
+// crates/nikaia-std/src/tools/check_core_stmt.nika
+//
+// **A statement, and a block of them** (ADR-294, #125, #558, C-6, U-c7):
+// `stmt`, one function per `Stmt` variant, and `block`, which stops being a
+// hub of the host. The form is the pilot's (`check_core_pilot.nika`): a free
+// function over the state, the world and a host; an expression is walked
+// through the hub `host.expr`. What stays Rust is asked through the host: a
+// value with a cleanup bound by a `let` (`a_value_with_a_cleanup_bound`) and
+// the spawn work's `NK2109` (`a_bound_handle_is_taken`, #605).
+
+use std::collections
+
+/// The empty tuple, what a statement that hands nothing back is.
+fn check_core_stmt_unit() -> Ty {
+    return Ty::Tuple([])
+}
+
+/// **The integer a `let`'s annotation names**, for the walk of its value
+/// (`flow.reaching`): one of the five integer types, written bare.
+fn check_core_stmt_reaching(world: ref CheckWorld, ty: ref Type?) -> String? sync {
+    let written: ref Type = ty ?? return null
+    return match written_ty(world.words, world.here.aliases, written) {
+        Ty::Named { name, args, view } => {
+            if !view && args.len() == 0 && (name == "u8" || name == "u32" || name == "u64" || name == "i32" || name == "i64") {
+                name.clone()
+            } else {
+                null
+            }
+        },
+        else => null,
+    }
+}
+
+/// A closure or a list literal, the values a `let`'s annotation is expected by.
+fn check_core_stmt_expects_a_lambda(value: ref Expr) -> bool sync {
+    return match value {
+        Expr::Closure { .. } => true,
+        Expr::ListLit { .. } => true,
+        else => false,
+    }
+}
+
+/// An index or a method call: the reads of a map a name is bound to.
+fn check_core_stmt_a_map_read(value: ref Expr) -> bool sync {
+    return match value {
+        Expr::Index { .. } => true,
+        Expr::MethodCall { .. } => true,
+        else => false,
+    }
+}
+
+/// A call of `get`, by its method's name.
+fn check_core_stmt_a_get(world: ref CheckWorld, read: ref Expr) -> bool sync {
+    return match read {
+        Expr::MethodCall { method, .. } => world.words.resolve(method) == "get",
+        else => false,
+    }
+}
+
+/// An index read, `xs[i]`.
+fn check_core_stmt_an_index(read: ref Expr) -> bool sync {
+    return match read {
+        Expr::Index { .. } => true,
+        else => false,
+    }
+}
+
+/// **A value `get` hands back past a jump** (D30).
+fn check_core_stmt_got(state: ref CheckState, world: ref CheckWorld, value: ref Expr) -> bool sync {
+    return match value {
+        Expr::Coalesce { value: read, fallback, .. } => check_core_stmt_a_get(world, read) && state.jumps(world, fallback),
+        else => false,
+    }
+}
+
+/// A read through the brackets whose fallback jumps.
+fn check_core_stmt_read_through_a_jump(state: ref CheckState, world: ref CheckWorld, value: ref Expr) -> bool sync {
+    return match value {
+        Expr::Coalesce { value: read, fallback, .. } => check_core_stmt_an_index(read) && state.jumps(world, fallback),
+        else => false,
+    }
+}
+
+/// A read through the brackets or a `get` whose fallback leaves.
+fn check_core_stmt_a_read_that_leaves(state: ref CheckState, world: ref CheckWorld, value: ref Expr) -> bool sync {
+    return match value {
+        Expr::Coalesce { value: read, fallback, .. } => (check_core_stmt_an_index(read) || check_core_stmt_a_get(world, read)) && state.leaves(world, fallback),
+        else => false,
+    }
+}
+
+/// A name or a field, the values a `let` may see through.
+fn check_core_stmt_a_name_or_field(value: ref Expr) -> bool sync {
+    return match value {
+        Expr::Variable(_, _) => true,
+        Expr::Field { .. } => true,
+        else => false,
+    }
+}
+
+/// A field or an index, the places a `let` is a view of.
+fn check_core_stmt_a_place(value: ref Expr) -> bool sync {
+    return match value {
+        Expr::Field { .. } => true,
+        Expr::Index { .. } => true,
+        else => false,
+    }
+}
+
+/// A bare name.
+fn check_core_stmt_a_name(value: ref Expr) -> bool sync {
+    return match value {
+        Expr::Variable(_, _) => true,
+        else => false,
+    }
+}
+
+/// The text of a string literal, where the value is one.
+fn check_core_stmt_literal(value: ref Expr) -> String? sync {
+    return match value {
+        Expr::LitStr { text, .. } => text.clone(),
+        else => null,
+    }
+}
+
+/// A `Vec` whose element type nobody knows.
+fn check_core_stmt_an_unknown_list(ty: ref Ty) -> bool sync {
+    return match ty {
+        Ty::Named { name, args, .. } => name == "Vec" && args.len() == 1 && args[0].is_unknown(),
+        else => false,
+    }
+}
+
+/// A list's own type, `fs::Path`.
+fn check_core_stmt_a_path(ty: ref Ty) -> bool sync {
+    return match ty {
+        Ty::Named { name, .. } => name == "fs::Path",
+        else => false,
+    }
+}
+
+/// A fresh open number at a `let` or a `for`.
+fn check_core_stmt_open_number(name: ref String, element: bool, span: ref Span) -> CheckOpenNumber {
+    return CheckOpenNumber { name: name.clone(), element: element, at: Span { start: span.start, end: span.end }, joined: span.start as i64, asks: [], given: [], derived: [], written: [] }
+}
+
+/// **A `let` whose declared type is a number and whose value is a `for`
+/// binding** (ADR-182 D5), and everything else a refusal (ADR-185 D1).
+fn check_core_stmt_a_number_read_through_a_lent_binding(mut state: CheckState, world: ref CheckWorld, want: ref Ty, value: ref Expr, span: ref Span) sync {
+    let wanted: String = match want {
+        Ty::Named { name, args, view } => {
+            if view {
+                return
+            }
+            if args.len() == 0 && (name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f64" || name == "bool" || name == "char" || name == "scalar") {
+                state.a_cast_over_a_lent_binding(world, value, span)
+                return
+            }
+            name.clone()
+        },
+        else => {
+            return
+        },
+    }
+    let name: String = match value {
+        Expr::Variable(bound, _) => f"{world.words.resolve(bound)}",
+        else => {
+            return
+        },
+    }
+    let local: CheckLocal = state.binding(name) ?? return
+    if !local.lent || state.number_shaped(world, value) {
+        return
+    }
+    state.a_copy_the_source_did_not_write(name, wanted, span)
+}
+
+/// **A value that may be wrapped into a nullable slot** (ADR-293 D3).
+fn check_core_stmt_wraps_into_nullable[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, found: ref Ty, want: ref Ty, value: ref Expr, span: ref Span) sync {
+    state.a_map_read_kept(world, found, want, value, span)
+    let how = check_widened_slot(state, world, host, found, want, value, span)
+    if how != null {
+        let wrap = how ?? return
+        state.facts.nullable_sites.insert(span.start as i64, wrap)
+    }
+}
+
+/// A list, a map, a set, or a `struct` or an `enum` this unit declares.
+fn check_core_stmt_has_no_arithmetic(world: ref CheckWorld, ty: ref Ty) -> bool sync {
+    return is_a_collection_type(ty) || declared_with_no_arithmetic(world.here, ty) != null
+}
+
+/// A name nothing typed bound to `bound`.
+fn check_core_stmt_lent_let(mut state: CheckState, world: ref CheckWorld, names: ref Vec[winnow_grammar::Symbol], span: ref Span) sync {
+    state.facts.lent_lets.insert(span.start as i64)
+    for n in names {
+        let name: String = f"{world.words.resolve(n)}"
+        let mut depth = state.scope.len() as i64 - 1
+        if depth < 0 {
+            depth = 0
+        }
+        state.lent_lets.insert((name, depth))
+    }
+}
+
+/// **`let`** (Part I 2.1).
+pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, names: ref Vec[winnow_grammar::Symbol], mutable: bool, ty: ref Type?, value: ref Expr, span: ref Span) -> Ty sync {
+    check_core_a_field_of_a_borrowed_subject(state, world, host, value, span, "bound")
+    check_core_a_mut_parameter_given_away(state, world, host, value, span, "bound")
+    let outer_read = state.flow.read_a_map
+    state.flow.read_a_map = false
+    state.flow.reaching = check_core_stmt_reaching(world, ty)
+    if ty != null && check_core_stmt_expects_a_lambda(value) {
+        let t: ref Type = ty ?? return check_core_stmt_unit()
+        state.flow.lambda_expected = written_ty(world.words, world.here.aliases, t)
+    }
+    let found = host.expr(state, value, span)
+    state.flow.lambda_expected = null
+    // **A name bound to a map read is a view of the map** (#297).
+    let was_read = state.flow.read_a_map
+    state.flow.read_a_map = outer_read
+    let of_a_map = was_read && check_core_stmt_a_map_read(value)
+    // **A value `get` hands back past a jump is a reference** (D30).
+    let got = check_core_stmt_got(state, world, value)
+    for n in names {
+        let name: String = f"{world.words.resolve(n)}"
+        if got {
+            state.got_past_a_jump.insert(name)
+        } else {
+            state.got_past_a_jump.remove(name)
+        }
+    }
+    // **A value with a cleanup, bound here, dies where this block ends**
+    // (ADR-297 D2).
+    if names.len() == 1 {
+        let single: String = f"{world.words.resolve(names[0])}"
+        host.a_value_with_a_cleanup_bound(state, single, found, span)
+    }
+    // **`let t = s` is a rename, and a rename moves** (ADR-094 D4, ADR-293
+    // D29), except `let _ = s`.
+    let mut bound_names: Vec[String] = []
+    for n in names {
+        bound_names.push(f"{world.words.resolve(n)}")
+    }
+    let mut any_named = false
+    for n in bound_names {
+        if n != "_" {
+            any_named = true
+        }
+    }
+    // **A container a `let` declares a view of what it holds is lent** (#452).
+    let mut seen_through = false
+    if check_core_stmt_a_name_or_field(value) && ty != null {
+        let t: ref Type = ty ?? return check_core_stmt_unit()
+        let want = written_ty(world.words, world.here.aliases, t)
+        seen_through = !found.fits(want) && state.fits_through_deref(world, found, want)
+    }
+    if seen_through {
+        check_core_stmt_lent_let(state, world, names, span)
+    } else if any_named {
+        let to = f"bound to `{bound_names.join("`, `")}` by a `let`"
+        state.hands_over(world, value, found, to, span)
+    }
+    // **And a `let` gives the name a value again**, as an assignment does.
+    for n in bound_names {
+        if n != "_" {
+            state.written_at.push((n.clone(), span.start as i64))
+        }
+    }
+    // **A `let` over a place is a view of it** (ADR-094 D4).
+    if check_core_stmt_a_place(value) && state.takes_away(world, found) {
+        check_core_stmt_lent_let(state, world, names, span)
+    }
+    // **A tuple of names takes the value apart** (ADR-291).
+    if names.len() >= 2 {
+        return state.tuple_let(world, names, ty != null, found, value, span)
+    }
+    let name: String = f"{world.words.resolve(names[0])}"
+    // **`let _ = expr` is a statement wearing a `let`** (ADR-291 D7).
+    if name == "_" {
+        state.a_let_that_binds_nothing(span)
+    }
+    state.nameable(name, span, "a `let`")
+    let mut bound = Ty::Unknown
+    if ty != null {
+        let t: ref Type = ty ?? return check_core_stmt_unit()
+        let want = host.declared(state, t, span)
+        // **The annotation is no longer the constructor** (ADR-281 D2).
+        state.constant_fits(world, value, want, span)
+        check_core_stmt_wraps_into_nullable(state, world, host, found, want, value, span)
+        // **The annotation is a use, and a use answers the literal** (ADR-152 D4).
+        let by_use = check_core_literal_by_use(state, world, host, found, want, value, span)
+        let found_used: Ty = by_use ?? found.clone()
+        let widened = state.widened_elements(world, found_used, want, value, span)
+        let found_kept: Ty = widened ?? found_used.clone()
+        state.expect_kept_asked(world, found_kept, want, value, "the `let` declares a `String`, which is text of its own", span, "let", fn(was, wanted) { f"This value is `{was}`, but the `let` declares `{wanted}`." })
+        check_core_stmt_a_number_read_through_a_lent_binding(state, world, want, value, span)
+        bound = want
+    } else if mutable && state.flow.grown_text.contains(name) && found.is_a_view() && state.text_literal(world, check_core_method_named("String"), value, true) != null {
+        // **A `let mut` of a literal that the body later grows holds text of
+        // its own** (0.0.232).
+        bound = check_core_method_named("String")
+    } else {
+        // **A number nothing typed is open** (ADR-285 D1).
+        if !(found.is_unknown() && state.number_shaped(world, value)) {
+            state.constant_fits(world, value, null, span)
+        }
+        if found.is_unknown() {
+            let met = state.views_meet_owned_text(world, value)
+            bound = met ?? found.clone()
+        } else {
+            bound = found.clone()
+        }
+    }
+    let mut open: i64? = null
+    if ty == null && bound.is_unknown() && state.number_shaped(world, value) {
+        state.flow.open_numbers.insert(span.start as i64, check_core_stmt_open_number(name, false, span))
+        state.open_number_given(world, span.start as i64, value, span)
+        open = span.start as i64
+    }
+    // **A list written in numbers has one open number for its elements**
+    // (ADR-285 D34).
+    let mut element_at: i64? = null
+    let mut element_constants: Vec[CheckConstant]? = null
+    if ty == null && check_core_stmt_an_unknown_list(bound) {
+        match value {
+            Expr::ListLit { items, .. } => {
+                let mut all_numbers = items.len() > 0
+                for item in items {
+                    if all_numbers && !state.number_shaped(world, item) {
+                        all_numbers = false
+                    }
+                }
+                if all_numbers {
+                    state.flow.open_numbers.insert(span.start as i64, check_core_stmt_open_number(name, true, span))
+                    for item in items {
+                        state.open_number_given(world, span.start as i64, item, span)
+                    }
+                    if !mutable {
+                        let mut constants: Vec[CheckConstant] = []
+                        let mut every = true
+                        for item in items {
+                            if every {
+                                let c = state.constant_of(world, item)
+                                if c == null {
+                                    every = false
+                                } else {
+                                    constants.push(c ?? continue)
+                                }
+                            }
+                        }
+                        if every {
+                            element_constants = constants
+                        }
+                    }
+                    element_at = span.start as i64
+                }
+            },
+            else => {},
+        }
+    }
+    // **An empty list has no element type, and D2 says where one comes
+    // from** (ADR-135).
+    let mut pending: i64? = null
+    if ty == null {
+        match value {
+            Expr::ListLit { items, .. } => {
+                if items.len() == 0 {
+                    state.flow.empty_lists.insert(span.start as i64, (name.clone(), Span { start: span.start, end: span.end }))
+                    pending = span.start as i64
+                }
+            },
+            else => {},
+        }
+    }
+    // **Only an immutable `let` carries its value forward** (Part III, C.4).
+    let mut constant: Integer? = null
+    if !mutable {
+        let c = state.constant_of(world, value)
+        if c != null {
+            let held: CheckConstant = c ?? return check_core_stmt_unit()
+            constant = held.value
+        }
+    }
+    // **What a task binds for itself** (ADR-055 D6).
+    let tasks = state.task_bindings.len()
+    if tasks > 0 {
+        state.task_bindings[tasks - 1].push((name.clone(), bound.clone(), span.start as i64))
+    }
+    let id = state.a_new_binding()
+    if element_at != null {
+        state.flow.open_elements.insert(id, element_at ?? 0)
+        if element_constants != null {
+            state.flow.list_constants.insert(id, element_constants ?? [])
+        }
+    }
+    // **And typed as one**: a `V?` read out of a map is an option of a view.
+    if of_a_map {
+        let kept: Ty = match bound {
+            Ty::Nullable(inner) => {
+                if inner.is_a_view() {
+                    bound.clone()
+                } else {
+                    Ty::Nullable(view_of_type(inner))
+                }
+            },
+            else => bound.clone(),
+        }
+        bound = kept
+        state.flow.map_views.insert(id)
+    }
+    // **A read through the brackets that jumps where nothing is there binds
+    // what the container holds**, unless it reads a number, a `bool` or a
+    // `char` (#456).
+    let jumped = check_core_stmt_read_through_a_jump(state, world, value)
+    let copied_read = a_copy_by_value(bound) && check_core_stmt_a_read_that_leaves(state, world, value)
+    if copied_read {
+        state.facts.copied_jump_reads.insert(id_of(value) as i64)
+    }
+    let read_through_a_jump = jumped && !copied_read
+    if check_core_stmt_a_path(bound) && state.made_from_text(world, value) {
+        state.flow.text_paths.insert(id)
+    }
+    if bound.is_unknown() || state.a_drivers_row(world, value) {
+        state.flow.unknown_bound.insert(id)
+    }
+    let mut literal: String? = null
+    if ty == null {
+        literal = check_core_stmt_literal(value)
+    }
+    let mut immutable: CheckImmutable? = null
+    if !mutable {
+        immutable = CheckImmutable { at: Span { start: span.start, end: span.end }, kind: CheckKind::Let }
+    }
+    let mut local = CheckLocal::free(name, bound, id)
+    local.constant = constant
+    local.lent = read_through_a_jump
+    local.empty_list = pending
+    local.open_number = open
+    local.literal = literal
+    local.immutable = immutable
+    local.written_mut = mutable
+    state.bind_local(local)
+    return check_core_stmt_unit()
+}
+
+/// **Code assigned into a function field** (ADR-230 D1).
+fn check_core_stmt_code_into_a_field(mut state: CheckState, world: ref CheckWorld, target: ref Expr) sync {
+    match target {
+        Expr::Field { base, name, .. } => {
+            let field: String = f"{world.words.resolve(name)}"
+            let mut owners: Vec[String] = []
+            match base {
+                Expr::Variable(bound, _) => {
+                    let named: String = f"{world.words.resolve(bound)}"
+                    let found = state.lookup(named)
+                    if found != null {
+                        let ty: Ty = found ?? Ty::Unknown
+                        match ty {
+                            Ty::Named { name: owner, .. } => owners.push(owner.clone()),
+                            else => {},
+                        }
+                    }
+                },
+                else => {
+                    for item in world.here.items {
+                        match item.node {
+                            Item::Struct { name: declared, .. } => owners.push(world.here.text(declared)),
+                            else => {},
+                        }
+                    }
+                },
+            }
+            for owner in owners {
+                if state.a_field_holds_code(world, owner, field) {
+                    state.a_field_whose_code_is_not_seen(owner, field)
+                }
+            }
+        },
+        else => {},
+    }
+}
+
+/// A shift, `<<` or `>>`.
+fn check_core_stmt_a_shift(op: ref BinaryOp?) -> bool sync {
+    if op == null {
+        return false
+    }
+    let o: ref BinaryOp = op ?? return false
+    return o == BinaryOp::Shl || o == BinaryOp::Shr
+}
+
+/// `+`, `-` or `*`, written compound.
+fn check_core_stmt_add_sub_mul(op: ref BinaryOp?) -> bool sync {
+    if op == null {
+        return false
+    }
+    let o: ref BinaryOp = op ?? return false
+    return o == BinaryOp::Add || o == BinaryOp::Sub || o == BinaryOp::Mul
+}
+
+/// An arithmetic or bit operator a slot of numbers is read once for.
+fn check_core_stmt_a_slot_operator(op: ref BinaryOp?) -> bool sync {
+    if op == null {
+        return false
+    }
+    let o: ref BinaryOp = op ?? return false
+    return o == BinaryOp::Add || o == BinaryOp::Sub || o == BinaryOp::Mul || o == BinaryOp::Div || o == BinaryOp::Rem || o == BinaryOp::BitAnd || o == BinaryOp::BitOr || o == BinaryOp::BitXor || o == BinaryOp::Shl || o == BinaryOp::Shr
+}
+
+/// An arithmetic operator, `+ - * / %`.
+fn check_core_stmt_arithmetic(op: ref BinaryOp?) -> bool sync {
+    if op == null {
+        return false
+    }
+    let o: ref BinaryOp = op ?? return false
+    return o == BinaryOp::Add || o == BinaryOp::Sub || o == BinaryOp::Mul || o == BinaryOp::Div || o == BinaryOp::Rem
+}
+
+/// A plain, not a view, type with no arguments: its name.
+fn check_core_stmt_plain_name(ty: ref Ty) -> String? sync {
+    return match ty {
+        Ty::Named { name, args, view } => {
+            if !view && args.len() == 0 {
+                name.clone()
+            } else {
+                null
+            }
+        },
+        else => null,
+    }
+}
+
+/// **The open number an assignment's target is**, its root.
+fn check_core_stmt_open_target(state: ref CheckState, world: ref CheckWorld, target: ref Expr) -> i64? sync {
+    match target {
+        Expr::Variable(name, _) => {
+            let named: String = f"{world.words.resolve(name)}"
+            let local: CheckLocal = state.binding(named) ?? return null
+            let at: i64 = local.open_number ?? return null
+            return state.open_root(at)
+        },
+        Expr::Index { .. } => {
+            let at: i64 = state.open_element_of(world, target) ?? return null
+            return state.open_root(at)
+        },
+        else => {},
+    }
+    return null
+}
+
+/// Whether the target is a name that holds shared mutable state.
+fn check_core_stmt_shared(state: ref CheckState, world: ref CheckWorld, target: ref Expr) -> bool sync {
+    if !check_core_stmt_a_name(target) {
+        return false
+    }
+    let root: String = state.rooted_at(world, target) ?? return false
+    let local: CheckLocal = state.binding(root) ?? return false
+    return match local.ty {
+        Ty::Named { name, .. } => name == "SharedMut",
+        else => false,
+    }
+}
+
+/// **`x = v` and `x op= v`** (Part I 2.1).
+pub fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, target: ref Expr, op: ref BinaryOp?, value: ref Expr, span: ref Span) -> Ty sync {
+    check_core_stmt_code_into_a_field(state, world, target)
+    // `NK2101`: an assignment **revives** a name a task took with it, and a
+    // part of one (ADR-293 D32).
+    let path = state.place_path(world, target)
+    if path != null {
+        let written: String = (path ?? "").clone()
+        let choices = state.branch.clone()
+        state.gives.push(CheckGive { path: written.clone(), at: span.start as i64, choices: choices })
+        state.written_at.push((written, span.start as i64))
+    }
+    // **D3**: an assignment into a parameter says `mut`.
+    let shared = check_core_stmt_shared(state, world, target)
+    if !shared {
+        let rooted = state.rooted_at(world, target)
+        if rooted != null {
+            let root: String = (rooted ?? "").clone()
+            let how: String = if check_core_stmt_a_name(target) { "changed here".clone() } else { "one of its parts is changed here".clone() }
+            state.a_changed_binding_says_mut(root, how, Span { start: span.start, end: span.end })
+            state.a_shared_name_changed_in_parallel(root, span)
+        }
+    }
+    // **A write through the brackets is unchanged** (ADR-293 D2, D19).
+    let outer = state.reading_only
+    state.reading_only = check_core_stmt_a_name(target)
+    // **A key written is handed to the map** (ADR-293 D27).
+    state.flow.writing_index = op == null && check_core_stmt_an_index(target)
+    let mut into = host.expr(state, target, span)
+    if check_core_stmt_an_index(target) {
+        let slot: Ty = match into {
+            Ty::Nullable(inner) => inner.clone(),
+            else => into.clone(),
+        }
+        into = slot
+    }
+    state.reading_only = outer
+    state.flow.writing_index = false
+    let mut found = host.expr(state, value, span)
+    if op == null {
+        state.a_map_read_assigned(world, into, value, span)
+        state.a_map_first_written(world, target, found)
+    }
+    // **An assignment keeps what it is given** (ADR-282 D3, ADR-293 D28).
+    if op == null {
+        check_core_a_kept_lambda(state, world, host, into, value, span)
+    }
+    if op == null {
+        let built = state.text_literal(world, into, value, true)
+        if built != null {
+            found = built ?? found.clone()
+        }
+    }
+    // **An assignment is a use of both sides** (ADR-285 D24, D25).
+    if !check_core_stmt_a_shift(op) {
+        let open = check_core_stmt_open_target(state, world, target)
+        if open != null {
+            if integer_named(value_of_a_copy(found.unseen())) != null {
+                state.number_asked(world, target, found, span, true)
+            } else if state.number_shaped(world, value) {
+                state.open_number_given(world, open ?? 0, value, span)
+            }
+        }
+        state.number_asked(world, value, into, span, true)
+    }
+    // **What is assigned is given to the place** (ADR-293 D29).
+    if op == null {
+        let to: String = if check_core_stmt_an_index(target) { "written into a container".clone() } else { "assigned to another name".clone() }
+        state.hands_over(world, value, found, to, span)
+    }
+    // **A write to shared mutable state goes through a door** (ADR-281).
+    let written = host.written(value)
+    state.a_write_that_skips_the_door(world, target, into, written, span)
+    // **A compound assignment on a map slot is written out** (ADR-293 D2).
+    if op != null {
+        check_core_a_compound_write_to_a_map_slot(state, world, host, target, span)
+    }
+    // **`x += a` over two integer types is `x = x + a`** (ADR-285 D32).
+    if op != null && !check_core_stmt_a_shift(op) {
+        let o: ref BinaryOp = op ?? return check_core_stmt_unit()
+        state.a_compound_over_two_integer_types(world, o.clone(), target, into, value, found, span)
+    }
+    // **`x += d` is `x = x + d`, and may be proved as one** (#387).
+    if check_core_stmt_add_sub_mul(op) && check_core_stmt_a_name(target) {
+        let plain = check_core_stmt_plain_name(into.unseen())
+        if plain != null {
+            let name: String = (plain ?? "").clone()
+            let same = match value {
+                Expr::LitInt { .. } => true,
+                else => value_of_a_copy(found.unseen()) == into.unseen(),
+            }
+            if is_whole_number(name) && same {
+                state.facts.arithmetic.insert(span.start as i64, name)
+            }
+        }
+    }
+    // **`xs[i] += d` on a list of numbers** (#387).
+    if check_core_stmt_a_slot_operator(op) && check_core_stmt_an_index(target) {
+        let plain = check_core_stmt_plain_name(into.unseen())
+        if plain != null {
+            let name: String = (plain ?? "").clone()
+            if a_number_name(name) || name == "bool" {
+                state.facts.copied_slots.insert(span.start as i64)
+            }
+        }
+    }
+    // **`NK1191` for `-=` as for `-`**.
+    if check_core_stmt_arithmetic(op) {
+        let arithmetic: ref BinaryOp = op ?? return check_core_stmt_unit()
+        if !(arithmetic == BinaryOp::Add && is_text_type(into)) && (check_core_stmt_has_no_arithmetic(world, into) || check_core_stmt_has_no_arithmetic(world, found)) {
+            state.arithmetic_on_something_that_has_none(world, arithmetic.clone(), target, into, value, found, true, span)
+        }
+    }
+    // Only a plain assignment.
+    if op == null {
+        check_core_stmt_wraps_into_nullable(state, world, host, found, into, value, span)
+        if state.owned_text_into_a_literal_binding(world, target, found, into, span) {
+            return check_core_stmt_unit()
+        }
+        if state.a_name_in_text(world, into, value, span) {
+            return check_core_stmt_unit()
+        }
+        let at = check_span_at(world, value, span)
+        let pushed = state.findings.len() as i64
+        let waiting = state.slots_waiting(span)
+        state.expect_type(world, found, into, span, "assign", fn(was, wanted) { f"You're assigning `{was}` to something that holds `{wanted}`." })
+        state.findings_moved(span, at, pushed, waiting)
+    }
+    return check_core_stmt_unit()
+}
+
+/// **`while`** (Part I 3.3).
+pub fn check_core_stmt_while[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, cond: ref Expr, body: ref Block, span: ref Span) -> Ty sync {
+    let cond_ty = host.expr(state, cond, span)
+    let at = check_span_at(world, cond, span)
+    state.expect_bool(cond_ty, at, "A `while` loop repeats while a `bool` is `true`.")
+    let depth = state.scope.len() as i64
+    state.repeats.push(CheckRepeats::a_loop(world.words, depth, body))
+    state.scope.push([])
+    // **The body and not the condition.**
+    state.flow.loops += 1
+    check_core_block(state, world, host, body)
+    state.flow.loops -= 1
+    state.scope.pop()
+    state.repeats.pop()
+    return check_core_stmt_unit()
+}
+
+/// **A range's binding is a use of the numbers it counts between**
+/// (ADR-285 D1, ADR-270 D8 step 1), and between two literals a number of its
+/// own (D1, D3).
+fn check_core_stmt_for_a_range(mut state: CheckState, world: ref CheckWorld, iter: ref Expr, mut frame: Vec[CheckLocal], span: ref Span) sync {
+    match iter {
+        Expr::Range { start, end, .. } => {
+            let mut open: Vec[i64] = []
+            for n in state.open_numbers_in(world, start) {
+                open.push(n)
+            }
+            for n in state.open_numbers_in(world, end) {
+                open.push(n)
+            }
+            state.open_numbers_joined(open)
+            if open.len() > 0 && frame.len() > 0 {
+                frame[0].open_number = state.open_root(open[0])
+            }
+            // **Between two literals the binding is a number of its own** (D1, D3).
+            if open.len() == 0 && state.number_shaped(world, start) && state.number_shaped(world, end) && frame.len() > 0 && frame[0].ty.is_unknown() {
+                let first: String = frame[0].name.clone()
+                state.flow.open_numbers.insert(span.start as i64, check_core_stmt_open_number(first, false, span))
+                frame[0].open_number = span.start as i64
+                state.open_number_given(world, span.start as i64, start, span)
+                state.open_number_given(world, span.start as i64, end, span)
+            }
+        },
+        else => {},
+    }
+}
+
+/// **`for`** (Part I 3.3).
+pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, bindings: ref Vec[winnow_grammar::Symbol], iter: ref Expr, body: ref Block, span: ref Span) -> Ty sync {
+    state.the_caller_writes_no_reference(iter, span, "a `for` lends what it iterates")
+    let over = host.expr(state, iter, span)
+    state.a_loop_over_a_nullable(world, over, iter, span)
+    state.fallible_step(world, over, bindings.len() as i64, span)
+    state.pausing_step(over, span)
+    // **A `for` walks a produced sequence, and that consumes it** (ADR-105 D2).
+    state.a_sequence_is_walked(iter, over, span, world)
+    let elements = elements_walked(over, bindings.len() as i64)
+    // **A name that holds a sequence is handed over, not lent** (ADR-293 D19).
+    let a_seq = match over {
+        Ty::Seq { .. } => true,
+        else => false,
+    }
+    let owned = is_a_place(iter) && a_seq
+    if owned {
+        state.facts.owned_loops.insert(span.start as i64)
+    }
+    // **A `for` over a place lends** (ADR-094 D4).
+    let lent = is_a_place(iter) && !owned
+    let mut frame: Vec[CheckLocal] = []
+    let mut at = 0
+    for b in bindings {
+        if at >= elements.len() {
+            break
+        }
+        let name: String = f"{world.words.resolve(b)}"
+        let element = elements[at].clone()
+        at += 1
+        let copied = lent && name != "_" && a_copy_by_value(element)
+        if copied {
+            state.facts.copied_loop_bindings.insert((span.start as i64, name.clone()))
+        }
+        let a_view = lent && name != "_" && !copied && element.is_a_view()
+        if a_view {
+            state.facts.copied_view_bindings.insert((span.start as i64, name.clone()))
+        }
+        // **A binding lent something that does not copy is a view of it.**
+        let named = match element {
+            Ty::Named { .. } => true,
+            else => false,
+        }
+        let mut bound = element.clone()
+        if lent && !copied && named {
+            bound = view_of_type(element)
+        }
+        let id = state.a_new_binding()
+        let mut local = CheckLocal::free(name, bound, id)
+        local.written_mut = false
+        local.lent = lent && !copied && !a_view
+        frame.push(local)
+    }
+    // **A range's binding is a use of the numbers it counts between**
+    // (ADR-285 D1, ADR-270 D8).
+    if bindings.len() == 1 {
+        check_core_stmt_for_a_range(state, world, iter, frame, span)
+    }
+    // **A walk over a list written in numbers binds its open element**
+    // (ADR-285 D34).
+    if bindings.len() == 1 && frame.len() > 0 && frame[0].ty.is_unknown() {
+        match iter {
+            Expr::Variable(name, _) => {
+                let named: String = f"{world.words.resolve(name)}"
+                let list = state.binding(named)
+                if list != null {
+                    let held: CheckLocal = list ?? return check_core_stmt_unit()
+                    let element_at = state.flow.open_elements.get(held.id)
+                    if element_at != null {
+                        let element: i64 = element_at ?? 0
+                        frame[0].open_number = state.open_root(element)
+                    }
+                }
+            },
+            Expr::ListLit { items, .. } => {
+                let mut all_numbers = items.len() > 0
+                for item in items {
+                    if all_numbers && !state.number_shaped(world, item) {
+                        all_numbers = false
+                    }
+                }
+                if all_numbers {
+                    let first: String = frame[0].name.clone()
+                    state.flow.open_numbers.insert(span.start as i64, check_core_stmt_open_number(first, false, span))
+                    frame[0].open_number = span.start as i64
+                    for item in items {
+                        state.open_number_given(world, span.start as i64, item, span)
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+    for local in frame {
+        state.nameable(local.name, span, "a `for` binding")
+    }
+    let depth = state.scope.len() as i64
+    state.repeats.push(CheckRepeats::a_loop(world.words, depth, body))
+    state.scope.push(frame)
+    state.flow.loops += 1
+    check_core_block(state, world, host, body)
+    state.flow.loops -= 1
+    state.scope.pop()
+    state.repeats.pop()
+    return check_core_stmt_unit()
+}
+
+/// **`return`**: `Ty::Unknown`, a statement that jumps is not a value.
+pub fn check_core_stmt_return[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr?, span: ref Span) -> Ty sync {
+    check_core_returns(state, world, host, value, span, false)
+    state.a_way_out("return", "", span)
+    return Ty::Unknown
+}
+
+/// **`break` and `continue`** (Part I 3.3): `Ty::Unknown`, as a `return`.
+pub fn check_core_stmt_jump(mut state: CheckState, word: ref String, span: ref Span) -> Ty sync {
+    if state.flow.loops == 0 {
+        state.a_jump_with_nowhere_to_go(word, span)
+    }
+    return Ty::Unknown
+}
+
+/// **A statement, walked**: one function per variant.
+pub fn check_core_stmt[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, stmt: ref Stmt, span: ref Span) -> Ty sync {
+    state.flow.literal_receivers.clear()
+    return match stmt {
+        Stmt::Let { names, mutable, ty, value } => check_core_stmt_let(state, world, host, names, mutable, ty, value, span),
+        // **`comptime` is a `let` that has to fold** (ADR-287 D4, D5).
+        Stmt::Comptime { name, ty, value, bounds } => check_core_comptime_binding(state, world, host, name, ty, value, bounds, span),
+        Stmt::Assign { target, op, value, .. } => check_core_stmt_assign(state, world, host, target, op, value, span),
+        Stmt::While { cond, body } => check_core_stmt_while(state, world, host, cond, body, span),
+        Stmt::For { bindings, iter, body } => check_core_stmt_for(state, world, host, bindings, iter, body, span),
+        Stmt::Return(value) => check_core_stmt_return(state, world, host, value, span),
+        Stmt::Break => check_core_stmt_jump(state, "break", span),
+        Stmt::Continue => check_core_stmt_jump(state, "continue", span),
+        // **One site, not two.**
+        Stmt::Expr(expr) => host.expr(state, expr, span),
+    }
+}
+
+/// A `break` or a `continue`.
+fn check_core_stmt_is_a_jump(stmt: ref Stmt) -> bool sync {
+    return match stmt {
+        Stmt::Break => true,
+        Stmt::Continue => true,
+        else => false,
+    }
+}
+
+/// **Walk a block and hand back the type of its tail.**
+pub fn check_core_block[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, block: ref Block) -> Ty sync {
+    state.scope.push([])
+    let mut tail = check_core_stmt_unit()
+    let count = block.stmts.len() as i64
+    let mut last = count - 1
+    if last < 0 {
+        last = 0
+    }
+    let mut at = 0
+    for stmt in block.stmts {
+        if at < last {
+            match stmt.node {
+                Stmt::Expr(value) => {
+                    state.discarded.insert(id_of(value) as i64)
+                },
+                else => {},
+            }
+        }
+        let ty = check_core_stmt(state, world, host, stmt.node, stmt.span)
+        state.coalesces_not_lent_are_taken(world)
+        // **`break i` is two statements, and that is the point**: asked of the
+        // next statement's span, because that is what the author would delete.
+        if at < last && check_core_stmt_is_a_jump(stmt.node) {
+            state.nothing_follows_a_jump(stmt.node, block.stmts[at + 1].span)
+        }
+        if at == last {
+            tail = ty
+        }
+        at += 1
+    }
+    host.a_bound_handle_is_taken(state, block)
+    state.scope.pop()
+    return tail
+}

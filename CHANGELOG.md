@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.927] — 2026-10-14
+
+**check: a statement and a block, in Nikaia (U-c7, #125, #558)**
+- The checker's `stmt` (one function per `Stmt` variant) and `block` move to `tools/check_core_stmt.nika`; the host method `block` is gone, and `CheckState` holds `got_past_a_jump` and `discarded`. No change in what a program means.
+
 ## [0.0.926] — 2026-10-14
 
 **std: text search is inlined; brc's naive.nika reads the temperature as naive.rs does**

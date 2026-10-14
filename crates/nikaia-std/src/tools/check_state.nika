@@ -797,4 +797,10 @@ pub struct CheckState {
     /// Arms that are known and disagree, by the choice, said at the end unless
     /// a position asks the arms one by one (#596, `NK1245`).
     pub arm_disagreements: collections::BTreeMap[i64, CheckFinding],
+    /// **Names a `let` bound to what `get` hands back past a jump** (D30):
+    /// `let held = m.get(k) ?? continue` is a reference below, so a `match` on
+    /// the name binds by reference by itself and writes no `ref`.
+    pub got_past_a_jump: collections::BTreeSet[String],
+    /// The statements whose value nothing reads.
+    pub discarded: collections::BTreeSet[i64],
 }

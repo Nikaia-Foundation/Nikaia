@@ -366,7 +366,17 @@ impl CheckHost for Host<'_> {
         unreachable!("the hub `expr` is asked of the core's host, not of the services")
     }
 
-    fn block(&self, _state: &mut CheckState, _block: &Block) -> Ty {
-        unreachable!("the hub `block` is asked of the core's host, not of the services")
+    fn a_value_with_a_cleanup_bound(
+        &self,
+        _state: &mut CheckState,
+        _name: &str,
+        _ty: &Ty,
+        _span: &Span,
+    ) {
+        unreachable!("only the core's host keeps the checker")
+    }
+
+    fn a_bound_handle_is_taken(&self, _state: &mut CheckState, _block: &Block) {
+        unreachable!("only the core's host keeps the checker")
     }
 }

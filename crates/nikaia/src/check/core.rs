@@ -63,6 +63,8 @@ pub(super) fn hollow() -> Box<CheckState> {
     Box::new(CheckState {
         flow: CheckFlow::start(false, false),
         arm_types: BTreeMap::new(),
+        got_past_a_jump: BTreeSet::new(),
+        discarded: BTreeSet::new(),
         arm_disagreements: BTreeMap::new(),
         findings: Vec::new(),
         structs: BTreeMap::new(),
@@ -370,7 +372,19 @@ impl CheckHost for Core<'_, '_> {
         self.hosted(state, |checker| checker.expr(node, span))
     }
 
-    fn block(&self, state: &mut CheckState, block: &Block) -> Ty {
-        self.hosted(state, |checker| checker.block(block))
+    fn a_value_with_a_cleanup_bound(
+        &self,
+        state: &mut CheckState,
+        name: &str,
+        ty: &Ty,
+        span: &Span,
+    ) {
+        self.hosted(state, |checker| {
+            checker.a_value_with_a_cleanup_bound(name, ty, span)
+        })
+    }
+
+    fn a_bound_handle_is_taken(&self, state: &mut CheckState, block: &Block) {
+        self.hosted(state, |checker| checker.a_bound_handle_is_taken(block))
     }
 }
