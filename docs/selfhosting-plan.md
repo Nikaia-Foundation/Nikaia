@@ -372,3 +372,37 @@ above (C-7), and `value_node`/`host()`/`others()` until C-7.
   strictly one unit at a time, C-5e to C-5h included.
 * **`Checker.spares`** must not leak a state that is still lent: assert when it
   is pushed back.
+
+## C-7 in units (decided 2026-10-14)
+
+After U-c11 the core is Nikaia, and what is left in `check/` is the layer
+above it, the drivers, and the Rust the host still crosses back into. Measured
+at f813401 (`scripts/c6/cg.py ... json`, stubs left out): 62 non-stub
+functions, 2,098 lines in `mod.rs`, plus `narrow.rs` (257) and
+`attributes.rs` (595). Leaves first; the same form as C-6 (free functions over
+`mut state: CheckState`, `world`, `host`), the same oracle (`lower-std`
+byte-identical, `scripts/c6/oracle.py` 0 differ) and the same tests. Each unit
+deletes the host methods it makes unneeded, from `check_host.nika`, `core.rs`
+and `host.rs`.
+
+| Unit | File (`tools/`) | What moves | Lines |
+| :--- | :--- | :--- | ---: |
+| U-d0 | `check_narrow.nika` | `narrow.rs` whole (ADR-350, #621 done): `proved_names`, `proofs_for`, `proved`, `reads_of_the_maybe`, `read_as_proved`, `a_proof_taken_back`; the four `Checker` fields become `CheckState.narrowing`; 6 host methods go | 257 |
+| U-d1 | `check_crossings.nika` | What the core still crosses back for: `a_bound_handle_is_taken` with `handle_path`, `handle_expr_path`, `handle_loop_body`, `handle_named_in`; `a_value_with_a_cleanup_made`/`_bound`; `a_type_that_does_not_compare`, `a_standard_bound_not_met`, `language_impls` (`Comparable` needs `parts_beside`); `a_call_that_hands_its_number_back`, `a_lambda_that_pauses_at_an_entry`, `a_scope_that_pauses`, `a_task_of_a_scope`; `arguments` (its `newly.keeps` read becomes a host query) | ~480 |
+| U-d2 | `check_attributes.nika` | `attributes.rs`: `attributes`, `attribute_marks`, `the_mark`, `attribute_arguments`, `an_attribute_read`, the three `an_attribute_*` findings, `literal_misfit`; `Mark` stays the ledger's (`mark_of` is emit's too) | 595 |
+| U-d3 | `check_defaults.nika` | `computed_value`, `compiled_build_time_value`, `unwritable_in`, `payload_of`, `computed_default`, `a_computed_default`, `a_field_default`, `item_constants`, `comptime_binding` stub, `fold`, `folds_in`, `lambda` stub | ~420 |
+| U-d4 | `check_function.nika` | `function` (322, one function per phase: parameters, body, ways out, findings at the end), `grammar`, `widened_slot`, `local_free`, `grown_text`, `expect`/`expect_kept` callers become `state.expect_*`, `reached_method`, `collect_comparisons`, `field_walks_in`, `collect_field_walks`, `walks_the_fields_of`, `shape_member` | ~640 |
+| U-d5 | `check_program.nika` | `program`, `unroll`, `instantiations_in`, `instantiations_beside`, `collect_types`, `written_by`, `a_static_integer`, `kept_function_call` | ~420 |
+| U-d6 | `check_walked.nika` | The pure half of `walked` (what it does after `CheckWorld` is built), `finished`, `unsigned_slots_proved` (`bounds::proven` as a host query), `unrolling_report`, `claims_report`. What stays Rust: building `CheckWorld` from `Parsed`, `check_against`, `check_for_the_ledger`, `propagation*`, `fallible_loops*`, `parsed_view_of`, `host()`, `others()`, `core.rs`, `host.rs` | ~330 |
+
+Notes:
+
+* **U-d0 first:** it is a leaf, touches no file the concurrent work edits
+  (#614 views, #620 throws), and frees `Checker` of four fields.
+* **U-d1 before U-d4:** `function` calls the crossings; once they are Nikaia,
+  `Core::hosted` has only the hubs' Rust-only queries left.
+* **`arguments` is a host method today** only because it reads
+  `Checker.newly`; `newly` belongs in `CheckWorld` (C-2 named it), which U-d1
+  adds.
+* **U-d6 ends C-7:** `Checker` keeps `parsed`, `beside`, `reads`, `newly`,
+  `world`, `s` and `spares`; `mod.rs` is the adapter.
