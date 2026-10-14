@@ -212,6 +212,12 @@ Rules from the sessions that moved the most; they save tokens, not just time.
   and re-run `python3 scripts/badges.py` with the next free number.
 * **A worktree-isolated agent cannot run compound shell** (heredocs, `$(...)`,
   pipes that look like git): put multi-step work in a script file and call it.
+* **Fix, do not work around** (owner's direction): a compiler or lowering
+  defect met on the way is fixed in the compiler, with a test, as its own
+  commit, before or alongside the move. A workaround in `tools/*.nika` is
+  debt: take one only when the fix is clearly larger than the unit, file it in
+  `docs/lowering-defects.md`, name it in the report, and remove the
+  workaround in the commit that fixes the defect.
 * **Known compiler defects, to fix in the compiler** (ADR-294 D3): the
   generated package still has "never read" and unreachable-code warnings,
   allowed on the `tools` module. The rest of this list (`f().trim_start()`,
