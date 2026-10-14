@@ -420,6 +420,93 @@ impl EmitState {
         out.push(f"{close}}}")
     }
 
+    /// **`match error { .. }` over the box a `join` hands on** (ADR-346 D5): one
+    /// arm per error type the patterns name, opened by that type, and the
+    /// catch-all for the rest, as over a sum.
+    pub fn emit_core_match_over_a_box[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, arms: ref Vec[MatchArm], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        let mut members: Vec[String] = []
+        let mut home: Vec[i64] = []
+        let mut catch_all = 0
+        for arm in arms {
+            let mut at = -1
+            let member = member_of(world.words, self.declared_errors, world.library, arm.pattern)
+            if member != null {
+                let named = member ?? return
+                let mut k = 0
+                for each in members {
+                    if each == named && at < 0 {
+                        at = k
+                    }
+                    k += 1
+                }
+                if at < 0 {
+                    at = k
+                    members.push(named.clone())
+                }
+            }
+            if at < 0 {
+                catch_all += 1
+            }
+            home.push(at)
+        }
+        if catch_all == 0 {
+            throw EmitRefused { message: "This `match error` needs an `else` arm: other errors can arrive at a `catch` too. Add `else => throw error` to pass them on, or `else => …` to handle them.".clone(), at: flow.statement }
+        }
+        let pad = "    ".repeat(depth + 1)
+        let inner = "    ".repeat(depth + 2)
+        let close = "    ".repeat(depth)
+        let count = members.len()
+        out.push("match error {\n")
+        for m in 0..<(count + 1) {
+            let mut inside = flow
+            let mut inside_scope = scope.clone()
+            if m < count {
+                let member = members[m].clone()
+                let own = self.name_of_error(world, member) != 0
+                let held = self.sum_member_held(world, member, "")
+                let mut bare = held.clone()
+                if held.starts_with("nikaia_std::error::Thrown<") && held.ends_with(">") {
+                    bare = held[26..<(held.len() - 1)].clone()
+                }
+                inside = flow with { caught_named: own }
+                let named_member: String? = member.clone()
+                inside_scope = scope.clone() with { caught_member: named_member }
+                out.push(f"{pad}error if nikaia_std::error::holds::<{bare}>(&*error) => {{ let error = nikaia_std::error::opened::<{bare}>(error); ")
+                if own {
+                    out.push("let (error, __nikaia_site) = nikaia_std::error::Thrown::from(error).split(); ")
+                }
+                out.push("match error {\n")
+            } else {
+                out.push(f"{pad}error => {{ match error {{\n")
+            }
+            for pass in 0..<2 {
+                let mut k = 0
+                for arm in arms {
+                    let mine = if pass == 0 { home[k] == m && m < count } else { home[k] < 0 }
+                    k += 1
+                    if !mine {
+                        continue
+                    }
+                    out.push(inner)
+                    if pass == 1 && m < count {
+                        out.push("#[allow(unreachable_patterns)] ")
+                    }
+                    self.emit_core_pattern_written(world, walk, out, host, arm.pattern, false, node_key(arm.body), false, 0, depth + 2, inside, inside_scope)
+                    if arm.guard != null {
+                        out.push(" if ")
+                        let guard = arm.guard ?? return
+                        host.expr(walk, out, guard, depth + 2, inside, inside_scope)
+                    }
+                    out.push(" => ")
+                    self.emit_core_arm_body_led(world, walk, out, host, arm.pattern, 0, arm.body, depth + 2, inside, inside_scope, "")
+                    out.push(",\n")
+                }
+            }
+            out.push(f"{pad}}} }},\n")
+        }
+        out.push(f"{close}}}")
+    }
+
     /// **A `match`** (Part I 3.4): the arms as Rust's own, each with its pattern,
     /// guard and body; a `match` that only answers `true` or `false` as a
     /// `matches!` (0.0.249); one over the error a `catch` binds, where that
@@ -433,6 +520,10 @@ impl EmitState {
         // catch-all is what every one of them falls through to.
         if scope.caught_sum != null && emit_match_is_caught(world, value) {
             let sum = scope.caught_sum?.clone() ?? return
+            if sum == "" {
+                self.emit_core_match_over_a_box(world, walk, out, host, arms, depth, flow, scope)
+                return
+            }
             self.emit_core_match_over_a_sum(world, walk, out, host, sum, arms, depth, flow, scope)
             return
         }

@@ -94,7 +94,7 @@ impl EmitState {
 
     /// The type a member of a sum is held as, with the lifetime parameters of
     /// the sum where the member carries a view.
-    fn sum_member_held(ref self, world: ref EmitWorld, member: ref String, params: ref String) -> String {
+    pub fn sum_member_held(ref self, world: ref EmitWorld, member: ref String, params: ref String) -> String {
         if self.borrows_named(world, member) {
             return sum_member_type(self.declared_errors, world.library, member, params)
         }

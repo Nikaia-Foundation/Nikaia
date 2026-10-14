@@ -572,10 +572,23 @@ impl EmitState {
         // envelope is opened **once, at the binding**, and the site is kept in a
         // local beside it for the one statement that needs it back (`throw error`).
         let caught = bound == "error"
-        let named = caught && self.caught_channel_is_named(world, guarded_expr)
+        let mut named = caught && self.caught_channel_is_named(world, guarded_expr)
         let mut sum: String? = null
         if caught {
             sum = self.caught_sum(world, guarded_expr)
+        }
+        // **`join` hands on the body's errors in the starter's channel** (ADR-346
+        // D5): a sum is taken apart as any other, an envelope opened, and the box
+        // is opened by the type each arm names (`""` says the box).
+        if caught && sum == null && emit_catch_is_a_join(world, guarded_expr) {
+            let own_sum = self.sum_of(scope.function)
+            if own_sum != null {
+                sum = own_sum
+            } else if scope.channel == "Box<dyn std::error::Error>" {
+                sum = "".clone()
+            } else if scope.channel.starts_with("nikaia_std::error::Thrown<") {
+                named = true
+            }
         }
         let inside = flow.handling(named)
         let inside_scope = scope.clone() with { caught_sum: sum }
@@ -696,7 +709,11 @@ impl EmitState {
             if scope.caught_sum != null && scope.caught_member != null {
                 let sum = (scope.caught_sum ?? "").clone()
                 let member = (scope.caught_member ?? "").clone()
-                held = f"crate::{sum}::{sum_variant(member)}({held})"
+                if sum == "" {
+                    held = f"{held}.into()"
+                } else {
+                    held = f"crate::{sum}::{sum_variant(member)}({held})"
+                }
             }
             out.push(f"return Err({held})")
             return
@@ -771,6 +788,10 @@ impl EmitState {
         let mut kind: String = "TaskHandle"
         if failing {
             kind = "FailingTask"
+            // A box is not `Send`: on the pool it crosses as `BoxedTask`'s.
+            if host.overlaps_user_code() && scope.channel == "Box<dyn std::error::Error>" {
+                kind = "BoxedTask"
+            }
         }
         if host.overlaps_user_code() {
             out.push(f"nikaia_std::task::{kind}::start_on_pool(async move ")
@@ -801,4 +822,12 @@ impl EmitState {
 fn emit_is_fatal(ledger: ref Ledger, error: ref String) -> bool {
     let types = ledger.implementations.get("Fatal") ?? return false
     return types.contains(error)
+}
+
+/// Whether a `catch` guards a `join` of a task handle (ADR-346 D5).
+fn emit_catch_is_a_join(world: ref EmitWorld, guarded: ref Expr) -> bool {
+    return match guarded {
+        Expr::MethodCall { method, .. } => emit_text(world, method) == "join",
+        else => false,
+    }
 }

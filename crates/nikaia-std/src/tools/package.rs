@@ -24657,9 +24657,13 @@ impl EmitState {
         let mut bound: String = String::from("_error");
         if host.block_mentions(handler, "error") { bound = "error".to_owned(); }
         let caught = bound == "error";
-        let named = caught && self.caught_channel_is_named(world, guarded_expr);
+        let mut named = caught && self.caught_channel_is_named(world, guarded_expr);
         let mut sum: Option<String> = None;
         if caught { sum = self.caught_sum(world, guarded_expr); }
+        if caught && sum.is_none() && emit_catch_is_a_join(world, guarded_expr) {
+            let own_sum = self.sum_of(&scope.function);
+            if own_sum.is_some() { sum = own_sum; } else if scope.channel == "Box<dyn std::error::Error>" { sum = Some("".to_owned()); } else if scope.channel.starts_with("nikaia_std::error::Thrown<") { named = true; }
+        }
         let inside = flow.handling(named);
         let inside_scope = EmitScope { caught_sum: sum, ..scope.clone() };
         let mut opening: Option<String> = None;
@@ -24753,7 +24757,7 @@ impl EmitState {
             if scope.caught_sum.is_some() && scope.caught_member.is_some() {
                 let sum = nikaia_std::index::or(scope.caught_sum.as_deref(), || "").to_owned();
                 let member = nikaia_std::index::or(scope.caught_member.as_deref(), || "").to_owned();
-                held = format!("crate::{}::{}({})", sum, sum_variant(&member), held);
+                if sum == "" { held = format!("{}.into()", held); } else { held = format!("crate::{}::{}({})", sum, sum_variant(&member), held); }
             }
             out.push(&format!("return Err({})", held));
             return Ok(());
@@ -24806,7 +24810,10 @@ impl EmitState {
             failing = inner.buf.contains("?") || inner.buf.contains("return");
         }
         let mut kind: String = String::from("TaskHandle");
-        if failing { kind = String::from("FailingTask"); }
+        if failing {
+            kind = String::from("FailingTask");
+            if host.overlaps_user_code() && scope.channel == "Box<dyn std::error::Error>" { kind = String::from("BoxedTask"); }
+        }
         if host.overlaps_user_code() { out.push(&format!("nikaia_std::task::{}::start_on_pool(async move ", kind)); } else { out.push(&format!("nikaia_std::task::{}::start(async move ", kind)); }
         if failing {
             out.push("{ let __nikaia_task = ");
@@ -24826,6 +24833,13 @@ impl EmitState {
 fn emit_is_fatal(ledger: &Ledger, error: &str) -> bool {
     let types = match ledger.implementations.get("Fatal") { Some(__nikaia_value) => __nikaia_value, None => return false };
     types.contains(error)
+}
+
+fn emit_catch_is_a_join(world: &EmitWorld<'_>, guarded: &Expr) -> bool {
+    match guarded {
+        Expr::MethodCall { method, .. } => { let method = *method; emit_text(world, method) == "join" },
+        _ => false,
+    }
 }
 
 
@@ -25532,12 +25546,87 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
+    pub fn emit_core_match_over_a_box<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, arms: &[MatchArm], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+        let mut members: Vec<String> = vec![];
+        let mut home: Vec<i64> = vec![];
+        let mut catch_all = 0;
+        for arm in arms.iter() {
+            let mut at = -1;
+            let member = member_of(world.words, &self.declared_errors, world.library, &arm.pattern);
+            if member.is_some() {
+                let named = match member { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+                let mut k = 0;
+                for each in members.iter() {
+                    if *each == named && at < 0 { at = k; }
+                    k += 1;
+                }
+                if at < 0 {
+                    at = k;
+                    members.push(named.to_owned());
+                }
+            }
+            if at < 0 { catch_all += 1; }
+            home.push(at);
+        }
+        if catch_all == 0 { return Err(nikaia_std::error::raise(EmitRefused { message: "This `match error` needs an `else` arm: other errors can arrive at a `catch` too. Add `else => throw error` to pass them on, or `else => …` to handle them.".to_owned(), at: Some(flow.statement) }, &"emit_core_match_over_a_box")); }
+        let pad = "    ".repeat(nikaia_std::count::of(depth + 1));
+        let inner = "    ".repeat(nikaia_std::count::of(depth + 2));
+        let close = "    ".repeat(nikaia_std::count::of(depth));
+        let count = members.len() as i64;
+        out.push("match error {\n");
+        for m in 0..count + 1 {
+            let mut inside = flow;
+            let mut inside_scope = scope.clone();
+            if m < count {
+                let member = (*nikaia_std::index::get(&members, (m) as usize)).to_owned();
+                let own = self.name_of_error(world, &member) != 0;
+                let held = self.sum_member_held(world, &member, "");
+                let mut bare = held.to_owned();
+                if held.starts_with("nikaia_std::error::Thrown<") && held.ends_with(">") { bare = nikaia_std::index::get(&held, nikaia_std::index::at(26..held.len() as i64 - 1)).to_owned(); }
+                inside = EmitFlow { caught_named: own, ..flow };
+                let named_member: Option<String> = Some(member.to_owned());
+                inside_scope = EmitScope { caught_member: named_member, ..scope.clone() };
+                out.push(&format!("{}error if nikaia_std::error::holds::<{}>(&*error) => {{ let error = nikaia_std::error::opened::<{}>(error); ", pad, bare, bare));
+                if own { out.push("let (error, __nikaia_site) = nikaia_std::error::Thrown::from(error).split(); "); }
+                out.push("match error {\n");
+            } else { out.push(&format!("{}error => {{ match error {{\n", pad)); }
+            for pass in 0..2 {
+                let mut k: i64 = 0;
+                for arm in arms.iter() {
+                    let mine = if pass == 0 { *nikaia_std::index::get(&home, nikaia_std::index::at(k)) == m && m < count } else { *nikaia_std::index::get(&home, nikaia_std::index::at(k)) < 0 };
+                    k += 1;
+                    if !mine { continue; }
+                    out.push(&inner);
+                    if pass == 1 && m < count { out.push("#[allow(unreachable_patterns)] "); }
+                    self.emit_core_pattern_written(world, walk, out, host, &arm.pattern, false, node_key(&arm.body), false, 0, depth + 2, inside, &inside_scope)?;
+                    if arm.guard.is_some() {
+                        out.push(" if ");
+                        let guard = match arm.guard.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+                        host.expr(walk, out, guard, depth + 2, inside, &inside_scope)?;
+                    }
+                    out.push(" => ");
+                    self.emit_core_arm_body_led(world, walk, out, host, &arm.pattern, 0, &arm.body, depth + 2, inside, &inside_scope, "")?;
+                    out.push(",\n");
+                }
+            }
+            out.push(&format!("{}}} }},\n", pad));
+        }
+        out.push(&format!("{}}}", close));
+        Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
     pub fn emit_core_match<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, value: &Expr, arms: &[MatchArm], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         if scope.caught_sum.is_some() && emit_match_is_caught(world, value) {
             let sum = match match scope.caught_sum.as_ref() {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
             } { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+            if sum == "" {
+                self.emit_core_match_over_a_box(world, walk, out, host, arms, depth, flow, scope)?;
+                return Ok(());
+            }
             self.emit_core_match_over_a_sum(world, walk, out, host, &sum, arms, depth, flow, scope)?;
             return Ok(());
         }
@@ -28412,7 +28501,7 @@ impl EmitState {
         }
         out
     }
-    fn sum_member_held(&self, world: &EmitWorld<'_>, member: &str, params: &str) -> String {
+    pub fn sum_member_held(&self, world: &EmitWorld<'_>, member: &str, params: &str) -> String {
         if self.borrows_named(world, member) { return sum_member_type(&self.declared_errors, world.library, member, params); }
         sum_member_type(&self.declared_errors, world.library, member, "")
     }

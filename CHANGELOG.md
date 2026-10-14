@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.893] — 2026-10-14
+
+**task: a catch at join names the body's error; a failing task on the pool (#605)**
+- A `catch` at `join` whose `match error` names the body's error types opens the starter's channel by them (a sum, an envelope, or the box via `std::error::holds`/`opened`), ADR-346 D5.
+- At `user_parallelism = yes` a body failing in the opaque channel starts a `task::BoxedTask`: the error crosses as its message and an `Exit`'s code.
+
 ## [0.0.892] — 2026-10-14
 
 **task: a task's error reaches join, and detach (#605)**

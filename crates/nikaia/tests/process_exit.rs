@@ -247,6 +247,21 @@ fn a_task_error_reaches_join() {
     assert_eq!(out.trim(), "1 5");
 }
 
+/// ADR-346 D5: a `catch` at `join` names the body's error type; at
+/// `user_parallelism = yes` a body failing in the opaque channel still hands
+/// its `Exit` to the joiner.
+#[test]
+fn a_catch_at_join_names_the_body_error() {
+    let source = "enum Bad { Oops(i64) }\nimpl Error for Bad {\n    fn message(ref self) -> String { return \"bad\" }\n}\n\nfn work(n: i64) -> i64 throws {\n    if n > 1 {\n        throw Bad::Oops(n)\n    }\n    return n\n}\n\nfn main() throws {\n    let b = spawn fn { work(7) }\n    let y = b.join() catch {\n        match error {\n            Bad::Oops(c) => c,\n            else => 0,\n        }\n    }\n    println(f\"{y}\")\n}\n";
+    let (out, err, code) = ran("spawn-join-typed", source, Build::default());
+    assert_eq!(code, Some(0), "{err}");
+    assert_eq!(out.trim(), "7");
+    let exit = "use std::process\n\nfn stop() -> i64 throws {\n    process::exit(4)\n    return 1\n}\n\nfn main() throws {\n    let h = spawn fn { stop() }\n    let v = h.join()\n    println(f\"never {v}\")\n}\n";
+    let (out, err, code) = ran("spawn-exit-pool", exit, Build::parallel());
+    assert_eq!(code, Some(4), "{err}");
+    assert_eq!(out, "");
+}
+
 const OWN_FATAL: &str = r#"enum Abort { Now(i64) }
 impl Error for Abort {
     fn message(ref self) -> String { return "aborted" }

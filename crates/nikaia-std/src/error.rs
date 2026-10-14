@@ -639,6 +639,28 @@ impl Full for crate::grammar::ParseError {
     }
 }
 
+/// **Whether the box a `join` hands on holds an `E`**
+/// ([ADR-346](../../docs/specification/adr/adr-346.md) D5): as itself, or
+/// raised into the box from its envelope.
+pub fn holds<E: Error + 'static>(error: &(dyn Error + 'static)) -> bool {
+    error.is::<E>()
+        || error
+            .downcast_ref::<Raised>()
+            .is_some_and(|raised| raised.inner().is::<E>())
+}
+
+/// **The `E` out of that box**; the emitter asks [`holds`] first.
+pub fn opened<E: Error + 'static>(error: Box<dyn Error>) -> E {
+    let error = match error.downcast::<Raised>() {
+        Ok(raised) => raised.inner,
+        Err(error) => error,
+    };
+    match error.downcast::<E>() {
+        Ok(found) => *found,
+        Err(_) => unreachable!("the emitter asked `holds` first"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

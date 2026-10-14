@@ -401,6 +401,77 @@ impl<T: 'static, E: 'static + From<Crashed>> FailingTask<T, E> {
     }
 }
 
+/// An error in the opaque channel on its way from a task on the pool to its
+/// joiner. A `Box<dyn Error>` is not `Send`, so what crosses is what the
+/// joiner can still act on: the message, and the code of an `Exit`.
+#[derive(Debug)]
+pub struct Carried {
+    message: String,
+    exit: Option<i32>,
+}
+
+impl Carried {
+    fn from_box(error: Box<dyn std::error::Error>) -> Self {
+        use crate::process::Ending;
+        Carried {
+            message: error.to_string(),
+            exit: error.exit_code(),
+        }
+    }
+
+    fn into_box(self) -> Box<dyn std::error::Error> {
+        match self.exit {
+            Some(code) => Box::new(crate::process::Exit::Code(i64::from(code))),
+            None => Box::new(self),
+        }
+    }
+}
+
+impl std::fmt::Display for Carried {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for Carried {}
+
+/// **A task on the pool whose body fails in the opaque channel**
+/// ([ADR-346](../../../docs/specification/adr/adr-346.md) D5): a
+/// `Box<dyn Error>` is not `Send`, so it crosses as [`Carried`].
+pub struct BoxedTask<T> {
+    handle: TaskHandle<Result<T, Carried>>,
+}
+
+impl<T: Send + 'static> BoxedTask<T> {
+    /// Start a body that hands back a `Result` in the opaque channel.
+    pub fn start_on_pool(
+        body: impl std::future::Future<Output = Result<T, Box<dyn std::error::Error>>> + Send + 'static,
+    ) -> Self {
+        BoxedTask {
+            handle: TaskHandle::start_on_pool(async move { body.await.map_err(Carried::from_box) }),
+        }
+    }
+
+    /// The task's value, or its body's error, or [`Crashed`] in the box.
+    pub async fn join(self) -> Result<T, Box<dyn std::error::Error>> {
+        match crate::rt::exec::Waiting::on(self.handle.slot).await {
+            Ok(Ok(value)) => Ok(value),
+            Ok(Err(carried)) => Err(carried.into_box()),
+            Err(crashed) => Err(Box::new(crashed)),
+        }
+    }
+}
+
+impl<T> BoxedTask<T> {
+    /// Stop the task, as [`TaskHandle::cancel`].
+    pub fn cancel(self) {
+        self.handle.cancel()
+    }
+
+    /// Nobody waits for this task.
+    pub fn detach(self) {}
+}
+
 thread_local! {
     /// How many `overlap` and `select` blocks this thread is polling a branch
     /// of right now.
