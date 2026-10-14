@@ -3,4 +3,10 @@
 # question in normal form, and `proved` with its certificate,
 # `refuted` with its model, or `unknown` with the solver that gave up.
 # Every entry is checked when it is read; a wrong one is searched again.
-fc47cf660057bdbabd41481ad08132cd57757ca630e5f79fe7af26fa5d328f15 proved S0[R(h3,h5,c1:1:0:1)|S1[R(h7)|R(h6,h8,c1:1:0:1)]]
+35e7d106daf92394c4c7d031be0f93f57eee8c99d252e6340c15cec5043e0fb1 proved S0[R(h2,h11,c1:1:0:1)|R(h0,h12,c0:1:1:1)]
+44170044a4d79cefbc73b74a562ac0ffdf8537aac7c9102b46839cf3a160d677 refuted v0=1,v1=1,v2=0,v3=0,v4=0
+583ec7058a13dd91e92c827c670f4729fa90855bfcccfaa010c5d1a64cd06355 refuted v0=1,v1=1,v2=1,v3=0,v4=0,v5=0,v6=0,v7=0,v8=0
+9d7abe7145d95ef8d0ef7f768d97e9f28d1228941619a8919fa83004e20338e0 proved S0[R(h3,h8,c1:1:0:1)|R(h1,h9,c0:1:1:1)]
+a4be91fdd9fef2877ab2fc2a4f92e9b0619111afe6538aa9284ab19028042aaf refuted v0=0,v1=1,v2=0,v3=0,v4=0,v5=0,v6=0,v7=0,v8=0
+c9b8b3e3549061e63e5c850505e3978d2b743de237ee30e41437141d12ede7be proved S0[R(h8,h11,c1:1:0:1)|S1[R(h13)|R(h12,h14,c1:1:0:1)]]
+e70d6ffd2a0123574c0d480b27fb15056eebdd4a275c3a93d1cff96c5cf35d1f proved S0[R(h1,h5,c1:1:0:1)|R(h3,h6,c0:1:1:1)]

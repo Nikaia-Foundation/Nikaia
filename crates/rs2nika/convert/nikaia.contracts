@@ -321,6 +321,18 @@ touches = []
 views = ["given: borrowed"]
 signature = "(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[String]"
 
+[fn."rs2nika_let_else"]
+sync = "inferred"
+touches = []
+views = ["line: borrowed"]
+signature = "(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String]"
+
+[fn."rs2nika_let_pair"]
+sync = "inferred"
+touches = []
+views = ["line: borrowed"]
+signature = "(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String]"
+
 [fn."rs2nika_let_type"]
 sync = "inferred"
 keeps = ["line"]
@@ -442,6 +454,12 @@ signature = "(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[String]"
 sync = "inferred"
 touches = []
 signature = "(c: scalar) -> bool"
+
+[fn."rs2nika_pattern_names"]
+sync = "inferred"
+touches = []
+views = ["pat: borrowed"]
+signature = "(pat: ref String) -> Vec[String]"
 
 [fn."rs2nika_question"]
 sync = "inferred"

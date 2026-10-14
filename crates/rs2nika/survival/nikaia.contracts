@@ -14,6 +14,13 @@ throws = ["?", "io::IoError"]
 locks = true
 signature = "()"
 
+[fn."survival_add"]
+sync = "inferred"
+keeps = ["cases"]
+touches = []
+views = ["commit: borrowed", "set: borrowed", "names: borrowed"]
+signature = "(cases: Vec[Survival_Case], commit: ref String, set: ref String, names: Vec[ref String]) -> Vec[Survival_Case]"
+
 [fn."survival_cases"]
 sync = "inferred"
 touches = []
@@ -57,4 +64,4 @@ views = ["head: borrowed"]
 signature = "(head: ref String) -> String"
 
 [type."Survival_Case"]
-fields = ["commit: String", "name: String"]
+fields = ["commit: String", "name: String", "set: String"]

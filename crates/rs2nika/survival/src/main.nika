@@ -22,19 +22,29 @@ use std::process
 struct Survival_Case {
     commit: String,
     name: String,
+    /// `old`: the thirteen of docs/selfhosting-gaps.md; `new`: later moves.
+    set: String,
+}
+
+fn survival_add(cases: Vec[Survival_Case], commit: ref String, set: ref String, names: Vec[ref String]) -> Vec[Survival_Case] {
+    let mut out = cases
+    for name in names {
+        out.push(Survival_Case { commit: commit.clone(), name: name.clone(), set: set.clone() })
+    }
+    return out
 }
 
 fn survival_cases() -> Vec[Survival_Case] {
     let mut cases: Vec[Survival_Case] = []
-    for name in ["several_errors", "wholly_known", "a_map_type", "is_a_literal_other_than", "a_copied_part"] {
-        cases.push(Survival_Case { commit: "5755b65", name: name.clone() })
-    }
-    for name in ["tail_of", "articles", "unpromised"] {
-        cases.push(Survival_Case { commit: "3e26691", name: name.clone() })
-    }
-    for name in ["payload_of", "claims_report", "byte_literal", "peeled", "an_or_a"] {
-        cases.push(Survival_Case { commit: "07c5b14", name: name.clone() })
-    }
+    // `payload_of` stays in Rust (an adapter over `Held`), so it is no case.
+    cases = survival_add(cases, "5755b65", "old", ["several_errors", "wholly_known", "a_map", "is_a_literal_other_than", "a_copied_part"])
+    cases = survival_add(cases, "3e26691", "old", ["tail_of", "articles", "unpromised"])
+    cases = survival_add(cases, "07c5b14", "old", ["claims_report", "byte_literal", "peeled", "an_or_a"])
+    cases = survival_add(cases, "61822b0", "new", ["an_exit_code_out_of_range", "an_operator_needs_a_bound", "a_fatal_error_passes"])
+    cases = survival_add(cases, "f6208c6", "new", ["arms_that_disagree", "a_write_that_skips_the_door"])
+    cases = survival_add(cases, "3e9216a", "new", ["an_operation_that_overflows", "collect_copies", "collect_types"])
+    cases = survival_add(cases, "0c4c693", "new", ["value_leaves", "arms_to_ask", "note_mixed", "views_meet_owned_text", "hands_over", "a_map_key"])
+    cases = survival_add(cases, "a77a8e6", "new", ["a_view_kept_where_the_receiver_says_text"])
     return cases
 }
 
@@ -149,59 +159,101 @@ fn main() throws {
     if !survival_project(root, dir, "../../nikaia-std/src/tools") {
         return
     }
-    let mut passed = 0
-    let mut total = 0
-    for case in survival_cases() {
-        total += 1
+    // every draft goes into the project at once: one check a round, not one a case
+    let cases = survival_cases()
+    let mut drafted: Vec[bool] = []
+    for case in cases {
         let rust = f"{dir}/{case.commit}.rs"
         let shown = process::run("git", ["show", f"{case.commit}^:crates/nikaia/src/check/mod.rs"]; dir: ".")
         if !shown.ok {
             println(f"GIT   {case.commit}: {shown.stderr}")
+            drafted.push(false)
             continue
         }
         fs::write(f"{case.commit}.rs", root, shown.stdout)
         let draft = process::run(rs2nika, ["--profile", "check", "--file", "--prefix", "survival_", "--only", case.name.clone(), rust.clone()])
         if !draft.ok {
             println(f"NONE  {case.name}: {draft.stderr.trim()}")
+            drafted.push(false)
             continue
         }
-        let file = f"zz_{case.name}.nika"
-        fs::write(f"ctx/src/{file}", root, draft.stdout)
-        let mut stubs: Vec[String] = []
-        let mut found: Vec[String] = []
-        let mut rounds = 0
-        while rounds < 8 {
-            rounds += 1
-            let mut text: String = ""
-            for t in stubs {
-                text = f"{text}struct {t} {{}}\n"
-            }
-            fs::write("ctx/src/zz_survival_stubs.nika", root, text)
-            let checked = process::run(nikaia, ["check", f"{dir}/ctx/src/{file}"])
-            found = survival_in(f"{checked.stdout}\n{checked.stderr}", file)
-            let mut grew = false
-            for head in found {
-                let t = survival_unknown_type(head)
-                if t != "" && !stubs.contains(t) {
-                    stubs.push(t.clone())
-                    grew = true
+        fs::write(f"ctx/src/zz_{case.name}.nika", root, draft.stdout)
+        drafted.push(true)
+    }
+    // a draft that does not parse stops every type check: it fails on its
+    // own and leaves the project before the next round
+    let mut unparsed: Vec[String] = []
+    for case in cases {
+        unparsed.push("")
+    }
+    let mut stubs: Vec[String] = []
+    let mut said: String = ""
+    let mut rounds = 0
+    while rounds < 8 + cases.len() {
+        rounds += 1
+        let mut text: String = ""
+        for t in stubs {
+            text = f"{text}struct {t} {{}}\n"
+        }
+        fs::write("ctx/src/zz_survival_stubs.nika", root, text)
+        let checked = process::run(nikaia, ["check", f"{dir}/ctx/src/zz_survival_stubs.nika"])
+        said = f"{checked.stdout}\n{checked.stderr}"
+        let mut grew = false
+        let mut k = 0
+        while k < cases.len() {
+            let file = f"zz_{cases[k].name}.nika"
+            for head in survival_in(said, file) {
+                if !head.contains("[NK") && drafted[k] && unparsed[k] == "" {
+                    unparsed[k] = head.clone()
+                    let gone = process::run("rm", [f"{dir}/ctx/src/{file}"])
+                    grew = gone.ok
                 }
             }
-            if !grew {
-                break
+            k += 1
+        }
+        for head in survival_in(said, "/ctx/src/zz_") {
+            let t = survival_unknown_type(head)
+            if t != "" && !stubs.contains(t) {
+                stubs.push(t.clone())
+                grew = true
             }
         }
-        let gone = process::run("rm", [f"{dir}/ctx/src/{file}"])
-        if !gone.ok {
-            println(f"RM    {file}")
-        }
-        let listed = survival_stub_list(stubs)
-        if found.len() == 0 {
-            passed += 1
-            println(f"PASS  {case.name}{listed}")
-        } else {
-            println(f"FAIL  {case.name}{listed}: {found.len()} error(s), first: {found[0]}")
+        if !grew {
+            break
         }
     }
+    println(f"stubs:{survival_stub_list(stubs)}")
+    let mut passed = 0
+    let mut total = 0
+    let mut passed_old = 0
+    let mut total_old = 0
+    let mut at = 0
+    while at < cases.len() {
+        let set: String = cases[at].set.clone()
+        let name: String = cases[at].name.clone()
+        let ok = drafted[at]
+        at += 1
+        total += 1
+        if set == "old" {
+            total_old += 1
+        }
+        if !ok {
+            continue
+        }
+        let mut found = survival_in(said, f"zz_{name}.nika")
+        if unparsed[at - 1] != "" {
+            found = [unparsed[at - 1].clone()]
+        }
+        if found.len() == 0 {
+            passed += 1
+            if set == "old" {
+                passed_old += 1
+            }
+            println(f"PASS  {set} {name}")
+        } else {
+            println(f"FAIL  {set} {name}: {found.len()} error(s), first: {found[0]}")
+        }
+    }
+    println(f"old set: {passed_old} of {total_old}; new set: {passed - passed_old} of {total - total_old}")
     println(f"{passed} of {total} drafts pass `nikaia check` in context")
 }

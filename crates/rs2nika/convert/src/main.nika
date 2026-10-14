@@ -106,6 +106,8 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R57  a byte literal `b'x'` -> its number (`b'\\\\'` -> `92`)",
         "R58  a line on Rust-only types (`&[&Parsed]`, `Ledger`, `check(..)`, `once(..)`) -> `// ADAPTER: bleibt in Rust`",
         "R59  `let v: T = xs.iter().filter(|x| p).cloned().collect()` -> `let mut v: T = []` and a `for` with `push(x.clone())`",
+        "R60  `let P = v else { jump }` -> `let x = match v { P => x, else => jump }` (a tuple of the names it binds)",
+        "R61  `let (mut a, mut b): (A, B) = (x, y)` -> one `let` each",
         "R59  Option combinators with a field or method body: `o.map(|x| x.f)` -> `o?.f`, `.is_some_and(|x| x.p())` -> `(o?.p() ?? false)`, `.map_or(d, ..)` -> `(o?.. ?? d)`",
         "R60  `String::with_capacity(n)` -> `\"\"`",
         "R61  a call or a literal in a `format!` argument -> `let hole_N = ..` before the line, `{hole_N}` in the f-string",
@@ -2899,6 +2901,126 @@ fn rs2nika_filter_cloned(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String] {
     return [f"{ind}{head.trim()}", f"{ind}for {var} in {r} {{", f"{ind}    if {b} {{", f"{ind}        {name}.push({var}.clone())", f"{ind}    }}", f"{ind}}}"]
 }
 
+/// The names a pattern binds: lower-case words not followed by `(`, `{`,
+/// `:` or `::`, and not after `::` or `.`.
+fn rs2nika_pattern_names(pat: ref String) -> Vec[String] {
+    let c: Vec[scalar] = pat.chars().collect()
+    let mut out: Vec[String] = []
+    let mut at = 0
+    while at < c.len() {
+        if !rs2nika_word(c[at]) {
+            at = at + 1
+            continue
+        }
+        let mut e = at
+        while e < c.len() && rs2nika_word(c[e]) {
+            e = e + 1
+        }
+        let w: String = rs2nika_text(c, at, e)
+        let mut n = e
+        while n < c.len() && c[n] == ' ' {
+            n = n + 1
+        }
+        let after = n < c.len() && (c[n] == '(' || c[n] == '{' || c[n] == ':')
+        let before = at > 0 && (c[at - 1] == ':' || c[at - 1] == '.')
+        let keyword = w == "ref" || w == "mut" || w == "true" || w == "false" || w == "_"
+        if rs2nika_lower(c[at]) && !after && !before && !keyword && !out.contains(w) {
+            out.push(w.clone())
+        }
+        at = e
+    }
+    return out
+}
+
+/// R60: `let P = v else { jump };` with any pattern -> `let x = match v { P => x, else => jump }`
+/// (a tuple of the names when it binds several).
+fn rs2nika_let_else(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String] {
+    let ind = rs2nika_indent(line)
+    let mut st: String = line.trim().clone()
+    if st.ends_with(";") {
+        st = st[0..<st.len() - 1].clone()
+    }
+    let els = st.find(" else {") ?? return []
+    let eq = st.find(" = ") ?? return []
+    if eq > els {
+        return []
+    }
+    let pat: String = st[4..<eq].trim().clone()
+    let value: String = st[eq + 3..<els].trim().clone()
+    let mut jump: String = st[els + 7..<st.len() - 1].trim().clone()
+    while jump.ends_with(";") {
+        jump = jump[0..<jump.len() - 1].trim().clone()
+    }
+    if !rs2nika_is_jump(jump) {
+        return []
+    }
+    let names = rs2nika_pattern_names(pat)
+    if names.len() == 0 {
+        return []
+    }
+    let mut bound: String = names[0].clone()
+    if names.len() > 1 {
+        bound = f"({names.join(", ")})"
+    }
+    let p = rs2nika_expr(ctx, pat)
+    let v = rs2nika_expr(ctx, value)
+    rs2nika_hit(ctx, "R60")
+    return [f"{ind}let {bound} = match {v} {{ {p} => {bound}, else => {jump} }}"]
+}
+
+/// R61: `let (mut a, mut b): (A, B) = (x, y);` -> one `let` each.
+fn rs2nika_let_pair(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String] {
+    let ind = rs2nika_indent(line)
+    let mut st: String = line.trim().clone()
+    if st.ends_with(";") {
+        st = st[0..<st.len() - 1].clone()
+    }
+    if !st.starts_with("let (") || !st.ends_with(")") || st.contains(" else ") {
+        return []
+    }
+    let close = st.find(")") ?? return []
+    let eq = st.find(" = ") ?? return []
+    if close > eq {
+        return []
+    }
+    let names: Vec[String] = rs2nika_split_args(st[5..<close].clone())
+    let mut types: Vec[String] = []
+    let rest: String = st[close + 1..<eq].trim().clone()
+    if rest.starts_with(":") {
+        let t: String = rest[1..<rest.len()].trim().clone()
+        if !t.starts_with("(") || !t.ends_with(")") {
+            return []
+        }
+        types = rs2nika_split_args(t[1..<t.len() - 1].clone())
+    } else if rest != "" {
+        return []
+    }
+    let value: String = st[eq + 3..<st.len()].trim().clone()
+    if !value.starts_with("(") {
+        return []
+    }
+    let values: Vec[String] = rs2nika_split_args(value[1..<value.len() - 1].clone())
+    if values.len() != names.len() || (types.len() > 0 && types.len() != names.len()) {
+        return []
+    }
+    let mut out: Vec[String] = []
+    let mut k = 0
+    while k < names.len() {
+        let n: String = names[k].trim().clone()
+        let mut decl: String = f"let {n}"
+        if types.len() > 0 {
+            let t = rs2nika_ty(ctx, types[k].trim())
+            decl = f"{decl}: {t}"
+        }
+        let typed = rs2nika_let_type(ctx, f"{decl} = {values[k].trim()}")
+        let e: String = rs2nika_expr(ctx, typed)
+        out.push(f"{ind}{e.trim()}")
+        k = k + 1
+    }
+    rs2nika_hit(ctx, "R61")
+    return out
+}
+
 fn rs2nika_if_let(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String] {
     let ind = rs2nika_indent(line)
     let filtered = rs2nika_filter_cloned(ctx, line)
@@ -2927,6 +3049,13 @@ fn rs2nika_if_let(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String] {
         }
         rs2nika_hit(ctx, "R22")
         return ["=", f"{ind}let {name} = {value} ?? {jump}"]
+    }
+    let pair = rs2nika_let_pair(ctx, line)
+    if pair.len() > 0 {
+        return pair
+    }
+    if st.starts_with("let ") && st.contains(" else {") && (st.ends_with("}") || st.ends_with("};")) {
+        return rs2nika_let_else(ctx, line)
     }
     let at = st.find("if let ") ?? return []
     if !st.ends_with(" {") || st.contains(" && let ") || (at > 0 && st[at - 1..<at] != " ") {
