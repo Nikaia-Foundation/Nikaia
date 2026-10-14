@@ -280,3 +280,11 @@ parameter, as a call of a named function does. Found with rs2nika's R62
 Rust's `Held::Precondition(..)` has no Nikaia spelling: the parser stops at
 the `..` and a draft must name every field with `_`, which a converter cannot
 know without the type. Found with rs2nika (#579, `claims_report`). Not decided here.
+
+## D28 (new, small). An owned `String` passed to `contains` needs `ref`
+
+`line.contains(mark)` with `let mark = f"..."` is NK1102 (and NK2105 in a loop); `line.contains(ref mark)` passes. A literal or a `ref String` needs no `ref`. Found writing `rs2nika/survival` (#579).
+
+## D29 (new). `tools/*.nika` checked as a project finds what `lower-std` does not
+
+The tools copied into a project with `node_id`/`winnow_grammar` described in `contracts/` give 11 NK2202 (a `sync` function calls one that "can pause", e.g. `CheckState::through_a_package_unread`) that `nikaia lower-std` accepts: the two inferences of `sync` differ. `rs2nika/survival` counts only findings in the draft (#579).
