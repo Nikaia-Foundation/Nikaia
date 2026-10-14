@@ -1,0 +1,436 @@
+// crates/nikaia-std/src/tools/check_arguments.nika
+//
+// **The count and the types of what a call passes, against what it takes**,
+// moved from the compiler's checker (ADR-294, #125, #558, C-5h): the arity,
+// the options by name, and each argument - an `if` or a `match` whose arms did
+// not agree asked arm by arm (#596) - against its parameter, with the `&`,
+// the wrap, the copy or the refusal each one is told.
+
+/// **One argument as the call reads it**: where it stands among the
+/// arguments (the receiver not counted), what was written there, the type that
+/// was found, and which arm of it it is (`-1` for the whole argument).
+struct CheckArgument {
+    at: i64,
+    arm: i64,
+    found: Ty,
+}
+
+/// **A parameter whose `keeps` moved** (ADR-297 D12), as the host hands it:
+/// the parameter, whether the callee keeps it now, and its type.
+fn check_arguments_moved(keeps: ref Vec[(String, bool, String)], param: ref String) -> i64 sync {
+    let mut at = 0
+    while at < keeps.len() {
+        if keeps[at].0 == param {
+            return at
+        }
+        at += 1
+    }
+    return -1
+}
+
+/// The argument written at `at`, where one was.
+fn check_arguments_at(given: ref Vec[Expr], at: i64) -> ref Expr? sync {
+    if at < given.len() {
+        return given[at]
+    }
+    return null
+}
+
+fn check_arguments_a_var(ty: ref Ty) -> bool sync {
+    return match ty {
+        Ty::Var { .. } => true,
+        else => false,
+    }
+}
+
+fn check_arguments_nullable(ty: ref Ty) -> bool sync {
+    return match ty {
+        Ty::Nullable(_) => true,
+        else => false,
+    }
+}
+
+fn check_arguments_a_path(ty: ref Ty) -> bool sync {
+    return match ty {
+        Ty::Named { name, .. } => name == "fs::Path",
+        else => false,
+    }
+}
+
+fn check_arguments_a_choice(value: ref Expr) -> bool sync {
+    return match value {
+        Expr::If { .. } => true,
+        Expr::Match { .. } => true,
+        else => false,
+    }
+}
+
+fn check_arguments_a_variable(value: ref Expr?) -> bool sync {
+    let given = value ?? return false
+    return match given {
+        Expr::Variable(_, _) => true,
+        else => false,
+    }
+}
+
+fn check_arguments_wrote_ref(value: ref Expr?) -> bool sync {
+    let given = value ?? return false
+    return match given {
+        Expr::Unary { op, .. } => match op {
+            UnaryOp::Ref => true,
+            else => false,
+        },
+        else => false,
+    }
+}
+
+fn check_arguments_a_print(written: ref String) -> bool sync {
+    return written == "println" || written == "eprintln" || written == "print" || written == "eprint"
+}
+
+/// The number a call on a number written as its receiver is made on.
+fn check_arguments_literal_receiver(value: ref Expr) -> Integer? sync {
+    return match value {
+        Expr::MethodCall { receiver, .. } => match receiver {
+            Expr::LitInt { value, negative, .. } => integer(value, negative),
+            else => null,
+        },
+        else => null,
+    }
+}
+
+/// The node of that number, read after [`check_arguments_literal_receiver`]
+/// found one.
+fn check_arguments_receiver_node(value: ref Expr) -> i64 sync {
+    return match value {
+        Expr::MethodCall { receiver, .. } => id_of(receiver) as i64,
+        else => -1,
+    }
+}
+
+/// The name a variable was written as, for the sentence that names it.
+fn check_arguments_named(world: ref CheckWorld, value: ref Expr?) -> String? sync {
+    let given = value ?? return null
+    return match given {
+        Expr::Variable(name, _) => world.words.resolve(name).clone(),
+        else => null,
+    }
+}
+
+/// **The count and the types of what a call passes, against what it takes.**
+///
+/// `given` is the argument expressions, for the one diagnostic that has to
+/// name the **value** rather than its type: `NK1115` points at the line where
+/// the sharing belongs, and that line starts with the name the caller wrote.
+/// `written` is the callee as the source writes it, which is what the emitter
+/// matches a recorded argument against; `keeps` is what moved in the callee's
+/// `keeps` since the committed ledger.
+pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, key: ref String, written: ref String, contract: ref FnContract, given: ref Vec[Expr], found: ref Vec[Ty], passed: ref Vec[(String, Ty)], keeps: ref Vec[(String, bool, String)], span: ref Span) -> Ty sync {
+    // No signature is no claim. The hand-written half of `std.contracts`
+    // has some, and an entry that says nothing is checked against nothing.
+    let signature = contract.signature ?? return Ty::Unknown
+    let wanted = call_arguments(signature)
+
+    if wanted.len() != found.len() {
+        let mut help: String = f"Call it without arguments: `{key}()`."
+        if wanted.len() > 0 {
+            let mut takes: Vec[String] = []
+            for (n, t) in wanted {
+                takes.push(f"`{n}: {t.text()}`")
+            }
+            help = f"It takes {takes.join(", ")}{a_root_is_one_of_two(wanted)}."
+        }
+        state.findings.push(check_refusal("NK1101", span, f"`{key}` takes {counted(wanted.len() as i64, "argument")}, but you passed {found.len()}.", [f"It's declared as `{key}{signature.text()}`."], help))
+        return signature.result_or_unit()
+    }
+
+    // **A length beside a view is checked at the call** (ADR-302 D6), before
+    // the arguments are measured one at a time: the question is about a
+    // *pair* of them, and a `usize` that is measured on its own has already
+    // passed.
+    state.a_length_that_fits_its_buffer(world, written, wanted, given, found, span)
+    state.one_type_variable_two_integer_types(world, key, wanted, given, found, span)
+
+    // Kap 5.1: an option is named, so it is checked by name - that it
+    // exists, and that what is passed is what it takes.
+    let mut index = 0
+    for (name, found_option) in passed {
+        let at = index
+        index += 1
+        let mut known = false
+        for option in signature.config {
+            if option.name != name || known {
+                continue
+            }
+            known = true
+            if found_option.fits(option.ty) {
+                continue
+            }
+            // **An option of a `ref` type lends what it is passed** (#455),
+            // as a `ref` parameter does (ADR-094 D1): the owned value fits
+            // the view, and the `&` is the compiler's to write.
+            if at < state.flow.option_values.len() && option.ty.is_a_view() && !found_option.is_a_view() && found_option.fits(option.ty.owned()) {
+                let value = state.flow.option_values[at]
+                state.facts.lent_options.insert(value)
+                continue
+            }
+            let ty = option.ty.text()
+            state.expect_type(world, found_option, option.ty, span, "field", fn(found_text, wanted_text) { f"The option `{name}` of `{key}` takes `{ty}`, but you're passing `{found_text}`." })
+        }
+        if !known {
+            state.no_such_option(key, name, signature, span)
+        }
+    }
+
+    let text_view = Ty::Named { name: "str".clone(), args: [], view: true }
+    // **An argument that is an `if` or a `match` whose arms did not agree
+    // is its arms** (#596): each is a value handed to the parameter.
+    let mut expanded: Vec[CheckArgument] = []
+    let mut all_arms: Vec[Vec[CheckArm]] = []
+    let mut position = 0
+    while position < found.len() {
+        let at = position
+        position += 1
+        let found_here = found[at].clone()
+        let known_want = at < wanted.len() && wholly_known(wanted[at].1) && !check_arguments_a_var(wanted[at].1)
+        let mut arms: Vec[CheckArm] = []
+        if found_here.is_unknown() && known_want && at < given.len() {
+            arms = state.arms_to_ask(world, given[at])
+        }
+        if arms.is_empty() {
+            expanded.push(CheckArgument { at: at, arm: -1, found: found_here })
+            all_arms.push(arms)
+            continue
+        }
+        // A number literal as an arm is an `i64` written there (#600).
+        let no_number = at < wanted.len() && state.no_number_is(wanted[at].1)
+        let mut k = 0
+        while k < arms.len() {
+            let arm = arms[k].clone()
+            let index = k
+            k += 1
+            let tail = arm.tail ?? continue
+            let literal = match check_peeled(tail) {
+                Expr::LitInt { .. } => true,
+                else => false,
+            }
+            if arm.ty.is_unknown() && literal && no_number {
+                expanded.push(CheckArgument { at: at, arm: index, found: Ty::Named { name: "i64".clone(), args: [], view: false } })
+            } else {
+                expanded.push(CheckArgument { at: at, arm: index, found: arm.ty.clone() })
+            }
+        }
+        all_arms.push(arms)
+    }
+    let own = world.own.functions.contains_key(key)
+    let offset = if signature.takes_a_receiver() { 1 } else { 0 }
+    for argument in expanded {
+        let at = argument.at
+        let given_here: ref Expr? = if argument.arm >= 0 { all_arms[at][argument.arm].tail } else { check_arguments_at(given, at) }
+        let name = wanted[at].0.clone()
+        let want = wanted[at].1.clone()
+        // **A view of a `String` is a view of text here** (ADR-233 D4): an
+        // element of `words.iter()` is one, and the language below lends it
+        // as the `&str` a parameter takes at the call, by itself.
+        let mut found_here = argument.found.clone()
+        if is_a_view_of_a_string(found_here) {
+            found_here = text_view.clone()
+        }
+        // A literal that cannot fit the parameter it is given, asked here
+        // rather than where the argument was walked: a free call walks its
+        // arguments before it resolves the callee, so the type to measure
+        // against is not known yet at that point (ADR-288's ordering is what
+        // gives a *method* call the answer earlier).
+        if given_here != null {
+            let value = given_here ?? continue
+            state.constant_fits(world, value, want, span)
+            if state.an_open_number_where_none_fits(world, found_here, want, value, span, "argument", fn(found_text, want_text) { f"`{key}` expects `{name}` to be `{want_text}`, but you're passing `{found_text}`." }) {
+                continue
+            }
+            // A free call walks its arguments first, so a call on a number
+            // written as its receiver is told its parameter here.
+            let receiver = check_arguments_literal_receiver(value)
+            if receiver != null {
+                let number = receiver ?? continue
+                let node = check_arguments_receiver_node(value)
+                let pending = state.flow.literal_receivers.clone()
+                let mut hit = -1
+                let mut i = 0
+                while i < pending.len() {
+                    if hit < 0 && pending[i].0 == node && pending[i].1 == number {
+                        hit = i
+                    }
+                    i += 1
+                }
+                if hit >= 0 {
+                    state.flow.literal_receivers = [pending[hit].clone()]
+                    state.literal_receivers_take(want)
+                    let mut rest: Vec[(i64, Integer)] = []
+                    let mut j = 0
+                    while j < pending.len() {
+                        if j != hit {
+                            rest.push(pending[j].clone())
+                        }
+                        j += 1
+                    }
+                    state.flow.literal_receivers = rest
+                }
+            }
+        }
+        let moved = check_arguments_moved(keeps, name)
+        if moved >= 0 {
+            let kept_now = keeps[moved].clone()
+            state.a_cleanup_that_moved(world, key, name, kept_now.1, kept_now.2, want, given_here, span)
+        }
+        // **A parameter is a use** (ADR-152 D4), and a literal handed to one
+        // that takes an `Array[T, N]` **is** that array; **one handed to a
+        // `String` is one** (ADR-282 D4). **What is printed is only read**
+        // (ADR-279 D5), and **a pattern is only read** (D28).
+        let mut lent = if own { lends_in_own(contract, at + offset, [world.library]) } else { lends_in(contract, at + offset, [world.library]) }
+        lent = lent || (at == 0 && is_a_lookup(key)) || check_arguments_a_print(key)
+        lent = lent || (at == 0 && (key == "str::starts_with" || key == "str::ends_with" || key == "str::contains"))
+        let kept = !lent
+        // **What the callee keeps, it is given** (ADR-293 D29): no `&` is
+        // written for this position, so a name here moves. **Not across the C
+        // boundary** (ADR-302 D5).
+        if kept && !want.is_a_view() && !signature.mutable.contains(name) && !state.foreign_names.contains(written) && given_here != null {
+            let value = given_here ?? continue
+            state.hands_over(world, value, found_here, f"passed to `{written}`, which keeps it", span)
+        }
+        // **A type variable only this argument decides takes the argument's
+        // own type** (0.0.230, #155): a text literal is a `String`.
+        let mut literal_wants = want.clone()
+        if kept && state.decided_by_this_argument(signature, wanted, at) {
+            literal_wants = Ty::Named { name: "String".clone(), args: [], view: false }
+        }
+        if given_here != null {
+            let value = given_here ?? continue
+            let array = state.array_literal(found_here, want, value, span)
+            if array != null {
+                found_here = array ?? found_here.clone()
+            } else {
+                found_here = state.text_literal(world, literal_wants, value, kept) ?? found_here.clone()
+            }
+        }
+        // **A view handed to a `String` the callee only reads is lent as it
+        // is** (ADR-282 D11), for a function this compiler declares; **not a
+        // `ref` the source wrote**, which is `NK1137`'s below.
+        let string = Ty::Named { name: "String".clone(), args: [], view: false }
+        if !kept && !check_arguments_wrote_ref(given_here) && found_here == text_view && want == string && own {
+            continue
+        }
+        // **A view handed to a parameter both kinds flow into** is borrowed as
+        // it is (ADR-282 D2).
+        if views_into_text(found_here, want) && either_param(world.here, key, at) {
+            // **An `if` or a `match` asked arm by arm** is wrapped arm by arm
+            // below (#562).
+            if argument.arm >= 0 && at < given.len() && check_arguments_a_choice(given[at]) && given_here != null {
+                state.note_mixed(world, given[at], check_arguments_nullable(want))
+            } else if given_here != null && check_arguments_nullable(want) && !check_arguments_nullable(found_here) {
+                // A plain view into a `String?` goes inside its option
+                // (#598): `Some(either(s))`, as text of its own does.
+                let value = given_here ?? continue
+                state.facts.nullable_args.insert(id_of(value) as i64, FactWrap::Constructor)
+            }
+            continue
+        }
+        // **A `usize` at the C boundary takes this language's own integer**
+        // (ADR-302 D6, ADR-285 D1): this *is* the fit.
+        if state.a_count_at_the_boundary(written, want, found_here) {
+            continue
+        }
+        // **The compiler writes the `&` at the call** (ADR-094 D1), where the
+        // callee lends this position and the value is not already a view.
+        if state.the_compiler_writes_the_reference(world, contract, at, given_here, found_here, want, own, written, span) {
+            continue
+        }
+        // **What is printed is only read** (ADR-279 D5): a `??` handed to a
+        // print call lends its left side as a lent argument does.
+        if check_arguments_a_print(written) && given_here != null {
+            let value = given_here ?? continue
+            if state.a_pending_coalesce_is_lent(value) {
+                continue
+            }
+            // **A file's name is printed as its bytes** (ADR-319 D4).
+            if check_arguments_a_path(found_here) {
+                // An `f"…"` recorded which of its holes are names already.
+                let node = id_of(value) as i64
+                if state.facts.path_holes.get(node) == null {
+                    state.facts.path_holes.insert(node, [true])
+                }
+                continue
+            }
+        }
+        if given_here != null {
+            let value = given_here ?? continue
+            state.a_map_read_kept(world, found_here, want, value, span)
+        }
+        let how = check_widened_slot(state, world, host, found_here, want, given_here, span)
+        if how != null {
+            if given_here != null {
+                let value = given_here ?? continue
+                state.facts.nullable_args.insert(id_of(value) as i64, how ?? continue)
+            }
+            continue
+        }
+        if state.fits_through_deref(world, found_here, want) {
+            continue
+        }
+        // **A view of a value that copies, where the value is wanted**
+        // (ADR-233 D4): the copy out of it is the compiler's to write - for a
+        // **name**, because a `*` on what an operator made is not Rust.
+        if state.a_view_that_copies(world, found_here) && unviewed_type(found_here) == want && check_arguments_a_variable(given_here) {
+            let value = given_here ?? continue
+            state.facts.copied_args.insert(id_of(value) as i64)
+            continue
+        }
+        // A plain value where a hull is wanted, refused by a code of its own
+        // (ADR-281 D2): the word goes here, at the call.
+        if becomes_shared(found_here, want) {
+            let mut value: String? = null
+            if given_here != null {
+                let arg = given_here ?? continue
+                value = names_of(world, arg)
+            }
+            let mut message: String = f"`{key}` takes a shared value, but this isn't one."
+            let mut help: String = f"Make it {an_or_a(want.text())} `{want.text()}`."
+            let hull: String = match want {
+                Ty::Named { name, .. } => name.clone(),
+                else => "".clone(),
+            }
+            if value != null {
+                let shown = (value ?? "").clone()
+                message = f"`{key}` takes a shared value, but `{shown}` isn't one."
+                if !hull.is_empty() {
+                    help = f"Wrap it: `{hull}({shown})`."
+                }
+            } else if !hull.is_empty() {
+                help = f"Wrap it: `{hull}(…)`."
+            }
+            state.findings.push(check_refusal("NK1115", span, message, [f"It's declared as `{key}{signature.text()}`."], help))
+            continue
+        }
+        if state.a_name_in_text(world, want, given_here, span) {
+            continue
+        }
+        let named = check_arguments_named(world, given_here)
+        let keeper = f"`{key}` keeps its `{name}` after the call returns"
+        let mut notes: Vec[String] = [f"It's declared as `{key}{signature.text()}`."]
+        let mut help: String = way_out_of_a_mismatch(found_here, want)
+        let why = state.a_view_kept(found_here, want, named, keeper)
+        if why != null {
+            let kept_why = why ?? continue
+            for note in kept_why.notes {
+                notes.push(note.clone())
+            }
+            help = kept_why.help.clone()
+        }
+        let mut at_span = span.clone()
+        if given_here != null {
+            let value = given_here ?? continue
+            at_span = check_span_at(world, value, span)
+        }
+        state.findings.push(check_refusal("NK1102", at_span, f"`{key}` expects `{name}` to be `{want.text()}`, but you're passing `{found_here.text()}`.", notes, help))
+    }
+    return signature.result_or_unit()
+}

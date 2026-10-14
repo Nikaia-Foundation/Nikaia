@@ -197,6 +197,10 @@ not as a gap: *as it is today, until someone needs more*.
 | two `self.s` arms of a Rust closure kept across a `self.s` write (E0502) | 1 | `leaves(then_branch)` called again after `arm_types.insert` | the booleans computed once |
 | a guard over a `T?` scrutinee (`n if n > 3` on `i64?`) passes the checker, rustc E0308 (new, probe `p01`) | - | - | - |
 | `if o != null { o + 1 }` passes the checker, rustc cannot add to `Option<i64>` (new, probe `q13`) | - | - | - |
+| `-> (bool, String)?` and `-> (i64, Integer)?`: a nullable tuple as a result type does not parse ("Expected `{`") | 2 | `Option<(usize, Integer)>` in `arguments` | `check_arguments.nika`: an index (`-1` for none) and two helpers |
+| a struct field `ref Expr?` filled from `ref Vec[Expr]` or `ref CheckWorld` params is NK2302 (whose data) | 1 | `Vec<(usize, Option<&Expr>, Ty)>` in `arguments` | `CheckArgument` keeps the arm's index, the view is read back where it is used |
+| `if c { arm.tail } else { given[at] }` into `ref Expr?`: the plain arm is `Expr`, NK1103 | 1 | `given.get(at)` | helper `check_arguments_at` returning `ref Expr?` |
+| `std::ptr::eq(whole, arm)` | 1 | `arguments` | the arm's index says it is an arm |
 
 The last three belong in `docs/lowering-defects.md`; the last should be a
 checker refusal (`NK1125`) if `!= null` is not meant to narrow.

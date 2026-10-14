@@ -9640,6 +9640,308 @@ pub fn variants_named(world: &CheckWorld<'_>, pattern: &MatchPattern, out: &mut 
 fn a_last_segment(world: &CheckWorld<'_>, path: &[winnow_grammar::Symbol], out: &mut collections::BTreeSet<String>) { if !path.is_empty() { out.insert(world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 1))).to_owned()); } }
 
 
+// --- check_arguments.nika ---
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CheckArgument {
+    at: i64,
+    arm: i64,
+    found: Ty,
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_arguments_moved(keeps: &[(String, bool, String)], param: &str) -> i64 {
+    let mut at: i64 = 0;
+    while ((at) as usize) < keeps.len() {
+        if nikaia_std::index::get(&keeps, (at) as usize).0 == param { return at; }
+        at += 1;
+    }
+    -1
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_arguments_at(given: &[Expr], at: i64) -> Option<&Expr> {
+    if at < given.len() as i64 { return Some(nikaia_std::index::get(&given, nikaia_std::index::at(at))); }
+    None
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_arguments_a_var(ty: &Ty) -> bool { matches!(ty, Ty::Var { .. }) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_arguments_nullable(ty: &Ty) -> bool { matches!(ty, Ty::Nullable(_)) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_arguments_a_path(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { name, .. } => name == "fs::Path",
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_arguments_a_choice(value: &Expr) -> bool { matches!(value, Expr::If { .. } | Expr::Match { .. }) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_arguments_a_variable(value: Option<&Expr>) -> bool {
+    let given = match value { Some(__nikaia_value) => __nikaia_value, None => return false };
+    matches!(given, Expr::Variable(_, _))
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_arguments_wrote_ref(value: Option<&Expr>) -> bool {
+    let given = match value { Some(__nikaia_value) => __nikaia_value, None => return false };
+    match given {
+        Expr::Unary { op, .. } => matches!(op, UnaryOp::Ref),
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_arguments_a_print(written: &str) -> bool { written == "println" || written == "eprintln" || written == "print" || written == "eprint" }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_arguments_literal_receiver(value: &Expr) -> Option<Integer> {
+    match value {
+        Expr::MethodCall { receiver, .. } => { let receiver = nikaia_std::boxed::open(receiver); match receiver {
+            Expr::LitInt { value, negative, .. } => { let negative = *negative; let value = *value; Some(integer(value, negative)) },
+            _ => None,
+        } },
+        _ => None,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_arguments_receiver_node(value: &Expr) -> i64 {
+    match value {
+        Expr::MethodCall { receiver, .. } => { let receiver = nikaia_std::boxed::open(receiver); id_of(receiver) as i64 },
+        _ => -1,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_arguments_named(world: &CheckWorld<'_>, value: Option<&Expr>) -> Option<String> {
+    let given = match value { Some(__nikaia_value) => __nikaia_value, None => return None };
+    match given {
+        Expr::Variable(name, _) => { let name = *name; Some(world.words.resolve(name).to_owned()) },
+        _ => None,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, key: &str, written: &str, contract: &FnContract, given: &[Expr], found: &[Ty], passed: &[(String, Ty)], keeps: &[(String, bool, String)], span: &Span) -> Ty {
+    let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
+    let wanted = call_arguments(signature);
+    if (wanted.len() as i64) != found.len() as i64 {
+        let mut help: String = format!("Call it without arguments: `{}()`.", key);
+        if !wanted.is_empty() {
+            let mut takes: Vec<String> = vec![];
+            for (n, t) in wanted.iter() { takes.push(format!("`{}: {}`", n, t.text())); }
+            help = format!("It takes {}{}.", takes.join(", "), a_root_is_one_of_two(&wanted));
+        }
+        state.findings.push(check_refusal("NK1101", span, format!("`{}` takes {}, but you passed {}.", key, counted(wanted.len() as i64, "argument"), found.len() as i64), vec![format!("It's declared as `{}{}`.", key, signature.text())], Some(help)));
+        return signature.result_or_unit();
+    }
+    state.a_length_that_fits_its_buffer(world, written, &wanted, given, found, span);
+    state.one_type_variable_two_integer_types(world, key, &wanted, given, found, span);
+    let mut index: i64 = 0;
+    for (name, found_option) in passed.iter() {
+        let at: i64 = index;
+        index += 1;
+        let mut known = false;
+        for option in signature.config.iter() {
+            if option.name != *name || known { continue; }
+            known = true;
+            if found_option.fits(&option.ty) { continue; }
+            if at < state.flow.option_values.len() as i64 && option.ty.is_a_view() && !found_option.is_a_view() && found_option.fits(&option.ty.owned()) {
+                let value = *nikaia_std::index::get(&state.flow.option_values, nikaia_std::index::at(at));
+                state.facts.lent_options.insert(value);
+                continue;
+            }
+            let ty = option.ty.text();
+            state.expect_type(world, found_option, &option.ty, span, "field", &|found_text, wanted_text| { format!("The option `{}` of `{}` takes `{}`, but you're passing `{}`.", name, key, ty, found_text) });
+        }
+        if !known { state.no_such_option(key, name, signature, span); }
+    }
+    let text_view = Ty::Named { name: "str".to_owned(), args: vec![], view: true };
+    let mut expanded: Vec<CheckArgument> = vec![];
+    let mut all_arms: Vec<Vec<CheckArm<'_>>> = vec![];
+    let mut position: i64 = 0;
+    while ((position) as usize) < found.len() {
+        let at: i64 = position;
+        position += 1;
+        let found_here = (*nikaia_std::index::get(&found, nikaia_std::index::at(at))).clone();
+        let known_want = at < wanted.len() as i64 && wholly_known(&nikaia_std::index::get(&wanted, nikaia_std::index::at(at)).1) && !check_arguments_a_var(&nikaia_std::index::get(&wanted, nikaia_std::index::at(at)).1);
+        let mut arms: Vec<CheckArm<'_>> = vec![];
+        if found_here.is_unknown() && known_want && at < given.len() as i64 { arms = state.arms_to_ask(world, nikaia_std::index::get(&given, nikaia_std::index::at(at))); }
+        if arms.is_empty() {
+            expanded.push(CheckArgument { at, arm: -1, found: found_here });
+            all_arms.push(arms);
+            continue;
+        }
+        let no_number = at < wanted.len() as i64 && state.no_number_is(&nikaia_std::index::get(&wanted, nikaia_std::index::at(at)).1);
+        let mut k: i64 = 0;
+        while ((k) as usize) < arms.len() {
+            let arm = (*nikaia_std::index::get(&arms, (k) as usize)).clone();
+            let index: i64 = k;
+            k += 1;
+            let tail = match arm.tail { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let literal = matches!(check_peeled(tail), Expr::LitInt { .. });
+            if arm.ty.is_unknown() && literal && no_number { expanded.push(CheckArgument { at, arm: index, found: Ty::Named { name: "i64".to_owned(), args: vec![], view: false } }); } else { expanded.push(CheckArgument { at, arm: index, found: arm.ty.clone() }); }
+        }
+        all_arms.push(arms);
+    }
+    let own = world.own.functions.contains_key(key);
+    let offset: i64 = if signature.takes_a_receiver() { 1 } else { 0 };
+    for argument in expanded.iter() {
+        let at = argument.at;
+        let given_here: Option<&Expr> = if argument.arm >= 0 { nikaia_std::index::get(nikaia_std::index::get(&all_arms, nikaia_std::index::at(at)), nikaia_std::index::at(argument.arm)).tail } else { check_arguments_at(given, at) };
+        let name = nikaia_std::index::get(&wanted, nikaia_std::index::at(at)).0.to_owned();
+        let want = nikaia_std::index::get(&wanted, nikaia_std::index::at(at)).1.clone();
+        let mut found_here = argument.found.clone();
+        if is_a_view_of_a_string(&found_here) { found_here = text_view.clone(); }
+        if given_here.is_some() {
+            let value = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };
+            state.constant_fits(world, value, Some(&want), span);
+            if state.an_open_number_where_none_fits(world, &found_here, &want, value, span, "argument", &|found_text, want_text| { format!("`{}` expects `{}` to be `{}`, but you're passing `{}`.", key, name, want_text, found_text) }) { continue; }
+            let receiver = check_arguments_literal_receiver(value);
+            if receiver.is_some() {
+                let number = match receiver { Some(__nikaia_value) => __nikaia_value, None => continue };
+                let node = check_arguments_receiver_node(value);
+                let pending = state.flow.literal_receivers.to_owned();
+                let mut hit: i64 = -1;
+                let mut i: i64 = 0;
+                while ((i) as usize) < pending.len() {
+                    if hit < 0 && nikaia_std::index::get(&pending, (i) as usize).0 == node && nikaia_std::index::get(&pending, (i) as usize).1 == number { hit = i; }
+                    i += 1;
+                }
+                if hit >= 0 {
+                    state.flow.literal_receivers = vec![(*nikaia_std::index::get(&pending, nikaia_std::index::at(hit))).clone()];
+                    state.literal_receivers_take(&want);
+                    let mut rest: Vec<(i64, Integer)> = vec![];
+                    let mut j: i64 = 0;
+                    while ((j) as usize) < pending.len() {
+                        if j != hit { rest.push((*nikaia_std::index::get(&pending, (j) as usize)).clone()); }
+                        j += 1;
+                    }
+                    state.flow.literal_receivers = rest;
+                }
+            }
+        }
+        let moved = check_arguments_moved(keeps, &name);
+        if moved >= 0 {
+            let kept_now = (*nikaia_std::index::get(&keeps, nikaia_std::index::at(moved))).clone();
+            state.a_cleanup_that_moved(world, key, &name, kept_now.1, &kept_now.2, &want, given_here, span);
+        }
+        let mut lent = if own { lends_in_own(contract, at + offset, &vec![world.library]) } else { lends_in(contract, at + offset, &vec![world.library]) };
+        lent = lent || at == 0 && is_a_lookup(key) || check_arguments_a_print(key);
+        lent = lent || at == 0 && (key == "str::starts_with" || key == "str::ends_with" || key == "str::contains");
+        let kept = !lent;
+        if kept && !want.is_a_view() && !nikaia_std::list::contains(&signature.mutable, &name) && !state.foreign_names.contains(written) && given_here.is_some() {
+            let value = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };
+            state.hands_over(world, value, &found_here, &format!("passed to `{}`, which keeps it", written), span);
+        }
+        let mut literal_wants = want.clone();
+        if kept && state.decided_by_this_argument(signature, &wanted, at) { literal_wants = Ty::Named { name: "String".to_owned(), args: vec![], view: false }; }
+        if given_here.is_some() {
+            let value = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let array = state.array_literal(&found_here, &want, value, span);
+            if array.is_some() { found_here = nikaia_std::index::or(array, || found_here.clone().into()); } else { found_here = nikaia_std::index::or(state.text_literal(world, &literal_wants, value, kept), || found_here.clone().into()); }
+        }
+        let string = Ty::Named { name: "String".to_owned(), args: vec![], view: false };
+        if !kept && !check_arguments_wrote_ref(given_here) && found_here == text_view && want == string && own { continue; }
+        if views_into_text(&found_here, &want) && either_param(&world.here, key, at) {
+            if argument.arm >= 0 && at < given.len() as i64 && check_arguments_a_choice(nikaia_std::index::get(&given, nikaia_std::index::at(at))) && given_here.is_some() { state.note_mixed(world, nikaia_std::index::get(&given, nikaia_std::index::at(at)), check_arguments_nullable(&want)); } else if given_here.is_some() && check_arguments_nullable(&want) && !check_arguments_nullable(&found_here) {
+                let value = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };
+                state.facts.nullable_args.insert(id_of(value) as i64, FactWrap::Constructor);
+            }
+            continue;
+        }
+        if state.a_count_at_the_boundary(written, &want, &found_here) { continue; }
+        if state.the_compiler_writes_the_reference(world, contract, at, given_here, &found_here, &want, own, written, span) { continue; }
+        if check_arguments_a_print(written) && given_here.is_some() {
+            let value = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };
+            if state.a_pending_coalesce_is_lent(value) { continue; }
+            if check_arguments_a_path(&found_here) {
+                let node = id_of(value) as i64;
+                if state.facts.path_holes.get(&node).is_none() { state.facts.path_holes.insert(node, vec![true]); }
+                continue;
+            }
+        }
+        if given_here.is_some() {
+            let value = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };
+            state.a_map_read_kept(world, &found_here, &want, value, span);
+        }
+        let how = check_widened_slot(state, world, host, &found_here, &want, given_here, span);
+        if how.is_some() {
+            if given_here.is_some() {
+                let value = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };
+                state.facts.nullable_args.insert(id_of(value) as i64, match how { Some(__nikaia_value) => __nikaia_value, None => continue });
+            }
+            continue;
+        }
+        if state.fits_through_deref(world, &found_here, &want) { continue; }
+        if state.a_view_that_copies(world, &found_here) && unviewed_type(&found_here) == want && check_arguments_a_variable(given_here) {
+            let value = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };
+            state.facts.copied_args.insert(id_of(value) as i64);
+            continue;
+        }
+        if becomes_shared(&found_here, &want) {
+            let mut value: Option<String> = None;
+            if given_here.is_some() {
+                let arg = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };
+                value = names_of(world, arg);
+            }
+            let mut message: String = format!("`{}` takes a shared value, but this isn't one.", key);
+            let mut help: String = format!("Make it {} `{}`.", an_or_a(&want.text()), want.text());
+            let hull: String = match want {
+                Ty::Named { ref name, .. } => name.to_owned(),
+                _ => "".to_owned(),
+            };
+            if value.is_some() {
+                let shown = nikaia_std::index::or(value.as_deref(), || "").to_owned();
+                message = format!("`{}` takes a shared value, but `{}` isn't one.", key, shown);
+                if !hull.is_empty() { help = format!("Wrap it: `{}({})`.", hull, shown); }
+            } else if !hull.is_empty() { help = format!("Wrap it: `{}(…)`.", hull); }
+            state.findings.push(check_refusal("NK1115", span, message, vec![format!("It's declared as `{}{}`.", key, signature.text())], Some(help)));
+            continue;
+        }
+        if state.a_name_in_text(world, &want, given_here, span) { continue; }
+        let named = check_arguments_named(world, given_here);
+        let keeper = format!("`{}` keeps its `{}` after the call returns", key, name);
+        let mut notes: Vec<String> = vec![format!("It's declared as `{}{}`.", key, signature.text())];
+        let mut help: String = way_out_of_a_mismatch(&found_here, &want);
+        let why = state.a_view_kept(&found_here, &want, (named).as_deref(), &keeper);
+        if why.is_some() {
+            let kept_why = match why { Some(__nikaia_value) => __nikaia_value, None => continue };
+            for note in kept_why.notes.iter() { notes.push(note.to_owned()); }
+            help = kept_why.help.to_owned();
+        }
+        let mut at_span = span.clone();
+        if given_here.is_some() {
+            let value = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };
+            at_span = check_span_at(world, value, span);
+        }
+        state.findings.push(check_refusal("NK1102", &at_span, format!("`{}` expects `{}` to be `{}`, but you're passing `{}`.", key, name, want.text(), found_here.text()), notes, Some(help)));
+    }
+    signature.result_or_unit()
+}
+
+
 // --- check_arith.nika ---
 
 fn arith_exit_code_outside(first: &Expr) -> Option<String> {
@@ -51526,6 +51828,10 @@ pub mod cexport_python {
 pub mod check_access {
     #[allow(unused_imports)]
     pub use super::{names_the_argument, dotted_path, variants_named};
+}
+pub mod check_arguments {
+    #[allow(unused_imports)]
+    pub use super::{check_arguments};
 }
 pub mod check_arith {
     #[allow(unused_imports)]

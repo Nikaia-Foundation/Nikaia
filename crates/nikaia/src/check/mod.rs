@@ -39,6 +39,7 @@ use crate::contracts::ty::TyOps;
 use crate::contracts::{FieldContract, FnContract, Ledger, ty, ty::Ty};
 use crate::fold::Constant;
 use crate::parser::Parsed;
+use nikaia_std::tools::check_arguments;
 use nikaia_std::tools::check_consts::{self, CheckCrossing as Crossing};
 use nikaia_std::tools::check_core_pilot;
 use nikaia_std::tools::check_flow::{
@@ -47,7 +48,6 @@ use nikaia_std::tools::check_flow::{
 };
 use nikaia_std::tools::check_items;
 use nikaia_std::tools::check_literals::element_kind;
-use nikaia_std::tools::check_lookups::names_of;
 use nikaia_std::tools::check_names::{integer_named, is_a_literal as is_literal};
 use nikaia_std::tools::check_overflow;
 use nikaia_std::tools::check_patterns::pattern_names;
@@ -68,7 +68,7 @@ use nikaia_std::tools::check_state::{
 use nikaia_std::tools::check_texts::{self, ends_in_text};
 use nikaia_std::tools::check_widen::{
     self, an_integer_that_does_not_widen, names_a_path, number_where_no_number_is,
-    views_into_nullable_text, views_into_text,
+    views_into_nullable_text,
 };
 use nikaia_std::tools::check_with::CheckCopyable as Copyable;
 use nikaia_std::tools::parsed_view::ParsedView;
@@ -992,23 +992,6 @@ struct Checker<'a> {
     here: Option<usize>,
 }
 
-/// One argument as [`Checker::the_compiler_writes_the_reference`] reads it:
-/// where it stands in the call, what was written there, the type that was
-/// found, and the one the parameter wants. Four values that only ever travel
-/// together, and a name for them so the rule reads as one question.
-struct Argument<'a> {
-    /// The position among the arguments, the receiver not counted.
-    at: usize,
-    /// What the source wrote there, where there is an expression to read.
-    given: Option<&'a Expr>,
-    /// The type of what was written.
-    found: &'a Ty,
-    /// The type the parameter declares.
-    want: &'a Ty,
-    /// The callee is a function or method of this program's own.
-    own: bool,
-}
-
 /// **What a `?.` reaches**, which Part I 3.5 calls a *member*
 /// ([ADR-278](../../../docs/specification/adr/adr-278.md)).
 ///
@@ -1041,17 +1024,6 @@ impl<'a> Checker<'a> {
         self.collect_field_walks();
         self.collect_comparisons();
         self.collect_copies();
-    }
-
-    /// **A view of a value that copies**, for an argument handed where the
-    /// value is wanted (ADR-233 D4): a number, a `bool` or a `char`, and
-    /// beside them a type that is one by declaration - the unit's own that
-    /// derive `Copy`, and a described Rust type whose ledger says `copies`
-    /// (ADR-294 D9.3). `for name in names` over a `ref Vec[Symbol]` binds a
-    /// view of each `Symbol`, and handing one to `resolve` was refused as a
-    /// mismatch although the handle is a `u32` the ledger says copies.
-    fn a_view_that_copies(&self, ty: &Ty) -> bool {
-        self.s.a_view_that_copies(self.world, ty)
     }
 
     /// The other files of the program: `beside` without this one.
@@ -2586,42 +2558,6 @@ impl<'a> Checker<'a> {
         self.nikaia(|state, world, host| {
             check_core_pilot::check_core_grammar_call(state, world, host, key, args, span)
         })
-    }
-
-    /// **The compiler writes the reference at the call, and a written one is
-    /// refused** ([ADR-094](../../docs/specification/adr/adr-094.md) D1).
-    ///
-    /// The callee's answer is `contracts::keeps::lends`, read here and read
-    /// again by the emitter when it writes that callee's *declaration* — one
-    /// answer in two positions, because the two disagreeing is a `&&T` or a
-    /// moved value in the language below. What this adds is the half the
-    /// emitter cannot see: whether the argument is **already** a view, which is
-    /// a question about its type (ADR-288).
-    ///
-    /// **`NK1137` lands exactly where the compiler would have written one**,
-    /// and nowhere else. A `&` in a position the callee keeps, or one in front
-    /// of a value whose type this checker could not work out, is still the
-    /// program's own and is left alone — refusing it would take away the only
-    /// way to say what the line means before the inference that replaces it can
-    /// answer.
-    fn the_compiler_writes_the_reference(
-        &mut self,
-        contract: &FnContract,
-        argument: Argument<'_>,
-        written: &str,
-        span: &Span,
-    ) -> bool {
-        let Argument {
-            at,
-            given,
-            found,
-            want,
-            own,
-        } = argument;
-        let at = at as i64;
-        self.s.the_compiler_writes_the_reference(
-            self.world, contract, at, given, found, want, own, written, span,
-        )
     }
 
     /// The name a free call names, unaliased — or nothing where this is not one.
@@ -8237,20 +8173,6 @@ impl<'a> Checker<'a> {
             .a_bit_operation_beside_a_comparison(self.world, op, lhs, rhs, at);
     }
 
-    /// `NK1102` for a type variable two integer types are handed to
-    /// (`tools/check_widen.nika`).
-    fn one_type_variable_two_integer_types(
-        &mut self,
-        key: &str,
-        wanted: &[(String, Ty)],
-        given: &[Expr],
-        found: &[Ty],
-        span: &Span,
-    ) {
-        self.s
-            .one_type_variable_two_integer_types(self.world, key, wanted, given, found, span);
-    }
-
     /// `x op= value` over two integer types (`tools/check_numbers2.nika`).
     fn a_compound_over_two_integer_types(
         &mut self,
@@ -9199,434 +9121,21 @@ impl<'a> Checker<'a> {
         passed: &[(String, Ty)],
         span: &Span,
     ) -> Ty {
-        // No signature is no claim. The hand-written half of `std.contracts`
-        // has some, and an entry that says nothing is checked against nothing.
-        let Some(signature) = contract.signature.clone() else {
-            return Ty::Unknown;
-        };
-        let wanted = signature.arguments();
-
-        if wanted.len() != found.len() {
-            self.s.findings.push(Finding {
-                severity: Severity::Error,
-                span: *span,
-                code: "NK1101".to_string(),
-                message: format!(
-                    "`{key}` takes {}, but you passed {}.",
-                    plural(wanted.len(), "argument"),
-                    found.len()
-                ),
-                notes: vec![format!("It's declared as `{key}{}`.", signature.text())],
-                help: Some(match wanted.len() {
-                    0 => format!("Call it without arguments: `{key}()`."),
-                    _ => {
-                        let takes = wanted
-                            .iter()
-                            .map(|(n, t)| format!("`{n}: {}`", t.text()))
-                            .collect::<Vec<_>>()
-                            .join(", ");
-                        format!("It takes {takes}{}.", a_root_is_one_of_two(wanted))
-                    }
-                }),
-                labels: Vec::new(),
-            });
-            return signature.result_or_unit();
-        }
-
-        // **A length beside a view is checked at the call**
-        // ([ADR-302](../../docs/specification/adr/adr-302.md) D6), before the
-        // arguments are measured one at a time: the question is about a *pair*
-        // of them, and a `usize` that is measured on its own has already
-        // passed.
-        self.a_length_that_fits_its_buffer(written, wanted, given, found, span);
-        self.one_type_variable_two_integer_types(key, wanted, given, found, span);
-
-        // Kap 5.1: an option is named, so it is checked by name - that it
-        // exists, and that what is passed is what it takes.
-        for (at, (name, found)) in passed.iter().enumerate() {
-            match signature.config.iter().find(|c| c.name == *name) {
-                Some(option) => {
-                    if found.fits(&option.ty) {
-                        continue;
-                    }
-                    // **An option of a `ref` type lends what it is passed**
-                    // (#455), as a `ref` parameter does (ADR-094 D1): the
-                    // owned value fits the view, and the `&` is the
-                    // compiler's to write.
-                    if let Some(value) = self.s.flow.option_values.get(at).copied()
-                        && option.ty.is_a_view()
-                        && !found.is_a_view()
-                        && found.fits(&option.ty.owned())
-                    {
-                        self.s.facts.lent_options.insert(value);
-                        continue;
-                    }
-                    let (want, ty) = (option.ty.clone(), option.ty.text());
-                    let name = name.clone();
-                    let key = key.to_string();
-                    self.expect(found, &want, *span, "field", move |found, _| {
-                        format!("The option `{name}` of `{key}` takes `{ty}`, but you're passing `{found}`.")
-                    });
-                }
-                None => self.s.no_such_option(key, name, &signature, span),
-            }
-        }
-
-        let text_view = Ty::view(ty::TEXT_VIEW);
-        // **An argument that is an `if` or a `match` whose arms did not agree
-        // is its arms** (#596): each is a value handed to the parameter.
-        let mut expanded: Vec<(usize, Option<&Expr>, Ty)> = Vec::new();
-        for (at, found) in found.iter().enumerate() {
-            let known_want = wanted
-                .get(at)
-                .is_some_and(|(_, want)| wholly_known(want) && !matches!(want, Ty::Var { .. }));
-            let arms = match (found.is_unknown() && known_want, given.get(at)) {
-                (true, Some(value)) => self.arms_to_ask(value),
-                _ => Vec::new(),
-            };
-            match arms.is_empty() {
-                true => expanded.push((at, given.get(at), found.clone())),
-                // A number literal as an arm is an `i64` written there (#600).
-                false => {
-                    let no_number = wanted
-                        .get(at)
-                        .is_some_and(|(_, want)| self.s.no_number_is(want));
-                    expanded.extend(arms.into_iter().map(|(arm, ty)| {
-                        let literal = matches!(peeled(arm), Expr::LitInt { .. });
-                        match ty.is_unknown() && literal && no_number {
-                            true => (at, Some(arm), Ty::named("i64")),
-                            false => (at, Some(arm), ty),
-                        }
-                    }))
-                }
-            }
-        }
-        for (at, given_here, found) in &expanded {
-            let (at, given_here) = (*at, *given_here);
-            let (name, want) = &wanted[at];
-            // **A view of a `String` is a view of text here**
-            // ([ADR-233](../../docs/specification/adr/adr-233.md) D4): an
-            // element of `words.iter()` is one, and the language below lends it
-            // as the `&str` a parameter takes at the call, by itself.
-            let found = match is_a_view_of_a_string(found) {
-                true => &text_view,
-                false => found,
-            };
-            // A literal that cannot fit the parameter it is given, asked here
-            // rather than where the argument was walked: a free call walks its
-            // arguments before it resolves the callee, so the type to measure
-            // against is not known yet at that point (ADR-288's ordering is what
-            // gives a *method* call the answer earlier).
-            if let Some(given) = given_here {
-                self.constant_fits(given, Some(want), span);
-                if self.an_open_number_where_none_fits(
-                    found,
-                    want,
-                    given,
-                    *span,
-                    "argument",
-                    &|found, want| {
-                        format!(
-                            "`{key}` expects `{name}` to be `{want}`, but you're passing `{found}`."
-                        )
-                    },
-                ) {
-                    continue;
-                }
-                // A free call walks its arguments first, so a call on a
-                // number written as its receiver is told its parameter here.
-                if let Expr::MethodCall { receiver, .. } = given
-                    && let Expr::LitInt {
-                        value, negative, ..
-                    } = **receiver
-                {
-                    let key = (
-                        value_node(receiver),
-                        nikaia_std::tools::integers::integer(value, negative),
-                    );
-                    if let Some(at) = self.s.flow.literal_receivers.iter().position(|k| *k == key) {
-                        let pending = std::mem::take(&mut self.s.flow.literal_receivers);
-                        self.s.flow.literal_receivers = vec![pending[at]];
-                        self.literal_receivers_take(want);
-                        self.s.flow.literal_receivers = pending
-                            .into_iter()
-                            .enumerate()
-                            .filter(|(i, _)| *i != at)
-                            .map(|(_, k)| k)
-                            .collect();
-                    }
-                }
-            }
-            self.a_cleanup_that_moved(key, name, want, given_here, span);
-            // **A parameter is a use** (ADR-152 D4), and a literal handed to one
-            // that takes an `Array[T, N]` **is** that array. What it changes is
-            // the type the rest of this loop reads, rather than ending it: the
-            // `&` the compiler writes (ADR-094 D1) and the ordinary fit are
-            // still this argument's questions, and they have to be asked of what
-            // the literal turned out to be.
-            //
-            // **And one handed to a `String` is one** (ADR-282 D4) — text of its
-            // own where the callee keeps it, and the literal as it is where the
-            // callee only reads it, because that parameter is a `&str` below
-            // (D3) and a constant needs no copy to be read.
-            // **What is printed is only read** (ADR-279 D5): the four print
-            // calls take any value by `?`, which would otherwise count as
-            // kept, and format it by reference (#473).
-            let lent = match self.world.own.functions.contains_key(key) {
-                true => crate::contracts::keeps::lends_in_own(
-                    contract,
-                    at + usize::from(signature.takes_a_receiver()),
-                    &[self.world.library],
-                ),
-                false => crate::contracts::keeps::lends_in(
-                    contract,
-                    at + usize::from(signature.takes_a_receiver()),
-                    &[self.world.library],
-                ),
-            } || (at == 0 && is_a_lookup(key))
-                || matches!(key, "println" | "eprintln" | "print" | "eprint")
-                // **A pattern is only read** (D28): owned text is lent to it.
-                || (at == 0 && matches!(key, "str::starts_with" | "str::ends_with" | "str::contains"));
-            let kept = !lent;
-            // **What the callee keeps, it is given** (ADR-293 D29): no `&` is
-            // written for this position, so a name here moves.
-            // **Not across the C boundary**: what a C declaration takes it
-            // takes by address or by copy, and the call writes that address
-            // ([ADR-302](../../docs/specification/adr/adr-302.md) D5).
-            if kept
-                && !want.is_a_view()
-                && !signature.mutable.contains(name)
-                && !self.s.foreign_names.contains(written)
-                && let Some(given) = given_here
-            {
-                self.hands_over(
-                    given,
-                    found,
-                    &format!("passed to `{written}`, which keeps it"),
-                    span,
-                );
-            }
-            // **A type variable only this argument decides takes the
-            // argument's own type** (0.0.230, issue #155 before it): a text
-            // literal is a `String`, so where a kept, by-value `$T` is bound by
-            // nothing else - no receiver, no other parameter - it is constructed
-            // as one. `hyper_shim::across_a_thread(value: $T)` with
-            // `T: Describe` implemented for `String` is the case: the literal's
-            // `&str` was a type the program never wrote. A `$T` a receiver
-            // binds (`Vec[$T]::push`) is the receiver's to answer and is left.
-            let text = Ty::named("String");
-            let literal_wants = match kept && self.decided_by_this_argument(&signature, wanted, at)
-            {
-                true => &text,
-                false => want,
-            };
-            let array = given_here.and_then(|given| {
-                self.array_literal(found, want, given, span)
-                    .or_else(|| self.text_literal(literal_wants, given, kept))
-            });
-            let found = array.as_ref().unwrap_or(found);
-            // **A view handed to a `String` the callee only reads is lent as it
-            // is** ([ADR-282](../../docs/specification/adr/adr-282.md) D11). The
-            // parameter is a `&str` below (ADR-282 D5), so the view already is
-            // what the callee takes: asking for `.to_owned()` here asked for a
-            // copy nothing would keep. Only for a function this compiler
-            // declares, because only there is the `&str` its own writing.
-            //
-            // **Not a `ref` the source wrote**, which is `NK1137`'s below: the
-            // reference at a lending call is the compiler's, and a view that
-            // arrives as a view is the case this is for.
-            let wrote_ref = matches!(
-                given_here,
-                Some(Expr::Unary {
-                    op: crate::ast::UnaryOp::Ref,
-                    ..
-                })
-            );
-            if !kept
-                && !wrote_ref
-                && *found == Ty::view("str")
-                && *want == Ty::named("String")
-                && self.world.own.functions.contains_key(key)
-            {
-                continue;
-            }
-            // **A view handed to a parameter both kinds flow into** is
-            // borrowed as it is ([ADR-282](../../docs/specification/adr/adr-282.md)
-            // D2): the emitter hands it over, as it does into a mixed field.
-            if views_into_text(found, want) && self.either_param(key, at) {
-                // **An `if` or a `match` asked arm by arm** is wrapped arm by
-                // arm below (#562).
-                if let (Some(whole), Some(arm)) = (given.get(at), given_here)
-                    && matches!(whole, Expr::If { .. } | Expr::Match { .. })
-                    && !std::ptr::eq(whole, arm)
-                {
-                    self.note_mixed(whole, matches!(want, Ty::Nullable(_)));
-                } else if let Some(value) = given_here
-                    && matches!(want, Ty::Nullable(_))
-                    && !matches!(found, Ty::Nullable(_))
-                {
-                    // A plain view into a `String?` goes inside its option
-                    // (#598): `Some(either(s))`, as text of its own does.
-                    self.s
-                        .facts
-                        .nullable_args
-                        .insert(value_node(value), Wrap::Constructor);
-                }
-                continue;
-            }
-            // **A `usize` at the C boundary takes this language's own integer**
-            // ([ADR-302](../../docs/specification/adr/adr-302.md) D6,
-            // [ADR-285](../../docs/specification/adr/adr-285.md) D1). A length
-            // here is an `i64` and the machine-width type left the surface a
-            // program can write, so a declaration that says `size_t` is handed
-            // an `i64` and the conversion is emitted — the same arrangement
-            // `str::repeat` has, arrived at from the **declaration** rather
-            // than from a name.
-            //
-            // `continue`, because this *is* the fit: what is left for the
-            // positions below to decide is a `&` this argument cannot want, a
-            // number being copied rather than moved.
-            if self.s.a_count_at_the_boundary(written, want, found) {
-                continue;
-            }
-            // Part I 2.3's third position for the wrap: a plain value in a
-            // parameter the callee declares nullable. Recorded before `fits`
-            // is consulted, because this *is* the fit - `Ty::fits` allows it,
-            // and what is left is telling the emitter to write the
-            // constructor.
-            // **The compiler writes the `&` at the call** (ADR-094 D1), where
-            // the callee lends this position and the value is not already a
-            // view. Asked before the wrap and the deref for `nullable_args`'
-            // reason: a lent argument *is* a fit, and what is left is telling
-            // the emitter what to write. The rule asks the fit itself, so an
-            // argument that is simply the wrong value falls through to the
-            // message it always had.
-            if self.the_compiler_writes_the_reference(
-                contract,
-                Argument {
-                    at,
-                    given: given_here,
-                    found,
-                    want,
-                    own: self.world.own.functions.contains_key(key),
-                },
-                written,
-                span,
-            ) {
-                continue;
-            }
-            // **What is printed is only read** (ADR-279 D5): below, the four
-            // print calls format their argument by reference, so a `??`
-            // handed to one lends its left side as a lent argument does.
-            if matches!(written, "println" | "eprintln" | "print" | "eprint")
-                && let Some(given) = given_here
-                && self.a_pending_coalesce_is_lent(given)
-            {
-                continue;
-            }
-            // **A file's name is printed as its bytes** (ADR-319 D4): the
-            // print calls take text or a name.
-            if matches!(written, "println" | "eprintln" | "print" | "eprint")
-                && let Some(given) = given_here
-                && matches!(found, Ty::Named { name, .. } if name == "fs::Path")
-            {
-                // An `f"…"` recorded which of its holes are names already.
-                self.s
-                    .facts
-                    .path_holes
-                    .entry(value_node(given))
-                    .or_insert_with(|| vec![true]);
-                continue;
-            }
-            if let Some(value) = given_here {
-                self.a_map_read_kept(found, want, value, span);
-            }
-            if let Some(how) = self.widened_slot(found, want, given_here, span) {
-                if let Some(value) = given_here {
-                    self.s.facts.nullable_args.insert(value_node(value), how);
-                }
-                continue;
-            }
-            if self.fits_through_deref(found, want) {
-                continue;
-            }
-            // **A view of a value that copies, where the value is wanted**
-            // ([ADR-233](../../docs/specification/adr/adr-233.md) D4): the copy
-            // out of it is a machine word, and the compiler's to write. It is
-            // what a lambda `sort_by_key` hands a `ref i64` meets first.
-            // A **name**: what an operator makes of a view is a value below
-            // whatever this checker calls it, and a `*` on it is not Rust.
-            if self.a_view_that_copies(found)
-                && unviewed(found) == *want
-                && matches!(given_here, Some(Expr::Variable(_, _)))
-            {
-                if let Some(value) = given_here {
-                    self.s.facts.copied_args.insert(value_node(value));
-                }
-                continue;
-            }
-            // A plain value where a hull is wanted. It is refused by a code of
-            // its own because the sentence is worth more than a type mismatch's:
-            // it names the hull and the value. **What the way out is changed**
-            // ([ADR-281](../../docs/specification/adr/adr-281.md) D2) - the word
-            // goes here, at the call, where it used to have to go somewhere else.
-            if becomes_shared(found, want) {
-                let value = given_here.and_then(|arg| names_of(self.world, arg));
-                self.s.findings.push(Finding {
-                    severity: Severity::Error,
-                    span: *span,
-                    code: "NK1115".to_string(),
-                    message: match &value {
-                        Some(value) => {
-                            format!("`{key}` takes a shared value, but `{value}` isn't one.")
-                        }
-                        None => format!("`{key}` takes a shared value, but this isn't one."),
-                    },
-                    notes: vec![format!("It's declared as `{key}{}`.", signature.text())],
-                    help: Some(match (&value, want) {
-                        (Some(value), Ty::Named { name, .. }) => {
-                            format!("Wrap it: `{name}({value})`.")
-                        }
-                        (None, Ty::Named { name, .. }) => {
-                            format!("Wrap it: `{name}(…)`.")
-                        }
-                        _ => format!("Make it {} `{}`.", an_or_a(&want.text()), want.text()),
-                    }),
-                    labels: Vec::new(),
-                });
-                continue;
-            }
-            if self.a_name_in_text(want, given_here, span) {
-                continue;
-            }
-            let (why, help) = match self.a_view_kept(
-                found,
-                want,
-                given_here,
-                &format!("`{key}` keeps its `{name}` after the call returns"),
-            ) {
-                Some((why, help)) => (why, help),
-                None => (Vec::new(), convert(found, want)),
-            };
-            let at = given_here.map_or(*span, |given| self.span_at(given, *span));
-            self.s.findings.push(Finding {
-                severity: Severity::Error,
-                span: at,
-                code: "NK1102".to_string(),
-                message: format!(
-                    "`{key}` expects `{name}` to be `{}`, but you're passing `{}`.",
-                    want.text(),
-                    found.text()
-                ),
-                notes: std::iter::once(format!("It's declared as `{key}{}`.", signature.text()))
-                    .chain(why)
-                    .collect(),
-                help: Some(help),
-                labels: Vec::new(),
-            });
-        }
-
-        signature.result_or_unit()
+        let keeps: Vec<(String, bool, String)> = self
+            .newly
+            .keeps
+            .get(key)
+            .map(|all| {
+                all.iter()
+                    .map(|kept| (kept.param.clone(), kept.now, kept.ty.clone()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        self.nikaia(|state, world, host| {
+            check_arguments::check_arguments(
+                state, world, host, key, written, contract, given, found, passed, &keeps, span,
+            )
+        })
     }
 
     // --- the one shape every check has --------------------------------------
@@ -9676,32 +9185,6 @@ impl<'a> Checker<'a> {
 
     fn fits_through_deref(&self, found: &Ty, want: &Ty) -> bool {
         self.s.fits_through_deref(self.world, found, want)
-    }
-
-    /// **An open number put where no number fits** (#554): `let n = 12` and
-    /// then `let s: String = n`. The number has no type until a use decides
-    /// it ([ADR-285](../../docs/specification/adr/adr-285.md) D23), so it read
-    /// as `?` here and passed, and `rustc` refused the generated file. A use
-    /// that asks for a type no number can be is refused at that use, with the
-    /// position's own code and sentence, the value named *a number*.
-    fn an_open_number_where_none_fits(
-        &mut self,
-        found: &Ty,
-        want: &Ty,
-        value: &Expr,
-        span: Span,
-        what: &str,
-        message: &dyn Fn(&str, &str) -> String,
-    ) -> bool {
-        self.s.an_open_number_where_none_fits(
-            self.world,
-            found,
-            want,
-            value,
-            &span,
-            what,
-            &|hole, ty| message(hole, ty),
-        )
     }
 
     /// [`Checker::expect`], for a position that has the value in hand, so a
@@ -9772,12 +9255,6 @@ impl<'a> Checker<'a> {
         )
     }
 
-    /// Whether parameter `at` of a function this program declares is text both
-    /// kinds of which flow into (ADR-282 D14): by its key, `f` or `Type::m`.
-    fn either_param(&self, key: &str, at: usize) -> bool {
-        check_items::either_param(&self.world.here, key, at as i64)
-    }
-
     /// A function field code is put into where the lock column cannot read it
     /// (ADR-230 D1): undecided, never quiet.
     fn a_field_whose_code_is_not_seen(&mut self, owner: &str, field: &str) {
@@ -9788,27 +9265,6 @@ impl<'a> Checker<'a> {
     /// ([ADR-282](../../docs/specification/adr/adr-282.md) D14).
     fn either_field(&self, owner: &str, field: &str) -> bool {
         check_items::either_field(&self.world.here, owner, field)
-    }
-
-    fn a_view_kept(
-        &self,
-        found: &Ty,
-        want: &Ty,
-        value: Option<&Expr>,
-        keeper: &str,
-    ) -> Option<(Vec<String>, String)> {
-        let named = match value {
-            Some(Expr::Variable(name, _)) => Some(self.parsed.text(*name)),
-            _ => None,
-        };
-        let kept = self.s.a_view_kept(found, want, named, keeper)?;
-        Some((kept.notes, kept.help))
-    }
-
-    /// **The integer type a use asks of a call on a number written as its
-    /// receiver is the number's** (#417), where the number is one of it.
-    fn literal_receivers_take(&mut self, want: &Ty) {
-        self.s.literal_receivers_take(want);
     }
 
     /// Report only when both sides are known and they disagree.
@@ -9896,41 +9352,6 @@ impl<'a> Checker<'a> {
     /// and it grows as the ledger does.
     fn may_fail_here(&mut self, key: &str, contract: &FnContract, span: &Span) {
         self.nikaia(|state, world, host| state.may_fail_here(world, host, key, contract, span))
-    }
-
-    /// **`NK2403`: a value's cleanup moved with a contract**
-    /// ([ADR-297](../../docs/specification/adr/adr-297.md), ADR-094 D5).
-    ///
-    /// A callee that keeps what it is given runs its cleanup when it is done
-    /// with it; one that only reads it lends it, and the cleanup runs at the end
-    /// of the caller's block. The call site shows neither, which ADR-094 D5
-    /// accepts - and what it owes for that is this: when a change to the callee
-    /// moves the point, on a type whose teardown does something, every call
-    /// that hands it a name is told once.
-    ///
-    /// A **warning**, as `NK2402` is, and for its reason: the program is
-    /// correct either way, and committing the ledger diff is the
-    /// acknowledgement. Only a **name**: a temporary's cleanup was at the end of
-    /// its statement, and where inside a call that is, nobody can observe.
-    fn a_cleanup_that_moved(
-        &mut self,
-        key: &str,
-        param: &str,
-        want: &Ty,
-        given: Option<&Expr>,
-        span: &Span,
-    ) {
-        let Some(moved) = self
-            .newly
-            .keeps
-            .get(key)
-            .and_then(|all| all.iter().find(|kept| kept.param == param))
-        else {
-            return;
-        };
-        self.s.a_cleanup_that_moved(
-            self.world, key, param, moved.now, &moved.ty, want, given, span,
-        );
     }
 
     /// Where a method call stands in ADR-023 D8's propagation, for the emitter
@@ -10679,43 +10100,6 @@ impl<'a> Checker<'a> {
         check_items::implements_error(&self.world.here, &self.world.beside, ty)
     }
 
-    /// **A length beside a view is checked at the call**
-    /// ([ADR-302](../../docs/specification/adr/adr-302.md) D6).
-    ///
-    /// `read(fd, buf, count)` declares `count: usize`, and the two parameters
-    /// are **one fact** in C: the pointer says where and the count says how far.
-    /// A call that passes a longer count is the buffer overrun the boundary
-    /// exists to stop, and it is refused here rather than by the operating
-    /// system.
-    ///
-    /// **What makes a pair is the declaration's own types**: a `&[T]` and, right
-    /// after it, a `usize`. The type is what says *length* rather than the name,
-    /// because `usize` is not a type this language's own values have
-    /// ([ADR-285](../../docs/specification/adr/adr-285.md) D1) — a length here
-    /// is an `i64` and the machine-width type left the surface a program can
-    /// write. A declaration that writes `usize` beside a buffer is therefore
-    /// saying C's `size_t`, and this is what that says.
-    ///
-    /// **Two shapes are accepted and everything else is refused** (D2's *narrow
-    /// on purpose*): the buffer's own `len()`, and a constant the buffer's
-    /// length is known to cover — which is an `Array[T, N]`, whose length is
-    /// part of its type ([ADR-152](../../docs/specification/adr/adr-152.md) D1).
-    /// A **zero** is accepted against any buffer, because no length is smaller.
-    ///
-    /// Nothing is claimed where the callee is not a foreign declaration, or
-    /// where this checker could not work the buffer's type out (Part III, C.4).
-    fn a_length_that_fits_its_buffer(
-        &mut self,
-        written: &str,
-        wanted: &[(String, Ty)],
-        given: &[Expr],
-        found: &[Ty],
-        span: &Span,
-    ) {
-        self.s
-            .a_length_that_fits_its_buffer(self.world, written, wanted, given, found, span);
-    }
-
     /// **A literal takes the use's type, whichever literal it is**: an array
     /// where an `Array[T, N]` is wanted (ADR-152 D4), and text of its own where
     /// a `String` is ([ADR-282](../../docs/specification/adr/adr-282.md) D4).
@@ -10939,22 +10323,6 @@ impl<'a> Checker<'a> {
             self.s.flow.fallible_methods.insert(value_node(receiver));
         }
         Some((*result).unwrap_or_else(|| Ty::named("()")))
-    }
-
-    /// The arms of a choice, each with the type it came to
-    /// (`tools/check_arm_leaves.nika`).
-    fn arms_to_ask<'e>(&mut self, value: &'e Expr) -> Vec<(&'e Expr, Ty)> {
-        self.s
-            .arms_to_ask(self.world, value)
-            .into_iter()
-            .filter_map(|arm| Some((arm.tail?, arm.ty)))
-            .collect()
-    }
-
-    /// Views and text of their own in one choice, wrapped leaf by leaf
-    /// (`tools/check_arm_leaves.nika`).
-    fn note_mixed(&mut self, value: &Expr, nullable: bool) {
-        self.s.note_mixed(self.world, value, nullable)
     }
 
     /// Views and text of their own meet as text where nothing asks
@@ -11586,18 +10954,6 @@ impl<'a> Checker<'a> {
                 }
             })
             .collect()
-    }
-
-    /// Whether parameter `at` is a by-value type variable that nothing else in
-    /// the signature binds: no receiver, and no other parameter names it.
-    fn decided_by_this_argument(
-        &self,
-        signature: &crate::contracts::Signature,
-        wanted: &[(String, Ty)],
-        at: usize,
-    ) -> bool {
-        self.s
-            .decided_by_this_argument(signature, wanted, at as i64)
     }
 
     /// **A kept function takes its arguments by value**, so a text literal
@@ -12844,25 +12200,6 @@ fn locked_content_of(ty: &Ty) -> Option<Ty> {
     nikaia_std::tools::check_types::locked_content_of(ty)
 }
 
-/// Whether a plain value stands where a **hull** is wanted - the shape whose
-/// message names the constructor.
-///
-/// `want` is `Shared[T]`, `SharedMut[T]` or `Locked[T]` and `found` is the `T` it
-/// would hold. It used to *permit* that at two positions, because the annotation
-/// was the constructor ([ADR-312](../../../docs/specification/adr/adr-312.md)).
-/// It permits nothing now
-/// ([ADR-281](../../../docs/specification/adr/adr-281.md) D2): a hull is made by a
-/// call, wherever a call may stand, and what this answers is only *which sentence
-/// to write* when one is missing.
-///
-/// That is the whole of why the positions stopped being a list. A literal could
-/// not be handled at all while the annotation was the constructor - it has no
-/// type of its own, so nothing knew the hull was wanted - and `SharedMut(0)`
-/// needs nobody to know.
-fn becomes_shared(found: &Ty, want: &Ty) -> bool {
-    nikaia_std::tools::check_types::becomes_shared(found, want)
-}
-
 /// Part III C.2: every diagnostic names a concrete way out.
 fn convert(found: &Ty, want: &Ty) -> String {
     nikaia_std::tools::check_types::way_out_of_a_mismatch(found, want)
@@ -12909,11 +12246,6 @@ fn peeled(value: &Expr) -> &Expr {
     nikaia_std::tools::check_types::check_peeled(value)
 }
 
-/// Whether a type is known all the way down.
-fn wholly_known(ty: &Ty) -> bool {
-    nikaia_std::tools::check_types::wholly_known(ty)
-}
-
 fn tail_of(block: &Block) -> Option<&Expr> {
     nikaia_std::tools::check_types::tail_value_of(block)
 }
@@ -12922,12 +12254,6 @@ fn tail_of(block: &Block) -> Option<&Expr> {
 /// nothing else (ADR-231 D1).
 fn copies_as_a_view(ty: &Ty) -> bool {
     nikaia_std::tools::check_types::copies_as_a_view(ty)
-}
-
-/// `ref String` as the language below has it, a `&String`: what a `$T` bound
-/// to `String` becomes under `ref $T`, which is an element of `words.iter()`.
-fn is_a_view_of_a_string(ty: &Ty) -> bool {
-    nikaia_std::tools::check_types::is_a_view_of_a_string(ty)
 }
 
 /// A view of a value that copies read as the value, and anything else as it is
@@ -13010,22 +12336,6 @@ fn articles(text: &str) -> String {
 /// collection it walks (#524).
 type LoopNames = Vec<(String, String)>;
 
-/// **The two forms of a root**, where that is the argument a call left out
-/// ([ADR-108](../../docs/specification/adr/adr-108.md) D1: *a call that leaves
-/// it out is `NK1101`, and the message names the two forms of D2*).
-///
-/// A sentence about one `std` type, written here because the ledger has no
-/// column for an `enum`'s variants: what `it takes `root: ref Root`` leaves a
-/// reader with is a type name and a question. The two lines beside `PROMISED`
-/// and `NOT_A_MODULE` in this file are there for the same reason — a thing the
-/// compiler has to know and the ledger does not carry.
-///
-/// **Empty for every other missing argument**, which is what keeps this from
-/// being a habit: the parameter has to be named `root` *and* typed `fs::Root`.
-fn a_root_is_one_of_two(wanted: &[(String, Ty)]) -> String {
-    nikaia_std::tools::check_places::a_root_is_one_of_two(wanted)
-}
-
 fn plural(n: usize, what: &str) -> String {
     nikaia_std::tools::check_words::counted(n as i64, what)
 }
@@ -13092,13 +12402,6 @@ pub fn boxed_member(owner: &str, at: Option<usize>, field: Option<&str>) -> Stri
         at.map_or(-1, |at| at as i64),
         field.unwrap_or_default(),
     )
-}
-
-/// **A `std` lookup whose key the language below takes by reference**
-/// (0.0.235): the map or set is asked about the key and keeps nothing, so the
-/// key is lent ([`Checker::a_lookup_key_lent`]) and not handed over.
-fn is_a_lookup(key: &str) -> bool {
-    nikaia_std::tools::check_words::is_a_lookup(key)
 }
 
 /// A list, a map or a set - the types Part I gives no operator.

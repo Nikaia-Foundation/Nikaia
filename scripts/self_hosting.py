@@ -198,6 +198,7 @@ COMPILER_NIKA = {
     "emit_core_flow.nika": "emit: the flow of the core: Closure, Binary, Coalesce, TryCatch, Try, Return, Break, Throw, Spawn (0.0.835)",
     "check_compare.nika": "check: whether a type compares, NK1188 NK1164 NK1247 NK1249 NK2204 NK2605, lent parts (0.0.894)",
     "check_overflow.nika": "check: an operation on constants that overflows, the wrap a slot takes, unsigned slots, moved refusals (0.0.900)",
+    "check_arguments.nika": "check: the count and the types of what a call passes (C-5h, arguments) (0.0.905)",
     "check_copies.nika": "check: which declared types derive Copy, what the types beside are made of (0.0.900)",
     "check_collect.nika": "check: the program's structs, enums and bounds collected before the walk (0.0.900)",
     "check_arm_leaves.nika": "check: the leaves of a choice, arms asked one by one, map keys, handing over (0.0.901)",

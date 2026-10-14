@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.905] — 2026-10-14
+
+**check: the arguments of a call in Nikaia (#125, #558)**
+- C-5h: `arguments` moves into `tools/check_arguments.nika`; its dead wrappers leave the checker.
+
 ## [0.0.904] — 2026-10-14
 
 **lowering: an option in a list element past a jump, a match on what get handed back, an iterator's text beside a literal (D30, D31, D32)**
