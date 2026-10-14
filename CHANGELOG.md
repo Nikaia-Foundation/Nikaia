@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.943] — 2026-10-14
+
+**check: match, if, select, overlap, catch and unsafe in Nikaia (U-c8, #125, #558)**
+- The arms `Match`, `If`, `Select`, `Overlap`, `TryCatch` and `Unsafe` of the checker's walk move to `tools/check_core_flow.nika`; what a test proves not `null` (ADR-350) stays in `check/narrow.rs`, asked through the host methods `proved_here` and `proved_from_here`. No program's findings or lowering change.
+
 ## [0.0.942] — 2026-10-14
 
 **spec: a hash map hashes a declared type from its fields (ADR-010 D11, NK1260, #591)**

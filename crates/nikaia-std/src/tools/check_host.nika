@@ -106,6 +106,12 @@ pub trait CheckHost {
     /// **What a `while` condition proves not `null` in the body** (ADR-350
     /// D2): the marker bindings of the body's first frame.
     fn proved_in_a_loop(ref self, mut state: CheckState, cond: ref Expr) -> Vec[CheckLocal] sync
+    /// **What `cond` proves not `null` where it `holds`** (ADR-350 D1, U-c8):
+    /// the marker bindings of a frame pushed next, kept by `check/narrow.rs`.
+    fn proved_here(ref self, mut state: CheckState, cond: ref Expr, holds: bool) -> Vec[CheckLocal] sync
+    /// **And for the rest of the block** (ADR-350 D3, U-c8): an `if` above
+    /// left it where `cond` did not hold.
+    fn proved_from_here(ref self, mut state: CheckState, cond: ref Expr, holds: bool) sync
     /// The value as the author wrote it, where this compiler can say so: a
     /// literal, a name, a negation, and an ellipsis for the rest. A query that
     /// stays Rust until `written` moves (C-5e): the text of a string literal is

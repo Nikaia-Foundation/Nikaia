@@ -387,4 +387,12 @@ impl CheckHost for Host<'_> {
     fn proved_in_a_loop(&self, _state: &mut CheckState, _cond: &Expr) -> Vec<Local> {
         unreachable!("only the core's host keeps the checker")
     }
+
+    fn proved_here(&self, _state: &mut CheckState, _cond: &Expr, _holds: bool) -> Vec<Local> {
+        unreachable!("only the core's host keeps the checker")
+    }
+
+    fn proved_from_here(&self, _state: &mut CheckState, _cond: &Expr, _holds: bool) {
+        unreachable!("only the core's host keeps the checker")
+    }
 }

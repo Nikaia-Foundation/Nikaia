@@ -360,6 +360,15 @@ Built: a `?.` reach on a `get`, `first` or `last` takes no `.as_ref()`
 (`emit_place_already_lent`, `emit_core_places.nika`); test
 `views_kept::a_cloned_get_with_a_fallback_runs`.
 
+## D37. A `ref` field of a struct literal from a part of a loop variable takes no `&`: **open**
+
+`answered.push(CheckArm { tail: arm.body, ty: t })`, with `tail: ref Expr?` and
+`arm` a loop variable over a `ref Vec[MatchArm]`, lowers to `CheckArm { tail:
+Some(arm.body), .. }`: `rustc` answers *expected `&Expr`, found `Expr`*. A
+parameter `body: ref Expr` handed in the same place lowers as `Some(body)` and
+compiles. Workaround: a function that builds the struct from a `ref`
+parameter (`check_core_flow_answered`). Met in U-c8 (`check_core_flow.nika`).
+
 ## Language questions filed as issues
 
 Forms met here that need a decision, not a lowering fix; the issue holds the case.

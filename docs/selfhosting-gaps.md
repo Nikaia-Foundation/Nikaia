@@ -254,6 +254,11 @@ checker refusal (`NK1125`) if `!= null` is not meant to narrow.
 | U-c9 `self.expect_at(..)` (a closure over `moved_to`) | `slots_waiting`, `expect_type`, `findings_moved` written out | yes: no `impl FnOnce(&mut Self)` |
 | U-c9 `crate::contracts::locks::free_calls(self.parsed, body)` | a host method `free_calls` | yes: it needs the emitter's `literal_expressions` |
 | U-c7 `Checker.got_past_a_jump`, `Checker.discarded` | moved into `CheckState` | no: Rust fields the moved code writes |
+| U-c8 `self.with_proved(&names, \|this\| this.block(b))` | host methods `proved_here` and `proved_from_here`; the frame pushed in Nikaia | yes: the proofs (`Checker.narrows`) stay Rust in `narrow.rs` while #621 works on it |
+| U-c8 `let outer = self.s.stamped_condition` and back | `?? -1`, then `null` or the value | no: a plain read of an `i64?` field is a move here |
+| U-c8 `scope.last_mut()` with `frame[at].ty = ..` for a guard | the frame rebuilt (`check_core_flow_viewed`, `_restored`) | untried: a write through two indices; one index write is used |
+| U-c8 `handed_over.as_mut().map(\|h\| mem::replace(..))` | `?.clone()`, the field set, the option written back | yes: no `as_mut` |
+| U-c8 `arms.iter().skip(1).find_map(..)?` | a `while` over the arms | no: closures that return `?` |
 
 ## Method
 

@@ -33,7 +33,7 @@ use crate::contracts::LedgerOps;
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::assets::Reads;
-use crate::ast::{self, BinaryOp, Block, Expr, Item, MatchPattern, Span, Stmt, UnaryOp};
+use crate::ast::{self, BinaryOp, Block, Expr, Item, Span, Stmt, UnaryOp};
 use crate::build_time;
 use crate::contracts::SignatureOps;
 use crate::contracts::ty::TyOps;
@@ -45,6 +45,7 @@ use nikaia_std::tools::check_consts;
 use nikaia_std::tools::check_core_args;
 use nikaia_std::tools::check_core_call;
 use nikaia_std::tools::check_core_comptime;
+use nikaia_std::tools::check_core_flow;
 use nikaia_std::tools::check_core_leaves;
 use nikaia_std::tools::check_core_method;
 use nikaia_std::tools::check_core_places;
@@ -55,18 +56,17 @@ use nikaia_std::tools::check_flow::{
 use nikaia_std::tools::check_items;
 use nikaia_std::tools::check_names::integer_named;
 use nikaia_std::tools::check_overflow;
-use nikaia_std::tools::check_patterns::pattern_names;
 use nikaia_std::tools::check_reports::CheckWall;
 use nikaia_std::tools::check_shapes::is_growable;
 pub use nikaia_std::tools::check_state::{
     CheckFinding as Finding, CheckLabel as Label, CheckSeverity as Severity,
 };
 use nikaia_std::tools::check_state::{
-    CheckGuarded as Guarded, CheckImmutable as Immutable, CheckKind as Kind, CheckLocal as Local,
+    CheckImmutable as Immutable, CheckKind as Kind, CheckLocal as Local,
     CheckPendingCoalesce as PendingCoalesce, CheckPromises as Promises, CheckRepeats as Repeats,
     CheckState, CheckWorld, a_body_never_ends,
 };
-use nikaia_std::tools::check_texts::{self, ends_in_text};
+use nikaia_std::tools::check_texts::{self};
 use nikaia_std::tools::check_widen::{self, names_a_path};
 use nikaia_std::tools::parsed_view::ParsedView;
 
@@ -922,7 +922,6 @@ impl From<CheckConstant> for Constant {
     }
 }
 
-use nikaia_std::tools::check_arms::CheckArm;
 use nikaia_std::tools::check_binds::CheckBoundary as Boundary;
 struct Checker<'a> {
     /// **The checker's state that is Nikaia** (`tools/check_state.nika`, #558).
@@ -1801,49 +1800,6 @@ impl<'a> Checker<'a> {
     fn types_that_contain_themselves(&mut self) {
         self.s
             .types_that_contain_themselves(&self.world.here, &self.world.beside)
-    }
-
-    /// **`NK1193`: a pattern that looks inside a part the compiler boxed,
-    /// further than the lowering reaches**
-    /// ([ADR-246](../../docs/specification/adr/adr-246.md) D4, D5).
-    ///
-    /// `Expr::Add(Expr::Num(n), b)` asks the part inside a box a question, and
-    /// the language below matches no pattern through one. Since D5 the
-    /// lowering binds such a part to a name, asks the question in the arm's
-    /// guard and takes the part apart in the arm - one level deep, and outside
-    /// an `|`. A pattern that looks inside a box *inside* that part, or does
-    /// so in one alternative of several, is still refused by name.
-    fn a_pattern_inside_a_box(&mut self, pattern: &MatchPattern, span: &Span) {
-        self.s.a_pattern_inside_a_box(self.world, pattern, span);
-    }
-
-    /// **A guard that reads a name bound inside a boxed part**
-    /// ([ADR-246](../../docs/specification/adr/adr-246.md) D5 item 2, #97).
-    ///
-    /// The guard runs before the arm takes the part apart, so the lowering
-    /// binds those names a second time inside the guard - through the box,
-    /// by reference - and this records which of them the guard reads, and
-    /// which of those are a number, a `bool` or a `char`: those are copied out
-    /// for the guard (`let n = *n;`), and the rest stay views of the part,
-    /// which is what a guard does with them anyway - it reads.
-    fn a_guard_reading_inside_a_box(&mut self, pattern: &MatchPattern, body: &Expr, guard: &Expr) {
-        self.nikaia(|state, world, host| {
-            state.a_guard_reading_inside_a_box(world, host, pattern, body, guard)
-        })
-    }
-
-    /// The names a pattern binds **whole** to a boxed part: `a` in
-    /// `Expr::Add(a, b)`, which the arm opens and a guard reads through the
-    /// box.
-    fn boxed_names(&self, pattern: &MatchPattern) -> Vec<String> {
-        self.s.boxed_names(self.world, pattern)
-    }
-
-    /// The types of the names bound inside the boxed parts a pattern looks
-    /// into, where the variant says them: each part is typed by the path its
-    /// own pattern names, which is the boxed type.
-    fn typed_inside_boxes(&self, pattern: &MatchPattern, out: &mut BTreeMap<String, Ty>) {
-        self.s.typed_inside_boxes(self.world, pattern, out);
     }
 
     /// Whether a call is to the **prelude's `assert`**
@@ -3008,590 +2964,37 @@ impl<'a> Checker<'a> {
             // A `seq` block is a block for every purpose but one: what it says
             // is about the *order* its statements run in (ADR-292 D7), not
             // about what any of them mean or what it hands back.
-            // **`unsafe { … }` is a block with a value and no other rule**
-            // ([ADR-302](../../docs/specification/adr/adr-302.md) D3): what is
-            // inside is checked exactly as anything else is.
             Expr::Block(block, _) => self.block(block),
 
-            // **`unsafe { … }` is a block with a value and no other rule**
-            // ([ADR-302](../../docs/specification/adr/adr-302.md) D3): what is
-            // inside is checked exactly as anything else is. The one thing it
-            // changes is that a call to an `extern` name is allowed here, which
-            // is the whole of what the word buys.
-            Expr::Unsafe(block, _) => {
-                let outer = std::mem::replace(&mut self.s.inside_unsafe, true);
-                let value = self.block(block);
-                self.s.inside_unsafe = outer;
-                value
-            }
-
-            // **Part I 8.1.2: each statement is a branch, and the block's value
-            // is the tuple of their results in written order**
-            // ([ADR-292](../../docs/specification/adr/adr-292.md) D2).
-            //
-            // Walked here rather than through the `Block` arm above, because a
-            // block hands back its *last* statement and this hands back all of
-            // them. The scope frame is the block's own, so a name a branch binds
-            // does not leak - and `branches_meet_on_nothing` is what refuses one
-            // that binds at all, since the block's value already carries it.
-            Expr::Overlap(block, _) => {
-                self.s.scope.push(Vec::new());
-                let parts: Vec<Ty> = block
-                    .stmts
-                    .iter()
-                    .map(|stmt| {
-                        // Each branch is an `async` block of its own (ADR-292
-                        // D2), so the boundary is per branch rather than per
-                        // block.
-                        let saved = self.enter_boundary("`overlap` branch");
-                        let ty = match &stmt.node {
-                            Stmt::Expr(value) => self.expr(value, &stmt.span),
-                            other => {
-                                self.nikaia(|state, world, host| {
-                                    check_core_stmt::check_core_stmt(
-                                        state, world, host, other, &stmt.span,
-                                    )
-                                });
-                                Ty::Unknown
-                            }
-                        };
-                        self.leave_boundary(saved);
-                        ty
-                    })
-                    .collect();
-                self.s.scope.pop();
-                self.branches_meet_on_nothing(block, span);
-                Ty::Tuple(parts)
-            }
-
-            // **Part II 12.4: every arm is started and the first to finish
-            // wins** ([ADR-292](../../docs/specification/adr/adr-292.md) D12).
-            //
-            // Each raced expression is an `async` block of its own, exactly as
-            // an `overlap` branch is, so the boundary is per arm. What the arm
-            // *binds* is the value that came back, so the body is walked in a
-            // scope holding that one name - and `_` binds nothing, which is
-            // [ADR-291](../../docs/specification/adr/adr-291.md) D6's ignore
-            // pattern rather than a catch-all arm.
-            //
-            // **The type is the `match` rule one construct over**: an arm that
-            // jumps is not one of the types that have to agree
-            // ([ADR-276](../../docs/specification/adr/adr-276.md) D20), and
-            // where the rest do not say the same the answer is `Unknown`
-            // rather than a guess. Part II 12.4's own example is two jumping
-            // arms, so it is a `select` of no value at all.
-            Expr::Select(arms, _) => {
-                let mut result: Option<Ty> = None;
-                let mut agree = true;
-                for arm in arms {
-                    let saved = self.enter_boundary("`select` arm");
-                    let raced = self.expr(&arm.value, span);
-                    self.leave_boundary(saved);
-                    let frame = match arm.binding {
-                        Some(name) => {
-                            vec![self.local_free(self.parsed.text(name).to_string(), raced)]
-                        }
-                        None => Vec::new(),
-                    };
-                    self.s.scope.push(frame);
-                    let saved = self.enter_boundary("`select` arm");
-                    let ty = self.block(&arm.body);
-                    self.leave_boundary(saved);
-                    self.s.scope.pop();
-                    if self.s.block_leaves(self.world, &arm.body) {
-                        continue;
-                    }
-                    // An arm of no known type is an open number beside the
-                    // others (`=> { -1 }`), or was refused itself (#497).
-                    if ty.is_unknown() {
-                        continue;
-                    }
-                    match &result {
-                        None => result = Some(ty),
-                        Some(seen) if *seen == ty => {}
-                        Some(_) => agree = false,
-                    }
-                }
-                match result {
-                    Some(ty) if agree => ty,
-                    _ => Ty::Unknown,
-                }
-            }
-
+            Expr::Unsafe(block, _) => self.nikaia(|state, world, host| {
+                check_core_flow::check_core_flow_unsafe(state, world, host, block)
+            }),
+            Expr::Overlap(block, _) => self.nikaia(|state, world, host| {
+                check_core_flow::check_core_flow_overlap(state, world, host, block, span)
+            }),
+            Expr::Select(arms, _) => self.nikaia(|state, world, host| {
+                check_core_flow::check_core_flow_select(state, world, host, arms, span)
+            }),
             Expr::If {
                 cond,
                 then_branch,
                 else_branch,
                 ..
-            } => {
-                let cond_ty = self.expr(cond, span);
-                let at = self.span_at(cond, *span);
-                self.expect_bool(&cond_ty, &at, "An `if` decides on a `bool`.");
-                // **A decision taken on what a lock said is stale too**
-                // ([ADR-281](../../docs/specification/adr/adr-281.md) D25's
-                // second shape). It reaches inward and **accumulates**: a
-                // nested `if` under a stamped one is still under it, and a
-                // plain condition inside does not clear the outer one.
-                let outer_condition = self.s.stamped_condition;
-                if cond_ty.is_seen() {
-                    self.s.stamped_condition = Some(span.at() as i64);
-                }
-                let choice = self.s.flow.next_choice;
-                self.s.flow.next_choice += 1;
-                self.s.branch.push((choice, 0));
-                let from = self.s.taken_so_far();
-                let proved_then = narrow::proved_names(self.parsed, cond, true);
-                let proved_else = narrow::proved_names(self.parsed, cond, false);
-                let then = self.with_proved(&proved_then, |this| this.block(then_branch));
-                // **A `continue` or a `break` leaves the turn as a `return`
-                // leaves the function**: what the branch took is not read
-                // after it on any path (found moving `types` into Nikaia,
-                // #125). A name from outside the loop is the loop rule's, which
-                // counts the hand-over itself.
-                let leaves = self.s.block_exits(self.world, then_branch)
-                    || self.s.block_leaves(self.world, then_branch);
-                self.s.a_branch_that_leaves(from, leaves, span);
-                self.s.branch.pop();
-                let branches = match else_branch {
-                    Some(otherwise) => {
-                        self.s.branch.push((choice, 1));
-                        let from = self.s.taken_so_far();
-                        let other = self.with_proved(&proved_else, |this| this.block(otherwise));
-                        let leaves = self.s.block_exits(self.world, otherwise)
-                            || self.s.block_leaves(self.world, otherwise);
-                        self.s.a_branch_that_leaves(from, leaves, span);
-                        self.s.branch.pop();
-                        // Only when both arms agree is there something to say
-                        // - or when they meet at text (ADR-282 D4).
-                        // **An arm that leaves gives no value** (#375):
-                        // `let t = if c { name } else { return }` is the other
-                        // arm's type, as a `match` arm that returns is.
-                        let leaves = |block: &Block| {
-                            self.s.block_exits(self.world, block)
-                                || self.s.block_leaves(self.world, block)
-                        };
-                        // **Each arm's type is kept for the position the value
-                        // goes into** (#596).
-                        let (then_leaves, other_leaves) = (leaves(then_branch), leaves(otherwise));
-                        for (block, ty, leaving) in [
-                            (then_branch, &then, then_leaves),
-                            (otherwise, &other, other_leaves),
-                        ] {
-                            if let (Some(tail), false) = (tail_of(block), leaving) {
-                                self.s
-                                    .arm_types
-                                    .insert(value_node(peeled(tail)), ty.clone());
-                            }
-                        }
-                        if then == other || (other_leaves && !then_leaves) {
-                            then
-                        } else if then_leaves && !other_leaves {
-                            other
-                        } else if let Some(typed) = self.a_number_beside_a_number(
-                            (tail_of(then_branch), &then),
-                            (tail_of(otherwise), &other),
-                            span,
-                        ) {
-                            typed
-                        } else {
-                            let arms = [(tail_of(then_branch), then), (tail_of(otherwise), other)];
-                            let met = self
-                                .arms_meet_at_text(&arms, span)
-                                .or_else(|| self.arms_meet_at_null(&arms));
-                            if met.is_none() {
-                                self.arms_that_disagree(expr, &arms, span);
-                            }
-                            met.unwrap_or(Ty::Unknown)
-                        }
-                    }
-                    // An `if` with no `else` is a statement's worth of value.
-                    None => Ty::Unknown,
-                };
-                self.s.stamped_condition = outer_condition;
-                // **An early exit proves the rest of the block** (ADR-350 D3):
-                // after `if x == null { return }` the block goes on only where
-                // `x` was not `null`.
-                let leaves = |this: &Self, block: &Block| {
-                    this.s.block_exits(this.world, block) || this.s.block_leaves(this.world, block)
-                };
-                let then_leaves = leaves(self, then_branch);
-                let else_leaves = else_branch
-                    .as_ref()
-                    .is_some_and(|other| leaves(self, other));
-                if then_leaves && !else_leaves {
-                    self.proved_from_here(&proved_else);
-                } else if else_leaves && !then_leaves {
-                    self.proved_from_here(&proved_then);
-                }
-                branches
-            }
-
-            Expr::Match { value, arms, .. } => {
-                let on = self.expr(value, span);
-                // `error` in a handler is untyped at its binding; where one
-                // type arrives, that is what its parts are read from.
-                let typed = match (&on, &**value) {
-                    (Ty::Unknown, Expr::Variable(name, _))
-                        if self.parsed.text(*name) == "error" && !self.s.flow.caught_several =>
-                    {
-                        self.s.flow.caught_one.clone().unwrap_or(Ty::Unknown)
-                    }
-                    // Several: each arm's pattern names its member (D17, D18).
-                    (on, _) if several_errors(on).is_some() => Ty::Unknown,
-                    _ => on.clone(),
-                };
-                // **With a `null` arm, the other arms match the `T`**
-                // ([ADR-352](../../docs/specification/adr/adr-352.md) D1): a
-                // bare name binds it and a literal compares with it.
-                let null_arm = arms
-                    .iter()
-                    .any(|arm| matches!(&arm.pattern, MatchPattern::Literal(Expr::LitNull(_))));
-                let typed = match (&typed, null_arm) {
-                    (Ty::Nullable(inner), true) => (**inner).clone(),
-                    _ => typed,
-                };
-                let lendable = self.an_owned_place(value, &typed);
-                // **A `match` over a `mut` parameter, or a place in one**
-                // (#576): below it is a `&mut`, so the arms bind references,
-                // and an arm that takes a part, or reads a number it binds,
-                // works on the value instead.
-                let mut_subject = self.s.a_mut_parameter_place(self.world, value);
-                // The parameter itself is the `&mut` the arms bind through; a
-                // field of one is a place the arms bind out of.
-                let through_the_reference =
-                    mut_subject.is_some() && matches!(value.as_ref(), Expr::Variable(_, _));
-                // **A field reached through a view is matched as the view it
-                // is** (found moving `traits` into Nikaia, #125): `match
-                // item.node` for a lent `item` is a place behind a reference
-                // below, and a pattern that binds a part of it moved it out -
-                // `rustc`'s *cannot move out of `item.node`*. Its parts are
-                // views here, so the emitter matches `&item.node`. **And one
-                // reached through the brackets of a view** is the same place:
-                // `match block.stmts[i].node` over a `ref Block` bound its
-                // parts by reference below while they were values here (found
-                // moving the compiler's `views` into Nikaia, #125).
-                let through_a_view = {
-                    let mut root = &**value;
-                    while let Expr::Field { base, .. } | Expr::Index { base, .. } = root {
-                        root = base;
-                    }
-                    matches!(&**value, Expr::Field { .. } | Expr::Index { .. })
-                        && matches!(root, Expr::Variable(name, _)
-                            if self.s.binding(self.parsed.text(*name))
-                                .is_some_and(|local| local.lent || local.ty.is_a_view()))
-                };
-                let typed = match through_a_view
-                    && !typed.is_a_view()
-                    && self.s.takes_away(self.world, &typed)
-                {
-                    true => {
-                        self.s.facts.lent_scrutinees.insert(value_node(value));
-                        // And read as the view it is below, so a part that
-                        // copies is copied out at the head of the arm.
-                        view_of(&typed)
-                    }
-                    false => typed,
-                };
-                // **And so is a name lent to this function's walk**
-                // (`Local::lent`): `target` bound by `Stmt::Assign { target,
-                // .. }` over a lent statement is a reference below whatever
-                // its type says, so `match target { Expr::Variable(name, _) =>
-                // … }` binds a `&Symbol` there. Read as the view it is, a part
-                // that copies is copied out at the head of the arm - it was
-                // handed on as the reference, and `rustc` answered *expected
-                // `Symbol`, found `&Symbol`* (found moving the compiler's
-                // `views` into Nikaia, #125).
-                // **And a `let` over a place** (#567): `let v = vs[0]` is a
-                // `&V` below whatever type it has here.
-                let lent_name = matches!(&**value, Expr::Variable(name, _)
-                    if self.s.binding(self.parsed.text(*name)).is_some_and(|local| local.lent))
-                    || self.s.a_lent_let(self.world, value);
-                let typed = match lent_name
-                    && !typed.is_a_view()
-                    && self.s.takes_away(self.world, &typed)
-                {
-                    true => view_of(&typed),
-                    false => typed,
-                };
-                // **A `match` is a condition too** (ADR-281 D25).
-                let outer_condition = self.s.stamped_condition;
-                if on.is_seen() {
-                    self.s.stamped_condition = Some(span.at() as i64);
-                }
-                let mut result: Option<Ty> = None;
-                let mut agree = true;
-                let mut answered: Vec<(Option<&Expr>, Ty)> = Vec::new();
-                let choice = self.s.flow.next_choice;
-                self.s.flow.next_choice += 1;
-                // **An error, one of several, is taken apart by member**
-                // (ADR-280 D30, D17): an arm whose pattern names a member's
-                // variant reads its parts from that member.
-                let several: Option<Vec<Ty>> = several_errors(&on);
-                for (taken, arm) in arms.iter().enumerate() {
-                    let typed = match &several {
-                        Some(members) => {
-                            let owner = match &arm.pattern {
-                                MatchPattern::Path(path)
-                                | MatchPattern::Tuple { path, .. }
-                                | MatchPattern::Named { path, .. }
-                                    if path.len() >= 2 =>
-                                {
-                                    path[..path.len() - 1]
-                                        .iter()
-                                        .map(|s| self.parsed.text(*s))
-                                        .collect::<Vec<_>>()
-                                        .join("::")
-                                }
-                                _ => String::new(),
-                            };
-                            members
-                                .iter()
-                                .find(|m| m.text() == owner)
-                                .cloned()
-                                .unwrap_or(Ty::Unknown)
-                        }
-                        None => typed.clone(),
-                    };
-                    // **Every alternative of an or-pattern binds the same
-                    // names** ([ADR-291](../../docs/specification/adr/adr-291.md)
-                    // D1), asked before the body is walked so that the body's
-                    // scope is one this checker can stand behind.
-                    self.s
-                        .an_or_pattern_that_binds_unevenly(self.world, &arm.pattern, span);
-                    // **And a pattern that names a variant the type does not
-                    // have**, which the exhaustiveness check below cannot say:
-                    // it reads which variants were *covered*, and a misspelling
-                    // covers none, so what it reports is the variant that is
-                    // missing rather than the name that is wrong — and with an
-                    // `else` arm beside it, nothing at all.
-                    self.a_pattern_naming_a_member_a_type_does_not_have(&arm.pattern, span);
-                    self.a_pattern_inside_a_box(&arm.pattern, span);
-                    if let Some(guard) = &arm.guard {
-                        self.a_guard_reading_inside_a_box(&arm.pattern, &arm.body, guard);
-                    }
-                    // **Over a place this function owns, a part is lent**
-                    // (ADR-291): the bindings are typed from the
-                    // variant, so that what the arm keeps is seen as kept.
-                    // **Over a value the `match` was lent, a part is a view
-                    // of it** (0.0.252), and a number is its copy: `why` in
-                    // `Refused::Because(why)` over a `ref self` is a view of
-                    // text. Untyped, `why.clone()` was a method on nothing
-                    // known, and a function that called one could not be
-                    // `sync` - found moving the template splitter into Nikaia,
-                    // where it made an `Error`'s `message` a future.
-                    let parts = match (lendable, typed.is_a_view()) {
-                        (true, _) => self.s.pattern_parts(self.world, &arm.pattern, &typed),
-                        (false, true) => self
-                            .s
-                            .pattern_parts(self.world, &arm.pattern, &typed)
-                            .into_iter()
-                            .map(|(name, ty)| match self.s.copied(self.world, &ty) {
-                                true => (name, ty),
-                                false => (name, view_of(&ty)),
-                            })
-                            .collect(),
-                        // **Over a value made here, a part is the value's own**
-                        // (issue #171): `match g(n) { R::Value(c) =>
-                        // c, … }` moves the temporary apart, so `c` is the
-                        // variant's `C`. Untyped, the whole `match` was
-                        // unknown, a method on what it bound resolved to
-                        // nothing, and the function around it was inferred to
-                        // pause - found moving `fold` into Nikaia.
-                        (false, false) => self.s.pattern_parts(self.world, &arm.pattern, &typed),
-                    };
-                    // **A number bound out of a value the `match` was lent**
-                    // is copied out at the head of the arm (0.0.236): the
-                    // language below binds a `&i64` there, and
-                    // `Expr::Num(n) => n` handed back a reference where the
-                    // function says `i64` - `rustc`'s *mismatched types*
-                    // about a file nobody wrote.
-                    // **And so is a part declared as a view**, `kind: ref
-                    // String` in `Line::Table`: a view copies, and bound
-                    // through a lent value it was a view of a view - `kind ==
-                    // "fn"` compared a `&&str` with a `str` (found moving the
-                    // ledger's reader onto a grammar).
-                    // **And so is one bound inside a boxed part** (ADR-246
-                    // D5): the arm opens the box it was lent, and what it
-                    // takes apart is a view too - `Expr::Add(Expr::Num(n), b)
-                    // => n` over a `ref Expr` handed back a `&i64`.
-                    // **And so is an element of a list pattern** (ADR-355
-                    // D5): the list is matched as a slice, which lends.
-                    let a_list = matches!(arm.pattern, MatchPattern::List(_));
-                    if typed.is_a_view() || through_the_reference || a_list {
-                        let at = value_node(&arm.body);
-                        let mut parts = self.s.pattern_parts(self.world, &arm.pattern, &typed);
-                        self.typed_inside_boxes(&arm.pattern, &mut parts);
-                        for (name, ty) in parts {
-                            // A view of a slice, `..rest` (ADR-355 D2), is
-                            // already the reference; `*` would make it unsized.
-                            let a_slice = matches!(&ty, Ty::Named { name, view: true, .. } if name == "Array");
-                            if (self.s.copied(self.world, &ty) || ty.is_a_view()) && !a_slice {
-                                self.s.facts.copied_bindings.insert((at, name));
-                            }
-                        }
-                    }
-                    // **And such a part is a view the language below lent**
-                    // (`Local::lent`), whatever its type says: `name` in
-                    // `S::Named { name, .. }` over a `ref S` is an
-                    // `&Option<String>` below, where a `ref String?` parameter
-                    // is an `Option<&str>`. The two type alike here, and a call
-                    // that hands the first to the second needs the option
-                    // opened (found moving `Ty` into Nikaia, ADR-294).
-                    let lent_parts = !lendable && typed.is_a_view();
-                    // **Owned text bound through a lent value is a `&String`
-                    // below**, though it types as the view of text a `ref
-                    // String` parameter is (a `&str` there): so it is lent,
-                    // and a comparison with a value reads it - `(x ?? "") ==
-                    // wanted` for `Ask::Changes(wanted)` over a `ref Ask`
-                    // compared a `String` with a `&String` (found moving
-                    // `bounds`' body questions into Nikaia, #125).
-                    let owned_text: BTreeSet<String> = match lent_parts {
-                        true => self
-                            .s
-                            .pattern_parts(self.world, &arm.pattern, &typed)
-                            .into_iter()
-                            .filter(|(_, ty)| {
-                                matches!(ty, Ty::Named { name, view: false, .. }
-                                    if ty::base(name) == "String")
-                            })
-                            .map(|(name, _)| name)
-                            .collect(),
-                        false => BTreeSet::new(),
-                    };
-                    let frame = self
-                        .pattern_bindings(&arm.pattern)
-                        .into_iter()
-                        .map(|local| match parts.get(&local.name) {
-                            Some(ty) => {
-                                let text = owned_text.contains(&local.name);
-                                let mut bound = self.local_free(local.name, ty.clone());
-                                bound.lent = lent_parts && (!self.s.copied(self.world, ty) || text);
-                                bound
-                            }
-                            None => local,
-                        })
-                        .collect();
-                    self.s.scope.push(frame);
-                    self.s.branch.push((choice, taken as i64));
-                    let from = self.s.taken_so_far();
-                    let changed_from = self.s.changed.len();
-                    // **The guard is walked inside the arm's scope** (D2): it
-                    // reads the names the pattern bound, and a condition is a
-                    // `bool` here exactly as anywhere else.
-                    if let Some(guard) = &arm.guard {
-                        // **A part bound whole out of a box is a view of it
-                        // in the guard** (ADR-246 D5 item 2, #97): the guard
-                        // runs before the arm opens the box, so the lowering
-                        // reads it through the box (`peek`), and a comparison
-                        // with a value reads the view as `Expr::Add(a, _) if
-                        // a == Expr::Num(1)` means.
-                        let boxed = self.boxed_names(&arm.pattern);
-                        let mut was: Vec<(usize, Ty, bool)> = Vec::new();
-                        if let Some(frame) = self.s.scope.last_mut() {
-                            for (at, local) in frame.iter_mut().enumerate() {
-                                if boxed.contains(&local.name) {
-                                    was.push((at, local.ty.clone(), local.lent));
-                                    local.ty = view_of(&local.ty);
-                                    local.lent = true;
-                                }
-                            }
-                        }
-                        let found = self.expr(guard, span);
-                        if let Some(frame) = self.s.scope.last_mut() {
-                            for (at, ty, lent) in was {
-                                frame[at].ty = ty;
-                                frame[at].lent = lent;
-                            }
-                        }
-                        let at = self.span_at(guard, *span);
-                        self.expect_bool(&found, &at, "A `match` guard is a condition.");
-                    }
-                    let ty = self.expr(&arm.body, span);
-                    self.a_part_lent_where_it_is_not_kept(
-                        &arm.body,
-                        &parts,
-                        from,
-                        changed_from,
-                        // **A name that is a view binds by reference by itself**
-                        // (D30): `let held = m.get(k) ?? continue` then `match
-                        // held`, and `ref` there is rustc's error.
-                        through_the_reference
-                            || matches!(arm.pattern, MatchPattern::List(_))
-                            || match value.as_ref() {
-                                Expr::Variable(name, _) => {
-                                    on.is_a_view()
-                                        || self.s.got_past_a_jump.contains(self.parsed.text(*name))
-                                }
-                                _ => false,
-                            },
-                    );
-                    let leaves = self.s.exits(self.world, &arm.body);
-                    self.s.a_branch_that_leaves(from, leaves, span);
-                    if let Some(subject) = &mut_subject {
-                        self.parts_taken_out_of_a_mut_parameter(
-                            subject,
-                            &arm.body,
-                            &typed,
-                            &parts,
-                            from.1 as usize,
-                        );
-                    }
-                    self.s.branch.pop();
-                    self.s.scope.pop();
-                    // **An arm that jumps is not one of the types that have to
-                    // agree** ([ADR-276](../../docs/specification/adr/adr-276.md)
-                    // D1): its type is *never*, which fits every expected type
-                    // without widening anything, so an arm that throws sits
-                    // beside an arm that hands back a `&str` and the `match` is
-                    // a `&str`. The language below reads the jumping arm as the
-                    // `!` it is and agrees by construction.
-                    if self.s.leaves(self.world, &arm.body) {
-                        continue;
-                    }
-                    answered.push((Some(&arm.body), ty.clone()));
-                    self.s
-                        .arm_types
-                        .insert(value_node(peeled(&arm.body)), ty.clone());
-                    match &result {
-                        None => result = Some(ty),
-                        Some(seen) if *seen == ty => {}
-                        Some(_) => agree = false,
-                    }
-                }
-                self.s.stamped_condition = outer_condition;
-                self.a_match_over_several_error_types(value, arms, span);
-                // **`match error { … }` is a `match` over the type that
-                // arrived**, where exactly one does. The binding itself is
-                // untyped (see [`Checker::caught_one`]); this hands the one
-                // question that can only gain by knowing.
-                let on = match (&on, &**value) {
-                    (Ty::Unknown, Expr::Variable(name, _))
-                        if self.parsed.text(*name) == "error" && !self.s.flow.caught_several =>
-                    {
-                        self.s.flow.caught_one.clone().unwrap_or(Ty::Unknown)
-                    }
-                    _ => on,
-                };
-                self.a_match_that_misses_a_case(&on, arms, span);
-                self.a_variant_matched_on_a_nullable(&on, value, arms, span);
-                self.s
-                    .a_null_arm_on_a_plain_value(self.world, &on, value, arms, span);
-                // Every arm of a `match` is a value of the same type, but what
-                // that type is, is only known when every arm says the same -
-                // or when the arms meet at text (ADR-282 D4).
-                match result {
-                    Some(ty) if agree => ty,
-                    _ => {
-                        let met = self
-                            .arms_meet_at_text(&answered, span)
-                            .or_else(|| self.arms_meet_at_null(&answered));
-                        if met.is_none() {
-                            self.arms_that_disagree(expr, &answered, span);
-                        }
-                        met.unwrap_or(Ty::Unknown)
-                    }
-                }
-            }
+            } => self.nikaia(|state, world, host| {
+                check_core_flow::check_core_flow_if(
+                    state,
+                    world,
+                    host,
+                    expr,
+                    cond,
+                    then_branch,
+                    else_branch.as_ref(),
+                    span,
+                )
+            }),
+            Expr::Match { value, arms, .. } => self.nikaia(|state, world, host| {
+                check_core_flow::check_core_flow_match(state, world, host, expr, value, arms, span)
+            }),
 
             Expr::Call {
                 func, args, config, ..
@@ -4358,104 +3761,9 @@ impl<'a> Checker<'a> {
                 check_core_places::check_core_range(state, host, start, end, span)
             }),
 
-            Expr::TryCatch { expr, handler, .. } => {
-                // Kap 7.1: the handler is what handles the failure, so the
-                // guarded expression is where a fallible call needs no
-                // `throws` on the function around it (`NK2605`). The handler
-                // itself is ordinary code again - a failure raised inside one
-                // leaves the function like any other.
-                let outer = std::mem::replace(&mut self.s.flow.caught, true);
-                // **And the lambda's own record of it** (ADR-277 D7): a
-                // `catch` in a lambda's body keeps a failure from leaving the
-                // lambda, which `self.s.flow.caught` cannot say because it also holds
-                // for a `catch` around the call the lambda is handed to. Put
-                // back at the same moment, so the handler's own calls count.
-                let lambda_outer = self
-                    .s
-                    .handed_over
-                    .as_mut()
-                    .map(|handed| std::mem::replace(&mut handed.caught, true));
-                // **A guard of its own, and the enclosing one set aside**
-                // ([ADR-308](../../../docs/specification/adr/adr-308.md)). A
-                // `catch` inside another one's guarded expression handles its
-                // own failures, so those are not the outer one's to count -
-                // `(a.parse() catch { 1 }) catch { 2 }` has nothing left for the
-                // second. The outer is told *no answer* rather than *nothing
-                // fails*, because what a handler's own failure does is
-                // [ADR-292](../../../docs/specification/adr/adr-292.md)'s
-                // question and this refusal does not need it answered.
-                let enclosing = self.s.flow.guarded.replace(Guarded::nothing());
-                let answers = self.expr(expr, span);
-                let guarded = std::mem::replace(&mut self.s.flow.guarded, enclosing);
-                if self.s.flow.guarded.is_some() {
-                    self.guard_has_no_answer();
-                }
-                self.s.flow.caught = outer;
-                if let (Some(handed), Some(was)) = (&mut self.s.handed_over, lambda_outer) {
-                    handed.caught = was;
-                }
-                let guarded = guarded.unwrap_or_else(Guarded::nothing);
-                self.a_fatal_error_passes(&guarded, handler, span);
-                // **`error` is what the guarded calls throw** (Part I 7.1,
-                // #501): `fs::read_to_string(…) catch { … {error} … }` binds an
-                // `io::IoError`, as the ledger records the call. One type, and
-                // every call looked up; several are a sum the handler tells
-                // apart with `match`, and claim nothing here.
-                let caught = match (
-                    guarded.unanswered,
-                    guarded.thrown.iter().collect::<Vec<_>>().as_slice(),
-                ) {
-                    (false, [one]) if *one != "?" => Ty::named(one.as_str()),
-                    // **Several: an `Error`, one of them**
-                    // ([ADR-280](../../docs/specification/adr/adr-280.md) D30):
-                    // known by its trait, with its members kept for what is
-                    // said about it.
-                    (false, members @ [_, _, ..]) if members.iter().all(|m| *m != "?") => {
-                        Ty::Named {
-                            name: "Error".to_string(),
-                            args: members.iter().map(|m| Ty::named(m.as_str())).collect(),
-                            view: false,
-                        }
-                    }
-                    _ => Ty::Unknown,
-                };
-                self.s.nothing_here_can_fail(&guarded, span);
-                let error = self.local_free("error".to_string(), caught);
-                self.s.scope.push(vec![error]);
-                let arriving = self.several_arrive(expr);
-                let one = self.the_one_error(expr);
-                let several = std::mem::replace(&mut self.s.flow.caught_several, arriving);
-                let single = std::mem::replace(&mut self.s.flow.caught_one, one);
-                let from = self.s.taken_so_far();
-                let handled = self.block(handler);
-                // **A handler's value stands where the guarded one would**, so
-                // a text literal it ends in is built into text of its own where
-                // the guarded value is (ADR-282 D3, one more of ADR-282 D3's
-                // positions): `read() catch { "" }`.
-                let literal =
-                    tail_of(handler).and_then(|tail| self.text_literal(&answers, tail, true));
-                let leaves = self.s.block_exits(self.world, handler);
-                self.s.a_branch_that_leaves(from, leaves, span);
-                self.s.flow.caught_several = several;
-                self.s.flow.caught_one = single;
-                self.s.scope.pop();
-                // **And so the `catch` is the guarded value's type**
-                // (0.0.230, issue #154 before it): where the handler leaves,
-                // or hands back that type, or something this checker cannot
-                // name. It used to be `?` always, so `let report = Log::file(d)
-                // catch { return }` typed nothing that followed - a field read
-                // on a lookup in `report.paths` reached `rustc` instead of
-                // `NK1125`. A handler whose value is known to be something
-                // else keeps the old answer, which claims nothing.
-                let handled = literal.unwrap_or(handled);
-                match self.s.block_leaves(self.world, handler)
-                    || handled.is_unknown()
-                    || handled.fits(&answers)
-                {
-                    true => answers,
-                    false => Ty::Unknown,
-                }
-            }
+            Expr::TryCatch { expr, handler, .. } => self.nikaia(|state, world, host| {
+                check_core_flow::check_core_flow_try_catch(state, world, host, expr, handler, span)
+            }),
 
             Expr::Spawn { body, .. } => {
                 // **Before** the body is walked, so that the task's own `let`s
@@ -4739,15 +4047,6 @@ impl<'a> Checker<'a> {
         })
     }
 
-    /// **`NK1201`, a file's name in an `f"…"` used as text** (ADR-319 D4):
-    /// a name holds the platform's bytes, which need not be text, so it has no
-    /// text form where the `f"…"` is text. Refused at the hole, the same at
-    /// every position; whether the name is text is the program's to say,
-    /// with `to_text()` or `display()`.
-    fn a_name_in_text(&mut self, want: &Ty, value: Option<&Expr>, span: &Span) -> bool {
-        self.s.a_name_in_text(self.world, want, value, span)
-    }
-
     /// `Shared(x)`, `SharedMut(x)` and `Locked(x)` make a hull
     /// ([ADR-281](../../docs/specification/adr/adr-281.md) D2).
     ///
@@ -4881,43 +4180,6 @@ impl<'a> Checker<'a> {
     }
 
     // --- the one shape every check has --------------------------------------
-
-    /// Whether `found` fits `want` once a transparent container is seen through.
-    ///
-    /// A type whose ledger records a `deref` is one a caller is not meant to
-    /// notice: Part III says of `fs::Mapped` that "a parser cannot tell the
-    /// difference", and the entry spells it — `fs::Mapped::deref` is
-    /// `(&Mapped) -> &str`. Nothing consulted that entry, so a function taking a
-    /// text view refused a mapped file, which is the opposite of what the
-    /// specification promises about it.
-    ///
-    /// **Only as a rescue, never as a rule of its own.** It is asked after a
-    /// direct comparison has already failed, so seeing through a container can
-    /// make a refusal into an acceptance and can never turn an acceptance into a
-    /// refusal. One step only: a container inside a container is two questions,
-    /// and nothing in the language has asked the second yet
-    /// ([ADR-288](../../../docs/specification/adr/adr-288.md) D11).
-    /// **One arm a number of a type and the other a number nothing typed**
-    /// (#497): `if at >= 2 { at - 2 } else { 0 }` is the typed arm's type, and
-    /// the other arm is a use of it (ADR-285 D24).
-    fn a_number_beside_a_number(
-        &mut self,
-        (a_tail, a): (Option<&Expr>, &Ty),
-        (b_tail, b): (Option<&Expr>, &Ty),
-        span: &Span,
-    ) -> Option<Ty> {
-        let (typed, open) = match (a.is_unknown(), b.is_unknown()) {
-            (false, true) => (a, b_tail?),
-            (true, false) => (b, a_tail?),
-            _ => return None,
-        };
-        let number = value_of_a_copy(typed.unseen());
-        if integer_named(&number).is_none() || !self.number_shaped(open) {
-            return None;
-        }
-        self.number_asked(open, &number, span, true);
-        Some(number)
-    }
 
     /// [`Checker::expect`], for a position that has the value in hand, so a
     /// view of text kept where text of its own is wanted can say **why** here
@@ -5053,53 +4315,6 @@ impl<'a> Checker<'a> {
         self.s.a_read(expr, &path, span);
     }
 
-    /// **The parts of a `mut` parameter an arm took out** (`NK2108`,
-    /// [ADR-094](../../docs/specification/adr/adr-094.md) D7): the arm of a
-    /// `match` over the parameter, or a place in it, bound a part and handed
-    /// it to something that keeps it. A part only read, or changed in place
-    /// through a `mut` parameter of its own, is still in the value.
-    ///
-    /// **And the arm that does is told to the emitter** (#576): it works on
-    /// the value taken out of the place, and writes the whole back.
-    fn parts_taken_out_of_a_mut_parameter(
-        &mut self,
-        path: &str,
-        body: &Expr,
-        subject: &Ty,
-        parts: &BTreeMap<String, Ty>,
-        handed_from: usize,
-    ) {
-        self.s.parts_taken_out_of_a_mut_parameter(
-            self.world,
-            path,
-            body,
-            subject,
-            parts,
-            handed_from as i64,
-        );
-    }
-
-    /// **`NK2104`: two branches of an `overlap` meet on something**
-    /// ([ADR-292](../../docs/specification/adr/adr-292.md) D3).
-    ///
-    /// **This is [ADR-292](../../docs/specification/adr/adr-292.md)'s analysis
-    /// used the other way round**, and it is the return on machinery built for
-    /// an inference that D1 withdraws. The touch sets no longer decide *whether
-    /// the compiler may* overlap two statements; they decide *whether the
-    /// programmer was right* to say so. Every mainstream form for "run these
-    /// together" takes the programmer's word for the independence — here the
-    /// claim is checked against what the ledger records each call touching.
-    ///
-    /// **A branch this compiler cannot account for is not refused.** `verdict`
-    /// answers `NotAccountedFor` where a statement performs nothing it can
-    /// name, and reading that as "they meet" would refuse a correct program on
-    /// an absence (Part III, C.4) — which is the same polarity every other
-    /// answer in this compiler takes about a thing nobody wrote down.
-    fn branches_meet_on_nothing(&mut self, block: &Block, span: &Span) {
-        self.s.branches_meet_on_nothing(self.world, block);
-        let _ = span;
-    }
-
     // --- crossing a thread (ADR-005 §1 Group B, `NK25xx`) -------------------
     //
     // Two places a value the *program* wrote reaches another thread, and **the
@@ -5202,77 +4417,6 @@ impl<'a> Checker<'a> {
         self.s.an_extern_enum(self.world, item, span);
     }
 
-    /// Whether more than one error **type** can arrive at a handler
-    /// ([ADR-280](../../docs/specification/adr/adr-280.md) D18).
-    ///
-    /// Read off the guarded call's own set, the way the lowering reads it: only
-    /// the outermost call and only one by name, because that is what a `catch`
-    /// guards in every program in the tree.
-    fn several_arrive(&self, guarded: &Expr) -> bool {
-        self.s.several_arrive(self.world, guarded)
-    }
-
-    /// The **one** error type a guarded expression can fail with, where exactly
-    /// one is written down.
-    ///
-    /// The same resolution [`Checker::several_arrive`] does, asked for the other
-    /// answer and over **both** ledgers: a `std` call's failure is in the
-    /// library's, and that is the one a corpus handler actually catches.
-    ///
-    /// `None` where several arrive, where the callee is not one this compiler
-    /// can resolve, or where the single member is `"?"` — the absence of a claim
-    /// ([ADR-024](../../docs/specification/adr/adr-024.md) D1), which names no
-    /// type and therefore no cases.
-    fn the_one_error(&self, expr: &Expr) -> Option<Ty> {
-        self.s.the_one_error(self.world, expr)
-    }
-
-    /// **`NK1151` for a `match` over a `catch`'s error**
-    /// ([ADR-280](../../docs/specification/adr/adr-280.md) D18).
-    ///
-    /// The variants **within** one error type are closed and the set of error
-    /// **types** is open ([ADR-023](../../docs/specification/adr/adr-023.md)
-    /// D4), so a handler that names variants of two of them has covered no set
-    /// at all — a callee that gains a failure sends a third type here, and the
-    /// `match` has nowhere to put it. `else` is what says the rest, which is
-    /// the same answer this code gives for every type whose cases cannot be
-    /// enumerated in arms.
-    ///
-    /// It is the caret for a refusal the **lowering** also states, which is the
-    /// arrangement `NK1132` already has: the emitter cannot write the file
-    /// either way, and this is where a reader finds out why.
-    fn a_match_over_several_error_types(
-        &mut self,
-        value: &Expr,
-        arms: &[ast::MatchArm],
-        span: &Span,
-    ) {
-        self.s
-            .a_match_over_several_error_types(self.world, value, arms, span);
-    }
-
-    /// **`NK1205`: a variant matched on a `T?`** (issue #180): `match
-    /// g(0) { W::B => 2, else => 3 }` for a `g` that hands back a `W?` names a
-    /// variant of `W` where the value may be `null`, and was lowered as a
-    /// `match` over an `Option<W>` with `W::B` as its pattern - `rustc`'s
-    /// *mismatched types* about a file nobody wrote (Part III C.1). The way
-    /// out is to say what `null` stands for first, with `??`.
-    fn a_variant_matched_on_a_nullable(
-        &mut self,
-        on: &Ty,
-        value: &Expr,
-        arms: &[ast::MatchArm],
-        span: &Span,
-    ) {
-        self.s
-            .a_variant_matched_on_a_nullable(self.world, on, value, arms, span);
-    }
-
-    fn a_match_that_misses_a_case(&mut self, on: &Ty, arms: &[ast::MatchArm], span: &Span) {
-        self.s
-            .a_match_that_misses_a_case(self.world, on, arms, span);
-    }
-
     /// **The interpreter, and the two refusals it can raise**
     /// ([ADR-287](../../docs/specification/adr/adr-287.md) D6's second stage,
     /// bounded by [ADR-287](../../docs/specification/adr/adr-287.md)).
@@ -5329,93 +4473,10 @@ impl<'a> Checker<'a> {
         self.s.tuple_literal(self.world, found, want, value)
     }
 
-    /// **Arms that are known and disagree** (#596, `NK1245`): the compiler
-    /// cannot tell the type of the value, and no arm is unknown for another
-    /// refusal's sake. Said unless a position asks the arms one by one.
-    fn arms_that_disagree(&mut self, expr: &Expr, arms: &[(Option<&Expr>, Ty)], span: &Span) {
-        if self.s.discarded.contains(&value_node(expr)) {
-            return;
-        }
-        let asked: Vec<CheckArm<'_>> = arms
-            .iter()
-            .map(|(tail, ty)| CheckArm {
-                tail: *tail,
-                ty: ty.clone(),
-            })
-            .collect();
-        let is_if = matches!(expr, Expr::If { .. });
-        let Some(mut finding) =
-            nikaia_std::tools::check_arms::arms_that_disagree(&asked, is_if, span)
-        else {
-            return;
-        };
-        // **The caret stands on the first arm that is not the first one's
-        // type** (#107), or on the `if` or `match` where none can be named.
-        let first = arms.first().map(|(_, ty)| ty.unseen());
-        finding.span = arms
-            .iter()
-            .skip(1)
-            .find_map(|(tail, ty)| (Some(ty.unseen()) != first).then_some(*tail)?)
-            .map_or_else(|| self.span_at(expr, *span), |arm| self.span_at(arm, *span));
-        self.s.arm_disagreements.insert(value_node(expr), finding);
-    }
-
     /// A text literal where `String` is wanted, built as text of its own
     /// (`tools/check_texts.nika`).
     fn text_literal(&mut self, want: &Ty, value: &Expr, owned: bool) -> Option<Ty> {
         self.s.text_literal(self.world, want, value, owned)
-    }
-
-    /// **Arms that disagree only because some are text literals and some are
-    /// text of their own agree on `String`** (ADR-282 D4): the literals take
-    /// their neighbours' type, as they do in a list. `if c { name } else
-    /// { "anonymous" }` over a `name: String` is a `String`, and the literal
-    /// arm is constructed as one. A **view** arm is not a literal, so an arm
-    /// holding one keeps the disagreement.
-    /// **Arms that meet at `T?`** because one of them is `null`: the plain
-    /// ones are `Some(…)` below ([`Checked::some_tails`]), and the choice is a
-    /// `T?`. Asked only where every arm that is not `null` is a `T` or a `T?`
-    /// of one `T`, so a choice this cannot type stays unknown.
-    ///
-    /// **Or because one of them is a `T?` already** (#435): `match t { Int(n)
-    /// => Form { … }, Add(a, b) => sum(…) }` with `sum` handing back a
-    /// `Form?` is a `Form?`, the plain arm `Some(…)`. Wrapped as a whole, the
-    /// choice went below as `match … { … }.into()`, and the language below
-    /// said *`match` arms have incompatible types* before the conversion
-    /// could be reached.
-    fn arms_meet_at_null(&mut self, arms: &[(Option<&Expr>, Ty)]) -> Option<Ty> {
-        let arms: Vec<CheckArm<'_>> = arms
-            .iter()
-            .map(|(tail, ty)| CheckArm {
-                tail: *tail,
-                ty: ty.clone(),
-            })
-            .collect();
-        self.s.arms_meet_at_null(self.world, &arms)
-    }
-
-    fn arms_meet_at_text(&mut self, arms: &[(Option<&Expr>, Ty)], span: &Span) -> Option<Ty> {
-        let text = Ty::named("String");
-        if !arms.iter().any(|(_, ty)| *ty == text) {
-            return None;
-        }
-        // **An arm beside text is text** (ADR-319 D4): an `f"…"` with a
-        // file's name in it, there, is refused at the hole.
-        for (arm, _) in arms {
-            self.a_name_in_text(&text, *arm, span);
-        }
-        let meets = arms
-            .iter()
-            .all(|(arm, ty)| *ty == text || arm.is_some_and(ends_in_text));
-        if !meets {
-            return None;
-        }
-        for (arm, ty) in arms {
-            if let (Some(arm), false) = (arm, *ty == text) {
-                self.text_literal(&text, arm, true);
-            }
-        }
-        Some(text)
     }
 }
 
@@ -5458,19 +4519,6 @@ impl<'a> Checker<'a> {
     fn a_member_this_type_does_not_have(&mut self, ty: &str, member: &str, span: &Span) {
         self.s
             .a_member_this_type_does_not_have(self.world, ty, member, span);
-    }
-
-    /// The same question asked of a `match` arm's pattern
-    /// ([ADR-291](../../docs/specification/adr/adr-291.md) D10's shapes), which
-    /// is where a misspelled variant is most likely to be written and least
-    /// likely to be noticed.
-    fn a_pattern_naming_a_member_a_type_does_not_have(
-        &mut self,
-        pattern: &MatchPattern,
-        span: &Span,
-    ) {
-        self.s
-            .a_pattern_naming_a_member_a_type_does_not_have(self.world, pattern, span);
     }
 
     /// **The instantiations that stand in the program's other files**
@@ -5685,15 +4733,6 @@ impl<'a> Checker<'a> {
         self.s.leave_boundary(&saved);
     }
 
-    /// **A fatal error passes a `catch` that does not name it**
-    /// ([ADR-345](../../docs/specification/adr/adr-345.md) D2), so it leaves
-    /// the function, which says `throws` (`NK2605`), or the `catch` around it
-    /// counts it.
-    fn a_fatal_error_passes(&mut self, guarded: &Guarded, handler: &Block, span: &Span) {
-        self.s
-            .a_fatal_error_passes(self.world, guarded, handler, span);
-    }
-
     /// **Every item-level `comptime`, in a frame that stays under the whole
     /// file** ([ADR-287](../../../docs/specification/adr/adr-287.md)).
     ///
@@ -5880,66 +4919,6 @@ impl<'a> Checker<'a> {
             guarded.unanswered = true;
         }
     }
-
-    /// **Whether a `match` is over a place this function owns**: a name, or a
-    /// field of one, that is not itself a view. Only there can a part be lent
-    /// and the whole stay: a temporary is gone after the `match` anyway, and a
-    /// view's parts are views already.
-    fn an_owned_place(&self, value: &Expr, on: &Ty) -> bool {
-        self.s.an_owned_place(self.world, value, on)
-    }
-
-    /// **The parts an arm only reads are lent** (ADR-291): a part
-    /// that does not copy, which nothing in the arm took, returned or handed
-    /// back as the arm's value, is bound as a view, and the scrutinee stays
-    /// whole for what comes after the `match`.
-    fn a_part_lent_where_it_is_not_kept(
-        &mut self,
-        body: &Expr,
-        parts: &BTreeMap<String, Ty>,
-        (_, from): (i64, i64),
-        changed_from: usize,
-        bound_by_reference: bool,
-    ) {
-        let lent = self
-            .s
-            .parts_lent(self.world, body, parts, from, changed_from as i64);
-        if !lent.is_empty() {
-            self.a_lent_part_is_handed_on_as_it_is(body, &lent);
-            // **Over a `mut` parameter the parts are references already**
-            // (the place is a `&mut` below), and `ref` in a pattern that
-            // borrows by itself is the language below's error (#576).
-            if !bound_by_reference {
-                let at = value_node(body);
-                self.s.facts.lent_bindings.insert(at, lent);
-            }
-        }
-    }
-
-    /// **A part the arm binds `ref` is a view already** (issue #270):
-    /// a call that lends it hands it on as it is, where the reference the
-    /// compiler writes for a lent argument made it a view of a view - the same
-    /// code below, and a `&` the language below's lint points at.
-    ///
-    /// Decided here, after the arm, because whether a part is lent is known
-    /// only once the arm is walked; the arguments recorded meanwhile are
-    /// found again by their ids. Only where nothing in the arm binds the name
-    /// again.
-    fn a_lent_part_is_handed_on_as_it_is(&mut self, body: &Expr, lent: &BTreeSet<String>) {
-        let host = self.host();
-        self.s
-            .a_lent_part_is_handed_on_as_it_is(self.world, &host, body, lent);
-    }
-
-    /// The names a `match` arm brings into scope, all of them unknown: what a
-    /// variant carries is not in the ledger yet.
-    fn pattern_bindings(&mut self, pattern: &MatchPattern) -> Vec<Local> {
-        let mut bound = Vec::new();
-        for name in pattern_names(self.world, pattern) {
-            bound.push(self.local_free(name, Ty::Unknown));
-        }
-        bound
-    }
 }
 
 /// **A lazy walk of a sequence whose step pauses**
@@ -6114,22 +5093,6 @@ pub fn value_node(expr: &Expr) -> i64 {
 /// A `u` is said *you*, so it takes `a`; the other vowels take `an`.
 pub fn an_or_a(ty: &str) -> String {
     nikaia_std::tools::render::an_or_a(ty)
-}
-
-/// **A handler's `error` where several error types arrive** (ADR-280 D30):
-/// an `Error` with its members.
-fn several_errors(ty: &Ty) -> Option<Vec<Ty>> {
-    Some(nikaia_std::tools::check_expect::several_errors_of(ty)).filter(|m| !m.is_empty())
-}
-
-/// The value a block ends in: its last statement, where that is an expression.
-/// The value a braced arm ends in: `{ { x } }` is `x`.
-fn peeled(value: &Expr) -> &Expr {
-    nikaia_std::tools::check_types::check_peeled(value)
-}
-
-fn tail_of(block: &Block) -> Option<&Expr> {
-    nikaia_std::tools::check_types::tail_value_of(block)
 }
 
 /// A view of a value that copies read as the value, and anything else as it is

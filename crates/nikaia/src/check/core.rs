@@ -399,4 +399,19 @@ impl CheckHost for Core<'_, '_> {
             checker.proofs_for(&names, frame)
         })
     }
+
+    fn proved_here(&self, state: &mut CheckState, cond: &Expr, holds: bool) -> Vec<Local> {
+        self.hosted(state, |checker| {
+            let names = super::narrow::proved_names(checker.parsed, cond, holds);
+            let frame = checker.s.scope.len();
+            checker.proofs_for(&names, frame)
+        })
+    }
+
+    fn proved_from_here(&self, state: &mut CheckState, cond: &Expr, holds: bool) {
+        self.hosted(state, |checker| {
+            let names = super::narrow::proved_names(checker.parsed, cond, holds);
+            checker.proved_from_here(&names)
+        })
+    }
 }

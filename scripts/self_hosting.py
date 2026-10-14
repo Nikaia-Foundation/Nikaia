@@ -210,6 +210,7 @@ COMPILER_NIKA = {
     "check_core_method.nika": "check: a method call, `x.m(…)` and `x?.m(…)` (U-c6) (0.0.924)",
     "check_core_stmt.nika": "check: a statement and a block (U-c7) (0.0.927)",
     "check_core_places.nika": "check: fields, struct literals, `with`, an index, a cast and a range (U-c9) (0.0.930)",
+    "check_core_flow.nika": "check: `match`, `if`, `select`, `overlap`, `catch` and `unsafe` (U-c8) (0.0.943)",
 }
 
 
