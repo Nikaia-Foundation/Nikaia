@@ -3240,6 +3240,16 @@ impl<'a> Checker<'a> {
                     (on, _) if several_errors(on).is_some() => Ty::Unknown,
                     _ => on.clone(),
                 };
+                // **With a `null` arm, the other arms match the `T`**
+                // ([ADR-352](../../docs/specification/adr/adr-352.md) D1): a
+                // bare name binds it and a literal compares with it.
+                let null_arm = arms
+                    .iter()
+                    .any(|arm| matches!(&arm.pattern, MatchPattern::Literal(Expr::LitNull(_))));
+                let typed = match (&typed, null_arm) {
+                    (Ty::Nullable(inner), true) => (**inner).clone(),
+                    _ => typed,
+                };
                 let lendable = self.an_owned_place(value, &typed);
                 // **A `match` over a `mut` parameter, or a place in one**
                 // (#576): below it is a `&mut`, so the arms bind references,
@@ -3557,6 +3567,8 @@ impl<'a> Checker<'a> {
                 };
                 self.a_match_that_misses_a_case(&on, arms, span);
                 self.a_variant_matched_on_a_nullable(&on, value, arms, span);
+                self.s
+                    .a_null_arm_on_a_plain_value(self.world, &on, value, arms, span);
                 // Every arm of a `match` is a value of the same type, but what
                 // that type is, is only known when every arm says the same -
                 // or when the arms meet at text (ADR-282 D4).

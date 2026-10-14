@@ -11150,6 +11150,27 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_match_that_misses_a_case(&mut self, world: &CheckWorld<'_>, on: &Ty, arms: &[MatchArm], span: &Span) {
+        match on {
+            Ty::Nullable(inner) => {
+                let inner = nikaia_std::boxed::open(inner);
+                if shapes_has_a_null_arm(arms) {
+                    let mut covered = false;
+                    for arm in arms.iter() { if arm.guard.is_none() && (shapes_is_null(&arm.pattern) || shapes_is_otherwise(&arm.pattern)) { covered = true; } }
+                    if !covered {
+                        self.a_case_is_missing("null", span);
+                        return;
+                    }
+                    self.a_match_that_misses_a_case_of(world, inner, arms, span);
+                    return;
+                }
+            },
+            _ => { },
+        }
+        self.a_match_that_misses_a_case_of(world, on, arms, span);
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn a_match_that_misses_a_case_of(&mut self, world: &CheckWorld<'_>, on: &Ty, arms: &[MatchArm], span: &Span) {
         for arm in arms.iter() { if arm.guard.is_none() && catches_everything(&arm.pattern) { return; } }
         let mut name: String = String::from("");
         match on {
@@ -19544,11 +19565,24 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub fn a_null_arm_on_a_plain_value(&mut self, world: &CheckWorld<'_>, on: &Ty, value: &Expr, arms: &[MatchArm], span: &Span) {
+        match on {
+            Ty::Nullable(_) => { return; },
+            Ty::Unknown => { return; },
+            _ => { },
+        }
+        if !shapes_has_a_null_arm(arms) { return; }
+        let written = written_expression(world.words, value);
+        self.findings.push(check_refusal("NK1256", span, format!("`{}` is a `{}`, which is never `null`, so a `null` arm can't match.", written, on.text()), vec![format!("A `null` arm belongs to a `match` over a `T?`; `{}` always has a value.", written)], Some("Remove the `null` arm.".to_owned())));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub fn a_variant_matched_on_a_nullable(&mut self, world: &CheckWorld<'_>, on: &Ty, value: &Expr, arms: &[MatchArm], span: &Span) {
         let inner = match on {
             Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); inner.clone() },
             _ => return,
         };
+        if shapes_has_a_null_arm(arms) { return; }
         for arm in arms.iter() {
             if kind_names_a_variant(&arm.pattern) {
                 let written = written_expression(world.words, value);
@@ -23336,6 +23370,26 @@ pub fn roots_in_a_binding(expr: &Expr) -> bool {
         _ => false,
     }
 }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn shapes_is_null(pattern: &MatchPattern) -> bool {
+    match pattern {
+        MatchPattern::Literal(literal) => matches!(literal, Expr::LitNull(_)),
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn shapes_has_a_null_arm(arms: &[MatchArm]) -> bool {
+    for arm in arms.iter() { if shapes_is_null(&arm.pattern) { return true; } }
+    false
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn shapes_is_otherwise(pattern: &MatchPattern) -> bool { matches!(pattern, MatchPattern::Otherwise) }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
@@ -31151,7 +31205,8 @@ impl EmitState {
             return Ok(());
         }
         let answer = emit_match_yes_or_no(arms);
-        if answer.is_some() {
+        let nullish = shapes_has_a_null_arm(arms);
+        if answer.is_some() && !nullish {
             let mut inside_a_box = false;
             for arm in arms.iter() { if self.looks_inside_a_box(world, &arm.pattern) { inside_a_box = true; } }
             if !inside_a_box {
@@ -31195,7 +31250,10 @@ impl EmitState {
                 out.push(",\n");
                 continue;
             }
+            let wrapped = nullish && !shapes_is_null(&arm.pattern) && !shapes_is_otherwise(&arm.pattern);
+            if wrapped { out.push("Some("); }
             let nests = self.emit_core_pattern_written(world, walk, out, host, &arm.pattern, false, key, true, 0, depth + 1, flow, scope)?;
+            if wrapped { out.push(")"); }
             if arm.guard.is_some() && nests > 0 && self.facts.guards_inside_boxes.contains_key(&key) {
                 let guard = match arm.guard.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
                 out.push(" if ");
@@ -56182,7 +56240,7 @@ pub mod check_send {
 }
 pub mod check_shapes {
     #[allow(unused_imports)]
-    pub use super::{roots_in_a_binding, catches_everything, plainly_a_value, an_element_beneath, rust_constant_type, element_below, slice_element, is_fixed, is_growable, constructed};
+    pub use super::{roots_in_a_binding, shapes_is_null, shapes_has_a_null_arm, shapes_is_otherwise, catches_everything, plainly_a_value, an_element_beneath, rust_constant_type, element_below, slice_element, is_fixed, is_growable, constructed};
 }
 pub mod check_state {
     #[allow(unused_imports)]

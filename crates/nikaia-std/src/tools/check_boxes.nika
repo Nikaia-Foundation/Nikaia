@@ -216,7 +216,34 @@ impl CheckState {
     /// (D3); an error of several types is a handler's, which always needs
     /// `else` (ADR-280 D4); `bool` is two arms; an enum's variants are
     /// counted, an or-pattern naming every variant in it (D10).
+    ///
+    /// **Over a `T?` with a `null` arm** (ADR-352 D2) the nothing is covered by
+    /// an unguarded `null` arm or by `else`, and the other arms are counted
+    /// against the `T`: a bare name there binds the `T` and covers it.
     pub fn a_match_that_misses_a_case(ref mut self, world: ref CheckWorld, on: ref Ty, arms: ref Vec[MatchArm], span: ref Span) sync {
+        match on {
+            Ty::Nullable(inner) => {
+                if shapes_has_a_null_arm(arms) {
+                    let mut covered = false
+                    for arm in arms {
+                        if arm.guard == null && (shapes_is_null(arm.pattern) || shapes_is_otherwise(arm.pattern)) {
+                            covered = true
+                        }
+                    }
+                    if !covered {
+                        self.a_case_is_missing("null", span)
+                        return
+                    }
+                    self.a_match_that_misses_a_case_of(world, inner, arms, span)
+                    return
+                }
+            }
+            else => {}
+        }
+        self.a_match_that_misses_a_case_of(world, on, arms, span)
+    }
+
+    fn a_match_that_misses_a_case_of(ref mut self, world: ref CheckWorld, on: ref Ty, arms: ref Vec[MatchArm], span: ref Span) sync {
         for arm in arms {
             if arm.guard == null && catches_everything(arm.pattern) {
                 return

@@ -121,8 +121,8 @@ pub fn rs2nika_rules() -> Vec[String] {
         "--only NAME converts the one function NAME of the file (line numbers kept, for `--facts`)",
         "R68  a positional rest `V(a, ..)` -> `V(a, _, _)`, the variant's parts counted in tools/*.nika (`--repo`); unknown -> TODO (NK1255)",
         "R70  a `format!` hole hoisted out of a match arm (R61) -> the arm becomes a block holding it",
-        "R71  a `None if guard =>` arm -> commented out under a TODO (no `null` pattern, #612)",
-        "R72  the last arm `None =>` of a `match` -> `else =>` (no `null` pattern, #612)",
+        "R71  a `None =>` / `None if guard =>` arm -> `null =>` / `null if guard =>` (ADR-352)",
+        "R72  a `Some(p) =>` arm -> `p =>`, `Some(_)` -> `_value` (the other arms of a `match` with `null` match the `T`, ADR-352)",
         "R73  `cond.then(|| e)` -> `(if cond { e } else { null })`",
         "R74  struct update `S { a: x, ..base }` -> `base with { a: x }` (Part I 4.2)",
         "R75  a callback `&|a: T| e` -> the lambda `fn(a) { e }` (R26)",
@@ -2462,8 +2462,8 @@ fn rs2nika_todos(line: ref String) -> Vec[String] {
     }
     let head_end = line.find("=>") ?? 0
     let head: String = line[0..<head_end].clone()
-    let some_arm = head_end > 0 && (head.trim_start().starts_with("Some(") || head.contains(" Some(") || head.contains("(Some(") || head.contains("|Some("))
-    if some_arm || st.starts_with("None =>") || st.starts_with("None  =>") {
+    let some_arm = head_end > 0 && (head.contains(" Some(") || head.contains("(Some(") || head.contains("|Some(")) && !head.trim_start().starts_with("Some(")
+    if some_arm {
         todo.push("`match` on `Some`/`None`: `let x = e ?? <none arm>`")
     }
     let whole = line.len()
@@ -3151,34 +3151,41 @@ fn rs2nika_filter_chain(mut ctx: Rs2nikaCtx, chain: ref String, ind: ref String)
     return out
 }
 
-/// R72: a `null =>` arm (Rust's `None =>`) that is the last arm of its
-/// `match` -> `else =>`, which then takes exactly what `None` took. Anywhere
-/// else it stays, under the TODO R39 writes (no `null` pattern yet, #612).
-fn rs2nika_null_arms(mut ctx: Rs2nikaCtx, given: ref Vec[String]) -> Vec[String] {
-    let mut out: Vec[String] = given.clone()
-    let mut i = 0
-    while i < out.len() {
-        let st: String = out[i].trim_start().clone()
-        if !st.starts_with("null => ") {
-            i = i + 1
-            continue
-        }
-        let mut depth = rs2nika_count(st, '{') - rs2nika_count(st, '}')
-        let mut j = i + 1
-        while j < out.len() && depth > 0 {
-            depth = depth + rs2nika_count(out[j], '{') - rs2nika_count(out[j], '}')
-            j = j + 1
-        }
-        while j < out.len() && out[j].trim_start().starts_with("//") {
-            j = j + 1
-        }
-        if j < out.len() && out[j].trim_start().starts_with("}") {
-            out[i] = out[i].replacen("null => ", "else => ", 1)
-            rs2nika_hit(ctx, "R72")
-        }
-        i = i + 1
+/// R72: a `Some(p) =>` arm -> `p =>`: in a `match` with a `null` arm the
+/// other arms match the `T` (ADR-352 D1). `Some(_)` binds `_value`, since a
+/// bare `_` is not an arm and `else` would also take the `null`.
+fn rs2nika_some_arm(mut ctx: Rs2nikaCtx, line: ref String) -> String {
+    let st: String = line.trim_start().clone()
+    if !st.starts_with("Some(") {
+        return line.clone()
     }
-    return out
+    let c: Vec[scalar] = st.chars().collect()
+    let mut depth = 0
+    let mut at = 4
+    while at < c.len() {
+        if c[at] == '(' {
+            depth = depth + 1
+        } else if c[at] == ')' {
+            depth = depth - 1
+            if depth == 0 {
+                break
+            }
+        }
+        at = at + 1
+    }
+    if at >= c.len() {
+        return line.clone()
+    }
+    let rest: String = rs2nika_text(c, at + 1, c.len())
+    if !rest.starts_with(" =>") && !rest.starts_with(" if ") {
+        return line.clone()
+    }
+    let mut inner: String = rs2nika_text(c, 5, at)
+    if inner == "_" {
+        inner = "_value".clone()
+    }
+    rs2nika_hit(ctx, "R72")
+    return f"{rs2nika_indent(line)}{inner}{rest}"
 }
 
 /// The names a pattern binds: lower-case words not followed by `(`, `{`,
@@ -3609,13 +3616,10 @@ pub fn rs2nika_convert(src: ref String, profile: ref String, prefix: ref String,
                 for t in rs2nika_todos(line) {
                     out.push(f"{ind}// TODO(rs2nika): {t}")
                 }
-                if line.trim_start().starts_with("None if ") {
-                    // R71: no guess while #612 (a `null` pattern) is undecided
-                    out.push(f"{ind}// TODO(rs2nika): a `None` arm with a guard: Nikaia has no `null` pattern yet (#612); test `e == null && guard` before the `match`")
-                    out.push(f"{ind}// {line.trim()}")
+                if line.trim_start().starts_with("None if ") || line.trim_start().starts_with("None =>") {
                     rs2nika_hit(ctx, "R71")
-                    continue
                 }
+                line = rs2nika_some_arm(ctx, line)
                 let typed = rs2nika_let_type(ctx, line)
                 let before_expr = ctx.todo_extra.len()
                 let mut code: String = rs2nika_expr(ctx, typed).trim_end().clone()
@@ -3660,7 +3664,7 @@ pub fn rs2nika_convert(src: ref String, profile: ref String, prefix: ref String,
             }
         }
     }
-    let armed = rs2nika_null_arms(ctx, out)
+    let armed = out.clone()
     let done = rs2nika_tail_returns(ctx, armed)
     let text = rs2nika_aliases(ctx, rs2nika_join(done, "\n"))
     let mut missing: Vec[String] = []

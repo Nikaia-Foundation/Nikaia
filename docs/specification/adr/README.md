@@ -62,6 +62,7 @@ implementation.
 
 | ADR | Decides | Status | Built |
 | :--- | :--- | :--- | :--- |
+| [352](adr-352.md) | `null` is a pattern in a `match` over a `T?`: the other arms match the `T` (a bare name binds it, a literal compares with it); an unguarded `null` arm and a catch-all make it complete; `null` over a value that is never `null` is `NK1256` | Accepted | yes |
 | [350](adr-350.md) | A test that proves a local or a parameter is not `null` makes it a `T` where the proof holds: the rest of an `&&`, the right of `||` over `x == null`, the branch, a `while` body, the rest of a block after an early exit; a write after the test takes it back (`NK1102` names it); field paths and enum binding in conditions not decided | Accepted | yes |
 | [349](adr-349.md) | `E::V(..)` matches a variant whatever values it carries, as `..` is the rest of a struct's fields; refused on a variant without values and wherever it is not alone in the brackets (`NK1255`); a positional rest `E::V(a, ..)` is left undecided | Accepted | yes |
 | [348](adr-348.md) | What `main` still holds at its end is freed by default; `optimization = "skip-free-at-exit:on"` leaves its memory to the operating system, while every value still dies and every cleanup runs; no `Drop` in `std` has an effect outside the process. | Accepted | yes |

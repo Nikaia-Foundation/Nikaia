@@ -1668,3 +1668,65 @@ fn a_maybe_stays_where_nothing_proves_it() {
         "{refusal:#?}"
     );
 }
+/// **`null` is a pattern in a `match` over a `T?`** (ADR-352 D1): the other
+/// arms match the `T`, so a literal compares with it, a guard works on any
+/// arm, and a bare name binds the plain value.
+#[test]
+fn null_is_a_pattern_and_the_other_arms_match_the_value() {
+    let source = r#"
+fn describe(count: i64?, strict: bool) -> String {
+    return match count {
+        null if strict => "missing",
+        null => "unknown",
+        0 => "none",
+        n if n > 9 => "many",
+        n => f"{n + 1}",
+    }
+}
+
+fn shout(name: String?) -> String {
+    return match name {
+        null => "nobody",
+        text => text.to_uppercase(),
+    }
+}
+
+fn main() {
+    println(describe(null, true))
+    println(describe(null, false))
+    println(describe(0, false))
+    println(describe(12, false))
+    println(describe(3, false))
+    println(shout(null))
+    println(shout("ada"))
+}
+"#;
+    assert_eq!(
+        ran("null-pattern", source),
+        "missing\nunknown\nnone\nmany\n4\nnobody\nADA\n"
+    );
+}
+
+/// **A `null` arm and a binding arm are complete** (ADR-352 D2); a guarded
+/// `null` arm covers nothing.
+#[test]
+fn a_null_arm_and_a_name_are_a_complete_match() {
+    let complete = "fn f(x: i64?) -> i64 {\n    return match x {\n        null => 0,\n        n => n,\n    }\n}\n";
+    assert!(findings(complete).is_empty(), "{:#?}", findings(complete));
+    let guarded = "fn f(x: i64?, c: bool) -> i64 {\n    return match x {\n        null if c => 0,\n        n => n,\n    }\n}\n";
+    let found = findings(guarded);
+    assert!(
+        found
+            .iter()
+            .any(|f| f.code == "NK1151" && f.message.contains("`null`")),
+        "{found:#?}"
+    );
+}
+
+/// **`null` over a value that is never `null` is `NK1256`** (ADR-352 D3).
+#[test]
+fn a_null_arm_on_a_plain_value_is_refused() {
+    let source = "fn f(x: i64) -> i64 {\n    return match x {\n        null => 0,\n        n => n,\n    }\n}\n";
+    let found = findings(source);
+    assert!(found.iter().any(|f| f.code == "NK1256"), "{found:#?}");
+}

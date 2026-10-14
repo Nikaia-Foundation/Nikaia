@@ -576,7 +576,11 @@ impl EmitState {
         // **A `match` that only answers `true` or `false` is a `matches!`** (0.0.249):
         // the arms that say one answer, and `else` the other.
         let answer = emit_match_yes_or_no(arms)
-        if answer != null {
+        // **A `match` with a `null` arm is one over an `Option`** (ADR-352 D4):
+        // `null` is `None`, and every other arm but `else` is `Some(…)` of what
+        // it writes.
+        let nullish = shapes_has_a_null_arm(arms)
+        if answer != null && !nullish {
             let mut inside_a_box = false
             for arm in arms {
                 if self.looks_inside_a_box(world, arm.pattern) {
@@ -644,7 +648,14 @@ impl EmitState {
             // fresh name, the guard asks whether it has the shape (the next arm is
             // tried where it does not, as for any pattern), and the arm takes it
             // apart before anything else.
+            let wrapped = nullish && !shapes_is_null(arm.pattern) && !shapes_is_otherwise(arm.pattern)
+            if wrapped {
+                out.push("Some(")
+            }
             let nests = self.emit_core_pattern_written(world, walk, out, host, arm.pattern, false, key, true, 0, depth + 1, flow, scope)
+            if wrapped {
+                out.push(")")
+            }
             // **A guard that reads a name bound in there** (ADR-246 D5 item 2): the
             // shape is asked by a `match` through the box that binds the names - by
             // reference, and a number copied out - and answers the guard where it

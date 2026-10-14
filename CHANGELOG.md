@@ -8,6 +8,19 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.933] — 2026-10-14
+
+**`null` is a pattern in a `match` over a `T?` (ADR-352)**
+
+- `match count { null => "unknown", 0 => "none", n => f"{n}" }`: with a
+  `null` arm the other arms match the `T` - a bare name binds it, a literal
+  compares with it - and a guard works on any arm (`null if c =>`). An
+  unguarded `null` arm (or `else`) and a catch-all are a complete `match`
+  (`NK1151` names `null` where it is missing). A `null` arm over a value that
+  is never `null` is the new `NK1256`. Lowered to `None` / `Some(…)`.
+- `rs2nika`: `None =>` and `None if c =>` stay `null` arms (R71), and
+  `Some(p) =>` becomes `p =>` (R72).
+
 ## [0.0.932] — 2026-10-14
 
 **check: a test that proves a T? not null makes it a T (ADR-350, #619)**

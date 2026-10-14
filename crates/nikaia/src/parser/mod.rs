@@ -3539,6 +3539,12 @@ grammar! {
                 "A pattern can't use `..<`. Pattern ranges include both ends, so \
                  move the end instead: `200..299`."
             ) -> { MatchPattern::Literal(Expr::LitInt { value: 0, negative: false, id: _state.user().id() }) }
+          // **`null` is a pattern over a `T?`**
+          // ([ADR-352](../../../../docs/specification/adr/adr-352.md) D1): the
+          // arm taken where the value is not set. A literal node, so every walk
+          // that reads a literal reads this one, and the checker says where it
+          // may stand.
+          | KW_NULL -> { MatchPattern::Literal(Expr::LitNull(_state.user().id())) }
           | l:pattern_lit -> { MatchPattern::Literal(l) }
           // **A bare tuple**, which names no type: `(0, 0)`.
           | "(" parts:match_part_list ")" -> {

@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.932 (Draft)
+**Version:** 0.0.933 (Draft)
 **Date:** 2026-10-14
 
 ---
@@ -1018,7 +1018,7 @@ match value {
 }
 ```
 
-A pattern is one of six things, and each is read the way it is written:
+A pattern is one of seven things, and each is read the way it is written:
 
 | pattern | matches |
 | :--- | :--- |
@@ -1028,6 +1028,7 @@ A pattern is one of six things, and each is read the way it is written:
 | `Message::Write(text)` | that variant, binding what it carries |
 | `Message::Move { x, y }` | that variant, binding its fields by name: `x` is short for `x: x` |
 | `other` | anything, and **binds it** to that name |
+| `null` | over a `T?`, the value that is not set; every other arm of that `match` matches the `T` inside, so a bare name binds the `T` and `0` compares with it (ADR-352). Over a type that is never `null` it is refused with `NK1256` |
 
 The last two rows are one rule: a path with `::` in it names a variant, and a
 bare name binds. `Quit` is a variant *of* `Message`, never on its own.
@@ -1066,7 +1067,9 @@ variant is named (an or-pattern names each variant in it), and needs no `else`. 
 `else`, or a bare name, which catches everything. `bool` is the exception: `true` and `false` are two arms and a complete
 `match`. An incomplete `match` is refused with `NK1151`, which names what is
 missing: the variants, or `else`. A guarded arm covers nothing, so a `match`
-whose only catch-all carries an `if` is refused with `NK1151`.
+whose only catch-all carries an `if` is refused with `NK1151`. A `match` over a `T?` with a `null` arm is complete
+when an unguarded `null` arm or `else` covers `null`, and the other arms cover
+the `T`: `null => …` and `n => …` are a complete `match`.
 
 An arm's body is an expression or a block. The expression may be a `throw`, a
 `return`, a `break`, a `continue` or a `panic(…)`. Their type is **never**, so

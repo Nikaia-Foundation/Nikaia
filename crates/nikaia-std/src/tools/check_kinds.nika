@@ -237,6 +237,21 @@ impl CheckState {
         }
     }
 
+    /// **`NK1256`: `null` matched on a value that cannot be `null`**
+    /// (ADR-352 D3). Where the type is not known nothing is claimed.
+    pub fn a_null_arm_on_a_plain_value(ref mut self, world: ref CheckWorld, on: ref Ty, value: ref Expr, arms: ref Vec[MatchArm], span: ref Span) sync {
+        match on {
+            Ty::Nullable(_) => return,
+            Ty::Unknown => return,
+            else => {}
+        }
+        if !shapes_has_a_null_arm(arms) {
+            return
+        }
+        let written = written_expression(world.words, value)
+        self.findings.push(check_refusal("NK1256", span, f"`{written}` is a `{on.text()}`, which is never `null`, so a `null` arm can't match.", [f"A `null` arm belongs to a `match` over a `T?`; `{written}` always has a value."], "Remove the `null` arm.".clone()))
+    }
+
     /// **`NK1205`: a variant matched on a `T?`** (issue #180): a pattern of `W`
     /// says nothing about the nothing. The way out is to say what `null` stands
     /// for first, with `??`.
@@ -244,6 +259,11 @@ impl CheckState {
         let inner = match on {
             Ty::Nullable(inner) => inner.clone(),
             else => return,
+        }
+        // **A `match` with a `null` arm matches the `T` in its other arms**
+        // (ADR-352 D1): the nothing has its arm, so a variant says enough.
+        if shapes_has_a_null_arm(arms) {
+            return
         }
         for arm in arms {
             if kind_names_a_variant(arm.pattern) {
