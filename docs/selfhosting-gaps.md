@@ -63,7 +63,6 @@ barely moves because the finished code was written before the `Seq` methods and
 | `byte as char` | 1 | `byte as char` | `byte as scalar` | `(byte as u8) as scalar` |
 | `Refused \| None` arm over an `Option` | 1 | `Some(Held::Refused) \| None =>` | `?? return` inside the loop (wrong: returns from the function) | a function of its own with `?? return` (the converter's own hint) |
 | `--prefix` applied inside a string literal | 1 | `Some("Give \`process::exit\` ..")` | `"CheckGive .."` (wrong text) | the literal as written (`an_exit_code_out_of_range`) |
-| inclusive range `0..=255` | 1 | `(0..=255).contains(code)` | `(0..255).contains(code)` (wrong: drops 255) | `value > 255` on the literal |
 | iterator chain `.iter().filter(..).cloned().collect()` | 1 | `guarded.thrown.iter().filter(..).cloned().collect()` | `.filter(..)?.clone().collect()` | a `for` loop with `push` (`a_fatal_error_passes`) |
 | `Option::as_mut()` on a field | 1 | `if let Some(outer) = self.s.flow.guarded.as_mut()` | `as_mut()` kept | clone, change, assign back (as `may_fail_here`) |
 | `self.parsed.interner` | 1 | `&self.parsed.interner` | `world.interner` | `world.words` |
