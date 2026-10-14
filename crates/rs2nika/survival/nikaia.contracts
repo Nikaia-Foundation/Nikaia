@@ -19,6 +19,12 @@ sync = "inferred"
 touches = []
 signature = "() -> Vec[Survival_Case]"
 
+[fn."survival_contracts_of"]
+sync = "inferred"
+touches = []
+views = ["ledger: borrowed", "crate_: borrowed"]
+signature = "(ledger: ref String, crate_: ref String) -> String"
+
 [fn."survival_dir"]
 sync = "inferred"
 throws = ["?", "io::IoError"]
@@ -26,11 +32,29 @@ locks = "?"
 views = ["root: borrowed"]
 signature = "(root: ref fs::Root) -> String"
 
-[fn."survival_first"]
+[fn."survival_in"]
 sync = "inferred"
 touches = []
-views = ["said: borrowed"]
-signature = "(said: ref String) -> String"
+views = ["said: borrowed", "file: borrowed"]
+signature = "(said: ref String, file: ref String) -> Vec[String]"
+
+[fn."survival_project"]
+throws = ["io::IoError"]
+locks = true
+views = ["root: borrowed", "dir: borrowed", "tools: borrowed"]
+signature = "(root: ref fs::Root, dir: ref String, tools: ref String) -> bool"
+
+[fn."survival_stub_list"]
+sync = "inferred"
+touches = []
+views = ["stubs: borrowed"]
+signature = "(stubs: ref Vec[String]) -> String"
+
+[fn."survival_unknown_type"]
+sync = "inferred"
+touches = []
+views = ["head: borrowed"]
+signature = "(head: ref String) -> String"
 
 [type."Survival_Case"]
 fields = ["commit: String", "name: String"]

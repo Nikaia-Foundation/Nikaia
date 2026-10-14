@@ -3,7 +3,14 @@
 // **How many rs2nika drafts survive `nikaia check`** (#579). The material is
 // the Rust of `check/mod.rs` before the three commits of
 // docs/selfhosting-gaps.md; each function is converted alone
-// (`rs2nika --profile check --file --only NAME`) and the draft is checked.
+// (`rs2nika --profile check --file --prefix survival_ --only NAME`) and the
+// draft is checked **in context**: as one more file of a scratch project that
+// holds a copy of `crates/nikaia-std/src/tools/*.nika` (the compiler's types
+// already in Nikaia) and the tools' described Rust crates as the project's own
+// `contracts/<crate>.contracts`. A type still unknown in the draft gets an
+// empty stub `struct` in `zz_survival_stubs.nika` and the draft is checked
+// again. Only findings located in the draft count: the copy's own are the
+// baseline.
 //
 //     cd crates/rs2nika/convert && nikaia build
 //     cd ../survival && nikaia run [-- NIKAIA]     # NIKAIA defaults to `nikaia`
@@ -38,22 +45,97 @@ fn survival_dir(root: ref fs::Root) -> String throws {
     }
 }
 
-/// The first line that names an error, and how many lines start with `error`.
-fn survival_first(said: ref String) -> String {
-    let mut first: String = ""
-    let mut count = 0
-    for line in said.lines() {
-        if line.starts_with("error") {
-            count += 1
-            if first == "" {
-                first = line.clone()
-            }
+/// The described ledger's header and the sections of one crate (`"node_id::..`).
+fn survival_contracts_of(ledger: ref String, crate_: ref String) -> String {
+    let mut out: String = ""
+    let mut keep = true
+    let mark = f"\"{crate_}::"
+    for line in ledger.lines() {
+        if line.starts_with("[") {
+            keep = line.contains(ref mark)
+        }
+        if keep {
+            out = f"{out}{line}\n"
         }
     }
-    if first == "" {
-        first = (said.lines().next() ?? "").clone()
+    return out
+}
+
+/// The scratch project around the drafts: the tools' sources and descriptions.
+fn survival_project(root: ref fs::Root, dir: ref String, tools: ref String) -> bool throws {
+    fs::create_dir("ctx", root; recursive: true)
+    let made = process::run("cp", ["-rT", tools.clone(), f"{dir}/ctx/src"])
+    if !made.ok {
+        println(f"COPY  {made.stderr}")
+        return false
     }
-    return f"{count} error(s), first: {first}"
+    let gone = process::run("rm", [f"{dir}/ctx/src/described.contracts"])
+    if !gone.ok {
+        return false
+    }
+    fs::create_dir("ctx/contracts", root; recursive: true)
+    let ledger = process::run("cat", [f"{tools}/described.contracts"]).stdout
+    let mut toml: String = "[package]\nname = \"survival_ctx\"\nversion = \"0.1.0\"\n\n[dependencies]\n"
+    for c in ["node_id", "winnow_grammar"] {
+        fs::write(f"ctx/contracts/{c}.contracts", root, survival_contracts_of(ledger, c))
+        toml = f"{toml}{c} = {{ type = \"rust\", version = \"0.1\" }}\n"
+    }
+    fs::write("ctx/nikaia.toml", root, toml)
+    return true
+}
+
+/// The findings of a check that point into `file`, as their header lines.
+fn survival_in(said: ref String, file: ref String) -> Vec[String] {
+    let mut out: Vec[String] = []
+    let mut head: String = ""
+    for line in said.lines() {
+        if line.starts_with("error") {
+            head = line.clone()
+        } else if head != "" && line.trim().starts_with("-->") {
+            if line.contains(ref file) {
+                out.push(head.clone())
+            }
+            head = ""
+        }
+    }
+    return out
+}
+
+/// The type a finding names as unknown, or "".
+fn survival_unknown_type(head: ref String) -> String {
+    let words = ["unknown type", "no type called", "isn't a type", "is not a type", "no type named"]
+    let mut said = false
+    for w in words {
+        if head.contains(w) {
+            said = true
+        }
+    }
+    if !said {
+        return ""
+    }
+    let mut name: String = ""
+    let mut at = 0
+    for part in head.split("`") {
+        if at == 1 {
+            name = part.clone()
+        }
+        at += 1
+    }
+    if name == "" || name.contains(" ") || name.contains("::") || name.contains("[") {
+        return ""
+    }
+    return name
+}
+
+fn survival_stub_list(stubs: ref Vec[String]) -> String {
+    if stubs.len() == 0 {
+        return ""
+    }
+    let mut out: String = " (stubs:"
+    for t in stubs {
+        out = f"{out} {t}"
+    }
+    return f"{out})"
 }
 
 fn main() throws {
@@ -64,6 +146,9 @@ fn main() throws {
     let rs2nika = "../convert/target/nikaia/bin/rs2nika"
     let root = fs::scratch()
     let dir = survival_dir(root)
+    if !survival_project(root, dir, "../../nikaia-std/src/tools") {
+        return
+    }
     let mut passed = 0
     let mut total = 0
     for case in survival_cases() {
@@ -75,19 +160,48 @@ fn main() throws {
             continue
         }
         fs::write(f"{case.commit}.rs", root, shown.stdout)
-        let draft = process::run(rs2nika, ["--profile", "check", "--file", "--only", case.name.clone(), rust.clone()])
+        let draft = process::run(rs2nika, ["--profile", "check", "--file", "--prefix", "survival_", "--only", case.name.clone(), rust.clone()])
         if !draft.ok {
             println(f"NONE  {case.name}: {draft.stderr.trim()}")
             continue
         }
-        fs::write(f"{case.name}.nika", root, draft.stdout)
-        let checked = process::run(nikaia, ["check", f"{dir}/{case.name}.nika"])
-        if checked.ok {
+        let file = f"zz_{case.name}.nika"
+        fs::write(f"ctx/src/{file}", root, draft.stdout)
+        let mut stubs: Vec[String] = []
+        let mut found: Vec[String] = []
+        let mut rounds = 0
+        while rounds < 8 {
+            rounds += 1
+            let mut text: String = ""
+            for t in stubs {
+                text = f"{text}struct {t} {{}}\n"
+            }
+            fs::write("ctx/src/zz_survival_stubs.nika", root, text)
+            let checked = process::run(nikaia, ["check", f"{dir}/ctx/src/{file}"])
+            found = survival_in(f"{checked.stdout}\n{checked.stderr}", file)
+            let mut grew = false
+            for head in found {
+                let t = survival_unknown_type(head)
+                if t != "" && !stubs.contains(t) {
+                    stubs.push(t.clone())
+                    grew = true
+                }
+            }
+            if !grew {
+                break
+            }
+        }
+        let gone = process::run("rm", [f"{dir}/ctx/src/{file}"])
+        if !gone.ok {
+            println(f"RM    {file}")
+        }
+        let listed = survival_stub_list(stubs)
+        if found.len() == 0 {
             passed += 1
-            println(f"PASS  {case.name}")
+            println(f"PASS  {case.name}{listed}")
         } else {
-            println(f"FAIL  {case.name}: {survival_first(f"{checked.stdout}\n{checked.stderr}")}")
+            println(f"FAIL  {case.name}{listed}: {found.len()} error(s), first: {found[0]}")
         }
     }
-    println(f"{passed} of {total} drafts pass `nikaia check`")
+    println(f"{passed} of {total} drafts pass `nikaia check` in context")
 }

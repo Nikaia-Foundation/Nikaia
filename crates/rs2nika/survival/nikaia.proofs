@@ -3,3 +3,4 @@
 # question in normal form, and `proved` with its certificate,
 # `refuted` with its model, or `unknown` with the solver that gave up.
 # Every entry is checked when it is read; a wrong one is searched again.
+fc47cf660057bdbabd41481ad08132cd57757ca630e5f79fe7af26fa5d328f15 proved S0[R(h3,h5,c1:1:0:1)|S1[R(h7)|R(h6,h8,c1:1:0:1)]]
