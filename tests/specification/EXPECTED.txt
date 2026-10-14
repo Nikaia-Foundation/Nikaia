@@ -71,33 +71,34 @@
 10-nikaia-light.md #71 lowered (as written)  use std::fs
 10-nikaia-light.md #72 lowered (as written)  use std::fs
 10-nikaia-light.md #73 refused (as written) [sketch NK1135]  use std::fs
-10-nikaia-light.md #74 fragment (as written) [sketch]  struct Token {
-10-nikaia-light.md #75 lowered (as written)  struct Reading { name: ref String, temp: i32 }
-10-nikaia-light.md #76 fragment (as written) [sketch]  struct Reading { name: ref String, temp: i32 }
-10-nikaia-light.md #77 refused (as written) [NK1135,NK2302]  impl Checker {
-10-nikaia-light.md #78 refused (a body) [NK1117]  let mut y = "short".clone()
-10-nikaia-light.md #79 refused (a body) [about-a-refusal NK1117]  let mut y = "short".clone()
-10-nikaia-light.md #80 refused (a body) [NK1117]  let mut users = load_users()
-10-nikaia-light.md #81 lowered (as written)  use std::fs
-10-nikaia-light.md #82 lowered (as written)  enum ConfigError {
-10-nikaia-light.md #83 refused (a body) [NK1117,NK1181,NK2605]  if !fs::exists(path, fs::Root::Anywhere) {
-10-nikaia-light.md #84 refused (a body) [NK1117]  let user = find(id) ?? throw NotFound(id)
-10-nikaia-light.md #85 refused (as written) [NK1117,NK1135]  fn load() -> Config throws {
-10-nikaia-light.md #86 refused (a body) [NK1117]  let config = load() catch {
-10-nikaia-light.md #87 refused (a body) [NK1117,NK1181]  let config = load() catch {
-10-nikaia-light.md #88 lowered (as written)  enum Abort { Now(String) }
-10-nikaia-light.md #89 refused (a body) [NK1117,NK1181]  let n = run() catch { 0 }                    // an `Abo…
-10-nikaia-light.md #90 refused (a body) [NK1117]  eprintln(f"{error}")           // the message, and noth…
-10-nikaia-light.md #91 refused (as written) [NK1117]  use std::panic
-10-nikaia-light.md #92 refused (a body) [NK1117,NK1181]  let (user, rights, prefs) = overlap {
-10-nikaia-light.md #93 lowered (a body)  spawn fn { println("I am running in the background!") }
-10-nikaia-light.md #94 refused (a body) [NK1117]  let h = spawn fn { fetch(url) }
-10-nikaia-light.md #95 lowered (a body) [about-a-refusal]  let message = "Hello"
-10-nikaia-light.md #96 lowered (a body)  let message = "Hello"
-10-nikaia-light.md #97 lowered (as written)  // file: src/parse.nika      (the same package as src/m…
-10-nikaia-light.md #98 refused (as written) [NK1117,NK1135]  // file: src/main.nika
-10-nikaia-light.md #99 refused (as written) [NK1245]  use http
-10-nikaia-light.md #100 lowered (as written)  // file: network.nika
+10-nikaia-light.md #74 lowered (as written)  struct Expr { n: i64 }
+10-nikaia-light.md #75 fragment (as written) [sketch]  struct Token {
+10-nikaia-light.md #76 lowered (as written)  struct Reading { name: ref String, temp: i32 }
+10-nikaia-light.md #77 fragment (as written) [sketch]  struct Reading { name: ref String, temp: i32 }
+10-nikaia-light.md #78 refused (as written) [NK1135,NK2302]  impl Checker {
+10-nikaia-light.md #79 refused (a body) [NK1117]  let mut y = "short".clone()
+10-nikaia-light.md #80 refused (a body) [about-a-refusal NK1117]  let mut y = "short".clone()
+10-nikaia-light.md #81 refused (a body) [NK1117]  let mut users = load_users()
+10-nikaia-light.md #82 lowered (as written)  use std::fs
+10-nikaia-light.md #83 lowered (as written)  enum ConfigError {
+10-nikaia-light.md #84 refused (a body) [NK1117,NK1181,NK2605]  if !fs::exists(path, fs::Root::Anywhere) {
+10-nikaia-light.md #85 refused (a body) [NK1117]  let user = find(id) ?? throw NotFound(id)
+10-nikaia-light.md #86 refused (as written) [NK1117,NK1135]  fn load() -> Config throws {
+10-nikaia-light.md #87 refused (a body) [NK1117]  let config = load() catch {
+10-nikaia-light.md #88 refused (a body) [NK1117,NK1181]  let config = load() catch {
+10-nikaia-light.md #89 lowered (as written)  enum Abort { Now(String) }
+10-nikaia-light.md #90 refused (a body) [NK1117,NK1181]  let n = run() catch { 0 }                    // an `Abo…
+10-nikaia-light.md #91 refused (a body) [NK1117]  eprintln(f"{error}")           // the message, and noth…
+10-nikaia-light.md #92 refused (as written) [NK1117]  use std::panic
+10-nikaia-light.md #93 refused (a body) [NK1117,NK1181]  let (user, rights, prefs) = overlap {
+10-nikaia-light.md #94 lowered (a body)  spawn fn { println("I am running in the background!") }
+10-nikaia-light.md #95 refused (a body) [NK1117]  let h = spawn fn { fetch(url) }
+10-nikaia-light.md #96 lowered (a body) [about-a-refusal]  let message = "Hello"
+10-nikaia-light.md #97 lowered (a body)  let message = "Hello"
+10-nikaia-light.md #98 lowered (as written)  // file: src/parse.nika      (the same package as src/m…
+10-nikaia-light.md #99 refused (as written) [NK1117,NK1135]  // file: src/main.nika
+10-nikaia-light.md #100 refused (as written) [NK1245]  use http
+10-nikaia-light.md #101 lowered (as written)  // file: network.nika
 20-nikaia-advance.md #1 refused (as written) [NK1117,NK1135,NK1181]  grammar Json {
 20-nikaia-advance.md #2 refused (as written) [NK1175,NK1181]  // The compiler runs the Json grammar at build time.
 20-nikaia-advance.md #3 refused (as written) [NK1181]  fn parse_input(input: String) throws {

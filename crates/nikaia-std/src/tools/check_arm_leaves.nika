@@ -411,6 +411,15 @@ impl CheckState {
             if what == "field" {
                 self.flow.field_either = mixed
             }
+            // **An arm that reads off a place, under a `let` that declares a
+            // view, is lent** (ADR-354 D1, #613).
+            if what == "let" && check_core_stmt_element_view(self, world, arm, ty, want) == 1 {
+                self.facts.lent_reads.insert(node_key(arm))
+                ty = match want {
+                    Ty::Nullable(held) => held.clone(),
+                    else => want.clone(),
+                }
+            }
             let here = check_span_at(world, arm, span)
             // A name of one (`let n = 12`) is #554's refusal.
             if ty.is_unknown() {

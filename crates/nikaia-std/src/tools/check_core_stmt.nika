@@ -203,6 +203,49 @@ fn check_core_stmt_lent_let(mut state: CheckState, world: ref CheckWorld, names:
     }
 }
 
+/// **An element or a field read off a place, under a `let` that declares a
+/// view of it** ([ADR-354](../../docs/specification/adr/adr-354.md) D1, #613):
+/// 1 where the read is lent, 2 where it is a word by its kind and is copied
+/// (`NK1257`), 0 where the rule has nothing to say.
+pub fn check_core_stmt_element_view(state: ref CheckState, world: ref CheckWorld, value: ref Expr, found: ref Ty, want: ref Ty) -> i64 sync {
+    if !check_core_stmt_a_place(value) || found.is_a_view() {
+        return 0
+    }
+    let inner = match want {
+        Ty::Nullable(held) => held.clone(),
+        else => want.clone(),
+    }
+    let is_view = match inner {
+        Ty::Named { view, .. } => view,
+        else => false,
+    }
+    let read = found.unseen()
+    if !is_view || !read.fits(inner.owned()) {
+        return 0
+    }
+    if state.a_word_by_its_kind(world, read) {
+        return 2
+    }
+    return 1
+}
+
+/// A field path or an index read as written, for a help: `given[0]`,
+/// `p.a`, `xs[i]`; `…` where it is anything else.
+fn check_core_stmt_read_shown(world: ref CheckWorld, value: ref Expr) -> String sync {
+    return match value {
+        Expr::Index { base, index, .. } => {
+            let held = dotted_path(world, base) ?? return "…".clone()
+            let at: String = match index {
+                Expr::Variable(name, _) => world.words.resolve(name).clone(),
+                Expr::LitInt { value, negative, .. } => if negative { f"-{value}" } else { f"{value}" },
+                else => "…".clone(),
+            }
+            f"{held}[{at}]"
+        }
+        else => dotted_path(world, value) ?? "…".clone(),
+    }
+}
+
 /// **`let`** (Part I 2.1).
 pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, names: ref Vec[winnow_grammar::Symbol], mutable: bool, ty: ref Type?, value: ref Expr, span: ref Span) -> Ty sync {
     check_core_a_field_of_a_borrowed_subject(state, world, host, value, span, "bound")
@@ -255,7 +298,15 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
         let want = written_ty(world.words, world.here.aliases, t)
         seen_through = !found.fits(want) && state.fits_through_deref(world, found, want)
     }
-    if seen_through {
+    // **An element or a field read off a place under a `ref T` is a view of
+    // it** (ADR-354 D1, #613).
+    let mut element_view = 0
+    if names.len() == 1 && ty != null {
+        let t: ref Type = ty ?? return check_core_stmt_unit()
+        let want = written_ty(world.words, world.here.aliases, t)
+        element_view = check_core_stmt_element_view(state, world, value, found, want)
+    }
+    if seen_through || element_view == 1 {
         check_core_stmt_lent_let(state, world, names, span)
     } else if any_named {
         let to = f"bound to `{bound_names.join("`, `")}` by a `let`"
@@ -292,7 +343,17 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
         let by_use = check_core_literal_by_use(state, world, host, found, want, value, span)
         let found_used: Ty = by_use ?? found.clone()
         let widened = state.widened_elements(world, found_used, want, value, span)
-        let found_kept: Ty = widened ?? found_used.clone()
+        let mut found_kept: Ty = widened ?? found_used.clone()
+        if element_view == 1 {
+            found_kept = want.clone()
+        } else if element_view == 2 {
+            // **A word is copied at a read, so there is no view of it to
+            // declare** (ADR-354 D2).
+            let shown = found.unseen().text()
+            let written = check_core_stmt_read_shown(world, value)
+            state.findings.push(check_refusal("NK1257", span, f"A `{shown}` read out of a place is a copy, so it can't be bound as a `ref {shown}`.", ["A number, a `bool`, a `scalar` and an enum whose variants hold nothing are copied at a read (ADR-279 D8); there is no view of them to keep.".clone()], f"an `{shown}` is copied at a read; write `let {name} = {written}`."))
+            found_kept = want.clone()
+        }
         state.expect_kept_asked(world, found_kept, want, value, "the `let` declares a `String`, which is text of its own", span, "let", fn(was, wanted) { f"This value is `{was}`, but the `let` declares `{wanted}`." })
         check_core_stmt_a_number_read_through_a_lent_binding(state, world, want, value, span)
         bound = want

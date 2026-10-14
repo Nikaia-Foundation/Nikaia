@@ -8,6 +8,16 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.935] — 2026-10-14
+
+**An element or a field read off a place is a view under `ref T` (ADR-354, #613)**
+
+`let y: ref Expr = given[0]` over a `given: ref Vec[Expr]`, and `given[0]` as
+an arm under `ref Expr?`, are views of the element, lowered with `&`; both were
+`NK1103`. A word by its kind written so, `let y: ref i64 = given[0]`, is
+`NK1257`, whose help writes `let y = given[0]`. A generic `ref T` is a view
+whatever `T` becomes (Part I 6.5).
+
 ## [0.0.934] — 2026-10-14
 
 **spec: a result's views point where the body says; a viewed buffer outlives its owner's name (ADR-353, #614)**

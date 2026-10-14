@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.934 (Draft)
+**Version:** 0.0.935 (Draft)
 **Date:** 2026-10-14
 
 ---
@@ -2272,6 +2272,24 @@ is refused with `NK1183`: the binding is a view, so the annotation comes off,
 or `.clone()` makes the copy. A
 `let` over a place (`config.name`, `totals.stations[name]`) is a view of it
 where the value would otherwise have to move.
+
+**Declared `ref T` or `ref T?`, an index or a field read off a place is a view
+of it** ([ADR-354](adr/adr-354.md)), in the `let` and in an arm of its value:
+
+```nika
+struct Expr { n: i64 }
+
+fn pick(given: ref Vec[Expr], tail: ref Expr, c: bool) -> i64 {
+    let first: ref Expr = given[0]
+    let either: ref Expr? = if c { tail } else { given[0] }
+    return first.n + (either?.n ?? 0)
+}
+```
+
+A value that is a word by its kind is copied at a read, so there is no view of
+it to declare: `let n: ref i64 = counts[0]` is refused with `NK1257`, and
+`let n = counts[0]` is the program. A `ref T` in a body generic over `T` is a
+view whatever `T` becomes.
 
 Nothing here inserts a copy. A value handed to a function that keeps it, and
 used again afterwards, is refused with `.clone()` named as the way out (8.3).

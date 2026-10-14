@@ -6649,6 +6649,15 @@ impl<'p> Emitter<'p> {
         depth: usize,
         flow: Flow<'_>,
     ) -> Result<()> {
+        // **An arm read off a place under a `ref T` is lent** (ADR-354 D1).
+        if self
+            .s
+            .facts
+            .lent_reads
+            .contains(&crate::check::value_node(expr))
+        {
+            out.push("&");
+        }
         match expr {
             // **A literal in an unsigned place carries that type's suffix**
             // (ADR-285 D3), ahead of the widening a bare one gets.
