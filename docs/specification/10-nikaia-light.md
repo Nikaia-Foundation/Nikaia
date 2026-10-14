@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.927 (Draft)
+**Version:** 0.0.928 (Draft)
 **Date:** 2026-10-14
 
 ---
@@ -538,6 +538,26 @@ nullable slot: an annotated `let`, an assignment, a `return`, a struct-literal
 field, and a call argument. Where the compiler cannot work out the value's type,
 it writes a conversion instead, which is right whether or not the value is
 already nullable.
+
+**A test that proves a `T?` is not `null` makes it a `T`** where the proof
+holds ([ADR-350](adr/adr-350.md)), for a local or a parameter:
+
+```nika
+if x != null && x > 3 { use(x + 1) }   // `x` is an i64 on the right and in the body
+if x == null || x > 3 { … }            // and on the right of `||`
+if x == null { return }                // and in the rest of the block
+while x != null { x = next(x) }        // and in the body, up to the write
+```
+
+The proof holds in the operand after `&&` (what the left proves true) and
+after `||` (what the left proves false), in the branch the condition leads
+into (the `else` branch gets what it proves false), in a `while` body, and in
+the rest of a block after an `if` whose branch leaves with `return`, `break`,
+`continue` or `throw`. `!` swaps true and false. Elsewhere the name is the
+`T?` it was declared. An assignment to the name after the test ends the proof
+there, and a loop inside the proven region that assigns it ends it for the
+whole loop; a use that needs a `T` after that is `NK1102`, naming the
+assignment.
 
 `let m = null` with nothing beside it is not refused by the compiler:
 `let mut m = null` followed by `m = "hi"` is a correct program. Where nothing

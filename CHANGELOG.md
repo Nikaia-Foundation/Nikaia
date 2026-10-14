@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.928] — 2026-10-14
+
+**spec: a test that proves a T? not null makes it a T (ADR-350, #619)**
+- ADR-350 records the owner's decision on #619: what a test proves, the compiler uses; Part I 2.3 states where the proof holds (&&, ||, the branch, a while body, the rest of a block after an early exit) and that a write takes it back.
+
 ## [0.0.927] — 2026-10-14
 
 **check: a statement and a block, in Nikaia (U-c7, #125, #558)**

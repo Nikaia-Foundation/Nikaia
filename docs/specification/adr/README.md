@@ -62,6 +62,7 @@ implementation.
 
 | ADR | Decides | Status | Built |
 | :--- | :--- | :--- | :--- |
+| [350](adr-350.md) | A test that proves a local or a parameter is not `null` makes it a `T` where the proof holds: the rest of an `&&`, the right of `||` over `x == null`, the branch, a `while` body, the rest of a block after an early exit; a write after the test takes it back (`NK1102` names it); field paths and enum binding in conditions not decided | Accepted | yes |
 | [349](adr-349.md) | `E::V(..)` matches a variant whatever values it carries, as `..` is the rest of a struct's fields; refused on a variant without values and wherever it is not alone in the brackets (`NK1255`); a positional rest `E::V(a, ..)` is left undecided | Accepted | yes |
 | [348](adr-348.md) | What `main` still holds at its end is freed by default; `optimization = "skip-free-at-exit:on"` leaves its memory to the operating system, while every value still dies and every cleanup runs; no `Drop` in `std` has an effect outside the process. | Accepted | yes |
 | [347](adr-347.md) | An enum with exactly one variant is written by its type's name, `Exit(c)` for `Exit::Code(c)`, at the value and in a pattern; a bare name in a pattern still binds; the short form of an enum with several variants is `NK1252` |
