@@ -498,6 +498,14 @@ pub fn check_core_a_called_field[H: CheckHost](mut state: CheckState, world: ref
                         state.a_lock_inside_a_lock(key, holds, span)
                         state.inside_a_door = own
                     }
+                    // **The call fails with what was stored there** (ADR-351
+                    // D2, D3): the union the ledger settled for the field.
+                    if world.own.code_throws.contains_key(key) {
+                        let set = world.own.code_throws[key] ?? return null
+                        let mut contract = FnContract::empty()
+                        contract.fails_with = set.clone()
+                        state.may_fail_here(world, host, key, contract, span)
+                    }
                 }
                 else => {}
             }

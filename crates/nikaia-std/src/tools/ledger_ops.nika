@@ -99,6 +99,14 @@ pub fn absorb_into(mut ledger: Ledger, module: ref String?, renames: ref collect
             ledger.code_locks.insert(field.clone(), holds.clone())
         }
     }
+    for (field, set) in other.code_throws {
+        let parts: Vec[ref String] = field.splitn(2, ".").collect()
+        if qualified && declared.contains(parts[0]) {
+            ledger.code_throws.insert(f"{prefix}::{field}", set.clone())
+        } else {
+            ledger.code_throws.insert(field.clone(), set.clone())
+        }
+    }
     // **This package's own word for itself is never renamed.**
     let mut kept: collections::BTreeMap[String, String] = collections::BTreeMap()
     for (from, to) in renames {

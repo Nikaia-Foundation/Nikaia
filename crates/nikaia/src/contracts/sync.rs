@@ -112,6 +112,7 @@ pub fn infer(
                 let called = MethodsCalled {
                     resolved: calls.resolved.clone(),
                     unseen: calls.unresolved || calls.code_pauses,
+                    fields: Default::default(),
                 };
                 (key.clone(), called)
             })

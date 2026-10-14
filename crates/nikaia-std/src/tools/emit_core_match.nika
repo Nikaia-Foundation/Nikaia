@@ -550,15 +550,19 @@ impl EmitState {
             }
             home.push(at)
         }
-        if catch_all == 0 {
-            throw EmitRefused { message: "This `match error` needs an `else` arm: other errors can arrive at a `catch` too. Add `else => throw error` to pass them on, or `else => …` to handle them.".clone(), at: flow.statement }
-        }
+        // **No catch-all where the checker proved the arms cover the set**
+        // (ADR-351 D2): the box holds one of the named members, and nothing
+        // else can arrive.
         let pad = "    ".repeat(depth + 1)
         let inner = "    ".repeat(depth + 2)
         let close = "    ".repeat(depth)
         let count = members.len()
         out.push("match error {\n")
-        for m in 0..<(count + 1) {
+        let mut blocks = count + 1
+        if catch_all == 0 {
+            blocks = count
+        }
+        for m in 0..<blocks {
             let mut inside = flow
             let mut inside_scope = scope.clone()
             if m < count {
@@ -604,6 +608,9 @@ impl EmitState {
                 }
             }
             out.push(f"{pad}}} }},\n")
+        }
+        if catch_all == 0 {
+            out.push(f"{pad}_ => unreachable!(\"the set a function value carries is closed (ADR-351)\"),\n")
         }
         out.push(f"{close}}}")
     }

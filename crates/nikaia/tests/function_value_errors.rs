@@ -1,0 +1,106 @@
+//! A function value keeps the error set inferred for it
+//! ([ADR-351](../../../docs/specification/adr/adr-351.md), #620): storing one
+//! calls nothing (D2), and a call through the place it was stored in fails with
+//! the union of what reaches that place (D1, D3).
+
+use nikaia::contracts::{Ledger, LedgerOps, STD};
+use nikaia::parser::parse_to_ast;
+
+fn findings(source: &str) -> Vec<nikaia::check::Finding> {
+    let parsed = parse_to_ast(source).expect("the source parses");
+    let own = Ledger::infer(&parsed);
+    let library = Ledger::parse(STD).expect("std ships a ledger");
+    nikaia::check::check_program(&parsed, &own, &library, &std::collections::BTreeSet::new())
+        .findings
+}
+
+fn codes(source: &str) -> Vec<String> {
+    findings(source)
+        .into_iter()
+        .map(|f| f.code.to_string())
+        .collect()
+}
+
+const JOB: &str = "enum Bad { Oops }\n\
+                   impl Error for Bad {\n\
+                   \x20   fn message(ref self) -> String { \"oops\" }\n\
+                   }\n\
+                   struct Job { run: fn() throws }\n\
+                   fn fail() throws {\n\
+                   \x20   throw Bad::Oops\n\
+                   }\n\
+                   fn quiet() {\n\
+                   \x20   print(\"fine\")\n\
+                   }\n";
+
+/// **The program of #620**: the kept arm is exhaustive with no `else`, and
+/// storing `fail` is not a call (`NK2605` is not reported on the `let`).
+#[test]
+fn a_call_through_a_field_fails_with_what_was_stored() {
+    let source = format!(
+        "{JOB}fn main() {{\n\
+         \x20   let job = Job {{ run: fail }}\n\
+         \x20   job.run() catch {{\n\
+         \x20       match error {{\n\
+         \x20           Bad::Oops => print(\"oops\")\n\
+         \x20       }}\n\
+         \x20   }}\n\
+         }}\n"
+    );
+    let found = codes(&source);
+    assert!(found.is_empty(), "{:?}", findings(&source));
+}
+
+/// **Storing a failing function in a function that cannot fail is fine**
+/// (D2): only the call fails.
+#[test]
+fn storing_a_failing_function_is_not_a_call() {
+    let source = format!("{JOB}fn main() {{\n    let job = Job {{ run: fail }}\n}}\n");
+    let found = codes(&source);
+    assert!(!found.contains(&"NK2605".to_string()), "{found:?}");
+}
+
+/// **A call through the field without a `catch` makes the function fail**.
+#[test]
+fn an_uncaught_call_through_the_field_needs_throws() {
+    let source =
+        format!("{JOB}fn main() {{\n    let job = Job {{ run: fail }}\n    job.run()\n}}\n");
+    let found = codes(&source);
+    assert_eq!(found, vec!["NK2605".to_string()], "{:?}", findings(&source));
+}
+
+/// **The handler opens the box by the type its arm names** (D2), and needs
+/// no catch-all where the arms cover the set.
+#[test]
+fn the_kept_arm_lowers_without_an_else() {
+    let source = format!(
+        "{JOB}fn main() {{\n\
+         \x20   let job = Job {{ run: fail }}\n\
+         \x20   job.run() catch {{\n\
+         \x20       match error {{\n\
+         \x20           Bad::Oops => print(\"oops\")\n\
+         \x20       }}\n\
+         \x20   }}\n\
+         }}\n"
+    );
+    let parsed = parse_to_ast(&source).expect("the source parses");
+    let rust = nikaia::emit::emit_program(&parsed, nikaia::emit::Build::default())
+        .expect("the source lowers")
+        .rust;
+    assert!(rust.contains("nikaia_std::error::holds::<Bad>"), "{rust}");
+    assert!(rust.contains("unreachable!("), "{rust}");
+}
+
+/// **A place no failing value reaches carries the empty set** (D3): a `catch`
+/// over a call through it is `NK1134`.
+#[test]
+fn a_catch_over_a_field_nothing_failing_reaches_is_nk1134() {
+    let source = format!(
+        "{JOB}fn main() {{\n\
+         \x20   let job = Job {{ run: quiet }}\n\
+         \x20   job.run() catch {{ print(\"never\") }}\n\
+         }}\n"
+    );
+    let found = codes(&source);
+    assert_eq!(found, vec!["NK1134".to_string()], "{:?}", findings(&source));
+}

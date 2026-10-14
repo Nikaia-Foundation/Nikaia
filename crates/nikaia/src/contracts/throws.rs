@@ -46,6 +46,7 @@ pub fn infer(
     units: &[&Parsed],
     library: &Ledger,
     resolved: &BTreeMap<String, MethodCalls>,
+    stored: &BTreeMap<String, crate::check::StoredCode>,
 ) {
     let mut graph = ThrowsGraph {
         methods: resolved
@@ -54,6 +55,7 @@ pub fn infer(
                 let called = MethodsCalled {
                     resolved: calls.resolved.clone(),
                     unseen: calls.unresolved || calls.code_fails,
+                    fields: calls.fields_called.clone(),
                 };
                 (key.clone(), called)
             })
@@ -63,6 +65,19 @@ pub fn infer(
         fatal_calls: BTreeMap::new(),
     };
     let fatal = fatal_types(ledger, library);
+    // **Each function field is a place of the graph** (ADR-351 D1, D3).
+    let places: BTreeSet<String> = stored.keys().cloned().collect();
+    for (field, code) in stored {
+        nika::stored_throws(
+            field,
+            &code.resolved,
+            code.unresolved,
+            &code.free,
+            ledger,
+            library,
+            &mut graph,
+        );
+    }
     for parsed in units.iter().copied() {
         let own: &Ledger = ledger;
         nika::unit_throws(
@@ -81,7 +96,12 @@ pub fn infer(
         &graph.fatal_calls,
         &fatal,
         ledger,
+        &places,
     ) {
+        if places.contains(&name) {
+            ledger.code_throws.insert(name, errors);
+            continue;
+        }
         if let Some(contract) = ledger.functions.get_mut(&name) {
             contract.fails_with = errors;
         }

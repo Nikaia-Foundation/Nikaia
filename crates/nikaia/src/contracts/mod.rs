@@ -668,7 +668,19 @@ impl LedgerOps for Ledger {
         // this one needs nothing from the other - and both are handed the same
         // `resolved`, because ADR-288's whole point is that there is one
         // answer to what `a.add(v)` goes to and both walks read it.
-        throws::infer(&mut ledger, units, library, &resolved);
+        let stored: BTreeMap<String, crate::check::StoredCode> = checked
+            .iter()
+            .flat_map(|c| c.stored_code.iter().map(|(k, v)| (k.clone(), v.clone())))
+            .fold(BTreeMap::new(), |mut all, (key, code)| {
+                let entry: &mut crate::check::StoredCode = all
+                    .entry(key)
+                    .or_insert_with(crate::check::StoredCode::empty);
+                entry.resolved.extend(code.resolved);
+                entry.unresolved |= code.unresolved;
+                entry.free.extend(code.free);
+                all
+            });
+        throws::infer(&mut ledger, units, library, &resolved, &stored);
         // **The fourth derived column** ([ADR-288](../../../docs/specification/adr/adr-288.md)
         // D2), and the one that was specified without an inference. After
         // `throws` for no reason but tidiness: it reads the same bodies through
@@ -699,18 +711,6 @@ impl LedgerOps for Ledger {
         maps::infer(&mut ledger, units);
         // Beside `keeps`, and for the same reason it runs here: it reads the
         // checker's method answers and the entries the item loop wrote.
-        let stored: BTreeMap<String, crate::check::StoredCode> = checked
-            .iter()
-            .flat_map(|c| c.stored_code.iter().map(|(k, v)| (k.clone(), v.clone())))
-            .fold(BTreeMap::new(), |mut all, (key, code)| {
-                let entry: &mut crate::check::StoredCode = all
-                    .entry(key)
-                    .or_insert_with(crate::check::StoredCode::empty);
-                entry.resolved.extend(code.resolved);
-                entry.unresolved |= code.unresolved;
-                entry.free.extend(code.free);
-                all
-            });
         locks::infer(&mut ledger, units, library, &resolved, &stored);
         // **Last, and it reads none of the columns above**
         // ([ADR-283](../../../docs/specification/adr/adr-283.md) D5): what it

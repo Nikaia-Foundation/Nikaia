@@ -28,6 +28,8 @@ comptime UNNAMED: ref String = "?"
 pub struct MethodsCalled {
     pub resolved: collections::BTreeSet[String],
     pub unseen: bool,
+    /// The function fields it calls through, as `Type.field` (ADR-351 D2).
+    pub fields: collections::BTreeSet[String],
 }
 
 /// The graph the walk builds - what each `throws` function throws itself and
@@ -90,6 +92,9 @@ fn with_methods(key: ref String, thrown: ref Thrown, own: ref Ledger, library: r
 
 fn methods_into(resolved: ref MethodsCalled?, own: ref Ledger, library: ref Ledger, mut named: collections::BTreeSet[String], mut called: collections::BTreeSet[String]) {
     let known = resolved ?? return
+    for field in known.fields {
+        called.insert(field.clone())
+    }
     if known.unseen {
         named.insert(UNNAMED.clone())
     }
@@ -102,6 +107,31 @@ fn methods_into(resolved: ref MethodsCalled?, own: ref Ledger, library: ref Ledg
             }
         }
     }
+}
+
+/// **A function field is a place in the graph** (ADR-351 D1, D3): it calls
+/// whatever was stored in it, and its set is the union of theirs. `free` are
+/// the functions named or called by the stored code, `resolved` its method
+/// calls; code this walk did not see makes it `?`.
+pub fn stored_throws(field: ref String, resolved: ref collections::BTreeSet[String], unresolved: bool, free: ref collections::BTreeSet[String], own: ref Ledger, library: ref Ledger, mut graph: ThrowsGraph) {
+    let mut named: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut called: collections::BTreeSet[String] = collections::BTreeSet()
+    if unresolved {
+        named.insert(UNNAMED.clone())
+    }
+    for callee in free {
+        if own.functions.contains_key(callee) {
+            called.insert(callee.clone())
+        } else if library.functions.contains_key(callee) {
+            for error in fails_with_of(library, callee) {
+                named.insert(error)
+            }
+        }
+    }
+    let known: MethodsCalled? = MethodsCalled { resolved: resolved.clone(), unseen: false, fields: collections::BTreeSet() }
+    methods_into(known, own, library, named, called)
+    graph.direct.insert(field.clone(), named)
+    graph.calls.insert(field.clone(), called)
 }
 
 // What a library's ledger says a callee fails with, and `?` for one it does
@@ -118,7 +148,7 @@ fn fails_with_of(library: ref Ledger, callee: ref String) -> Vec[String] {
 /// fail cannot propagate. A declared `throws` whose body names nothing keeps
 /// `["?"]`: the declaration is a promise a caller already relies on, and this
 /// is here to say more than it, never less.
-pub fn error_sets(direct: ref collections::BTreeMap[String, collections::BTreeSet[String]], calls: ref collections::BTreeMap[String, collections::BTreeSet[String]], fatal_calls: ref collections::BTreeMap[String, collections::BTreeMap[String, collections::BTreeSet[String]]], fatal: ref collections::BTreeSet[String], own: ref Ledger) -> collections::BTreeMap[String, Vec[String]] {
+pub fn error_sets(direct: ref collections::BTreeMap[String, collections::BTreeSet[String]], calls: ref collections::BTreeMap[String, collections::BTreeSet[String]], fatal_calls: ref collections::BTreeMap[String, collections::BTreeMap[String, collections::BTreeSet[String]]], fatal: ref collections::BTreeSet[String], own: ref Ledger, places: ref collections::BTreeSet[String]) -> collections::BTreeMap[String, Vec[String]] {
     let mut sets = direct.clone()
     let mut changed = true
     while changed {
@@ -147,6 +177,16 @@ pub fn error_sets(direct: ref collections::BTreeMap[String, collections::BTreeSe
     }
     let mut settled: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
     for (name, set) in sets {
+        // **A function field settles to its union as it is** (ADR-351 D3):
+        // empty where no failing value reaches it.
+        if places.contains(name) {
+            let mut union: Vec[String] = []
+            for error in set {
+                union.push(error.clone())
+            }
+            settled.insert(name.clone(), union)
+            continue
+        }
         let contract = own.functions[name] ?? continue
         if contract.fails_with.len() == 0 {
             continue

@@ -1236,6 +1236,10 @@ pub struct Ledger {
     /// not written to the ledger file - a published field is stored into by
     /// packages that do not exist yet, so the file has nothing to say about it.
     pub code_locks: collections::BTreeMap[String, Lock],
+    /// **What a call through a function field can fail with** (ADR-351 D1,
+    /// D3), by `Type.field`: the union of the sets of everything stored there.
+    /// An empty set is a field no failing value reaches.
+    pub code_throws: collections::BTreeMap[String, Vec[String]],
     /// Kap 4.7: every `trait` declared here, with the names of its methods.
     ///
     /// The **signatures** are in `functions`, keyed `Summarize::summary`, which
@@ -1283,6 +1287,7 @@ impl Ledger {
             functions: collections::BTreeMap(),
             types: collections::BTreeMap(),
             code_locks: collections::BTreeMap(),
+            code_throws: collections::BTreeMap(),
             traits: collections::BTreeMap(),
             implementations: collections::BTreeMap(),
         }

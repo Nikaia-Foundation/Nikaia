@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.938] — 2026-10-14
+
+**a call through a function field fails with what was stored there (ADR-351 D1-D3, part of #620)**
+- Storing a function value calls nothing: NK2605 is no longer reported where a failing function is put into a field (ADR-351 D2).
+- A function field is a place of the error-set graph: the ledger keeps code_throws, the union of what was stored there; a call through it fails with that set, a catch over it takes the members by name with no else, and a field no failing value reaches makes the catch NK1134 (D1, D3).
+
 ## [0.0.937] — 2026-10-14
 
 **List patterns, and `..` as the rest of positional values (ADR-355, #618)**

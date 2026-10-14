@@ -12942,6 +12942,12 @@ pub fn check_core_a_called_field<H: CheckHost>(state: &mut CheckState, world: &C
                         state.a_lock_inside_a_lock(&key, holds, span);
                         state.inside_a_door = own;
                     }
+                    if world.own.code_throws.contains_key(&key) {
+                        let set = match *nikaia_std::index::get(&world.own.code_throws, &key) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                        let mut contract = FnContract::empty();
+                        contract.fails_with = set.to_owned();
+                        state.may_fail_here(world, host, &key, &contract, span);
+                    }
                 },
                 _ => { },
             }
@@ -14356,7 +14362,22 @@ pub fn check_core_a_kept_lambda<H: CheckHost>(state: &mut CheckState, world: &Ch
                             at += 1;
                         }
                         state.scope.push(frame);
+                        let was_caught = state.flow.caught;
+                        let enclosing: Option<CheckGuarded> = match state.flow.guarded.as_ref() {
+                            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                            None => None,
+                        };
+                        let handed: Option<CheckHanded> = match state.handed_over.as_ref() {
+                            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                            None => None,
+                        };
+                        state.flow.caught = true;
+                        state.flow.guarded = None;
+                        state.handed_over = None;
                         host.expr(state, &call, span);
+                        state.flow.caught = was_caught;
+                        state.flow.guarded = enclosing;
+                        state.handed_over = handed;
                         state.scope.pop();
                     }
                 },
@@ -30285,6 +30306,10 @@ impl EmitState {
                 boxed = true;
             } else if scope.channel.starts_with("nikaia_std::error::Thrown<") { named = true; }
         }
+        if caught && sum.is_none() && !named && self.emit_catch_is_a_field_call(guarded_expr) {
+            sum = Some("".to_owned());
+            boxed = true;
+        }
         let inside = flow.handling(named);
         let inside_scope = EmitScope { caught_sum: sum, ..scope.clone() };
         let mut opening: Option<String> = None;
@@ -30497,6 +30522,15 @@ fn emit_catch_is_a_scope(world: &EmitWorld<'_>, guarded: &Expr) -> bool {
     match guarded {
         Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); unaliased_in(world.aliases, &nikaia_std::index::or(emit_callee_text(world, func), || "".into())) == "task::scope" },
         _ => false,
+    }
+}
+
+impl EmitState {
+    fn emit_catch_is_a_field_call(&self, guarded: &Expr) -> bool {
+        match guarded {
+            Expr::MethodCall { receiver, .. } => { let receiver = nikaia_std::boxed::open(receiver); self.facts.field_calls.contains_key(&node_key(receiver)) },
+            _ => false,
+        }
     }
 }
 
@@ -31297,13 +31331,14 @@ impl EmitState {
             if at < 0 { catch_all += 1; }
             home.push(at);
         }
-        if catch_all == 0 { return Err(nikaia_std::error::raise(EmitRefused { message: "This `match error` needs an `else` arm: other errors can arrive at a `catch` too. Add `else => throw error` to pass them on, or `else => …` to handle them.".to_owned(), at: Some(flow.statement) }, &"emit_core_match_over_a_box")); }
         let pad = "    ".repeat(nikaia_std::count::of(depth + 1));
         let inner = "    ".repeat(nikaia_std::count::of(depth + 2));
         let close = "    ".repeat(nikaia_std::count::of(depth));
         let count = members.len() as i64;
         out.push("match error {\n");
-        for m in 0..count + 1 {
+        let mut blocks = count + 1;
+        if catch_all == 0 { blocks = count; }
+        for m in 0..blocks {
             let mut inside = flow;
             let mut inside_scope = scope.clone();
             if m < count {
@@ -31340,6 +31375,7 @@ impl EmitState {
             }
             out.push(&format!("{}}} }},\n", pad));
         }
+        if catch_all == 0 { out.push(&format!("{}_ => unreachable!(\"the set a function value carries is closed (ADR-351)\"),\n", pad)); }
         out.push(&format!("{}}}", close));
         Ok(())
     }
@@ -38372,6 +38408,10 @@ pub fn absorb_into(ledger: &mut Ledger, module: Option<&str>, renames: &collecti
     for (field, holds) in other.code_locks.iter() {
         let parts: Vec<&str> = field.splitn(2, '.').collect::<Vec<_>>();
         if qualified && declared.contains(*nikaia_std::index::get(&parts, 0)) { ledger.code_locks.insert(format!("{}::{}", prefix, field), holds.clone()); } else { ledger.code_locks.insert(field.to_owned(), holds.clone()); }
+    }
+    for (field, set) in other.code_throws.iter() {
+        let parts: Vec<&str> = field.splitn(2, '.').collect::<Vec<_>>();
+        if qualified && declared.contains(*nikaia_std::index::get(&parts, 0)) { ledger.code_throws.insert(format!("{}::{}", prefix, field), set.to_owned()); } else { ledger.code_throws.insert(field.to_owned(), set.to_owned()); }
     }
     let mut kept: collections::BTreeMap<String, String> = collections::BTreeMap::new();
     for (from, to) in renames.iter() { if !qualified || *from != prefix { kept.insert(from.to_owned(), to.to_owned()); } }
@@ -50817,6 +50857,7 @@ const UNNAMED: &str = "?";
 pub struct MethodsCalled {
     pub resolved: collections::BTreeSet<String>,
     pub unseen: bool,
+    pub fields: collections::BTreeSet<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -50868,8 +50909,20 @@ fn with_methods(key: &str, thrown: &Thrown, own: &Ledger, library: &Ledger, grap
 
 fn methods_into(resolved: Option<&MethodsCalled>, own: &Ledger, library: &Ledger, named: &mut collections::BTreeSet<String>, called: &mut collections::BTreeSet<String>) {
     let known = match resolved { Some(__nikaia_value) => __nikaia_value, None => return };
+    for field in known.fields.iter() { called.insert(field.to_owned()); }
     if known.unseen { named.insert(UNNAMED.to_owned()); }
     for callee in known.resolved.iter() { if own.functions.contains_key(callee) { called.insert(callee.to_owned()); } else { for error in fails_with_of(library, callee) { named.insert(error); } } }
+}
+
+pub fn stored_throws(field: &str, resolved: &collections::BTreeSet<String>, unresolved: bool, free: &collections::BTreeSet<String>, own: &Ledger, library: &Ledger, graph: &mut ThrowsGraph) {
+    let mut named: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut called: collections::BTreeSet<String> = collections::BTreeSet::new();
+    if unresolved { named.insert(UNNAMED.to_owned()); }
+    for callee in free.iter() { if own.functions.contains_key(callee) { called.insert(callee.to_owned()); } else if library.functions.contains_key(callee) { for error in fails_with_of(library, callee) { named.insert(error); } } }
+    let known: Option<MethodsCalled> = Some(MethodsCalled { resolved: resolved.to_owned(), unseen: false, fields: collections::BTreeSet::new() });
+    methods_into((known).as_ref(), own, library, &mut named, &mut called);
+    graph.direct.insert(field.to_owned(), named);
+    graph.calls.insert(field.to_owned(), called);
 }
 
 fn fails_with_of(library: &Ledger, callee: &str) -> Vec<String> {
@@ -50877,7 +50930,7 @@ fn fails_with_of(library: &Ledger, callee: &str) -> Vec<String> {
     contract.fails_with.to_owned()
 }
 
-pub fn error_sets(direct: &collections::BTreeMap<String, collections::BTreeSet<String>>, calls: &collections::BTreeMap<String, collections::BTreeSet<String>>, fatal_calls: &collections::BTreeMap<String, collections::BTreeMap<String, collections::BTreeSet<String>>>, fatal: &collections::BTreeSet<String>, own: &Ledger) -> collections::BTreeMap<String, Vec<String>> {
+pub fn error_sets(direct: &collections::BTreeMap<String, collections::BTreeSet<String>>, calls: &collections::BTreeMap<String, collections::BTreeSet<String>>, fatal_calls: &collections::BTreeMap<String, collections::BTreeMap<String, collections::BTreeSet<String>>>, fatal: &collections::BTreeSet<String>, own: &Ledger, places: &collections::BTreeSet<String>) -> collections::BTreeMap<String, Vec<String>> {
     let mut sets = direct.to_owned();
     let mut changed = true;
     while changed {
@@ -50902,6 +50955,12 @@ pub fn error_sets(direct: &collections::BTreeMap<String, collections::BTreeSet<S
     }
     let mut settled: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
     for (name, set) in sets.iter() {
+        if places.contains(name) {
+            let mut union: Vec<String> = vec![];
+            for error in set.iter() { union.push(error.to_owned()); }
+            settled.insert(name.to_owned(), union);
+            continue;
+        }
         let contract = match *nikaia_std::index::get(&own.functions, name) { Some(__nikaia_value) => __nikaia_value, None => continue };
         if contract.fails_with.is_empty() { continue; }
         let mut errors: Vec<String> = vec![];
@@ -53237,12 +53296,13 @@ pub struct Ledger {
     pub functions: collections::BTreeMap<String, FnContract>,
     pub types: collections::BTreeMap<String, TypeContract>,
     pub code_locks: collections::BTreeMap<String, Lock>,
+    pub code_throws: collections::BTreeMap<String, Vec<String>>,
     pub traits: collections::BTreeMap<String, collections::BTreeSet<String>>,
     pub implementations: collections::BTreeMap<String, collections::BTreeSet<String>>,
 }
 
 impl Ledger {
-    pub fn blank() -> Ledger { Ledger { version: 0, toolchain: String::from(""), inference: String::from(""), sources: collections::BTreeMap::new(), functions: collections::BTreeMap::new(), types: collections::BTreeMap::new(), code_locks: collections::BTreeMap::new(), traits: collections::BTreeMap::new(), implementations: collections::BTreeMap::new() } }
+    pub fn blank() -> Ledger { Ledger { version: 0, toolchain: String::from(""), inference: String::from(""), sources: collections::BTreeMap::new(), functions: collections::BTreeMap::new(), types: collections::BTreeMap::new(), code_locks: collections::BTreeMap::new(), code_throws: collections::BTreeMap::new(), traits: collections::BTreeMap::new(), implementations: collections::BTreeMap::new() } }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -56810,7 +56870,7 @@ pub mod threads {
 }
 pub mod throws {
     #[allow(unused_imports)]
-    pub use super::{MethodsCalled, ThrowsGraph, unit_throws, error_sets, error_type, Thrown, Contribution, thrown_by, fatal_named};
+    pub use super::{MethodsCalled, ThrowsGraph, unit_throws, stored_throws, error_sets, error_type, Thrown, Contribution, thrown_by, fatal_named};
 }
 pub mod tiers {
     #[allow(unused_imports)]

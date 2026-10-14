@@ -666,6 +666,13 @@ impl EmitState {
                 named = true
             }
         }
+        // **A call through a function field fails in the box** (ADR-351 D2):
+        // the stored code's channel is the box, opened by the type each arm
+        // names.
+        if caught && sum == null && !named && self.emit_catch_is_a_field_call(guarded_expr) {
+            sum = "".clone()
+            boxed = true
+        }
         let inside = flow.handling(named)
         let inside_scope = scope.clone() with { caught_sum: sum }
         // **The envelope is opened as the handler's first statement** (ADR-292
@@ -969,6 +976,16 @@ fn emit_catch_is_a_scope(world: ref EmitWorld, guarded: ref Expr) -> bool {
     return match guarded {
         Expr::Call { func, .. } => unaliased_in(world.aliases, emit_callee_text(world, func) ?? "") == "task::scope",
         else => false,
+    }
+}
+
+impl EmitState {
+    /// Whether a `catch` guards a call through a function field (ADR-351).
+    fn emit_catch_is_a_field_call(ref self, guarded: ref Expr) -> bool {
+        return match guarded {
+            Expr::MethodCall { receiver, .. } => self.facts.field_calls.contains_key(node_key(receiver)),
+            else => false,
+        }
     }
 }
 

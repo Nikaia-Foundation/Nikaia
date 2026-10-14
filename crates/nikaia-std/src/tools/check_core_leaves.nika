@@ -119,7 +119,20 @@ pub fn check_core_a_kept_lambda[H: CheckHost](mut state: CheckState, world: ref 
                             at += 1
                         }
                         state.scope.push(frame)
+                        // **Storing a function calls nothing** (ADR-351 D2):
+                        // the call typed here runs when the value is called,
+                        // so what it can fail with is the value's, not this
+                        // function's, and no `catch` around it counts it.
+                        let was_caught = state.flow.caught
+                        let enclosing: CheckGuarded? = state.flow.guarded?.clone()
+                        let handed: CheckHanded? = state.handed_over?.clone()
+                        state.flow.caught = true
+                        state.flow.guarded = null
+                        state.handed_over = null
                         host.expr(state, call, span)
+                        state.flow.caught = was_caught
+                        state.flow.guarded = enclosing
+                        state.handed_over = handed
                         state.scope.pop()
                     }
                 }
