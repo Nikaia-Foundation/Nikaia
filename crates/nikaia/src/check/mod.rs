@@ -1509,10 +1509,7 @@ impl<'a> Checker<'a> {
     /// `struct` compares when its fields do, and a field may name a type
     /// declared further down the file.
     fn collect_comparisons(&mut self) {
-        // **And what another file of the package declares** (ADR-286 D1):
-        // `Integer` from `integers.nika` compares in `build_values.nika` as it
-        // does at home, and a type holding one derives `PartialEq` (found
-        // moving the build-time values into Nikaia, #125).
+        // **And what another file of the package declares** (ADR-286 D1).
         let beside = self.parts_beside();
         let asking = Comparable {
             beside: &beside,
@@ -1523,48 +1520,9 @@ impl<'a> Checker<'a> {
             own: self.world.own,
             library: self.world.library,
         };
-        // **Only what this unit declares.** A library's type answers from its
-        // own column, and nothing here writes a derive for it.
-        let declared: Vec<String> = self
-            .parsed
-            .program
-            .items
-            .iter()
-            .filter_map(|item| match &item.node {
-                Item::Struct { name, .. } | Item::Enum { name, .. } => {
-                    Some(self.parsed.text(*name).to_string())
-                }
-                _ => None,
-            })
-            .collect();
-        let mut compared: Vec<(String, bool)> = Vec::new();
-        for name in declared {
-            // **An `impl Eq` is the equality** (ADR-341 D5): no derive is written
-            // for the type, and the emitter writes the `impl` the program did.
-            if asking.implements("Eq", &name) {
-                continue;
-            }
-            let parts: Vec<Ty> = match self.s.enum_payloads.get(&name) {
-                Some(held) => held.clone(),
-                None => self
-                    .s
-                    .structs
-                    .get(&name)
-                    .map(|fields| fields.iter().map(|f| f.ty.clone()).collect())
-                    .unwrap_or_default(),
-            };
-            if !parts.iter().all(|ty| asking.of(ty)) {
-                continue;
-            }
-            let totally = parts.iter().all(|ty| asking.totally(ty));
-            compared.push((name, totally));
-        }
-        for (name, totally) in compared {
-            self.s.facts.compares.insert(name.clone());
-            if totally {
-                self.s.facts.compares_totally.insert(name);
-            }
-        }
+        let found = nikaia_std::tools::check_compare::compare_declared(&asking, &self.world.here);
+        self.s.facts.compares.extend(found.compares);
+        self.s.facts.compares_totally.extend(found.totally);
     }
 
     /// **Which functions walk a type's fields, and which parameter each walks**
@@ -3173,36 +3131,8 @@ impl<'a> Checker<'a> {
         let (owner, fails) = self.cleanup_of(ty)?;
         self.a_settle_in_this_function(fails);
         self.s.a_cleanup_that_may_pause(name, span);
-        let is = match ty.unseen() {
-            Ty::Named { name, .. }
-                if crate::contracts::ty::base(&name) == crate::contracts::ty::base(&owner) =>
-            {
-                "is"
-            }
-            _ => "holds",
-        };
-        if fails && !self.s.flow.throwing && !self.s.flow.caught && self.s.current.is_some() {
-            self.s.findings.push(Finding {
-                severity: Severity::Error,
-                span: *span,
-                code: "NK2605".to_string(),
-                message: format!("This function can fail, because cleaning up `{name}` can fail."),
-                notes: vec![format!(
-                    "`{name}` {is} a `{owner}`. Its cleanup runs at the end of this block \
-                     and can fail, so the function can fail with it."
-                )],
-                help: Some(match is {
-                    "is" => format!(
-                        "Declare the function with `throws`, or close it yourself where you \
-                         want to handle the failure: `{name}.close() catch {{ … }}`."
-                    ),
-                    _ => format!(
-                        "Declare the function with `throws`, or close the `{owner}` it holds \
-                         yourself, with `close() catch {{ … }}`."
-                    ),
-                }),
-                labels: Vec::new(),
-            });
+        if fails {
+            self.s.a_failing_cleanup_undeclared(name, ty, &owner, span);
         }
         Some(fails)
     }
@@ -3219,67 +3149,24 @@ impl<'a> Checker<'a> {
             return;
         };
         let beside = self.parts_beside();
-        let mut refused: Vec<(String, String, String)> = Vec::new();
-        {
-            let asking = Comparable {
-                beside: &beside,
-                structs: &self.s.structs,
-                enums: &self.s.enums,
-                payloads: &self.s.enum_payloads,
-                parameters: &self.s.struct_parameters,
-                own: self.world.own,
-                library: self.world.library,
-            };
-            for (parameter, traits) in wanted {
-                let Some(held) = bound.get(parameter) else {
-                    continue;
-                };
-                for wanted_trait in traits {
-                    if !matches!(wanted_trait.as_str(), "Eq" | "Ord")
-                        || self.world.own.traits.contains_key(wanted_trait)
-                    {
-                        continue;
-                    }
-                    let met = match held {
-                        Ty::Named { name, args, .. }
-                            if args.is_empty() && self.s.type_parameters.contains_key(name) =>
-                        {
-                            self.s.type_parameters[name]
-                                .iter()
-                                .any(|own| own == "Ord" || (wanted_trait == "Eq" && own == "Eq"))
-                        }
-                        _ if wanted_trait == "Ord" => asking.orders(held),
-                        _ => asking.totally(held),
-                    };
-                    if !met {
-                        refused.push((parameter.clone(), wanted_trait.clone(), held.text()));
-                    }
-                }
-            }
-        }
-        for (parameter, wanted_trait, held) in refused {
-            let what = match wanted_trait.as_str() {
-                "Ord" => "an order",
-                _ => "an equality that is an equivalence",
-            };
-            let declared = self.s.structs.contains_key(&held) || self.s.enums.contains_key(&held);
-            self.s.findings.push(Finding {
-                severity: Severity::Error,
-                span: *span,
-                code: "NK1164".to_string(),
-                message: format!("`{key}` needs a `{wanted_trait}` here, but `{held}` isn't one."),
-                notes: vec![format!(
-                    "`{key}` declares `[{parameter}: {wanted_trait}]`, so the type passed has to have {what}, and `{held}` hasn't."
-                )],
-                help: Some(match declared {
-                    true => format!(
-                        "Write `impl {wanted_trait} for {held} {{ … }}`, or pass a type that already has one."
-                    ),
-                    false => "Pass a type that has one: a number, `String`, `bool`, `char`, or a tuple, list or option of those, or a type you declare with an `impl`.".to_string(),
-                }),
-                labels: Vec::new(),
-            });
-        }
+        let asking = Comparable {
+            beside: &beside,
+            structs: &self.s.structs,
+            enums: &self.s.enums,
+            payloads: &self.s.enum_payloads,
+            parameters: &self.s.struct_parameters,
+            own: self.world.own,
+            library: self.world.library,
+        };
+        let refused = nikaia_std::tools::check_compare::compare_standard_bounds(
+            &asking,
+            &self.s.type_parameters,
+            key,
+            wanted,
+            bound,
+            span,
+        );
+        self.s.findings.extend(refused);
     }
 
     /// **`NK1248`: a comparison on a type parameter that no bound allows**
@@ -3303,85 +3190,18 @@ impl<'a> Checker<'a> {
     /// not `Eq` is not one `BTreeMap` can use.
     fn language_impls(&mut self) {
         let beside = self.parts_beside();
-        let mut refused: Vec<(Span, String, String, String, bool)> = Vec::new();
-        {
-            let asking = Comparable {
-                beside: &beside,
-                structs: &self.s.structs,
-                enums: &self.s.enums,
-                payloads: &self.s.enum_payloads,
-                parameters: &self.s.struct_parameters,
-                own: self.world.own,
-                library: self.world.library,
-            };
-            for item in &self.parsed.program.items {
-                let Item::Impl {
-                    trait_name: Some(trait_name),
-                    target,
-                    ..
-                } = &item.node
-                else {
-                    continue;
-                };
-                let trait_text = self.parsed.text(*trait_name);
-                if !matches!(trait_text, "Eq" | "Ord")
-                    || self.world.own.traits.contains_key(trait_text)
-                {
-                    continue;
-                }
-                let target = self.parsed.text(target.name).to_string();
-                let declared = self.s.structs.contains_key(&target)
-                    || self.s.enums.contains_key(&target)
-                    || beside.contains_key(&target);
-                if !declared {
-                    refused.push((
-                        item.span,
-                        trait_text.to_string(),
-                        target,
-                        String::new(),
-                        true,
-                    ));
-                } else if trait_text == "Ord" && !asking.totally(&Ty::named(&target)) {
-                    refused.push((
-                        item.span,
-                        trait_text.to_string(),
-                        target,
-                        String::new(),
-                        false,
-                    ));
-                }
-            }
-        }
-        for (span, trait_text, target, _, foreign) in refused {
-            let (message, note, help) = if foreign {
-                (
-                    format!(
-                        "You can't write `impl {trait_text} for {target}`: your program doesn't declare it."
-                    ),
-                    format!(
-                        "`{trait_text}` for a type another package declares is that package's to say, and its ledger does."
-                    ),
-                    format!(
-                        "Write it for a type you declare, or hold `{target}` in a `struct` of your own."
-                    ),
-                )
-            } else {
-                (
-                    format!("`impl Ord for {target}` needs `{target}` to be `Eq`."),
-                    "An order that disagrees with equality gives an ordered map no meaning, and a type holding a float is not `Eq`.".to_string(),
-                    format!("Write `impl Eq for {target}`, or take out the part that has no equality."),
-                )
-            };
-            self.s.findings.push(Finding {
-                severity: Severity::Error,
-                span,
-                code: "NK1249".to_string(),
-                message,
-                notes: vec![note],
-                help: Some(help),
-                labels: Vec::new(),
-            });
-        }
+        let asking = Comparable {
+            beside: &beside,
+            structs: &self.s.structs,
+            enums: &self.s.enums,
+            payloads: &self.s.enum_payloads,
+            parameters: &self.s.struct_parameters,
+            own: self.world.own,
+            library: self.world.library,
+        };
+        let refused =
+            nikaia_std::tools::check_compare::compare_language_impls(&asking, &self.world.here);
+        self.s.findings.extend(refused);
     }
 
     /// **`NK1188`: `==` on a type that does not compare**
@@ -3409,27 +3229,8 @@ impl<'a> Checker<'a> {
             own: self.world.own,
             library: self.world.library,
         };
-        let Some(ty) = [left, right].into_iter().find(|ty| !asking.of(ty)) else {
-            return;
-        };
-        let ty = ty.text();
-        self.s.findings.push(Finding {
-            severity: Severity::Error,
-            span: *span,
-            code: "NK1188".to_string(),
-            message: format!("You can't compare two `{ty}` values with `==`."),
-            notes: vec![
-                "A `struct` or an `enum` can be compared when all of its parts can. Locks, \
-                 mapped files, sockets and task handles can't be compared."
-                    .to_string(),
-            ],
-            help: Some(
-                "Compare the parts that matter, or give the type a method that says what \
-                 being equal means for it."
-                    .to_string(),
-            ),
-            labels: Vec::new(),
-        });
+        let refused = nikaia_std::tools::check_compare::compare_refusal(&asking, left, right, span);
+        self.s.findings.extend(refused);
     }
 
     fn a_field_of_a_borrowed_subject(&mut self, value: &Expr, span: &Span, what: &str) {
@@ -9164,46 +8965,9 @@ impl<'a> Checker<'a> {
             own: self.world.own,
             library: self.world.library,
         };
-        let mut refused = Vec::new();
-        let mut stack = vec![ty];
-        while let Some(ty) = stack.pop() {
-            match ty {
-                Ty::Named { name, args, .. } => {
-                    let last = name.rsplit("::").next().unwrap_or(name);
-                    if matches!(last, "BTreeMap" | "BTreeSet")
-                        && let Some(key) = args.first()
-                        && !asking.orders(key)
-                    {
-                        refused.push((last.to_string(), key.text()));
-                    }
-                    stack.extend(args.iter());
-                }
-                Ty::Tuple(parts) => stack.extend(parts.iter()),
-                Ty::Nullable(inner) => stack.push(inner),
-                _ => {}
-            }
-        }
-        for (map, key) in refused {
-            self.s.findings.push(Finding {
-                severity: Severity::Error,
-                span: *span,
-                code: "NK1247".to_string(),
-                message: format!("`{map}` keeps its keys in order, and `{key}` has no order."),
-                notes: vec![
-                    "A number, a `String`, a `bool`, a `char`, and a tuple, list or option of \
-                     those have one. A float doesn't (`NaN`), a `struct` or an `enum` you \
-                     declare isn't given one, and a type from a library has one only where its \
-                     ledger says `orders = true`."
-                        .to_string(),
-                ],
-                help: Some(
-                    "Use a `HashMap` or `HashSet` where the order of the keys is not \
-                     observable, or key by a text or a number that says what comes first."
-                        .to_string(),
-                ),
-                labels: Vec::new(),
-            });
-        }
+        let refused =
+            nikaia_std::tools::check_compare::compare_keys_with_no_order(&asking, ty, span);
+        self.s.findings.extend(refused);
     }
 
     fn call(&mut self, func: &Expr, args: &[Expr], config: &[ast::ConfigArg], span: &Span) -> Ty {
@@ -11870,77 +11634,31 @@ impl<'a> Checker<'a> {
     /// cannot tell the type of the value, and no arm is unknown for another
     /// refusal's sake. Said unless a position asks the arms one by one.
     fn arms_that_disagree(&mut self, expr: &Expr, arms: &[(Option<&Expr>, Ty)], span: &Span) {
-        if self.discarded.contains(&value_node(expr)) || arms.len() < 2 {
+        if self.discarded.contains(&value_node(expr)) {
             return;
         }
-        // A number nothing typed yet is a use's to type, so it is a number.
-        let (mut known, mut numbers): (Vec<Ty>, usize) = (Vec::new(), 0);
-        for (tail, ty) in arms {
-            let ty = ty.unseen();
-            match (wholly_known(&ty), tail.map(peeled)) {
-                (true, _) if ty == Ty::Tuple(Vec::new()) => return,
-                (true, _) => known.push(ty),
-                (false, Some(Expr::LitInt { .. })) => numbers += 1,
-                (false, _) => return,
-            }
-        }
-        let numeric = |ty: &Ty| integer_named(&value_of_a_copy(ty.clone())).is_some();
-        let alike = known.windows(2).all(|pair| pair[0] == pair[1])
-            && (numbers == 0 || known.iter().all(numeric));
-        if alike {
+        let asked: Vec<CheckArm<'_>> = arms
+            .iter()
+            .map(|(tail, ty)| CheckArm {
+                tail: *tail,
+                ty: ty.clone(),
+            })
+            .collect();
+        let is_if = matches!(expr, Expr::If { .. });
+        let Some(mut finding) =
+            nikaia_std::tools::check_arms::arms_that_disagree(&asked, is_if, span)
+        else {
             return;
-        }
-        let (word, article) = match expr {
-            Expr::If { .. } => ("if", "`if`"),
-            _ => ("match", "`match`"),
-        };
-        let mut shown: Vec<String> = Vec::new();
-        for ty in &known {
-            if !shown.contains(&ty.text()) {
-                shown.push(ty.text());
-            }
-        }
-        if numbers > 0 {
-            shown.push("a number".to_string());
-        }
-        let listed = match shown.as_slice() {
-            [rest @ .., last] => format!(
-                "{} and `{last}`",
-                rest.iter()
-                    .map(|t| format!("`{t}`"))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
-            [] => String::new(),
         };
         // **The caret stands on the first arm that is not the first one's
         // type** (#107), or on the `if` or `match` where none can be named.
         let first = arms.first().map(|(_, ty)| ty.unseen());
-        let at = arms
+        finding.span = arms
             .iter()
             .skip(1)
             .find_map(|(tail, ty)| (Some(ty.unseen()) != first).then_some(*tail)?)
             .map_or_else(|| self.span_at(expr, *span), |arm| self.span_at(arm, *span));
-        self.arm_disagreements.insert(
-            value_node(expr),
-            Finding {
-                severity: Severity::Error,
-                span: at,
-                code: "NK1245".to_string(),
-                message: format!(
-                    "The arms of this {article} are {listed}, so the compiler can't tell what \
-                     type its value is."
-                ),
-                notes: vec![format!(
-                    "What is not known is not checked, so the value of a `{word}` whose arms \
-                     disagree is refused rather than left to the language below."
-                )],
-                // A written type does not make arms of two known types meet,
-                // and where one is written each arm is asked against it.
-                help: Some(format!("Make the arms of the {article} the same type.")),
-                labels: Vec::new(),
-            },
-        );
+        self.arm_disagreements.insert(value_node(expr), finding);
     }
 
     /// A text literal where `String` is wanted, built as text of its own
@@ -12746,33 +12464,9 @@ impl<'a> Checker<'a> {
     /// is mechanical and a help line that says *"use a door"* leaves the reader
     /// to work out which of the four.
     fn a_write_that_skips_the_door(&mut self, target: &Expr, into: &Ty, value: &Expr, span: &Span) {
-        let Ty::Named { name, .. } = into else {
-            return;
-        };
-        if name != SHARED_MUT {
-            return;
-        }
-        // The name, where the target is one. A field or an index into a hull is
-        // a shape nothing decides yet, and saying nothing is the direction that
-        // cannot refuse a program that is right.
-        let Expr::Variable(bound, _) = target else {
-            return;
-        };
-        let bound = self.parsed.text(*bound).to_string();
         let written = self.written(value);
-        self.s.findings.push(Finding {
-            severity: Severity::Error,
-            span: *span,
-            code: "NK2204".to_string(),
-            message: format!(
-                "You can't assign to `{bound}` directly: it holds shared mutable state."
-            ),
-            notes: vec![
-                "Changing shared state goes through a method that takes the lock.".to_string(),
-            ],
-            help: Some(format!("Write `{bound}.set({written})`.")),
-            labels: Vec::new(),
-        });
+        self.s
+            .a_write_that_skips_the_door(self.world, target, into, &written, span);
     }
 
     /// The value as the author wrote it, where this compiler can say so.
@@ -13549,22 +13243,9 @@ impl<'a> Checker<'a> {
         changed_from: usize,
         bound_by_reference: bool,
     ) {
-        let lent: BTreeSet<String> = parts
-            .iter()
-            .filter(|(name, ty)| {
-                let taken = self.s.handed[from as usize..].iter().any(|taken| {
-                    taken.path == **name || taken.path.starts_with(&format!("{name}."))
-                }) || self.s.changed[changed_from..].iter().any(|n| n == *name);
-                self.s.takes_away(self.world, ty)
-                    && !taken
-                    && !nikaia_std::tools::check_references::check_gives_back(
-                        body,
-                        name,
-                        &self.parsed.interner,
-                    )
-            })
-            .map(|(name, _)| name.clone())
-            .collect();
+        let lent = self
+            .s
+            .parts_lent(self.world, body, parts, from, changed_from as i64);
         if !lent.is_empty() {
             self.a_lent_part_is_handed_on_as_it_is(body, &lent);
             // **Over a `mut` parameter the parts are references already**
@@ -14061,253 +13742,9 @@ fn expected_arguments(contract: &FnContract) -> Vec<Ty> {
 /// program declares - is moved, which is what `NK1131` is about.
 ///
 /// A short list on purpose, and the polarity is the usual one: a type not on it
-/// **Whether two values of this type may be compared**
-/// ([ADR-204](../../docs/specification/adr/adr-204.md) D1).
-///
-/// `==` on a declared type had no lowering at all: `rustc` answered *binary
-/// operation `==` cannot be applied to type `P`* about a file nobody wrote, with
-/// *consider annotating `P` with `#[derive(PartialEq)]`* as the help — [Part III
-/// C.1 and C.2](../../docs/specification/30-nikaia-tooling.md) at once. So the
-/// question has to be answerable here, and the answer decides both the derive
-/// the emitter writes and the refusal this file raises.
-///
-/// **Three sources and one rule.** The language's own types answer from the list
-/// below; a **declared** type answers from its parts, structurally, which is what
-/// cannot be wrong; and a type whose parts are Rust answers from the ledger's
-/// `compares` column, whose absence is *no* ([ADR-010](../../docs/specification/adr/adr-010.md)
-/// D1).
-///
-/// **`Ty::Unknown` compares.** Nothing is known, so nothing is refused — [Part
-/// III C.4](../../docs/specification/30-nikaia-tooling.md)'s direction, and the
-/// same answer every other question here gives an absent claim.
-struct Comparable<'a> {
-    /// What each type another file of the package declares is made of.
-    beside: &'a BTreeMap<String, Vec<Ty>>,
-    structs: &'a BTreeMap<String, Vec<FieldContract>>,
-    enums: &'a BTreeMap<String, BTreeSet<String>>,
-    /// What a declared `enum`'s variants hold ([`Checker::enum_payloads`]).
-    payloads: &'a BTreeMap<String, Vec<Ty>>,
-    /// A generic struct's parameters in declaration order
-    /// ([`Checker::struct_parameters`]), so `Spanned[Stmt]` is asked about the
-    /// `Stmt` its `node` holds rather than about a `T` that says nothing.
-    parameters: &'a BTreeMap<String, Vec<String>>,
-    own: &'a Ledger,
-    library: &'a Ledger,
-}
-
-/// Which of the two questions [`Comparable`] is being asked.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Strength {
-    /// `==` works: Rust's `PartialEq`.
-    Compares,
-    /// …and equality is an equivalence: Rust's `Eq`, which a float is not and
-    /// which a type holding one cannot be.
-    Totally,
-    /// …and the values have an order: Rust's `Ord`, which a map kept in order
-    /// asks of its key (`NK1247`). A float has none, and a type this language
-    /// declares is given none.
-    Orders,
-}
-
-impl Comparable<'_> {
-    /// The primitives and the containers, which are the language's rather than a
-    /// module's and so are a list here rather than a column anywhere.
-    ///
-    /// A container compares exactly when what it holds does, which is Rust's own
-    /// rule for each of them and is why they are one arm.
-    fn of(&self, ty: &Ty) -> bool {
-        self.asking(ty, Strength::Compares, &mut BTreeSet::new())
-    }
-
-    /// The same question about **`Eq`**, which is not the same walk one step
-    /// deeper: a `struct` holding a type that compares and is not an equivalence
-    /// is the same, and the float may be several declarations away.
-    fn totally(&self, ty: &Ty) -> bool {
-        self.asking(ty, Strength::Totally, &mut BTreeSet::new())
-    }
-
-    /// Whether the program or a library wrote `impl <trait_name> for <name>`
-    /// for a language trait (`Eq`, `Ord`), unless the program declares a trait
-    /// of that name, which then means its own ([ADR-341](../../docs/specification/adr/adr-341.md)).
-    fn implements(&self, trait_name: &str, name: &str) -> bool {
-        !self.own.traits.contains_key(trait_name)
-            && [self.own, self.library].into_iter().any(|ledger| {
-                ledger
-                    .implementations
-                    .get(trait_name)
-                    .is_some_and(|types| types.contains(name))
-            })
-    }
-
-    /// The same question about **`Ord`**, the one an ordered map asks of its key.
-    fn orders(&self, ty: &Ty) -> bool {
-        self.asking(ty, Strength::Orders, &mut BTreeSet::new())
-    }
-
-    /// `seen` is the types already being asked about, so a `struct` that holds
-    /// itself through a `Vec` answers once rather than forever.
-    fn asking(&self, ty: &Ty, how: Strength, seen: &mut BTreeSet<String>) -> bool {
-        match ty {
-            // An absent claim is not a refusal (C.4). A type variable is one:
-            // a library's `$V` is substituted away at a call, and one that is
-            // not is `Unknown` by the same rule.
-            Ty::Unknown | Ty::Var { .. } | Ty::Count(_) => true,
-            Ty::Tuple(parts) => parts.iter().all(|part| self.asking(part, how, seen)),
-            Ty::Nullable(inner) => self.asking(inner, how, seen),
-            // **A produced sequence is not a value this language holds**: it is
-            // walked, and what it hands over is the item.
-            Ty::Seq { .. } => false,
-            // **What the C boundary lends is an address**, and an address is not
-            // a value this language compares
-            // ([ADR-302](../../docs/specification/adr/adr-302.md) D5).
-            Ty::Pointed { .. } => false,
-            Ty::Fn { .. } => false,
-            Ty::Named { name, args, .. } => self.named(name, args, how, seen),
-        }
-    }
-
-    fn named(&self, name: &str, args: &[Ty], how: Strength, seen: &mut BTreeSet<String>) -> bool {
-        // **A view compares as what it views does**: `&str` is `String`'s
-        // comparison and `&T` is `T`'s, which is Rust's rule too.
-        let holds =
-            |seen: &mut BTreeSet<String>| args.iter().all(|arg| self.asking(arg, how, seen));
-        // **A map or a set that is not kept in order has none**, and neither has
-        // the unordered `Set`: only the ordered ones and the lists answer by
-        // what they hold.
-        if how == Strength::Orders
-            && matches!(
-                name,
-                "Set"
-                    | "collections::HashMap"
-                    | "collections::HashSet"
-                    | "HashMap"
-                    | "HashSet"
-                    | "TrustedMap"
-                    | "TrustedSet"
-            )
-        {
-            return false;
-        }
-        match name {
-            // **A float compares and is not an equivalence**, because
-            // `NaN != NaN`. It is the one primitive the two questions differ on,
-            // and every type holding one differs with it however far down.
-            "f64" => how == Strength::Compares,
-            "i32" | "i64" | "u8" | "u32" | "u64" | "bool" | "char" | "scalar" | "String"
-            | "str" | "Bytes" => true,
-            // A container compares when what it holds does.
-            "Vec"
-            | "List"
-            | ty::ARRAY
-            | "Option"
-            | "Set"
-            | "collections::HashMap"
-            | "collections::HashSet"
-            | "collections::BTreeMap"
-            | "collections::BTreeSet"
-            | "HashMap"
-            | "HashSet"
-            | "BTreeMap"
-            | "BTreeSet"
-            | "Shared" => holds(seen),
-            _ => {
-                // Keyed by the whole type: `Spanned[Stmt]` and `Spanned[Item]`
-                // are two questions (ADR-294).
-                let key = match args.is_empty() {
-                    true => name.to_string(),
-                    false => format!("{name}{args:?}"),
-                };
-                if !seen.insert(key) {
-                    // Already being asked about, one level up: a type is not
-                    // *un*comparable for holding itself.
-                    return true;
-                }
-                // **A type this language declares has the order and the equality
-                // its program wrote** (ADR-341 D4): none until `impl Ord`, and
-                // the walk's own until `impl Eq` replaces it.
-                let declared = self.structs.contains_key(name)
-                    || self.enums.contains_key(name)
-                    || self.beside.contains_key(name);
-                if declared {
-                    if how == Strength::Orders {
-                        return self.implements("Ord", name);
-                    }
-                    if self.implements("Eq", name) {
-                        return true;
-                    }
-                }
-                if let Some(fields) = self.structs.get(name) {
-                    // **A generic struct is asked about what it was given**: its
-                    // fields name its parameters, which answer *yes* as a type
-                    // variable does, so `Block { stmts: Vec[Spanned[Stmt]] }`
-                    // derived `PartialEq` while `Stmt` did not, and `rustc`
-                    // refused the derive (ADR-294).
-                    let bound: BTreeMap<String, Ty> = self
-                        .parameters
-                        .get(name)
-                        .map(|params| params.iter().cloned().zip(args.iter().cloned()).collect())
-                        .unwrap_or_default();
-                    return fields.iter().all(|f| match bound.is_empty() {
-                        true => self.asking(&f.ty, how, seen),
-                        false => self.asking(&ty::substitute(&f.ty, &bound), how, seen),
-                    });
-                }
-                if self.enums.contains_key(name) {
-                    return self.payloads(name).all(|ty| self.asking(ty, how, seen));
-                }
-                if let Some(parts) = self.beside.get(name) {
-                    return parts.iter().all(|ty| self.asking(ty, how, seen));
-                }
-                // **A name nothing here knows** is another refusal's -
-                // `NK1135`, `NK2504` or `rustc`'s - and answers as `Unknown`
-                // does rather than as a second refusal naming the wrong cause
-                // (ADR-204 D1, #379). Only a name no ledger knows: one that
-                // has an entry answers from its column below.
-                if nikaia_std::tools::types::nobody_knows(name, self.own, self.library) {
-                    return true;
-                }
-                // **A type whose parts are Rust**: the column, whose absence is
-                // no. And it answers the `==` question only — a library type is
-                // never taken for an *equivalence*, because whether it is one is
-                // a second claim nobody has had a use for. So a `struct` holding
-                // one compares and is not a map key yet, which is the
-                // under-approximation that cannot be wrong.
-                let claimed = |contract: &crate::contracts::TypeContract| match how {
-                    Strength::Compares => contract.compares,
-                    Strength::Orders => contract.orders,
-                    Strength::Totally => contract.equates,
-                };
-                [self.own, self.library]
-                    .into_iter()
-                    .filter_map(|ledger| ledger.types.get(name))
-                    .any(claimed)
-            }
-        }
-    }
-
-    /// Every type a declared `enum`'s variants hold, **or a library one's**.
-    ///
-    /// A declared `enum` answers from [`Checker::enum_payloads`]; one that
-    /// arrived in a ledger answers from its `variants` column, which carries the
-    /// payload types for the same reason.
-    fn payloads<'s>(&'s self, name: &str) -> Box<dyn Iterator<Item = &'s Ty> + 's> {
-        if let Some(held) = self.payloads.get(name) {
-            return Box::new(held.iter());
-        }
-        let name = name.to_string();
-        Box::new(
-            [self.own, self.library]
-                .into_iter()
-                .filter_map(move |ledger| ledger.types.get(&name))
-                .flat_map(|contract| {
-                    contract
-                        .variants
-                        .iter()
-                        .flat_map(|variant| variant.holds.iter().map(|f| &f.ty))
-                }),
-        )
-    }
-}
+/// **Whether two values of this type may be compared** (ADR-204 D1):
+/// `tools/check_compare.nika`.
+use nikaia_std::tools::check_compare::CheckComparable as Comparable;
 
 /// **A part that lets the type holding it derive `Copy`**
 /// ([`Checker::collect_copies`]): a number, a truth value, a character, a

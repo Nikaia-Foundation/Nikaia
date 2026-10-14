@@ -196,6 +196,7 @@ COMPILER_NIKA = {
     "check_references.nika": "check: who writes the reference at a call (NK1137), a lent coalesce, a name given back (0.0.X) (0.0.833)",
     "check_expect.nika": "check: expect, expect_kept (0.0.834)",
     "emit_core_flow.nika": "emit: the flow of the core: Closure, Binary, Coalesce, TryCatch, Try, Return, Break, Throw, Spawn (0.0.835)",
+    "check_compare.nika": "check: whether a type compares, NK1188 NK1164 NK1247 NK1249 NK2204 NK2605, lent parts (0.0.894)",
 }
 
 

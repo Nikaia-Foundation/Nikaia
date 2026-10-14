@@ -288,3 +288,14 @@ know without the type. Found with rs2nika (#579, `claims_report`). Not decided h
 ## D29 (new). `tools/*.nika` checked as a project finds what `lower-std` does not
 
 The tools copied into a project with `node_id`/`winnow_grammar` described in `contracts/` give 11 NK2202 (a `sync` function calls one that "can pause", e.g. `CheckState::through_a_package_unread`) that `nikaia lower-std` accepts: the two inferences of `sync` differ. `rs2nika/survival` counts only findings in the draft (#579).
+
+## D30 (new). D28 for `starts_with`, and `match` on a `?? continue` binding
+
+Two found moving `Comparable` (C-5g, `check_compare.nika`). `let p = f"{name}."`
+then `path.starts_with(p)` is refused with `NK1102` (*expects `ref String`,
+passing `String`*), and `NK2105` where `p` stands outside the loop; a `ref
+String` parameter works. `let held = map.get(k) ?? continue` then `match held
+{ Ty::Named { name, .. } => .. }` lowers `Ty::Named { ref name, .. }` against a
+reference, which rustc refuses (*cannot explicitly borrow within an
+implicitly-borrowing pattern*); a helper taking `ref Ty` works. **To build:**
+a `nikaia run` test for each, then the argument coercion and the pattern.

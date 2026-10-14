@@ -1,0 +1,502 @@
+// crates/nikaia-std/src/tools/check_compare.nika
+//
+// **Whether two values of a type may be compared** (ADR-204 D1, ADR-341):
+// `==`, `Eq` and `Ord`, asked of the language's own types, of a declared type
+// by its parts and of a Rust type by its ledger column; and the refusal
+// `NK1188` for `==` on a type that does not compare. Moved from the compiler's
+// checker (ADR-294, #125, #558, C-5g).
+
+use std::collections
+
+/// The primitives that compare, totally and in order.
+comptime COMPARE_PLAIN: Array[ref String, 11] = ["i32", "i64", "u8", "u32", "u64", "bool", "char", "scalar", "String", "str", "Bytes"]
+
+/// The containers, which compare when what they hold does.
+comptime COMPARE_CONTAINERS: Array[ref String, 14] = ["Vec", "List", "Array", "Option", "Set", "collections::HashMap", "collections::HashSet", "collections::BTreeMap", "collections::BTreeSet", "HashMap", "HashSet", "BTreeMap", "BTreeSet", "Shared"]
+
+/// The maps and sets not kept in order, which have no order.
+comptime COMPARE_UNORDERED: Array[ref String, 7] = ["Set", "collections::HashMap", "collections::HashSet", "HashMap", "HashSet", "TrustedMap", "TrustedSet"]
+
+/// Which of the three questions is asked.
+pub enum CompareStrength {
+    /// `==` works: Rust's `PartialEq`.
+    Compares,
+    /// ...and equality is an equivalence: Rust's `Eq`.
+    Totally,
+    /// ...and the values have an order: Rust's `Ord`.
+    Orders,
+}
+
+/// **What the question is asked against**: the types another file declares,
+/// this unit's structs, enums, their payloads and parameters, and the ledgers.
+/// `Ty::Unknown` compares: nothing is known, so nothing is refused (C.4).
+pub struct CheckComparable {
+    /// What each type another file of the package declares is made of.
+    pub beside: ref collections::BTreeMap[String, Vec[Ty]],
+    pub structs: ref collections::BTreeMap[String, Vec[FieldContract]],
+    pub enums: ref collections::BTreeMap[String, collections::BTreeSet[String]],
+    /// What a declared `enum`'s variants hold.
+    pub payloads: ref collections::BTreeMap[String, Vec[Ty]],
+    /// A generic struct's parameters in declaration order.
+    pub parameters: ref collections::BTreeMap[String, Vec[String]],
+    pub own: ref Ledger,
+    pub library: ref Ledger,
+}
+
+impl CheckComparable {
+    /// Whether `==` works on the type.
+    pub fn of(ref self, ty: ref Ty) -> bool {
+        let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
+        return self.asking(ty, CompareStrength::Compares, seen)
+    }
+
+    /// Whether equality on it is an equivalence (`Eq`).
+    pub fn totally(ref self, ty: ref Ty) -> bool {
+        let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
+        return self.asking(ty, CompareStrength::Totally, seen)
+    }
+
+    /// Whether its values have an order (`Ord`).
+    pub fn orders(ref self, ty: ref Ty) -> bool {
+        let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
+        return self.asking(ty, CompareStrength::Orders, seen)
+    }
+
+    /// Whether the program or a library wrote `impl <trait_name> for <name>`
+    /// for a language trait, unless the program declares a trait of that name
+    /// (ADR-341).
+    pub fn implements(ref self, trait_name: ref String, name: ref String) -> bool {
+        if self.own.traits.contains_key(trait_name) {
+            return false
+        }
+        for ledger in [self.own, self.library] {
+            let types = ledger.implementations.get(trait_name) ?? continue
+            if types.contains(name) {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// `seen` is the types already being asked about, so a type that holds
+    /// itself answers once rather than forever.
+    fn asking(ref self, ty: ref Ty, how: CompareStrength, mut seen: collections::BTreeSet[String]) -> bool {
+        return match ty {
+            Ty::Unknown => true,
+            Ty::Var { .. } => true,
+            Ty::Count(_) => true,
+            Ty::Tuple(parts) => self.all_of(parts, how, seen),
+            Ty::Nullable(inner) => self.asking(inner, how, seen),
+            Ty::Seq { .. } => false,
+            Ty::Pointed { .. } => false,
+            Ty::Fn { .. } => false,
+            Ty::Named { name, args, .. } => self.named(name, args, how, seen),
+        }
+    }
+
+    fn all_of(ref self, parts: ref Vec[Ty], how: CompareStrength, mut seen: collections::BTreeSet[String]) -> bool {
+        for part in parts {
+            if !self.asking(part, how, seen) {
+                return false
+            }
+        }
+        return true
+    }
+
+    fn named(ref self, name: ref String, args: ref Vec[Ty], how: CompareStrength, mut seen: collections::BTreeSet[String]) -> bool {
+        if how == CompareStrength::Orders && COMPARE_UNORDERED.contains(name) {
+            return false
+        }
+        if name == "f64" {
+            return how == CompareStrength::Compares
+        }
+        if COMPARE_PLAIN.contains(name) {
+            return true
+        }
+        if COMPARE_CONTAINERS.contains(name) {
+            return self.all_of(args, how, seen)
+        }
+        // Keyed by the whole type: `Spanned[Stmt]` and `Spanned[Item]` are two
+        // questions (ADR-294).
+        let mut key = name.clone()
+        if args.len() > 0 {
+            let mut written: Vec[String] = []
+            for arg in args {
+                written.push(arg.text())
+            }
+            key = f"{name}[{written.join(", ")}]"
+        }
+        if seen.contains(key) {
+            return true
+        }
+        seen.insert(key)
+        let declared = self.structs.contains_key(name) || self.enums.contains_key(name) || self.beside.contains_key(name)
+        if declared {
+            if how == CompareStrength::Orders {
+                return self.implements("Ord", name)
+            }
+            if self.implements("Eq", name) {
+                return true
+            }
+        }
+        if self.structs.contains_key(name) {
+            let fields = self.structs.get(name) ?? return true
+            let mut bound: collections::BTreeMap[String, Ty] = collections::BTreeMap()
+            let params = self.parameters.get(name)
+            if params != null {
+                let names = params ?? return true
+                let mut at = 0
+                for param in names {
+                    if at < args.len() {
+                        bound.insert(param.clone(), args[at].clone())
+                    }
+                    at = at + 1
+                }
+            }
+            for field in fields {
+                if bound.len() == 0 {
+                    if !self.asking(field.ty, how, seen) {
+                        return false
+                    }
+                } else {
+                    let given = substitute(field.ty, bound)
+                    if !self.asking(given, how, seen) {
+                        return false
+                    }
+                }
+            }
+            return true
+        }
+        if self.enums.contains_key(name) {
+            for held in self.payloads_of(name) {
+                if !self.asking(held, how, seen) {
+                    return false
+                }
+            }
+            return true
+        }
+        if self.beside.contains_key(name) {
+            let parts = self.beside.get(name) ?? return true
+            return self.all_of(parts, how, seen)
+        }
+        // A name nothing here knows is another refusal's (ADR-204 D1, #379).
+        if nobody_knows(name, self.own, self.library) {
+            return true
+        }
+        // A type whose parts are Rust: the column, whose absence is no.
+        for ledger in [self.own, self.library] {
+            let contract = ledger.types.get(name) ?? continue
+            let claimed = match how {
+                CompareStrength::Compares => contract.compares,
+                CompareStrength::Orders => contract.orders,
+                CompareStrength::Totally => contract.equates,
+            }
+            if claimed {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// Every type a declared `enum`'s variants hold, or a library one's.
+    fn payloads_of(ref self, name: ref String) -> Vec[Ty] {
+        let held = self.payloads.get(name)
+        if held != null {
+            return (held ?? return []).clone()
+        }
+        let mut all: Vec[Ty] = []
+        for ledger in [self.own, self.library] {
+            let contract = ledger.types.get(name) ?? continue
+            for variant in contract.variants {
+                for field in variant.holds {
+                    all.push(field.ty.clone())
+                }
+            }
+        }
+        return all
+    }
+}
+
+/// **`NK1188`: `==` on a type that does not compare** (ADR-204 D3).
+/// Asked of one side and only where its type is known; the two sides
+/// disagreeing is `NK1102`'s business.
+pub fn compare_refusal(asking: ref CheckComparable, left: ref Ty, right: ref Ty, span: ref Span) -> CheckFinding? {
+    let mut found: String = ""
+    if !asking.of(left) {
+        found = left.text()
+    } else if !asking.of(right) {
+        found = right.text()
+    }
+    if found == "" {
+        return null
+    }
+    let note: String = "A `struct` or an `enum` can be compared when all of its parts can. Locks, mapped files, sockets and task handles can't be compared."
+    return check_refusal("NK1188", span, f"You can't compare two `{found}` values with `==`.", [note], "Compare the parts that matter, or give the type a method that says what being equal means for it.".clone())
+}
+
+/// What `compare_declared` found: the declared types that compare, and those
+/// whose equality is an equivalence.
+pub struct CompareDeclared {
+    pub compares: Vec[String],
+    pub totally: Vec[String],
+}
+
+/// **Which declared types compare** (ADR-204 D1), for the derive the emitter
+/// writes: only what this unit declares, after every type is collected,
+/// because the answer is structural.
+pub fn compare_declared(asking: ref CheckComparable, here: ref ParsedView) -> CompareDeclared {
+    let mut declared: Vec[String] = []
+    for item in here.items {
+        match item.node {
+            Item::Struct { name, .. } => declared.push(here.text(name)),
+            Item::Enum { name, .. } => declared.push(here.text(name)),
+            else => {},
+        }
+    }
+    let mut found = CompareDeclared { compares: [], totally: [] }
+    for name in declared {
+        // An `impl Eq` is the equality (ADR-341 D5).
+        if asking.implements("Eq", name) {
+            continue
+        }
+        let mut parts: Vec[Ty] = []
+        if asking.payloads.contains_key(name) {
+            parts = (asking.payloads.get(name) ?? continue).clone()
+        } else if asking.structs.contains_key(name) {
+            let fields = asking.structs.get(name) ?? continue
+            for field in fields {
+                parts.push(field.ty.clone())
+            }
+        }
+        let mut compares = true
+        let mut totally = true
+        for part in parts {
+            if !asking.of(part) {
+                compares = false
+            } else if !asking.totally(part) {
+                totally = false
+            }
+        }
+        if !compares {
+            continue
+        }
+        found.compares.push(name.clone())
+        if totally {
+            found.totally.push(name.clone())
+        }
+    }
+    return found
+}
+
+impl CheckState {
+
+    /// **`NK2204`: a write to shared mutable state that skips the door**: the
+    /// message names the door with the value in it. Only a name as the target;
+    /// a field or an index into a hull says nothing.
+    pub fn a_write_that_skips_the_door(ref mut self, world: ref CheckWorld, target: ref Expr, into: ref Ty, written: ref String, span: ref Span) {
+        let hull = match into {
+            Ty::Named { name, .. } => name == "SharedMut",
+            else => false,
+        }
+        if !hull {
+            return
+        }
+        let bound = match target {
+            Expr::Variable(name, _) => world.words.resolve(name).clone(),
+            else => return,
+        }
+        let note: String = "Changing shared state goes through a method that takes the lock."
+        self.findings.push(check_refusal("NK2204", span, f"You can't assign to `{bound}` directly: it holds shared mutable state.", [note], f"Write `{bound}.set({written})`."))
+    }
+
+    /// **A cleanup that can fail where the function cannot** (`NK2605`,
+    /// ADR-297 D2, D3): the value `name` of type `ty` dies here, and `owner`'s
+    /// cleanup can fail.
+    pub fn a_failing_cleanup_undeclared(ref mut self, name: ref String, ty: ref Ty, owner: ref String, span: ref Span) {
+        if self.flow.throwing || self.flow.caught || self.current == null {
+            return
+        }
+        let mut is: String = "holds"
+        match ty.unseen() {
+            Ty::Named { name, .. } => if compare_base(name) == compare_base(owner) {
+                is = "is".clone()
+            },
+            else => {},
+        }
+        let mut help: String = f"Declare the function with `throws`, or close the `{owner}` it holds yourself, with `close() catch {{ … }}`."
+        if is == "is" {
+            help = f"Declare the function with `throws`, or close it yourself where you want to handle the failure: `{name}.close() catch {{ … }}`."
+        }
+        self.findings.push(check_refusal("NK2605", span, f"This function can fail, because cleaning up `{name}` can fail.", [f"`{name}` {is} a `{owner}`. Its cleanup runs at the end of this block and can fail, so the function can fail with it."], help))
+    }
+
+    /// **The parts an arm only reads are lent** (ADR-291): a part that does
+    /// not copy, which nothing in the arm took (`handed` from `from`, `changed`
+    /// from `changed_from`), returned or handed back as the arm's value.
+    pub fn parts_lent(ref self, world: ref CheckWorld, body: ref Expr, parts: ref collections::BTreeMap[String, Ty], from: i64, changed_from: i64) -> collections::BTreeSet[String] {
+        let mut lent: collections::BTreeSet[String] = collections::BTreeSet()
+        for (name, ty) in parts {
+            if !self.takes_away(world, ty) {
+                continue
+            }
+            let mut taken = false
+            let mut at = 0
+            for handed in self.handed {
+                if at >= from && compare_path_within(handed.path, name, f"{name}.") {
+                    taken = true
+                }
+                at = at + 1
+            }
+            at = changed_from
+            while at < self.changed.len() {
+                if self.changed[at] == name {
+                    taken = true
+                }
+                at = at + 1
+            }
+            if taken || check_gives_back(body, name, world.words) {
+                continue
+            }
+            lent.insert(name.clone())
+        }
+        return lent
+    }
+}
+
+/// The last segment of a path: `fs::File` is `File`.
+fn compare_base(name: ref String) -> String {
+    let parts = name.split("::")
+    let mut last: String = name.clone()
+    for part in parts {
+        last = part.clone()
+    }
+    return last
+}
+
+/// Whether `path` is `name` or a part of it (`inside` is `name.`).
+fn compare_path_within(path: ref String, name: ref String, inside: ref String) -> bool {
+    return path == name || path.starts_with(inside)
+}
+
+/// **`NK1164` for `[T: Eq]` and `[T: Ord]`: the argument's type is neither.**
+/// `wanted` is what the callee `key` declares for each parameter, `bound` what
+/// the call binds them to, `parameters` the type parameters in scope here.
+pub fn compare_standard_bounds(asking: ref CheckComparable, parameters: ref collections::BTreeMap[String, Vec[String]], key: ref String, wanted: ref collections::BTreeMap[String, Vec[String]], bound: ref collections::BTreeMap[String, Ty], span: ref Span) -> Vec[CheckFinding] {
+    let mut refused: Vec[CheckFinding] = []
+    for (parameter, traits) in wanted {
+        let held = bound.get(parameter) ?? continue
+        for wanted_trait in traits {
+            if (wanted_trait != "Eq" && wanted_trait != "Ord") || asking.own.traits.contains_key(wanted_trait) {
+                continue
+            }
+            let ordered = wanted_trait == "Ord"
+            let mut met = false
+            let own_bounds = compare_parameter_bounds(held, parameters)
+            if own_bounds.len() == 1 && own_bounds[0] == "?" {
+                if ordered {
+                    met = asking.orders(held)
+                } else {
+                    met = asking.totally(held)
+                }
+            } else {
+                for own in own_bounds {
+                    if own == "Ord" || (!ordered && own == "Eq") {
+                        met = true
+                    }
+                }
+            }
+            if met {
+                continue
+            }
+            let shown = held.text()
+            let mut what: String = "an equality that is an equivalence"
+            if ordered {
+                what = "an order".clone()
+            }
+            let mut help: String = "Pass a type that has one: a number, `String`, `bool`, `char`, or a tuple, list or option of those, or a type you declare with an `impl`."
+            if asking.structs.contains_key(shown) || asking.enums.contains_key(shown) {
+                help = f"Write `impl {wanted_trait} for {shown} {{ … }}`, or pass a type that already has one."
+            }
+            refused.push(check_refusal("NK1164", span, f"`{key}` needs a `{wanted_trait}` here, but `{shown}` isn't one.", [f"`{key}` declares `[{parameter}: {wanted_trait}]`, so the type passed has to have {what}, and `{shown}` hasn't."], help))
+        }
+    }
+    return refused
+}
+
+/// **`NK1247`: a `BTreeMap` or `BTreeSet` keyed by a type with no order**,
+/// anywhere in `ty`.
+pub fn compare_keys_with_no_order(asking: ref CheckComparable, ty: ref Ty, span: ref Span) -> Vec[CheckFinding] {
+    let mut refused: Vec[CheckFinding] = []
+    let mut stack: Vec[Ty] = [ty.clone()]
+    while stack.len() > 0 {
+        let one = stack.pop() ?? break
+        match one {
+            Ty::Named { name, args, .. } => {
+                let last = compare_base(name)
+                if (last == "BTreeMap" || last == "BTreeSet") && args.len() > 0 && !asking.orders(args[0]) {
+                    let key = args[0].text()
+                    let note: String = "A number, a `String`, a `bool`, a `char`, and a tuple, list or option of those have one. A float doesn't (`NaN`), a `struct` or an `enum` you declare isn't given one, and a type from a library has one only where its ledger says `orders = true`."
+                    refused.push(check_refusal("NK1247", span, f"`{last}` keeps its keys in order, and `{key}` has no order.", [note], "Use a `HashMap` or `HashSet` where the order of the keys is not observable, or key by a text or a number that says what comes first.".clone()))
+                }
+                for arg in args {
+                    stack.push(arg.clone())
+                }
+            },
+            Ty::Tuple(parts) => {
+                for part in parts {
+                    stack.push(part.clone())
+                }
+            },
+            Ty::Nullable(inner) => stack.push(inner.clone()),
+            else => {},
+        }
+    }
+    return refused
+}
+
+/// The bounds of a type parameter in scope, or `["?"]` where `ty` is not one.
+fn compare_parameter_bounds(ty: ref Ty, parameters: ref collections::BTreeMap[String, Vec[String]]) -> Vec[String] {
+    let name = match ty {
+        Ty::Named { name, args, .. } => if args.len() == 0 { name.clone() } else { "".clone() },
+        else => "".clone(),
+    }
+    let bounds = parameters.get(name) ?? return ["?".clone()]
+    return bounds.clone()
+}
+
+/// **`NK1249`: `impl Eq` or `impl Ord` the program may not write**: for a type
+/// it does not declare, or `Ord` for a type that is not `Eq` (ADR-341).
+pub fn compare_language_impls(asking: ref CheckComparable, here: ref ParsedView) -> Vec[CheckFinding] {
+    let mut refused: Vec[CheckFinding] = []
+    for item in here.items {
+        match item.node {
+            Item::Impl { trait_name, target, .. } => {
+                let found = compare_language_impl(asking, here, trait_name, target, item.span)
+                if found != null {
+                    refused.push(found ?? continue)
+                }
+            },
+            else => {},
+        }
+    }
+    return refused
+}
+
+fn compare_language_impl(asking: ref CheckComparable, here: ref ParsedView, trait_name: winnow_grammar::Symbol?, target: ref Type, span: ref Span) -> CheckFinding? {
+    let symbol = trait_name ?? return null
+    let trait_text = here.text(symbol)
+    if (trait_text != "Eq" && trait_text != "Ord") || asking.own.traits.contains_key(trait_text) {
+        return null
+    }
+    let name = here.text(target.name)
+    let declared = asking.structs.contains_key(name) || asking.enums.contains_key(name) || asking.beside.contains_key(name)
+    if !declared {
+        return check_refusal("NK1249", span, f"You can't write `impl {trait_text} for {name}`: your program doesn't declare it.", [f"`{trait_text}` for a type another package declares is that package's to say, and its ledger does."], f"Write it for a type you declare, or hold `{name}` in a `struct` of your own.")
+    }
+    let named = Ty::Named { name: name.clone(), args: [], view: false }
+    if trait_text == "Ord" && !asking.totally(named) {
+        let note: String = "An order that disagrees with equality gives an ordered map no meaning, and a type holding a float is not `Eq`."
+        return check_refusal("NK1249", span, f"`impl Ord for {name}` needs `{name}` to be `Eq`.", [note], f"Write `impl Eq for {name}`, or take out the part that has no equality.")
+    }
+    return null
+}

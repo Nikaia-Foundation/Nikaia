@@ -193,3 +193,90 @@ fn ends_in_null_literal(expr: ref Expr) -> bool {
         else => false,
     }
 }
+
+/// An arm that ends in an integer literal, through braces.
+fn an_arm_is_an_integer(arm: ref CheckArm) -> bool {
+    let tail = arm.tail ?? return false
+    return match check_peeled(tail) {
+        Expr::LitInt { .. } => true,
+        else => false,
+    }
+}
+
+/// **Arms that are known and disagree** (#596, `NK1245`): the compiler cannot
+/// tell the type of the value, and no arm is unknown for another refusal's
+/// sake. The finding stands at `span`; the caller moves the caret to the first
+/// arm that is not the first one's type (#107).
+pub fn arms_that_disagree(arms: ref Vec[CheckArm], is_if: bool, span: ref Span) -> CheckFinding? {
+    if arms.len() < 2 {
+        return null
+    }
+    // A number nothing typed yet is a use's to type, so it is a number.
+    let mut known: Vec[Ty] = []
+    let mut numbers = 0
+    for arm in arms {
+        let ty = arm.ty.unseen()
+        if wholly_known(ty) {
+            let unit = match ty {
+                Ty::Tuple(parts) => parts.len() == 0,
+                else => false,
+            }
+            if unit {
+                return null
+            }
+            known.push(ty)
+        } else if an_arm_is_an_integer(arm) {
+            numbers = numbers + 1
+        } else {
+            return null
+        }
+    }
+    let mut alike = true
+    let mut at = 1
+    while at < known.len() {
+        if known[at] != known[at - 1] {
+            alike = false
+        }
+        at = at + 1
+    }
+    if numbers > 0 {
+        for ty in known {
+            if integer_named(value_of_a_copy(ty)) == null {
+                alike = false
+            }
+        }
+    }
+    if alike {
+        return null
+    }
+    let mut word: String = "match"
+    let mut article: String = "`match`"
+    if is_if {
+        word = "if".clone()
+        article = "`if`".clone()
+    }
+    let mut shown: Vec[String] = []
+    for ty in known {
+        let text = ty.text()
+        if !shown.contains(text) {
+            shown.push(text)
+        }
+    }
+    if numbers > 0 {
+        shown.push("a number".clone())
+    }
+    let mut listed: String = ""
+    let mut index = 0
+    while index < shown.len() {
+        let one = shown[index].clone()
+        if index + 1 == shown.len() {
+            listed = f"{listed} and `{one}`"
+        } else if index == 0 {
+            listed = f"`{one}`"
+        } else {
+            listed = f"{listed}, `{one}`"
+        }
+        index = index + 1
+    }
+    return check_refusal("NK1245", span, f"The arms of this {article} are {listed}, so the compiler can't tell what type its value is.", [f"What is not known is not checked, so the value of a `{word}` whose arms disagree is refused rather than left to the language below."], f"Make the arms of the {article} the same type.")
+}

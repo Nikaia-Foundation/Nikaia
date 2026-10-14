@@ -67,6 +67,12 @@ barely moves because the finished code was written before the `Seq` methods and
 | `Option::as_mut()` on a field | 1 | `if let Some(outer) = self.s.flow.guarded.as_mut()` | `as_mut()` kept | clone, change, assign back (as `may_fail_here`) |
 | `self.parsed.interner` | 1 | `&self.parsed.interner` | `world.interner` | `world.words` |
 | `crate::ast::int_value` (`i128`) not in Nikaia | 1 | `int_value(*value, *negative)` | kept, listed as missing | compare the `u64` literal and its sign directly |
+| COMPILER: `s.starts_with(p)` with `p` a local `let p = f"..."` | 1 | `taken.path.starts_with(&format!("{name}."))` | `NK1102` (*expects `ref String`, passing `String`*), also inside the loop; outside it `NK2105` | a helper taking `p: ref String`, called with the f-string (`compare_path_within`) |
+| COMPILER: `match` on a binding from `map.get(k) ?? continue` | 1 | `match held { Ty::Named { name, args, .. } if .. }` | lowers `ref name` inside an implicitly borrowing pattern (rustc: *cannot explicitly borrow within an implicitly-borrowing pattern*) | a helper with a `ref Ty` parameter (`compare_parameter_bounds`) |
+| LANGUAGE: `ref mut` parameter for a recursive walk's `seen` set | 1 | `seen: &mut BTreeSet<String>` | `NK1158` (*`ref mut` only for C*) | `mut seen: collections::BTreeSet[String]` |
+| LANGUAGE: a method on `CheckState` handing back a struct of views of `self` and `world` | 1 | `Comparable { structs: &self.s.structs, own: self.world.own, .. }` | `NK2302`, and `self.structs` is not a `ref` field value (`NK1106`) | Rust builds `CheckComparable`; Nikaia takes it as `ref` in free functions |
+| STYLE: `f"{name}{args:?}"` as a memo key | 1 | Debug of `Vec<Ty>` | not available | `name[` + `Ty::text` joined `]`, unique the same way |
+| STYLE: `Vec::extend` with a `T?` | 1 | `refused.extend(found)` (Option is an iterator) | `NK1102` | `if found != null { push(found ?? continue) }` |
 
 ### For the converter, by frequency
 

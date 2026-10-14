@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.894] — 2026-10-14
+
+**check: whether a type compares, in Nikaia (#125, #558)**
+- Comparable (==, Eq, Ord) and NK1188, NK1164, NK1247, NK1249, NK1245, NK2204, NK2605 and lent match parts are checked by tools/check_compare.nika and check_arms.nika; no change in what a program means.
+
 ## [0.0.893] — 2026-10-14
 
 **task: a catch at join names the body's error; a failing task on the pool (#605)**

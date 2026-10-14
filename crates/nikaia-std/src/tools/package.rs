@@ -10044,6 +10044,56 @@ impl CheckState {
 
 fn ends_in_null_literal(expr: &Expr) -> bool { matches!(expr, Expr::LitNull(_)) }
 
+fn an_arm_is_an_integer(arm: &CheckArm<'_>) -> bool {
+    let tail = match arm.tail { Some(__nikaia_value) => __nikaia_value, None => return false };
+    matches!(check_peeled(tail), Expr::LitInt { .. })
+}
+
+pub fn arms_that_disagree(arms: &[CheckArm<'_>], is_if: bool, span: &Span) -> Option<CheckFinding> {
+    if arms.len() < 2 { return None; }
+    let mut known: Vec<Ty> = vec![];
+    let mut numbers = 0;
+    for arm in arms.iter() {
+        let ty = arm.ty.unseen();
+        if wholly_known(&ty) {
+            let unit = match ty {
+                Ty::Tuple(ref parts) => parts.is_empty(),
+                _ => false,
+            };
+            if unit { return None; }
+            known.push(ty);
+        } else if an_arm_is_an_integer(arm) { numbers = numbers + 1; } else { return None; }
+    }
+    let mut alike = true;
+    let mut at: i64 = 1;
+    while at < known.len() as i64 {
+        if *nikaia_std::index::get(&known, nikaia_std::index::at(at)) != *nikaia_std::index::get(&known, nikaia_std::index::at(at - 1)) { alike = false; }
+        at = at + 1;
+    }
+    if numbers > 0 { for ty in known.iter() { if integer_named(&value_of_a_copy(ty)).is_none() { alike = false; } } }
+    if alike { return None; }
+    let mut word: String = String::from("match");
+    let mut article: String = String::from("`match`");
+    if is_if {
+        word = "if".to_owned();
+        article = "`if`".to_owned();
+    }
+    let mut shown: Vec<String> = vec![];
+    for ty in known.iter() {
+        let text = ty.text();
+        if !nikaia_std::list::contains(&shown, &text) { shown.push(text); }
+    }
+    if numbers > 0 { shown.push("a number".to_owned()); }
+    let mut listed: String = String::from("");
+    let mut index: i64 = 0;
+    while index < shown.len() as i64 {
+        let one = (*nikaia_std::index::get(&shown, nikaia_std::index::at(index))).to_owned();
+        if index + 1 == shown.len() as i64 { listed = format!("{} and `{}`", listed, one); } else if index == 0 { listed = format!("`{}`", one); } else { listed = format!("{}, `{}`", listed, one); }
+        index = index + 1;
+    }
+    Some(check_refusal("NK1245", span, format!("The arms of this {} are {}, so the compiler can't tell what type its value is.", article, listed), vec![format!("What is not known is not checked, so the value of a `{}` whose arms disagree is refused rather than left to the language below.", word)], Some(format!("Make the arms of the {} the same type.", article))))
+}
+
 
 // --- check_binds.nika ---
 
@@ -10848,6 +10898,322 @@ pub fn a_pausing_sequence(result: Ty, on: &Ty) -> Ty {
         Ty::Seq { ref item, can_throw, parallel, shape, .. } => { let item = nikaia_std::boxed::open(item); Ty::Seq { item: Box::new(item.clone()), is_sync: false, pauses: true, can_throw: can_throw || fails, parallel, shape: Shape { ends: false, sized: false, replays: shape.replays } } },
         _ => result,
     }
+}
+
+
+// --- check_compare.nika ---
+
+const COMPARE_PLAIN: [&str; 11] = ["i32", "i64", "u8", "u32", "u64", "bool", "char", "scalar", "String", "str", "Bytes"];
+
+const COMPARE_CONTAINERS: [&str; 14] = ["Vec", "List", "Array", "Option", "Set", "collections::HashMap", "collections::HashSet", "collections::BTreeMap", "collections::BTreeSet", "HashMap", "HashSet", "BTreeMap", "BTreeSet", "Shared"];
+
+const COMPARE_UNORDERED: [&str; 7] = ["Set", "collections::HashMap", "collections::HashSet", "HashMap", "HashSet", "TrustedMap", "TrustedSet"];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CompareStrength {
+    Compares,
+    Totally,
+    Orders,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CheckComparable<'a> {
+    pub beside: &'a collections::BTreeMap<String, Vec<Ty>>,
+    pub structs: &'a collections::BTreeMap<String, Vec<FieldContract>>,
+    pub enums: &'a collections::BTreeMap<String, collections::BTreeSet<String>>,
+    pub payloads: &'a collections::BTreeMap<String, Vec<Ty>>,
+    pub parameters: &'a collections::BTreeMap<String, Vec<String>>,
+    pub own: &'a Ledger,
+    pub library: &'a Ledger,
+}
+
+impl<'a> CheckComparable<'a> {
+    pub fn of(&self, ty: &'a Ty) -> bool {
+        let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
+        self.asking(ty, CompareStrength::Compares, &mut seen)
+    }
+    pub fn totally(&self, ty: &'a Ty) -> bool {
+        let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
+        self.asking(ty, CompareStrength::Totally, &mut seen)
+    }
+    pub fn orders(&self, ty: &'a Ty) -> bool {
+        let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
+        self.asking(ty, CompareStrength::Orders, &mut seen)
+    }
+    pub fn implements(&self, trait_name: &'a str, name: &str) -> bool {
+        if self.own.traits.contains_key(trait_name) { return false; }
+        for ledger in [self.own, self.library] {
+            let types = match ledger.implementations.get(trait_name) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            if types.contains(name) { return true; }
+        }
+        false
+    }
+    fn asking(&self, ty: &Ty, how: CompareStrength, seen: &mut collections::BTreeSet<String>) -> bool {
+        match ty {
+            Ty::Unknown => true,
+            Ty::Var { .. } => true,
+            Ty::Count(_) => true,
+            Ty::Tuple(parts) => self.all_of(parts, how, seen),
+            Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); self.asking(inner, how, seen) },
+            Ty::Seq { .. } => false,
+            Ty::Pointed { .. } => false,
+            Ty::Fn { .. } => false,
+            Ty::Named { name, args, .. } => self.named(name, args, how, seen),
+        }
+    }
+    fn all_of(&self, parts: &'a Vec<Ty>, how: CompareStrength, seen: &mut collections::BTreeSet<String>) -> bool {
+        for part in parts.iter() { if !self.asking(part, how, seen) { return false; } }
+        true
+    }
+    fn named(&self, name: &'a str, args: &'a Vec<Ty>, how: CompareStrength, seen: &mut collections::BTreeSet<String>) -> bool {
+        if how == CompareStrength::Orders && nikaia_std::list::contains(&COMPARE_UNORDERED, &name) { return false; }
+        if name == "f64" { return how == CompareStrength::Compares; }
+        if nikaia_std::list::contains(&COMPARE_PLAIN, &name) { return true; }
+        if nikaia_std::list::contains(&COMPARE_CONTAINERS, &name) { return self.all_of(args, how, seen); }
+        let mut key = name.to_owned();
+        if !args.is_empty() {
+            let mut written: Vec<String> = vec![];
+            for arg in args.iter() { written.push(arg.text()); }
+            key = format!("{}[{}]", name, written.join(", "));
+        }
+        if seen.contains(&key) { return true; }
+        seen.insert(key);
+        let declared = self.structs.contains_key(name) || self.enums.contains_key(name) || self.beside.contains_key(name);
+        if declared {
+            if how == CompareStrength::Orders { return self.implements("Ord", name); }
+            if self.implements("Eq", name) { return true; }
+        }
+        if self.structs.contains_key(name) {
+            let fields = match self.structs.get(name) { Some(__nikaia_value) => __nikaia_value, None => return true };
+            let mut bound: collections::BTreeMap<String, Ty> = collections::BTreeMap::new();
+            let params = self.parameters.get(name);
+            if params.is_some() {
+                let names = match params { Some(__nikaia_value) => __nikaia_value, None => return true };
+                let mut at: i64 = 0;
+                for param in names.iter() {
+                    if at < args.len() as i64 { bound.insert(param.to_owned(), (*nikaia_std::index::get(&args, nikaia_std::index::at(at))).clone()); }
+                    at = at + 1;
+                }
+            }
+            for field in fields.iter() {
+                if bound.is_empty() { if !self.asking(&field.ty, how, seen) { return false; } } else {
+                    let given = substitute(&field.ty, &bound);
+                    if !self.asking(&given, how, seen) { return false; }
+                }
+            }
+            return true;
+        }
+        if self.enums.contains_key(name) {
+            for held in self.payloads_of(name) { if !self.asking(&held, how, seen) { return false; } }
+            return true;
+        }
+        if self.beside.contains_key(name) {
+            let parts = match self.beside.get(name) { Some(__nikaia_value) => __nikaia_value, None => return true };
+            return self.all_of(&parts, how, seen);
+        }
+        if nobody_knows(name, self.own, self.library) { return true; }
+        for ledger in [self.own, self.library] {
+            let contract = match ledger.types.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let claimed = match how {
+                CompareStrength::Compares => contract.compares,
+                CompareStrength::Orders => contract.orders,
+                CompareStrength::Totally => contract.equates,
+            };
+            if claimed { return true; }
+        }
+        false
+    }
+    fn payloads_of(&self, name: &'a str) -> Vec<Ty> {
+        let held = self.payloads.get(name);
+        if held.is_some() { return match held { Some(__nikaia_value) => __nikaia_value, None => return vec![] }.to_owned(); }
+        let mut all: Vec<Ty> = vec![];
+        for ledger in [self.own, self.library] {
+            let contract = match ledger.types.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            for variant in contract.variants.iter() { for field in variant.holds.iter() { all.push(field.ty.clone()); } }
+        }
+        all
+    }
+}
+
+pub fn compare_refusal(asking: &CheckComparable<'_>, left: &Ty, right: &Ty, span: &Span) -> Option<CheckFinding> {
+    let mut found: String = String::from("");
+    if !asking.of(left) { found = left.text(); } else if !asking.of(right) { found = right.text(); }
+    if found == "" { return None; }
+    let note: String = String::from("A `struct` or an `enum` can be compared when all of its parts can. Locks, mapped files, sockets and task handles can't be compared.");
+    Some(check_refusal("NK1188", span, format!("You can't compare two `{}` values with `==`.", found), vec![note], Some("Compare the parts that matter, or give the type a method that says what being equal means for it.".to_owned())))
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CompareDeclared {
+    pub compares: Vec<String>,
+    pub totally: Vec<String>,
+}
+
+pub fn compare_declared(asking: &CheckComparable<'_>, here: &ParsedView<'_>) -> CompareDeclared {
+    let mut declared: Vec<String> = vec![];
+    for item in here.items.iter() {
+        match &item.node {
+            Item::Struct { name, .. } => { let name = *name; declared.push(here.text(name)) },
+            Item::Enum { name, .. } => { let name = *name; declared.push(here.text(name)) },
+            _ => { },
+        }
+    }
+    let mut found = CompareDeclared { compares: vec![], totally: vec![] };
+    for name in declared.iter() {
+        if asking.implements("Eq", name) { continue; }
+        let mut parts: Vec<Ty> = vec![];
+        if asking.payloads.contains_key(name) { parts = match asking.payloads.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue }.to_owned(); } else if asking.structs.contains_key(name) {
+            let fields = match asking.structs.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            for field in fields.iter() { parts.push(field.ty.clone()); }
+        }
+        let mut compares = true;
+        let mut totally = true;
+        for part in parts.iter() { if !asking.of(part) { compares = false; } else if !asking.totally(part) { totally = false; } }
+        if !compares { continue; }
+        found.compares.push(name.to_owned());
+        if totally { found.totally.push(name.to_owned()); }
+    }
+    found
+}
+
+impl CheckState {
+    pub fn a_write_that_skips_the_door(&mut self, world: &CheckWorld<'_>, target: &Expr, into: &Ty, written: &str, span: &Span) {
+        let hull = match into {
+            Ty::Named { name, .. } => name == "SharedMut",
+            _ => false,
+        };
+        if !hull { return; }
+        let bound = match target {
+            Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_owned() },
+            _ => return,
+        };
+        let note: String = String::from("Changing shared state goes through a method that takes the lock.");
+        self.findings.push(check_refusal("NK2204", span, format!("You can't assign to `{}` directly: it holds shared mutable state.", bound), vec![note], Some(format!("Write `{}.set({})`.", bound, written))));
+    }
+    pub fn a_failing_cleanup_undeclared(&mut self, name: &str, ty: &Ty, owner: &str, span: &Span) {
+        if self.flow.throwing || self.flow.caught || self.current.is_none() { return; }
+        let mut is: String = String::from("holds");
+        match ty.unseen() {
+            Ty::Named { ref name, .. } => if compare_base(name) == compare_base(owner) { is = "is".to_owned(); },
+            _ => { },
+        }
+        let mut help: String = format!("Declare the function with `throws`, or close the `{}` it holds yourself, with `close() catch {{ … }}`.", owner);
+        if is == "is" { help = format!("Declare the function with `throws`, or close it yourself where you want to handle the failure: `{}.close() catch {{ … }}`.", name); }
+        self.findings.push(check_refusal("NK2605", span, format!("This function can fail, because cleaning up `{}` can fail.", name), vec![format!("`{}` {} a `{}`. Its cleanup runs at the end of this block and can fail, so the function can fail with it.", name, is, owner)], Some(help)));
+    }
+    pub fn parts_lent(&self, world: &CheckWorld<'_>, body: &Expr, parts: &collections::BTreeMap<String, Ty>, from: i64, changed_from: i64) -> collections::BTreeSet<String> {
+        let mut lent: collections::BTreeSet<String> = collections::BTreeSet::new();
+        for (name, ty) in parts.iter() {
+            if !self.takes_away(world, ty) { continue; }
+            let mut taken = false;
+            let mut at: i64 = 0;
+            for handed in self.handed.iter() {
+                if at >= from && compare_path_within(&handed.path, name, &format!("{}.", name)) { taken = true; }
+                at = at + 1;
+            }
+            at = changed_from;
+            while at < self.changed.len() as i64 {
+                if *nikaia_std::index::get(&self.changed, nikaia_std::index::at(at)) == *name { taken = true; }
+                at = at + 1;
+            }
+            if taken || check_gives_back(body, name, world.words) { continue; }
+            lent.insert(name.to_owned());
+        }
+        lent
+    }
+}
+
+fn compare_base(name: &str) -> String {
+    let parts = name.split("::");
+    let mut last: String = name.to_owned();
+    for part in parts { last = part.to_owned(); }
+    last
+}
+
+fn compare_path_within(path: &str, name: &str, inside: &str) -> bool { path == name || path.starts_with(inside) }
+
+pub fn compare_standard_bounds(asking: &CheckComparable<'_>, parameters: &collections::BTreeMap<String, Vec<String>>, key: &str, wanted: &collections::BTreeMap<String, Vec<String>>, bound: &collections::BTreeMap<String, Ty>, span: &Span) -> Vec<CheckFinding> {
+    let mut refused: Vec<CheckFinding> = vec![];
+    for (parameter, traits) in wanted.iter() {
+        let held = match bound.get(parameter) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        for wanted_trait in traits.iter() {
+            if wanted_trait != "Eq" && wanted_trait != "Ord" || asking.own.traits.contains_key(wanted_trait) { continue; }
+            let ordered = wanted_trait == "Ord";
+            let mut met = false;
+            let own_bounds = compare_parameter_bounds(&held, parameters);
+            if own_bounds.len() == 1 && *nikaia_std::index::get(&own_bounds, 0) == "?" { if ordered { met = asking.orders(&held); } else { met = asking.totally(&held); } } else { for own in own_bounds.iter() { if own == "Ord" || !ordered && own == "Eq" { met = true; } } }
+            if met { continue; }
+            let shown = held.text();
+            let mut what: String = String::from("an equality that is an equivalence");
+            if ordered { what = "an order".to_owned(); }
+            let mut help: String = String::from("Pass a type that has one: a number, `String`, `bool`, `char`, or a tuple, list or option of those, or a type you declare with an `impl`.");
+            if asking.structs.contains_key(&shown) || asking.enums.contains_key(&shown) { help = format!("Write `impl {} for {} {{ … }}`, or pass a type that already has one.", wanted_trait, shown); }
+            refused.push(check_refusal("NK1164", span, format!("`{}` needs a `{}` here, but `{}` isn't one.", key, wanted_trait, shown), vec![format!("`{}` declares `[{}: {}]`, so the type passed has to have {}, and `{}` hasn't.", key, parameter, wanted_trait, what, shown)], Some(help)));
+        }
+    }
+    refused
+}
+
+pub fn compare_keys_with_no_order(asking: &CheckComparable<'_>, ty: &Ty, span: &Span) -> Vec<CheckFinding> {
+    let mut refused: Vec<CheckFinding> = vec![];
+    let mut stack: Vec<Ty> = vec![ty.clone()];
+    while !stack.is_empty() {
+        let one = match stack.pop() { Some(__nikaia_value) => __nikaia_value, None => break };
+        match one {
+            Ty::Named { ref name, ref args, .. } => {
+                let last = compare_base(name);
+                if (last == "BTreeMap" || last == "BTreeSet") && !args.is_empty() && !asking.orders(nikaia_std::index::get(&args, 0)) {
+                    let key = (*nikaia_std::index::get(&args, 0)).text();
+                    let note: String = String::from("A number, a `String`, a `bool`, a `char`, and a tuple, list or option of those have one. A float doesn't (`NaN`), a `struct` or an `enum` you declare isn't given one, and a type from a library has one only where its ledger says `orders = true`.");
+                    refused.push(check_refusal("NK1247", span, format!("`{}` keeps its keys in order, and `{}` has no order.", last, key), vec![note], Some("Use a `HashMap` or `HashSet` where the order of the keys is not observable, or key by a text or a number that says what comes first.".to_owned())));
+                }
+                for arg in args.iter() { stack.push(arg.clone()); }
+            },
+            Ty::Tuple(ref parts) => { for part in parts.iter() { stack.push(part.clone()); } },
+            Ty::Nullable(ref inner) => { let inner = nikaia_std::boxed::open(inner); stack.push(inner.clone()) },
+            _ => { },
+        }
+    }
+    refused
+}
+
+fn compare_parameter_bounds(ty: &Ty, parameters: &collections::BTreeMap<String, Vec<String>>) -> Vec<String> {
+    let name = match ty {
+        Ty::Named { name, args, .. } => if args.is_empty() { name.to_owned() } else { "".to_owned() },
+        _ => "".to_owned(),
+    };
+    let bounds = match parameters.get(&name) { Some(__nikaia_value) => __nikaia_value, None => return vec!["?".to_owned()] };
+    bounds.to_owned()
+}
+
+pub fn compare_language_impls(asking: &CheckComparable<'_>, here: &ParsedView<'_>) -> Vec<CheckFinding> {
+    let mut refused: Vec<CheckFinding> = vec![];
+    for item in here.items.iter() {
+        match &item.node {
+            Item::Impl { trait_name, target, .. } => {
+                let trait_name = *trait_name;
+                let found = compare_language_impl(asking, here, trait_name, target, &item.span);
+                if found.is_some() { refused.push(match found { Some(__nikaia_value) => __nikaia_value, None => continue }); }
+            },
+            _ => { },
+        }
+    }
+    refused
+}
+
+fn compare_language_impl(asking: &CheckComparable<'_>, here: &ParsedView<'_>, trait_name: Option<winnow_grammar::Symbol>, target: &Type, span: &Span) -> Option<CheckFinding> {
+    let symbol = match trait_name { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let trait_text = here.text(symbol);
+    if trait_text != "Eq" && trait_text != "Ord" || asking.own.traits.contains_key(&trait_text) { return None; }
+    let name = here.text(target.name);
+    let declared = asking.structs.contains_key(&name) || asking.enums.contains_key(&name) || asking.beside.contains_key(&name);
+    if !declared { return Some(check_refusal("NK1249", span, format!("You can't write `impl {} for {}`: your program doesn't declare it.", trait_text, name), vec![format!("`{}` for a type another package declares is that package's to say, and its ledger does.", trait_text)], Some(format!("Write it for a type you declare, or hold `{}` in a `struct` of your own.", name)))); }
+    let named = Ty::Named { name: name.to_owned(), args: vec![], view: false };
+    if trait_text == "Ord" && !asking.totally(&named) {
+        let note: String = String::from("An order that disagrees with equality gives an ordered map no meaning, and a type holding a float is not `Eq`.");
+        return Some(check_refusal("NK1249", span, format!("`impl Ord for {}` needs `{}` to be `Eq`.", name, name), vec![note], Some(format!("Write `impl Eq for {}`, or take out the part that has no equality.", name))));
+    }
+    None
 }
 
 
@@ -50361,7 +50727,7 @@ pub mod check_arith {
 }
 pub mod check_arms {
     #[allow(unused_imports)]
-    pub use super::{CheckArm};
+    pub use super::{CheckArm, arms_that_disagree};
 }
 pub mod check_binds {
     #[allow(unused_imports)]
@@ -50380,6 +50746,10 @@ pub mod check_buildtime2 {}
 pub mod check_calls {
     #[allow(unused_imports)]
     pub use super::{call_arguments, expected_arguments, receiver_bindings, argument_bindings, walks_by_value, shape_through, a_paused_chain, a_pausing_sequence};
+}
+pub mod check_compare {
+    #[allow(unused_imports)]
+    pub use super::{CompareStrength, CheckComparable, compare_refusal, CompareDeclared, compare_declared, compare_standard_bounds, compare_keys_with_no_order, compare_language_impls};
 }
 pub mod check_consts {
     #[allow(unused_imports)]
