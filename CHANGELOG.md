@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.911] — 2026-10-14
+
+**A statement match arm is a statement**
+- An arm of a statement `match` whose body hands back a value (`k => seen.insert(k, v)`) drops it, so it agrees with `else => {}` (lowering-defects D34).
+
 ## [0.0.910] — 2026-10-14
 
 **check: a comptime and a dsl block over a grammar in Nikaia (U-c2, #125, #558)**

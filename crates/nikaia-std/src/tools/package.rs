@@ -12674,7 +12674,7 @@ pub fn check_core_comptime_binding<H: CheckHost>(state: &mut CheckState, world: 
         let literal = state.array_literal(&found, &wanted, value, span);
         if literal.is_some() { narrowed = nikaia_std::index::or(literal, || Ty::Unknown); }
         match state.crosses_as_fixed(&narrowed, &wanted, (evaluated).as_ref(), span) {
-            CheckCrossing::Other => check_core_comptime_other(state, world, &bound, &narrowed, &wanted, (evaluated).as_ref(), span),
+            CheckCrossing::Other => { check_core_comptime_other(state, world, &bound, &narrowed, &wanted, (evaluated).as_ref(), span); },
             _ => { },
         }
     } else {
