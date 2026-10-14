@@ -179,9 +179,9 @@ fn the_other_three_collections_are_built() {
     assert!(lowered(source).contains("collections::BTreeMap::new()"));
 }
 
-/// **What `NK1190` refuses**: a type the library names, called as its
-/// constructor, with no `::new` entry beside it. `io::IoError` is a `std` type
-/// nothing constructs this way.
+/// **An enum of several variants called by its type's name** is refused
+/// before checking (ADR-347, `NK1252`): `io::IoError` has five variants, and
+/// the message names them, so `NK1190`'s "no constructor" is never reached.
 #[test]
 fn a_std_type_with_no_constructor_is_refused_here() {
     let source = "use std::io\n\
@@ -189,15 +189,11 @@ fn a_std_type_with_no_constructor_is_refused_here() {
                   fn main() {\n\
                   \x20   let e = io::IoError()\n\
                   }\n";
-    let found: Vec<_> = every_finding(source)
-        .into_iter()
-        .filter(|f| f.code == "NK1190")
-        .collect();
-    assert_eq!(found.len(), 1, "{:#?}", every_finding(source));
-    assert_eq!(
-        found[0].message,
-        "You can't call `io::IoError(…)`: it has no constructor."
-    );
+    let refused = parse_to_ast(source)
+        .expect_err("NK1252 refuses it")
+        .to_string();
+    assert!(refused.contains("NK1252"), "{refused}");
+    assert!(refused.contains("io::IoError::NotFound"), "{refused}");
 }
 
 /// **A struct of the program's own is built with a literal** (0.0.240):
