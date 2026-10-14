@@ -342,6 +342,18 @@ pub enum Command {
         #[arg(long)]
         project: Option<PathBuf>,
     },
+    /// Manage the user cache (`~/.cache/nikaia`, or `NIKAIA_CACHE_DIR`).
+    Cache {
+        #[command(subcommand)]
+        action: CacheAction,
+    },
+}
+
+/// What `nikaia cache` does.
+#[derive(Subcommand, Debug)]
+pub enum CacheAction {
+    /// Empty the user cache. Everything in it is rebuilt on demand.
+    Clean,
 }
 
 /// `rustc --error-format=json … | nikaia explain x.nika`
@@ -648,6 +660,7 @@ fn project_command(args: &Cli, command: &Command) -> Result<i32> {
             project,
         } => return describe(crate_name, project.clone()),
         Command::Lower { .. }
+        | Command::Cache { .. }
         | Command::Check { .. }
         | Command::Interpret { .. }
         | Command::Explain { .. } => {
@@ -907,6 +920,14 @@ fn run() -> Result<()> {
         Command::Check { file } => single_file(&args, file, Verb::Check),
         Command::Interpret { file } => single_file(&args, file, Verb::Interpret),
         Command::Explain { file } => single_file(&args, file, Verb::Explain),
+        Command::Cache {
+            action: CacheAction::Clean,
+        } => {
+            let dir = orchestrator::cache::clean()
+                .with_context(|| "emptying the user cache".to_string())?;
+            println!("emptied {}", dir.display());
+            Ok(())
+        }
         command => {
             let code = project_command(&args, command)?;
             std::process::exit(code);

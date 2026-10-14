@@ -270,10 +270,23 @@ fn write_if_changed(path: &Path, text: &str) -> Result<(), Wall> {
 /// the program links.
 /// Where every grammar run's parser is compiled: the user cache, beside the
 /// compiled `std` (ADR-002 D4).
+///
+/// One entry per compiler, so an old compiler's parsers are evicted as a whole
+/// (#615).
 fn shared_target() -> PathBuf {
-    orchestrator::cache::Layout::user_cache_dir()
+    let compiler = orchestrator::cache::sha256_hex(
+        format!(
+            "{}\n{}",
+            env!("CARGO_PKG_VERSION"),
+            env!("NIKAIA_RUSTC_VERSION")
+        )
+        .as_bytes(),
+    );
+    let entry = orchestrator::cache::Layout::user_cache_dir()
         .join("build-time-parsers")
-        .join("target")
+        .join(&compiler[..16]);
+    orchestrator::cache::use_entry(&entry);
+    entry.join("target")
 }
 
 fn manifest(key: &str, program: &str) -> String {

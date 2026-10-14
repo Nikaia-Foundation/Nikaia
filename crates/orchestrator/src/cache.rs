@@ -716,18 +716,24 @@ impl Layout {
 /// and 13 GB in the one the project tests share, with a build then failing on
 /// "no space left on device".
 ///
-/// Three, and not one: switching target or codegen table back and forth is a
-/// normal thing to do, and evicting on every switch would turn a cache into a
-/// tax.
-pub const KEEP_TREES: usize = 3;
+/// Eight, and not one: switching target or codegen table back and forth is a
+/// normal thing to do, and parallel worktrees build with different compilers at
+/// once; evicting on every switch would turn a cache into a tax. Every kind of
+/// entry in the user cache (`rlib/`, `build-time-bundle/`,
+/// `build-time-parsers/`) is held to the same number.
+pub const KEEP_TREES: usize = 8;
+
+/// An entry nobody used for this long goes, whatever its rank (#615): one night
+/// of agent work on many compiler versions left 23 GB behind.
+const UNUSED: std::time::Duration = std::time::Duration::from_secs(60 * 60 * 24);
 
 /// Don't touch a tree that has been written to within this. A concurrent build
 /// is the thing being protected from, and a build that has not touched its own
 /// tree in an hour is not one that is running.
 const IN_USE: std::time::Duration = std::time::Duration::from_secs(60 * 60);
 
-/// Keep the newest [`KEEP_TREES`] entries of a cache directory and remove the
-/// rest.
+/// Keep the newest [`KEEP_TREES`] entries of a cache directory, remove the
+/// rest, and remove any entry not used for a day.
 ///
 /// **A cache with no eviction is a disk leak**, and this one leaks by design
 /// rather than by accident: two builds which differ in a way Cargo would answer
@@ -757,12 +763,36 @@ pub fn sweep(root: &Path, keep: usize) {
 
     // Newest first, so the tail is what goes.
     trees.sort_by_key(|(used, _)| std::cmp::Reverse(*used));
-    for (used, path) in trees.into_iter().skip(keep) {
+    for (rank, (used, path)) in trees.into_iter().enumerate() {
         let idle = now.duration_since(used).unwrap_or_default();
-        if idle < IN_USE {
+        if idle < IN_USE || (rank < keep && idle < UNUSED) {
             continue;
         }
         let _ = std::fs::remove_dir_all(&path);
+    }
+}
+
+/// **Mark an entry used and sweep its siblings**: what every writer of a user
+/// cache entry calls, so the entry it is about to use is the newest and stays.
+pub fn use_entry(entry: &Path) {
+    touch(entry);
+    if let Some(root) = entry.parent() {
+        sweep(root, KEEP_TREES);
+    }
+}
+
+/// **`nikaia cache clean`**: empty the user cache by hand. Everything in it is
+/// rebuilt on demand. Returns the directory that was emptied.
+pub fn clean() -> std::io::Result<PathBuf> {
+    let dir = Layout::user_cache_dir();
+    clean_dir(&dir)?;
+    Ok(dir)
+}
+
+fn clean_dir(dir: &Path) -> std::io::Result<()> {
+    match std::fs::remove_dir_all(dir) {
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e),
+        _ => Ok(()),
     }
 }
 
@@ -1392,6 +1422,36 @@ mod sweep_tests {
     }
 
     const DAY: std::time::Duration = std::time::Duration::from_secs(60 * 60 * 24);
+    const HOUR: std::time::Duration = std::time::Duration::from_secs(60 * 60);
+
+    /// **#615: an entry unused for a day goes after a write, a fresh one stays**,
+    /// even when both are well within the count kept.
+    #[test]
+    fn a_write_evicts_what_was_not_used_for_a_day() {
+        let root = scratch("stale");
+        let old_version = tree(&root, "v1", 2 * DAY);
+        let fresh = tree(&root, "v2", 2 * HOUR);
+        let written = root.join("v3");
+
+        use_entry(&written);
+
+        assert!(written.is_dir(), "the entry being written stays");
+        assert!(fresh.is_dir(), "a fresh one stays");
+        assert!(!old_version.is_dir(), "the stale version went");
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    /// **`nikaia cache clean` empties the cache**, and an absent one is not an
+    /// error.
+    #[test]
+    fn clean_empties_the_cache() {
+        let root = scratch("clean");
+        tree(&root, "rlib", HOUR);
+        tree(&root.join("build-time-bundle"), "k", HOUR);
+        clean_dir(&root).expect("cleaned");
+        assert!(!root.exists());
+        clean_dir(&root).expect("nothing to clean is fine");
+    }
 
     /// **The newest `keep` stay and the rest go.**
     ///
@@ -1402,10 +1462,10 @@ mod sweep_tests {
     #[test]
     fn the_oldest_trees_are_removed_and_the_newest_are_kept() {
         let root = scratch("oldest");
-        let newest = tree(&root, "aaa", DAY);
-        let middle = tree(&root, "bbb", 2 * DAY);
-        let old = tree(&root, "ccc", 3 * DAY);
-        let older = tree(&root, "ddd", 4 * DAY);
+        let newest = tree(&root, "aaa", 2 * HOUR);
+        let middle = tree(&root, "bbb", 3 * HOUR);
+        let old = tree(&root, "ccc", 4 * HOUR);
+        let older = tree(&root, "ddd", 5 * HOUR);
 
         sweep(&root, 2);
 

@@ -958,6 +958,7 @@ pub(crate) fn bundle(_workshop: &Path) -> Result<Bundle, String> {
     let at = orchestrator::cache::Layout::user_cache_dir()
         .join("build-time-bundle")
         .join(&key[..16]);
+    orchestrator::cache::use_entry(&at);
     let dir = at.join("bundle");
     std::fs::create_dir_all(dir.join("src")).map_err(|e| format!("{}: {e}", dir.display()))?;
     write_if_changed(&dir.join("Cargo.toml"), &manifest)?;

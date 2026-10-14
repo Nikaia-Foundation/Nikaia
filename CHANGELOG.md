@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.923] — 2026-10-14
+
+**cache: evict on write, `nikaia cache clean` (#615)**
+- The user cache keeps at most eight entries of each kind (compiled std, build-time bundle, grammar parsers) and a write removes an entry of its kind unused for 24 hours; grammar parsers get one entry per compiler.
+- New subcommand `nikaia cache clean` empties the user cache.
+
 ## [0.0.922] — 2026-10-14
 
 **check: a method call on a known receiver, and `?.`, in Nikaia (U-c5, #125, #558)**

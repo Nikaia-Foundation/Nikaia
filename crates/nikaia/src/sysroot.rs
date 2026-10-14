@@ -189,8 +189,7 @@ impl Sysroot {
         let tree = root.join(key.as_str());
         // Marked in use *before* the sweep, so this build's own tree is the
         // newest one and can never be the one that goes.
-        cache::touch(&tree);
-        cache::sweep(&root, cache::KEEP_TREES);
+        cache::use_entry(&tree);
         tree
     }
 }
