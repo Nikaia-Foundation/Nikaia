@@ -12497,6 +12497,440 @@ impl CheckState {
 }
 
 
+// --- check_core_args.nika ---
+
+fn check_core_args_runs(callee: Option<&FnContract>, at: i64) -> bool {
+    let contract = match callee { Some(__nikaia_value) => __nikaia_value, None => return true };
+    let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return true };
+    let mut i: i64 = 0;
+    for (name, _) in signature.params.iter() {
+        if i == at { return !nikaia_std::list::contains(&contract.keeps, &name); }
+        i += 1;
+    }
+    true
+}
+
+fn check_core_args_is_lambda(arg: &Expr, expected: &[Ty], at: i64) -> bool {
+    if at >= expected.len() as i64 { return false; }
+    let mut closure = false;
+    match arg {
+        Expr::Closure { .. } => { closure = true; },
+        _ => { },
+    }
+    if !closure { return false; }
+    matches!(*nikaia_std::index::get(&expected, nikaia_std::index::at(at)), Ty::Fn { .. })
+}
+
+fn check_core_args_named(state: &CheckState, world: &CheckWorld<'_>, arg: &Expr) -> bool {
+    match arg {
+        Expr::Path(_, _) => true,
+        Expr::Variable(name, _) => { let name = *name; state.binding(world.words.resolve(name)).is_none() },
+        _ => false,
+    }
+}
+
+fn check_core_args_a_run_parameter(state: &CheckState, world: &CheckWorld<'_>, arg: &Expr) -> bool {
+    match arg {
+        Expr::Variable(name, _) => { let name = *name; state.run_code.contains(world.words.resolve(name)) },
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+fn check_core_args_lambda<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, arg: &Expr, want: &Ty, declared_here: bool, callee: Option<&FnContract>, at: i64, span: &Span) -> Ty {
+    let id = id_of(arg) as i64;
+    let runs = check_core_args_runs(callee, at);
+    match arg {
+        Expr::Closure { params, mutable, body, .. } => {
+            match want {
+                Ty::Fn { params: given, result, is_sync, can_throw } => {
+                    let result = nikaia_std::boxed::open(result); let can_throw = *can_throw; let is_sync = *is_sync;
+                    let pauses: bool = !is_sync;
+                    let fails: bool = can_throw;
+                    if pauses && declared_here {
+                        state.facts.future_lambdas.insert(id);
+                        if runs { state.facts.run_lambdas.insert(id); }
+                    }
+                    if !runs {
+                        state.facts.kept_lambdas.insert(id, (pauses, fails));
+                        state.a_kept_lambdas_hulls(world, arg);
+                        state.a_kept_lambda_takes_these(world, arg, pauses, span);
+                    }
+                    state.a_lambdas_text_is_its_own(world, want, arg);
+                    let (came_to, paused) = check_core_lambda(state, world, host, params, mutable, body, given, &CheckPromises { may_pause: pauses, may_fail: fails }, span);
+                    if paused && !declared_here { state.flow.paused_args.push(id); }
+                    let written: Ty = nikaia_std::index::or(match result {
+                        Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+                        None => None,
+                    }, || Ty::Unknown);
+                    let mut out: Option<Ty> = None;
+                    if !written.is_unknown() { out = Some(written); } else if !came_to.is_unknown() { out = Some(came_to); }
+                    return Ty::Fn { params: given.to_owned(), result: Box::new(out), is_sync: !pauses, can_throw: fails };
+                },
+                _ => { },
+            }
+        },
+        _ => { },
+    }
+    Ty::Unknown
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+fn check_core_args_other<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, arg: &Expr, expected: &[Ty], declared_here: bool, callee: Option<&FnContract>, at: i64, span: &Span) -> Ty {
+    let mut lends = false;
+    let mut wants_fn = false;
+    let mut wants_pausing_fn = false;
+    if at < expected.len() as i64 {
+        lends = (*nikaia_std::index::get(&expected, nikaia_std::index::at(at))).is_a_view();
+        match nikaia_std::index::get(&expected, nikaia_std::index::at(at)) {
+            Ty::Fn { is_sync, .. } => {
+                let is_sync = *is_sync;
+                wants_fn = true;
+                let plain: bool = is_sync;
+                wants_pausing_fn = !plain;
+            },
+            _ => { },
+        }
+    }
+    if !lends { check_core_a_field_of_a_borrowed_subject(state, world, host, arg, span, "passed"); }
+    let found = host.expr(state, arg, span);
+    let named = check_core_args_named(&state, world, arg);
+    let runs = check_core_args_runs(callee, at);
+    let mut found_fn = false;
+    let mut arity: i64 = 0;
+    match found {
+        Ty::Fn { ref params, .. } => {
+            found_fn = true;
+            arity = params.len() as i64;
+        },
+        _ => { },
+    }
+    if declared_here && named && runs && wants_pausing_fn && found_fn { state.facts.sync_functions_run_async.insert(id_of(arg) as i64, arity); }
+    if declared_here && wants_fn && found_fn && runs && !check_core_args_a_run_parameter(&state, world, arg) && !named { state.facts.kept_args.insert(id_of(arg) as i64); }
+    found
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+pub fn check_core_arguments_given<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, args: &[Expr], expected: &[Ty], declared_here: bool, callee: Option<&FnContract>, span: &Span) -> Vec<Ty> {
+    let mut out: Vec<Ty> = vec![];
+    let mut at: i64 = 0;
+    for arg in args.iter() {
+        if check_core_args_is_lambda(arg, expected, at) { out.push(check_core_args_lambda(state, world, host, arg, nikaia_std::index::get(&expected, nikaia_std::index::at(at)), declared_here, callee, at, span)); } else { out.push(check_core_args_other(state, world, host, arg, expected, declared_here, callee, at, span)); }
+        at += 1;
+    }
+    out
+}
+
+fn check_core_args_door(writing: bool) -> String {
+    if writing { return "update_all".to_owned(); }
+    "access_all".to_owned()
+}
+
+fn check_core_args_door_shape(writing: bool) -> String {
+    if writing { return "update_all(a, b) fn(x, y) { … }".to_owned(); }
+    "access_all(a, b) fn(x, y) { … }".to_owned()
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_args_no_door(state: &mut CheckState, writing: bool, wanted: &str, span: &Span) { state.no_door(&check_core_args_door(writing), &check_core_args_door_shape(writing), wanted, span); }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+fn check_core_args_door_block<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, writing: bool, args: &[Expr], params: &[winnow_grammar::Symbol], mutable: &[winnow_grammar::Symbol], body: &Block, span: &Span) -> Ty {
+    let count = args.len() as i64 - 1;
+    if count < 2 {
+        check_core_args_no_door(state, writing, "It's for several locks, so pass at least two.", span);
+        return Ty::Unknown;
+    }
+    let mut held: Vec<Ty> = vec![];
+    let mut at: i64 = 0;
+    while at < count {
+        let lock = nikaia_std::index::get(&args, (at) as usize);
+        let found = host.expr(state, &lock, span);
+        let content = locked_content_of(&found);
+        if content.is_some() {
+            let inside: Ty = nikaia_std::index::or(content, || Ty::Unknown);
+            let mut view: Ty = inside.clone();
+            if !writing {
+                match inside {
+                    Ty::Named { ref name, ref args, .. } => { view = Ty::Named { name: name.to_owned(), args: args.to_owned(), view: true }; },
+                    _ => { },
+                }
+            }
+            held.push(view);
+        } else if found.is_unknown() && !state.is_a_number(world, &lock) { held.push(Ty::Unknown); } else {
+            let door = check_core_args_door(writing);
+            state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1124".to_owned(), message: format!("`{}` takes locks, but this is a `{}`.", door, found.text()), notes: vec!["Taking several locks together keeps them in one order, and only a lock can be taken.".to_owned()], help: Some("Pass `SharedMut[T]` values or `Locked[T]` fields.".to_owned()), labels: vec![] });
+            held.push(Ty::Unknown);
+        }
+        at += 1;
+    }
+    if !params.is_empty() && (params.len() as i64) != count { check_core_args_no_door(state, writing, "The block takes one value per lock, in the order the locks are written.", span); }
+    if writing {
+        state.an_update_block_returns_nothing(body, span);
+        state.an_update_block_reads_what_it_writes(world, params, body, span);
+    }
+    let outer_door = state.flow.at_a_write_door;
+    state.flow.at_a_write_door = writing;
+    let outer_inside = state.inside_a_door;
+    state.inside_a_door = true;
+    check_core_lambda(state, world, host, params, mutable, body, &held, &CheckPromises { may_pause: true, may_fail: true }, span);
+    state.flow.at_a_write_door = outer_door;
+    state.inside_a_door = outer_inside;
+    if writing { return Ty::Tuple(vec![]); }
+    Ty::Named { name: SEEN.to_owned(), args: vec![Ty::Unknown], view: false }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_core_locks<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, writing: bool, args: &[Expr], span: &Span) -> Ty {
+    if args.is_empty() {
+        check_core_args_no_door(state, writing, "It takes the locks and then the block.", span);
+        return Ty::Unknown;
+    }
+    let last = nikaia_std::index::get(&args, nikaia_std::index::at(args.len() as i64 - 1));
+    match last {
+        Expr::Closure { params, mutable, body, .. } => { return check_core_args_door_block(state, world, host, writing, args, params, mutable, body, span); },
+        _ => { },
+    }
+    check_core_args_no_door(state, writing, "The block comes last: `fn(a, b) { … }`.", span);
+    Ty::Unknown
+}
+
+fn check_core_args_fn_element(declared: Option<&Ty>) -> Option<Ty> {
+    let ty = match declared { Some(__nikaia_value) => __nikaia_value, None => return None };
+    match ty {
+        Ty::Named { name, args, .. } => {
+            if name == "Vec" && !args.is_empty() {
+                match nikaia_std::index::get(&args, 0) {
+                    Ty::Fn { .. } => { return Some((*nikaia_std::index::get(&args, 0)).clone()); },
+                    _ => { },
+                }
+            }
+        },
+        _ => { },
+    }
+    None
+}
+
+fn check_core_args_an_integer(name: &str) -> bool { name == "u8" || name == "u32" || name == "u64" || name == "i32" || name == "i64" }
+
+fn check_core_args_plain_name(ty: &Ty) -> String {
+    match ty {
+        Ty::Named { name, args, view } => { let view = *view; if !view && args.is_empty() { name.to_owned() } else { "".to_owned() } },
+        _ => "".to_owned(),
+    }
+}
+
+fn check_core_args_a_closure(value: &Expr) -> bool { matches!(value, Expr::Closure { .. }) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_core_list_literal<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, items: &[Expr], span: &Span) -> Ty {
+    let mut agreed: Ty = Ty::Unknown;
+    let mut has_kind = false;
+    let mut first_kind: String = String::from("");
+    let mut first_written: String = String::from("");
+    let mut said = false;
+    let declared: Option<Ty> = match state.flow.lambda_expected.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    };
+    state.flow.lambda_expected = None;
+    let element: Option<Ty> = check_core_args_fn_element((declared).as_ref());
+    let mut walked: Vec<Ty> = vec![];
+    for item in items.iter() {
+        if check_core_args_a_closure(item) {
+            state.flow.lambda_expected = match element.as_ref() {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            };
+        }
+        let found = host.expr(state, item, span);
+        state.flow.lambda_expected = None;
+        walked.push(found);
+    }
+    let mut at: i64 = 0;
+    for item in items.iter() {
+        state.hands_over(world, item, nikaia_std::index::get(&walked, (at) as usize), "put into a list", span);
+        at += 1;
+    }
+    let mut a_null = false;
+    for item in items.iter() {
+        match item {
+            Expr::LitNull(_) => { a_null = true; },
+            _ => { },
+        }
+    }
+    if a_null {
+        let mut arms: Vec<CheckArm<'_>> = vec![];
+        let mut i: i64 = 0;
+        for item in items.iter() {
+            arms.push(CheckArm { tail: Some(item), ty: (*nikaia_std::index::get(&walked, (i) as usize)).clone() });
+            i += 1;
+        }
+        let met = state.arms_meet_at_null(world, &arms);
+        if met.is_some() {
+            let element_ty: Ty = nikaia_std::index::or(met, || Ty::Unknown);
+            return Ty::Named { name: "Vec".to_owned(), args: vec![element_ty], view: false };
+        }
+    }
+    let mut holds_text = false;
+    for found in walked.iter() { if check_core_args_plain_name(found) == "String" { holds_text = true; } }
+    let mut founds: Vec<Ty> = vec![];
+    let mut integers: Vec<String> = vec![];
+    let mut j: i64 = 0;
+    for item in items.iter() {
+        let mut found: Ty = (*nikaia_std::index::get(&walked, (j) as usize)).clone();
+        if holds_text {
+            match item {
+                Expr::LitStr { .. } => {
+                    state.facts.owned_texts.insert(id_of(item) as i64);
+                    found = Ty::Named { name: "String".to_owned(), args: vec![], view: false };
+                },
+                _ => { },
+            }
+        }
+        integers.push(check_core_args_plain_name(&found));
+        founds.push(found);
+        j += 1;
+    }
+    let mut k: i64 = 0;
+    for item in items.iter() {
+        let found: Ty = (*nikaia_std::index::get(&founds, (k) as usize)).clone();
+        k += 1;
+        let shape = element_kind(item, &found);
+        if shape.is_some() {
+            let kind: String = nikaia_std::index::or(shape.as_deref(), || "").to_owned();
+            if !has_kind {
+                has_kind = true;
+                first_kind = kind.to_owned();
+                first_written = found.text();
+            } else if first_kind != kind && !said {
+                said = true;
+                state.a_list_whose_elements_disagree(&first_kind, &first_written, &kind, &found, span);
+            }
+        }
+        if found.is_unknown() { continue; }
+        if agreed.is_unknown() {
+            agreed = found;
+            continue;
+        }
+        let a = check_core_args_plain_name(&agreed);
+        let b = check_core_args_plain_name(&found);
+        if a != "" && b != "" && !is_a_literal(item) {
+            let common = common_integer(&a, &b);
+            if common.is_some() {
+                let name: String = nikaia_std::index::or(common.as_deref(), || "").to_owned();
+                agreed = Ty::Named { name, args: vec![], view: false };
+                continue;
+            }
+        }
+        if !found.fits(&agreed) && !said {
+            said = true;
+            let first = agreed.clone();
+            let kind: String = nikaia_std::index::or(element_kind(item, &first), || "a value".into()).to_owned();
+            state.a_list_whose_elements_disagree(&kind, &first.text(), "a value", &found, span);
+        }
+    }
+    let common = check_core_args_plain_name(&agreed);
+    if common != "" && check_core_args_an_integer(&common) {
+        let mut m: i64 = 0;
+        for item in items.iter() {
+            let own = (*nikaia_std::index::get(&integers, (m) as usize)).to_owned();
+            m += 1;
+            if own != "" && own != common && !is_a_literal(item) {
+                let met: String = nikaia_std::index::or(common_integer(&own, &common), || "".into()).to_owned();
+                if met == common { state.facts.wrapped.insert(id_of(item) as i64, FactWrap::Widen(common.to_owned())); }
+            }
+        }
+    }
+    let mut a_fn = false;
+    match agreed {
+        Ty::Fn { .. } => { a_fn = true; },
+        _ => { },
+    }
+    if a_fn { for item in items.iter() { check_core_a_kept_lambda(state, world, host, &agreed, item, span); } }
+    Ty::Named { name: "Vec".to_owned(), args: vec![agreed], view: false }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_args_a_field_called(state: &mut CheckState, current: &str, key: &str) {
+    let mut calls: CheckMethodCalls = nikaia_std::index::or(state.methods.remove(current), || CheckMethodCalls::empty());
+    calls.fields_called.insert(key.to_owned());
+    state.methods.insert(current.to_owned(), calls);
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_args_code_said(state: &mut CheckState, current: &str, pauses: bool, fails: bool) {
+    let mut calls: CheckMethodCalls = nikaia_std::index::or(state.methods.remove(current), || CheckMethodCalls::empty());
+    calls.code_pauses = calls.code_pauses || pauses;
+    calls.code_fails = calls.code_fails || fails;
+    state.methods.insert(current.to_owned(), calls);
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+pub fn check_core_a_called_field<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, on: &Ty, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], outer_inside: bool, span: &Span) -> Option<Ty> {
+    let code: Ty = match state.a_field_that_is_code(world, on, method) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    match code {
+        Ty::Fn { ref params, ref result, is_sync, can_throw } => {
+            let result = nikaia_std::boxed::open(result);
+            let pauses: bool = !is_sync;
+            let fails: bool = can_throw;
+            check_core_arguments_given(state, world, host, args, params, false, None, span);
+            state.kept_arguments_are_its_own(world, args, params);
+            match on {
+                Ty::Named { name, .. } => {
+                    let key = format!("{}.{}", name, world.words.resolve(method));
+                    if state.current.is_some() && state.task_bindings.is_empty() {
+                        let current: String = nikaia_std::index::or(match state.current.as_ref() {
+                            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                            None => None,
+                        }, || "".into());
+                        check_core_args_a_field_called(state, &current, &key);
+                    }
+                    if world.own.code_locks.contains_key(&key) {
+                        let holds = match *nikaia_std::index::get(&world.own.code_locks, &key) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                        let own = state.inside_a_door;
+                        state.inside_a_door = outer_inside;
+                        state.a_lock_inside_a_lock(&key, holds, span);
+                        state.inside_a_door = own;
+                    }
+                },
+                _ => { },
+            }
+            state.facts.field_calls.insert(id_of(receiver) as i64, pauses);
+            if state.current.is_some() {
+                let current: String = nikaia_std::index::or(match state.current.as_ref() {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                }, || "".into());
+                check_core_args_code_said(state, &current, pauses, fails);
+            }
+            if fails { state.flow.fallible_methods.insert(id_of(receiver) as i64); }
+            return Some(nikaia_std::index::or(match result.as_ref() {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || Ty::Named { name: "()".to_owned(), args: vec![], view: false }));
+        },
+        _ => { },
+    }
+    None
+}
+
+
 // --- check_core_comptime.nika ---
 
 fn check_core_comptime_shape(evaluated: Option<&BuildValue>) -> i64 {
@@ -52692,6 +53126,10 @@ pub mod check_consts {
 pub mod check_copies {
     #[allow(unused_imports)]
     pub use super::{check_parts_beside};
+}
+pub mod check_core_args {
+    #[allow(unused_imports)]
+    pub use super::{check_core_arguments_given, check_core_locks, check_core_list_literal, check_core_a_called_field};
 }
 pub mod check_core_comptime {
     #[allow(unused_imports)]

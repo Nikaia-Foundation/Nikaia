@@ -41,6 +41,7 @@ use crate::fold::Constant;
 use crate::parser::Parsed;
 use nikaia_std::tools::check_arguments;
 use nikaia_std::tools::check_consts;
+use nikaia_std::tools::check_core_args;
 use nikaia_std::tools::check_core_comptime;
 use nikaia_std::tools::check_core_leaves;
 use nikaia_std::tools::check_core_pilot;
@@ -49,7 +50,6 @@ use nikaia_std::tools::check_flow::{
     CheckUnsignedSlot as UnsignedSlot,
 };
 use nikaia_std::tools::check_items;
-use nikaia_std::tools::check_literals::element_kind;
 use nikaia_std::tools::check_names::{integer_named, is_a_literal as is_literal};
 use nikaia_std::tools::check_overflow;
 use nikaia_std::tools::check_patterns::pattern_names;
@@ -8073,125 +8073,10 @@ impl<'a> Checker<'a> {
     /// (D2). Both refuse anything that is not a lock, because a door that let a
     /// plain value through would be a door about nothing.
     fn locks(&mut self, door: MultiLock, args: &[Expr], span: &Span) -> Ty {
-        let Some((last, locks)) = args.split_last() else {
-            self.no_door(door, "It takes the locks and then the block.", span);
-            return Ty::Unknown;
-        };
-        let Expr::Closure {
-            params,
-            mutable,
-            body,
-            ..
-        } = last
-        else {
-            self.no_door(door, "The block comes last: `fn(a, b) { … }`.", span);
-            return Ty::Unknown;
-        };
-        if locks.len() < 2 {
-            self.no_door(door, "It's for several locks, so pass at least two.", span);
-            return Ty::Unknown;
-        }
-
-        let mut held = Vec::with_capacity(locks.len());
-        for lock in locks {
-            let found = self.expr(lock, span);
-            match locked_content_of(&found) {
-                Some(inside) => held.push(match (door, &inside) {
-                    // A view of what it holds, the way `access` hands one over.
-                    (MultiLock::Reading, Ty::Named { name, args, .. }) => Ty::Named {
-                        name: name.clone(),
-                        args: args.clone(),
-                        view: true,
-                    },
-                    (MultiLock::Reading, _) => inside,
-                    (MultiLock::Writing, _) => inside,
-                }),
-                // Nothing written down says this is a lock. A type nothing
-                // describes is not claimed about at all (Part III, C.4) - but a
-                // **number** is not such a type: a literal carries no type on
-                // purpose (Part I 2.4), and reading that absence as "might be a
-                // lock" would hand `rustc` a program about a trait bound.
-                None if found.is_unknown() && !self.s.is_a_number(self.world, lock) => {
-                    held.push(Ty::Unknown)
-                }
-                None => {
-                    self.s.findings.push(Finding {
-                        severity: Severity::Error,
-                        span: *span,
-                        code: "NK1124".to_string(),
-                        message: format!(
-                            "`{}` takes locks, but this is a `{}`.",
-                            door.written(),
-                            found.text()
-                        ),
-                        notes: vec![
-                            "Taking several locks together keeps them in one order, and only a \
-                             lock can be taken."
-                                .to_string(),
-                        ],
-                        help: Some(format!(
-                            "Pass `{SHARED_MUT}[T]` values or `{LOCKED}[T]` fields."
-                        )),
-                        labels: Vec::new(),
-                    });
-                    held.push(Ty::Unknown);
-                }
-            }
-        }
-        if !params.is_empty() && params.len() != locks.len() {
-            self.no_door(
-                door,
-                "The block takes one value per lock, in the order the locks are written.",
-                span,
-            );
-        }
-        // D6 is D1 widened, so the same question is asked of this block.
-        // D6 is D1 widened, so the same two questions are asked of this block.
-        if matches!(door, MultiLock::Writing) {
-            self.s.an_update_block_returns_nothing(body, span);
-            self.an_update_block_reads_what_it_writes(params, body, span);
-        }
-        let outer_door = std::mem::replace(
-            &mut self.s.flow.at_a_write_door,
-            matches!(door, MultiLock::Writing),
-        );
-        // Both kinds hold their locks open across the block, so both are one.
-        let outer_inside = std::mem::replace(&mut self.s.inside_a_door, true);
-        // **Nothing is asked of this block's promises**
-        // ([ADR-277](../../docs/specification/adr/adr-277.md) D7), and that is
-        // deliberate rather than an omission: `access_all` and `update_all` are
-        // not ledger entries at all ([ADR-281](../../docs/specification/adr/adr-281.md)
-        // D1), so there is no written type here to read a promise off. What
-        // Part II 12.2 requires of the block — `sync`, and no lock — is
-        // `NK2202`'s and `NK2203`'s, and a second refusal saying the same thing
-        // in other words would be two rules for one mistake.
-        self.lambda(
-            params,
-            mutable,
-            body,
-            &held,
-            Promises {
-                may_pause: true,
-                may_fail: true,
-            },
-            span,
-        );
-        self.s.flow.at_a_write_door = outer_door;
-        self.s.inside_a_door = outer_inside;
-        match door {
-            // What a lambda hands back is not written down (ADR-288 D13) — but
-            // that it came **out of a lock** is
-            // ([ADR-281](../../docs/specification/adr/adr-281.md) D22), and the
-            // stamp is what a `set` reads. `Seen[?]` is the honest pair: the
-            // type is unknown and where it came from is not.
-            MultiLock::Reading => Ty::seen(Ty::Unknown),
-            MultiLock::Writing => Ty::Tuple(Vec::new()),
-        }
-    }
-
-    /// The one message shape for a door written wrong.
-    fn no_door(&mut self, door: MultiLock, wanted: &str, span: &Span) {
-        self.s.no_door(door.written(), door.shape(), wanted, span);
+        let writing = matches!(door, MultiLock::Writing);
+        self.nikaia(|state, world, host| {
+            check_core_args::check_core_locks(state, world, host, writing, args, span)
+        })
     }
 
     /// `Shared(x)`, `SharedMut(x)` and `Locked(x)` make a hull
@@ -9561,179 +9446,9 @@ impl<'a> Checker<'a> {
     /// keeps *walking*, because an element is an expression and a mistake
     /// inside one is still a mistake.
     fn list_literal(&mut self, items: &[Expr], span: &Span) -> Ty {
-        let mut agreed = Ty::Unknown;
-        let mut kind: Option<(String, String)> = None;
-        let mut said = false;
-        // **A lambda in a list of a declared `fn` type takes that type**
-        // (#497), as one bound by an annotated `let` does:
-        // `let fs: Vec[fn(i64) -> i64] = [fn(x) { x * 2 }]`.
-        let element = self
-            .s
-            .flow
-            .lambda_expected
-            .take()
-            .and_then(|declared| match declared {
-                Ty::Named { name, args, .. } if name == "Vec" => args.into_iter().next(),
-                _ => None,
-            });
-        let founds: Vec<Ty> = items
-            .iter()
-            .map(|item| {
-                if matches!(item, Expr::Closure { .. }) {
-                    self.s.flow.lambda_expected =
-                        element.clone().filter(|ty| matches!(ty, Ty::Fn { .. }));
-                }
-                let found = self.expr(item, span);
-                self.s.flow.lambda_expected = None;
-                found
-            })
-            .collect();
-        for (item, ty) in items.iter().zip(&founds) {
-            self.hands_over(item, ty, "put into a list", span);
-        }
-        // **A list with a `null` in it is a list of `T?`**, met as the arms of
-        // a choice meet (`arms_meet_at_null`): `[null, 7]` holds `Some(7)`
-        // below, where the `7` reached `rustc` bare beside a `None` (#312).
-        if items.iter().any(|item| matches!(item, Expr::LitNull(_))) {
-            let arms: Vec<(Option<&Expr>, Ty)> = items
-                .iter()
-                .zip(&founds)
-                .map(|(item, ty)| (Some(item), ty.clone()))
-                .collect();
-            if let Some(element) = self.arms_meet_at_null(&arms) {
-                return Ty::Named {
-                    name: "Vec".to_string(),
-                    args: vec![element],
-                    view: false,
-                };
-            }
-        }
-        // **A text literal takes its neighbours' text** (ADR-282 D4): where
-        // the list already holds text of its own, `["a", f"c"]` is a list of
-        // `String` and the literal is constructed as one. A list holds one
-        // type, so the literal has no other answer - and a **view** among the
-        // elements is not a literal, so it still disagrees below.
-        let holds_text = founds.iter().any(|found| *found == Ty::named("String"));
-        let founds: Vec<Ty> = items
-            .iter()
-            .zip(founds)
-            .map(|(item, found)| match (item, holds_text) {
-                (Expr::LitStr { .. }, true) => {
-                    self.s.facts.owned_texts.insert(value_node(item));
-                    Ty::named("String")
-                }
-                _ => found,
-            })
-            .collect();
-        let integers: Vec<Option<String>> = founds
-            .iter()
-            .map(|found| match found {
-                Ty::Named {
-                    name,
-                    args,
-                    view: false,
-                } if args.is_empty() => Some(name.clone()),
-                _ => None,
-            })
-            .collect();
-        for (item, found) in items.iter().zip(founds) {
-            // **A number beside text, where neither has a type yet.** A bare
-            // `1` fits every numeric type and so it arrives here as `?` - which
-            // is right, and which would let `[1, "two"]` past to be answered by
-            // the backend about a file nobody wrote
-            // ([Part III C.1](../../docs/specification/30-nikaia-tooling.md)).
-            // The **kind** is the part of a literal that is known without a
-            // type, and two kinds that differ is a disagreement whatever the
-            // types say.
-            if let Some(shape) = element_kind(item, &found) {
-                match &kind {
-                    None => kind = Some((shape, found.text())),
-                    Some((first, written)) if *first != shape && !said => {
-                        said = true;
-                        let (first, written) = (first.clone(), written.clone());
-                        self.s
-                            .a_list_whose_elements_disagree(&first, &written, &shape, &found, span);
-                    }
-                    Some(_) => {}
-                }
-            }
-            if found.is_unknown() {
-                continue;
-            }
-            if agreed.is_unknown() {
-                agreed = found;
-                continue;
-            }
-            // **Two integer types hold their common type** (ADR-285 D32),
-            // whatever comes first: `[a, b]` over a `u32` and an `i64` is a
-            // `Vec[i64]`.
-            if let (
-                Ty::Named {
-                    name: a,
-                    args: x,
-                    view: false,
-                },
-                Ty::Named {
-                    name: b,
-                    args: y,
-                    view: false,
-                },
-            ) = (&agreed, &found)
-                && x.is_empty()
-                && y.is_empty()
-                && !is_literal(item)
-                && let Some(common) = common_integer(a, b)
-            {
-                agreed = Ty::named(common);
-                continue;
-            }
-            if !found.fits(&agreed) && !said {
-                said = true;
-                let first = agreed.clone();
-                self.s.a_list_whose_elements_disagree(
-                    &element_kind(item, &first).unwrap_or_else(|| "a value".to_string()),
-                    &first.text(),
-                    "a value",
-                    &found,
-                    span,
-                );
-            }
-        }
-        // **And the narrower elements are widened into it** (D32).
-        if let Ty::Named {
-            name: common,
-            args,
-            view: false,
-        } = &agreed
-            && args.is_empty()
-            && let Some(common) = INTEGERS.iter().find(|n| **n == common.as_str())
-        {
-            for (item, own) in items.iter().zip(&integers) {
-                if let Some(own) = own
-                    && own != common
-                    && !is_literal(item)
-                    && common_integer(own, common) == Some(*common)
-                {
-                    self.s
-                        .facts
-                        .wrapped
-                        .insert(value_node(item), Wrap::Widen(common.to_string()));
-                }
-            }
-        }
-        // **A lambda beside a function value is kept as that value is**
-        // (Part I 5.3): `[adder(1), fn(x) { x * 2 }]` is a list of one type,
-        // and the type is the one the other elements say.
-        if matches!(agreed, Ty::Fn { .. }) {
-            for item in items {
-                self.a_kept_lambda(&agreed, item, span);
-            }
-        }
-        Ty::Named {
-            name: "Vec".to_string(),
-            args: vec![agreed],
-            view: false,
-        }
+        self.nikaia(|state, world, host| {
+            check_core_args::check_core_list_literal(state, world, host, items, span)
+        })
     }
 
     /// Whether this program writes `impl Error for` the type, in this file or
@@ -9755,25 +9470,6 @@ impl<'a> Checker<'a> {
         })
     }
 
-    /// **A hull a kept lambda captures, it captures a handle of** (ADR-230
-    /// D4, ADR-312 D5): handing a hull on duplicates the count, so the name
-    /// outside is still there on the next line. Asked wherever a lambda is
-    /// kept - a field, a `let`, and a parameter the callee keeps (#536).
-    fn a_kept_lambdas_hulls(&mut self, value: &Expr) {
-        self.s.a_kept_lambdas_hulls(self.world, value);
-    }
-
-    /// **What a kept lambda captures, it takes** (Part I 8.3, ADR-328 D7, #95
-    /// step 6): it is called after the statement that made it, so a value a
-    /// move takes away goes with it and is `NK2101` where it is used again. One
-    /// that pauses owns it once and counts the calls that borrow it - each
-    /// call's future must own what it reads - which the emitter writes from
-    /// `kept_owned`: no copy.
-    fn a_kept_lambda_takes_these(&mut self, value: &Expr, pauses: bool, span: &Span) {
-        self.s
-            .a_kept_lambda_takes_these(self.world, value, pauses, span);
-    }
-
     /// **A lambda where a function value is kept** is one shared closure
     /// below, and one that may pause hands back a boxed future.
     fn a_kept_lambda(&mut self, want: &Ty, value: &Expr, span: &Span) {
@@ -9782,45 +9478,10 @@ impl<'a> Checker<'a> {
         })
     }
 
-    /// **A lambda's text literal is built where its type keeps text**: the
-    /// value a lambda ends in is handed to whoever calls it, as a function's
-    /// is (ADR-282 D4).
-    fn a_lambdas_text_is_its_own(&mut self, want: &Ty, value: &Expr) {
-        self.s.a_lambdas_text_is_its_own(self.world, want, value);
-    }
-
     /// A tuple of text literals where a tuple with text is wanted
     /// (`tools/check_texts.nika`).
     fn tuple_literal(&mut self, found: &Ty, want: &Ty, value: &Expr) -> Option<Ty> {
         self.s.tuple_literal(self.world, found, want, value)
-    }
-
-    /// **A text literal where a `String` is wanted is a `String`**
-    /// ([ADR-282](../../docs/specification/adr/adr-282.md) D4), and hands back
-    /// the type it became.
-    ///
-    /// `"x"` is a view of static text, and a view put where text of its own
-    /// is declared was refused until the program wrote `.to_string()` - the
-    /// most common refusal a newcomer met, and one that protected nothing: the
-    /// text is a constant in the program, so making a `String` of it is
-    /// *constructing* a value, as `[1, 2]` constructs the `Vec` it stands in,
-    /// and not copying text the program had. ADR-005 §3's rule is about the
-    /// second, and it stands: a **view** of text the program has still needs
-    /// its `.clone()`.
-    ///
-    /// `owned` says whether the position keeps what it is given. It is `false`
-    /// for an argument the callee only reads, whose parameter is a `&str` below
-    /// (D3): the literal fits it as it is, the answer is still *a `String`*
-    /// for the fit, and nothing is recorded, so nothing is allocated.
-    ///
-    /// Also through `T?`, whose wrap is the caller's (`wraps_into_nullable`),
-    /// and through a list literal where a `Vec[String]` is wanted, element by
-    /// element - but only where **every** element is a text literal, so a list
-    /// that mixes in a view keeps the refusal it had.
-    /// The function type of `on`'s field called `method`, where `on` is a
-    /// struct with such a field and no method of that name.
-    fn a_field_that_is_code(&self, on: &Ty, method: Ident) -> Option<Ty> {
-        self.s.a_field_that_is_code(self.world, on, method)
     }
 
     /// **A call of a field that holds a function**, `button.on_click(4)`:
@@ -9838,58 +9499,19 @@ impl<'a> Checker<'a> {
         outer_inside: bool,
         span: &Span,
     ) -> Option<Ty> {
-        let Some(Ty::Fn {
-            params,
-            result,
-            is_sync,
-            can_throw: throws,
-        }) = self.a_field_that_is_code(on, method)
-        else {
-            return None;
-        };
-        self.arguments_given(args, &params, false, None, span);
-        self.kept_arguments_are_its_own(args, &params);
-        // **A call through a function field reaches what was
-        // stored there** (ADR-230 D1, D2): recorded for the lock
-        // column, and asked here where a lock is already open.
-        if let Ty::Named { name: owner, .. } = on {
-            let key = format!("{owner}.{}", self.parsed.text(method));
-            if let Some(current) = self.s.current.clone()
-                && self.s.task_bindings.is_empty()
-            {
-                self.s
-                    .methods
-                    .entry(current)
-                    .or_insert_with(MethodCalls::empty)
-                    .fields_called
-                    .insert(key.clone());
-            }
-            // The door this call stands in, not this call: the flag
-            // was set above for the call's own block.
-            let holds = self.world.own.code_locks.get(&key).copied();
-            if let Some(holds) = holds {
-                let own = std::mem::replace(&mut self.s.inside_a_door, outer_inside);
-                self.s.a_lock_inside_a_lock(&key, &holds, span);
-                self.s.inside_a_door = own;
-            }
-        }
-        self.s
-            .facts
-            .field_calls
-            .insert(value_node(receiver), !is_sync);
-        if let Some(current) = self.s.current.clone() {
-            let entry = self
-                .s
-                .methods
-                .entry(current)
-                .or_insert_with(MethodCalls::empty);
-            entry.code_pauses |= !is_sync;
-            entry.code_fails |= throws;
-        }
-        if throws {
-            self.s.flow.fallible_methods.insert(value_node(receiver));
-        }
-        Some((*result).unwrap_or_else(|| Ty::named("()")))
+        self.nikaia(|state, world, host| {
+            check_core_args::check_core_a_called_field(
+                state,
+                world,
+                host,
+                on,
+                receiver,
+                method,
+                args,
+                outer_inside,
+                span,
+            )
+        })
     }
 
     /// Views and text of their own meet as text where nothing asks
@@ -10344,179 +9966,24 @@ impl<'a> Checker<'a> {
         callee: Option<&FnContract>,
         span: &Span,
     ) -> Vec<Ty> {
-        args.iter()
-            .enumerate()
-            .map(|(at, arg)| match (arg, expected.get(at)) {
-                (
-                    Expr::Closure {
-                        params,
-                        mutable,
-                        body,
-                        ..
-                    },
-                    Some(Ty::Fn {
-                        params: given,
-                        result,
-                        is_sync,
-                        can_throw: throws,
-                    }),
-                ) => {
-                    // **A lambda handed to a parameter whose type may pause is
-                    // written as a closure returning a boxed future**
-                    // ([ADR-277](../../docs/specification/adr/adr-277.md) D11).
-                    // Recorded here because it is a question about the
-                    // parameter's **type**, which the emitter has no way to ask
-                    // ([ADR-288](../../docs/specification/adr/adr-288.md)) — the
-                    // same arrangement `lent_args` and `nullable_args` have, and
-                    // keyed the same way.
-                    if !is_sync && declared_here {
-                        self.s.facts.future_lambdas.insert(value_node(arg));
-                        // **And an `async` closure where the callee *runs* it**
-                        // ([ADR-277](../../docs/specification/adr/adr-277.md)
-                        // D1). The box is what a **kept** parameter needs, and
-                        // a run parameter never did: `impl AsyncFn(A) -> R` is
-                        // 1.37 ns/call against the box's 11.99, on a 0.31
-                        // floor.
-                        //
-                        // **Run is the absence of `keeps`**, and a callee this
-                        // walk could not resolve is read as run - which agrees
-                        // with what the *declaration* writer does with the same
-                        // absent answer. The two reading one column the same
-                        // way is the whole of what keeps them from writing two
-                        // shapes for one parameter.
-                        let runs = callee.is_none_or(|c| {
-                            c.signature
-                                .as_ref()
-                                .and_then(|s| s.arguments().get(at).cloned())
-                                .is_none_or(|(name, _)| !c.keeps.contains(&name))
-                        });
-                        if runs {
-                            self.s.facts.run_lambdas.insert(value_node(arg));
-                        }
-                    }
-                    // **A parameter the callee keeps is a kept function
-                    // value**, `sync` or not: the callee stores it. A `std`
-                    // entry too, where its `keeps` names the parameter
-                    // (`net::serve`'s handler, ADR-326 D1): its Rust takes the
-                    // same `Kept` this program's own declaration would, so
-                    // ADR-277 D12's plain closure is not what it describes.
-                    if !self.runs_the_parameter(callee, at) {
-                        self.s
-                            .facts
-                            .kept_lambdas
-                            .insert(value_node(arg), (!is_sync, *throws));
-                        self.a_kept_lambdas_hulls(arg);
-                        self.a_kept_lambda_takes_these(arg, !is_sync, span);
-                    }
-                    if let Some(want) = expected.get(at) {
-                        self.a_lambdas_text_is_its_own(want, arg);
-                    }
-                    let (came_to, paused) = self.lambda(
-                        params,
-                        mutable,
-                        body,
-                        given,
-                        Promises {
-                            may_pause: !is_sync,
-                            may_fail: *throws,
-                        },
-                        span,
-                    );
-                    // **A lambda that paused, handed to a `std` entry**
-                    // ([ADR-233](../../docs/specification/adr/adr-233.md) D1):
-                    // kept for the call to lower to the entry's pausing
-                    // counterpart, which only the call knows.
-                    if paused && !declared_here {
-                        self.s
-                            .flow
-                            .paused_args
-                            .push((value_node(arg) as usize) as i64);
-                    }
-                    // **The lambda as the type it was handed to, with what its
-                    // body comes to where that type does not say** (ADR-293
-                    // D5): `fn($T) -> $U` binds `$U` from it, which is how a
-                    // `map` knows its elements. Where the type does say, what it
-                    // says stands - this is an answer for a variable, not a
-                    // second opinion on a written result.
-                    let result = match result.as_ref() {
-                        Some(written) if !written.is_unknown() => Some(written.clone()),
-                        _ => (!came_to.is_unknown()).then_some(came_to),
-                    };
-                    Ty::Fn {
-                        params: given.clone(),
-                        result: Box::new(result),
-                        is_sync: *is_sync,
-                        can_throw: *throws,
-                    }
-                }
-                _ => {
-                    // **A parameter that only borrows takes nothing out of
-                    // `self`** (0.0.252): `quoted(self.attribute)` into
-                    // `attribute: ref String` is lent, which is what the
-                    // subject's own loan allows. Found moving the template
-                    // splitter into Nikaia.
-                    if !expected.get(at).is_some_and(Ty::is_a_view) {
-                        self.a_field_of_a_borrowed_subject(arg, span, "passed");
-                    }
-                    let found = self.expr(arg, span);
-                    // **A declared function, run by a parameter that may pause**
-                    // (#516): the emitter wraps the one that never does.
-                    let named = matches!(arg, Expr::Path(_, _))
-                        || matches!(arg, Expr::Variable(name, _)
-                            if self.s.binding(self.parsed.text(*name)).is_none());
-                    if declared_here
-                        && named
-                        && self.runs_the_parameter(callee, at)
-                        && matches!(expected.get(at), Some(Ty::Fn { is_sync: false, .. }))
-                        && let Ty::Fn { params, .. } = &found
-                    {
-                        self.s
-                            .facts
-                            .sync_functions_run_async
-                            .insert(value_node(arg), params.len() as i64);
-                    }
-                    // **A kept value handed to a parameter that only runs
-                    // it** is lent as the closure it holds.
-                    if declared_here
-                        && matches!(expected.get(at), Some(Ty::Fn { .. }))
-                        && matches!(found, Ty::Fn { .. })
-                        && self.runs_the_parameter(callee, at)
-                        && !self.a_run_parameter(arg)
-                        // A declared function named here is no kept value: it
-                        // is passed as it is (#502).
-                        && !matches!(arg, Expr::Path(_, _))
-                        && !matches!(arg, Expr::Variable(name, _)
-                            if self.s.binding(self.parsed.text(*name)).is_none())
-                    {
-                        self.s.facts.kept_args.insert(value_node(arg));
-                    }
-                    found
-                }
-            })
-            .collect()
+        self.nikaia(|state, world, host| {
+            check_core_args::check_core_arguments_given(
+                state,
+                world,
+                host,
+                args,
+                expected,
+                declared_here,
+                callee,
+                span,
+            )
+        })
     }
 
     /// **A kept function takes its arguments by value**, so a text literal
     /// handed to one where it keeps text is built there (ADR-282 D4).
     fn kept_arguments_are_its_own(&mut self, args: &[Expr], params: &[Ty]) {
         self.s.kept_arguments_are_its_own(self.world, args, params);
-    }
-
-    /// Whether `expr` names a parameter of the function being walked that is
-    /// code it only runs: a closure argument below, not a kept value.
-    fn a_run_parameter(&self, expr: &Expr) -> bool {
-        matches!(expr, Expr::Variable(name, _) if self.s.run_code.contains(self.parsed.text(*name)))
-    }
-
-    /// Whether the callee only **runs** its `at`th parameter: the absence of
-    /// `keeps`, and run where no contract was resolved.
-    fn runs_the_parameter(&self, callee: Option<&FnContract>, at: usize) -> bool {
-        callee.is_none_or(|c| {
-            c.signature
-                .as_ref()
-                .and_then(|s| s.arguments().get(at).cloned())
-                .is_none_or(|(name, _)| !c.keeps.contains(&name))
-        })
     }
 
     /// A lambda whose parameters have types, because the callee said so.
@@ -11164,13 +10631,6 @@ impl MultiLock {
         match self {
             MultiLock::Reading => "access_all",
             MultiLock::Writing => "update_all",
-        }
-    }
-
-    fn shape(self) -> &'static str {
-        match self {
-            MultiLock::Reading => "access_all(a, b) fn(x, y) { … }",
-            MultiLock::Writing => "update_all(a, b) fn(x, y) { … }",
         }
     }
 }

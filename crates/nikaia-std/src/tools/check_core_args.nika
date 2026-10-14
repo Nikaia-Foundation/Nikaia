@@ -1,0 +1,517 @@
+// crates/nikaia-std/src/tools/check_core_args.nika
+//
+// **A call's arguments, a door over several locks, a list literal and a call
+// of a field that holds a function** (ADR-294, #125, #558, C-6, U-c3):
+// `arguments_given`, `locks`, `list_literal` and `a_called_field`. The form is
+// the pilot's (`check_core_pilot.nika`): a free function over the state, the
+// world and a host; the walk comes back through the hub `host.expr`.
+
+use std::collections
+
+/// Whether the callee only **runs** its `at`th parameter: the absence of
+/// `keeps`, and run where no contract was resolved.
+fn check_core_args_runs(callee: ref FnContract?, at: i64) -> bool {
+    let contract = callee ?? return true
+    let signature = contract.signature ?? return true
+    let mut i = 0
+    for (name, _) in signature.params {
+        if i == at {
+            return !contract.keeps.contains(name)
+        }
+        i += 1
+    }
+    return true
+}
+
+/// Whether `arg` is a lambda landing in a parameter of a function type.
+fn check_core_args_is_lambda(arg: ref Expr, expected: ref Vec[Ty], at: i64) -> bool {
+    if at >= expected.len() as i64 {
+        return false
+    }
+    let mut closure = false
+    match arg {
+        Expr::Closure { .. } => { closure = true },
+        else => {}
+    }
+    if !closure {
+        return false
+    }
+    return match expected[at] {
+        Ty::Fn { .. } => true,
+        else => false,
+    }
+}
+
+/// Whether `arg` names a declared function: a path, or a name nothing binds.
+fn check_core_args_named(state: ref CheckState, world: ref CheckWorld, arg: ref Expr) -> bool {
+    return match arg {
+        Expr::Path(_, _) => true,
+        Expr::Variable(name, _) => state.binding(world.words.resolve(name)) == null,
+        else => false,
+    }
+}
+
+/// Whether `arg` names a parameter of the function being walked that is code
+/// it only runs: a closure argument below, not a kept value.
+fn check_core_args_a_run_parameter(state: ref CheckState, world: ref CheckWorld, arg: ref Expr) -> bool {
+    return match arg {
+        Expr::Variable(name, _) => state.run_code.contains(world.words.resolve(name)),
+        else => false,
+    }
+}
+
+/// **A lambda handed to a parameter of a function type**: typed by it, and
+/// recorded as kept, run or boxed into a future (ADR-277 D11, D12).
+fn check_core_args_lambda[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, arg: ref Expr, want: ref Ty, declared_here: bool, callee: ref FnContract?, at: i64, span: ref Span) -> Ty sync {
+    let id = id_of(arg) as i64
+    let runs = check_core_args_runs(callee, at)
+    match arg {
+        Expr::Closure { params, mutable, body, .. } => {
+            match want {
+                Ty::Fn { params: given, result, is_sync, can_throw } => {
+                    let pauses: bool = !is_sync
+                    let fails: bool = can_throw
+                    if pauses && declared_here {
+                        state.facts.future_lambdas.insert(id)
+                        if runs {
+                            state.facts.run_lambdas.insert(id)
+                        }
+                    }
+                    if !runs {
+                        state.facts.kept_lambdas.insert(id, (pauses, fails))
+                        state.a_kept_lambdas_hulls(world, arg)
+                        state.a_kept_lambda_takes_these(world, arg, pauses, span)
+                    }
+                    state.a_lambdas_text_is_its_own(world, want, arg)
+                    let (came_to, paused) = check_core_lambda(state, world, host, params, mutable, body, given, CheckPromises { may_pause: pauses, may_fail: fails }, span)
+                    if paused && !declared_here {
+                        state.flow.paused_args.push(id)
+                    }
+                    let written: Ty = result?.clone() ?? Ty::Unknown
+                    let mut out: Ty? = null
+                    if !written.is_unknown() {
+                        out = written
+                    } else if !came_to.is_unknown() {
+                        out = came_to
+                    }
+                    return Ty::Fn { params: given.clone(), result: out, is_sync: !pauses, can_throw: fails }
+                }
+                else => {}
+            }
+        }
+        else => {}
+    }
+    return Ty::Unknown
+}
+
+/// **Any other argument**: walked, and recorded where a declared function or a
+/// kept value lands in a parameter that only runs it (#502, #516).
+fn check_core_args_other[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, arg: ref Expr, expected: ref Vec[Ty], declared_here: bool, callee: ref FnContract?, at: i64, span: ref Span) -> Ty sync {
+    // **A parameter that only borrows takes nothing out of `self`** (0.0.252).
+    let mut lends = false
+    let mut wants_fn = false
+    let mut wants_pausing_fn = false
+    if at < expected.len() as i64 {
+        lends = expected[at].is_a_view()
+        match expected[at] {
+            Ty::Fn { is_sync, .. } => {
+                wants_fn = true
+                let plain: bool = is_sync
+                wants_pausing_fn = !plain
+            }
+            else => {}
+        }
+    }
+    if !lends {
+        check_core_a_field_of_a_borrowed_subject(state, world, host, arg, span, "passed")
+    }
+    let found = host.expr(state, arg, span)
+    let named = check_core_args_named(state, world, arg)
+    let runs = check_core_args_runs(callee, at)
+    let mut found_fn = false
+    let mut arity = 0
+    match found {
+        Ty::Fn { params, .. } => {
+            found_fn = true
+            arity = params.len() as i64
+        }
+        else => {}
+    }
+    // **A declared function, run by a parameter that may pause** (#516).
+    if declared_here && named && runs && wants_pausing_fn && found_fn {
+        state.facts.sync_functions_run_async.insert(id_of(arg) as i64, arity)
+    }
+    // **A kept value handed to a parameter that only runs it** is lent as the
+    // closure it holds; a declared function named here is passed as it is.
+    if declared_here && wants_fn && found_fn && runs && !check_core_args_a_run_parameter(state, world, arg) && !named {
+        state.facts.kept_args.insert(id_of(arg) as i64)
+    }
+    return found
+}
+
+/// **Walk a call's arguments, telling a lambda what it will be handed**
+/// (ADR-288). `declared_here` says whether the signature came from this
+/// program's ledger rather than from `std`'s (ADR-277 D12); `callee` is read
+/// for whether it keeps the parameter a lambda lands in (D11).
+pub fn check_core_arguments_given[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, args: ref Vec[Expr], expected: ref Vec[Ty], declared_here: bool, callee: ref FnContract?, span: ref Span) -> Vec[Ty] sync {
+    let mut out: Vec[Ty] = []
+    let mut at = 0
+    for arg in args {
+        if check_core_args_is_lambda(arg, expected, at) {
+            out.push(check_core_args_lambda(state, world, host, arg, expected[at], declared_here, callee, at, span))
+        } else {
+            out.push(check_core_args_other(state, world, host, arg, expected, declared_here, callee, at, span))
+        }
+        at += 1
+    }
+    return out
+}
+
+/// The name a door over several locks is written with.
+fn check_core_args_door(writing: bool) -> String {
+    if writing {
+        return "update_all".clone()
+    }
+    return "access_all".clone()
+}
+
+/// The shape a door over several locks is written in.
+fn check_core_args_door_shape(writing: bool) -> String {
+    if writing {
+        return "update_all(a, b) fn(x, y) { … }".clone()
+    }
+    return "access_all(a, b) fn(x, y) { … }".clone()
+}
+
+/// The one message shape for a door written wrong.
+fn check_core_args_no_door(mut state: CheckState, writing: bool, wanted: ref String, span: ref Span) sync {
+    state.no_door(check_core_args_door(writing), check_core_args_door_shape(writing), wanted, span)
+}
+
+/// The door's block, once the locks are typed: walked as a lambda handed what
+/// the locks hold, with the lock held open (ADR-281 D17, D6).
+fn check_core_args_door_block[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, writing: bool, args: ref Vec[Expr], params: ref Vec[winnow_grammar::Symbol], mutable: ref Vec[winnow_grammar::Symbol], body: ref Block, span: ref Span) -> Ty sync {
+    let count = args.len() - 1
+    if count < 2 {
+        check_core_args_no_door(state, writing, "It's for several locks, so pass at least two.", span)
+        return Ty::Unknown
+    }
+    let mut held: Vec[Ty] = []
+    let mut at = 0
+    while at < count {
+        let lock = args[at]
+        let found = host.expr(state, lock, span)
+        let content = locked_content_of(found)
+        if content != null {
+            let inside: Ty = content ?? Ty::Unknown
+            let mut view: Ty = inside.clone()
+            if !writing {
+                match inside {
+                    // A view of what it holds, the way `access` hands one over.
+                    Ty::Named { name, args, .. } => {
+                        view = Ty::Named { name: name.clone(), args: args.clone(), view: true }
+                    }
+                    else => {}
+                }
+            }
+            held.push(view)
+        } else if found.is_unknown() && !state.is_a_number(world, lock) {
+            // A type nothing describes is not claimed about (Part III, C.4); a
+            // number is not such a type (Part I 2.4).
+            held.push(Ty::Unknown)
+        } else {
+            let door = check_core_args_door(writing)
+            state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1124".clone(), message: f"`{door}` takes locks, but this is a `{found.text()}`.", notes: ["Taking several locks together keeps them in one order, and only a lock can be taken.".clone()], help: "Pass `SharedMut[T]` values or `Locked[T]` fields.".clone(), labels: [] })
+            held.push(Ty::Unknown)
+        }
+        at += 1
+    }
+    if params.len() > 0 && params.len() != count {
+        check_core_args_no_door(state, writing, "The block takes one value per lock, in the order the locks are written.", span)
+    }
+    // D6 is D1 widened, so the same two questions are asked of this block.
+    if writing {
+        state.an_update_block_returns_nothing(body, span)
+        state.an_update_block_reads_what_it_writes(world, params, body, span)
+    }
+    let outer_door = state.flow.at_a_write_door
+    state.flow.at_a_write_door = writing
+    // Both kinds hold their locks open across the block, so both are one.
+    let outer_inside = state.inside_a_door
+    state.inside_a_door = true
+    // Nothing is asked of this block's promises (ADR-277 D7): the doors are
+    // not ledger entries (ADR-281 D1); `NK2202` and `NK2203` say the rest.
+    check_core_lambda(state, world, host, params, mutable, body, held, CheckPromises { may_pause: true, may_fail: true }, span)
+    state.flow.at_a_write_door = outer_door
+    state.inside_a_door = outer_inside
+    if writing {
+        return Ty::Tuple([])
+    }
+    // What a lambda hands back is not written down (ADR-288 D13), but that it
+    // came out of a lock is (ADR-281 D22): `Seen[?]`.
+    return Ty::Named { name: SEEN.clone(), args: [Ty::Unknown], view: false }
+}
+
+/// **`access_all` and `update_all`** (ADR-281 D17): `access_all` hands each
+/// value as a view, the way `access` does; `update_all` hands each in by value
+/// and takes a new one back per lock (D2). Both refuse anything that is not a
+/// lock.
+pub fn check_core_locks[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, writing: bool, args: ref Vec[Expr], span: ref Span) -> Ty sync {
+    if args.len() == 0 {
+        check_core_args_no_door(state, writing, "It takes the locks and then the block.", span)
+        return Ty::Unknown
+    }
+    let last = args[args.len() - 1]
+    match last {
+        Expr::Closure { params, mutable, body, .. } => {
+            return check_core_args_door_block(state, world, host, writing, args, params, mutable, body, span)
+        }
+        else => {}
+    }
+    check_core_args_no_door(state, writing, "The block comes last: `fn(a, b) { … }`.", span)
+    return Ty::Unknown
+}
+
+/// The function type a list of a declared `Vec[fn …]` hands its lambdas (#497).
+fn check_core_args_fn_element(declared: ref Ty?) -> Ty? {
+    let ty = declared ?? return null
+    match ty {
+        Ty::Named { name, args, .. } => {
+            if name == "Vec" && args.len() > 0 {
+                match args[0] {
+                    Ty::Fn { .. } => { return args[0].clone() },
+                    else => {}
+                }
+            }
+        }
+        else => {}
+    }
+    return null
+}
+
+/// Whether `name` is one of the integer types a list widens into (ADR-285 D32).
+fn check_core_args_an_integer(name: ref String) -> bool {
+    return name == "u8" || name == "u32" || name == "u64" || name == "i32" || name == "i64"
+}
+
+/// The name of a plain named type, or "" for any other.
+fn check_core_args_plain_name(ty: ref Ty) -> String {
+    return match ty {
+        Ty::Named { name, args, view } => if !view && args.len() == 0 { name.clone() } else { "".clone() },
+        else => "".clone(),
+    }
+}
+
+/// Whether `value` is a closure.
+fn check_core_args_a_closure(value: ref Expr) -> bool {
+    return match value {
+        Expr::Closure { .. } => true,
+        else => false,
+    }
+}
+
+/// **A list literal**: one element type, the elements' agreed type, with a
+/// `null` meeting the rest at `T?` (#312), a text literal taking its
+/// neighbours' text (ADR-282 D4), and two integer types their common one
+/// (ADR-285 D32). Once per literal: the walk stops reporting after the first
+/// disagreement but keeps walking.
+pub fn check_core_list_literal[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, items: ref Vec[Expr], span: ref Span) -> Ty sync {
+    let mut agreed: Ty = Ty::Unknown
+    let mut has_kind = false
+    let mut first_kind: String = ""
+    let mut first_written: String = ""
+    let mut said = false
+    let declared: Ty? = state.flow.lambda_expected?.clone()
+    state.flow.lambda_expected = null
+    let element: Ty? = check_core_args_fn_element(declared)
+    let mut walked: Vec[Ty] = []
+    for item in items {
+        if check_core_args_a_closure(item) {
+            state.flow.lambda_expected = element?.clone()
+        }
+        let found = host.expr(state, item, span)
+        state.flow.lambda_expected = null
+        walked.push(found)
+    }
+    let mut at = 0
+    for item in items {
+        state.hands_over(world, item, walked[at], "put into a list", span)
+        at += 1
+    }
+    // **A list with a `null` in it is a list of `T?`** (#312).
+    let mut a_null = false
+    for item in items {
+        match item {
+            Expr::LitNull(_) => { a_null = true },
+            else => {}
+        }
+    }
+    if a_null {
+        let mut arms: Vec[CheckArm] = []
+        let mut i = 0
+        for item in items {
+            arms.push(CheckArm { tail: item, ty: walked[i].clone() })
+            i += 1
+        }
+        let met = state.arms_meet_at_null(world, arms)
+        if met != null {
+            let element_ty: Ty = met ?? Ty::Unknown
+            return Ty::Named { name: "Vec".clone(), args: [element_ty], view: false }
+        }
+    }
+    // **A text literal takes its neighbours' text** (ADR-282 D4).
+    let mut holds_text = false
+    for found in walked {
+        if check_core_args_plain_name(found) == "String" {
+            holds_text = true
+        }
+    }
+    let mut founds: Vec[Ty] = []
+    let mut integers: Vec[String] = []
+    let mut j = 0
+    for item in items {
+        let mut found: Ty = walked[j].clone()
+        if holds_text {
+            match item {
+                Expr::LitStr { .. } => {
+                    state.facts.owned_texts.insert(id_of(item) as i64)
+                    found = Ty::Named { name: "String".clone(), args: [], view: false }
+                }
+                else => {}
+            }
+        }
+        integers.push(check_core_args_plain_name(found))
+        founds.push(found)
+        j += 1
+    }
+    let mut k = 0
+    for item in items {
+        let found: Ty = founds[k].clone()
+        k += 1
+        // **A number beside text, where neither has a type yet** (Part III C.1).
+        let shape = element_kind(item, found)
+        if shape != null {
+            let kind: String = (shape ?? "").clone()
+            if !has_kind {
+                has_kind = true
+                first_kind = kind.clone()
+                first_written = found.text()
+            } else if first_kind != kind && !said {
+                said = true
+                state.a_list_whose_elements_disagree(first_kind, first_written, kind, found, span)
+            }
+        }
+        if found.is_unknown() {
+            continue
+        }
+        if agreed.is_unknown() {
+            agreed = found
+            continue
+        }
+        // **Two integer types hold their common type** (ADR-285 D32).
+        let a = check_core_args_plain_name(agreed)
+        let b = check_core_args_plain_name(found)
+        if a != "" && b != "" && !is_a_literal(item) {
+            let common = common_integer(a, b)
+            if common != null {
+                let name: String = (common ?? "").clone()
+                agreed = Ty::Named { name: name, args: [], view: false }
+                continue
+            }
+        }
+        if !found.fits(agreed) && !said {
+            said = true
+            let first = agreed.clone()
+            let kind: String = (element_kind(item, first) ?? "a value").clone()
+            state.a_list_whose_elements_disagree(kind, first.text(), "a value", found, span)
+        }
+    }
+    // **And the narrower elements are widened into it** (D32).
+    let common = check_core_args_plain_name(agreed)
+    if common != "" && check_core_args_an_integer(common) {
+        let mut m = 0
+        for item in items {
+            let own = integers[m].clone()
+            m += 1
+            if own != "" && own != common && !is_a_literal(item) {
+                let met: String = (common_integer(own, common) ?? "").clone()
+                if met == common {
+                    state.facts.wrapped.insert(id_of(item) as i64, FactWrap::Widen(common.clone()))
+                }
+            }
+        }
+    }
+    // **A lambda beside a function value is kept as that value is** (Part I 5.3).
+    let mut a_fn = false
+    match agreed {
+        Ty::Fn { .. } => { a_fn = true },
+        else => {}
+    }
+    if a_fn {
+        for item in items {
+            check_core_a_kept_lambda(state, world, host, agreed, item, span)
+        }
+    }
+    return Ty::Named { name: "Vec".clone(), args: [agreed], view: false }
+}
+
+/// Record that the function being walked calls the field `key`.
+fn check_core_args_a_field_called(mut state: CheckState, current: ref String, key: ref String) sync {
+    let mut calls: CheckMethodCalls = state.methods.remove(current) ?? CheckMethodCalls::empty()
+    calls.fields_called.insert(key.clone())
+    state.methods.insert(current.clone(), calls)
+}
+
+/// Record whether the field's code pauses or fails for the function walked.
+fn check_core_args_code_said(mut state: CheckState, current: ref String, pauses: bool, fails: bool) sync {
+    let mut calls: CheckMethodCalls = state.methods.remove(current) ?? CheckMethodCalls::empty()
+    calls.code_pauses = calls.code_pauses || pauses
+    calls.code_fails = calls.code_fails || fails
+    state.methods.insert(current.clone(), calls)
+}
+
+/// **A call of a field that holds a function**, `button.on_click(4)`: what it
+/// is given, the lock column and what the emitter needs, and the call's result;
+/// `null` where `on` has no such field. `outer_inside` is whether a lock was
+/// already open around this call (#533).
+pub fn check_core_a_called_field[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, on: ref Ty, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], outer_inside: bool, span: ref Span) -> Ty? sync {
+    let code: Ty = state.a_field_that_is_code(world, on, method) ?? return null
+    match code {
+        Ty::Fn { params, result, is_sync, can_throw } => {
+            let pauses: bool = !is_sync
+            let fails: bool = can_throw
+            check_core_arguments_given(state, world, host, args, params, false, null, span)
+            state.kept_arguments_are_its_own(world, args, params)
+            // **A call through a function field reaches what was stored
+            // there** (ADR-230 D1, D2).
+            match on {
+                Ty::Named { name, .. } => {
+                    let key = f"{name}.{world.words.resolve(method)}"
+                    if state.current != null && state.task_bindings.len() == 0 {
+                        let current: String = state.current?.clone() ?? ""
+                        check_core_args_a_field_called(state, current, key)
+                    }
+                    if world.own.code_locks.contains_key(key) {
+                        let holds = world.own.code_locks[key] ?? return null
+                        let own = state.inside_a_door
+                        state.inside_a_door = outer_inside
+                        state.a_lock_inside_a_lock(key, holds, span)
+                        state.inside_a_door = own
+                    }
+                }
+                else => {}
+            }
+            state.facts.field_calls.insert(id_of(receiver) as i64, pauses)
+            if state.current != null {
+                let current: String = state.current?.clone() ?? ""
+                check_core_args_code_said(state, current, pauses, fails)
+            }
+            if fails {
+                state.flow.fallible_methods.insert(id_of(receiver) as i64)
+            }
+            return result?.clone() ?? Ty::Named { name: "()".clone(), args: [], view: false }
+        }
+        else => {}
+    }
+    return null
+}

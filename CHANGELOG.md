@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.912] — 2026-10-14
+
+**check: a call's arguments, a door over several locks, a list literal and a called field in Nikaia (U-c3, #125, #558)**
+- The checker's arguments_given, locks (access_all, update_all), list_literal and a_called_field move to tools/check_core_args.nika (ADR-294, U-c3). Nothing a program sees changes.
+
 ## [0.0.911] — 2026-10-14
 
 **A statement match arm is a statement**

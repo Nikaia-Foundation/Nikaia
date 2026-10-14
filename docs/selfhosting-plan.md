@@ -297,7 +297,7 @@ gives what each core unit calls.
 | U-c0 | `check_core_pilot.nika` | Scaffolding: `world` as a reference, the boxed baton, `core.rs`, the hubs `expr` and `block`, `scripts/c6/`, the oracle, `check_deep_nesting.rs`, the callgrind baseline. Pilot: `grammar_call`, `a_compound_write_to_a_map_slot`, `an_instantiation`, `a_mut_parameter_given_away` (needs `specialised` and `written`). U-c0 may come before C-5e. | 115 |
 | U-c1 (done, 0.0.907) | `check_core_leaves.nika` | `a_field_of_a_borrowed_subject`, `a_field_of_a_lent_place_handed_back`, `a_kept_lambda`, `literal_by_use`, `holes`, `lambda`, `returns`, `an_assert` | 537 |
 | U-c2 (done, 0.0.910) | `check_core_comptime.nika` | `comptime_binding`, `a_block_over_a_grammar` | 429 |
-| U-c3 | `check_core_args.nika` | `arguments_given`, `locks`, `list_literal`, `a_called_field` | 524 |
+| U-c3 (done, 0.0.912) | `check_core_args.nika` | `arguments_given`, `locks`, `list_literal`, `a_called_field` | 524 |
 | U-c4 | `check_core_call.nika` | `call`; the arms `Call`, `ListLit`, `Tuple` | 499 |
 | U-c5 | `check_core_call_on.nika` | `call_on`, `a_safe_call` | 688 |
 | U-c6 | `check_core_method.nika` | the arm `MethodCall \| SafeMethod` | 638 |

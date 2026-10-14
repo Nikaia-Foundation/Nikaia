@@ -216,6 +216,11 @@ checker refusal (`NK1125`) if `!= null` is not meant to narrow.
 | U-c2 `.get(..).and_then(|c| c.signature.as_ref())` | a helper over `ref FnContract` | no: `c.signature ?? return` on a `get(..) ??` local moves out of the reference (lowering-defects D35) |
 | U-c2 `self.declared(ty, span)` and the `payload_of` / `{f:?}` closures | host methods `declared` (hosted), `payload_of`, `float_text` | yes: `Ty::from_ast` and `a_key_with_no_order` stay Rust |
 | U-c2 `rust_constant_type(..).or_else(..).or_else(..)` | `if x != null { return x }` per step | no lazy `??` chain |
+| U-c3 `door: MultiLock` across the crossing | `writing: bool`, the two spellings as helpers | yes: the Rust enum stays for `call`'s dispatch |
+| U-c3 `methods.entry(k).or_insert_with(..).field = ..` | `remove(k) ?? empty()`, change, `insert` | no `entry` API on a map |
+| U-c3 `kind: Option<(String, String)>` matched with a guard | a `bool` and two `String`s | no tuple pattern over an option |
+| U-c3 `args.iter().map(\|(at, arg)\| match (arg, expected.get(at)) ..)` | a loop, a helper asking the pair, one function per arm | no tuple pattern over an option |
+| U-c3 `args.split_last()` | `args[args.len() - 1]` after a length check | no slice patterns |
 
 ## Method
 
