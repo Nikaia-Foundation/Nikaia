@@ -4491,7 +4491,7 @@ fn rs2nika_enum_arity(mut ctx: Rs2nikaCtx, text: ref String) {
 /// R68: a positional rest `V(a, ..)` -> `V(a, _, _)` (ADR-349 refuses it,
 /// `NK1255`), the number of parts from `ctx.arity`; a TODO where it is unknown.
 fn rs2nika_rest(mut ctx: Rs2nikaCtx, given: ref String) -> String {
-    if !given.contains(", ..)") {
+    if !given.contains(", ..)") && !given.contains("(..)") {
         return given.clone()
     }
     let c: Vec[scalar] = given.chars().collect()
@@ -4499,6 +4499,43 @@ fn rs2nika_rest(mut ctx: Rs2nikaCtx, given: ref String) -> String {
     let mut at = 0
     while at < c.len() {
         let rest = at + 5 <= c.len() && rs2nika_text(c, at, at + 5) == ", ..)"
+        // `V(..)`: every part is `_` (R68)
+        let all = at > 0 && rs2nika_path_char(c[at - 1]) && at + 4 <= c.len() && rs2nika_text(c, at, at + 4) == "(..)"
+        if all {
+            let mut p0 = at - 1
+            while p0 >= 0 && rs2nika_path_char(c[p0]) {
+                p0 = p0 - 1
+            }
+            let path0: String = rs2nika_text(c, p0 + 1, at)
+            let segs0: Vec[String] = path0.split("::").map(fn(x) { x.clone() }).collect()
+            let key0: String = if segs0.len() >= 2 { f"{segs0[segs0.len() - 2]}::{segs0[segs0.len() - 1]}\t" } else { f"::{path0}\t" }
+            let mut n0 = -1
+            let last0 = f"::{segs0[segs0.len() - 1]}\t"
+            let mut alike: Vec[i64] = []
+            for a in ctx.arity.clone() {
+                let k0 = rs2nika_number(a[(a.find("\t") ?? 0) + 1..<a.len()].clone())
+                if a.starts_with(ref key0) {
+                    n0 = k0
+                } else if a.contains(ref last0) {
+                    alike.push(k0)
+                }
+            }
+            // a variant named by an alias (`Held::P` for `ClaimHeld::P`): one alike is enough
+            if n0 < 0 && alike.len() == 1 {
+                n0 = alike[0]
+            }
+            if n0 > 0 {
+                let mut holes: Vec[String] = []
+                while holes.len() < n0 {
+                    holes.push("_")
+                }
+                let joined0 = rs2nika_join(holes, ", ")
+                out.push_str(f"({joined0})")
+                rs2nika_hit(ctx, "R68")
+                at = at + 4
+                continue
+            }
+        }
         if !rest {
             out.push(c[at])
             at = at + 1
