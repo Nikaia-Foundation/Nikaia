@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.941] — 2026-10-14
+
+**a parameter of code fails with what its callers hand it (ADR-351 D4, part of #620)**
+- A parameter of code of a free function that is not `pub` and not used as a value is a place of the error-set calculation: every call in the package adds what it hands that parameter, and a call through it fails with that union, so a `catch` takes the errors by name.
+
 ## [0.0.940] — 2026-10-14
 
 **a call through a variable or a list element fails with what it was given (ADR-351 D1, D4, part of #620)**

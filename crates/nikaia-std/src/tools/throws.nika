@@ -134,6 +134,35 @@ pub fn stored_throws(field: ref String, resolved: ref collections::BTreeSet[Stri
     graph.calls.insert(field.clone(), called)
 }
 
+/// **A parameter of code is a place** (ADR-351 D1, D4), given what every
+/// caller of this package hands it. One whose callers this package cannot
+/// all see - a `pub` function, or one used as a value - cannot be named.
+pub fn params_as_places(own: ref Ledger, mut stored: collections::BTreeMap[String, CheckStoredCode]) {
+    let mut kept: collections::BTreeSet[String] = collections::BTreeSet()
+    for (_, code) in stored {
+        for free in code.free {
+            kept.insert(free.clone())
+        }
+    }
+    for (name, contract) in own.functions {
+        if name.contains("::") {
+            continue
+        }
+        let signature: ref Signature = contract.signature ?? continue
+        for (param, ty) in signature.params {
+            if !check_core_stmt_holds_code(ty) {
+                continue
+            }
+            let key = f"{name}::{param}"
+            let mut entry: CheckStoredCode = stored.remove(key) ?? CheckStoredCode::empty()
+            if contract.public || kept.contains(name) {
+                entry.unresolved = true
+            }
+            stored.insert(key, entry)
+        }
+    }
+}
+
 // What a library's ledger says a callee fails with, and `?` for one it does
 // not carry.
 fn fails_with_of(library: ref Ledger, callee: ref String) -> Vec[String] {

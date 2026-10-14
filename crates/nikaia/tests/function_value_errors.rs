@@ -151,6 +151,26 @@ fn a_list_of_functions_fails_with_the_union() {
     assert!(found.is_empty(), "{:?}", findings(&source));
 }
 
+/// **A parameter of code is given what every caller hands it** (D4).
+#[test]
+fn a_parameter_fails_with_what_its_callers_hand_it() {
+    let source = format!(
+        "{JOB}fn guard(run: fn() throws) {{\n\
+         \x20   run() catch {{\n\
+         \x20       match error {{\n\
+         \x20           Bad::Oops => print(\"oops\")\n\
+         \x20       }}\n\
+         \x20   }}\n\
+         }}\n\
+         fn main() {{\n\
+         \x20   guard(fail)\n\
+         \x20   guard(quiet)\n\
+         }}\n"
+    );
+    let found = codes(&source);
+    assert!(found.is_empty(), "{:?}", findings(&source));
+}
+
 /// **A list of functions that cannot fail carries the empty set**: `NK1134`.
 #[test]
 fn a_list_of_quiet_functions_is_nk1134() {

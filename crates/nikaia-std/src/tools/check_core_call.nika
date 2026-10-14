@@ -186,6 +186,7 @@ fn check_core_call_kept[H: CheckHost](mut state: CheckState, world: ref CheckWor
         // **A call through a name fails with what the name was given**
         // (ADR-351 D1, D3): the union the ledger settled for that place.
         let key = f"{current}::{name}"
+        let a_param = !current.contains("::") && check_core_call_a_param_of(world, current, name)
         if fails && world.own.code_throws.contains_key(key) {
             let set = world.own.code_throws[key] ?? return gives
             let mut contract = FnContract::empty()
@@ -194,7 +195,7 @@ fn check_core_call_kept[H: CheckHost](mut state: CheckState, world: ref CheckWor
             check_core_args_a_field_called(state, current, key)
             check_core_args_code_said(state, current, !is_sync, false)
         } else {
-            if fails && state.stored_code.contains_key(key) {
+            if fails && (a_param || state.stored_code.contains_key(key)) {
                 check_core_args_a_field_called(state, current, key)
                 check_core_args_code_said(state, current, !is_sync, false)
             } else {
@@ -203,6 +204,54 @@ fn check_core_call_kept[H: CheckHost](mut state: CheckState, world: ref CheckWor
         }
     }
     return gives
+}
+
+// Whether `name` is a parameter of code of the function `current`.
+fn check_core_call_a_param_of(world: ref CheckWorld, current: ref String, name: ref String) -> bool {
+    let contract = world.own.functions[current] ?? return false
+    let signature: ref Signature = contract.signature ?? return false
+    for (param, ty) in signature.params {
+        if param == name && check_core_stmt_holds_code(ty) {
+            return true
+        }
+    }
+    return false
+}
+
+// Whether a function of this program takes code.
+fn check_core_call_takes_code(callee: ref FnContract?) -> bool {
+    let contract: ref FnContract = callee ?? return false
+    let signature: ref Signature = contract.signature ?? return false
+    for (_, ty) in signature.params {
+        if check_core_stmt_holds_code(ty) {
+            return true
+        }
+    }
+    return false
+}
+
+// What each argument of code is, added to the place of its parameter.
+fn check_core_call_feed_params[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, key: ref String, contract: ref FnContract, args: ref Vec[Expr], frame: ref CheckStoredCode) sync {
+    let signature: ref Signature = contract.signature ?? return
+    let mut i = -1
+    for (param, ty) in signature.params {
+        i += 1
+        if i >= args.len() as i64 || !check_core_stmt_holds_code(ty) {
+            continue
+        }
+        let mut stored = frame.clone()
+        check_core_places_code_into(state, world, host, args[i], stored)
+        let place = f"{key}::{param}"
+        let mut entry: CheckStoredCode = state.stored_code.remove(place) ?? CheckStoredCode::empty()
+        for resolved in stored.resolved {
+            entry.resolved.insert(resolved.clone())
+        }
+        entry.unresolved = entry.unresolved || stored.unresolved
+        for free in stored.free {
+            entry.free.insert(free.clone())
+        }
+        state.stored_code.insert(place, entry)
+    }
 }
 
 /// **A variant is built by its constructor, and its parts are what it keeps**
@@ -258,8 +307,18 @@ fn check_core_call_unresolved[H: CheckHost](mut state: CheckState, world: ref Ch
     if is_variable && state.run_code.contains(name) {
         let looked: Ty = state.lookup(name) ?? Ty::Unknown
         match looked {
-            Ty::Fn { params, result, .. } => {
+            Ty::Fn { params, result, can_throw, .. } => {
                 check_core_call_lent(state, args, params, found)
+                // **A parameter of code fails with what its callers hand
+                // it** (ADR-351 D1, D4).
+                let current: String = state.current?.clone() ?? ""
+                let key = f"{current}::{name}"
+                if can_throw && world.own.code_throws.contains_key(key) && !current.contains("::") && check_core_call_a_param_of(world, current, name) {
+                    let set = world.own.code_throws[key] ?? return Ty::Unknown
+                    let mut contract = FnContract::empty()
+                    contract.fails_with = set.clone()
+                    state.may_fail_here(world, host, key, contract, span)
+                }
                 return result?.clone() ?? Ty::Named { name: "()".clone(), args: [], view: false }
             }
             else => {}
@@ -396,7 +455,18 @@ fn check_core_call_named_call[H: CheckHost](mut state: CheckState, world: ref Ch
         state.an_exit_code_out_of_range(key, args, span)
     }
     let declared_here = have && world.own.functions.contains_key(key)
+    // **A parameter of code is a place, given what every caller hands it**
+    // (ADR-351 D1, D4).
+    let feeds = declared_here && !key.contains("::") && check_core_call_takes_code(callee)
+    if feeds {
+        state.stored_frames.push(CheckStoredCode::empty())
+    }
     let found = check_core_arguments_given(state, world, host, args, expected, declared_here, callee, span)
+    if feeds {
+        let frame: CheckStoredCode = state.stored_frames.pop() ?? CheckStoredCode::empty()
+        let contract: FnContract = callee?.clone() ?? FnContract::empty()
+        check_core_call_feed_params(state, world, host, key, contract, args, frame)
+    }
     let paused_here: Vec[i64] = state.flow.paused_args.clone()
     state.flow.paused_args = outer_paused
     // **A scope with a task that pauses polls it, and pauses itself**

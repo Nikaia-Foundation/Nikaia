@@ -13132,6 +13132,7 @@ fn check_core_call_kept<H: CheckHost>(state: &mut CheckState, world: &CheckWorld
             None => None,
         }, || "".into());
         let key = format!("{}::{}", current, name);
+        let a_param = !current.contains("::") && check_core_call_a_param_of(world, &current, name);
         if fails && world.own.code_throws.contains_key(&key) {
             let set = match *nikaia_std::index::get(&world.own.code_throws, &key) { Some(__nikaia_value) => __nikaia_value, None => return gives };
             let mut contract = FnContract::empty();
@@ -13139,12 +13140,45 @@ fn check_core_call_kept<H: CheckHost>(state: &mut CheckState, world: &CheckWorld
             state.may_fail_here(world, host, &key, &contract, span);
             check_core_args_a_field_called(state, &current, &key);
             check_core_args_code_said(state, &current, !is_sync, false);
-        } else if fails && state.stored_code.contains_key(&key) {
+        } else if fails && (a_param || state.stored_code.contains_key(&key)) {
             check_core_args_a_field_called(state, &current, &key);
             check_core_args_code_said(state, &current, !is_sync, false);
         } else { check_core_args_code_said(state, &current, !is_sync, fails); }
     }
     gives
+}
+
+fn check_core_call_a_param_of(world: &CheckWorld<'_>, current: &str, name: &str) -> bool {
+    let contract = match *nikaia_std::index::get(&world.own.functions, current) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let signature: &Signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+    for (param, ty) in signature.params.iter() { if param == name && check_core_stmt_holds_code(ty) { return true; } }
+    false
+}
+
+fn check_core_call_takes_code(callee: Option<&FnContract>) -> bool {
+    let contract: &FnContract = match callee { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let signature: &Signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+    for (_, ty) in signature.params.iter() { if check_core_stmt_holds_code(ty) { return true; } }
+    false
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_call_feed_params<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, key: &str, contract: &FnContract, args: &[Expr], frame: &CheckStoredCode) {
+    let signature: &Signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
+    let mut i: i64 = -1;
+    for (param, ty) in signature.params.iter() {
+        i += 1;
+        if i >= args.len() as i64 || !check_core_stmt_holds_code(ty) { continue; }
+        let mut stored = frame.clone();
+        check_core_places_code_into(&state, world, host, nikaia_std::index::get(&args, nikaia_std::index::at(i)), &mut stored);
+        let place = format!("{}::{}", key, param);
+        let mut entry: CheckStoredCode = nikaia_std::index::or(state.stored_code.remove(&place), || CheckStoredCode::empty());
+        for resolved in stored.resolved.iter() { entry.resolved.insert(resolved.to_owned()); }
+        entry.unresolved = entry.unresolved || stored.unresolved;
+        for free in stored.free.iter() { entry.free.insert(free.to_owned()); }
+        state.stored_code.insert(place, entry);
+    }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -13195,9 +13229,20 @@ fn check_core_call_unresolved<H: CheckHost>(state: &mut CheckState, world: &Chec
     if is_variable && state.run_code.contains(name) {
         let looked: Ty = nikaia_std::index::or(state.lookup(name), || Ty::Unknown);
         match looked {
-            Ty::Fn { ref params, ref result, .. } => {
+            Ty::Fn { ref params, ref result, can_throw, .. } => {
                 let result = nikaia_std::boxed::open(result);
                 check_core_call_lent(state, args, params, found);
+                let current: String = nikaia_std::index::or(match state.current.as_ref() {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                }, || "".into());
+                let key = format!("{}::{}", current, name);
+                if can_throw && world.own.code_throws.contains_key(&key) && !current.contains("::") && check_core_call_a_param_of(world, &current, name) {
+                    let set = match *nikaia_std::index::get(&world.own.code_throws, &key) { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
+                    let mut contract = FnContract::empty();
+                    contract.fails_with = set.to_owned();
+                    state.may_fail_here(world, host, &key, &contract, span);
+                }
                 return nikaia_std::index::or(match result.as_ref() {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                     None => None,
@@ -13316,7 +13361,17 @@ fn check_core_call_named_call<H: CheckHost>(state: &mut CheckState, world: &Chec
     state.flow.paused_args = vec![];
     if have { state.an_exit_code_out_of_range(&key, args, span); }
     let declared_here = have && world.own.functions.contains_key(&key);
+    let feeds = declared_here && !key.contains("::") && check_core_call_takes_code((callee).as_ref());
+    if feeds { state.stored_frames.push(CheckStoredCode::empty()); }
     let found = check_core_arguments_given(state, world, host, args, &expected, declared_here, (callee).as_ref(), span);
+    if feeds {
+        let frame: CheckStoredCode = nikaia_std::index::or(state.stored_frames.pop(), || CheckStoredCode::empty());
+        let contract: FnContract = nikaia_std::index::or(match callee.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || FnContract::empty());
+        check_core_call_feed_params(state, world, host, &key, &contract, args, &frame);
+    }
     let paused_here: Vec<i64> = state.flow.paused_args.to_owned();
     state.flow.paused_args = outer_paused;
     if have && key == "task::scope" { host.a_scope_that_pauses(state, args, &paused_here, span); }
@@ -51082,6 +51137,22 @@ pub fn stored_throws(field: &str, resolved: &collections::BTreeSet<String>, unre
     graph.calls.insert(field.to_owned(), called);
 }
 
+pub fn params_as_places(own: &Ledger, stored: &mut collections::BTreeMap<String, CheckStoredCode>) {
+    let mut kept: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for (_, code) in stored.iter() { for free in code.free.iter() { kept.insert(free.to_owned()); } }
+    for (name, contract) in own.functions.iter() {
+        if name.contains("::") { continue; }
+        let signature: &Signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
+        for (param, ty) in signature.params.iter() {
+            if !check_core_stmt_holds_code(ty) { continue; }
+            let key = format!("{}::{}", name, param);
+            let mut entry: CheckStoredCode = nikaia_std::index::or(stored.remove(&key), || CheckStoredCode::empty());
+            if contract.public || kept.contains(name) { entry.unresolved = true; }
+            stored.insert(key, entry);
+        }
+    }
+}
+
 fn fails_with_of(library: &Ledger, callee: &str) -> Vec<String> {
     let contract = match *nikaia_std::index::get(&library.functions, callee) { Some(__nikaia_value) => __nikaia_value, None => return vec![String::from("?")] };
     contract.fails_with.to_owned()
@@ -57027,7 +57098,7 @@ pub mod threads {
 }
 pub mod throws {
     #[allow(unused_imports)]
-    pub use super::{MethodsCalled, ThrowsGraph, unit_throws, stored_throws, error_sets, error_type, Thrown, Contribution, thrown_by, fatal_named};
+    pub use super::{MethodsCalled, ThrowsGraph, unit_throws, stored_throws, params_as_places, error_sets, error_type, Thrown, Contribution, thrown_by, fatal_named};
 }
 pub mod tiers {
     #[allow(unused_imports)]

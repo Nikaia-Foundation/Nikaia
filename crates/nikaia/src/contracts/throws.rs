@@ -65,7 +65,11 @@ pub fn infer(
         fatal_calls: BTreeMap::new(),
     };
     let fatal = fatal_types(ledger, library);
-    // **Each function field is a place of the graph** (ADR-351 D1, D3).
+    // **Each function field, name and parameter of code is a place of the
+    // graph** (ADR-351 D1, D3, D4).
+    let mut stored = stored.clone();
+    nika::params_as_places(ledger, &mut stored);
+    let stored = &stored;
     let places: BTreeSet<String> = stored.keys().cloned().collect();
     for (field, code) in stored {
         nika::stored_throws(
