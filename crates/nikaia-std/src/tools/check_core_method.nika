@@ -291,11 +291,13 @@ fn check_core_method_resolved(mut state: CheckState, world: ref CheckWorld, rece
     }
     // **A list of text asked for a view of text** (#125, #375).
     if (key == "Vec::contains" || key == "Array::contains") && args.len() == 1 {
-        let named = match args[0] {
-            Expr::Variable(_, _) => true,
+        // A literal is text as well (`names.contains("?")`).
+        let text = match args[0] {
+            Expr::Variable(_, _) => check_core_method_text_local(state, world, args[0]),
+            Expr::LitStr { .. } => true,
             else => false,
         }
-        if named && check_core_method_text_local(state, world, args[0]) {
+        if text {
             state.facts.text_in_lists.insert(id_of(receiver) as i64)
         }
     }

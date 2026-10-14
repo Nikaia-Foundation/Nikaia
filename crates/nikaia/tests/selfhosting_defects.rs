@@ -1482,3 +1482,27 @@ fn main() {
     assert_eq!(lines, ["1", "1 2", "2"]);
     assert!(rust.contains("{ let db = db.clone(); nikaia_std::task::TaskHandle::start(async move { println!(\"{}\", db) }) }"), "{rust}");
 }
+
+/// Owned text is lent to `strip_prefix` and `strip_suffix` as to
+/// `starts_with`, and a literal asked of a list of text is a view of text
+/// (both reached `rustc` unlent in `tools/*.nika`).
+#[test]
+fn owned_text_is_lent_to_strip_and_a_literal_to_contains() {
+    let said = printed(
+        "strip-owned-contains-literal",
+        r#"
+fn main() {
+    let name: String = "now"
+    let prefix = f"from({name}::"
+    let error: String = "from(now::f)"
+    let rest: String = (error.strip_prefix(prefix) ?? "").clone()
+    let tail = f")"
+    let param: String = (rest.strip_suffix(tail) ?? "").clone()
+    let named: Vec[String] = [name.clone(), "?".clone()]
+    let found = named.contains("?")
+    println(f"{param} {found}")
+}
+"#,
+    );
+    assert_eq!(said.trim(), "f true");
+}

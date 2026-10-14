@@ -68,6 +68,10 @@ impl CheckState {
             param = "suffix"
         } else if key == "str::contains" {
             param = "part"
+        } else if key == "str::strip_prefix" {
+            param = "prefix"
+        } else if key == "str::strip_suffix" {
+            param = "suffix"
         } else {
             return
         }

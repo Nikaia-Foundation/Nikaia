@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.950] — 2026-10-14
+
+**Owned text is lent to strip_prefix and strip_suffix; a literal asked of a list of text is a view**
+- `x.strip_prefix(p)` and `x.strip_suffix(p)` with an owned `String` `p` lower with `&p`, as `starts_with` does (`check_values.nika`); `names.contains("?")` on a `Vec[String]` takes the literal as a view of text (`check_core_method.nika`). Both reached `rustc` from `tools/*.nika` (#620). Test: `selfhosting_defects`.
+
 ## [0.0.949] — 2026-10-14
 
 **a result's views keep their own sources by path; the ledger writes them per path (ADR-353 D1, D5, part of #614)**

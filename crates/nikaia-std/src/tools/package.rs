@@ -15711,8 +15711,12 @@ fn check_core_method_resolved(state: &mut CheckState, world: &CheckWorld<'_>, re
     let library = key.ends_with("::clone") && world.library.functions.contains_key(&key) && !world.own.functions.contains_key(&key);
     if library && args.is_empty() { state.facts.owned_copies.insert(id_of(receiver) as i64); }
     if (key == "Vec::contains" || key == "Array::contains") && args.len() == 1 {
-        let named = matches!(*nikaia_std::index::get(&args, 0), Expr::Variable(_, _));
-        if named && check_core_method_text_local(&state, world, nikaia_std::index::get(&args, 0)) { state.facts.text_in_lists.insert(id_of(receiver) as i64); }
+        let text = match nikaia_std::index::get(&args, 0) {
+            Expr::Variable(_, _) => check_core_method_text_local(&state, world, nikaia_std::index::get(&args, 0)),
+            Expr::LitStr { .. } => true,
+            _ => false,
+        };
+        if text { state.facts.text_in_lists.insert(id_of(receiver) as i64); }
     }
     let counts = key == format!("{}::count", SEQ) || key == format!("{}::position", SEQ) || key == format!("{}::count", PAR) || key == format!("{}::position", PAR);
     if counts && !world.own.functions.contains_key(&key) { state.facts.counted.insert(id_of(receiver) as i64); }
@@ -26598,7 +26602,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn a_pattern_of_owned_text(&mut self, key: &str, given: &[Expr], found: &[Ty], span: &Span) {
         let mut param: String = String::from("");
-        if key == "str::starts_with" { param = String::from("prefix"); } else if key == "str::ends_with" { param = String::from("suffix"); } else if key == "str::contains" { param = String::from("part"); } else { return; }
+        if key == "str::starts_with" { param = String::from("prefix"); } else if key == "str::ends_with" { param = String::from("suffix"); } else if key == "str::contains" { param = String::from("part"); } else if key == "str::strip_prefix" { param = String::from("prefix"); } else if key == "str::strip_suffix" { param = String::from("suffix"); } else { return; }
         if found.is_empty() { return; }
         let a_list = match nikaia_std::index::get(&found, 0) {
             Ty::Named { name, .. } => name == "Vec" || name == "Array",
