@@ -40,7 +40,8 @@ use crate::contracts::{FieldContract, FnContract, Ledger, ty, ty::Ty};
 use crate::fold::Constant;
 use crate::parser::Parsed;
 use nikaia_std::tools::check_arguments;
-use nikaia_std::tools::check_consts::{self, CheckCrossing as Crossing};
+use nikaia_std::tools::check_consts;
+use nikaia_std::tools::check_core_comptime;
 use nikaia_std::tools::check_core_leaves;
 use nikaia_std::tools::check_core_pilot;
 use nikaia_std::tools::check_flow::{
@@ -55,8 +56,7 @@ use nikaia_std::tools::check_patterns::pattern_names;
 use nikaia_std::tools::check_reports::CheckWall;
 use nikaia_std::tools::check_scope::{resolve_call, resolve_method};
 use nikaia_std::tools::check_shapes::{
-    an_element_beneath, constructed, element_below, is_fixed, is_growable, roots_in_a_binding,
-    rust_constant_type, slice_element,
+    an_element_beneath, is_growable, roots_in_a_binding, slice_element,
 };
 pub use nikaia_std::tools::check_state::{
     CheckFinding as Finding, CheckLabel as Label, CheckSeverity as Severity,
@@ -929,12 +929,6 @@ fn shape_member(bound: &str) -> Option<(&'static str, &'static str)> {
         "Enum" => Some((VARIANTS, ty::VARIANT)),
         _ => None,
     }
-}
-
-/// The Rust element type of a build-time array nothing declared a type for
-/// (`tools/check_consts.nika`).
-fn rust_array_type(items: &[build_time::Value]) -> Option<String> {
-    nikaia_std::tools::check_consts::rust_array_type(items)
 }
 
 impl From<Constant> for CheckConstant {
@@ -9552,31 +9546,6 @@ impl<'a> Checker<'a> {
         self.s.build_time_value(&host, value, bound, span)
     }
 
-    /// The table a `comptime` map crosses as, and whether the reader was told
-    /// what is wrong (`tools/check_consts.nika`).
-    fn a_table_that_crosses(
-        &mut self,
-        bound: &str,
-        want: &Ty,
-        pairs: &[build_time::Value],
-        span: &Span,
-    ) -> (Option<(String, String)>, bool) {
-        let (parsed, beside) = (self.parsed, self.beside);
-        let table = self.s.a_table_that_crosses(
-            self.world,
-            bound,
-            want,
-            pairs,
-            span,
-            &|ty: &str, variant: &str| payload_of(parsed, beside, ty, variant),
-            &|f: f64| format!("{f:?}"),
-        );
-        match table.found {
-            true => (Some((table.below, table.written)), false),
-            false => (None, table.said),
-        }
-    }
-
     /// **`[1, 2, 3]`**, and what its type is
     /// ([ADR-135](../../docs/specification/adr/adr-135.md) D1).
     ///
@@ -10017,22 +9986,9 @@ impl<'a> Checker<'a> {
         }
         Some(text)
     }
-
-    /// A list literal where an `Array[T, N]` is wanted
-    /// (`tools/check_numbers2.nika`).
-    fn array_literal(&mut self, found: &Ty, want: &Ty, value: &Expr, span: &Span) -> Option<Ty> {
-        self.s.array_literal(found, want, value, span)
-    }
 }
 
 impl<'a> Checker<'a> {
-    fn unwritable_field(&self, ty: &Ty) -> Option<(String, String)> {
-        match self.s.unwritable_field(self.world, ty).as_slice() {
-            [field, held] => Some((field.clone(), held.clone())),
-            _ => None,
-        }
-    }
-
     /// A field or a payload a `const` cannot hold, anywhere in a computed value
     /// (`tools/check_consts.nika`).
     fn unwritable_in(&self, value: &build_time::Value) -> Option<(String, String)> {
@@ -10045,20 +10001,6 @@ impl<'a> Checker<'a> {
             [name, held] => Some((name.clone(), held.clone())),
             _ => None,
         }
-    }
-
-    /// A computed value written against the type its declaration states
-    /// (`tools/check_consts.nika`).
-    fn written_below(&self, value: &build_time::Value, want: Option<&Ty>) -> Option<String> {
-        let (parsed, beside) = (self.parsed, self.beside);
-        check_consts::written_below(
-            &self.s,
-            self.world,
-            value,
-            want,
-            &|ty: &str, variant: &str| payload_of(parsed, beside, ty, variant),
-            &|f: f64| format!("{f:?}"),
-        )
     }
 
     /// **`NK1171`: a member a known type or module does not have**
@@ -10828,27 +10770,8 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// **`comptime(steps: 50G, ram: 16Gi)`**
-    /// ([ADR-321](../../docs/specification/adr/adr-321.md) D11): the steps and
-    /// bytes it names, or `None` where one is refused - a name other than the
-    /// two (`NK1109`), or a value that is not a whole number the build knows.
-    fn raised_bounds(
-        &mut self,
-        bounds: &[crate::ast::ConfigArg],
-        span: &Span,
-    ) -> Option<(Option<u64>, Option<u64>)> {
-        let raised = self.s.raised_bounds(self.world, bounds, span)?;
-        Some((raised.steps, raised.ram))
-    }
-
-    /// **`dsl G { … } eod` over a grammar of this program** (#518): the
-    /// grammar's `entry` run on the block's text while the program is built,
-    /// as `comptime … = G::entry("…")` would be - the value is recorded for
-    /// the emitter under the statement, as a `comptime`'s is.
-    ///
-    /// **Only a grammar with one entry**: no rule is a grammar's main one
-    /// (ADR-296 D25), and which entry a block over a grammar with several
-    /// runs is not decided (#518), so that one is left as it was.
+    /// **`dsl G { … } eod` over a grammar of this program** (#518,
+    /// `tools/check_core_comptime.nika`).
     fn a_block_over_a_grammar(
         &mut self,
         block: &Expr,
@@ -10856,57 +10779,15 @@ impl<'a> Checker<'a> {
         content: &str,
         span: &Span,
     ) -> Ty {
-        let grammar = self.parsed.text(target).to_string();
-        let Some(entry) = self
-            .s
-            .grammars
-            .get(&grammar)
-            .and_then(|entries| entries.iter().next().cloned())
-        else {
-            return Ty::Unknown;
-        };
-        let name = self.parsed.interner.intern_string("__nikaia_dsl");
-        let call = Expr::Call {
-            func: Box::new(Expr::Path(
-                vec![target, self.parsed.interner.intern_string(&entry)],
-                crate::ast::fresh_id(),
-            )),
-            args: vec![Expr::LitStr {
-                text: build_time::written(content.trim()),
-                id: crate::ast::fresh_id(),
-            }],
-            config: Vec::new(),
-            id: crate::ast::fresh_id(),
-        };
-        // Recorded under the statement, as a `comptime`'s is, and moved to the
-        // block's own node: two blocks in one statement are two values.
-        let outer = self.s.facts.comptime_values.remove(&(span.at() as i64));
-        self.comptime_binding(name, None, &call, &[], span);
-        if let Some(value) = self.s.facts.comptime_values.remove(&(span.at() as i64)) {
-            self.s.facts.dsl_values.insert(value_node(block), value);
-        }
-        if let Some(outer) = outer {
-            self.s.facts.comptime_values.insert(span.at() as i64, outer);
-        }
-        // The block's type is the entry's result, as the call's would be.
-        self.world
-            .own
-            .functions
-            .get(&format!("{grammar}::{entry}"))
-            .and_then(|contract| contract.signature.as_ref())
-            .and_then(|signature| signature.result.clone())
-            .unwrap_or(Ty::Unknown)
+        self.nikaia(|state, world, host| {
+            check_core_comptime::check_core_a_block_over_a_grammar(
+                state, world, host, block, target, content, span,
+            )
+        })
     }
 
-    /// **One `comptime`, wherever it stands**
-    /// ([ADR-287](../../../docs/specification/adr/adr-287.md)).
-    ///
-    /// [ADR-287](../../docs/specification/adr/adr-287.md) D3 decided both
-    /// places and said the difference is *"where the name is visible, never
-    /// what may stand to the right of the `='"*. So there is one function and
-    /// the two callers differ only in which frame the name lands in - a second
-    /// copy of the fold, the refusal and the emitter's spelling would be three
-    /// chances for the two places to disagree about what a constant is.
+    /// **One `comptime`, wherever it stands** (ADR-287,
+    /// `tools/check_core_comptime.nika`).
     fn comptime_binding(
         &mut self,
         name: Ident,
@@ -10915,378 +10796,12 @@ impl<'a> Checker<'a> {
         bounds: &[crate::ast::ConfigArg],
         span: &Span,
     ) -> Ty {
-        // **The bounds this one raises** (ADR-321 D11), read before anything
-        // runs: a bound that is refused runs nothing.
-        let raised = self.raised_bounds(bounds, span);
-        // **`asset("…")` is a name only here** (ADR-310 D3), so the ordinary
-        // walk's refusal is off while the initialiser is read: the evaluator
-        // answers it, and two walks over one expression must not both have an
-        // opinion about the same call.
-        let outside = std::mem::replace(&mut self.s.flow.inside_a_comptime, true);
-        let walked_from = self.s.findings.len();
-        let found = self.expr(value, span);
-        self.s.flow.inside_a_comptime = outside;
-        // **A name nothing declares is the one error** (ADR-287 D19, #380):
-        // `comptime D = C + 1` above `comptime C = 1` in a body is `NK1117`,
-        // because a body is read top to bottom. `NK1127` beside it - *can't be
-        // computed while the program is built* - named the wrong cause.
-        // A **name**, and not a module without its `use`: `io::read_to_string()`
-        // is `NK1117` for the missing line and still `NK1127`, because a call
-        // into `std` cannot be computed while the program is built either way.
-        let said_a_name = self.s.findings[walked_from..]
-            .iter()
-            .any(|f| f.code == "NK1117" && f.message.ends_with("` isn't declared anywhere."));
-        let bound = self.parsed.text(name).to_string();
-        self.s.nameable(&bound, span, "a `comptime`");
-        let want = ty.as_ref().map(|ty| self.declared(ty, span));
-
-        // What the emitter writes, spelled in the language below. An
-        // integer takes the type its declaration pinned, and otherwise
-        // the first one that holds it - Part I 2.4's rule, applied here
-        // because Rust's `const` will not take the absence.
-        //
-        // **Before the type check and not after it**, which is
-        // [ADR-311](../../docs/specification/adr/adr-311.md) D1's doing: whether
-        // a growable value crosses as a fixed one is a question about the
-        // **value**, because the length that makes an `Array[T, N]` a type is
-        // the one the build computed.
-        let folded = self.constant_of(value);
-        // **The second stage of
-        // [ADR-287](../../docs/specification/adr/adr-287.md) D6**: a call, and
-        // with it everything a called body can reach. The fold above is the
-        // first stage and stays in front of it, because it is what says which
-        // integer type a *declaration* pinned — a question the interpreter does
-        // not ask and does not need to.
-        let (evaluated, said) = match &folded {
-            // A fold past the 65 bits has been refused already, and has no
-            // number to hand on.
-            Some(folded) if folded.beyond => (None, false),
-            Some(folded) => (Some(build_time::Value::Int(folded.value)), false),
-            None => match raised {
-                None => (None, true),
-                Some(raised) => {
-                    let outside = std::mem::replace(&mut self.s.flow.raised, raised);
-                    let outcome = match self.compiled_build_time_value(value, &found, &bound, span)
-                    {
-                        Some(outcome) => outcome,
-                        None => self.build_time_value(value, &bound, span),
-                    };
-                    self.s.flow.raised = outside;
-                    outcome
-                }
-            },
-        };
-        // Counted rather than returned, so that every refusal below - the
-        // crossing's, the ordinary mismatch's, and whatever `constant_fits`
-        // makes of a literal - suppresses `NK1127` the same way. One mistake,
-        // one error, and the rule does not have to be remembered at each site.
-        let before = self.s.findings.len();
-        if let Some(want) = &want {
-            self.constant_fits(value, Some(want), span);
-            // **The annotation is a use, and a use answers the literal**
-            // (ADR-152 D4) - the same line a `let` runs one construct over, and
-            // it was missing here: `comptime PRIMES: Array[i64, 4] = [2, 3, 5, 7]`
-            // is a `Vec[?]` against an `Array[i64, 4]` without it.
-            let narrowed = self
-                .array_literal(&found, want, value, span)
-                .unwrap_or_else(|| found.clone());
-            // **Growable going in, fixed coming out**
-            // ([ADR-311](../../docs/specification/adr/adr-311.md) D1). A body
-            // that builds its table with `push` has a `Vec`, and a `const`
-            // below cannot hold one - but the value has been computed by the
-            // line above, so its length is known and `Array[T, N]` is exactly
-            // what it crosses as.
-            match self
-                .s
-                .crosses_as_fixed(&narrowed, want, evaluated.as_ref(), span)
-            {
-                Crossing::Fits | Crossing::Said | Crossing::Unanswered => {}
-                Crossing::Other => {
-                    // …and D2's other half: a value that owns memory is refused
-                    // for **what it is**, with the view-shaped equivalent as the
-                    // way out. Only where the build computed one, because that
-                    // is what lets the way out name the length.
-                    match (&evaluated, is_growable(want)) {
-                        // **A `struct` is only as writable as its fields**, and
-                        // the one that is not is worth naming: a reader looking
-                        // at `Bag { items: [1, 2, 3] }` cannot see which half
-                        // of it a `const` cannot hold.
-                        (Some(build_time::Value::Struct { .. }), _)
-                            if self.unwritable_field(want).is_some() =>
-                        {
-                            let (field, held) = self.unwritable_field(want).expect("just asked");
-                            self.s.a_field_that_owns_memory(
-                                &bound,
-                                &field,
-                                &held,
-                                "a `comptime`",
-                                span,
-                            );
-                        }
-                        (
-                            Some(
-                                computed
-                                @ (build_time::Value::List(_) | build_time::Value::Text(_)),
-                            ),
-                            true,
-                        ) => {
-                            let (want, computed) = (want.clone(), computed.clone());
-                            self.s.a_constant_that_owns_memory(
-                                &bound,
-                                &want,
-                                &computed,
-                                "a `comptime`",
-                                span,
-                            );
-                        }
-                        // **An `Array` with no length** is what a `comptime`
-                        // list was written as, and the mismatch is the length:
-                        // the help handed back the type that was written, which
-                        // told nobody anything.
-                        (Some(build_time::Value::List(items)), false)
-                            if matches!(want, Ty::Named { name, args, .. }
-                                if name == "Array" && args.len() == 1) =>
-                        {
-                            let element = match want {
-                                Ty::Named { args, .. } => args[0].text(),
-                                _ => unreachable!("matched above"),
-                            };
-                            self.s.findings.push(Finding {
-                                severity: Severity::Error,
-                                span: *span,
-                                code: "NK1166".to_string(),
-                                message: format!(
-                                    "`{bound}` is an `Array[{element}]` with no length, which a \
-                                     `comptime` needs."
-                                ),
-                                notes: vec![
-                                    "An `Array` built into the program carries its length in \
-                                     its type."
-                                        .to_string(),
-                                ],
-                                help: Some(format!(
-                                    "Declare it as `Array[{element}, {}]`: the build computed {}.",
-                                    items.len(),
-                                    plural(items.len(), "element")
-                                )),
-                                labels: Vec::new(),
-                            });
-                        }
-                        _ => {
-                            self.expect(&narrowed, want, *span, "const", |found, want| {
-                                format!(
-                                    "This value is `{found}`, but the `comptime` declares `{want}`."
-                                )
-                            });
-                        }
-                    }
-                }
-            }
-        } else {
-            self.constant_fits(value, None, span);
-        }
-        let said_a_type = self.s.findings.len() > before;
-
-        let below = match (&want, &folded, value) {
-            // **A type this program declares is its own name below**, and the
-            // *value* is what says it is one: `rust_constant_type` knows the
-            // types Part I 2.2 offers and cannot know a `Point`, where a
-            // `Value::Struct` names the very type the declaration did.
-            (Some(want), _, _) => rust_constant_type(self.world.library, want)
-                .or_else(|| self.s.declared_below(self.world, want))
-                .or_else(|| match &evaluated {
-                    Some(build_time::Value::Struct { name, .. })
-                        if matches!(want, Ty::Named { name: wanted, args, view: false }
-                        if wanted == name && args.is_empty()) =>
-                    {
-                        Some(name.clone())
-                    }
-                    _ => None,
-                }),
-            (None, Some(folded), _) => Some(match &folded.pinned {
-                Some(pinned) => pinned.clone(),
-                None => folded.first_type().to_string(),
-            }),
-            (None, None, _) => match &evaluated {
-                // A float with nothing declaring which one it is takes the
-                // wider, as an integer does (Part I 2.4).
-                Some(build_time::Value::Float(_)) => Some("f64".to_string()),
-                // A `bool` from the interpreter is a `bool` below, whether it
-                // was written `true` or came out of a call.
-                Some(build_time::Value::Bool(_)) => Some("bool".to_string()),
-                // **The expression's type, never the value's**
-                // ([ADR-287](../../docs/specification/adr/adr-287.md) D21): a
-                // call's result type, so `big(1)` and `big(3)` are one type
-                // and no type waits on an evaluation.
-                Some(build_time::Value::Int(value)) => Some(
-                    integer_named(&found)
-                        .unwrap_or_else(|| Constant::of(*value).first_type().to_string()),
-                ),
-                // **An array with nothing declaring its type.** The element
-                // type is the **checker's** where it has one - a body declared
-                // `-> Vec[i64]` says `i64`, and reading it off the values
-                // instead would make `[0, 1, 4]` an `[i32; 3]` and every later
-                // `i64` arithmetic on it `rustc`'s complaint about a file
-                // nobody wrote. Part I 2.4's widest-holder rule is the fallback
-                // for the case nothing declared anything.
-                Some(build_time::Value::List(items)) => element_below(self.world.library, &found)
-                    .or_else(|| rust_array_type(items))
-                    .map(|ty| format!("[{ty}; {}]", items.len())),
-                // **Text crosses as a view, and `&str` is the one a `const`
-                // holds** ([ADR-311](../../docs/specification/adr/adr-311.md)
-                // D1). A `String` allocates and `const X: String` is not
-                // something the language below has; `const X: &str` is, and its
-                // lifetime is `'static` by the elision a `const` already makes.
-                Some(build_time::Value::Text(_)) => Some("&str".to_string()),
-                // A pair with nothing declaring what it is for says nothing:
-                // `Fixed[K, V]` is the declaration that makes a list of them a
-                // table, and without it there is no type to write.
-                Some(build_time::Value::Tuple(_)) => None,
-                // **A struct is its own name below**, and the fields carry
-                // themselves — `const P: Point = Point { x: 1, y: 2 };` is
-                // Rust, and a struct whose fields own nothing is already the
-                // view form ([ADR-311](../../docs/specification/adr/adr-311.md)
-                // D1's *a number is already its own view*, one shape out).
-                Some(build_time::Value::Struct { name, .. }) => Some(name.clone()),
-                // …and a variant is its `enum`'s name, one shape over.
-                Some(build_time::Value::Variant { ty, .. }) => Some(ty.clone()),
-                Some(build_time::Value::Constant { constructor, .. }) => constructed(constructor),
-                None => None,
-            },
-        };
-
-        // **A map the build can see** ([ADR-311](../../docs/specification/adr/adr-311.md)
-        // D1): a list of pairs, and the **declared type** is what says it is a
-        // table rather than a list — the rule
-        // [ADR-152](../../docs/specification/adr/adr-152.md) D4 already makes
-        // for `Array[T, N]`, one shape out. Both halves at once, because the
-        // type below and the value below are one answer here: `Fixed<i64>` and
-        // a `Fixed::new(…)` are written from the same table.
-        let (crossed, said_a_table) = match (&want, &evaluated) {
-            (Some(want), Some(build_time::Value::List(pairs))) if is_fixed(want) => {
-                self.a_table_that_crosses(&bound, want, pairs, span)
-            }
-            _ => (None, false),
-        };
-
-        // **The value, spelled below, read against the declaration**
-        // ([ADR-179](../../docs/specification/adr/adr-179.md) D2). Every shape
-        // but one spells itself — an integer is its digits wherever it stands
-        // — and a **list** is the one that does not: the same value is
-        // `[1, 2, 3]` against an `Array[i64, 3]` and `&[1, 2, 3]` against a
-        // `&[i64]`, so the type is walked beside it.
-        //
-        // A pair has no `const` form of its own, and a list of them has one
-        // only where a declaration says it is a table — which `crossed` below
-        // is.
-        let written = match &evaluated {
-            Some(value) => self.written_below(value, want.as_ref()),
-            None => None,
-        };
-        let (below, written) = match crossed {
-            Some((below, written)) => (Some(below), Some(written)),
-            None => (below, written),
-        };
-        // **A part of the value the language below cannot write.**
-        //
-        // Asked of the **value** rather than of the declared type, because an
-        // `enum` is not answerable from its type: `Shape::Empty` is a `const`
-        // and `Shape::Many([1, 2])` is not, and the two are the same `Shape`.
-        // Without this the second one lowered — `const M: Shape =
-        // Shape::Many([1, 2]);` against a variant that declares a `Vec` — and
-        // `rustc` answered about the generated file, which is [Part III
-        // C.1](../../docs/specification/30-nikaia-tooling.md)'s class.
-        let said_a_part = match &evaluated {
-            Some(value) => match self.unwritable_in(value) {
-                Some((where_it_is, held)) => {
-                    self.s.a_field_that_owns_memory(
-                        &bound,
-                        &where_it_is,
-                        &held,
-                        "a `comptime`",
-                        span,
-                    );
-                    true
-                }
-                None => false,
-            },
-            None => false,
-        };
-        match (&below, &written) {
-            // **Nothing is recorded where a part of it cannot be written**,
-            // or the emitter would write the `const` the refusal just said is
-            // not one.
-            (Some(below), Some(written)) if !said_a_part => {
-                self.s
-                    .facts
-                    .comptime_values
-                    .insert(span.at() as i64, (below.clone(), written.clone()));
-            }
-            // …and nothing at all where the refusal has already been made by
-            // name: `NK1152` and `NK1165` each say what `NK1127` would, with
-            // the part that matters in it.
-            _ if said || said_a_type || said_a_table || said_a_part || said_a_name => {}
-            _ => self.s.findings.push(Finding {
-                code: "NK1127".to_string(),
-                severity: Severity::Error,
-                span: *span,
-                message: format!("`{bound}` can't be computed while the program is built."),
-                notes: vec![
-                    "A `comptime` has to be computed while the program is built.".to_string(),
-                    "At build time the compiler can compute numbers, `bool`s, text, lists, \
-                         structs and enum variants: literals, `f\"…\"`, arithmetic and \
-                         comparisons, `if`, `for` over a range, `while`, and calls to your own \
-                         functions and methods made of those."
-                        .to_string(),
-                ],
-                help: Some(format!(
-                    "Write `let {bound} = …` to compute it while the program runs instead."
-                )),
-                labels: Vec::new(),
-            }),
-        }
-
-        // **An integer with no written type is an open number**
-        // ([ADR-287](../../docs/specification/adr/adr-287.md) D21): each use
-        // takes it in the type it asks for, checked against the value, as a
-        // literal is taken.
-        let open = want.is_none() && matches!(evaluated, Some(build_time::Value::Int(_)));
-        let held = match open {
-            true => Ty::Unknown,
-            false => want.unwrap_or(found),
-        };
-        let id = self.a_new_binding();
-        if open {
-            self.s.open_comptimes.insert(id, *span);
-        }
-        // **What the name is worth is what was *evaluated*, not what folded.**
-        // They were the same thing while the fold was the whole evaluator; with
-        // a call in it they are not, and binding the fold left
-        // `comptime ANSWER = double(21)` visible as a name with no value — so
-        // the next constant that read it was `NK1127` although the one before
-        // it had just been computed.
-        self.bind_local(Local {
-            written_mut: false,
-            id,
-            literal: None,
-            name: bound,
-            ty: held,
-            lent: false,
-            changing: false,
-            // The fold's number, which is what `constant_of` reads one
-            // `comptime` later and what `ADR-285 D29's overflow check needs.
-            constant: match &evaluated {
-                Some(build_time::Value::Int(value)) => Some(*value),
-                _ => None,
-            },
-            // …and the whole value, which is what a *call* one `comptime`
-            // later needs: `ORIGIN.scaled(10)` wants a `Point`.
-            built: evaluated,
-            immutable: None,
-            empty_list: None,
-            open_number: None,
-        });
-        Ty::Tuple(Vec::new())
+        let bounds = bounds.to_vec();
+        self.nikaia(|state, world, host| {
+            check_core_comptime::check_core_comptime_binding(
+                state, world, host, name, ty, value, &bounds, span,
+            )
+        })
     }
 
     /// **What a `return` hands back, asked once**
@@ -11788,10 +11303,6 @@ fn is_number(name: &str) -> bool {
 /// samples are left as they are.
 fn articles(text: &str) -> String {
     nikaia_std::tools::check_words::articles(text)
-}
-
-fn plural(n: usize, what: &str) -> String {
-    nikaia_std::tools::check_words::counted(n as i64, what)
 }
 
 /// What the receiver's actual type binds this signature's variables to.

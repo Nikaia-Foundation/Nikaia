@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.910] — 2026-10-14
+
+**check: a comptime and a dsl block over a grammar in Nikaia (U-c2, #125, #558)**
+- comptime_binding and a_block_over_a_grammar move to tools/check_core_comptime.nika; the host answers declared, payload_of and float_text.
+
 ## [0.0.909] — 2026-10-14
 
 **task: a typed error crosses the pool; a supervisor's hand-over carries the child's error (#605)**

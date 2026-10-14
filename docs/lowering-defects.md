@@ -329,3 +329,12 @@ tuple variant has 2 fields*). The checker should name the arity itself (a
 whose arm is `map.insert(k, v)` (an `Option`) lowers the arm without `;`, so
 the arms disagree with `_ => { }`. Workaround: the test inline, and a block
 arm. Met in U-c1 (`check_core_leaves.nika`).
+
+## D35 (new). A field option of a `get(..) ??` local moves out of the reference: **open**
+
+`let c = map.get(k) ?? return x` then `let s = c.signature ?? return x` lowers
+the second to `match c.signature { Some(v) => v, .. }`: E0507, *cannot move
+out of `c.signature` behind a shared reference*. The same read on a `ref`
+parameter lends (`match &c.signature`), so the lowering does not know that a
+local bound from `get(..) ??` is a reference. Workaround: a helper function
+over `ref T`. Met in U-c2 (`check_core_comptime.nika`).

@@ -210,6 +210,12 @@ checker refusal (`NK1125`) if `!= null` is not meant to narrow.
 | U-c1 `.or_else` chain of five literal kinds | `if x != null { return x }` per kind | no, but no lazy `??` chain exists |
 | U-c1 `let [condition] = args else {..}` | `if args.len() != 1` then `args[0]` | no slice patterns |
 | U-c1 `message = Some(&option.value)` | the index of the option | yes: no `ref Expr?` local from a loop |
+| U-c2 `let grammar = ...` | `let owner = ...` | yes: `grammar` is a keyword |
+| U-c2 `match (&evaluated, is_growable(want))` | a shape number from a helper over `ref BuildValue?`, then `if`s | no: no tuple pattern over an option |
+| U-c2 `evaluated` read again after `evaluated ?? return` | `evaluated?.clone() ?? return` | yes (NK2105), at the cost of a clone |
+| U-c2 `.get(..).and_then(|c| c.signature.as_ref())` | a helper over `ref FnContract` | no: `c.signature ?? return` on a `get(..) ??` local moves out of the reference (lowering-defects D35) |
+| U-c2 `self.declared(ty, span)` and the `payload_of` / `{f:?}` closures | host methods `declared` (hosted), `payload_of`, `float_text` | yes: `Ty::from_ast` and `a_key_with_no_order` stay Rust |
+| U-c2 `rust_constant_type(..).or_else(..).or_else(..)` | `if x != null { return x }` per step | no lazy `??` chain |
 
 ## Method
 

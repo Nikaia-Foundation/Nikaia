@@ -110,6 +110,13 @@ pub trait CheckHost {
     /// inside each, and a template's beside the names its `<for>` binds around
     /// each (name, collection).
     fn holes_read(ref self, literal: ref Expr) -> Vec[(Expr, Vec[(String, String)])] sync
+    /// **A declared type, read** (U-c2): the spelling checked and the type
+    /// built from the parsed annotation, which stays the parser's.
+    fn declared(ref self, mut state: CheckState, ty: ref Type, span: ref Span) -> Ty sync
+    /// The payload of `variant` of the `enum` `ty`, in whichever file declares it.
+    fn payload_of(ref self, ty: ref String, variant: ref String) -> Vec[Ty]? sync
+    /// A finite float as the language below writes it.
+    fn float_text(ref self, number: f64) -> String sync
 }
 
 /// What the build worked out a local is: the whole value, or the integer the

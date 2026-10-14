@@ -1,0 +1,400 @@
+// crates/nikaia-std/src/tools/check_core_comptime.nika
+//
+// **A `comptime`, wherever it stands, and a `dsl` block over a grammar of this
+// program** (ADR-294, #125, #558, C-6, U-c2): `comptime_binding` and
+// `a_block_over_a_grammar`. The form is the pilot's (`check_core_pilot.nika`):
+// a free function over the state, the world and a host; the walk comes back
+// through the hub `host.expr`.
+
+use std::collections
+
+/// Which shape a computed value has: 0 none, 1 an integer, 2 a float, 3 a
+/// `bool`, 4 a list, 5 text, 6 a tuple, 7 a struct, 8 a variant, 9 a `std`
+/// constant.
+fn check_core_comptime_shape(evaluated: ref BuildValue?) -> i64 {
+    let value = evaluated ?? return 0
+    return match value {
+        BuildValue::Int(_) => 1,
+        BuildValue::Float(_) => 2,
+        BuildValue::Bool(_) => 3,
+        BuildValue::List(_) => 4,
+        BuildValue::Text(_) => 5,
+        BuildValue::Tuple(_) => 6,
+        BuildValue::Struct { .. } => 7,
+        BuildValue::Variant { .. } => 8,
+        BuildValue::Constant { .. } => 9,
+    }
+}
+
+/// The type a number with nothing declaring one takes: the first of `i32` and
+/// `i64` that holds it (Part I 2.4).
+fn check_core_comptime_first_type(n: ref Integer, beyond: bool) -> String {
+    if !beyond && integer_fits(n, "i32") {
+        return "i32".clone()
+    }
+    return "i64".clone()
+}
+
+/// The type below for a `comptime` that declares one: Part I 2.2's, a type of
+/// this program, or the struct the value names.
+fn check_core_comptime_declared_below(state: ref CheckState, world: ref CheckWorld, want: ref Ty, evaluated: ref BuildValue?) -> String? {
+    let offered = rust_constant_type(world.library, want)
+    if offered != null {
+        return offered
+    }
+    let declared = state.declared_below(world, want)
+    if declared != null {
+        return declared
+    }
+    let value = evaluated ?? return null
+    let mut named: String = ""
+    match value {
+        BuildValue::Struct { name, .. } => { named = name.clone() },
+        else => {}
+    }
+    if named == "" {
+        return null
+    }
+    let mut same = false
+    match want {
+        Ty::Named { name, args, view } => {
+            same = !view && name == named && args.len() == 0
+        },
+        else => {}
+    }
+    if same {
+        return named
+    }
+    return null
+}
+
+/// The type below for a `comptime` nothing declares and nothing folded: the
+/// expression's where the value is a number (ADR-287 D21), the value's shape
+/// otherwise.
+fn check_core_comptime_value_below(world: ref CheckWorld, found: ref Ty, evaluated: ref BuildValue?) -> String? {
+    let value = evaluated ?? return null
+    match value {
+        BuildValue::Float(_) => { return "f64".clone() },
+        BuildValue::Bool(_) => { return "bool".clone() },
+        BuildValue::Int(n) => {
+            let named = integer_named(found)
+            if named != null {
+                return named
+            }
+            return check_core_comptime_first_type(n, false)
+        },
+        BuildValue::List(items) => {
+            let mut element: String? = element_below(world.library, found)
+            if element == null {
+                element = rust_array_type(items)
+            }
+            let ty = element ?? return null
+            return f"[{ty}; {items.len()}]"
+        },
+        BuildValue::Text(_) => { return "&str".clone() },
+        BuildValue::Tuple(_) => { return null },
+        BuildValue::Struct { name, .. } => { return name.clone() },
+        BuildValue::Variant { ty, .. } => { return ty.clone() },
+        BuildValue::Constant { constructor, .. } => { return constructed(constructor) },
+    }
+    return null
+}
+
+/// The elements of a computed list, or none.
+fn check_core_comptime_items(evaluated: ref BuildValue?) -> Vec[BuildValue] {
+    let value = evaluated ?? return []
+    return match value {
+        BuildValue::List(items) => items.clone(),
+        else => [],
+    }
+}
+
+/// The element of an `Array` written with no length, where `want` is one.
+fn check_core_comptime_unsized_array(want: ref Ty) -> String? {
+    match want {
+        Ty::Named { name, args, .. } => {
+            if name == "Array" && args.len() == 1 {
+                return args[0].text()
+            }
+        },
+        else => {}
+    }
+    return null
+}
+
+/// **What a declared `comptime` that does not cross as it is gets told**
+/// (ADR-311 D1, D2): a field that owns memory, a growable value, an `Array`
+/// with no length, or the ordinary mismatch.
+fn check_core_comptime_other(mut state: CheckState, world: ref CheckWorld, bound: ref String, narrowed: ref Ty, want: ref Ty, evaluated: ref BuildValue?, span: ref Span) sync {
+    let shape = check_core_comptime_shape(evaluated)
+    if shape == 7 {
+        let field = state.unwritable_field(world, want)
+        if field.len() == 2 {
+            state.a_field_that_owns_memory(bound, field[0], field[1], "a `comptime`", span)
+            return
+        }
+    }
+    if (shape == 4 || shape == 5) && is_growable(want) {
+        let computed = evaluated ?? return
+        state.a_constant_that_owns_memory(bound, want, computed, "a `comptime`", span)
+        return
+    }
+    if shape == 4 && !is_growable(want) {
+        let unsized = check_core_comptime_unsized_array(want)
+        if unsized != null {
+            let element = unsized ?? return
+            let items = check_core_comptime_items(evaluated)
+            let notes: Vec[String] = ["An `Array` built into the program carries its length in its type.".clone()]
+            state.findings.push(check_refusal("NK1166", span, f"`{bound}` is an `Array[{element}]` with no length, which a `comptime` needs.", notes, f"Declare it as `Array[{element}, {items.len()}]`: the build computed {counted(items.len() as i64, "element")}."))
+            return
+        }
+    }
+    state.expect_type(world, narrowed, want, span, "const", fn(found_text, wanted_text) { f"This value is `{found_text}`, but the `comptime` declares `{wanted_text}`." })
+}
+
+/// **One `comptime`, wherever it stands** (ADR-287 D3): the two places differ
+/// only in which frame the name lands in, so there is one function - a second
+/// copy of the fold, the refusal and the emitter's spelling would be three
+/// chances for the two places to disagree about what a constant is.
+pub fn check_core_comptime_binding[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, name: winnow_grammar::Symbol, ty: ref Type?, value: ref Expr, bounds: ref Vec[ConfigArg], span: ref Span) -> Ty sync {
+    // **The bounds this one raises** (ADR-321 D11), read before anything
+    // runs: a bound that is refused runs nothing.
+    let raised: CheckRaised? = state.raised_bounds(world, bounds, span)
+    // **`asset("…")` is a name only here** (ADR-310 D3): the evaluator answers
+    // it, so the ordinary walk's refusal is off while the initialiser is read.
+    let outside = state.flow.inside_a_comptime
+    state.flow.inside_a_comptime = true
+    let walked_from = state.findings.len()
+    let found = host.expr(state, value, span)
+    state.flow.inside_a_comptime = outside
+    // **A name nothing declares is the one error** (ADR-287 D19, #380).
+    let mut said_a_name = false
+    let mut at = walked_from
+    while at < state.findings.len() {
+        if state.findings[at].code == "NK1117" && state.findings[at].message.ends_with("` isn't declared anywhere.") {
+            said_a_name = true
+        }
+        at = at + 1
+    }
+    let bound = world.words.resolve(name).clone()
+    state.nameable(bound, span, "a `comptime`")
+    let mut want: Ty? = null
+    if ty != null {
+        let written = ty ?? return Ty::Unknown
+        want = host.declared(state, written, span)
+    }
+
+    // What the emitter writes, spelled in the language below: before the type
+    // check, because whether a growable value crosses as a fixed one is a
+    // question about the value (ADR-311 D1).
+    let folded: CheckConstant? = state.constant_of(world, value)
+    let mut fold_type: String? = null
+    let mut evaluated: BuildValue? = null
+    let mut said = false
+    if folded != null {
+        let one = folded ?? return Ty::Unknown
+        let pinned: String? = one.pinned?.clone()
+        if pinned != null {
+            fold_type = pinned
+        } else {
+            fold_type = check_core_comptime_first_type(one.value, one.beyond)
+        }
+        // A fold past the 65 bits has been refused already.
+        if !one.beyond {
+            evaluated = BuildValue::Int(one.value.clone())
+        }
+    } else {
+        if raised == null {
+            said = true
+        } else {
+            let more = raised ?? return Ty::Unknown
+            let kept = state.flow.raised.clone()
+            state.flow.raised = (more.steps, more.ram)
+            let compiled = state.compiled_build_time_value(world, host, value, found, bound, span)
+            if compiled.answered {
+                evaluated = compiled.value
+                said = compiled.said
+            } else {
+                let (built, refused) = state.build_time_value(host, value, bound, span)
+                evaluated = built
+                said = refused
+            }
+            state.flow.raised = kept
+        }
+    }
+    // Counted rather than returned, so that every refusal below suppresses
+    // `NK1127` the same way: one mistake, one error.
+    let before = state.findings.len()
+    if want != null {
+        let wanted: Ty = want?.clone() ?? Ty::Unknown
+        state.constant_fits(world, value, want, span)
+        // **The annotation is a use, and a use answers the literal** (ADR-152 D4).
+        let mut narrowed: Ty = found.clone()
+        let literal = state.array_literal(found, wanted, value, span)
+        if literal != null {
+            narrowed = literal ?? Ty::Unknown
+        }
+        // **Growable going in, fixed coming out** (ADR-311 D1).
+        match state.crosses_as_fixed(narrowed, wanted, evaluated, span) {
+            CheckCrossing::Other => check_core_comptime_other(state, world, bound, narrowed, wanted, evaluated, span),
+            else => {}
+        }
+    } else {
+        let none: Ty? = null
+        state.constant_fits(world, value, none, span)
+    }
+    let said_a_type = state.findings.len() > before
+
+    let mut below: String? = null
+    if want != null {
+        let wanted: Ty = want?.clone() ?? Ty::Unknown
+        below = check_core_comptime_declared_below(state, world, wanted, evaluated)
+    } else {
+        if fold_type != null {
+            below = fold_type
+        } else {
+            below = check_core_comptime_value_below(world, found, evaluated)
+        }
+    }
+
+    // **A map the build can see** (ADR-311 D1): a list of pairs, and the
+    // declared type is what says it is a table.
+    let mut said_a_table = false
+    let mut crossed = false
+    let mut table_below: String = ""
+    let mut table_written: String = ""
+    if want != null && check_core_comptime_shape(evaluated) == 4 {
+        let wanted: Ty = want?.clone() ?? Ty::Unknown
+        if is_fixed(wanted) {
+            let pairs = check_core_comptime_items(evaluated)
+            let table = state.a_table_that_crosses(world, bound, wanted, pairs, span, fn(of, variant) { host.payload_of(of, variant) }, fn(number) { host.float_text(number) })
+            if table.found {
+                crossed = true
+                table_below = table.below.clone()
+                table_written = table.written.clone()
+            } else {
+                said_a_table = table.said
+            }
+        }
+    }
+
+    // **The value, spelled below, read against the declaration** (ADR-179 D2).
+    let mut written: String? = null
+    if evaluated != null {
+        let computed: BuildValue = evaluated?.clone() ?? return Ty::Unknown
+        written = written_below(state, world, computed, want, fn(of, variant) { host.payload_of(of, variant) }, fn(number) { host.float_text(number) })
+    }
+    if crossed {
+        below = table_below
+        written = table_written
+    }
+    // **A part of the value the language below cannot write**, asked of the
+    // value: `Shape::Empty` is a `const` and `Shape::Many([1, 2])` is not.
+    let mut said_a_part = false
+    if evaluated != null {
+        let computed: BuildValue = evaluated?.clone() ?? return Ty::Unknown
+        let part = unwritable_in(state, world, computed, fn(of, variant) { host.payload_of(of, variant) })
+        if part.len() == 2 {
+            state.a_field_that_owns_memory(bound, part[0], part[1], "a `comptime`", span)
+            said_a_part = true
+        }
+    }
+    if below != null && written != null && !said_a_part {
+        let spelled = below ?? return Ty::Unknown
+        let text = written ?? return Ty::Unknown
+        state.facts.comptime_values.insert(span.start as i64, (spelled, text))
+    } else {
+        if !(said || said_a_type || said_a_table || said_a_part || said_a_name) {
+            let notes: Vec[String] = ["A `comptime` has to be computed while the program is built.".clone(), "At build time the compiler can compute numbers, `bool`s, text, lists, structs and enum variants: literals, `f\"…\"`, arithmetic and comparisons, `if`, `for` over a range, `while`, and calls to your own functions and methods made of those.".clone()]
+            state.findings.push(check_refusal("NK1127", span, f"`{bound}` can't be computed while the program is built.", notes, f"Write `let {bound} = …` to compute it while the program runs instead."))
+        }
+    }
+
+    // **An integer with no written type is an open number** (ADR-287 D21).
+    let shape = check_core_comptime_shape(evaluated)
+    let open = want == null && shape == 1
+    let mut held: Ty = Ty::Unknown
+    if !open {
+        held = want ?? found
+    }
+    let id = state.a_new_binding()
+    if open {
+        state.open_comptimes.insert(id, Span { start: span.start, end: span.end })
+    }
+    let mut constant: Integer? = null
+    if shape == 1 {
+        let computed = evaluated?.clone() ?? return Ty::Unknown
+        match computed {
+            BuildValue::Int(n) => { constant = n.clone() },
+            else => {}
+        }
+    }
+    // **What the name is worth is what was evaluated, not what folded**, and
+    // the whole value, which is what a call one `comptime` later needs.
+    state.bind_local(CheckLocal {
+        written_mut: false,
+        id: id,
+        literal: null,
+        name: bound,
+        ty: held,
+        lent: false,
+        changing: false,
+        constant: constant,
+        built: evaluated,
+        immutable: null,
+        empty_list: null,
+        open_number: null,
+    })
+    return Ty::Tuple([])
+}
+
+/// **`dsl G { … } eod` over a grammar of this program** (#518): the grammar's
+/// entry run on the block's text while the program is built, as
+/// `comptime … = G::entry("…")` would be. The value is recorded for the
+/// emitter under the block's own node: two blocks in one statement are two
+/// values. Only a grammar with one entry (ADR-296 D25).
+pub fn check_core_a_block_over_a_grammar[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, block: ref Expr, target: winnow_grammar::Symbol, content: ref String, span: ref Span) -> Ty sync {
+    let owner = world.words.resolve(target).clone()
+    let mut entry: String = ""
+    let mut any = false
+    let entries = state.grammars.get(owner) ?? return Ty::Unknown
+    for one in entries {
+        if !any {
+            entry = one.clone()
+            any = true
+        }
+    }
+    if !any {
+        return Ty::Unknown
+    }
+    let name = host.intern("__nikaia_dsl")
+    let call = Expr::Call {
+        func: Expr::Path([target, host.intern(entry)], fresh_id()),
+        args: [Expr::LitStr { text: as_a_literal(content.trim()), id: fresh_id() }],
+        config: [],
+        id: fresh_id(),
+    }
+    let key = span.start as i64
+    let outer = state.facts.comptime_values.remove(key)
+    let none: Type? = null
+    let bounds: Vec[ConfigArg] = []
+    check_core_comptime_binding(state, world, host, name, none, call, bounds, span)
+    let value = state.facts.comptime_values.remove(key)
+    if value != null {
+        let recorded = value ?? return Ty::Unknown
+        state.facts.dsl_values.insert(node_key(block), recorded)
+    }
+    if outer != null {
+        let kept = outer ?? return Ty::Unknown
+        state.facts.comptime_values.insert(key, kept)
+    }
+    // The block's type is the entry's result, as the call's would be.
+    let contract = world.own.functions.get(f"{owner}::{entry}") ?? return Ty::Unknown
+    return check_core_comptime_result(contract)
+}
+
+/// The result type a contract declares, or `Unknown`.
+fn check_core_comptime_result(contract: ref FnContract) -> Ty {
+    let signature = contract.signature ?? return Ty::Unknown
+    return signature.result?.clone() ?? Ty::Unknown
+}

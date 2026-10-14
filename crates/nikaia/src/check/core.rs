@@ -270,6 +270,18 @@ impl CheckHost for Core<'_, '_> {
         self.h.newly_throws(key)
     }
 
+    fn declared(&self, state: &mut CheckState, ty: &crate::ast::Type, span: &Span) -> Ty {
+        self.hosted(state, |checker| checker.declared(ty, span))
+    }
+
+    fn payload_of(&self, ty: &str, variant: &str) -> Option<Vec<Ty>> {
+        self.h.payload_of(ty, variant)
+    }
+
+    fn float_text(&self, number: f64) -> String {
+        self.h.float_text(number)
+    }
+
     fn expr(&self, state: &mut CheckState, node: &Expr, span: &Span) -> Ty {
         self.hosted(state, |checker| checker.expr(node, span))
     }

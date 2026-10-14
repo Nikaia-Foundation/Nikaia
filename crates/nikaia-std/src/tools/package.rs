@@ -12497,6 +12497,314 @@ impl CheckState {
 }
 
 
+// --- check_core_comptime.nika ---
+
+fn check_core_comptime_shape(evaluated: Option<&BuildValue>) -> i64 {
+    let value = match evaluated { Some(__nikaia_value) => __nikaia_value, None => return 0 };
+    match value {
+        BuildValue::Int(_) => 1,
+        BuildValue::Float(_) => 2,
+        BuildValue::Bool(_) => 3,
+        BuildValue::List(_) => 4,
+        BuildValue::Text(_) => 5,
+        BuildValue::Tuple(_) => 6,
+        BuildValue::Struct { .. } => 7,
+        BuildValue::Variant { .. } => 8,
+        BuildValue::Constant { .. } => 9,
+    }
+}
+
+fn check_core_comptime_first_type(n: &Integer, beyond: bool) -> String {
+    if !beyond && integer_fits(n, "i32") { return "i32".to_owned(); }
+    "i64".to_owned()
+}
+
+fn check_core_comptime_declared_below(state: &CheckState, world: &CheckWorld<'_>, want: &Ty, evaluated: Option<&BuildValue>) -> Option<String> {
+    let offered = rust_constant_type(world.library, want);
+    if offered.is_some() { return offered; }
+    let declared = state.declared_below(world, want);
+    if declared.is_some() { return declared; }
+    let value = match evaluated { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let mut named: String = String::from("");
+    match value {
+        BuildValue::Struct { name, .. } => { named = name.to_owned(); },
+        _ => { },
+    }
+    if named == "" { return None; }
+    let mut same = false;
+    match want {
+        Ty::Named { name, args, view } => {
+            let view = *view;
+            same = !view && *name == named && args.is_empty();
+        },
+        _ => { },
+    }
+    if same { return Some(named); }
+    None
+}
+
+fn check_core_comptime_value_below(world: &CheckWorld<'_>, found: &Ty, evaluated: Option<&BuildValue>) -> Option<String> {
+    let value = match evaluated { Some(__nikaia_value) => __nikaia_value, None => return None };
+    match value {
+        BuildValue::Float(_) => { return Some("f64".to_owned()); },
+        BuildValue::Bool(_) => { return Some("bool".to_owned()); },
+        BuildValue::Int(n) => {
+            let named = integer_named(found);
+            if named.is_some() { return named; }
+            return Some(check_core_comptime_first_type(n, false));
+        },
+        BuildValue::List(items) => {
+            let mut element: Option<String> = element_below(world.library, found);
+            if element.is_none() { element = rust_array_type(items); }
+            let ty = match element { Some(__nikaia_value) => __nikaia_value, None => return None };
+            return Some(format!("[{}; {}]", ty, items.len() as i64));
+        },
+        BuildValue::Text(_) => { return Some("&str".to_owned()); },
+        BuildValue::Tuple(_) => { return None; },
+        BuildValue::Struct { name, .. } => { return Some(name.to_owned()); },
+        BuildValue::Variant { ty, .. } => { return Some(ty.to_owned()); },
+        BuildValue::Constant { constructor, .. } => { return constructed(constructor); },
+    }
+    None
+}
+
+fn check_core_comptime_items(evaluated: Option<&BuildValue>) -> Vec<BuildValue> {
+    let value = match evaluated { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
+    match value {
+        BuildValue::List(items) => items.to_owned(),
+        _ => vec![],
+    }
+}
+
+fn check_core_comptime_unsized_array(want: &Ty) -> Option<String> {
+    match want {
+        Ty::Named { name, args, .. } => { if name == "Array" && args.len() == 1 { return Some((*nikaia_std::index::get(&args, 0)).text()); } },
+        _ => { },
+    }
+    None
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_comptime_other(state: &mut CheckState, world: &CheckWorld<'_>, bound: &str, narrowed: &Ty, want: &Ty, evaluated: Option<&BuildValue>, span: &Span) {
+    let shape = check_core_comptime_shape(evaluated);
+    if shape == 7 {
+        let field = state.unwritable_field(world, want);
+        if field.len() == 2 {
+            state.a_field_that_owns_memory(bound, nikaia_std::index::get(&field, 0), nikaia_std::index::get(&field, 1), "a `comptime`", span);
+            return;
+        }
+    }
+    if (shape == 4 || shape == 5) && is_growable(want) {
+        let computed = match evaluated { Some(__nikaia_value) => __nikaia_value, None => return };
+        state.a_constant_that_owns_memory(bound, want, computed, "a `comptime`", span);
+        return;
+    }
+    if shape == 4 && !is_growable(want) {
+        let r#unsized = check_core_comptime_unsized_array(want);
+        if r#unsized.is_some() {
+            let element = match r#unsized { Some(__nikaia_value) => __nikaia_value, None => return };
+            let items = check_core_comptime_items(evaluated);
+            let notes: Vec<String> = vec!["An `Array` built into the program carries its length in its type.".to_owned()];
+            state.findings.push(check_refusal("NK1166", span, format!("`{}` is an `Array[{}]` with no length, which a `comptime` needs.", bound, element), notes, Some(format!("Declare it as `Array[{}, {}]`: the build computed {}.", element, items.len() as i64, counted(items.len() as i64, "element")))));
+            return;
+        }
+    }
+    state.expect_type(world, narrowed, want, span, "const", &|found_text, wanted_text| { format!("This value is `{}`, but the `comptime` declares `{}`.", found_text, wanted_text) });
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+pub fn check_core_comptime_binding<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, name: winnow_grammar::Symbol, ty: Option<&Type>, value: &Expr, bounds: &[ConfigArg], span: &Span) -> Ty {
+    let raised: Option<CheckRaised> = state.raised_bounds(world, bounds, span);
+    let outside = state.flow.inside_a_comptime;
+    state.flow.inside_a_comptime = true;
+    let walked_from = state.findings.len() as i64;
+    let found = host.expr(state, value, span);
+    state.flow.inside_a_comptime = outside;
+    let mut said_a_name = false;
+    let mut at = walked_from;
+    while at < state.findings.len() as i64 {
+        if nikaia_std::index::get(&state.findings, nikaia_std::index::at(at)).code == "NK1117" && nikaia_std::index::get(&state.findings, nikaia_std::index::at(at)).message.ends_with("` isn't declared anywhere.") { said_a_name = true; }
+        at = at + 1;
+    }
+    let bound = world.words.resolve(name).to_owned();
+    state.nameable(&bound, span, "a `comptime`");
+    let mut want: Option<Ty> = None;
+    if ty.is_some() {
+        let written = match ty { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
+        want = Some(host.declared(state, written, span));
+    }
+    let folded: Option<CheckConstant> = state.constant_of(world, value);
+    let mut fold_type: Option<String> = None;
+    let mut evaluated: Option<BuildValue> = None;
+    let mut said = false;
+    if folded.is_some() {
+        let one = match folded { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
+        let pinned: Option<String> = match one.pinned.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        };
+        if pinned.is_some() { fold_type = pinned; } else { fold_type = Some(check_core_comptime_first_type(&one.value, one.beyond)); }
+        if !one.beyond { evaluated = Some(BuildValue::Int(one.value.clone())); }
+    } else if raised.is_none() { said = true; } else {
+        let more = match raised { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
+        let kept = state.flow.raised.clone();
+        state.flow.raised = (more.steps, more.ram);
+        let compiled = state.compiled_build_time_value(world, host, value, &found, &bound, span);
+        if compiled.answered {
+            evaluated = compiled.value;
+            said = compiled.said;
+        } else {
+            let (built, refused) = state.build_time_value(host, value, &bound, span);
+            evaluated = built;
+            said = refused;
+        }
+        state.flow.raised = kept;
+    }
+    let before = state.findings.len() as i64;
+    if want.is_some() {
+        let wanted: Ty = nikaia_std::index::or(match want.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || Ty::Unknown);
+        state.constant_fits(world, value, (want).as_ref(), span);
+        let mut narrowed: Ty = found.clone();
+        let literal = state.array_literal(&found, &wanted, value, span);
+        if literal.is_some() { narrowed = nikaia_std::index::or(literal, || Ty::Unknown); }
+        match state.crosses_as_fixed(&narrowed, &wanted, (evaluated).as_ref(), span) {
+            CheckCrossing::Other => check_core_comptime_other(state, world, &bound, &narrowed, &wanted, (evaluated).as_ref(), span),
+            _ => { },
+        }
+    } else {
+        let none: Option<Ty> = None;
+        state.constant_fits(world, value, (none).as_ref(), span);
+    }
+    let said_a_type = (state.findings.len() as i64) > before;
+    let mut below: Option<String> = None;
+    if want.is_some() {
+        let wanted: Ty = nikaia_std::index::or(match want.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || Ty::Unknown);
+        below = check_core_comptime_declared_below(&state, world, &wanted, (evaluated).as_ref());
+    } else if fold_type.is_some() { below = fold_type; } else { below = check_core_comptime_value_below(world, &found, (evaluated).as_ref()); }
+    let mut said_a_table = false;
+    let mut crossed = false;
+    let mut table_below: String = String::from("");
+    let mut table_written: String = String::from("");
+    if want.is_some() && check_core_comptime_shape((evaluated).as_ref()) == 4 {
+        let wanted: Ty = nikaia_std::index::or(match want.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || Ty::Unknown);
+        if is_fixed(&wanted) {
+            let pairs = check_core_comptime_items((evaluated).as_ref());
+            let table = state.a_table_that_crosses(world, &bound, &wanted, &pairs, span, &|of, variant| { host.payload_of(of, variant) }, &|number| { host.float_text(number) });
+            if table.found {
+                crossed = true;
+                table_below = table.below.to_owned();
+                table_written = table.written.to_owned();
+            } else { said_a_table = table.said; }
+        }
+    }
+    let mut written: Option<String> = None;
+    if evaluated.is_some() {
+        let computed: BuildValue = match match evaluated.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        } { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
+        written = written_below(&state, world, &computed, (want).as_ref(), &|of, variant| { host.payload_of(of, variant) }, &|number| { host.float_text(number) });
+    }
+    if crossed {
+        below = Some(table_below);
+        written = Some(table_written);
+    }
+    let mut said_a_part = false;
+    if evaluated.is_some() {
+        let computed: BuildValue = match match evaluated.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        } { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
+        let part = unwritable_in(&state, world, &computed, &|of, variant| { host.payload_of(of, variant) });
+        if part.len() == 2 {
+            state.a_field_that_owns_memory(&bound, nikaia_std::index::get(&part, 0), nikaia_std::index::get(&part, 1), "a `comptime`", span);
+            said_a_part = true;
+        }
+    }
+    if below.is_some() && written.is_some() && !said_a_part {
+        let spelled = match below { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
+        let text = match written { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
+        state.facts.comptime_values.insert(span.start as i64, (spelled, text));
+    } else if !(said || said_a_type || said_a_table || said_a_part || said_a_name) {
+        let notes: Vec<String> = vec!["A `comptime` has to be computed while the program is built.".to_owned(), "At build time the compiler can compute numbers, `bool`s, text, lists, structs and enum variants: literals, `f\"…\"`, arithmetic and comparisons, `if`, `for` over a range, `while`, and calls to your own functions and methods made of those.".to_owned()];
+        state.findings.push(check_refusal("NK1127", span, format!("`{}` can't be computed while the program is built.", bound), notes, Some(format!("Write `let {} = …` to compute it while the program runs instead.", bound))));
+    }
+    let shape = check_core_comptime_shape((evaluated).as_ref());
+    let open = want.is_none() && shape == 1;
+    let mut held: Ty = Ty::Unknown;
+    if !open { held = nikaia_std::index::or(want, || found.into()); }
+    let id = state.a_new_binding();
+    if open { state.open_comptimes.insert(id, Span { start: span.start, end: span.end }); }
+    let mut constant: Option<Integer> = None;
+    if shape == 1 {
+        let computed = match match evaluated.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        } { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
+        match computed {
+            BuildValue::Int(n) => { constant = Some(n.clone()); },
+            _ => { },
+        }
+    }
+    state.bind_local(CheckLocal { written_mut: false, id, literal: None, name: bound, ty: held, lent: false, changing: false, constant, built: evaluated, immutable: None, empty_list: None, open_number: None });
+    Ty::Tuple(vec![])
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_core_a_block_over_a_grammar<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, block: &Expr, target: winnow_grammar::Symbol, content: &str, span: &Span) -> Ty {
+    let owner = world.words.resolve(target).to_owned();
+    let mut entry: String = String::from("");
+    let mut any = false;
+    let entries = match state.grammars.get(&owner) { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
+    for one in entries.iter() {
+        if !any {
+            entry = one.to_owned();
+            any = true;
+        }
+    }
+    if !any { return Ty::Unknown; }
+    let name = host.intern("__nikaia_dsl");
+    let call = Expr::Call { func: Box::new(Expr::Path(vec![target, host.intern(&entry)], fresh_id())), args: vec![Expr::LitStr { text: as_a_literal(content.trim()), id: fresh_id() }], config: vec![], id: fresh_id() };
+    let key = span.start as i64;
+    let outer = state.facts.comptime_values.remove(&key);
+    let none: Option<Type> = None;
+    let bounds: Vec<ConfigArg> = vec![];
+    check_core_comptime_binding(state, world, host, name, (none).as_ref(), &call, &bounds, span);
+    let value = state.facts.comptime_values.remove(&key);
+    if value.is_some() {
+        let recorded = match value { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
+        state.facts.dsl_values.insert(node_key(block), recorded);
+    }
+    if outer.is_some() {
+        let kept = match outer { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
+        state.facts.comptime_values.insert(key, kept);
+    }
+    let contract = match world.own.functions.get(&format!("{}::{}", owner, entry)) { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
+    check_core_comptime_result(&contract)
+}
+
+fn check_core_comptime_result(contract: &FnContract) -> Ty {
+    let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
+    nikaia_std::index::or(match signature.result.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || Ty::Unknown)
+}
+
+
 // --- check_core_leaves.nika ---
 
 fn check_core_field_of_self(world: &CheckWorld<'_>, value: &Expr) -> Option<String> {
@@ -14836,6 +15144,9 @@ pub trait CheckHost {
     fn written(&self, value: &Expr) -> String;
     fn newly_throws(&self, key: &str) -> Option<Vec<String>>;
     fn holes_read(&self, literal: &Expr) -> Vec<(Expr, Vec<(String, String)>)>;
+    fn declared(&self, state: &mut CheckState, ty: &Type, span: &Span) -> Ty;
+    fn payload_of(&self, ty: &str, variant: &str) -> Option<Vec<Ty>>;
+    fn float_text(&self, number: f64) -> String;
 }
 
 fn host_known(local: &CheckLocal) -> Option<BuildValue> {
@@ -52374,6 +52685,10 @@ pub mod check_consts {
 pub mod check_copies {
     #[allow(unused_imports)]
     pub use super::{check_parts_beside};
+}
+pub mod check_core_comptime {
+    #[allow(unused_imports)]
+    pub use super::{check_core_comptime_binding, check_core_a_block_over_a_grammar};
 }
 pub mod check_core_leaves {
     #[allow(unused_imports)]
