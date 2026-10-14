@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.936] — 2026-10-14
+
+**A result may point into several parameters (ADR-353 D1, D2, #614)**
+
+`NK2302` no longer refuses `longest` or `pair`: the ledger lists every parameter the result reaches, and the lowering ties them and the result to one buffer group.
+
 ## [0.0.935] — 2026-10-14
 
 **An element or a field read off a place is a view under `ref T` (ADR-354, #613)**
