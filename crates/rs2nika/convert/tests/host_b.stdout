@@ -19,7 +19,7 @@ fn a_wall(why: ref crate::grammar_run::Wall) -> CheckWall sync {
     return match why {
         Wall::Refused { detail } => CheckWall::Refused { detail: detail.clone() },
         Wall::NoCrossedForm { ty, because } => CheckWall::NoCrossedForm { ty: ty.clone(), because: because.clone() },
-        Wall::InsideAnother { grammar } => CheckWall::InsideAnother { outer: grammar.clone() },
+        Wall::InsideAnother { grammar: grammar_ } => CheckWall::InsideAnother { outer: grammar_.clone() },
         Wall::NowhereToBuild => CheckWall::NowhereToBuild,
         Wall::DidNotBuild { detail } => CheckWall::DidNotBuild { detail: detail.clone() },
         Wall::Unreadable { detail } => CheckWall::Unreadable { detail: detail.clone() },

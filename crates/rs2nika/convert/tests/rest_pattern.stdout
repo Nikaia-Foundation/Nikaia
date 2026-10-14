@@ -1,0 +1,23 @@
+fn is_call(e: ref Expr) -> bool sync {
+    return match e {
+        Expr::Call(..) => true,
+        // TODO(rs2nika): `Expr::Index(.., ..)`: a positional rest is refused (NK1255): one `_` per part left
+        Expr::Index(base, ..) => is_call(base),
+        // TODO(rs2nika): `Expr::Pair(.., ..)`: a positional rest is refused (NK1255): one `_` per part left
+        Expr::Pair(_, rhs, ..) if rhs.is_empty() => false,
+        else => false,
+    }
+}
+
+enum Shape {
+    Pair(Expr, Expr, Span),
+    Index(Expr, Expr),
+}
+
+fn first_of(s: ref Shape) -> bool sync {
+    return match s {
+        Shape::Pair(a, _, _) => is_call(a),
+        Shape::Index(_, i) => is_call(i),
+    }
+}
+

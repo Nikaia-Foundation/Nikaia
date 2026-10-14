@@ -1,0 +1,15 @@
+fn joining(package: ref Vec[String], copies: ref collections::BTreeSet[String], parts: ref collections::BTreeMap[String, Vec[Ty]]) -> Vec[String] sync {
+    let mut joining: Vec[String] = []
+    for name in package {
+        if !(!copies.contains(name)) {
+            continue
+        }
+        let held = parts.get(name) ?? continue
+        if !(held.iter().all(fn(ty) { ty.copies() })) {
+            continue
+        }
+        joining.push(name.clone())
+    }
+    return joining
+}
+

@@ -1,0 +1,23 @@
+fn listed(shown: ref Vec[String], n: i64) -> String sync {
+    return match n {
+        0 => "",
+        else => {
+            let hole_4 = shown.join(", ")
+            f"{hole_4} and `{shown.len()}`"
+        },
+    }
+}
+
+fn pick(o: i64?, strict: bool) -> i64 sync {
+    return match o {
+        // TODO(rs2nika): `match` on `Some`/`None`: `let x = e ?? <none arm>`
+        Some(x) if x > 0 => x,
+        // TODO(rs2nika): a `None` arm with a guard: Nikaia has no `null` pattern yet (#612); test `e == null && guard` before the `match`
+        // None if strict => return -1,
+        // TODO(rs2nika): `match` on `Some`/`None`: `let x = e ?? <none arm>`
+        Some(_) => 1,
+        // TODO(rs2nika): `match` on `Some`/`None`: `let x = e ?? <none arm>`
+        else => 0,
+    }
+}
+
