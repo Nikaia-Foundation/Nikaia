@@ -1747,8 +1747,11 @@ fn rs2nika_expr(mut ctx: Rs2nikaCtx, line: ref String) -> String {
     s = rs2nika_rep(ctx, s, ".into_owned()", ".clone()", "R16")
     s = rs2nika_method_arg(ctx, s, ".unwrap_or_else(", " ?? ", "", "R20")
     s = rs2nika_method_arg(ctx, s, ".unwrap_or(", " ?? ", "", "R20")
-    s = rs2nika_rep(ctx, s, ".cloned()", "?.clone()", "R20")
-    s = rs2nika_rep(ctx, s, ".copied()", "", "R20")
+    // an iterator's `.cloned()` is no option's: it stays, under a TODO
+    if !s.contains(".iter()") {
+        s = rs2nika_rep(ctx, s, ".cloned()", "?.clone()", "R20")
+        s = rs2nika_rep(ctx, s, ".copied()", "", "R20")
+    }
     s = rs2nika_rep(ctx, s, ".is_some()", " != null", "R21")
     s = rs2nika_rep(ctx, s, ".is_none()", " == null", "R21")
     for m in [".as_ref() {", ".as_slice() {", ".as_str() {", ".as_deref() {", ".borrow() {", ".iter() {"] {
@@ -2292,6 +2295,12 @@ fn rs2nika_todos(line: ref String) -> Vec[String] {
     }
     if line.contains(".entry(") {
         todo.push("`.entry(..)`: read with `??`, then write `m[k] = v`")
+    }
+    if line.contains(".iter()") && (line.contains(".cloned()") || line.contains(".copied()")) {
+        todo.push("`.cloned()` of an iterator: a `for` loop with `push` of `x.clone()`")
+    }
+    if line.contains(".as_mut()") {
+        todo.push("`.as_mut()`: clone the value, change it, assign it back")
     }
     if comb.contains("is_some_and") || comb.contains("is_ok_and") || comb.contains("map_or") {
         todo.push("`is_some_and`/`map_or`: `let x = e ?? <false>` then the test")
