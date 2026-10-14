@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.962] — 2026-10-14
+
+**A pub type keeps a place per view field (#614)**
+- ADR-353 D7: each struct field that holds a view keeps its own sources, pub or not; the ledger's `tethered` lists them in order (ledger version 4). An enum and a thrown type keep one.
+
 ## [0.0.961] — 2026-10-14
 
 **Lowering defects D10, D11b, D18, D26, D37, D39, D40**

@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.961 (Draft)
+**Version:** 0.0.962 (Draft)
 **Date:** 2026-10-14
 
 ---
@@ -2456,7 +2456,11 @@ fn longest(a: ref String, b: ref String) -> ref String {
 Every argument no view of the result points into is free when the call
 returns. The ledger (6.7) writes each view's sources: `-> ref(world) String`,
 `-> ref(a | b) String`, and for a value holding views each by its path,
-`left: ref(a), right: ref(b)`. A trait's method and a function type have no
+`left: ref(a), right: ref(b)`. Each field of a `struct` keeps its own
+sources, whether the type is `pub` or not: `pair(x, y).left` points into `x`
+alone. A field whose type holds several views joins their sources, and an
+`enum` joins those of all its variants, since which variant a value is gets
+decided as the program runs. A trait's method and a function type have no
 body: their result points into the receiver, or else into every parameter that
 is a view. A method implementing a trait hands back views of what the trait's
 declaration names.
