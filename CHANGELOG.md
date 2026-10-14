@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.908] — 2026-10-14
+
+**A variant pattern names every part**
+- `NK1253`: a pattern of a positional variant with a different number of parts than the variant carries (`E::A(_)` against `A(i64, i64)`) is refused by the checker instead of reaching rustc (lowering-defects D33).
+
 ## [0.0.907] — 2026-10-14
 
 **check: the leaves of the core in Nikaia (U-c1, #125, #558)**
