@@ -87,7 +87,21 @@ pub fn unit_throws(program: ref Program, names: ref winnow_grammar::InternerCont
 // after all is `?`, as an unresolved one is.
 fn with_methods(key: ref String, thrown: ref Thrown, own: ref Ledger, library: ref Ledger, mut graph: ThrowsGraph) {
     let mut named = thrown.direct.clone()
-    let mut called = thrown.calls.clone()
+    let mut called: collections::BTreeSet[String] = collections::BTreeSet()
+    // **A call by a name is the place of that name** (ADR-351 D1, D4): a
+    // parameter or a name of code the checker saw called, `?` where not.
+    let fields: collections::BTreeSet[String] = graph.methods[key]?.fields?.clone() ?? collections::BTreeSet()
+    for callee in thrown.calls {
+        if !callee.starts_with("@") {
+            called.insert(callee.clone())
+            continue
+        }
+        let local: String = (callee.strip_prefix("@") ?? "").clone()
+        let place = f"{key}::{local}"
+        if !fields.contains(place) {
+            named.insert(UNNAMED.clone())
+        }
+    }
     methods_into(graph.methods[key], own, library, named, called)
     graph.direct.insert(key.clone(), named)
     graph.calls.insert(key.clone(), called)
@@ -140,8 +154,11 @@ pub fn stored_throws(field: ref String, resolved: ref collections::BTreeSet[Stri
 
 /// **A parameter of code is a place** (ADR-351 D1, D4), given what every
 /// caller of this package hands it. One whose callers this package cannot
-/// all see - a `pub` function, or one used as a value - cannot be named.
-pub fn params_as_places(own: ref Ledger, mut stored: collections::BTreeMap[String, CheckStoredCode]) {
+/// all see - a `pub` function, or one used as a value - is `from(F::p)`
+/// besides: the callers this package does not see hand it more. Those places
+/// are returned.
+pub fn params_as_places(own: ref Ledger, mut stored: collections::BTreeMap[String, CheckStoredCode]) -> collections::BTreeSet[String] {
+    let mut open: collections::BTreeSet[String] = collections::BTreeSet()
     let mut kept: collections::BTreeSet[String] = collections::BTreeSet()
     // The functions named as a value anywhere - returned, handed on, kept.
     let named: CheckStoredCode = stored.remove(AS_VALUE) ?? CheckStoredCode::empty()
@@ -179,13 +196,43 @@ pub fn params_as_places(own: ref Ledger, mut stored: collections::BTreeMap[Strin
                 continue
             }
             let key = f"{name}::{param}"
-            let mut entry: CheckStoredCode = stored.remove(key) ?? CheckStoredCode::empty()
+            let entry: CheckStoredCode = stored.remove(key) ?? CheckStoredCode::empty()
             if contract.public || kept.contains(name) {
-                entry.unresolved = true
+                open.insert(key.clone())
             }
             stored.insert(key, entry)
         }
     }
+    return open
+}
+
+/// **A set member that stands for the code a parameter was given** (ADR-351
+/// D4): `from(p)`, or `from(F::p)` inside the inference.
+pub fn throws_given(error: ref String) -> bool {
+    return error.starts_with("from(") && error.ends_with(")")
+}
+
+/// **What a function publishes for its own parameters' code** (ADR-351 D4):
+/// `from(F::p)` is written `from(p)` in `F`'s set; one of another function's
+/// parameters is code this ledger cannot name, `?`.
+pub fn throws_published(name: ref String, errors: ref Vec[String]) -> Vec[String] {
+    let prefix = f"from({name}::"
+    let mut out: collections::BTreeSet[String] = collections::BTreeSet()
+    for error in errors {
+        if !throws_given(error) {
+            out.insert(error.clone())
+        } else if error.starts_with(prefix) {
+            let rest: String = (error.strip_prefix(prefix.clone()) ?? "").clone()
+            out.insert(f"from({rest}")
+        } else {
+            out.insert(UNNAMED.clone())
+        }
+    }
+    let mut list: Vec[String] = []
+    for error in out {
+        list.push(error.clone())
+    }
+    return list
 }
 
 // What a library's ledger says a callee fails with, and `?` for one it does
@@ -264,10 +311,15 @@ pub fn error_sets(direct: ref collections::BTreeMap[String, collections::BTreeSe
 /// without it - a file `rustc` refused.
 fn theirs(sets: ref collections::BTreeMap[String, collections::BTreeSet[String]], own: ref Ledger, callee: ref String) -> Vec[String] {
     let mut errors: Vec[String] = []
+    // **A callee's own `from(F::p)` is what its callers hand it** (ADR-351
+    // D4): the caller's arguments already reached the place `F::p`.
+    let prefix = f"from({callee}::"
     if sets.contains_key(callee) {
         let set = sets[callee] ?? return errors
         for error in set {
-            errors.push(error.clone())
+            if !error.starts_with(prefix) {
+                errors.push(error.clone())
+            }
         }
         return errors
     }
@@ -352,6 +404,9 @@ pub struct Thrown {
 /// it (`?` for a call nobody can name), or neither.
 pub struct Contribution {
     pub call: String?,
+    /// **The functions of this package handed to a library's `from(p)`**
+    /// (ADR-351 D4): called by the library, so what they throw is the call's.
+    pub given: Vec[String],
     pub errors: Vec[String],
     /// Those of `errors` that are fatal (ADR-345 D1).
     pub fatal: Vec[String],
@@ -614,6 +669,9 @@ fn a_contribution(expr: ref Expr, names: ref winnow_grammar::InternerContext, co
             let call = given.call ?? ""
             if call.len() > 0 {
                 out.calls.insert(call)
+            }
+            for handed in given.given {
+                out.calls.insert(handed.clone())
             }
             for error in given.errors {
                 out.direct.insert(error.clone())

@@ -766,7 +766,7 @@ fn check_core_flow_caught_type(guarded: ref CheckGuarded) -> Ty sync {
     let mut thrown: Vec[String] = []
     let mut unknown = false
     for name in guarded.thrown {
-        if name == "?" {
+        if name == "?" || throws_given(name) {
             unknown = true
         }
         thrown.push(name.clone())
@@ -822,7 +822,12 @@ pub fn check_core_flow_try_catch[H: CheckHost](mut state: CheckState, world: ref
     state.scope.push([CheckLocal::free("error".clone(), caught, id)])
     // **A set that cannot be named is open** (ADR-351 D4): a `match` over it
     // covers nothing without `else`, as one over several types does.
-    let open = guarded.thrown.contains("?")
+    let mut open = false
+    for thrown in guarded.thrown {
+        if thrown == "?" || throws_given(thrown) {
+            open = true
+        }
+    }
     let arriving = state.several_arrive(world, guarded_expr) || open
     let one: Ty? = state.the_one_error(world, guarded_expr)
     let several = state.flow.caught_several

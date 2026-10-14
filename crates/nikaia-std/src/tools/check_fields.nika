@@ -306,10 +306,7 @@ impl CheckState {
         let fields = self.fields_seen(world, owner)
         for each in fields {
             if each.name == field {
-                return match each.ty {
-                    Ty::Fn { .. } => true,
-                    else => false,
-                }
+                return check_core_stmt_holds_code(each.ty)
             }
         }
         return false

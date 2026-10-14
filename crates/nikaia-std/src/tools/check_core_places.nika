@@ -503,11 +503,9 @@ fn check_core_places_a_literal_field[H: CheckHost](mut state: CheckState, world:
     if declared != null {
         let d: ref Vec[FieldContract] = declared ?? return true
         for f in d {
-            if f.name == field {
-                match f.ty {
-                    Ty::Fn { .. } => { code_field = true },
-                    else => {}
-                }
+            // A list or a map of code is a place too (ADR-351 D3).
+            if f.name == field && check_core_stmt_holds_code(f.ty) {
+                code_field = true
             }
         }
         for f in d {

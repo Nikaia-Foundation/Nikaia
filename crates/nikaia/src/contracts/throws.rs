@@ -68,7 +68,7 @@ pub fn infer(
     // **Each function field, name and parameter of code is a place of the
     // graph** (ADR-351 D1, D3, D4).
     let mut stored = stored.clone();
-    nika::params_as_places(ledger, &mut stored);
+    let open = nika::params_as_places(ledger, &mut stored);
     let stored = &stored;
     let places: BTreeSet<String> = stored.keys().cloned().collect();
     for (field, code) in stored {
@@ -81,6 +81,15 @@ pub fn infer(
             library,
             &mut graph,
         );
+    }
+    // **A parameter whose callers this package does not all see is
+    // `from(F::p)`** (ADR-351 D4): its callers replace it with what they hand.
+    for key in &open {
+        graph
+            .direct
+            .entry(key.clone())
+            .or_default()
+            .insert(format!("from({key})"));
     }
     for parsed in units.iter().copied() {
         let own: &Ledger = ledger;
@@ -107,7 +116,7 @@ pub fn infer(
             continue;
         }
         if let Some(contract) = ledger.functions.get_mut(&name) {
-            contract.fails_with = errors;
+            contract.fails_with = nika::throws_published(&name, &errors);
         }
     }
 }
@@ -131,6 +140,7 @@ fn contribution(
     library: &Ledger,
     fatal: &BTreeSet<String>,
 ) -> nikaia_std::tools::throws::Contribution {
+    let mut given = Vec::new();
     let (call, errors) = match reached(parsed, expr, own, library) {
         Some(Reached::Own(name)) => (Some(name), Vec::new()),
         Some(Reached::Library { key, .. }) => (
@@ -138,10 +148,13 @@ fn contribution(
             library
                 .functions
                 .get(&key)
-                .map(|contract| contract.fails_with.clone())
+                .map(|contract| from_given(parsed, expr, contract, own, library, &mut given))
                 .unwrap_or_default(),
         ),
-        Some(Reached::Opaque(_)) => (None, vec![UNNAMED_ERROR.to_string()]),
+        // **A call by a name of this function is the place that name is**
+        // (ADR-351 D1, D4), where the checker saw one; `@name` asks.
+        Some(Reached::Opaque(Some(name))) => (Some(format!("@{name}")), Vec::new()),
+        Some(Reached::Opaque(None)) => (None, vec![UNNAMED_ERROR.to_string()]),
         Some(Reached::Method) | None => (None, Vec::new()),
     };
     let fatal = errors
@@ -151,9 +164,57 @@ fn contribution(
         .collect();
     nikaia_std::tools::throws::Contribution {
         call,
+        given,
         errors,
         fatal,
     }
+}
+
+/// **A library's `from(p)` is what this call hands `p`** (ADR-351 D4): a
+/// function of this package named there is called by the library (into
+/// `given`), one of a library brings its ledger's set; anything else is code
+/// this walk does not see, `?`.
+fn from_given(
+    parsed: &Parsed,
+    expr: &Expr,
+    contract: &nikaia_std::tools::ty::FnContract,
+    own: &Ledger,
+    library: &Ledger,
+    given: &mut Vec<String>,
+) -> Vec<String> {
+    let args: &[Expr] = match expr {
+        Expr::Call { args, .. } => args,
+        _ => &[],
+    };
+    let params: Vec<&str> = contract
+        .signature
+        .as_ref()
+        .map(|s| s.params.iter().map(|(p, _)| p.as_str()).collect())
+        .unwrap_or_default();
+    let mut out = Vec::new();
+    for error in &contract.fails_with {
+        if !nika::throws_given(error) {
+            out.push(error.clone());
+            continue;
+        }
+        let param = &error["from(".len()..error.len() - 1];
+        let arg = params
+            .iter()
+            .position(|p| *p == param)
+            .and_then(|i| args.get(i));
+        let named = match arg {
+            Some(Expr::Variable(name, _)) => Some(parsed.interner.resolve(*name).to_string()),
+            _ => None,
+        };
+        match named {
+            Some(name) if own.functions.contains_key(&name) => given.push(name),
+            Some(name) if library.functions.contains_key(&name) => {
+                out.extend(library.functions[&name].fails_with.iter().cloned())
+            }
+            _ => out.push(UNNAMED_ERROR.to_string()),
+        }
+    }
+    out
 }
 
 /// **The fatal error types** (ADR-345 D1): every type an `impl Fatal` names,

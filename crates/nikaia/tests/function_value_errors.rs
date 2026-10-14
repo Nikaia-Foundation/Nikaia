@@ -343,7 +343,6 @@ fn a_field_carries_what_with_gave_it() {
 }
 
 #[test]
-#[ignore = "a `for` over a field path does not yet take the field's set (#620)"]
 fn a_list_field_carries_what_was_pushed() {
     accepted_exactly(
         &format!(
@@ -362,5 +361,32 @@ fn a_mut_list_handed_to_a_mut_parameter() {
             "    let mut all: Vec[fn() throws] = [fail]\n    grow(all)\n    for run in all {{\n        run() {BOTH}\n    }}"
         ),
         "fn grow(mut all: Vec[fn() throws]) {\n    all.push(worse)\n}\n",
+    );
+}
+
+/// **A caller replaces `from(p)` with what it passed** (ADR-351 D4): `now` is
+/// `pub`, so callers this package does not see may hand it more, but the
+/// call `now(fail)` fails with what `fail` fails with, and the `catch` over it
+/// needs no `else`. Handing it `worse` makes the one arm too few.
+#[test]
+fn a_caller_replaces_from_with_what_it_passed() {
+    let now = "pub fn now(f: fn() throws) throws {\n    f()\n}\n";
+    let source = format!("{JOB}{WORSE}{now}fn main() {{\n    now(fail) {ONLY_BAD}\n}}\n");
+    assert!(codes(&source).is_empty(), "{:?}", findings(&source));
+    refused_without_else(&format!("    now(worse) {ONLY_BAD}"), now);
+}
+
+/// **The ledger writes `from(p)` and reads it back as itself** (ADR-351 D4,
+/// D7), never as `?`.
+#[test]
+fn the_ledger_says_from_the_parameter() {
+    let parsed = parse_to_ast("pub fn now(f: fn() throws) throws {\n    f()\n}\nfn main() {\n}\n")
+        .expect("the source parses");
+    let text = Ledger::infer(&parsed).render();
+    assert!(text.contains("throws = [\"from(f)\"]"), "{text}");
+    let back = Ledger::parse(&text).expect("it reads back");
+    assert_eq!(
+        back.functions["now"].fails_with,
+        vec!["from(f)".to_string()]
     );
 }

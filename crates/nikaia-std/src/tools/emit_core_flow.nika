@@ -689,7 +689,10 @@ impl EmitState {
         // **A call through a function field fails in the box** (ADR-351 D2):
         // the stored code's channel is the box, opened by the type each arm
         // names.
-        if caught && sum == null && !named && self.emit_catch_is_a_field_call(guarded_expr) {
+        // **And so does a call of a function whose set has `from(p)`**
+        // (ADR-351 D4): its channel varies with the caller, so it is the box,
+        // opened by the type each arm names.
+        if caught && sum == null && !named && (self.emit_catch_is_a_field_call(guarded_expr) || self.emit_catch_calls_given_code(world, guarded_expr)) {
             sum = "".clone()
             boxed = true
         }
@@ -1004,6 +1007,24 @@ fn emit_catch_is_a_scope(world: ref EmitWorld, guarded: ref Expr) -> bool {
 
 impl EmitState {
     /// Whether a `catch` guards a call through a function field (ADR-351).
+    fn emit_catch_calls_given_code(ref self, world: ref EmitWorld, guarded: ref Expr) -> bool {
+        let name = call_callee_name(world.words, world.aliases, guarded) ?? return false
+        let mut set: Vec[String] = []
+        let own = self.own_contracts.functions.get(name)
+        if own != null {
+            set = (own ?? return false).fails_with.clone()
+        } else {
+            let theirs = world.library.functions.get(name) ?? return false
+            set = theirs.fails_with.clone()
+        }
+        for member in set {
+            if throws_given(member) {
+                return true
+            }
+        }
+        return false
+    }
+
     fn emit_catch_is_a_field_call(ref self, guarded: ref Expr) -> bool {
         return match guarded {
             Expr::MethodCall { receiver, .. } => self.facts.field_calls.contains_key(node_key(receiver)),

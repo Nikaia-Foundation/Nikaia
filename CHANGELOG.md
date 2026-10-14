@@ -8,6 +8,19 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.963] — 2026-10-14
+
+**a function's set names the code it was given, from(p) (ADR-351 D4, part of #620)**
+
+- A `pub` function (or one used as a value) that calls code it was given
+  publishes `throws = ["from(p)"]`, read back as itself; a caller replaces it
+  with the set of what it passed, and a `catch` over the call takes that set
+  by name. An unreplaced `from(p)` is open, as `?` is.
+- A call through a parameter of code is that parameter's place in the throws
+  graph, so the function's own set is specific rather than `?`.
+- A `for` over a field path (`for run in jobs.all`) takes the field's set, and
+  a list or map of code in a struct literal is a place too.
+
 ## [0.0.962] — 2026-10-14
 
 **A pub type keeps a place per view field (#614)**

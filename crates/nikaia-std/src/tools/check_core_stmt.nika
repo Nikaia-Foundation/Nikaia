@@ -844,24 +844,25 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
     // **An element of a list of code is given what the list was** (ADR-351
     // D1, D4).
     if bindings.len() == 1 && state.current != null && check_core_stmt_holds_code(over) {
-        match iter {
-            Expr::Variable(named, _) => {
-                let current: String = state.current?.clone() ?? ""
-                let from = f"{current}::{world.words.resolve(named)}"
-                let to = f"{current}::{world.words.resolve(bindings[0])}"
-                let given: CheckStoredCode = state.stored_code[from]?.clone() ?? CheckStoredCode { resolved: collections::BTreeSet(), unresolved: true, free: collections::BTreeSet() }
-                let mut entry: CheckStoredCode = state.stored_code.remove(to) ?? CheckStoredCode::empty()
-                for resolved in given.resolved {
-                    entry.resolved.insert(resolved.clone())
-                }
-                entry.unresolved = entry.unresolved || given.unresolved
-                for free in given.free {
-                    entry.free.insert(free.clone())
-                }
-                state.stored_code.insert(to, entry)
-            },
-            else => {}
+        // A name of this function, or a field path: each place it names.
+        let current: String = state.current?.clone() ?? ""
+        let to = f"{current}::{world.words.resolve(bindings[0])}"
+        let keys = check_core_places_code_keys(state, world, iter)
+        let mut entry: CheckStoredCode = state.stored_code.remove(to) ?? CheckStoredCode::empty()
+        if keys.len() == 0 {
+            entry.unresolved = true
         }
+        for from in keys {
+            let given: CheckStoredCode = state.stored_code[from]?.clone() ?? CheckStoredCode { resolved: collections::BTreeSet(), unresolved: true, free: collections::BTreeSet() }
+            for resolved in given.resolved {
+                entry.resolved.insert(resolved.clone())
+            }
+            entry.unresolved = entry.unresolved || given.unresolved
+            for free in given.free {
+                entry.free.insert(free.clone())
+            }
+        }
+        state.stored_code.insert(to, entry)
     }
     // **A name that holds a sequence is handed over, not lent** (ADR-293 D19).
     let a_seq = match over {

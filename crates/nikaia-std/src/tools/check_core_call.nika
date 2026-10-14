@@ -243,6 +243,85 @@ fn check_core_call_takes_code(callee: ref FnContract?) -> bool {
     return false
 }
 
+/// **A caller replaces `from(p)` with what it passed** (ADR-351 D4): each
+/// `from(p)` member of the callee's set becomes the set of the code given here
+/// for `p`. Code this walk cannot see is `?`.
+fn check_core_call_from_given[H: CheckHost](state: ref CheckState, world: ref CheckWorld, host: ref H, contract: ref FnContract, args: ref Vec[Expr]) -> FnContract sync {
+    let mut given = contract.clone()
+    let mut any = false
+    for error in contract.fails_with {
+        if throws_given(error) {
+            any = true
+        }
+    }
+    if !any {
+        return given
+    }
+    let mut set: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut params: Vec[String] = []
+    if contract.signature != null {
+        let signature: ref Signature = contract.signature ?? return given
+        for (param, _) in signature.params {
+            params.push(param.clone())
+        }
+    }
+    for error in contract.fails_with {
+        if !throws_given(error) {
+            set.insert(error.clone())
+            continue
+        }
+        let inner: String = (error.strip_prefix("from(") ?? "").clone()
+        let param: String = (inner.strip_suffix(")") ?? "").clone()
+        let mut at = -1
+        let mut i = 0
+        for each in params {
+            if each == param && at < 0 {
+                at = i
+            }
+            i += 1
+        }
+        if at < 0 || at >= args.len() as i64 {
+            set.insert("?".clone())
+            continue
+        }
+        let mut stored = CheckStoredCode::empty()
+        check_core_places_code_into(state, world, host, args[at], stored)
+        if stored.unresolved {
+            set.insert("?".clone())
+        }
+        for name in stored.free {
+            check_core_call_set_into(world, name, set)
+        }
+        for name in stored.resolved {
+            check_core_call_set_into(world, name, set)
+        }
+    }
+    let mut errors: Vec[String] = []
+    for error in set {
+        errors.push(error.clone())
+    }
+    given.fails_with = errors
+    return given
+}
+
+// What the function `name` fails with, by this package's ledger or a
+// library's, into `set` (as the inference reads `free`).
+fn check_core_call_set_into(world: ref CheckWorld, name: ref String, mut set: collections::BTreeSet[String]) {
+    if world.own.functions.contains_key(name) {
+        let own = world.own.functions[name] ?? return
+        for error in own.fails_with {
+            set.insert(error.clone())
+        }
+        return
+    }
+    if world.library.functions.contains_key(name) {
+        let contract = world.library.functions[name] ?? return
+        for error in contract.fails_with {
+            set.insert(error.clone())
+        }
+    }
+}
+
 // What each argument of code is, added to the place of its parameter.
 fn check_core_call_feed_params[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, key: ref String, contract: ref FnContract, args: ref Vec[Expr], frame: ref CheckStoredCode) sync {
     let signature: ref Signature = contract.signature ?? return
@@ -332,6 +411,10 @@ fn check_core_call_unresolved[H: CheckHost](mut state: CheckState, world: ref Ch
                 // it** (ADR-351 D1, D4).
                 let current: String = state.current?.clone() ?? ""
                 let key = f"{current}::{name}"
+                // The call is the parameter's place in the throws graph.
+                if can_throw && state.current != null {
+                    check_core_args_a_field_called(state, current, key)
+                }
                 if can_throw && world.own.code_throws.contains_key(key) {
                     let set = world.own.code_throws[key] ?? return Ty::Unknown
                     let mut contract = FnContract::empty()
@@ -355,7 +438,9 @@ fn check_core_call_described[H: CheckHost](mut state: CheckState, world: ref Che
     if contract.threads.may() {
         state.crosses_into_an_unseen_call(world, name, args, found, config, passed, span, f"`{name}` is described as starting a thread of its own (`threads = true`), so what it is given may be looked at from one")
     }
-    state.may_fail_here(world, host, key, contract, span)
+    // **A caller replaces `from(p)` with what it passed** (ADR-351 D4).
+    let given = check_core_call_from_given(state, world, host, contract, args)
+    state.may_fail_here(world, host, key, given, span)
     state.a_call_that_may_pause(name, !contract.sync_claim.is_sync(), contract.sync_claim.is_unpromised(), span)
     state.a_pausing_call_in_an_action(name, contract, span)
     // `Stats(first)` is the anonymous constructor, which hands back the type

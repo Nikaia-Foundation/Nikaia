@@ -286,6 +286,13 @@ impl CheckState {
         }
         let key = world.here.unaliased(name)
         let contract = world.own.functions[key] ?? return false
+        // **`from(p)` is what this call passed** (ADR-351 D4): the set the
+        // call substituted is the one asked, member by member.
+        for member in contract.fails_with {
+            if throws_given(member) {
+                return false
+            }
+        }
         return contract.fails_with.len() > 1
     }
 }
