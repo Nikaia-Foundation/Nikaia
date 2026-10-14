@@ -8,6 +8,19 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.922] — 2026-10-14
+
+**check: a method call on a known receiver, and `?.`, in Nikaia (U-c5, #125, #558)**
+
+- `call_on` and `a_safe_call` move to `tools/check_core_call_on.nika`
+  (about 690 Rust lines out, with 21 wrappers and helpers left dead). The
+  argument list stays the one without the receiver, as in Rust.
+- New host methods: `a_lambda_that_pauses_at_an_entry` (stays Rust) and
+  `a_task_of_a_scope`, the `task::Scope::spawn` half that belongs to the task
+  work (#605).
+- Nothing a program means changes: `lower-std` is byte-identical between the
+  old and the new binary, and the C-6 oracle finds 0 of 143 files differing.
+
 ## [0.0.921] — 2026-10-14
 
 **task: a scope's function may throw; a sum keeps a later failure of another member (#605)**

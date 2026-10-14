@@ -344,6 +344,28 @@ impl CheckHost for Core<'_, '_> {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
+    fn a_lambda_that_pauses_at_an_entry(
+        &self,
+        state: &mut CheckState,
+        key: &str,
+        receiver: &Expr,
+        on: &Ty,
+        args: &[Expr],
+        lambda_at: i64,
+        result: Ty,
+        span: &Span,
+    ) -> Ty {
+        let lambda = usize::try_from(lambda_at).ok().and_then(|at| args.get(at));
+        self.hosted(state, |checker| {
+            checker.a_lambda_that_pauses_at_an_entry(key, receiver, on, lambda, result, span)
+        })
+    }
+
+    fn a_task_of_a_scope(&self, state: &mut CheckState, args: &[Expr]) {
+        self.hosted(state, |checker| checker.a_task_of_a_scope(args))
+    }
+
     fn expr(&self, state: &mut CheckState, node: &Expr, span: &Span) -> Ty {
         self.hosted(state, |checker| checker.expr(node, span))
     }

@@ -130,6 +130,12 @@ pub trait CheckHost {
     /// **A `task::scope` whose lambda paused** (ADR-328 D10, U-c4): the task
     /// work's (#605), which stays Rust while it is built.
     fn a_scope_that_pauses(ref self, mut state: CheckState, args: ref Vec[Expr], paused: ref Vec[i64], span: ref Span) sync
+    /// **A lambda that pauses, handed to a `std` entry** (ADR-233, U-c5):
+    /// `args[lambda_at]` is the lambda, `-1` none. Stays Rust.
+    fn a_lambda_that_pauses_at_an_entry(ref self, mut state: CheckState, key: ref String, receiver: ref Expr, on: ref Ty, args: ref Vec[Expr], lambda_at: i64, result: Ty, span: ref Span) -> Ty sync
+    /// **A task of `task::scope` runs beside the others** (Part II 12.7,
+    /// ADR-346 D7, U-c5): the task work's (#605), which stays Rust.
+    fn a_task_of_a_scope(ref self, mut state: CheckState, args: ref Vec[Expr]) sync
 }
 
 /// What the build worked out a local is: the whole value, or the integer the

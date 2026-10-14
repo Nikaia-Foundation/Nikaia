@@ -299,7 +299,7 @@ gives what each core unit calls.
 | U-c2 (done, 0.0.910) | `check_core_comptime.nika` | `comptime_binding`, `a_block_over_a_grammar` | 429 |
 | U-c3 (done, 0.0.912) | `check_core_args.nika` | `arguments_given`, `locks`, `list_literal`, `a_called_field` | 524 |
 | U-c4 (done, 0.0.916) | `check_core_call.nika` | `call`; the arms `Call`, `ListLit`, `Tuple` | 499 |
-| U-c5 | `check_core_call_on.nika` | `call_on`, `a_safe_call` | 688 |
+| U-c5 (done, 0.0.922) | `check_core_call_on.nika` | `call_on`, `a_safe_call` | 688 |
 | U-c6 | `check_core_method.nika` | the arm `MethodCall \| SafeMethod` | 638 |
 | U-c7 | `check_core_stmt.nika` | `stmt` (one function per `Stmt` variant) and `block`; the host method `block` is deleted | 884 |
 | U-c8 | `check_core_flow.nika` | the arms `Match`, `If`, `Select`, `Overlap`, `TryCatch`, `Block`, `Unsafe` | 609 |

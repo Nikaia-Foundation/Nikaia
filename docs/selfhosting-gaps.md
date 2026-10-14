@@ -231,6 +231,13 @@ checker refusal (`NK1125`) if `!= null` is not meant to narrow.
 | U-c4 `arguments`, `an_attribute_read`, `a_call_that_hands_its_number_back`, `a_standard_bound_not_met` | host methods (hosted) | yes: Rust until C-5h |
 | U-c4 the `task::scope` half of `call` | host method `a_scope_that_pauses` | yes: #605's task work |
 | U-c4 a trait method's `ref Vec[T]` | fixed in the compiler: a slice in the declaration too | no: was `&Vec<T>` against `&[T]` (test in `trait_mut_parameter.rs`) |
+| U-c5 `CheckComparable` built from `state.structs` and the other maps | a free function taking each map as `ref` (`check_core_call_on_compares`) | yes: NK1106, a struct of references takes no field read of a `ref` struct |
+| U-c5 `reached_method`'s `entry(current).or_insert_with` | `methods.remove(current) ?? empty`, changed, inserted back | yes: no `entry` API |
+| U-c5 `Option<&Expr>` of the pausing lambda for the host | an index into `args`, `-1` for none | yes: an optional reference across the trait |
+| U-c5 `witness: Option<usize>` | `i64`, `-1` for none | yes: no `if let` |
+| U-c5 nested `if` inside `else if` of the push/insert binding | conditions joined with `&&` | yes: clippy `collapsible_if` on the lowered code |
+| U-c5 the `task::Scope::spawn` half of `call_on` | host method `a_task_of_a_scope` | yes: #605's task work |
+| U-c5 `a_lambda_that_pauses_at_an_entry` | host method, stays Rust | yes: not in the unit |
 
 ## Method
 

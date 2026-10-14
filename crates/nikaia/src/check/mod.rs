@@ -43,6 +43,7 @@ use nikaia_std::tools::check_arguments;
 use nikaia_std::tools::check_consts;
 use nikaia_std::tools::check_core_args;
 use nikaia_std::tools::check_core_call;
+use nikaia_std::tools::check_core_call_on;
 use nikaia_std::tools::check_core_comptime;
 use nikaia_std::tools::check_core_leaves;
 use nikaia_std::tools::check_core_pilot;
@@ -51,14 +52,12 @@ use nikaia_std::tools::check_flow::{
     CheckUnsignedSlot as UnsignedSlot,
 };
 use nikaia_std::tools::check_items;
-use nikaia_std::tools::check_names::{integer_named, is_a_literal as is_literal};
+use nikaia_std::tools::check_names::integer_named;
 use nikaia_std::tools::check_overflow;
 use nikaia_std::tools::check_patterns::pattern_names;
 use nikaia_std::tools::check_reports::CheckWall;
 use nikaia_std::tools::check_scope::resolve_method;
-use nikaia_std::tools::check_shapes::{
-    an_element_beneath, is_growable, roots_in_a_binding, slice_element,
-};
+use nikaia_std::tools::check_shapes::{an_element_beneath, is_growable, slice_element};
 pub use nikaia_std::tools::check_state::{
     CheckFinding as Finding, CheckLabel as Label, CheckSeverity as Severity,
 };
@@ -68,9 +67,7 @@ use nikaia_std::tools::check_state::{
     CheckRepeats as Repeats, CheckState, CheckWorld, a_body_never_ends,
 };
 use nikaia_std::tools::check_texts::{self, ends_in_text};
-use nikaia_std::tools::check_widen::{
-    self, an_integer_that_does_not_widen, names_a_path, views_into_nullable_text,
-};
+use nikaia_std::tools::check_widen::{self, names_a_path, views_into_nullable_text};
 use nikaia_std::tools::check_with::CheckCopyable as Copyable;
 use nikaia_std::tools::parsed_view::ParsedView;
 
@@ -684,9 +681,6 @@ const INTEGERS: [&str; 5] = ["u8", "u32", "u64", "i32", "i64"];
 pub fn common_integer(a: &str, b: &str) -> Option<&'static str> {
     check_widen::common_integer(a, b).map(|common| a_static_integer(&common))
 }
-
-/// The ledger keys of a file name's methods (ADR-319 D3).
-const PATH_METHODS: &str = "fs::Path::";
 
 /// The loops whose step can fail, for a caller that wants only those.
 ///
@@ -1783,21 +1777,6 @@ impl<'a> Checker<'a> {
         self.s.record_cast(from, into, value_node(operand));
     }
 
-    /// **A lookup's key is lent** (0.0.235, issue #169).
-    ///
-    /// `m.get(k)`, `m.contains_key(k)` and a set's `contains(k)` and
-    /// `remove(k)` take the key by reference in the language below, and a
-    /// method's arguments are not lent by the ledger's column
-    /// (`contracts::keeps::lends` says why: the declaration would be written
-    /// off it, and a call the checker does not walk would miss). These
-    /// declarations are Rust's and are never written off anything, so the
-    /// reason does not reach them: the `&` is recorded here, for exactly these
-    /// entries, where the key is a known value that is not already a view.
-    /// `m.get(k)` over a map keyed by numbers was `rustc`'s *mismatched types*.
-    fn a_lookup_key_lent(&mut self, key: &str, args: &[Expr], found: &[Ty]) {
-        self.s.a_lookup_key_lent(self.world, key, args, found);
-    }
-
     /// `NK1105` for text of its own given to a name bound to a literal
     /// (`tools/check_exprs.nika`).
     fn owned_text_into_a_literal_binding(
@@ -1988,108 +1967,12 @@ impl<'a> Checker<'a> {
         witness: Option<usize>,
         span: &Span,
     ) -> Ty {
-        let name = self.parsed.text(*method).to_string();
-        // **The same call, on the value inside.** Everything a method
-        // call is checked for - what it may throw, whether it pauses,
-        // what its arguments have to be, what the receiver's own type
-        // binds - is unchanged by the reach: a `?.` decides *whether*
-        // the call happens and never *what* a call is. The door is one
-        // of those things, so it is resolved here exactly as it is
-        // there, off the type **inside** the `T?`.
-        let within = witness
-            .filter(|_| a_task_handle(&inner) && name == "join")
-            .map(|at| &config[at].value);
-        let door = witness
-            .filter(|_| locked_content_of(&inner).is_some() && name == "set")
-            .map(|at| &config[at].value);
-        let witness = witness.filter(|_| within.is_none());
-        if let (Some(at), None) = (witness, door) {
-            self.expr(&config[at].value, span);
-        }
-        let given: Vec<Expr>;
-        let (args, written) = match door {
-            Some(seen) => {
-                self.s.the_witness_takes_no_reference(seen, span);
-                self.s.facts.witnessed_sets.insert(span.at() as i64);
-                given = args.iter().chain([seen]).cloned().collect();
-                (&given[..], "set(after)".to_string())
-            }
-            None => match within {
-                Some(limit) => {
-                    given = args.iter().chain([limit]).cloned().collect();
-                    (&given[..], "join(within)".to_string())
-                }
-                None => (args, self.parsed.text(*method).to_string()),
-            },
-        };
-        // **The receiver is lent to the call where the call changes
-        // nothing** ([ADR-278](../../docs/specification/adr/adr-278.md)
-        // D2, [ADR-278](../../docs/specification/adr/adr-278.md) D16 and
-        // D3). What comes out of a reached **method** is the call's own
-        // result rather than a view of the receiver, so this half needs
-        // no representation and is whole.
-        //
-        // Asked of the `mutates` column and only where **every**
-        // candidate for the name agrees, which is the rule `NK1138`
-        // uses one construct over: a name this compiler cannot resolve
-        // is claimed nothing about, and the reach lowers exactly as it
-        // did (Part III C.4).
-        let candidates: Vec<_> = self
-            .world
-            .own
-            .candidates(&name)
-            .into_iter()
-            .chain(self.world.library.candidates(&name))
-            .collect();
-        // **A map's read is lent already** (0.0.246): it answers a
-        // view of the value the map holds, and lending that again made
-        // each element a view of a view - `m[k]?.clone()` copied the
-        // reference and not the list, and `rustc` refused the `??`
-        // after it. The receiver of a `?.` that is an index can only be
-        // a map's, since a list's element is not a `T?` (`NK1121`).
-        // **Nor is a nullable view** (issue #171): an
-        // `Option<&str>` is a copy already, and lending it made the
-        // reached value a `&&str`, whose `.to_owned()` is the `&str`.
-        let lent = !candidates.is_empty()
-            && candidates.iter().all(|(_, c)| !c.mutates)
-            && !matches!(receiver, Expr::Index { .. })
-            && !inner.is_a_view();
-        if lent {
-            self.s.facts.lent_reaches.insert(value_node(receiver));
-        }
-        // **And a copy of a view is text of its own** (ADR-293 D24),
-        // reached or not: `b?.clone()` for a `b: ref String?` is a
-        // `String?`, which `.clone()` of the `&str` inside is not.
-        if inner.is_a_view() && name == "clone" && args.is_empty() {
-            self.s.facts.owned_copies.insert(value_node(receiver));
-        }
-        // **A field that holds a function is called as one** here too
-        // (#533): `x?.apply(1)` is `(x.apply)(1)` on what is inside.
-        let inside = self.s.inside_a_door;
-        let reached = match self.a_called_field(&inner, receiver, *method, args, inside, span) {
-            Some(result) => result,
-            None => self.call_on(*inner, receiver, *method, args, &written, span),
-        };
-        // **A view out of a temporary needs something to point into**
-        // (ADR-278 D21): the receiver is held for the rest of the block.
-        let a_view = match &reached {
-            Ty::Nullable(inner) => inner.is_a_view(),
-            other => other.is_a_view(),
-        };
-        if lent && a_view && !roots_in_a_binding(receiver) {
-            self.s.facts.held_reaches.insert(value_node(receiver));
-        }
-        match reached {
-            // The `and_then` case, recorded by name for the emitter
-            // exactly as a nullable field is (ADR-288: the emitter has
-            // no types and this is a question about one).
-            Ty::Nullable(result) => {
-                self.s.facts.flattened_reaches.insert(value_node(receiver));
-                Ty::Nullable(result)
-            }
-            Ty::Unknown => Ty::Unknown,
-            plain => Ty::Nullable(Box::new(plain)),
-        }
+        let witness = witness.map_or(-1, |at| at as i64);
+        self.nikaia(|state, world, host| {
+            check_core_call_on::check_core_a_safe_call(
+                state, world, host, *inner, receiver, *method, args, config, witness, span,
+            )
+        })
     }
 
     /// A field read through `?.` (`tools/check_fields.nika`).
@@ -2574,6 +2457,7 @@ impl<'a> Checker<'a> {
     /// wrote, and everything the **emitter** is handed stays keyed by that —
     /// an argument it has to put a `&` in front of is found under `set`,
     /// because `set` is what is written on the line.
+    #[allow(clippy::too_many_arguments)]
     fn call_on(
         &mut self,
         on: Ty,
@@ -2583,646 +2467,22 @@ impl<'a> Checker<'a> {
         entry: &str,
         span: &Span,
     ) -> Ty {
-        // **`full()` is `Error`'s own, on every type that implements it**
-        // (Part I 7.1, #497): the `impl` writes `message` and the trait
-        // provides the long form, which no entry of the type's names.
-        if entry == "full"
-            && args.is_empty()
-            && let Ty::Named { name, .. } = &on
-            && self.implements_error(name)
-        {
-            self.reached_method(None);
-            self.method_pauses(receiver, false, span);
-            self.method_propagates(receiver, false, span);
-            return Ty::named("String");
-        }
-        // **An error, one of several, answers `Error`'s methods** (ADR-280
-        // D30); what only one member has is reached through a `match`.
-        if let Some(members) = several_errors(&on) {
-            args.iter().for_each(|a| {
-                self.expr(a, span);
-            });
-            self.reached_method(None);
-            self.method_pauses(receiver, false, span);
-            self.method_propagates(receiver, false, span);
-            if matches!(entry, "message" | "full") && args.is_empty() {
-                return Ty::named("String");
-            }
-            let members = members_named(&members);
-            self.s.findings.push(Finding {
-                severity: Severity::Error,
-                span: *span,
-                code: "NK1171".to_string(),
-                message: format!(
-                    "This is an error, one of {members}, and an error has no method called `{entry}`."
-                ),
-                notes: vec![
-                    "What every error has is `message()` and `full()`; what one of them has \
-                     is reached once a `match` has said which it is."
-                        .to_string(),
-                ],
-                help: Some(format!(
-                    "Take it apart first: `match error {{ … }}`, and call `{entry}` in the arm \
-                     of the type that has it."
-                )),
-                labels: Vec::new(),
-            });
-            return Ty::Unknown;
-        }
-        // **A produced sequence answers under its own word**
-        // ([ADR-105](../../docs/specification/adr/adr-105.md) D1): `Seq` and
-        // `Par` are what the ledger calls the receiver, so `Seq::collect` is
-        // found exactly as `Vec::push` is. A `Par[T]` falls back to `Seq`'s
-        // entries where it has none of its own, which is D3's *otherwise
-        // `Par[T]` has `Seq[T]`'s surface* - one sentence rather than a second
-        // copy of twelve entries.
-        let named;
-        let name = match &on {
-            Ty::Seq { parallel, .. } => {
-                named = match parallel {
-                    true => ty::PAR,
-                    false => ty::SEQ,
-                };
-                Some(named)
-            }
-            Ty::Named { name, .. } => Some(name.as_str()),
-            // **A run is an `Array` whose length the caller knows**
-            // ([ADR-184](../../docs/specification/adr/adr-184.md) D3), and
-            // `std` writes its surface under `Array`: `xs.len()` for an
-            // `xs: ref Array[R]` resolved to nothing, so the function around
-            // it was inferred to pause - found moving `contracts::trust` into
-            // Nikaia.
-            Ty::Pointed { slice: true, .. } => Some(ty::ARRAY),
-            _ => None,
-        };
-        // **A copy of a number, a `bool`, a `char` or a tuple is the derived
-        // one** too, for the reason a declared record's is below: no ledger
-        // describes it because nothing has to. Answered as *nothing describes
-        // this method*, `at.clone()` on an `i64` and `id.clone()` on an
-        // `(i64, String)` made every function around them `async`, found
-        // moving `contracts::keep`'s walk into Nikaia (ADR-294).
-        if entry == "clone" && args.is_empty() {
-            match &on {
-                Ty::Tuple(_) => return on.clone(),
-                Ty::Named { name, args, .. }
-                    if args.is_empty()
-                        && (is_number(name)
-                            || name == "bool"
-                            || name == "char"
-                            || name == "scalar") =>
-                {
-                    return Ty::Named {
-                        name: name.clone(),
-                        args: Vec::new(),
-                        view: false,
-                    };
-                }
-                _ => {}
-            }
-        }
-        let Some(name) = name else {
-            // The receiver's type is not known, so neither is what this
-            // calls. Recorded, because "I could not find out" is an
-            // answer somebody downstream has to act on.
-            args.iter().for_each(|a| {
-                self.expr(a, span);
-            });
-            self.reached_method(None);
-            self.method_propagates(receiver, false, span);
-            self.method_pauses(receiver, false, span);
-            return Ty::Unknown;
-        };
-        let key = format!("{name}::{entry}");
-        let found = self.method(&key).or_else(|| match &on {
-            // D3's *otherwise `Par[T]` has `Seq[T]`'s surface*.
-            Ty::Seq { parallel: true, .. } => self.method(&format!("{}::{entry}", ty::SEQ)),
-            // **Text of its own lends itself as a view**
-            // ([ADR-282](../../docs/specification/adr/adr-282.md) D18), so a
-            // method of a view is a method of a `String` too - which is how
-            // the language below has it.
-            Ty::Named { name, args, .. } if name == "String" && args.is_empty() => {
-                self.method(&format!("str::{entry}"))
-            }
-            // **A list's own `map` is `std`'s `ListExt`** (ADR-233 D2): the
-            // trait is what the language below calls on a `Vec`, and the entry
-            // is written under its name.
-            Ty::Named { name, .. } if ty::base(name) == "Vec" => {
-                self.method(&format!("list::ListExt::{entry}"))
-            }
-            // **A value with a cleanup closes under std's one `close`**
-            // ([ADR-297](../../docs/specification/adr/adr-297.md) D4): it
-            // runs the cleanup now and hands its failure back at the call.
-            Ty::Named { name, .. }
-                if entry == "close"
-                    && self.cleanup_of(&on).is_some_and(|(owner, _)| {
-                        crate::contracts::ty::base(&owner) == crate::contracts::ty::base(name)
-                    }) =>
-            {
-                self.method("cleanup::close")
-            }
-            _ => None,
-        });
-        // **A copy of a type this program declares is the derived one**: it
-        // does not pause, cannot fail, and hands back the type itself, owned.
-        // No ledger describes it because nothing has to - and answered as
-        // *nothing describes this method*, `r.clone()` on a declared `struct`
-        // made the function around it `async`, found moving the ledger's
-        // records into Nikaia (ADR-294), where `Signature::text` became a
-        // future.
-        if found.is_none()
-            && entry == "clone"
-            && args.is_empty()
-            && (self.s.structs.contains_key(name)
-                || self.s.enums.contains_key(name)
-                // ...or another unit of the package declares, which is where
-                // a tool module's records stand (`ledger.nika` beside
-                // `ty.nika`).
-                || self.world.own.types.contains_key(name))
-        {
-            return match &on {
-                Ty::Named { name, args, .. } => Ty::Named {
-                    name: name.clone(),
-                    args: args.clone(),
-                    view: false,
-                },
-                other => other.clone(),
-            };
-        }
-        let Some((key, contract)) = found else {
-            // The type is known and no ledger describes this method of
-            // it - `HashMap::entry` until something writes it down.
-            // **A bound is looked up before anything is refused**
-            // ([ADR-295](../../docs/specification/adr/adr-295.md) D8): where
-            // `T: Summarize` and the trait declares this method, the call is
-            // asked again on the trait and everything about it - arity,
-            // argument types, `sync`, `throws` - is answered from the
-            // declaration, exactly as it would be from a written-down receiver.
-            if let Some(bound) = self.s.bound_that_answers(self.world, name, entry) {
-                return self.call_on(bound, receiver, method, args, entry, span);
-            }
-            // **`compare` and `eq` are the language's** (ADR-341 D2): a type
-            // parameter with the bound has them, and so has a number, a text
-            // or a container the language orders or equates. A declared type
-            // with `impl Ord` has its own, found above.
-            if matches!(entry, "compare" | "eq") && args.len() == 1 {
-                let wants_order = entry == "compare";
-                let by_bound = match &on {
-                    Ty::Named {
-                        name, args: held, ..
-                    } if held.is_empty() => self.s.type_parameters.get(name).map(|bounds| {
-                        bounds.iter().any(|bound| {
-                            !self.world.own.traits.contains_key(bound)
-                                && (bound == "Ord" || (!wants_order && bound == "Eq"))
-                        })
-                    }),
-                    _ => None,
-                };
-                let answered = match by_bound {
-                    Some(held) => held,
-                    None if matches!(&on, Ty::Unknown | Ty::Var { .. }) => false,
-                    None => {
-                        let beside = self.parts_beside();
-                        let asking = Comparable {
-                            beside: &beside,
-                            structs: &self.s.structs,
-                            enums: &self.s.enums,
-                            payloads: &self.s.enum_payloads,
-                            parameters: &self.s.struct_parameters,
-                            own: self.world.own,
-                            library: self.world.library,
-                        };
-                        match wants_order {
-                            true => asking.orders(&on),
-                            false => asking.totally(&on),
-                        }
-                    }
-                };
-                if answered {
-                    let given = self.expr(&args[0], span);
-                    let view = |ty: &Ty| matches!(ty, Ty::Named { view: true, .. }) as i64;
-                    self.s
-                        .facts
-                        .standard_compares
-                        .insert(value_node(receiver), view(&on) | (view(&given) << 1));
-                    self.reached_method(Some(match wants_order {
-                        true => "Ord::compare",
-                        false => "Eq::eq",
-                    }));
-                    self.method_pauses(receiver, false, span);
-                    self.method_propagates(receiver, false, span);
-                    return match wants_order {
-                        true => Ty::named("Ordering"),
-                        false => Ty::named("bool"),
-                    };
-                }
-            }
-            // **A `Seen[T]` is the `T` it stamps** (ADR-281 D26, #497): the
-            // stamp is erased below, so `seen.len()` is the list's `len`.
-            if let Ty::Named {
-                name, args: held, ..
-            } = &on
-                && name == "Seen"
-                && let [held] = held.as_slice()
-            {
-                return self.call_on(held.clone(), receiver, method, args, entry, span);
-            }
-            // **And a type seen through answers with what it holds** (#497),
-            // as a field read on one does: `data.lines()` on an `fs::Mapped`
-            // is the text's.
-            if let Some(held) = self
-                .seen_through(&on)
-                .filter(|held| held.unseen() != on.unseen())
-            {
-                return self.call_on(held, receiver, method, args, entry, span);
-            }
-            // Unless the type is a **parameter**, where nothing will ever
-            // describe it and saying so now is the whole of `NK1126`.
-            self.s
-                .nothing_says_what_a_parameter_can_do(name, "method", entry, span);
-            self.s.no_number_has_this_method(name, entry, span);
-            self.s.a_list_collected(name, entry, args, span);
-            self.a_member_nothing_writes_down(name, entry, true, span);
-            args.iter().for_each(|a| {
-                self.expr(a, span);
-            });
-            self.reached_method(None);
-            self.method_pauses(receiver, false, span);
-            self.method_propagates(receiver, false, span);
-            return Ty::Unknown;
-        };
-        // **`to_text` on a name made from text cannot fail** (ADR-319 D5):
-        // it reaches the entry that throws nothing, and the emitter writes it.
-        let known_text =
-            key == "fs::Path::to_text" && std::mem::take(&mut self.s.flow.receiver_from_text);
-        if known_text {
-            self.s.facts.path_methods.insert(value_node(receiver), true);
-        }
-        self.reached_method(Some(match known_text {
-            true => "fs::Path::text_of",
-            false => &key,
-        }));
-        self.s.flow.last_resolved = Some(key.clone());
-        // **A receiver the method changes or takes is not only read**: a
-        // `match` arm that does this to a part it bound needs the part itself.
-        if let Some(name) = self.s.flow.receiver_name.clone() {
-            let takes = contract
-                .signature
-                .as_ref()
-                .and_then(|s| s.params.first())
-                .is_some_and(|(_, ty)| {
-                    matches!(ty, Ty::Seq { .. }) || self.s.takes_away(self.world, ty)
-                });
-            if contract.mutates || takes {
-                self.s.changed.push(name);
-            }
-        }
-        // **A method that walks a produced sequence consumes it**
-        // ([ADR-105](../../docs/specification/adr/adr-105.md) D2): every `Seq`
-        // entry writes its receiver `(Seq[$T], …)` and not `&Seq[$T]`, so the
-        // signature is what says so rather than a list of method names. A
-        // container's methods take a view and are untouched.
-        if matches!(&on, Ty::Seq { shape, .. } if !shape.replays)
-            && walks_by_value(&contract)
-            && let Some(name) = self.s.flow.receiver_name.clone()
-        {
-            let taken = self.s.taken(name, on.clone(), self.s.read_seq, "", span);
-            self.s.walked.push(taken);
-        }
-        // **And a list's own `map` takes the list** (ADR-233 D2): the mapped
-        // list replaces it, so a read of it afterwards is one of a list that
-        // is gone - `NK2105`, where it was `rustc`'s *borrow of moved value*.
-        if key == "list::ListExt::map"
-            && let Some(name) = self.s.flow.receiver_name.clone()
-        {
-            self.s
-                .hands_over_name(self.world, &name, "taken by `map`", span);
-        }
-        // **And `close` takes the value**: nothing of it is left to clean up
-        // afterwards, and nothing of it to read.
-        if key == "cleanup::close"
-            && let Some(name) = self.s.flow.receiver_name.clone()
-        {
-            self.s
-                .hands_over_name(self.world, &name, "closed by `close`", span);
-        }
-        // ADR-023 D8: the failure leaves at the call, and the emitter
-        // is what writes that. Recorded whether or not the function
-        // around it declares `throws` - where it does not, `NK2605`
-        // below refuses the program and nothing is emitted at all.
-        self.method_options(method, &contract, span);
-        self.method_propagates(
-            receiver,
-            !known_text
-                && (!contract.fails_with.is_empty()
-                    || self.walks_a_failing_sequence(&on, &contract)),
-            span,
-        );
-        // ADR-055 D2, the method half. Either ledger since §6 step 3
-        // made `std`'s own pausing entries `async fn`: before it, a
-        // `std` entry blocked its thread and awaiting one would have
-        // been awaiting a value rather than a future.
-        // **A walk of a sequence whose step pauses, pauses**
-        // ([ADR-172](../../docs/specification/adr/adr-172.md) D5). The entry's
-        // own `sync` is about the walk — `count` adds one per element and does
-        // nothing else — and what suspends is the **step** it asks for. So the
-        // receiver's word decides it at the site, which is the same word the
-        // `for` one construct over reads.
-        //
-        // **Except a `map` or a `filter` of a sequence this compiler made
-        // pause** ([ADR-233](../../docs/specification/adr/adr-233.md) D1): that
-        // one has both, as adapters of its own, and hands back another like it.
-        let chained = a_paused_chain(&key, &on);
-        let walks_a_pausing_step =
-            matches!(&on, Ty::Seq { pauses: true, .. }) && walks_by_value(&contract) && !chained;
-        self.method_pauses(
-            receiver,
-            !contract.sync_claim.is_sync() || walks_a_pausing_step,
-            span,
-        );
-        // …and a **lazy** walk of one is another such sequence, as an adapter
-        // of its own ([ADR-233](../../docs/specification/adr/adr-233.md) D1,
-        // [ADR-234](../../docs/specification/adr/adr-234.md) D1) - every one
-        // `Seq` has, which is what `chained` says. What is left here is an entry
-        // that hands back a sequence and has no pausing form: none today, since
-        // `rev` is `NK2703` first. The net stays for the next one.
-        //
-        // Recorded rather than refused here, because *this compiler cannot
-        // build that yet* is a refusal from the lowering and not a rule of the
-        // language ([ADR-171](../../docs/specification/adr/adr-171.md) §4).
-        let hands_back_a_sequence = matches!(
-            contract.signature.as_ref().and_then(|s| s.result.as_ref()),
-            Some(Ty::Seq { .. })
-        );
-        if walks_a_pausing_step && hands_back_a_sequence {
-            self.s.facts.pausing_walks.insert(value_node(receiver));
-        }
-        // **A walk of a sequence whose step can fail, can fail**
-        // ([ADR-025](../../docs/specification/adr/adr-025.md) D1, one construct
-        // over from the `for` it was written about). The entry's own `throws`
-        // is about the walk; what fails is the **step** it asks for, so the
-        // receiver's word decides it at the site.
-        //
-        // **The eager walks and not the lazy ones**, for the reason above read
-        // the other way: a `map` has produced nothing, so nothing of it has
-        // failed yet, and the failure belongs to whatever walks the result.
-        let walks_a_failing_step = matches!(
-            &on,
-            Ty::Seq {
-                can_throw: true,
-                ..
-            }
-        ) && walks_by_value(&contract)
-            && !hands_back_a_sequence;
-        if walks_a_failing_step {
-            self.a_walk_of_a_failing_sequence(method, span);
-        }
-        self.s
-            .a_pausing_method_in_a_sync_body(&key, &contract, span);
-        self.s.a_call_that_may_pause(
-            self.parsed.text(method),
-            !contract.sync_claim.is_sync() || walks_a_pausing_step,
-            unpromised(&contract) && !walks_a_pausing_step,
-            span,
-        );
-        self.s
-            .a_pausing_call_in_an_action(self.parsed.text(method), &contract, span);
-        // A method call is a written call, so the rule reaches it too
-        // (`NK2605`) - and here the receiver's type was known and a
-        // ledger described the method, which is the only case this
-        // compiler can answer at all.
-        if !known_text {
-            self.may_fail_here(&key, &contract, span);
-        }
+        self.nikaia(|state, world, host| {
+            check_core_call_on::check_core_call_on(
+                state, world, host, on, receiver, method, args, entry, span,
+            )
+        })
+    }
 
-        // What the receiver's own type tells the signature (ADR-288).
-        // `HashMap[&str, Stats]` against `&HashMap[$K, $V]` binds `$V`
-        // to `Stats`, so `-> Entry[$V]` is an `Entry[Stats]` and the
-        // next call in the chain has something to bind from in turn.
-        let mut bound = bindings(&contract, &on);
-        // **And a generic type of the program's own binds its parameters by
-        // position** (#497): `h.seen()` on a `Holder[i64]`, for `impl
-        // Holder[T] { fn seen(ref self) -> ref T }`, is a `ref i64`, as the
-        // field `h.value` is.
-        for (name, ty) in self.arguments_of(&on) {
-            bound.entry(name).or_insert(ty);
+    /// **A task of `task::scope` runs beside the others** (Part II 12.7):
+    /// asked as a walk's lambda is, at both settings, so the program means
+    /// the same at each. **And it fails in the scope's channel** (ADR-346 D7).
+    pub(super) fn a_task_of_a_scope(&mut self, args: &[Expr]) {
+        self.s.in_parallel = self.s.in_parallel.or(Some(self.s.scope.len() as i64));
+        self.s.scoped_task = true;
+        if let Some(lambda) = args.first() {
+            self.s.facts.scope_tasks.insert(value_node(lambda));
         }
-
-        // The arguments are walked **after** the contract is in hand,
-        // which is what lets a lambda's parameters have types (ADR-288).
-        // The old order walked them first and could not: `a` in
-        // `.and_modify fn { a.add(t) }` is named nowhere and typed by
-        // nothing but the callee's signature.
-        let expected: Vec<Ty> = expected_arguments(&contract)
-            .iter()
-            .map(|ty| ty::substitute(ty, &bound))
-            .collect();
-        let outer_paused = std::mem::take(&mut self.s.flow.paused_args);
-        // **A lambda handed to a walk of a `Par[T]` runs on several cores at
-        // once** (Part II 12.6, ADR-235 D2): what it may do is asked while it
-        // is walked, and a lambda inside it is inside it too.
-        let outer_parallel = self.s.in_parallel;
-        let outer_scoped = self.s.scoped_task;
-        if matches!(&on, Ty::Seq { parallel: true, .. }) {
-            self.s.in_parallel = outer_parallel.or(Some(self.s.scope.len() as i64));
-            self.s.scoped_task = false;
-        }
-        // **A task of `task::scope` runs beside the others** (Part II 12.7):
-        // asked as a walk's lambda is, at both settings, so the program means
-        // the same at each.
-        if key == "task::Scope::spawn" {
-            self.s.in_parallel = outer_parallel.or(Some(self.s.scope.len() as i64));
-            self.s.scoped_task = true;
-            // **And it fails in the scope's channel** (ADR-346 D7).
-            if let Some(lambda) = args.first() {
-                self.s.facts.scope_tasks.insert(value_node(lambda));
-            }
-        }
-        let found = self.arguments_given(
-            args,
-            &expected,
-            self.world.own.functions.contains_key(&key),
-            Some(&contract),
-            span,
-        );
-        self.s.in_parallel = outer_parallel;
-        self.s.scoped_task = outer_scoped;
-        // **The element type an empty list's first `push` gives it** (#523):
-        // `let mut rows = Vec()` then `rows.push((fragment, tally.n))` makes
-        // `rows` a list of what was pushed, for every read after.
-        if let Some(name) = self.s.flow.pushed_into.take() {
-            // **A `push` onto a list of open elements is a use of them**
-            // (ADR-285 D34): a typed value asks for its type, and a number is
-            // given to them and held to the type they come to.
-            let open = self
-                .s
-                .binding(&name)
-                .and_then(|local| {
-                    self.s
-                        .flow
-                        .open_elements
-                        .get(&local.id)
-                        .map(|at| *at as usize)
-                })
-                .map(|at| self.open_root(at));
-            // **An empty list's first `push` of a number makes its elements
-            // one open number** (#497, ADR-285 D34), as a list written in
-            // numbers has: `let mut xs = Vec()` then `xs.push(10)` is a list
-            // of whatever integer the uses of `xs[0]` ask for.
-            if open.is_none()
-                && let ("push", [pushed], [value]) = (entry, found.as_slice(), args)
-                && pushed.is_unknown()
-                && self.number_shaped(value)
-                && let Some(local) = self.s.binding(&name)
-                && matches!(&local.ty, Ty::Named { name, args, .. }
-                    if name == "Vec" && matches!(args.as_slice(), [] | [Ty::Unknown]))
-            {
-                let id = local.id;
-                self.s.flow.open_numbers.insert(
-                    span.at() as i64,
-                    OpenNumber {
-                        name: name.clone(),
-                        element: true,
-                        at: *span,
-                        joined: span.at() as i64,
-                        asks: Vec::new(),
-                        given: Vec::new(),
-                        derived: Vec::new(),
-                        written: Vec::new(),
-                    },
-                );
-                self.open_number_given(span.at(), value, span);
-                self.s.flow.open_elements.insert(id, span.at() as i64);
-            } else if let (Some(number), "push", [pushed], [value]) =
-                (open, entry, found.as_slice(), args)
-            {
-                if let Some(ty) = integer_named(&value_of_a_copy(pushed.unseen())) {
-                    if let Some(number) = self.s.flow.open_numbers.get_mut(&(number as i64)) {
-                        number.asks.push((ty, *span, true));
-                    }
-                } else if self.number_shaped(value) {
-                    self.open_number_given(number, value, span);
-                }
-            }
-            let given: Option<(Option<String>, Vec<Ty>)> = match (entry, found.as_slice()) {
-                ("push", [pushed]) if !pushed.is_unknown() => Some((
-                    Some("Vec".to_string()),
-                    vec![value_of_a_copy(pushed.clone())],
-                )),
-                // `m.insert("a", 7)`: the key and the value, each as the map
-                // holds it; the map keeps the name it was made with.
-                ("insert", [key, value]) if !key.is_unknown() && !value.is_unknown() => Some((
-                    None,
-                    vec![value_of_a_copy(key.clone()), value_of_a_copy(value.clone())],
-                )),
-                _ => None,
-            };
-            if let Some((kind, elements)) = given
-                && let Some(local) = self
-                    .s
-                    .scope
-                    .iter_mut()
-                    .rev()
-                    .find_map(|frame| frame.iter_mut().rev().find(|local| local.name == name))
-                && let Ty::Named { name, args, .. } = &mut local.ty
-            {
-                if let Some(kind) = kind {
-                    *name = kind;
-                }
-                *args = elements;
-            }
-        }
-        let paused_here = std::mem::replace(&mut self.s.flow.paused_args, outer_paused);
-        let pausing_lambda = args.iter().find(|arg| {
-            matches!(arg, Expr::Closure { .. }) && paused_here.contains(&value_node(arg))
-        });
-        self.s
-            .a_set_that_reads_what_it_writes(&on, entry, &found, span);
-        // **A literal where the receiver says text is wanted** (ADR-293 D21):
-        // `m.insert("a", 1)` on a map of `String` keys wants `$K`, which the
-        // receiver binds and the per-argument check below does not see. A
-        // method's argument is handed over, so the literal is built there.
-        for (at, given) in args.iter().enumerate() {
-            if let Some(want) = expected.get(at) {
-                self.text_literal(want, given, true);
-            }
-        }
-        self.a_sequence_that_cannot_do_this(&on, method, &contract, &found, span);
-        self.counts_in_usize(&key, args);
-        if key.starts_with(PATH_METHODS) {
-            self.s
-                .facts
-                .path_methods
-                .entry(value_node(receiver))
-                .or_insert(false);
-        }
-        // **The source's own name and not the ledger's**, because what
-        // `arguments` records is read back by the emitter off the line as it is
-        // written: a `&` the compiler owes the witness is looked up under
-        // `set`, which is the word on the page.
-        let written = self.parsed.text(method).to_string();
-        let result = self.arguments(&key, &written, &contract, args, &found, &[], span);
-        self.a_lookup_key_lent(&key, args, &found);
-        self.a_view_kept_where_the_receiver_says_text(
-            &key, &contract, args, &found, &expected, span,
-        );
-        // **A plain value where the receiver says `T?`** (Part I 2.3):
-        // `m.insert(1, Kind::B)` on a map of `Kind?` values wants `$V`, which
-        // the receiver binds to a `T?` and `arguments` does not see - the
-        // `Some(…)` was never written, and `rustc` said *mismatched types*
-        // (found moving `sharing`'s classes into Nikaia, #125).
-        for (at, given) in args.iter().enumerate() {
-            let (Some(want), Some(found)) = (expected.get(at), found.get(at)) else {
-                continue;
-            };
-            self.a_map_read_kept(found, want, given, span);
-            if let Some(how) = self.widened_slot(found, want, Some(given), span) {
-                self.s.facts.nullable_args.insert(value_node(given), how);
-                continue;
-            }
-            // **An integer the receiver's type does not hold without loss**
-            // (ADR-285 D32): `v.push(b)` with `b: u64` on a `Vec[i64]` was
-            // passed here and refused by `rustc`. A literal takes the type it
-            // is handed to and is not asked.
-            if !is_literal(given) && an_integer_that_does_not_widen(found, want) {
-                let at = self.span_at(given, *span);
-                self.s.findings.push(Finding {
-                    severity: Severity::Error,
-                    span: at,
-                    code: "NK1102".to_string(),
-                    message: format!(
-                        "`{key}` expects `{}` here, but you're passing `{}`.",
-                        want.text(),
-                        found.text()
-                    ),
-                    notes: Vec::new(),
-                    help: Some(convert(found, want)),
-                    labels: Vec::new(),
-                });
-            }
-        }
-        self.s.a_pattern_of_owned_text(&key, args, &found, span);
-        // The receiver first (ADR-288), then whatever the arguments can still
-        // say (ADR-295 D2) - `or_insert` on a map that bound `$V` already has
-        // its answer, and `bind` does not overwrite one.
-        for (name, ty) in from_arguments(&contract, &found) {
-            bound.entry(name).or_insert(ty);
-        }
-        // A method's own parameters carry bounds exactly as a free function's
-        // do, and one written call is one rule (ADR-278).
-        self.s
-            .a_bound_the_argument_does_not_meet(self.world, &key, &bound, span);
-        self.a_standard_bound_not_met(&key, &bound, span);
-        let result = ty::substitute(&result, &bound);
-        let result = shape_through(&contract, &on, &found, result);
-        let result = self.a_lambda_that_pauses_at_an_entry(
-            &key,
-            receiver,
-            &on,
-            pausing_lambda,
-            result,
-            span,
-        );
-        self.stamped_through(&contract, &found, result)
     }
 
     /// **A lambda that pauses, handed to a `std` entry**
@@ -3311,34 +2571,6 @@ impl<'a> Checker<'a> {
         let callee = key.to_string();
         self.s.a_call_that_may_pause(&callee, true, false, span);
         result
-    }
-
-    /// **`NK2703`: a sequence asked for something it is not**
-    /// ([ADR-293](../../docs/specification/adr/adr-293.md) D17).
-    ///
-    /// `rev` writes its receiver `Seq[$T] ends`, and in a receiver's position
-    /// the word is a demand: `io::lines().rev()` is refused here, in the
-    /// program's words, where it used to be refused by `rustc` in the language
-    /// below's (`the trait bound `Lines: DoubleEndedIterator` is not
-    /// satisfied`, about a file nobody wrote).
-    fn a_sequence_that_cannot_do_this(
-        &mut self,
-        on: &Ty,
-        method: Ident,
-        contract: &FnContract,
-        found: &[Ty],
-        span: &Span,
-    ) {
-        self.s
-            .a_sequence_that_cannot_do_this(self.world, on, method, contract, found, span);
-    }
-
-    /// **A count the language below takes in `usize`**
-    /// ([ADR-293](../../docs/specification/adr/adr-293.md) D20), recorded for
-    /// the emitter by the **entry** the call resolved to - so a method of the
-    /// program's own that happens to be called `take` is not converted.
-    fn counts_in_usize(&mut self, key: &str, args: &[Expr]) {
-        self.s.counts_in_usize(key, args);
     }
 
     /// **A map's read kept where a `T?` of its own is wanted**
@@ -8208,28 +7440,6 @@ impl<'a> Checker<'a> {
         self.s.findings_moved(&span, &at, pushed, &waiting);
     }
 
-    /// **A view kept where the receiver says text of its own**
-    /// ([ADR-282](../../docs/specification/adr/adr-282.md) D19):
-    /// `names.push(line.trim())` on a `Vec[String]`. The signature says `$T`,
-    /// which a view fits; the receiver binds `$T` to `String`, and that is the
-    /// question - the one [`Checker::arguments`] asks of a parameter that says
-    /// `String` itself. A position the tier pass made a view is `ref String`
-    /// here and fits; one it made mixed is handed `value.into_either()`, which
-    /// reads as text of its own.
-    fn a_view_kept_where_the_receiver_says_text(
-        &mut self,
-        key: &str,
-        contract: &FnContract,
-        given: &[Expr],
-        found: &[Ty],
-        expected: &[Ty],
-        span: &Span,
-    ) {
-        self.s.a_view_kept_where_the_receiver_says_text(
-            self.world, key, contract, given, found, expected, span,
-        )
-    }
-
     /// A function field code is put into where the lock column cannot read it
     /// (ADR-230 D1): undecided, never quiet.
     fn a_field_whose_code_is_not_seen(&mut self, owner: &str, field: &str) {
@@ -8304,52 +7514,6 @@ impl<'a> Checker<'a> {
     /// `NK1108` for a condition that is not a `bool` (`tools/check_exprs.nika`).
     fn expect_bool(&mut self, found: &Ty, span: &Span, why: &str) {
         self.s.expect_bool(found, span, why);
-    }
-
-    /// A written call to something that can fail (`NK2605`).
-    ///
-    /// ADR-025 D1 states the rule for the calls **nobody wrote** - a block's
-    /// closing brace, a loop's step - and says it is "exactly as a written
-    /// call would" behave. The written call is the case the rule was
-    /// generalised *from*, and it had no code: a function calling something
-    /// that can fail and declaring nothing lowered in silence, and the ledger
-    /// then published `[fn."ruft"] signature = "() -> String"` with no
-    /// `throws` at all - a committed file that other programs read
-    /// ([ADR-020](../../../../docs/specification/adr/adr-020.md)) saying a
-    /// function cannot fail when its body can. `rustc` was what refused the
-    /// program, about a file the author never wrote, which Part III C.1 calls
-    /// a bug in this compiler.
-    ///
-    /// Reported only where the callee's contract **says** it can fail, which
-    /// is what makes this need no guess: the ledger is the fact, and a callee
-    /// no ledger describes says nothing here (the same silence `NK2502`'s
-    /// method calls keep, C.4). So it never refuses a program that is right,
-    /// and it grows as the ledger does.
-    fn may_fail_here(&mut self, key: &str, contract: &FnContract, span: &Span) {
-        self.nikaia(|state, world, host| state.may_fail_here(world, host, key, contract, span))
-    }
-
-    /// Where a method call stands in ADR-023 D8's propagation, for the emitter
-    /// ([`Checked::fallible_methods`]).
-    ///
-    /// Every method call reaches this, and `fails` says whether the ledger
-    /// describing its callee declares `throws`. A call whose receiver or whose
-    /// method could not be resolved arrives with `false`, which is not "it
-    /// cannot fail" but "there is no answer" - and it lands in the set that
-    /// *removes* the pair, so an unresolved call leaves the statement's name
-    /// alone rather than speaking for it.
-    /// [`Checked::method_options`]: the callee's options, in the declaration's
-    /// order, for the emitter to make positional.
-    ///
-    /// Recorded from the **contract** and not from the call, so a call that
-    /// leaves an option out still gets its default — which is the half the
-    /// emitter could not work out on its own either.
-    fn method_options(&mut self, method: Ident, contract: &FnContract, span: &Span) {
-        self.s.method_options(self.world, method, contract, span);
-    }
-
-    fn method_propagates(&mut self, receiver: &Expr, fails: bool, _span: &Span) {
-        self.s.method_propagates(value_node(receiver), fails);
     }
 
     /// **What a task takes with it** (Part I 8.3, `NK2101`).
@@ -8493,42 +7657,6 @@ impl<'a> Checker<'a> {
     fn branches_meet_on_nothing(&mut self, block: &Block, span: &Span) {
         self.s.branches_meet_on_nothing(self.world, block);
         let _ = span;
-    }
-
-    /// The same, for the `.await` ([`Checked::pausing_methods`]).
-    ///
-    /// Separate from `method_propagates` because the two answers are separate:
-    /// a call can fail without pausing and pause without failing, and the two
-    /// sets are narrowed independently. Both are recorded at every method call,
-    /// including the ones nothing could be established about - `false` there is
-    /// "there is no answer", and it lands in the set that *removes* the pair.
-    fn method_pauses(&mut self, receiver: &Expr, pauses: bool, _span: &Span) {
-        self.s.method_pauses(value_node(receiver), pauses);
-    }
-
-    /// Whether this method call is an **eager** walk of a sequence whose step
-    /// can fail ([ADR-025](../../docs/specification/adr/adr-025.md) D1).
-    ///
-    /// Asked twice — once for the `?` the emitter writes and once for the
-    /// refusal — so it is one sentence rather than two that have to agree.
-    fn walks_a_failing_sequence(&self, on: &Ty, contract: &FnContract) -> bool {
-        self.s.walks_a_failing_sequence(on, contract)
-    }
-
-    /// `NK2701` for a **walk** rather than for a loop
-    /// ([ADR-025](../../docs/specification/adr/adr-025.md) D1).
-    ///
-    /// The same rule and the same code as a `for` over the same sequence: a
-    /// step that can fail fails the function around it, and nothing marks the
-    /// call. The message says *a step of what it walks* rather than *a turn of
-    /// this loop*, because that is what a reader is looking at.
-    ///
-    /// **It is the half whose absence was a wrong answer.** `io::lines().count()`
-    /// used to compile and count the failures as lines, because the entry said
-    /// `-> i64` and nothing asked what a step of the receiver does.
-    fn a_walk_of_a_failing_sequence(&mut self, method: Ident, span: &Span) {
-        self.s
-            .a_walk_of_a_failing_sequence(self.world, method, span);
     }
 
     /// A loop over something whose step **pauses**
@@ -8815,12 +7943,6 @@ impl<'a> Checker<'a> {
         self.s.build_time_value(&host, value, bound, span)
     }
 
-    /// Whether this program writes `impl Error for` the type, in this file or
-    /// another of the package.
-    fn implements_error(&self, ty: &str) -> bool {
-        check_items::implements_error(&self.world.here, &self.world.beside, ty)
-    }
-
     /// **A literal takes the use's type, whichever literal it is**: an array
     /// where an `Array[T, N]` is wanted (ADR-152 D4), and text of its own where
     /// a `String` is ([ADR-282](../../docs/specification/adr/adr-282.md) D4).
@@ -8987,24 +8109,6 @@ impl<'a> Checker<'a> {
             [name, held] => Some((name.clone(), held.clone())),
             _ => None,
         }
-    }
-
-    /// **`NK1171`: a member a known type or module does not have**
-    /// ([ADR-286](../../docs/specification/adr/adr-286.md) D36): what is written
-    /// down is what can be called. `"x".as_str()` and `String::from("x")` are
-    /// Rust's, and passed here untyped to be answered by the language below.
-    /// Known is a type or module the program, `std`'s ledger or a crate's
-    /// description writes down; a type parameter, a head only a `use` names
-    /// and a foreign name are not claimed.
-    fn a_member_nothing_writes_down(
-        &mut self,
-        head: &str,
-        member: &str,
-        method: bool,
-        span: &Span,
-    ) {
-        self.s
-            .a_member_nothing_writes_down(self.world, head, member, method, span);
     }
 
     /// **`NK1171`: `X::y`, where `X` is a type this program declares and `y` is
@@ -9293,44 +8397,6 @@ impl<'a> Checker<'a> {
         self.s.bind_local(local);
     }
 
-    /// Walk a call's arguments, telling a lambda what it will be handed.
-    ///
-    /// The types come from the callee's signature, so this can only run once
-    /// the callee is known - which is why the resolution moved ahead of the
-    /// walk (ADR-288). An argument whose parameter says nothing is walked
-    /// exactly as it was before.
-    ///
-    /// `declared_here` says whether the signature came from **this program's**
-    /// ledger rather than from `std`'s. It decides one thing and
-    /// [ADR-277](../../docs/specification/adr/adr-277.md) D12 is why: a `std`
-    /// entry's lambda type is a hand-written description of a **Rust**
-    /// signature, which takes a plain closure whatever its `sync` column says,
-    /// so the future shape must not be written for one.
-    fn arguments_given(
-        &mut self,
-        args: &[Expr],
-        expected: &[Ty],
-        declared_here: bool,
-        // The callee's contract, where one was resolved. Read for one question:
-        // whether it **keeps** the parameter a lambda is landing in
-        // ([ADR-277](../../docs/specification/adr/adr-277.md) D11).
-        callee: Option<&FnContract>,
-        span: &Span,
-    ) -> Vec<Ty> {
-        self.nikaia(|state, world, host| {
-            check_core_args::check_core_arguments_given(
-                state,
-                world,
-                host,
-                args,
-                expected,
-                declared_here,
-                callee,
-                span,
-            )
-        })
-    }
-
     /// A lambda whose parameters have types, because the callee said so.
     ///
     /// The implicit form is the one that matters and the one that had no way
@@ -9378,41 +8444,6 @@ impl<'a> Checker<'a> {
     fn a_fatal_error_passes(&mut self, guarded: &Guarded, handler: &Block, span: &Span) {
         self.s
             .a_fatal_error_passes(self.world, guarded, handler, span);
-    }
-
-    /// `NK2205`: a `set` whose argument reads the same container with `get`
-    /// ([ADR-281](../../../docs/specification/adr/adr-281.md) D10,
-    /// [ADR-281](../../../docs/specification/adr/adr-281.md)).
-    ///
-    /// `kasse.set(kasse.get() + 100)` takes the lock **twice** — once to read
-    /// and once to store — and between the two the value can change, so what is
-    /// stored is computed from a state that may no longer hold. Making a new
-    /// value out of the old one is what the third door is for, and it takes the
-    /// lock once.
-    ///
-    /// **Syntactic, on purpose** (D10's own line): it catches the `get`
-    /// written *inside* the `set`, which is the shape people write, and not the
-    /// same pair spread over two lines. The second is a question about what
-    /// happened between two statements, and nothing here answers that — so
-    /// widening this rule would mean guessing, and the narrow one is right
-    /// about what it does see.
-    /// **The stamp passes through a call the callee cannot put it back with**
-    /// ([ADR-281](../../docs/specification/adr/adr-281.md) D23).
-    ///
-    /// A call whose argument is stamped is allowed where the callee's `touches`
-    /// column names no lock — it cannot write the value into one — and **its
-    /// result is stamped**. That is what makes `kasse.set(bumped(stand))` the
-    /// same answer as `kasse.set(stand + 1)` without an analysis following the
-    /// value through `bumped`.
-    ///
-    /// **A callee that touches a lock, or that nothing describes, does not
-    /// pass one on.** An absent `touches` reads as *touches everything*
-    /// ([ADR-292](../../docs/specification/adr/adr-292.md)), so a call nobody
-    /// wrote down hands back a plain value rather than a stamped one: the
-    /// wrong answer that way costs a refusal that is not raised, and the wrong
-    /// answer the other way refuses a program (C.4).
-    fn stamped_through(&self, contract: &FnContract, given: &[Ty], result: Ty) -> Ty {
-        self.s.stamped_through(contract, given, result)
     }
 
     /// **`NK2207`: an `update` block that assigns to its `mut v` without
@@ -9767,33 +8798,6 @@ impl<'a> Checker<'a> {
     }
 }
 
-/// What one turn of a `for` binds, when the collection's element type is
-/// written down.
-///
-/// Only a list with one element type and one binding: `for (k, v) in map`
-/// takes apart a pair whose shape Stage 0 has no signature for, and a view of
-/// a collection yields views whose spelling the language below chooses.
-/// Whether a method takes its receiver **by value**, which for a produced
-/// sequence is what consumes it ([ADR-105](../../docs/specification/adr/adr-105.md) D2).
-///
-/// Read off the signature rather than off a list of names: every `Seq` entry
-/// writes `(Seq[$T], …)` and a container's writes `(&Vec[$T], …)`, so the file
-/// that describes the method is what says whether the walk keeps it.
-/// **What a sequence entry's result is as a whole**
-/// ([ADR-293](../../docs/specification/adr/adr-293.md) D17): a word the entry
-/// writes on its result, where every sequence handed in has it too.
-///
-/// A `map` walked from the back is its input walked from the back, so `map`
-/// writes `ends sized` and a `filter` over `io::lines()` still cannot be. Where
-/// the entry says `ends_by_length`, walking the result from the back also needs
-/// every input's length - `take`, `zip`, `skip`, `step_by`.
-///
-/// **A result never replays** unless the entry says so: a range replays, and a
-/// `rev` of one is an ordinary sequence, walked once.
-fn shape_through(contract: &FnContract, receiver: &Ty, found: &[Ty], result: Ty) -> Ty {
-    nikaia_std::tools::check_calls::shape_through(contract, receiver, found, result)
-}
-
 /// **A lazy walk of a sequence whose step pauses**
 /// ([ADR-233](../../docs/specification/adr/adr-233.md) D1,
 /// [ADR-234](../../docs/specification/adr/adr-234.md) D1): one this compiler
@@ -9814,10 +8818,6 @@ fn a_paused_chain(key: &str, on: &Ty) -> bool {
 /// whatever walks it, and the `?` goes there.
 fn a_pausing_sequence(result: Ty, on: &Ty) -> Ty {
     nikaia_std::tools::check_calls::a_pausing_sequence(result, on)
-}
-
-fn walks_by_value(contract: &FnContract) -> bool {
-    nikaia_std::tools::check_calls::walks_by_value(contract)
 }
 
 /// **Whether this file declares a type by this name**
@@ -9975,11 +8975,6 @@ fn locked_content_of(ty: &Ty) -> Option<Ty> {
     nikaia_std::tools::check_types::locked_content_of(ty)
 }
 
-/// Part III C.2: every diagnostic names a concrete way out.
-fn convert(found: &Ty, want: &Ty) -> String {
-    nikaia_std::tools::check_types::way_out_of_a_mismatch(found, want)
-}
-
 /// **Whether a `'…'` as written is one ASCII character**, which is what makes
 /// it a byte as well as a scalar (Part I 2.6; `tools/check_texts.nika`).
 pub fn a_byte(written: &str) -> bool {
@@ -10092,41 +9087,6 @@ fn articles(text: &str) -> String {
     nikaia_std::tools::check_words::articles(text)
 }
 
-/// What the receiver's actual type binds this signature's variables to.
-///
-/// The receiver is the signature's first parameter where there is one, so this
-/// is one `bind` against one pattern - the narrowness is ADR-288's decision
-/// rather than a gap. A signature with no variables produces an empty map and
-/// every substitution below is the identity.
-fn bindings(contract: &FnContract, receiver: &Ty) -> BTreeMap<String, Ty> {
-    nikaia_std::tools::check_calls::receiver_bindings(contract, receiver)
-}
-
-/// What the **arguments** bind this signature's variables to.
-///
-/// ADR-288 bound from the receiver only, and said so on purpose: binding from
-/// arguments is where a signature language grows into a unification algorithm.
-/// [ADR-295](../../../docs/specification/adr/adr-295.md) D2 takes that step and
-/// keeps it one step. This is the same `ty::bind` against one pattern per
-/// argument - a structural walk, no queue, no fixpoint, no occurs check -
-/// because a type parameter is **written** rather than inferred, so there is
-/// never a variable on the right-hand side to solve for.
-///
-/// A mismatch binds nothing, exactly as the receiver's does: the question is
-/// what a caller can *tell* the signature, and `substitute` turns what it could
-/// not tell into `?`.
-fn from_arguments(contract: &FnContract, found: &[Ty]) -> BTreeMap<String, Ty> {
-    nikaia_std::tools::check_calls::argument_bindings(contract, found)
-}
-
-/// The types a callee's parameters expect, as a call site sees them.
-///
-/// A method's receiver is the first parameter, so the arguments a *call* writes
-/// are the ones after it - `Signature::arguments` already draws that line.
-fn expected_arguments(contract: &FnContract) -> Vec<Ty> {
-    nikaia_std::tools::check_calls::expected_arguments(contract)
-}
-
 /// Whether handing a value of this type out takes nothing away.
 ///
 /// Part I 2.2's numbers, `bool` and `char`, and any **view**: all of them are
@@ -10163,13 +9123,6 @@ fn is_a_collection(ty: &Ty) -> bool {
 /// and this must not quietly paper over.
 fn is_text(ty: &Ty) -> bool {
     nikaia_std::tools::check_types::is_text_type(ty)
-}
-
-/// **Whether an entry is another package's `sync` that was never promised**
-/// ([ADR-288](../../docs/specification/adr/adr-288.md) D28): the one reading of
-/// *may pause* that is not a pause.
-fn unpromised(contract: &FnContract) -> bool {
-    contract.sync_claim.is_unpromised()
 }
 
 /// The whole-number types an operation may be written unchecked in

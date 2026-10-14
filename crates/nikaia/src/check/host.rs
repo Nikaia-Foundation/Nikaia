@@ -343,6 +343,25 @@ impl CheckHost for Host<'_> {
         unreachable!("`a_scope_that_pauses` is asked of the core's host")
     }
 
+    #[allow(clippy::too_many_arguments)]
+    fn a_lambda_that_pauses_at_an_entry(
+        &self,
+        _state: &mut CheckState,
+        _key: &str,
+        _receiver: &Expr,
+        _on: &Ty,
+        _args: &[Expr],
+        _lambda_at: i64,
+        _result: Ty,
+        _span: &Span,
+    ) -> Ty {
+        unreachable!("`a_lambda_that_pauses_at_an_entry` is asked of the core's host")
+    }
+
+    fn a_task_of_a_scope(&self, _state: &mut CheckState, _args: &[Expr]) {
+        unreachable!("`a_task_of_a_scope` is asked of the core's host")
+    }
+
     fn expr(&self, _state: &mut CheckState, _node: &Expr, _span: &Span) -> Ty {
         unreachable!("the hub `expr` is asked of the core's host, not of the services")
     }
