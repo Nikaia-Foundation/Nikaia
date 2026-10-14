@@ -731,6 +731,7 @@ impl LedgerOps for Ledger {
                 for source in sources {
                     if let Some(contract) = ledger.functions.get_mut(&source.key) {
                         contract.borrows = source.borrows;
+                        contract.returns = source.returns;
                     }
                 }
             }

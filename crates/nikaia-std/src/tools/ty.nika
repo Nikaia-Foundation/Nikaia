@@ -1085,6 +1085,10 @@ pub struct FnContract {
     pub provenance: Provenance?,
     pub signature: Signature?,
     pub borrows: Vec[String],
+    /// **Each view's own sources, by its path** (ADR-353 D1, D5):
+    /// `left: ref(a), right: ref(b)`. Empty where every view the result holds
+    /// may point into all of `borrows`.
+    pub returns: String,
     pub keeps: Vec[String],
     pub mutates: bool,
     pub touches_a_lock: Lock,
@@ -1126,6 +1130,7 @@ impl FnContract {
             provenance: null,
             signature: null,
             borrows: [],
+            returns: "".clone(),
             keeps: [],
             mutates: false,
             touches_a_lock: Lock::No,

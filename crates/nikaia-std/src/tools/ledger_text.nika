@@ -187,7 +187,9 @@ fn function_text(name: ref String, contract: ref FnContract) -> String {
         mutates_said = said.mutates_said
         signature_line = f"signature = \"{ledger_escaped(said.text)}\"\n"
     }
-    if contract.borrows.len() > 0 && !borrows_said {
+    if contract.returns.len() > 0 {
+        out.push_str(f"returns = \"{contract.returns}\"\n")
+    } else if contract.borrows.len() > 0 && !borrows_said {
         out.push_str(f"returns = \"ref({contract.borrows.join(" | ")})\"\n")
     }
     // Beside `returns`, the other thing a caller reads off a signature about

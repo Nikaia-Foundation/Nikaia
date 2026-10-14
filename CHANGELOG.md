@@ -8,6 +8,20 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.949] — 2026-10-14
+
+**a result's views keep their own sources by path; the ledger writes them per path (ADR-353 D1, D5, part of #614)**
+
+- **Sources per view** (ADR-353 D1): the walk keeps `left:a` beside a plain
+  `a`, so a view taken out of `pair(x, y).left` points into `x` alone. A path
+  is one field long (a deeper view folds into its field's), which keeps the
+  entries finite and the fixpoint short.
+- **The ledger writes them** (D5): `returns = "left: ref(a), right: ref(b)"`,
+  read back at callers in other files. The lowering still ties a struct's
+  views to one lifetime (step 3 of #614's list).
+- **Text made in place is lent to a pattern**: `s.strip_prefix(f"id{n}")`
+  lowers to `strip_prefix(&format!(..))`, which rustc refused before (E0277).
+
 ## [0.0.948] — 2026-10-14
 
 **check: operators, `??`, the lambda and `spawn` in Nikaia (U-c10, #125, #558)**
@@ -76,6 +90,12 @@ has no heading here; `CLAUDE.md` draws the line.
 
 * `[]`, `[x]`, `[first, .., last]`, `[h, ..rest]` match a `Vec[T]`, an `Array[T]` or a view; `..rest` is a view `ref Array[T]`; one `..` per pattern (`NK1258`); a list `match` needs `else`.
 * `(a, ..)` and `E::V(a, ..)` match the remaining values; `NK1255` is only `..` on a variant without values.
+
+## [0.0.936] — 2026-10-14
+
+**A result may point into several parameters (ADR-353 D1, D2, #614)**
+
+`NK2302` no longer refuses `longest` or `pair`: the ledger lists every parameter the result reaches, and the lowering ties them and the result to one buffer group.
 
 ## [0.0.935] — 2026-10-14
 

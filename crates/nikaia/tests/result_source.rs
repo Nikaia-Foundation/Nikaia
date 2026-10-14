@@ -1052,6 +1052,26 @@ fn package_compiled(purpose: &str, dir: &std::path::Path, program: &nikaia::modu
     );
 }
 
+/// ADR-353 D1, D5 across files: a caller reads the callee's per-view
+/// `returns` off the ledger, and a view out of one field keeps that field's
+/// source alone.
+#[test]
+fn per_view_sources_are_read_across_files() {
+    let helper = "pub struct Pair { pub left: ref String, pub right: ref String }\n\
+        pub fn pair(a: ref String, b: ref String) -> Pair {\n    return Pair { left: a, right: b }\n}\n";
+    let main = "fn swapped(x: ref String, y: ref String) -> Pair {\n    let p = pair(x, y)\n    return Pair { left: p.right, right: p.left }\n}\n\
+        fn main() {\n    let x = \"hello\".clone()\n    let y = \"hi\".clone()\n    let t = swapped(x, y)\n    println(f\"{t.left} {t.right}\")\n}\n";
+    let (dir, program) = package("per-view", &[("helper.nika", helper), ("main.nika", main)]);
+    let found = package_findings(&program);
+    assert!(found.is_empty(), "{found:#?}");
+    let pair = program.contracts.functions.get("pair").expect("pair");
+    assert_eq!(pair.returns, "left: ref(a), right: ref(b)");
+    let swapped = program.contracts.functions.get("swapped").expect("swapped");
+    assert_eq!(swapped.returns, "left: ref(y), right: ref(x)");
+    package_compiled("per_view_sources_are_read_across_files", &dir, &program);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 const HELPER: &str = "pub struct Txt { pub n: ref String }\n\
      pub fn mk(x: ref String) -> Txt {\n    return Txt { n: x }\n}\n";
 

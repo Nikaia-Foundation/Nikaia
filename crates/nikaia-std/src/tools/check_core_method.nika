@@ -375,6 +375,11 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
                     }
                 }
             },
+            // **Text made in place is lent to the pattern**: the language
+            // below matches a view, not a `String` of its own.
+            Expr::LitInterpolated { .. } => {
+                state.facts.lent_args.insert(id_of(args[pattern_at]) as i64)
+            },
             else => {}
         }
     }

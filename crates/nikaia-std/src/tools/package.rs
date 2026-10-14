@@ -15780,6 +15780,7 @@ fn check_core_method_called<H: CheckHost>(state: &mut CheckState, world: &CheckW
                     if literal != "" { state.facts.char_patterns.insert(id_of(nikaia_std::index::get(&args, nikaia_std::index::at(pattern_at))) as i64, literal); }
                 }
             },
+            Expr::LitInterpolated { .. } => { state.facts.lent_args.insert(id_of(nikaia_std::index::get(&args, nikaia_std::index::at(pattern_at))) as i64); },
             _ => { },
         }
     }
@@ -38720,6 +38721,7 @@ pub fn read(written: &str) -> Result<Ledger, nikaia_std::error::Thrown<Refused>>
             LedgerLine::Table { kind, name } => {
                 #[allow(unused_variables)] let kind = *kind; #[allow(unused_variables)] let name = *name;
                 if section == Section::Function {
+                    ledger_borrows_in_order(&mut function);
                     ledger.functions.insert(current.to_owned(), function);
                     function = FnContract::empty();
                 }
@@ -38756,6 +38758,7 @@ pub fn read(written: &str) -> Result<Ledger, nikaia_std::error::Thrown<Refused>>
             },
             LedgerLine::Sources => {
                 if section == Section::Function {
+                    ledger_borrows_in_order(&mut function);
                     ledger.functions.insert(current.to_owned(), function);
                     function = FnContract::empty();
                 }
@@ -38777,7 +38780,10 @@ pub fn read(written: &str) -> Result<Ledger, nikaia_std::error::Thrown<Refused>>
             LedgerLine::Nothing => { },
         }
     }
-    if section == Section::Function { ledger.functions.insert(current.to_owned(), function); }
+    if section == Section::Function {
+        ledger_borrows_in_order(&mut function);
+        ledger.functions.insert(current.to_owned(), function);
+    }
     if section == Section::Kind { ledger.types.insert(current.to_owned(), a_type); }
     for name in traits.iter() {
         let prefix = format!("{}::", name);
@@ -38821,7 +38827,13 @@ fn implemented(name: &str, n: i64) -> Result<(String, String), nikaia_std::error
 }
 
 fn function_key(entry: &mut FnContract, name: &str, key: &str, value: &str, n: i64) -> Result<(), nikaia_std::error::Thrown<Refused>> {
-    if key == "pub" { entry.public = value == "true"; } else if key == "sync" { entry.sync_claim = sync_of(value, n)?; } else if key == "throws" { entry.fails_with = throws_of(value, n)?; } else if key == "returns" { entry.borrows = borrows_of(&unquoted(value, n)?, n)?; } else if key == "signature" {
+    if key == "pub" { entry.public = value == "true"; } else if key == "sync" { entry.sync_claim = sync_of(value, n)?; } else if key == "throws" { entry.fails_with = throws_of(value, n)?; } else if key == "returns" {
+        let written = unquoted(value, n)?;
+        if written.contains(':') {
+            entry.borrows = path_borrows_of(&written, n)?;
+            entry.returns = written.to_owned();
+        } else { entry.borrows = borrows_of(&written, n)?; }
+    } else if key == "signature" {
         let spelled = spelled_signature(&unquoted(value, n)?, name)?;
         if spelled.mutates { entry.mutates = true; }
         if !spelled.borrows.is_empty() { entry.borrows = spelled.borrows.to_owned(); }
@@ -38920,6 +38932,29 @@ fn throws_of(value: &str, n: i64) -> Result<Vec<String>, nikaia_std::error::Thro
         return Ok(vec![unnamed]);
     }
     Ok(entries(value, n)?)
+}
+
+fn ledger_borrows_in_order(entry: &mut FnContract) {
+    if entry.returns.is_empty() { return; }
+    let signature = match match entry.signature.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return };
+    let mut ordered: Vec<String> = vec![];
+    for param in signature.params.iter() { if entry.borrows.contains(&param.0) { ordered.push(param.0.to_owned()); } }
+    if (ordered.len() as i64) == entry.borrows.len() as i64 { entry.borrows = ordered; }
+}
+
+fn path_borrows_of(value: &str, n: i64) -> Result<Vec<String>, nikaia_std::error::Thrown<Refused>> {
+    let mut names: Vec<String> = vec![];
+    for part in value.split("),") {
+        let pieces: Vec<&str> = part.split(':').collect::<Vec<_>>();
+        if pieces.len() != 2 { return Err(nikaia_std::error::throwing(Refused::Because(format!("line {}: expected `path: ref(…)`, found `{}`", n, value)), &"path_borrows_of")); }
+        let mut written = (*nikaia_std::index::get(&pieces, 1)).trim().to_owned();
+        if !written.ends_with(')') { written = format!("{})", written); }
+        for name in borrows_of(&written, n)? { if !nikaia_std::list::contains(&names, &name) { names.push(name.to_owned()); } }
+    }
+    Ok(names)
 }
 
 fn borrows_of(value: &str, n: i64) -> Result<Vec<String>, nikaia_std::error::Thrown<Refused>> {
@@ -40125,7 +40160,7 @@ fn function_text(name: &str, contract: &FnContract) -> String {
         mutates_said = said.mutates_said;
         signature_line = format!("signature = \"{}\"\n", ledger_escaped(&said.text));
     }
-    if !contract.borrows.is_empty() && !borrows_said { out.push_str(&format!("returns = \"ref({})\"\n", contract.borrows.join(" | "))); }
+    if !contract.returns.is_empty() { out.push_str(&format!("returns = \"{}\"\n", contract.returns)); } else if !contract.borrows.is_empty() && !borrows_said { out.push_str(&format!("returns = \"ref({})\"\n", contract.borrows.join(" | "))); }
     if !contract.keeps.is_empty() { out.push_str(&format!("keeps = [{}]\n", quoted_all(&contract.keeps))); }
     if contract.mutates && !mutates_said { out.push_str("mutates = true\n"); }
     match contract.touches_a_lock {
@@ -54731,6 +54766,7 @@ pub struct FnContract {
     pub provenance: Option<Provenance>,
     pub signature: Option<Signature>,
     pub borrows: Vec<String>,
+    pub returns: String,
     pub keeps: Vec<String>,
     pub mutates: bool,
     pub touches_a_lock: Lock,
@@ -54746,7 +54782,7 @@ pub struct FnContract {
 }
 
 impl FnContract {
-    pub fn empty() -> FnContract { FnContract { public: false, sync_claim: Sync::No, fails_with: vec![], touches: vec![], touches_known: false, provenance: None, signature: None, borrows: vec![], keeps: vec![], mutates: false, touches_a_lock: Lock::No, threads: Threads::Undecided, views: vec![], sharing: vec![], maps: vec![], ends_by_length: false, pieces: false, requires: vec![], ensures: vec![], from: vec![] } }
+    pub fn empty() -> FnContract { FnContract { public: false, sync_claim: Sync::No, fails_with: vec![], touches: vec![], touches_known: false, provenance: None, signature: None, borrows: vec![], returns: "".to_owned(), keeps: vec![], mutates: false, touches_a_lock: Lock::No, threads: Threads::Undecided, views: vec![], sharing: vec![], maps: vec![], ends_by_length: false, pieces: false, requires: vec![], ensures: vec![], from: vec![] } }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -56555,6 +56591,61 @@ fn rsrc_none() -> collections::BTreeSet<String> {
 
 fn rsrc_join(into: &mut collections::BTreeSet<String>, more: &collections::BTreeSet<String>) { for name in more.iter() { into.insert(name.to_owned()); } }
 
+fn rsrc_param_of(entry: &str) -> String {
+    let parts = entry.split(':').collect::<Vec<_>>();
+    (*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_owned()
+}
+
+fn rsrc_path_of(entry: &str) -> String {
+    let parts = entry.split(':').collect::<Vec<_>>();
+    if parts.len() < 2 { return String::from(""); }
+    (*nikaia_std::index::get(&parts, 0)).to_owned()
+}
+
+fn rsrc_under(path: &str, entries: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {
+    let mut out = rsrc_none();
+    for entry in entries.iter() { if path.is_empty() { out.insert(entry.to_owned()); } else { out.insert(format!("{}:{}", path, rsrc_param_of(entry))); } }
+    out
+}
+
+fn rsrc_out_of(name: &str, entries: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {
+    let mut out = rsrc_none();
+    for entry in entries.iter() {
+        let path = rsrc_path_of(entry);
+        if path.is_empty() { out.insert(entry.to_owned()); } else if path == name { out.insert(rsrc_param_of(entry)); } else if !path.starts_with(&format!("{}.", name)) { out.insert(rsrc_loosened(&rsrc_param_of(entry))); } else if path.starts_with(&format!("{}.", name)) {
+            let rest = nikaia_std::index::get(&path, nikaia_std::index::at(name.len() as i64 + 1..)).to_owned();
+            out.insert(format!("{}:{}", rest, rsrc_param_of(entry)));
+        }
+    }
+    out
+}
+
+fn rsrc_plain(entries: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {
+    let mut out = rsrc_none();
+    for entry in entries.iter() { out.insert(rsrc_bare(&rsrc_param_of(entry))); }
+    out
+}
+
+fn rsrc_bare(param: &str) -> String {
+    if param.starts_with('~') { return nikaia_std::index::get(&param, 1..).to_owned(); }
+    param.to_owned()
+}
+
+fn rsrc_loosened(param: &str) -> String {
+    if param.starts_with('~') { return param.to_owned(); }
+    format!("~{}", param)
+}
+
+fn rsrc_all_loose(entries: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {
+    let mut out = rsrc_none();
+    for entry in entries.iter() {
+        let path = rsrc_path_of(entry);
+        let param = rsrc_loosened(&rsrc_param_of(entry));
+        if path.is_empty() { out.insert(param); } else { out.insert(format!("{}:{}", path, param)); }
+    }
+    out
+}
+
 fn rsrc_flow(at: &Span) -> ResultSrcFlow {
     let env: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
     ResultSrcFlow { env, ways: vec![], at: Span { start: at.start, end: at.end }, depth: 0, inner: rsrc_none(), shadow: rsrc_none(), annotated: collections::BTreeMap::new() }
@@ -56744,10 +56835,10 @@ fn rsrc_maybe(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::
 fn rsrc_field(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, base: &Expr, name: &str, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
     let inner = rsrc_eval(unit, asked, here, known, own_buffer, base, flow);
     let hidden = rsrc_type(unit, asked, here, &flow, base);
-    if hidden.is_none() && rsrc_root_name(asked, base).is_some() && !is_self(asked, base) { return inner; }
-    let declared = match field_type(unit, asked, here, base, name) { Some(__nikaia_value) => __nikaia_value, None => return inner };
+    if hidden.is_none() && rsrc_root_name(asked, base).is_some() && !is_self(asked, base) { return rsrc_out_of(name, &inner); }
+    let declared = match field_type(unit, asked, here, base, name) { Some(__nikaia_value) => __nikaia_value, None => return rsrc_out_of(name, &inner) };
     if rsrc_scalar(asked, &declared) { return rsrc_none(); }
-    inner
+    rsrc_out_of(name, &inner)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -56762,7 +56853,7 @@ fn rsrc_fields(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections:
     for field in fields.iter() {
         let mut more = rsrc_none();
         if field.value.is_none() { more = rsrc_of_name(&flow, asked.names.resolve(field.name)); } else { more = rsrc_maybe(unit, asked, here, known, own_buffer, (field.value).as_ref(), flow); }
-        rsrc_join(&mut out, &more);
+        rsrc_join(&mut out, &rsrc_under(asked.names.resolve(field.name), &more));
     }
     out
 }
@@ -57061,11 +57152,14 @@ fn rsrc_callee(asked: &Asked<'_>, known: &collections::BTreeMap<String, ResultSr
     }, || ResultSrcKnown { declared: false, params: vec![], reach: rsrc_none() });
     if found.declared {
         let mut out = rsrc_none();
-        for borrowed in found.reach.iter() {
+        for entry in found.reach.iter() {
+            let written = rsrc_param_of(entry);
+            let borrowed = rsrc_bare(&written);
             let mut at: i64 = -1;
-            for i in 0..found.params.len() as i64 { if at < 0 && *nikaia_std::index::get(&found.params, nikaia_std::index::at(i)) == *borrowed { at = i; } }
+            for i in 0..found.params.len() as i64 { if at < 0 && *nikaia_std::index::get(&found.params, nikaia_std::index::at(i)) == borrowed { at = i; } }
             if at < 0 || at >= positional.len() as i64 { return everything.to_owned(); }
-            rsrc_join(&mut out, nikaia_std::index::get(&positional, nikaia_std::index::at(at)));
+            let mapped = rsrc_under(&rsrc_path_of(entry), nikaia_std::index::get(&positional, nikaia_std::index::at(at)));
+            if written.starts_with('~') { rsrc_join(&mut out, &rsrc_all_loose(&mapped)); } else { rsrc_join(&mut out, &mapped); }
         }
         return out;
     }
@@ -57092,11 +57186,31 @@ fn rsrc_callee(asked: &Asked<'_>, known: &collections::BTreeMap<String, ResultSr
         return everything.to_owned();
     }
     let mut out = rsrc_none();
-    for borrowed in contract.borrows.iter() {
+    for (path, borrowed) in rsrc_written_paths(&contract) {
         let mut at: i64 = -1;
-        for i in 0..signature.params.len() as i64 { if at < 0 && nikaia_std::index::get(&signature.params, nikaia_std::index::at(i)).0 == *borrowed { at = i; } }
+        for i in 0..signature.params.len() as i64 { if at < 0 && nikaia_std::index::get(&signature.params, nikaia_std::index::at(i)).0 == borrowed { at = i; } }
         if at < 0 || at >= positional.len() as i64 { return everything.to_owned(); }
-        rsrc_join(&mut out, nikaia_std::index::get(&positional, nikaia_std::index::at(at)));
+        rsrc_join(&mut out, &rsrc_under(&path, nikaia_std::index::get(&positional, nikaia_std::index::at(at))));
+    }
+    out
+}
+
+fn rsrc_written_paths(contract: &FnContract) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = vec![];
+    if contract.returns.is_empty() {
+        for borrowed in contract.borrows.iter() { out.push(("".to_owned(), borrowed.to_owned())); }
+        return out;
+    }
+    for part in contract.returns.split("),") {
+        let pieces: Vec<&str> = part.split(':').collect::<Vec<_>>();
+        if pieces.len() != 2 { continue; }
+        let path = (*nikaia_std::index::get(&pieces, 0)).trim().to_owned();
+        let inside = (*nikaia_std::index::get(&pieces, 1)).trim();
+        let names = nikaia_std::index::or(inside.strip_prefix("ref("), || inside.into()).to_owned();
+        for name in names.split('|') {
+            let bare = nikaia_std::index::or(name.trim().strip_suffix(')'), || name.trim().into()).to_owned();
+            if !bare.is_empty() { out.push((path.to_owned(), bare)); }
+        }
     }
     out
 }
@@ -57265,7 +57379,9 @@ fn rsrc_function(unit: &Unit, asked: &Asked<'_>, subject: Option<&Type>, trait_n
             known.insert(key.to_owned(), ResultSrcKnown { declared: true, params, reach: reach.to_owned() });
             if report {
                 let of = of_what((owner).as_deref(), &function);
-                rsrc_report(asked, &of, &sources, &declared_views, &flow.ways, &reach, (receiver).as_ref(), trait_name, at, out);
+                let mut plain_ways: Vec<ResultSrcWay> = vec![];
+                for way in flow.ways.iter() { plain_ways.push(ResultSrcWay { span: Span { start: way.span.start, end: way.span.end }, reach: rsrc_plain(&way.reach) }); }
+                rsrc_report(asked, &of, &sources, &declared_views, &plain_ways, &rsrc_plain(&reach), (receiver).as_ref(), trait_name, at, out);
             }
             return changed;
         },
@@ -57346,6 +57462,7 @@ fn rsrc_function_types(unit: &Unit, asked: &Asked<'_>, args: &[FnArg], ret_type:
 pub struct ResultSource {
     pub key: String,
     pub borrows: Vec<String>,
+    pub returns: String,
 }
 
 pub fn result_sources(asked: &Asked<'_>, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool) -> Vec<ResultSource> {
@@ -57356,11 +57473,32 @@ pub fn result_sources(asked: &Asked<'_>, items: &[Spanned<Item>], own_buffer: &i
     let mut out: Vec<ResultSource> = vec![];
     for (key, found) in known.iter() {
         if !found.declared { continue; }
+        let plain = rsrc_plain(&found.reach);
         let mut borrows: Vec<String> = vec![];
-        for param in found.params.iter() { if found.reach.contains(param) { borrows.push(param.to_owned()); } }
-        out.push(ResultSource { key: key.to_owned(), borrows });
+        for param in found.params.iter() { if plain.contains(param) { borrows.push(param.to_owned()); } }
+        out.push(ResultSource { key: key.to_owned(), borrows, returns: rsrc_returns_text(&found.params, &found.reach) });
     }
     out
+}
+
+fn rsrc_returns_text(params: &[String], reach: &collections::BTreeSet<String>) -> String {
+    let mut whole: collections::BTreeSet<String> = rsrc_none();
+    let mut paths: collections::BTreeSet<String> = rsrc_none();
+    for entry in reach.iter() {
+        let path = rsrc_path_of(entry);
+        if rsrc_param_of(entry).starts_with('~') { continue; }
+        if path.is_empty() { whole.insert(entry.to_owned()); } else { paths.insert(path); }
+    }
+    let mut parts: Vec<String> = vec![];
+    for path in paths.iter() {
+        let mut named: Vec<String> = vec![];
+        for param in params.iter() { if whole.contains(param) || reach.contains(&format!("{}:{}", path, param)) { named.push(param.to_owned()); } }
+        if !named.is_empty() {
+            let list = named.join(" | ");
+            parts.push(format!("{}: ref({})", path, list));
+        }
+    }
+    parts.join(", ")
 }
 
 fn rsrc_findings(asked: &Asked<'_>, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool, out: &mut Vec<Finding>) {

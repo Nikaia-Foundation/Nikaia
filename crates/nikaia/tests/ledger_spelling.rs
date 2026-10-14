@@ -62,6 +62,37 @@ fn where_a_result_points_is_written_in_the_result() {
     assert_eq!(read.functions["longest"].borrows, ["a", "b"]);
 }
 
+/// **A result holding views writes each view's sources by its path**
+/// ([ADR-353](../../../docs/specification/adr/adr-353.md) D1, D5), and reads
+/// back to the same contract; a view built from another call's views keeps
+/// its own path's sources.
+#[test]
+fn each_view_of_a_result_is_written_by_its_path() {
+    let (read, text) = written(
+        "pub struct Pair { pub left: ref String, pub right: ref String }\n\
+         pub fn pair(a: ref String, b: ref String) -> Pair sync {\n\
+         \x20   return Pair { left: a, right: b }\n\
+         }\n\
+         pub fn swapped(x: ref String, y: ref String) -> Pair sync {\n\
+         \x20   let p = pair(x, y)\n\
+         \x20   return Pair { left: p.right, right: p.left }\n\
+         }\n",
+    );
+    assert!(
+        text.contains("returns = \"left: ref(a), right: ref(b)\""),
+        "{text}"
+    );
+    assert!(
+        text.contains("returns = \"left: ref(y), right: ref(x)\""),
+        "{text}"
+    );
+    assert_eq!(read.functions["pair"].borrows, ["a", "b"]);
+    assert_eq!(
+        read.functions["swapped"].returns,
+        "left: ref(y), right: ref(x)"
+    );
+}
+
 /// **A type variable is declared in brackets before the parameters**, as
 /// `fn hand[T](x: T) -> T` declares it, and a bound stays where it stood.
 #[test]

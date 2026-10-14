@@ -614,3 +614,19 @@ fn a_pattern_of_one_scalar_is_a_char() {
     assert!(emitted.contains("starts_with('#')"), "{emitted}");
     assert!(!emitted.contains("contains('x')"), "{emitted}");
 }
+
+/// Text made in place for a pattern is lent: the language below matches a
+/// view, and a `String` of its own is no pattern there (E0277).
+#[test]
+fn text_made_in_place_is_lent_to_a_pattern() {
+    let emitted = emit(
+        "fn f(line: ref String, n: i64) -> i64 {\n\
+             let rest = line.strip_prefix(f\"id{n}\") ?? \"\"\n\
+             let head = line.strip_suffix(f\"{n}\") ?? \"\"\n\
+             return rest.len() + head.len() + line.split(f\"{n};\").count()\n\
+         }\n",
+    );
+    assert!(emitted.contains("strip_prefix(&format!("), "{emitted}");
+    assert!(emitted.contains("strip_suffix(&format!("), "{emitted}");
+    assert!(emitted.contains("split(&format!("), "{emitted}");
+}

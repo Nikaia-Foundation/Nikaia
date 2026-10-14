@@ -226,6 +226,7 @@ pub fn read(written: ref String) -> Ledger throws {
         match one {
             LedgerLine::Table { kind, name } => {
                 if section == Section::Function {
+                    ledger_borrows_in_order(function)
                     ledger.functions.insert(current.clone(), function)
                     function = FnContract::empty()
                 }
@@ -261,6 +262,7 @@ pub fn read(written: ref String) -> Ledger throws {
             }
             LedgerLine::Sources => {
                 if section == Section::Function {
+                    ledger_borrows_in_order(function)
                     ledger.functions.insert(current.clone(), function)
                     function = FnContract::empty()
                 }
@@ -296,6 +298,7 @@ pub fn read(written: ref String) -> Ledger throws {
         }
     }
     if section == Section::Function {
+        ledger_borrows_in_order(function)
         ledger.functions.insert(current.clone(), function)
     }
     if section == Section::Kind {
@@ -376,7 +379,13 @@ fn function_key(mut entry: FnContract, name: ref String, key: ref String, value:
     } else if key == "throws" {
         entry.fails_with = throws_of(value, n)
     } else if key == "returns" {
-        entry.borrows = borrows_of(unquoted(value, n), n)
+        let written = unquoted(value, n)
+        if written.contains(":") {
+            entry.borrows = path_borrows_of(written, n)
+            entry.returns = written.clone()
+        } else {
+            entry.borrows = borrows_of(written, n)
+        }
     } else if key == "signature" {
         // **Read back from Nikaia's spelling** (ADR-251 D4): the receiver says
         // whether the call changes it, and a `ref(a | b)` in the result where
@@ -591,6 +600,45 @@ fn throws_of(value: ref String, n: i64) -> Vec[String] throws {
         return [unnamed]
     }
     return entries(value, n)
+}
+
+// **A per-view `returns` names its parameters in the order of its paths**;
+// the contract keeps them in the signature's order, as the checker finds them.
+fn ledger_borrows_in_order(mut entry: FnContract) {
+    if entry.returns.len() == 0 {
+        return
+    }
+    let signature = entry.signature?.clone() ?? return
+    let mut ordered: Vec[String] = []
+    for param in signature.params {
+        if entry.borrows.contains(param.0) {
+            ordered.push(param.0.clone())
+        }
+    }
+    if ordered.len() == entry.borrows.len() {
+        entry.borrows = ordered
+    }
+}
+
+// `left: ref(a), right: ref(b)` (ADR-353 D5): every parameter any view names.
+fn path_borrows_of(value: ref String, n: i64) -> Vec[String] throws {
+    let mut names: Vec[String] = []
+    for part in value.split("),") {
+        let pieces: Vec[ref String] = part.split(":").collect()
+        if pieces.len() != 2 {
+            throw Refused::Because(f"line {n}: expected `path: ref(…)`, found `{value}`")
+        }
+        let mut written = pieces[1].trim().clone()
+        if !written.ends_with(")") {
+            written = f"{written})"
+        }
+        for name in borrows_of(written, n) {
+            if !names.contains(name) {
+                names.push(name.clone())
+            }
+        }
+    }
+    return names
 }
 
 // `ref(a | b)`, and `borrows(a | b)`, the spelling before ADR-251 D4.

@@ -1357,6 +1357,99 @@ fn rsrc_join(mut into: collections::BTreeSet[String], more: ref collections::BTr
     }
 }
 
+// **A source per view** (ADR-353 D1): an entry is a parameter, which every view
+// of the value may point into, or `path:parameter`, which only the view at that
+// path does: `left:a` for `Pair { left: a, .. }`, `left.name:a` one further in.
+fn rsrc_param_of(entry: ref String) -> String {
+    let parts = entry.split(":").collect()
+    return parts[parts.len() - 1].clone()
+}
+
+fn rsrc_path_of(entry: ref String) -> String {
+    let parts = entry.split(":").collect()
+    if parts.len() < 2 {
+        return ""
+    }
+    return parts[0].clone()
+}
+
+// The entries a view at `path` gets: each one under it.
+fn rsrc_under(path: ref String, entries: ref collections::BTreeSet[String]) -> collections::BTreeSet[String] {
+    let mut out = rsrc_none()
+    for entry in entries {
+        if path.len() == 0 {
+            out.insert(entry.clone())
+        } else {
+            // **A path is one field long**: the view at `path` points into
+            // whatever any view inside it points into. That says more, never
+            // less (D13), it is what one lifetime per view field can say, and
+            // it keeps the entries finite (fields times parameters), so the
+            // fixpoint ends where a value is nested in itself in a loop.
+            out.insert(f"{path}:{rsrc_param_of(entry)}")
+        }
+    }
+    return out
+}
+
+// The entries of the view at field `name`: those of every view, and those under it.
+fn rsrc_out_of(name: ref String, entries: ref collections::BTreeSet[String]) -> collections::BTreeSet[String] {
+    let mut out = rsrc_none()
+    for entry in entries {
+        let path = rsrc_path_of(entry)
+        if path.len() == 0 {
+            out.insert(entry.clone())
+        } else if path == name {
+            out.insert(rsrc_param_of(entry))
+        } else if !path.starts_with(f"{name}.") {
+            // **Loose**: another view's source, which the lowering still ties
+            // to the whole value until a struct has a lifetime per view.
+            out.insert(rsrc_loosened(rsrc_param_of(entry)))
+        } else if path.starts_with(f"{name}.") {
+            let rest = path[(name.len() + 1)..<path.len()].clone()
+            out.insert(f"{rest}:{rsrc_param_of(entry)}")
+        }
+    }
+    return out
+}
+
+// The parameters, whatever view they are of, loose ones included.
+fn rsrc_plain(entries: ref collections::BTreeSet[String]) -> collections::BTreeSet[String] {
+    let mut out = rsrc_none()
+    for entry in entries {
+        out.insert(rsrc_bare(rsrc_param_of(entry)))
+    }
+    return out
+}
+
+fn rsrc_bare(param: ref String) -> String {
+    if param.starts_with("~") {
+        return param[1..<param.len()].clone()
+    }
+    return param.clone()
+}
+
+fn rsrc_loosened(param: ref String) -> String {
+    if param.starts_with("~") {
+        return param.clone()
+    }
+    return f"~{param}"
+}
+
+// Every entry made loose, keeping its path.
+fn rsrc_all_loose(entries: ref collections::BTreeSet[String]) -> collections::BTreeSet[String] {
+    let mut out = rsrc_none()
+    for entry in entries {
+        let path = rsrc_path_of(entry)
+        let param = rsrc_loosened(rsrc_param_of(entry))
+        if path.len() == 0 {
+            out.insert(param)
+        } else {
+            out.insert(f"{path}:{param}")
+        }
+    }
+    return out
+}
+
 fn rsrc_flow(at: ref Span) -> ResultSrcFlow {
     let env: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
     return ResultSrcFlow { env: env, ways: [], at: Span { start: at.start, end: at.end }, depth: 0, inner: rsrc_none(), shadow: rsrc_none(), annotated: collections::BTreeMap() }
@@ -1566,13 +1659,13 @@ fn rsrc_field(unit: ref Unit, asked: ref Asked, here: ref Here, known: ref colle
     let inner = rsrc_eval(unit, asked, here, known, own_buffer, base, flow)
     let hidden = rsrc_type(unit, asked, here, flow, base)
     if hidden == null && rsrc_root_name(asked, base) != null && !is_self(asked, base) {
-        return inner
+        return rsrc_out_of(name, inner)
     }
-    let declared = field_type(unit, asked, here, base, name) ?? return inner
+    let declared = field_type(unit, asked, here, base, name) ?? return rsrc_out_of(name, inner)
     if rsrc_scalar(asked, declared) {
         return rsrc_none()
     }
-    return inner
+    return rsrc_out_of(name, inner)
 }
 
 // The element of a buffer is inside it; the index is only read.
@@ -1591,7 +1684,7 @@ fn rsrc_fields(unit: ref Unit, asked: ref Asked, here: ref Here, known: ref coll
         } else {
             more = rsrc_maybe(unit, asked, here, known, own_buffer, field.value, flow)
         }
-        rsrc_join(out, more)
+        rsrc_join(out, rsrc_under(asked.names.resolve(field.name), more))
     }
     return out
 }
@@ -1930,7 +2023,9 @@ fn rsrc_callee(asked: ref Asked, known: ref collections::BTreeMap[String, Result
     let found = known[key]?.clone() ?? ResultSrcKnown { declared: false, params: [], reach: rsrc_none() }
     if found.declared {
         let mut out = rsrc_none()
-        for borrowed in found.reach {
+        for entry in found.reach {
+            let written = rsrc_param_of(entry)
+            let borrowed = rsrc_bare(written)
             let mut at = -1
             for i in 0..<found.params.len() {
                 if at < 0 && found.params[i] == borrowed {
@@ -1940,7 +2035,12 @@ fn rsrc_callee(asked: ref Asked, known: ref collections::BTreeMap[String, Result
             if at < 0 || at >= positional.len() {
                 return everything.clone()
             }
-            rsrc_join(out, positional[at])
+            let mapped = rsrc_under(rsrc_path_of(entry), positional[at])
+            if written.starts_with("~") {
+                rsrc_join(out, rsrc_all_loose(mapped))
+            } else {
+                rsrc_join(out, mapped)
+            }
         }
         return out
     }
@@ -1959,7 +2059,7 @@ fn rsrc_callee(asked: ref Asked, known: ref collections::BTreeMap[String, Result
         return everything.clone()
     }
     let mut out = rsrc_none()
-    for borrowed in contract.borrows {
+    for (path, borrowed) in rsrc_written_paths(contract) {
         let mut at = -1
         for i in 0..<signature.params.len() {
             if at < 0 && signature.params[i].0 == borrowed {
@@ -1969,7 +2069,35 @@ fn rsrc_callee(asked: ref Asked, known: ref collections::BTreeMap[String, Result
         if at < 0 || at >= positional.len() {
             return everything.clone()
         }
-        rsrc_join(out, positional[at])
+        rsrc_join(out, rsrc_under(path, positional[at]))
+    }
+    return out
+}
+
+// The ledger's sources as (path, parameter): `returns = "left: ref(a)"` per
+// view (ADR-353 D5), else every parameter for every view.
+fn rsrc_written_paths(contract: ref FnContract) -> Vec[(String, String)] {
+    let mut out: Vec[(String, String)] = []
+    if contract.returns.len() == 0 {
+        for borrowed in contract.borrows {
+            out.push(("".clone(), borrowed.clone()))
+        }
+        return out
+    }
+    for part in contract.returns.split("),") {
+        let pieces: Vec[ref String] = part.split(":").collect()
+        if pieces.len() != 2 {
+            continue
+        }
+        let path = pieces[0].trim().clone()
+        let inside = pieces[1].trim()
+        let names = (inside.strip_prefix("ref(") ?? inside).clone()
+        for name in names.split("|") {
+            let bare = (name.trim().strip_suffix(")") ?? name.trim()).clone()
+            if bare.len() > 0 {
+                out.push((path.clone(), bare))
+            }
+        }
     }
     return out
 }
@@ -2184,7 +2312,11 @@ fn rsrc_function(unit: ref Unit, asked: ref Asked, subject: ref Type?, trait_nam
             known.insert(key.clone(), ResultSrcKnown { declared: true, params: params, reach: reach.clone() })
             if report {
                 let of = of_what(owner, function)
-                rsrc_report(asked, of, sources, declared_views, flow.ways, reach, receiver, trait_name, at, out)
+                let mut plain_ways: Vec[ResultSrcWay] = []
+                for way in flow.ways {
+                    plain_ways.push(ResultSrcWay { span: Span { start: way.span.start, end: way.span.end }, reach: rsrc_plain(way.reach) })
+                }
+                rsrc_report(asked, of, sources, declared_views, plain_ways, rsrc_plain(reach), receiver, trait_name, at, out)
             }
             return changed
         }
@@ -2294,6 +2426,9 @@ fn rsrc_function_types(unit: ref Unit, asked: ref Asked, args: ref Vec[FnArg], r
 pub struct ResultSource {
     pub key: String,
     pub borrows: Vec[String],
+    // Each view's own sources by its path where they differ (ADR-353 D1, D5):
+    // `left: ref(a), right: ref(b)`; empty where every view has them all.
+    pub returns: String,
 }
 
 /// The answer of D25 for every function of the unit that hands back a view,
@@ -2308,15 +2443,49 @@ pub fn result_sources(asked: ref Asked, items: ref Vec[Spanned[Item]], own_buffe
         if !found.declared {
             continue
         }
+        let plain = rsrc_plain(found.reach)
         let mut borrows: Vec[String] = []
         for param in found.params {
-            if found.reach.contains(param) {
+            if plain.contains(param) {
                 borrows.push(param.clone())
             }
         }
-        out.push(ResultSource { key: key.clone(), borrows: borrows })
+        out.push(ResultSource { key: key.clone(), borrows: borrows, returns: rsrc_returns_text(found.params, found.reach) })
     }
     return out
+}
+
+// D5's spelling of the views' own sources, by path, in the signature's order of
+// parameters: `left: ref(a), right: ref(b)`. A parameter every view may point
+// into is in each path's list. Empty where no entry names a path.
+fn rsrc_returns_text(params: ref Vec[String], reach: ref collections::BTreeSet[String]) -> String {
+    let mut whole: collections::BTreeSet[String] = rsrc_none()
+    let mut paths: collections::BTreeSet[String] = rsrc_none()
+    for entry in reach {
+        let path = rsrc_path_of(entry)
+        if rsrc_param_of(entry).starts_with("~") {
+            continue
+        }
+        if path.len() == 0 {
+            whole.insert(entry.clone())
+        } else {
+            paths.insert(path)
+        }
+    }
+    let mut parts: Vec[String] = []
+    for path in paths {
+        let mut named: Vec[String] = []
+        for param in params {
+            if whole.contains(param) || reach.contains(f"{path}:{param}") {
+                named.push(param.clone())
+            }
+        }
+        if named.len() > 0 {
+            let list = named.join(" | ")
+            parts.push(f"{path}: ref({list})")
+        }
+    }
+    return parts.join(", ")
 }
 
 // The refusals of D25 and D26 over a unit: the fixpoint first, then one report.
