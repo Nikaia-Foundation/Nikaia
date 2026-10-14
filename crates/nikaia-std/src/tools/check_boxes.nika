@@ -253,6 +253,11 @@ impl CheckState {
         match on {
             Ty::Named { name: written, args, view } => {
                 if written == "Error" && args.len() > 1 && !view {
+                    // **A closed set's members are each named** (ADR-351
+                    // D3): several that arrive by name take `else` instead.
+                    if !self.flow.caught_several {
+                        self.a_closed_set_that_misses_a_case(world, args, arms, span)
+                    }
                     return
                 }
                 name = written.clone()
@@ -313,5 +318,65 @@ impl CheckState {
             let text = missing.join("`, `")
             self.a_case_is_missing(text, span)
         }
+    }
+
+    // Every member of a closed set of errors, and each case of one that is an
+    // enum, has an arm.
+    fn a_closed_set_that_misses_a_case(ref mut self, world: ref CheckWorld, members: ref Vec[Ty], arms: ref Vec[MatchArm], span: ref Span) sync {
+        let mut named: collections::BTreeSet[String] = collections::BTreeSet()
+        for arm in arms {
+            if arm.guard == null {
+                check_boxes_qualified(world, arm.pattern, named)
+            }
+        }
+        let mut missing: Vec[String] = []
+        for member in members {
+            let name: String = match member {
+                Ty::Named { name, .. } => name.clone(),
+                else => continue,
+            }
+            if named.contains(name) {
+                continue
+            }
+            if !self.enums.contains_key(name) {
+                missing.push(name.clone())
+                continue
+            }
+            let variants = self.enums[name]?.clone() ?? collections::BTreeSet()
+            for variant in variants {
+                if !named.contains(f"{name}::{variant}") {
+                    missing.push(f"{name}::{variant}")
+                }
+            }
+        }
+        if missing.len() > 0 {
+            let text = missing.join("`, `")
+            self.a_case_is_missing(text, span)
+        }
+    }
+}
+
+// What an arm names, qualified: `Type::Variant` for a variant, `Type` for a
+// binding of a whole member (`Type(e)`, `Type { .. }`).
+fn check_boxes_qualified(world: ref CheckWorld, pattern: ref MatchPattern, mut out: collections::BTreeSet[String]) sync {
+    match pattern {
+        MatchPattern::Path(path) => check_boxes_path(world, path, out),
+        MatchPattern::Tuple { path, .. } => check_boxes_path(world, path, out),
+        MatchPattern::Named { path, .. } => check_boxes_path(world, path, out),
+        MatchPattern::Or(alternatives) => {
+            for alternative in alternatives {
+                check_boxes_qualified(world, alternative, out)
+            }
+        }
+        else => {}
+    }
+}
+
+fn check_boxes_path(world: ref CheckWorld, path: ref Vec[winnow_grammar::Symbol], mut out: collections::BTreeSet[String]) sync {
+    let n = path.len() as i64
+    if n == 1 {
+        out.insert(world.words.resolve(path[0]).clone())
+    } else if n >= 2 {
+        out.insert(f"{world.words.resolve(path[n - 2])}::{world.words.resolve(path[n - 1])}")
     }
 }

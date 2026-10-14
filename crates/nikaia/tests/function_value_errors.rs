@@ -288,3 +288,79 @@ fn a_published_field_is_stored_into_by_other_packages() {
         "pub struct Task { pub run: fn() throws }\n",
     );
 }
+
+const BOTH: &str = "catch {\n\
+                    \x20       match error {\n\
+                    \x20           Bad::Oops => print(\"oops\")\n\
+                    \x20           Boom::Bang => print(\"boom\")\n\
+                    \x20       }\n\
+                    \x20   }";
+
+/// **Where more code reaches a place, the place carries the union** (ADR-351
+/// D3): an arm per member, no `else`, and nothing refused.
+fn accepted_exactly(body: &str, extra: &str) {
+    let source = format!("{JOB}{WORSE}{extra}fn main() {{\n{body}\n}}\n");
+    let found = findings(&source);
+    assert!(found.is_empty(), "{found:?}\n{source}");
+}
+
+#[test]
+fn a_mut_name_carries_the_union_of_what_it_was_given() {
+    accepted_exactly(
+        &format!("    let mut run: fn() throws = fail\n    run = worse\n    run() {BOTH}"),
+        "",
+    );
+}
+
+#[test]
+fn a_mut_list_carries_what_was_pushed() {
+    accepted_exactly(
+        &format!(
+            "    let mut all: Vec[fn() throws] = [fail]\n    all.push(worse)\n    for run in all {{\n        run() {BOTH}\n    }}"
+        ),
+        "",
+    );
+}
+
+#[test]
+fn a_field_carries_what_was_assigned() {
+    accepted_exactly(
+        &format!(
+            "    let mut job = Job {{ run: fail }}\n    job.run = worse\n    job.run() {BOTH}"
+        ),
+        "",
+    );
+}
+
+#[test]
+fn a_field_carries_what_with_gave_it() {
+    accepted_exactly(
+        &format!(
+            "    let job = Job {{ run: fail }}\n    let other = job with {{ run: worse }}\n    other.run() {BOTH}"
+        ),
+        "",
+    );
+}
+
+#[test]
+#[ignore = "a `for` over a field path does not yet take the field's set (#620)"]
+fn a_list_field_carries_what_was_pushed() {
+    accepted_exactly(
+        &format!(
+            "    let mut jobs = Jobs {{ all: [fail] }}\n    jobs.all.push(worse)\n    for run in jobs.all {{\n        run() {BOTH}\n    }}"
+        ),
+        "struct Jobs { all: Vec[fn() throws] }\n",
+    );
+}
+
+/// **A name handed to a `mut` parameter may be changed there**: its set is
+/// not named here, so an exhaustive `catch` is refused.
+#[test]
+fn a_mut_list_handed_to_a_mut_parameter() {
+    refused_without_else(
+        &format!(
+            "    let mut all: Vec[fn() throws] = [fail]\n    grow(all)\n    for run in all {{\n        run() {BOTH}\n    }}"
+        ),
+        "fn grow(mut all: Vec[fn() throws]) {\n    all.push(worse)\n}\n",
+    );
+}

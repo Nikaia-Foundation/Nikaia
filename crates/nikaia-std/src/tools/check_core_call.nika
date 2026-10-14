@@ -206,6 +206,19 @@ fn check_core_call_kept[H: CheckHost](mut state: CheckState, world: ref CheckWor
     return gives
 }
 
+// The arguments handed to `mut` parameters, whose code may change there.
+fn check_core_call_mut_args(mut state: CheckState, world: ref CheckWorld, callee: ref FnContract?, args: ref Vec[Expr]) sync {
+    let contract: ref FnContract = callee ?? return
+    let signature: ref Signature = contract.signature ?? return
+    let mut i = -1
+    for (param, _) in signature.params {
+        i += 1
+        if i < args.len() as i64 && signature.mutable.contains(param) {
+            check_core_method_code_lent(state, world, args[i])
+        }
+    }
+}
+
 // Whether `name` is a parameter of code of the function `current`.
 fn check_core_call_a_param_of(world: ref CheckWorld, current: ref String, name: ref String) -> bool {
     let contract = world.own.functions[current] ?? return false
@@ -296,8 +309,14 @@ fn check_core_call_unresolved[H: CheckHost](mut state: CheckState, world: ref Ch
     }
     // A call nothing describes may start a thread of its own (ADR-303 D7).
     state.crosses_into_an_unseen_call(world, name, args, found, config, passed, span, f"The compiler knows nothing about `{name}`, so it has to assume it might start a thread of its own.")
-    // …and says nothing about whether it can fail (ADR-308).
-    if state.flow.guarded != null {
+    // …and says nothing about whether it can fail (ADR-308), unless it is
+    // a name of code whose set is settled (ADR-351 D3).
+    let mut settled = false
+    if is_variable && state.run_code.contains(name) && state.current != null {
+        let here: String = state.current?.clone() ?? ""
+        settled = world.own.code_throws.contains_key(f"{here}::{name}")
+    }
+    if state.flow.guarded != null && !settled {
         let held: CheckGuarded? = state.flow.guarded?.clone()
         let mut guarded = held ?? CheckGuarded::nothing()
         guarded.unanswered = true
@@ -313,7 +332,7 @@ fn check_core_call_unresolved[H: CheckHost](mut state: CheckState, world: ref Ch
                 // it** (ADR-351 D1, D4).
                 let current: String = state.current?.clone() ?? ""
                 let key = f"{current}::{name}"
-                if can_throw && world.own.code_throws.contains_key(key) && !current.contains("::") && check_core_call_a_param_of(world, current, name) {
+                if can_throw && world.own.code_throws.contains_key(key) {
                     let set = world.own.code_throws[key] ?? return Ty::Unknown
                     let mut contract = FnContract::empty()
                     contract.fails_with = set.clone()
@@ -462,6 +481,9 @@ fn check_core_call_named_call[H: CheckHost](mut state: CheckState, world: ref Ch
         state.stored_frames.push(CheckStoredCode::empty())
     }
     let found = check_core_arguments_given(state, world, host, args, expected, declared_here, callee, span)
+    // **A name of code handed to a `mut` parameter may be changed there**
+    // (ADR-351 D3): what it holds afterwards is not seen here.
+    check_core_call_mut_args(state, world, callee, args)
     if feeds {
         let frame: CheckStoredCode = state.stored_frames.pop() ?? CheckStoredCode::empty()
         let contract: FnContract = callee?.clone() ?? FnContract::empty()

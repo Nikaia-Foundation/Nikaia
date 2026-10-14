@@ -40,18 +40,6 @@ impl CheckState {
         self.findings.push(check_refusal("NK1124", span, f"Write `{written}` like this: `{shape}`.", [wanted.clone()], null))
     }
 
-    /// A function field code is put into where the lock column cannot read it
-    /// (ADR-230 D1): undecided, never quiet.
-    pub fn a_field_whose_code_is_not_seen(ref mut self, owner: ref String, field: ref String) sync {
-        let key = f"{owner}.{field}"
-        let mut stored = CheckStoredCode::empty()
-        if self.stored_code.contains_key(key) {
-            stored = self.stored_code[key]?.clone() ?? CheckStoredCode::empty()
-        }
-        stored.unresolved = true
-        self.stored_code.insert(key, stored)
-    }
-
     /// **A value that came out of a lock passes the stamp on** (ADR-281 D22): a
     /// callee that touches a lock, or that nothing describes, does not.
     pub fn stamped_through(ref self, contract: ref FnContract, given: ref Vec[Ty], result: Ty) -> Ty sync {

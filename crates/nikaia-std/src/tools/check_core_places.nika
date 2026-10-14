@@ -258,6 +258,90 @@ pub fn check_core_places_stored[H: CheckHost](mut state: CheckState, world: ref 
     state.stored_code.insert(key.clone(), entry)
 }
 
+/// **Code given to places already holding code meets what they hold**
+/// (ADR-351 D3): an assignment, a `push` or an `insert` adds the value's set
+/// to each place it reaches, under the frame pushed before it was walked.
+pub fn check_core_places_stored_keys[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr?, keys: ref Vec[String]) sync {
+    let mut stored: CheckStoredCode = state.stored_frames.pop() ?? CheckStoredCode::empty()
+    if value == null {
+        stored.unresolved = true
+    } else {
+        let v: ref Expr = value ?? return
+        check_core_places_code_into(state, world, host, v, stored)
+    }
+    for key in keys {
+        let mut entry: CheckStoredCode = state.stored_code.remove(key) ?? CheckStoredCode::empty()
+        for resolved in stored.resolved {
+            entry.resolved.insert(resolved.clone())
+        }
+        entry.unresolved = entry.unresolved || stored.unresolved
+        for free in stored.free {
+            entry.free.insert(free.clone())
+        }
+        state.stored_code.insert(key.clone(), entry)
+    }
+}
+
+/// **The places of code a write reaches** (ADR-351 D3): a name of this
+/// function that holds code, every function field a field path names, and
+/// for an element written through the brackets, its container.
+pub fn check_core_places_code_keys(state: ref CheckState, world: ref CheckWorld, target: ref Expr) -> Vec[String] sync {
+    let mut keys: Vec[String] = []
+    match target {
+        Expr::Variable(bound, _) => {
+            let named: String = f"{world.words.resolve(bound)}"
+            let found = state.lookup(named)
+            if found != null && state.current != null {
+                let ty: Ty = found ?? Ty::Unknown
+                if check_core_stmt_holds_code(ty) {
+                    let current: String = state.current?.clone() ?? ""
+                    keys.push(f"{current}::{named}")
+                }
+            }
+        },
+        Expr::Index { base, .. } => {
+            return check_core_places_code_keys(state, world, base)
+        },
+        Expr::Field { base, name, .. } => {
+            let field: String = f"{world.words.resolve(name)}"
+            let mut owners: Vec[String] = []
+            let mut typed = false
+            match base {
+                Expr::Variable(bound, _) => {
+                    let named: String = f"{world.words.resolve(bound)}"
+                    let found = state.lookup(named)
+                    if found != null {
+                        let ty: Ty = found ?? Ty::Unknown
+                        match ty {
+                            Ty::Named { name: owner, .. } => {
+                                owners.push(owner.clone())
+                                typed = true
+                            },
+                            else => {},
+                        }
+                    }
+                },
+                else => {},
+            }
+            if !typed {
+                for item in world.here.items {
+                    match item.node {
+                        Item::Struct { name: declared, .. } => owners.push(world.here.text(declared)),
+                        else => {},
+                    }
+                }
+            }
+            for owner in owners {
+                if state.a_field_holds_code(world, owner, field) {
+                    keys.push(f"{owner}.{field}")
+                }
+            }
+        },
+        else => {},
+    }
+    return keys
+}
+
 /// **Where code values meet, their sets meet** (ADR-351 D1, D4): what an
 /// expression that gives a function value can give, added to `stored` - a
 /// lambda's calls, a named function, the place a name was given, each element
@@ -561,20 +645,15 @@ fn check_core_places_a_with_field[H: CheckHost](mut state: CheckState, world: re
         seen.insert(field.clone())
     }
     // `user with { name }` - the shorthand is the literal's.
-    let given = check_core_places_given(state, world, host, init.value, field, span)
-    // **Code put into a function field here is code the lock column does not
-    // read** (ADR-230 D1).
-    let mut code_field = false
-    for f in declared {
-        if f.name == field {
-            match f.ty {
-                Ty::Fn { .. } => { code_field = true },
-                else => {}
-            }
-        }
-    }
+    // **Code put into a function field by a `with` meets what the field
+    // holds** (ADR-351 D3).
+    let code_field = state.a_field_holds_code(world, name, field)
     if code_field {
-        state.a_field_whose_code_is_not_seen(name, field)
+        state.stored_frames.push(CheckStoredCode::empty())
+    }
+    let given = check_core_places_given(state, world, host, init.value, field, span)
+    if code_field {
+        check_core_places_stored(state, world, host, init.value, f"{name}.{field}")
     }
     let mut at = -1
     let mut i = 0

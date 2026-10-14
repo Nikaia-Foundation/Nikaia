@@ -8,6 +8,10 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.956] — 2026-10-14
+
+**a function value's set meets what reaches it: `mut` names, push, field assignment and `with` carry the union (ADR-351 D3, part of #620)**
+
 ## [0.0.955] — 2026-10-14
 
 **a view's argument may be given a new value while the view is used; a change in place under a view is NK2305 (ADR-353 D3, D4, part of #614)**

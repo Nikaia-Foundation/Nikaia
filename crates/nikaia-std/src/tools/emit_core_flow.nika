@@ -987,6 +987,8 @@ impl EmitState {
     fn emit_catch_is_a_field_call(ref self, guarded: ref Expr) -> bool {
         return match guarded {
             Expr::MethodCall { receiver, .. } => self.facts.field_calls.contains_key(node_key(receiver)),
+            // And through a name that holds code (ADR-351 D3).
+            Expr::Call { func, .. } => self.facts.kept_calls.contains_key(node_key(func)),
             else => false,
         }
     }

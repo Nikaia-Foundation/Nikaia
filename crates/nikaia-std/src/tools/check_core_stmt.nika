@@ -275,14 +275,6 @@ pub fn check_core_stmt_holds_code(ty: ref Ty) -> bool {
     }
 }
 
-// A `mut` name can be given other code later; until those meet (ADR-351 D4)
-// its set cannot be named.
-fn check_core_stmt_place_unseen(mut state: CheckState, key: ref String) sync {
-    let mut entry: CheckStoredCode = state.stored_code.remove(key) ?? CheckStoredCode::empty()
-    entry.unresolved = true
-    state.stored_code.insert(key.clone(), entry)
-}
-
 pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, names: ref Vec[winnow_grammar::Symbol], shape: ref Vec[i64], mutable: bool, ty: ref Type?, value: ref Expr, span: ref Span) -> Ty sync {
     check_core_a_field_of_a_borrowed_subject(state, world, host, value, span, "bound")
     check_core_a_mut_parameter_given_away(state, world, host, value, span, "bound")
@@ -308,9 +300,6 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
         let current: String = state.current?.clone() ?? ""
         let key = f"{current}::{world.words.resolve(names[0])}"
         check_core_places_stored(state, world, host, value, key)
-        if mutable {
-            check_core_stmt_place_unseen(state, key)
-        }
     }
     state.a_narrowed_read_given_up(value)
     // **A name bound to a map read is a view of the map** (#297).
@@ -559,43 +548,6 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
     return check_core_stmt_unit()
 }
 
-/// **Code assigned into a function field** (ADR-230 D1).
-fn check_core_stmt_code_into_a_field(mut state: CheckState, world: ref CheckWorld, target: ref Expr) sync {
-    match target {
-        Expr::Field { base, name, .. } => {
-            let field: String = f"{world.words.resolve(name)}"
-            let mut owners: Vec[String] = []
-            match base {
-                Expr::Variable(bound, _) => {
-                    let named: String = f"{world.words.resolve(bound)}"
-                    let found = state.lookup(named)
-                    if found != null {
-                        let ty: Ty = found ?? Ty::Unknown
-                        match ty {
-                            Ty::Named { name: owner, .. } => owners.push(owner.clone()),
-                            else => {},
-                        }
-                    }
-                },
-                else => {
-                    for item in world.here.items {
-                        match item.node {
-                            Item::Struct { name: declared, .. } => owners.push(world.here.text(declared)),
-                            else => {},
-                        }
-                    }
-                },
-            }
-            for owner in owners {
-                if state.a_field_holds_code(world, owner, field) {
-                    state.a_field_whose_code_is_not_seen(owner, field)
-                }
-            }
-        },
-        else => {},
-    }
-}
-
 /// A shift, `<<` or `>>`.
 fn check_core_stmt_a_shift(op: ref BinaryOp?) -> bool sync {
     if op == null {
@@ -679,7 +631,8 @@ fn check_core_stmt_shared(state: ref CheckState, world: ref CheckWorld, target: 
 
 /// **`x = v` and `x op= v`** (Part I 2.1).
 pub fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, target: ref Expr, op: ref BinaryOp?, value: ref Expr, span: ref Span) -> Ty sync {
-    check_core_stmt_code_into_a_field(state, world, target)
+    // **Code assigned meets what the place holds** (ADR-351 D3).
+    let code_keys: Vec[String] = if op == null { check_core_places_code_keys(state, world, target) } else { [] }
     // `NK2101`: an assignment **revives** a name a task took with it, and a
     // part of one (ADR-293 D32).
     let path = state.place_path(world, target)
@@ -715,7 +668,13 @@ pub fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref Ch
     }
     state.reading_only = outer
     state.flow.writing_index = false
+    if code_keys.len() > 0 {
+        state.stored_frames.push(CheckStoredCode::empty())
+    }
     let mut found = check_core_expr(state, world, host, value, span)
+    if code_keys.len() > 0 {
+        check_core_places_stored_keys(state, world, host, value, code_keys)
+    }
     if op == null {
         state.a_map_read_assigned(world, into, value, span)
         state.a_map_first_written(world, target, found)

@@ -459,6 +459,51 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
 /// `?.`; `expr` is the whole call.
 pub fn check_core_method[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, safe: bool, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: ref Span) -> Ty sync {
     let name: String = f"{world.words.resolve(method)}"
+    // **Code put into a container meets what it holds** (ADR-351 D3): the
+    // value a `push` or an `insert` adds, and what an `extend` or an `append`
+    // brings, reach the container's place.
+    let adds = name == "push" || name == "insert" || name == "push_front" || name == "push_back" || name == "extend" || name == "append"
+    let mut code_keys: Vec[String] = []
+    if adds && args.len() > 0 {
+        code_keys = check_core_places_code_keys(state, world, receiver)
+    }
+    // **A name of code handed to a method may be changed there** (ADR-351
+    // D3): what it holds afterwards is not seen here.
+    for arg in args {
+        check_core_method_code_lent(state, world, arg)
+    }
+    if code_keys.len() > 0 {
+        state.stored_frames.push(CheckStoredCode::empty())
+    }
+    let found = check_core_method_walked(state, world, host, expr, safe, receiver, method, args, config, span)
+    if code_keys.len() > 0 {
+        let last = args.len() as i64 - 1
+        check_core_places_stored_keys(state, world, host, args[last], code_keys)
+    }
+    return found
+}
+
+// A `let mut` name of code handed to a method: its place cannot be named.
+pub fn check_core_method_code_lent(mut state: CheckState, world: ref CheckWorld, arg: ref Expr) sync {
+    match arg {
+        Expr::Variable(bound, _) => {
+            let named: String = f"{world.words.resolve(bound)}"
+            let local: CheckLocal = state.binding(named) ?? return
+            if !local.written_mut || !check_core_stmt_holds_code(local.ty) {
+                return
+            }
+            let current: String = state.current?.clone() ?? return
+            let key = f"{current}::{named}"
+            let mut entry: CheckStoredCode = state.stored_code.remove(key) ?? CheckStoredCode::empty()
+            entry.unresolved = true
+            state.stored_code.insert(key, entry)
+        },
+        else => {},
+    }
+}
+
+fn check_core_method_walked[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, safe: bool, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: ref Span) -> Ty sync {
+    let name: String = f"{world.words.resolve(method)}"
     // **`after:` on a `set` is a witness and not an option** (ADR-281 D26),
     // and the first `push` or `insert` of an empty list or map is held.
     state.flow.pushed_into = check_core_method_pushed_into(state, world, receiver, name, args.len() as i64)
