@@ -4565,15 +4565,11 @@ impl<'a> Checker<'a> {
             if name == "_" {
                 continue;
             }
-            let mut later = std::collections::BTreeSet::new();
-            for after in &block.stmts[at + 1..] {
-                nikaia_std::tools::names::names_in_statement(
-                    &after.node,
-                    &self.parsed.interner,
-                    &mut later,
-                );
-            }
-            if later.contains(&name) {
+            let rest: Vec<&Stmt> = block.stmts[at + 1..].iter().map(|s| &s.node).collect();
+            if matches!(
+                self.handle_path(&name, &rest, false),
+                HandlePath::Taken | HandlePath::Gone
+            ) {
                 continue;
             }
             self.s.findings.push(Finding {
@@ -4591,6 +4587,149 @@ impl<'a> Checker<'a> {
                 )),
                 labels: Vec::new(),
             });
+        }
+    }
+
+    /// Whether `name` is mentioned in `stmt`.
+    fn handle_named(&self, name: &str, stmt: &Stmt) -> bool {
+        let mut seen = std::collections::BTreeSet::new();
+        nikaia_std::tools::names::names_in_statement(stmt, &self.parsed.interner, &mut seen);
+        seen.contains(name)
+    }
+
+    /// Whether `name` is mentioned in `expr`.
+    fn handle_named_in(&self, name: &str, expr: &Expr) -> bool {
+        self.handle_named(name, &Stmt::Expr(expr.clone()))
+    }
+
+    /// **Every path through `stmts` takes the handle `name`** (`NK2109`):
+    /// a mention takes it (a `join`, `detach`, `cancel`, or a hand-over);
+    /// a `return`, `throw`, or a `break`/`continue` outside a nested loop
+    /// that does not mention it leaves it behind; branches must all take it.
+    fn handle_path(&self, name: &str, stmts: &[&Stmt], in_loop: bool) -> HandlePath {
+        for stmt in stmts {
+            let flow = match stmt {
+                Stmt::Return(value) => match value {
+                    Some(v) if self.handle_named_in(name, v) => HandlePath::Gone,
+                    _ => HandlePath::Left,
+                },
+                Stmt::Break | Stmt::Continue if !in_loop => HandlePath::Left,
+                Stmt::Expr(e) => self.handle_expr_path(name, e, in_loop),
+                Stmt::Let { value, .. } => self.handle_expr_path(name, value, in_loop),
+                Stmt::For { iter, body, .. } => {
+                    if self.handle_named_in(name, iter) {
+                        HandlePath::Taken
+                    } else {
+                        self.handle_loop_body(name, body)
+                    }
+                }
+                Stmt::While { cond, body } => {
+                    if self.handle_named_in(name, cond) {
+                        HandlePath::Taken
+                    } else {
+                        self.handle_loop_body(name, body)
+                    }
+                }
+                other => {
+                    if self.handle_named(name, other) {
+                        HandlePath::Taken
+                    } else {
+                        HandlePath::Falls
+                    }
+                }
+            };
+            if flow != HandlePath::Falls {
+                return flow;
+            }
+        }
+        HandlePath::Falls
+    }
+
+    /// A loop body: a mention anywhere takes the handle, a `return` or
+    /// `throw` before any mention leaves it.
+    fn handle_loop_body(&self, name: &str, body: &Block) -> HandlePath {
+        let stmts: Vec<&Stmt> = body.stmts.iter().map(|s| &s.node).collect();
+        match self.handle_path(name, &stmts, true) {
+            HandlePath::Left => HandlePath::Left,
+            HandlePath::Gone => HandlePath::Taken,
+            _ if stmts.iter().any(|s| self.handle_named(name, s)) => HandlePath::Taken,
+            _ => HandlePath::Falls,
+        }
+    }
+
+    fn handle_expr_path(&self, name: &str, expr: &Expr, in_loop: bool) -> HandlePath {
+        let block = |b: &Block| {
+            let stmts: Vec<&Stmt> = b.stmts.iter().map(|s| &s.node).collect();
+            self.handle_path(name, &stmts, in_loop)
+        };
+        let branches: Vec<HandlePath> = match expr {
+            Expr::Throw(inner, _) => {
+                return if self.handle_named_in(name, inner) {
+                    HandlePath::Gone
+                } else {
+                    HandlePath::Left
+                };
+            }
+            Expr::Return(value, _) => {
+                return match value.as_ref() {
+                    Some(v) if self.handle_named_in(name, v) => HandlePath::Gone,
+                    _ => HandlePath::Left,
+                };
+            }
+            Expr::Block(b, _) => return block(b),
+            Expr::If {
+                cond,
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                if self.handle_named_in(name, cond) {
+                    return HandlePath::Taken;
+                }
+                vec![
+                    block(then_branch),
+                    else_branch.as_ref().map_or(HandlePath::Falls, block),
+                ]
+            }
+            Expr::Match { value, arms, .. } => {
+                if self.handle_named_in(name, value) {
+                    return HandlePath::Taken;
+                }
+                arms.iter()
+                    .map(|arm| {
+                        if arm
+                            .guard
+                            .as_ref()
+                            .is_some_and(|g| self.handle_named_in(name, g))
+                        {
+                            HandlePath::Taken
+                        } else {
+                            self.handle_expr_path(name, &arm.body, in_loop)
+                        }
+                    })
+                    .collect()
+            }
+            other => {
+                return if self.handle_named_in(name, other) {
+                    HandlePath::Taken
+                } else {
+                    HandlePath::Falls
+                };
+            }
+        };
+        // A branch that left the scope with the handle does not go on.
+        let on: Vec<HandlePath> = branches
+            .into_iter()
+            .filter(|b| *b != HandlePath::Gone)
+            .collect();
+        if on.is_empty() {
+            HandlePath::Gone
+        } else if on.iter().all(|b| *b == HandlePath::Taken) {
+            HandlePath::Taken
+        } else if on.iter().all(|b| *b == HandlePath::Falls) {
+            HandlePath::Falls
+        } else {
+            HandlePath::Left
         }
     }
 
@@ -13895,4 +14034,17 @@ fn unpromised(contract: &FnContract) -> bool {
 /// (ADR-306 D10).
 fn is_a_whole_number(name: &str) -> bool {
     nikaia_std::tools::bounds_shape::is_whole_number(name)
+}
+
+/// Where a task handle stands on the paths through some statements (`NK2109`).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum HandlePath {
+    /// Every path takes it.
+    Taken,
+    /// Every path takes it and leaves the scope (`return h`, `throw`).
+    Gone,
+    /// Some path leaves the scope, or ends a branch, without taking it.
+    Left,
+    /// No path mentions it; control falls through.
+    Falls,
 }

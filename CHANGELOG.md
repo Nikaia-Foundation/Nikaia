@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.899] — 2026-10-14
+
+**check: NK2109 on every path (#605)**
+- NK2109 also refuses a task handle taken in only some branches, or left behind by a return, throw, break or continue before it is taken; returning or throwing it hands it on (ADR-346 D3).
+
 ## [0.0.898] — 2026-10-14
 
 **contracts: filter_map/find_map lambdas read as lambdas; the project sync inference reads described crates (#579)**

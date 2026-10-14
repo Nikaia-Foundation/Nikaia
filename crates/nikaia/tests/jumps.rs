@@ -486,3 +486,31 @@ fn a_forgotten_handle_is_refused() {
     assert_eq!(code, "NK2109");
     assert!(message.contains("`h`"), "{message}");
 }
+
+/// ADR-346 D3: a handle taken in one branch only, or left by a `return`, is `NK2109`.
+#[test]
+fn a_handle_taken_on_some_paths_is_refused() {
+    let (code, _) = one(
+        "fn f(c: bool) {\n    let h = spawn fn { 1 }\n    if c {\n        h.detach()\n    }\n}\n",
+    );
+    assert_eq!(code, "NK2109");
+    let (code, _) = one(
+        "fn f(c: bool) {\n    let h = spawn fn { 1 }\n    if c {\n        return\n    }\n    h.detach()\n}\n",
+    );
+    assert_eq!(code, "NK2109");
+}
+
+/// ADR-346 D3: taken on every branch, or handed back, is not `NK2109`.
+#[test]
+fn a_handle_taken_on_every_path_is_accepted() {
+    for src in [
+        "fn f(c: bool) {\n    let h = spawn fn { 1 }\n    if c {\n        h.detach()\n    } else {\n        h.cancel()\n    }\n}\n",
+        "fn f(c: bool) -> TaskHandle[i64] {\n    let h = spawn fn { 1 }\n    if c {\n        return h\n    }\n    return h\n}\n",
+    ] {
+        let found = findings(src);
+        assert!(
+            !found.iter().any(|f| f.code == "NK2109"),
+            "{src}: {found:#?}"
+        );
+    }
+}
