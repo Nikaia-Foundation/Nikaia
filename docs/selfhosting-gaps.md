@@ -73,6 +73,11 @@ type from rust-analyzer's facts). Left for the converter:
 2. `crate::ast::int_value` (`i128`): a callee with no Nikaia twin; name one in
    `rs2nika.names` once it exists.
 
+From the U-c1..U-c4 rows the converter now writes: a Rust name Nikaia reserves
+(`grammar`, `throws`, ..) as `name_` (R69), and an assignment as a match arm's
+value in a block (R62). Left for it: `spec.clone()` on a `String?` as
+`spec?.clone()`, which needs the local's type from `--facts`.
+
 ## LANGUAGE (11): `std` entries, no syntax
 
 | form | n | Rust | probe today | by hand |
@@ -203,14 +208,12 @@ checker refusal (`NK1125`) if `!= null` is not meant to narrow.
 | `count(\|h\| matches!(h, Held::Proved))` x5 | counters by `how.starts_with(..)` | no; a typed lambda works (`q17b`) |
 | `from[1..]` byte slicing with `find` | the whole text as `Vec[scalar]` | partly: follows from no `split_at` |
 | `Item::Enum { .. } if text == ty =>` | `if` inside the arm | no (`q06`) |
-| U-c1 `Expr::Closure { .. } => closure = true,` | a block arm | yes: an assignment is not an arm expression |
 | U-c1 `match hole { V(n, _) => seen.insert(..), _ => {} }` | the insert in a block arm | no: the arm lowered without `;`, `Option` against `()` (lowering-defects D34) |
 | U-c1 `fn compares(op: BinaryOp)` called with a bound `op` | the comparison inline | no: param lowered `&BinaryOp`, call `*op` (lowering-defects D34) |
 | U-c1 `spec.clone()` on a `String?` from a pattern | `spec?.clone()` | yes (NK1125) |
 | U-c1 `.or_else` chain of five literal kinds | `if x != null { return x }` per kind | no, but no lazy `??` chain exists |
 | U-c1 `let [condition] = args else {..}` | `if args.len() != 1` then `args[0]` | no slice patterns |
 | U-c1 `message = Some(&option.value)` | the index of the option | yes: no `ref Expr?` local from a loop |
-| U-c2 `let grammar = ...` | `let owner = ...` | yes: `grammar` is a keyword |
 | U-c2 `match (&evaluated, is_growable(want))` | a shape number from a helper over `ref BuildValue?`, then `if`s | no: no tuple pattern over an option |
 | U-c2 `evaluated` read again after `evaluated ?? return` | `evaluated?.clone() ?? return` | yes (NK2105), at the cost of a clone |
 | U-c2 `.get(..).and_then(|c| c.signature.as_ref())` | a helper over `ref FnContract` | no: `c.signature ?? return` on a `get(..) ??` local moves out of the reference (lowering-defects D35) |
@@ -222,8 +225,6 @@ checker refusal (`NK1125`) if `!= null` is not meant to narrow.
 | U-c3 `args.iter().map(\|(at, arg)\| match (arg, expected.get(at)) ..)` | a loop, a helper asking the pair, one function per arm | no tuple pattern over an option |
 | U-c3 `args.split_last()` | `args[args.len() - 1]` after a length check | no slice patterns |
 | U-c4 `MultiLock::named(name)` in `call` | the two spellings compared, `writing: bool` to `check_core_locks` | yes: `MultiLock` stays a Rust enum for the tests' ledger walk |
-| U-c4 a `throws` parameter | `fails` | `throws` is a reserved word |
-| U-c4 a `grammar` local | `entered_path` | `grammar` is a keyword |
 | U-c4 `name.strip_prefix(f"{ty}::")` | a helper over `ref String` | an owned `String` as a pattern lowers by value (E0277) |
 | U-c4 `result: ref Ty?` handed a `Fn`'s field | the caller unwraps to `Ty` first | `ref T?` is `Option<&T>`, a bound field `&Option<T>` |
 | U-c4 `rsplit_once` / `split_once` | `split("::")` collected, a loop | no `rsplit_once` |
