@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.896] — 2026-10-14
+
+**task: join(within: d) (#605)**
+- `h.join(within: d)` waits at most `d`; on time-out the task is cancelled and the call throws `task::TimedOut` (ADR-346 D4, C code 1101).
+- A `match error` arm names a struct error whole (`task::TimedOut`, `task::Crashed { .. }`).
+
 ## [0.0.895] — 2026-10-14
 
 **lowering: a let-bound function value is lent its views, owned text lent to a pattern; Seq::find_map, Args::len (#579)**

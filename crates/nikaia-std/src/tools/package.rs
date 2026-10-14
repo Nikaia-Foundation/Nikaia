@@ -7774,6 +7774,7 @@ fn cx_numbered(target: &str, variant: &str, constant: &str, errno: &str) -> CxCo
 pub fn cx_std_codes(error: &str, target: &str) -> Vec<CxCode> {
     if error == "io::IoError" { return vec![cx_numbered(target, "NotFound", "IO_NOT_FOUND", "ENOENT"), cx_numbered(target, "PermissionDenied", "IO_PERMISSION_DENIED", "EACCES"), cx_numbered(target, "NotText", "IO_NOT_TEXT", "EILSEQ"), cx_one_code(Some(String::from("Outside")), 1000, "IO_OUTSIDE", None), cx_one_code(Some(String::from("Other")), 1001, "IO_OTHER", None)]; }
     if error == "task::Crashed" { return vec![cx_one_code(None, 1100, "TASK_CRASHED", None)]; }
+    if error == "task::TimedOut" { return vec![cx_one_code(None, 1101, "TASK_TIMED_OUT", None)]; }
     if error == "supervisor::Escalated" { return vec![cx_one_code(None, 1200, "SUPERVISOR_ESCALATED", None)]; }
     if error == "cleanup::Failure" { return vec![cx_one_code(None, 1300, "CLEANUP_FAILURE", None)]; }
     if error == "Overtaken" { return vec![cx_one_code(None, 1400, "OVERTAKEN", None)]; }
@@ -24436,6 +24437,8 @@ impl EmitState {
         }
         let mut witness: Vec<Expr> = vec![];
         if name == "set" && self.facts.witnessed_sets.contains(&flow.statement) { witness = emit_call_option_named(world, config, "after"); }
+        let mut limit: Vec<Expr> = vec![];
+        if name == "join" && args.is_empty() { limit = emit_call_option_named(world, config, "within"); }
         if receiver.is_some() && name == "to_string" && args.is_empty() {
             let text = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
             if self.facts.text_as_is.contains(&node_key(text)) {
@@ -24476,7 +24479,7 @@ impl EmitState {
             copies = self.facts.owned_copies.contains(&node_key(on));
         }
         let mut written = name.to_owned();
-        if name == "drain" && args.is_empty() { written = String::from("into_iter"); } else if name == "clone" && args.is_empty() && copies { written = String::from("to_owned"); } else if name == "set" && !witness.is_empty() { written = String::from("set_after"); }
+        if name == "drain" && args.is_empty() { written = String::from("into_iter"); } else if name == "clone" && args.is_empty() && copies { written = String::from("to_owned"); } else if name == "set" && !witness.is_empty() { written = String::from("set_after"); } else if !limit.is_empty() { written = String::from("join_within"); }
         let mut length = is_length(&name, args);
         if !length && receiver.is_some() {
             let on = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
@@ -24535,7 +24538,7 @@ impl EmitState {
         if !witness.is_empty() {
             out.push(", &");
             self.emit_core_postfix_base(world, walk, out, host, nikaia_std::index::get(&witness, 0), depth, flow, scope)?;
-        } else {
+        } else if !limit.is_empty() { host.expr(walk, out, nikaia_std::index::get(&limit, 0), depth, flow, scope)?; } else {
             self.emit_core_dsl_parameters(world, walk, out, host, &name, args.len() as i64, config, depth, flow, scope)?;
             self.emit_core_method_options(world, walk, out, host, method, args.len() as i64, config, depth, flow, scope)?;
         }
@@ -25036,14 +25039,18 @@ impl EmitState {
         let mut named = caught && self.caught_channel_is_named(world, guarded_expr);
         let mut sum: Option<String> = None;
         if caught { sum = self.caught_sum(world, guarded_expr); }
+        let mut boxed = false;
         if caught && sum.is_none() && emit_catch_is_a_join(world, guarded_expr) {
             let own_sum = self.sum_of(&scope.function);
-            if own_sum.is_some() { sum = own_sum; } else if scope.channel == "Box<dyn std::error::Error>" { sum = Some("".to_owned()); } else if scope.channel.starts_with("nikaia_std::error::Thrown<") { named = true; }
+            if own_sum.is_some() { sum = own_sum; } else if scope.channel == "Box<dyn std::error::Error>" {
+                sum = Some("".to_owned());
+                boxed = true;
+            } else if scope.channel.starts_with("nikaia_std::error::Thrown<") { named = true; }
         }
         let inside = flow.handling(named);
         let inside_scope = EmitScope { caught_sum: sum, ..scope.clone() };
         let mut opening: Option<String> = None;
-        if named { opening = Some(String::from("let (error, __nikaia_site) = error.split();")); }
+        if named { opening = Some(String::from("let (error, __nikaia_site) = error.split();")); } else if boxed { opening = Some(String::from("let error: Box<dyn std::error::Error> = error.into();")); }
         out.push(&format!(" {{\n{}Ok(value) => value,\n", pad));
         let passing = self.fatal_passing(world, guarded_expr, handler);
         if !passing.is_empty() {
@@ -27655,6 +27662,10 @@ pub fn sum_member_type(declared: &collections::BTreeSet<String>, library: &Ledge
 pub fn member_of(words: &winnow_grammar::InternerContext, declared: &collections::BTreeSet<String>, library: &Ledger, pattern: &MatchPattern) -> Option<String> {
     let path = match match_path(pattern) { Some(__nikaia_value) => __nikaia_value, None => return None };
     if path.len() < 2 { return None; }
+    let mut whole: Vec<String> = vec![];
+    for symbol in path.iter() { whole.push(words.resolve(*symbol).to_owned()); }
+    let written = whole.join("::");
+    if error_kind(declared, library, &written) != 0 { return Some(written); }
     let mut parts: Vec<String> = vec![];
     for at in 0..path.len() as i64 - 1 { parts.push(words.resolve(*nikaia_std::index::get(&path, (at) as usize)).to_owned()); }
     let member = parts.join("::");
@@ -28906,6 +28917,13 @@ impl EmitState {
                 out.push(&format!("impl{} From<{}> for {}{} {{\n    fn from(error: {}) -> {}{} {{ {}::{}(error) }}\n}}\n", decl, held, name, params, held, name, params, name, variant));
                 if self.name_of_error(world, member) == 2 { out.push(&format!("impl{} From<{}> for {}{} {{\n    fn from(error: {}) -> {}{} {{ {}::{}(nikaia_std::error::Thrown::from(error)) }}\n}}\n", decl, member, name, params, member, name, params, name, variant)); }
             }
+            let mut crashed = false;
+            let mut timed_out = false;
+            for member in members.iter() {
+                if member == "task::Crashed" { crashed = true; }
+                if member == "task::TimedOut" { timed_out = true; }
+            }
+            if crashed && timed_out { out.push(&format!("impl{} From<nikaia_std::task::Late> for {}{} {{\n    fn from(error: nikaia_std::task::Late) -> {}{} {{\n        match error {{\n            nikaia_std::task::Late::Crashed(e) => e.into(),\n            nikaia_std::task::Late::TimedOut(e) => e.into(),\n        }}\n    }}\n}}\n", decl, name, params, name, params)); }
             out.push(&format!("impl{} std::fmt::Display for {}{} {{\n    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {{\n        match self {{\n", decl, name, params));
             for member in members.iter() {
                 let variant = sum_variant(member);

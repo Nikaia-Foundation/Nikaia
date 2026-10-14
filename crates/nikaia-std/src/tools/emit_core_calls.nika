@@ -626,6 +626,11 @@ impl EmitState {
         if name == "set" && self.facts.witnessed_sets.contains(flow.statement) {
             witness = emit_call_option_named(world, config, "after")
         }
+        // **`join(within: d)` is `join_within(d)`** (ADR-346 D4).
+        let mut limit: Vec[Expr] = []
+        if name == "join" && args.len() == 0 {
+            limit = emit_call_option_named(world, config, "within")
+        }
         // **The text form of text is the text** (ADR-282 D8): nothing is called,
         // and whether it is lent, built or handed over is decided around it as for
         // any other text.
@@ -686,6 +691,8 @@ impl EmitState {
             written = "to_owned"
         } else if name == "set" && witness.len() > 0 {
             written = "set_after"
+        } else if limit.len() > 0 {
+            written = "join_within"
         }
         let mut length = is_length(name, args)
         if !length && receiver != null {
@@ -780,6 +787,8 @@ impl EmitState {
             // Parenthesised exactly where a postfix would be: `&` binds tighter
             // than every binary operator.
             self.emit_core_postfix_base(world, walk, out, host, witness[0], depth, flow, scope)
+        } else if limit.len() > 0 {
+            host.expr(walk, out, limit[0], depth, flow, scope)
         } else {
             self.emit_core_dsl_parameters(world, walk, out, host, name, args.len(), config, depth, flow, scope)
             self.emit_core_method_options(world, walk, out, host, method, args.len(), config, depth, flow, scope)

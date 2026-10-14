@@ -972,6 +972,9 @@ pub fn cx_std_codes(error: ref String, target: ref String) -> Vec[CxCode] {
     if error == "task::Crashed" {
         return [cx_one_code(null, 1100, "TASK_CRASHED", null)]
     }
+    if error == "task::TimedOut" {
+        return [cx_one_code(null, 1101, "TASK_TIMED_OUT", null)]
+    }
     if error == "supervisor::Escalated" {
         return [cx_one_code(null, 1200, "SUPERVISOR_ESCALATED", null)]
     }

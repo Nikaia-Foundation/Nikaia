@@ -262,6 +262,16 @@ fn a_catch_at_join_names_the_body_error() {
     assert_eq!(out, "");
 }
 
+/// ADR-346 D4: `join(within: d)` hands the value back in time, and throws
+/// `task::TimedOut` (the task cancelled) once `d` ran out.
+#[test]
+fn join_within_times_out() {
+    let source = "use std::time\n\nfn slow() -> i64 {\n    time::sleep(5.seconds())\n    return 1\n}\n\nfn quick() -> i64 {\n    return 2\n}\n\nfn main() throws {\n    let a = spawn fn { quick() }\n    let x = a.join(within: 2.seconds())\n    let b = spawn fn { slow() }\n    let y = b.join(within: 10.millis()) catch {\n        match error {\n            task::TimedOut => 9,\n            else => 0,\n        }\n    }\n    println(f\"{x} {y}\")\n}\n";
+    let (out, err, code) = ran("spawn-join-within", source, Build::default());
+    assert_eq!(code, Some(0), "{err}");
+    assert_eq!(out.trim(), "2 9");
+}
+
 const OWN_FATAL: &str = r#"enum Abort { Now(i64) }
 impl Error for Abort {
     fn message(ref self) -> String { return "aborted" }

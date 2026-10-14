@@ -401,6 +401,83 @@ impl<T: 'static, E: 'static + From<Crashed>> FailingTask<T, E> {
     }
 }
 
+/// **What `join(within:)` throws when the time ran out**
+/// ([ADR-346](../../../docs/specification/adr/adr-346.md) D4): the task was
+/// cancelled, and its cleanups ran.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TimedOut;
+
+impl std::fmt::Display for TimedOut {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("the task did not end in time")
+    }
+}
+
+impl std::error::Error for TimedOut {}
+
+/// The two ways `TaskHandle::join(within:)` fails; a channel holding both takes
+/// it apart.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Late {
+    Crashed(Crashed),
+    TimedOut(TimedOut),
+}
+
+impl std::fmt::Display for Late {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Late::Crashed(e) => e.fmt(f),
+            Late::TimedOut(e) => e.fmt(f),
+        }
+    }
+}
+
+impl std::error::Error for Late {}
+
+impl<T> TaskHandle<T> {
+    /// Wait for the slot, at most `span`; on time-out, cancel the task.
+    async fn within(self, span: std::time::Duration) -> Option<Result<T, Crashed>> {
+        use std::future::Future;
+        let mut waiting = std::pin::pin!(crate::rt::exec::Waiting::on(self.slot.clone()));
+        let mut sleeping = std::pin::pin!(crate::time::sleep(span));
+        let outcome = std::future::poll_fn(|context| {
+            if let std::task::Poll::Ready(value) = waiting.as_mut().poll(context) {
+                return std::task::Poll::Ready(Some(value));
+            }
+            if sleeping.as_mut().poll(context).is_ready() {
+                return std::task::Poll::Ready(None);
+            }
+            std::task::Poll::Pending
+        })
+        .await;
+        if outcome.is_none() {
+            self.cancel();
+        }
+        outcome
+    }
+
+    /// **`join(within: d)`** (ADR-346 D4): the value, or [`Crashed`], or
+    /// [`TimedOut`] once `span` ran out, the task cancelled.
+    pub async fn join_within(self, span: std::time::Duration) -> Result<T, Late> {
+        match self.within(span).await {
+            Some(Ok(value)) => Ok(value),
+            Some(Err(crashed)) => Err(Late::Crashed(crashed)),
+            None => Err(Late::TimedOut(TimedOut)),
+        }
+    }
+}
+
+impl<T: 'static, E: 'static + From<Crashed> + From<TimedOut>> FailingTask<T, E> {
+    /// `join(within:)` of a task whose body can fail.
+    pub async fn join_within(self, span: std::time::Duration) -> Result<T, E> {
+        match self.handle.within(span).await {
+            Some(Ok(outcome)) => outcome,
+            Some(Err(crashed)) => Err(E::from(crashed)),
+            None => Err(E::from(TimedOut)),
+        }
+    }
+}
+
 /// An error in the opaque channel on its way from a task on the pool to its
 /// joiner. A `Box<dyn Error>` is not `Send`, so what crosses is what the
 /// joiner can still act on: the message, and the code of an `Exit`.
@@ -449,6 +526,19 @@ impl<T: Send + 'static> BoxedTask<T> {
     ) -> Self {
         BoxedTask {
             handle: TaskHandle::start_on_pool(async move { body.await.map_err(Carried::from_box) }),
+        }
+    }
+
+    /// `join(within:)` of such a task.
+    pub async fn join_within(
+        self,
+        span: std::time::Duration,
+    ) -> Result<T, Box<dyn std::error::Error>> {
+        match self.handle.within(span).await {
+            Some(Ok(Ok(value))) => Ok(value),
+            Some(Ok(Err(carried))) => Err(carried.into_box()),
+            Some(Err(crashed)) => Err(Box::new(crashed)),
+            None => Err(Box::new(TimedOut)),
         }
     }
 

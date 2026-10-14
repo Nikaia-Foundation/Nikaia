@@ -158,6 +158,15 @@ pub fn member_of(words: ref winnow_grammar::InternerContext, declared: ref colle
     if path.len() < 2 {
         return null
     }
+    // A struct error is named whole: `task::TimedOut`, `task::Crashed { .. }`.
+    let mut whole: Vec[String] = []
+    for symbol in path {
+        whole.push(words.resolve(symbol).clone())
+    }
+    let written = whole.join("::")
+    if error_kind(declared, library, written) != 0 {
+        return written
+    }
     let mut parts: Vec[String] = []
     for at in 0..<path.len() - 1 {
         parts.push(words.resolve(path[at]).clone())

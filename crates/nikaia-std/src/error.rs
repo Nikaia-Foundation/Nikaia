@@ -647,12 +647,24 @@ pub fn holds<E: Error + 'static>(error: &(dyn Error + 'static)) -> bool {
         || error
             .downcast_ref::<Raised>()
             .is_some_and(|raised| raised.inner().is::<E>())
+        || match error.downcast_ref::<crate::task::Late>() {
+            Some(crate::task::Late::Crashed(e)) => (e as &dyn Error).is::<E>(),
+            Some(crate::task::Late::TimedOut(e)) => (e as &dyn Error).is::<E>(),
+            None => false,
+        }
 }
 
 /// **The `E` out of that box**; the emitter asks [`holds`] first.
 pub fn opened<E: Error + 'static>(error: Box<dyn Error>) -> E {
     let error = match error.downcast::<Raised>() {
         Ok(raised) => raised.inner,
+        Err(error) => error,
+    };
+    let error: Box<dyn Error> = match error.downcast::<crate::task::Late>() {
+        Ok(late) => match *late {
+            crate::task::Late::Crashed(e) => Box::new(e),
+            crate::task::Late::TimedOut(e) => Box::new(e),
+        },
         Err(error) => error,
     };
     match error.downcast::<E>() {

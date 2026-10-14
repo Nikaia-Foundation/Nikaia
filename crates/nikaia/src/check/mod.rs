@@ -2666,9 +2666,13 @@ impl<'a> Checker<'a> {
         // the call happens and never *what* a call is. The door is one
         // of those things, so it is resolved here exactly as it is
         // there, off the type **inside** the `T?`.
-        let door = witness
-            .filter(|_| locked_content_of(&inner).is_some())
+        let within = witness
+            .filter(|_| a_task_handle(&inner) && name == "join")
             .map(|at| &config[at].value);
+        let door = witness
+            .filter(|_| locked_content_of(&inner).is_some() && name == "set")
+            .map(|at| &config[at].value);
+        let witness = witness.filter(|_| within.is_none());
         if let (Some(at), None) = (witness, door) {
             self.expr(&config[at].value, span);
         }
@@ -2680,7 +2684,13 @@ impl<'a> Checker<'a> {
                 given = args.iter().chain([seen]).cloned().collect();
                 (&given[..], "set(after)".to_string())
             }
-            None => (args, self.parsed.text(*method).to_string()),
+            None => match within {
+                Some(limit) => {
+                    given = args.iter().chain([limit]).cloned().collect();
+                    (&given[..], "join(within)".to_string())
+                }
+                None => (args, self.parsed.text(*method).to_string()),
+            },
         };
         // **The receiver is lent to the call where the call changes
         // nothing** ([ADR-278](../../docs/specification/adr/adr-278.md)
@@ -6281,11 +6291,16 @@ impl<'a> Checker<'a> {
                     }
                     _ => None,
                 };
-                let witness = match self.parsed.text(*method) == "set" {
-                    true => config
+                // `join(within: d)` is `TaskHandle::join(within)` the same way
+                // (ADR-346 D4): the option joins the arguments.
+                let witness = match self.parsed.text(*method) {
+                    "set" => config
                         .iter()
                         .position(|a| self.parsed.text(a.name) == "after"),
-                    false => None,
+                    "join" => config
+                        .iter()
+                        .position(|a| self.parsed.text(a.name) == "within"),
+                    _ => None,
                 };
                 // ADR-296 D5: a DSL's deferred parameters stand here. They are
                 // expressions like any other, so they are walked - what checks
@@ -6610,9 +6625,15 @@ impl<'a> Checker<'a> {
                 //
                 // **Before `NK2203`**, which names the entry it refuses and
                 // would otherwise name `set` for a call that is not one.
-                let door = witness
-                    .filter(|_| locked_content_of(&on).is_some())
+                let within = witness
+                    .filter(|_| a_task_handle(&on) && self.parsed.text(*method) == "join")
                     .map(|at| &config[at].value);
+                let door = witness
+                    .filter(|_| {
+                        locked_content_of(&on).is_some() && self.parsed.text(*method) == "set"
+                    })
+                    .map(|at| &config[at].value);
+                let witness = witness.filter(|_| within.is_none());
                 if let (Some(at), None) = (witness, door) {
                     // Not a lock after all, so it was an option like any other
                     // and the walk above owed it a visit.
@@ -6626,7 +6647,13 @@ impl<'a> Checker<'a> {
                         given = args.iter().chain([seen]).cloned().collect();
                         (&given[..], "set(after)".to_string())
                     }
-                    None => (&args[..], self.parsed.text(*method).to_string()),
+                    None => match within {
+                        Some(limit) => {
+                            given = args.iter().chain([limit]).cloned().collect();
+                            (&given[..], "join(within)".to_string())
+                        }
+                        None => (&args[..], self.parsed.text(*method).to_string()),
+                    },
                 };
                 // **A `set` given a stamped value** (D4). The
                 // rule wants the receiver's **name** for its message and the
@@ -13513,6 +13540,11 @@ impl MultiLock {
 ///
 /// `SharedMut[T]` is a count around a lock and `Locked[T]` is the lock on its
 /// own; both hold a `T` and a door over several takes either.
+/// Whether a type is a task's handle (ADR-346 D4: `join(within:)`).
+fn a_task_handle(ty: &Ty) -> bool {
+    matches!(ty, Ty::Named { name, .. } if name == "TaskHandle")
+}
+
 fn locked_content_of(ty: &Ty) -> Option<Ty> {
     nikaia_std::tools::check_types::locked_content_of(ty)
 }

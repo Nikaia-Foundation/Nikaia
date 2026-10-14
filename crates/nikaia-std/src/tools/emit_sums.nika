@@ -142,6 +142,21 @@ impl EmitState {
                     out.push(f"impl{decl} From<{member}> for {name}{params} {{\n    fn from(error: {member}) -> {name}{params} {{ {name}::{variant}(nikaia_std::error::Thrown::from(error)) }}\n}}\n")
                 }
             }
+            // **`join(within:)` fails in two of `std`'s ways at once** (ADR-346
+            // D4): a sum holding both takes the pair apart.
+            let mut crashed = false
+            let mut timed_out = false
+            for member in members {
+                if member == "task::Crashed" {
+                    crashed = true
+                }
+                if member == "task::TimedOut" {
+                    timed_out = true
+                }
+            }
+            if crashed && timed_out {
+                out.push(f"impl{decl} From<nikaia_std::task::Late> for {name}{params} {{\n    fn from(error: nikaia_std::task::Late) -> {name}{params} {{\n        match error {{\n            nikaia_std::task::Late::Crashed(e) => e.into(),\n            nikaia_std::task::Late::TimedOut(e) => e.into(),\n        }}\n    }}\n}}\n")
+            }
             out.push(f"impl{decl} std::fmt::Display for {name}{params} {{\n    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {{\n        match self {{\n")
             for member in members {
                 let variant = sum_variant(member)

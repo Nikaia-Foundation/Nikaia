@@ -3898,6 +3898,23 @@ pub = true
 signature = "[T](self: TaskHandle[T]) -> T"
 throws = ["task::Crashed"]
 
+# **`join(within: d)` waits at most `d`** (ADR-346 D4): on time-out the task is
+# cancelled, as `cancel()` cancels it, and the call throws `task::TimedOut`.
+# Wait for the task, at most `within`, and take what it produced.
+#
+# When the time runs out first, the task is cancelled (its cleanups run) and
+# this throws `task::TimedOut`.
+[fn."TaskHandle::join(within)"]
+pub = true
+signature = "[T](self: TaskHandle[T], within: time::Duration) -> T"
+throws = ["task::Crashed", "task::TimedOut"]
+
+# **What `join(within:)` throws when the time ran out** (ADR-346 D4).
+[type."task::TimedOut"]
+pub = true
+crosses = true
+compares = true
+
 # **What a task that panicked hands its joiner**
 # ([ADR-328](../../docs/specification/adr/adr-328.md) D8): what the panic said,
 # and where, as `src/main.nika:4` - empty where no line of the program is known.
