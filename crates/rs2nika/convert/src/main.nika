@@ -108,8 +108,9 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R59  Option combinators with a field or method body: `o.map(|x| x.f)` -> `o?.f`, `.is_some_and(|x| x.p())` -> `(o?.p() ?? false)`, `.map_or(d, ..)` -> `(o?.. ?? d)`",
         "R60  `String::with_capacity(n)` -> `\"\"`",
         "R61  a call or a literal in a `format!` argument -> `let hole_N = ..` before the line, `{hole_N}` in the f-string",
+        "R65  `?` in a lambda -> `?? return null`; `x.starts_with([a, b])` -> `(x.starts_with(a) || x.starts_with(b))`; a `use` inside a function -> TODO",
         "R64  `let x = match e { Some(v) => v, None => return y }` (also `continue`/`break`, in loops too) -> `let x = e ?? return y`",
-        "R63  what R59 leaves of `o.is_some_and(..)`: `o.is_some_and(|x| p)` -> `(o != null && p)` with `x` read as `(o ?? panic(..))`, `o.is_some_and(f)` -> `(o != null && f(o ?? panic(..)))`",
+        "R63  what R59 leaves of `o.is_some_and(..)`: `o.is_some_and(|x| p)` -> `(o != null && p)` with `x` read as `(o ?? panic(..))` (used twice: `match o ?? panic(..) { x => p }`), `o.is_some_and(f)` -> `(o != null && f(o ?? panic(..)))`",
         "--only NAME converts the one function NAME of the file (line numbers kept, for `--facts`)",
         "R62  a local closure with arguments -> `let f: fn(ref T) -> R sync = fn(a) { .. }`, its type from the `--facts` file (rust-analyzer) or from its own annotations",
     ]
@@ -1718,6 +1719,7 @@ fn rs2nika_expr(mut ctx: Rs2nikaCtx, line: ref String) -> String {
     s = rs2nika_opt_comb_hit(ctx, s)
     s = rs2nika_adapters(ctx, s)
     s = rs2nika_closures(ctx, s)
+    s = rs2nika_starts_any(ctx, s)
     s = rs2nika_some(ctx, s)
     s = rs2nika_derefs(ctx, s)
     s = rs2nika_idioms(ctx, s)
@@ -1822,6 +1824,16 @@ fn rs2nika_some_and(given: ref String) -> String {
                 continue
             }
             let bare: String = some[1..<some.len() - 1].clone()
+            let once = rs2nika_replace_word(body, v, "#")
+            if once.split("#").count() > 2 {
+                // used twice: unwrapped once, bound by a match arm
+                cond = f"match {bare} {{ {v} => {body} }}"
+                let pre2: String = rs2nika_text(c, 0, start)
+                let post2: String = rs2nika_text(c, end + 1, c.len())
+                s = f"{pre2}({recv} != null && {cond}){post2}"
+                from = 0
+                continue
+            }
             cond = rs2nika_replace_word(body.replace(f"*{v}", v).replace(f"({v})", f"(#{v}#)"), v, some).replace(f"(#{some}#)", f"({bare})")
         } else if rs2nika_is_path(arg) {
             let bare: String = some[1..<some.len() - 1].clone()
@@ -2072,6 +2084,18 @@ fn rs2nika_closures(mut ctx: Rs2nikaCtx, given: ref String) -> String {
             if block {
                 body = body[1..<body.len() - 1].trim().clone()
             }
+            // a closure nested in this one's body is rewritten too
+            body = rs2nika_closures(ctx, body)
+            // R65: `?` in a lambda leaves the lambda with `null` (5.3: a
+            // lambda's `return` leaves the lambda)
+            if body.contains("?;") || body.ends_with("?") {
+                body = body.replace("?;", " ?? return null;")
+                if body.ends_with("?") {
+                    let cut: String = body[0..<body.len() - 1].clone()
+                    body = f"{cut} ?? return null"
+                }
+                rs2nika_hit(ctx, "R65")
+            }
             let args = rs2nika_join(names, ", ")
             out.push_str(f"fn({args}) {{ {body} }}{semi}")
             rs2nika_hit(ctx, "R26")
@@ -2082,6 +2106,45 @@ fn rs2nika_closures(mut ctx: Rs2nikaCtx, given: ref String) -> String {
         at = at + 1
     }
     return out
+}
+
+/// R65: `x.starts_with(['a', 'b'])` -> `(x.starts_with('a') || x.starts_with('b'))`
+/// (`str::starts_with` takes one text or one character); a `use` inside a
+/// function -> a TODO (Nikaia's `use` stands at the top of a file).
+fn rs2nika_starts_any(mut ctx: Rs2nikaCtx, given: ref String) -> String {
+    let t: String = given.trim().clone()
+    if t.starts_with("use ") && given.starts_with(" ") {
+        rs2nika_hit(ctx, "R65")
+        return f"{rs2nika_indent(given)}// TODO(rs2nika): `{t}` belongs at the top of the file"
+    }
+    let mut s: String = given.clone()
+    while true {
+        let c: Vec[scalar] = s.chars().collect()
+        let at = rs2nika_find_from(c, ".starts_with([", 0)
+        if at < 0 {
+            break
+        }
+        let open = at + 13
+        let end = rs2nika_closing(c, open, '[', ']')
+        if end < 0 || end + 1 >= c.len() || c[end + 1] != ')' {
+            break
+        }
+        let start = rs2nika_recv_start(c, at)
+        let recv: String = rs2nika_text(c, start, at)
+        let items: String = rs2nika_text(c, open + 1, end)
+        let mut parts: Vec[String] = []
+        for item in items.split(",") {
+            if item.trim() != "" {
+                parts.push(f"{recv}.starts_with({item.trim()})")
+            }
+        }
+        let pre: String = rs2nika_text(c, 0, start)
+        let post: String = rs2nika_text(c, end + 2, c.len())
+        let joined = rs2nika_join(parts, " || ")
+        s = f"{pre}({joined}){post}"
+        rs2nika_hit(ctx, "R65")
+    }
+    return s
 }
 
 /// R27: `::<T>()` -> `()`.

@@ -1,0 +1,13 @@
+fn an_or_a(ty: ref String) -> ref String sync {
+    if (ty.starts_with('i') || ty.starts_with('a')) { "an" } else { "a" }
+}
+
+fn wide(o: String?) -> bool sync {
+    return (o != null && match o ?? panic("rs2nika: checked above") { x => x.len() > 1 && x.len() < 5 })
+}
+
+fn head(v: ref Vec[ref String]) -> i64? sync {
+    // TODO(rs2nika): iterator adapter with no `Seq` method: a `for` loop
+    return v.iter().find_map(fn(s) { let t = s.strip_prefix("a") ?? return null; Some(t.len()) })
+}
+

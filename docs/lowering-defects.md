@@ -274,3 +274,9 @@ consider borrowing"): the call does not borrow `xs[0]` for the `ref String`
 parameter, as a call of a named function does. Found with rs2nika's R62
 (#579). **To build:** a `nikaia run` test, and the borrow at the call.
 
+
+## D27 (new, language). No rest pattern `V(..)`
+
+Rust's `Held::Precondition(..)` has no Nikaia spelling: the parser stops at
+the `..` and a draft must name every field with `_`, which a converter cannot
+know without the type. Found with rs2nika (#579, `claims_report`). Not decided here.

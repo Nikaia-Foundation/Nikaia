@@ -558,6 +558,12 @@ touches = []
 views = ["text: borrowed", "pre: borrowed"]
 signature = "(text: ref String, pre: ref String) -> bool"
 
+[fn."rs2nika_starts_any"]
+sync = "inferred"
+touches = []
+views = ["given: borrowed"]
+signature = "(mut ctx: Rs2nikaCtx, given: ref String) -> String"
+
 [fn."rs2nika_starts_control"]
 sync = "inferred"
 touches = []
