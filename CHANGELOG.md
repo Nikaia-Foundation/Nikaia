@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.929] — 2026-10-14
+
+**spec: a function value keeps the error set inferred for it (ADR-351, #620)**
+- The owner's decision on #620 (option B): a function value carries the error set the compiler inferred for it wherever it goes, called at once or kept. A call through it fails with that set; writing, storing or handing it on fails with nothing; values that meet carry the union. A ledger names a call through a given function as `from(p)`. `supervisor::run` throws a child's fatal error itself and `supervisor::Handed` is withdrawn (ADR-346 D7 changed). A `net::serve` handler's error is a detached task's (ADR-346 D6). Part I 5.4 C and 7.1, Part II 12.8, Part III 13.5 and `net`. Not built yet.
+
 ## [0.0.928] — 2026-10-14
 
 **spec: a test that proves a T? not null makes it a T (ADR-350, #619)**

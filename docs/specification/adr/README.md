@@ -239,6 +239,7 @@ implementation.
 
 | ADR | Decides | Status | Built |
 | :--- | :--- | :--- | :--- |
+| [351](adr-351.md) | A function value keeps the error set inferred for it, called at once or kept: a call through it fails with that set, storing or handing it on fails with nothing, values that meet carry the union; a ledger says `from(p)`; `supervisor::run` throws a child's fatal error itself (`Handed` withdrawn); a `net::serve` handler's error is a detached task's | Accepted | no |
 | [308](adr-308.md) | An unread error is bound as `_error`, a `catch` over what cannot fail is refused (`NK1134`), and an error that newly reaches a handler is named once (`NK2402`). | Accepted | yes |
 | [280](adr-280.md) | A failure travels as its error type in a one-word envelope; the site is free, a trace is asked for, and the failures that joined it are shown, not read. Where more than one error type arrives, `error` is an `Error`, one of the members (D30). | Accepted | yes |
 | [023](adr-023.md) | `throws` carries no type list and the error set is inferred into the ledger; `throw` exists, an error knows its site, and there is no postfix `?`. | Accepted | yes |
@@ -266,6 +267,7 @@ either finds the other. Records replaced as a whole are not here: they are in
 
 | Changed | By | What holds now |
 | :--- | :--- | :--- |
+| [346](adr-346.md) D7 | [351](adr-351.md) D5 | a supervisor throws a child's fatal error itself; no `supervisor::Handed` |
 | [343](adr-343.md) D1-D3 | [345](adr-345.md) D3-D5 | `exit` throws the fatal `process::Exit`; no `exits` column, no `NK2607` |
 | [296](adr-296.md) D25 | [299](adr-299.md) D21 | the author may mark one entry `main`; the compiler still picks none |
 | [299](adr-299.md) D4, D8 | [338](adr-338.md) D2 | the database protocol is the official package `db` |

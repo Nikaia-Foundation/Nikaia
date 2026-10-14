@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.928 (Draft)
+**Version:** 0.0.929 (Draft)
 **Date:** 2026-10-14
 
 ---
@@ -1833,11 +1833,11 @@ The context of such a parameter is **inferred**, not written. A parameter the
 body only calls is immediate and borrows. A parameter the body keeps (stores,
 hands back, gives to a task) is detached and moves. It is the question 6.5 asks
 of every parameter, and there is no `@detached` to write. For an immediate
-parameter the lambda's `touches` and `throws` count for the callee, while
+parameter the lambda's `touches` count for the callee, while
 whether the call may pause, and the shape it is lowered to, follow the
 parameter's type. `std`'s own lambda-taking entries, such as `map`, are written
 by hand and follow the lambda in everything. For a kept parameter the
-callee's promises follow the type, so a `listen` that calls a stored
+callee's promises about pausing follow the type, so a `listen` that calls a stored
 `fn(Request) -> Response` may pause. The capture at a `spawn` is reported with
 `NK2101` (8.3).
 
@@ -2527,6 +2527,16 @@ names the order.
 **`throws` names no types.** What a function can fail *with* follows from its
 body. The compiler infers it whole-program and writes it to `nikaia.contracts`
 (Part III, 13.5).
+
+**A function value keeps its set.** A named function or a lambda used as a
+value carries the set inferred for its body wherever it goes: a `let`, a
+field, an element of a list or a map, a result, a parameter, called at once or
+kept. A call through it can fail with that set; writing, storing, handing on
+or returning it can fail with nothing. Where values with different sets meet
+(the arms of an `if` or a `match`, the elements of one list or map, the values
+assigned to one variable or field, the arguments every caller hands one
+parameter), the place carries their union. A place no failing value reaches
+cannot fail ([ADR-351](adr/adr-351.md)).
 
 **An error type is an `enum`.**
 

@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part II: Advanced Features & Metaprogramming**
-**Version:** 0.0.928 (Draft)
+**Version:** 0.0.929 (Draft)
 **Date:** 2026-10-14
 
 ---
@@ -1079,12 +1079,12 @@ fn main() throws {
 }
 ```
 
-**`supervisor::run` runs the supervisor until it gives up.** It returns only then, and throws `supervisor::Escalated`. Before it does, it stops every child in reverse order and their cleanups run. A supervisor in the background is `spawn fn { supervisor::run(…) }`; a child whose function calls `supervisor::run` is a supervisor below, and its giving up is a crash to the one above.
+**`supervisor::run` runs the supervisor until it gives up.** It returns only then, and throws `supervisor::Escalated`, or a child's fatal error (below). Before it does, it stops every child in reverse order and their cleanups run. A supervisor in the background is `spawn fn { supervisor::run(…) }`; a child whose function calls `supervisor::run` is a supervisor below, and its giving up is a crash to the one above.
 
 **The list's order is the start order and the dependency.** A child depends on every child before it; children start in list order and stop in reverse. The strategy says which siblings restart with a crashed child: `OneForOne` the child alone; `OneForAll` all of them; `RestForOne` the child and every child after it. Those that restart are stopped in reverse order and started in list order.
 
 **A child's kind says which ends are restarted** (`restart:`): `Kind::Permanent`, the default, every end; `Kind::Transient` a panic or a thrown error, not a normal end; `Kind::Temporary` none, and a crash is reported.
 
-**When, a policy decides** (`policy:`): a value implementing `supervisor::Restart`, whose `decide` gets the history of failures - how long the last attempt ran, how many failures this cycle has had, how long since its first - and answers `Immediate`, `Delay(d)` or `Escalate`. A child that ends with a **fatal** error (Part I 7.1) is not restarted and no policy is asked: the supervisor stops every child and throws `supervisor::Handed`, which is fatal itself, says what the child's error said and ends the program as that error would have: an `Exit`'s code, `1` for any other ([ADR-346](adr/adr-346.md) D7). `Handed` carries the child's error itself: a `catch` arm that names the child's own error type takes it there, unless a value of that type cannot cross threads, in which case only its message travels. A child that wants a restart catches the type by name. `std`'s default restarts the first failure at once, then after a delay that grows, with jitter, up to a ceiling, starts a new cycle after an attempt that ran long enough, and gives up when a cycle lasts too long. The policy of the child that crashed decides for the siblings it takes along. `SharedMut::supervised` is rebuilt by the same policy; a door to it during a delay panics, and a value whose policy gives up stays poisoned (Part I 6.3).
+**When, a policy decides** (`policy:`): a value implementing `supervisor::Restart`, whose `decide` gets the history of failures - how long the last attempt ran, how many failures this cycle has had, how long since its first - and answers `Immediate`, `Delay(d)` or `Escalate`. A child that ends with a **fatal** error (Part I 7.1) is not restarted and no policy is asked: the supervisor stops every child and throws that error itself, which ends the program as it would have: an `Exit`'s code, `1` for any other. `run` can fail with `supervisor::Escalated` and the fatal members of its children's error sets, which each child carries as a function value does (Part I 7.1); a `catch` takes one by naming its type ([ADR-351](adr/adr-351.md) D5). A child that wants a restart catches the type by name. `std`'s default restarts the first failure at once, then after a delay that grows, with jitter, up to a ceiling, starts a new cycle after an attempt that ran long enough, and gives up when a cycle lasts too long. The policy of the child that crashed decides for the siblings it takes along. `SharedMut::supervised` is rebuilt by the same policy; a door to it during a delay panics, and a value whose policy gives up stays poisoned (Part I 6.3).
 
 **A child keeps no changeable state across a restart.** Its function is called again for every attempt. A binding it captures without `mut` is lent to every attempt, and a `Shared` handle is duplicated. A captured `mut` binding, or a value an attempt would keep, hand on or use up, is refused with `NK1229`; what must be fresh is built inside the function.

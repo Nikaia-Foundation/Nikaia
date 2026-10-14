@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part III: Tooling, Ecosystem & Interoperability**
-**Version:** 0.0.928 (Draft)
+**Version:** 0.0.929 (Draft)
 **Date:** 2026-10-14
 
 ---
@@ -302,7 +302,7 @@ error[NK2401]: a change in `longest` broke its caller `report`
 | :--- | :--- | :--- |
 | `pub` | fn, type | reachable from outside the unit that declares it |
 | `sync` | fn | Part II 12.1: it never pauses; what it reaches is answered by `touches`. `true` where the source asserted it, `"inferred"` where the body implies it, `"sync(f)"` where the lambda it is given decides - the source's own `sync(f)` ([ADR-288](adr/adr-288.md) D31) |
-| `throws` | fn | Part I 7.1: it may fail, and **with what**: `throws = ["ConfigError", "IoError"]`, the set inferred over the call graph. The set names error **types** and never one of their variants. A member written `"?"` is *something this compiler cannot name* — an unresolved call, or a call into code no ledger describes. **`std`'s own entries all name what they throw**: `io::IoError` for the seven that read, write or check text, `Overtaken` for the lock's two doors. Where the set has exactly one member and the member is a type **any ledger describes** — the unit's own, or `std`'s — the **failure channel is that type**; where it has two or more, the channel is a **generated sum** over them. Either way a `catch` matches on the members' variants. A set with a `"?"` in it travels in one opaque error |
+| `throws` | fn | Part I 7.1: it may fail, and **with what**: `throws = ["ConfigError", "IoError"]`, the set inferred over the call graph. The set names error **types** and never one of their variants. A member written `"?"` is *something this compiler cannot name* — an unresolved call, or a call into code no ledger describes. A member written `"from(p)"` is *what the function value given as `p` throws*, where `p` is a parameter or a field path of one (`"from(handler)"`, `"from(job.run)"`); a caller replaces it with the set of what it passed, and a function value is never a reason for `"?"` ([ADR-351](adr/adr-351.md) D4). **`std`'s own entries all name what they throw**: `io::IoError` for the seven that read, write or check text, `Overtaken` for the lock's two doors. Where the set has exactly one member and the member is a type **any ledger describes** — the unit's own, or `std`'s — the **failure channel is that type**; where it has two or more, the channel is a **generated sum** over them. Either way a `catch` matches on the members' variants. A set with a `"?"` in it travels in one opaque error |
 | `returns` | fn | what the result may point into, `returns = "ref(a \| b)"`, **only where the result has no `ref` to write it on** (a `Seq[scalar]` read out of a text). Everywhere else it is in the signature: `-> ref(a \| b) String` |
 | `keeps` | fn | the parameters written with a plain type that the body **keeps** past the call - stores, returns, hands to a task or to a callee that keeps it ([ADR-094](adr/adr-094.md) D2): `keeps = ["value"]`. A caller hands such an argument over; every other one is lent. **Absent on a present entry means it keeps nothing** |
 | `mutates` | fn | the call changes the value it is made on. Written in the signature, as the receiver `ref mut self`; the key stands only on an entry with no receiver to write it on |
@@ -1424,7 +1424,9 @@ An untrusted map is seeded randomly, so **its iteration order is not stable betw
   provides an adaptive one and a package may provide another. At the system's
   ceiling or over the limit the server stops accepting, and never ends for it.
   A read can carry a deadline; `serve` sets no idle limit of its own, which is a
-  protocol's to set.
+  protocol's to set. An error a handler ends with is a detached task's error
+  (Part I 8.2): printed in the long form, and a fatal one replaces the exit
+  status at `main`'s end ([ADR-351](adr/adr-351.md) D6).
 
 * **`http1`** (an official package, 17.3): HTTP/1.1's **text half** — where a head ends, what its lines
   say, which header the client sent, what the query string says, and where the
