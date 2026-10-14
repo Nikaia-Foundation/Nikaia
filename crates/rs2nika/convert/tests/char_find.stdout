@@ -1,0 +1,6 @@
+fn tick(text: ref String) -> i64 sync {
+    let at = text.find("`") ?? 0
+    let quote = text.rfind('\'') ?? 0
+    return at + quote
+}
+

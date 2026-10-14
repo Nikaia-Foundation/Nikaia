@@ -86,6 +86,12 @@ touches = []
 views = ["t: borrowed"]
 signature = "(t: ref String, byte: i64) -> i64"
 
+[fn."rs2nika_char_needle"]
+sync = "inferred"
+touches = []
+views = ["given: borrowed"]
+signature = "(mut ctx: Rs2nikaCtx, given: ref String) -> String"
+
 [fn."rs2nika_close_iflet"]
 sync = "inferred"
 touches = []

@@ -74,7 +74,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R25  `for x in &xs` / `xs.iter()` -> `for x in xs`",
         "R26  closures `|x| e` -> `fn(x) { e }`; `.any`/`.all`/`.find` pass through (`Seq`), a function name `.any(f)` -> `.any(fn(x) { f(x) })`",
         "R27  `.collect::<T>()` -> `.collect()`",
-        "R28  path prefixes `crate::ast::`, `ast::`, `crate::types::`, `ty::` dropped",
+        "R28  path prefixes `crate::ast::`, `ast::`, `crate::types::`, `ty::`, `contracts::` dropped",
         "R29  `.as_ref()`, `.as_slice()`, `.as_str()`, `.as_deref()`, `.borrow()` dropped",
         "R30  `#[...]` attributes dropped; `pub(crate)`/`pub(super)` -> `pub`/none",
         "R31  profile: `self.parsed.text(x)`/`self.text(x)`/`self.name(x)` -> `world.words.resolve(x)`",
@@ -108,6 +108,7 @@ pub fn rs2nika_rules() -> Vec[String] {
         "R59  Option combinators with a field or method body: `o.map(|x| x.f)` -> `o?.f`, `.is_some_and(|x| x.p())` -> `(o?.p() ?? false)`, `.map_or(d, ..)` -> `(o?.. ?? d)`",
         "R60  `String::with_capacity(n)` -> `\"\"`",
         "R61  a call or a literal in a `format!` argument -> `let hole_N = ..` before the line, `{hole_N}` in the f-string",
+        "R67  `.find('c')` / `.rfind('c')` -> `.find(\"c\")`: `str::find` takes text",
         "R66  `build_time::decoded(x)` -> `decoded(x) fn(n) { ascii_scalar(n) }` (escapes.nika), with a TODO: above ASCII it reads no text",
         "R65  `?` in a lambda -> `?? return null`; `x.starts_with([a, b])` -> `(x.starts_with(a) || x.starts_with(b))`; a `use` inside a function -> TODO",
         "R64  `let x = match e { Some(v) => v, None => return y }` (also `continue`/`break`, in loops too) -> `let x = e ?? return y`",
@@ -1678,10 +1679,35 @@ fn rs2nika_decoded(mut ctx: Rs2nikaCtx, given: ref String) -> String {
     return s
 }
 
+/// R67: a one-character `char` needle of `find`/`rfind` is the same text.
+fn rs2nika_char_needle(mut ctx: Rs2nikaCtx, given: ref String) -> String {
+    let mut s: String = given.clone()
+    for m in [".find('", ".rfind('"] {
+        let mut from = 0
+        while true {
+            let c: Vec[scalar] = s.chars().collect()
+            let at = rs2nika_find_from(c, m, from)
+            if at < 0 {
+                break
+            }
+            let q = at + m.chars().count() - 1
+            from = at + 1
+            if q + 3 < c.len() && c[q + 2] == '\'' && c[q + 3] == ')' && c[q + 1] != '\\' && c[q + 1] != '"' {
+                let pre = rs2nika_text(c, 0, q)
+                let post = rs2nika_text(c, q + 3, c.len())
+                s = f"{pre}\"{c[q + 1]}\"{post}"
+                rs2nika_hit(ctx, "R67")
+            }
+        }
+    }
+    return s
+}
+
 fn rs2nika_expr(mut ctx: Rs2nikaCtx, line: ref String) -> String {
     let mut s: String = rs2nika_bytes(ctx, line)
     s = rs2nika_decoded(ctx, s)
-    for p in ["crate::ast::", "ast::", "crate::types::", "crate::"] {
+    s = rs2nika_char_needle(ctx, s)
+    for p in ["crate::ast::", "ast::", "crate::types::", "crate::", "contracts::"] {
         if s.contains(p) {
             s = s.replace(p, "")
             rs2nika_hit(ctx, "R28")
