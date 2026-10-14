@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.953] — 2026-10-14
+
+**a parameter handed to a trait's method by value is kept**
+- contracts: a trait's method keeps the parameters it takes by value, so a call through a bound (`host.go(f)` under `[H: A]`) keeps the caller's by-value parameter, and the lowering writes it as a value, not a `&` the method does not take (found in U-c11: deleting `CheckHost::expr` made `emit_match_subject` lower `flow: &EmitFlow`).
+
 ## [0.0.952] — 2026-10-14
 
 **a struct of views takes one lifetime per view field, and a result's fields their parameters' (ADR-353 D1, part of #614)**

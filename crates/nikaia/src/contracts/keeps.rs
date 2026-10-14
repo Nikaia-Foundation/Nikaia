@@ -163,6 +163,24 @@ pub fn infer(
                         }
                     }
                 }
+                // **A trait's method keeps what it takes by value**: a call
+                // through a bound (`host.go(f)` under `[H: A]`) cannot see
+                // which `impl` answers, and the signature taking `f` by value
+                // is the licence for any of them to keep it. Read as keeping
+                // nothing, a caller lent its own by-value parameter on and the
+                // language below refused the `&` where a value was asked.
+                Item::Trait { name, methods, .. } => {
+                    let owner = parsed.text(*name);
+                    for method in methods {
+                        let mut uses = no_uses();
+                        for arg in method.node.args.iter() {
+                            if !arg.ty.is_view && !arg.mutable {
+                                uses.kept.insert(parsed.text(arg.name).to_string());
+                            }
+                        }
+                        graph.insert(format!("{owner}::{}", parsed.text(method.node.name)), uses);
+                    }
+                }
                 // **A `entry` rule is an entry, and its one parameter is the
                 // text** ([ADR-296](../../../docs/specification/adr/adr-296.md)
                 // D1). Whether it keeps that text is not a question about an

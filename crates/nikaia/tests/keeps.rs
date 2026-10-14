@@ -568,3 +568,16 @@ fn main() {
     assert_eq!(keeps(source, "Log::add"), vec!["line".to_string()]);
     assert_eq!(keeps(source, "note"), vec!["line".to_string()]);
 }
+
+/// **A trait's method keeps what it takes by value**: a call through a bound
+/// cannot see the `impl` that answers, so a caller's by-value parameter handed
+/// on to it is kept, and lowered as a value rather than a `&` the method's
+/// signature does not take. What the method takes by `ref` stays lent.
+#[test]
+fn a_parameter_handed_to_a_trait_method_by_value_is_kept() {
+    let source = "struct Flow { pub n: i64 }\n\
+         trait Host { fn go(ref self, f: Flow, g: ref Flow) -> i64 sync }\n\
+         fn pass[H: Host](host: ref H, f: Flow, g: Flow) -> i64 sync { return host.go(f, g) }";
+    assert_eq!(keeps(source, "Host::go"), ["f"]);
+    assert_eq!(keeps(source, "pass"), ["f"]);
+}
