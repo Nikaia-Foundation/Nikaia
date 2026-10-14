@@ -513,6 +513,17 @@ impl<T: 'static, E: 'static + From<Crashed> + From<TimedOut>> FailingTask<T, E> 
 pub struct Carried {
     message: String,
     exit: Option<i32>,
+    fatal: Option<i32>,
+}
+
+impl crate::process::Ending for Carried {
+    fn exit_code(&self) -> Option<i32> {
+        self.exit
+    }
+
+    fn fatal_code(&self) -> Option<i32> {
+        self.fatal
+    }
 }
 
 impl Carried {
@@ -521,6 +532,7 @@ impl Carried {
         Carried {
             message: error.to_string(),
             exit: error.exit_code(),
+            fatal: error.fatal_code(),
         }
     }
 
@@ -562,7 +574,7 @@ impl<T: Send + 'static> BoxedTask<T> {
                 if let Err(carried) = &outcome {
                     told.failed(Report {
                         text: carried.message.clone(),
-                        code: carried.exit,
+                        code: carried.fatal,
                     });
                 }
                 outcome
@@ -629,7 +641,7 @@ impl<E: crate::process::Ending + std::fmt::Display> ProbeEnding for &Probe<'_, E
     fn report(&self) -> Report {
         Report {
             text: self.0.to_string(),
-            code: self.0.exit_code(),
+            code: self.0.fatal_code(),
         }
     }
 }

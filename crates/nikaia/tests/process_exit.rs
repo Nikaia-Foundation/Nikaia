@@ -279,13 +279,41 @@ fn a_detached_error_reaches_the_log_at_the_end() {
 }
 
 /// ADR-346 D7: a supervisor does not restart a child's fatal `Exit`; it hands
-/// it on, and `main` ends with its code.
+/// it on as `supervisor::Handed`, which is fatal, so a plain `catch` does not
+/// take it, and `main` ends with its code.
 #[test]
 fn a_supervisor_hands_a_fatal_error_on() {
     let source = "use std::process\nuse std::supervisor\n\nfn stop(tries: SharedMut[i64]) throws {\n    tries.update fn(mut v) { v += 1 }\n    process::exit(6)\n}\n\nfn main() throws {\n    let tries = SharedMut(0)\n    let seen = tries.clone()\n    supervisor::run([\n        supervisor::child(fn { stop(tries) }; restart: supervisor::Kind::Permanent),\n    ]) catch {\n        let n = seen.get()\n        println(f\"tries {n}\")\n        throw error\n    }\n}\n";
     let (out, err, code) = ran("supervisor-fatal", source, Build::default());
     assert_eq!(code, Some(6), "{err}");
-    assert_eq!(out.trim(), "tries 1", "{err}");
+    assert_eq!(out.trim(), "", "{err}");
+}
+
+/// ADR-345 D1 with ADR-346 D6, D7: a program's own fatal type is fatal in a
+/// task as `Exit` is - a supervisor does not restart it, and a detached task's
+/// sets the status `1` at `main`'s end.
+#[test]
+fn a_program_fatal_type_is_fatal_in_tasks() {
+    let decl = "use std::supervisor\nuse std::time\n\nenum Doom { Over(i64) }\nimpl Error for Doom {\n    fn message(ref self) -> String { return \"doom\" }\n}\nimpl Fatal for Doom {}\n\n";
+    let supervised = format!(
+        "{decl}fn stop(tries: SharedMut[i64]) throws {{\n    tries.update fn(mut v) {{ v += 1 }}\n    println(\"try\")\n    throw Doom::Over(1)\n}}\n\nfn main() throws {{\n    let tries = SharedMut(0)\n    supervisor::run([\n        supervisor::child(fn {{ stop(tries) }}; restart: supervisor::Kind::Permanent),\n    ]) catch {{\n        println(\"taken\")\n    }}\n}}\n"
+    );
+    let (out, err, code) = ran("supervisor-own-fatal", &supervised, Build::default());
+    assert_eq!(code, Some(1), "{err}");
+    assert_eq!(out.trim(), "try", "{err}");
+    assert!(err.contains("doom"), "{err}");
+    let detached = format!(
+        "{decl}fn work() -> i64 throws {{\n    throw Doom::Over(2)\n    return 1\n}}\n\nfn main() throws {{\n    spawn fn {{ work() }}\n    time::sleep(20.millis())\n    println(\"end\")\n}}\n"
+    );
+    for (purpose, how) in [
+        ("detached-own-fatal", Build::default()),
+        ("detached-own-fatal-pool", Build::parallel()),
+    ] {
+        let (out, err, code) = ran(purpose, &detached, how);
+        assert_eq!(out.trim(), "end", "{err}");
+        assert_eq!(code, Some(1), "{err}");
+        assert!(err.contains("Error in a detached task: doom"), "{err}");
+    }
 }
 
 /// ADR-346 D4: `join(within: d)` hands the value back in time, and throws

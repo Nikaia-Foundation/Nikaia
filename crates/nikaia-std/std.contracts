@@ -4501,6 +4501,17 @@ crosses = true
 compares = true
 fields = ["pub message: String"]
 
+# **A child's fatal error, handed on** (ADR-346 D7): fatal itself, so only a
+# `catch` arm that names it takes it; it says what the child's error said and
+# ends the program as that error would have.
+[type."supervisor::Handed"]
+pub = true
+crosses = true
+compares = true
+fields = ["pub message: String"]
+
+[impl."Fatal for supervisor::Handed"]
+
 # **`body` is kept**: the supervisor calls it again for every attempt.
 # A task for a supervisor to run, and which of its ends restart it.
 [fn."supervisor::child"]
@@ -4514,10 +4525,12 @@ signature = "[P: supervisor::Restart](body: fn() throws; restart: supervisor::Ki
 # Run the children until the supervisor gives up.
 #
 # They start in list order and stop in reverse. It returns only when it gives
-# up, after stopping every child, and throws `supervisor::Escalated` then.
+# up, after stopping every child, and throws `supervisor::Escalated` then. A
+# child's fatal error is not restarted: it stops every child and is thrown as
+# `supervisor::Handed`.
 [fn."supervisor::run"]
 pub = true
-throws = ["supervisor::Escalated"]
+throws = ["supervisor::Escalated", "supervisor::Handed"]
 signature = "(children: Vec[supervisor::Child]; strategy: supervisor::Strategy = supervisor::Strategy::OneForOne)"
 
 # Close it now rather than when it is dropped.

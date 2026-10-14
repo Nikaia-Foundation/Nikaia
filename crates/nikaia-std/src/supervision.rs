@@ -53,22 +53,77 @@ pub enum Kind {
 pub struct Escalated {
     /// What the last crash said.
     pub message: String,
-    /// The code of a fatal `Exit` a child ended with: it is not restarted, and
-    /// the supervisor hands it on (ADR-346 D7).
-    pub exit: Option<i32>,
-}
-
-impl crate::process::Ending for crate::error::Thrown<Escalated> {
-    fn exit_code(&self) -> Option<i32> {
-        self.held().exit
-    }
 }
 
 impl crate::process::Ending for Escalated {
     fn exit_code(&self) -> Option<i32> {
-        self.exit
+        None
     }
 }
+
+/// **A child's fatal error, handed on** (ADR-346 D7): it is not restarted, every
+/// child stops, and `run` throws this, which is fatal itself, so only a `catch`
+/// arm that names it takes it. It says what the child's error said, and ends
+/// the program as that error would have (an `Exit`'s code, or `1`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Handed {
+    /// What the child's error said.
+    pub message: String,
+    exit: Option<i32>,
+    code: i32,
+}
+
+impl crate::process::Ending for Handed {
+    fn exit_code(&self) -> Option<i32> {
+        self.exit
+    }
+
+    fn fatal_code(&self) -> Option<i32> {
+        Some(self.code)
+    }
+}
+
+impl std::fmt::Display for Handed {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for Handed {}
+
+/// How `run` ends: it gave up, or it handed a fatal error on.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Stopped {
+    Escalated(Escalated),
+    Handed(Handed),
+}
+
+impl crate::process::Ending for Stopped {
+    fn exit_code(&self) -> Option<i32> {
+        match self {
+            Stopped::Escalated(_) => None,
+            Stopped::Handed(handed) => handed.exit,
+        }
+    }
+
+    fn fatal_code(&self) -> Option<i32> {
+        match self {
+            Stopped::Escalated(_) => None,
+            Stopped::Handed(handed) => Some(handed.code),
+        }
+    }
+}
+
+impl std::fmt::Display for Stopped {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Stopped::Escalated(e) => e.fmt(f),
+            Stopped::Handed(e) => e.fmt(f),
+        }
+    }
+}
+
+impl std::error::Error for Stopped {}
 
 impl std::fmt::Display for Escalated {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -123,20 +178,21 @@ pub fn child_on_pool(
     }
 }
 
-/// How one attempt of a child ended: normally, or with what it said and the
-/// code of a fatal `Exit` in it.
-type Ended = Option<(String, Option<i32>)>;
+/// How one attempt of a child ended: normally, or with what it said and, for a
+/// fatal error, its `Exit` code and the status it sets.
+type Ended = Option<(String, Option<(Option<i32>, i32)>)>;
 
 /// The message a child's outcome carries, where it is a failure.
 fn ended(outcome: Outcome) -> Ended {
     use crate::process::Ending;
-    outcome
-        .err()
-        .map(|error| (error.to_string(), error.exit_code()))
+    outcome.err().map(|error| {
+        let fatal = error.fatal_code().map(|code| (error.exit_code(), code));
+        (error.to_string(), fatal)
+    })
 }
 
 /// **Run the supervisor** until it gives up (ADR-328 D1-D4).
-pub async fn run(children: &[Child], strategy: Strategy) -> Result<(), Escalated> {
+pub async fn run(children: &[Child], strategy: Strategy) -> Result<(), Stopped> {
     let kinds: Vec<Kind> = children.iter().map(|c| c.kind).collect();
     supervise(
         &kinds,
@@ -151,7 +207,7 @@ pub async fn run(children: &[Child], strategy: Strategy) -> Result<(), Escalated
 }
 
 /// [`run`] where tasks run on threads.
-pub async fn run_on_pool(children: &[PoolChild], strategy: Strategy) -> Result<(), Escalated> {
+pub async fn run_on_pool(children: &[PoolChild], strategy: Strategy) -> Result<(), Stopped> {
     let kinds: Vec<Kind> = children.iter().map(|c| c.kind).collect();
     supervise(
         &kinds,
@@ -183,7 +239,7 @@ pub(crate) async fn supervise(
     strategy: Strategy,
     start: impl Fn(usize) -> TaskHandle<Ended>,
     decide: impl Fn(usize, Failures) -> Next,
-) -> Result<(), Escalated> {
+) -> Result<(), Stopped> {
     let count = kinds.len();
     let mut running: Vec<Option<TaskHandle<Ended>>> =
         (0..count).map(|at| Some(start(at))).collect();
@@ -201,16 +257,17 @@ pub(crate) async fn supervise(
             Ok(Some((thrown, None))) => Some(thrown),
             // **A fatal error is not restarted** (ADR-346 D7): every child
             // stops and the supervisor hands it on.
-            Ok(Some((thrown, Some(code)))) => {
+            Ok(Some((thrown, Some((exit, code))))) => {
                 for handle in running.iter_mut().rev() {
                     if let Some(handle) = handle.take() {
                         handle.cancel();
                     }
                 }
-                return Err(Escalated {
+                return Err(Stopped::Handed(Handed {
                     message: thrown,
-                    exit: Some(code),
-                });
+                    exit,
+                    code,
+                }));
             }
             Err(crashed) => Some(crashed.message),
         };
@@ -244,10 +301,7 @@ pub(crate) async fn supervise(
                         handle.cancel();
                     }
                 }
-                return Err(Escalated {
-                    message: said,
-                    exit: None,
-                });
+                return Err(Stopped::Escalated(Escalated { message: said }));
             }
             Next::Delay(span) => crate::time::sleep(span).await,
             Next::Immediate => {}
@@ -508,10 +562,9 @@ mod tests {
         ));
         assert_eq!(
             outcome,
-            Err(Escalated {
+            Err(Stopped::Escalated(Escalated {
                 message: "it broke".to_string(),
-                exit: None,
-            })
+            }))
         );
     }
 

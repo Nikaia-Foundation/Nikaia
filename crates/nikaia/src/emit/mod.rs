@@ -2624,6 +2624,11 @@ impl<'p> Emitter<'p> {
                         matches!(&item.node, Item::Trait { name, .. } if self.text(*name) == "Fatal")
                     });
                 if fatal {
+                    // It answers `Ending` for the status it sets (ADR-345 D4,
+                    // ADR-346 D6) and so that a supervisor does not restart it.
+                    out.push(&format!(
+                        "impl{declares} nikaia_std::process::Ending for {target_name}{applied} {{\n    fn exit_code(&self) -> Option<i32> {{\n        None\n    }}\n    fn fatal_code(&self) -> Option<i32> {{\n        Some(1)\n    }}\n}}\n\n"
+                    ));
                     return Ok(());
                 }
                 let is_cleanup = trait_name.is_some_and(|t| self.text(t) == "Cleanup");

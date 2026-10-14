@@ -104,8 +104,36 @@ pub fn exit(code: i64) -> Result<(), Exit> {
 }
 
 /// Whether a failure channel holds an [`Exit`], and its code.
+///
+/// `exit_code` is an `Exit`'s, which ends `main` without a message;
+/// `fatal_code` is any fatal error's (ADR-345 D1): an `Exit`'s code, `1` for a
+/// program's own `impl Fatal for T` (D4) - what a detached task's fatal error
+/// sets at `main`'s end and what a supervisor does not restart (ADR-346 D6, D7).
 pub trait Ending {
     fn exit_code(&self) -> Option<i32>;
+    fn fatal_code(&self) -> Option<i32> {
+        self.exit_code()
+    }
+}
+
+type FatalProbe = fn(&(dyn std::error::Error + 'static)) -> Option<i32>;
+
+/// The program's own fatal types, for the opaque channel, which cannot ask a
+/// trait: `main` registers each before its first statement.
+static FATAL: std::sync::Mutex<Vec<FatalProbe>> = std::sync::Mutex::new(Vec::new());
+
+/// **Register a program's fatal type** (ADR-345 D1) so that a box holding it
+/// is known to be fatal.
+pub fn fatal<T: Ending + std::error::Error + 'static>() {
+    FATAL
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .push(|error| error.downcast_ref::<T>().and_then(Ending::fatal_code));
+}
+
+fn registered_fatal(error: &(dyn std::error::Error + 'static)) -> Option<i32> {
+    let probes = FATAL.lock().unwrap_or_else(|e| e.into_inner());
+    probes.iter().find_map(|probe| probe(error))
 }
 
 impl Ending for Exit {
@@ -116,9 +144,13 @@ impl Ending for Exit {
     }
 }
 
-impl Ending for crate::error::Thrown<Exit> {
+impl<E: Ending> Ending for crate::error::Thrown<E> {
     fn exit_code(&self) -> Option<i32> {
         self.held().exit_code()
+    }
+
+    fn fatal_code(&self) -> Option<i32> {
+        self.held().fatal_code()
     }
 }
 
@@ -129,16 +161,49 @@ impl Ending for Box<dyn std::error::Error> {
         if let Some(exit) = self.downcast_ref::<Exit>() {
             return exit.exit_code();
         }
-        // A supervisor that handed a child's `Exit` on (ADR-346 D7).
-        if let Some(escalated) = self.downcast_ref::<crate::supervisor::Escalated>() {
-            return escalated.exit;
+        let inner = opened(&**self);
+        if let Some(exit) = inner.downcast_ref::<Exit>() {
+            return exit.exit_code();
         }
-        let inner = self.downcast_ref::<crate::error::Raised>()?.inner();
-        if let Some(escalated) = inner.downcast_ref::<crate::supervisor::Escalated>() {
-            return escalated.exit;
-        }
-        inner.downcast_ref::<Exit>().and_then(Ending::exit_code)
+        known(inner).and_then(|known| known.exit_code())
     }
+
+    fn fatal_code(&self) -> Option<i32> {
+        let error: &(dyn std::error::Error + 'static) = &**self;
+        let inner = opened(error);
+        if let Some(exit) = inner.downcast_ref::<Exit>() {
+            return exit.exit_code();
+        }
+        if let Some(known) = known(inner) {
+            return known.fatal_code();
+        }
+        registered_fatal(error).or_else(|| registered_fatal(inner))
+    }
+}
+
+/// The error under a [`crate::error::Raised`] envelope, or the error itself.
+fn opened<'a>(
+    error: &'a (dyn std::error::Error + 'static),
+) -> &'a (dyn std::error::Error + 'static) {
+    match error.downcast_ref::<crate::error::Raised>() {
+        Some(raised) => raised.inner(),
+        None => error,
+    }
+}
+
+/// `std`'s own carriers of a fatal error: a supervisor's hand-over (ADR-346
+/// D7) and an error that crossed from the pool.
+fn known<'a>(error: &'a (dyn std::error::Error + 'static)) -> Option<&'a dyn Ending> {
+    if let Some(handed) = error.downcast_ref::<crate::supervisor::Handed>() {
+        return Some(handed);
+    }
+    if let Some(stopped) = error.downcast_ref::<crate::supervisor::Stopped>() {
+        return Some(stopped);
+    }
+    if let Some(carried) = error.downcast_ref::<crate::task::Carried>() {
+        return Some(carried);
+    }
+    None
 }
 
 /// `main`'s outcome after the runtime finished: an `Exit` ends the process with

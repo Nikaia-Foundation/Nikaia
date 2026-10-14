@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.906] — 2026-10-14
+
+**task: a program's own fatal types are fatal in tasks; a supervisor hands a fatal error on as supervisor::Handed (#605)**
+- impl Fatal for T makes T answer process::Ending: a detached task's error of such a type sets status 1 at main's end, and the opaque channel knows it through a registry main fills (ADR-345 D1, ADR-346 D6).
+- A supervisor's child that ends with any fatal error is not restarted; supervisor::run throws supervisor::Handed (new, fatal), which a plain catch does not take; it carries the child's message and its status (ADR-346 D7).
+- supervisor::run throws supervisor::Escalated or supervisor::Handed; a function with a plain catch around it says throws.
+
 ## [0.0.905] — 2026-10-14
 
 **check: the arguments of a call in Nikaia (#125, #558)**

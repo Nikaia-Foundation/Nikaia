@@ -103,7 +103,7 @@ impl supervisor::Restart for SupervisionNever {
     }
 }
 
-fn supervision_escalated(attempts: SharedMut[i64], asked: SharedMut[i64]) -> String {
+fn supervision_escalated(attempts: SharedMut[i64], asked: SharedMut[i64]) -> String throws {
     supervisor::run([
         supervisor::child(fn { supervision_flaky(attempts) }; restart: supervisor::Kind::Transient, policy: SupervisionNever { asked: asked }),
     ]) catch { return f"{error.message}" }

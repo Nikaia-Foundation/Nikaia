@@ -154,6 +154,20 @@ impl EmitState {
                     timed_out = true
                 }
             }
+            // `supervisor::run` gives up or hands a fatal error on (ADR-346 D7).
+            let mut escalated = false
+            let mut handed = false
+            for member in members {
+                if member == "supervisor::Escalated" {
+                    escalated = true
+                }
+                if member == "supervisor::Handed" {
+                    handed = true
+                }
+            }
+            if escalated && handed {
+                out.push(f"impl{decl} From<nikaia_std::supervisor::Stopped> for {name}{params} {{\n    fn from(error: nikaia_std::supervisor::Stopped) -> {name}{params} {{\n        match error {{\n            nikaia_std::supervisor::Stopped::Escalated(e) => e.into(),\n            nikaia_std::supervisor::Stopped::Handed(e) => e.into(),\n        }}\n    }}\n}}\n")
+            }
             if crashed && timed_out {
                 out.push(f"impl{decl} From<nikaia_std::task::Late> for {name}{params} {{\n    fn from(error: nikaia_std::task::Late) -> {name}{params} {{\n        match error {{\n            nikaia_std::task::Late::Crashed(e) => e.into(),\n            nikaia_std::task::Late::TimedOut(e) => e.into(),\n        }}\n    }}\n}}\n")
             }
@@ -180,16 +194,19 @@ impl EmitState {
             out.push("        }\n    }\n}\n\n")
             // **`Exit` ends `main` with its code** (ADR-345 D4): a sum that
             // holds it answers for it.
-            // So does a supervisor that handed on a child's `Exit` (ADR-346 D7).
+            // So does every other fatal member (ADR-345 D1) for the status a
+            // detached task sets, and a supervisor's hand-over (ADR-346 D6, D7).
             let mut arms: String = ""
+            let mut fatal_arms: String = ""
             for member in members {
-                if member == "process::Exit" || member == "supervisor::Escalated" {
+                if emit_is_fatal(self.own_contracts, member) || emit_is_fatal(world.library, member) {
                     let variant = sum_variant(member)
                     arms = f"{arms}            {name}::{variant}(e) => nikaia_std::process::Ending::exit_code(e),\n"
+                    fatal_arms = f"{fatal_arms}            {name}::{variant}(e) => nikaia_std::process::Ending::fatal_code(e),\n"
                 }
             }
             if arms.len() > 0 {
-                out.push(f"impl{decl} nikaia_std::process::Ending for {name}{params} {{\n    fn exit_code(&self) -> Option<i32> {{\n        match self {{\n{arms}            #[allow(unreachable_patterns)] _ => None,\n        }}\n    }}\n}}\n\n")
+                out.push(f"impl{decl} nikaia_std::process::Ending for {name}{params} {{\n    fn exit_code(&self) -> Option<i32> {{\n        match self {{\n{arms}            #[allow(unreachable_patterns)] _ => None,\n        }}\n    }}\n    fn fatal_code(&self) -> Option<i32> {{\n        match self {{\n{fatal_arms}            #[allow(unreachable_patterns)] _ => None,\n        }}\n    }}\n}}\n\n")
             }
         }
     }

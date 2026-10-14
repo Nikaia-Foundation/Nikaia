@@ -52,6 +52,7 @@ impl EmitState {
         let mut text: String = "\n// ADR-303 D4: the runtime is running before the program's first\n// statement, so an operation inside it costs no thread wake-up. What\n// starts is what `user_parallelism` allows (ADR-037 D2): the I/O\n// worker always, a pool for user code only at `yes`.\n"
         text = f"{text}fn main(){ret} {{\n"
         text = f"{text}    nikaia_std::abort::report_in_nikaia_terms(__NIKAIA_SITES);\n"
+        text = f"{text}{self.fatal_registrations(world)}"
         text = f"{text}    let nikaia_runtime = nikaia_std::rt::{start}(nikaia_std::rt::UserCode::{user_code});\n"
         // ADR-345 D4: where `process::Exit` may leave `main`, the process ends
         // with its code after the drain.
@@ -65,6 +66,33 @@ impl EmitState {
             text = f"{text}    nikaia_runtime.finish();\n    nikaia_std::process::ended(outcome)\n}}\n"
         } else {
             text = f"{text}    nikaia_runtime.finish();\n    outcome\n}}\n"
+        }
+        return text
+    }
+
+    /// **The program's own fatal types** (ADR-345 D1), registered so that the
+    /// opaque channel knows them: a detached task's or a supervisor's child's
+    /// error arrives there (ADR-346 D6, D7). A type with parameters or a view
+    /// is not registered.
+    fn fatal_registrations(ref self, world: ref EmitWorld) -> String {
+        let fatal = self.own_contracts.implementations.get("Fatal") ?? return ""
+        let mut text: String = ""
+        for item in world.items {
+            match item.node {
+                Item::Struct { name, generics, .. } => {
+                    let bare = world.words.resolve(name)
+                    if fatal.contains(bare) && generics.len() == 0 && !self.borrowing.contains(bare) {
+                        text = f"{text}    nikaia_std::process::fatal::<{escaped_name(bare)}>();\n"
+                    }
+                },
+                Item::Enum { name, .. } => {
+                    let bare = world.words.resolve(name)
+                    if fatal.contains(bare) && !self.borrowing.contains(bare) {
+                        text = f"{text}    nikaia_std::process::fatal::<{escaped_name(bare)}>();\n"
+                    }
+                },
+                else => {},
+            }
         }
         return text
     }
@@ -125,7 +153,7 @@ impl EmitState {
 fn main_exits(own: ref Ledger) -> bool {
     let contract = own.functions.get("main") ?? return false
     for error in contract.fails_with {
-        if error == "process::Exit" || error == "supervisor::Escalated" {
+        if error == "process::Exit" || error == "supervisor::Handed" {
             return true
         }
     }

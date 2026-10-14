@@ -26118,7 +26118,11 @@ impl EmitState {
         if named { opening = Some(String::from("let (error, __nikaia_site) = error.split();")); } else if boxed { opening = Some(String::from("let error: Box<dyn std::error::Error> = error.into();")); }
         out.push(&format!(" {{\n{}Ok(value) => value,\n", pad));
         let passing = self.fatal_passing(world, guarded_expr, handler);
-        if !passing.is_empty() {
+        let mut handler_takes: String = format!("Err({}) => ", bound);
+        if !passing.is_empty() && nikaia_std::index::or(call_callee_name(world.words, world.aliases, guarded_expr), || "".into()) == "supervisor::run" {
+            out.push(&format!("{}Err(nikaia_std::supervisor::Stopped::Handed(error)) => return Err(error.into()),\n", pad));
+            handler_takes = format!("Err(nikaia_std::supervisor::Stopped::Escalated({})) => ", bound);
+        } else if !passing.is_empty() {
             let caught_in = self.caught_sum(world, guarded_expr);
             if caught_in.is_none() {
                 out.push(&format!("{}Err(error) => return Err(error.into()),\n", pad));
@@ -26128,7 +26132,7 @@ impl EmitState {
                 for member in passing.iter() { out.push(&format!("{}Err(crate::{}::{}(error)) => return Err(error.into()),\n", pad, held_sum, sum_variant(member))); }
             }
         }
-        out.push(&format!("{}Err({}) => ", pad, bound));
+        out.push(&format!("{}{}", pad, handler_takes));
         host.block_opening_with(walk, out, handler, depth + 1, inside, &inside_scope, EmitTail::Value, opening)?;
         out.push(&format!(",\n{}}}", close));
         Ok(())
@@ -28287,10 +28291,31 @@ impl EmitState {
         let mut text: String = String::from("\n// ADR-303 D4: the runtime is running before the program's first\n// statement, so an operation inside it costs no thread wake-up. What\n// starts is what `user_parallelism` allows (ADR-037 D2): the I/O\n// worker always, a pool for user code only at `yes`.\n");
         text = format!("{}fn main(){} {{\n", text, ret);
         text = format!("{}    nikaia_std::abort::report_in_nikaia_terms(__NIKAIA_SITES);\n", text);
+        text = format!("{}{}", text, self.fatal_registrations(world));
         text = format!("{}    let nikaia_runtime = nikaia_std::rt::{}(nikaia_std::rt::UserCode::{});\n", text, start, user_code);
         let exits = main_exits(&self.own_contracts);
         if call_pauses(&self.own_contracts, "main") { text = format!("{}    let outcome = nikaia_std::rt::exec::block_on(__nikaia_main());\n", text); } else { text = format!("{}    let outcome = __nikaia_main();\n", text); }
         if exits { text = format!("{}    nikaia_runtime.finish();\n    nikaia_std::process::ended(outcome)\n}}\n", text); } else { text = format!("{}    nikaia_runtime.finish();\n    outcome\n}}\n", text); }
+        text
+    }
+    fn fatal_registrations(&self, world: &EmitWorld<'_>) -> String {
+        let fatal = match self.own_contracts.implementations.get("Fatal") { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
+        let mut text: String = String::from("");
+        for item in world.items.iter() {
+            match &item.node {
+                Item::Struct { name, generics, .. } => {
+                    let name = *name;
+                    let bare = world.words.resolve(name);
+                    if fatal.contains(bare) && generics.is_empty() && !self.borrowing.contains(bare) { text = format!("{}    nikaia_std::process::fatal::<{}>();\n", text, escaped_name(bare)); }
+                },
+                Item::Enum { name, .. } => {
+                    let name = *name;
+                    let bare = world.words.resolve(name);
+                    if fatal.contains(bare) && !self.borrowing.contains(bare) { text = format!("{}    nikaia_std::process::fatal::<{}>();\n", text, escaped_name(bare)); }
+                },
+                _ => { },
+            }
+        }
         text
     }
     pub fn held_structs(&self, world: &EmitWorld<'_>) -> String {
@@ -28331,7 +28356,7 @@ impl EmitState {
 
 fn main_exits(own: &Ledger) -> bool {
     let contract = match own.functions.get("main") { Some(__nikaia_value) => __nikaia_value, None => return false };
-    for error in contract.fails_with.iter() { if error == "process::Exit" || error == "supervisor::Escalated" { return true; } }
+    for error in contract.fails_with.iter() { if error == "process::Exit" || error == "supervisor::Handed" { return true; } }
     false
 }
 
@@ -30000,6 +30025,13 @@ impl EmitState {
                 if member == "task::Crashed" { crashed = true; }
                 if member == "task::TimedOut" { timed_out = true; }
             }
+            let mut escalated = false;
+            let mut handed = false;
+            for member in members.iter() {
+                if member == "supervisor::Escalated" { escalated = true; }
+                if member == "supervisor::Handed" { handed = true; }
+            }
+            if escalated && handed { out.push(&format!("impl{} From<nikaia_std::supervisor::Stopped> for {}{} {{\n    fn from(error: nikaia_std::supervisor::Stopped) -> {}{} {{\n        match error {{\n            nikaia_std::supervisor::Stopped::Escalated(e) => e.into(),\n            nikaia_std::supervisor::Stopped::Handed(e) => e.into(),\n        }}\n    }}\n}}\n", decl, name, params, name, params)); }
             if crashed && timed_out { out.push(&format!("impl{} From<nikaia_std::task::Late> for {}{} {{\n    fn from(error: nikaia_std::task::Late) -> {}{} {{\n        match error {{\n            nikaia_std::task::Late::Crashed(e) => e.into(),\n            nikaia_std::task::Late::TimedOut(e) => e.into(),\n        }}\n    }}\n}}\n", decl, name, params, name, params)); }
             out.push(&format!("impl{} std::fmt::Display for {}{} {{\n    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {{\n        match self {{\n", decl, name, params));
             for member in members.iter() {
@@ -30017,13 +30049,15 @@ impl EmitState {
             }
             out.push("        }\n    }\n}\n\n");
             let mut arms: String = String::from("");
+            let mut fatal_arms: String = String::from("");
             for member in members.iter() {
-                if member == "process::Exit" || member == "supervisor::Escalated" {
+                if emit_is_fatal(&self.own_contracts, member) || emit_is_fatal(world.library, member) {
                     let variant = sum_variant(member);
                     arms = format!("{}            {}::{}(e) => nikaia_std::process::Ending::exit_code(e),\n", arms, name, variant);
+                    fatal_arms = format!("{}            {}::{}(e) => nikaia_std::process::Ending::fatal_code(e),\n", fatal_arms, name, variant);
                 }
             }
-            if !arms.is_empty() { out.push(&format!("impl{} nikaia_std::process::Ending for {}{} {{\n    fn exit_code(&self) -> Option<i32> {{\n        match self {{\n{}            #[allow(unreachable_patterns)] _ => None,\n        }}\n    }}\n}}\n\n", decl, name, params, arms)); }
+            if !arms.is_empty() { out.push(&format!("impl{} nikaia_std::process::Ending for {}{} {{\n    fn exit_code(&self) -> Option<i32> {{\n        match self {{\n{}            #[allow(unreachable_patterns)] _ => None,\n        }}\n    }}\n    fn fatal_code(&self) -> Option<i32> {{\n        match self {{\n{}            #[allow(unreachable_patterns)] _ => None,\n        }}\n    }}\n}}\n\n", decl, name, params, arms, fatal_arms)); }
         }
     }
     pub fn channel_of(&self, world: &EmitWorld<'_>, thrown: &[String], elided: bool, params: &str, static_params: &str, borrows: bool) -> String {
