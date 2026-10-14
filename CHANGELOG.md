@@ -8,6 +8,10 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.968] — 2026-10-15
+
+**check: what the core crossed back into Rust for, in Nikaia (C-7 U-d1, #125, #558)**
+
 ## [0.0.967] — 2026-10-15
 
 **A parameter may take a tuple apart, in a function and a lambda (#623)**

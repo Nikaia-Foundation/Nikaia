@@ -7,7 +7,7 @@
 // `continue`, a `dsl` block and `asm`. The form is the pilot's
 // (`check_core_pilot.nika`): a free function over the state, the world and a
 // host. What a test proves not `null` (ADR-350) is `check_narrow.nika`'s;
-// a value's cleanup is `host.a_value_with_a_cleanup_made`.
+// a value's cleanup is `check_crossings_a_value_with_a_cleanup_made`.
 // One function per arm, so a deep expression's frames stay small.
 
 /// The escapes a literal may write (`build_time::ESCAPES`).
@@ -58,7 +58,7 @@ pub fn check_core_expr[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     // **A value with a cleanup made here may die in this function**
     // (ADR-297 D2): by a call or a literal, which is where one comes from.
     if check_core_expr_makes_a_value(expr) {
-        host.a_value_with_a_cleanup_made(state, ty)
+        check_crossings_a_value_with_a_cleanup_made(state, world, ty)
     }
     if ty.is_unknown() && !said_inside {
         state.a_value_of_no_known_type(world, expr, span)

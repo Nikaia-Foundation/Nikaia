@@ -266,7 +266,7 @@ fn check_core_ops_equal[H: CheckHost](mut state: CheckState, world: ref CheckWor
     let asks_for_null = check_core_ops_null(lhs) || check_core_ops_null(rhs)
     if !asks_for_null {
         state.an_operator_needs_a_bound(world, op, left, right, at)
-        host.a_type_that_does_not_compare(state, left, right, at)
+        check_crossings_a_type_that_does_not_compare(state, world, left, right, at)
     }
     if !asks_for_null {
         state.a_maybe_compared_with_a_value(left, right, span)

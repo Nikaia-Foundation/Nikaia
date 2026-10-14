@@ -1,0 +1,499 @@
+// crates/nikaia-std/src/tools/check_crossings.nika
+//
+// **What the checker's core crossed back into Rust for** (ADR-294, #125,
+// #558, C-7, U-d1): a bound task handle that has to be used up (`NK2109`), a
+// value with a cleanup made or bound, the comparison checks (`NK1188`,
+// `NK1164`, `NK1249`), a task of `task::scope` and a scope or an entry whose
+// lambda pauses, a call that hands its open number back, and a call's
+// arguments against what moved in the callee's `keeps`. Free functions over the
+// state, as the core's own are; what moved since the committed ledger is the
+// world's (`CheckWorld.newly_keeps`, `newly_throws`).
+
+use std::collections
+
+/// **Where the paths after a `let h = spawn …` leave the handle** (`NK2109`).
+pub enum CheckCrossingsPath {
+    /// A mention used it up: a `join`, a `detach`, a `cancel`, a hand-over.
+    Taken,
+    /// The path left the scope and took the handle with it.
+    Gone,
+    /// The path left the scope without it.
+    Left,
+    /// The path goes on to the next statement.
+    Falls,
+}
+
+/// Whether `name` is mentioned in `stmt`.
+fn check_crossings_named(world: ref CheckWorld, name: ref String, stmt: ref Stmt) -> bool {
+    let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
+    names_in_statement(stmt, world.words, seen)
+    return seen.contains(name)
+}
+
+/// Whether `name` is mentioned in `expr`.
+fn check_crossings_named_in(world: ref CheckWorld, name: ref String, expr: ref Expr) -> bool {
+    let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
+    names_in(expr, world.words, seen)
+    return seen.contains(name)
+}
+
+/// A `return` hands the handle out where it names it, and leaves it otherwise.
+fn check_crossings_returned(world: ref CheckWorld, name: ref String, value: ref Expr?) -> CheckCrossingsPath {
+    let given: ref Expr = value ?? return CheckCrossingsPath::Left
+    if check_crossings_named_in(world, name, given) {
+        return CheckCrossingsPath::Gone
+    }
+    return CheckCrossingsPath::Left
+}
+
+/// A mention takes the handle; no mention goes on.
+fn check_crossings_mentioned(world: ref CheckWorld, name: ref String, expr: ref Expr) -> CheckCrossingsPath {
+    if check_crossings_named_in(world, name, expr) {
+        return CheckCrossingsPath::Taken
+    }
+    return CheckCrossingsPath::Falls
+}
+
+/// **Every path through `stmts` from `from` on takes the handle `name`**: a
+/// mention takes it, a `return`, `throw`, or a `break`/`continue` outside a
+/// nested loop that does not mention it leaves it behind, and branches must
+/// all take it.
+fn check_crossings_path(world: ref CheckWorld, name: ref String, stmts: ref Vec[Spanned[Stmt]], from: i64, in_loop: bool) -> CheckCrossingsPath {
+    let mut at = from
+    while at < stmts.len() as i64 {
+        let flow = check_crossings_step(world, name, stmts[at].node, in_loop)
+        if flow != CheckCrossingsPath::Falls {
+            return flow
+        }
+        at += 1
+    }
+    return CheckCrossingsPath::Falls
+}
+
+/// One statement of `check_crossings_path`.
+fn check_crossings_step(world: ref CheckWorld, name: ref String, stmt: ref Stmt, in_loop: bool) -> CheckCrossingsPath {
+    match stmt {
+        Stmt::Return(value) => return check_crossings_returned(world, name, value),
+        Stmt::Break => {
+            if !in_loop {
+                return CheckCrossingsPath::Left
+            }
+        }
+        Stmt::Continue => {
+            if !in_loop {
+                return CheckCrossingsPath::Left
+            }
+        }
+        Stmt::Expr(e) => return check_crossings_expr_path(world, name, e, in_loop),
+        Stmt::Let { value, .. } => return check_crossings_expr_path(world, name, value, in_loop),
+        Stmt::For { iter, body, .. } => {
+            if check_crossings_named_in(world, name, iter) {
+                return CheckCrossingsPath::Taken
+            }
+            return check_crossings_loop_body(world, name, body)
+        }
+        Stmt::While { cond, body } => {
+            if check_crossings_named_in(world, name, cond) {
+                return CheckCrossingsPath::Taken
+            }
+            return check_crossings_loop_body(world, name, body)
+        }
+        else => {}
+    }
+    if check_crossings_named(world, name, stmt) {
+        return CheckCrossingsPath::Taken
+    }
+    return CheckCrossingsPath::Falls
+}
+
+/// A loop body: a mention anywhere takes the handle, a `return` or `throw`
+/// before any mention leaves it.
+fn check_crossings_loop_body(world: ref CheckWorld, name: ref String, body: ref Block) -> CheckCrossingsPath {
+    let flow = check_crossings_path(world, name, body.stmts, 0, true)
+    if flow == CheckCrossingsPath::Left {
+        return CheckCrossingsPath::Left
+    }
+    if flow == CheckCrossingsPath::Gone {
+        return CheckCrossingsPath::Taken
+    }
+    for stmt in body.stmts {
+        if check_crossings_named(world, name, stmt.node) {
+            return CheckCrossingsPath::Taken
+        }
+    }
+    return CheckCrossingsPath::Falls
+}
+
+/// An expression standing as a statement: a `throw` or a `return` leaves, a
+/// block goes on through its statements, and an `if` or a `match` joins its
+/// branches.
+fn check_crossings_expr_path(world: ref CheckWorld, name: ref String, expr: ref Expr, in_loop: bool) -> CheckCrossingsPath {
+    let mut branches: Vec[CheckCrossingsPath] = []
+    match expr {
+        Expr::Throw(inner, _) => {
+            if check_crossings_named_in(world, name, inner) {
+                return CheckCrossingsPath::Gone
+            }
+            return CheckCrossingsPath::Left
+        }
+        Expr::Return(value, _) => return check_crossings_returned(world, name, value),
+        Expr::Block(b, _) => return check_crossings_path(world, name, b.stmts, 0, in_loop),
+        Expr::If { cond, then_branch, else_branch, .. } => {
+            if check_crossings_named_in(world, name, cond) {
+                return CheckCrossingsPath::Taken
+            }
+            branches.push(check_crossings_path(world, name, then_branch.stmts, 0, in_loop))
+            let otherwise: ref Block = else_branch ?? return check_crossings_joined(branches, true)
+            branches.push(check_crossings_path(world, name, otherwise.stmts, 0, in_loop))
+        }
+        Expr::Match { value, arms, .. } => {
+            if check_crossings_named_in(world, name, value) {
+                return CheckCrossingsPath::Taken
+            }
+            for arm in arms {
+                branches.push(check_crossings_arm(world, name, arm, in_loop))
+            }
+        }
+        else => return check_crossings_mentioned(world, name, expr),
+    }
+    return check_crossings_joined(branches, false)
+}
+
+/// One arm of a `match`: a guard that names the handle takes it.
+fn check_crossings_arm(world: ref CheckWorld, name: ref String, arm: ref MatchArm, in_loop: bool) -> CheckCrossingsPath {
+    let guard: ref Expr = arm.guard ?? return check_crossings_expr_path(world, name, arm.body, in_loop)
+    if check_crossings_named_in(world, name, guard) {
+        return CheckCrossingsPath::Taken
+    }
+    return check_crossings_expr_path(world, name, arm.body, in_loop)
+}
+
+/// The branches joined: one that left the scope with the handle does not go
+/// on; the rest must agree. `falls` adds a missing `else`, which goes on.
+fn check_crossings_joined(branches: ref Vec[CheckCrossingsPath], falls: bool) -> CheckCrossingsPath {
+    let mut on = 0
+    let mut taken = 0
+    let mut fallen = 0
+    for branch in branches {
+        if branch != CheckCrossingsPath::Gone {
+            on += 1
+        }
+        if branch == CheckCrossingsPath::Taken {
+            taken += 1
+        }
+        if branch == CheckCrossingsPath::Falls {
+            fallen += 1
+        }
+    }
+    if falls {
+        on += 1
+        fallen += 1
+    }
+    if on == 0 {
+        return CheckCrossingsPath::Gone
+    }
+    if taken == on {
+        return CheckCrossingsPath::Taken
+    }
+    if fallen == on {
+        return CheckCrossingsPath::Falls
+    }
+    return CheckCrossingsPath::Left
+}
+
+/// The name a `let` binds a `spawn` to, where it binds one name that is not
+/// `_`.
+fn check_crossings_spawned(world: ref CheckWorld, stmt: ref Stmt) -> String? {
+    match stmt {
+        Stmt::Let { names, value, .. } => {
+            if names.len() != 1 {
+                return null
+            }
+            match value {
+                Expr::Spawn { .. } => {}
+                else => return null,
+            }
+            let name: String = f"{world.words.resolve(names[0])}"
+            if name == "_" {
+                return null
+            }
+            return name
+        }
+        else => return null,
+    }
+}
+
+/// **`NK2109`: a bound handle is used up before it leaves its scope**
+/// ([ADR-346](../../../docs/specification/adr/adr-346.md) D3). A `let h =
+/// spawn …` whose name no later statement of the block mentions is forgotten:
+/// nobody joins, cancels, detaches or hands it on.
+pub fn check_crossings_a_bound_handle_is_taken(mut state: CheckState, world: ref CheckWorld, block: ref Block) sync {
+    let mut at = 0
+    for stmt in block.stmts {
+        at += 1
+        let spawned: String? = check_crossings_spawned(world, stmt.node)
+        if spawned != null {
+            let name: String = spawned ?? ""
+            let flow = check_crossings_path(world, name, block.stmts, at, false)
+            if flow != CheckCrossingsPath::Taken && flow != CheckCrossingsPath::Gone {
+                state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: Span { start: stmt.span.start, end: stmt.span.end }, code: "NK2109".clone(), message: f"The task handle `{name}` is never joined, cancelled or detached.", notes: ["An error of a task nobody waits for would be lost, so a bound handle is used up before its scope ends.".clone()], help: f"Write `{name}.join()` to wait for the task, or `{name}.detach()` if nobody waits for it.", labels: [] })
+            }
+        }
+    }
+}
+
+/// **A value with a cleanup may die in the function being walked** (ADR-297
+/// D2): the settle the function reaches is a call it makes.
+fn check_crossings_settle(mut state: CheckState, fails: bool) sync {
+    let key: String? = state.a_settle_in_this_function(fails)
+    if key == null {
+        return
+    }
+    check_core_call_on_reached(state, key)
+}
+
+/// A value with a cleanup, made by a call or a literal (ADR-297 D2).
+pub fn check_crossings_a_value_with_a_cleanup_made(mut state: CheckState, world: ref CheckWorld, ty: ref Ty) sync {
+    let held = state.cleanup_of(world, ty) ?? return
+    check_crossings_settle(state, held.fails)
+}
+
+/// **A value with a cleanup dies in this function**, a `let`'s or a kept
+/// parameter's: the function settles it, the settle is a pause, and a cleanup
+/// that can fail is the function's to declare. Whether it can fail, where it
+/// has a cleanup at all.
+pub fn check_crossings_a_value_with_a_cleanup_dying(mut state: CheckState, world: ref CheckWorld, name: ref String, ty: ref Ty, span: ref Span) -> bool? sync {
+    let held = state.cleanup_of(world, ty) ?? return null
+    check_crossings_settle(state, held.fails)
+    state.a_cleanup_that_may_pause(name, span)
+    if held.fails {
+        state.a_failing_cleanup_undeclared(name, ty, held.owner, span)
+    }
+    return held.fails
+}
+
+/// **A value with a cleanup, bound by a `let`** (ADR-297 D2, D3): the block
+/// is settled where it ends.
+pub fn check_crossings_a_value_with_a_cleanup_bound(mut state: CheckState, world: ref CheckWorld, name: ref String, ty: ref Ty, span: ref Span) sync {
+    let fails = check_crossings_a_value_with_a_cleanup_dying(state, world, name, ty, span) ?? return
+    state.facts.settle_lets.insert(span.start as i64, fails)
+}
+
+/// `NK1188`'s question, asked of what the state collected (a free function:
+/// `CheckComparable` holds references, NK1106).
+fn check_crossings_refusal(beside: ref collections::BTreeMap[String, Vec[Ty]], structs: ref collections::BTreeMap[String, Vec[FieldContract]], enums: ref collections::BTreeMap[String, collections::BTreeSet[String]], payloads: ref collections::BTreeMap[String, Vec[Ty]], parameters: ref collections::BTreeMap[String, Vec[String]], world: ref CheckWorld, left: ref Ty, right: ref Ty, span: ref Span) -> CheckFinding? {
+    let asking = CheckComparable { beside: beside, structs: structs, enums: enums, payloads: payloads, parameters: parameters, own: world.own, library: world.library }
+    return compare_refusal(asking, left, right, span)
+}
+
+/// **`NK1188`: `==` on a type that does not compare**
+/// ([ADR-204](../../../docs/specification/adr/adr-204.md) D3), asked of one
+/// side and only where its type is known.
+pub fn check_crossings_a_type_that_does_not_compare(mut state: CheckState, world: ref CheckWorld, left: ref Ty, right: ref Ty, span: ref Span) sync {
+    let beside = check_parts_beside(world)
+    let refused: CheckFinding? = check_crossings_refusal(beside, state.structs, state.enums, state.enum_payloads, state.struct_parameters, world, left, right, span)
+    let finding = refused ?? return
+    state.findings.push(finding)
+}
+
+/// `NK1164`'s question, asked of what the state collected.
+fn check_crossings_bounds(beside: ref collections::BTreeMap[String, Vec[Ty]], structs: ref collections::BTreeMap[String, Vec[FieldContract]], enums: ref collections::BTreeMap[String, collections::BTreeSet[String]], payloads: ref collections::BTreeMap[String, Vec[Ty]], parameters: ref collections::BTreeMap[String, Vec[String]], world: ref CheckWorld, type_parameters: ref collections::BTreeMap[String, Vec[String]], key: ref String, wanted: ref collections::BTreeMap[String, Vec[String]], bound: ref collections::BTreeMap[String, Ty], span: ref Span) -> Vec[CheckFinding] {
+    let asking = CheckComparable { beside: beside, structs: structs, enums: enums, payloads: payloads, parameters: parameters, own: world.own, library: world.library }
+    return compare_standard_bounds(asking, type_parameters, key, wanted, bound, span)
+}
+
+/// **`NK1164` for `[T: Eq]` and `[T: Ord]`: the argument's type is neither**
+/// ([ADR-341](../../../docs/specification/adr/adr-341.md) D4). The bound is
+/// the language's, so no `impl` in a ledger answers it.
+pub fn check_crossings_a_standard_bound_not_met(mut state: CheckState, world: ref CheckWorld, key: ref String, bound: ref collections::BTreeMap[String, Ty], span: ref Span) sync {
+    if !state.declared_bounds.contains_key(key) {
+        return
+    }
+    let beside = check_parts_beside(world)
+    let wanted = state.declared_bounds.get(key) ?? return
+    let refused = check_crossings_bounds(beside, state.structs, state.enums, state.enum_payloads, state.struct_parameters, world, state.type_parameters, key, wanted, bound, span)
+    for finding in refused {
+        state.findings.push(finding.clone())
+    }
+}
+
+/// `NK1249`'s question, asked of what the state collected.
+fn check_crossings_impls(beside: ref collections::BTreeMap[String, Vec[Ty]], structs: ref collections::BTreeMap[String, Vec[FieldContract]], enums: ref collections::BTreeMap[String, collections::BTreeSet[String]], payloads: ref collections::BTreeMap[String, Vec[Ty]], parameters: ref collections::BTreeMap[String, Vec[String]], world: ref CheckWorld) -> Vec[CheckFinding] {
+    let asking = CheckComparable { beside: beside, structs: structs, enums: enums, payloads: payloads, parameters: parameters, own: world.own, library: world.library }
+    return compare_language_impls(asking, world.here)
+}
+
+/// **`NK1249`: an `impl Eq` or `impl Ord` the language cannot honour**
+/// ([ADR-341](../../../docs/specification/adr/adr-341.md) D5).
+pub fn check_crossings_language_impls(mut state: CheckState, world: ref CheckWorld) sync {
+    let beside = check_parts_beside(world)
+    let refused = check_crossings_impls(beside, state.structs, state.enums, state.enum_payloads, state.struct_parameters, world)
+    for finding in refused {
+        state.findings.push(finding.clone())
+    }
+}
+
+/// **A task of `task::scope` runs beside the others** (Part II 12.7): asked
+/// as a walk's lambda is, at both settings. **And it fails in the scope's
+/// channel** (ADR-346 D7).
+pub fn check_crossings_a_task_of_a_scope(mut state: CheckState, args: ref Vec[Expr]) sync {
+    if state.in_parallel == null {
+        state.in_parallel = state.scope.len() as i64
+    }
+    state.scoped_task = true
+    if args.len() > 0 {
+        state.facts.scope_tasks.insert(id_of(args[0]) as i64)
+    }
+}
+
+/// **A scope with a task that pauses polls it, and pauses itself** (ADR-328
+/// D10): its lambda paused because a task in it did.
+pub fn check_crossings_a_scope_that_pauses(mut state: CheckState, args: ref Vec[Expr], paused: ref Vec[i64], span: ref Span) sync {
+    if args.len() == 0 {
+        return
+    }
+    let body = id_of(args[0]) as i64
+    if !paused.contains(body) {
+        return
+    }
+    state.facts.paused_scopes.insert(body)
+    state.a_call_that_may_pause("task::scope", true, false, span)
+}
+
+/// Which counterpart in `nikaia_std::seq` a pausing lambda handed to `key`
+/// is lowered to, where there is one.
+fn check_crossings_entry(state: ref CheckState, key: ref String, chained: bool) -> FactPausing? sync {
+    if key == "Seq::map" {
+        if chained {
+            return FactPausing::Method("then".clone())
+        }
+        return FactPausing::Function("then".clone())
+    }
+    if key == "Seq::filter" {
+        if chained {
+            return FactPausing::Method("then_filter".clone())
+        }
+        return FactPausing::Function("then_filter".clone())
+    }
+    if key == "list::ListExt::map" {
+        return FactPausing::Function("map_list".clone())
+    }
+    // A `mut` parameter is a `&mut Vec` already, and handed on as it is: a
+    // second `&mut` may not be taken of it (ADR-094 D3).
+    if key == "Vec::sort_by_key" {
+        let named: String = state.flow.receiver_name?.clone() ?? ""
+        let local = state.binding(named) ?? return FactPausing::Lent("sort_by_key".clone())
+        if local.changing {
+            return FactPausing::Function("sort_by_key".clone())
+        }
+        return FactPausing::Lent("sort_by_key".clone())
+    }
+    if key == "Entry::or_insert_with" {
+        return FactPausing::Function("or_insert_with".clone())
+    }
+    // **A task of `task::scope` that pauses** (ADR-328 D10): handed to the
+    // scope to poll, and the scope around it pauses.
+    if key == "task::Scope::spawn" {
+        return FactPausing::Method("spawn_paused".clone())
+    }
+    if key == "Entry::and_modify" {
+        return FactPausing::Function("and_modify".clone())
+    }
+    return null
+}
+
+/// **A lambda that pauses, handed to a `std` entry**
+/// ([ADR-233](../../../docs/specification/adr/adr-233.md)): `args[lambda_at]`
+/// is the lambda, `-1` none. A lazy `map` or `filter` hands back a sequence
+/// whose step pauses (D1); the eager entries pause where they are called (D2).
+pub fn check_crossings_a_lambda_that_pauses_at_an_entry(mut state: CheckState, key: ref String, receiver: ref Expr, on: ref Ty, args: ref Vec[Expr], lambda_at: i64, result: Ty, span: ref Span) -> Ty sync {
+    // A `Par[T]`'s lambda may not pause at all: `NK2209` has said so.
+    let parallel = match on {
+        Ty::Seq { parallel, .. } => parallel,
+        else => false,
+    }
+    if parallel {
+        return result
+    }
+    let chained = a_paused_chain(key, on)
+    if lambda_at < 0 || lambda_at >= args.len() as i64 {
+        // A plain lambda over a sequence that already pauses: the step still
+        // does, so the result is one too.
+        if chained {
+            return a_pausing_sequence(result, on)
+        }
+        return result
+    }
+    // An entry with no counterpart keeps the lowering's refusal.
+    let entry = check_crossings_entry(state, key, chained) ?? return result
+    state.facts.pausing_lambdas.insert(id_of(args[lambda_at]) as i64, entry)
+    if key == "Seq::map" || key == "Seq::filter" {
+        return a_pausing_sequence(result, on)
+    }
+    // The eager ones pause where they are called, for every rule that asks.
+    let written = id_of(receiver) as i64
+    state.flow.settled_methods.remove(written)
+    state.flow.pausing_methods.insert(written)
+    state.a_call_that_may_pause(key, true, false, span)
+    return result
+}
+
+/// Whether `ty` is the type parameter `name`.
+fn check_crossings_is_var(ty: ref Ty, name: ref String) -> bool {
+    return match ty {
+        Ty::Var { name: n, .. } => n == name,
+        else => false,
+    }
+}
+
+/// Whether `bound` gives `name` a type this compiler worked out.
+fn check_crossings_known(bound: ref collections::BTreeMap[String, Ty], name: ref String) -> bool {
+    let ty = bound.get(name) ?? return false
+    return !ty.is_unknown()
+}
+
+/// **A generic call whose result only an open number binds** (#497):
+/// `hand(7)` for `fn hand[T](x: T) -> T` hands back the `7`, whose type its
+/// uses decide (ADR-285 D1), so the call is that open number.
+pub fn check_crossings_a_call_that_hands_its_number_back(mut state: CheckState, world: ref CheckWorld, contract: ref FnContract, bound: ref collections::BTreeMap[String, Ty], args: ref Vec[Expr]) sync {
+    let signature: ref Signature = contract.signature ?? return
+    let result: ref Ty = signature.result ?? return
+    let name: String = match result {
+        Ty::Var { name, .. } => name.clone(),
+        else => return,
+    }
+    if check_crossings_known(bound, name) {
+        return
+    }
+    // The arguments a call passes: the parameters after a receiver.
+    let mut skip = 0
+    if signature.params.len() > 0 && signature.params[0].0 == "self" {
+        skip = 1
+    }
+    let mut at: Vec[i64] = []
+    let mut i = skip
+    while i < signature.params.len() as i64 {
+        if i - skip < args.len() as i64 && check_crossings_is_var(signature.params[i].1, name) {
+            at.push(i - skip)
+        }
+        i += 1
+    }
+    if at.len() == 0 {
+        return
+    }
+    for k in at {
+        if !state.number_shaped(world, args[k]) {
+            return
+        }
+    }
+    state.flow.open_calls.insert(id_of(args[0]) as i64, at)
+}
+
+/// **The count and the types of what a call passes**, against what it takes
+/// (`check_arguments`), with what moved in the callee's `keeps` since the
+/// committed ledger (ADR-297 D12).
+pub fn check_crossings_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, key: ref String, written: ref String, contract: ref FnContract, given: ref Vec[Expr], found: ref Vec[Ty], passed: ref Vec[(String, Ty)], span: ref Span) -> Ty sync {
+    let none: Vec[(String, bool, String)] = []
+    let keeps = world.newly_keeps.get(key) ?? return check_arguments(state, world, host, key, written, contract, given, found, passed, none, span)
+    return check_arguments(state, world, host, key, written, contract, given, found, passed, keeps, span)
+}

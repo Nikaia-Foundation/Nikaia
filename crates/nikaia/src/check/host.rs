@@ -14,7 +14,6 @@ pub(super) struct Host<'a> {
     pub(super) reads: &'a Reads,
     pub(super) own: &'a Ledger,
     pub(super) library: &'a Ledger,
-    pub(super) newly: &'a Newly,
 }
 
 impl Host<'_> {
@@ -275,10 +274,6 @@ impl CheckHost for Host<'_> {
         }
     }
 
-    fn newly_throws(&self, key: &str) -> Option<Vec<String>> {
-        self.newly.throws.get(key).cloned()
-    }
-
     /// Code below the core never walks an expression: the hubs are the core's
     /// host's (`core::Core`), until the dispatcher moves (U-c7, U-c11).
     fn declared(&self, _state: &mut CheckState, _ty: &crate::ast::Type, _span: &Span) -> Ty {
@@ -302,102 +297,10 @@ impl CheckHost for Host<'_> {
         unreachable!("`an_attribute_read` is asked of the core's host, not of the services")
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn arguments(
-        &self,
-        _state: &mut CheckState,
-        _key: &str,
-        _written: &str,
-        _contract: &FnContract,
-        _given: &[Expr],
-        _found: &[Ty],
-        _passed: &[(String, Ty)],
-        _span: &Span,
-    ) -> Ty {
-        unreachable!("`arguments` is asked of the core's host, not of the services")
-    }
-
-    fn a_call_that_hands_its_number_back(
-        &self,
-        _state: &mut CheckState,
-        _contract: &FnContract,
-        _bound: &BTreeMap<String, Ty>,
-        _args: &[Expr],
-    ) {
-        unreachable!("`a_call_that_hands_its_number_back` is asked of the core's host")
-    }
-
-    fn a_standard_bound_not_met(
-        &self,
-        _state: &mut CheckState,
-        _key: &str,
-        _bound: &BTreeMap<String, Ty>,
-        _span: &Span,
-    ) {
-        unreachable!("`a_standard_bound_not_met` is asked of the core's host")
-    }
-
-    fn a_scope_that_pauses(
-        &self,
-        _state: &mut CheckState,
-        _args: &[Expr],
-        _paused: &[i64],
-        _span: &Span,
-    ) {
-        unreachable!("`a_scope_that_pauses` is asked of the core's host")
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn a_lambda_that_pauses_at_an_entry(
-        &self,
-        _state: &mut CheckState,
-        _key: &str,
-        _receiver: &Expr,
-        _on: &Ty,
-        _args: &[Expr],
-        _lambda_at: i64,
-        _result: Ty,
-        _span: &Span,
-    ) -> Ty {
-        unreachable!("`a_lambda_that_pauses_at_an_entry` is asked of the core's host")
-    }
-
-    fn a_task_of_a_scope(&self, _state: &mut CheckState, _args: &[Expr]) {
-        unreachable!("`a_task_of_a_scope` is asked of the core's host")
-    }
-
-    fn a_value_with_a_cleanup_made(&self, _state: &mut CheckState, _ty: &Ty) {
-        unreachable!("only the core's host keeps the checker")
-    }
-
     fn an_escape_nothing_names(
         &self,
         text: &str,
     ) -> Option<nikaia_std::tools::escapes::NotAnEscape> {
         crate::build_time::an_escape_nothing_names(text)
-    }
-
-    fn a_value_with_a_cleanup_bound(
-        &self,
-        _state: &mut CheckState,
-        _name: &str,
-        _ty: &Ty,
-        _span: &Span,
-    ) {
-        unreachable!("only the core's host keeps the checker")
-    }
-
-    fn a_bound_handle_is_taken(&self, _state: &mut CheckState, _block: &Block) {
-        unreachable!("only the core's host keeps the checker")
-    }
-
-    fn a_type_that_does_not_compare(
-        &self,
-        _state: &mut CheckState,
-        _left: &Ty,
-        _right: &Ty,
-        _span: &Span,
-    ) {
-        unreachable!("only the core's host keeps the checker")
     }
 }

@@ -13482,12 +13482,12 @@ fn check_core_call_described<H: CheckHost>(state: &mut CheckState, world: &Check
     let mut options: Vec<i64> = vec![];
     for option in config.iter() { options.push(id_of(&option.value) as i64); }
     state.flow.option_values = options;
-    let result = host.arguments(state, key, name, contract, args, found, passed, span);
+    let result = check_crossings_arguments(state, world, host, key, name, contract, args, found, passed, span);
     state.flow.option_values = vec![];
     let bound = argument_bindings(contract, found);
-    host.a_call_that_hands_its_number_back(state, contract, &bound, args);
+    check_crossings_a_call_that_hands_its_number_back(state, world, contract, &bound, args);
     state.a_bound_the_argument_does_not_meet(world, key, &bound, span);
-    host.a_standard_bound_not_met(state, key, &bound, span);
+    check_crossings_a_standard_bound_not_met(state, world, key, &bound, span);
     let typed: Ty = nikaia_std::index::or(constructed, || substitute(&result, &bound).into());
     state.stamped_through(contract, found, typed)
 }
@@ -13585,7 +13585,7 @@ fn check_core_call_named_call<H: CheckHost>(state: &mut CheckState, world: &Chec
     }
     let paused_here: Vec<i64> = state.flow.paused_args.to_owned();
     state.flow.paused_args = outer_paused;
-    if have && key == "task::scope" { host.a_scope_that_pauses(state, args, &paused_here, span); }
+    if have && key == "task::scope" { check_crossings_a_scope_that_pauses(state, args, &paused_here, span); }
     if have && key == "supervisor::child" && !args.is_empty() { state.a_child_that_keeps_state(world, nikaia_std::index::get(&args, 0), span); }
     let passed = check_core_call_passed(state, world, host, config, span);
     if variant.is_some() {
@@ -13717,7 +13717,7 @@ fn check_core_call_on_view(ty: &Ty) -> i64 {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_call_on_reached(state: &mut CheckState, key: Option<String>) {
+pub fn check_core_call_on_reached(state: &mut CheckState, key: Option<String>) {
     let have = key.is_some();
     let written: String = nikaia_std::index::or(key.as_deref(), || "").to_owned();
     if !have && state.flow.guarded.is_some() {
@@ -14126,7 +14126,7 @@ fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState, world: &Ch
         state.in_parallel = Some(nikaia_std::index::or(state.in_parallel, || depth.into()));
         state.scoped_task = false;
     }
-    if key == "task::Scope::spawn" { host.a_task_of_a_scope(state, args); }
+    if key == "task::Scope::spawn" { check_crossings_a_task_of_a_scope(state, args); }
     let callee: Option<FnContract> = Some(contract.clone());
     let found = check_core_arguments_given(state, world, host, args, &expected, world.own.functions.contains_key(key), (callee).as_ref(), span);
     state.in_parallel = outer_parallel;
@@ -14151,17 +14151,17 @@ fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState, world: &Ch
     state.counts_in_usize(key, args);
     if key.starts_with("fs::Path::") && !state.facts.path_methods.contains_key(&node) { state.facts.path_methods.insert(node, false); }
     let no_options: Vec<(String, Ty)> = vec![];
-    let result = host.arguments(state, key, &written, contract, args, &found, &no_options, span);
+    let result = check_crossings_arguments(state, world, host, key, &written, contract, args, &found, &no_options, span);
     state.a_lookup_key_lent(world, key, args, &found);
     state.a_view_kept_where_the_receiver_says_text(world, key, contract, args, &found, &expected, span);
     check_core_call_on_given(state, world, host, key, args, &found, &expected, span);
     state.a_pattern_of_owned_text(key, args, &found, span);
     for (name, ty) in argument_bindings(contract, &found) { if !bound.contains_key(&name) { bound.insert(name.to_owned(), ty.clone()); } }
     state.a_bound_the_argument_does_not_meet(world, key, &bound, span);
-    host.a_standard_bound_not_met(state, key, &bound, span);
+    check_crossings_a_standard_bound_not_met(state, world, key, &bound, span);
     let substituted = substitute(&result, &bound);
     let shaped = shape_through(contract, on, &found, substituted);
-    let paused = host.a_lambda_that_pauses_at_an_entry(state, key, receiver, on, args, lambda_at, shaped, span);
+    let paused = check_crossings_a_lambda_that_pauses_at_an_entry(state, key, receiver, on, args, lambda_at, shaped, span);
     state.stamped_through(contract, &found, paused)
 }
 
@@ -14626,7 +14626,7 @@ pub fn check_core_expr<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
     let opened = check_core_expr_open_receiver(state, expr, walked);
     let ty = check_core_expr_flat_get(state, world, expr, opened);
     if state.flow.read_a_map && check_core_expr_a_map_read(world, expr) { state.flow.map_read_sites.insert(id_of(expr) as i64); }
-    if check_core_expr_makes_a_value(expr) { host.a_value_with_a_cleanup_made(state, &ty); }
+    if check_core_expr_makes_a_value(expr) { check_crossings_a_value_with_a_cleanup_made(state, world, &ty); }
     if ty.is_unknown() && !said_inside { state.a_value_of_no_known_type(world, expr, span); }
     ty
 }
@@ -16757,7 +16757,7 @@ fn check_core_ops_equal<H: CheckHost>(state: &mut CheckState, world: &CheckWorld
     let asks_for_null = check_core_ops_null(lhs) || check_core_ops_null(rhs);
     if !asks_for_null {
         state.an_operator_needs_a_bound(world, op, left, right, at);
-        host.a_type_that_does_not_compare(state, left, right, at);
+        check_crossings_a_type_that_does_not_compare(state, world, left, right, at);
     }
     if !asks_for_null { state.a_maybe_compared_with_a_value(left, right, span); }
     state.a_view_compared_with_a_value(world, lhs, left, rhs, right, at);
@@ -18131,7 +18131,7 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     }
     if names.len() == 1 {
         let single: String = format!("{}", world.words.resolve(*nikaia_std::index::get(&names, 0)));
-        host.a_value_with_a_cleanup_bound(state, &single, &found, span);
+        check_crossings_a_value_with_a_cleanup_bound(state, world, &single, &found, span);
     }
     let mut bound_names: Vec<String> = vec![];
     for n in names.iter() {
@@ -18658,9 +18658,358 @@ pub fn check_core_block<H: CheckHost>(state: &mut CheckState, world: &CheckWorld
         if at == last { tail = ty; }
         at += 1;
     }
-    host.a_bound_handle_is_taken(state, block);
+    check_crossings_a_bound_handle_is_taken(state, world, block);
     state.scope.pop();
     tail
+}
+
+
+// --- check_crossings.nika ---
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CheckCrossingsPath {
+    Taken,
+    Gone,
+    Left,
+    Falls,
+}
+
+fn check_crossings_named(world: &CheckWorld<'_>, name: &str, stmt: &Stmt) -> bool {
+    let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
+    names_in_statement(stmt, world.words, &mut seen);
+    seen.contains(name)
+}
+
+fn check_crossings_named_in(world: &CheckWorld<'_>, name: &str, expr: &Expr) -> bool {
+    let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
+    names_in(expr, world.words, &mut seen);
+    seen.contains(name)
+}
+
+fn check_crossings_returned(world: &CheckWorld<'_>, name: &str, value: Option<&Expr>) -> CheckCrossingsPath {
+    let given: &Expr = match value { Some(__nikaia_value) => __nikaia_value, None => return CheckCrossingsPath::Left };
+    if check_crossings_named_in(world, name, given) { return CheckCrossingsPath::Gone; }
+    CheckCrossingsPath::Left
+}
+
+fn check_crossings_mentioned(world: &CheckWorld<'_>, name: &str, expr: &Expr) -> CheckCrossingsPath {
+    if check_crossings_named_in(world, name, expr) { return CheckCrossingsPath::Taken; }
+    CheckCrossingsPath::Falls
+}
+
+fn check_crossings_path(world: &CheckWorld<'_>, name: &str, stmts: &[Spanned<Stmt>], from: i64, in_loop: bool) -> CheckCrossingsPath {
+    let mut at = from;
+    while at < stmts.len() as i64 {
+        let flow = check_crossings_step(world, name, &nikaia_std::index::get(&stmts, nikaia_std::index::at(at)).node, in_loop);
+        if flow != CheckCrossingsPath::Falls { return flow; }
+        at += 1;
+    }
+    CheckCrossingsPath::Falls
+}
+
+fn check_crossings_step(world: &CheckWorld<'_>, name: &str, stmt: &Stmt, in_loop: bool) -> CheckCrossingsPath {
+    match stmt {
+        Stmt::Return(value) => { return check_crossings_returned(world, name, (value).as_ref()); },
+        Stmt::Break => { if !in_loop { return CheckCrossingsPath::Left; } },
+        Stmt::Continue => { if !in_loop { return CheckCrossingsPath::Left; } },
+        Stmt::Expr(e) => { return check_crossings_expr_path(world, name, e, in_loop); },
+        Stmt::Let { value, .. } => { return check_crossings_expr_path(world, name, value, in_loop); },
+        Stmt::For { iter, body, .. } => {
+            if check_crossings_named_in(world, name, iter) { return CheckCrossingsPath::Taken; }
+            return check_crossings_loop_body(world, name, body);
+        },
+        Stmt::While { cond, body } => {
+            if check_crossings_named_in(world, name, cond) { return CheckCrossingsPath::Taken; }
+            return check_crossings_loop_body(world, name, body);
+        },
+        _ => { },
+    }
+    if check_crossings_named(world, name, stmt) { return CheckCrossingsPath::Taken; }
+    CheckCrossingsPath::Falls
+}
+
+fn check_crossings_loop_body(world: &CheckWorld<'_>, name: &str, body: &Block) -> CheckCrossingsPath {
+    let flow = check_crossings_path(world, name, &body.stmts, 0, true);
+    if flow == CheckCrossingsPath::Left { return CheckCrossingsPath::Left; }
+    if flow == CheckCrossingsPath::Gone { return CheckCrossingsPath::Taken; }
+    for stmt in body.stmts.iter() { if check_crossings_named(world, name, &stmt.node) { return CheckCrossingsPath::Taken; } }
+    CheckCrossingsPath::Falls
+}
+
+fn check_crossings_expr_path(world: &CheckWorld<'_>, name: &str, expr: &Expr, in_loop: bool) -> CheckCrossingsPath {
+    let mut branches: Vec<CheckCrossingsPath> = vec![];
+    match expr {
+        Expr::Throw(inner, _) => {
+            let inner = nikaia_std::boxed::open(inner);
+            if check_crossings_named_in(world, name, inner) { return CheckCrossingsPath::Gone; }
+            return CheckCrossingsPath::Left;
+        },
+        Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); return check_crossings_returned(world, name, (value).as_ref()); },
+        Expr::Block(b, _) => { return check_crossings_path(world, name, &b.stmts, 0, in_loop); },
+        Expr::If { cond, then_branch, else_branch, .. } => {
+            let cond = nikaia_std::boxed::open(cond);
+            if check_crossings_named_in(world, name, cond) { return CheckCrossingsPath::Taken; }
+            branches.push(check_crossings_path(world, name, &then_branch.stmts, 0, in_loop));
+            let otherwise: &Block = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return check_crossings_joined(&branches, true) };
+            branches.push(check_crossings_path(world, name, &otherwise.stmts, 0, in_loop));
+        },
+        Expr::Match { value, arms, .. } => {
+            let value = nikaia_std::boxed::open(value);
+            if check_crossings_named_in(world, name, value) { return CheckCrossingsPath::Taken; }
+            for arm in arms.iter() { branches.push(check_crossings_arm(world, name, arm, in_loop)); }
+        },
+        _ => { return check_crossings_mentioned(world, name, expr); },
+    }
+    check_crossings_joined(&branches, false)
+}
+
+fn check_crossings_arm(world: &CheckWorld<'_>, name: &str, arm: &MatchArm, in_loop: bool) -> CheckCrossingsPath {
+    let guard: &Expr = match arm.guard.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return check_crossings_expr_path(world, name, &arm.body, in_loop) };
+    if check_crossings_named_in(world, name, guard) { return CheckCrossingsPath::Taken; }
+    check_crossings_expr_path(world, name, &arm.body, in_loop)
+}
+
+fn check_crossings_joined(branches: &[CheckCrossingsPath], falls: bool) -> CheckCrossingsPath {
+    let mut on = 0;
+    let mut taken = 0;
+    let mut fallen = 0;
+    for branch in branches.iter() {
+        let branch = *branch;
+        if branch != CheckCrossingsPath::Gone { on += 1; }
+        if branch == CheckCrossingsPath::Taken { taken += 1; }
+        if branch == CheckCrossingsPath::Falls { fallen += 1; }
+    }
+    if falls {
+        on += 1;
+        fallen += 1;
+    }
+    if on == 0 { return CheckCrossingsPath::Gone; }
+    if taken == on { return CheckCrossingsPath::Taken; }
+    if fallen == on { return CheckCrossingsPath::Falls; }
+    CheckCrossingsPath::Left
+}
+
+fn check_crossings_spawned(world: &CheckWorld<'_>, stmt: &Stmt) -> Option<String> {
+    match stmt {
+        Stmt::Let { names, value, .. } => {
+            if names.len() != 1 { return None; }
+            match value {
+                Expr::Spawn { .. } => { },
+                _ => { return None; },
+            }
+            let name: String = format!("{}", world.words.resolve(*nikaia_std::index::get(&names, 0)));
+            if name == "_" { return None; }
+            return Some(name);
+        },
+        _ => return None,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_crossings_a_bound_handle_is_taken(state: &mut CheckState, world: &CheckWorld<'_>, block: &Block) {
+    let mut at: i64 = 0;
+    for stmt in block.stmts.iter() {
+        at += 1;
+        let spawned: Option<String> = check_crossings_spawned(world, &stmt.node);
+        if spawned.is_some() {
+            let name: String = nikaia_std::index::or(spawned, || "".into());
+            let flow = check_crossings_path(world, &name, &block.stmts, at, false);
+            if flow != CheckCrossingsPath::Taken && flow != CheckCrossingsPath::Gone { state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: Span { start: stmt.span.start, end: stmt.span.end }, code: "NK2109".to_owned(), message: format!("The task handle `{}` is never joined, cancelled or detached.", name), notes: vec!["An error of a task nobody waits for would be lost, so a bound handle is used up before its scope ends.".to_owned()], help: Some(format!("Write `{}.join()` to wait for the task, or `{}.detach()` if nobody waits for it.", name, name)), labels: vec![] }); }
+        }
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_crossings_settle(state: &mut CheckState, fails: bool) {
+    let key: Option<String> = state.a_settle_in_this_function(fails);
+    if key.is_none() { return; }
+    check_core_call_on_reached(state, std::convert::identity(key));
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_crossings_a_value_with_a_cleanup_made(state: &mut CheckState, world: &CheckWorld<'_>, ty: &Ty) {
+    let held = match state.cleanup_of(world, ty) { Some(__nikaia_value) => __nikaia_value, None => return };
+    check_crossings_settle(state, held.fails);
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_crossings_a_value_with_a_cleanup_dying(state: &mut CheckState, world: &CheckWorld<'_>, name: &str, ty: &Ty, span: &Span) -> Option<bool> {
+    let held = match state.cleanup_of(world, ty) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    check_crossings_settle(state, held.fails);
+    state.a_cleanup_that_may_pause(name, span);
+    if held.fails { state.a_failing_cleanup_undeclared(name, ty, &held.owner, span); }
+    Some(held.fails)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_crossings_a_value_with_a_cleanup_bound(state: &mut CheckState, world: &CheckWorld<'_>, name: &str, ty: &Ty, span: &Span) {
+    let fails = match check_crossings_a_value_with_a_cleanup_dying(state, world, name, ty, span) { Some(__nikaia_value) => __nikaia_value, None => return };
+    state.facts.settle_lets.insert(span.start as i64, fails);
+}
+
+#[allow(clippy::too_many_arguments)]
+fn check_crossings_refusal(beside: &collections::BTreeMap<String, Vec<Ty>>, structs: &collections::BTreeMap<String, Vec<FieldContract>>, enums: &collections::BTreeMap<String, collections::BTreeSet<String>>, payloads: &collections::BTreeMap<String, Vec<Ty>>, parameters: &collections::BTreeMap<String, Vec<String>>, world: &CheckWorld<'_>, left: &Ty, right: &Ty, span: &Span) -> Option<CheckFinding> {
+    let asking = CheckComparable { beside, structs, enums, payloads, parameters, own: world.own, library: world.library };
+    compare_refusal(&asking, left, right, span)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_crossings_a_type_that_does_not_compare(state: &mut CheckState, world: &CheckWorld<'_>, left: &Ty, right: &Ty, span: &Span) {
+    let beside = check_parts_beside(world);
+    let refused: Option<CheckFinding> = check_crossings_refusal(&beside, &state.structs, &state.enums, &state.enum_payloads, &state.struct_parameters, world, left, right, span);
+    let finding = match refused { Some(__nikaia_value) => __nikaia_value, None => return };
+    state.findings.push(finding);
+}
+
+#[allow(clippy::too_many_arguments)]
+fn check_crossings_bounds(beside: &collections::BTreeMap<String, Vec<Ty>>, structs: &collections::BTreeMap<String, Vec<FieldContract>>, enums: &collections::BTreeMap<String, collections::BTreeSet<String>>, payloads: &collections::BTreeMap<String, Vec<Ty>>, parameters: &collections::BTreeMap<String, Vec<String>>, world: &CheckWorld<'_>, type_parameters: &collections::BTreeMap<String, Vec<String>>, key: &str, wanted: &collections::BTreeMap<String, Vec<String>>, bound: &collections::BTreeMap<String, Ty>, span: &Span) -> Vec<CheckFinding> {
+    let asking = CheckComparable { beside, structs, enums, payloads, parameters, own: world.own, library: world.library };
+    compare_standard_bounds(&asking, type_parameters, key, wanted, bound, span)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_crossings_a_standard_bound_not_met(state: &mut CheckState, world: &CheckWorld<'_>, key: &str, bound: &collections::BTreeMap<String, Ty>, span: &Span) {
+    if !state.declared_bounds.contains_key(key) { return; }
+    let beside = check_parts_beside(world);
+    let wanted = match state.declared_bounds.get(key) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let refused = check_crossings_bounds(&beside, &state.structs, &state.enums, &state.enum_payloads, &state.struct_parameters, world, &state.type_parameters, key, &wanted, bound, span);
+    for finding in refused.iter() { state.findings.push(finding.clone()); }
+}
+
+fn check_crossings_impls(beside: &collections::BTreeMap<String, Vec<Ty>>, structs: &collections::BTreeMap<String, Vec<FieldContract>>, enums: &collections::BTreeMap<String, collections::BTreeSet<String>>, payloads: &collections::BTreeMap<String, Vec<Ty>>, parameters: &collections::BTreeMap<String, Vec<String>>, world: &CheckWorld<'_>) -> Vec<CheckFinding> {
+    let asking = CheckComparable { beside, structs, enums, payloads, parameters, own: world.own, library: world.library };
+    compare_language_impls(&asking, &world.here)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_crossings_language_impls(state: &mut CheckState, world: &CheckWorld<'_>) {
+    let beside = check_parts_beside(world);
+    let refused = check_crossings_impls(&beside, &state.structs, &state.enums, &state.enum_payloads, &state.struct_parameters, world);
+    for finding in refused.iter() { state.findings.push(finding.clone()); }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_crossings_a_task_of_a_scope(state: &mut CheckState, args: &[Expr]) {
+    if state.in_parallel.is_none() { state.in_parallel = Some(state.scope.len() as i64); }
+    state.scoped_task = true;
+    if !args.is_empty() { state.facts.scope_tasks.insert(id_of(nikaia_std::index::get(&args, 0)) as i64); }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_crossings_a_scope_that_pauses(state: &mut CheckState, args: &[Expr], paused: &[i64], span: &Span) {
+    if args.is_empty() { return; }
+    let body = id_of(nikaia_std::index::get(&args, 0)) as i64;
+    if !paused.contains(&body) { return; }
+    state.facts.paused_scopes.insert(body);
+    state.a_call_that_may_pause("task::scope", true, false, span);
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_crossings_entry(state: &CheckState, key: &str, chained: bool) -> Option<FactPausing> {
+    if key == "Seq::map" {
+        if chained { return Some(FactPausing::Method("then".to_owned())); }
+        return Some(FactPausing::Function("then".to_owned()));
+    }
+    if key == "Seq::filter" {
+        if chained { return Some(FactPausing::Method("then_filter".to_owned())); }
+        return Some(FactPausing::Function("then_filter".to_owned()));
+    }
+    if key == "list::ListExt::map" { return Some(FactPausing::Function("map_list".to_owned())); }
+    if key == "Vec::sort_by_key" {
+        let named: String = nikaia_std::index::or(match state.flow.receiver_name.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || "".into());
+        let local = match state.binding(&named) { Some(__nikaia_value) => __nikaia_value, None => return Some(FactPausing::Lent("sort_by_key".to_owned())) };
+        if local.changing { return Some(FactPausing::Function("sort_by_key".to_owned())); }
+        return Some(FactPausing::Lent("sort_by_key".to_owned()));
+    }
+    if key == "Entry::or_insert_with" { return Some(FactPausing::Function("or_insert_with".to_owned())); }
+    if key == "task::Scope::spawn" { return Some(FactPausing::Method("spawn_paused".to_owned())); }
+    if key == "Entry::and_modify" { return Some(FactPausing::Function("and_modify".to_owned())); }
+    None
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+pub fn check_crossings_a_lambda_that_pauses_at_an_entry(state: &mut CheckState, key: &str, receiver: &Expr, on: &Ty, args: &[Expr], lambda_at: i64, result: Ty, span: &Span) -> Ty {
+    let parallel = match on {
+        Ty::Seq { parallel, .. } => { let parallel = *parallel; parallel },
+        _ => false,
+    };
+    if parallel { return result; }
+    let chained = a_paused_chain(key, on);
+    if lambda_at < 0 || lambda_at >= args.len() as i64 {
+        if chained { return a_pausing_sequence(result, on); }
+        return result;
+    }
+    let entry = match check_crossings_entry(&state, key, chained) { Some(__nikaia_value) => __nikaia_value, None => return result };
+    state.facts.pausing_lambdas.insert(id_of(nikaia_std::index::get(&args, nikaia_std::index::at(lambda_at))) as i64, entry);
+    if key == "Seq::map" || key == "Seq::filter" { return a_pausing_sequence(result, on); }
+    let written = id_of(receiver) as i64;
+    state.flow.settled_methods.remove(&written);
+    state.flow.pausing_methods.insert(written);
+    state.a_call_that_may_pause(key, true, false, span);
+    result
+}
+
+fn check_crossings_is_var(ty: &Ty, name: &str) -> bool {
+    match ty {
+        Ty::Var { name: n, .. } => n == name,
+        _ => false,
+    }
+}
+
+fn check_crossings_known(bound: &collections::BTreeMap<String, Ty>, name: &str) -> bool {
+    let ty = match bound.get(name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    !ty.is_unknown()
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_crossings_a_call_that_hands_its_number_back(state: &mut CheckState, world: &CheckWorld<'_>, contract: &FnContract, bound: &collections::BTreeMap<String, Ty>, args: &[Expr]) {
+    let signature: &Signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
+    let result: &Ty = match signature.result.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
+    let name: String = match result {
+        Ty::Var { name, .. } => name.to_owned(),
+        _ => return,
+    };
+    if check_crossings_known(bound, &name) { return; }
+    let mut skip: i64 = 0;
+    if !signature.params.is_empty() && nikaia_std::index::get(&signature.params, 0).0 == "self" { skip = 1; }
+    let mut at: Vec<i64> = vec![];
+    let mut i: i64 = skip;
+    while i < signature.params.len() as i64 {
+        if i - skip < args.len() as i64 && check_crossings_is_var(&nikaia_std::index::get(&signature.params, nikaia_std::index::at(i)).1, &name) { at.push(i - skip); }
+        i += 1;
+    }
+    if at.is_empty() { return; }
+    for k in at.iter() {
+        let k = nikaia_std::num::value(k);
+        if !state.number_shaped(world, nikaia_std::index::get(&args, nikaia_std::index::at(k))) { return; }
+    }
+    state.flow.open_calls.insert(id_of(nikaia_std::index::get(&args, 0)) as i64, at);
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+pub fn check_crossings_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, key: &str, written: &str, contract: &FnContract, given: &[Expr], found: &[Ty], passed: &[(String, Ty)], span: &Span) -> Ty {
+    let none: Vec<(String, bool, String)> = vec![];
+    let keeps = match world.newly_keeps.get(key) { Some(__nikaia_value) => __nikaia_value, None => return check_arguments(state, world, host, key, written, contract, given, found, passed, &none, span) };
+    check_arguments(state, world, host, key, written, contract, given, found, passed, &keeps, span)
 }
 
 
@@ -20532,24 +20881,13 @@ pub trait CheckHost {
     fn assets_read_in(&self, value: &Expr, read: &collections::BTreeMap<String, String>) -> Expr;
     fn value_fn(&self) -> String;
     fn place_of(&self, place: &str, here: i64) -> CheckPlace;
-    fn a_value_with_a_cleanup_made(&self, state: &mut CheckState, ty: &Ty);
     fn an_escape_nothing_names(&self, text: &str) -> Option<NotAnEscape>;
-    fn a_value_with_a_cleanup_bound(&self, state: &mut CheckState, name: &str, ty: &Ty, span: &Span);
-    fn a_bound_handle_is_taken(&self, state: &mut CheckState, block: &Block);
-    fn a_type_that_does_not_compare(&self, state: &mut CheckState, left: &Ty, right: &Ty, span: &Span);
     fn written(&self, value: &Expr) -> String;
-    fn newly_throws(&self, key: &str) -> Option<Vec<String>>;
     fn holes_read(&self, literal: &Expr) -> Vec<(Expr, Vec<(String, String)>)>;
     fn declared(&self, state: &mut CheckState, ty: &Type, span: &Span) -> Ty;
     fn payload_of(&self, ty: &str, variant: &str) -> Option<Vec<Ty>>;
     fn float_text(&self, number: f64) -> String;
     fn an_attribute_read(&self, state: &mut CheckState, args: &[Expr], span: &Span) -> Option<String>;
-    fn arguments(&self, state: &mut CheckState, key: &str, written: &str, contract: &FnContract, given: &[Expr], found: &[Ty], passed: &[(String, Ty)], span: &Span) -> Ty;
-    fn a_call_that_hands_its_number_back(&self, state: &mut CheckState, contract: &FnContract, bound: &collections::BTreeMap<String, Ty>, args: &[Expr]);
-    fn a_standard_bound_not_met(&self, state: &mut CheckState, key: &str, bound: &collections::BTreeMap<String, Ty>, span: &Span);
-    fn a_scope_that_pauses(&self, state: &mut CheckState, args: &[Expr], paused: &[i64], span: &Span);
-    fn a_lambda_that_pauses_at_an_entry(&self, state: &mut CheckState, key: &str, receiver: &Expr, on: &Ty, args: &[Expr], lambda_at: i64, result: Ty, span: &Span) -> Ty;
-    fn a_task_of_a_scope(&self, state: &mut CheckState, args: &[Expr]);
 }
 
 fn host_known(local: &CheckLocal) -> Option<BuildValue> {
@@ -22421,9 +22759,8 @@ impl CheckState {
                 for thrown in contract.fails_with.iter() { guarded.thrown.insert(thrown.to_owned()); }
                 self.flow.guarded = Some(guarded);
             }
-            let gained: Option<Vec<String>> = host.newly_throws(key);
-            if gained.is_some() {
-                let list = match gained { Some(__nikaia_value) => __nikaia_value, None => return };
+            if world.newly_throws.contains_key(key) {
+                let list = match world.newly_throws.get(key) { Some(__nikaia_value) => __nikaia_value, None => return };
                 self.newly_reaches_a_handler(key, &list, span);
             }
             if self.handed_over.is_some() {
@@ -26420,6 +26757,8 @@ pub struct CheckWorld<'a> {
     pub beside: Vec<ParsedView<'a>>,
     pub here_at: i64,
     pub fields_by_base: collections::BTreeMap<String, Vec<Ty>>,
+    pub newly_throws: collections::BTreeMap<String, Vec<String>>,
+    pub newly_keeps: collections::BTreeMap<String, Vec<(String, bool, String)>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -59172,7 +59511,7 @@ pub mod check_core_call {
 }
 pub mod check_core_call_on {
     #[allow(unused_imports)]
-    pub use super::{check_core_call_on, check_core_a_safe_call};
+    pub use super::{check_core_call_on_reached, check_core_call_on, check_core_a_safe_call};
 }
 pub mod check_core_comptime {
     #[allow(unused_imports)]
@@ -59209,6 +59548,10 @@ pub mod check_core_places {
 pub mod check_core_stmt {
     #[allow(unused_imports)]
     pub use super::{check_core_stmt_element_view, check_core_stmt_holds_code, check_core_stmt_let, check_core_stmt_assign, check_core_stmt_while, check_core_stmt_for, check_core_stmt_return, check_core_stmt_jump, check_core_stmt, check_core_block};
+}
+pub mod check_crossings {
+    #[allow(unused_imports)]
+    pub use super::{CheckCrossingsPath, check_crossings_a_bound_handle_is_taken, check_crossings_a_value_with_a_cleanup_made, check_crossings_a_value_with_a_cleanup_dying, check_crossings_a_value_with_a_cleanup_bound, check_crossings_a_type_that_does_not_compare, check_crossings_a_standard_bound_not_met, check_crossings_language_impls, check_crossings_a_task_of_a_scope, check_crossings_a_scope_that_pauses, check_crossings_a_lambda_that_pauses_at_an_entry, check_crossings_a_call_that_hands_its_number_back, check_crossings_arguments};
 }
 pub mod check_decls {
     #[allow(unused_imports)]

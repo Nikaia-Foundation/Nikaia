@@ -442,6 +442,13 @@ pub struct CheckWorld {
     /// **The fields of every type in `own` and `library`, by the type's own
     /// name**: what a cleanup or a teardown a type holds is asked through.
     pub fields_by_base: collections::BTreeMap[String, Vec[Ty]],
+    /// **What moved in the callees since the committed ledger** (the build's
+    /// `Newly`): the errors each throws now and did not, what `NK2402` is
+    /// told once.
+    pub newly_throws: collections::BTreeMap[String, Vec[String]],
+    /// The parameters each callee keeps now and did not, or keeps no longer
+    /// (ADR-297 D12): the parameter, whether it keeps it now, its type.
+    pub newly_keeps: collections::BTreeMap[String, Vec[(String, bool, String)]],
 }
 
 /// **What the checker keeps while it walks a program**: the findings, the

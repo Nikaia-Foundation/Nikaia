@@ -274,10 +274,6 @@ impl CheckHost for Core<'_, '_> {
         self.h.holes_read(literal)
     }
 
-    fn newly_throws(&self, key: &str) -> Option<Vec<String>> {
-        self.h.newly_throws(key)
-    }
-
     fn declared(&self, state: &mut CheckState, ty: &crate::ast::Type, span: &Span) -> Ty {
         self.hosted(state, |checker| checker.declared(ty, span))
     }
@@ -299,117 +295,10 @@ impl CheckHost for Core<'_, '_> {
         self.hosted(state, |checker| checker.an_attribute_read(args, span))
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn arguments(
-        &self,
-        state: &mut CheckState,
-        key: &str,
-        written: &str,
-        contract: &FnContract,
-        given: &[Expr],
-        found: &[Ty],
-        passed: &[(String, Ty)],
-        span: &Span,
-    ) -> Ty {
-        self.hosted(state, |checker| {
-            checker.arguments(key, written, contract, given, found, passed, span)
-        })
-    }
-
-    fn a_call_that_hands_its_number_back(
-        &self,
-        state: &mut CheckState,
-        contract: &FnContract,
-        bound: &BTreeMap<String, Ty>,
-        args: &[Expr],
-    ) {
-        self.hosted(state, |checker| {
-            checker.a_call_that_hands_its_number_back(contract, bound, args)
-        })
-    }
-
-    fn a_standard_bound_not_met(
-        &self,
-        state: &mut CheckState,
-        key: &str,
-        bound: &BTreeMap<String, Ty>,
-        span: &Span,
-    ) {
-        self.hosted(state, |checker| {
-            checker.a_standard_bound_not_met(key, bound, span)
-        })
-    }
-
-    fn a_scope_that_pauses(
-        &self,
-        state: &mut CheckState,
-        args: &[Expr],
-        paused: &[i64],
-        span: &Span,
-    ) {
-        self.hosted(state, |checker| {
-            checker.a_scope_that_pauses(args, paused, span)
-        })
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn a_lambda_that_pauses_at_an_entry(
-        &self,
-        state: &mut CheckState,
-        key: &str,
-        receiver: &Expr,
-        on: &Ty,
-        args: &[Expr],
-        lambda_at: i64,
-        result: Ty,
-        span: &Span,
-    ) -> Ty {
-        let lambda = usize::try_from(lambda_at).ok().and_then(|at| args.get(at));
-        self.hosted(state, |checker| {
-            checker.a_lambda_that_pauses_at_an_entry(key, receiver, on, lambda, result, span)
-        })
-    }
-
-    fn a_task_of_a_scope(&self, state: &mut CheckState, args: &[Expr]) {
-        self.hosted(state, |checker| checker.a_task_of_a_scope(args))
-    }
-
-    fn a_value_with_a_cleanup_made(&self, state: &mut CheckState, ty: &Ty) {
-        self.hosted(state, |checker| checker.a_value_with_a_cleanup_made(ty))
-    }
-
     fn an_escape_nothing_names(
         &self,
         text: &str,
     ) -> Option<nikaia_std::tools::escapes::NotAnEscape> {
         self.h.an_escape_nothing_names(text)
-    }
-
-    fn a_value_with_a_cleanup_bound(
-        &self,
-        state: &mut CheckState,
-        name: &str,
-        ty: &Ty,
-        span: &Span,
-    ) {
-        self.hosted(state, |checker| {
-            checker.a_value_with_a_cleanup_bound(name, ty, span)
-        })
-    }
-
-    fn a_bound_handle_is_taken(&self, state: &mut CheckState, block: &Block) {
-        self.hosted(state, |checker| checker.a_bound_handle_is_taken(block))
-    }
-
-    fn a_type_that_does_not_compare(
-        &self,
-        state: &mut CheckState,
-        left: &Ty,
-        right: &Ty,
-        span: &Span,
-    ) {
-        self.hosted(state, |checker| {
-            checker.a_type_that_does_not_compare(left, right, span)
-        })
     }
 }

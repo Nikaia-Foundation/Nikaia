@@ -52,7 +52,7 @@ fn check_core_call_on_view(ty: ref Ty) -> i64 {
 
 /// **What a call reached, filed for the function around it** (ADR-308):
 /// `reached_method`. `null` is a method nothing describes.
-fn check_core_call_on_reached(mut state: CheckState, key: String?) sync {
+pub fn check_core_call_on_reached(mut state: CheckState, key: String?) sync {
     let have = key != null
     let written: String = (key ?? "").clone()
     if !have && state.flow.guarded != null {
@@ -536,7 +536,7 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     // **A task of `task::scope` runs beside the others** (Part II 12.7): the
     // task work's (#605), asked of the host.
     if key == "task::Scope::spawn" {
-        host.a_task_of_a_scope(state, args)
+        check_crossings_a_task_of_a_scope(state, args)
     }
     let callee: FnContract? = contract.clone()
     let found = check_core_arguments_given(state, world, host, args, expected, world.own.functions.contains_key(key), callee, span)
@@ -573,7 +573,7 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     }
     // **The source's own name and not the ledger's.**
     let no_options: Vec[(String, Ty)] = []
-    let result = host.arguments(state, key, written, contract, args, found, no_options, span)
+    let result = check_crossings_arguments(state, world, host, key, written, contract, args, found, no_options, span)
     state.a_lookup_key_lent(world, key, args, found)
     state.a_view_kept_where_the_receiver_says_text(world, key, contract, args, found, expected, span)
     check_core_call_on_given(state, world, host, key, args, found, expected, span)
@@ -586,10 +586,10 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
         }
     }
     state.a_bound_the_argument_does_not_meet(world, key, bound, span)
-    host.a_standard_bound_not_met(state, key, bound, span)
+    check_crossings_a_standard_bound_not_met(state, world, key, bound, span)
     let substituted = substitute(result, bound)
     let shaped = shape_through(contract, on, found, substituted)
-    let paused = host.a_lambda_that_pauses_at_an_entry(state, key, receiver, on, args, lambda_at, shaped, span)
+    let paused = check_crossings_a_lambda_that_pauses_at_an_entry(state, key, receiver, on, args, lambda_at, shaped, span)
     return state.stamped_through(contract, found, paused)
 }
 

@@ -452,14 +452,14 @@ fn check_core_call_described[H: CheckHost](mut state: CheckState, world: ref Che
         options.push(id_of(option.value) as i64)
     }
     state.flow.option_values = options
-    let result = host.arguments(state, key, name, contract, args, found, passed, span)
+    let result = check_crossings_arguments(state, world, host, key, name, contract, args, found, passed, span)
     state.flow.option_values = []
     // **What the arguments tell the signature** (ADR-295 D2), and a bound
     // (D16).
     let bound = argument_bindings(contract, found)
-    host.a_call_that_hands_its_number_back(state, contract, bound, args)
+    check_crossings_a_call_that_hands_its_number_back(state, world, contract, bound, args)
     state.a_bound_the_argument_does_not_meet(world, key, bound, span)
-    host.a_standard_bound_not_met(state, key, bound, span)
+    check_crossings_a_standard_bound_not_met(state, world, key, bound, span)
     let typed: Ty = constructed ?? substitute(result, bound)
     return state.stamped_through(contract, found, typed)
 }
@@ -574,7 +574,7 @@ fn check_core_call_named_call[H: CheckHost](mut state: CheckState, world: ref Ch
     // **A scope with a task that pauses polls it, and pauses itself**
     // (ADR-328 D10): the task work's (#605), asked of the host.
     if have && key == "task::scope" {
-        host.a_scope_that_pauses(state, args, paused_here, span)
+        check_crossings_a_scope_that_pauses(state, args, paused_here, span)
     }
     if have && key == "supervisor::child" && args.len() > 0 {
         state.a_child_that_keeps_state(world, args[0], span)

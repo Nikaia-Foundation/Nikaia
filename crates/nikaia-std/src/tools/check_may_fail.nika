@@ -77,9 +77,8 @@ impl CheckState {
                 }
                 self.flow.guarded = guarded
             }
-            let gained: Vec[String]? = host.newly_throws(key)
-            if gained != null {
-                let list = gained ?? return
+            if world.newly_throws.contains_key(key) {
+                let list = world.newly_throws.get(key) ?? return
                 self.newly_reaches_a_handler(key, list, span)
             }
             // **And the lambda this may be inside** (ADR-277 D7). A `catch`

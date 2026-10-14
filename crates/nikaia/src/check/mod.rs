@@ -34,17 +34,16 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::assets::Reads;
 use crate::ast::{self, BinaryOp, Block, Expr, Item, Span, Stmt, UnaryOp};
 use crate::build_time;
-use crate::contracts::SignatureOps;
 use crate::contracts::ty::TyOps;
-use crate::contracts::{FieldContract, FnContract, Ledger, ty, ty::Ty};
+use crate::contracts::{FieldContract, Ledger, ty, ty::Ty};
 use crate::fold::Constant;
 use crate::parser::Parsed;
-use nikaia_std::tools::check_arguments;
 use nikaia_std::tools::check_consts;
 use nikaia_std::tools::check_core_comptime;
 use nikaia_std::tools::check_core_expr;
 use nikaia_std::tools::check_core_leaves;
 use nikaia_std::tools::check_core_stmt;
+use nikaia_std::tools::check_crossings;
 use nikaia_std::tools::check_flow::{
     CheckConstant, CheckFlow, CheckUnrolling, CheckUnsignedSlot as UnsignedSlot,
 };
@@ -330,6 +329,18 @@ fn walked<'a>(
             .position(|other| std::ptr::eq(*other, parsed))
             .map_or(-1, |at| at as i64),
         fields_by_base: check_items::fields_by_base(own, library),
+        newly_throws: newly.throws.clone(),
+        newly_keeps: newly
+            .keeps
+            .iter()
+            .map(|(callee, all)| {
+                let moved = all
+                    .iter()
+                    .map(|kept| (kept.param.clone(), kept.now, kept.ty.clone()))
+                    .collect();
+                (callee.clone(), moved)
+            })
+            .collect(),
     };
     let mut s = core::hollow();
     s.flow = CheckFlow::start(computes, harvesting);
@@ -401,7 +412,6 @@ fn walked<'a>(
         .collect();
     s.dsl_drivers = crate::dsl::drivers(parsed).into_iter().collect();
     let mut checker = Checker {
-        newly,
         parsed,
         beside,
         reads,
@@ -488,7 +498,7 @@ fn walked<'a>(
     // type walk runs before `sync::infer` fills that in
     // ([ADR-080](../../docs/specification/adr/adr-080.md)).
     checker.s.findings.extend(crate::traits::check(parsed, own));
-    checker.language_impls();
+    checker.nikaia(|state, world, _| check_crossings::check_crossings_language_impls(state, world));
     // Part I 2.2: a **type** nothing declares, which had nothing where a value
     // has had `NK1117` since ADR-298
     // ([ADR-096](../../docs/specification/adr/adr-096.md)). Separate for the
@@ -925,10 +935,6 @@ struct Checker<'a> {
     world: &'a CheckWorld<'a>,
     /// States with nothing in them, for the crossings into Nikaia (`core.rs`).
     spares: Vec<Box<CheckState>>,
-    /// What each callee has **newly** gained since the committed ledger
-    /// ([ADR-308](../../docs/specification/adr/adr-308.md) D11). Empty where
-    /// there is nothing to compare, which says nothing.
-    newly: &'a Newly,
     parsed: &'a Parsed,
     /// **The program's other files**, for the one question that needs a body
     /// rather than a contract — a `comptime` calling across a file boundary.
@@ -956,7 +962,6 @@ impl<'a> Checker<'a> {
             reads: self.reads,
             own: self.world.own,
             library: self.world.library,
-            newly: self.newly,
         }
     }
 
@@ -1945,139 +1950,14 @@ impl<'a> Checker<'a> {
         });
     }
 
-    /// **Whether a type's values have a cleanup**, and whether it can fail
-    /// ([ADR-297](../../docs/specification/adr/adr-297.md) D1): an `impl
-    /// Cleanup` for it in any ledger this build reads - or for what it holds,
-    /// in a field, an element or a nullable, which dies with it. A view is not
-    /// the value, and dies nowhere. The type named is the one with the
-    /// cleanup; the answer fails where any cleanup it holds can.
-    fn cleanup_of(&self, ty: &Ty) -> Option<(String, bool)> {
-        self.s
-            .cleanup_of(self.world, ty)
-            .map(|held| (held.owner, held.fails))
-    }
-
-    /// **A value with a cleanup may die in the function being walked**
-    /// (ADR-297 D2): its body becomes a settle point's, and the settle is a call
-    /// every analysis reads - one that pauses, and one that fails where the
-    /// function says `throws` and the cleanup can fail.
-    fn a_settle_in_this_function(&mut self, fails: bool) {
-        if let Some(key) = self.s.a_settle_in_this_function(fails) {
-            self.reached_method(Some(&key));
-        }
-    }
-
-    /// A value with a cleanup, made by a call or a literal (ADR-297 D2).
-    fn a_value_with_a_cleanup_made(&mut self, ty: &Ty) {
-        if let Some((_, fails)) = self.cleanup_of(ty) {
-            self.a_settle_in_this_function(fails);
-        }
-    }
-
-    /// **A value with a cleanup, bound by a `let`** (ADR-297 D2, D3): the
-    /// block is settled where it ends, the settle is a pause wherever pausing
-    /// is refused, and a cleanup that can fail is the function's to declare.
-    fn a_value_with_a_cleanup_bound(&mut self, name: &str, ty: &Ty, span: &Span) {
-        if let Some(fails) = self.a_value_with_a_cleanup_dying(name, ty, span) {
-            self.s.facts.settle_lets.insert(span.at() as i64, fails);
-        }
-    }
-
-    /// **A value with a cleanup dies in this function**, a `let`'s or a kept
-    /// parameter's: the function settles it, the settle is a pause, and a
-    /// cleanup that can fail is the function's to declare. Whether it can fail,
-    /// where it has a cleanup at all.
+    /// **A value with a cleanup dies in this function**, a kept parameter's
+    /// (`tools/check_crossings.nika`, U-d1).
     fn a_value_with_a_cleanup_dying(&mut self, name: &str, ty: &Ty, span: &Span) -> Option<bool> {
-        let (owner, fails) = self.cleanup_of(ty)?;
-        self.a_settle_in_this_function(fails);
-        self.s.a_cleanup_that_may_pause(name, span);
-        if fails {
-            self.s.a_failing_cleanup_undeclared(name, ty, &owner, span);
-        }
-        Some(fails)
-    }
-
-    /// **`NK1164` for `[T: Eq]` and `[T: Ord]`: the argument's type is neither**
-    /// ([ADR-341](../../docs/specification/adr/adr-341.md) D4).
-    ///
-    /// The bound is the language's, so no `impl` in a ledger answers it: the
-    /// walk does (`Comparable`), with the program's `impl Eq` and `impl Ord`.
-    /// A type parameter of the caller's answers for its own bounds, and a type
-    /// nobody could work out answers yes (Part III C.4).
-    fn a_standard_bound_not_met(&mut self, key: &str, bound: &BTreeMap<String, Ty>, span: &Span) {
-        let Some(wanted) = self.s.declared_bounds.get(key) else {
-            return;
-        };
-        let beside = self.parts_beside();
-        let asking = Comparable {
-            beside: &beside,
-            structs: &self.s.structs,
-            enums: &self.s.enums,
-            payloads: &self.s.enum_payloads,
-            parameters: &self.s.struct_parameters,
-            own: self.world.own,
-            library: self.world.library,
-        };
-        let refused = nikaia_std::tools::check_compare::compare_standard_bounds(
-            &asking,
-            &self.s.type_parameters,
-            key,
-            wanted,
-            bound,
-            span,
-        );
-        self.s.findings.extend(refused);
-    }
-
-    /// **`NK1249`: an `impl Eq` or `impl Ord` the language cannot honour**
-    /// ([ADR-341](../../docs/specification/adr/adr-341.md) D5).
-    ///
-    /// For a type another package declares the ledger answers, and `rustc`
-    /// would refuse the `impl` as an orphan; and an order for a type that is
-    /// not `Eq` is not one `BTreeMap` can use.
-    fn language_impls(&mut self) {
-        let beside = self.parts_beside();
-        let asking = Comparable {
-            beside: &beside,
-            structs: &self.s.structs,
-            enums: &self.s.enums,
-            payloads: &self.s.enum_payloads,
-            parameters: &self.s.struct_parameters,
-            own: self.world.own,
-            library: self.world.library,
-        };
-        let refused =
-            nikaia_std::tools::check_compare::compare_language_impls(&asking, &self.world.here);
-        self.s.findings.extend(refused);
-    }
-
-    /// **`NK1188`: `==` on a type that does not compare**
-    /// ([ADR-204](../../docs/specification/adr/adr-204.md) D3).
-    ///
-    /// The words were `rustc`'s about a file nobody wrote — *binary operation
-    /// `==` cannot be applied to type `P`* — with *consider annotating `P` with
-    /// `#[derive(PartialEq)]`* as the help, which is a way out the source cannot
-    /// take: [Part III C.1 and
-    /// C.2](../../docs/specification/30-nikaia-tooling.md) at once.
-    ///
-    /// **Asked of one side and only where its type is known.** A type this
-    /// compiler could not work out compares, which is the answer an absent claim
-    /// gets everywhere here ([Part III
-    /// C.4](../../docs/specification/30-nikaia-tooling.md)); and the two sides
-    /// disagreeing is `NK1102`'s business, one refusal over.
-    fn a_type_that_does_not_compare(&mut self, left: &Ty, right: &Ty, span: &Span) {
-        let beside = self.parts_beside();
-        let asking = Comparable {
-            beside: &beside,
-            structs: &self.s.structs,
-            enums: &self.s.enums,
-            payloads: &self.s.enum_payloads,
-            parameters: &self.s.struct_parameters,
-            own: self.world.own,
-            library: self.world.library,
-        };
-        let refused = nikaia_std::tools::check_compare::compare_refusal(&asking, left, right, span);
-        self.s.findings.extend(refused);
+        self.nikaia(|state, world, _| {
+            check_crossings::check_crossings_a_value_with_a_cleanup_dying(
+                state, world, name, ty, span,
+            )
+        })
     }
 
     fn a_field_of_a_borrowed_subject(&mut self, value: &Expr, span: &Span, what: &str) {
@@ -2105,105 +1985,6 @@ impl<'a> Checker<'a> {
                 state, world, host, value, span,
             )
         })
-    }
-
-    /// **A task of `task::scope` runs beside the others** (Part II 12.7):
-    /// asked as a walk's lambda is, at both settings, so the program means
-    /// the same at each. **And it fails in the scope's channel** (ADR-346 D7).
-    pub(super) fn a_task_of_a_scope(&mut self, args: &[Expr]) {
-        self.s.in_parallel = self.s.in_parallel.or(Some(self.s.scope.len() as i64));
-        self.s.scoped_task = true;
-        if let Some(lambda) = args.first() {
-            self.s.facts.scope_tasks.insert(value_node(lambda));
-        }
-    }
-
-    /// **A lambda that pauses, handed to a `std` entry**
-    /// ([ADR-233](../../docs/specification/adr/adr-233.md)).
-    ///
-    /// Every `std` entry that takes a lambda describes a **Rust** signature
-    /// whose closure is synchronous, so the call is lowered to the entry's
-    /// counterpart in `nikaia_std::seq`, which takes the language below's own
-    /// `async` closure (D1, D2). Which counterpart is a question about the
-    /// receiver's type, which the emitter has none of, so it is answered here.
-    ///
-    /// * `map` and `filter` of a sequence hand back **a sequence whose step
-    ///   pauses** (D1): nothing is walked here, and whatever walks the result
-    ///   pauses - a `for` gives its thread up at each step, and `collect`,
-    ///   `count`, `nth` and `join` are awaited, exactly as for `io::lines()`.
-    /// * A list's `map`, `sort_by_key`, `or_insert_with` and `and_modify` are
-    ///   **eager** (D2): the call itself runs the lambda, so the call pauses.
-    ///
-    /// The four doors take their lambda **while a lock is held**, where a
-    /// pause is `NK2202` by Part II 12.2's own rule - asked of every call
-    /// inside a door, not here (D3).
-    #[allow(clippy::too_many_arguments)]
-    fn a_lambda_that_pauses_at_an_entry(
-        &mut self,
-        key: &str,
-        receiver: &Expr,
-        on: &Ty,
-        lambda: Option<&Expr>,
-        result: Ty,
-        span: &Span,
-    ) -> Ty {
-        // A `Par[T]`'s lambda may not pause at all: `NK2209` has said so.
-        if matches!(on, Ty::Seq { parallel: true, .. }) {
-            return result;
-        }
-        let chained = a_paused_chain(key, on);
-        let Some(lambda) = lambda else {
-            // A plain lambda over a sequence that already pauses: the step
-            // still does, so the result is one too.
-            return match chained {
-                true => a_pausing_sequence(result, on),
-                false => result,
-            };
-        };
-        let entry = match (key, chained) {
-            ("Seq::map", true) => PausingEntry::Method("then".to_string()),
-            ("Seq::filter", true) => PausingEntry::Method("then_filter".to_string()),
-            ("Seq::map", false) => PausingEntry::Function("then".to_string()),
-            ("Seq::filter", false) => PausingEntry::Function("then_filter".to_string()),
-            ("list::ListExt::map", _) => PausingEntry::Function("map_list".to_string()),
-            // A `mut` parameter is a `&mut Vec` already, and handed on as it
-            // is: a second `&mut` may not be taken of it (ADR-094 D3).
-            ("Vec::sort_by_key", _) => match self
-                .s
-                .flow
-                .receiver_name
-                .as_deref()
-                .and_then(|name| self.s.binding(name))
-                .is_some_and(|local| local.changing)
-            {
-                true => PausingEntry::Function("sort_by_key".to_string()),
-                false => PausingEntry::Lent("sort_by_key".to_string()),
-            },
-            ("Entry::or_insert_with", _) => PausingEntry::Function("or_insert_with".to_string()),
-            // **A task of `task::scope` that pauses** (ADR-328 D10): handed to
-            // the scope to poll, and the scope around it pauses.
-            ("task::Scope::spawn", _) => PausingEntry::Method("spawn_paused".to_string()),
-            ("Entry::and_modify", _) => PausingEntry::Function("and_modify".to_string()),
-            // An entry with no counterpart keeps the lowering's refusal, which
-            // names the call and the way out.
-            _ => return result,
-        };
-        self.s
-            .facts
-            .pausing_lambdas
-            .insert(value_node(lambda), entry);
-        if matches!(key, "Seq::map" | "Seq::filter") {
-            return a_pausing_sequence(result, on);
-        }
-        // The eager ones pause where they are called, and the call is one that
-        // may pause for every rule that asks: the function around it, the
-        // lambda around it, the door around it.
-        let written = value_node(receiver);
-        self.s.flow.settled_methods.remove(&written);
-        self.s.flow.pausing_methods.insert(written);
-        let callee = key.to_string();
-        self.s.a_call_that_may_pause(&callee, true, false, span);
-        result
     }
 
     /// Part I 2.3: record where the emitter has to write the `Some(…)`.
@@ -2254,13 +2035,6 @@ impl<'a> Checker<'a> {
         })
     }
 
-    /// **A value that is nothing but numbers**: literals and open numbers,
-    /// joined by the operations [`Self::open_numbers_in`] walks. A `let` of one
-    /// is an open number itself (D1).
-    fn number_shaped(&self, expr: &Expr) -> bool {
-        self.s.number_shaped(self.world, expr)
-    }
-
     /// **A use asks the open numbers in a value for a type** (D2): a type
     /// standing beside it (`beside`), or an index, which takes any integer.
     fn number_asked(&mut self, value: &Expr, want: &Ty, at: &Span, beside: bool) {
@@ -2280,190 +2054,6 @@ impl<'a> Checker<'a> {
         self.nikaia(|state, world, host| {
             check_core_stmt::check_core_block(state, world, host, block)
         })
-    }
-
-    /// **`NK2109`: a bound handle is used up before it leaves its scope**
-    /// ([ADR-346](../../docs/specification/adr/adr-346.md) D3). A `let h =
-    /// spawn …` whose name no later statement of the block mentions is
-    /// forgotten: nobody joins, cancels, detaches or hands it on.
-    fn a_bound_handle_is_taken(&mut self, block: &Block) {
-        for (at, stmt) in block.stmts.iter().enumerate() {
-            let Stmt::Let { names, value, .. } = &stmt.node else {
-                continue;
-            };
-            let ([single], Expr::Spawn { .. }) = (names.as_slice(), value) else {
-                continue;
-            };
-            let name = self.parsed.text(*single).to_string();
-            if name == "_" {
-                continue;
-            }
-            let rest: Vec<&Stmt> = block.stmts[at + 1..].iter().map(|s| &s.node).collect();
-            if matches!(
-                self.handle_path(&name, &rest, false),
-                HandlePath::Taken | HandlePath::Gone
-            ) {
-                continue;
-            }
-            self.s.findings.push(Finding {
-                severity: Severity::Error,
-                span: stmt.span,
-                code: "NK2109".to_string(),
-                message: format!("The task handle `{name}` is never joined, cancelled or detached."),
-                notes: vec![
-                    "An error of a task nobody waits for would be lost, so a bound handle is used up \
-                     before its scope ends."
-                        .to_string(),
-                ],
-                help: Some(format!(
-                    "Write `{name}.join()` to wait for the task, or `{name}.detach()` if nobody waits for it."
-                )),
-                labels: Vec::new(),
-            });
-        }
-    }
-
-    /// Whether `name` is mentioned in `stmt`.
-    fn handle_named(&self, name: &str, stmt: &Stmt) -> bool {
-        let mut seen = std::collections::BTreeSet::new();
-        nikaia_std::tools::names::names_in_statement(stmt, &self.parsed.interner, &mut seen);
-        seen.contains(name)
-    }
-
-    /// Whether `name` is mentioned in `expr`.
-    fn handle_named_in(&self, name: &str, expr: &Expr) -> bool {
-        self.handle_named(name, &Stmt::Expr(expr.clone()))
-    }
-
-    /// **Every path through `stmts` takes the handle `name`** (`NK2109`):
-    /// a mention takes it (a `join`, `detach`, `cancel`, or a hand-over);
-    /// a `return`, `throw`, or a `break`/`continue` outside a nested loop
-    /// that does not mention it leaves it behind; branches must all take it.
-    fn handle_path(&self, name: &str, stmts: &[&Stmt], in_loop: bool) -> HandlePath {
-        for stmt in stmts {
-            let flow = match stmt {
-                Stmt::Return(value) => match value {
-                    Some(v) if self.handle_named_in(name, v) => HandlePath::Gone,
-                    _ => HandlePath::Left,
-                },
-                Stmt::Break | Stmt::Continue if !in_loop => HandlePath::Left,
-                Stmt::Expr(e) => self.handle_expr_path(name, e, in_loop),
-                Stmt::Let { value, .. } => self.handle_expr_path(name, value, in_loop),
-                Stmt::For { iter, body, .. } => {
-                    if self.handle_named_in(name, iter) {
-                        HandlePath::Taken
-                    } else {
-                        self.handle_loop_body(name, body)
-                    }
-                }
-                Stmt::While { cond, body } => {
-                    if self.handle_named_in(name, cond) {
-                        HandlePath::Taken
-                    } else {
-                        self.handle_loop_body(name, body)
-                    }
-                }
-                other => {
-                    if self.handle_named(name, other) {
-                        HandlePath::Taken
-                    } else {
-                        HandlePath::Falls
-                    }
-                }
-            };
-            if flow != HandlePath::Falls {
-                return flow;
-            }
-        }
-        HandlePath::Falls
-    }
-
-    /// A loop body: a mention anywhere takes the handle, a `return` or
-    /// `throw` before any mention leaves it.
-    fn handle_loop_body(&self, name: &str, body: &Block) -> HandlePath {
-        let stmts: Vec<&Stmt> = body.stmts.iter().map(|s| &s.node).collect();
-        match self.handle_path(name, &stmts, true) {
-            HandlePath::Left => HandlePath::Left,
-            HandlePath::Gone => HandlePath::Taken,
-            _ if stmts.iter().any(|s| self.handle_named(name, s)) => HandlePath::Taken,
-            _ => HandlePath::Falls,
-        }
-    }
-
-    fn handle_expr_path(&self, name: &str, expr: &Expr, in_loop: bool) -> HandlePath {
-        let block = |b: &Block| {
-            let stmts: Vec<&Stmt> = b.stmts.iter().map(|s| &s.node).collect();
-            self.handle_path(name, &stmts, in_loop)
-        };
-        let branches: Vec<HandlePath> = match expr {
-            Expr::Throw(inner, _) => {
-                return if self.handle_named_in(name, inner) {
-                    HandlePath::Gone
-                } else {
-                    HandlePath::Left
-                };
-            }
-            Expr::Return(value, _) => {
-                return match value.as_ref() {
-                    Some(v) if self.handle_named_in(name, v) => HandlePath::Gone,
-                    _ => HandlePath::Left,
-                };
-            }
-            Expr::Block(b, _) => return block(b),
-            Expr::If {
-                cond,
-                then_branch,
-                else_branch,
-                ..
-            } => {
-                if self.handle_named_in(name, cond) {
-                    return HandlePath::Taken;
-                }
-                vec![
-                    block(then_branch),
-                    else_branch.as_ref().map_or(HandlePath::Falls, block),
-                ]
-            }
-            Expr::Match { value, arms, .. } => {
-                if self.handle_named_in(name, value) {
-                    return HandlePath::Taken;
-                }
-                arms.iter()
-                    .map(|arm| {
-                        if arm
-                            .guard
-                            .as_ref()
-                            .is_some_and(|g| self.handle_named_in(name, g))
-                        {
-                            HandlePath::Taken
-                        } else {
-                            self.handle_expr_path(name, &arm.body, in_loop)
-                        }
-                    })
-                    .collect()
-            }
-            other => {
-                return if self.handle_named_in(name, other) {
-                    HandlePath::Taken
-                } else {
-                    HandlePath::Falls
-                };
-            }
-        };
-        // A branch that left the scope with the handle does not go on.
-        let on: Vec<HandlePath> = branches
-            .into_iter()
-            .filter(|b| *b != HandlePath::Gone)
-            .collect();
-        if on.is_empty() {
-            HandlePath::Gone
-        } else if on.iter().all(|b| *b == HandlePath::Taken) {
-            HandlePath::Taken
-        } else if on.iter().all(|b| *b == HandlePath::Falls) {
-            HandlePath::Falls
-        } else {
-            HandlePath::Left
-        }
     }
 
     // --- expressions --------------------------------------------------------
@@ -2525,86 +2115,6 @@ impl<'a> Checker<'a> {
         let refused =
             nikaia_std::tools::check_compare::compare_keys_with_no_order(&asking, ty, span);
         self.s.findings.extend(refused);
-    }
-
-    /// **A generic call whose result only an open number binds** (#497):
-    /// `hand(7)` for `fn hand[T](x: T) -> T` hands back the `7`, whose type
-    /// its uses decide (ADR-285 D1), so the call is that open number.
-    /// **A scope with a task that pauses polls it, and pauses itself**
-    /// (ADR-328 D10): its lambda paused because a task in it did. Asked by
-    /// `tools/check_core_call.nika` and kept here for the task work (#605).
-    pub(super) fn a_scope_that_pauses(&mut self, args: &[Expr], paused: &[i64], span: &Span) {
-        if let Some(body) = args.first().filter(|arg| paused.contains(&value_node(arg))) {
-            self.s.facts.paused_scopes.insert(value_node(body));
-            self.s
-                .a_call_that_may_pause("task::scope", true, false, span);
-        }
-    }
-
-    fn a_call_that_hands_its_number_back(
-        &mut self,
-        contract: &FnContract,
-        bound: &BTreeMap<String, Ty>,
-        args: &[Expr],
-    ) {
-        let Some(signature) = &contract.signature else {
-            return;
-        };
-        let Some(Ty::Var { name, .. }) = &signature.result else {
-            return;
-        };
-        if bound.get(name).is_some_and(|ty| !ty.is_unknown()) {
-            return;
-        }
-        let at: Vec<usize> = signature
-            .arguments()
-            .iter()
-            .enumerate()
-            .filter(|(_, (_, ty))| matches!(ty, Ty::Var { name: n, .. } if n == name))
-            .map(|(at, _)| at)
-            .filter(|&at| at < args.len())
-            .collect();
-        if !at.is_empty() && at.iter().all(|&at| self.number_shaped(&args[at])) {
-            self.s.flow.open_calls.insert(
-                value_node(&args[0]),
-                at.into_iter().map(|at| at as i64).collect(),
-            );
-        }
-    }
-
-    /// The count and the types of what a call passes, against what it takes.
-    ///
-    /// `given` is the argument expressions, for the one diagnostic that has to
-    /// name the **value** rather than its type: `NK1115` points at the line where
-    /// the sharing belongs, and that line starts with the name the caller wrote.
-    #[allow(clippy::too_many_arguments)]
-    fn arguments(
-        &mut self,
-        key: &str,
-        // The callee as the source writes it, which is the part the emitter can
-        // match a recorded argument against (`nullable_args`).
-        written: &str,
-        contract: &FnContract,
-        given: &[Expr],
-        found: &[Ty],
-        passed: &[(String, Ty)],
-        span: &Span,
-    ) -> Ty {
-        let keeps: Vec<(String, bool, String)> = self
-            .newly
-            .keeps
-            .get(key)
-            .map(|all| {
-                all.iter()
-                    .map(|kept| (kept.param.clone(), kept.now, kept.ty.clone()))
-                    .collect()
-            })
-            .unwrap_or_default();
-        self.nikaia(|state, world, host| {
-            check_arguments::check_arguments(
-                state, world, host, key, written, contract, given, found, passed, &keeps, span,
-            )
-        })
     }
 
     // --- the one shape every check has --------------------------------------
@@ -3068,88 +2578,6 @@ impl<'a> Checker<'a> {
             )
         })
     }
-
-    /// Note where a method call in the function being walked went (ADR-288).
-    ///
-    /// `None` is "I could not find out", and it is recorded rather than
-    /// dropped: an analysis that claims a property has to be able to tell that
-    /// apart from a body that called nothing.
-    fn reached_method(&mut self, key: Option<&str>) {
-        // **Before the `current` gate**, which is about which function's set an
-        // answer lands in and not about whether there is one: a method nothing
-        // describes says nothing about failing, wherever it stands
-        // ([ADR-308](../../../docs/specification/adr/adr-308.md)).
-        if key.is_none() {
-            self.guard_has_no_answer();
-        }
-        for frame in &mut self.s.stored_frames {
-            match key {
-                Some(key) => {
-                    frame.resolved.insert(key.to_string());
-                }
-                None => frame.unresolved = true,
-            }
-        }
-        let Some(current) = self.s.current.clone() else {
-            return;
-        };
-        // **Which side of a `spawn` this call is on** (ADR-281 D29). The stack
-        // is the one the task walk already keeps, so "inside a task" is
-        // exactly what it says.
-        let inside_a_task = !self.s.task_bindings.is_empty();
-        let entry = self
-            .s
-            .methods
-            .entry(current)
-            .or_insert_with(MethodCalls::empty);
-        match key {
-            Some(key) => {
-                entry.resolved.insert(key.to_string());
-                if inside_a_task {
-                    entry.in_a_task.resolved.insert(key.to_string());
-                }
-            }
-            None => {
-                entry.unresolved = true;
-                entry.unanswered += 1;
-                entry.in_a_task.unresolved |= inside_a_task;
-            }
-        }
-    }
-
-    /// **Something the guarded expression of a `catch` holds and this compiler
-    /// cannot see the end of** ([ADR-308](../../../docs/specification/adr/adr-308.md)).
-    ///
-    /// Called where a call could not be resolved and where a `catch` stands
-    /// inside another one's guarded expression. A no-op outside a guarded
-    /// expression, which is most of a program.
-    fn guard_has_no_answer(&mut self) {
-        if let Some(guarded) = &mut self.s.flow.guarded {
-            guarded.unanswered = true;
-        }
-    }
-}
-
-/// **A lazy walk of a sequence whose step pauses**
-/// ([ADR-233](../../docs/specification/adr/adr-233.md) D1,
-/// [ADR-234](../../docs/specification/adr/adr-234.md) D1): one this compiler
-/// made pause, by handing a pausing lambda to a `map` or a `filter`, or
-/// `io::lines()`, whose step can fail as well. Both have every lazy walk `Seq`
-/// has but `rev`, as adapters of their own.
-fn a_paused_chain(key: &str, on: &Ty) -> bool {
-    nikaia_std::tools::check_calls::a_paused_chain(key, on)
-}
-
-/// What a `map` or a `filter` hands back where its step pauses
-/// ([ADR-233](../../docs/specification/adr/adr-233.md) D1): a sequence whose
-/// step pauses, walked from the front only and with no length until the end.
-///
-/// **And one whose step can fail where what it walks can**
-/// ([ADR-234](../../docs/specification/adr/adr-234.md) D1): a `map` of
-/// `io::lines()` has produced nothing yet, so its failures are still ahead of
-/// whatever walks it, and the `?` goes there.
-fn a_pausing_sequence(result: Ty, on: &Ty) -> Ty {
-    nikaia_std::tools::check_calls::a_pausing_sequence(result, on)
 }
 
 /// **Whether this file declares a type by this name**
@@ -3362,17 +2790,4 @@ pub fn boxed_member(owner: &str, at: Option<usize>, field: Option<&str>) -> Stri
         at.map_or(-1, |at| at as i64),
         field.unwrap_or_default(),
     )
-}
-
-/// Where a task handle stands on the paths through some statements (`NK2109`).
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum HandlePath {
-    /// Every path takes it.
-    Taken,
-    /// Every path takes it and leaves the scope (`return h`, `throw`).
-    Gone,
-    /// Some path leaves the scope, or ends a branch, without taking it.
-    Left,
-    /// No path mentions it; control falls through.
-    Falls,
 }

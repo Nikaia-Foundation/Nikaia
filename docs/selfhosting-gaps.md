@@ -267,6 +267,10 @@ checker refusal (`NK1125`) if `!= null` is not meant to narrow.
 | U-d0 `self.s.written_at[from..].iter().find(..)` | a `while` over the indices | no: no slice of a field in a condition was tried |
 | U-d0 `enum Proved` and `Checker.narrows` keyed by `(usize, usize, i64)` | `CheckProved`, `CheckNarrowing` in `CheckState`, keys as `(i64, i64, i64)` | yes: the four fields travel with the baton |
 | U-d0 `let Some(..) = .. else { continue }` | `?? continue` after a `!= null` test | no |
+| U-d1 `stmts: &[&Stmt]` (the rest of a block after a `let`) | the block's `Vec[Spanned[Stmt]]` and a start index | no: no vector of references |
+| U-d1 `Stmt::Break \| Stmt::Continue if !in_loop` | one arm each, the guard as an `if` inside | no: no guard on an or-pattern was tried |
+| U-d1 `let x: ref T = map.get(k) ?? return` | the annotation left out | yes: `NK1103` calls the `get` of a map read through a `ref` a `T`, while a field's `T?` takes `ref T` |
+| U-d1 `Checker.newly` (the build's `Newly`) | `CheckWorld.newly_throws`, `newly_keeps`; host `newly_throws` and `arguments` go | no |
 
 ## Method
 

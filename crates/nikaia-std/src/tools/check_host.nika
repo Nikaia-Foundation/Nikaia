@@ -93,29 +93,14 @@ pub trait CheckHost {
     /// Where a run that stopped at `place` (`@<file>:<byte>`) stopped, seen
     /// from file `here`.
     fn place_of(ref self, place: ref String, here: i64) -> CheckPlace sync
-    /// **A value with a cleanup, made here** (ADR-297 D2, U-c11): the
-    /// cleanup's questions stay Rust.
-    fn a_value_with_a_cleanup_made(ref self, mut state: CheckState, ty: ref Ty) sync
     /// The first escape in a literal that this language's set does not name
     /// (`build_time::an_escape_nothing_names`, U-c11).
     fn an_escape_nothing_names(ref self, text: ref String) -> NotAnEscape? sync
-    /// **A value with a cleanup, bound by a `let`, dies where its block ends**
-    /// (ADR-297 D2, U-c7): the cleanup's questions stay Rust.
-    fn a_value_with_a_cleanup_bound(ref self, mut state: CheckState, name: ref String, ty: ref Ty, span: ref Span) sync
-    /// **`NK2109`: a bound handle is used up before it leaves its scope**
-    /// (ADR-346 D3, U-c7): the spawn work's (#605), which stays Rust.
-    fn a_bound_handle_is_taken(ref self, mut state: CheckState, block: ref Block) sync
-    /// **Two sides of a type that does not compare** (U-c10): the parts beside
-    /// stay Rust's.
-    fn a_type_that_does_not_compare(ref self, mut state: CheckState, left: ref Ty, right: ref Ty, span: ref Span) sync
     /// The value as the author wrote it, where this compiler can say so: a
     /// literal, a name, a negation, and an ellipsis for the rest. A query that
     /// stays Rust until `written` moves (C-5e): the text of a string literal is
     /// Rust's `Debug`.
     fn written(ref self, value: ref Expr) -> String sync
-    /// The errors a callee throws now and did not at the committed ledger (the
-    /// build's `Newly`), where there are any: what `NK2402` is told once.
-    fn newly_throws(ref self, key: ref String) -> Vec[String]? sync
     /// **The holes of a literal as the checker walks them** (U-c1): an
     /// `f"…"`'s as the grammar parsed them, with what the tier pass wraps
     /// inside each, and a template's beside the names its `<for>` binds around
@@ -131,22 +116,6 @@ pub trait CheckHost {
     /// **`field.attribute(X)`'s `X`** (U-c4): one type, an attribute, or
     /// `null` where it is refused.
     fn an_attribute_read(ref self, mut state: CheckState, args: ref Vec[Expr], span: ref Span) -> String? sync
-    /// **A call's arguments against its contract** (U-c4): `arguments`, which
-    /// stays Rust until C-5h.
-    fn arguments(ref self, mut state: CheckState, key: ref String, written: ref String, contract: ref FnContract, given: ref Vec[Expr], found: ref Vec[Ty], passed: ref Vec[(String, Ty)], span: ref Span) -> Ty sync
-    /// A generic call whose result only an open number binds (#497, U-c4).
-    fn a_call_that_hands_its_number_back(ref self, mut state: CheckState, contract: ref FnContract, bound: ref collections::BTreeMap[String, Ty], args: ref Vec[Expr]) sync
-    /// A standard bound the argument does not meet (U-c4).
-    fn a_standard_bound_not_met(ref self, mut state: CheckState, key: ref String, bound: ref collections::BTreeMap[String, Ty], span: ref Span) sync
-    /// **A `task::scope` whose lambda paused** (ADR-328 D10, U-c4): the task
-    /// work's (#605), which stays Rust while it is built.
-    fn a_scope_that_pauses(ref self, mut state: CheckState, args: ref Vec[Expr], paused: ref Vec[i64], span: ref Span) sync
-    /// **A lambda that pauses, handed to a `std` entry** (ADR-233, U-c5):
-    /// `args[lambda_at]` is the lambda, `-1` none. Stays Rust.
-    fn a_lambda_that_pauses_at_an_entry(ref self, mut state: CheckState, key: ref String, receiver: ref Expr, on: ref Ty, args: ref Vec[Expr], lambda_at: i64, result: Ty, span: ref Span) -> Ty sync
-    /// **A task of `task::scope` runs beside the others** (Part II 12.7,
-    /// ADR-346 D7, U-c5): the task work's (#605), which stays Rust.
-    fn a_task_of_a_scope(ref self, mut state: CheckState, args: ref Vec[Expr]) sync
 }
 
 /// What the build worked out a local is: the whole value, or the integer the

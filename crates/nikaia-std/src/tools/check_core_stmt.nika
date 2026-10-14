@@ -327,7 +327,7 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
     // (ADR-297 D2).
     if names.len() == 1 {
         let single: String = f"{world.words.resolve(names[0])}"
-        host.a_value_with_a_cleanup_bound(state, single, found, span)
+        check_crossings_a_value_with_a_cleanup_bound(state, world, single, found, span)
     }
     // **`let t = s` is a rename, and a rename moves** (ADR-094 D4, ADR-293
     // D29), except `let _ = s`.
@@ -1042,7 +1042,7 @@ pub fn check_core_block[H: CheckHost](mut state: CheckState, world: ref CheckWor
         }
         at += 1
     }
-    host.a_bound_handle_is_taken(state, block)
+    check_crossings_a_bound_handle_is_taken(state, world, block)
     state.scope.pop()
     return tail
 }
