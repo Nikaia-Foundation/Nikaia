@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.903] — 2026-10-14
+
+**check: a view kept where the receiver says text in Nikaia (#125, #558)**
+- `a_view_kept_where_the_receiver_says_text` moves from the checker into `tools/check_arm_leaves.nika`; its message is a lambda that captures the callee and the parameter.
+
 ## [0.0.902] — 2026-10-14
 
 **task: detached errors reach the log at main's end; a supervisor hands a fatal Exit on (#605)**

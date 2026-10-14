@@ -250,6 +250,64 @@ impl CheckState {
     }
 }
 
+fn a_type_variable(ty: ref Ty) -> bool sync {
+    return match ty {
+        Ty::Var { .. } => true,
+        else => false,
+    }
+}
+
+impl CheckState {
+    /// **A view kept where the receiver says text of its own** (ADR-282 D19):
+    /// `names.push(line.trim())` on a `Vec[String]`. The signature says `$T`,
+    /// which a view fits; the receiver binds `$T` to `String`, and that is the
+    /// question `arguments` asks of a parameter that says `String` itself. A
+    /// position the tier pass made a view is `ref String` here and fits; one
+    /// it made mixed is handed `value.into_either()`.
+    pub fn a_view_kept_where_the_receiver_says_text(ref mut self, world: ref CheckWorld, key: ref String, contract: ref FnContract, given: ref Vec[Expr], found: ref Vec[Ty], expected: ref Vec[Ty], span: ref Span) sync {
+        let signature = contract.signature ?? return
+        let offset = if signature.takes_a_receiver() { 1 } else { 0 }
+        let own = world.own.functions.contains_key(key)
+        let mut at = 0
+        while at + offset < signature.params.len() && at < expected.len() {
+            let i = at
+            at += 1
+            let name = signature.params[i + offset].0.clone()
+            let generic = a_type_variable(signature.params[i + offset].1)
+            let want = expected[i].clone()
+            let position = i + offset
+            let lends = if own { lends_in_own(contract, position, [world.library]) } else { lends_in(contract, position, [world.library]) }
+            let kept = !(lends || (i == 0 && is_a_lookup(key)))
+            if i >= found.len() {
+                continue
+            }
+            let found_here = found[i].clone()
+            if generic && kept && self.a_view_of_what_does_not_copy(world, found_here, want) {
+                self.a_view_kept_whole(key, name, found_here, want, span)
+                continue
+            }
+            if !generic || !kept || !views_into_text(found_here, want) {
+                continue
+            }
+            // A literal is built into text where it is kept (ADR-282 D4),
+            // which the caller has already recorded.
+            let mut ty = found_here.clone()
+            if i < given.len() {
+                ty = self.text_literal(world, want, given[i], true) ?? found_here.clone()
+            }
+            if !views_into_text(ty, want) {
+                continue
+            }
+            let keeper = f"`{key}` keeps its `{name}` after the call returns"
+            if i < given.len() {
+                self.expect_kept_asked(world, ty, want, given[i], keeper, span, "argument", fn(found, wanted) { f"`{key}` expects `{name}` to be `{wanted}` here, but you're passing `{found}`." })
+            } else {
+                self.expect_kept_asked(world, ty, want, null, keeper, span, "argument", fn(found, wanted) { f"`{key}` expects `{name}` to be `{wanted}` here, but you're passing `{found}`." })
+            }
+        }
+    }
+}
+
 fn is_a_choice(value: ref Expr) -> bool sync {
     return match value {
         Expr::If { .. } => true,

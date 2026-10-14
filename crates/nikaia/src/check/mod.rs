@@ -9739,54 +9739,9 @@ impl<'a> Checker<'a> {
         expected: &[Ty],
         span: &Span,
     ) {
-        let Some(signature) = contract.signature.as_ref() else {
-            return;
-        };
-        let arguments = signature.arguments();
-        for (at, ((name, declared), want)) in arguments.iter().zip(expected).enumerate() {
-            let generic = matches!(declared, Ty::Var { .. });
-            let lent = match self.world.own.functions.contains_key(key) {
-                true => crate::contracts::keeps::lends_in_own(
-                    contract,
-                    at + usize::from(signature.takes_a_receiver()),
-                    &[self.world.library],
-                ),
-                false => crate::contracts::keeps::lends_in(
-                    contract,
-                    at + usize::from(signature.takes_a_receiver()),
-                    &[self.world.library],
-                ),
-            } || (at == 0 && is_a_lookup(key));
-            let kept = !lent;
-            let Some(found) = found.get(at) else { continue };
-            if generic && kept && self.s.a_view_of_what_does_not_copy(self.world, found, want) {
-                self.s.a_view_kept_whole(key, name, found, want, span);
-                continue;
-            }
-            if !generic || !kept || !views_into_text(found, want) {
-                continue;
-            }
-            // A literal is built into text where it is kept (ADR-282 D4),
-            // which the caller has already recorded.
-            let literal = given.get(at).and_then(|g| self.text_literal(want, g, true));
-            let found = literal.as_ref().unwrap_or(found);
-            if !views_into_text(found, want) {
-                continue;
-            }
-            let keeper = format!("`{key}` keeps its `{name}` after the call returns");
-            let (key, name) = (key.to_string(), name.clone());
-            self.expect_kept(
-                found,
-                want,
-                given.get(at),
-                &keeper,
-                *span,
-                "argument",
-                move |found, want| {
-                    format!("`{key}` expects `{name}` to be `{want}` here, but you're passing `{found}`.")
-                },
-            );
-        }
+        self.s.a_view_kept_where_the_receiver_says_text(
+            self.world, key, contract, given, found, expected, span,
+        )
     }
 
     /// Whether parameter `at` of a function this program declares is text both

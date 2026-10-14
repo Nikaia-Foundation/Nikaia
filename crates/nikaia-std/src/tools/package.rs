@@ -10107,6 +10107,44 @@ impl CheckState {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+fn a_type_variable(ty: &Ty) -> bool { matches!(ty, Ty::Var { .. }) }
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn a_view_kept_where_the_receiver_says_text(&mut self, world: &CheckWorld<'_>, key: &str, contract: &FnContract, given: &[Expr], found: &[Ty], expected: &[Ty], span: &Span) {
+        let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
+        let offset: i64 = if signature.takes_a_receiver() { 1 } else { 0 };
+        let own = world.own.functions.contains_key(key);
+        let mut at: i64 = 0;
+        while at + offset < signature.params.len() as i64 && ((at) as usize) < expected.len() {
+            let i: i64 = at;
+            at += 1;
+            let name = nikaia_std::index::get(&signature.params, nikaia_std::index::at(i + offset)).0.to_owned();
+            let generic = a_type_variable(&nikaia_std::index::get(&signature.params, nikaia_std::index::at(i + offset)).1);
+            let want = (*nikaia_std::index::get(&expected, nikaia_std::index::at(i))).clone();
+            let position: i64 = i + offset;
+            let lends = if own { lends_in_own(contract, position, &vec![world.library]) } else { lends_in(contract, position, &vec![world.library]) };
+            let kept = !(lends || i == 0 && is_a_lookup(key));
+            if i >= found.len() as i64 { continue; }
+            let found_here = (*nikaia_std::index::get(&found, nikaia_std::index::at(i))).clone();
+            if generic && kept && self.a_view_of_what_does_not_copy(world, &found_here, &want) {
+                self.a_view_kept_whole(key, &name, &found_here, &want, span);
+                continue;
+            }
+            if !generic || !kept || !views_into_text(&found_here, &want) { continue; }
+            let mut ty = found_here.clone();
+            if i < given.len() as i64 { ty = nikaia_std::index::or(self.text_literal(world, &want, nikaia_std::index::get(&given, nikaia_std::index::at(i)), true), || found_here.clone().into()); }
+            if !views_into_text(&ty, &want) { continue; }
+            let keeper = format!("`{}` keeps its `{}` after the call returns", key, name);
+            if i < given.len() as i64 { self.expect_kept_asked(world, &ty, &want, Some(nikaia_std::index::get(&given, nikaia_std::index::at(i))), &keeper, span, "argument", &|found, wanted| { format!("`{}` expects `{}` to be `{}` here, but you're passing `{}`.", key, name, wanted, found) }); } else { self.expect_kept_asked(world, &ty, &want, None, &keeper, span, "argument", &|found, wanted| { format!("`{}` expects `{}` to be `{}` here, but you're passing `{}`.", key, name, wanted, found) }); }
+        }
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 fn is_a_choice(value: &Expr) -> bool { matches!(value, Expr::If { .. } | Expr::Match { .. }) }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
