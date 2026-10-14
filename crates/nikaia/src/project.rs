@@ -1834,6 +1834,15 @@ pub fn check(
     // tally has to say what it counted and these are two different shapes: one
     // is a view given to a call and kept, the other a view of a buffer the body
     // made and handed back.
+    // **Data changed under a view** (ADR-353 D4): the way out is an order of
+    // statements, or a copy.
+    let changed_under = count("NK2305");
+    if changed_under > 0 {
+        refused.push(format!(
+            "{changed_under} change{} to data a view still to be used may point into",
+            plural(changed_under)
+        ));
+    }
     let tethered = count("NK2303");
     if tethered > 0 {
         refused.push(format!(
@@ -1963,6 +1972,7 @@ pub fn check(
         - undescribed
         - stale
         - aliases
+        - changed_under
         - tethered
         - untethered
         - tasks

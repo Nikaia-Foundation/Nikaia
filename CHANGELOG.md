@@ -8,6 +8,23 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.955] — 2026-10-14
+
+**a view's argument may be given a new value while the view is used; a change in place under a view is NK2305 (ADR-353 D3, D4, part of #614)**
+
+- `let r = longest(x, y); y = "replaced".clone(); println(r)` compiles: an
+  assignment in the block that declares `y` lowers as a binding of its own,
+  so the old text lives on with no copy, and a `let mut` whose every change
+  became such a binding loses its `mut` (`view_changes.rs`).
+- `NK2305`: a change in place - a changing method, an assignment to a part -
+  of data a view made by a call or read off a place (ADR-354) may point into,
+  while the view is used later or by the loop around the change, is refused
+  at the change, naming the view, the call, the later use and the callee's
+  way out.
+- Still open: moving an owned argument into a callee that keeps it, or into
+  another local, while a view of it is used, and a reassignment in a nested
+  block, still reach `rustc`.
+
 ## [0.0.954] — 2026-10-14
 
 **check: the walk's hub and dispatcher in Nikaia (U-c11, #125, #558)**

@@ -1103,6 +1103,10 @@ struct Emitter<'p> {
     /// file of the build, so a program knows the hidden parameters of the
     /// library types it names.
     seeds: seeds::Seeds,
+    /// **What a give-up lowers to** (ADR-353 D3, `view_changes`): an
+    /// assignment that becomes a binding of its own, and the `let`s that need
+    /// no `mut` because of it.
+    give_ups: crate::view_changes::GiveUps,
     /// Where the parameters of the type being written come from.
     place: std::cell::RefCell<seeds::Place>,
     /// A signature of a barrier is being written: its maps are the keyed ones.
@@ -2037,10 +2041,18 @@ impl<'p> Emitter<'p> {
                 )
             })
             .collect();
+        let give_ups = crate::view_changes::analyse(
+            parsed,
+            &state.own_contracts,
+            library,
+            &state.facts.lent_lets,
+        )
+        .1;
         let mut made = Self {
             parsed,
             build,
             s: state,
+            give_ups,
             w: std::cell::RefCell::new(Some(EmitWalk::fresh())),
             failed: std::cell::RefCell::new(None),
             world: EmitWorld {
@@ -5561,7 +5573,8 @@ impl<'p> Emitter<'p> {
                 ty,
                 value,
             } => {
-                let mutable = if *mutable { "mut " } else { "" };
+                let unmuted = self.give_ups.unmuted.contains(&(span.at() as i64));
+                let mutable = if *mutable && !unmuted { "mut " } else { "" };
                 // **A tuple of names is Rust's own tuple pattern**
                 // ([ADR-291](../../docs/specification/adr/adr-291.md)): the
                 // language below takes a tuple apart by position exactly as
@@ -5997,6 +6010,14 @@ impl<'p> Emitter<'p> {
                     if self.changes_in_place(flow, self.text(*name)))
                 {
                     out.push("*");
+                }
+                // **Given up while a view of it is used** (ADR-353 D3): the
+                // new value is a binding of its own, and the old one lives
+                // on, unchanged, to the end of the block.
+                match self.give_ups.rebound.get(&(span.at() as i64)) {
+                    Some(true) => out.push("let mut "),
+                    Some(false) => out.push("let "),
+                    None => {}
                 }
                 self.expr(out, target, depth, flow.place())?;
                 match op {

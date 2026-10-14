@@ -1140,3 +1140,218 @@ pub fn keep_left() -> String {
     assert!(rust.contains("-> Pair<'r, 'r1>"), "{rust}");
     compiled("a_view_field_outlives_the_other_parameter", source);
 }
+
+// ---- ADR-353 D3, D4: giving an argument up, and changing it in place ----
+
+const LONGEST: &str = r#"fn longest(a: ref String, b: ref String) -> ref String {
+    if a.len() >= b.len() {
+        return a
+    }
+    return b
+}
+"#;
+
+fn changed_under(source: &str) -> Vec<Finding> {
+    let parsed = parse_to_ast(source).expect("the source parses");
+    let own = Ledger::infer(&parsed);
+    let library = Ledger::parse(STD).expect("std's shipped ledger parses");
+    check::check(&parsed, &own, &library)
+        .findings
+        .into_iter()
+        .filter(|f| f.code == "NK2305")
+        .collect()
+}
+
+/// D3: `y` given a new value while `r` may still point into it. The old text
+/// lives on under its own binding, with no copy, and no `mut` is left over.
+#[test]
+fn a_reassigned_argument_keeps_its_old_data_for_the_view() {
+    let source = format!(
+        "{LONGEST}pub fn both() -> String {{
+    let x = \"ab\".clone()
+    let mut y = \"short\".clone()
+    let r = longest(x, y)
+    y = \"replaced\".clone()
+    return f\"{{r}} {{y}}\"
+}}
+"
+    );
+    assert!(changed_under(&source).is_empty());
+    let rust = lowered(&source);
+    assert!(rust.contains("let y = \"replaced\""), "{rust}");
+    assert!(!rust.contains("let mut y"), "{rust}");
+    assert!(!rust.contains("y.clone()"), "{rust}");
+    compiled(
+        "a_reassigned_argument_keeps_its_old_data_for_the_view",
+        &source,
+    );
+}
+
+/// D3: the new value is changed afterwards, so its binding is `mut`; the
+/// change is to the new data, which no view points into.
+#[test]
+fn a_reassigned_argument_may_be_changed_afterwards() {
+    let source = format!(
+        "{LONGEST}pub fn both() -> String {{
+    let x = \"ab\".clone()
+    let mut y = \"short\".clone()
+    let r = longest(x, y)
+    y = \"re\".clone()
+    y.push_str(\"placed\")
+    return f\"{{r}} {{y}}\"
+}}
+"
+    );
+    assert!(changed_under(&source).is_empty());
+    let rust = lowered(&source);
+    assert!(rust.contains("let mut y = \"re\""), "{rust}");
+    compiled("a_reassigned_argument_may_be_changed_afterwards", &source);
+}
+
+/// D3 with ADR-354: a view of an element, the list given a new value.
+#[test]
+fn a_reassigned_list_keeps_the_element_a_view_points_into() {
+    let source = format!(
+        "{LONGEST}pub fn both() -> String {{
+    let x = \"ab\".clone()
+    let mut ys = [\"short\".clone()]
+    let r = longest(x, ys[0])
+    let e = ys[0]
+    ys = [\"other\".clone()]
+    return f\"{{r}} {{e}} {{ys[0]}}\"
+}}
+"
+    );
+    assert!(changed_under(&source).is_empty());
+    compiled(
+        "a_reassigned_list_keeps_the_element_a_view_points_into",
+        &source,
+    );
+}
+
+/// D3: the end of the argument's scope; its buffer goes into the frame's keep.
+#[test]
+fn an_argument_whose_scope_ends_lives_in_the_keep() {
+    let source = format!(
+        "{LONGEST}pub fn outer(x: ref String) -> String {{
+    let mut r: ref String = \"none\"
+    if x.len() > 0 {{
+        let y = \"short\".clone()
+        r = longest(x, y)
+    }}
+    return f\"{{r}}\"
+}}
+"
+    );
+    let rust = lowered(&source);
+    assert!(rust.contains("__keep_frame.put("), "{rust}");
+    compiled("an_argument_whose_scope_ends_lives_in_the_keep", &source);
+}
+
+/// D3: an argument moved into a function that only reads it.
+#[test]
+fn an_argument_moved_into_a_reading_function() {
+    let source = format!(
+        "{LONGEST}fn size(s: String) -> i64 {{
+    return s.len()
+}}
+pub fn both() -> String {{
+    let x = \"ab\".clone()
+    let y = \"short\".clone()
+    let r = longest(x, y)
+    let n = size(y)
+    return f\"{{r}} {{n}}\"
+}}
+"
+    );
+    compiled("an_argument_moved_into_a_reading_function", &source);
+}
+
+/// D4: Part I 6.6's example, refused at the change with every part.
+#[test]
+fn a_change_in_place_under_a_view_is_nk2305() {
+    let source = format!(
+        "{LONGEST}pub fn both() -> String {{
+    let x = \"ab\".clone()
+    let mut y = \"short\".clone()
+    let r = longest(x, y)
+    y.push_str(\"er\")
+    return f\"{{r}}\"
+}}
+"
+    );
+    let found = changed_under(&source);
+    assert_eq!(found.len(), 1, "{found:?}");
+    let f = &found[0];
+    assert!(
+        f.message.contains("`y`") && f.message.contains("`r`"),
+        "{}",
+        f.message
+    );
+    assert!(
+        !f.message.contains("live") && !f.message.contains("lifetime"),
+        "{}",
+        f.message
+    );
+    assert_eq!(f.labels.len(), 3, "{:?}", f.labels);
+    assert!(
+        f.labels.iter().any(|l| l.text.contains("`longest`")),
+        "{:?}",
+        f.labels
+    );
+    assert!(
+        f.notes.iter().any(|n| n.contains("return b")),
+        "{:?}",
+        f.notes
+    );
+    let help = f.help.clone().unwrap_or_default();
+    assert!(
+        help.contains("before this change") && help.contains(".clone()"),
+        "{help}"
+    );
+}
+
+/// D4: the same change after the last use of the view is accepted.
+#[test]
+fn a_change_after_the_last_use_compiles() {
+    let source = format!(
+        "{LONGEST}pub fn both() -> String {{
+    let x = \"ab\".clone()
+    let mut y = \"short\".clone()
+    let r = longest(x, y)
+    let said = f\"{{r}}\"
+    y.push_str(\"er\")
+    return f\"{{said}} {{y}}\"
+}}
+"
+    );
+    assert!(changed_under(&source).is_empty());
+    compiled("a_change_after_the_last_use_compiles", &source);
+}
+
+/// D4 with ADR-354: an element view, and a change inside a loop that uses the
+/// view on its next round.
+#[test]
+fn a_change_under_an_element_view_or_in_a_loop_is_nk2305() {
+    let element = "pub fn first() -> String {
+    let mut ys = [\"short\".clone()]
+    let e = ys[0]
+    ys.push(\"x\".clone())
+    return f\"{e}\"
+}
+";
+    assert_eq!(changed_under(element).len(), 1);
+    let looping = format!(
+        "{LONGEST}pub fn twice() {{
+    let x = \"ab\".clone()
+    let mut y = \"short\".clone()
+    let r = longest(x, y)
+    for i in 0..<2 {{
+        println(r)
+        y.push_str(\"er\")
+    }}
+}}
+"
+    );
+    assert_eq!(changed_under(&looping).len(), 1);
+}
