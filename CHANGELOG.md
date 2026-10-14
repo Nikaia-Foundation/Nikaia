@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.918] — 2026-10-14
+
+**check: a method's function parameter is counted past its receiver, so a lambda it only runs is not kept (#125)**
+
+`check_core_args_runs` (0.0.912, U-c3) counted `self` as a call's first argument, so a lambda handed to a method's run parameter was recorded as kept and lowered as `Kept<…>` where the method takes `impl Fn` (red `language`: `defects_found_running.nika`, `supervision.nika`). It now counts past the receiver, as Rust's `arguments()` did.
+
 ## [0.0.917] — 2026-10-14
 
 **task: a scope's catch lets its tasks borrow; a sum joins; a fatal error keeps its site**

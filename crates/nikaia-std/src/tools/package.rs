@@ -12503,7 +12503,7 @@ fn check_core_args_runs(callee: Option<&FnContract>, at: i64) -> bool {
     let contract = match callee { Some(__nikaia_value) => __nikaia_value, None => return true };
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return true };
     let mut i: i64 = 0;
-    for (name, _) in signature.params.iter() {
+    for (name, _) in call_arguments(signature) {
         if i == at { return !nikaia_std::list::contains(&contract.keeps, &name); }
         i += 1;
     }

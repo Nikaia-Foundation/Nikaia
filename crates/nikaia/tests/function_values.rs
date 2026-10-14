@@ -73,6 +73,45 @@ fn a_declared_function_passed_as_an_argument_runs() {
     assert_eq!(String::from_utf8_lossy(&ran.stdout).trim(), "10 1");
 }
 
+/// **A method's function parameter it only runs is run, not kept**: a
+/// receiver is no argument, so `ask` is the method's second parameter and the
+/// trailing lambda a plain closure, not a `Kept` one (0.0.912 read `self` as
+/// the first argument).
+#[test]
+fn a_recursive_method_runs_the_lambda_it_hands_on() {
+    let dir = common::scratch_dir("function-values-method");
+    std::fs::write(
+        dir.join("descent.nika"),
+        "struct D { total: i64 }\n\
+         impl D {\n\
+         \x20   fn down(ref mut self, n: i64, ask: fn(i64) -> bool sync) {\n\
+         \x20       if n == 0 { return }\n\
+         \x20       if ask(n) { self.total += n }\n\
+         \x20       self.down(n - 1, ask)\n\
+         \x20   }\n\
+         }\n\
+         fn main() {\n\
+         \x20   let mut walk = D { total: 0 }\n\
+         \x20   walk.down(6) fn(k) { k % 2 == 0 }\n\
+         \x20   println(f\"{walk.total}\")\n\
+         }\n",
+    )
+    .expect("write the source");
+    let ran = Command::new(env!("CARGO_BIN_EXE_nikaia"))
+        .current_dir(&dir)
+        .args(["run", "--no-cache", "descent.nika"])
+        .env_remove("CARGO_TARGET_DIR")
+        .output()
+        .expect("the nikaia binary runs");
+    std::fs::remove_dir_all(&dir).ok();
+    assert!(
+        ran.status.success(),
+        "{}",
+        String::from_utf8_lossy(&ran.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&ran.stdout).trim(), "12");
+}
+
 /// **A tuple's position it does not have is `NK1107`** (#515), where it
 /// reached `rustc` as *no field `2`*; the help names the ones it has.
 #[test]

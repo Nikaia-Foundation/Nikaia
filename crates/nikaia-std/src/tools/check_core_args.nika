@@ -14,7 +14,7 @@ fn check_core_args_runs(callee: ref FnContract?, at: i64) -> bool {
     let contract = callee ?? return true
     let signature = contract.signature ?? return true
     let mut i = 0
-    for (name, _) in signature.params {
+    for (name, _) in call_arguments(signature) {
         if i == at {
             return !contract.keeps.contains(name)
         }
