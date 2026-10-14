@@ -219,6 +219,10 @@ impl CheckHost for Core<'_, '_> {
         self.h.literal_holes(literal)
     }
 
+    fn free_calls(&self, body: &crate::ast::Block) -> BTreeSet<String> {
+        self.h.free_calls(body)
+    }
+
     fn evaluate(&self, value: &Expr, held: &BTreeMap<String, build_time::Value>) -> CheckBuilt {
         self.h.evaluate(value, held)
     }

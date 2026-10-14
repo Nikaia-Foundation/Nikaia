@@ -248,6 +248,11 @@ checker refusal (`NK1125`) if `!= null` is not meant to narrow.
 | U-c7 `fn …() -> (Expr, Expr)?` for a range's ends | the range's half of `for` is its own function over `match iter` | yes: `NK1254`, no nullable tuple |
 | U-c7 `Local { .., ..self.local_free(..) }` | `CheckLocal::free` then field writes | yes: no struct update syntax |
 | U-c7 `frame.first_mut()` | `frame[0].open_number = …` behind `frame.len() > 0` | yes: no `if let` |
+| U-c9 `bound.get(p).cloned().unwrap_or(..)` | a loop over the map (`check_core_places_bound`) | no: `bound.get(p)?.clone()`, which NK1185 names as the way, clones the reference (D36) |
+| U-c9 `match &self.s.flow.unrolling { Some(u) => .. }` | a helper over `ref CheckUnrolling?` | no: `state.flow.unrolling ?? return` moves out of `&mut` (E0507, D35's shape on a field of a `mut` parameter) |
+| U-c9 `field.parse::<usize>()` | digits checked, then `text::parse_i64` | yes: no `usize` |
+| U-c9 `self.expect_at(..)` (a closure over `moved_to`) | `slots_waiting`, `expect_type`, `findings_moved` written out | yes: no `impl FnOnce(&mut Self)` |
+| U-c9 `crate::contracts::locks::free_calls(self.parsed, body)` | a host method `free_calls` | yes: it needs the emitter's `literal_expressions` |
 | U-c7 `Checker.got_past_a_jump`, `Checker.discarded` | moved into `CheckState` | no: Rust fields the moved code writes |
 
 ## Method

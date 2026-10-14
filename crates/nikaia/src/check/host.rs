@@ -84,6 +84,10 @@ impl CheckHost for Host<'_> {
         hole
     }
 
+    fn free_calls(&self, body: &crate::ast::Block) -> BTreeSet<String> {
+        crate::contracts::locks::free_calls(self.parsed, body)
+    }
+
     fn literal_holes(&self, literal: &Expr) -> Vec<Expr> {
         crate::emit::literal_expressions_bound(self.parsed, literal)
             .into_iter()

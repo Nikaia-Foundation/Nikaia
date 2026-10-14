@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.930] — 2026-10-14
+
+**check: fields, struct literals, `with`, an index, a cast and a range, in Nikaia (U-c9, #125, #558)**
+- The checker's arms `Field | SafeField`, `StructLit`, `With`, `Index`, `Cast` and `Range` move to `tools/check_core_places.nika` (U-c9); the host gains `free_calls`. No program's findings or lowering change.
+
 ## [0.0.929] — 2026-10-14
 
 **spec: a function value keeps the error set inferred for it (ADR-351, #620)**

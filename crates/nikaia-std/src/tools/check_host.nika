@@ -72,6 +72,9 @@ pub trait CheckHost {
     /// The holes of a literal the emitter reads again, with the names a
     /// template's `<for>` binds around each.
     fn literal_holes(ref self, literal: ref Expr) -> Vec[Expr] sync
+    /// The free calls a lambda's body makes, for a function field it is
+    /// stored in (ADR-230 D1).
+    fn free_calls(ref self, body: ref Block) -> collections::BTreeSet[String] sync
     /// What an initialiser comes to, the names in `held` being what the scope
     /// knows.
     fn evaluate(ref self, value: ref Expr, held: ref collections::BTreeMap[String, BuildValue]) -> CheckBuilt sync

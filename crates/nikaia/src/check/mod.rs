@@ -46,7 +46,7 @@ use nikaia_std::tools::check_core_call;
 use nikaia_std::tools::check_core_comptime;
 use nikaia_std::tools::check_core_leaves;
 use nikaia_std::tools::check_core_method;
-use nikaia_std::tools::check_core_pilot;
+use nikaia_std::tools::check_core_places;
 use nikaia_std::tools::check_core_stmt;
 use nikaia_std::tools::check_flow::{
     CheckConstant, CheckFlow, CheckUnrolling, CheckUnsignedSlot as UnsignedSlot,
@@ -56,7 +56,7 @@ use nikaia_std::tools::check_names::integer_named;
 use nikaia_std::tools::check_overflow;
 use nikaia_std::tools::check_patterns::pattern_names;
 use nikaia_std::tools::check_reports::CheckWall;
-use nikaia_std::tools::check_shapes::{is_growable, slice_element};
+use nikaia_std::tools::check_shapes::is_growable;
 pub use nikaia_std::tools::check_state::{
     CheckFinding as Finding, CheckLabel as Label, CheckSeverity as Severity,
 };
@@ -66,8 +66,7 @@ use nikaia_std::tools::check_state::{
     CheckState, CheckWorld, a_body_never_ends,
 };
 use nikaia_std::tools::check_texts::{self, ends_in_text};
-use nikaia_std::tools::check_widen::{self, names_a_path, views_into_nullable_text};
-use nikaia_std::tools::check_with::CheckCopyable as Copyable;
+use nikaia_std::tools::check_widen::{self, names_a_path};
 use nikaia_std::tools::parsed_view::ParsedView;
 
 /// A finding's code as the `&'static str` the compiler's tables and its tests
@@ -107,18 +106,6 @@ fn payload_of(
 }
 
 use winnow_grammar::Symbol as Ident;
-
-/// The types Part I 2.2 offers, which is what an `as` may name
-/// ([ADR-285](../../../docs/specification/adr/adr-285.md) D14).
-///
-/// Wider than `record_cast`'s `NUMERIC`, and the two answer different questions:
-/// that one is which conversions are **checked** at run time
-/// ([ADR-285](../../../docs/specification/adr/adr-285.md) D12), this one is which
-/// types a program may **write**. `bool`, `char`, `String` and `&str` are types
-/// of this language and no conversion between them narrows anything.
-const OFFERED: [&str; 11] = [
-    "i32", "i64", "u8", "u32", "u64", "f64", "bool", "char", "scalar", "String", "str",
-];
 
 /// What one pass of the checker learned: its findings, the facts the emitter
 /// reads (`tools/check_facts.nika`), and what each function calls.
@@ -1729,34 +1716,6 @@ impl<'a> Checker<'a> {
         self.s.run_code = outer_run_code;
     }
 
-    /// Whether a conversion narrows, recorded for the emitter (ADR-285 D12).
-    ///
-    /// **Only among the numeric types this compiler knows the range of**, for the
-    /// reason `constant_fits` gives: a claim about a type neither the
-    /// specification nor the ledger describes would be a claim about a surface
-    /// that is not there. Anything this does not recognise is recorded as
-    /// widening, which leaves the conversion exactly as it is today.
-    ///
-    /// The list is the other way round - which conversions **always** fit - and
-    /// that is the fail-closed direction (ADR-010 D1): a pair nobody thought
-    /// about is checked at run time rather than truncated in silence.
-    ///
-    /// **The machine-width types are not in it, and no longer need to be**
-    /// ([ADR-285](../../../../docs/specification/adr/adr-285.md) D1). They were,
-    /// because `len` handed one back and what fits on a large machine does not on
-    /// a small one. A length is an `i64` now and `usize` has left the surface a
-    /// program can write, so a conversion out of one is a conversion out of a type
-    /// nobody can hold - and this list is the writable surface, which is the
-    /// reason the entry was there and the reason it is not.
-    ///
-    /// An integer to `f64` is the one entry that loses something and is still
-    /// called fitting (D7): digits go at large values without anything
-    /// overflowing, there is no sensible point to stop at, and every language
-    /// does it this way. That is a written limit and not a check.
-    fn record_cast(&mut self, from: &Ty, into: &Ty, operand: &Expr) {
-        self.s.record_cast(from, into, value_node(operand));
-    }
-
     /// **`NK1191`: an arithmetic operator on something that has none**
     /// (0.0.234; a declared `struct` or `enum` too, under the same code).
     ///
@@ -1914,19 +1873,6 @@ impl<'a> Checker<'a> {
     fn a_trait_nothing_declares(&mut self, written: &str, span: &Span) {
         self.s
             .a_trait_nothing_declares(&self.world.here, self.world, written, span)
-    }
-
-    /// A field read through `?.` (`tools/check_fields.nika`).
-    fn a_safe_field(
-        &mut self,
-        inner: &Ty,
-        base: &Expr,
-        field: String,
-        expr: &Expr,
-        span: &Span,
-    ) -> Ty {
-        self.s
-            .a_safe_field(self.world, inner, base, &field, expr, span)
     }
 
     /// `?.` over a value that is never absent (`tools/check_fields.nika`).
@@ -2327,20 +2273,6 @@ impl<'a> Checker<'a> {
         self.nikaia(|state, world, host| {
             check_core_leaves::check_core_a_field_of_a_lent_place_handed_back(
                 state, world, host, value, span,
-            )
-        })
-    }
-
-    /// **A `mut` parameter given away whole** (issue #161, Part I
-    /// 6.6): it is passed as `ref mut`, so the function borrows it as a method
-    /// borrows `ref self`, and giving it away is [`Self::a_field_of_a_borrowed_subject`]'s
-    /// shape one position over. `store(mut out: Vec[String])` then
-    /// `Box { items: out }` was `rustc`'s *mismatched types* about a file
-    /// nobody wrote.
-    fn a_mut_parameter_given_away(&mut self, value: &Expr, span: &Span, what: &str) {
-        self.nikaia(|state, world, host| {
-            check_core_pilot::check_core_a_mut_parameter_given_away(
-                state, world, host, value, span, what,
             )
         })
     }
@@ -3637,440 +3569,19 @@ impl<'a> Checker<'a> {
             }
 
             Expr::Field { base, name, .. } | Expr::SafeField { base, name, .. } => {
-                let on = self.expr(base, span);
-                let field = self.parsed.text(*name).to_string();
-                // **`x?.field`** (Part I 3.5): over a `T?` the field of what is
-                // inside, as a `T?`; over a plain value the plain read, with
-                // `NK1217` ([ADR-279](../../docs/specification/adr/adr-279.md)
-                // D13).
-                if matches!(expr, Expr::SafeField { .. }) {
-                    match &on {
-                        Ty::Nullable(inner) => {
-                            return self.a_safe_field(inner, base, field, expr, span);
-                        }
-                        Ty::Unknown => return Ty::Unknown,
-                        _ => self.s.reaches_through_a_plain_value(
-                            self.world, &on, base, &field, false, expr, span,
-                        ),
-                    }
-                }
-                self.a_read_of_a_part(base, expr, &field, span);
-                if let Ty::Nullable(_) = &on {
-                    self.s.reaches_into_a_nullable(&on, "field", &field, span);
-                    return Ty::Unknown;
-                }
-                // **A field of one member is reached through the `match`**
-                // (ADR-280 D30).
-                if let Some(members) = several_errors(&on) {
-                    let members = members_named(&members);
-                    self.s.findings.push(Finding {
-                        severity: Severity::Error,
-                        span: *span,
-                        code: "NK1107".to_string(),
-                        message: format!(
-                            "This is an error, one of {members}, and an error has no field `{field}`."
-                        ),
-                        notes: vec![
-                            "A field belongs to one of them, and which one it is is said by a \
-                             `match`."
-                                .to_string(),
-                        ],
-                        help: Some(format!(
-                            "Take it apart first: `match error {{ … }}`, and read `{field}` in \
-                             the arm of the type that has it."
-                        )),
-                        labels: Vec::new(),
-                    });
-                    return Ty::Unknown;
-                }
-                // **A tuple's part is the type written at its position**:
-                // `params[i].0` over a `Vec[(String, i64)]` is a `String`.
-                // It was nothing, so a comparison with a lent `String` could
-                // not tell which side was the value, and `rustc` answered
-                // *can't compare `String` with `&String`* about a generated
-                // file - found moving the compiler's `views` into Nikaia
-                // (#125).
-                if let Ty::Tuple(parts) = &on {
-                    // **A position the tuple does not have is `NK1107`** (#515):
-                    // `t.2` on a pair reached `rustc` as *no field `2`*.
-                    if let Ok(at) = field.parse::<usize>()
-                        && at >= parts.len()
-                    {
-                        let last = parts.len().saturating_sub(1);
-                        self.s.findings.push(Finding {
-                            severity: Severity::Error,
-                            span: *span,
-                            code: "NK1107".to_string(),
-                            message: format!("This tuple has no part `.{at}`."),
-                            notes: vec![format!(
-                                "A tuple's parts are counted from 0, and this one has {}.",
-                                parts.len()
-                            )],
-                            help: Some(match parts.is_empty() {
-                                true => "There's nothing in it to read.".to_string(),
-                                false => format!("Use one of `.0` to `.{last}`."),
-                            }),
-                            labels: Vec::new(),
-                        });
-                        return Ty::Unknown;
-                    }
-                    return field
-                        .parse::<usize>()
-                        .ok()
-                        .and_then(|at| parts.get(at).cloned())
-                        .unwrap_or(Ty::Unknown);
-                }
-                // **A type that is seen through answers with what it holds**
-                // (#497): `db.host` on a `Shared[Connection]` is the
-                // connection's field, as a method on it already is.
-                let on = match &on {
-                    Ty::Named { name, .. } if self.s.fields_of(self.world, name).is_none() => {
-                        self.seen_through(&on).unwrap_or(on)
-                    }
-                    _ => on,
-                };
-                let Ty::Named { name: ty, .. } = &on else {
-                    return Ty::Unknown;
-                };
-                // **A boxed field is read through its box**
-                // ([ADR-246](../../docs/specification/adr/adr-246.md) D2).
-                if self
-                    .s
-                    .facts
-                    .boxed_members
-                    .get(ty)
-                    .is_some_and(|members| members.contains(&field))
-                {
-                    self.s.facts.boxed_reads.insert(value_node(expr));
-                }
-                // **A handle has no fields** (ADR-302 D7): it is an address
-                // this language never dereferences, so there is nothing inside
-                // it to name. Before `fields_of`, which would answer `None` and
-                // send the reader to `NK1126`'s *no bound* — a sentence about a
-                // type parameter, which this is not.
-                if self.s.opaque_handles.contains(ty) {
-                    let ty = ty.clone();
-                    self.s
-                        .a_handle_has_nothing_inside(&ty, &format!("the field `{field}`"), span);
-                    return Ty::Unknown;
-                }
-                // **A reflected field answers two members and no others**
-                // ([ADR-304](../../docs/specification/adr/adr-304.md) D2):
-                // `.name` here, and `.of(value)` where a method is called.
-                if ty == ty::VARIANT {
-                    if field == "name" {
-                        return Ty::view("str");
-                    }
-                    let held = field.clone();
-                    self.s.a_reflected_variant_has_two_members(&held, span);
-                    return Ty::Unknown;
-                }
-                if ty == ty::FIELD {
-                    if field == "name" {
-                        return Ty::Named {
-                            name: "str".to_string(),
-                            args: Vec::new(),
-                            view: true,
-                        };
-                    }
-                    // **`field.default`, its default as a `T?`** (ADR-331
-                    // D5): `null` where it has none.
-                    if field == "default" {
-                        return match &self.s.flow.unrolling {
-                            Some(unrolling) => Ty::Nullable(Box::new(unrolling.field.ty.clone())),
-                            None => Ty::Unknown,
-                        };
-                    }
-                    let held = field.clone();
-                    self.s.a_reflected_field_has_two_members(&held, span);
-                    return Ty::Unknown;
-                }
-                let Some(fields) = self.s.fields_of(self.world, ty) else {
-                    // `NK1126` where the type is a parameter: nothing will ever
-                    // describe `T`, so a field on one is refused here rather
-                    // than by `rustc` about the generated file.
-                    let ty = ty.clone();
-                    self.s
-                        .nothing_says_what_a_parameter_can_do(&ty, "field", &field, span);
-                    return Ty::Unknown;
-                };
-                match fields.iter().find(|f| f.name == field) {
-                    Some(found) => {
-                        let (ty, declared) = (ty.clone(), found.clone());
-                        self.s.field_is_reachable(&ty, &declared, span);
-                        // `Pair[i64].first` is an `i64`: the receiver's own
-                        // arguments bind the declaration's parameters, exactly
-                        // as a method's receiver binds its signature's
-                        // (ADR-288, and ADR-295 D2 for a `.nika` declaration).
-                        ty::substitute(&declared.ty, &self.arguments_of(&on))
-                    }
-                    None => {
-                        let ty = ty.clone();
-                        self.s.no_such_field(&ty, &field, &fields, span);
-                        Ty::Unknown
-                    }
-                }
+                let safe = matches!(expr, Expr::SafeField { .. });
+                self.nikaia(|state, world, host| {
+                    check_core_places::check_core_field(
+                        state, world, host, expr, safe, base, *name, span,
+                    )
+                })
             }
 
-            Expr::StructLit { name, fields, .. } => {
-                // `unaliased`, the same as a type: `h::Request(path: …)` builds
-                // `http::Request` (ADR-286 D12).
-                let name = self.parsed.unaliased(self.parsed.text(*name));
-                let declared = self.s.fields_of(self.world, &name);
-                // **A struct literal naming nothing this compiler declares**
-                // ([ADR-096](../../docs/specification/adr/adr-096.md), `NK1135`),
-                // and it is the silence that let
-                // [ADR-133](../../docs/specification/adr/adr-133.md)'s collision
-                // through: `Stats(min: first)` and `execute(target_age: 30)` are
-                // one spelling, `ctor_lit` reads both as a literal, and a literal
-                // for a struct nothing declares walked out of here on the
-                // `continue` below and lowered verbatim. `rustc` answered
-                // *cannot find struct `execute`* about a file nobody wrote, which
-                // is Part III C.1's class and the very hole `NK1135` was built
-                // to close for a written annotation.
-                //
-                // **Unqualified only**, which is `NK1135`'s own convention:
-                // `pool::Conn(id: 1)` names a package's type, and whether this
-                // build can see that package is a question with a message of its
-                // own (ADR-286 D11).
-                if declared.is_none() && !name.contains("::") && !self.declares_a_type(&name) {
-                    self.s.a_struct_nothing_declares(self.world, &name, span);
-                }
-                // **What a generic struct's literal binds**
-                // ([ADR-295](../../docs/specification/adr/adr-295.md) D2).
-                // `Pair { first: 1, second: 2 }` is a `Pair[i64]` and nothing
-                // else says so: the declaration writes `first: $T` and the
-                // value is an `i64`, which is one `bind` per field.
-                let mut bound: BTreeMap<String, Ty> = BTreeMap::new();
-                // **A field named twice** is `NK1172`, here and in a `with` for
-                // one reason ([ADR-118](../../docs/specification/adr/adr-118.md)
-                // D1 restates the literal's rule): `Point { x: 1, x: 2 }` used
-                // to lower, and `rustc` answered about the generated file.
-                let mut seen: BTreeSet<String> = BTreeSet::new();
-                let mut misspelled = false;
-                for init in fields {
-                    let field = self.parsed.text(init.name).to_string();
-                    if !seen.insert(field.clone()) {
-                        self.s.a_field_written_twice(&name, &field, span);
-                    }
-                    // **Code put into a function field is remembered with the
-                    // field** (ADR-230 D1): what it calls is what a call
-                    // through the field reaches, wherever that call is.
-                    let code_field = declared.as_ref().is_some_and(|d| {
-                        d.iter()
-                            .any(|f| f.name == field && matches!(f.ty, Ty::Fn { .. }))
-                    });
-                    if code_field {
-                        self.s.stored_frames.push(StoredCode::empty());
-                    }
-                    // `Reading { name, temp }` is shorthand for `name: name`.
-                    if let Some(value) = &init.value {
-                        self.a_mut_parameter_given_away(value, span, "put into a field");
-                    }
-                    if let Some(Expr::Closure { .. }) = &init.value {
-                        self.s.flow.lambda_expected = declared
-                            .as_ref()
-                            .and_then(|d| d.iter().find(|f| f.name == field))
-                            .map(|f| f.ty.clone());
-                    }
-                    let found = match &init.value {
-                        Some(value) => self.expr(value, span),
-                        None => self.s.lookup(&field).unwrap_or(Ty::Unknown),
-                    };
-                    self.s.flow.lambda_expected = None;
-                    if code_field {
-                        let mut stored =
-                            self.s.stored_frames.pop().unwrap_or_else(StoredCode::empty);
-                        match &init.value {
-                            Some(Expr::Closure { body, .. }) => {
-                                stored
-                                    .free
-                                    .extend(crate::contracts::locks::free_calls(self.parsed, body));
-                            }
-                            // A function of this program, named: it is what
-                            // runs.
-                            Some(Expr::Variable(named, _)) => {
-                                let named = self.parsed.text(*named).to_string();
-                                match self.s.lookup(&named).is_none() {
-                                    true => {
-                                        stored.free.insert(named);
-                                    }
-                                    false => stored.unresolved = true,
-                                }
-                            }
-                            // Anything else - a value computed somewhere else -
-                            // is code this walk did not see.
-                            _ => stored.unresolved = true,
-                        }
-                        let entry = self
-                            .s
-                            .stored_code
-                            .entry(format!("{name}.{field}"))
-                            .or_insert_with(StoredCode::empty);
-                        entry.resolved.extend(stored.resolved);
-                        entry.unresolved |= stored.unresolved;
-                        entry.free.extend(stored.free);
-                    }
-                    let Some(declared) = &declared else { continue };
-                    match declared.iter().find(|f| f.name == field) {
-                        Some(found_field) => {
-                            let want = found_field.ty.clone();
-                            ty::bind(&want, &found, &mut bound);
-                            // **A field holds what it is given** (ADR-293 D29),
-                            // unless it is declared a view.
-                            if !want.is_a_view() {
-                                let to = format!("stored in `{name}.{field}`");
-                                match &init.value {
-                                    Some(value) => self.hands_over(value, &found, &to, span),
-                                    None => self.s.hands_over_name(self.world, &field, &to, span),
-                                }
-                            }
-                            let owner = name.clone();
-                            self.s.field_is_reachable(&name, found_field, span);
-                            // **No longer a constructor either**
-                            // ([ADR-281](../../docs/specification/adr/adr-281.md)
-                            // D2). It was the second of the two positions, and the
-                            // two positions are what stopped being a list.
-                            let _ = &owner;
-                            // **A declared field is a use** (ADR-152 D4), and
-                            // it is the position [ADR-284](../../docs/specification/adr/adr-284.md)
-                            // §4's C value field will be written through.
-                            let found = match init.value.as_ref() {
-                                Some(value) => self
-                                    .literal_by_use(&found, &want, value, span)
-                                    .unwrap_or(found),
-                                None => found,
-                            };
-                            // Part I 2.3's fourth position: a plain value in a
-                            // field the struct declares nullable. The same rule
-                            // as the other three (`wraps_into_nullable`), keyed
-                            // by the field as well, because a struct literal
-                            // has one of these per field and a statement only
-                            // one span.
-                            // **A run this body owns, in a field that views
-                            // one** ([ADR-179](../../docs/specification/adr/adr-179.md)
-                            // D2). `Vec[T]` *fits* `&[T]` — that is the C
-                            // boundary's rule, where the call lends for its own
-                            // duration ([ADR-302](../../docs/specification/adr/adr-302.md)
-                            // D1) — and a **struct outlives the expression that
-                            // fills it**, so the same fit here is a view of
-                            // something already gone. Asked before `expect`,
-                            // because `expect` is silent where the fit holds.
-                            //
-                            // **Inside a grammar action anything that is not
-                            // already a view is refused**, and that is not
-                            // caution: an action's bindings come from the
-                            // parse, which **owns** the runs it built, and what
-                            // this checker knows about one of them is nothing
-                            // — so a `Section { name, settings }` shorthand
-                            // would slip past a test on the value's type and
-                            // reach `rustc` as *expected `&[Setting]`, found
-                            // `Vec<Setting>`*, about a grammar line whose way
-                            // out is not *write a `&`* at all.
-                            //
-                            // **And not inside a `comptime`**, which is the
-                            // position this type was added for: there the run
-                            // is **the build's**, the crossing writes the `&`
-                            // and the array literal behind it is the program's
-                            // own text ([ADR-311](../../docs/specification/adr/adr-311.md)
-                            // D1). Refusing there would refuse the one line
-                            // that is right, which is [Part III
-                            // C.4](../../docs/specification/30-nikaia-tooling.md).
-                            let owns_it = matches!(&found, Ty::Named { name, view: false, .. }
-                                if name == "Vec" || name == "List")
-                                || (self.s.inside_an_action.is_some() && !found.is_a_view());
-                            if slice_element(&want).is_some()
-                                && owns_it
-                                && !self.s.flow.inside_a_comptime
-                            {
-                                self.s
-                                    .a_run_this_body_owns(&name, &field, &found.text(), span);
-                                continue;
-                            }
-                            let value = init.value.as_ref();
-                            let keeper = format!("`{owner}` keeps its `{field}` after this line");
-                            if let Some(how) = self.widened_slot(&found, &want, value, span) {
-                                self.s
-                                    .facts
-                                    .nullable_fields
-                                    .insert((value_node(expr), field.clone()), how);
-                                // A view into a `String?` is still a view kept
-                                // (ADR-282 D12): asked as it would be without
-                                // the `?`.
-                                if views_into_nullable_text(&found, &want) {
-                                    self.s.flow.field_either = self.either_field(&owner, &field);
-                                    let (o, f) = (owner.clone(), field.clone());
-                                    self.expect_kept(
-                                        &found,
-                                        &want,
-                                        value,
-                                        &keeper,
-                                        *span,
-                                        "field",
-                                        move |found, want| {
-                                            format!("`{o}.{f}` holds `{want}`, but you're giving it `{found}`.")
-                                        },
-                                    );
-                                }
-                                continue;
-                            }
-                            self.s.flow.field_either = self.either_field(&owner, &field);
-                            self.expect_kept(
-                                &found,
-                                &want,
-                                value,
-                                &keeper,
-                                *span,
-                                "field",
-                                move |found, want| {
-                                    format!("`{owner}.{field}` holds `{want}`, but you're giving it `{found}`.")
-                                },
-                            );
-                        }
-                        None => {
-                            misspelled = true;
-                            self.s.no_such_field(&name, &field, declared, span)
-                        }
-                    }
-                }
-                // **A field left out takes its default, and one without a
-                // default may not be left out** (ADR-331 D5, `NK1234`).
-                // Not after a field it does not have: that is most likely the
-                // one it misspelled, and said once.
-                if let Some(declared) = declared.as_ref().filter(|_| !misspelled) {
-                    let missing: Vec<String> = declared
-                        .iter()
-                        .filter(|f| f.default.is_empty() && !seen.contains(&f.name))
-                        .map(|f| f.name.clone())
-                        .collect();
-                    if !missing.is_empty() {
-                        self.s.fields_left_out(&name, &missing, span);
-                    }
-                }
-                // **A variant's literal is its `enum`** and not the variant:
-                // `Shape` is a type a declaration can be written as and
-                // `Shape::Spot` is not, so answering the latter refused a
-                // correct program with a way out nobody can take (Part III
-                // C.4). The map is built where the `enum` is read, so the
-                // literal and the pattern agree by construction.
-                if let Some(owner) = self.s.variant_owner.get(&name) {
-                    return Ty::named(owner.clone());
-                }
-                match self.s.struct_parameters.get(&name) {
-                    Some(order) => {
-                        let args = order
-                            .iter()
-                            .map(|p| bound.get(p).cloned().unwrap_or(Ty::Unknown))
-                            .collect();
-                        Ty::Named {
-                            name,
-                            args,
-                            view: false,
-                        }
-                    }
-                    None => Ty::named(name),
-                }
-            }
+            Expr::StructLit { name, fields, .. } => self.nikaia(|state, world, host| {
+                check_core_places::check_core_struct_literal(
+                    state, world, host, expr, *name, fields, span,
+                )
+            }),
 
             // **`value with { field: … }`**
             // ([ADR-118](../../docs/specification/adr/adr-118.md) D1): a copy of
@@ -4079,96 +3590,9 @@ impl<'a> Checker<'a> {
             // literal's — so what is new here is the **operand**: it has to be
             // a struct this compiler can name, because what it lowers to is
             // Rust's `Point { x: 1, ..p }` and the type is written there.
-            Expr::With { base, fields, .. } => {
-                let found = self.expr(base, span);
-                let Ty::Named {
-                    name,
-                    view,
-                    args: _,
-                } = &found
-                else {
-                    self.s
-                        .a_with_over_something_else(&found.text(), &Copyable::Unnamed, span);
-                    return Ty::Unknown;
-                };
-                let name = self.parsed.unaliased(name);
-                // **An enum is refused with a message naming `match`**
-                // (ADR-118 §4): `m with { x: 1 }` cannot be typed without
-                // knowing the variant, and inside a `match` arm it is known —
-                // which is a decision that record deliberately left open.
-                if self.s.enums.contains_key(&name) {
-                    self.s
-                        .a_with_over_something_else(&name, &Copyable::AnEnum, span);
-                    return found;
-                }
-                // **A view is not something to move from** (D3): what `with`
-                // does not name it takes from the operand *by move*, and no
-                // copy is inserted that the program did not write (ADR-282 D7).
-                if *view {
-                    self.s
-                        .a_with_over_something_else(&name, &Copyable::AView, span);
-                    return Ty::named(name);
-                }
-                let Some(declared) = self.s.fields_of(self.world, &name) else {
-                    self.s
-                        .a_with_over_something_else(&name, &Copyable::NotAStruct, span);
-                    return found;
-                };
-                // **A copy that changes nothing is the value** (D1).
-                if fields.is_empty() {
-                    self.s.a_with_that_changes_nothing(&name, span);
-                }
-                let mut seen: BTreeSet<String> = BTreeSet::new();
-                for init in fields {
-                    let field = self.parsed.text(init.name).to_string();
-                    if !seen.insert(field.clone()) {
-                        self.s.a_field_written_twice(&name, &field, span);
-                    }
-                    // `user with { name }` — the shorthand is the literal's.
-                    let given = match &init.value {
-                        Some(value) => self.expr(value, span),
-                        None => self.s.lookup(&field).unwrap_or(Ty::Unknown),
-                    };
-                    // **Code put into a function field here is code the lock
-                    // column does not read** (ADR-230 D1): the field is
-                    // undecided rather than quiet.
-                    if declared
-                        .iter()
-                        .any(|f| f.name == field && matches!(f.ty, Ty::Fn { .. }))
-                    {
-                        self.a_field_whose_code_is_not_seen(&name, &field);
-                    }
-                    match declared.iter().find(|f| f.name == field) {
-                        Some(held) => {
-                            // **D4: a field may be named only where a literal
-                            // could name it.** The private field a copy merely
-                            // *carries* is never named, so it never reaches
-                            // this.
-                            self.s.field_is_reachable(&name, held, span);
-                            let want = held.ty.clone();
-                            let owner = name.clone();
-                            let field = field.clone();
-                            let at = init
-                                .value
-                                .as_ref()
-                                .map_or(*span, |v| self.span_at(v, *span));
-                            self.expect_at(&given, &want, *span, at, "field", move |given, want| {
-                                format!("`{owner}.{field}` holds `{want}`, but you're giving it `{given}`.")
-                            });
-                        }
-                        None => self.s.no_such_field(&name, &field, &declared, span),
-                    }
-                }
-                // **The type, for the emitter** (ADR-296 D17): Rust writes the
-                // struct's name in a functional update and this node does not
-                // carry one, so the answer travels under the byte the `with`
-                // stands at rather than being worked out twice.
-                self.s
-                    .facts
-                    .with_types
-                    .insert(value_node(expr), name.clone());
-                found
-            }
+            Expr::With { base, fields, .. } => self.nikaia(|state, world, host| {
+                check_core_places::check_core_with(state, world, host, expr, base, fields, span)
+            }),
 
             // A lambda's arguments are the ones it names (ADR-277). There is
             // nothing to read off the body any more, so a `fn { … }` pushes an
@@ -4528,23 +3952,9 @@ impl<'a> Checker<'a> {
                 }
             }
 
-            Expr::Cast { expr, ty, .. } => {
-                let from = self.expr(expr, span);
-                let into = self.declared(ty, span);
-                self.a_cast_over_a_lent_binding(expr, span);
-                if let Ty::Named { name, .. } = &into
-                    && !OFFERED.contains(&name.as_str())
-                {
-                    self.s.cast_names_a_foreign_type(name, span);
-                }
-                self.record_cast(&from, &into, expr);
-                if matches!(&from, Ty::Named { name, .. } if name == "char" || name == "scalar")
-                    && matches!(&into, Ty::Named { name, .. } if INTEGERS.contains(&name.as_str()))
-                {
-                    self.s.facts.char_codes.insert(value_node(expr));
-                }
-                into
-            }
+            Expr::Cast { expr, ty, .. } => self.nikaia(|state, world, host| {
+                check_core_places::check_core_cast(state, world, host, expr, ty, span)
+            }),
 
             Expr::Tuple(parts, _) => self.nikaia(|state, world, host| {
                 check_core_call::check_core_tuple(state, world, host, parts, span)
@@ -4867,126 +4277,9 @@ impl<'a> Checker<'a> {
             // A shape it does not recognise still claims nothing: `s[i]` over
             // text is a slice in some languages and a byte in others, and
             // Nikaia has not said. `?` is the absence of a claim (ADR-024 D1).
-            Expr::Index { base, index, .. } => {
-                let writing = std::mem::replace(&mut self.s.flow.writing_index, false);
-                let on = self.expr(base, span);
-                let key = self.expr(index, span);
-                // **An index of a mapping is a page fault**
-                // ([ADR-281](../../docs/specification/adr/adr-281.md) D35).
-                self.s.io_inside_a_door(self.world, &on, "this index", span);
-                // A type seen through is indexed as what it holds (#497):
-                // `data[0..<7]` on an `fs::Mapped` is a slice of its text.
-                let on = match self.seen_through(&on) {
-                    Some(held) if held.unseen() != on.unseen() => held,
-                    _ => on,
-                };
-                // **A view of a run is indexed as the run is** (ADR-179 D1,
-                // ADR-293 D23): `xs[i]` for an `xs: ref Array[T]` is a `T`, and a
-                // range in the brackets is a run of it again. It was `?`, so a
-                // method called on an element was one no ledger describes, and
-                // the function around it became a future (found moving `Ty::fits`
-                // into Nikaia, ADR-294).
-                if let Ty::Pointed {
-                    item,
-                    slice: true,
-                    mutable,
-                } = &on
-                {
-                    if matches!(&**index, Expr::Range { .. }) {
-                        return Ty::Pointed {
-                            item: item.clone(),
-                            slice: true,
-                            mutable: *mutable,
-                        };
-                    }
-                    self.number_asked(index, &Ty::named("i64"), span, false);
-                    self.s.facts.list_indices.insert(value_node(base));
-                    return (**item).clone();
-                }
-                let Ty::Named { name, args, .. } = &on else {
-                    return Ty::Unknown;
-                };
-                // **And no indexing** (ADR-302 D7), for the same reason: a
-                // handle is one address and not a run of anything.
-                if self.s.opaque_handles.contains(name) {
-                    let name = name.clone();
-                    self.s.a_handle_has_nothing_inside(&name, "an index", span);
-                    return Ty::Unknown;
-                }
-                // The **last segment**, because a `std` type carries its module
-                // since [ADR-313](../../docs/specification/adr/adr-313.md) D3 and
-                // what is indexed is the type rather than where it is reached
-                // from.
-                // **A range in the brackets is a slice** (ADR-293 D23): a run of
-                // the list, `ref Array[T]` - the type a function writes to take
-                // one - or a view of the text. Written there, or kept in a name.
-                let a_range = matches!(&**index, Expr::Range { .. })
-                    || matches!(&key, Ty::Seq { shape, .. } if shape.replays);
-                if a_range && !matches!(&**index, Expr::Range { .. }) {
-                    self.s.facts.slice_indices.insert(value_node(index));
-                }
-                // **An index is a use that prefers an `i64`**
-                // ([ADR-285](../../docs/specification/adr/adr-285.md) D24): a
-                // length and an index are one (ADR-285 D1), and the language
-                // below takes any integer through `index::at` - so it is asked
-                // only where nothing else asks.
-                if !a_range && matches!(crate::contracts::ty::base(name), "Vec" | "List" | "Array")
-                {
-                    self.number_asked(index, &Ty::named("i64"), span, false);
-                }
-                if a_range {
-                    return match (crate::contracts::ty::base(name), args.as_slice()) {
-                        ("Vec" | "List" | "Array", [item, ..]) => Ty::Named {
-                            name: ty::ARRAY.to_string(),
-                            args: vec![item.clone()],
-                            view: true,
-                        },
-                        ("String" | "str", []) => Ty::view("str"),
-                        // **A cut of a `Bytes` is a `Bytes`** (ADR-320 D7).
-                        ("Bytes", []) => Ty::named("Bytes"),
-                        _ => Ty::Unknown,
-                    };
-                }
-                match (crate::contracts::ty::base(name), args.as_slice()) {
-                    // **A `Bytes` is read as a run of bytes** (ADR-320 D7,
-                    // Part I 2.6): `b[i]` is a `u8`, and an index outside
-                    // stops the program, as a list's does.
-                    ("Bytes", []) => Ty::named("u8"),
-                    // **A sequence keeps its `T` and its abort**
-                    // ([ADR-293](../../docs/specification/adr/adr-293.md) D3):
-                    // it has a `T` at every index it has at all, and an index
-                    // it does not have is the program's own arithmetic gone
-                    // wrong ([Part III A.2](../../../docs/specification/30-nikaia-tooling.md)).
-                    ("Vec" | "List" | "Array", [item, ..]) => {
-                        self.s.facts.list_indices.insert(value_node(base));
-                        item.clone()
-                    }
-                    // **A map answers a `T?`** (D1). It has a value only where
-                    // the key is, and *there is nothing there* is data about
-                    // the world rather than a bug in the program — so the
-                    // bracket says what `get` says, and `??` is how a program
-                    // that knows better says so.
-                    ("HashMap" | "Map" | "BTreeMap", [keys, value]) => {
-                        let (keys, value) = (keys.clone(), value.clone());
-                        self.s.flow.read_a_map = !writing;
-                        self.a_map_key(&keys, &key, index, writing, span);
-                        // **A map of `T?` reads one `T?`**
-                        // ([ADR-293](../../docs/specification/adr/adr-293.md)
-                        // D1): a stored `null` and an absent key are both
-                        // `null`, and `contains_key` tells them apart. A write
-                        // keeps the slot's own type, so `m[k] = null` stores
-                        // (D2).
-                        match (value, writing) {
-                            (Ty::Nullable(held), false) => {
-                                self.s.facts.flat_reads.insert(value_node(expr));
-                                Ty::Nullable(held)
-                            }
-                            (value, _) => Ty::Nullable(Box::new(value)),
-                        }
-                    }
-                    _ => Ty::Unknown,
-                }
-            }
+            Expr::Index { base, index, .. } => self.nikaia(|state, world, host| {
+                check_core_places::check_core_index(state, world, host, expr, base, index, span)
+            }),
             // **A range is a sequence that replays**
             // ([ADR-293](../../docs/specification/adr/adr-293.md) D18): its
             // elements are produced as they are asked for, it can be walked
@@ -4998,26 +4291,9 @@ impl<'a> Checker<'a> {
             // The item is whichever end says one; a literal says none
             // (Part I 2.4), so `0..<3` is a range of `?` and `0..<n` one of
             // what `n` is.
-            Expr::Range { start, end, .. } => {
-                let from = self.expr(start, span);
-                let to = self.expr(end, span);
-                let item = match from.is_unknown() {
-                    true => to,
-                    false => from,
-                };
-                Ty::Seq {
-                    item: Box::new(item),
-                    is_sync: true,
-                    pauses: false,
-                    can_throw: false,
-                    parallel: false,
-                    shape: ty::Shape {
-                        ends: true,
-                        sized: true,
-                        replays: true,
-                    },
-                }
-            }
+            Expr::Range { start, end, .. } => self.nikaia(|state, _world, host| {
+                check_core_places::check_core_range(state, host, start, end, span)
+            }),
 
             Expr::TryCatch { expr, handler, .. } => {
                 // Kap 7.1: the handler is what handles the failure, so the
@@ -5580,12 +4856,6 @@ impl<'a> Checker<'a> {
         Some(number)
     }
 
-    /// What a type seen through (`deref` in its ledger) hands out, with the
-    /// receiver's own arguments bound: `&$T` of a `Shared[$T]`.
-    fn seen_through(&self, ty: &Ty) -> Option<Ty> {
-        self.s.seen_through(self.world, ty)
-    }
-
     /// [`Checker::expect`], for a position that has the value in hand, so a
     /// view of text kept where text of its own is wanted can say **why** here
     /// ([ADR-282](../../docs/specification/adr/adr-282.md) D25). `keeper` is the
@@ -5619,47 +4889,6 @@ impl<'a> Checker<'a> {
             what,
             &|hole, ty| message(hole, ty),
         )
-    }
-
-    /// **What `ask` refuses at the statement `span`, said at `at`** (#107):
-    /// the refusals it pushes, and the one it leaves waiting on an unsigned
-    /// slot, which stays keyed by the statement where the walk answers it
-    /// (ADR-285 D32).
-    fn moved_to(&mut self, span: Span, at: Span, ask: impl FnOnce(&mut Self)) {
-        let pushed = self.s.findings.len() as i64;
-        let waiting = self.s.slots_waiting(&span);
-        ask(self);
-        self.s.findings_moved(&span, &at, pushed, &waiting);
-    }
-
-    /// A function field code is put into where the lock column cannot read it
-    /// (ADR-230 D1): undecided, never quiet.
-    fn a_field_whose_code_is_not_seen(&mut self, owner: &str, field: &str) {
-        self.s.a_field_whose_code_is_not_seen(owner, field);
-    }
-
-    /// Whether a struct's field is text both kinds of which flow into
-    /// ([ADR-282](../../docs/specification/adr/adr-282.md) D14).
-    fn either_field(&self, owner: &str, field: &str) -> bool {
-        check_items::either_field(&self.world.here, owner, field)
-    }
-
-    /// Report only when both sides are known and they disagree.
-    /// [`Checker::expect`] for a statement at `span`, said at `at` (#107).
-    fn expect_at(
-        &mut self,
-        found: &Ty,
-        want: &Ty,
-        span: Span,
-        at: Span,
-        what: &str,
-        message: impl Fn(&str, &str) -> String,
-    ) {
-        self.moved_to(span, at, |checker| {
-            checker
-                .s
-                .expect_type(checker.world, found, want, &span, what, &message)
-        });
     }
 
     fn expect(
@@ -5731,31 +4960,6 @@ impl<'a> Checker<'a> {
         self.s.a_task_takes_these(self.world, body, task, span);
     }
 
-    /// **A key in the brackets of a map whose keys are owned**
-    /// ([ADR-293](../../docs/specification/adr/adr-293.md) D27).
-    ///
-    /// The brackets went through `index::at` whatever was in them, and `at` is
-    /// for a **position**: it turns a number into a `usize` and passes a view
-    /// through. So a map keyed by an owned `String` could not be written with a
-    /// `String` (no `at` for one) or with a literal (a `&str` where the map
-    /// keeps a `String`), and a map keyed by an `i64` had its key turned into a
-    /// `usize` - each `rustc`'s words about a file nobody wrote.
-    ///
-    /// A key is not a position. **Written**, the map keeps it: it goes in by
-    /// value, a literal is built into text of its own where it stands (as
-    /// ADR-282 does for every other place that keeps text), a name is handed
-    /// over (`NK2105` if it is used again), and a **view** is refused with the
-    /// sentence ADR-282 has for text kept where only a view was given.
-    /// **Read**, the map keeps nothing: the key is lent, or goes in as it is
-    /// where it is a view already.
-    ///
-    /// A map keyed by **views** is left exactly as it was: every example keys
-    /// its maps that way, and a view goes through `at` untouched.
-    fn a_map_key(&mut self, keys: &Ty, found: &Ty, index: &Expr, writing: bool, span: &Span) {
-        self.s
-            .a_map_key(self.world, keys, found, index, writing, span)
-    }
-
     /// **A value handed to something that keeps it**
     /// ([ADR-293](../../docs/specification/adr/adr-293.md) D29, which builds
     /// [ADR-094](../../docs/specification/adr/adr-094.md) D2's last paragraph).
@@ -5784,12 +4988,6 @@ impl<'a> Checker<'a> {
     /// A read of a name, recorded once per expression and statement.
     fn a_read(&mut self, expr: &Expr, path: String, span: &Span) {
         self.s.a_read(expr, &path, span);
-    }
-
-    /// `p.name` extends the read of `p` it stands on: what is read is the part
-    /// ([ADR-293](../../docs/specification/adr/adr-293.md) D32).
-    fn a_read_of_a_part(&mut self, base: &Expr, expr: &Expr, field: &str, span: &Span) {
-        self.s.a_read_of_a_part(base, expr, field, span);
     }
 
     /// **The parts of a `mut` parameter an arm took out** (`NK2108`,
@@ -5941,16 +5139,6 @@ impl<'a> Checker<'a> {
         self.s.an_extern_enum(self.world, item, span);
     }
 
-    /// Whether any ledger or this unit declares a **type** by this name.
-    ///
-    /// Presence and not fields, which is the difference from [`Self::fields_of`]:
-    /// *an empty field list means nothing recorded and not nothing inside*
-    /// (Part III 15.2), so a described foreign type has an entry and no fields,
-    /// and it is declared.
-    fn declares_a_type(&self, name: &str) -> bool {
-        self.s.declares_a_type(self.world, name)
-    }
-
     /// Whether more than one error **type** can arrive at a handler
     /// ([ADR-280](../../docs/specification/adr/adr-280.md) D18).
     ///
@@ -6070,19 +5258,6 @@ impl<'a> Checker<'a> {
     ) -> (Option<build_time::Value>, bool) {
         let host = self.host();
         self.s.build_time_value(&host, value, bound, span)
-    }
-
-    /// **A literal takes the use's type, whichever literal it is**: an array
-    /// where an `Array[T, N]` is wanted (ADR-152 D4), and text of its own where
-    /// a `String` is ([ADR-282](../../docs/specification/adr/adr-282.md) D4).
-    /// One entry for every position that is a use, so a position cannot ask
-    /// one of the two questions and forget the other.
-    fn literal_by_use(&mut self, found: &Ty, want: &Ty, value: &Expr, span: &Span) -> Option<Ty> {
-        self.nikaia(|state, world, host| {
-            check_core_leaves::check_core_literal_by_use(
-                state, world, host, found, want, value, span,
-            )
-        })
     }
 
     /// A tuple of text literals where a tuple with text is wanted
@@ -6387,23 +5562,6 @@ impl<'a> Checker<'a> {
         })
     }
 
-    /// **A cast whose operand is a `for` binding**
-    /// ([ADR-182](../../docs/specification/adr/adr-182.md) D1).
-    ///
-    /// `for n in NS { sum = sum + (n as i64) }` reached the language below as
-    /// `n as i64` over a `&i32`, and what came back was *casting `&i32` as
-    /// `i64` is invalid* with a way out that reads *dereference the
-    /// expression* — a noun and an instruction about a file nobody wrote
-    /// ([Part III C.1](../../docs/specification/30-nikaia-tooling.md)).
-    ///
-    /// **Only a bare name**, because that is the only operand shape that can
-    /// arrive as a view: a call, a literal and an arithmetic expression each
-    /// come to a value, and a field read or an index is already taken apart by
-    /// the lowering that wrote it.
-    fn a_cast_over_a_lent_binding(&mut self, operand: &Expr, span: &Span) {
-        self.s.a_cast_over_a_lent_binding(self.world, operand, span);
-    }
-
     // --- looking things up ---------------------------------------------------
 
     /// A number no other binding gets, for [`Local::id`]: the state's own
@@ -6660,17 +5818,6 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// The fields of a type, when something knows them.
-    /// What a value's own type arguments bind its declaration's parameters to.
-    ///
-    /// `Pair[i64]` against `struct Pair[T]` gives `T = i64`, positionally,
-    /// because a type argument's position is the only thing that says which
-    /// parameter it fills. Empty for every type that declares none, which is
-    /// every type written today.
-    fn arguments_of(&self, on: &Ty) -> BTreeMap<String, Ty> {
-        self.s.arguments_of(on)
-    }
-
     /// **Whether a `match` is over a place this function owns**: a name, or a
     /// field of one, that is not itself a view. Only there can a part be lent
     /// and the whole stay: a temporary is gone after the `match` anyway, and a
@@ -6910,11 +6057,6 @@ pub fn an_or_a(ty: &str) -> String {
 /// an `Error` with its members.
 fn several_errors(ty: &Ty) -> Option<Vec<Ty>> {
     Some(nikaia_std::tools::check_expect::several_errors_of(ty)).filter(|m| !m.is_empty())
-}
-
-/// The members, as a message names them: `` `ConfigError`, `io::IoError` ``.
-fn members_named(members: &[Ty]) -> String {
-    nikaia_std::tools::check_places::members_named(members)
 }
 
 /// The value a block ends in: its last statement, where that is an expression.

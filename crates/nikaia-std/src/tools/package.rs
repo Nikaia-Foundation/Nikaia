@@ -15195,6 +15195,506 @@ pub fn check_core_a_mut_parameter_given_away<H: CheckHost>(state: &mut CheckStat
 }
 
 
+// --- check_core_places.nika ---
+
+fn check_core_places_named(name: &str) -> Ty { Ty::Named { name: name.to_owned(), args: vec![], view: false } }
+
+fn check_core_places_str_view() -> Ty { Ty::Named { name: "str".to_owned(), args: vec![], view: true } }
+
+fn check_core_places_base(name: &str) -> String {
+    let parts: Vec<&str> = name.split("::").collect::<Vec<_>>();
+    if parts.is_empty() { return name.to_owned(); }
+    let last = parts.len() as i64 - 1;
+    format!("{}", *nikaia_std::index::get(&parts, nikaia_std::index::at(last)))
+}
+
+fn check_core_places_a_list(base: &str) -> bool { base == "Vec" || base == "List" || base == "Array" }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_places_a_range(index: &Expr) -> bool { matches!(index, Expr::Range { .. }) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_places_a_closure(value: Option<&Expr>) -> bool {
+    let v: &Expr = match value { Some(__nikaia_value) => __nikaia_value, None => return false };
+    matches!(v, Expr::Closure { .. })
+}
+
+fn check_core_places_position(field: &str) -> i64 {
+    if field.is_empty() { return -1; }
+    for c in field.chars() { if c < '0' || c > '9' { return -1; } }
+    nikaia_std::index::or(text::parse_i64(field), || -1)
+}
+
+fn check_core_places_bound(bound: &collections::BTreeMap<String, Ty>, p: &str) -> Ty {
+    for (name, ty) in bound.iter() { if name == p { return ty.clone(); } }
+    Ty::Unknown
+}
+
+fn check_core_places_unrolled_default(unrolling: Option<&CheckUnrolling>) -> Ty {
+    let u: &CheckUnrolling = match unrolling { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
+    Ty::Nullable(Box::new(u.field.ty.clone()))
+}
+
+fn check_core_places_offered(name: &str) -> bool { name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f64" || name == "bool" || name == "char" || name == "scalar" || name == "String" || name == "str" }
+
+fn check_core_places_an_integer(name: &str) -> bool { name == "u8" || name == "u32" || name == "u64" || name == "i32" || name == "i64" }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_places_given<H: CheckHost>(state: &mut CheckState, host: &H, value: Option<&Expr>, field: &str, span: &Span) -> Ty {
+    if value.is_none() { return nikaia_std::index::or(state.lookup(field), || Ty::Unknown); }
+    let v: &Expr = match value { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
+    host.expr(state, v, span)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_places_tuple_part(state: &mut CheckState, parts: &[Ty], field: &str, span: &Span) -> Ty {
+    let at = check_core_places_position(field);
+    if at >= 0 && at >= parts.len() as i64 {
+        let count = parts.len() as i64;
+        let mut last = count - 1;
+        if last < 0 { last = 0; }
+        let mut help: String = String::from("There's nothing in it to read.");
+        if count > 0 { help = format!("Use one of `.0` to `.{}`.", last); }
+        state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1107".to_owned(), message: format!("This tuple has no part `.{}`.", at), notes: vec![format!("A tuple's parts are counted from 0, and this one has {}.", count)], help: Some(help), labels: vec![] });
+        return Ty::Unknown;
+    }
+    if at < 0 { return Ty::Unknown; }
+    (*nikaia_std::index::get(&parts, nikaia_std::index::at(at))).clone()
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_places_a_named_field(state: &mut CheckState, world: &CheckWorld<'_>, expr: &Expr, on: &Ty, ty: &str, field: &str, span: &Span) -> Ty {
+    let boxed = state.facts.boxed_members.get(ty);
+    if boxed.is_some() {
+        let members = match boxed { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
+        if members.contains(field) { state.facts.boxed_reads.insert(id_of(expr) as i64); }
+    }
+    if state.opaque_handles.contains(ty) {
+        state.a_handle_has_nothing_inside(ty, &format!("the field `{}`", field), span);
+        return Ty::Unknown;
+    }
+    if ty == "$Variant" {
+        if field == "name" { return check_core_places_str_view(); }
+        state.a_reflected_variant_has_two_members(field, span);
+        return Ty::Unknown;
+    }
+    if ty == "$Field" {
+        if field == "name" { return check_core_places_str_view(); }
+        if field == "default" { return check_core_places_unrolled_default((state.flow.unrolling).as_ref()); }
+        state.a_reflected_field_has_two_members(field, span);
+        return Ty::Unknown;
+    }
+    let declared: Option<Vec<FieldContract>> = state.fields_of(world, ty);
+    if declared.is_none() {
+        state.nothing_says_what_a_parameter_can_do(ty, "field", field, span);
+        return Ty::Unknown;
+    }
+    let fields: Vec<FieldContract> = match declared { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
+    for found in fields.iter() {
+        if found.name == field {
+            state.field_is_reachable(ty, found, span);
+            return substitute(&found.ty, &state.arguments_of(on));
+        }
+    }
+    state.no_such_field(ty, field, &fields, span);
+    Ty::Unknown
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+pub fn check_core_field<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, expr: &Expr, safe: bool, base: &Expr, name: winnow_grammar::Symbol, span: &Span) -> Ty {
+    let on = host.expr(state, base, span);
+    let field: String = format!("{}", world.words.resolve(name));
+    if safe {
+        match on {
+            Ty::Nullable(ref inner) => {
+                let inner = nikaia_std::boxed::open(inner);
+                return state.a_safe_field(world, inner, base, &field, expr, span);
+            },
+            Ty::Unknown => { return Ty::Unknown; },
+            _ => { state.reaches_through_a_plain_value(world, &on, base, &field, false, expr, span); },
+        }
+    }
+    state.a_read_of_a_part(base, expr, &field, span);
+    match on {
+        Ty::Nullable(_) => {
+            state.reaches_into_a_nullable(&on, "field", &field, span);
+            return Ty::Unknown;
+        },
+        _ => { },
+    }
+    let members = several_errors_of(&on);
+    if !members.is_empty() {
+        let named = members_named(&members);
+        state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1107".to_owned(), message: format!("This is an error, one of {}, and an error has no field `{}`.", named, field), notes: vec!["A field belongs to one of them, and which one it is is said by a `match`.".to_owned()], help: Some(format!("Take it apart first: `match error {{ … }}`, and read `{}` in the arm of the type that has it.", field)), labels: vec![] });
+        return Ty::Unknown;
+    }
+    match on {
+        Ty::Tuple(ref parts) => { return check_core_places_tuple_part(state, parts, &field, span); },
+        _ => { },
+    }
+    let mut seen: Ty = on.clone();
+    match on {
+        Ty::Named { ref name, .. } => { if state.fields_of(world, name).is_none() { seen = nikaia_std::index::or(state.seen_through(world, &on), || on.clone().into()); } },
+        _ => { },
+    }
+    let ty: String = match seen {
+        Ty::Named { ref name, .. } => name.to_owned(),
+        _ => return Ty::Unknown,
+    };
+    check_core_places_a_named_field(state, world, expr, &seen, &ty, &field, span)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_places_stored<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, value: Option<&Expr>, key: &str) {
+    let mut stored: CheckStoredCode = nikaia_std::index::or(state.stored_frames.pop(), || CheckStoredCode::empty());
+    if value.is_none() { stored.unresolved = true; } else {
+        let v: &Expr = match value { Some(__nikaia_value) => __nikaia_value, None => return };
+        match v {
+            Expr::Closure { body, .. } => { for called in host.free_calls(body) { stored.free.insert(called); } },
+            Expr::Variable(named, _) => {
+                let named = *named;
+                let written: String = format!("{}", world.words.resolve(named));
+                if state.lookup(&written).is_none() { stored.free.insert(written); } else { stored.unresolved = true; }
+            },
+            _ => { stored.unresolved = true; },
+        }
+    }
+    let mut entry: CheckStoredCode = nikaia_std::index::or(state.stored_code.remove(key), || CheckStoredCode::empty());
+    for resolved in stored.resolved.iter() { entry.resolved.insert(resolved.to_owned()); }
+    entry.unresolved = entry.unresolved || stored.unresolved;
+    for free in stored.free.iter() { entry.free.insert(free.to_owned()); }
+    state.stored_code.insert(key.to_owned(), entry);
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+fn check_core_places_a_declared_field<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, expr: &Expr, name: &str, declared: &[FieldContract], value: Option<&Expr>, field: &str, given: &Ty, bound: &mut collections::BTreeMap<String, Ty>, span: &Span) -> bool {
+    let mut at: i64 = -1;
+    let mut i: i64 = 0;
+    while i < declared.len() as i64 {
+        if nikaia_std::index::get(&declared, (i) as usize).name == field {
+            at = i;
+            break;
+        }
+        i += 1;
+    }
+    if at < 0 {
+        state.no_such_field(name, field, declared, span);
+        return false;
+    }
+    let found_field = nikaia_std::index::get(&declared, nikaia_std::index::at(at));
+    let want: Ty = found_field.ty.clone();
+    bind(&want, &given, bound);
+    if !want.is_a_view() {
+        let to = format!("stored in `{}.{}`", name, field);
+        if value.is_none() { state.hands_over_name(world, field, &to, span); } else {
+            let v: &Expr = match value { Some(__nikaia_value) => __nikaia_value, None => return true };
+            state.hands_over(world, v, &given, &to, span);
+        }
+    }
+    state.field_is_reachable(name, &found_field, span);
+    let mut found: Ty = given.clone();
+    if value.is_some() {
+        let v: &Expr = match value { Some(__nikaia_value) => __nikaia_value, None => return true };
+        found = nikaia_std::index::or(check_core_literal_by_use(state, world, host, &found, &want, v, span), || found.into());
+    }
+    let mut owns_it = match found {
+        Ty::Named { ref name, view, .. } => !view && (name == "Vec" || name == "List"),
+        _ => false,
+    };
+    if state.inside_an_action.is_some() && !found.is_a_view() { owns_it = true; }
+    if slice_element(&want).is_some() && owns_it && !state.flow.inside_a_comptime {
+        state.a_run_this_body_owns(name, field, &found.text(), span);
+        return true;
+    }
+    let keeper = format!("`{}` keeps its `{}` after this line", name, field);
+    let how: Option<FactWrap> = check_widened_slot(state, world, host, &found, &want, value, span);
+    if how.is_some() {
+        let wrap: FactWrap = match how { Some(__nikaia_value) => __nikaia_value, None => return true };
+        state.facts.nullable_fields.insert((id_of(expr) as i64, field.to_owned()), wrap);
+        if views_into_nullable_text(&found, &want) {
+            state.flow.field_either = either_field(&world.here, name, field);
+            state.expect_kept_asked(world, &found, &want, value, &keeper, span, "field", &|was, wanted| { format!("`{}.{}` holds `{}`, but you're giving it `{}`.", name, field, wanted, was) });
+        }
+        return true;
+    }
+    state.flow.field_either = either_field(&world.here, name, field);
+    state.expect_kept_asked(world, &found, &want, value, &keeper, span, "field", &|was, wanted| { format!("`{}.{}` holds `{}`, but you're giving it `{}`.", name, field, wanted, was) });
+    true
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+fn check_core_places_a_literal_field<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, expr: &Expr, name: &str, declared: Option<&Vec<FieldContract>>, init: &FieldInit, bound: &mut collections::BTreeMap<String, Ty>, seen: &mut collections::BTreeSet<String>, span: &Span) -> bool {
+    let field: String = format!("{}", world.words.resolve(init.name));
+    if seen.contains(&field) { state.a_field_written_twice(name, &field, span); } else { seen.insert(field.to_owned()); }
+    let mut code_field = false;
+    let mut expected: Option<Ty> = None;
+    if declared.is_some() {
+        let d: &Vec<FieldContract> = match declared { Some(__nikaia_value) => __nikaia_value, None => return true };
+        for f in d.iter() {
+            if f.name == field {
+                match &f.ty {
+                    Ty::Fn { .. } => { code_field = true; },
+                    _ => { },
+                }
+            }
+        }
+        for f in d.iter() {
+            if f.name == field {
+                expected = Some(f.ty.clone());
+                break;
+            }
+        }
+    }
+    if code_field { state.stored_frames.push(CheckStoredCode::empty()); }
+    if init.value.is_some() {
+        let v: &Expr = match init.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return true };
+        check_core_a_mut_parameter_given_away(state, world, host, v, span, "put into a field");
+    }
+    if check_core_places_a_closure((init.value).as_ref()) { state.flow.lambda_expected = expected; }
+    let given = check_core_places_given(state, host, (init.value).as_ref(), &field, span);
+    state.flow.lambda_expected = None;
+    if code_field { check_core_places_stored(state, world, host, (init.value).as_ref(), &format!("{}.{}", name, field)); }
+    if declared.is_none() { return true; }
+    let d: &Vec<FieldContract> = match declared { Some(__nikaia_value) => __nikaia_value, None => return true };
+    check_core_places_a_declared_field(state, world, host, expr, name, d, (init.value).as_ref(), &field, &given, bound, span)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_core_struct_literal<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, expr: &Expr, written: winnow_grammar::Symbol, fields: &[FieldInit], span: &Span) -> Ty {
+    let name: String = world.here.unaliased(&format!("{}", world.words.resolve(written)));
+    let declared: Option<Vec<FieldContract>> = state.fields_of(world, &name);
+    if declared.is_none() && !name.contains("::") && !state.declares_a_type(world, &name) { state.a_struct_nothing_declares(world, &name, span); }
+    let mut bound: collections::BTreeMap<String, Ty> = collections::BTreeMap::new();
+    let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut misspelled = false;
+    for init in fields.iter() { if !check_core_places_a_literal_field(state, world, host, expr, &name, (declared).as_ref(), init, &mut bound, &mut seen, span) { misspelled = true; } }
+    if declared.is_some() && !misspelled {
+        let d = match declared { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
+        let mut missing: Vec<String> = vec![];
+        for f in d.iter() { if f.default.is_empty() && !seen.contains(&f.name) { missing.push(f.name.to_owned()); } }
+        if !missing.is_empty() { state.fields_left_out(&name, &missing, span); }
+    }
+    let owner = state.variant_owner.get(&name);
+    if owner.is_some() {
+        let o = match owner { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
+        return check_core_places_named(o);
+    }
+    let order = state.struct_parameters.get(&name);
+    if order.is_none() { return check_core_places_named(&name); }
+    let parameters = match order { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
+    let mut args: Vec<Ty> = vec![];
+    for p in parameters.iter() { args.push(check_core_places_bound(&bound, p)); }
+    Ty::Named { name, args, view: false }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_core_with<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, expr: &Expr, base: &Expr, fields: &[FieldInit], span: &Span) -> Ty {
+    let found = host.expr(state, base, span);
+    let mut written: String = String::from("");
+    let mut view = false;
+    match found {
+        Ty::Named { ref name, view: v, .. } => {
+            written = name.to_owned();
+            view = v;
+        },
+        _ => {
+            state.a_with_over_something_else(&found.text(), &CheckCopyable::Unnamed, span);
+            return Ty::Unknown;
+        },
+    }
+    let name: String = world.here.unaliased(&written);
+    if state.enums.contains_key(&name) {
+        state.a_with_over_something_else(&name, &CheckCopyable::AnEnum, span);
+        return found;
+    }
+    if view {
+        state.a_with_over_something_else(&name, &CheckCopyable::AView, span);
+        return check_core_places_named(&name);
+    }
+    let fields_of: Option<Vec<FieldContract>> = state.fields_of(world, &name);
+    if fields_of.is_none() {
+        state.a_with_over_something_else(&name, &CheckCopyable::NotAStruct, span);
+        return found;
+    }
+    let declared: Vec<FieldContract> = match fields_of { Some(__nikaia_value) => __nikaia_value, None => return found };
+    if fields.is_empty() { state.a_with_that_changes_nothing(&name, span); }
+    let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for init in fields.iter() { check_core_places_a_with_field(state, world, host, &name, &declared, init, &mut seen, span); }
+    state.facts.with_types.insert(id_of(expr) as i64, name.to_owned());
+    found
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+fn check_core_places_a_with_field<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, name: &str, declared: &[FieldContract], init: &FieldInit, seen: &mut collections::BTreeSet<String>, span: &Span) {
+    let field: String = format!("{}", world.words.resolve(init.name));
+    if seen.contains(&field) { state.a_field_written_twice(name, &field, span); } else { seen.insert(field.to_owned()); }
+    let given = check_core_places_given(state, host, (init.value).as_ref(), &field, span);
+    let mut code_field = false;
+    for f in declared.iter() {
+        if f.name == field {
+            match &f.ty {
+                Ty::Fn { .. } => { code_field = true; },
+                _ => { },
+            }
+        }
+    }
+    if code_field { state.a_field_whose_code_is_not_seen(name, &field); }
+    let mut at: i64 = -1;
+    let mut i: i64 = 0;
+    while i < declared.len() as i64 {
+        if nikaia_std::index::get(&declared, (i) as usize).name == field {
+            at = i;
+            break;
+        }
+        i += 1;
+    }
+    if at < 0 {
+        state.no_such_field(name, &field, declared, span);
+        return;
+    }
+    let held = nikaia_std::index::get(&declared, nikaia_std::index::at(at));
+    state.field_is_reachable(name, &held, span);
+    let want: Ty = held.ty.clone();
+    let mut said: Span = span.clone();
+    if init.value.is_some() {
+        let v: &Expr = match init.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
+        said = check_span_at(world, v, span);
+    }
+    let pushed = state.findings.len() as i64;
+    let waiting = state.slots_waiting(span);
+    state.expect_type(world, &given, &want, span, "field", &|was, wanted| { format!("`{}.{}` holds `{}`, but you're giving it `{}`.", name, field, wanted, was) });
+    state.findings_moved(span, &said, pushed, &waiting);
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_core_index<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, expr: &Expr, base: &Expr, index: &Expr, span: &Span) -> Ty {
+    let writing = state.flow.writing_index;
+    state.flow.writing_index = false;
+    let first = host.expr(state, base, span);
+    let key = host.expr(state, index, span);
+    state.io_inside_a_door(world, &first, "this index", span);
+    let mut on: Ty = first.clone();
+    let through: Option<Ty> = state.seen_through(world, &first);
+    if through.is_some() {
+        let held: Ty = nikaia_std::index::or(through, || Ty::Unknown);
+        if held.unseen() != first.unseen() { on = held; }
+    }
+    let written_range = check_core_places_a_range(index);
+    match on {
+        Ty::Pointed { ref item, slice, mutable } => {
+            let item = nikaia_std::boxed::open(item);
+            if slice {
+                if written_range { return Ty::Pointed { item: Box::new(item.clone()), slice: true, mutable }; }
+                state.number_asked(world, index, &check_core_places_named("i64"), span, false);
+                state.facts.list_indices.insert(id_of(base) as i64);
+                return item.clone();
+            }
+            return Ty::Unknown;
+        },
+        _ => { },
+    }
+    let mut name: String = String::from("");
+    let mut args: Vec<Ty> = vec![];
+    match on {
+        Ty::Named { name: ref n, args: ref a, .. } => {
+            name = n.to_owned();
+            args = a.to_owned();
+        },
+        _ => { return Ty::Unknown; },
+    }
+    if state.opaque_handles.contains(&name) {
+        state.a_handle_has_nothing_inside(&name, "an index", span);
+        return Ty::Unknown;
+    }
+    let replays = match key {
+        Ty::Seq { shape, .. } => shape.replays,
+        _ => false,
+    };
+    let a_range = written_range || replays;
+    if a_range && !written_range { state.facts.slice_indices.insert(id_of(index) as i64); }
+    let b = check_core_places_base(&name);
+    if !a_range && check_core_places_a_list(&b) { state.number_asked(world, index, &check_core_places_named("i64"), span, false); }
+    if a_range {
+        if check_core_places_a_list(&b) && !args.is_empty() { return Ty::Named { name: "Array".to_owned(), args: vec![(*nikaia_std::index::get(&args, 0)).clone()], view: true }; }
+        if (b == "String" || b == "str") && args.is_empty() { return check_core_places_str_view(); }
+        if b == "Bytes" && args.is_empty() { return check_core_places_named("Bytes"); }
+        return Ty::Unknown;
+    }
+    if b == "Bytes" && args.is_empty() { return check_core_places_named("u8"); }
+    if check_core_places_a_list(&b) && !args.is_empty() {
+        state.facts.list_indices.insert(id_of(base) as i64);
+        return (*nikaia_std::index::get(&args, 0)).clone();
+    }
+    if (b == "HashMap" || b == "Map" || b == "BTreeMap") && args.len() == 2 {
+        state.flow.read_a_map = !writing;
+        state.a_map_key(world, nikaia_std::index::get(&args, 0), &key, index, writing, span);
+        let value: Ty = (*nikaia_std::index::get(&args, 1)).clone();
+        if !writing {
+            match value {
+                Ty::Nullable(ref held) => {
+                    let held = nikaia_std::boxed::open(held);
+                    state.facts.flat_reads.insert(id_of(expr) as i64);
+                    return Ty::Nullable(Box::new(held.clone()));
+                },
+                _ => { },
+            }
+        }
+        return Ty::Nullable(Box::new(value));
+    }
+    Ty::Unknown
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_core_cast<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, inner: &Expr, ty: &Type, span: &Span) -> Ty {
+    let from = host.expr(state, inner, span);
+    let into = host.declared(state, ty, span);
+    state.a_cast_over_a_lent_binding(world, inner, span);
+    match into {
+        Ty::Named { ref name, .. } => { if !check_core_places_offered(name) { state.cast_names_a_foreign_type(name, span); } },
+        _ => { },
+    }
+    state.record_cast(&from, &into, id_of(inner) as i64);
+    let from_a_char = match from {
+        Ty::Named { ref name, .. } => name == "char" || name == "scalar",
+        _ => false,
+    };
+    let into_an_integer = match into {
+        Ty::Named { ref name, .. } => check_core_places_an_integer(name),
+        _ => false,
+    };
+    if from_a_char && into_an_integer { state.facts.char_codes.insert(id_of(inner) as i64); }
+    into
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_core_range<H: CheckHost>(state: &mut CheckState, host: &H, start: &Expr, end: &Expr, span: &Span) -> Ty {
+    let from = host.expr(state, start, span);
+    let to = host.expr(state, end, span);
+    let mut item: Ty = from;
+    if item.is_unknown() { item = to; }
+    Ty::Seq { item: Box::new(item), is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: true, sized: true, replays: true } }
+}
+
+
 // --- check_core_stmt.nika ---
 
 fn check_core_stmt_unit() -> Ty { Ty::Tuple(vec![]) }
@@ -17750,6 +18250,7 @@ pub trait CheckHost {
     fn intern(&self, text: &str) -> winnow_grammar::Symbol;
     fn wrap_hole(&self, hole: &Expr, wraps: &[(i64, winnow_grammar::Symbol)]) -> Expr;
     fn literal_holes(&self, literal: &Expr) -> Vec<Expr>;
+    fn free_calls(&self, body: &Block) -> collections::BTreeSet<String>;
     fn evaluate(&self, value: &Expr, held: &collections::BTreeMap<String, BuildValue>) -> CheckBuilt;
     fn compute_comptime(&self, value: &Expr, found: &Ty, bound: &str, known: &collections::BTreeMap<String, BuildValue>, steps: Option<u64>, bytes: Option<u64>) -> CheckComputed;
     fn somewhere(&self) -> bool;
@@ -55546,6 +56047,10 @@ pub mod check_core_method {
 pub mod check_core_pilot {
     #[allow(unused_imports)]
     pub use super::{check_specialised, check_core_grammar_call, check_core_a_compound_write_to_a_map_slot, check_core_an_instantiation, check_core_a_mut_parameter_given_away};
+}
+pub mod check_core_places {
+    #[allow(unused_imports)]
+    pub use super::{check_core_field, check_core_struct_literal, check_core_with, check_core_index, check_core_cast, check_core_range};
 }
 pub mod check_core_stmt {
     #[allow(unused_imports)]
