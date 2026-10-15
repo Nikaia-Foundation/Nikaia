@@ -48,16 +48,16 @@ benches/brc/brc.sh 200000     # quicker
 
 ## The table
 
-Nikaia 0.0.926, rustc 1.97.0, Intel Xeon @ 2.80 GHz; callgrind, 1 000 000 rows,
+Nikaia 0.0.970, rustc 1.97.0, Intel Xeon @ 2.80 GHz; callgrind, 1 000 000 rows,
 per row:
 
 | | instructions | mispredictions | tokens |
 |---|---:|---:|---:|
-| Rust, `naive` | 860.3 | 8.60 | 486 |
-| **Nikaia**, `naive.nika` | **597.8** | **8.33** | **320** |
+| Rust, `naive` | 861.1 | 8.72 | 486 |
+| **Nikaia**, `naive.nika` | **597.9** | **8.32** | **320** |
 | Rust, `tuned` | 272.2 | 3.70 | 809 |
-| **Nikaia**, `examples/1brc.nika` | **300.1** | **1.61** | **618** |
-| Nikaia, overflow checks off | 298.1 | 1.58 | |
+| **Nikaia**, `examples/1brc.nika` | **300.2** | **1.58** | **618** |
+| Nikaia, overflow checks off | 298.2 | 1.58 | |
 
 The naive programs: Nikaia's is a third shorter and runs 30 % fewer
 instructions, from the same algorithm (below).

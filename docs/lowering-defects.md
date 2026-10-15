@@ -21,7 +21,7 @@ finds two D8 casts in `check_numbers4.nika`.
 | D3 | `set.insert(..)` as an arm value: `bool` against `()` | not reproduced (0.0.951: runs) | d03_insert_tail.nika |
 | D4 | a `for` over `Vec[Symbol]` yields `ref Symbol` | **built** (0.0.965: an element of a type that copies by declaration, the package's or a ledger `copies` one, binds the value) | `selfhosting_defects::a_loop_over_copies_binds_the_value` |
 | D5 | `(A, B)?` does not parse | **built** (0.0.913: refused, `NK1254`, naming a struct or `(A?, B?)`) | nullable.rs |
-| D6 | `HashSet`/`HashMap` fields lower to `TrustedSet`/`TrustedMap` | verified: the type follows each file's own trust analysis; decided in ADR-010 D9, build #581 | probe_hash.nika |
+| D6 | `HashSet`/`HashMap` fields lower to `TrustedSet`/`TrustedMap` | **built** (0.0.840-0.0.848, #581: one trust analysis per package, one Rust type per class, a `pub` type's maps are hidden parameters defaulting to `Keyed`; 0.0.970: a Rust adapter names them, the order of the files changes nothing) | `map_trust.rs` |
 | D7 | `x.len() as i64` writes `(x.len() as i64) as i64` | **built** (0.0.871: the cast is written once) | expressions.rs |
 | D8 | `get(x.span.start as i64)` lowers to `&x.span.start as i64` | **built** (0.0.871: `&(x as i64)`) | expressions.rs |
 | D9 | `Type?` parameter lowers to `Option<&Type>` | **closed**: not reproduced (0.0.965, by value and `ref`, `nikaia run`); D1 is built | `selfhosting_defects::an_optional_parameter_and_a_match_of_text_run` |
@@ -48,6 +48,7 @@ finds two D8 casts in `check_numbers4.nika`.
 | D40 | `fn take(s: String) { let mut t = s; t.push_str("!") }` lowered `s` as `&str` (rustc refuses `push_str`) | **built** (0.0.961: a `let mut` of a parameter keeps it, `keeps.nika`) | `a_parameter_moved_into_a_let_mut_stays_owned` |
 
 | D41 | `strip_prefix(prefix)` with an owned `prefix` declared outside a loop is `NK2105` (passed to a method that keeps it) | **built** (0.0.965: every text method's pattern is only read, `check_core_method_pattern_at`; `throws.nika` drops its `prefix.clone()`) | `selfhosting_defects::a_pattern_handed_to_strip_in_a_loop_is_only_read` |
+| D42 | a tools file whose function throws through `net`'s `io::IoError` without `use std::io` lowers to `Thrown<io::IoError>` with no `io` in scope (rustc E0433); a program has the prelude | open: write `use std::io` | `map_trust.rs` `HM_C` |
 ---
 
 ## D1. A by-value parameter that is only read lowers as `&T`, and `p with {..}` then writes `..p`
@@ -140,16 +141,12 @@ Built (0.0.913): the checker refuses it with `NK1254`, naming a struct and `Name
 1. The parser's message after `)` + `?` in a type: "`(A, B)?` is not written: name the pair with a `struct`" (Part I 2.3).
 2. A test of the message.
 
-## D6. `HashSet`/`HashMap` fields: the lowered type depends on where the file builds them
+## D6. `HashSet`/`HashMap` fields: the lowered type depends on where the file builds them: **built**
 
 ### Today
-In `tools`, a struct with `seen: collections::HashSet[String]` lowers to `collections::HashSet<String>` when nothing in the file builds one. Once the same file writes `collections::HashSet()`, the field lowers to `collections::TrustedSet<String>` (the provenance rule, ADR-010 D5). The Rust adapter that builds or reads the struct then needs a type it cannot predict. In a user program this is the intended rule.
-Workaround (the plan's): `BTreeSet`/`BTreeMap`.
+The tools package is lowered with one trust analysis over all its files (`sysroot.rs` `lower_tools_files`), and a map has one Rust type per class (ADR-010 D9, Part III 17.1). A `pub` struct of the tools that holds maps lowers with one hidden parameter per map, `__S0: nikaia_std::hash::Seed = nikaia_std::hash::Keyed`: a Rust adapter that writes `HmNames` gets the keyed map, one that writes `HmNames<nikaia_std::hash::Fast, nikaia_std::hash::Fast>` the fast one (`a_rust_adapter_names_a_tools_struct_with_and_without_its_hashers`). The files read in another order lower to the same sections (`the_real_tools_package_lowers_the_same_read_backwards`).
 
-**The mechanism, re-checked:** `tools` is lowered with each file's own trust analysis (`sysroot.rs` `lower_tools_at`). A method call on a value whose type another file declares is unresolved there and counts as untrusted, so that file writes `HashMap::new()` into a field its declaring file wrote as `TrustedMap` (rustc E0308). A project uses the entry file's analysis for all files.
-
-### To build
-Decided: [ADR-010](specification/adr/adr-010.md) D9, Part III 17.1. The build order and tests are #581.
+What is left is #581's step 11: a `HashSet` in the tools is the **keyed** one today wherever its class leaves its function (measured: `CheckComparable`'s `seen` as a `HashSet` costs 580,527 more instructions lowering `ty.nika` than as a `BTreeSet`, +0.10 %), so the tools keep `BTreeMap`/`BTreeSet` until the fill per class at use sites (#581) makes such a class fast.
 
 ## D7. `x.len() as i64` writes a doubled cast
 

@@ -354,8 +354,15 @@ pub fn lower_tools_at(dir: &Path, build: crate::emit::Build) -> Result<String> {
         .filter(|path| path.extension().is_some_and(|e| e == NIKA))
         .collect();
     paths.sort();
+    lower_tools_files(&paths, build)
+}
+
+/// **The tools package from these files, in this order** (#581 step 9): what
+/// a file lowers to depends on the package, never on where the file stands in
+/// the list; only the order of the sections follows it.
+pub fn lower_tools_files(paths: &[PathBuf], build: crate::emit::Build) -> Result<String> {
     let mut parsed: Vec<crate::parser::Parsed> = Vec::new();
-    for path in &paths {
+    for path in paths {
         let source =
             std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
         parsed.push(

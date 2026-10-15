@@ -335,7 +335,9 @@ const HM_B: &str = "use std::collections\n\n\
      \x20   let mut n = HmNames { seen: collections::HashSet(), ids: collections::HashMap() }\n\
      \x20   n.seen.insert(\"a\")\n\
      \x20   return n.seen.len()\n}\n";
-const HM_C: &str = "use std::net\n\nuse std::collections\n\n\
+// `use std::io`: a tools file names the module its thrown error is in
+// (D42 in `docs/lowering-defects.md`).
+const HM_C: &str = "use std::net\n\nuse std::io\n\nuse std::collections\n\n\
      pub fn hm_serve() -> i64 throws {\n\
      \x20   let mut c = net::connect(\"127.0.0.1:1\")\n\
      \x20   let b = c.read()\n\
@@ -692,4 +694,117 @@ fn a_helper_that_loops_over_its_map_and_hands_it_on_stays_one_class() {
         line_with(&rust, "fn total(").contains("TrustedMap"),
         "{rust}"
     );
+}
+
+// ---------------------------------------------------------------------------
+// **A Rust adapter names a tools type** (ADR-010 D9, #581 step 8): a `pub`
+// struct of the tools package that holds maps takes one hidden parameter per
+// map, each defaulting to `Keyed`. Rust that names none gets the safe map,
+// Rust that names `Fast` gets the fast one, and both compile whatever the
+// other files of the package do.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_rust_adapter_names_a_tools_struct_with_and_without_its_hashers() {
+    for (name, files) in [
+        (
+            "adapter-fast",
+            vec![("hm_a.nika", HM_A), ("hm_b.nika", HM_B)],
+        ),
+        (
+            "adapter-keyed",
+            vec![
+                ("hm_a.nika", HM_A),
+                ("hm_b.nika", HM_B),
+                ("hm_c.nika", HM_C),
+            ],
+        ),
+    ] {
+        let rust = tools_lowered(name, &files);
+        let header = rust
+            .lines()
+            .find(|l| l.contains("pub struct HmNames"))
+            .expect("`HmNames` is lowered");
+        assert!(header.contains("nikaia_std::hash::Keyed"), "{header}");
+        let adapter = format!(
+            "#![allow(warnings)]\n\
+             mod tools {{\n{}\n}}\n\
+             fn named(_: &tools::HmNames) {{}}\n\
+             fn fast(_: &tools::HmNames<nikaia_std::hash::Fast, nikaia_std::hash::Fast>) {{}}\n\
+             fn main() {{\n    println!(\"{{}}\", tools::hm_count());\n}}\n",
+            rust.replace("use winnow_grammar::grammar;", "")
+        );
+        let dir = common::scratch_dir(&format!("map-trust-{name}"));
+        compiles(&adapter, &dir);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// **Determinism** (#581 step 9): the order the files are read in changes
+// nothing in what the tools package lowers to.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn the_tools_package_lowers_the_same_whatever_the_file_order() {
+    let forward = tools_lowered(
+        "order-forward",
+        &[
+            ("hm_a.nika", HM_A),
+            ("hm_b.nika", HM_B),
+            ("hm_c.nika", HM_C),
+        ],
+    );
+    let reverse = tools_lowered_in_order(
+        "order-reverse",
+        &[
+            ("hm_c.nika", HM_C),
+            ("hm_b.nika", HM_B),
+            ("hm_a.nika", HM_A),
+        ],
+    );
+    assert_eq!(sections(&forward), sections(&reverse));
+}
+
+/// **The compiler's own tools package**, read backwards, lowers to the same
+/// sections.
+#[test]
+fn the_real_tools_package_lowers_the_same_read_backwards() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../nikaia-std/src/tools");
+    let mut paths: Vec<PathBuf> = std::fs::read_dir(&dir)
+        .expect("the tools")
+        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+        .filter(|path| path.extension().is_some_and(|e| e == "nika"))
+        .collect();
+    paths.sort();
+    let forward = nikaia::sysroot::lower_tools_files(&paths, Default::default()).expect("forward");
+    paths.reverse();
+    let backward =
+        nikaia::sysroot::lower_tools_files(&paths, Default::default()).expect("backward");
+    assert!(sections(&forward) == sections(&backward));
+}
+
+/// The tools package from these files, read in the order given.
+fn tools_lowered_in_order(name: &str, files: &[(&str, &str)]) -> String {
+    let dir = common::scratch_dir(&format!("map-trust-tools-{name}"));
+    let mut paths = Vec::new();
+    for (file, contents) in files {
+        std::fs::write(dir.join(file), contents).expect("write the file");
+        paths.push(dir.join(file));
+    }
+    let rust = nikaia::sysroot::lower_tools_files(&paths, Default::default()).expect("it lowers");
+    let _ = std::fs::remove_dir_all(&dir);
+    rust
+}
+
+/// The lowered package as its file sections, sorted: only their order may
+/// follow the order the files were read in.
+fn sections(rust: &str) -> Vec<String> {
+    let mut parts: Vec<String> = rust
+        .split("\n// --- ")
+        .flat_map(|part| part.split("\npub mod "))
+        .map(|part| part.trim_end().to_string())
+        .collect();
+    parts.sort();
+    parts
 }

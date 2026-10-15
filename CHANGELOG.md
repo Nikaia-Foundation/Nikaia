@@ -8,6 +8,21 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.970] — 2026-10-15
+
+**a Rust adapter names a tools map's hasher, and the tools lower the same in any file order (ADR-010 D9, #581 steps 8-10)**
+
+* `sysroot::lower_tools_files` lowers the tools package from a list of files in
+  the order given; `lower_tools_at` sorts and calls it. Read backwards, the
+  compiler's own tools lower to the same sections (`map_trust.rs`).
+* A Rust adapter names a tools `pub` struct with maps as `HmNames` (keyed) or
+  `HmNames<nikaia_std::hash::Fast, nikaia_std::hash::Fast>`; both compile.
+* Measured (callgrind): 1BRC 300.2 instructions and 1.58 mispredictions per
+  row, unchanged; a tools `BTreeSet` switched to `HashSet` lowers keyed and
+  costs +0.10 % lowering `ty.nika`, so the tools keep `BTreeSet`.
+* Lowering defect D42 recorded: a tools file throwing `io::IoError` needs
+  `use std::io`.
+
 ## [0.0.969] — 2026-10-15
 
 **A hand-over under a view is NK2305, a move into a local keeps the buffer, a pub type keeps a place per view field (ADR-353 D3, D6, D7, #614)**
