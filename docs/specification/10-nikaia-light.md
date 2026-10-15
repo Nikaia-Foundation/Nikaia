@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.966 (Draft)
+**Version:** 0.0.967 (Draft)
 **Date:** 2026-10-15
 
 ---
@@ -145,7 +145,7 @@ let mut y = 10
 y = 20     // This is allowed
 ```
 
-**Taking a tuple apart.** `let (a, b) = pair()` binds each name to the part at its position. The names may nest as the tuple does, `let (a, (b, c)) = (1, (2, 3))`: a `let` takes a name, `_`, or a parenthesised list of these, as deep as it is written. A written type on a tuple is refused (`NK1136`), because one type cannot say which name it is about. A variant is refused (`NK1259`): it may not be the one the value holds, and taking it apart is a `match`'s.
+**Taking a tuple apart.** `let (a, b) = pair()` binds each name to the part at its position. The names may nest as the tuple does, `let (a, (b, c)) = (1, (2, 3))`: a `let` takes a name, `_`, or a parenthesised list of these, as deep as it is written. A written type on a tuple is refused (`NK1136`), because one type cannot say which name it is about. A variant is refused (`NK1259`): it may not be the one the value holds, and taking it apart is a `match`'s. A **parameter** takes the same pattern, in a function, `fn dist((x, y): (f64, f64)) -> f64`, with the type of the whole after it, and in a lambda, `fn((name, v)) { … }`. It is still one parameter: callers, the function's type and its count of arguments see one tuple. `ref` or `mut` before it belong to the whole, so the parts are views or changeable. An option, which a call names, is never a pattern.
 
 **Reserved words**
 
@@ -1727,7 +1727,10 @@ none, so `fn { … }` is a lambda of no arguments. A body that uses `a`, `b` or
 A block lambda holds any number of statements. Its arguments are the ones it
 names.
 
-* **Syntax:** `fn(name) { ... }`, and `fn(first, second) { ... }` for more than one
+* **Syntax:** `fn(name) { ... }`, and `fn(first, second) { ... }` for more than one;
+  a parameter in brackets takes the one tuple it is handed apart,
+  `fn((name, v)) { ... }` (2.1, *Taking a tuple apart*). Two names are two
+  arguments, never the parts of one tuple (`NK1101`)
 * **Arguments:** as many as the list says; the list is the only thing that says so
 * **A lambda that names none takes none**, so `fn { ... }` is the zero-argument
   form, which is what `.or_insert_with fn { Stats(0) }` takes

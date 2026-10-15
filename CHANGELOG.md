@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.967] — 2026-10-15
+
+**A parameter may take a tuple apart, in a function and a lambda (#623)**
+- ADR-358: a positional parameter may be one irrefutable tuple pattern, `fn dist((x, y): (f64, f64))`, `fn((name, v))`; it stays one parameter; `ref`/`mut` belong to the whole; the ledger names the parts; a variant is `NK1259`; `NK1101`'s help writes `fn((a, b))`.
+
 ## [0.0.966] — 2026-10-15
 
 **A catch naming every error type is complete; kept code's set belongs to its storage (#625, #620)**
