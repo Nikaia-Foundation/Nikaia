@@ -352,15 +352,23 @@ fn a_list_field_carries_what_was_pushed() {
     );
 }
 
-/// **A name handed to a `mut` parameter may be changed there**: its set is
-/// not named here, so an exhaustive `catch` is refused.
+/// **A name handed to a `mut` parameter holds what the parameter's place
+/// holds** (ADR-351 D3): `grow` pushes `worse`, so the list carries both, a
+/// `catch` with an arm for each needs no `else`, and one arm is too few.
 #[test]
 fn a_mut_list_handed_to_a_mut_parameter() {
-    refused_without_else(
+    let grow = "fn grow(mut all: Vec[fn() throws]) {\n    all.push(worse)\n}\n";
+    accepted_exactly(
         &format!(
             "    let mut all: Vec[fn() throws] = [fail]\n    grow(all)\n    for run in all {{\n        run() {BOTH}\n    }}"
         ),
-        "fn grow(mut all: Vec[fn() throws]) {\n    all.push(worse)\n}\n",
+        grow,
+    );
+    refused_without_else(
+        &format!(
+            "    let mut all: Vec[fn() throws] = [fail]\n    grow(all)\n    for run in all {{\n        run() {ONLY_BAD}\n    }}"
+        ),
+        grow,
     );
 }
 
@@ -374,6 +382,27 @@ fn a_caller_replaces_from_with_what_it_passed() {
     let source = format!("{JOB}{WORSE}{now}fn main() {{\n    now(fail) {ONLY_BAD}\n}}\n");
     assert!(codes(&source).is_empty(), "{:?}", findings(&source));
     refused_without_else(&format!("    now(worse) {ONLY_BAD}"), now);
+}
+
+const FORWARD: &str = "pub fn now(f: fn() throws) throws {\n    f()\n}\n\
+                       pub fn twice(g: fn() throws) throws {\n    now(g)\n}\n";
+
+/// **A parameter of code handed on chains** (ADR-351 D4): `now`'s `from(f)`
+/// is, inside `twice`, `twice`'s `from(g)`, so `twice(fail)` fails with
+/// `Bad` alone and handing it `worse` makes the one arm too few.
+#[test]
+fn a_parameter_handed_on_chains_from() {
+    accepted_exactly(&format!("    twice(fail) {ONLY_BAD}"), FORWARD);
+    refused_without_else(&format!("    twice(worse) {ONLY_BAD}"), FORWARD);
+    let parsed = parse_to_ast(&format!("{FORWARD}fn main() {{\n}}\n")).expect("the source parses");
+    let text = Ledger::infer(&parsed).render();
+    assert!(text.contains("throws = [\"from(g)\"]"), "{text}");
+    assert!(
+        !text
+            .lines()
+            .any(|l| l.starts_with("throws") && l.contains("\"?\"")),
+        "{text}"
+    );
 }
 
 /// **The ledger writes `from(p)` and reads it back as itself** (ADR-351 D4,

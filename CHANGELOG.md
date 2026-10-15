@@ -8,6 +8,14 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.971] — 2026-10-15
+
+**a parameter of code called in a throws function hands its failure on; from(p) chains through a parameter handed on and a mut parameter's place (ADR-351 D3, D4, part of #620)**
+- A call of a parameter of code inside a `throws` function hands its failure on (`f()?`); before, the failure was dropped.
+- A `catch` over `now(fail)` is told (NK2402) what `fail` gained since the committed ledger, although `now` still says `from(f)`.
+- A parameter of code handed on (`now(g)` inside `twice(g)`) is `twice`'s `from(g)`, not `"?"`; a `catch` over `twice(fail)` needs no `else`.
+- A `let mut` name of code handed to a `mut` parameter of this package's own function holds what that parameter's place holds, not `"?"`.
+
 ## [0.0.970] — 2026-10-15
 
 **a Rust adapter names a tools map's hasher, and the tools lower the same in any file order (ADR-010 D9, #581 steps 8-10)**

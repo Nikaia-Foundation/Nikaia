@@ -61,6 +61,12 @@ pub fn stored_reaches(field: ref String, resolved: ref collections::BTreeSet[Str
         reaches.callees.insert(to.clone())
     }
     for to in free {
+        // `@F::p` is a parameter of code handed on (ADR-351 D4): code this
+        // walk does not see.
+        if to.starts_with("@") {
+            reaches.itself = reaches.itself.or(Lock::Undecided)
+            continue
+        }
         reaches.callees.insert(to.clone())
     }
     graph.insert(f"{FIELD}{field}", reaches)

@@ -138,7 +138,10 @@ pub fn stored_throws(field: ref String, resolved: ref collections::BTreeSet[Stri
         named.insert(UNNAMED.clone())
     }
     for callee in free {
-        if own.functions.contains_key(callee) {
+        // **A parameter of code handed on** (ADR-351 D4): the place it is.
+        if callee.starts_with("@") {
+            called.insert((callee.strip_prefix("@") ?? "").clone())
+        } else if own.functions.contains_key(callee) {
             called.insert(callee.clone())
         } else if library.functions.contains_key(callee) {
             for error in fails_with_of(library, callee) {
@@ -292,8 +295,29 @@ pub fn error_sets(direct: ref collections::BTreeMap[String, collections::BTreeSe
         if contract.fails_with.len() == 0 {
             continue
         }
-        let mut errors: Vec[String] = []
+        // **Code a caller handed on reaches this function through its own
+        // parameter** (ADR-351 D4): `from(G::q)` that arrived in the place
+        // `F::p` is, for `F`'s callers, what they hand `p`: `from(F::p)`.
+        let own_prefix = f"from({name}::"
+        let mut mapped: collections::BTreeSet[String] = collections::BTreeSet()
         for error in set {
+            if !throws_given(error) || error.starts_with(own_prefix) {
+                mapped.insert(error.clone())
+                continue
+            }
+            let mut through: String = error.clone()
+            for callee in (calls[name]?.clone() ?? collections::BTreeSet()) {
+                if places.contains(callee) && callee.starts_with(f"{name}::") {
+                    let held = sets[callee]?.clone() ?? collections::BTreeSet()
+                    if held.contains(error) {
+                        through = f"from({callee})"
+                    }
+                }
+            }
+            mapped.insert(through)
+        }
+        let mut errors: Vec[String] = []
+        for error in mapped {
             errors.push(error.clone())
         }
         if errors.len() == 0 {

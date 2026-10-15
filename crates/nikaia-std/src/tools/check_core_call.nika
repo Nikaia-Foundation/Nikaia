@@ -202,15 +202,41 @@ fn check_core_call_kept[H: CheckHost](mut state: CheckState, world: ref CheckWor
 }
 
 // The arguments handed to `mut` parameters, whose code may change there.
-fn check_core_call_mut_args(mut state: CheckState, world: ref CheckWorld, callee: ref FnContract?, args: ref Vec[Expr]) sync {
+// `seen` is the callee's key where this package declares it: what it gives
+// the parameter is then that parameter's place, `@seen::param` (ADR-351 D3).
+fn check_core_call_mut_args(mut state: CheckState, world: ref CheckWorld, callee: ref FnContract?, seen: ref String, args: ref Vec[Expr]) sync {
     let contract: ref FnContract = callee ?? return
     let signature: ref Signature = contract.signature ?? return
     let mut i = -1
     for (param, _) in signature.params {
         i += 1
         if i < args.len() as i64 && signature.mutable.contains(param) {
-            check_core_method_code_lent(state, world, args[i])
+            if seen.len() > 0 {
+                check_core_call_mut_place(state, world, args[i], f"@{seen}::{param}")
+            } else {
+                check_core_method_code_lent(state, world, args[i])
+            }
         }
+    }
+}
+
+// A `let mut` name of code handed to a `mut` parameter of this package's own
+// function: it holds afterwards what the parameter's place holds.
+fn check_core_call_mut_place(mut state: CheckState, world: ref CheckWorld, arg: ref Expr, place: ref String) sync {
+    match arg {
+        Expr::Variable(bound, _) => {
+            let named: String = f"{world.words.resolve(bound)}"
+            let local: CheckLocal = state.binding(named) ?? return
+            if !local.written_mut || !check_core_stmt_holds_code(local.ty) {
+                return
+            }
+            let current: String = state.current?.clone() ?? return
+            let key = f"{current}::{named}"
+            let mut entry: CheckStoredCode = state.stored_code.remove(key) ?? CheckStoredCode::empty()
+            entry.free.insert(place.clone())
+            state.stored_code.insert(key, entry)
+        },
+        else => {},
     }
 }
 
@@ -299,9 +325,68 @@ fn check_core_call_from_given[H: CheckHost](state: ref CheckState, world: ref Ch
     return given
 }
 
+/// **A passed function that gained an error widens the call** (ADR-351 D4
+/// with ADR-308 D3): `now(fail)` fails with what `fail` fails with, so a
+/// `catch` over it receives what `fail` gained since the committed ledger,
+/// although `now`'s own entry still says `from(f)`.
+fn check_core_call_from_newly[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, contract: ref FnContract, args: ref Vec[Expr], span: ref Span) sync {
+    if state.flow.guarded == null {
+        return
+    }
+    let mut params: Vec[String] = []
+    if contract.signature != null {
+        let signature: ref Signature = contract.signature ?? return
+        for (param, _) in signature.params {
+            params.push(param.clone())
+        }
+    }
+    for error in contract.fails_with {
+        if !throws_given(error) {
+            continue
+        }
+        let inner: String = (error.strip_prefix("from(") ?? "").clone()
+        let param: String = (inner.strip_suffix(")") ?? "").clone()
+        let mut at = -1
+        let mut i = 0
+        for each in params {
+            if each == param && at < 0 {
+                at = i
+            }
+            i += 1
+        }
+        if at < 0 || at >= args.len() as i64 {
+            continue
+        }
+        let mut stored = CheckStoredCode::empty()
+        check_core_places_code_into(state, world, host, args[at], stored)
+        let mut names: Vec[String] = []
+        for name in stored.free {
+            names.push(name.clone())
+        }
+        for name in stored.resolved {
+            names.push(name.clone())
+        }
+        for name in names {
+            if world.newly_throws.contains_key(name) {
+                let list = world.newly_throws.get(name) ?? return
+                state.newly_reaches_a_handler(name, list, span)
+            }
+        }
+    }
+}
+
 // What the function `name` fails with, by this package's ledger or a
 // library's, into `set` (as the inference reads `free`).
 fn check_core_call_set_into(world: ref CheckWorld, name: ref String, mut set: collections::BTreeSet[String]) {
+    // A parameter of code handed on: what its place settled to.
+    if name.starts_with("@") {
+        let place: String = (name.strip_prefix("@") ?? "").clone()
+        let settled = world.own.code_throws[place] ?? return
+        for error in settled {
+            set.insert(error.clone())
+        }
+        return
+    }
     if world.own.functions.contains_key(name) {
         let own = world.own.functions[name] ?? return
         for error in own.fails_with {
@@ -410,6 +495,11 @@ fn check_core_call_unresolved[H: CheckHost](mut state: CheckState, world: ref Ch
                 if can_throw && state.current != null {
                     check_core_args_a_field_called(state, current, key)
                 }
+                // **And the failure leaves through it** (Part I 7.1): the
+                // emitter writes the `?` the call owes.
+                if can_throw {
+                    state.facts.run_code_fails.insert(id_of(func) as i64)
+                }
                 if can_throw && world.own.code_throws.contains_key(key) {
                     let set = world.own.code_throws[key] ?? return Ty::Unknown
                     let mut contract = FnContract::empty()
@@ -436,6 +526,7 @@ fn check_core_call_described[H: CheckHost](mut state: CheckState, world: ref Che
     // **A caller replaces `from(p)` with what it passed** (ADR-351 D4).
     let given = check_core_call_from_given(state, world, host, contract, args)
     state.may_fail_here(world, host, key, given, span)
+    check_core_call_from_newly(state, world, host, contract, args, span)
     state.a_call_that_may_pause(name, !contract.sync_claim.is_sync(), contract.sync_claim.is_unpromised(), span)
     state.a_pausing_call_in_an_action(name, contract, span)
     // `Stats(first)` is the anonymous constructor, which hands back the type
@@ -563,7 +654,11 @@ fn check_core_call_named_call[H: CheckHost](mut state: CheckState, world: ref Ch
     let found = check_core_arguments_given(state, world, host, args, expected, declared_here, callee, span)
     // **A name of code handed to a `mut` parameter may be changed there**
     // (ADR-351 D3): what it holds afterwards is not seen here.
-    check_core_call_mut_args(state, world, callee, args)
+    let mut seen_key: String = "".clone()
+    if declared_here && !key.contains("::") {
+        seen_key = key.clone()
+    }
+    check_core_call_mut_args(state, world, callee, seen_key, args)
     if feeds {
         let frame: CheckStoredCode = state.stored_frames.pop() ?? CheckStoredCode::empty()
         let contract: FnContract = callee?.clone() ?? FnContract::empty()

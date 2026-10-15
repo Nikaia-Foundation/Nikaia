@@ -53,6 +53,35 @@ fn findings(source: &str, newly: &[(&str, &[&str])]) -> Vec<Finding> {
     .findings
 }
 
+/// **A function handed on widens the call it was handed to** (ADR-351 D4):
+/// `now` still says `from(f)`, but `now(fail)` fails with what `fail` fails
+/// with, so a `catch` over it is told what `fail` gained.
+#[test]
+fn a_passed_function_that_gained_an_error_is_named() {
+    let source = "enum Bad { Oops }\n\
+                  impl Error for Bad {\n\
+                  \x20   fn message(ref self) -> String { \"oops\" }\n\
+                  }\n\
+                  fn fail() throws {\n\
+                  \x20   throw Bad::Oops\n\
+                  }\n\
+                  pub fn now(f: fn() throws) throws {\n\
+                  \x20   f()\n\
+                  }\n\
+                  fn main() {\n\
+                  \x20   now(fail) catch { println(\"caught\") }\n\
+                  }\n";
+    let found = findings(source, &[("fail", &["Bad"])]);
+    let note = found
+        .iter()
+        .find(|f| f.code == "NK2402")
+        .unwrap_or_else(|| panic!("{found:#?}"));
+    assert_eq!(
+        note.message,
+        "This `catch` now also receives `Bad` from `fail`."
+    );
+}
+
 const HANDLED: &str = "use std::io\n\n\
                        fn reads() -> String throws {\n\
                        \x20   return io::read_to_string()\n\

@@ -79,7 +79,7 @@ fn the_library_publishes_from_its_parameter() {
 
 /// **D4, run**: the caller's `catch` takes what it passed, by name.
 #[test]
-#[ignore = "a named function handed to a `fn() throws` parameter lowers in its own channel, not the box (#620)"]
+#[ignore = "waits for ADR-351 D8: the set as a type parameter of `now` (#620)"]
 fn a_catch_over_a_library_call_takes_what_was_passed() {
     let dir = the_two("from-across");
     let run = nikaia(&dir.join("app"), &["run"]);
@@ -89,4 +89,29 @@ fn a_catch_over_a_library_call_takes_what_was_passed() {
     assert_eq!(stdout, "caught oops\n", "{stderr}");
     let ledger = std::fs::read_to_string(dir.join("lib/nikaia.contracts")).expect("the ledger");
     assert!(ledger.contains("throws = [\"from(f)\"]"), "{ledger}");
+}
+
+/// **The same in one package, run** (ADR-351 D4): `fail` fails in its own
+/// channel and is handed into the box the parameter's type is, and the call of
+/// `f` inside `now` hands the failure on rather than dropping it.
+#[test]
+#[ignore = "waits for ADR-351 D8: the set as a type parameter of `now` (#620)"]
+fn a_named_function_handed_to_a_parameter_fails_through_it() {
+    let dir = common::scratch_dir("from-same");
+    std::fs::create_dir_all(dir.join("src")).expect("the package");
+    std::fs::write(
+        dir.join("nikaia.toml"),
+        "[package]\nname = \"one\"\nversion = \"0.1.0\"\n",
+    )
+    .expect("a manifest");
+    let source = APP.replace(
+        "use lib\n",
+        "pub fn now(f: fn() throws) throws {\n    f()\n}\n",
+    );
+    std::fs::write(dir.join("src/main.nika"), source.replace("lib::now", "now")).expect("a source");
+    let run = nikaia(&dir, &["run"]);
+    let stdout = String::from_utf8_lossy(&run.stdout);
+    let stderr = String::from_utf8_lossy(&run.stderr);
+    assert!(run.status.success(), "{stdout}{stderr}");
+    assert_eq!(stdout, "caught oops\n", "{stderr}");
 }

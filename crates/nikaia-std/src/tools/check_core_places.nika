@@ -365,6 +365,11 @@ pub fn check_core_places_code_into[H: CheckHost](state: ref CheckState, world: r
                     for free in entry.free {
                         stored.free.insert(free.clone())
                     }
+                } else if check_core_call_a_param_of(world, current, written) {
+                    // **A parameter of code handed on is that parameter's
+                    // place** (ADR-351 D4): `@F::p`, so `g(f)` chains `g`'s
+                    // `from(q)` to `F`'s `from(f)`.
+                    stored.free.insert(f"@{key}")
                 } else {
                     stored.unresolved = true
                 }

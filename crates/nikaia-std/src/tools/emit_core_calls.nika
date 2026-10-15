@@ -378,7 +378,8 @@ impl EmitState {
         // callee's contract must **say** it can fail. A lambda's body is emitted
         // with `Flow::PLAIN`, so a fallible call inside one never takes a `?` from
         // the function around it.
-        if flow.can_throw && !flow.caught && call_can_fail(world.words, self.own_contracts, world.library, self.described, func) {
+        let code_fails = self.facts.run_code_fails.contains(node_key(func))
+        if flow.can_throw && !flow.caught && (code_fails || call_can_fail(world.words, self.own_contracts, world.library, self.described, func)) {
             out.push("?")
         }
     }
