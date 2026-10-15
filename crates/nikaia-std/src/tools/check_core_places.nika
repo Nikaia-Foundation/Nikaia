@@ -67,15 +67,9 @@ fn check_core_places_position(field: ref String) -> i64 {
     return text::parse_i64(field) ?? -1
 }
 
-/// What a parameter is bound to, or `?`. A loop, not `bound.get(p)?.clone()`,
-/// which lowers to a clone of the reference (`docs/lowering-defects.md`).
+/// What a parameter is bound to, or `?`.
 fn check_core_places_bound(bound: ref collections::BTreeMap[String, Ty], p: ref String) -> Ty {
-    for (name, ty) in bound {
-        if name == p {
-            return ty.clone()
-        }
-    }
-    return Ty::Unknown
+    return bound.get(p)?.clone() ?? Ty::Unknown
 }
 
 /// **`field.default`, its default as a `T?`** (ADR-331 D5): `?` outside an

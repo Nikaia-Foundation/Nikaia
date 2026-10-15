@@ -392,8 +392,7 @@ pub fn a_copied_part(ty: ref Ty, copies: ref collections::BTreeSet[String]) -> b
 
 fn a_copied_scalar(name: ref String) -> bool {
     return match name {
-        "i32" => true, "i64" => true, "u8" => true, "u32" => true, "u64" => true,
-        "f64" => true, "bool" => true, "char" => true, "scalar" => true,
+        "i32" | "i64" | "u8" | "u32" | "u64" | "f64" | "bool" | "char" | "scalar" => true,
         else => false,
     }
 }

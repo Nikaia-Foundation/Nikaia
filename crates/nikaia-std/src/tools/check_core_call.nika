@@ -105,16 +105,11 @@ fn check_core_call_variant(state: ref CheckState, name: ref String) -> String? {
     }
     let parts: Vec[ref String] = name.split("::").collect()
     let ty: String = f"{parts[0]}"
-    let rest = check_core_call_after(name, f"{ty}::")
+    let rest = (name.strip_prefix(f"{ty}::") ?? "").clone()
     if state.is_variant(ty, rest) {
         return ty
     }
     return null
-}
-
-/// What follows `prefix` in `name`, or empty.
-fn check_core_call_after(name: ref String, prefix: ref String) -> String {
-    return (name.strip_prefix(prefix) ?? "").clone()
 }
 
 /// What comes before the last `::`, or the whole name.

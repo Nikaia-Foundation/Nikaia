@@ -455,7 +455,7 @@ pub fn check_core_an_assert[H: CheckHost](mut state: CheckState, world: ref Chec
     let mut right: String? = null
     match condition {
         Expr::Binary { op, lhs, rhs, .. } => {
-            if op == BinaryOp::Eq || op == BinaryOp::Ne || op == BinaryOp::Lt || op == BinaryOp::Le || op == BinaryOp::Gt || op == BinaryOp::Ge {
+            if check_core_ops_equality(op) || check_core_ops_ordering(op) {
                 left = check_core_shown_operand(world, lhs)
                 right = check_core_shown_operand(world, rhs)
             }

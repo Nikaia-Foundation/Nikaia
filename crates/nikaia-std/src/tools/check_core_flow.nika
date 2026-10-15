@@ -94,15 +94,9 @@ fn check_core_flow_root(value: ref Expr) -> ref Expr sync {
     }
 }
 
-/// The type a name is bound to in `parts`, where it is bound. A loop, not
-/// `parts.get(name)?.clone()` (`docs/lowering-defects.md` D36).
+/// The type a name is bound to in `parts`, where it is bound.
 fn check_core_flow_part(parts: ref collections::BTreeMap[String, Ty], wanted: ref String) -> Ty? {
-    for (name, ty) in parts {
-        if name == wanted {
-            return ty.clone()
-        }
-    }
-    return null
+    return parts.get(wanted)?.clone()
 }
 
 /// Whether a block hands nothing on: it exits or jumps.

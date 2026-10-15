@@ -1506,3 +1506,112 @@ fn main() {
     );
     assert_eq!(said.trim(), "f true");
 }
+
+/// `get(k)?.clone() ?? d` over a `BTreeMap` of a struct and a `HashMap` of
+/// text clones the value, not the reference (lowering-defects D2, D36).
+#[test]
+fn a_cloned_get_over_either_map_gives_the_value() {
+    let said = printed(
+        "get-clone-either-map",
+        r#"
+use std::collections
+
+struct Ty { name: String }
+
+fn lookup(m: ref collections::BTreeMap[String, Ty], k: ref String) -> Ty sync {
+    return m.get(k)?.clone() ?? Ty { name: "unknown" }
+}
+
+fn lookup_h(m: ref collections::HashMap[String, String], k: ref String) -> String sync {
+    return m.get(k)?.clone() ?? "none"
+}
+
+fn main() {
+    let mut m: collections::BTreeMap[String, Ty] = collections::BTreeMap()
+    m["a"] = Ty { name: "A" }
+    let mut h: collections::HashMap[String, String] = collections::HashMap()
+    h["x"] = "X"
+    println(f"{lookup(m, "a").name} {lookup(m, "b").name} {lookup_h(h, "x")} {lookup_h(h, "y")}")
+}
+"#,
+    );
+    assert_eq!(said.trim(), "A unknown X none");
+}
+
+/// A loop over a `ref Vec[T]` of a type that copies by declaration binds
+/// the value, as a loop over numbers does (lowering-defects D4).
+#[test]
+fn a_loop_over_copies_binds_the_value() {
+    let said = printed(
+        "loop-over-copies",
+        r#"
+use std::collections
+
+struct P { x: i64, y: i64 }
+
+fn count(points: ref Vec[P]) -> i64 sync {
+    let mut m: collections::BTreeMap[i64, P] = collections::BTreeMap()
+    let mut at = 0
+    for p in points {
+        m[at] = p
+        at += 1
+    }
+    return m.len()
+}
+
+fn main() {
+    let points: Vec[P] = [P { x: 1, y: 2 }, P { x: 3, y: 4 }]
+    println(f"{count(points)} {points[1].y}")
+}
+"#,
+    );
+    assert_eq!(said.trim(), "2 4");
+}
+
+/// A `T?` parameter, by value and as a view, and a `match` of text literals
+/// over a `ref String`, also in a guard (lowering-defects D9, D19: not
+/// reproduced; kept as the path that runs).
+#[test]
+fn an_optional_parameter_and_a_match_of_text_run() {
+    let said = printed(
+        "optional-param-text-match",
+        r#"
+struct Ty { name: String }
+
+fn show(t: Ty?) -> String sync {
+    let v = t ?? return "none".clone()
+    return v.name.clone()
+}
+
+fn show_r(t: ref Ty?) -> String sync {
+    let v = t ?? return "none".clone()
+    return v.name.clone()
+}
+
+fn kind(name: ref String) -> String sync {
+    let k = match name {
+        "i32" | "i64" => "int",
+        "f64" => "float",
+        else => "other",
+    }
+    return k.clone()
+}
+
+fn guarded(name: ref String, n: i64) -> String sync {
+    let r = match n {
+        _x if (match name { "i32" | "i64" => true, else => false }) => "int",
+        else => "no",
+    }
+    return r.clone()
+}
+
+fn main() {
+    let x: Ty? = Ty { name: "b" }
+    let s: String = "i64"
+    let u: String = "u8"
+    println(f"{show(Ty { name: "a" })} {show(null)} {show_r(x)} {kind(s)} {kind(u)} {guarded(s, 1)}")
+}
+"#,
+    );
+    assert_eq!(said.trim(), "a none b int other int");
+}

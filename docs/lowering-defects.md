@@ -17,14 +17,14 @@ finds two D8 casts in `check_numbers4.nika`.
 | # | Defect | Status | Probe |
 | :--- | :--- | :--- | :--- |
 | D1 | by-value read-only parameter lowers as `&T`; `p with {..}` writes `..p` | **built** (0.0.951: a `with` keeps its base, so the parameter stays a value) | d01_with_param.nika, probe_tools.nika |
-| D2 | `m.get(k)?.clone() ?? d` clones a reference | verified | d02_get_clone.nika |
+| D2 | `m.get(k)?.clone() ?? d` clones a reference | **built** (a duplicate of D36; 0.0.965: re-checked over a `BTreeMap` of a struct and a `HashMap` of text) | `selfhosting_defects::a_cloned_get_over_either_map_gives_the_value` |
 | D3 | `set.insert(..)` as an arm value: `bool` against `()` | not reproduced (0.0.951: runs) | d03_insert_tail.nika |
-| D4 | a `for` over `Vec[Symbol]` yields `ref Symbol` | verified (as a checker type) | probe_symkey.nika |
+| D4 | a `for` over `Vec[Symbol]` yields `ref Symbol` | **built** (0.0.965: an element of a type that copies by declaration, the package's or a ledger `copies` one, binds the value) | `selfhosting_defects::a_loop_over_copies_binds_the_value` |
 | D5 | `(A, B)?` does not parse | **built** (0.0.913: refused, `NK1254`, naming a struct or `(A?, B?)`) | nullable.rs |
 | D6 | `HashSet`/`HashMap` fields lower to `TrustedSet`/`TrustedMap` | verified: the type follows each file's own trust analysis; decided in ADR-010 D9, build #581 | probe_hash.nika |
 | D7 | `x.len() as i64` writes `(x.len() as i64) as i64` | **built** (0.0.871: the cast is written once) | expressions.rs |
 | D8 | `get(x.span.start as i64)` lowers to `&x.span.start as i64` | **built** (0.0.871: `&(x as i64)`) | expressions.rs |
-| D9 | `Type?` parameter lowers to `Option<&Type>` | not reproduced as named; same root cause as D1 (`&Option<T>`) | d09_opt_param.nika, probe_tools.nika |
+| D9 | `Type?` parameter lowers to `Option<&Type>` | **closed**: not reproduced (0.0.965, by value and `ref`, `nikaia run`); D1 is built | `selfhosting_defects::an_optional_parameter_and_a_match_of_text_run` |
 | D10 | `x ?? 0` on `Integer?` lowers to a plain integer | **built** (0.0.961: refused, `NK1103`; the fallback is of the left side's type, Part I 3.5) | probe_tools.nika |
 | D11 | typed `throw` in a trait impl of a `throws` method is not boxed | **built** (0.0.951: raised into the box the signature declares) | d11_typed_throw.nika |
 | D11b | a thrown `struct` without `impl Error` is not refused | **built** (0.0.961: `NK1161`, asked of the package's ledger, so an `impl` in another file counts) | d11b_free_throw.nika |
@@ -35,7 +35,7 @@ finds two D8 casts in `check_numbers4.nika`.
 | D16 | `if match x {..} =>` in a guard does not parse; `if (match ..)` does | **built** (0.0.951: by design, ADR-301 D4; the refusal names the parentheses) | (rs2nika R14 writes the parentheses) |
 | D17 | `s.starts_with(['a', 'b'])` passes the checker, lowers to `starts_with(vec![..])` (E0277) | **built** (0.0.887: refused, `NK1102`, #586) | nullable.rs |
 | D18 | a two-parameter lambda over a list of tuples, `filter fn(name, ty) {..}`, lowers to `\|name, ty\|` (E0593) | **built** (0.0.961: refused, `NK1101`, help `fn(pair) { let (name, ty) = pair }`; whether it should destructure is #623) | `draft_a_root_is_one_of_two` |
-| D19 | `match name { "i32" \| "i64" => .. }` with `name: ref String` lowers to `matches!(name, "i32" \| ..)` on `&String` (E0308) | not reproduced in a user program (0.0.887, `nikaia run`) | `draft_a_copied_part` |
+| D19 | `match name { "i32" \| "i64" => .. }` with `name: ref String` lowers to `matches!(name, "i32" \| ..)` on `&String` (E0308) | **closed**: not reproduced (0.0.965: a `let`, a `return` and a guard; `a_copied_scalar` in `tools` now uses the or-pattern) | `selfhosting_defects::an_optional_parameter_and_a_match_of_text_run` |
 | D20 | `x ?? s.len()` / `x ?? (0 - 1)` lowered to `|| s.len() as i64.into()` / `0 - 1.into()` | **built** (0.0.874) | expressions.rs |
 | D21 | `a ?? 0 - 1` read as `a ?? 0` and a statement `-1` | **built** (0.0.874: refused, ADR-279 D1) | coalesce_fallback.rs |
 | D22 | `cli::args().nth(at)` with `at: i64` lowered to Rust's `usize` `nth` (E0308) | **built** (0.0.875: `cli::Args`) | cli.rs |
@@ -71,6 +71,8 @@ Workaround (verified): `return Flow { a: !f.a, b: f.b }`.
 3. Remove the `self`-method workaround the emit modules took for it, if any is only that.
 
 ## D2. `m.get(k)?.clone() ?? d` on a map clones a reference
+
+**Built** as D36 (a duplicate). Re-checked in 0.0.965 over a `BTreeMap` of a struct and a `HashMap` of `String`; the D36 loops in `check_core_flow.nika` and `check_core_places.nika` are gone.
 
 ### Found
 By the check self-hosting session (b3bb1c9), and again by the rs2nika draft of `pattern_type` (2026-10-11).
@@ -109,6 +111,8 @@ Workaround (verified): `0 => { let _added = seen.insert("zero") },`.
 2. The emitter writes `;` after an arm's or branch's value when the `match`/`if` is a statement, or wraps it in `{ ..; }`.
 
 ## D4. A `for` over a `Vec[Symbol]` binds `ref Symbol`, which is not a `Symbol`
+
+**Built (0.0.965).** A loop variable lent an element of a type that copies by declaration (the package's own that derives `Copy`, or a described type whose ledger says `copies`) binds the value: the checker asks `a_view_that_copies` (`check_core_stmt.nika`), and the lowering reads it once where the body opens (`let n = *n;`), as for a view of a number.
 
 ### Today
 ```nika
@@ -171,6 +175,8 @@ Built in 0.0.871: a cast written after a `&` is bracketed; test `a_borrowed_cast
 2. A test with a `u32` field cast to an `i64` key, through `get` and `[]`.
 
 ## D9. `Type?` parameter: not reproduced as named
+
+**Closed (0.0.965):** not reproduced again, by value and as `ref Ty?`, in a user program; D1 is built.
 
 ### Today
 In a user program, `t: Ty?` lowers to `Option<Ty>` and runs, and `t: ref Ty?` lowers to `Option<&Ty>` (correct). In `tools`, a read-only `t: Ty?` lowers to `&Option<Ty>`, which is D1's rule, and compiles. If a commit met `Option<&Type>` against an owned slot, it was D1.
@@ -273,6 +279,7 @@ Found by running rs2nika's drafts of unmoved `check/mod.rs` functions through
   form should take the tuple apart is a language question: #623 (`decision`).
 * D19: a `match` of string literals over `name: ref String` (in a guard or a
   `matches!`) lowers without `.as_str()` (E0308).
+* D19 **closed (0.0.965)**: not reproduced in a `let`, a `return` or a guard; the test is `selfhosting_defects::an_optional_parameter_and_a_match_of_text_run`.
 **To build:** each a test through `nikaia run`, and the lowering fix named above,
 or a checker refusal that names the spelling that works.
 

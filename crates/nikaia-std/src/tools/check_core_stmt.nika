@@ -888,7 +888,11 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
         if copied {
             state.facts.copied_loop_bindings.insert((span.start as i64, name.clone()))
         }
-        let a_view = lent && name != "_" && !copied && element.is_a_view()
+        // **An element of a type that copies by declaration is the value**
+        // (lowering-defects D4): a type of the package that derives `Copy`, or
+        // a described one whose ledger says `copies`, as a number is above.
+        let declared_copy = lent && name != "_" && !copied && !element.is_a_view() && state.a_view_that_copies(world, view_of_type(element))
+        let a_view = declared_copy || (lent && name != "_" && !copied && element.is_a_view())
         if a_view {
             state.facts.copied_view_bindings.insert((span.start as i64, name.clone()))
         }
@@ -898,7 +902,7 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
             else => false,
         }
         let mut bound = element.clone()
-        if lent && !copied && named {
+        if lent && !copied && !declared_copy && named {
             bound = view_of_type(element)
         }
         let id = state.a_new_binding()

@@ -8,6 +8,14 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.965] — 2026-10-14
+
+**Lowering defects D2, D4, D9, D19; four tools workarounds removed**
+
+* A `for` over a `ref Vec[T]` whose `T` copies by declaration (the package's own `Copy` type, or a described one whose ledger says `copies`, such as `Symbol`) binds the value, as one over numbers does (D4).
+* D2 is D36, built; D9 and D19 are not reproduced and closed. Tests in `selfhosting_defects.rs`.
+* `tools/*.nika`: the D36 loops (`check_core_places_bound`, `check_core_flow_part`), the D38 helper `check_core_call_after`, the D34 inline comparison and the D19 one-arm-per-string match give way to the plain forms.
+
 ## [0.0.964] — 2026-10-14
 
 **a viewed argument given a new value in a nested block lives in the frame's keep; a union field takes one lifetime over its group (ADR-353 D2, D3, part of #614)**

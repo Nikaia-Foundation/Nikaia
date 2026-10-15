@@ -625,7 +625,10 @@ fn counted_statement(stmt: &Stmt, over: &mut Vec<CountedLoop>, words: &winnow_gr
         Stmt::For { bindings, iter, body, .. } => {
             counted_expr(iter, &over, words, out);
             let mut inner = copied(&over);
-            for b in bindings.iter() { inner = without(&inner, words.resolve(*b)); }
+            for b in bindings.iter() {
+                let b = *b;
+                inner = without(&inner, words.resolve(b));
+            }
             if bindings.len() == 1 {
                 let found = loop_over_length(*nikaia_std::index::get(&bindings, 0), iter, body, &over, words);
                 if found.is_some() { inner.push(nikaia_std::index::or(found, || CountedLoop { binding: String::from(""), list: String::from("") })); }
@@ -635,7 +638,8 @@ fn counted_statement(stmt: &Stmt, over: &mut Vec<CountedLoop>, words: &winnow_gr
         Stmt::Let { names, value, .. } => {
             counted_expr(value, &over, words, out);
             for name in names.iter() {
-                let kept = without(&over, words.resolve(*name));
+                let name = *name;
+                let kept = without(&over, words.resolve(name));
                 over.clear();
                 over.extend(kept);
             }
@@ -860,7 +864,10 @@ fn any_is_variable(exprs: &[Expr], name: &str, words: &winnow_grammar::InternerC
 }
 
 fn any_symbol(symbols: &[winnow_grammar::Symbol], name: &str, words: &winnow_grammar::InternerContext) -> bool {
-    for s in symbols.iter() { if words.resolve(*s) == name { return true; } }
+    for s in symbols.iter() {
+        let s = *s;
+        if words.resolve(s) == name { return true; }
+    }
     false
 }
 
@@ -1957,7 +1964,12 @@ fn bind_name(name: &str, seen: &mut ShapeSeen) {
     seen.bound.insert(name.to_owned(), before + 1);
 }
 
-fn bind_all(names: &[winnow_grammar::Symbol], words: &winnow_grammar::InternerContext, seen: &mut ShapeSeen) { for n in names.iter() { bind_name(words.resolve(*n), seen); } }
+fn bind_all(names: &[winnow_grammar::Symbol], words: &winnow_grammar::InternerContext, seen: &mut ShapeSeen) {
+    for n in names.iter() {
+        let n = *n;
+        bind_name(words.resolve(n), seen);
+    }
+}
 
 fn once(name: &str, seen: &ShapeSeen) -> bool { nikaia_std::index::or(seen.bound.get(name), || 0) == 1 }
 
@@ -2338,6 +2350,7 @@ pub fn bounds_aggressive(args: &[FnArg], body: &Block, nonnegative: collections:
             let before = walk.assumed.len() as i64;
             let mut kept: collections::BTreeMap<String, Range> = collections::BTreeMap::new();
             for (key, bound) in walk.assumed.iter() {
+                let bound = *bound;
                 let seen = match found.get(key) { Some(__nikaia_value) => __nikaia_value, None => continue };
                 if bound.holds(&seen) { kept.insert(key.to_owned(), bound.clone()); }
             }
@@ -2370,18 +2383,25 @@ fn bounding_pass(walk: &mut BoundsWalk, args: &[FnArg], body: &Block, context: &
         if ty == "Vec" || ty == "List" || ty == "Array" { bounding_at_least_zero(walk, &mut facts, &length_of(&name)); }
     }
     for (name, range) in context.given.iter() {
+        let range = *range;
         if !walk.shape.bound.contains(name) {
             facts.ints.insert(name.to_owned());
-            bounding_bounded(walk, &mut facts, name, range);
+            bounding_bounded(walk, &mut facts, name, &range);
         }
     }
-    for (name, range) in context.text_lengths.iter() { if !walk.shape.bound.contains(name) { bounding_bounded(walk, &mut facts, &length_of(name), range); } }
+    for (name, range) in context.text_lengths.iter() {
+        let range = *range;
+        if !walk.shape.bound.contains(name) { bounding_bounded(walk, &mut facts, &length_of(name), &range); }
+    }
     bounding_block(walk, body, &mut facts, context, program, words, ask);
 }
 
 fn bounding_found(walk: &BoundsWalk) -> collections::BTreeMap<String, Range> {
     let mut out: collections::BTreeMap<String, Range> = collections::BTreeMap::new();
-    for (key, bound) in walk.written.iter() { if bound.is_bounded() && !bounding_poisoned(walk, key) { out.insert(key.to_owned(), bound.clone()); } }
+    for (key, bound) in walk.written.iter() {
+        let bound = *bound;
+        if bound.is_bounded() && !bounding_poisoned(walk, key) { out.insert(key.to_owned(), bound.clone()); }
+    }
     out
 }
 
@@ -2829,8 +2849,9 @@ fn bounding_callee(func: &Expr, words: &winnow_grammar::InternerContext) -> Opti
         Expr::Path(parts, _) => {
             let mut out: String = String::from("");
             for part in parts.iter() {
+                let part = *part;
                 if !out.is_empty() { out.push_str("::"); }
-                out.push_str(words.resolve(*part));
+                out.push_str(words.resolve(part));
             }
             Some(out)
         },
@@ -3130,7 +3151,12 @@ fn bounding_block(walk: &mut BoundsWalk, block: &Block, facts: &mut BoundsFacts,
     let mut leaves = false;
     for stmt in block.stmts.iter() {
         match &stmt.node {
-            Stmt::Let { names, .. } => { for name in names.iter() { bound.push(words.resolve(*name).to_owned()); } },
+            Stmt::Let { names, .. } => {
+                for name in names.iter() {
+                    let name = *name;
+                    bound.push(words.resolve(name).to_owned());
+                }
+            },
             Stmt::Comptime { name, .. } => { let name = *name; bound.push(words.resolve(name).to_owned()); },
             _ => { },
         }
@@ -3225,7 +3251,8 @@ fn bounding_let(walk: &mut BoundsWalk, names: &[winnow_grammar::Symbol], ty: Opt
     }
     let whole = nikaia_std::index::or(bounding_declared_whole(ty, words), || (value_lin.is_some() || value_range.is_some()).into());
     for symbol in names.iter() {
-        let name = words.resolve(*symbol);
+        let symbol = *symbol;
+        let name = words.resolve(symbol);
         bounding_forget(&walk, facts, name);
         facts.ints.remove(name);
     }
@@ -3301,7 +3328,8 @@ fn bounding_for(walk: &mut BoundsWalk, bindings: &[winnow_grammar::Symbol], iter
     let mut inner = facts.clone();
     bounding_after_change(walk, &mut inner, &changed);
     for binding in bindings.iter() {
-        let bound = words.resolve(*binding);
+        let binding = *binding;
+        let bound = words.resolve(binding);
         bounding_forget(&walk, &mut inner, bound);
         inner.ints.remove(bound);
     }
@@ -4255,7 +4283,10 @@ fn buffer_statement(stmt: &Stmt, span: &Span, ask: &BufferAsk<'_>, holes_of: &im
             let origins = origins_of(iter, ask, holes_of, unaliased, walk);
             walk.path.push((at, true));
             open_scope(walk);
-            for name in bindings.iter() { bind_local(ask.names.resolve(*name).to_owned(), a_local(at, &walk.path, origins.to_owned(), None, false, false), walk); }
+            for name in bindings.iter() {
+                let name = *name;
+                bind_local(ask.names.resolve(name).to_owned(), a_local(at, &walk.path, origins.to_owned(), None, false, false), walk);
+            }
             for inner in body.stmts.iter() {
                 walk.statement = inner.span.start as i64;
                 buffer_statement(&inner.node, &inner.span, ask, holes_of, unaliased, walk);
@@ -4318,7 +4349,8 @@ fn let_statement(stmt: &Stmt, span: &Span, ask: &BufferAsk<'_>, holes_of: &impl 
         _ => { origins = origins_of(value, ask, holes_of, unaliased, walk); },
     }
     for bound in names.iter() {
-        bind_local(ask.names.resolve(*bound).to_owned(), a_local(at, &walk.path, origins.to_owned(), match ty {
+        let bound = *bound;
+        bind_local(ask.names.resolve(bound).to_owned(), a_local(at, &walk.path, origins.to_owned(), match ty {
             Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
             None => None,
         }, is_buffer, text), walk);
@@ -9548,7 +9580,10 @@ impl CheckState {
     pub fn a_task_takes_no_arguments(&mut self, world: &CheckWorld<'_>, params: &[winnow_grammar::Symbol], span: &Span) {
         if params.is_empty() { return; }
         let mut named: Vec<String> = vec![];
-        for param in params.iter() { named.push(format!("`{}`", world.words.resolve(*param))); }
+        for param in params.iter() {
+            let param = *param;
+            named.push(format!("`{}`", world.words.resolve(param)));
+        }
         let first = world.words.resolve(*nikaia_std::index::get(&params, 0)).to_owned();
         self.findings.push(check_refusal("NK2103", span, format!("This task's lambda takes {}, but a task isn't given any arguments.", named.join(", ")), vec!["`spawn` starts a body without arguments; the body takes what it needs from the code around it.".to_owned()], Some(format!("Remove the argument list: `spawn fn {{ … }}`. If `{}` is a value from here, declare it before the task and use it inside.", first))));
     }
@@ -11129,7 +11164,10 @@ impl CheckState {
         match pattern {
             MatchPattern::Tuple { path, parts } => {
                 let mut written: Vec<String> = vec![];
-                for symbol in path.iter() { written.push(world.words.resolve(*symbol).to_owned()); }
+                for symbol in path.iter() {
+                    let symbol = *symbol;
+                    written.push(world.words.resolve(symbol).to_owned());
+                }
                 for index in 0..parts.len() as i64 {
                     let part = nikaia_std::index::get(&parts, nikaia_std::index::at(index));
                     if !self.boxed_part(world, path, index) || binds_a_part(&part) { self.a_pattern_inside_a_box_at(world, &part, span, at); } else {
@@ -13109,7 +13147,10 @@ fn check_core_call_named(name: &str) -> Ty { Ty::Named { name: name.to_owned(), 
 
 fn check_core_call_joined(world: &CheckWorld<'_>, segments: &[winnow_grammar::Symbol]) -> String {
     let mut parts: Vec<String> = vec![];
-    for segment in segments.iter() { parts.push(format!("{}", world.words.resolve(*segment))); }
+    for segment in segments.iter() {
+        let segment = *segment;
+        parts.push(format!("{}", world.words.resolve(segment)));
+    }
     parts.join("::")
 }
 
@@ -13164,12 +13205,10 @@ fn check_core_call_variant(state: &CheckState, name: &str) -> Option<String> {
     if !name.contains("::") { return None; }
     let parts: Vec<&str> = name.split("::").collect::<Vec<_>>();
     let ty: String = format!("{}", *nikaia_std::index::get(&parts, 0));
-    let rest = check_core_call_after(name, &format!("{}::", ty));
+    let rest = nikaia_std::index::or(name.strip_prefix(&format!("{}::", ty)), || "").to_owned();
     if state.is_variant(&ty, &rest) { return Some(ty); }
     None
 }
-
-fn check_core_call_after(name: &str, prefix: &str) -> String { nikaia_std::index::or(name.strip_prefix(prefix), || "").to_owned() }
 
 fn check_core_call_owner(name: &str) -> String {
     let parts: Vec<&str> = name.split("::").collect::<Vec<_>>();
@@ -14807,7 +14846,10 @@ fn check_core_expr_a_bare_case(ledger: &Ledger, owner: &str, variant: &str) -> b
 // this was written - see `contracts::sync`.
 fn check_core_expr_path(state: &mut CheckState, world: &CheckWorld<'_>, segments: &[winnow_grammar::Symbol], span: &Span) -> Ty {
     let mut names: Vec<String> = vec![];
-    for segment in segments.iter() { names.push(world.words.resolve(*segment).to_owned()); }
+    for segment in segments.iter() {
+        let segment = *segment;
+        names.push(world.words.resolve(segment).to_owned());
+    }
     state.a_constructor_written_as_new(world, &names.join("::"), span);
     if names.len() == 2 {
         let ty = (*nikaia_std::index::get(&names, 0)).to_owned();
@@ -14987,8 +15029,10 @@ fn check_core_flow_root(value: &Expr) -> &Expr {
 }
 
 fn check_core_flow_part(parts: &collections::BTreeMap<String, Ty>, wanted: &str) -> Option<Ty> {
-    for (name, ty) in parts.iter() { if name == wanted { return Some(ty.clone()); } }
-    None
+    match parts.get(wanted) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -15687,9 +15731,10 @@ pub fn check_core_a_kept_lambda<H: CheckHost>(state: &mut CheckState, world: &Ch
                         let mut frame: Vec<CheckLocal> = vec![];
                         let mut at: i64 = 0;
                         for n in names.iter() {
+                            let n = *n;
                             if ((at) as usize) < params.len() {
                                 let id = state.a_new_binding();
-                                frame.push(CheckLocal::free(world.words.resolve(*n).to_owned(), (*nikaia_std::index::get(&params, (at) as usize)).clone(), id));
+                                frame.push(CheckLocal::free(world.words.resolve(n).to_owned(), (*nikaia_std::index::get(&params, (at) as usize)).clone(), id));
                             }
                             at += 1;
                         }
@@ -15817,9 +15862,10 @@ pub fn check_core_lambda<H: CheckHost>(state: &mut CheckState, world: &CheckWorl
     let mut frame: Vec<CheckLocal> = vec![];
     let mut at: i64 = 0;
     for p in params.iter() {
+        let p = *p;
         let mut ty: Ty = Ty::Unknown;
         if ((at) as usize) < given.len() { ty = (*nikaia_std::index::get(&given, (at) as usize)).clone(); }
-        let local = state.lambda_parameter(world, *p, mutable, ty, span);
+        let local = state.lambda_parameter(world, p, mutable, ty, span);
         if local.ty.is_unknown() { state.flow.unknown_bound.insert(local.id); }
         frame.push(local);
         at += 1;
@@ -15988,7 +16034,7 @@ pub fn check_core_an_assert<H: CheckHost>(state: &mut CheckState, world: &CheckW
     match condition {
         Expr::Binary { op, lhs, rhs, .. } => {
             let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
-            if *op == BinaryOp::Eq || *op == BinaryOp::Ne || *op == BinaryOp::Lt || *op == BinaryOp::Le || *op == BinaryOp::Gt || *op == BinaryOp::Ge {
+            if check_core_ops_equality(*op) || check_core_ops_ordering(*op) {
                 left = check_core_shown_operand(world, lhs);
                 right = check_core_shown_operand(world, rhs);
             }
@@ -17004,7 +17050,10 @@ fn check_core_ops_a_pair_split(state: &mut CheckState, world: &CheckWorld<'_>, d
     };
     if parts != params.len() as i64 { return; }
     let mut names: Vec<String> = vec![];
-    for p in params.iter() { names.push(world.words.resolve(*p).to_owned()); }
+    for p in params.iter() {
+        let p = *p;
+        names.push(world.words.resolve(p).to_owned());
+    }
     let joined = names.join(", ");
     let notes: Vec<String> = vec![format!("The place hands it one value, a `{}`, and a lambda takes what it is handed.", (*nikaia_std::index::get(&handed, 0)).text()).to_owned()];
     let help: String = format!("Take the tuple and name its parts in the body: `fn(pair) {{ let ({}) = pair … }}`.", joined);
@@ -17043,9 +17092,10 @@ pub fn check_core_ops_closure<H: CheckHost>(state: &mut CheckState, world: &Chec
     let mut names: Vec<String> = vec![];
     let mut at: i64 = 0;
     for p in params.iter() {
+        let p = *p;
         let mut ty: Ty = Ty::Unknown;
         if at < given.len() as i64 { ty = (*nikaia_std::index::get(&given, (at) as usize)).clone(); }
-        let local = state.lambda_parameter(world, *p, mutable, ty, span);
+        let local = state.lambda_parameter(world, p, mutable, ty, span);
         if local.ty.is_unknown() { state.flow.unknown_bound.insert(local.id); }
         names.push(local.name.to_owned());
         frame.push(local);
@@ -17220,8 +17270,10 @@ fn check_core_places_position(field: &str) -> i64 {
 }
 
 fn check_core_places_bound(bound: &collections::BTreeMap<String, Ty>, p: &str) -> Ty {
-    for (name, ty) in bound.iter() { if name == p { return ty.clone(); } }
-    Ty::Unknown
+    nikaia_std::index::or(match bound.get(p) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || Ty::Unknown)
 }
 
 fn check_core_places_unrolled_default(unrolling: Option<&CheckUnrolling>) -> Ty {
@@ -17970,7 +18022,8 @@ fn check_core_stmt_has_no_arithmetic(world: &CheckWorld<'_>, ty: &Ty) -> bool { 
 fn check_core_stmt_lent_let(state: &mut CheckState, world: &CheckWorld<'_>, names: &[winnow_grammar::Symbol], span: &Span) {
     state.facts.lent_lets.insert(span.start as i64);
     for n in names.iter() {
-        let name: String = format!("{}", world.words.resolve(*n));
+        let n = *n;
+        let name: String = format!("{}", world.words.resolve(n));
         let mut depth = state.scope.len() as i64 - 1;
         if depth < 0 { depth = 0; }
         state.lent_lets.insert((name, depth));
@@ -18071,7 +18124,8 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     let of_a_map = was_read && check_core_stmt_a_map_read(value);
     let got = check_core_stmt_got(&state, world, value);
     for n in names.iter() {
-        let name: String = format!("{}", world.words.resolve(*n));
+        let n = *n;
+        let name: String = format!("{}", world.words.resolve(n));
         if got { state.got_past_a_jump.insert(name); } else { state.got_past_a_jump.remove(&name); }
     }
     if names.len() == 1 {
@@ -18079,7 +18133,10 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         host.a_value_with_a_cleanup_bound(state, &single, &found, span);
     }
     let mut bound_names: Vec<String> = vec![];
-    for n in names.iter() { bound_names.push(format!("{}", world.words.resolve(*n))); }
+    for n in names.iter() {
+        let n = *n;
+        bound_names.push(format!("{}", world.words.resolve(n)));
+    }
     let mut any_named = false;
     for n in bound_names.iter() { if n != "_" { any_named = true; } }
     let mut seen_through = false;
@@ -18478,17 +18535,19 @@ pub fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     let mut frame: Vec<CheckLocal> = vec![];
     let mut at: i64 = 0;
     for b in bindings.iter() {
+        let b = *b;
         if ((at) as usize) >= elements.len() { break; }
-        let name: String = format!("{}", world.words.resolve(*b));
+        let name: String = format!("{}", world.words.resolve(b));
         let element = (*nikaia_std::index::get(&elements, (at) as usize)).clone();
         at += 1;
         let copied = lent && name != "_" && a_copy_by_value(&element);
         if copied { state.facts.copied_loop_bindings.insert((span.start as i64, name.to_owned())); }
-        let a_view = lent && name != "_" && !copied && element.is_a_view();
+        let declared_copy = lent && name != "_" && !copied && !element.is_a_view() && state.a_view_that_copies(world, &view_of_type(&element));
+        let a_view = declared_copy || lent && name != "_" && !copied && element.is_a_view();
         if a_view { state.facts.copied_view_bindings.insert((span.start as i64, name.to_owned())); }
         let named = matches!(element, Ty::Named { .. });
         let mut bound = element.clone();
-        if lent && !copied && named { bound = view_of_type(&element); }
+        if lent && !copied && !declared_copy && named { bound = view_of_type(&element); }
         let id = state.a_new_binding();
         let mut local = CheckLocal::free(name, bound, id);
         local.written_mut = false;
@@ -20805,7 +20864,12 @@ impl CheckState {
 fn lent_binds_again(world: &CheckWorld<'_>, block: &Block, lent: &collections::BTreeSet<String>) -> bool {
     for stmt in block.stmts.iter() {
         match &stmt.node {
-            Stmt::Let { names, .. } => { for name in names.iter() { if lent.contains(world.words.resolve(*name)) { return true; } } },
+            Stmt::Let { names, .. } => {
+                for name in names.iter() {
+                    let name = *name;
+                    if lent.contains(world.words.resolve(name)) { return true; }
+                }
+            },
             _ => { },
         }
     }
@@ -20843,7 +20907,10 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn an_import_that_brings_a_name_in(&mut self, world: &CheckWorld<'_>, path: &[winnow_grammar::Symbol], span: &Span) {
         let mut segments: Vec<String> = vec![];
-        for part in path.iter() { segments.push(world.words.resolve(*part).to_owned()); }
+        for part in path.iter() {
+            let part = *part;
+            segments.push(world.words.resolve(part).to_owned());
+        }
         if segments.len() < 2 || *nikaia_std::index::get(&segments, 0) != "std" { return; }
         let last = (*nikaia_std::index::get(&segments, nikaia_std::index::at(segments.len() as i64 - 1))).to_owned();
         let mut a_type = false;
@@ -21692,7 +21759,10 @@ fn kind_callee_name(world: &CheckWorld<'_>, func: &Expr) -> Option<String> {
 
 fn kind_path_text(world: &CheckWorld<'_>, segments: &[winnow_grammar::Symbol]) -> String {
     let mut parts: Vec<String> = vec![];
-    for segment in segments.iter() { parts.push(world.words.resolve(*segment).to_owned()); }
+    for segment in segments.iter() {
+        let segment = *segment;
+        parts.push(world.words.resolve(segment).to_owned());
+    }
     parts.join("::")
 }
 
@@ -21750,7 +21820,8 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn an_update_block_reads_what_it_writes(&mut self, world: &CheckWorld<'_>, params: &[winnow_grammar::Symbol], body: &Block, span: &Span) {
         for param in params.iter() {
-            let name = world.words.resolve(*param).to_owned();
+            let param = *param;
+            let name = world.words.resolve(param).to_owned();
             if kind_an_update_only_replaces(world, &name, body) { self.findings.push(check_refusal("NK2207", span, format!("This `update` block replaces `{}` without reading it, which is what `set` is for.", name), vec!["`update` is for changes that depend on the current value. Just storing a new value is what `set` does.".to_owned()], Some("Use `set` if the value is computed outside, or use the old value here: `v += n`, `v.push(e)`, `if v > 100 { v = 0 }`.".to_owned()))); }
         }
     }
@@ -21822,7 +21893,10 @@ fn lambda_names(world: &CheckWorld<'_>, body: &Block) -> collections::BTreeSet<S
 // this was written - see `contracts::sync`.
 fn lambda_own(world: &CheckWorld<'_>, params: &[winnow_grammar::Symbol]) -> collections::BTreeSet<String> {
     let mut own: collections::BTreeSet<String> = collections::BTreeSet::new();
-    for p in params.iter() { own.insert(world.words.resolve(*p).to_owned()); }
+    for p in params.iter() {
+        let p = *p;
+        own.insert(world.words.resolve(p).to_owned());
+    }
     own
 }
 
@@ -22071,7 +22145,10 @@ impl CheckState {
                 for generic in generics.iter() {
                     if generic.bounds.is_empty() { continue; }
                     let mut traits: Vec<String> = vec![];
-                    for bound in generic.bounds.iter() { traits.push(world.words.resolve(*bound).to_owned()); }
+                    for bound in generic.bounds.iter() {
+                        let bound = *bound;
+                        traits.push(world.words.resolve(bound).to_owned());
+                    }
                     bounds.insert(world.words.resolve(generic.name).to_owned(), traits);
                 }
                 if bounds.is_empty() { return; }
@@ -22112,7 +22189,10 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     fn names_a_grammar_rule(&self, world: &CheckWorld<'_>, segments: &[winnow_grammar::Symbol]) -> bool {
         let mut written: Vec<String> = vec![];
-        for part in segments.iter() { written.push(world.words.resolve(*part).to_owned()); }
+        for part in segments.iter() {
+            let part = *part;
+            written.push(world.words.resolve(part).to_owned());
+        }
         let name = written.join("::");
         let at = match nikaia_std::search::find(&name, &"::", 0) { Some(__nikaia_value) => __nikaia_value, None => return false };
         let owner = nikaia_std::index::get(&name, nikaia_std::index::at(0..at)).to_owned();
@@ -22163,7 +22243,10 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     fn names_a_function_by_path(&self, world: &CheckWorld<'_>, segments: &[winnow_grammar::Symbol]) -> bool {
         let mut written: Vec<String> = vec![];
-        for part in segments.iter() { written.push(world.words.resolve(*part).to_owned()); }
+        for part in segments.iter() {
+            let part = *part;
+            written.push(world.words.resolve(part).to_owned());
+        }
         resolve_call(world, &written.join("::")).is_some()
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -23185,7 +23268,10 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn lambda_parameter(&mut self, world: &CheckWorld<'_>, name: winnow_grammar::Symbol, mutable: &[winnow_grammar::Symbol], ty: Ty, span: &Span) -> CheckLocal {
         let mut written = false;
-        for one in mutable.iter() { if *one == name { written = true; } }
+        for one in mutable.iter() {
+            let one = *one;
+            if one == name { written = true; }
+        }
         let asked = self.flow.at_a_write_door && !written;
         let mut local = CheckLocal::free(world.words.resolve(name).to_owned(), ty, self.a_new_binding());
         if asked { local.immutable = Some(CheckImmutable { at: span.clone(), kind: CheckKind::Parameter }); }
@@ -23212,7 +23298,10 @@ impl CheckState {
 
 fn note_joined(world: &CheckWorld<'_>, segments: &[winnow_grammar::Symbol]) -> String {
     let mut parts: Vec<String> = vec![];
-    for segment in segments.iter() { parts.push(world.words.resolve(*segment).to_owned()); }
+    for segment in segments.iter() {
+        let segment = *segment;
+        parts.push(world.words.resolve(segment).to_owned());
+    }
     parts.join("::")
 }
 
@@ -24381,7 +24470,10 @@ impl CheckState {
             },
             Expr::Path(parts, _) => {
                 let mut texts: Vec<String> = vec![];
-                for one in parts.iter() { texts.push(world.words.resolve(*one).to_owned()); }
+                for one in parts.iter() {
+                    let one = *one;
+                    texts.push(world.words.resolve(one).to_owned());
+                }
                 name = texts.join("::");
             },
             _ => { return None; },
@@ -24553,7 +24645,10 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     fn pattern_variant(&self, world: &CheckWorld<'_>, path: &[winnow_grammar::Symbol], owner: &str) -> String {
         let mut written: Vec<String> = vec![];
-        for part in path.iter() { written.push(world.words.resolve(*part).to_owned()); }
+        for part in path.iter() {
+            let part = *part;
+            written.push(world.words.resolve(part).to_owned());
+        }
         if written.len() == 1 { return format!("{}::{}", owner, *nikaia_std::index::get(&written, 0)); }
         written.join("::")
     }
@@ -27936,7 +28031,10 @@ impl CheckState {
             match &stmt.node {
                 Stmt::Let { names, .. } => {
                     let mut bound: Vec<String> = vec![];
-                    for name in names.iter() { bound.push(world.words.resolve(*name).to_owned()); }
+                    for name in names.iter() {
+                        let name = *name;
+                        bound.push(world.words.resolve(name).to_owned());
+                    }
                     let name = bound.join("`, `");
                     self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: stmt.span.clone(), code: "NK2104".to_owned(), message: format!("A branch of an `overlap` can't declare `{}`.", name), notes: vec!["Each statement in the block runs as its own branch, and the block's value is their results in the order they're written.".to_owned()], help: Some(format!("Take the value from the block instead: `let ({}, …) = overlap {{ … }}`.", name)), labels: vec![] });
                 },
@@ -28012,7 +28110,10 @@ impl CheckState {
             },
             Expr::Path(segments, _) => {
                 let mut parts: Vec<String> = vec![];
-                for segment in segments.iter() { parts.push(world.words.resolve(*segment).to_owned()); }
+                for segment in segments.iter() {
+                    let segment = *segment;
+                    parts.push(world.words.resolve(segment).to_owned());
+                }
                 let joined = parts.join("::");
                 name = world.here.unaliased(&joined);
             },
@@ -28874,7 +28975,7 @@ pub fn cr_with_driver(rust: &str, rows: &[(i64, i64, i64)], value_fn: &str, dump
     }
     let mut table: String = String::from("const __NIKAIA_SITES: &[nikaia_std::abort::Site] = &[\n");
     for (line, row) in placed.iter() {
-        let line = nikaia_std::num::value(line);
+        let line = nikaia_std::num::value(line);let row = *row;
         table.push_str(&format!("    ({}, \"{}{}\", {}),\n", line, stopped_at, row.unit, row.byte));
     }
     table.push_str("];\n");
@@ -29229,7 +29330,10 @@ pub fn declared_function(names: &winnow_grammar::InternerContext, aliases: &coll
     for generic in generics.iter() {
         if generic.bounds.is_empty() { continue; }
         let mut written: Vec<String> = vec![];
-        for bound in generic.bounds.iter() { written.push(names.resolve(*bound).to_owned()); }
+        for bound in generic.bounds.iter() {
+            let bound = *bound;
+            written.push(names.resolve(bound).to_owned());
+        }
         bounds.push((names.resolve(generic.name).to_owned(), written));
     }
     let mut options: Vec<ConfigContract> = vec![];
@@ -29245,7 +29349,10 @@ pub fn declared_function(names: &winnow_grammar::InternerContext, aliases: &coll
     let mut sync_claim = Sync::No;
     if is_sync { sync_claim = Sync::Asserted; } else if !sync_by.is_empty() {
         let mut lambdas: Vec<String> = vec![];
-        for lambda in sync_by.iter() { lambdas.push(names.resolve(*lambda).to_owned()); }
+        for lambda in sync_by.iter() {
+            let lambda = *lambda;
+            lambdas.push(names.resolve(lambda).to_owned());
+        }
         sync_claim = Sync::From(lambdas.join(", "));
     }
     let mut fails_with: Vec<String> = vec![];
@@ -30120,7 +30227,10 @@ fn emit_callee_text(world: &EmitWorld<'_>, func: &Expr) -> Option<String> {
         },
         Expr::Path(segments, _) => {
             let mut parts: Vec<String> = vec![];
-            for segment in segments.iter() { parts.push(world.words.resolve(*segment).to_owned()); }
+            for segment in segments.iter() {
+                let segment = *segment;
+                parts.push(world.words.resolve(segment).to_owned());
+            }
             return Some(parts.join("::"));
         },
         _ => { },
@@ -30399,7 +30509,8 @@ pub fn emit_bounded(world: &EmitWorld<'_>, param: &GenericParam) -> String {
     let name = escaped_name(world.words.resolve(param.name));
     let mut bounds: Vec<String> = vec![];
     for bound in param.bounds.iter() {
-        let written = escaped_name(world.words.resolve(*bound));
+        let bound = *bound;
+        let written = escaped_name(world.words.resolve(bound));
         if !emit_is_a_shape_bound(world, &written) { bounds.push(written); }
     }
     if bounds.is_empty() { return name; }
@@ -30418,7 +30529,10 @@ pub fn call_written_name(words: &winnow_grammar::InternerContext, func: &Expr) -
         },
         Expr::Path(segments, _) => {
             let mut parts: Vec<String> = vec![];
-            for segment in segments.iter() { parts.push(words.resolve(*segment).to_owned()); }
+            for segment in segments.iter() {
+                let segment = *segment;
+                parts.push(words.resolve(segment).to_owned());
+            }
             return Some(parts.join("::"));
         },
         _ => { },
@@ -30608,7 +30722,10 @@ fn emit_arg_function_key(world: &EmitWorld<'_>, arg: &Expr) -> Option<String> {
 
 fn emit_arg_joined(world: &EmitWorld<'_>, parts: &[winnow_grammar::Symbol]) -> String {
     let mut names: Vec<String> = vec![];
-    for part in parts.iter() { names.push(emit_text(world, *part)); }
+    for part in parts.iter() {
+        let part = *part;
+        names.push(emit_text(world, part));
+    }
     names.join("::")
 }
 
@@ -30796,7 +30913,10 @@ impl EmitState {
         match arg {
             Expr::Closure { params, mutable, body, .. } => {
                 let mut names: Vec<String> = vec![];
-                for p in params.iter() { names.push(escaped_name(&emit_text(world, *p))); }
+                for p in params.iter() {
+                    let p = *p;
+                    names.push(escaped_name(&emit_text(world, p)));
+                }
                 let joined = names.join(", ");
                 let runs = self.facts.run_lambdas.contains(&node_key(arg));
                 if runs { out.push(&format!("async |{}| ", joined)); } else { out.push(&format!("|{}| Box::pin(async move ", joined)); }
@@ -31954,7 +32074,10 @@ impl EmitState {
                 for at in 0..args.len() as i64 { counts.push(self.count_at(host.crossings_are_possible(), "<field>", &variant_slot(&owner, &variant, at))); }
                 walk.variant_counts = Some(counts);
                 let mut names: Vec<String> = vec![];
-                for s in segments.iter() { names.push(emit_text(world, *s)); }
+                for s in segments.iter() {
+                    let s = *s;
+                    names.push(emit_text(world, s));
+                }
                 out.push(&self.path(world, walk.trusting, false, &names));
                 out.push("(");
                 self.emit_core_args(world, walk, out, host, &variant, args, &vec![], depth, flow, scope)?;
@@ -32373,7 +32496,10 @@ impl EmitState {
     #[allow(clippy::too_many_arguments)]
     pub fn emit_core_closure<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, params: &[winnow_grammar::Symbol], mutable: &[winnow_grammar::Symbol], body: &Block, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         let mut names: Vec<String> = vec![];
-        for p in params.iter() { names.push(escaped_name(&emit_text(world, *p))); }
+        for p in params.iter() {
+            let p = *p;
+            names.push(escaped_name(&emit_text(world, p)));
+        }
         if self.facts.kept_lambdas.contains_key(&node_key(node)) {
             let (pauses, fails) = self.emit_flow_pair(node_key(node));
             self.emit_flow_kept(world, walk, out, host, node, params, mutable, &names, body, pauses, fails, depth, flow, scope)?;
@@ -32387,7 +32513,10 @@ impl EmitState {
         let pattern = self.facts.filter_patterns.contains(&node_key(node));
         if pattern && names.len() == 1 { out.push(&format!("|&{}| ", *nikaia_std::index::get(&names, 0))); } else { out.push(&format!("|{}| ", names.join(", "))); }
         let mut changed: Vec<winnow_grammar::Symbol> = scope.changed.to_owned();
-        for each in mutable.iter() { changed.push(each.to_owned()); }
+        for each in mutable.iter() {
+            let each = *each;
+            changed.push(each.to_owned());
+        }
         let inside = EmitFlow { in_lambda: !pauses, statement: flow.statement, ..EmitFlow::plain() };
         if fails {
             let channel = scope.tasks_channel.to_owned();
@@ -32424,13 +32553,17 @@ impl EmitState {
         let mut bound: Vec<String> = vec![];
         let mut k: i64 = 0;
         for p in params.iter() {
+            let p = *p;
             let name = (*nikaia_std::index::get(&names, (k) as usize)).to_owned();
             k += 1;
-            if mutable.contains(p) { bound.push(format!("mut {}", name)); } else { bound.push(name); }
+            if mutable.contains(&p) { bound.push(format!("mut {}", name)); } else { bound.push(name); }
         }
         out.push(&format!("nikaia_std::func::Kept(std::sync::Arc::new(move |{}| ", bound.join(", ")));
         let mut changed: Vec<winnow_grammar::Symbol> = vec![];
-        for each in scope.changed.iter() { if !params.contains(each) { changed.push(each.to_owned()); } }
+        for each in scope.changed.iter() {
+            let each = *each;
+            if !params.contains(&each) { changed.push(each.to_owned()); }
+        }
         let inside = EmitFlow { in_lambda: !pauses, can_throw: fails, statement: flow.statement, ..EmitFlow::plain() };
         let inside_scope = self.emit_flow_inside_scope(changed);
         if pauses {
@@ -33323,7 +33456,10 @@ impl EmitState {
         let unsafe_holes = illegal(&segments);
         if !unsafe_holes.is_empty() {
             let mut message: String = String::from("the template has holes escaping cannot make safe\n");
-            for (expr, at) in unsafe_holes.iter() { message.push_str(&format!("  {}\n", illegal_message(expr, at))); }
+            for (expr, at) in unsafe_holes.iter() {
+                let at = *at;
+                message.push_str(&format!("  {}\n", illegal_message(expr, &at)));
+            }
             return Err(nikaia_std::error::raise(EmitRefused { message, at: None }, &"emit_core_template"));
         }
         let pad = "    ".repeat(nikaia_std::count::of(depth + 1));
@@ -33448,7 +33584,10 @@ fn emit_match_is_list(pattern: &MatchPattern) -> bool {
 
 fn emit_match_path(world: &EmitWorld<'_>, path: &[winnow_grammar::Symbol]) -> String {
     let mut parts: Vec<String> = vec![];
-    for each in path.iter() { parts.push(emit_text(world, *each)); }
+    for each in path.iter() {
+        let each = *each;
+        parts.push(emit_text(world, each));
+    }
     parts.join("::")
 }
 
@@ -33484,7 +33623,14 @@ impl EmitState {
                 out.push("]");
             },
             MatchPattern::Literal(value) => { host.expr(walk, out, value, depth, flow, scope)?; },
-            MatchPattern::Path(p) => { if p.len() == 1 { for one in p.iter() { out.push(&self.emit_match_bound(world, *one, wild, lent_key)); } } else { out.push(&emit_match_path(world, p)); } },
+            MatchPattern::Path(p) => {
+                if p.len() == 1 {
+                    for one in p.iter() {
+                        let one = *one;
+                        out.push(&self.emit_match_bound(world, one, wild, lent_key));
+                    }
+                } else { out.push(&emit_match_path(world, p)); }
+            },
             MatchPattern::Tuple { path, parts } => {
                 out.push(&emit_match_path(world, path));
                 out.push("(");
@@ -35525,7 +35671,10 @@ pub fn member_of(words: &winnow_grammar::InternerContext, declared: &collections
     let path = match match_path(pattern) { Some(__nikaia_value) => __nikaia_value, None => return None };
     if path.len() < 2 { return None; }
     let mut whole: Vec<String> = vec![];
-    for symbol in path.iter() { whole.push(words.resolve(*symbol).to_owned()); }
+    for symbol in path.iter() {
+        let symbol = *symbol;
+        whole.push(words.resolve(symbol).to_owned());
+    }
     let written = whole.join("::");
     if error_kind(declared, library, &written) != 0 { return Some(written); }
     let mut parts: Vec<String> = vec![];
@@ -35589,8 +35738,14 @@ impl EmitState {
         }
         if plan.local_keeps.contains(&at) { lines.push(format!("let __keep_{} = nikaia_std::tether::Keep::new();", at)); }
         let mut element = false;
-        for (_, keep) in plan.puts.iter() { if emit_is_element(keep, at) { element = true; } }
-        for (_, keep) in plan.calls.iter() { if emit_is_element(keep, at) { element = true; } }
+        for (_, keep) in plan.puts.iter() {
+            let keep = *keep;
+            if emit_is_element(&keep, at) { element = true; }
+        }
+        for (_, keep) in plan.calls.iter() {
+            let keep = *keep;
+            if emit_is_element(&keep, at) { element = true; }
+        }
         if element { lines.push(format!("let __keep_{} = std::sync::Arc::new(nikaia_std::tether::Keep::new());", at)); }
         if lines.is_empty() { return None; }
         Some(lines.join(" "))
@@ -36034,11 +36189,17 @@ fn nn_range_from_literal(iter: &Expr) -> bool {
 fn nn_note(stmt: &Stmt, state: &mut NnState) {
     match stmt {
         Stmt::Let { names, ty, value, .. } => {
-            for name in names.iter() { nn_declare(*name, state); }
+            for name in names.iter() {
+                let name = *name;
+                nn_declare(name, state);
+            }
             if names.len() == 1 && ty.is_none() && nn_literal(value) { nn_candidate(*nikaia_std::index::get(&names, 0), state); }
         },
         Stmt::For { bindings, iter, .. } => {
-            for name in bindings.iter() { nn_declare(*name, state); }
+            for name in bindings.iter() {
+                let name = *name;
+                nn_declare(name, state);
+            }
             if bindings.len() == 1 && nn_range_from_literal(iter) { nn_candidate(*nikaia_std::index::get(&bindings, 0), state); }
         },
         Stmt::Assign { target, op, value } => {
@@ -36489,7 +36650,10 @@ impl EmitOut {
     pub fn append(&mut self, other: EmitOut) {
         let offset = self.buf.len() as i64;
         self.buf.push_str(&other.buf);
-        for entry in other.entries.iter() { self.entries.push(EmitMapEntry { start: entry.start + offset, end: entry.end + offset, source: entry.source, unit: entry.unit }); }
+        for entry in other.entries.iter() {
+            let entry = *entry;
+            self.entries.push(EmitMapEntry { start: entry.start + offset, end: entry.end + offset, source: entry.source, unit: entry.unit });
+        }
     }
 }
 
@@ -36581,7 +36745,10 @@ fn reach_edges_of(words: &winnow_grammar::InternerContext, aliases: &collections
                     Expr::Variable(name, _) => { let name = *name; reach_note(aliases, pausing, by_last, &words.resolve(name).to_owned(), &mut out); },
                     Expr::Path(segments, _) => {
                         let mut joined: Vec<String> = vec![];
-                        for segment in segments.iter() { joined.push(words.resolve(*segment).to_owned()); }
+                        for segment in segments.iter() {
+                            let segment = *segment;
+                            joined.push(words.resolve(segment).to_owned());
+                        }
                         reach_note(aliases, pausing, by_last, &joined.join("::"), &mut out);
                     },
                     _ => { },
@@ -37045,7 +37212,10 @@ pub fn emit_base(name: &str) -> String {
 
 fn emit_segments(world: &EmitWorld<'_>, path: &[winnow_grammar::Symbol]) -> Vec<String> {
     let mut out: Vec<String> = vec![];
-    for symbol in path.iter() { out.push(world.words.resolve(*symbol).to_owned()); }
+    for symbol in path.iter() {
+        let symbol = *symbol;
+        out.push(world.words.resolve(symbol).to_owned());
+    }
     out
 }
 
@@ -38572,7 +38742,10 @@ fn statement(stmt: &Stmt, words: &winnow_grammar::InternerContext, debug: &impl 
     match stmt {
         Stmt::Let { names, value, .. } => {
             let mut bound: Vec<String> = vec![];
-            for n in names.iter() { bound.push(words.resolve(*n).to_owned()); }
+            for n in names.iter() {
+                let n = *n;
+                bound.push(words.resolve(n).to_owned());
+            }
             out.push(format!("[Nikaia Runtime] Bind: {} = <evaluated>", bound.join(", ")));
             expression(value, words, debug, format_of, out);
         },
@@ -38891,7 +39064,12 @@ fn keeps_statement(stmt: &Stmt, interner: &winnow_grammar::InternerContext, hole
             let mutable = *mutable;
             let reached = reached_of(value, interner, context, &walk.aliases);
             if mutable { for name in reached.iter() { if !context.lent.contains(name) { walk.uses.kept.insert(name.to_owned()); } } }
-            if !reached.is_empty() { for bound in names.iter() { alias(interner.resolve(*bound).to_owned(), &reached, walk); } }
+            if !reached.is_empty() {
+                for bound in names.iter() {
+                    let bound = *bound;
+                    alias(interner.resolve(bound).to_owned(), &reached, walk);
+                }
+            }
         },
         _ => { },
     }
@@ -40879,6 +41057,7 @@ pub fn absorb_into(ledger: &mut Ledger, module: Option<&str>, renames: &collecti
     }, || "".into());
     let qualified = module.is_some();
     for (field, holds) in other.code_locks.iter() {
+        let holds = *holds;
         let parts: Vec<&str> = field.splitn(2, '.').collect::<Vec<_>>();
         if qualified && declared.contains(*nikaia_std::index::get(&parts, 0)) { ledger.code_locks.insert(format!("{}::{}", prefix, field), holds.clone()); } else { ledger.code_locks.insert(field.to_owned(), holds.clone()); }
     }
@@ -41618,6 +41797,7 @@ pub fn locking(itself: &collections::BTreeMap<String, Lock>, callees: &collectio
     }
     let mut answer = Locking { functions: collections::BTreeMap::new(), fields: collections::BTreeMap::new() };
     for (name, holds) in touches.iter() {
+        let holds = *holds;
         if name.starts_with("field:") {
             let c: Vec<scalar> = nikaia_std::list::chars(name.chars());
             let field = slice(&c, 6, c.len() as i64);
@@ -41736,10 +41916,19 @@ fn lg_has(list: &[String], text: &str) -> bool {
 
 fn lg_resolved(arena: &TermArena, proof: &mut LgProof, clause: &LgClause, rest: &[LgPart], tautology: &str, instead: &[LgPart]) -> LgClause {
     let mut parts: Vec<LgPart> = vec![];
-    for part in rest.iter() { parts.push(LgPart { id: part.id, positive: part.positive }); }
-    for part in instead.iter() { parts.push(LgPart { id: part.id, positive: part.positive }); }
+    for part in rest.iter() {
+        let part = *part;
+        parts.push(LgPart { id: part.id, positive: part.positive });
+    }
+    for part in instead.iter() {
+        let part = *part;
+        parts.push(LgPart { id: part.id, positive: part.positive });
+    }
     let mut text: Vec<String> = vec![];
-    for part in parts.iter() { text.push(lg_literal(arena, part)); }
+    for part in parts.iter() {
+        let part = *part;
+        text.push(lg_literal(arena, &part));
+    }
     let step = proof.step(&format!("(cl{}) :rule resolution :premises ({} {})", lg_spaced(&text), clause.step, tautology));
     LgClause { step, parts }
 }
@@ -41750,6 +41939,7 @@ fn lg_inserted(rest: &[LgPart], at: i64, part: LgPart) -> Vec<LgPart> {
     if place > rest.len() as i64 { place = rest.len() as i64; }
     let mut index: i64 = 0;
     for one in rest.iter() {
+        let one = *one;
         if index == place { parts.push(LgPart { id: part.id, positive: part.positive }); }
         parts.push(LgPart { id: one.id, positive: one.positive });
         index += 1;
@@ -41764,6 +41954,7 @@ fn lg_opened(arena: &mut TermArena, proof: &mut LgProof, clause: &LgClause, at: 
     let mut rest: Vec<LgPart> = vec![];
     let mut index: i64 = 0;
     for one in clause.parts.iter() {
+        let one = *one;
         if index != at { rest.push(LgPart { id: one.id, positive: one.positive }); }
         index += 1;
     }
@@ -41919,7 +42110,8 @@ fn lg_choice(arena: &mut TermArena, proof: &mut LgProof, chosen: &[LgPart]) -> O
     let mut facts: Vec<i64> = vec![];
     let mut seen: Vec<String> = vec![];
     for part in chosen.iter() {
-        let text = lg_literal(&arena, part);
+        let part = *part;
+        let text = lg_literal(&arena, &part);
         if lg_has(&seen, &text) { continue; }
         seen.push(text);
         if part.positive { facts.push(part.id); } else { facts.push(arena.not(part.id)); }
@@ -41969,7 +42161,8 @@ fn lg_choice(arena: &mut TermArena, proof: &mut LgProof, chosen: &[LgPart]) -> O
     let mut made_lin: Vec<LgLin> = vec![];
     let mut made_atom: Vec<String> = vec![];
     for step in steps.iter() {
-        let made = match lg_lemma_of(step, &bounds, &source_text, &source_weight, &made_lin, &made_atom, &mut used) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let step = *step;
+        let made = match lg_lemma_of(&step, &bounds, &source_text, &source_weight, &made_lin, &made_atom, &mut used) { Some(__nikaia_value) => __nikaia_value, None => return None };
         lemmas.push(proof.step(&made.lemma));
         made_atom.push(lg_atom(&made.bound));
         made_lin.push(made.bound.clone());
@@ -42027,7 +42220,10 @@ fn lg_lemma_of(step: &LgStep, bounds: &[LgLin], source_text: &[String], source_w
 
 fn lg_hulled(arena: &mut TermArena, proof: &mut LgProof, clause: &LgClause) -> Vec<LgClause> {
     let mut parts: Vec<i64> = vec![];
-    for part in clause.parts.iter() { if part.positive { parts.push(part.id); } else { parts.push(arena.not(part.id)); } }
+    for part in clause.parts.iter() {
+        let part = *part;
+        if part.positive { parts.push(part.id); } else { parts.push(arena.not(part.id)); }
+    }
     let either = arena.or(parts);
     let falsum = arena.boolean(false);
     let facts: Vec<i64> = vec![either];
@@ -42037,20 +42233,24 @@ fn lg_hulled(arena: &mut TermArena, proof: &mut LgProof, clause: &LgClause) -> V
     if read.is_none() { return out; }
     let indexed = match read { Some(__nikaia_value) => __nikaia_value, None => return out };
     let mut bounds: Vec<LgLin> = vec![];
-    for item in indexed.top.iter() { if item.atom { bounds.push((*nikaia_std::index::get(&indexed.atoms, nikaia_std::index::at(item.n))).clone()); } }
+    for item in indexed.top.iter() {
+        let item = *item;
+        if item.atom { bounds.push((*nikaia_std::index::get(&indexed.atoms, nikaia_std::index::at(item.n))).clone()); }
+    }
     for bound in bounds.iter() {
         let hull = lg_bound_term(arena, bound);
         let mut lemmas: Vec<String> = vec![];
         let mut lits: Vec<String> = vec![];
         let mut complete = true;
         for part in clause.parts.iter() {
+            let part = *part;
             let found = lg_choice(arena, proof, &vec![LgPart { id: part.id, positive: part.positive }, LgPart { id: hull, positive: false }]);
             if found.is_none() {
                 complete = false;
                 break;
             }
             let below = match found { Some(__nikaia_value) => __nikaia_value, None => return out };
-            let pivot = lg_negation(&lg_literal(&arena, part));
+            let pivot = lg_negation(&lg_literal(&arena, &part));
             for lit in below.lits.iter() { if *lit != pivot && !lg_has(&lits, lit) { lits.push(lit.to_owned()); } }
             lemmas.push(below.step.to_owned());
         }
@@ -42082,11 +42282,12 @@ fn lg_below(search: &mut LgSearch, depth: i64, chosen: &mut Vec<LgPart>) -> Opti
     let mut steps: Vec<String> = vec![];
     let mut all_lits: Vec<Vec<String>> = vec![];
     for part in clause.parts.iter() {
+        let part = *part;
         chosen.push(LgPart { id: part.id, positive: part.positive });
         let found = lg_below(search, depth + 1, chosen);
         chosen.pop();
         let here = match found { Some(__nikaia_value) => __nikaia_value, None => return None };
-        let pivot = lg_negation(&lg_literal(&search.arena, part));
+        let pivot = lg_negation(&lg_literal(&search.arena, &part));
         if !lg_has(&here.lits, &pivot) { return Some(here); }
         steps.push(here.step.to_owned());
         all_lits.push(here.lits.to_owned());
@@ -42094,7 +42295,8 @@ fn lg_below(search: &mut LgSearch, depth: i64, chosen: &mut Vec<LgPart>) -> Opti
     let mut lits: Vec<String> = vec![];
     let mut at: i64 = 0;
     for part in clause.parts.iter() {
-        let pivot = lg_negation(&lg_literal(&search.arena, part));
+        let part = *part;
+        let pivot = lg_negation(&lg_literal(&search.arena, &part));
         for lit in (*nikaia_std::index::get(&all_lits, (at) as usize)).iter() { if *lit != pivot && !lg_has(&lits, lit) { lits.push(lit.to_owned()); } }
         at += 1;
     }
@@ -42122,7 +42324,8 @@ pub fn lg_alethe_write(source: &TermArena, facts: &[i64], goal: i64) -> Option<S
         let mut open: i64 = -1;
         let mut index: i64 = 0;
         for part in clause.parts.iter() {
-            if open < 0 && !lg_is_literal(&arena, part) { open = index; }
+            let part = *part;
+            if open < 0 && !lg_is_literal(&arena, &part) { open = index; }
             index += 1;
         }
         if open < 0 { clauses.push(clause); } else {
@@ -42456,6 +42659,7 @@ impl LgIndexed {
     fn strongest(&self, alternative: &[LgItem]) -> Vec<LgForm> {
         let mut by_form: Vec<LgForm> = vec![];
         for item in alternative.iter() {
+            let item = *item;
             if !item.atom { continue; }
             let atom = (*nikaia_std::index::get(&self.atoms, nikaia_std::index::at(item.n))).clone();
             let mut at: i64 = 0;
@@ -43014,7 +43218,10 @@ pub fn lg_certificate_text(certificate: &LgCertificate) -> String {
     match certificate {
         LgCertificate::Refuted(refutation) => {
             let mut steps: Vec<String> = vec![];
-            for step in refutation.steps.iter() { steps.push(lg_step_text(step)); }
+            for step in refutation.steps.iter() {
+                let step = *step;
+                steps.push(lg_step_text(&step));
+            }
             format!("R({})", steps.join(","))
         },
         LgCertificate::Split { disjunction, cases } => {
@@ -43133,6 +43340,7 @@ struct LgBranch {
 impl LgBranch {
     fn absorb(&mut self, items: &[LgItem], why: &collections::BTreeSet<i64>) {
         for item in items.iter() {
+            let item = *item;
             if item.atom {
                 if !self.held_atoms.contains(&item.n) {
                     self.held_atoms.push(item.n);
@@ -43172,9 +43380,9 @@ fn lg_search(indexed: &LgIndexed, state: &LgBranch, budget: &LgBudget, work: &mu
             let mut relies: collections::BTreeSet<i64> = collections::BTreeSet::new();
             let mut steps: Vec<LgStep> = vec![];
             for step in refutation.steps.iter() {
+                let step = *step;
                 match step {
                     LgStep::Hypothesis(i) => {
-                        let i = *i;
                         for one in (*nikaia_std::index::get(&state.held_why, nikaia_std::index::at(i))).iter() {
                             let one = nikaia_std::num::value(one);
                             relies.insert(one);
@@ -43339,7 +43547,12 @@ struct LgChecking {
 }
 
 impl LgChecking {
-    fn absorb(&mut self, items: &[LgItem]) { for item in items.iter() { if item.atom { self.held.insert(item.n); } else { self.open.insert(item.n); } } }
+    fn absorb(&mut self, items: &[LgItem]) {
+        for item in items.iter() {
+            let item = *item;
+            if item.atom { self.held.insert(item.n); } else { self.open.insert(item.n); }
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -43400,7 +43613,8 @@ fn lg_replay(indexed: &LgIndexed, branch: &LgChecking, refutation: &LgRefutation
     let mut made: Vec<LgLin> = vec![];
     let mut at: i64 = 0;
     for step in refutation.steps.iter() {
-        let bound = lg_replayed(indexed, branch, step, &made, at, case);
+        let step = *step;
+        let bound = lg_replayed(indexed, branch, &step, &made, at, case);
         if bound.rejected.is_some() {
             return match bound.rejected.as_ref() {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -43922,7 +44136,12 @@ pub fn a_use_refused(names: &winnow_grammar::InternerContext, items: &[Spanned<I
 fn use_segments(names: &winnow_grammar::InternerContext, item: &Item) -> Vec<String> {
     let mut out: Vec<String> = vec![];
     match item {
-        Item::Import { path, .. } => { for segment in path.iter() { out.push(names.resolve(*segment).to_owned()); } },
+        Item::Import { path, .. } => {
+            for segment in path.iter() {
+                let segment = *segment;
+                out.push(names.resolve(segment).to_owned());
+            }
+        },
         _ => { },
     }
     out
@@ -44582,7 +44801,10 @@ fn called_key(func: &Expr, names: &winnow_grammar::InternerContext) -> Option<St
 
 fn joined_segments(segments: &[winnow_grammar::Symbol], names: &winnow_grammar::InternerContext) -> String {
     let mut parts: Vec<String> = vec![];
-    for segment in segments.iter() { parts.push(names.resolve(*segment).to_owned()); }
+    for segment in segments.iter() {
+        let segment = *segment;
+        parts.push(names.resolve(segment).to_owned());
+    }
     parts.join("::")
 }
 
@@ -46303,8 +46525,9 @@ fn thrower_named(call: &Expr, words: &winnow_grammar::InternerContext, unaliased
             Expr::Path(segments, _) => {
                 let mut joined: String = String::from("");
                 for segment in segments.iter() {
+                    let segment = *segment;
                     if !joined.is_empty() { joined.push_str("::"); }
-                    joined.push_str(words.resolve(*segment));
+                    joined.push_str(words.resolve(segment));
                 }
                 Some(unaliased(&joined))
             },
@@ -46392,8 +46615,9 @@ fn outside_source_named(func: &Expr, words: &winnow_grammar::InternerContext) ->
         Expr::Path(segments, _) => {
             let mut joined: String = String::from("");
             for segment in segments.iter() {
+                let segment = *segment;
                 if !joined.is_empty() { joined.push_str("::"); }
-                joined.push_str(words.resolve(*segment));
+                joined.push_str(words.resolve(segment));
             }
             Some(joined)
         },
@@ -47498,7 +47722,8 @@ fn prover_let(walk: &mut ProverWalk, names: &[winnow_grammar::Symbol], mutable: 
         }
     }
     for name in names.iter() {
-        let n = words.resolve(*name).to_owned();
+        let name = *name;
+        let n = words.resolve(name).to_owned();
         scope.rebind(&walk.arena, &n);
         if tainted {
             scope.tainted.insert(n.to_owned());
@@ -47543,7 +47768,8 @@ fn prover_for(walk: &mut ProverWalk, bindings: &[winnow_grammar::Symbol], iter: 
     let tainted = from_outside(iter, &scope.tainted, words, library, holes_of);
     let mut inner = scope.clone();
     for binding in bindings.iter() {
-        let n = words.resolve(*binding).to_owned();
+        let binding = *binding;
+        let n = words.resolve(binding).to_owned();
         inner.rebind(&walk.arena, &n);
         if tainted { inner.tainted.insert(n); }
     }
@@ -47578,7 +47804,12 @@ fn prover_for(walk: &mut ProverWalk, bindings: &[winnow_grammar::Symbol], iter: 
             _ => { },
         }
     }
-    if !ranged { for binding in bindings.iter() { inner.loose.insert(words.resolve(*binding).to_owned()); } }
+    if !ranged {
+        for binding in bindings.iter() {
+            let binding = *binding;
+            inner.loose.insert(words.resolve(binding).to_owned());
+        }
+    }
     inner.path = None;
     prover_block(walk, body, &mut inner, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
     scope.path = None;
@@ -47774,8 +48005,14 @@ fn prover_blocks_in(walk: &mut ProverWalk, expr: &Expr, scope: &ProverScope, at:
         Expr::Overlap(block, _) => { prover_nested(walk, block, None, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition); },
         Expr::Closure { params, mutable, body, .. } => {
             let mut names: Vec<String> = vec![];
-            for p in params.iter() { names.push(words.resolve(*p).to_owned()); }
-            for p in mutable.iter() { names.push(words.resolve(*p).to_owned()); }
+            for p in params.iter() {
+                let p = *p;
+                names.push(words.resolve(p).to_owned());
+            }
+            for p in mutable.iter() {
+                let p = *p;
+                names.push(words.resolve(p).to_owned());
+            }
             prover_nested(walk, body, Some(names), scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
         },
         Expr::Call { func, args, config, .. } => {
@@ -47932,8 +48169,9 @@ fn prover_bound_callee(func: &Expr, scope: &ProverScope, words: &winnow_grammar:
 fn prover_qualified(segments: &[winnow_grammar::Symbol], words: &winnow_grammar::InternerContext, unaliased: &impl Fn(&str) -> String) -> String {
     let mut joined: String = String::from("");
     for segment in segments.iter() {
+        let segment = *segment;
         if !joined.is_empty() { joined.push_str("::"); }
-        joined.push_str(words.resolve(*segment));
+        joined.push_str(words.resolve(segment));
     }
     unaliased(&joined)
 }
@@ -51155,7 +51393,8 @@ fn promise_of(caller: &str, args: &[FnArg], is_sync: bool, sync_by: &[winnow_gra
     }
     let mut named: Vec<String> = vec![];
     for one in sync_by.iter() {
-        let parameter = names.resolve(*one).to_owned();
+        let one = *one;
+        let parameter = names.resolve(one).to_owned();
         allowed.insert(parameter.to_owned());
         named.push(parameter);
     }
@@ -51762,29 +52001,31 @@ pub fn tethers_report(texts: &[String], ledger: &Ledger, here: &collections::BTr
     for plan in plans.iter() {
         let mut names: Vec<String> = vec![];
         for (at, keep) in plan.puts.iter() {
-            let at = nikaia_std::num::value(at);
-            if goes_in_the_callers_keep(keep) {
+            let at = nikaia_std::num::value(at);let keep = *keep;
+            if goes_in_the_callers_keep(&keep) {
                 let found = match buffer_named(plan, at) { Some(__nikaia_value) => __nikaia_value, None => continue };
                 names.push(found);
             }
         }
         for (id, keep) in plan.calls.iter() {
+            let keep = *keep;
             let (_, callee) = id;
-            if callee.contains('#') && goes_in_the_callers_keep(keep) { names.push(an_argument(&callee)); }
+            if callee.contains('#') && goes_in_the_callers_keep(&keep) { names.push(an_argument(&callee)); }
         }
         handed.insert(plan.key.to_owned(), names);
     }
     for plan in plans.iter() {
         let mut said: Vec<String> = vec![];
         for (at, keep) in plan.puts.iter() {
-            let at = nikaia_std::num::value(at);
+            let at = nikaia_std::num::value(at);let keep = *keep;
             let name = nikaia_std::index::or(buffer_named(plan, at), || "a buffer".into());
-            said.push(format!("    {} lives {}\n", name, keep_words(keep)));
+            said.push(format!("    {} lives {}\n", name, keep_words(&keep)));
         }
         for (id, keep) in plan.calls.iter() {
+            let keep = *keep;
             let (_, callee) = id;
             if callee.contains('#') {
-                said.push(format!("    {} lives {}\n", an_argument(&callee), keep_words(keep)));
+                said.push(format!("    {} lives {}\n", an_argument(&callee), keep_words(&keep)));
                 continue;
             }
             let mut names: Vec<String> = vec![];
@@ -51793,7 +52034,7 @@ pub fn tethers_report(texts: &[String], ledger: &Ledger, here: &collections::BTr
                 let list = match found { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
                 for one in list.iter() { names.push(one.to_owned()); }
             }
-            if lives_in_a_local_keep(keep) && !names.is_empty() { said.push(format!("    {} lives in `{}`'s keep: handed back by `{}`\n", names.join(", "), plan.key, callee)); } else { said.push(format!("    what `{}` reads lives {}\n", callee, keep_words(keep))); }
+            if lives_in_a_local_keep(&keep) && !names.is_empty() { said.push(format!("    {} lives in `{}`'s keep: handed back by `{}`\n", names.join(", "), plan.key, callee)); } else { said.push(format!("    what `{}` reads lives {}\n", callee, keep_words(&keep))); }
         }
         for keeper in plan.element_keepers.iter() {
             if plan.struct_keepers.contains(keeper) {
@@ -52446,7 +52687,10 @@ fn tier_statement(stmt: &Stmt, at: i64, ask: &TierAsk<'_>, walk: &mut TierWalk) 
         Stmt::For { bindings, iter, body, .. } => {
             let kinds = tier_expr(iter, ask, walk);
             open_tier_scope(walk);
-            for binding in bindings.iter() { bind_tier_local(ask.names.resolve(*binding).to_owned(), plain_local(kinds.clone()), walk); }
+            for binding in bindings.iter() {
+                let binding = *binding;
+                bind_tier_local(ask.names.resolve(binding).to_owned(), plain_local(kinds.clone()), walk);
+            }
             tier_block(body, ask, walk);
             close_tier_scope(walk);
         },
@@ -52901,7 +53145,10 @@ fn mapped(params: &[winnow_grammar::Symbol], body: &Block, received: &Kinds, ask
     walk.result = None;
     open_tier_scope(walk);
     if params.is_empty() { bind_tier_local(String::from("a"), plain_local(received.clone()), walk); }
-    for param in params.iter() { bind_tier_local(ask.names.resolve(*param).to_owned(), plain_local(received.clone()), walk); }
+    for param in params.iter() {
+        let param = *param;
+        bind_tier_local(ask.names.resolve(param).to_owned(), plain_local(received.clone()), walk);
+    }
     let made = tier_block(body, ask, walk);
     close_tier_scope(walk);
     walk.result = held;
@@ -53011,7 +53258,8 @@ fn decide_tiers(flows: &Flows, declared: &TextDeclared) -> collections::BTreeMap
     }
     let mut out: collections::BTreeMap<String, Tier> = collections::BTreeMap::new();
     for (word, kinds) in positions.iter() {
-        let mut tier = tier_of_kinds(kinds);
+        let kinds = *kinds;
+        let mut tier = tier_of_kinds(&kinds);
         if mixed(&tier) && fixed.contains(word) { tier = Tier::Owned; }
         if !owned_tier(&tier) { out.insert(word.to_owned(), tier); }
     }
@@ -53038,8 +53286,9 @@ fn fixed_by_publishing(word: &str, flows: &Flows, declared: &TextDeclared) -> bo
 fn same_tiers(a: &collections::BTreeMap<String, Tier>, b: &collections::BTreeMap<String, Tier>) -> bool {
     if (a.len() as i64) != b.len() as i64 { return false; }
     for (word, tier) in a.iter() {
+        let tier = *tier;
         let other = match *nikaia_std::index::get(&b, word) { Some(__nikaia_value) => __nikaia_value, None => return false };
-        if tier_word(tier) != tier_word(other) { return false; }
+        if tier_word(&tier) != tier_word(other) { return false; }
     }
     true
 }
@@ -53065,6 +53314,7 @@ pub fn text_tiers(program: &Program, ask: &TierAsk<'_>) -> TextTiers {
     }
     let mut tiers: Vec<(TextPosition, Tier)> = vec![];
     for (word, tier) in walk.tiers.iter() {
+        let tier = *tier;
         let position = match match *nikaia_std::index::get(&walk.flows.known, word) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
@@ -54673,7 +54923,10 @@ fn tm_walk_function(fname: &str, alone: bool, args: &[FnArg], body: &Block, word
     tm_walk_block(body, words, library, env, classes, &mut walk);
     if walk.unread {
         classes.unread = true;
-        for made in walk.made.iter() { if made.at >= 0 && walk.escapes.contains(&made.id) { classes.escaped.push(made.at); } }
+        for made in walk.made.iter() {
+            let made = *made;
+            if made.at >= 0 && walk.escapes.contains(&made.id) { classes.escaped.push(made.at); }
+        }
         for node in walk.nodes.iter() { mc_poison(classes, node); }
         mc_poison(classes, &ret);
         return;
@@ -54692,6 +54945,7 @@ fn tm_walk_function(fname: &str, alone: bool, args: &[FnArg], body: &Block, word
         mc_poison(classes, nikaia_std::index::get(&walk.nodes, nikaia_std::index::at(id)));
     }
     for made in walk.made.iter() {
+        let made = *made;
         if nikaia_std::index::or(walk.bound.get(&made.name), || 0) != 1 { mc_poison(classes, nikaia_std::index::get(&walk.nodes, nikaia_std::index::at(made.id))); }
         if made.at >= 0 {
             classes.lets.push(made.at);
@@ -54780,7 +55034,10 @@ fn tm_walk_block(block: &Block, words: &winnow_grammar::InternerContext, library
                     walk.made.push(MapMade { at: stmt.span.start as i64, name: name.to_owned(), id });
                 } else {
                     tm_walk_expr(value, words, library, env, classes, walk);
-                    for one in names.iter() { tm_opaque(one.to_owned(), walk); }
+                    for one in names.iter() {
+                        let one = *one;
+                        tm_opaque(one.to_owned(), walk);
+                    }
                 }
             },
             Stmt::Assign { target, value, .. } => {
@@ -54808,6 +55065,7 @@ fn tm_walk_block(block: &Block, words: &winnow_grammar::InternerContext, library
                 let given = tm_deps_of(iter, words, library, env, &walk);
                 walk.scopes.push(collections::BTreeMap::new());
                 for one in bindings.iter() {
+                    let one = *one;
                     let node = format!("b:{}", walk.given.len() as i64);
                     tm_bind(one.to_owned(), &given, &node, walk);
                 }
@@ -55066,8 +55324,9 @@ fn tm_call_deps(func: &Expr, args: &[Expr], config: &[ConfigArg], words: &winnow
         Expr::Path(segments, _) => {
             let mut joined: String = String::from("");
             for segment in segments.iter() {
+                let segment = *segment;
                 if !joined.is_empty() { joined.push_str("::"); }
-                joined.push_str(words.resolve(*segment));
+                joined.push_str(words.resolve(segment));
             }
             joined
         },
@@ -56401,6 +56660,7 @@ fn bounds_of(names: &winnow_grammar::InternerContext, item: &Item, traits: &coll
 fn bounds_in(names: &winnow_grammar::InternerContext, generics: &[GenericParam], traits: &collections::BTreeSet<String>, span: &Span, out: &mut Vec<Finding>) {
     for parameter in generics.iter() {
         for bound in parameter.bounds.iter() {
+            let bound = *bound;
             let name = names.resolve(bound.to_owned()).to_owned();
             if !name.contains("::") && !traits.contains(&name) { out.push(refusal("NK1135", span.clone(), format!("There's no trait called `{}`.", name), vec![String::from("A bound names a trait the caller's type has to implement, and no trait by this name is declared.")], format!("Declare `{}` with `trait`, or remove the bound. (Without a bound, the value can only be moved and passed on.)", name))); }
         }
@@ -56902,8 +57162,9 @@ fn scan(unit: &Unit, asked: &Asked<'_>, target: Option<&Type>, method: u32, item
             let function = function_name(asked.names, name);
             let subject_fields = fields_of_type(unit, asked, target);
             for (param, ty) in declared.iter() {
+                let param = *param;
                 if !ty.is_view { continue; }
-                let param_name = asked.names.resolve(*param).to_owned();
+                let param_name = asked.names.resolve(param).to_owned();
                 let mut carriers: collections::BTreeSet<String> = collections::BTreeSet::new();
                 carriers.insert(param_name.to_owned());
                 let mut here = Here { subject: match target {
@@ -56911,7 +57172,7 @@ fn scan(unit: &Unit, asked: &Asked<'_>, target: Option<&Type>, method: u32, item
                     None => None,
                 }, subject_fields: subject_fields.to_owned(), declared: declared.to_owned(), ours: if result_holds_view { text_of(asked, (ret_type).as_ref()) } else { None }, carriers, found: vec![] };
                 walk_block(unit, asked, body, true, own_buffer, &mut here);
-                one_answer(asked, &here, *param, Scanned { param: param_name, ty: written_type(asked.names, ty), function: function.to_owned(), subject: match subject_name.as_ref() {
+                one_answer(asked, &here, param, Scanned { param: param_name, ty: written_type(asked.names, ty), function: function.to_owned(), subject: match subject_name.as_ref() {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                     None => None,
                 }, method, names_a_buffer: subject_names_a_buffer }, out);
@@ -56946,7 +57207,10 @@ fn one_answer(asked: &Asked<'_>, here: &Here, symbol: winnow_grammar::Symbol, si
     let one_carrier = carriers.len() == 1 && !signed.names_a_buffer;
     let mut unreached: Vec<(Span, Destination)> = vec![];
     let mut reached: Vec<(Span, Destination)> = vec![];
-    for (span, into) in here.found.iter() { if covered_by_the_subject(signed.names_a_buffer, into) || one_carrier && a_param_field(into) { reached.push((span.clone(), into.clone())); } else { unreached.push((span.clone(), into.clone())); } }
+    for (span, into) in here.found.iter() {
+        let span = *span;
+        if covered_by_the_subject(signed.names_a_buffer, into) || one_carrier && a_param_field(into) { reached.push((span.clone(), into.clone())); } else { unreached.push((span.clone(), into.clone())); }
+    }
     let carried = unreached.is_empty();
     let candidates = if carried { reached } else { unreached };
     if candidates.is_empty() { return; }
@@ -57036,7 +57300,12 @@ fn walk_block(unit: &Unit, asked: &Asked<'_>, block: &Block, tail: bool, own_buf
         let span = nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).span.clone();
         match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).node {
             Stmt::Let { names, value, .. } => {
-                if mentions(unit, asked, &here, value) && !own_buffer(value) { for name in names.iter() { here.carriers.insert(asked.names.resolve(*name).to_owned()); } }
+                if mentions(unit, asked, &here, value) && !own_buffer(value) {
+                    for name in names.iter() {
+                        let name = *name;
+                        here.carriers.insert(asked.names.resolve(name).to_owned());
+                    }
+                }
                 if views_a_local_struct(asked, block, i, names, value) { descend(unit, asked, value, &span, own_buffer, here); } else { stores(unit, asked, value, &span, own_buffer, here); }
             },
             Stmt::Comptime { name, value, .. } => {
@@ -57060,7 +57329,12 @@ fn walk_block(unit: &Unit, asked: &Asked<'_>, block: &Block, tail: bool, own_buf
             Stmt::Return(value) => { handed_back_maybe(unit, asked, (value).as_ref(), &span, own_buffer, here); },
             Stmt::Expr(expr) => { if returning { handed_back(unit, asked, expr, &span, own_buffer, here); } else { stores(unit, asked, expr, &span, own_buffer, here); } },
             Stmt::For { bindings, iter, body, .. } => {
-                if mentions(unit, asked, &here, iter) { for binding in bindings.iter() { here.carriers.insert(asked.names.resolve(*binding).to_owned()); } }
+                if mentions(unit, asked, &here, iter) {
+                    for binding in bindings.iter() {
+                        let binding = *binding;
+                        here.carriers.insert(asked.names.resolve(binding).to_owned());
+                    }
+                }
                 stores(unit, asked, iter, &span, own_buffer, here);
                 walk_block(unit, asked, body, false, own_buffer, here);
             },
@@ -57142,7 +57416,8 @@ fn assigned(unit: &Unit, asked: &Asked<'_>, target: &Expr, span: &Span, here: &m
 fn a_struct_parameter(unit: &Unit, asked: &Asked<'_>, here: &Here, name: winnow_grammar::Symbol) -> Option<String> {
     let wanted = asked.names.resolve(name);
     for (declared, ty) in here.declared.iter() {
-        if asked.names.resolve(*declared) == wanted {
+        let declared = *declared;
+        if asked.names.resolve(declared) == wanted {
             let owner = asked.names.resolve(ty.name);
             if !ty.is_view && unit.borrowing.contains(owner) { return Some(owner.to_owned()); }
             return None;
@@ -57167,7 +57442,10 @@ fn field_of_param(unit: &Unit, asked: &Asked<'_>, param: winnow_grammar::Symbol,
 
 fn joined_path(asked: &Asked<'_>, parts: &[winnow_grammar::Symbol]) -> String {
     let mut written: Vec<String> = vec![];
-    for part in parts.iter() { written.push(asked.names.resolve(*part).to_owned()); }
+    for part in parts.iter() {
+        let part = *part;
+        written.push(asked.names.resolve(part).to_owned());
+    }
     written.join("::")
 }
 
@@ -57186,7 +57464,10 @@ fn variable_type(asked: &Asked<'_>, here: &Here, name: &str) -> Option<Type> {
             None => None,
         };
     }
-    for (param, ty) in here.declared.iter() { if asked.names.resolve(*param) == name { return Some(ty.clone()); } }
+    for (param, ty) in here.declared.iter() {
+        let param = *param;
+        if asked.names.resolve(param) == name { return Some(ty.clone()); }
+    }
     None
 }
 
@@ -57973,12 +58254,20 @@ fn rsrc_block(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::
         match &nikaia_std::index::get(&block.stmts, (i) as usize).node {
             Stmt::Let { names, value, ty, .. } => {
                 let reach = rsrc_eval(unit, asked, here, known, own_buffer, value, flow);
-                for name in names.iter() { rsrc_shadow(asked, here, asked.names.resolve(*name), flow); }
+                for name in names.iter() {
+                    let name = *name;
+                    rsrc_shadow(asked, here, asked.names.resolve(name), flow);
+                }
                 if names.len() == 1 && ty.is_some() {
                     let annotation = match ty { Some(__nikaia_value) => __nikaia_value, None => return tail };
                     flow.annotated.insert(asked.names.resolve(*nikaia_std::index::get(&names, 0)).to_owned(), annotation.clone());
                 }
-                if !own_buffer(value) { for name in names.iter() { rsrc_bind(flow, asked.names.resolve(*name), &reach); } }
+                if !own_buffer(value) {
+                    for name in names.iter() {
+                        let name = *name;
+                        rsrc_bind(flow, asked.names.resolve(name), &reach);
+                    }
+                }
             },
             Stmt::Comptime { name, value, .. } => {
                 let name = *name;
@@ -58003,8 +58292,9 @@ fn rsrc_block(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::
             Stmt::For { bindings, iter, body, .. } => {
                 let reach = rsrc_eval(unit, asked, here, known, own_buffer, iter, flow);
                 for binding in bindings.iter() {
-                    rsrc_shadow(asked, here, asked.names.resolve(*binding), flow);
-                    rsrc_bind(flow, asked.names.resolve(*binding), &reach);
+                    let binding = *binding;
+                    rsrc_shadow(asked, here, asked.names.resolve(binding), flow);
+                    rsrc_bind(flow, asked.names.resolve(binding), &reach);
                 }
                 let walked = rsrc_block(unit, asked, here, known, own_buffer, body, flow);
             },
@@ -58636,7 +58926,10 @@ fn hole_written(names: &winnow_grammar::InternerContext, expr: &Expr, spec: Opti
 
 fn path_written(names: &winnow_grammar::InternerContext, segments: &[winnow_grammar::Symbol]) -> String {
     let mut parts: Vec<String> = vec![];
-    for segment in segments.iter() { parts.push(names.resolve(*segment).to_owned()); }
+    for segment in segments.iter() {
+        let segment = *segment;
+        parts.push(names.resolve(segment).to_owned());
+    }
     parts.join("::")
 }
 

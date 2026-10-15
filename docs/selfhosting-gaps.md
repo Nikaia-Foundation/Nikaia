@@ -170,9 +170,9 @@ not as a gap: *as it is today, until someone needs more*.
 | defect | n | Rust | by hand |
 | :--- | ---: | :--- | :--- |
 | `starts_with([chars])` passes the checker, rustc E0277 (D17) | 1 | `ty.starts_with(['i', 'a', ..])` | `render::an_or_a` |
-| `match name { "i32" \| "i64" => .. }` on `ref String` (D19) | 1 | `matches!(name.as_str(), "i32" \| ..)` | `a_copied_scalar`, one arm per string |
+| `match name { "i32" \| "i64" => .. }` on `ref String` (D19) | 1 | `matches!(name.as_str(), "i32" \| ..)` | `a_copied_scalar`, one arm per string; **removed (0.0.965)**: one or-pattern arm |
 | `mut e: ref E` reassigned in a loop and returned: rustc "missing lifetime" (new, probe `p25`) | 1 | `fn peeled(mut value: &Expr) -> &Expr { while let .. }` | recursion |
-| `map.get(k)?.clone() ?? x` on a `Ty` or `Span` value lowers to a `&T` (E0277 `&Ty == Ty`, E0308); on an `i64` an index by `&i64` (D31) | 3 | `self.arm_types.get(&k)?` | `check_arm_leaves.nika`: `arm_type_of` returning `Ty?`, plain `?? return` for the `i64` |
+| `map.get(k)?.clone() ?? x` on a `Ty` or `Span` value lowers to a `&T` (E0277 `&Ty == Ty`, E0308); on an `i64` an index by `&i64` (D31) | 3 | `self.arm_types.get(&k)?` | `check_arm_leaves.nika`: `arm_type_of` returning `Ty?`, plain `?? return` for the `i64`; D36 is built, and the two later loops of this kind (`check_core_places_bound`, `check_core_flow_part`) are **removed (0.0.965)** |
 | NK2302 on a method whose result holds `value`'s views and a `Ty` cloned out of `self`'s map | 1 | `fn arms_to_ask<'e>(&mut self, value: &'e Expr) -> Vec<(&'e Expr, Ty)>` | the clone moved into `arm_type_of` |
 | two `self.s` arms of a Rust closure kept across a `self.s` write (E0502) | 1 | `leaves(then_branch)` called again after `arm_types.insert` | the booleans computed once |
 | a guard over a `T?` scrutinee (`n if n > 3` on `i64?`) passes the checker, rustc E0308 (new, probe `p01`) | - | - | - |
@@ -209,7 +209,7 @@ checker refusal (`NK1125`) if `!= null` is not meant to narrow.
 | `from[1..]` byte slicing with `find` | the whole text as `Vec[scalar]` | partly: follows from no `split_at` |
 | `Item::Enum { .. } if text == ty =>` | `if` inside the arm | no (`q06`) |
 | U-c1 `match hole { V(n, _) => seen.insert(..), _ => {} }` | the insert in a block arm | no: the arm lowered without `;`, `Option` against `()` (lowering-defects D34) |
-| U-c1 `fn compares(op: BinaryOp)` called with a bound `op` | the comparison inline | no: param lowered `&BinaryOp`, call `*op` (lowering-defects D34) |
+| U-c1 `fn compares(op: BinaryOp)` called with a bound `op` | the comparison inline; **removed (0.0.965)**: `check_core_ops_equality(op) \|\| check_core_ops_ordering(op)` | no: param lowered `&BinaryOp`, call `*op` (lowering-defects D34) |
 | U-c1 `spec.clone()` on a `String?` from a pattern | `spec?.clone()` | yes (NK1125) |
 | U-c1 `.or_else` chain of five literal kinds | `if x != null { return x }` per kind | no, but no lazy `??` chain exists |
 | U-c1 `let [condition] = args else {..}` | `if args.len() != 1` then `args[0]` | no slice patterns |
@@ -225,7 +225,7 @@ checker refusal (`NK1125`) if `!= null` is not meant to narrow.
 | U-c3 `args.iter().map(\|(at, arg)\| match (arg, expected.get(at)) ..)` | a loop, a helper asking the pair, one function per arm | no tuple pattern over an option |
 | U-c3 `args.split_last()` | `args[args.len() - 1]` after a length check | no slice patterns |
 | U-c4 `MultiLock::named(name)` in `call` | the two spellings compared, `writing: bool` to `check_core_locks` | yes: `MultiLock` stays a Rust enum for the tests' ledger walk |
-| U-c4 `name.strip_prefix(f"{ty}::")` | a helper over `ref String` | an owned `String` as a pattern lowers by value (E0277) |
+| U-c4 `name.strip_prefix(f"{ty}::")` | a helper over `ref String`; **removed (0.0.965)**: written inline (D38 built) | an owned `String` as a pattern lowers by value (E0277) |
 | U-c4 `result: ref Ty?` handed a `Fn`'s field | the caller unwraps to `Ty` first | `ref T?` is `Option<&T>`, a bound field `&Option<T>` |
 | U-c4 `rsplit_once` / `split_once` | `split("::")` collected, a loop | no `rsplit_once` |
 | U-c4 `arguments`, `an_attribute_read`, `a_call_that_hands_its_number_back`, `a_standard_bound_not_met` | host methods (hosted) | yes: Rust until C-5h |
@@ -248,7 +248,7 @@ checker refusal (`NK1125`) if `!= null` is not meant to narrow.
 | U-c7 `fn …() -> (Expr, Expr)?` for a range's ends | the range's half of `for` is its own function over `match iter` | yes: `NK1254`, no nullable tuple |
 | U-c7 `Local { .., ..self.local_free(..) }` | `CheckLocal::free` then field writes | yes: no struct update syntax |
 | U-c7 `frame.first_mut()` | `frame[0].open_number = …` behind `frame.len() > 0` | yes: no `if let` |
-| U-c9 `bound.get(p).cloned().unwrap_or(..)` | a loop over the map (`check_core_places_bound`) | no: `bound.get(p)?.clone()`, which NK1185 names as the way, clones the reference (D36) |
+| U-c9 `bound.get(p).cloned().unwrap_or(..)` | a loop over the map (`check_core_places_bound`); **removed (0.0.965)**: `bound.get(p)?.clone() ?? Ty::Unknown` | no: `bound.get(p)?.clone()`, which NK1185 names as the way, clones the reference (D36) |
 | U-c9 `match &self.s.flow.unrolling { Some(u) => .. }` | a helper over `ref CheckUnrolling?` | no: `state.flow.unrolling ?? return` moves out of `&mut` (E0507, D35's shape on a field of a `mut` parameter) |
 | U-c9 `field.parse::<usize>()` | digits checked, then `text::parse_i64` | yes: no `usize` |
 | U-c9 `self.expect_at(..)` (a closure over `moved_to`) | `slots_waiting`, `expect_type`, `findings_moved` written out | yes: no `impl FnOnce(&mut Self)` |
