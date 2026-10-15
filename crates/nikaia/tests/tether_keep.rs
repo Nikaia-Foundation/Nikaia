@@ -408,7 +408,7 @@ fn each_representation_is_the_one_the_plan_chose() {
         loader.contains("__keep: &'k nikaia_std::tether::Keep"),
         "{loader}"
     );
-    assert!(loader.contains("Vec<Setting<'k>>"), "{loader}");
+    assert!(loader.contains("Vec<Setting<'k, 'k>>"), "{loader}");
     // `put_viewed`: a keep handed in may be a task's, whose `Holding` finds
     // the views again in it rather than copying them (ADR-218 D4).
     assert!(loader.contains("__keep.put_viewed("), "{loader}");

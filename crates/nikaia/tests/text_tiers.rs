@@ -200,7 +200,7 @@ fn both_kinds_of_text_in_one_field_each_as_it_is() {
         "{rust}"
     );
     assert!(
-        rust.contains("note: nikaia_std::either_text::EitherText<'a>"),
+        rust.contains("note: nikaia_std::either_text::EitherText<'a1>"),
         "{rust}"
     );
     // A result both kinds flow into: each `return` as it is.

@@ -297,10 +297,10 @@ fn a_narrowing_cast_over_a_for_binding_still_aborts() {
 #[test]
 fn a_let_that_declares_a_type_over_a_for_binding_is_refused() {
     let found = findings(
-        "struct Row { a: i64 }\n\
+        "struct Row { a: i64, name: String }\n\
          \n\
          fn main() {\n\
-         \x20   let rows: Vec[Row] = [Row { a: 1 }]\n\
+         \x20   let rows: Vec[Row] = [Row { a: 1, name: \"x\" }]\n\
          \x20   for r in rows {\n\
          \x20       let copy: Row = r\n\
          \x20       println(f\"{copy.a}\")\n\

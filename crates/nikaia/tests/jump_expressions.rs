@@ -27,7 +27,8 @@ fn lowered(source: &str) -> String {
         .rust
 }
 
-const BAD: &str = "enum Bad { OutOfRange(i64), Missing }\n";
+const BAD: &str = "enum Bad { OutOfRange(i64), Missing }\n\
+                   impl Error for Bad { fn message(ref self) -> String { return \"bad\" } }\n";
 
 /// **A `match` arm that throws**, and the `match` is the *other* arm's type:
 /// the arm that throws hands back nothing at all.

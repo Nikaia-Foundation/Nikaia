@@ -219,11 +219,12 @@ fn a_field_only_quiet_code_is_stored_in_is_not_refused() {
     ));
 }
 
-/// **Code put into a function field where the column cannot read it** - by an
-/// assignment - leaves the field undecided rather than quiet (ADR-230 D1): a
-/// quiet literal elsewhere does not speak for it.
+/// **Code assigned into a function field meets what the literal put there**
+/// (ADR-230 D1, ADR-351 D3): the field holds the union of every value that
+/// reaches it, so a lock taken by the assigned code is one a call through the
+/// field may take, and a quiet literal elsewhere does not speak for it.
 #[test]
-fn a_field_code_is_assigned_into_is_not_answered_by_the_literal_alone() {
+fn code_assigned_into_a_field_is_read_with_the_literal() {
     let found = findings(
         "struct Button {\n    on_click: fn() sync,\n}\n\n\
          fn main() {\n\
@@ -234,7 +235,5 @@ fn a_field_code_is_assigned_into_is_not_answered_by_the_literal_alone() {
          \x20   a.access fn(x) { button.on_click() }\n\
          }\n",
     );
-    // Undecided is not a refusal (ADR-281 D29's third value): the runtime check
-    // is where this program stands, as every undecided one does.
-    assert!(!found.iter().any(|f| f.code == "NK2203"), "{found:#?}");
+    assert!(found.iter().any(|f| f.code == "NK2203"), "{found:#?}");
 }
