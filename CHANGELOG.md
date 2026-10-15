@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.966] — 2026-10-15
+
+**A catch naming every error type is complete; kept code's set belongs to its storage (#625, #620)**
+- ADR-357: a `match` over a `catch`'s error that names every non-fatal type arriving needs no `else`; `"?"` or an open `from(p)` needs one; a grown set refuses such a `match` (`NK1151`, narrated), and `NK2404` warns the author of a `pub` function whose set grew. ADR-351 D8: kept code lives in a value something holds; its set belongs to the storage (handles share it), the ledger's new `code` key says what a function puts where, and it lowers without a box.
+
 ## [0.0.965] — 2026-10-14
 
 **Lowering defects D2, D4, D9, D19; four tools workarounds removed**

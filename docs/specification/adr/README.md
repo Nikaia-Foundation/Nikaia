@@ -244,7 +244,8 @@ implementation.
 
 | ADR | Decides | Status | Built |
 | :--- | :--- | :--- | :--- |
-| [351](adr-351.md) | A function value keeps the error set inferred for it, called at once or kept: a call through it fails with that set, storing or handing it on fails with nothing, values that meet carry the union; a ledger says `from(p)`; `supervisor::run` throws a child's fatal error itself (`Handed` withdrawn); a `net::serve` handler's error is a detached task's | Accepted | no |
+| [357](adr-357.md) | A `catch` whose `match` names every non-fatal error type arriving is complete, with no `else`; `"?"` or an open `from(p)` needs `else`; a grown set refuses such a `match` (`NK1151`, narrated), and the author of a `pub` function is warned when its set grows (`NK2404`) | Accepted | no |
+| [351](adr-351.md) | A function value keeps the error set inferred for it, called at once or kept: a call through it fails with that set, storing or handing it on fails with nothing, values that meet carry the union; a ledger says `from(p)`; `supervisor::run` throws a child's fatal error itself (`Handed` withdrawn); a `net::serve` handler's error is a detached task's; kept code's set belongs to its storage, the ledger's `code` says what a function puts there, lowered without a box (D8) | Accepted | no |
 | [308](adr-308.md) | An unread error is bound as `_error`, a `catch` over what cannot fail is refused (`NK1134`), and an error that newly reaches a handler is named once (`NK2402`). | Accepted | yes |
 | [280](adr-280.md) | A failure travels as its error type in a one-word envelope; the site is free, a trace is asked for, and the failures that joined it are shown, not read. Where more than one error type arrives, `error` is an `Error`, one of the members (D30). | Accepted | yes |
 | [023](adr-023.md) | `throws` carries no type list and the error set is inferred into the ledger; `throw` exists, an error knows its site, and there is no postfix `?`. | Accepted | yes |
@@ -272,6 +273,7 @@ either finds the other. Records replaced as a whole are not here: they are in
 
 | Changed | By | What holds now |
 | :--- | :--- | :--- |
+| [023](adr-023.md) D4, [280](adr-280.md) D18, [308](adr-308.md) D11 | [357](adr-357.md) D1-D3 | the set of error types at a `catch` is closed; a `match` naming every type needs no `else`, and a grown set refuses it |
 | [291](adr-291.md) D1, D5 | [356](adr-356.md) D1, D2 | a `let` and a `for` head take a nested tuple; a variant there is `NK1259` |
 | [349](adr-349.md) D3 | [355](adr-355.md) D3 | `E::V(a, ..)` and `(a, ..)` are the remaining values; `NK1255` only on a variant without values |
 | [283](adr-283.md) D25 | [353](adr-353.md) D1-D4 | a result may point into several parameters, view by view; giving an argument up while viewed is allowed; a change in place is `NK2305` |

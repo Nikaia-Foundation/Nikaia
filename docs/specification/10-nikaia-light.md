@@ -1,7 +1,7 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.965 (Draft)
-**Date:** 2026-10-14
+**Version:** 0.0.966 (Draft)
+**Date:** 2026-10-15
 
 ---
 
@@ -2608,7 +2608,11 @@ or returning it can fail with nothing. Where values with different sets meet
 (the arms of an `if` or a `match`, the elements of one list or map, the values
 assigned to one variable or field, the arguments every caller hands one
 parameter), the place carries their union. A place no failing value reaches
-cannot fail ([ADR-351](adr/adr-351.md)).
+cannot fail ([ADR-351](adr/adr-351.md)). Code that is kept lives in a value
+someone holds, reached from a parameter or a result: the set belongs to that
+storage, every handle to it shares it (a `Shared`, the two ends of a channel),
+and it holds everything put there in the value's life. What a function puts
+into such a place is in its ledger entry (Part III 13.5, `code`).
 
 **An error type is an `enum`.**
 
@@ -2729,8 +2733,7 @@ let config = load() catch {
 }
 ```
 
-A `match` over `error` that more than one error type reaches needs `else`, because the set of error **types** is open
-(`NK1151`). Outside a `match`, such an `error` is known by what every member has: `Error`'s methods, `f"{error}"` and `throw error`. What only one member has is reached through the `match`. A library's error type arrives as that type: a function that reads
+A `match` over `error` is **complete when it names every type that can arrive**: each variant of it, or the type by a bare name. A fatal type need not be named, since it passes on unless named. Where the set holds something the compiler cannot name - a call into code no ledger describes - the `match` needs `else` (`NK1151`). Outside a `match`, such an `error` is known by what every member has: `Error`'s methods, `f"{error}"` and `throw error`. What only one member has is reached through the `match`. A library's error type arrives as that type: a function that reads
 a file hands its failure on as an `io::IoError`. No `throw` in the program
 raised it, so it has no site, and `error.full()` says so; the failures that
 joined it travel with it through every caller that hands it on.
@@ -2767,16 +2770,16 @@ let m = run() catch {
 (Part III 17.1). At the end of `main` it ends the program with `code`; every
 other error that leaves `main` ends it with `1` (Part III A.2).
 
-**Two sets differ.** The **variants of an error type** are closed: a `match`
-over them is exhaustive, and adding one is a breaking change. The **set of
-error types** arriving at a `catch` is open, and it grows when a callee gains a
-failure. When it grows, **every `catch` over that callee is named once in the
-build output**, with the new error, the handler it now reaches, and the fact
-that the handler takes it as it takes everything (`NK2402`, given at the call
-inside the handler). Under `--locked` the build fails until the ledger is
-regenerated and committed. The commit is the acknowledgement; nothing is
-written at the handler, and a handler that matches on `error` is told the same
-as one that does not.
+**When a set grows.** The variants of an error type and the set of error types
+arriving at a `catch` are both closed: a `match` that names all of them is
+complete, and a new one makes it incomplete. When a callee gains a failure, a
+`match` that named every type without `else` is refused (`NK1151`), and the
+message names the new type and the call that brings it in. A handler with
+`else`, or one that does not match on `error`, takes the new error as it takes
+everything, and **is named once in the build output** (`NK2402`, given at the
+call inside the handler). Under `--locked` the build fails until the ledger is
+regenerated and committed. The author of a `pub` function whose set grows is
+warned (`NK2404`): callers that name every type will stop building.
 
 **Every error carries its site and its chain.** The **site** is where the error
 was raised. The chain holds every error that joined on the way: a cleanup that
