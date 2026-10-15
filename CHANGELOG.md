@@ -8,6 +8,16 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.972] — 2026-10-15
+
+**check: a loop body's tail if or match, and a discarded choice's arms, ask no common type (#596)**
+
+- The value of a `for` or `while` body is never used, so an `if` or `match`
+  at its end is a statement: arms of different types (`m.insert(..)` and
+  `n.insert(..)`) are no longer `NK1245`. A discarded `if` or `match` hands
+  this on to its arms, so an `else if` chain and nested tails are statements
+  too.
+
 ## [0.0.971] — 2026-10-15
 
 **a parameter of code called in a throws function hands its failure on; from(p) chains through a parameter handed on and a mut parameter's place (ADR-351 D3, D4, part of #620)**

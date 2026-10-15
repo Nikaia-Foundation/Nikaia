@@ -786,6 +786,7 @@ pub fn check_core_stmt_while[H: CheckHost](mut state: CheckState, world: ref Che
     state.scope.push(proved)
     // **The body and not the condition.**
     state.flow.loops += 1
+    check_core_stmt_body_discarded(state, body)
     check_core_block(state, world, host, body)
     state.flow.loops -= 1
     state.scope.pop()
@@ -958,6 +959,7 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
     state.repeats.push(CheckRepeats::a_loop(world.words, depth, body))
     state.scope.push(frame)
     state.flow.loops += 1
+    check_core_stmt_body_discarded(state, body)
     check_core_block(state, world, host, body)
     state.flow.loops -= 1
     state.scope.pop()
@@ -1008,6 +1010,21 @@ fn check_core_stmt_is_a_jump(stmt: ref Stmt) -> bool sync {
         Stmt::Break => true,
         Stmt::Continue => true,
         else => false,
+    }
+}
+
+/// **A loop body's value is never used** (#596): its tail `if` or `match` is a
+/// statement, and its arms are not asked for a common type.
+pub fn check_core_stmt_body_discarded(mut state: CheckState, body: ref Block) sync {
+    let count = body.stmts.len() as i64
+    if count == 0 {
+        return
+    }
+    match body.stmts[count - 1].node {
+        Stmt::Expr(value) => {
+            state.discarded.insert(id_of(value) as i64)
+        },
+        else => {},
     }
 }
 

@@ -1952,6 +1952,25 @@ fn every_refused_arm_shape_is_pointed_at() {
     assert_eq!((text.as_str(), line), ("\"x\"", 2));
 }
 
+/// A loop body's value is never used: its tail `if` asks no common type of its
+/// arms (#596).
+#[test]
+fn the_tail_if_of_a_loop_body_is_a_statement() {
+    let found = findings(
+        "use std::collections\n\n\
+         fn main() {\n    \
+         let mut m: collections::BTreeMap[i64, String] = collections::BTreeMap()\n    \
+         let mut n: collections::BTreeMap[i64, i64] = collections::BTreeMap()\n    \
+         let xs: Vec[i64] = [1, 2]\n    \
+         for x in xs {\n        if x == 1 { m.insert(1, \"a\".clone()) } else { n.insert(2, 3) }\n    }\n    \
+         let mut i = 0\n    \
+         while i < 2 {\n        i += 1\n        if i == 1 { m.insert(1, \"b\".clone()) } else if i == 2 { n.insert(2, 4) } else { m.insert(3, \"c\".clone()) }\n    }\n    \
+         for x in xs {\n        match x {\n            1 => m.insert(1, \"d\".clone()),\n            else => n.insert(2, 5),\n        }\n    }\n    \
+         println(f\"{m.len()} {n.len()}\")\n}\n",
+    );
+    assert!(found.is_empty(), "{found:#?}");
+}
+
 /// A condition, an assigned value and an argument are pointed at (#107).
 #[test]
 fn a_refused_expression_is_pointed_at() {

@@ -15177,6 +15177,17 @@ fn check_core_flow_meet_at_text(state: &mut CheckState, world: &CheckWorld<'_, '
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+fn check_core_flow_arm_discarded(state: &mut CheckState, body: &Expr) {
+    state.discarded.insert(id_of(body) as i64);
+    state.discarded.insert(id_of(check_peeled(body)) as i64);
+    match body {
+        Expr::Block(block, _) => { check_core_stmt_body_discarded(state, block); },
+        _ => { },
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 fn check_core_flow_disagree(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr, arms: &[CheckArm<'_>], span: &Span) {
     if state.discarded.contains(&(id_of(expr) as i64)) { return; }
     let is_if = matches!(expr, Expr::If { .. });
@@ -15320,6 +15331,13 @@ pub fn check_core_flow_if<H: CheckHost>(state: &mut CheckState, world: &CheckWor
     state.expect_bool(&cond_ty, &at, "An `if` decides on a `bool`.");
     let outer_condition = nikaia_std::index::or(state.stamped_condition, || -1);
     if cond_ty.is_seen() { state.stamped_condition = Some(span.start as i64); }
+    if state.discarded.contains(&(id_of(expr) as i64)) {
+        check_core_stmt_body_discarded(state, then_branch);
+        if else_branch.is_some() {
+            let otherwise: &Block = nikaia_std::index::or(else_branch, || then_branch.into());
+            check_core_stmt_body_discarded(state, otherwise);
+        }
+    }
     let choice = state.flow.next_choice;
     state.flow.next_choice += 1;
     state.branch.push((choice, 0));
@@ -15590,6 +15608,7 @@ pub fn check_core_flow_match<H: CheckHost>(state: &mut CheckState, world: &Check
     let choice = state.flow.next_choice;
     state.flow.next_choice += 1;
     let mut taken: i64 = 0;
+    if state.discarded.contains(&(id_of(expr) as i64)) { for arm in arms.iter() { check_core_flow_arm_discarded(state, &arm.body); } }
     for arm in arms.iter() {
         let mut arm_typed = typed.clone();
         if !several.is_empty() { arm_typed = check_core_flow_member(world, &several, &arm.pattern); }
@@ -18539,6 +18558,7 @@ pub fn check_core_stmt_while<H: CheckHost>(state: &mut CheckState, world: &Check
     let proved = check_narrow_proved_here(state, world, cond, true);
     state.scope.push(proved);
     state.flow.loops += 1;
+    check_core_stmt_body_discarded(state, body);
     check_core_block(state, world, host, body);
     state.flow.loops -= 1;
     state.scope.pop();
@@ -18663,6 +18683,7 @@ pub fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     state.repeats.push(CheckRepeats::a_loop(world.words, depth, body));
     state.scope.push(frame);
     state.flow.loops += 1;
+    check_core_stmt_body_discarded(state, body);
     check_core_block(state, world, host, body);
     state.flow.loops -= 1;
     state.scope.pop();
@@ -18709,6 +18730,17 @@ pub fn check_core_stmt<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 fn check_core_stmt_is_a_jump(stmt: &Stmt) -> bool { matches!(stmt, Stmt::Break | Stmt::Continue) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_core_stmt_body_discarded(state: &mut CheckState, body: &Block) {
+    let count = body.stmts.len() as i64;
+    if count == 0 { return; }
+    match &nikaia_std::index::get(&body.stmts, nikaia_std::index::at(count - 1)).node {
+        Stmt::Expr(value) => { state.discarded.insert(id_of(value) as i64); },
+        _ => { },
+    }
+}
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
@@ -59651,7 +59683,7 @@ pub mod check_core_places {
 }
 pub mod check_core_stmt {
     #[allow(unused_imports)]
-    pub use super::{check_core_stmt_element_view, check_core_stmt_holds_code, check_core_stmt_let, check_core_stmt_assign, check_core_stmt_while, check_core_stmt_for, check_core_stmt_return, check_core_stmt_jump, check_core_stmt, check_core_block};
+    pub use super::{check_core_stmt_element_view, check_core_stmt_holds_code, check_core_stmt_let, check_core_stmt_assign, check_core_stmt_while, check_core_stmt_for, check_core_stmt_return, check_core_stmt_jump, check_core_stmt, check_core_stmt_body_discarded, check_core_block};
 }
 pub mod check_crossings {
     #[allow(unused_imports)]

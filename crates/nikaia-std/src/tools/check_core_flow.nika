@@ -181,6 +181,17 @@ fn check_core_flow_meet_at_text(mut state: CheckState, world: ref CheckWorld, ar
     return text
 }
 
+/// **A `match` arm whose value is not used** (#596): the arm, and the tail of
+/// the block it is, are statements.
+fn check_core_flow_arm_discarded(mut state: CheckState, body: ref Expr) sync {
+    state.discarded.insert(id_of(body) as i64)
+    state.discarded.insert(id_of(check_peeled(body)) as i64)
+    match body {
+        Expr::Block(block, _) => check_core_stmt_body_discarded(state, block),
+        else => {},
+    }
+}
+
 /// **Arms whose types differ**: said once, at the first arm that is not the
 /// first one's type.
 fn check_core_flow_disagree(mut state: CheckState, world: ref CheckWorld, expr: ref Expr, arms: ref Vec[CheckArm], span: ref Span) sync {
@@ -355,6 +366,15 @@ pub fn check_core_flow_if[H: CheckHost](mut state: CheckState, world: ref CheckW
     let outer_condition = state.stamped_condition ?? -1
     if cond_ty.is_seen() {
         state.stamped_condition = span.start as i64
+    }
+    // **An `if` whose value is not used hands that on to its arms** (#596):
+    // an `else if` and an arm's own tail `if` or `match` are statements too.
+    if state.discarded.contains(id_of(expr) as i64) {
+        check_core_stmt_body_discarded(state, then_branch)
+        if else_branch != null {
+            let otherwise: ref Block = else_branch ?? then_branch
+            check_core_stmt_body_discarded(state, otherwise)
+        }
     }
     let choice = state.flow.next_choice
     state.flow.next_choice += 1
@@ -699,6 +719,11 @@ pub fn check_core_flow_match[H: CheckHost](mut state: CheckState, world: ref Che
     let choice = state.flow.next_choice
     state.flow.next_choice += 1
     let mut taken = 0
+    if state.discarded.contains(id_of(expr) as i64) {
+        for arm in arms {
+            check_core_flow_arm_discarded(state, arm.body)
+        }
+    }
     for arm in arms {
         // **An error, one of several, is taken apart by member** (ADR-280 D30).
         let mut arm_typed = typed.clone()
