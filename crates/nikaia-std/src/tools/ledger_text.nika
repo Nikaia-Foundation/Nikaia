@@ -39,7 +39,9 @@ pub fn derived_text(ledger: ref Ledger) -> String {
     out.push_str("# What that contract was derived from: the compiler, the inference and\n")
     out.push_str("# the sources. A consumer believes the contract while the sources hash\n")
     out.push_str("# as recorded here. Part III, 13.5.\n")
-    out.push_str(f"version = {ledger.version}\n")
+    // The record's own version: it moves with what the record says, not
+    // with the contract beside it (ADR-353 D7 raised that one to 4).
+    out.push_str("version = 3\n")
     out.push_str(f"toolchain = \"{ledger.toolchain}\"\n")
     out.push_str(f"inference = \"{ledger.inference}\"\n")
     if ledger.sources.len() > 0 {

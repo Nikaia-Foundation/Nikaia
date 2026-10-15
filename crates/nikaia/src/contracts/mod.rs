@@ -98,7 +98,11 @@ pub const INFERENCE: &str = "stage0-signatures+sync-bodies+throws-bodies+sharing
 /// version 1 file still reads - `true` is taken as `["?"]`, which is what it
 /// always meant - and the version is what tells a *reader* that the file it has
 /// may say more than it knows how to use.
-pub const VERSION: u32 = 3;
+///
+/// 4 since [ADR-353](../../../../docs/specification/adr/adr-353.md) D7: a
+/// type's `tethered` lists its places in the order the fields are written, and
+/// a reading package takes one lifetime per place from it.
+pub const VERSION: u32 = 4;
 
 /// What stays Rust of a variant's entry until its text moves (ADR-294 step
 /// (c)): reading one back. The declaration and `text` are `tools/ty.nika`'s.

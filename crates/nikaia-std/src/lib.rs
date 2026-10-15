@@ -241,7 +241,7 @@ pub mod tools {
     /// `rust::file`'s reason: the generated `Http1::parse_head()` hands
     /// back a parser rather than a result, and a Rust caller has no
     /// emitter to write the four lines that turn one into the other.
-    pub fn written(text: &str) -> Result<Written<'_>, crate::grammar::ParseError> {
+    pub fn written(text: &str) -> Result<Written<'_, '_>, crate::grammar::ParseError> {
         use winnow::Parser;
         let mut stream = winnow_grammar::ParseInput::<()> {
             state: winnow_grammar::ParseContext::<()>::default(),

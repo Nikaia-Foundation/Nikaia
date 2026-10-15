@@ -4064,13 +4064,13 @@ pub struct BufferPlan {
 }
 
 #[derive(Debug, Clone)]
-pub struct BufferAsk<'a> {
+pub struct BufferAsk<'a, 'a1, 'a2, 'a3, 'a4, 'a5> {
     pub names: &'a winnow_grammar::InternerContext,
-    pub own: &'a Ledger,
-    pub library: &'a Ledger,
-    pub items: &'a Vec<Spanned<Item>>,
-    pub context: &'a KeepContext,
-    pub given_up: &'a collections::BTreeMap<i64, String>,
+    pub own: &'a1 Ledger,
+    pub library: &'a2 Ledger,
+    pub items: &'a3 Vec<Spanned<Item>>,
+    pub context: &'a4 KeepContext,
+    pub given_up: &'a5 collections::BTreeMap<i64, String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -4164,7 +4164,7 @@ fn bind_local(name: String, local: Local, walk: &mut BufferWalk) {
 
 fn a_local(at: i64, path: &[(i64, bool)], origins: collections::BTreeSet<(i64, String)>, ty: Option<Type>, buffer: bool, text: bool) -> Local { Local { at, path: path.to_owned(), origins, ty, parameter: false, keeps: false, buffer, text } }
 
-pub fn buffer_plans(program: &Program, ask: &BufferAsk<'_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String) -> Vec<BufferPlan> {
+pub fn buffer_plans(program: &Program, ask: &BufferAsk<'_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String) -> Vec<BufferPlan> {
     let mut out: Vec<BufferPlan> = vec![];
     for item in program.items.iter() {
         match &item.node {
@@ -4179,7 +4179,7 @@ pub fn buffer_plans(program: &Program, ask: &BufferAsk<'_>, holes_of: &impl Fn(&
     out
 }
 
-fn plan_of(item: &Item, target: Option<String>, ask: &BufferAsk<'_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String) -> Option<BufferPlan> {
+fn plan_of(item: &Item, target: Option<String>, ask: &BufferAsk<'_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String) -> Option<BufferPlan> {
     let (name, receiver, args, body) = match item {
         Item::Fn { name, receiver, args, body, .. } => { let name = *name; (name, receiver, args, body) },
         _ => return None,
@@ -4230,12 +4230,12 @@ fn plan_of(item: &Item, target: Option<String>, ask: &BufferAsk<'_>, holes_of: &
     Some(decide(key, body, &walk, ask))
 }
 
-fn carries_maybe(ty: Option<&Type>, ask: &BufferAsk<'_>) -> bool {
+fn carries_maybe(ty: Option<&Type>, ask: &BufferAsk<'_, '_, '_, '_, '_, '_>) -> bool {
     let written = match ty { Some(__nikaia_value) => __nikaia_value, None => return false };
     ask.context.carries(ask.names, written)
 }
 
-fn buffer_block(block: &Block, ask: &BufferAsk<'_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) {
+fn buffer_block(block: &Block, ask: &BufferAsk<'_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) {
     open_scope(walk);
     for stmt in block.stmts.iter() {
         walk.statement = stmt.span.start as i64;
@@ -4244,13 +4244,13 @@ fn buffer_block(block: &Block, ask: &BufferAsk<'_>, holes_of: &impl Fn(&Expr) ->
     close_scope(walk);
 }
 
-fn nested(at: i64, looping: bool, block: &Block, ask: &BufferAsk<'_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) {
+fn nested(at: i64, looping: bool, block: &Block, ask: &BufferAsk<'_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) {
     walk.path.push((at, looping));
     buffer_block(block, ask, holes_of, unaliased, walk);
     walk.path.pop();
 }
 
-fn buffer_statement(stmt: &Stmt, span: &Span, ask: &BufferAsk<'_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) {
+fn buffer_statement(stmt: &Stmt, span: &Span, ask: &BufferAsk<'_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) {
     let at = span.start as i64;
     match stmt {
         Stmt::Let { value, .. } => {
@@ -4323,12 +4323,20 @@ fn shed(root: &str, walk: &mut BufferWalk) {
     walk.sheds.insert(root.to_owned(), paths);
 }
 
-fn let_statement(stmt: &Stmt, span: &Span, ask: &BufferAsk<'_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) {
+fn let_statement(stmt: &Stmt, span: &Span, ask: &BufferAsk<'_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) {
     let (names, value, ty, made) = match stmt {
         Stmt::Let { names, value, ty, .. } => (names, value, ty, made_here(names, value, (ty).as_ref(), ask, unaliased, &walk)),
         _ => return,
     };
     let at = span.start as i64;
+    match value {
+        Expr::Variable(moved, _) => {
+            let moved = *moved;
+            let bound = local_of(&ask.names.resolve(moved).to_owned(), &walk);
+            if bound.is_some() && nikaia_std::index::or(bound.as_ref().map(|__nikaia_it| __nikaia_it.buffer), || false) { given_up_inside(nikaia_std::index::or(bound.as_ref().map(|__nikaia_it| __nikaia_it.at), || 0), ask, walk); }
+        },
+        _ => { },
+    }
     if names.len() == 1 {
         let from = taken_from(ask.names, value);
         if from.is_some() { walk.taken.insert(ask.names.resolve(*nikaia_std::index::get(&names, 0)).to_owned(), nikaia_std::index::or(from, || "".into())); }
@@ -4359,7 +4367,7 @@ fn let_statement(stmt: &Stmt, span: &Span, ask: &BufferAsk<'_>, holes_of: &impl 
 
 fn a_named_buffer(made: &Buffer) -> bool { matches!(made, Buffer::Named(_)) }
 
-fn made_here(names: &[winnow_grammar::Symbol], value: &Expr, ty: Option<&Type>, ask: &BufferAsk<'_>, unaliased: &impl Fn(&str) -> String, walk: &BufferWalk) -> Buffer {
+fn made_here(names: &[winnow_grammar::Symbol], value: &Expr, ty: Option<&Type>, ask: &BufferAsk<'_, '_, '_, '_, '_, '_>, unaliased: &impl Fn(&str) -> String, walk: &BufferWalk) -> Buffer {
     if names.len() != 1 { return Buffer::None; }
     match value {
         Expr::MethodCall { receiver, method, .. } => {
@@ -4376,7 +4384,7 @@ fn made_here(names: &[winnow_grammar::Symbol], value: &Expr, ty: Option<&Type>, 
     found
 }
 
-fn copies_text(receiver: &Expr, ask: &BufferAsk<'_>, walk: &BufferWalk) -> bool {
+fn copies_text(receiver: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
     match receiver {
         Expr::LitStr { .. } => true,
         Expr::LitInterpolated { .. } => true,
@@ -4389,7 +4397,7 @@ fn copies_text(receiver: &Expr, ask: &BufferAsk<'_>, walk: &BufferWalk) -> bool 
     }
 }
 
-fn text_local(name: &str, ask: &BufferAsk<'_>, walk: &BufferWalk) -> bool {
+fn text_local(name: &str, ask: &BufferAsk<'_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
     let local = match local_of(name, walk) { Some(__nikaia_value) => __nikaia_value, None => return false };
     if local.text { return true; }
     let ty = match local.ty { Some(__nikaia_value) => __nikaia_value, None => return false };
@@ -4397,21 +4405,21 @@ fn text_local(name: &str, ask: &BufferAsk<'_>, walk: &BufferWalk) -> bool {
     (written == "String" || written == "str") && ty.generics.is_empty()
 }
 
-fn formats(receiver: &Expr, ask: &BufferAsk<'_>, walk: &BufferWalk) -> bool {
+fn formats(receiver: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
     match receiver {
         Expr::Variable(name, _) => { let name = *name; formats_local(ask.names.resolve(name), ask, walk) },
         _ => false,
     }
 }
 
-fn formats_local(name: &str, ask: &BufferAsk<'_>, walk: &BufferWalk) -> bool {
+fn formats_local(name: &str, ask: &BufferAsk<'_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
     let local = match local_of(name, walk) { Some(__nikaia_value) => __nikaia_value, None => return false };
     let ty = match local.ty { Some(__nikaia_value) => __nikaia_value, None => return false };
     let written = ask.names.resolve(ty.name);
     written != "String" && written != "str"
 }
 
-fn is_the_buffer(expr: &Expr, ask: &BufferAsk<'_>, walk: &BufferWalk) -> bool {
+fn is_the_buffer(expr: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
     match expr {
         Expr::Variable(name, _) => { let name = *name; a_buffer_local(ask.names.resolve(name), walk) },
         Expr::MethodCall { receiver, method, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; match ask.names.resolve(method) == "clone" || ask.names.resolve(method) == "to_owned" || ask.names.resolve(method) == "to_string" {
@@ -4422,7 +4430,7 @@ fn is_the_buffer(expr: &Expr, ask: &BufferAsk<'_>, walk: &BufferWalk) -> bool {
     }
 }
 
-fn struct_of(expr: &Expr, ask: &BufferAsk<'_>, walk: &BufferWalk) -> Option<String> {
+fn struct_of(expr: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> Option<String> {
     let name = match expr {
         Expr::StructLit { name, .. } => { let name = *name; ask.names.resolve(name).to_owned() },
         Expr::Variable(name, _) => { let name = *name; match written_type_of(ask.names.resolve(name), ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return None } },
@@ -4432,13 +4440,13 @@ fn struct_of(expr: &Expr, ask: &BufferAsk<'_>, walk: &BufferWalk) -> Option<Stri
     None
 }
 
-fn written_type_of(name: &str, ask: &BufferAsk<'_>, walk: &BufferWalk) -> Option<String> {
+fn written_type_of(name: &str, ask: &BufferAsk<'_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> Option<String> {
     let local = match local_of(name, walk) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let ty = match local.ty { Some(__nikaia_value) => __nikaia_value, None => return None };
     Some(ask.names.resolve(ty.name).to_owned())
 }
 
-fn a_variant(callee: &str, ask: &BufferAsk<'_>) -> bool {
+fn a_variant(callee: &str, ask: &BufferAsk<'_, '_, '_, '_, '_, '_>) -> bool {
     let segments: Vec<&str> = callee.split("::").collect::<Vec<_>>();
     if segments.len() < 2 { return false; }
     let variant = *nikaia_std::index::get(&segments, nikaia_std::index::at(segments.len() as i64 - 1));
@@ -4480,7 +4488,7 @@ fn flow_into(root: &str, origins: &collections::BTreeSet<(i64, String)>, walk: &
     set_local(root, local, walk);
 }
 
-fn given_up_inside(bound_at: i64, ask: &BufferAsk<'_>, walk: &mut BufferWalk) {
+fn given_up_inside(bound_at: i64, ask: &BufferAsk<'_, '_, '_, '_, '_, '_>, walk: &mut BufferWalk) {
     let viewer = match *nikaia_std::index::get(&ask.given_up, &bound_at) { Some(__nikaia_value) => __nikaia_value, None => return }.to_owned();
     let no_callee: String = String::from("");
     let id = (bound_at, no_callee);
@@ -4511,7 +4519,7 @@ fn escape_word(escaping: &Escape) -> String {
     }
 }
 
-fn nested_blocks(expr: &Expr, at: i64, ask: &BufferAsk<'_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) {
+fn nested_blocks(expr: &Expr, at: i64, ask: &BufferAsk<'_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) {
     match expr {
         Expr::Block(block, _) => { nested_keeping_statement(at, block, ask, holes_of, unaliased, walk); },
         Expr::Unsafe(block, _) => { nested_keeping_statement(at, block, ask, holes_of, unaliased, walk); },
@@ -4550,13 +4558,13 @@ fn nested_blocks(expr: &Expr, at: i64, ask: &BufferAsk<'_>, holes_of: &impl Fn(&
     }
 }
 
-fn nested_keeping_statement(at: i64, block: &Block, ask: &BufferAsk<'_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) {
+fn nested_keeping_statement(at: i64, block: &Block, ask: &BufferAsk<'_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) {
     let statement = walk.statement;
     nested(at, false, block, ask, holes_of, unaliased, walk);
     walk.statement = statement;
 }
 
-fn spawns_in(expr: &Expr, ask: &BufferAsk<'_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, walk: &mut BufferWalk) {
+fn spawns_in(expr: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, walk: &mut BufferWalk) {
     let mut bodies: Vec<Expr> = vec![];
     spawn_bodies(expr, holes_of, &mut bodies);
     for body in bodies.iter() {
@@ -4578,7 +4586,7 @@ fn capture(name: &str, local: &Local, walk: &mut BufferWalk) {
     walk.captured.insert(name.to_owned(), held);
 }
 
-fn task_names(body: &Expr, ask: &BufferAsk<'_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> collections::BTreeSet<String> {
+fn task_names(body: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> collections::BTreeSet<String> {
     let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
     for one in seen_in_expression(body, ask.names, &name_as_it_is, holes_of, &no_root, true) {
         match one {
@@ -4671,7 +4679,7 @@ fn spawn_bodies(expr: &Expr, holes_of: &impl Fn(&Expr) -> Vec<Expr>, out: &mut V
     }
 }
 
-fn effects(expr: &Expr, ask: &BufferAsk<'_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) {
+fn effects(expr: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) {
     match expr {
         Expr::MethodCall { receiver, method, args, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
@@ -4685,7 +4693,7 @@ fn effects(expr: &Expr, ask: &BufferAsk<'_>, holes_of: &impl Fn(&Expr) -> Vec<Ex
     }
 }
 
-fn put_by_method(root: &str, method: &str, args: &[Expr], ask: &BufferAsk<'_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) {
+fn put_by_method(root: &str, method: &str, args: &[Expr], ask: &BufferAsk<'_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) {
     if drops_entries(method) { shed(root, walk); }
     if !keeps_what_it_is_given(method) { return; }
     let mut all: collections::BTreeSet<(i64, String)> = collections::BTreeSet::new();
@@ -4717,7 +4725,7 @@ fn put_into(root: &str, at: i64, of: &collections::BTreeSet<(i64, String)>, walk
     walk.puts_into.insert(key, PutsAt { by_arg });
 }
 
-fn origins_of(expr: &Expr, ask: &BufferAsk<'_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) -> collections::BTreeSet<(i64, String)> {
+fn origins_of(expr: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) -> collections::BTreeSet<(i64, String)> {
     let none: collections::BTreeSet<(i64, String)> = collections::BTreeSet::new();
     match expr {
         Expr::Variable(name, _) => { let name = *name; origins_of_local(ask.names.resolve(name), &walk) },
@@ -4810,7 +4818,7 @@ fn a_buffer_local(name: &str, walk: &BufferWalk) -> bool {
 
 fn add_all(from: &collections::BTreeSet<(i64, String)>, into: &mut collections::BTreeSet<(i64, String)>) { for one in from.iter() { into.insert(one.clone()); } }
 
-fn items_origins(items: &[Expr], ask: &BufferAsk<'_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) -> collections::BTreeSet<(i64, String)> {
+fn items_origins(items: &[Expr], ask: &BufferAsk<'_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) -> collections::BTreeSet<(i64, String)> {
     let mut out: collections::BTreeSet<(i64, String)> = collections::BTreeSet::new();
     for item in items.iter() {
         let of = origins_of(item, ask, holes_of, unaliased, walk);
@@ -4819,7 +4827,7 @@ fn items_origins(items: &[Expr], ask: &BufferAsk<'_>, holes_of: &impl Fn(&Expr) 
     out
 }
 
-fn method_origins(call: &Expr, ask: &BufferAsk<'_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) -> collections::BTreeSet<(i64, String)> {
+fn method_origins(call: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) -> collections::BTreeSet<(i64, String)> {
     let (receiver, method, args) = match call {
         Expr::MethodCall { receiver, method, args, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; (receiver, ask.names.resolve(method).to_owned(), args) },
         Expr::SafeMethod { receiver, method, args, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; (receiver, ask.names.resolve(method).to_owned(), args) },
@@ -4860,7 +4868,7 @@ fn owned_by_every_method(ledger: &Ledger, method: &str) -> bool {
     any
 }
 
-fn call_origins(func: &Expr, args: &[Expr], ask: &BufferAsk<'_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) -> collections::BTreeSet<(i64, String)> {
+fn call_origins(func: &Expr, args: &[Expr], ask: &BufferAsk<'_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) -> collections::BTreeSet<(i64, String)> {
     let callee = written_callee(ask.names, func, unaliased);
     let named = nikaia_std::index::or(match callee.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -4890,7 +4898,7 @@ fn call_origins(func: &Expr, args: &[Expr], ask: &BufferAsk<'_>, holes_of: &impl
     out
 }
 
-fn answered_by(contract: &FnContract, named: &str, args: &[Expr], ask: &BufferAsk<'_>, out: &mut collections::BTreeSet<(i64, String)>, walk: &mut BufferWalk) -> bool {
+fn answered_by(contract: &FnContract, named: &str, args: &[Expr], ask: &BufferAsk<'_, '_, '_, '_, '_, '_>, out: &mut collections::BTreeSet<(i64, String)>, walk: &mut BufferWalk) -> bool {
     if takes_a_keep(contract) {
         let source = call_source(named, walk);
         for held in contract.views.iter() {
@@ -4912,7 +4920,7 @@ fn answered_by(contract: &FnContract, named: &str, args: &[Expr], ask: &BufferAs
     !a_ledger_type_with_a_view(result)
 }
 
-fn made_arguments(contract: &FnContract, named: &str, args: &[Expr], ask: &BufferAsk<'_>, unaliased: &impl Fn(&str) -> String, out: &mut collections::BTreeSet<(i64, String)>, walk: &mut BufferWalk) {
+fn made_arguments(contract: &FnContract, named: &str, args: &[Expr], ask: &BufferAsk<'_, '_, '_, '_, '_, '_>, unaliased: &impl Fn(&str) -> String, out: &mut collections::BTreeSet<(i64, String)>, walk: &mut BufferWalk) {
     if takes_a_keep(contract) { return; }
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
     let result = match signature.result.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -4929,7 +4937,7 @@ fn made_arguments(contract: &FnContract, named: &str, args: &[Expr], ask: &Buffe
     }
 }
 
-fn buffers_view_call(arg: &Expr, ask: &BufferAsk<'_>, unaliased: &impl Fn(&str) -> String) -> bool {
+fn buffers_view_call(arg: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_>, unaliased: &impl Fn(&str) -> String) -> bool {
     match arg {
         Expr::Call { func, .. } => {
             let func = nikaia_std::boxed::open(func);
@@ -4967,7 +4975,7 @@ fn parameter_index(contract: &FnContract, position: &str) -> i64 {
     -1
 }
 
-fn tail_origins(block: &Block, ask: &BufferAsk<'_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) -> collections::BTreeSet<(i64, String)> {
+fn tail_origins(block: &Block, ask: &BufferAsk<'_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) -> collections::BTreeSet<(i64, String)> {
     let none: collections::BTreeSet<(i64, String)> = collections::BTreeSet::new();
     if block.stmts.is_empty() { return none; }
     let last = nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1));
@@ -4994,7 +5002,7 @@ fn call_source(callee: &str, walk: &mut BufferWalk) -> collections::BTreeSet<(i6
     one
 }
 
-fn decide(key: String, body: &Block, walk: &BufferWalk, ask: &BufferAsk<'_>) -> BufferPlan {
+fn decide(key: String, body: &Block, walk: &BufferWalk, ask: &BufferAsk<'_, '_, '_, '_, '_, '_>) -> BufferPlan {
     let mut first: i64 = -1;
     if !body.stmts.is_empty() { first = nikaia_std::index::get(&body.stmts, 0).span.start as i64; }
     let mut plan = BufferPlan { key, first, takes_keep: false, frame_keep: false, task_keep: false, local_keeps: collections::BTreeSet::new(), puts: collections::BTreeMap::new(), calls: collections::BTreeMap::new(), tethered: collections::BTreeMap::new(), element_keepers: collections::BTreeSet::new(), struct_keepers: collections::BTreeSet::new(), widths: collections::BTreeMap::new(), keeper_structs: collections::BTreeMap::new(), held_locals: collections::BTreeSet::new(), holds: collections::BTreeMap::new(), escapes: vec![], refusals: vec![], reputs: collections::BTreeMap::new() };
@@ -5027,18 +5035,18 @@ fn decide(key: String, body: &Block, walk: &BufferWalk, ask: &BufferAsk<'_>) -> 
     plan
 }
 
-fn struct_of_views_maybe(written: Option<&Type>, ask: &BufferAsk<'_>) -> bool {
+fn struct_of_views_maybe(written: Option<&Type>, ask: &BufferAsk<'_, '_, '_, '_, '_, '_>) -> bool {
     let ty = match written { Some(__nikaia_value) => __nikaia_value, None => return false };
     names_a_struct_of_views(ask.names, ty, &ask.context.borrowing)
 }
 
-fn not_held_maybe(written: Option<&Type>, ask: &BufferAsk<'_>) -> Option<String> {
+fn not_held_maybe(written: Option<&Type>, ask: &BufferAsk<'_, '_, '_, '_, '_, '_>) -> Option<String> {
     let ty = match written { Some(__nikaia_value) => __nikaia_value, None => return None };
     let mut seen: Vec<String> = vec![];
     ask.context.not_held(ask.names, ty, &mut seen)
 }
 
-fn a_sequence_container(written: Option<&Type>, ask: &BufferAsk<'_>) -> bool {
+fn a_sequence_container(written: Option<&Type>, ask: &BufferAsk<'_, '_, '_, '_, '_, '_>) -> bool {
     let ty = match written { Some(__nikaia_value) => __nikaia_value, None => return true };
     let container = ask.names.resolve(ty.name);
     container == "Vec" || container == "List" || container == "VecDeque" || container == "Deque"
@@ -5052,7 +5060,7 @@ fn keeper_type(keeper: &str, walk: &BufferWalk) -> Option<Type> {
     }
 }
 
-fn keeper_struct(keeper: &str, written: Option<&Type>, walk: &BufferWalk, ask: &BufferAsk<'_>) -> Option<String> {
+fn keeper_struct(keeper: &str, written: Option<&Type>, walk: &BufferWalk, ask: &BufferAsk<'_, '_, '_, '_, '_, '_>) -> Option<String> {
     if walk.struct_puts.contains_key(keeper) {
         return match *nikaia_std::index::get(&walk.struct_puts, keeper) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -5200,7 +5208,7 @@ fn source_refusal(source: &Source, what: &str, why: &str, help: &str) -> Finding
     refusal("NK2304", span, format!("{} {}", named, what), vec![why.to_owned()], help.to_owned())
 }
 
-fn element_refusals(walk: &BufferWalk, ask: &BufferAsk<'_>, plan: &mut BufferPlan) {
+fn element_refusals(walk: &BufferWalk, ask: &BufferAsk<'_, '_, '_, '_, '_, '_>, plan: &mut BufferPlan) {
     let mut found: Vec<Finding> = vec![];
     for keeper in plan.element_keepers.iter() {
         let written = keeper_type(keeper, walk);
@@ -9577,7 +9585,7 @@ fn cx_python_ticket(prefix: &str) -> String { format!("_DONE = ctypes.CFUNCTYPE(
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_task_takes_no_arguments(&mut self, world: &CheckWorld<'_>, params: &[winnow_grammar::Symbol], span: &Span) {
+    pub fn a_task_takes_no_arguments(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, params: &[winnow_grammar::Symbol], span: &Span) {
         if params.is_empty() { return; }
         let mut named: Vec<String> = vec![];
         for param in params.iter() {
@@ -9623,7 +9631,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_struct_nothing_declares(&mut self, world: &CheckWorld<'_>, name: &str, span: &Span) {
+    pub fn a_struct_nothing_declares(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, name: &str, span: &Span) {
         let is_a_function = world.own.functions.contains_key(name) || world.library.functions.contains_key(name) || world.own.functions.contains_key(&format!("{}::new", name));
         let mut note: String = String::from("Braces after a name build a struct, and no struct of that name is declared here or in a package you use.");
         let mut help: String = String::from("Declare the `struct`, or fix the name.");
@@ -9635,14 +9643,14 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_literal_written_like_a_call(&mut self, world: &CheckWorld<'_>, name: &str, config: &[ConfigArg], span: &Span) {
+    pub fn a_literal_written_like_a_call(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, name: &str, config: &[ConfigArg], span: &Span) {
         let mut fields: Vec<String> = vec![];
         for setting in config.iter() { fields.push(world.words.resolve(setting.name).to_owned()); }
         self.findings.push(check_refusal("NK1146", span, format!("Build a `{}` with braces, not parentheses.", name), vec!["Parentheses after a type call its constructor; a struct literal with field names uses braces.".to_owned()], Some(format!("Write `{} {{ {}: … }}`.", name, fields.join(": …, ")))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn an_or_pattern_that_binds_unevenly(&mut self, world: &CheckWorld<'_>, pattern: &MatchPattern, span: &Span) {
+    pub fn an_or_pattern_that_binds_unevenly(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, pattern: &MatchPattern, span: &Span) {
         match pattern {
             MatchPattern::Or(alternatives) => {
                 let mut first: collections::BTreeSet<String> = collections::BTreeSet::new();
@@ -9676,7 +9684,7 @@ impl CheckState {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn names_the_argument(world: &CheckWorld<'_>, expr: &Expr, at: i64) -> (String, Option<String>) {
+pub fn names_the_argument(world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr, at: i64) -> (String, Option<String>) {
     let prose: String = match expr {
         Expr::Variable(name, _) => { let name = *name; format!("`{}`", world.words.resolve(name)) },
         Expr::Field { name, .. } => { let name = *name; format!("the `{}` this passes", world.words.resolve(name)) },
@@ -9687,7 +9695,7 @@ pub fn names_the_argument(world: &CheckWorld<'_>, expr: &Expr, at: i64) -> (Stri
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn dotted_path(world: &CheckWorld<'_>, expr: &Expr) -> Option<String> {
+pub fn dotted_path(world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr) -> Option<String> {
     match expr {
         Expr::Variable(name, _) => { let name = *name; Some(world.words.resolve(name).to_owned()) },
         Expr::Field { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; dotted_field(world, base, name) },
@@ -9697,14 +9705,14 @@ pub fn dotted_path(world: &CheckWorld<'_>, expr: &Expr) -> Option<String> {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn dotted_field(world: &CheckWorld<'_>, base: &Expr, name: winnow_grammar::Symbol) -> Option<String> {
+fn dotted_field(world: &CheckWorld<'_, '_, '_, '_, '_>, base: &Expr, name: winnow_grammar::Symbol) -> Option<String> {
     let held = match dotted_path(world, base) { Some(__nikaia_value) => __nikaia_value, None => return None };
     Some(format!("{}.{}", held, world.words.resolve(name)))
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn variants_named(world: &CheckWorld<'_>, pattern: &MatchPattern, out: &mut collections::BTreeSet<String>) {
+pub fn variants_named(world: &CheckWorld<'_, '_, '_, '_, '_>, pattern: &MatchPattern, out: &mut collections::BTreeSet<String>) {
     match pattern {
         MatchPattern::Path(path) => { a_last_segment(world, path, out); },
         MatchPattern::Tuple { path, .. } => { a_last_segment(world, path, out); },
@@ -9716,7 +9724,7 @@ pub fn variants_named(world: &CheckWorld<'_>, pattern: &MatchPattern, out: &mut 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn a_last_segment(world: &CheckWorld<'_>, path: &[winnow_grammar::Symbol], out: &mut collections::BTreeSet<String>) { if !path.is_empty() { out.insert(world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 1))).to_owned()); } }
+fn a_last_segment(world: &CheckWorld<'_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], out: &mut collections::BTreeSet<String>) { if !path.is_empty() { out.insert(world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 1))).to_owned()); } }
 
 
 // --- check_arguments.nika ---
@@ -9811,7 +9819,7 @@ fn check_arguments_receiver_node(value: &Expr) -> i64 {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_arguments_named(world: &CheckWorld<'_>, value: Option<&Expr>) -> Option<String> {
+fn check_arguments_named(world: &CheckWorld<'_, '_, '_, '_, '_>, value: Option<&Expr>) -> Option<String> {
     let given = match value { Some(__nikaia_value) => __nikaia_value, None => return None };
     match given {
         Expr::Variable(name, _) => { let name = *name; Some(world.words.resolve(name).to_owned()) },
@@ -9822,7 +9830,7 @@ fn check_arguments_named(world: &CheckWorld<'_>, value: Option<&Expr>) -> Option
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, key: &str, written: &str, contract: &FnContract, given: &[Expr], found: &[Ty], passed: &[(String, Ty)], keeps: &[(String, bool, String)], span: &Span) -> Ty {
+pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, key: &str, written: &str, contract: &FnContract, given: &[Expr], found: &[Ty], passed: &[(String, Ty)], keeps: &[(String, bool, String)], span: &Span) -> Ty {
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
     let wanted = call_arguments(signature);
     if (wanted.len() as i64) != found.len() as i64 {
@@ -10046,7 +10054,7 @@ impl CheckState {
         let note: String = String::from("An exit status is one byte; the system would keep only part of it.");
         self.findings.push(check_refusal("NK1116", span, format!("The exit code {} is not in 0..=255.", code), vec![note], Some("Give `process::exit` a code from 0 to 255.".to_owned())));
     }
-    pub fn an_operator_needs_a_bound(&mut self, world: &CheckWorld<'_>, op: BinaryOp, left: &Ty, right: &Ty, at: &Span) {
+    pub fn an_operator_needs_a_bound(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, op: BinaryOp, left: &Ty, right: &Ty, at: &Span) {
         let ordering = op == BinaryOp::Lt || op == BinaryOp::Le || op == BinaryOp::Gt || op == BinaryOp::Ge;
         for ty in [left.clone(), right.clone()] {
             let name: String = match ty {
@@ -10090,7 +10098,7 @@ fn arith_symbol(op: BinaryOp) -> String {
     }
 }
 
-fn arith_extend_text(world: &CheckWorld<'_>, target: &Expr, value: &Expr, compound: bool) -> String {
+fn arith_extend_text(world: &CheckWorld<'_, '_, '_, '_, '_>, target: &Expr, value: &Expr, compound: bool) -> String {
     if !compound { return "a.extend(b)".to_owned(); }
     match target {
         Expr::Variable(bound, _) => { let bound = *bound; format!("{}.extend({})", world.words.resolve(bound), written_expression(world.words, value)) },
@@ -10111,7 +10119,7 @@ fn arith_a_plain_number(ty: &Ty) -> bool {
     }
 }
 
-fn arith_a_variable(side: &Expr, world: &CheckWorld<'_>) -> Option<String> {
+fn arith_a_variable(side: &Expr, world: &CheckWorld<'_, '_, '_, '_, '_>) -> Option<String> {
     match side {
         Expr::Variable(bound, _) => { let bound = *bound; Some(world.words.resolve(bound).to_owned()) },
         _ => None,
@@ -10129,14 +10137,14 @@ fn arith_a_number_literal(expr: &Expr) -> bool {
 
 fn arith_an_int_literal(expr: &Expr) -> bool { matches!(expr, Expr::LitInt { .. }) }
 
-fn arith_a_named_call(world: &CheckWorld<'_>, expr: &Expr, called: &str) -> bool {
+fn arith_a_named_call(world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr, called: &str) -> bool {
     match expr {
         Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); arith_the_variable_named(world, func, called) },
         _ => false,
     }
 }
 
-fn arith_the_variable_named(world: &CheckWorld<'_>, expr: &Expr, name: &str) -> bool {
+fn arith_the_variable_named(world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr, name: &str) -> bool {
     match expr {
         Expr::Variable(n, _) => { let n = *n; world.words.resolve(n) == name },
         _ => false,
@@ -10163,7 +10171,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn arithmetic_on_something_that_has_none(&mut self, world: &CheckWorld<'_>, op: BinaryOp, left_expr: &Expr, left: &Ty, right_expr: &Expr, right: &Ty, compound: bool, span: &Span) {
+    pub fn arithmetic_on_something_that_has_none(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, op: BinaryOp, left_expr: &Expr, left: &Ty, right_expr: &Expr, right: &Ty, compound: bool, span: &Span) {
         let symbol = arith_symbol(op);
         let left_collection = is_a_collection_type(left);
         if !left_collection && !is_a_collection_type(right) {
@@ -10193,7 +10201,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn arithmetic_on_a_declared_type(&mut self, world: &CheckWorld<'_>, symbol: &str, side: &Expr, ty: &Ty, other_side: &Expr, other: &Ty, at: i64, compound: bool, span: &Span) {
+    pub fn arithmetic_on_a_declared_type(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, symbol: &str, side: &Expr, ty: &Ty, other_side: &Expr, other: &Ty, at: i64, compound: bool, span: &Span) {
         let kind = match declared_with_no_arithmetic(&world.here, ty) { Some(__nikaia_value) => __nikaia_value, None => return };
         let seen = ty.unseen();
         let name = match seen {
@@ -10222,7 +10230,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_value_of_no_known_type(&mut self, world: &CheckWorld<'_>, expr: &Expr, span: &Span) {
+    pub fn a_value_of_no_known_type(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr, span: &Span) {
         let open = arith_a_number_literal(expr) || self.number_shaped(world, expr) || self.a_name_of_an_open_comptime(world, expr) || self.a_member_of_an_open_argument(world, expr) || self.a_coalesce_of_numbers(world, expr) || arith_a_named_call(world, expr, "asset");
         let said = arith_a_name(expr);
         let structural = arith_structural(expr) || arith_a_named_call(world, expr, "panic") || self.a_standing_member(world, expr);
@@ -10243,7 +10251,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn a_name_of_an_open_comptime(&self, world: &CheckWorld<'_>, expr: &Expr) -> bool {
+    fn a_name_of_an_open_comptime(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
             Expr::Variable(n, _) => { let n = *n; self.is_an_open_comptime(world.words.resolve(n)) },
             _ => false,
@@ -10257,7 +10265,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn a_coalesce_of_numbers(&self, world: &CheckWorld<'_>, expr: &Expr) -> bool {
+    fn a_coalesce_of_numbers(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
             Expr::Coalesce { fallback, .. } => { let fallback = nikaia_std::boxed::open(fallback); self.number_shaped(world, fallback) || self.jumps(world, fallback) },
             _ => false,
@@ -10265,7 +10273,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn a_standing_member(&self, world: &CheckWorld<'_>, expr: &Expr) -> bool {
+    fn a_standing_member(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         if self.flow.unrolling.is_some() { return false; }
         match expr {
             Expr::MethodCall { method, .. } => { let method = *method; world.words.resolve(method) == "of" },
@@ -10275,7 +10283,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn a_member_of_an_unknown(&self, world: &CheckWorld<'_>, expr: &Expr) -> bool {
+    fn a_member_of_an_unknown(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
             Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); self.is_an_unknown_name(world, base) },
             Expr::MethodCall { receiver, .. } => { let receiver = nikaia_std::boxed::open(receiver); self.is_an_unknown_name(world, receiver) },
@@ -10284,7 +10292,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn is_an_unknown_name(&self, world: &CheckWorld<'_>, expr: &Expr) -> bool {
+    fn is_an_unknown_name(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
             Expr::Variable(n, _) => { let n = *n; self.is_a_name_bound_unknown(world.words.resolve(n)) },
             _ => false,
@@ -10310,7 +10318,7 @@ impl CheckState {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn value_leaves<'r>(&self, world: &CheckWorld<'_>, value: &'r Expr) -> Vec<&'r Expr> {
+    pub fn value_leaves<'r>(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, value: &'r Expr) -> Vec<&'r Expr> {
         let mut out: Vec<&Expr> = vec![];
         match value {
             Expr::If { then_branch, else_branch, .. } => {
@@ -10334,7 +10342,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn choice_nodes(&self, world: &CheckWorld<'_>, value: &Expr) -> Vec<i64> {
+    pub fn choice_nodes(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, value: &Expr) -> Vec<i64> {
         let mut out: Vec<i64> = vec![];
         match value {
             Expr::If { then_branch, else_branch, .. } => {
@@ -10368,7 +10376,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn arms_to_ask<'r>(&mut self, world: &CheckWorld<'_>, value: &'r Expr) -> Vec<CheckArm<'r>> {
+    pub fn arms_to_ask<'r>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, value: &'r Expr) -> Vec<CheckArm<'r>> {
         let mut asked: Vec<CheckArm<'_>> = vec![];
         if !is_a_choice(value) { return asked; }
         for leaf in self.value_leaves(world, value) {
@@ -10380,13 +10388,13 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn note_mixed(&mut self, world: &CheckWorld<'_>, value: &Expr, nullable: bool) {
+    pub fn note_mixed(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, value: &Expr, nullable: bool) {
         for leaf in self.value_leaves(world, value) { if !ends_in_null(check_peeled(leaf)) { self.facts.mixed_leaves.insert(node_key(leaf), nullable); } }
         self.facts.mixed_choices.insert(node_key(value));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn views_meet_owned_text(&mut self, world: &CheckWorld<'_>, value: &Expr) -> Option<Ty> {
+    pub fn views_meet_owned_text(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, value: &Expr) -> Option<Ty> {
         if !is_a_choice(value) { return None; }
         let text = a_string_type();
         let maybe_text = Ty::Nullable(Box::new(a_string_type()));
@@ -10439,7 +10447,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn hands_over(&mut self, world: &CheckWorld<'_>, value: &Expr, ty: &Ty, to: &str, span: &Span) {
+    pub fn hands_over(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, value: &Expr, ty: &Ty, to: &str, span: &Span) {
         match value {
             Expr::MethodCall { receiver, .. } => {
                 let receiver = nikaia_std::boxed::open(receiver);
@@ -10459,7 +10467,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_map_key(&mut self, world: &CheckWorld<'_>, keys: &Ty, found: &Ty, index: &Expr, writing: bool, span: &Span) {
+    pub fn a_map_key(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, keys: &Ty, found: &Ty, index: &Expr, writing: bool, span: &Span) {
         if keys.is_unknown() {
             let mut form = FactKeyForm::Either;
             if writing { form = FactKeyForm::Handed; } else if found.is_a_view() { form = FactKeyForm::AsIs; }
@@ -10479,7 +10487,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn a_key_read_as_it_is(&self, world: &CheckWorld<'_>, found: &Ty, index: &Expr) -> bool {
+    fn a_key_read_as_it_is(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, found: &Ty, index: &Expr) -> bool {
         if found.is_a_view() || self.a_lent_let(world, index) { return true; }
         match index {
             Expr::LitStr { .. } => { return true; },
@@ -10502,7 +10510,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn a_view_kept_where_the_receiver_says_text(&mut self, world: &CheckWorld<'_>, key: &str, contract: &FnContract, given: &[Expr], found: &[Ty], expected: &[Ty], span: &Span) {
+    pub fn a_view_kept_where_the_receiver_says_text(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, key: &str, contract: &FnContract, given: &[Expr], found: &[Ty], expected: &[Ty], span: &Span) {
         let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
         let offset: i64 = if signature.takes_a_receiver() { 1 } else { 0 };
         let own = world.own.functions.contains_key(key);
@@ -10538,7 +10546,7 @@ fn is_a_choice(value: &Expr) -> bool { matches!(value, Expr::If { .. } | Expr::M
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_span_at(world: &CheckWorld<'_>, expr: &Expr, span: &Span) -> Span {
+pub fn check_span_at(world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr, span: &Span) -> Span {
     let at = match world.here.spans.get(&id_of(expr)) { Some(__nikaia_value) => __nikaia_value, None => return Span { start: span.start, end: span.end } };
     if at.start >= span.start && at.end <= span.end { return Span { start: at.start, end: at.end }; }
     Span { start: span.start, end: span.end }
@@ -10565,7 +10573,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    fn expect_kept_moved(&mut self, world: &CheckWorld<'_>, found: &Ty, want: &Ty, value: Option<&Expr>, keeper: &str, span: &Span, at: &Span, what: &str, message: &impl Fn(&str, &str) -> String) {
+    fn expect_kept_moved(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: Option<&Expr>, keeper: &str, span: &Span, at: &Span, what: &str, message: &impl Fn(&str, &str) -> String) {
         let pushed = self.findings.len() as i64;
         let waiting = self.slots_waiting(span);
         self.expect_kept(world, found, want, value, keeper, span, what, &message);
@@ -10574,7 +10582,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn expect_kept_asked(&mut self, world: &CheckWorld<'_>, found: &Ty, want: &Ty, value: Option<&Expr>, keeper: &str, span: &Span, what: &str, message: &impl Fn(&str, &str) -> String) {
+    pub fn expect_kept_asked(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: Option<&Expr>, keeper: &str, span: &Span, what: &str, message: &impl Fn(&str, &str) -> String) {
         let mut arms: Vec<CheckArm<'_>> = vec![];
         let mut at = Span { start: span.start, end: span.end };
         if value.is_some() {
@@ -10681,7 +10689,7 @@ fn the_plain_type_agrees(plain: Option<&Ty>, inner: &Ty) -> bool {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn arms_meet_at_null(&mut self, world: &CheckWorld<'_>, arms: &[CheckArm<'_>]) -> Option<Ty> {
+    pub fn arms_meet_at_null(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, arms: &[CheckArm<'_>]) -> Option<Ty> {
         let mut asked = false;
         for arm in arms.iter() { if an_arm_ends_in_null(arm) || an_arm_is_a_nullable(arm) { asked = true; } }
         if !asked { return None; }
@@ -10716,7 +10724,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn an_arm_beside_a_null(&mut self, world: &CheckWorld<'_>, arm: &CheckArm<'_>, literals: bool, text: &Ty) {
+    fn an_arm_beside_a_null(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, arm: &CheckArm<'_>, literals: bool, text: &Ty) {
         let tail = match arm.tail { Some(__nikaia_value) => __nikaia_value, None => return };
         if an_arm_is_a_nullable(arm) || ends_in_null_literal(tail) { return; }
         if literals && an_arm_is_a_text_literal(arm) { self.text_literal(world, text, tail, true); }
@@ -10724,7 +10732,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_lambdas_text_is_its_own(&mut self, world: &CheckWorld<'_>, want: &Ty, value: &Expr) {
+    pub fn a_lambdas_text_is_its_own(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, want: &Ty, value: &Expr) {
         match want {
             Ty::Fn { result, .. } => {
                 let result = nikaia_std::boxed::open(result);
@@ -10738,7 +10746,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn a_closure_ends_in(&mut self, world: &CheckWorld<'_>, result: Option<&Ty>, body: &Block) {
+    fn a_closure_ends_in(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, result: Option<&Ty>, body: &Block) {
         let kept = match result { Some(__nikaia_value) => __nikaia_value, None => return };
         let tail = block_tail(body);
         if tail.len() == 1 { self.text_literal(world, kept, *nikaia_std::index::get(&tail, 0), true); }
@@ -10835,7 +10843,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn tuple_let(&mut self, world: &CheckWorld<'_>, names: &[winnow_grammar::Symbol], shape: &[i64], written: bool, found: &Ty, value: &Expr, span: &Span) -> Ty {
+    pub fn tuple_let(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, names: &[winnow_grammar::Symbol], shape: &[i64], written: bool, found: &Ty, value: &Expr, span: &Span) -> Ty {
         if written { self.findings.push(check_refusal("NK1136", span, "A `let` that binds several names can't have a type.".to_owned(), vec!["The names are taken apart by position, and one type can't say which name it belongs to.".to_owned()], Some("Remove the type, or bind one name and read the parts from it.".to_owned()))); }
         let mut parts = binds_tuple_parts(found, names.len() as i64);
         if !shape.is_empty() {
@@ -10857,7 +10865,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn nested_pattern_parts(&mut self, world: &CheckWorld<'_>, top: Vec<Ty>, shape: &[i64], count: i64, site: &str, span: &Span) -> Vec<Ty> {
+    pub fn nested_pattern_parts(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, top: Vec<Ty>, shape: &[i64], count: i64, site: &str, span: &Span) -> Vec<Ty> {
         let mut out: Vec<Ty> = vec![];
         if shape.len() == 1 && *nikaia_std::index::get(&shape, 0) == -1 {
             self.findings.push(check_refusal("NK1259", span, format!("{} can't take a variant apart.", site), vec!["A variant may not be the one the value holds, and a binding has no other branch to go to.".to_owned()], Some("Take the value apart with a `match`, which has an arm for each case.".to_owned())));
@@ -10889,7 +10897,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn a_tuple_over_a_lent_name(&self, world: &CheckWorld<'_>, value: &Expr) -> bool {
+    fn a_tuple_over_a_lent_name(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, value: &Expr) -> bool {
         match value {
             Expr::Variable(name, _) => { let name = *name; self.lent_here(world.words.resolve(name)) },
             _ => false,
@@ -10955,7 +10963,7 @@ fn binds_tuple_parts(found: &Ty, count: i64) -> Vec<Ty> {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn declared_below(&self, world: &CheckWorld<'_>, ty: &Ty) -> Option<String> {
+    pub fn declared_below(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, ty: &Ty) -> Option<String> {
         match ty {
             Ty::Named { name, args, view } => { let view = *view; self.a_declared_name(world, name, args, view) },
             Ty::Pointed { item, slice, mutable } => { let item = nikaia_std::boxed::open(item); let mutable = *mutable; let slice = *slice; if slice && !mutable { self.a_run_of(world, item, "&[", "]") } else { None } },
@@ -10964,7 +10972,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn a_declared_name(&self, world: &CheckWorld<'_>, name: &str, args: &[Ty], view: bool) -> Option<String> {
+    fn a_declared_name(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, name: &str, args: &[Ty], view: bool) -> Option<String> {
         if !view && args.is_empty() && (self.fields_of(world, name).is_some() || self.enums.contains_key(name)) { return Some(name.to_owned()); }
         if !view && name == "Array" && args.len() == 2 {
             return match nikaia_std::index::get(&args, 1) {
@@ -10976,7 +10984,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn a_run_of(&self, world: &CheckWorld<'_>, element: &Ty, open: &str, close: &str) -> Option<String> {
+    fn a_run_of(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, element: &Ty, open: &str, close: &str) -> Option<String> {
         let mut written = rust_constant_type(world.library, element);
         if written.is_none() { written = self.declared_below(world, element); }
         let held = match written { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -10984,7 +10992,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn unwritable_field(&self, world: &CheckWorld<'_>, ty: &Ty) -> Vec<String> {
+    pub fn unwritable_field(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, ty: &Ty) -> Vec<String> {
         let name = match ty {
             Ty::Named { name, .. } => name.to_owned(),
             _ => return vec![],
@@ -11003,7 +11011,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn names_a_struct(&self, world: &CheckWorld<'_>, ty: &Ty) -> bool {
+    fn names_a_struct(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, ty: &Ty) -> bool {
         match ty {
             Ty::Named { name, .. } => self.fields_of(world, name).is_some(),
             _ => false,
@@ -11026,7 +11034,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn only_reads_its_receiver(&self, world: &CheckWorld<'_>, method: &str) -> bool {
+    pub fn only_reads_its_receiver(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, method: &str) -> bool {
         let mut candidates: Vec<FnContract> = vec![];
         for key in ledger_candidates(world.own, method) {
             candidates.push(nikaia_std::index::or(match *nikaia_std::index::get(&world.own.functions, &key) {
@@ -11050,7 +11058,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_word_by_its_kind(&self, world: &CheckWorld<'_>, ty: &Ty) -> bool {
+    pub fn a_word_by_its_kind(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, ty: &Ty) -> bool {
         match ty {
             Ty::Named { name, args, view } => { let view = *view; !view && args.is_empty() && (a_number_name(name) || name == "bool" || name == "char" || name == "scalar" || self.a_payloadless_enum(name) || a_ledger_copies(ty, &vec![world.library])) },
             _ => false,
@@ -11065,7 +11073,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_coalesce_that_may_lend(&self, world: &CheckWorld<'_>, left: &Ty, fallback: &Expr, other: &Ty) -> Option<String> {
+    pub fn a_coalesce_that_may_lend(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, left: &Ty, fallback: &Expr, other: &Ty) -> Option<String> {
         let held = match left {
             Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); inner.clone() },
             _ => return None,
@@ -11088,7 +11096,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn rooted_at(&self, world: &CheckWorld<'_>, place: &Expr) -> Option<String> {
+    pub fn rooted_at(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, place: &Expr) -> Option<String> {
         match place {
             Expr::Variable(name, _) => { let name = *name; Some(world.words.resolve(name).to_owned()) },
             Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); self.rooted_at(world, base) },
@@ -11099,7 +11107,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn hands_back_a_view_of_the_subject(&self, world: &CheckWorld<'_>, value: &Expr) -> bool {
+    pub fn hands_back_a_view_of_the_subject(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, value: &Expr) -> bool {
         let expected = match match self.expected.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
@@ -11123,10 +11131,10 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn place_path(&self, world: &CheckWorld<'_>, expr: &Expr) -> Option<String> { dotted_path(world, expr) }
+    pub fn place_path(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr) -> Option<String> { dotted_path(world, expr) }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_mut_parameter_place(&self, world: &CheckWorld<'_>, subject: &Expr) -> Option<String> {
+    pub fn a_mut_parameter_place(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, subject: &Expr) -> Option<String> {
         let path = match dotted_path(world, subject) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let parts: Vec<&str> = path.split('.').collect::<Vec<_>>();
         let found = match self.binding(*nikaia_std::index::get(&parts, 0)) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -11158,10 +11166,10 @@ pub enum CheckDepth {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_pattern_inside_a_box(&mut self, world: &CheckWorld<'_>, pattern: &MatchPattern, span: &Span) { self.a_pattern_inside_a_box_at(world, pattern, span, CheckDepth::Arm); }
+    pub fn a_pattern_inside_a_box(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, pattern: &MatchPattern, span: &Span) { self.a_pattern_inside_a_box_at(world, pattern, span, CheckDepth::Arm); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn a_pattern_inside_a_box_at(&mut self, world: &CheckWorld<'_>, pattern: &MatchPattern, span: &Span, at: CheckDepth) {
+    fn a_pattern_inside_a_box_at(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, pattern: &MatchPattern, span: &Span, at: CheckDepth) {
         match pattern {
             MatchPattern::Tuple { path, parts } => {
                 let mut written: Vec<String> = vec![];
@@ -11195,7 +11203,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn boxed_names(&self, world: &CheckWorld<'_>, pattern: &MatchPattern) -> Vec<String> {
+    pub fn boxed_names(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, pattern: &MatchPattern) -> Vec<String> {
         let mut out: Vec<String> = vec![];
         match pattern {
             MatchPattern::Tuple { path, parts } => {
@@ -11214,7 +11222,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn typed_inside_boxes(&self, world: &CheckWorld<'_>, pattern: &MatchPattern, out: &mut collections::BTreeMap<String, Ty>) {
+    pub fn typed_inside_boxes(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, pattern: &MatchPattern, out: &mut collections::BTreeMap<String, Ty>) {
         match pattern {
             MatchPattern::Tuple { path, parts } => {
                 for at in 0..parts.len() as i64 {
@@ -11240,7 +11248,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn names_inside_boxes(&self, world: &CheckWorld<'_>, pattern: &MatchPattern, out: &mut Vec<String>) {
+    pub fn names_inside_boxes(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, pattern: &MatchPattern, out: &mut Vec<String>) {
         match pattern {
             MatchPattern::Tuple { path, parts } => {
                 for at in 0..parts.len() as i64 {
@@ -11254,7 +11262,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn boxed_part(&self, world: &CheckWorld<'_>, path: &[winnow_grammar::Symbol], at: i64) -> bool {
+    pub fn boxed_part(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], at: i64) -> bool {
         if path.len() < 2 { return false; }
         let owner = world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 2))).to_owned();
         let variant = world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 1))).to_owned();
@@ -11267,7 +11275,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn looks_inside_a_box(&self, world: &CheckWorld<'_>, pattern: &MatchPattern) -> bool {
+    pub fn looks_inside_a_box(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, pattern: &MatchPattern) -> bool {
         match pattern {
             MatchPattern::Tuple { path, parts } => {
                 for at in 0..parts.len() as i64 {
@@ -11283,7 +11291,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_match_that_misses_a_case(&mut self, world: &CheckWorld<'_>, on: &Ty, arms: &[MatchArm], span: &Span) {
+    pub fn a_match_that_misses_a_case(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, on: &Ty, arms: &[MatchArm], span: &Span) {
         match on {
             Ty::Nullable(inner) => {
                 let inner = nikaia_std::boxed::open(inner);
@@ -11304,7 +11312,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn a_match_that_misses_a_case_of(&mut self, world: &CheckWorld<'_>, on: &Ty, arms: &[MatchArm], span: &Span) {
+    fn a_match_that_misses_a_case_of(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, on: &Ty, arms: &[MatchArm], span: &Span) {
         for arm in arms.iter() { if arm.guard.is_none() && catches_everything(&arm.pattern) { return; } }
         let mut name: String = String::from("");
         match on {
@@ -11363,7 +11371,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn a_closed_set_that_misses_a_case(&mut self, world: &CheckWorld<'_>, members: &[Ty], arms: &[MatchArm], span: &Span) {
+    fn a_closed_set_that_misses_a_case(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, members: &[Ty], arms: &[MatchArm], span: &Span) {
         let mut named: collections::BTreeSet<String> = collections::BTreeSet::new();
         for arm in arms.iter() { if arm.guard.is_none() { check_boxes_qualified(world, &arm.pattern, &mut named); } }
         let mut missing: Vec<String> = vec![];
@@ -11392,7 +11400,7 @@ impl CheckState {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_boxes_qualified(world: &CheckWorld<'_>, pattern: &MatchPattern, out: &mut collections::BTreeSet<String>) {
+fn check_boxes_qualified(world: &CheckWorld<'_, '_, '_, '_, '_>, pattern: &MatchPattern, out: &mut collections::BTreeSet<String>) {
     match pattern {
         MatchPattern::Path(path) => { check_boxes_path(world, path, out); },
         MatchPattern::Tuple { path, .. } => { check_boxes_path(world, path, out); },
@@ -11404,7 +11412,7 @@ fn check_boxes_qualified(world: &CheckWorld<'_>, pattern: &MatchPattern, out: &m
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_boxes_path(world: &CheckWorld<'_>, path: &[winnow_grammar::Symbol], out: &mut collections::BTreeSet<String>) {
+fn check_boxes_path(world: &CheckWorld<'_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], out: &mut collections::BTreeSet<String>) {
     let n = path.len() as i64;
     if n == 1 { out.insert(world.words.resolve(*nikaia_std::index::get(&path, 0)).to_owned()); } else if n >= 2 { out.insert(format!("{}::{}", world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(n - 2))), world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(n - 1))))); }
 }
@@ -11466,7 +11474,7 @@ impl CheckState {
     pub fn a_build_time_call_went_too_deep(&mut self, callee: &str, span: &Span) { self.findings.push(check_refusal("NK1152", span, format!("`{}` calls itself too deeply to be computed while the program is built.", callee), vec!["The build limits how deep calls may go, so that a recursion without an end is reported instead of crashing the compiler.".to_owned()], Some("Give the recursion a base case, or compute it while the program runs.".to_owned()))); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_constructor_written_as_new(&mut self, world: &CheckWorld<'_>, name: &str, span: &Span) {
+    pub fn a_constructor_written_as_new(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, name: &str, span: &Span) {
         let ty = match name.strip_suffix("::new") { Some(__nikaia_value) => __nikaia_value, None => return };
         if !world.own.functions.contains_key(name) && !world.library.functions.contains_key(name) { return; }
         self.findings.push(check_refusal("NK1149", span, format!("Make a `{}` with `{}(…)`, not `{}::new`.", ty, ty, ty), vec!["In Nikaia a type's constructor has no name: it's called as the type itself.".to_owned()], Some(format!("Write `{}(…)`, or just `{}` where you pass the constructor itself.", ty, ty))));
@@ -11724,7 +11732,7 @@ fn collect_default_written(default: Option<&FieldDefault>) -> String {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn collect_keys_unordered(beside: &collections::BTreeMap<String, Vec<Ty>>, structs: &collections::BTreeMap<String, Vec<FieldContract>>, enums: &collections::BTreeMap<String, collections::BTreeSet<String>>, payloads: &collections::BTreeMap<String, Vec<Ty>>, parameters: &collections::BTreeMap<String, Vec<String>>, world: &CheckWorld<'_>, ty: &Ty, span: &Span) -> Vec<CheckFinding> {
+pub fn collect_keys_unordered(beside: &collections::BTreeMap<String, Vec<Ty>>, structs: &collections::BTreeMap<String, Vec<FieldContract>>, enums: &collections::BTreeMap<String, collections::BTreeSet<String>>, payloads: &collections::BTreeMap<String, Vec<Ty>>, parameters: &collections::BTreeMap<String, Vec<String>>, world: &CheckWorld<'_, '_, '_, '_, '_>, ty: &Ty, span: &Span) -> Vec<CheckFinding> {
     let asking = CheckComparable { beside, structs, enums, payloads, parameters, own: world.own, library: world.library };
     compare_keys_with_no_order(&asking, ty, span)
 }
@@ -11732,7 +11740,7 @@ pub fn collect_keys_unordered(beside: &collections::BTreeMap<String, Vec<Ty>>, s
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn collect_declared(&mut self, world: &CheckWorld<'_>, beside: &collections::BTreeMap<String, Vec<Ty>>, ty: &Type, span: &Span) -> Ty {
+    fn collect_declared(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, beside: &collections::BTreeMap<String, Vec<Ty>>, ty: &Type, span: &Span) -> Ty {
         self.spelling(world, ty, span);
         let written = written_ty(world.here.words, world.here.aliases, ty);
         let refused = collect_keys_unordered(beside, &self.structs, &self.enums, &self.enum_payloads, &self.struct_parameters, world, &written, span);
@@ -11741,7 +11749,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn collect_types_beside(&mut self, other: &ParsedView<'_>, item: &Item) {
+    fn collect_types_beside(&mut self, other: &ParsedView<'_, '_, '_, '_, '_>, item: &Item) {
         match item {
             Item::Enum { name, variants, .. } => {
                 let name = *name;
@@ -11784,7 +11792,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn collect_struct(&mut self, world: &CheckWorld<'_>, beside: &collections::BTreeMap<String, Vec<Ty>>, name: winnow_grammar::Symbol, generics: &[GenericParam], fields: &[FieldDef], span: &Span) {
+    fn collect_struct(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, beside: &collections::BTreeMap<String, Vec<Ty>>, name: winnow_grammar::Symbol, generics: &[GenericParam], fields: &[FieldDef], span: &Span) {
         let mut order: Vec<String> = vec![];
         let mut parameters: collections::BTreeSet<String> = collections::BTreeSet::new();
         for generic in generics.iter() {
@@ -11804,7 +11812,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn collect_enum(&mut self, world: &CheckWorld<'_>, beside: &collections::BTreeMap<String, Vec<Ty>>, name: winnow_grammar::Symbol, variants: &[EnumVariant], span: &Span) {
+    fn collect_enum(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, beside: &collections::BTreeMap<String, Vec<Ty>>, name: winnow_grammar::Symbol, variants: &[EnumVariant], span: &Span) {
         let own = world.here.text(name);
         self.nameable(&own, span, "an enum");
         for variant in variants.iter() { self.nameable(&world.here.text(variant.name), span, "a variant"); }
@@ -11845,7 +11853,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn collect_types(&mut self, world: &CheckWorld<'_>) {
+    pub fn collect_types(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>) {
         for other in world.beside.iter() { for item in other.items.iter() { self.collect_types_beside(other, &item.node); } }
         let beside = check_parts_beside(world);
         for item in world.here.items.iter() {
@@ -11886,17 +11894,17 @@ pub enum CompareStrength {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CheckComparable<'a> {
+pub struct CheckComparable<'a, 'a1, 'a2, 'a3, 'a4, 'a5, 'a6> {
     pub beside: &'a collections::BTreeMap<String, Vec<Ty>>,
-    pub structs: &'a collections::BTreeMap<String, Vec<FieldContract>>,
-    pub enums: &'a collections::BTreeMap<String, collections::BTreeSet<String>>,
-    pub payloads: &'a collections::BTreeMap<String, Vec<Ty>>,
-    pub parameters: &'a collections::BTreeMap<String, Vec<String>>,
-    pub own: &'a Ledger,
-    pub library: &'a Ledger,
+    pub structs: &'a1 collections::BTreeMap<String, Vec<FieldContract>>,
+    pub enums: &'a2 collections::BTreeMap<String, collections::BTreeSet<String>>,
+    pub payloads: &'a3 collections::BTreeMap<String, Vec<Ty>>,
+    pub parameters: &'a4 collections::BTreeMap<String, Vec<String>>,
+    pub own: &'a5 Ledger,
+    pub library: &'a6 Ledger,
 }
 
-impl<'a> CheckComparable<'a> {
+impl<'a> CheckComparable<'a, 'a, 'a, 'a, 'a, 'a, 'a> {
     pub fn of(&self, ty: &'a Ty) -> bool {
         let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
         self.asking(ty, CompareStrength::Compares, &mut seen)
@@ -12004,7 +12012,7 @@ impl<'a> CheckComparable<'a> {
     }
 }
 
-pub fn compare_refusal(asking: &CheckComparable<'_>, left: &Ty, right: &Ty, span: &Span) -> Option<CheckFinding> {
+pub fn compare_refusal(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '_>, left: &Ty, right: &Ty, span: &Span) -> Option<CheckFinding> {
     let mut found: String = String::from("");
     if !asking.of(left) { found = left.text(); } else if !asking.of(right) { found = right.text(); }
     if found == "" { return None; }
@@ -12018,7 +12026,7 @@ pub struct CompareDeclared {
     pub totally: Vec<String>,
 }
 
-pub fn compare_declared(asking: &CheckComparable<'_>, here: &ParsedView<'_>) -> CompareDeclared {
+pub fn compare_declared(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '_>, here: &ParsedView<'_, '_, '_, '_, '_>) -> CompareDeclared {
     let mut declared: Vec<String> = vec![];
     for item in here.items.iter() {
         match &item.node {
@@ -12046,7 +12054,7 @@ pub fn compare_declared(asking: &CheckComparable<'_>, here: &ParsedView<'_>) -> 
 }
 
 impl CheckState {
-    pub fn a_write_that_skips_the_door(&mut self, world: &CheckWorld<'_>, target: &Expr, into: &Ty, written: &str, span: &Span) {
+    pub fn a_write_that_skips_the_door(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, target: &Expr, into: &Ty, written: &str, span: &Span) {
         let hull = match into {
             Ty::Named { name, .. } => name == "SharedMut",
             _ => false,
@@ -12070,7 +12078,7 @@ impl CheckState {
         if is == "is" { help = format!("Declare the function with `throws`, or close it yourself where you want to handle the failure: `{}.close() catch {{ … }}`.", name); }
         self.findings.push(check_refusal("NK2605", span, format!("This function can fail, because cleaning up `{}` can fail.", name), vec![format!("`{}` {} a `{}`. Its cleanup runs at the end of this block and can fail, so the function can fail with it.", name, is, owner)], Some(help)));
     }
-    pub fn parts_lent(&self, world: &CheckWorld<'_>, body: &Expr, parts: &collections::BTreeMap<String, Ty>, from: i64, changed_from: i64) -> collections::BTreeSet<String> {
+    pub fn parts_lent(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, body: &Expr, parts: &collections::BTreeMap<String, Ty>, from: i64, changed_from: i64) -> collections::BTreeSet<String> {
         let mut lent: collections::BTreeSet<String> = collections::BTreeSet::new();
         for (name, ty) in parts.iter() {
             if !self.takes_away(world, ty) { continue; }
@@ -12101,7 +12109,7 @@ fn compare_base(name: &str) -> String {
 
 fn compare_path_within(path: &str, name: &str, inside: &str) -> bool { path == name || path.starts_with(inside) }
 
-pub fn compare_standard_bounds(asking: &CheckComparable<'_>, parameters: &collections::BTreeMap<String, Vec<String>>, key: &str, wanted: &collections::BTreeMap<String, Vec<String>>, bound: &collections::BTreeMap<String, Ty>, span: &Span) -> Vec<CheckFinding> {
+pub fn compare_standard_bounds(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '_>, parameters: &collections::BTreeMap<String, Vec<String>>, key: &str, wanted: &collections::BTreeMap<String, Vec<String>>, bound: &collections::BTreeMap<String, Ty>, span: &Span) -> Vec<CheckFinding> {
     let mut refused: Vec<CheckFinding> = vec![];
     for (parameter, traits) in wanted.iter() {
         let held = match bound.get(parameter) { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -12123,7 +12131,7 @@ pub fn compare_standard_bounds(asking: &CheckComparable<'_>, parameters: &collec
     refused
 }
 
-pub fn compare_keys_with_no_order(asking: &CheckComparable<'_>, ty: &Ty, span: &Span) -> Vec<CheckFinding> {
+pub fn compare_keys_with_no_order(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty, span: &Span) -> Vec<CheckFinding> {
     let mut refused: Vec<CheckFinding> = vec![];
     let mut stack: Vec<Ty> = vec![ty.clone()];
     while !stack.is_empty() {
@@ -12155,7 +12163,7 @@ fn compare_parameter_bounds(ty: &Ty, parameters: &collections::BTreeMap<String, 
     bounds.to_owned()
 }
 
-pub fn compare_language_impls(asking: &CheckComparable<'_>, here: &ParsedView<'_>) -> Vec<CheckFinding> {
+pub fn compare_language_impls(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '_>, here: &ParsedView<'_, '_, '_, '_, '_>) -> Vec<CheckFinding> {
     let mut refused: Vec<CheckFinding> = vec![];
     for item in here.items.iter() {
         match &item.node {
@@ -12170,7 +12178,7 @@ pub fn compare_language_impls(asking: &CheckComparable<'_>, here: &ParsedView<'_
     refused
 }
 
-fn compare_language_impl(asking: &CheckComparable<'_>, here: &ParsedView<'_>, trait_name: Option<winnow_grammar::Symbol>, target: &Type, span: &Span) -> Option<CheckFinding> {
+fn compare_language_impl(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '_>, here: &ParsedView<'_, '_, '_, '_, '_>, trait_name: Option<winnow_grammar::Symbol>, target: &Type, span: &Span) -> Option<CheckFinding> {
     let symbol = match trait_name { Some(__nikaia_value) => __nikaia_value, None => return None };
     let trait_text = here.text(symbol);
     if trait_text != "Eq" && trait_text != "Ord" || asking.own.traits.contains_key(&trait_text) { return None; }
@@ -12425,7 +12433,7 @@ fn nth_type(declared: &[Ty], at: i64) -> Option<Ty> {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn unwritable_payload(state: &CheckState, world: &CheckWorld<'_>, ty: &str, variant: &str, payloads: &impl Fn(&str, &str) -> Option<Vec<Ty>>) -> Vec<String> {
+fn unwritable_payload(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, ty: &str, variant: &str, payloads: &impl Fn(&str, &str) -> Option<Vec<Ty>>) -> Vec<String> {
     let carried = match payloads(ty, variant) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
     for held in carried.iter() { if rust_constant_type(world.library, held).is_none() && state.declared_below(world, held).is_none() { return vec![format!("{}::{}", ty, variant), held.text()]; } }
     vec![]
@@ -12433,7 +12441,7 @@ fn unwritable_payload(state: &CheckState, world: &CheckWorld<'_>, ty: &str, vari
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn unwritable_in(state: &CheckState, world: &CheckWorld<'_>, value: &BuildValue, payloads: &impl Fn(&str, &str) -> Option<Vec<Ty>>) -> Vec<String> {
+pub fn unwritable_in(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, value: &BuildValue, payloads: &impl Fn(&str, &str) -> Option<Vec<Ty>>) -> Vec<String> {
     match value {
         BuildValue::Struct { name, fields } => {
             let own = state.unwritable_field(world, &Ty::Named { name: name.to_owned(), args: vec![], view: false });
@@ -12473,7 +12481,7 @@ pub fn unwritable_in(state: &CheckState, world: &CheckWorld<'_>, value: &BuildVa
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn written_below(state: &CheckState, world: &CheckWorld<'_>, value: &BuildValue, want: Option<&Ty>, payloads: &impl Fn(&str, &str) -> Option<Vec<Ty>>, float_text: &impl Fn(f64) -> String) -> Option<String> {
+pub fn written_below(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, value: &BuildValue, want: Option<&Ty>, payloads: &impl Fn(&str, &str) -> Option<Vec<Ty>>, float_text: &impl Fn(f64) -> String) -> Option<String> {
     if want.is_none() { return rust_value(value, float_text); }
     let wanted: Ty = nikaia_std::index::or(want.as_ref(), || &Ty::Unknown).clone();
     match value {
@@ -12524,7 +12532,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn a_table_that_crosses(&mut self, world: &CheckWorld<'_>, bound: &str, want: &Ty, pairs: &[BuildValue], span: &Span, payloads: &impl Fn(&str, &str) -> Option<Vec<Ty>>, float_text: &impl Fn(f64) -> String) -> CheckTable {
+    pub fn a_table_that_crosses(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, bound: &str, want: &Ty, pairs: &[BuildValue], span: &Span, payloads: &impl Fn(&str, &str) -> Option<Vec<Ty>>, float_text: &impl Fn(f64) -> String) -> CheckTable {
         let args = type_arguments(want);
         if args.len() != 2 { return no_table(false); }
         if !a_str_view_key(nikaia_std::index::get(&args, 0)) {
@@ -12583,7 +12591,7 @@ impl CheckState {
 
 // --- check_copies.nika ---
 
-pub fn check_parts_beside(world: &CheckWorld<'_>) -> collections::BTreeMap<String, Vec<Ty>> {
+pub fn check_parts_beside(world: &CheckWorld<'_, '_, '_, '_, '_>) -> collections::BTreeMap<String, Vec<Ty>> {
     let mut parts: collections::BTreeMap<String, Vec<Ty>> = collections::BTreeMap::new();
     let mut at: i64 = 0;
     for other in world.beside.iter() {
@@ -12593,7 +12601,7 @@ pub fn check_parts_beside(world: &CheckWorld<'_>) -> collections::BTreeMap<Strin
     parts
 }
 
-fn copies_parts_of(other: &ParsedView<'_>, item: &Item, parts: &mut collections::BTreeMap<String, Vec<Ty>>) {
+fn copies_parts_of(other: &ParsedView<'_, '_, '_, '_, '_>, item: &Item, parts: &mut collections::BTreeMap<String, Vec<Ty>>) {
     match item {
         Item::Struct { name, generics, fields, .. } => {
             let name = *name;
@@ -12622,7 +12630,7 @@ fn copies_parts_of(other: &ParsedView<'_>, item: &Item, parts: &mut collections:
     }
 }
 
-fn copies_declared_in(view: &ParsedView<'_>) -> Vec<String> {
+fn copies_declared_in(view: &ParsedView<'_, '_, '_, '_, '_>) -> Vec<String> {
     let mut names: Vec<String> = vec![];
     for item in view.items.iter() {
         match &item.node {
@@ -12634,7 +12642,7 @@ fn copies_declared_in(view: &ParsedView<'_>) -> Vec<String> {
     names
 }
 
-fn copies_dropped_in(view: &ParsedView<'_>, dropped: &mut collections::BTreeSet<String>) {
+fn copies_dropped_in(view: &ParsedView<'_, '_, '_, '_, '_>, dropped: &mut collections::BTreeSet<String>) {
     for item in view.items.iter() {
         match &item.node {
             Item::Impl { trait_name, target, .. } => {
@@ -12650,7 +12658,7 @@ fn copies_dropped_in(view: &ParsedView<'_>, dropped: &mut collections::BTreeSet<
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn collect_copies(&mut self, world: &CheckWorld<'_>) {
+    pub fn collect_copies(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>) {
         let declared = copies_declared_in(&world.here);
         let mut package: Vec<String> = declared.to_owned();
         let mut at: i64 = 0;
@@ -12726,7 +12734,7 @@ fn check_core_args_is_lambda(arg: &Expr, expected: &[Ty], at: i64) -> bool {
     matches!(*nikaia_std::index::get(&expected, nikaia_std::index::at(at)), Ty::Fn { .. })
 }
 
-fn check_core_args_named(state: &CheckState, world: &CheckWorld<'_>, arg: &Expr) -> bool {
+fn check_core_args_named(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, arg: &Expr) -> bool {
     match arg {
         Expr::Path(_, _) => true,
         Expr::Variable(name, _) => { let name = *name; state.binding(world.words.resolve(name)).is_none() },
@@ -12734,7 +12742,7 @@ fn check_core_args_named(state: &CheckState, world: &CheckWorld<'_>, arg: &Expr)
     }
 }
 
-fn check_core_args_a_run_parameter(state: &CheckState, world: &CheckWorld<'_>, arg: &Expr) -> bool {
+fn check_core_args_a_run_parameter(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, arg: &Expr) -> bool {
     match arg {
         Expr::Variable(name, _) => { let name = *name; state.run_code.contains(world.words.resolve(name)) },
         _ => false,
@@ -12744,7 +12752,7 @@ fn check_core_args_a_run_parameter(state: &CheckState, world: &CheckWorld<'_>, a
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-fn check_core_args_lambda<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, arg: &Expr, want: &Ty, declared_here: bool, callee: Option<&FnContract>, at: i64, span: &Span) -> Ty {
+fn check_core_args_lambda<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, arg: &Expr, want: &Ty, declared_here: bool, callee: Option<&FnContract>, at: i64, span: &Span) -> Ty {
     let id = id_of(arg) as i64;
     let runs = check_core_args_runs(callee, at);
     match arg {
@@ -12785,7 +12793,7 @@ fn check_core_args_lambda<H: CheckHost>(state: &mut CheckState, world: &CheckWor
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-fn check_core_args_other<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, arg: &Expr, expected: &[Ty], declared_here: bool, callee: Option<&FnContract>, at: i64, span: &Span) -> Ty {
+fn check_core_args_other<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, arg: &Expr, expected: &[Ty], declared_here: bool, callee: Option<&FnContract>, at: i64, span: &Span) -> Ty {
     let mut lends = false;
     let mut wants_fn = false;
     let mut wants_pausing_fn = false;
@@ -12822,7 +12830,7 @@ fn check_core_args_other<H: CheckHost>(state: &mut CheckState, world: &CheckWorl
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub fn check_core_arguments_given<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, args: &[Expr], expected: &[Ty], declared_here: bool, callee: Option<&FnContract>, span: &Span) -> Vec<Ty> {
+pub fn check_core_arguments_given<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, args: &[Expr], expected: &[Ty], declared_here: bool, callee: Option<&FnContract>, span: &Span) -> Vec<Ty> {
     let mut out: Vec<Ty> = vec![];
     let mut at: i64 = 0;
     for arg in args.iter() {
@@ -12849,7 +12857,7 @@ fn check_core_args_no_door(state: &mut CheckState, writing: bool, wanted: &str, 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-fn check_core_args_door_block<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, writing: bool, args: &[Expr], params: &[winnow_grammar::Symbol], mutable: &[winnow_grammar::Symbol], body: &Block, span: &Span) -> Ty {
+fn check_core_args_door_block<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, writing: bool, args: &[Expr], params: &[winnow_grammar::Symbol], mutable: &[winnow_grammar::Symbol], body: &Block, span: &Span) -> Ty {
     let count = args.len() as i64 - 1;
     if count < 2 {
         check_core_args_no_door(state, writing, "It's for several locks, so pass at least two.", span);
@@ -12896,7 +12904,7 @@ fn check_core_args_door_block<H: CheckHost>(state: &mut CheckState, world: &Chec
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_locks<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, writing: bool, args: &[Expr], span: &Span) -> Ty {
+pub fn check_core_locks<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, writing: bool, args: &[Expr], span: &Span) -> Ty {
     if args.is_empty() {
         check_core_args_no_door(state, writing, "It takes the locks and then the block.", span);
         return Ty::Unknown;
@@ -12939,7 +12947,7 @@ fn check_core_args_a_closure(value: &Expr) -> bool { matches!(value, Expr::Closu
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_list_literal<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, items: &[Expr], span: &Span) -> Ty {
+pub fn check_core_list_literal<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, items: &[Expr], span: &Span) -> Ty {
     let mut agreed: Ty = Ty::Unknown;
     let mut has_kind = false;
     let mut first_kind: String = String::from("");
@@ -13087,7 +13095,7 @@ pub fn check_core_args_code_said(state: &mut CheckState, current: &str, pauses: 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub fn check_core_a_called_field<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, on: &Ty, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], outer_inside: bool, span: &Span) -> Option<Ty> {
+pub fn check_core_a_called_field<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, on: &Ty, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], outer_inside: bool, span: &Span) -> Option<Ty> {
     let code: Ty = match state.a_field_that_is_code(world, on, method) { Some(__nikaia_value) => __nikaia_value, None => return None };
     match code {
         Ty::Fn { ref params, ref result, is_sync, can_throw } => {
@@ -13146,7 +13154,7 @@ pub fn check_core_a_called_field<H: CheckHost>(state: &mut CheckState, world: &C
 
 fn check_core_call_named(name: &str) -> Ty { Ty::Named { name: name.to_owned(), args: vec![], view: false } }
 
-fn check_core_call_joined(world: &CheckWorld<'_>, segments: &[winnow_grammar::Symbol]) -> String {
+fn check_core_call_joined(world: &CheckWorld<'_, '_, '_, '_, '_>, segments: &[winnow_grammar::Symbol]) -> String {
     let mut parts: Vec<String> = vec![];
     for segment in segments.iter() {
         let segment = *segment;
@@ -13161,14 +13169,14 @@ fn check_core_call_opaque(ty: &Ty) -> bool { matches!(ty, Ty::Unknown | Ty::Fn {
 
 fn check_core_call_is_variable(func: &Expr) -> bool { matches!(func, Expr::Variable(_, _)) }
 
-fn check_core_call_the_prelude_assert(state: &CheckState, world: &CheckWorld<'_>, func: &Expr) -> bool {
+fn check_core_call_the_prelude_assert(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, func: &Expr) -> bool {
     match func {
         Expr::Variable(name, _) => { let name = *name; world.words.resolve(name) == "assert" && state.lookup("assert").is_none() && !world.own.functions.contains_key("assert") },
         _ => false,
     }
 }
 
-fn check_core_call_attribute_member(state: &CheckState, world: &CheckWorld<'_>, func: &Expr) -> String {
+fn check_core_call_attribute_member(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, func: &Expr) -> String {
     match func {
         Expr::Path(segments, _) => {
             if segments.len() == 2 {
@@ -13182,7 +13190,7 @@ fn check_core_call_attribute_member(state: &CheckState, world: &CheckWorld<'_>, 
     "".to_owned()
 }
 
-fn check_core_call_free_callee(world: &CheckWorld<'_>, func: &Expr) -> Option<String> {
+fn check_core_call_free_callee(world: &CheckWorld<'_, '_, '_, '_, '_>, func: &Expr) -> Option<String> {
     match func {
         Expr::Variable(name, _) => { let name = *name; Some(world.here.unaliased(&format!("{}", world.words.resolve(name)))) },
         Expr::Path(segments, _) => Some(world.here.unaliased(&check_core_call_joined(world, segments))),
@@ -13190,7 +13198,7 @@ fn check_core_call_free_callee(world: &CheckWorld<'_>, func: &Expr) -> Option<St
     }
 }
 
-fn check_core_call_holds(world: &CheckWorld<'_>, name: &str) -> Lock {
+fn check_core_call_holds(world: &CheckWorld<'_, '_, '_, '_, '_>, name: &str) -> Lock {
     if world.own.functions.contains_key(name) {
         let contract = match *nikaia_std::index::get(&world.own.functions, name) { Some(__nikaia_value) => __nikaia_value, None => return Lock::No };
         return contract.touches_a_lock.clone();
@@ -13254,7 +13262,7 @@ fn check_core_call_lent(state: &mut CheckState, args: &[Expr], params: &[Ty], fo
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-fn check_core_call_kept<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, func: &Expr, args: &[Expr], name: &str, params: &[Ty], gives: Ty, is_sync: bool, fails: bool, span: &Span) -> Ty {
+fn check_core_call_kept<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, func: &Expr, args: &[Expr], name: &str, params: &[Ty], gives: Ty, is_sync: bool, fails: bool, span: &Span) -> Ty {
     state.read_at.push((name.to_owned(), span.start as i64));
     let found = check_core_arguments_given(state, world, host, args, params, false, None, span);
     check_core_call_lent(state, args, params, &found);
@@ -13284,7 +13292,7 @@ fn check_core_call_kept<H: CheckHost>(state: &mut CheckState, world: &CheckWorld
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_call_mut_args(state: &mut CheckState, world: &CheckWorld<'_>, callee: Option<&FnContract>, args: &[Expr]) {
+fn check_core_call_mut_args(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, callee: Option<&FnContract>, args: &[Expr]) {
     let contract: &FnContract = match callee { Some(__nikaia_value) => __nikaia_value, None => return };
     let signature: &Signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
     let mut i: i64 = -1;
@@ -13294,7 +13302,7 @@ fn check_core_call_mut_args(state: &mut CheckState, world: &CheckWorld<'_>, call
     }
 }
 
-fn check_core_call_a_param_of(world: &CheckWorld<'_>, current: &str, name: &str) -> bool {
+fn check_core_call_a_param_of(world: &CheckWorld<'_, '_, '_, '_, '_>, current: &str, name: &str) -> bool {
     let contract = match *nikaia_std::index::get(&world.own.functions, current) { Some(__nikaia_value) => __nikaia_value, None => return false };
     let signature: &Signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
     for (param, ty) in signature.params.iter() { if param == name && check_core_stmt_holds_code(ty) { return true; } }
@@ -13310,7 +13318,7 @@ fn check_core_call_takes_code(callee: Option<&FnContract>) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_call_from_given<H: CheckHost>(state: &CheckState, world: &CheckWorld<'_>, host: &H, contract: &FnContract, args: &[Expr]) -> FnContract {
+fn check_core_call_from_given<H: CheckHost>(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, contract: &FnContract, args: &[Expr]) -> FnContract {
     let mut given = contract.clone();
     let mut any = false;
     for error in contract.fails_with.iter() { if throws_given(error) { any = true; } }
@@ -13350,7 +13358,7 @@ fn check_core_call_from_given<H: CheckHost>(state: &CheckState, world: &CheckWor
     given
 }
 
-fn check_core_call_set_into(world: &CheckWorld<'_>, name: &str, set: &mut collections::BTreeSet<String>) {
+fn check_core_call_set_into(world: &CheckWorld<'_, '_, '_, '_, '_>, name: &str, set: &mut collections::BTreeSet<String>) {
     if world.own.functions.contains_key(name) {
         let own = match *nikaia_std::index::get(&world.own.functions, name) { Some(__nikaia_value) => __nikaia_value, None => return };
         for error in own.fails_with.iter() { set.insert(error.to_owned()); }
@@ -13364,7 +13372,7 @@ fn check_core_call_set_into(world: &CheckWorld<'_>, name: &str, set: &mut collec
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_call_feed_params<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, key: &str, contract: &FnContract, args: &[Expr], frame: &CheckStoredCode) {
+fn check_core_call_feed_params<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, key: &str, contract: &FnContract, args: &[Expr], frame: &CheckStoredCode) {
     let signature: &Signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
     let mut i: i64 = -1;
     for (param, ty) in signature.params.iter() {
@@ -13383,7 +13391,7 @@ fn check_core_call_feed_params<H: CheckHost>(state: &mut CheckState, world: &Che
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_call_variant_parts<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, args: &[Expr], name: &str, span: &Span) -> Ty {
+fn check_core_call_variant_parts<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, args: &[Expr], name: &str, span: &Span) -> Ty {
     let parts: Vec<Ty> = nikaia_std::index::or(match *nikaia_std::index::get(&state.variant_parts, name) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
@@ -13403,7 +13411,7 @@ fn check_core_call_variant_parts<H: CheckHost>(state: &mut CheckState, world: &C
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-fn check_core_call_unresolved<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, func: &Expr, name: &str, args: &[Expr], found: &[Ty], config: &[ConfigArg], passed: &[(String, Ty)], shadowed: bool, span: &Span) -> Ty {
+fn check_core_call_unresolved<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, func: &Expr, name: &str, args: &[Expr], found: &[Ty], config: &[ConfigArg], passed: &[(String, Ty)], shadowed: bool, span: &Span) -> Ty {
     let is_variable = check_core_call_is_variable(func);
     if is_variable { state.a_function_nothing_declares(&world.here, world, name, span); }
     match func {
@@ -13466,7 +13474,7 @@ fn check_core_call_unresolved<H: CheckHost>(state: &mut CheckState, world: &Chec
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-fn check_core_call_described<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, name: &str, key: &str, contract: &FnContract, args: &[Expr], found: &[Ty], config: &[ConfigArg], passed: &[(String, Ty)], span: &Span) -> Ty {
+fn check_core_call_described<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, name: &str, key: &str, contract: &FnContract, args: &[Expr], found: &[Ty], config: &[ConfigArg], passed: &[(String, Ty)], span: &Span) -> Ty {
     state.reachable(name, contract, span);
     if contract.threads.may() { state.crosses_into_an_unseen_call(world, name, args, found, config, passed, span, &format!("`{}` is described as starting a thread of its own (`threads = true`), so what it is given may be looked at from one", name)); }
     let given = check_core_call_from_given(&state, world, host, contract, args);
@@ -13494,7 +13502,7 @@ fn check_core_call_described<H: CheckHost>(state: &mut CheckState, world: &Check
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_call_passed<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, config: &[ConfigArg], span: &Span) -> Vec<(String, Ty)> {
+fn check_core_call_passed<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, config: &[ConfigArg], span: &Span) -> Vec<(String, Ty)> {
     let mut passed: Vec<(String, Ty)> = vec![];
     for option in config.iter() {
         check_core_a_field_of_a_borrowed_subject(state, world, host, &option.value, span, "passed");
@@ -13506,7 +13514,7 @@ fn check_core_call_passed<H: CheckHost>(state: &mut CheckState, world: &CheckWor
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_call_names(state: &mut CheckState, world: &CheckWorld<'_>, func: &Expr, name: &str, args: &[Expr], span: &Span) {
+fn check_core_call_names(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, func: &Expr, name: &str, args: &[Expr], span: &Span) {
     state.a_foreign_call_outside_unsafe(name, span);
     state.a_constructor_written_as_new(world, name, span);
     state.a_std_name_without_its_module(world, name, span);
@@ -13530,7 +13538,7 @@ fn check_core_call_names(state: &mut CheckState, world: &CheckWorld<'_>, func: &
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-fn check_core_call_named_call<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, func: &Expr, name: &str, args: &[Expr], config: &[ConfigArg], span: &Span) -> Ty {
+fn check_core_call_named_call<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, func: &Expr, name: &str, args: &[Expr], config: &[ConfigArg], span: &Span) -> Ty {
     check_core_call_names(state, world, func, name, args, span);
     let entered: Option<String> = state.grammar_path(name);
     if entered.is_some() {
@@ -13604,7 +13612,7 @@ fn check_core_call_named_call<H: CheckHost>(state: &mut CheckState, world: &Chec
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_free_call<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, func: &Expr, args: &[Expr], config: &[ConfigArg], span: &Span) -> Ty {
+pub fn check_core_free_call<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, func: &Expr, args: &[Expr], config: &[ConfigArg], span: &Span) -> Ty {
     let member = check_core_call_attribute_member(&state, world, func);
     if member != "" {
         let read: String = match host.an_attribute_read(state, args, span) { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
@@ -13668,14 +13676,14 @@ pub fn check_core_free_call<H: CheckHost>(state: &mut CheckState, world: &CheckW
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_call<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, func: &Expr, args: &[Expr], config: &[ConfigArg], span: &Span) -> Ty {
+pub fn check_core_call<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, func: &Expr, args: &[Expr], config: &[ConfigArg], span: &Span) -> Ty {
     if check_core_call_the_prelude_assert(&state, world, func) { return check_core_an_assert(state, world, host, args, config, span); }
     check_core_free_call(state, world, host, func, args, config, span)
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_tuple<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, parts: &[Expr], span: &Span) -> Ty {
+pub fn check_core_tuple<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, parts: &[Expr], span: &Span) -> Ty {
     let mut found: Vec<Ty> = vec![];
     for part in parts.iter() { found.push(check_core_expr(state, world, host, part, span)); }
     let mut i: i64 = 0;
@@ -13803,7 +13811,7 @@ fn check_core_call_on_owned(on: &Ty) -> Ty {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_call_on_fallback(state: &CheckState, world: &CheckWorld<'_>, on: &Ty, entry: &str) -> Option<CheckResolved> {
+fn check_core_call_on_fallback(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, on: &Ty, entry: &str) -> Option<CheckResolved> {
     match on {
         Ty::Seq { parallel, .. } => {
             let parallel = *parallel;
@@ -13824,7 +13832,7 @@ fn check_core_call_on_fallback(state: &CheckState, world: &CheckWorld<'_>, on: &
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_call_on_comparable(state: &CheckState, world: &CheckWorld<'_>, on: &Ty, wants_order: bool) -> bool {
+fn check_core_call_on_comparable(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, on: &Ty, wants_order: bool) -> bool {
     match on {
         Ty::Named { name, args, .. } => {
             if args.is_empty() && state.type_parameters.contains_key(name) {
@@ -13845,7 +13853,7 @@ fn check_core_call_on_comparable(state: &CheckState, world: &CheckWorld<'_>, on:
 }
 
 #[allow(clippy::too_many_arguments)]
-fn check_core_call_on_compares(beside: &collections::BTreeMap<String, Vec<Ty>>, structs: &collections::BTreeMap<String, Vec<FieldContract>>, enums: &collections::BTreeMap<String, collections::BTreeSet<String>>, payloads: &collections::BTreeMap<String, Vec<Ty>>, parameters: &collections::BTreeMap<String, Vec<String>>, world: &CheckWorld<'_>, on: &Ty, wants_order: bool) -> bool {
+fn check_core_call_on_compares(beside: &collections::BTreeMap<String, Vec<Ty>>, structs: &collections::BTreeMap<String, Vec<FieldContract>>, enums: &collections::BTreeMap<String, collections::BTreeSet<String>>, payloads: &collections::BTreeMap<String, Vec<Ty>>, parameters: &collections::BTreeMap<String, Vec<String>>, world: &CheckWorld<'_, '_, '_, '_, '_>, on: &Ty, wants_order: bool) -> bool {
     let asking = CheckComparable { beside, structs, enums, payloads, parameters, own: world.own, library: world.library };
     if wants_order { return asking.orders(on); }
     asking.totally(on)
@@ -13862,7 +13870,7 @@ fn check_core_call_on_seen(on: &Ty) -> Option<Ty> {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-fn check_core_call_on_undescribed<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, on: &Ty, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], entry: &str, type_name: &str, span: &Span) -> Ty {
+fn check_core_call_on_undescribed<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, on: &Ty, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], entry: &str, type_name: &str, span: &Span) -> Ty {
     let bound: Option<Ty> = state.bound_that_answers(world, type_name, entry);
     if bound.is_some() {
         let answered: Ty = nikaia_std::index::or(bound, || Ty::Unknown);
@@ -13902,7 +13910,7 @@ fn check_core_call_on_undescribed<H: CheckHost>(state: &mut CheckState, world: &
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_call_on_takes(state: &CheckState, world: &CheckWorld<'_>, contract: &FnContract) -> bool {
+fn check_core_call_on_takes(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, contract: &FnContract) -> bool {
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
     for (_, ty) in signature.params.iter() {
         match ty {
@@ -13950,7 +13958,7 @@ fn check_core_call_on_open(state: &CheckState, bound_name: &str) -> i64 {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_call_on_pushed(state: &mut CheckState, world: &CheckWorld<'_>, entry: &str, args: &[Expr], found: &[Ty], span: &Span) {
+fn check_core_call_on_pushed(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, entry: &str, args: &[Expr], found: &[Ty], span: &Span) {
     if state.flow.pushed_into.is_none() { return; }
     let pushed_name: String = nikaia_std::index::or(match state.flow.pushed_into.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -14013,7 +14021,7 @@ fn check_core_call_on_pushed(state: &mut CheckState, world: &CheckWorld<'_>, ent
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-fn check_core_call_on_given<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, key: &str, args: &[Expr], found: &[Ty], expected: &[Ty], span: &Span) {
+fn check_core_call_on_given<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, key: &str, args: &[Expr], found: &[Ty], expected: &[Ty], span: &Span) {
     let mut i: i64 = 0;
     for given in args.iter() {
         if i >= expected.len() as i64 || i >= found.len() as i64 {
@@ -14039,7 +14047,7 @@ fn check_core_call_on_given<H: CheckHost>(state: &mut CheckState, world: &CheckW
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, on: &Ty, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], entry: &str, key: &str, contract: &FnContract, span: &Span) -> Ty {
+fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, on: &Ty, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], entry: &str, key: &str, contract: &FnContract, span: &Span) -> Ty {
     let node = id_of(receiver) as i64;
     let mut known_text = false;
     if key == "fs::Path::to_text" {
@@ -14168,7 +14176,7 @@ fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState, world: &Ch
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub fn check_core_call_on<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, on: Ty, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], entry: &str, span: &Span) -> Ty {
+pub fn check_core_call_on<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, on: Ty, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], entry: &str, span: &Span) -> Ty {
     if entry == "full" && args.is_empty() {
         let mut an_error = false;
         match on {
@@ -14215,7 +14223,7 @@ pub fn check_core_call_on<H: CheckHost>(state: &mut CheckState, world: &CheckWor
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub fn check_core_a_safe_call<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, inner: Ty, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], witness: i64, span: &Span) -> Ty {
+pub fn check_core_a_safe_call<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, inner: Ty, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], witness: i64, span: &Span) -> Ty {
     let name: String = format!("{}", world.words.resolve(method));
     let within = witness >= 0 && check_core_call_on_task_handle(&inner) && name == "join";
     let door = witness >= 0 && locked_content_of(&inner).is_some() && name == "set";
@@ -14295,7 +14303,7 @@ fn check_core_comptime_first_type(n: &Integer, beyond: bool) -> String {
     "i64".to_owned()
 }
 
-fn check_core_comptime_declared_below(state: &CheckState, world: &CheckWorld<'_>, want: &Ty, evaluated: Option<&BuildValue>) -> Option<String> {
+fn check_core_comptime_declared_below(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, want: &Ty, evaluated: Option<&BuildValue>) -> Option<String> {
     let offered = rust_constant_type(world.library, want);
     if offered.is_some() { return std::convert::identity(offered); }
     let declared = state.declared_below(world, want);
@@ -14319,7 +14327,7 @@ fn check_core_comptime_declared_below(state: &CheckState, world: &CheckWorld<'_>
     None
 }
 
-fn check_core_comptime_value_below(world: &CheckWorld<'_>, found: &Ty, evaluated: Option<&BuildValue>) -> Option<String> {
+fn check_core_comptime_value_below(world: &CheckWorld<'_, '_, '_, '_, '_>, found: &Ty, evaluated: Option<&BuildValue>) -> Option<String> {
     let value = match evaluated { Some(__nikaia_value) => __nikaia_value, None => return None };
     match value {
         BuildValue::Float(_) => { return Some("f64".to_owned()); },
@@ -14362,7 +14370,7 @@ fn check_core_comptime_unsized_array(want: &Ty) -> Option<String> {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_comptime_other(state: &mut CheckState, world: &CheckWorld<'_>, bound: &str, narrowed: &Ty, want: &Ty, evaluated: Option<&BuildValue>, span: &Span) {
+fn check_core_comptime_other(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, bound: &str, narrowed: &Ty, want: &Ty, evaluated: Option<&BuildValue>, span: &Span) {
     let shape = check_core_comptime_shape(evaluated);
     if shape == 7 {
         let field = state.unwritable_field(world, want);
@@ -14392,7 +14400,7 @@ fn check_core_comptime_other(state: &mut CheckState, world: &CheckWorld<'_>, bou
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub fn check_core_comptime_binding<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, name: winnow_grammar::Symbol, ty: Option<&Type>, value: &Expr, bounds: &[ConfigArg], span: &Span) -> Ty {
+pub fn check_core_comptime_binding<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, name: winnow_grammar::Symbol, ty: Option<&Type>, value: &Expr, bounds: &[ConfigArg], span: &Span) -> Ty {
     let raised: Option<CheckRaised> = state.raised_bounds(world, bounds, span);
     let outside = state.flow.inside_a_comptime;
     state.flow.inside_a_comptime = true;
@@ -14540,7 +14548,7 @@ pub fn check_core_comptime_binding<H: CheckHost>(state: &mut CheckState, world: 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_a_block_over_a_grammar<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, block: &Expr, target: winnow_grammar::Symbol, content: &str, span: &Span) -> Ty {
+pub fn check_core_a_block_over_a_grammar<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, block: &Expr, target: winnow_grammar::Symbol, content: &str, span: &Span) -> Ty {
     let owner = world.words.resolve(target).to_owned();
     let mut entry: String = String::from("");
     let mut any = false;
@@ -14612,7 +14620,7 @@ fn check_core_expr_escapes<H: CheckHost>(state: &mut CheckState, host: &H, text:
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_expr<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, expr: &Expr, span: &Span) -> Ty {
+pub fn check_core_expr<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, expr: &Expr, span: &Span) -> Ty {
     let reaching: Option<String> = match state.flow.reaching.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
@@ -14633,7 +14641,7 @@ pub fn check_core_expr<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
 
 fn check_core_expr_makes_a_value(expr: &Expr) -> bool { matches!(expr, Expr::Call { .. } | Expr::MethodCall { .. } | Expr::SafeMethod { .. } | Expr::StructLit { .. }) }
 
-fn check_core_expr_a_map_read(world: &CheckWorld<'_>, expr: &Expr) -> bool {
+fn check_core_expr_a_map_read(world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr) -> bool {
     match expr {
         Expr::Index { .. } => true,
         Expr::MethodCall { method, .. } => { let method = *method; world.words.resolve(method) == "get" },
@@ -14692,7 +14700,7 @@ fn check_core_expr_inside(ty: &Ty) -> Ty {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_expr_flat_get(state: &mut CheckState, world: &CheckWorld<'_>, expr: &Expr, ty: Ty) -> Ty {
+fn check_core_expr_flat_get(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr, ty: Ty) -> Ty {
     match expr {
         Expr::MethodCall { method, args, .. } => {
             let method = *method;
@@ -14708,7 +14716,7 @@ fn check_core_expr_flat_get(state: &mut CheckState, world: &CheckWorld<'_>, expr
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, expr: &Expr, span: &Span) -> Ty {
+pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, expr: &Expr, span: &Span) -> Ty {
     match expr {
         Expr::LitInt { .. } => Ty::Unknown,
         Expr::LitFloat(_, _) => check_core_expr_named("f64"),
@@ -14770,7 +14778,7 @@ pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWo
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_expr_text<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, text: &str, span: &Span) -> Ty {
+fn check_core_expr_text<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, text: &str, span: &Span) -> Ty {
     check_core_expr_escapes(state, host, text, span);
     state.unmarked_hole(world, host, text, span);
     check_core_expr_view("str")
@@ -14778,7 +14786,7 @@ fn check_core_expr_text<H: CheckHost>(state: &mut CheckState, world: &CheckWorld
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_expr_interpolated<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, expr: &Expr, parts: &[FPart], span: &Span) -> Ty {
+fn check_core_expr_interpolated<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, expr: &Expr, parts: &[FPart], span: &Span) -> Ty {
     for part in parts.iter() {
         match part {
             FPart::Text(text) => { check_core_expr_escapes(state, host, text, span); },
@@ -14799,7 +14807,7 @@ fn check_core_expr_empty_list(state: &CheckState, name: &str) -> i64 {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_expr_variable<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, expr: &Expr, symbol: winnow_grammar::Symbol, span: &Span) -> Ty {
+fn check_core_expr_variable<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, expr: &Expr, symbol: winnow_grammar::Symbol, span: &Span) -> Ty {
     let name = world.words.resolve(symbol).to_owned();
     state.read_at.push((name.to_owned(), span.start as i64));
     let at = check_core_expr_empty_list(&state, &name);
@@ -14845,7 +14853,7 @@ fn check_core_expr_a_bare_case(ledger: &Ledger, owner: &str, variant: &str) -> b
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_expr_path(state: &mut CheckState, world: &CheckWorld<'_>, segments: &[winnow_grammar::Symbol], span: &Span) -> Ty {
+fn check_core_expr_path(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, segments: &[winnow_grammar::Symbol], span: &Span) -> Ty {
     let mut names: Vec<String> = vec![];
     for segment in segments.iter() {
         let segment = *segment;
@@ -14876,7 +14884,7 @@ fn check_core_expr_path(state: &mut CheckState, world: &CheckWorld<'_>, segments
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_expr_unary<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, whole: &Expr, op: UnaryOp, inner: &Expr, span: &Span) -> Ty {
+fn check_core_expr_unary<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, whole: &Expr, op: UnaryOp, inner: &Expr, span: &Span) -> Ty {
     let negation = matches!(op, UnaryOp::Neg);
     if negation {
         let reached: Option<String> = match state.flow.reached.as_ref() {
@@ -14914,7 +14922,7 @@ fn check_core_expr_unary<H: CheckHost>(state: &mut CheckState, world: &CheckWorl
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_expr_throw<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, inner: &Expr, span: &Span) -> Ty {
+fn check_core_expr_throw<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, inner: &Expr, span: &Span) -> Ty {
     let thrown = check_core_expr(state, world, host, inner, span);
     state.a_thrown_value_that_is_not_an_error(inner, &thrown, span);
     state.a_thrown_type_with_no_error(world, &thrown, span);
@@ -14937,7 +14945,7 @@ fn check_core_expr_one_entry(state: &CheckState, name: &str) -> bool {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-fn check_core_expr_dsl<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, expr: &Expr, target: winnow_grammar::Symbol, package: Option<winnow_grammar::Symbol>, context: Option<winnow_grammar::Symbol>, content: &str, span: &Span) -> Ty {
+fn check_core_expr_dsl<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, expr: &Expr, target: winnow_grammar::Symbol, package: Option<winnow_grammar::Symbol>, context: Option<winnow_grammar::Symbol>, content: &str, span: &Span) -> Ty {
     let bare = package.is_none();
     if bare && state.a_package_where_a_grammar_stands(&world.here, target, span) {
         check_core_expr_unanswered(state);
@@ -14972,7 +14980,7 @@ fn check_core_flow_unknown(ty: &Ty) -> bool { matches!(ty, Ty::Unknown) }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_flow_variable(world: &CheckWorld<'_>, value: &Expr) -> String {
+fn check_core_flow_variable(world: &CheckWorld<'_, '_, '_, '_, '_>, value: &Expr) -> String {
     match value {
         Expr::Variable(name, _) => { let name = *name; format!("{}", world.words.resolve(name)) },
         _ => "".to_owned(),
@@ -15038,11 +15046,11 @@ fn check_core_flow_part(parts: &collections::BTreeMap<String, Ty>, wanted: &str)
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_flow_leaves(state: &CheckState, world: &CheckWorld<'_>, block: &Block) -> bool { state.block_exits(world, block) || state.block_leaves(world, block) }
+fn check_core_flow_leaves(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, block: &Block) -> bool { state.block_exits(world, block) || state.block_leaves(world, block) }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_flow_proved_block<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, cond: &Expr, holds: bool, block: &Block) -> Ty {
+fn check_core_flow_proved_block<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, cond: &Expr, holds: bool, block: &Block) -> Ty {
     let markers = check_narrow_proved_here(state, world, cond, holds);
     if markers.is_empty() { return check_core_block(state, world, host, block); }
     state.scope.push(markers);
@@ -15060,7 +15068,7 @@ fn check_core_flow_arm_type(state: &mut CheckState, block: &Block, ty: &Ty) {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_flow_number_open(state: &mut CheckState, world: &CheckWorld<'_>, typed: &Ty, open: Option<&Expr>, span: &Span) -> Option<Ty> {
+fn check_core_flow_number_open(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, typed: &Ty, open: Option<&Expr>, span: &Span) -> Option<Ty> {
     let opened: &Expr = match open { Some(__nikaia_value) => __nikaia_value, None => return None };
     let number = value_of_a_copy(&typed.unseen());
     if integer_named(&number).is_none() || !state.number_shaped(world, opened) { return None; }
@@ -15070,7 +15078,7 @@ fn check_core_flow_number_open(state: &mut CheckState, world: &CheckWorld<'_>, t
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_flow_number_beside(state: &mut CheckState, world: &CheckWorld<'_>, a_tail: Option<&Expr>, a: &Ty, b_tail: Option<&Expr>, b: &Ty, span: &Span) -> Option<Ty> {
+fn check_core_flow_number_beside(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, a_tail: Option<&Expr>, a: &Ty, b_tail: Option<&Expr>, b: &Ty, span: &Span) -> Option<Ty> {
     if !a.is_unknown() && b.is_unknown() { return check_core_flow_number_open(state, world, a, b_tail, span); }
     if a.is_unknown() && !b.is_unknown() { return check_core_flow_number_open(state, world, b, a_tail, span); }
     None
@@ -15085,7 +15093,7 @@ fn check_core_flow_ends_in_text(tail: Option<&Expr>) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_flow_meet_at_text(state: &mut CheckState, world: &CheckWorld<'_>, arms: &[CheckArm<'_>], span: &Span) -> Option<Ty> {
+fn check_core_flow_meet_at_text(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, arms: &[CheckArm<'_>], span: &Span) -> Option<Ty> {
     let text = check_core_flow_named("String");
     let mut any = false;
     for arm in arms.iter() { if arm.ty == text { any = true; } }
@@ -15103,7 +15111,7 @@ fn check_core_flow_meet_at_text(state: &mut CheckState, world: &CheckWorld<'_>, 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_flow_disagree(state: &mut CheckState, world: &CheckWorld<'_>, expr: &Expr, arms: &[CheckArm<'_>], span: &Span) {
+fn check_core_flow_disagree(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr, arms: &[CheckArm<'_>], span: &Span) {
     if state.discarded.contains(&(id_of(expr) as i64)) { return; }
     let is_if = matches!(expr, Expr::If { .. });
     let mut finding: CheckFinding = match arms_that_disagree(arms, is_if, span) { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -15125,7 +15133,7 @@ fn check_core_flow_disagree(state: &mut CheckState, world: &CheckWorld<'_>, expr
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_flow_meet(state: &mut CheckState, world: &CheckWorld<'_>, expr: &Expr, arms: &[CheckArm<'_>], span: &Span) -> Ty {
+fn check_core_flow_meet(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr, arms: &[CheckArm<'_>], span: &Span) -> Ty {
     let text = check_core_flow_meet_at_text(state, world, arms, span);
     if text.is_some() { return nikaia_std::index::or(text, || Ty::Unknown); }
     let at_null = state.arms_meet_at_null(world, arms);
@@ -15136,7 +15144,7 @@ fn check_core_flow_meet(state: &mut CheckState, world: &CheckWorld<'_>, expr: &E
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_flow_unsafe<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, block: &Block) -> Ty {
+pub fn check_core_flow_unsafe<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, block: &Block) -> Ty {
     let outer = state.inside_unsafe;
     state.inside_unsafe = true;
     let value = check_core_block(state, world, host, block);
@@ -15146,7 +15154,7 @@ pub fn check_core_flow_unsafe<H: CheckHost>(state: &mut CheckState, world: &Chec
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_flow_branch<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, stmt: &Stmt, span: &Span) -> Ty {
+fn check_core_flow_branch<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, stmt: &Stmt, span: &Span) -> Ty {
     match stmt {
         Stmt::Expr(value) => { return check_core_expr(state, world, host, value, span); },
         _ => { check_core_stmt(state, world, host, stmt, span); },
@@ -15156,7 +15164,7 @@ fn check_core_flow_branch<H: CheckHost>(state: &mut CheckState, world: &CheckWor
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_flow_overlap<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, block: &Block, span: &Span) -> Ty {
+pub fn check_core_flow_overlap<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, block: &Block, span: &Span) -> Ty {
     state.scope.push(vec![]);
     let mut parts: Vec<Ty> = vec![];
     for stmt in block.stmts.iter() {
@@ -15172,7 +15180,7 @@ pub fn check_core_flow_overlap<H: CheckHost>(state: &mut CheckState, world: &Che
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_flow_select_frame(state: &mut CheckState, world: &CheckWorld<'_>, binding: Option<winnow_grammar::Symbol>, raced: Ty) -> Vec<CheckLocal> {
+fn check_core_flow_select_frame(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, binding: Option<winnow_grammar::Symbol>, raced: Ty) -> Vec<CheckLocal> {
     let name = match binding { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
     let id = state.a_new_binding();
     vec![CheckLocal::free(format!("{}", world.words.resolve(name)), raced, id)]
@@ -15180,7 +15188,7 @@ fn check_core_flow_select_frame(state: &mut CheckState, world: &CheckWorld<'_>, 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_flow_select_arm<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, arm: &SelectArm, span: &Span) -> Option<Ty> {
+fn check_core_flow_select_arm<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, arm: &SelectArm, span: &Span) -> Option<Ty> {
     let saved = state.enter_boundary("`select` arm");
     let raced = check_core_expr(state, world, host, &arm.value, span);
     state.leave_boundary(&saved);
@@ -15197,7 +15205,7 @@ fn check_core_flow_select_arm<H: CheckHost>(state: &mut CheckState, world: &Chec
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_flow_select<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, arms: &[SelectArm], span: &Span) -> Ty {
+pub fn check_core_flow_select<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, arms: &[SelectArm], span: &Span) -> Ty {
     let mut seen = Ty::Unknown;
     let mut any = false;
     let mut agree = true;
@@ -15218,7 +15226,7 @@ pub fn check_core_flow_select<H: CheckHost>(state: &mut CheckState, world: &Chec
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-fn check_core_flow_else<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, expr: &Expr, cond: &Expr, then_branch: &Block, then: &Ty, otherwise: &Block, choice: i64, span: &Span) -> Ty {
+fn check_core_flow_else<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, expr: &Expr, cond: &Expr, then_branch: &Block, then: &Ty, otherwise: &Block, choice: i64, span: &Span) -> Ty {
     state.branch.push((choice, 1));
     let from = state.taken_so_far();
     let other = check_core_flow_proved_block(state, world, host, cond, false, otherwise);
@@ -15240,7 +15248,7 @@ fn check_core_flow_else<H: CheckHost>(state: &mut CheckState, world: &CheckWorld
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub fn check_core_flow_if<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, expr: &Expr, cond: &Expr, then_branch: &Block, else_branch: Option<&Block>, span: &Span) -> Ty {
+pub fn check_core_flow_if<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, expr: &Expr, cond: &Expr, then_branch: &Block, else_branch: Option<&Block>, span: &Span) -> Ty {
     let cond_ty = check_core_expr(state, world, host, cond, span);
     let at = check_span_at(world, cond, span);
     state.expect_bool(&cond_ty, &at, "An `if` decides on a `bool`.");
@@ -15269,7 +15277,7 @@ pub fn check_core_flow_if<H: CheckHost>(state: &mut CheckState, world: &CheckWor
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_flow_member(world: &CheckWorld<'_>, members: &[Ty], pattern: &MatchPattern) -> Ty {
+fn check_core_flow_member(world: &CheckWorld<'_, '_, '_, '_, '_>, members: &[Ty], pattern: &MatchPattern) -> Ty {
     let path: Vec<winnow_grammar::Symbol> = match pattern {
         MatchPattern::Path(p) => p.to_owned(),
         MatchPattern::Tuple { path, .. } => path.to_owned(),
@@ -15291,7 +15299,7 @@ fn check_core_flow_member(world: &CheckWorld<'_>, members: &[Ty], pattern: &Matc
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_flow_through_a_view(state: &CheckState, world: &CheckWorld<'_>, value: &Expr) -> bool {
+fn check_core_flow_through_a_view(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, value: &Expr) -> bool {
     let a_place = matches!(value, Expr::Field { .. } | Expr::Index { .. });
     if !a_place { return false; }
     let root = check_core_flow_root(value);
@@ -15303,7 +15311,7 @@ fn check_core_flow_through_a_view(state: &CheckState, world: &CheckWorld<'_>, va
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_flow_a_lent_name(state: &CheckState, world: &CheckWorld<'_>, value: &Expr) -> bool {
+fn check_core_flow_a_lent_name(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, value: &Expr) -> bool {
     let name = check_core_flow_variable(world, value);
     if name == "" { return false; }
     let local: CheckLocal = match state.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return false };
@@ -15340,7 +15348,7 @@ fn check_core_flow_restored(now: &[CheckLocal], saved: &[CheckLocal], boxed: &[S
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_flow_guard<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, pattern: &MatchPattern, guard: &Expr, span: &Span) {
+fn check_core_flow_guard<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, pattern: &MatchPattern, guard: &Expr, span: &Span) {
     let boxed = state.boxed_names(world, pattern);
     let last = state.scope.len() as i64 - 1;
     let mut saved: Vec<CheckLocal> = vec![];
@@ -15359,21 +15367,21 @@ fn check_core_flow_guard<H: CheckHost>(state: &mut CheckState, world: &CheckWorl
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_flow_guard_box<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, pattern: &MatchPattern, body: &Expr, guard: Option<&Expr>) {
+fn check_core_flow_guard_box<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, pattern: &MatchPattern, body: &Expr, guard: Option<&Expr>) {
     let g: &Expr = match guard { Some(__nikaia_value) => __nikaia_value, None => return };
     state.a_guard_reading_inside_a_box(world, host, pattern, body, g);
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_flow_a_guard<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, pattern: &MatchPattern, guard: Option<&Expr>, span: &Span) {
+fn check_core_flow_a_guard<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, pattern: &MatchPattern, guard: Option<&Expr>, span: &Span) {
     let g: &Expr = match guard { Some(__nikaia_value) => __nikaia_value, None => return };
     check_core_flow_guard(state, world, host, pattern, g, span);
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_flow_parts(state: &mut CheckState, world: &CheckWorld<'_>, pattern: &MatchPattern, typed: &Ty, lendable: bool) -> collections::BTreeMap<String, Ty> {
+fn check_core_flow_parts(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, pattern: &MatchPattern, typed: &Ty, lendable: bool) -> collections::BTreeMap<String, Ty> {
     let parts = state.pattern_parts(world, pattern, typed);
     if lendable || !typed.is_a_view() { return parts; }
     let mut out: collections::BTreeMap<String, Ty> = collections::BTreeMap::new();
@@ -15383,7 +15391,7 @@ fn check_core_flow_parts(state: &mut CheckState, world: &CheckWorld<'_>, pattern
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_flow_copied_parts(state: &mut CheckState, world: &CheckWorld<'_>, arm: &MatchArm, typed: &Ty) {
+fn check_core_flow_copied_parts(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, arm: &MatchArm, typed: &Ty) {
     let at = id_of(&arm.body) as i64;
     let mut parts = state.pattern_parts(world, &arm.pattern, typed);
     state.typed_inside_boxes(world, &arm.pattern, &mut parts);
@@ -15395,7 +15403,7 @@ fn check_core_flow_copied_parts(state: &mut CheckState, world: &CheckWorld<'_>, 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_flow_owned_texts(state: &mut CheckState, world: &CheckWorld<'_>, pattern: &MatchPattern, typed: &Ty) -> collections::BTreeSet<String> {
+fn check_core_flow_owned_texts(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, pattern: &MatchPattern, typed: &Ty) -> collections::BTreeSet<String> {
     let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
     let parts = state.pattern_parts(world, pattern, typed);
     for (name, ty) in parts.iter() { if check_core_flow_owned_text(ty) { out.insert(name.to_owned()); } }
@@ -15404,7 +15412,7 @@ fn check_core_flow_owned_texts(state: &mut CheckState, world: &CheckWorld<'_>, p
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_flow_frame(state: &mut CheckState, world: &CheckWorld<'_>, pattern: &MatchPattern, parts: &collections::BTreeMap<String, Ty>, lent_parts: bool, owned_text: &collections::BTreeSet<String>) -> Vec<CheckLocal> {
+fn check_core_flow_frame(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, pattern: &MatchPattern, parts: &collections::BTreeMap<String, Ty>, lent_parts: bool, owned_text: &collections::BTreeSet<String>) -> Vec<CheckLocal> {
     let names = pattern_names(world, pattern);
     let mut bound: Vec<CheckLocal> = vec![];
     for name in names.iter() {
@@ -15431,7 +15439,7 @@ fn check_core_flow_frame(state: &mut CheckState, world: &CheckWorld<'_>, pattern
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-fn check_core_flow_lent_parts<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, body: &Expr, parts: &collections::BTreeMap<String, Ty>, from: i64, changed_from: i64, bound_by_reference: bool, a_list: bool) {
+fn check_core_flow_lent_parts<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, body: &Expr, parts: &collections::BTreeMap<String, Ty>, from: i64, changed_from: i64, bound_by_reference: bool, a_list: bool) {
     let lent = state.parts_lent(world, body, parts, from, changed_from);
     if a_list { for (name, part) in parts.iter() { if !lent.contains(name) && !part.is_a_view() && !state.copied(world, part) { state.facts.cloned_bindings.insert((id_of(body) as i64, name.to_owned())); } } }
     if !lent.is_empty() {
@@ -15443,7 +15451,7 @@ fn check_core_flow_lent_parts<H: CheckHost>(state: &mut CheckState, world: &Chec
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-fn check_core_flow_arm<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, value: &Expr, on: &Ty, arm: &MatchArm, typed: &Ty, lendable: bool, through_the_reference: bool, mut_subject: Option<&str>, choice: i64, taken: i64, span: &Span) -> Option<Ty> {
+fn check_core_flow_arm<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, value: &Expr, on: &Ty, arm: &MatchArm, typed: &Ty, lendable: bool, through_the_reference: bool, mut_subject: Option<&str>, choice: i64, taken: i64, span: &Span) -> Option<Ty> {
     state.an_or_pattern_that_binds_unevenly(world, &arm.pattern, span);
     state.a_pattern_naming_a_member_a_type_does_not_have(world, &arm.pattern, span);
     state.a_pattern_inside_a_box(world, &arm.pattern, span);
@@ -15476,7 +15484,7 @@ fn check_core_flow_arm<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_flow_caught(state: &CheckState, world: &CheckWorld<'_>, on: &Ty, value: &Expr) -> Ty {
+fn check_core_flow_caught(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, on: &Ty, value: &Expr) -> Ty {
     if check_core_flow_unknown(on) && check_core_flow_variable(world, value) == "error" && !state.flow.caught_several {
         return nikaia_std::index::or(match state.flow.caught_one.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -15488,7 +15496,7 @@ fn check_core_flow_caught(state: &CheckState, world: &CheckWorld<'_>, on: &Ty, v
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_flow_match<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, expr: &Expr, value: &Expr, arms: &[MatchArm], span: &Span) -> Ty {
+pub fn check_core_flow_match<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, expr: &Expr, value: &Expr, arms: &[MatchArm], span: &Span) -> Ty {
     let on = check_core_expr(state, world, host, value, span);
     let several: Vec<Ty> = several_errors_of(&on);
     let mut typed = check_core_flow_caught(&state, world, &on, value);
@@ -15587,14 +15595,14 @@ fn check_core_flow_caught_type(guarded: &CheckGuarded) -> Ty {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_flow_handler_text(state: &mut CheckState, world: &CheckWorld<'_>, answers: &Ty, handler: &Block) -> Option<Ty> {
+fn check_core_flow_handler_text(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, answers: &Ty, handler: &Block) -> Option<Ty> {
     let tail: &Expr = match tail_value_of(handler) { Some(__nikaia_value) => __nikaia_value, None => return None };
     state.text_literal(world, answers, tail, true)
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_flow_try_catch<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, guarded_expr: &Expr, handler: &Block, span: &Span) -> Ty {
+pub fn check_core_flow_try_catch<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, guarded_expr: &Expr, handler: &Block, span: &Span) -> Ty {
     let outer = state.flow.caught;
     state.flow.caught = true;
     let lambda_outer = check_core_flow_lambda_caught(state, true);
@@ -15645,7 +15653,7 @@ pub fn check_core_flow_try_catch<H: CheckHost>(state: &mut CheckState, world: &C
 
 // --- check_core_leaves.nika ---
 
-fn check_core_field_of_self(world: &CheckWorld<'_>, value: &Expr) -> Option<String> {
+fn check_core_field_of_self(world: &CheckWorld<'_, '_, '_, '_, '_>, value: &Expr) -> Option<String> {
     match value {
         Expr::Field { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; match base {
             Expr::Variable(subject, _) => { let subject = *subject; if world.words.resolve(subject) == "self" { Some(world.words.resolve(name).to_owned()) } else { None } },
@@ -15657,7 +15665,7 @@ fn check_core_field_of_self(world: &CheckWorld<'_>, value: &Expr) -> Option<Stri
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_a_field_of_a_borrowed_subject<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, value: &Expr, span: &Span, what: &str) {
+pub fn check_core_a_field_of_a_borrowed_subject<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, value: &Expr, span: &Span, what: &str) {
     if !state.borrowing_self { return; }
     let field = match check_core_field_of_self(world, value) { Some(__nikaia_value) => __nikaia_value, None => return };
     let ty = check_core_expr(state, world, host, value, span);
@@ -15670,7 +15678,7 @@ pub fn check_core_a_field_of_a_borrowed_subject<H: CheckHost>(state: &mut CheckS
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_a_field_of_a_lent_place_handed_back<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, value: &Expr, span: &Span) {
+pub fn check_core_a_field_of_a_lent_place_handed_back<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, value: &Expr, span: &Span) {
     let expected: Option<Ty> = match state.expected.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
@@ -15696,7 +15704,7 @@ pub fn check_core_a_field_of_a_lent_place_handed_back<H: CheckHost>(state: &mut 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_a_kept_lambda<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, want: &Ty, value: &Expr, span: &Span) {
+pub fn check_core_a_kept_lambda<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, want: &Ty, value: &Expr, span: &Span) {
     let inner: Ty = match want {
         Ty::Nullable(held) => { let held = nikaia_std::boxed::open(held); held.clone() },
         _ => want.clone(),
@@ -15768,7 +15776,7 @@ pub fn check_core_a_kept_lambda<H: CheckHost>(state: &mut CheckState, world: &Ch
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_literal_by_use<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, found: &Ty, want: &Ty, value: &Expr, span: &Span) -> Option<Ty> {
+pub fn check_core_literal_by_use<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, found: &Ty, want: &Ty, value: &Expr, span: &Span) -> Option<Ty> {
     check_core_a_kept_lambda(state, world, host, want, value, span);
     let array = state.array_literal(found, want, value, span);
     if array.is_some() { return std::convert::identity(array); }
@@ -15800,7 +15808,7 @@ fn check_core_element_of(held: Option<&Ty>) -> Ty {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_holes<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, literal: &Expr, span: &Span) {
+pub fn check_core_holes<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, literal: &Expr, span: &Span) {
     let mut interpolated = false;
     let mut specs: Vec<Option<String>> = vec![];
     match literal {
@@ -15859,7 +15867,7 @@ pub fn check_core_holes<H: CheckHost>(state: &mut CheckState, world: &CheckWorld
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub fn check_core_lambda<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, params: &[winnow_grammar::Symbol], mutable: &[winnow_grammar::Symbol], body: &Block, given: &[Ty], promised: &CheckPromises, span: &Span) -> (Ty, bool) {
+pub fn check_core_lambda<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, params: &[winnow_grammar::Symbol], mutable: &[winnow_grammar::Symbol], body: &Block, given: &[Ty], promised: &CheckPromises, span: &Span) -> (Ty, bool) {
     let mut frame: Vec<CheckLocal> = vec![];
     let mut at: i64 = 0;
     for p in params.iter() {
@@ -15896,7 +15904,7 @@ pub fn check_core_lambda<H: CheckHost>(state: &mut CheckState, world: &CheckWorl
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_returns<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, value: Option<&Expr>, span: &Span, in_an_expression: bool) {
+pub fn check_core_returns<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, value: Option<&Expr>, span: &Span, in_an_expression: bool) {
     let mut lending = false;
     let mut closure = false;
     if value.is_some() {
@@ -15960,7 +15968,7 @@ pub fn check_core_returns<H: CheckHost>(state: &mut CheckState, world: &CheckWor
 
 fn check_core_a_number_literal(expr: &Expr) -> bool { matches!(expr, Expr::LitInt { .. } | Expr::LitFloat(_, _)) }
 
-fn check_core_shown_operand(world: &CheckWorld<'_>, operand: &Expr) -> Option<String> {
+fn check_core_shown_operand(world: &CheckWorld<'_, '_, '_, '_, '_>, operand: &Expr) -> Option<String> {
     let literal: bool = match operand {
         Expr::LitInt { .. } => true,
         Expr::LitFloat(_, _) => true,
@@ -15977,7 +15985,7 @@ fn check_core_shown_operand(world: &CheckWorld<'_>, operand: &Expr) -> Option<St
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_an_assert<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, args: &[Expr], config: &[ConfigArg], span: &Span) -> Ty {
+pub fn check_core_an_assert<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, args: &[Expr], config: &[ConfigArg], span: &Span) -> Ty {
     let unit = Ty::Named { name: String::from("()"), args: vec![], view: false };
     if args.len() != 1 {
         state.an_assert_of_another_shape(format!("`assert` claims one condition, and this hands it {}", args.len() as i64), span);
@@ -16077,7 +16085,7 @@ fn check_core_method_string(ty: &Ty) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_method_receiver_name(world: &CheckWorld<'_>, receiver: &Expr) -> Option<String> {
+fn check_core_method_receiver_name(world: &CheckWorld<'_, '_, '_, '_, '_>, receiver: &Expr) -> Option<String> {
     match receiver {
         Expr::Variable(name, _) => {
             let name = *name;
@@ -16090,7 +16098,7 @@ fn check_core_method_receiver_name(world: &CheckWorld<'_>, receiver: &Expr) -> O
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_method_pushed_into(state: &CheckState, world: &CheckWorld<'_>, receiver: &Expr, method: &str, count: i64) -> Option<String> {
+fn check_core_method_pushed_into(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, receiver: &Expr, method: &str, count: i64) -> Option<String> {
     let push = method == "push" && count == 1;
     let insert = method == "insert" && count == 2;
     if !push && !insert { return None; }
@@ -16106,7 +16114,7 @@ fn check_core_method_pushed_into(state: &CheckState, world: &CheckWorld<'_>, rec
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_method_witness(world: &CheckWorld<'_>, method: &str, config: &[ConfigArg]) -> i64 {
+fn check_core_method_witness(world: &CheckWorld<'_, '_, '_, '_, '_>, method: &str, config: &[ConfigArg]) -> i64 {
     let mut wanted: String = String::from("");
     if method == "set" { wanted = "after".to_owned(); } else if method == "join" { wanted = "within".to_owned(); } else { return -1; }
     let mut at: i64 = 0;
@@ -16226,7 +16234,7 @@ fn check_core_method_task_handle(ty: &Ty) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_method_text_local(state: &CheckState, world: &CheckWorld<'_>, arg: &Expr) -> bool {
+fn check_core_method_text_local(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, arg: &Expr) -> bool {
     let name: String = match check_core_method_receiver_name(world, arg) { Some(__nikaia_value) => __nikaia_value, None => return false };
     let local: CheckLocal = match state.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return false };
     check_core_method_str_view(&local.ty) || check_core_method_string(&local.ty)
@@ -16234,7 +16242,7 @@ fn check_core_method_text_local(state: &CheckState, world: &CheckWorld<'_>, arg:
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_method_changes(state: &mut CheckState, world: &CheckWorld<'_>, receiver: &Expr, name: &str, span: &Span) {
+fn check_core_method_changes(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, receiver: &Expr, name: &str, span: &Span) {
     let root: String = match state.rooted_at(world, receiver) { Some(__nikaia_value) => __nikaia_value, None => return };
     let mut count = 0;
     let mut all = true;
@@ -16256,7 +16264,7 @@ fn check_core_method_changes(state: &mut CheckState, world: &CheckWorld<'_>, rec
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_method_resolved(state: &mut CheckState, world: &CheckWorld<'_>, receiver: &Expr, args: &[Expr]) {
+fn check_core_method_resolved(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, receiver: &Expr, args: &[Expr]) {
     let last: Option<String> = match state.flow.last_resolved.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
@@ -16280,7 +16288,7 @@ fn check_core_method_resolved(state: &mut CheckState, world: &CheckWorld<'_>, re
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-fn check_core_method_called<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, expr: &Expr, on: Ty, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], written: &str, span: &Span) -> Ty {
+fn check_core_method_called<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, expr: &Expr, on: Ty, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], written: &str, span: &Span) -> Ty {
     let name: String = format!("{}", world.words.resolve(method));
     let outer_receiver: Option<String> = match state.set_receiver.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -16424,7 +16432,7 @@ fn check_core_method_one_item(name: &str) -> bool { name == "filter" || name == 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub fn check_core_method<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, expr: &Expr, safe: bool, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], span: &Span) -> Ty {
+pub fn check_core_method<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, expr: &Expr, safe: bool, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], span: &Span) -> Ty {
     let name: String = format!("{}", world.words.resolve(method));
     let adds = name == "push" || name == "insert" || name == "push_front" || name == "push_back" || name == "extend" || name == "append";
     let mut code_keys: Vec<String> = vec![];
@@ -16441,7 +16449,7 @@ pub fn check_core_method<H: CheckHost>(state: &mut CheckState, world: &CheckWorl
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_method_code_lent(state: &mut CheckState, world: &CheckWorld<'_>, arg: &Expr) {
+pub fn check_core_method_code_lent(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, arg: &Expr) {
     match arg {
         Expr::Variable(bound, _) => {
             let bound = *bound;
@@ -16464,7 +16472,7 @@ pub fn check_core_method_code_lent(state: &mut CheckState, world: &CheckWorld<'_
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, expr: &Expr, safe: bool, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], span: &Span) -> Ty {
+fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, expr: &Expr, safe: bool, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], span: &Span) -> Ty {
     let name: String = format!("{}", world.words.resolve(method));
     state.flow.pushed_into = check_core_method_pushed_into(&state, world, receiver, &name, args.len() as i64);
     let witness = check_core_method_witness(world, &name, config);
@@ -16666,7 +16674,7 @@ fn check_core_ops_index(value: &Expr) -> bool { matches!(value, Expr::Index { ..
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_ops_has_no_arithmetic(world: &CheckWorld<'_>, ty: &Ty) -> bool { is_a_collection_type(ty) || declared_with_no_arithmetic(&world.here, ty).is_some() }
+fn check_core_ops_has_no_arithmetic(world: &CheckWorld<'_, '_, '_, '_, '_>, ty: &Ty) -> bool { is_a_collection_type(ty) || declared_with_no_arithmetic(&world.here, ty).is_some() }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
@@ -16722,7 +16730,7 @@ fn check_core_ops_literal_beside(state: &mut CheckState, op: BinaryOp, side: &Ex
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_ops_proved_expr<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, cond: &Expr, holds: bool, value: &Expr, span: &Span) -> Ty {
+fn check_core_ops_proved_expr<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, cond: &Expr, holds: bool, value: &Expr, span: &Span) -> Ty {
     let markers = check_narrow_proved_here(state, world, cond, holds);
     if markers.is_empty() { return check_core_expr(state, world, host, value, span); }
     state.scope.push(markers);
@@ -16751,7 +16759,7 @@ fn check_core_ops_same(state: &CheckState, op: BinaryOp, lhs: &Expr, left: &Ty, 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-fn check_core_ops_equal<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, op: BinaryOp, lhs: &Expr, left: &Ty, rhs: &Expr, right: &Ty, at: &Span, span: &Span) -> Ty {
+fn check_core_ops_equal<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, op: BinaryOp, lhs: &Expr, left: &Ty, rhs: &Expr, right: &Ty, at: &Span, span: &Span) -> Ty {
     state.a_pending_coalesce_of_text_is_lent(lhs);
     state.a_pending_coalesce_of_text_is_lent(rhs);
     let asks_for_null = check_core_ops_null(lhs) || check_core_ops_null(rhs);
@@ -16768,7 +16776,7 @@ fn check_core_ops_equal<H: CheckHost>(state: &mut CheckState, world: &CheckWorld
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-fn check_core_ops_outcome<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, op: BinaryOp, lhs: &Expr, left: &Ty, rhs: &Expr, right: &Ty, at: &Span, span: &Span) -> Ty {
+fn check_core_ops_outcome<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, op: BinaryOp, lhs: &Expr, left: &Ty, rhs: &Expr, right: &Ty, at: &Span, span: &Span) -> Ty {
     if check_core_ops_bits(op) {
         state.a_bit_operator_on_something_else(op, left, right, at);
         let l = value_of_a_copy(&left.unseen());
@@ -16807,7 +16815,7 @@ fn check_core_ops_outcome<H: CheckHost>(state: &mut CheckState, world: &CheckWor
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub fn check_core_ops_binary<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, op: BinaryOp, lhs: &Expr, rhs: &Expr, at: &Span, span: &Span) -> Ty {
+pub fn check_core_ops_binary<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, op: BinaryOp, lhs: &Expr, rhs: &Expr, at: &Span, span: &Span) -> Ty {
     let arithmetic = check_core_ops_arithmetic(op);
     let reached: Option<String> = match state.flow.reached.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -16869,7 +16877,7 @@ pub fn check_core_ops_binary<H: CheckHost>(state: &mut CheckState, world: &Check
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_ops_from_a_map(state: &CheckState, world: &CheckWorld<'_>, value: &Expr, read_now: bool) -> bool {
+fn check_core_ops_from_a_map(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, value: &Expr, read_now: bool) -> bool {
     match value {
         Expr::Index { .. } => read_now,
         Expr::MethodCall { .. } => read_now,
@@ -16887,7 +16895,7 @@ fn check_core_ops_a_map_view(state: &CheckState, name: &str) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_ops_lent_root(state: &CheckState, world: &CheckWorld<'_>, value: &Expr) -> bool {
+fn check_core_ops_lent_root(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, value: &Expr) -> bool {
     let root: String = match state.rooted_at(world, value) { Some(__nikaia_value) => __nikaia_value, None => return false };
     state.lent_here(&root) || state.got_past_a_jump.contains(&root)
 }
@@ -16959,7 +16967,7 @@ fn check_core_ops_held_named(name: &str, args: &[Ty]) -> Ty {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, expr: &Expr, value: &Expr, fallback: &Expr, span: &Span) -> Ty {
+pub fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, expr: &Expr, value: &Expr, fallback: &Expr, span: &Span) -> Ty {
     let outer = state.flow.read_a_map;
     state.flow.read_a_map = false;
     let left = check_core_expr(state, world, host, value, span);
@@ -17037,7 +17045,7 @@ pub fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, world: &Che
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_ops_a_pair_split(state: &mut CheckState, world: &CheckWorld<'_>, declared: Option<&Ty>, params: &[winnow_grammar::Symbol], span: &Span) {
+fn check_core_ops_a_pair_split(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, declared: Option<&Ty>, params: &[winnow_grammar::Symbol], span: &Span) {
     if params.len() < 2 { return; }
     let ty: &Ty = match declared { Some(__nikaia_value) => __nikaia_value, None => return };
     let handed: Vec<Ty> = match ty {
@@ -17081,7 +17089,7 @@ fn check_core_ops_a_fn(declared: Option<&Ty>) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_ops_closure<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, params: &[winnow_grammar::Symbol], mutable: &[winnow_grammar::Symbol], body: &Block, span: &Span) -> Ty {
+pub fn check_core_ops_closure<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, params: &[winnow_grammar::Symbol], mutable: &[winnow_grammar::Symbol], body: &Block, span: &Span) -> Ty {
     let declared: Option<Ty> = match state.flow.lambda_expected.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
@@ -17117,7 +17125,7 @@ pub fn check_core_ops_closure<H: CheckHost>(state: &mut CheckState, world: &Chec
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_ops_task<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, task: i64, params: &[winnow_grammar::Symbol], body: &Block, span: &Span) -> Ty {
+fn check_core_ops_task<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, task: i64, params: &[winnow_grammar::Symbol], body: &Block, span: &Span) -> Ty {
     state.a_task_takes_no_arguments(world, params, span);
     let closure = Expr::Closure { params: params.to_owned(), mutable: vec![], body: body.clone(), id: fresh_id() };
     state.a_task_takes_these(world, &closure, task, span);
@@ -17137,7 +17145,7 @@ fn check_core_ops_task<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_ops_spawn<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, spawned: &Expr, span: &Span) -> Ty {
+pub fn check_core_ops_spawn<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, spawned: &Expr, span: &Span) -> Ty {
     state.crosses_into_a_task(world, spawned, span);
     let task = id_of(spawned) as i64;
     match spawned {
@@ -17158,7 +17166,7 @@ pub fn check_specialised(function: &str, on: &str) -> String {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_grammar_call<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, key: &str, args: &[Expr], span: &Span) -> Ty {
+pub fn check_core_grammar_call<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, key: &str, args: &[Expr], span: &Span) -> Ty {
     for arg in args.iter() { check_core_expr(state, world, host, arg, span); }
     let contract = match match *nikaia_std::index::get(&world.own.functions, key) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -17180,7 +17188,7 @@ pub fn check_core_grammar_call<H: CheckHost>(state: &mut CheckState, world: &Che
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_a_compound_write_to_a_map_slot<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, target: &Expr, span: &Span) {
+pub fn check_core_a_compound_write_to_a_map_slot<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, target: &Expr, span: &Span) {
     match target {
         Expr::Index { base, index, .. } => {
             let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
@@ -17198,7 +17206,7 @@ pub fn check_core_a_compound_write_to_a_map_slot<H: CheckHost>(state: &mut Check
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_an_instantiation<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, name: &str, call: i64, args: &[Expr], span: &Span) {
+pub fn check_core_an_instantiation<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, name: &str, call: i64, args: &[Expr], span: &Span) {
     if !state.walks_fields.contains_key(name) { return; }
     if args.is_empty() { return; }
     let before = state.findings.len() as i64;
@@ -17215,7 +17223,7 @@ pub fn check_core_an_instantiation<H: CheckHost>(state: &mut CheckState, world: 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_a_mut_parameter_given_away<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, value: &Expr, span: &Span, what: &str) {
+pub fn check_core_a_mut_parameter_given_away<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, value: &Expr, span: &Span, what: &str) {
     let name: String = match value {
         Expr::Variable(symbol, _) => { let symbol = *symbol; world.words.resolve(symbol).to_owned() },
         _ => return,
@@ -17288,7 +17296,7 @@ fn check_core_places_an_integer(name: &str) -> bool { name == "u8" || name == "u
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_places_given<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, value: Option<&Expr>, field: &str, span: &Span) -> Ty {
+fn check_core_places_given<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, value: Option<&Expr>, field: &str, span: &Span) -> Ty {
     if value.is_none() { return nikaia_std::index::or(state.lookup(field), || Ty::Unknown); }
     let v: &Expr = match value { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
     check_core_expr(state, world, host, v, span)
@@ -17313,7 +17321,7 @@ fn check_core_places_tuple_part(state: &mut CheckState, parts: &[Ty], field: &st
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_places_a_named_field(state: &mut CheckState, world: &CheckWorld<'_>, expr: &Expr, on: &Ty, ty: &str, field: &str, span: &Span) -> Ty {
+fn check_core_places_a_named_field(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr, on: &Ty, ty: &str, field: &str, span: &Span) -> Ty {
     let boxed = state.facts.boxed_members.get(ty);
     if boxed.is_some() {
         let members = match boxed { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
@@ -17353,7 +17361,7 @@ fn check_core_places_a_named_field(state: &mut CheckState, world: &CheckWorld<'_
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub fn check_core_field<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, expr: &Expr, safe: bool, base: &Expr, name: winnow_grammar::Symbol, span: &Span) -> Ty {
+pub fn check_core_field<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, expr: &Expr, safe: bool, base: &Expr, name: winnow_grammar::Symbol, span: &Span) -> Ty {
     let on = check_core_expr(state, world, host, base, span);
     let field: String = format!("{}", world.words.resolve(name));
     if safe {
@@ -17398,7 +17406,7 @@ pub fn check_core_field<H: CheckHost>(state: &mut CheckState, world: &CheckWorld
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_places_stored<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, value: Option<&Expr>, key: &str) {
+pub fn check_core_places_stored<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, value: Option<&Expr>, key: &str) {
     let mut stored: CheckStoredCode = nikaia_std::index::or(state.stored_frames.pop(), || CheckStoredCode::empty());
     if value.is_none() { stored.unresolved = true; } else {
         let v: &Expr = match value { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -17413,7 +17421,7 @@ pub fn check_core_places_stored<H: CheckHost>(state: &mut CheckState, world: &Ch
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_places_stored_keys<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, value: Option<&Expr>, keys: &[String]) {
+pub fn check_core_places_stored_keys<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, value: Option<&Expr>, keys: &[String]) {
     let mut stored: CheckStoredCode = nikaia_std::index::or(state.stored_frames.pop(), || CheckStoredCode::empty());
     if value.is_none() { stored.unresolved = true; } else {
         let v: &Expr = match value { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -17430,7 +17438,7 @@ pub fn check_core_places_stored_keys<H: CheckHost>(state: &mut CheckState, world
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_places_code_keys(state: &CheckState, world: &CheckWorld<'_>, target: &Expr) -> Vec<String> {
+pub fn check_core_places_code_keys(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, target: &Expr) -> Vec<String> {
     let mut keys: Vec<String> = vec![];
     match target {
         Expr::Variable(bound, _) => {
@@ -17492,7 +17500,7 @@ pub fn check_core_places_code_keys(state: &CheckState, world: &CheckWorld<'_>, t
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_places_code_into<H: CheckHost>(state: &CheckState, world: &CheckWorld<'_>, host: &H, v: &Expr, stored: &mut CheckStoredCode) {
+pub fn check_core_places_code_into<H: CheckHost>(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, v: &Expr, stored: &mut CheckStoredCode) {
     match v {
         Expr::Closure { body, .. } => { for called in host.free_calls(body) { stored.free.insert(called); } },
         Expr::Variable(named, _) => {
@@ -17530,7 +17538,7 @@ pub fn check_core_places_code_into<H: CheckHost>(state: &CheckState, world: &Che
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_places_tail_into<H: CheckHost>(state: &CheckState, world: &CheckWorld<'_>, host: &H, block: &Block, stored: &mut CheckStoredCode) {
+fn check_core_places_tail_into<H: CheckHost>(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, block: &Block, stored: &mut CheckStoredCode) {
     let n = block.stmts.len() as i64;
     if n == 0 {
         stored.unresolved = true;
@@ -17546,7 +17554,7 @@ fn check_core_places_tail_into<H: CheckHost>(state: &CheckState, world: &CheckWo
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-fn check_core_places_a_declared_field<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, expr: &Expr, name: &str, declared: &[FieldContract], value: Option<&Expr>, field: &str, given: &Ty, bound: &mut collections::BTreeMap<String, Ty>, span: &Span) -> bool {
+fn check_core_places_a_declared_field<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, expr: &Expr, name: &str, declared: &[FieldContract], value: Option<&Expr>, field: &str, given: &Ty, bound: &mut collections::BTreeMap<String, Ty>, span: &Span) -> bool {
     let mut at: i64 = -1;
     let mut i: i64 = 0;
     while i < declared.len() as i64 {
@@ -17604,7 +17612,7 @@ fn check_core_places_a_declared_field<H: CheckHost>(state: &mut CheckState, worl
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-fn check_core_places_a_literal_field<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, expr: &Expr, name: &str, declared: Option<&Vec<FieldContract>>, init: &FieldInit, bound: &mut collections::BTreeMap<String, Ty>, seen: &mut collections::BTreeSet<String>, span: &Span) -> bool {
+fn check_core_places_a_literal_field<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, expr: &Expr, name: &str, declared: Option<&Vec<FieldContract>>, init: &FieldInit, bound: &mut collections::BTreeMap<String, Ty>, seen: &mut collections::BTreeSet<String>, span: &Span) -> bool {
     let field: String = format!("{}", world.words.resolve(init.name));
     if seen.contains(&field) { state.a_field_written_twice(name, &field, span); } else { seen.insert(field.to_owned()); }
     let mut code_field = false;
@@ -17643,7 +17651,7 @@ fn check_core_places_a_literal_field<H: CheckHost>(state: &mut CheckState, world
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_struct_literal<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, expr: &Expr, written: winnow_grammar::Symbol, fields: &[FieldInit], span: &Span) -> Ty {
+pub fn check_core_struct_literal<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, expr: &Expr, written: winnow_grammar::Symbol, fields: &[FieldInit], span: &Span) -> Ty {
     let name: String = world.here.unaliased(&format!("{}", world.words.resolve(written)));
     let declared: Option<Vec<FieldContract>> = state.fields_of(world, &name);
     if declared.is_none() && !name.contains("::") && !state.declares_a_type(world, &name) { state.a_struct_nothing_declares(world, &name, span); }
@@ -17672,7 +17680,7 @@ pub fn check_core_struct_literal<H: CheckHost>(state: &mut CheckState, world: &C
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_with<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, expr: &Expr, base: &Expr, fields: &[FieldInit], span: &Span) -> Ty {
+pub fn check_core_with<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, expr: &Expr, base: &Expr, fields: &[FieldInit], span: &Span) -> Ty {
     let found = check_core_expr(state, world, host, base, span);
     let mut written: String = String::from("");
     let mut view = false;
@@ -17711,7 +17719,7 @@ pub fn check_core_with<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-fn check_core_places_a_with_field<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, name: &str, declared: &[FieldContract], init: &FieldInit, seen: &mut collections::BTreeSet<String>, span: &Span) {
+fn check_core_places_a_with_field<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, name: &str, declared: &[FieldContract], init: &FieldInit, seen: &mut collections::BTreeSet<String>, span: &Span) {
     let field: String = format!("{}", world.words.resolve(init.name));
     if seen.contains(&field) { state.a_field_written_twice(name, &field, span); } else { seen.insert(field.to_owned()); }
     let code_field = state.a_field_holds_code(world, name, &field);
@@ -17765,7 +17773,7 @@ fn check_core_places_lent_field(want: &Ty, given: &Ty) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_index<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, expr: &Expr, base: &Expr, index: &Expr, span: &Span) -> Ty {
+pub fn check_core_index<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, expr: &Expr, base: &Expr, index: &Expr, span: &Span) -> Ty {
     let writing = state.flow.writing_index;
     state.flow.writing_index = false;
     let first = check_core_expr(state, world, host, base, span);
@@ -17844,7 +17852,7 @@ pub fn check_core_index<H: CheckHost>(state: &mut CheckState, world: &CheckWorld
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_cast<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, inner: &Expr, ty: &Type, span: &Span) -> Ty {
+pub fn check_core_cast<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, inner: &Expr, ty: &Type, span: &Span) -> Ty {
     let from = check_core_expr(state, world, host, inner, span);
     let into = host.declared(state, ty, span);
     state.a_cast_over_a_lent_binding(world, inner, span);
@@ -17867,7 +17875,7 @@ pub fn check_core_cast<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_range<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, start: &Expr, end: &Expr, span: &Span) -> Ty {
+pub fn check_core_range<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, start: &Expr, end: &Expr, span: &Span) -> Ty {
     let from = check_core_expr(state, world, host, start, span);
     let to = check_core_expr(state, world, host, end, span);
     let mut item: Ty = from;
@@ -17882,7 +17890,7 @@ fn check_core_stmt_unit() -> Ty { Ty::Tuple(vec![]) }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_stmt_reaching(world: &CheckWorld<'_>, ty: Option<&Type>) -> Option<String> {
+fn check_core_stmt_reaching(world: &CheckWorld<'_, '_, '_, '_, '_>, ty: Option<&Type>) -> Option<String> {
     let written: &Type = match ty { Some(__nikaia_value) => __nikaia_value, None => return None };
     match written_ty(world.words, world.here.aliases, written) {
         Ty::Named { ref name, ref args, view } => { if !view && args.is_empty() && (name == "u8" || name == "u32" || name == "u64" || name == "i32" || name == "i64") { Some(name.to_owned()) } else { None } },
@@ -17900,7 +17908,7 @@ fn check_core_stmt_a_map_read(value: &Expr) -> bool { matches!(value, Expr::Inde
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_stmt_a_get(world: &CheckWorld<'_>, read: &Expr) -> bool {
+fn check_core_stmt_a_get(world: &CheckWorld<'_, '_, '_, '_, '_>, read: &Expr) -> bool {
     match read {
         Expr::MethodCall { method, .. } => { let method = *method; world.words.resolve(method) == "get" },
         _ => false,
@@ -17913,7 +17921,7 @@ fn check_core_stmt_an_index(read: &Expr) -> bool { matches!(read, Expr::Index { 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_stmt_got(state: &CheckState, world: &CheckWorld<'_>, value: &Expr) -> bool {
+fn check_core_stmt_got(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, value: &Expr) -> bool {
     match value {
         Expr::Coalesce { value: read, fallback, .. } => { let read = nikaia_std::boxed::open(read); let fallback = nikaia_std::boxed::open(fallback); check_core_stmt_a_get(world, read) && state.jumps(world, fallback) },
         _ => false,
@@ -17922,7 +17930,7 @@ fn check_core_stmt_got(state: &CheckState, world: &CheckWorld<'_>, value: &Expr)
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_stmt_read_through_a_jump(state: &CheckState, world: &CheckWorld<'_>, value: &Expr) -> bool {
+fn check_core_stmt_read_through_a_jump(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, value: &Expr) -> bool {
     match value {
         Expr::Coalesce { value: read, fallback, .. } => { let read = nikaia_std::boxed::open(read); let fallback = nikaia_std::boxed::open(fallback); check_core_stmt_an_index(read) && state.jumps(world, fallback) },
         _ => false,
@@ -17931,7 +17939,7 @@ fn check_core_stmt_read_through_a_jump(state: &CheckState, world: &CheckWorld<'_
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_stmt_a_read_that_leaves(state: &CheckState, world: &CheckWorld<'_>, value: &Expr) -> bool {
+fn check_core_stmt_a_read_that_leaves(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, value: &Expr) -> bool {
     match value {
         Expr::Coalesce { value: read, fallback, .. } => { let read = nikaia_std::boxed::open(read); let fallback = nikaia_std::boxed::open(fallback); (check_core_stmt_an_index(read) || check_core_stmt_a_get(world, read)) && state.leaves(world, fallback) },
         _ => false,
@@ -17981,7 +17989,7 @@ fn check_core_stmt_open_number(name: &str, element: bool, span: &Span) -> CheckO
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_stmt_a_number_read_through_a_lent_binding(state: &mut CheckState, world: &CheckWorld<'_>, want: &Ty, value: &Expr, span: &Span) {
+fn check_core_stmt_a_number_read_through_a_lent_binding(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, want: &Ty, value: &Expr, span: &Span) {
     let wanted: String = match want {
         Ty::Named { name, args, view } => {
             let view = *view;
@@ -18005,7 +18013,7 @@ fn check_core_stmt_a_number_read_through_a_lent_binding(state: &mut CheckState, 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_stmt_wraps_into_nullable<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, found: &Ty, want: &Ty, value: &Expr, span: &Span) {
+fn check_core_stmt_wraps_into_nullable<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, found: &Ty, want: &Ty, value: &Expr, span: &Span) {
     state.a_map_read_kept(world, found, want, value, span);
     let how = check_widened_slot(state, world, host, found, want, Some(value), span);
     if how.is_some() {
@@ -18016,11 +18024,11 @@ fn check_core_stmt_wraps_into_nullable<H: CheckHost>(state: &mut CheckState, wor
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_stmt_has_no_arithmetic(world: &CheckWorld<'_>, ty: &Ty) -> bool { is_a_collection_type(ty) || declared_with_no_arithmetic(&world.here, ty).is_some() }
+fn check_core_stmt_has_no_arithmetic(world: &CheckWorld<'_, '_, '_, '_, '_>, ty: &Ty) -> bool { is_a_collection_type(ty) || declared_with_no_arithmetic(&world.here, ty).is_some() }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_stmt_lent_let(state: &mut CheckState, world: &CheckWorld<'_>, names: &[winnow_grammar::Symbol], span: &Span) {
+fn check_core_stmt_lent_let(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, names: &[winnow_grammar::Symbol], span: &Span) {
     state.facts.lent_lets.insert(span.start as i64);
     for n in names.iter() {
         let n = *n;
@@ -18033,7 +18041,7 @@ fn check_core_stmt_lent_let(state: &mut CheckState, world: &CheckWorld<'_>, name
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_stmt_element_view(state: &CheckState, world: &CheckWorld<'_>, value: &Expr, found: &Ty, want: &Ty) -> i64 {
+pub fn check_core_stmt_element_view(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, value: &Expr, found: &Ty, want: &Ty) -> i64 {
     if !check_core_stmt_a_place(value) || found.is_a_view() { return 0; }
     let inner = match want {
         Ty::Nullable(held) => { let held = nikaia_std::boxed::open(held); held.clone() },
@@ -18051,7 +18059,7 @@ pub fn check_core_stmt_element_view(state: &CheckState, world: &CheckWorld<'_>, 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_stmt_read_shown(world: &CheckWorld<'_>, value: &Expr) -> String {
+fn check_core_stmt_read_shown(world: &CheckWorld<'_, '_, '_, '_, '_>, value: &Expr) -> String {
     match value {
         Expr::Index { base, index, .. } => {
             let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
@@ -18092,7 +18100,7 @@ pub fn check_core_stmt_holds_code(ty: &Ty) -> bool {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, names: &[winnow_grammar::Symbol], shape: &[i64], mutable: bool, ty: Option<&Type>, value: &Expr, span: &Span) -> Ty {
+pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, names: &[winnow_grammar::Symbol], shape: &[i64], mutable: bool, ty: Option<&Type>, value: &Expr, span: &Span) -> Ty {
     check_core_a_field_of_a_borrowed_subject(state, world, host, value, span, "bound");
     check_core_a_mut_parameter_given_away(state, world, host, value, span, "bound");
     let outer_read = state.flow.read_a_map;
@@ -18327,7 +18335,7 @@ fn check_core_stmt_plain_name(ty: &Ty) -> Option<String> {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_stmt_open_target(state: &CheckState, world: &CheckWorld<'_>, target: &Expr) -> Option<i64> {
+fn check_core_stmt_open_target(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, target: &Expr) -> Option<i64> {
     match target {
         Expr::Variable(name, _) => {
             let name = *name;
@@ -18347,7 +18355,7 @@ fn check_core_stmt_open_target(state: &CheckState, world: &CheckWorld<'_>, targe
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_stmt_shared(state: &CheckState, world: &CheckWorld<'_>, target: &Expr) -> bool {
+fn check_core_stmt_shared(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, target: &Expr) -> bool {
     if !check_core_stmt_a_name(target) { return false; }
     let root: String = match state.rooted_at(world, target) { Some(__nikaia_value) => __nikaia_value, None => return false };
     let local: CheckLocal = match state.binding(&root) { Some(__nikaia_value) => __nikaia_value, None => return false };
@@ -18359,7 +18367,7 @@ fn check_core_stmt_shared(state: &CheckState, world: &CheckWorld<'_>, target: &E
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, target: &Expr, op: Option<&BinaryOp>, value: &Expr, span: &Span) -> Ty {
+pub fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, target: &Expr, op: Option<&BinaryOp>, value: &Expr, span: &Span) -> Ty {
     let code_keys: Vec<String> = if op.is_none() { check_core_places_code_keys(&state, world, target) } else { vec![] };
     let path = state.place_path(world, target);
     if path.is_some() {
@@ -18456,7 +18464,7 @@ pub fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world: &Chec
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_stmt_while<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, cond: &Expr, body: &Block, span: &Span) -> Ty {
+pub fn check_core_stmt_while<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, cond: &Expr, body: &Block, span: &Span) -> Ty {
     let cond_ty = check_core_expr(state, world, host, cond, span);
     let at = check_span_at(world, cond, span);
     state.expect_bool(&cond_ty, &at, "A `while` loop repeats while a `bool` is `true`.");
@@ -18474,7 +18482,7 @@ pub fn check_core_stmt_while<H: CheckHost>(state: &mut CheckState, world: &Check
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_stmt_for_a_range(state: &mut CheckState, world: &CheckWorld<'_>, iter: &Expr, frame: &mut Vec<CheckLocal>, span: &Span) {
+fn check_core_stmt_for_a_range(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, iter: &Expr, frame: &mut Vec<CheckLocal>, span: &Span) {
     match iter {
         Expr::Range { start, end, .. } => {
             let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end);
@@ -18498,7 +18506,7 @@ fn check_core_stmt_for_a_range(state: &mut CheckState, world: &CheckWorld<'_>, i
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, bindings: &[winnow_grammar::Symbol], shape: &[i64], iter: &Expr, body: &Block, span: &Span) -> Ty {
+pub fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, bindings: &[winnow_grammar::Symbol], shape: &[i64], iter: &Expr, body: &Block, span: &Span) -> Ty {
     state.the_caller_writes_no_reference(iter, span, "a `for` lends what it iterates");
     let over = check_core_expr(state, world, host, iter, span);
     state.a_loop_over_a_nullable(world, &over, iter, span);
@@ -18598,7 +18606,7 @@ pub fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &CheckWo
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_stmt_return<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, value: Option<&Expr>, span: &Span) -> Ty {
+pub fn check_core_stmt_return<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, value: Option<&Expr>, span: &Span) -> Ty {
     check_core_returns(state, world, host, value, span, false);
     if value.is_some() {
         let returned = match value { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
@@ -18617,7 +18625,7 @@ pub fn check_core_stmt_jump(state: &mut CheckState, word: &str, span: &Span) -> 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_stmt<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, stmt: &Stmt, span: &Span) -> Ty {
+pub fn check_core_stmt<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, stmt: &Stmt, span: &Span) -> Ty {
     state.flow.literal_receivers.clear();
     match stmt {
         Stmt::Let { names, shape, mutable, ty, value } => { let mutable = *mutable; check_core_stmt_let(state, world, host, names, shape, mutable, (ty).as_ref(), value, span) },
@@ -18638,7 +18646,7 @@ fn check_core_stmt_is_a_jump(stmt: &Stmt) -> bool { matches!(stmt, Stmt::Break |
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_block<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, block: &Block) -> Ty {
+pub fn check_core_block<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, block: &Block) -> Ty {
     state.scope.push(vec![]);
     let mut tail = check_core_stmt_unit();
     let count = block.stmts.len() as i64;
@@ -18674,30 +18682,30 @@ pub enum CheckCrossingsPath {
     Falls,
 }
 
-fn check_crossings_named(world: &CheckWorld<'_>, name: &str, stmt: &Stmt) -> bool {
+fn check_crossings_named(world: &CheckWorld<'_, '_, '_, '_, '_>, name: &str, stmt: &Stmt) -> bool {
     let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
     names_in_statement(stmt, world.words, &mut seen);
     seen.contains(name)
 }
 
-fn check_crossings_named_in(world: &CheckWorld<'_>, name: &str, expr: &Expr) -> bool {
+fn check_crossings_named_in(world: &CheckWorld<'_, '_, '_, '_, '_>, name: &str, expr: &Expr) -> bool {
     let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
     names_in(expr, world.words, &mut seen);
     seen.contains(name)
 }
 
-fn check_crossings_returned(world: &CheckWorld<'_>, name: &str, value: Option<&Expr>) -> CheckCrossingsPath {
+fn check_crossings_returned(world: &CheckWorld<'_, '_, '_, '_, '_>, name: &str, value: Option<&Expr>) -> CheckCrossingsPath {
     let given: &Expr = match value { Some(__nikaia_value) => __nikaia_value, None => return CheckCrossingsPath::Left };
     if check_crossings_named_in(world, name, given) { return CheckCrossingsPath::Gone; }
     CheckCrossingsPath::Left
 }
 
-fn check_crossings_mentioned(world: &CheckWorld<'_>, name: &str, expr: &Expr) -> CheckCrossingsPath {
+fn check_crossings_mentioned(world: &CheckWorld<'_, '_, '_, '_, '_>, name: &str, expr: &Expr) -> CheckCrossingsPath {
     if check_crossings_named_in(world, name, expr) { return CheckCrossingsPath::Taken; }
     CheckCrossingsPath::Falls
 }
 
-fn check_crossings_path(world: &CheckWorld<'_>, name: &str, stmts: &[Spanned<Stmt>], from: i64, in_loop: bool) -> CheckCrossingsPath {
+fn check_crossings_path(world: &CheckWorld<'_, '_, '_, '_, '_>, name: &str, stmts: &[Spanned<Stmt>], from: i64, in_loop: bool) -> CheckCrossingsPath {
     let mut at = from;
     while at < stmts.len() as i64 {
         let flow = check_crossings_step(world, name, &nikaia_std::index::get(&stmts, nikaia_std::index::at(at)).node, in_loop);
@@ -18707,7 +18715,7 @@ fn check_crossings_path(world: &CheckWorld<'_>, name: &str, stmts: &[Spanned<Stm
     CheckCrossingsPath::Falls
 }
 
-fn check_crossings_step(world: &CheckWorld<'_>, name: &str, stmt: &Stmt, in_loop: bool) -> CheckCrossingsPath {
+fn check_crossings_step(world: &CheckWorld<'_, '_, '_, '_, '_>, name: &str, stmt: &Stmt, in_loop: bool) -> CheckCrossingsPath {
     match stmt {
         Stmt::Return(value) => { return check_crossings_returned(world, name, (value).as_ref()); },
         Stmt::Break => { if !in_loop { return CheckCrossingsPath::Left; } },
@@ -18728,7 +18736,7 @@ fn check_crossings_step(world: &CheckWorld<'_>, name: &str, stmt: &Stmt, in_loop
     CheckCrossingsPath::Falls
 }
 
-fn check_crossings_loop_body(world: &CheckWorld<'_>, name: &str, body: &Block) -> CheckCrossingsPath {
+fn check_crossings_loop_body(world: &CheckWorld<'_, '_, '_, '_, '_>, name: &str, body: &Block) -> CheckCrossingsPath {
     let flow = check_crossings_path(world, name, &body.stmts, 0, true);
     if flow == CheckCrossingsPath::Left { return CheckCrossingsPath::Left; }
     if flow == CheckCrossingsPath::Gone { return CheckCrossingsPath::Taken; }
@@ -18736,7 +18744,7 @@ fn check_crossings_loop_body(world: &CheckWorld<'_>, name: &str, body: &Block) -
     CheckCrossingsPath::Falls
 }
 
-fn check_crossings_expr_path(world: &CheckWorld<'_>, name: &str, expr: &Expr, in_loop: bool) -> CheckCrossingsPath {
+fn check_crossings_expr_path(world: &CheckWorld<'_, '_, '_, '_, '_>, name: &str, expr: &Expr, in_loop: bool) -> CheckCrossingsPath {
     let mut branches: Vec<CheckCrossingsPath> = vec![];
     match expr {
         Expr::Throw(inner, _) => {
@@ -18763,7 +18771,7 @@ fn check_crossings_expr_path(world: &CheckWorld<'_>, name: &str, expr: &Expr, in
     check_crossings_joined(&branches, false)
 }
 
-fn check_crossings_arm(world: &CheckWorld<'_>, name: &str, arm: &MatchArm, in_loop: bool) -> CheckCrossingsPath {
+fn check_crossings_arm(world: &CheckWorld<'_, '_, '_, '_, '_>, name: &str, arm: &MatchArm, in_loop: bool) -> CheckCrossingsPath {
     let guard: &Expr = match arm.guard.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return check_crossings_expr_path(world, name, &arm.body, in_loop) };
     if check_crossings_named_in(world, name, guard) { return CheckCrossingsPath::Taken; }
     check_crossings_expr_path(world, name, &arm.body, in_loop)
@@ -18789,7 +18797,7 @@ fn check_crossings_joined(branches: &[CheckCrossingsPath], falls: bool) -> Check
     CheckCrossingsPath::Left
 }
 
-fn check_crossings_spawned(world: &CheckWorld<'_>, stmt: &Stmt) -> Option<String> {
+fn check_crossings_spawned(world: &CheckWorld<'_, '_, '_, '_, '_>, stmt: &Stmt) -> Option<String> {
     match stmt {
         Stmt::Let { names, value, .. } => {
             if names.len() != 1 { return None; }
@@ -18807,7 +18815,7 @@ fn check_crossings_spawned(world: &CheckWorld<'_>, stmt: &Stmt) -> Option<String
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_crossings_a_bound_handle_is_taken(state: &mut CheckState, world: &CheckWorld<'_>, block: &Block) {
+pub fn check_crossings_a_bound_handle_is_taken(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, block: &Block) {
     let mut at: i64 = 0;
     for stmt in block.stmts.iter() {
         at += 1;
@@ -18830,14 +18838,14 @@ fn check_crossings_settle(state: &mut CheckState, fails: bool) {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_crossings_a_value_with_a_cleanup_made(state: &mut CheckState, world: &CheckWorld<'_>, ty: &Ty) {
+pub fn check_crossings_a_value_with_a_cleanup_made(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, ty: &Ty) {
     let held = match state.cleanup_of(world, ty) { Some(__nikaia_value) => __nikaia_value, None => return };
     check_crossings_settle(state, held.fails);
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_crossings_a_value_with_a_cleanup_dying(state: &mut CheckState, world: &CheckWorld<'_>, name: &str, ty: &Ty, span: &Span) -> Option<bool> {
+pub fn check_crossings_a_value_with_a_cleanup_dying(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, name: &str, ty: &Ty, span: &Span) -> Option<bool> {
     let held = match state.cleanup_of(world, ty) { Some(__nikaia_value) => __nikaia_value, None => return None };
     check_crossings_settle(state, held.fails);
     state.a_cleanup_that_may_pause(name, span);
@@ -18847,20 +18855,20 @@ pub fn check_crossings_a_value_with_a_cleanup_dying(state: &mut CheckState, worl
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_crossings_a_value_with_a_cleanup_bound(state: &mut CheckState, world: &CheckWorld<'_>, name: &str, ty: &Ty, span: &Span) {
+pub fn check_crossings_a_value_with_a_cleanup_bound(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, name: &str, ty: &Ty, span: &Span) {
     let fails = match check_crossings_a_value_with_a_cleanup_dying(state, world, name, ty, span) { Some(__nikaia_value) => __nikaia_value, None => return };
     state.facts.settle_lets.insert(span.start as i64, fails);
 }
 
 #[allow(clippy::too_many_arguments)]
-fn check_crossings_refusal(beside: &collections::BTreeMap<String, Vec<Ty>>, structs: &collections::BTreeMap<String, Vec<FieldContract>>, enums: &collections::BTreeMap<String, collections::BTreeSet<String>>, payloads: &collections::BTreeMap<String, Vec<Ty>>, parameters: &collections::BTreeMap<String, Vec<String>>, world: &CheckWorld<'_>, left: &Ty, right: &Ty, span: &Span) -> Option<CheckFinding> {
+fn check_crossings_refusal(beside: &collections::BTreeMap<String, Vec<Ty>>, structs: &collections::BTreeMap<String, Vec<FieldContract>>, enums: &collections::BTreeMap<String, collections::BTreeSet<String>>, payloads: &collections::BTreeMap<String, Vec<Ty>>, parameters: &collections::BTreeMap<String, Vec<String>>, world: &CheckWorld<'_, '_, '_, '_, '_>, left: &Ty, right: &Ty, span: &Span) -> Option<CheckFinding> {
     let asking = CheckComparable { beside, structs, enums, payloads, parameters, own: world.own, library: world.library };
     compare_refusal(&asking, left, right, span)
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_crossings_a_type_that_does_not_compare(state: &mut CheckState, world: &CheckWorld<'_>, left: &Ty, right: &Ty, span: &Span) {
+pub fn check_crossings_a_type_that_does_not_compare(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, left: &Ty, right: &Ty, span: &Span) {
     let beside = check_parts_beside(world);
     let refused: Option<CheckFinding> = check_crossings_refusal(&beside, &state.structs, &state.enums, &state.enum_payloads, &state.struct_parameters, world, left, right, span);
     let finding = match refused { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -18868,14 +18876,14 @@ pub fn check_crossings_a_type_that_does_not_compare(state: &mut CheckState, worl
 }
 
 #[allow(clippy::too_many_arguments)]
-fn check_crossings_bounds(beside: &collections::BTreeMap<String, Vec<Ty>>, structs: &collections::BTreeMap<String, Vec<FieldContract>>, enums: &collections::BTreeMap<String, collections::BTreeSet<String>>, payloads: &collections::BTreeMap<String, Vec<Ty>>, parameters: &collections::BTreeMap<String, Vec<String>>, world: &CheckWorld<'_>, type_parameters: &collections::BTreeMap<String, Vec<String>>, key: &str, wanted: &collections::BTreeMap<String, Vec<String>>, bound: &collections::BTreeMap<String, Ty>, span: &Span) -> Vec<CheckFinding> {
+fn check_crossings_bounds(beside: &collections::BTreeMap<String, Vec<Ty>>, structs: &collections::BTreeMap<String, Vec<FieldContract>>, enums: &collections::BTreeMap<String, collections::BTreeSet<String>>, payloads: &collections::BTreeMap<String, Vec<Ty>>, parameters: &collections::BTreeMap<String, Vec<String>>, world: &CheckWorld<'_, '_, '_, '_, '_>, type_parameters: &collections::BTreeMap<String, Vec<String>>, key: &str, wanted: &collections::BTreeMap<String, Vec<String>>, bound: &collections::BTreeMap<String, Ty>, span: &Span) -> Vec<CheckFinding> {
     let asking = CheckComparable { beside, structs, enums, payloads, parameters, own: world.own, library: world.library };
     compare_standard_bounds(&asking, type_parameters, key, wanted, bound, span)
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_crossings_a_standard_bound_not_met(state: &mut CheckState, world: &CheckWorld<'_>, key: &str, bound: &collections::BTreeMap<String, Ty>, span: &Span) {
+pub fn check_crossings_a_standard_bound_not_met(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, key: &str, bound: &collections::BTreeMap<String, Ty>, span: &Span) {
     if !state.declared_bounds.contains_key(key) { return; }
     let beside = check_parts_beside(world);
     let wanted = match state.declared_bounds.get(key) { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -18883,14 +18891,14 @@ pub fn check_crossings_a_standard_bound_not_met(state: &mut CheckState, world: &
     for finding in refused.iter() { state.findings.push(finding.clone()); }
 }
 
-fn check_crossings_impls(beside: &collections::BTreeMap<String, Vec<Ty>>, structs: &collections::BTreeMap<String, Vec<FieldContract>>, enums: &collections::BTreeMap<String, collections::BTreeSet<String>>, payloads: &collections::BTreeMap<String, Vec<Ty>>, parameters: &collections::BTreeMap<String, Vec<String>>, world: &CheckWorld<'_>) -> Vec<CheckFinding> {
+fn check_crossings_impls(beside: &collections::BTreeMap<String, Vec<Ty>>, structs: &collections::BTreeMap<String, Vec<FieldContract>>, enums: &collections::BTreeMap<String, collections::BTreeSet<String>>, payloads: &collections::BTreeMap<String, Vec<Ty>>, parameters: &collections::BTreeMap<String, Vec<String>>, world: &CheckWorld<'_, '_, '_, '_, '_>) -> Vec<CheckFinding> {
     let asking = CheckComparable { beside, structs, enums, payloads, parameters, own: world.own, library: world.library };
     compare_language_impls(&asking, &world.here)
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_crossings_language_impls(state: &mut CheckState, world: &CheckWorld<'_>) {
+pub fn check_crossings_language_impls(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>) {
     let beside = check_parts_beside(world);
     let refused = check_crossings_impls(&beside, &state.structs, &state.enums, &state.enum_payloads, &state.struct_parameters, world);
     for finding in refused.iter() { state.findings.push(finding.clone()); }
@@ -18979,7 +18987,7 @@ fn check_crossings_known(bound: &collections::BTreeMap<String, Ty>, name: &str) 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_crossings_a_call_that_hands_its_number_back(state: &mut CheckState, world: &CheckWorld<'_>, contract: &FnContract, bound: &collections::BTreeMap<String, Ty>, args: &[Expr]) {
+pub fn check_crossings_a_call_that_hands_its_number_back(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, contract: &FnContract, bound: &collections::BTreeMap<String, Ty>, args: &[Expr]) {
     let signature: &Signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
     let result: &Ty = match signature.result.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
     let name: String = match result {
@@ -19006,7 +19014,7 @@ pub fn check_crossings_a_call_that_hands_its_number_back(state: &mut CheckState,
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub fn check_crossings_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, key: &str, written: &str, contract: &FnContract, given: &[Expr], found: &[Ty], passed: &[(String, Ty)], span: &Span) -> Ty {
+pub fn check_crossings_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, key: &str, written: &str, contract: &FnContract, given: &[Expr], found: &[Ty], passed: &[(String, Ty)], span: &Span) -> Ty {
     let none: Vec<(String, bool, String)> = vec![];
     let keeps = match world.newly_keeps.get(key) { Some(__nikaia_value) => __nikaia_value, None => return check_arguments(state, world, host, key, written, contract, given, found, passed, &none, span) };
     check_arguments(state, world, host, key, written, contract, given, found, passed, &keeps, span)
@@ -19018,7 +19026,7 @@ pub fn check_crossings_arguments<H: CheckHost>(state: &mut CheckState, world: &C
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn bound_that_answers(&self, world: &CheckWorld<'_>, parameter: &str, member: &str) -> Option<Ty> {
+    pub fn bound_that_answers(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, parameter: &str, member: &str) -> Option<Ty> {
         let bounds = match *nikaia_std::index::get(&self.type_parameters, parameter) { Some(__nikaia_value) => __nikaia_value, None => return None };
         for bound in bounds.iter() {
             let methods = match *nikaia_std::index::get(&world.own.traits, bound) { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -19128,7 +19136,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn grammar_entry(&self, world: &CheckWorld<'_>, receiver: &Expr, method: winnow_grammar::Symbol) -> Option<String> {
+    pub fn grammar_entry(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, receiver: &Expr, method: winnow_grammar::Symbol) -> Option<String> {
         match receiver {
             Expr::Variable(name, _) => { let name = *name; self.grammar_rule(world.words.resolve(name), world.words.resolve(method)) },
             _ => None,
@@ -19162,7 +19170,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn answers_for(&self, world: &CheckWorld<'_>, ty: &str, trait_name: &str) -> bool {
+    pub fn answers_for(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, ty: &str, trait_name: &str) -> bool {
         if (trait_name == "Struct" || trait_name == "Enum") && !world.own.traits.contains_key(trait_name) {
             if self.type_parameters.contains_key(ty) { return self.declares_bound(ty, trait_name); }
             let is_struct = self.structs.contains_key(ty);
@@ -19198,7 +19206,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn fields_of(&self, world: &CheckWorld<'_>, name: &str) -> Option<Vec<FieldContract>> {
+    pub fn fields_of(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, name: &str) -> Option<Vec<FieldContract>> {
         if self.structs.contains_key(name) {
             let fields = match *nikaia_std::index::get(&self.structs, name) { Some(__nikaia_value) => __nikaia_value, None => return None };
             return a_nonempty(fields);
@@ -19213,7 +19221,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn iterates_fallibly(&self, world: &CheckWorld<'_>, name: &str) -> bool {
+    pub fn iterates_fallibly(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, name: &str) -> bool {
         let suffix = format!("::{}", name);
         for (entry_name, entry_value) in world.own.types.iter() { if (entry_name == name || entry_name.ends_with(&suffix)) && entry_value.iterates_fallibly { return true; } }
         for (entry_name, entry_value) in world.library.types.iter() { if (entry_name == name || entry_name.ends_with(&suffix)) && entry_value.iterates_fallibly { return true; } }
@@ -19221,7 +19229,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn function_as_a_value(&self, world: &CheckWorld<'_>, name: &str) -> Option<Ty> {
+    pub fn function_as_a_value(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, name: &str) -> Option<Ty> {
         let mut key = name.to_owned();
         if self.structs.contains_key(name) || world.own.types.contains_key(name) { key = format!("{}::new", name); }
         let contract = match ledger_function(world, &key) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -19270,7 +19278,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn io_inside_a_door(&mut self, world: &CheckWorld<'_>, on: &Ty, what: &str, span: &Span) {
+    pub fn io_inside_a_door(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, on: &Ty, what: &str, span: &Span) {
         if !self.inside_a_door { return; }
         let name = match on {
             Ty::Named { name, .. } => name.to_owned(),
@@ -19406,7 +19414,7 @@ fn expect_code(what: &str) -> String {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn expect_type(&mut self, world: &CheckWorld<'_>, found: &Ty, want: &Ty, span: &Span, what: &str, message: &impl Fn(&str, &str) -> String) {
+    pub fn expect_type(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, found: &Ty, want: &Ty, span: &Span, what: &str, message: &impl Fn(&str, &str) -> String) {
         if found.is_unknown() { self.literal_receivers_take(want); }
         if self.fits_through_deref(world, found, want) { return; }
         if text_as_a_path(found, want) >= 0 { return; }
@@ -19444,7 +19452,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn expect_kept(&mut self, world: &CheckWorld<'_>, found: &Ty, want: &Ty, value: Option<&Expr>, keeper: &str, span: &Span, what: &str, message: &impl Fn(&str, &str) -> String) {
+    pub fn expect_kept(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: Option<&Expr>, keeper: &str, span: &Span, what: &str, message: &impl Fn(&str, &str) -> String) {
         if value.is_some() {
             let given = match value { Some(__nikaia_value) => __nikaia_value, None => return };
             self.number_asked(world, given, want, span, true);
@@ -19476,7 +19484,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn a_view_kept_beside(&mut self, world: &CheckWorld<'_>, found: &Ty, want: &Ty, value: Option<&Expr>, keeper: &str) {
+    fn a_view_kept_beside(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: Option<&Expr>, keeper: &str) {
         let mut named: Option<String> = None;
         if value.is_some() {
             let given = match value { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -19512,7 +19520,7 @@ fn a_plain_str_view(ty: &Ty) -> bool {
     }
 }
 
-fn width_dependent(world: &CheckWorld<'_>, value: &Expr, into: &str) -> Vec<String> {
+fn width_dependent(world: &CheckWorld<'_, '_, '_, '_, '_>, value: &Expr, into: &str) -> Vec<String> {
     match value {
         Expr::Binary { op, lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); if op.is_bitwise() { width_of_binary(world, *op, lhs, rhs, into) } else { vec![] } },
         Expr::Unary { op, expr, .. } => { let expr = nikaia_std::boxed::open(expr); if *op == UnaryOp::Not { vec!["`!`".to_owned(), format!("!({} as {})", written_expression(world.words, expr), into)] } else { vec![] } },
@@ -19521,7 +19529,7 @@ fn width_dependent(world: &CheckWorld<'_>, value: &Expr, into: &str) -> Vec<Stri
     }
 }
 
-fn width_of_binary(world: &CheckWorld<'_>, op: BinaryOp, lhs: &Expr, rhs: &Expr, into: &str) -> Vec<String> {
+fn width_of_binary(world: &CheckWorld<'_, '_, '_, '_, '_>, op: BinaryOp, lhs: &Expr, rhs: &Expr, into: &str) -> Vec<String> {
     let sign = binary_op_text(op);
     let left = written_expression(world.words, lhs);
     let mut right = written_expression(world.words, rhs);
@@ -19529,7 +19537,7 @@ fn width_of_binary(world: &CheckWorld<'_>, op: BinaryOp, lhs: &Expr, rhs: &Expr,
     vec![format!("`{}`", sign), format!("({} as {}) {} {}", left, into, sign, right)]
 }
 
-fn width_of_method(world: &CheckWorld<'_>, receiver: &Expr, method: winnow_grammar::Symbol, into: &str) -> Vec<String> {
+fn width_of_method(world: &CheckWorld<'_, '_, '_, '_, '_>, receiver: &Expr, method: winnow_grammar::Symbol, into: &str) -> Vec<String> {
     let name = world.words.resolve(method).to_owned();
     if !name.starts_with("wrapping_") && !name.starts_with("saturating_") && !name.starts_with("truncating_") { return vec![]; }
     vec![format!("`{}`", name), format!("({} as {}).{}(…)", written_expression(world.words, receiver), into, name)]
@@ -19538,7 +19546,7 @@ fn width_of_method(world: &CheckWorld<'_>, receiver: &Expr, method: winnow_gramm
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn narrow_by_width(&mut self, world: &CheckWorld<'_>, value: &Expr, into: &str, span: &Span) -> bool {
+    pub fn narrow_by_width(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, value: &Expr, into: &str, span: &Span) -> bool {
         let found = width_dependent(world, value, into);
         if found.is_empty() { return false; }
         let what = (*nikaia_std::index::get(&found, 0)).to_owned();
@@ -19552,7 +19560,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_bit_operation_beside_a_comparison(&mut self, world: &CheckWorld<'_>, op: BinaryOp, lhs: &Expr, rhs: &Expr, at: &Span) {
+    pub fn a_bit_operation_beside_a_comparison(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, op: BinaryOp, lhs: &Expr, rhs: &Expr, at: &Span) {
         let left_bare = a_bare_bit_operation(lhs);
         let right_bare = a_bare_bit_operation(rhs);
         if !left_bare && !right_bare { return; }
@@ -19566,7 +19574,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_collection_in_a_hole(&mut self, world: &CheckWorld<'_>, hole: &Expr, held: &Ty, spec: Option<&str>, span: &Span) {
+    pub fn a_collection_in_a_hole(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, hole: &Expr, held: &Ty, spec: Option<&str>, span: &Span) {
         if !is_a_collection_type(held) { return; }
         if spec.is_some() && nikaia_std::index::or(spec, || "").contains('?') { return; }
         let written = written_expression(world.words, hole);
@@ -19586,7 +19594,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_loop_over_a_nullable(&mut self, world: &CheckWorld<'_>, over: &Ty, iter: &Expr, span: &Span) {
+    pub fn a_loop_over_a_nullable(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, over: &Ty, iter: &Expr, span: &Span) {
         let inner = match over {
             Ty::Nullable(held) => { let held = nikaia_std::boxed::open(held); held.text() },
             _ => return,
@@ -19598,7 +19606,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_fallback_beside_what_a_map_holds(&mut self, world: &CheckWorld<'_>, read: &Expr, held: &Ty, fallback: &Ty, span: &Span) {
+    pub fn a_fallback_beside_what_a_map_holds(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, read: &Expr, held: &Ty, fallback: &Ty, span: &Span) {
         if held.is_a_view() || fallback.is_a_view() || fallback.is_unknown() || a_plain_string(held) { return; }
         let name = match held {
             Ty::Named { name, .. } => name.to_owned(),
@@ -19613,7 +19621,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn owned_text_into_a_literal_binding(&mut self, world: &CheckWorld<'_>, target: &Expr, found: &Ty, into: &Ty, span: &Span) -> bool {
+    pub fn owned_text_into_a_literal_binding(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, target: &Expr, found: &Ty, into: &Ty, span: &Span) -> bool {
         let name = match target {
             Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_owned() },
             _ => return false,
@@ -19685,13 +19693,13 @@ fn a_parameter_binding(local: &CheckLocal) -> bool {
     at.kind == CheckKind::Parameter
 }
 
-fn a_variant_path(state: &CheckState, world: &CheckWorld<'_>, segments: &[winnow_grammar::Symbol]) -> bool {
+fn a_variant_path(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, segments: &[winnow_grammar::Symbol]) -> bool {
     if segments.len() != 2 { return false; }
     state.is_variant(world.words.resolve(*nikaia_std::index::get(&segments, 0)), world.words.resolve(*nikaia_std::index::get(&segments, 1)))
 }
 
 impl CheckState {
-    pub fn a_value_written_out(&self, world: &CheckWorld<'_>, written: &Expr) -> bool {
+    pub fn a_value_written_out(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, written: &Expr) -> bool {
         match written {
             Expr::Path(segments, _) => a_variant_path(self, world, segments),
             Expr::StructLit { .. } => true,
@@ -19701,7 +19709,7 @@ impl CheckState {
     }
 }
 
-fn a_call_of_a_variant(state: &CheckState, world: &CheckWorld<'_>, func: &Expr) -> bool {
+fn a_call_of_a_variant(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, func: &Expr) -> bool {
     match func {
         Expr::Path(segments, _) => a_variant_path(state, world, segments),
         _ => false,
@@ -19722,7 +19730,7 @@ fn ext_an_enum_note() -> String { "An `extern` enum is a tagged union in C's lay
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn an_entry_point(&mut self, world: &CheckWorld<'_>, item: &Item, span: &Span, of_a_trait: bool) {
+    pub fn an_entry_point(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, item: &Item, span: &Span, of_a_trait: bool) {
         match item {
             Item::Fn { name, generics, args, ret_type, is_public, is_extern, .. } => {
                 let is_extern = *is_extern; let is_public = *is_public; let name = *name;
@@ -19734,7 +19742,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    fn an_entry_point_of(&mut self, world: &CheckWorld<'_>, name: Option<winnow_grammar::Symbol>, generics: &[GenericParam], args: &[FnArg], ret_type: Option<&Type>, is_public: bool, span: &Span, of_a_trait: bool) {
+    fn an_entry_point_of(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, name: Option<winnow_grammar::Symbol>, generics: &[GenericParam], args: &[FnArg], ret_type: Option<&Type>, is_public: bool, span: &Span, of_a_trait: bool) {
         let mut written: String = "new".to_owned();
         if name.is_some() { written = world.words.resolve(match name { Some(__nikaia_value) => __nikaia_value, None => return }).to_owned(); }
         if !is_public { self.findings.push(check_refusal("NK1237", span, format!("`{}` is `extern` but not `pub`.", written), vec!["`extern` before a function with a body exports it to C, and what a package exports is part of its surface.".to_owned()], Some(format!("Write `pub extern fn {}`, or leave out `extern` for a function only this program calls.", written)))); }
@@ -19759,14 +19767,14 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn what_an_entry_point_hands_back(&mut self, world: &CheckWorld<'_>, written: &str, ret_type: Option<&Type>, span: &Span) {
+    fn what_an_entry_point_hands_back(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, written: &str, ret_type: Option<&Type>, span: &Span) {
         let result = match ret_type { Some(__nikaia_value) => __nikaia_value, None => return };
         let way = self.crosses_to_c(world, result, true);
         if way.is_some() { self.findings.push(check_refusal("NK1240", span, format!("What `{}` hands back cannot cross to C.", written), vec!["An entry point hands back numbers, `bool` and `scalar`, text and bytes into the caller's buffer, a struct or an enum of the package, or an optional of those (Part III 15.1).".to_owned()], std::convert::identity(way))); }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn an_extern_struct(&mut self, world: &CheckWorld<'_>, item: &Item, span: &Span) {
+    pub fn an_extern_struct(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, item: &Item, span: &Span) {
         match item {
             Item::Struct { name, generics, fields, is_public, is_extern } => {
                 let is_extern = *is_extern; let is_public = *is_public; let name = *name;
@@ -19777,7 +19785,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn an_extern_struct_of(&mut self, world: &CheckWorld<'_>, name: winnow_grammar::Symbol, generics: &[GenericParam], fields: &[FieldDef], is_public: bool, span: &Span) {
+    fn an_extern_struct_of(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, name: winnow_grammar::Symbol, generics: &[GenericParam], fields: &[FieldDef], is_public: bool, span: &Span) {
         let written = world.words.resolve(name).to_owned();
         if !is_public { self.findings.push(check_refusal("NK1237", span, format!("`{}` is `extern` but not `pub`.", written), vec![ext_a_struct_note()], Some(format!("Write `pub extern struct {}`, or leave out `extern` for a struct only this program uses.", written)))); }
         if !generics.is_empty() { self.findings.push(check_refusal("NK1145", span, format!("`{}` is an `extern` struct with type parameters, and C's layout has none.", written), vec![ext_a_struct_note()], Some(format!("Declare one `extern` struct for each type `{}` is used with.", written)))); }
@@ -19791,7 +19799,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn an_extern_enum(&mut self, world: &CheckWorld<'_>, item: &Item, span: &Span) {
+    pub fn an_extern_enum(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, item: &Item, span: &Span) {
         match item {
             Item::Enum { name, variants, is_public, is_extern } => {
                 let is_extern = *is_extern; let is_public = *is_public; let name = *name;
@@ -19802,7 +19810,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn an_extern_enum_of(&mut self, world: &CheckWorld<'_>, name: winnow_grammar::Symbol, variants: &[EnumVariant], is_public: bool, span: &Span) {
+    fn an_extern_enum_of(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, name: winnow_grammar::Symbol, variants: &[EnumVariant], is_public: bool, span: &Span) {
         let written = world.words.resolve(name).to_owned();
         if !is_public { self.findings.push(check_refusal("NK1237", span, format!("`{}` is `extern` but not `pub`.", written), vec![ext_an_enum_note()], Some(format!("Write `pub extern enum {}`, or leave out `extern` for an enum only this program uses.", written)))); }
         for variant in variants.iter() {
@@ -19822,14 +19830,14 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn a_variant_field(&mut self, world: &CheckWorld<'_>, written: &str, variant_name: &str, field: String, ty: &Type, at: &Span) {
+    fn a_variant_field(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, written: &str, variant_name: &str, field: String, ty: &Type, at: &Span) {
         if a_c_value(&world.here, ty) { return; }
         let shown = world.words.resolve(ty.name).to_owned();
         self.findings.push(check_refusal("NK1145", at, format!("`{}::{}.{}` is a `{}`, which is not a C value.", written, variant_name, field, shown), vec![ext_an_enum_note()], Some("Leave out `extern`: a `pub enum` crosses to C as a handle, read through `_kind` and a getter per field.".to_owned())));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn crosses_to_c(&self, world: &CheckWorld<'_>, ty: &Type, out: bool) -> Option<String> {
+    pub fn crosses_to_c(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, ty: &Type, out: bool) -> Option<String> {
         let name = world.words.resolve(ty.name).to_owned();
         if (*ty.code).is_some() { return self.a_callback_crosses(world, ty, out); }
         if ty.is_tuple { return Some("Hand a tuple's parts over one by one, or as a `pub extern struct`.".to_owned()); }
@@ -19840,7 +19848,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn a_callback_crosses(&self, world: &CheckWorld<'_>, ty: &Type, out: bool) -> Option<String> {
+    fn a_callback_crosses(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, ty: &Type, out: bool) -> Option<String> {
         if out { return Some("Hand back a value; a function is a parameter's shape: a callback.".to_owned()); }
         let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
         if !code.is_sync { return Some("Write the callback `sync`: C calls it on its own thread, where nothing may pause.".to_owned()); }
@@ -19854,7 +19862,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    fn ext_table(&self, world: &CheckWorld<'_>, name: &str, base: &str, args: &[String], view: bool, out: bool, declared: bool) -> Option<String> {
+    fn ext_table(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, name: &str, base: &str, args: &[String], view: bool, out: bool, declared: bool) -> Option<String> {
         let plain = args.is_empty();
         if plain && !view && ext_a_number(base) { return None; }
         if ext_a_text(base) && plain && view && !out { return None; }
@@ -20128,7 +20136,7 @@ fn check_cleanup_fails(ledger: &Ledger, owner: &str) -> bool {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn method_options(&mut self, world: &CheckWorld<'_>, method: winnow_grammar::Symbol, contract: &FnContract, span: &Span) {
+    pub fn method_options(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, method: winnow_grammar::Symbol, contract: &FnContract, span: &Span) {
         let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
         if signature.config.is_empty() { return; }
         let mut options: Vec<(String, String)> = vec![];
@@ -20150,7 +20158,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_walk_of_a_failing_sequence(&mut self, world: &CheckWorld<'_>, method: winnow_grammar::Symbol, span: &Span) {
+    pub fn a_walk_of_a_failing_sequence(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, method: winnow_grammar::Symbol, span: &Span) {
         if self.flow.throwing || self.flow.caught || self.inside_an_action.is_some() { return; }
         let function = match self.current.as_deref() { Some(__nikaia_value) => __nikaia_value, None => return }.to_owned();
         let name = world.words.resolve(method).to_owned();
@@ -20170,7 +20178,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn fallible_step(&mut self, world: &CheckWorld<'_>, over: &Ty, bindings: i64, span: &Span) {
+    pub fn fallible_step(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, over: &Ty, bindings: i64, span: &Span) {
         let mut name: String = String::from("");
         match over {
             Ty::Named { name: written, .. } => {
@@ -20209,7 +20217,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn seen_through(&self, world: &CheckWorld<'_>, ty: &Ty) -> Option<Ty> {
+    pub fn seen_through(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, ty: &Ty) -> Option<Ty> {
         let name = match ty {
             Ty::Named { name, .. } => name.to_owned(),
             _ => return None,
@@ -20223,14 +20231,14 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn fits_through_deref(&self, world: &CheckWorld<'_>, found: &Ty, want: &Ty) -> bool {
+    pub fn fits_through_deref(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, found: &Ty, want: &Ty) -> bool {
         if found.fits(want) { return true; }
         let seen = match self.seen_through(world, found) { Some(__nikaia_value) => __nikaia_value, None => return false };
         seen.fits(want)
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn fields_of_base(&self, world: &CheckWorld<'_>, base: &str) -> Vec<Ty> {
+    pub fn fields_of_base(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, base: &str) -> Vec<Ty> {
         nikaia_std::index::or(match *nikaia_std::index::get(&world.fields_by_base, base) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
@@ -20238,13 +20246,13 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn cleanup_of(&self, world: &CheckWorld<'_>, ty: &Ty) -> Option<CheckCleanup> {
+    pub fn cleanup_of(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, ty: &Ty) -> Option<CheckCleanup> {
         let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
         self.cleanup_within(world, ty, &mut seen)
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn cleanup_within(&self, world: &CheckWorld<'_>, ty: &Ty, seen: &mut collections::BTreeSet<String>) -> Option<CheckCleanup> {
+    pub fn cleanup_within(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, ty: &Ty, seen: &mut collections::BTreeSet<String>) -> Option<CheckCleanup> {
         let mut held: Vec<Ty> = vec![];
         match ty.unseen() {
             Ty::Named { ref name, ref args, view } => {
@@ -20289,7 +20297,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn tears_down(&self, world: &CheckWorld<'_>, ty: &Ty, seen: &mut collections::BTreeSet<String>) -> Option<String> {
+    pub fn tears_down(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, ty: &Ty, seen: &mut collections::BTreeSet<String>) -> Option<String> {
         let name = match ty {
             Ty::Named { name, view, .. } => {
                 let view = *view;
@@ -20341,7 +20349,7 @@ fn viewed_nullable(plain: &Ty) -> Ty { Ty::Nullable(Box::new(plain.as_a_view()))
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_safe_field(&mut self, world: &CheckWorld<'_>, inner: &Ty, base: &Expr, field: &str, expr: &Expr, span: &Span) -> Ty {
+    pub fn a_safe_field(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, inner: &Ty, base: &Expr, field: &str, expr: &Expr, span: &Span) -> Ty {
         let ty = named_or_empty(inner);
         if ty.is_empty() { return Ty::Unknown; }
         if self.facts.boxed_members.contains_key(&ty) {
@@ -20390,7 +20398,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn reaches_through_a_plain_value(&mut self, world: &CheckWorld<'_>, on: &Ty, receiver: &Expr, member: &str, method: bool, reach: &Expr, span: &Span) {
+    pub fn reaches_through_a_plain_value(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, on: &Ty, receiver: &Expr, member: &str, method: bool, reach: &Expr, span: &Span) {
         if on.is_unknown() { return; }
         let mut what: String = String::from("field");
         let mut plain: String = format!(".{}", member);
@@ -20414,7 +20422,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn nothing_to_fall_back_from(&mut self, world: &CheckWorld<'_>, value: &Expr, left: &Ty, coalesce: &Expr, span: &Span) -> bool {
+    pub fn nothing_to_fall_back_from(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, value: &Expr, left: &Ty, coalesce: &Expr, span: &Span) -> bool {
         let seen = left.unseen();
         let never_absent = match seen {
             Ty::Named { ref name, .. } => type_last_segment(name) != "Option",
@@ -20441,7 +20449,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_fallback_that_owns_what_the_left_side_views(&mut self, world: &CheckWorld<'_>, viewed: &Ty, fallback: &Ty, written: &Expr, span: &Span) {
+    pub fn a_fallback_that_owns_what_the_left_side_views(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, viewed: &Ty, fallback: &Ty, written: &Expr, span: &Span) {
         if !viewed.is_a_view() || fallback.is_a_view() { return; }
         let mut names_a_copy = false;
         match written {
@@ -20477,7 +20485,7 @@ fn a_map_name(name: &str) -> bool {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_lent_parameter(&self, world: &CheckWorld<'_>, given: &Expr) -> bool {
+    pub fn a_lent_parameter(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, given: &Expr) -> bool {
         let name = match given {
             Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_owned() },
             _ => return false,
@@ -20502,7 +20510,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_map_first_written(&mut self, world: &CheckWorld<'_>, target: &Expr, found: &Ty) {
+    pub fn a_map_first_written(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, target: &Expr, found: &Ty) {
         let base_name = match target {
             Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); match base {
                 Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_owned() },
@@ -20537,7 +20545,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn comptimes_asked(&mut self, world: &CheckWorld<'_>, expr: &Expr, ty: &str) {
+    pub fn comptimes_asked(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr, ty: &str) {
         match expr {
             Expr::Variable(name, _) => {
                 let name = *name;
@@ -20565,14 +20573,14 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_field_holds_code(&self, world: &CheckWorld<'_>, owner: &str, field: &str) -> bool {
+    pub fn a_field_holds_code(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, owner: &str, field: &str) -> bool {
         let fields = self.fields_seen(world, owner);
         for each in fields.iter() { if each.name == field { return check_core_stmt_holds_code(&each.ty); } }
         false
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn fields_seen(&self, world: &CheckWorld<'_>, name: &str) -> Vec<FieldContract> {
+    pub fn fields_seen(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, name: &str) -> Vec<FieldContract> {
         if self.structs.contains_key(name) {
             return nikaia_std::index::or(match *nikaia_std::index::get(&self.structs, name) {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -20594,7 +20602,7 @@ impl CheckState {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn index_key_type(state: &CheckState, world: &CheckWorld<'_>, index: &Expr) -> Ty {
+fn index_key_type(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, index: &Expr) -> Ty {
     match index {
         Expr::LitStr { .. } => Ty::Named { name: String::from("String"), args: vec![], view: false },
         Expr::Variable(key, _) => { let key = *key; value_of_a_copy(&nikaia_std::index::or(state.lookup(world.words.resolve(key)), || Ty::Unknown)) },
@@ -20721,7 +20729,7 @@ fn list_of_known(item: Ty) -> Ty {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn bare_reference(pattern: &Pattern, world: &CheckWorld<'_>) -> String {
+fn bare_reference(pattern: &Pattern, world: &CheckWorld<'_, '_, '_, '_, '_>) -> String {
     match pattern {
         Pattern::Ref { name, generics, args } => { let name = *name; if generics.is_empty() && args.is_empty() { world.words.resolve(name).to_owned() } else { String::from("") } },
         _ => String::from(""),
@@ -20735,7 +20743,7 @@ fn an_offered_number_name(name: &str) -> bool { name == "i32" || name == "i64" |
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn pattern_type(&self, world: &CheckWorld<'_>, pattern: &Pattern, rules: &collections::BTreeSet<String>) -> Ty {
+    pub fn pattern_type(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, pattern: &Pattern, rules: &collections::BTreeSet<String>) -> Ty {
         match pattern {
             Pattern::Repeat { pat, rep } => { let pat = nikaia_std::boxed::open(pat); self.repeat_type(world, &pat.node, rep, rules) },
             Pattern::Group(pat) => { let pat = nikaia_std::boxed::open(pat); self.pattern_type(world, &pat.node, rules) },
@@ -20746,7 +20754,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn repeat_type(&self, world: &CheckWorld<'_>, pat: &Pattern, rep: &Repeat, rules: &collections::BTreeSet<String>) -> Ty {
+    fn repeat_type(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, pat: &Pattern, rep: &Repeat, rules: &collections::BTreeSet<String>) -> Ty {
         if *rep == Repeat::Optional {
             let inner = self.pattern_type(world, pat, rules);
             return match inner {
@@ -20760,7 +20768,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn choice_type(&self, world: &CheckWorld<'_>, alternatives: &[Spanned<Pattern>], rules: &collections::BTreeSet<String>) -> Ty {
+    fn choice_type(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, alternatives: &[Spanned<Pattern>], rules: &collections::BTreeSet<String>) -> Ty {
         let mut first = Ty::Unknown;
         let mut at: i64 = 0;
         while at < alternatives.len() as i64 {
@@ -20775,7 +20783,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn reference_type(&self, world: &CheckWorld<'_>, name: winnow_grammar::Symbol, generics: &[Type], args: &[Spanned<Pattern>], rules: &collections::BTreeSet<String>) -> Ty {
+    fn reference_type(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, name: winnow_grammar::Symbol, generics: &[Type], args: &[Spanned<Pattern>], rules: &collections::BTreeSet<String>) -> Ty {
         let called = world.words.resolve(name).to_owned();
         if rules.contains(&called) {
             return nikaia_std::index::or(match *nikaia_std::index::get(&self.rule_results, &called) {
@@ -20801,7 +20809,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn bindings_of(&mut self, world: &CheckWorld<'_>, pattern: &Pattern, rules: &collections::BTreeSet<String>) -> Vec<CheckLocal> {
+    pub fn bindings_of(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, pattern: &Pattern, rules: &collections::BTreeSet<String>) -> Vec<CheckLocal> {
         let mut out: Vec<CheckLocal> = vec![];
         match pattern {
             Pattern::Bind { name, pat } => {
@@ -20911,7 +20919,7 @@ struct HostCalls {
     assets: Vec<(String, bool)>,
 }
 
-fn host_enum_names(view: &ParsedView<'_>, out: &mut collections::BTreeSet<String>) {
+fn host_enum_names(view: &ParsedView<'_, '_, '_, '_, '_>, out: &mut collections::BTreeSet<String>) {
     for item in view.items.iter() {
         let named: String = match &item.node {
             Item::Enum { name, .. } => { let name = *name; view.text(name) },
@@ -20921,7 +20929,7 @@ fn host_enum_names(view: &ParsedView<'_>, out: &mut collections::BTreeSet<String
     }
 }
 
-fn host_grammar_names(view: &ParsedView<'_>, out: &mut collections::BTreeSet<String>) {
+fn host_grammar_names(view: &ParsedView<'_, '_, '_, '_, '_>, out: &mut collections::BTreeSet<String>) {
     for item in view.items.iter() {
         let named: String = match &item.node {
             Item::Grammar(def) => view.text(def.name),
@@ -20931,7 +20939,7 @@ fn host_grammar_names(view: &ParsedView<'_>, out: &mut collections::BTreeSet<Str
     }
 }
 
-fn host_runs_a_grammar(world: &CheckWorld<'_>, value: &Expr, grammars: &collections::BTreeSet<String>) -> bool {
+fn host_runs_a_grammar(world: &CheckWorld<'_, '_, '_, '_, '_>, value: &Expr, grammars: &collections::BTreeSet<String>) -> bool {
     let mut runs = false;
     for expr in visited_in_expr(value) {
         match expr {
@@ -20958,7 +20966,7 @@ fn host_runs_a_grammar(world: &CheckWorld<'_>, value: &Expr, grammars: &collecti
     runs
 }
 
-fn host_calls_in<H: CheckHost>(world: &CheckWorld<'_>, host: &H, value: &Expr, enums: &collections::BTreeSet<String>) -> HostCalls {
+fn host_calls_in<H: CheckHost>(world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, value: &Expr, enums: &collections::BTreeSet<String>) -> HostCalls {
     let mut found = HostCalls { calls: false, assets: vec![] };
     for expr in visited_in_expr(value) {
         match expr {
@@ -21007,7 +21015,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn unmarked_hole<H: CheckHost>(&mut self, world: &CheckWorld<'_>, host: &H, text: &str, span: &Span) {
+    pub fn unmarked_hole<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, text: &str, span: &Span) {
         if text.contains("{{") || text.contains("}}") {
             let single = text.replace("{{", "{").replace("}}", "}");
             self.warn_migration(span, "`{{{{` in a plain string is now two braces.".to_owned(), format!("Braces in a plain string don't need escaping any more: write `\"{}\"`.", single));
@@ -21051,7 +21059,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn compiled_build_time_value<H: CheckHost>(&mut self, world: &CheckWorld<'_>, host: &H, value: &Expr, found: &Ty, bound: &str, span: &Span) -> CheckCompiled {
+    pub fn compiled_build_time_value<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, value: &Expr, found: &Ty, bound: &str, span: &Span) -> CheckCompiled {
         if !self.flow.computes { return CheckCompiled { answered: true, value: None, said: true }; }
         let nothing = CheckCompiled { answered: false, value: None, said: false };
         let mut here = world.here_at;
@@ -21125,7 +21133,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_lent_part_is_handed_on_as_it_is<H: CheckHost>(&mut self, world: &CheckWorld<'_>, host: &H, body: &Expr, lent: &collections::BTreeSet<String>) {
+    pub fn a_lent_part_is_handed_on_as_it_is<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, body: &Expr, lent: &collections::BTreeSet<String>) {
         let mut is_block = false;
         let mut empty = false;
         match body {
@@ -21178,7 +21186,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn a_lent_part_in_an_expression_arm(&mut self, world: &CheckWorld<'_>, body: &Expr, lent: &collections::BTreeSet<String>) {
+    fn a_lent_part_in_an_expression_arm(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, body: &Expr, lent: &collections::BTreeSet<String>) {
         let mut named: Vec<i64> = vec![];
         let mut bound_again = false;
         for expr in visited_in_expr(body) {
@@ -21200,7 +21208,7 @@ impl CheckState {
     }
 }
 
-fn lent_binds_again(world: &CheckWorld<'_>, block: &Block, lent: &collections::BTreeSet<String>) -> bool {
+fn lent_binds_again(world: &CheckWorld<'_, '_, '_, '_, '_>, block: &Block, lent: &collections::BTreeSet<String>) -> bool {
     for stmt in block.stmts.iter() {
         match &stmt.node {
             Stmt::Let { names, .. } => {
@@ -21244,7 +21252,7 @@ fn not_a_module(name: &str) -> bool { name == "f64" || name == "i32" || name == 
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn an_import_that_brings_a_name_in(&mut self, world: &CheckWorld<'_>, path: &[winnow_grammar::Symbol], span: &Span) {
+    pub fn an_import_that_brings_a_name_in(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], span: &Span) {
         let mut segments: Vec<String> = vec![];
         for part in path.iter() {
             let part = *part;
@@ -21294,7 +21302,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_name_the_page_does_not_have(&mut self, world: &CheckWorld<'_>, pattern: &Spanned<Pattern>) {
+    pub fn a_name_the_page_does_not_have(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, pattern: &Spanned<Pattern>) {
         match &pattern.node {
             Pattern::Ref { name, args, .. } => {
                 let name = *name;
@@ -21315,7 +21323,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_lambda_the_promise_names(&mut self, world: &CheckWorld<'_>, key: &str, named: &str, args: &[FnArg], at: &Span) {
+    pub fn a_lambda_the_promise_names(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, key: &str, named: &str, args: &[FnArg], at: &Span) {
         let mut why: Option<String> = None;
         let mut found = false;
         for arg in args.iter() {
@@ -21345,7 +21353,7 @@ fn item_last_segment(written: &str) -> String {
     last
 }
 
-fn item_type_name(view: &ParsedView<'_>, item: &Item) -> String {
+fn item_type_name(view: &ParsedView<'_, '_, '_, '_, '_>, item: &Item) -> String {
     match item {
         Item::Struct { name, .. } => { let name = *name; view.text(name) },
         Item::Enum { name, .. } => { let name = *name; view.text(name) },
@@ -21355,13 +21363,13 @@ fn item_type_name(view: &ParsedView<'_>, item: &Item) -> String {
     }
 }
 
-pub fn declares_a_type(view: &ParsedView<'_>, name: &str) -> bool {
+pub fn declares_a_type(view: &ParsedView<'_, '_, '_, '_, '_>, name: &str) -> bool {
     if name == "" { return false; }
     for item in view.items.iter() { if item_type_name(view, &item.node) == name { return true; } }
     false
 }
 
-pub fn declared_with_no_arithmetic(view: &ParsedView<'_>, ty: &Ty) -> Option<String> {
+pub fn declared_with_no_arithmetic(view: &ParsedView<'_, '_, '_, '_, '_>, ty: &Ty) -> Option<String> {
     let seen = ty.unseen();
     let name = match seen {
         Ty::Named { name, .. } => name,
@@ -21378,21 +21386,21 @@ pub fn declared_with_no_arithmetic(view: &ParsedView<'_>, ty: &Ty) -> Option<Str
     None
 }
 
-fn item_takes_either(view: &ParsedView<'_>, node: &Item, own: &str, at: i64) -> bool {
+fn item_takes_either(view: &ParsedView<'_, '_, '_, '_, '_>, node: &Item, own: &str, at: i64) -> bool {
     match node {
         Item::Fn { name, args, .. } => { let name = *name; item_fn_takes_either(view, name, args, own, at) },
         _ => false,
     }
 }
 
-fn item_fn_takes_either(view: &ParsedView<'_>, name: Option<winnow_grammar::Symbol>, args: &[FnArg], own: &str, at: i64) -> bool {
+fn item_fn_takes_either(view: &ParsedView<'_, '_, '_, '_, '_>, name: Option<winnow_grammar::Symbol>, args: &[FnArg], own: &str, at: i64) -> bool {
     let symbol = match name { Some(__nikaia_value) => __nikaia_value, None => return false };
     if view.text(symbol) != own { return false; }
     if at < 0 || at >= args.len() as i64 { return false; }
     nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.either
 }
 
-pub fn either_param(view: &ParsedView<'_>, key: &str, at: i64) -> bool {
+pub fn either_param(view: &ParsedView<'_, '_, '_, '_, '_>, key: &str, at: i64) -> bool {
     let parts: Vec<&str> = key.split("::").collect::<Vec<_>>();
     let own = (*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_owned();
     let mut target: String = String::from("");
@@ -21409,13 +21417,13 @@ pub fn either_param(view: &ParsedView<'_>, key: &str, at: i64) -> bool {
     false
 }
 
-fn item_impl_takes_either(view: &ParsedView<'_>, t: &Type, methods: &[Spanned<Item>], target: &str, own: &str, at: i64) -> bool {
+fn item_impl_takes_either(view: &ParsedView<'_, '_, '_, '_, '_>, t: &Type, methods: &[Spanned<Item>], target: &str, own: &str, at: i64) -> bool {
     if view.text(t.name) != target { return false; }
     for method in methods.iter() { if item_takes_either(view, &method.node, own, at) { return true; } }
     false
 }
 
-pub fn either_field(view: &ParsedView<'_>, owner: &str, field: &str) -> bool {
+pub fn either_field(view: &ParsedView<'_, '_, '_, '_, '_>, owner: &str, field: &str) -> bool {
     let owner = item_last_segment(owner);
     for item in view.items.iter() {
         let found = match &item.node {
@@ -21427,12 +21435,12 @@ pub fn either_field(view: &ParsedView<'_>, owner: &str, field: &str) -> bool {
     false
 }
 
-fn item_has_either_field(view: &ParsedView<'_>, fields: &[FieldDef], field: &str) -> bool {
+fn item_has_either_field(view: &ParsedView<'_, '_, '_, '_, '_>, fields: &[FieldDef], field: &str) -> bool {
     for f in fields.iter() { if f.ty.either && view.text(f.name) == field { return true; } }
     false
 }
 
-pub fn imports_a_package(view: &ParsedView<'_>, name: &str) -> bool {
+pub fn imports_a_package(view: &ParsedView<'_, '_, '_, '_, '_>, name: &str) -> bool {
     for item in view.items.iter() {
         let found = match &item.node {
             Item::Import { path, alias } => { let alias = *alias; item_import_is(view, path, alias, name) },
@@ -21443,13 +21451,13 @@ pub fn imports_a_package(view: &ParsedView<'_>, name: &str) -> bool {
     false
 }
 
-fn item_import_is(view: &ParsedView<'_>, path: &[winnow_grammar::Symbol], alias: Option<winnow_grammar::Symbol>, name: &str) -> bool {
+fn item_import_is(view: &ParsedView<'_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], alias: Option<winnow_grammar::Symbol>, name: &str) -> bool {
     if alias.is_some() { return view.text(match alias { Some(__nikaia_value) => __nikaia_value, None => return false }) == name; }
     if path.is_empty() { return false; }
     view.text(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 1))) == name
 }
 
-pub fn imports_exactly(view: &ParsedView<'_>, head: &str) -> bool {
+pub fn imports_exactly(view: &ParsedView<'_, '_, '_, '_, '_>, head: &str) -> bool {
     for item in view.items.iter() {
         let found = match &item.node {
             Item::Import { path, .. } => path.len() == 1 && view.text(*nikaia_std::index::get(&path, 0)) == head,
@@ -21460,7 +21468,7 @@ pub fn imports_exactly(view: &ParsedView<'_>, head: &str) -> bool {
     false
 }
 
-pub fn an_extern_struct_named(view: &ParsedView<'_>, name: &str) -> bool {
+pub fn an_extern_struct_named(view: &ParsedView<'_, '_, '_, '_, '_>, name: &str) -> bool {
     for item in view.items.iter() {
         let found = match &item.node {
             Item::Struct { name: declared, is_extern, .. } => { let declared = *declared; let is_extern = *is_extern; is_extern && view.text(declared) == name },
@@ -21472,7 +21480,7 @@ pub fn an_extern_struct_named(view: &ParsedView<'_>, name: &str) -> bool {
     false
 }
 
-fn item_c_enum(view: &ParsedView<'_>, node: &Item, name: &str) -> bool {
+fn item_c_enum(view: &ParsedView<'_, '_, '_, '_, '_>, node: &Item, name: &str) -> bool {
     match node {
         Item::Enum { name: declared, variants, is_extern, .. } => { let declared = *declared; let is_extern = *is_extern; view.text(declared) == name && (is_extern || item_all_unit(variants)) },
         Item::Struct { name: declared, is_extern, .. } => { let declared = *declared; let is_extern = *is_extern; is_extern && view.text(declared) == name },
@@ -21488,7 +21496,7 @@ fn item_all_unit(variants: &[EnumVariant]) -> bool {
     true
 }
 
-pub fn a_c_value(view: &ParsedView<'_>, ty: &Type) -> bool {
+pub fn a_c_value(view: &ParsedView<'_, '_, '_, '_, '_>, ty: &Type) -> bool {
     if ty.is_view || ty.is_nullable || ty.is_tuple || (*ty.code).is_some() { return false; }
     let name = view.text(ty.name);
     if ty.generics.is_empty() {
@@ -21500,13 +21508,13 @@ pub fn a_c_value(view: &ParsedView<'_>, ty: &Type) -> bool {
     false
 }
 
-pub fn implements_error(here: &ParsedView<'_>, beside: &[ParsedView<'_>], ty: &str) -> bool {
+pub fn implements_error(here: &ParsedView<'_, '_, '_, '_, '_>, beside: &[ParsedView<'_, '_, '_, '_, '_>], ty: &str) -> bool {
     if item_implements_error(here, ty) { return true; }
     for unit in beside.iter() { if item_implements_error(unit, ty) { return true; } }
     false
 }
 
-fn item_implements_error(unit: &ParsedView<'_>, ty: &str) -> bool {
+fn item_implements_error(unit: &ParsedView<'_, '_, '_, '_, '_>, ty: &str) -> bool {
     for item in unit.items.iter() {
         let found = match &item.node {
             Item::Impl { trait_name, target, .. } => { let trait_name = *trait_name; item_is_error_impl(unit, trait_name, target, ty) },
@@ -21517,20 +21525,20 @@ fn item_implements_error(unit: &ParsedView<'_>, ty: &str) -> bool {
     false
 }
 
-fn item_is_error_impl(unit: &ParsedView<'_>, trait_name: Option<winnow_grammar::Symbol>, target: &Type, ty: &str) -> bool {
+fn item_is_error_impl(unit: &ParsedView<'_, '_, '_, '_, '_>, trait_name: Option<winnow_grammar::Symbol>, target: &Type, ty: &str) -> bool {
     let symbol = match trait_name { Some(__nikaia_value) => __nikaia_value, None => return false };
     unit.text(symbol) == "Error" && unit.text(target.name) == ty
 }
 
 impl CheckState {
-    pub fn a_package_where_a_grammar_stands(&mut self, view: &ParsedView<'_>, target: winnow_grammar::Symbol, span: &Span) -> bool {
+    pub fn a_package_where_a_grammar_stands(&mut self, view: &ParsedView<'_, '_, '_, '_, '_>, target: winnow_grammar::Symbol, span: &Span) -> bool {
         let name = view.text(target);
         if name == "html" || self.grammars.contains_key(&name) { return false; }
         if !imports_a_package(view, &name) { return false; }
         self.findings.push(check_refusal("NK1228", span, format!("`{}` is a package, and a `dsl` block names a grammar.", name), vec!["A grammar from a package is named with its package, as every name from one is.".to_owned()], Some(format!("Write `dsl {}::Grammar`, naming the grammar `{}` offers.", name, name))));
         true
     }
-    pub fn through_a_package_unread(&self, view: &ParsedView<'_>, world: &CheckWorld<'_>, expr: &Expr) -> bool {
+    pub fn through_a_package_unread(&self, view: &ParsedView<'_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         let func = match expr {
             Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); func },
             Expr::Path(_, _) => expr,
@@ -21599,7 +21607,7 @@ fn item_plain_name(subject: &Ty) -> Option<String> {
     }
 }
 
-pub fn check_payload_in(view: &ParsedView<'_>, ty: &str, variant: &str) -> Option<Vec<Ty>> {
+pub fn check_payload_in(view: &ParsedView<'_, '_, '_, '_, '_>, ty: &str, variant: &str) -> Option<Vec<Ty>> {
     for item in view.items.iter() {
         match &item.node {
             Item::Enum { name, variants, .. } => {
@@ -21624,7 +21632,7 @@ pub fn check_payload_in(view: &ParsedView<'_>, ty: &str, variant: &str) -> Optio
     None
 }
 
-fn item_placeholder_of_enum(view: &ParsedView<'_>, name: &str, variants: &[EnumVariant]) -> Option<String> {
+fn item_placeholder_of_enum(view: &ParsedView<'_, '_, '_, '_, '_>, name: &str, variants: &[EnumVariant]) -> Option<String> {
     let mut best: Option<String> = None;
     let mut best_size: i64 = -1;
     for variant in variants.iter() {
@@ -21672,7 +21680,7 @@ fn item_placeholder_of_enum(view: &ParsedView<'_>, name: &str, variants: &[EnumV
     best
 }
 
-fn item_declared_variants(view: &ParsedView<'_>, on: &str) -> Option<Vec<String>> {
+fn item_declared_variants(view: &ParsedView<'_, '_, '_, '_, '_>, on: &str) -> Option<Vec<String>> {
     for item in view.items.iter() {
         let found: Option<Vec<String>> = match &item.node {
             Item::Enum { name, variants, .. } => { let name = *name; if view.text(name) == on { Some(item_variant_names(view, variants)) } else { None } },
@@ -21683,14 +21691,14 @@ fn item_declared_variants(view: &ParsedView<'_>, on: &str) -> Option<Vec<String>
     None
 }
 
-fn item_variant_names(view: &ParsedView<'_>, variants: &[EnumVariant]) -> Vec<String> {
+fn item_variant_names(view: &ParsedView<'_, '_, '_, '_, '_>, variants: &[EnumVariant]) -> Vec<String> {
     let mut out: Vec<String> = vec![];
     for v in variants.iter() { out.push(view.text(v.name)); }
     out
 }
 
 impl CheckState {
-    pub fn a_placeholder(&self, view: &ParsedView<'_>, subject: &Ty) -> Option<String> {
+    pub fn a_placeholder(&self, view: &ParsedView<'_, '_, '_, '_, '_>, subject: &Ty) -> Option<String> {
         let name = match item_plain_name(subject) { Some(__nikaia_value) => __nikaia_value, None => return None };
         for item in view.items.iter() {
             let found: Option<String> = match &item.node {
@@ -21716,7 +21724,7 @@ impl CheckState {
         let joined = holes.join(", ");
         Some(format!("{} {{ {} }}", name, joined))
     }
-    pub fn shape_of(&self, view: &ParsedView<'_>, world: &CheckWorld<'_>, on: &str) -> Option<Vec<FieldContract>> {
+    pub fn shape_of(&self, view: &ParsedView<'_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_>, on: &str) -> Option<Vec<FieldContract>> {
         if !self.enums.contains_key(on) { return self.fields_of(world, on); }
         let known = match self.enums.get(on) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let mut variants: Vec<String> = vec![];
@@ -21736,7 +21744,7 @@ impl CheckState {
         for variant in variants.iter() { out.push(FieldContract { name: variant.to_owned(), ty: Ty::Named { name: String::from("$Variant"), args: vec![], view: false }, public: true, default: String::from(""), attributes: vec![] }); }
         Some(out)
     }
-    pub fn a_function_nothing_declares(&mut self, view: &ParsedView<'_>, world: &CheckWorld<'_>, name: &str, span: &Span) {
+    pub fn a_function_nothing_declares(&mut self, view: &ParsedView<'_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_>, name: &str, span: &Span) {
         let declared = self.lookup(name).is_some() || self.structs.contains_key(name) || self.enums.contains_key(name) || world.own.types.contains_key(name) || self.modules.contains(name) || self.grammars.contains_key(name) || self.foreign_names.contains(name) || self.variant_parts.contains_key(name) || is_hull(name) || name == "access_all" || name == "update_all" || name == "panic" || name == "asset" || name == "assert" || imports_a_package(view, name);
         if declared { return; }
         let mut known: Vec<String> = vec![];
@@ -21751,7 +21759,7 @@ impl CheckState {
         }
         self.findings.push(check_refusal("NK1117", span, format!("There's no function called `{}`.", name), vec!["A function called by its name alone is one of yours or one that's always available. A function from a package is called with the package's name in front: `package::name(…)`.".to_owned()], Some(help)));
     }
-    pub fn a_trait_nothing_declares(&mut self, view: &ParsedView<'_>, world: &CheckWorld<'_>, written: &str, span: &Span) {
+    pub fn a_trait_nothing_declares(&mut self, view: &ParsedView<'_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_>, written: &str, span: &Span) {
         let at = nikaia_std::search::find(&written, &"::", 0);
         if at.is_some() {
             let head = nikaia_std::index::get(&written, nikaia_std::index::at(0..match at { Some(__nikaia_value) => __nikaia_value, None => return })).to_owned();
@@ -21772,7 +21780,7 @@ impl CheckState {
         }
         self.findings.push(check_refusal("NK1117", span, format!("There's no trait called `{}`.", written), vec![because], Some(help)));
     }
-    pub fn a_head_nothing_declares(&mut self, view: &ParsedView<'_>, world: &CheckWorld<'_>, head: &str, written: &str, span: &Span) {
+    pub fn a_head_nothing_declares(&mut self, view: &ParsedView<'_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_>, head: &str, written: &str, span: &Span) {
         let head = view.unaliased(head);
         let prefix = format!("{}::", head);
         let mut declared = self.structs.contains_key(&head) || self.enums.contains_key(&head);
@@ -21812,7 +21820,7 @@ fn item_contract_variants(contract: &TypeContract) -> Vec<String> {
 
 #[derive(Debug, Clone)]
 pub struct ItemGeneric<'a> {
-    pub file: ParsedView<'a>,
+    pub file: ParsedView<'a, 'a, 'a, 'a, 'a>,
     pub params: Vec<String>,
     pub members: Vec<Type>,
 }
@@ -21829,7 +21837,7 @@ struct ItemInline {
     inline: collections::BTreeSet<String>,
 }
 
-fn item_held_inline(parsed: &ParsedView<'_>, ty: &Type, generics: &collections::BTreeMap<String, ItemGeneric<'_>>, out: &mut collections::BTreeSet<String>) {
+fn item_held_inline(parsed: &ParsedView<'_, '_, '_, '_, '_>, ty: &Type, generics: &collections::BTreeMap<String, ItemGeneric<'_>>, out: &mut collections::BTreeSet<String>) {
     if ty.is_view || (*ty.code).is_some() { return; }
     if ty.is_tuple {
         for part in ty.generics.iter() { item_held_inline(parsed, part, generics, out); }
@@ -21850,7 +21858,7 @@ fn item_held_inline(parsed: &ParsedView<'_>, ty: &Type, generics: &collections::
     for member in generic.members.iter() { item_held_through(&generic, member, parsed, &ty.generics, generics, out); }
 }
 
-fn item_held_through(generic: &ItemGeneric<'_>, member: &Type, at: &ParsedView<'_>, arguments: &[Type], generics: &collections::BTreeMap<String, ItemGeneric<'_>>, out: &mut collections::BTreeSet<String>) {
+fn item_held_through(generic: &ItemGeneric<'_>, member: &Type, at: &ParsedView<'_, '_, '_, '_, '_>, arguments: &[Type], generics: &collections::BTreeMap<String, ItemGeneric<'_>>, out: &mut collections::BTreeSet<String>) {
     if member.is_view || (*member.code).is_some() { return; }
     if member.is_tuple {
         for part in member.generics.iter() { item_held_through(generic, part, at, arguments, generics, out); }
@@ -21887,7 +21895,7 @@ fn item_reaches(from: &str, to: &str, holds: &collections::BTreeMap<String, coll
     false
 }
 
-fn item_members_of(file: &ParsedView<'_>, node: &Item) -> Vec<ItemMember> {
+fn item_members_of(file: &ParsedView<'_, '_, '_, '_, '_>, node: &Item) -> Vec<ItemMember> {
     let mut out: Vec<ItemMember> = vec![];
     match node {
         Item::Struct { fields, .. } => { for f in fields.iter() { out.push(ItemMember { member: file.text(f.name), ty: f.ty.clone() }); } },
@@ -21906,7 +21914,7 @@ fn item_members_of(file: &ParsedView<'_>, node: &Item) -> Vec<ItemMember> {
     out
 }
 
-fn item_declared_type_name(file: &ParsedView<'_>, node: &Item) -> Option<String> {
+fn item_declared_type_name(file: &ParsedView<'_, '_, '_, '_, '_>, node: &Item) -> Option<String> {
     match node {
         Item::Struct { name, .. } => { let name = *name; Some(file.text(name)) },
         Item::Enum { name, .. } => { let name = *name; Some(file.text(name)) },
@@ -21915,8 +21923,8 @@ fn item_declared_type_name(file: &ParsedView<'_>, node: &Item) -> Option<String>
 }
 
 impl CheckState {
-    pub fn types_that_contain_themselves(&mut self, here: &ParsedView<'_>, beside: &[ParsedView<'_>]) {
-        let mut files: Vec<ParsedView<'_>> = vec![here.clone()];
+    pub fn types_that_contain_themselves(&mut self, here: &ParsedView<'_, '_, '_, '_, '_>, beside: &[ParsedView<'_, '_, '_, '_, '_>]) {
+        let mut files: Vec<ParsedView<'_, '_, '_, '_, '_>> = vec![here.clone()];
         for other in beside.iter() { files.push(other.clone()); }
         let mut generics: collections::BTreeMap<String, ItemGeneric<'_>> = collections::BTreeMap::new();
         for file in files.iter() {
@@ -22016,7 +22024,7 @@ fn kind_a_usize(ty: &Ty) -> bool {
     }
 }
 
-fn kind_the_buffers_own_length(world: &CheckWorld<'_>, count: &Expr, buffer: &Expr) -> bool {
+fn kind_the_buffers_own_length(world: &CheckWorld<'_, '_, '_, '_, '_>, count: &Expr, buffer: &Expr) -> bool {
     match count {
         Expr::MethodCall { receiver, method, args, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; world.words.resolve(method) == "len" && args.is_empty() && receiver == buffer },
         _ => false,
@@ -22062,7 +22070,7 @@ fn kind_names_a_variant(pattern: &MatchPattern) -> bool {
     }
 }
 
-fn kind_an_update_only_replaces(world: &CheckWorld<'_>, name: &str, body: &Block) -> bool {
+fn kind_an_update_only_replaces(world: &CheckWorld<'_, '_, '_, '_, '_>, name: &str, body: &Block) -> bool {
     let mut assigned = false;
     let mut read = false;
     for stmt in body.stmts.iter() {
@@ -22081,14 +22089,14 @@ fn kind_an_update_only_replaces(world: &CheckWorld<'_>, name: &str, body: &Block
     assigned && !read
 }
 
-fn kind_is_the_name(world: &CheckWorld<'_>, target: &Expr, name: &str) -> bool {
+fn kind_is_the_name(world: &CheckWorld<'_, '_, '_, '_, '_>, target: &Expr, name: &str) -> bool {
     match target {
         Expr::Variable(n, _) => { let n = *n; world.words.resolve(n) == name },
         _ => false,
     }
 }
 
-fn kind_callee_name(world: &CheckWorld<'_>, func: &Expr) -> Option<String> {
+fn kind_callee_name(world: &CheckWorld<'_, '_, '_, '_, '_>, func: &Expr) -> Option<String> {
     match func {
         Expr::Variable(name, _) => { let name = *name; Some(world.words.resolve(name).to_owned()) },
         Expr::Path(segments, _) => Some(kind_path_text(world, segments)),
@@ -22096,7 +22104,7 @@ fn kind_callee_name(world: &CheckWorld<'_>, func: &Expr) -> Option<String> {
     }
 }
 
-fn kind_path_text(world: &CheckWorld<'_>, segments: &[winnow_grammar::Symbol]) -> String {
+fn kind_path_text(world: &CheckWorld<'_, '_, '_, '_, '_>, segments: &[winnow_grammar::Symbol]) -> String {
     let mut parts: Vec<String> = vec![];
     for segment in segments.iter() {
         let segment = *segment;
@@ -22108,7 +22116,7 @@ fn kind_path_text(world: &CheckWorld<'_>, segments: &[winnow_grammar::Symbol]) -
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn raised_bounds(&mut self, world: &CheckWorld<'_>, bounds: &[ConfigArg], span: &Span) -> Option<CheckRaised> {
+    pub fn raised_bounds(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, bounds: &[ConfigArg], span: &Span) -> Option<CheckRaised> {
         let mut raised = CheckRaised { steps: None, ram: None };
         let mut refused = false;
         for bound in bounds.iter() {
@@ -22133,7 +22141,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_length_that_fits_its_buffer(&mut self, world: &CheckWorld<'_>, written: &str, wanted: &[(String, Ty)], given: &[Expr], found: &[Ty], span: &Span) {
+    pub fn a_length_that_fits_its_buffer(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, written: &str, wanted: &[(String, Ty)], given: &[Expr], found: &[Ty], span: &Span) {
         if !self.foreign_names.contains(written) { return; }
         let mut at: i64 = 0;
         while at < wanted.len() as i64 {
@@ -22144,7 +22152,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    fn a_buffer_and_its_count(&mut self, world: &CheckWorld<'_>, written: &str, wanted: &[(String, Ty)], given: &[Expr], found: &[Ty], at: i64, span: &Span) {
+    fn a_buffer_and_its_count(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, written: &str, wanted: &[(String, Ty)], given: &[Expr], found: &[Ty], at: i64, span: &Span) {
         if !kind_a_slice_pointer(&nikaia_std::index::get(&wanted, nikaia_std::index::at(at)).1) { return; }
         if at + 1 >= wanted.len() as i64 || !kind_a_usize(&nikaia_std::index::get(&wanted, nikaia_std::index::at(at + 1)).1) { return; }
         if at + 1 >= given.len() as i64 { return; }
@@ -22157,7 +22165,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn an_update_block_reads_what_it_writes(&mut self, world: &CheckWorld<'_>, params: &[winnow_grammar::Symbol], body: &Block, span: &Span) {
+    pub fn an_update_block_reads_what_it_writes(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, params: &[winnow_grammar::Symbol], body: &Block, span: &Span) {
         for param in params.iter() {
             let param = *param;
             let name = world.words.resolve(param).to_owned();
@@ -22166,7 +22174,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_null_arm_on_a_plain_value(&mut self, world: &CheckWorld<'_>, on: &Ty, value: &Expr, arms: &[MatchArm], span: &Span) {
+    pub fn a_null_arm_on_a_plain_value(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, on: &Ty, value: &Expr, arms: &[MatchArm], span: &Span) {
         match on {
             Ty::Nullable(_) => { return; },
             Ty::Unknown => { return; },
@@ -22178,7 +22186,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_variant_matched_on_a_nullable(&mut self, world: &CheckWorld<'_>, on: &Ty, value: &Expr, arms: &[MatchArm], span: &Span) {
+    pub fn a_variant_matched_on_a_nullable(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, on: &Ty, value: &Expr, arms: &[MatchArm], span: &Span) {
         let inner = match on {
             Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); inner.clone() },
             _ => return,
@@ -22196,7 +22204,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn several_arrive(&self, world: &CheckWorld<'_>, guarded: &Expr) -> bool {
+    pub fn several_arrive(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, guarded: &Expr) -> bool {
         let name = match guarded {
             Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); match kind_callee_name(world, func) { Some(__nikaia_value) => __nikaia_value, None => return false } },
             Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); return self.several_arrive(world, inner) },
@@ -22214,7 +22222,7 @@ impl CheckState {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn lambda_names(world: &CheckWorld<'_>, body: &Block) -> collections::BTreeSet<String> {
+fn lambda_names(world: &CheckWorld<'_, '_, '_, '_, '_>, body: &Block) -> collections::BTreeSet<String> {
     let mut named: collections::BTreeSet<String> = collections::BTreeSet::new();
     for e in visited_in_block(body) {
         match e {
@@ -22230,7 +22238,7 @@ fn lambda_names(world: &CheckWorld<'_>, body: &Block) -> collections::BTreeSet<S
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn lambda_own(world: &CheckWorld<'_>, params: &[winnow_grammar::Symbol]) -> collections::BTreeSet<String> {
+fn lambda_own(world: &CheckWorld<'_, '_, '_, '_, '_>, params: &[winnow_grammar::Symbol]) -> collections::BTreeSet<String> {
     let mut own: collections::BTreeSet<String> = collections::BTreeSet::new();
     for p in params.iter() {
         let p = *p;
@@ -22258,7 +22266,7 @@ fn a_hull_named(name: &str) -> bool {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_kept_lambdas_hulls(&mut self, world: &CheckWorld<'_>, value: &Expr) {
+    pub fn a_kept_lambdas_hulls(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, value: &Expr) {
         match value {
             Expr::Closure { params, body, .. } => { self.hulls_of_a_lambda(world, value, params, body); },
             _ => { },
@@ -22272,7 +22280,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn hulls_of_a_lambda(&mut self, world: &CheckWorld<'_>, value: &Expr, params: &[winnow_grammar::Symbol], body: &Block) {
+    fn hulls_of_a_lambda(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, value: &Expr, params: &[winnow_grammar::Symbol], body: &Block) {
         let named = lambda_names(world, body);
         let own = lambda_own(world, params);
         let mut hulls: Vec<String> = vec![];
@@ -22284,7 +22292,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_kept_lambda_takes_these(&mut self, world: &CheckWorld<'_>, value: &Expr, pauses: bool, span: &Span) {
+    pub fn a_kept_lambda_takes_these(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, value: &Expr, pauses: bool, span: &Span) {
         match value {
             Expr::Closure { params, body, .. } => { self.takes_of_a_lambda(world, value, params, body, pauses, span); },
             _ => { },
@@ -22292,7 +22300,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn takes_of_a_lambda(&mut self, world: &CheckWorld<'_>, value: &Expr, params: &[winnow_grammar::Symbol], body: &Block, pauses: bool, span: &Span) {
+    fn takes_of_a_lambda(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, value: &Expr, params: &[winnow_grammar::Symbol], body: &Block, pauses: bool, span: &Span) {
         let named = lambda_names(world, body);
         let own = lambda_own(world, params);
         let mut owned: Vec<String> = vec![];
@@ -22310,7 +22318,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_task_takes_these(&mut self, world: &CheckWorld<'_>, body: &Expr, task: i64, span: &Span) {
+    pub fn a_task_takes_these(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, body: &Expr, task: i64, span: &Span) {
         let mut named: collections::BTreeSet<String> = collections::BTreeSet::new();
         names_in(body, world.words, &mut named);
         for name in named.iter() {
@@ -22328,7 +22336,7 @@ impl CheckState {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_child_that_keeps_state(&mut self, world: &CheckWorld<'_>, body: &Expr, span: &Span) {
+    pub fn a_child_that_keeps_state(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, body: &Expr, span: &Span) {
         match body {
             Expr::Closure { params, body, .. } => { self.state_of_a_child(world, params, body, span); },
             _ => { },
@@ -22336,7 +22344,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn state_of_a_child(&mut self, world: &CheckWorld<'_>, params: &[winnow_grammar::Symbol], block: &Block, span: &Span) {
+    fn state_of_a_child(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, params: &[winnow_grammar::Symbol], block: &Block, span: &Span) {
         let mut named: collections::BTreeSet<String> = collections::BTreeSet::new();
         names_in_block(block, world.words, &mut named);
         let own = lambda_own(world, params);
@@ -22378,7 +22386,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_thrown_type_with_no_error(&mut self, world: &CheckWorld<'_>, thrown: &Ty, span: &Span) {
+    pub fn a_thrown_type_with_no_error(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, thrown: &Ty, span: &Span) {
         let name: String = match thrown {
             Ty::Named { name, view, .. } => { let view = *view; if view { "".to_owned() } else { name.to_owned() } },
             _ => "".to_owned(),
@@ -22406,7 +22414,7 @@ impl CheckState {
     pub fn a_handle_is_not_made_here(&mut self, handle: &str, span: &Span) { self.findings.push(check_refusal("NK1160", span, format!("You can't make a `{}` yourself: it's a handle a C library gives you.", handle), vec![format!("`{}` is declared `opaque`: only a C function can hand one out.", handle)], Some(format!("Call the function in the `extern \"C\"` block that returns a `{}`.", handle)))); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_length_that_may_not_fit(&mut self, world: &CheckWorld<'_>, written: &str, buffer: &Expr, span: &Span) {
+    pub fn a_length_that_may_not_fit(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, written: &str, buffer: &Expr, span: &Span) {
         let named = match buffer {
             Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_owned() },
             _ => String::from("the buffer"),
@@ -22449,7 +22457,7 @@ fn a_kind_by_name(name: &str) -> Option<String> {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn collect_library_enums(&mut self, world: &CheckWorld<'_>) {
+    pub fn collect_library_enums(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>) {
         self.collect_enums_of(world.own);
         self.collect_enums_of(world.library);
     }
@@ -22476,7 +22484,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn bounds_declared_by(&mut self, world: &CheckWorld<'_>, item: &Item, target: Option<&str>) {
+    pub fn bounds_declared_by(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, item: &Item, target: Option<&str>) {
         match item {
             Item::Fn { name, generics, .. } => {
                 let name = *name;
@@ -22502,7 +22510,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_drivers_row(&self, world: &CheckWorld<'_>, expr: &Expr) -> bool {
+    pub fn a_drivers_row(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
             Expr::MethodCall { method, .. } => { let method = *method; self.dsl_drivers.contains(world.words.resolve(method)) },
             Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); match func {
@@ -22514,7 +22522,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn refused_where_it_is_lowered(&self, world: &CheckWorld<'_>, expr: &Expr) -> bool {
+    pub fn refused_where_it_is_lowered(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
             Expr::Dsl { .. } => true,
             Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); match func {
@@ -22526,7 +22534,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn names_a_grammar_rule(&self, world: &CheckWorld<'_>, segments: &[winnow_grammar::Symbol]) -> bool {
+    fn names_a_grammar_rule(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, segments: &[winnow_grammar::Symbol]) -> bool {
         let mut written: Vec<String> = vec![];
         for part in segments.iter() {
             let part = *part;
@@ -22539,7 +22547,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_member_of_an_open_argument(&self, world: &CheckWorld<'_>, expr: &Expr) -> bool {
+    pub fn a_member_of_an_open_argument(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         let base = match expr {
             Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); base },
             Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); base },
@@ -22562,7 +22570,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn names_something_here(&self, world: &CheckWorld<'_>, expr: &Expr) -> bool {
+    pub fn names_something_here(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
             Expr::Variable(name, _) => { let name = *name; self.names_a_binding_or_a_function(world, world.words.resolve(name)) },
             Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); self.names_something_here(world, base) },
@@ -22577,10 +22585,10 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn names_a_binding_or_a_function(&self, world: &CheckWorld<'_>, name: &str) -> bool { self.lookup(name).is_some() || resolve_call(world, name).is_some() }
+    fn names_a_binding_or_a_function(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, name: &str) -> bool { self.lookup(name).is_some() || resolve_call(world, name).is_some() }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn names_a_function_by_path(&self, world: &CheckWorld<'_>, segments: &[winnow_grammar::Symbol]) -> bool {
+    fn names_a_function_by_path(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, segments: &[winnow_grammar::Symbol]) -> bool {
         let mut written: Vec<String> = vec![];
         for part in segments.iter() {
             let part = *part;
@@ -22590,13 +22598,13 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn any_names_something(&self, world: &CheckWorld<'_>, args: &[Expr]) -> bool {
+    fn any_names_something(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, args: &[Expr]) -> bool {
         for arg in args.iter() { if self.names_something_here(world, arg) { return true; } }
         false
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn is_a_number(&self, world: &CheckWorld<'_>, expr: &Expr) -> bool {
+    pub fn is_a_number(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
             Expr::LitInt { .. } => true,
             Expr::LitFloat(_, _) => true,
@@ -22615,7 +22623,7 @@ impl CheckState {
     pub fn warn_migration(&mut self, span: &Span, message: String, help: String) { self.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: "NK1111".to_owned(), message, notes: vec!["Only `f\"…\"` strings fill in `{…}`; a plain string keeps the braces as they are.".to_owned()], help: Some(help), labels: vec![] }); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn spelling(&mut self, world: &CheckWorld<'_>, ty: &Type, span: &Span) {
+    pub fn spelling(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, ty: &Type, span: &Span) {
         if world.words.resolve(ty.name) == "Shared" && !ty.generics.is_empty() && world.words.resolve(nikaia_std::index::get(&ty.generics, 0).name) == "Locked" {
             let held = nikaia_std::index::get(&ty.generics, 0);
             let mut inside: String = String::from("T");
@@ -22635,7 +22643,7 @@ fn any_unknown(types: &[Ty]) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn names_of(world: &CheckWorld<'_>, expr: &Expr) -> Option<String> {
+pub fn names_of(world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr) -> Option<String> {
     match expr {
         Expr::Variable(name, _) => { let name = *name; Some(world.words.resolve(name).to_owned()) },
         _ => None,
@@ -22644,7 +22652,7 @@ pub fn names_of(world: &CheckWorld<'_>, expr: &Expr) -> Option<String> {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn as_this_program_says(world: &CheckWorld<'_>, key: &str, trait_name: &str) -> String {
+pub fn as_this_program_says(world: &CheckWorld<'_, '_, '_, '_, '_>, key: &str, trait_name: &str) -> String {
     if world.own.traits.contains_key(trait_name) { return trait_name.to_owned(); }
     let segments: Vec<&str> = key.split("::").collect::<Vec<_>>();
     let mut take = segments.len() as i64 - 1;
@@ -22664,7 +22672,7 @@ pub fn as_this_program_says(world: &CheckWorld<'_>, key: &str, trait_name: &str)
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn bounds_in_a_signature(world: &CheckWorld<'_>, key: &str) -> Option<collections::BTreeMap<String, Vec<String>>> {
+pub fn bounds_in_a_signature(world: &CheckWorld<'_, '_, '_, '_, '_>, key: &str) -> Option<collections::BTreeMap<String, Vec<String>>> {
     let contract = match ledger_function(world, key) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let signature = match contract.signature { Some(__nikaia_value) => __nikaia_value, None => return None };
     let mut bounds: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
@@ -22680,7 +22688,7 @@ pub fn bounds_in_a_signature(world: &CheckWorld<'_>, key: &str) -> Option<collec
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn ledger_function(world: &CheckWorld<'_>, key: &str) -> Option<FnContract> {
+pub fn ledger_function(world: &CheckWorld<'_, '_, '_, '_, '_>, key: &str) -> Option<FnContract> {
     if world.own.functions.contains_key(key) {
         return match *nikaia_std::index::get(&world.own.functions, key) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -22699,7 +22707,7 @@ pub fn ledger_function(world: &CheckWorld<'_>, key: &str) -> Option<FnContract> 
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn declares_a_type(&self, world: &CheckWorld<'_>, name: &str) -> bool {
+    pub fn declares_a_type(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, name: &str) -> bool {
         if self.structs.contains_key(name) || world.own.types.contains_key(name) { return true; }
         if name == "Self" || self.enums.contains_key(name) { return true; }
         let suffix = format!("::{}", name);
@@ -22717,7 +22725,7 @@ fn check_is_fatal(ledger: &Ledger, error: &str) -> bool {
 }
 
 impl CheckState {
-    pub fn a_fatal_error_passes(&mut self, world: &CheckWorld<'_>, guarded: &CheckGuarded, handler: &Block, span: &Span) {
+    pub fn a_fatal_error_passes(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, guarded: &CheckGuarded, handler: &Block, span: &Span) {
         let named = fatal_named(handler, world.words);
         let mut passing: Vec<String> = vec![];
         for error in guarded.thrown.iter() { if (check_is_fatal(world.own, error) || check_is_fatal(world.library, error)) && !named.contains(error) { passing.push(error.to_owned()); } }
@@ -22743,7 +22751,7 @@ impl CheckState {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn may_fail_here<H: CheckHost>(&mut self, world: &CheckWorld<'_>, host: &H, key: &str, contract: &FnContract, span: &Span) {
+    pub fn may_fail_here<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, key: &str, contract: &FnContract, span: &Span) {
         if !contract.fails_with.is_empty() {
             let word = type_last_segment(key);
             self.a_way_out("fails", &word, span);
@@ -22821,7 +22829,7 @@ fn mem_also(head: &str) -> Vec<String> {
 
 fn mem_a_said_code(code: &str) -> bool { code == "NK1189" || code == "NK1126" || code == "NK1210" }
 
-fn mem_unit_has_trait(unit: &ParsedView<'_>, name: &str) -> bool {
+fn mem_unit_has_trait(unit: &ParsedView<'_, '_, '_, '_, '_>, name: &str) -> bool {
     for item in unit.items.iter() {
         let found = match &item.node {
             Item::Trait { name: declared, .. } => { let declared = *declared; unit.text(declared) == name },
@@ -22832,13 +22840,13 @@ fn mem_unit_has_trait(unit: &ParsedView<'_>, name: &str) -> bool {
     false
 }
 
-fn mem_a_trait_is_declared(world: &CheckWorld<'_>, name: &str) -> bool {
+fn mem_a_trait_is_declared(world: &CheckWorld<'_, '_, '_, '_, '_>, name: &str) -> bool {
     if mem_unit_has_trait(&world.here, name) { return true; }
     for unit in world.beside.iter() { if mem_unit_has_trait(unit, name) { return true; } }
     false
 }
 
-fn mem_unit_provides(world: &CheckWorld<'_>, unit: &ParsedView<'_>, head: &str, member: &str) -> bool {
+fn mem_unit_provides(world: &CheckWorld<'_, '_, '_, '_, '_>, unit: &ParsedView<'_, '_, '_, '_, '_>, head: &str, member: &str) -> bool {
     for item in unit.items.iter() {
         let implemented = match &item.node {
             Item::Impl { trait_name, target, .. } => { let trait_name = *trait_name; mem_an_impl_provides(world, unit, trait_name, target, head, member) },
@@ -22849,7 +22857,7 @@ fn mem_unit_provides(world: &CheckWorld<'_>, unit: &ParsedView<'_>, head: &str, 
     false
 }
 
-fn mem_an_impl_provides(world: &CheckWorld<'_>, unit: &ParsedView<'_>, trait_name: Option<winnow_grammar::Symbol>, target: &Type, head: &str, member: &str) -> bool {
+fn mem_an_impl_provides(world: &CheckWorld<'_, '_, '_, '_, '_>, unit: &ParsedView<'_, '_, '_, '_, '_>, trait_name: Option<winnow_grammar::Symbol>, target: &Type, head: &str, member: &str) -> bool {
     let symbol = match trait_name { Some(__nikaia_value) => __nikaia_value, None => return false };
     if unit.text(target.name) != head { return false; }
     let written = unit.text(symbol);
@@ -22857,13 +22865,13 @@ fn mem_an_impl_provides(world: &CheckWorld<'_>, unit: &ParsedView<'_>, trait_nam
     !mem_a_trait_is_declared(world, &written)
 }
 
-fn mem_provided_by_a_trait(world: &CheckWorld<'_>, head: &str, member: &str) -> bool {
+fn mem_provided_by_a_trait(world: &CheckWorld<'_, '_, '_, '_, '_>, head: &str, member: &str) -> bool {
     if mem_unit_provides(world, &world.here, head, member) { return true; }
     for unit in world.beside.iter() { if mem_unit_provides(world, unit, head, member) { return true; } }
     false
 }
 
-fn mem_a_unit_declares(world: &CheckWorld<'_>, head: &str) -> bool {
+fn mem_a_unit_declares(world: &CheckWorld<'_, '_, '_, '_, '_>, head: &str) -> bool {
     for unit in world.beside.iter() { if declares_a_type(unit, head) { return true; } }
     false
 }
@@ -22877,7 +22885,7 @@ fn mem_listed(names: &[String], before: &str) -> String {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_member_nothing_writes_down(&mut self, world: &CheckWorld<'_>, head: &str, member: &str, method: bool, span: &Span) {
+    pub fn a_member_nothing_writes_down(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, head: &str, member: &str, method: bool, span: &Span) {
         for found in self.findings.iter() { if found.span == *span && mem_a_said_code(&found.code) { return; } }
         if method && resolve_method(world, &format!("{}::deref", head)).is_some() { return; }
         if self.type_parameters.contains_key(head) || self.foreign_names.contains(head) || self.opaque_handles.contains(head) || self.grammars.contains_key(head) || a_number_name(head) { return; }
@@ -22905,7 +22913,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_member_this_type_does_not_have(&mut self, world: &CheckWorld<'_>, ty: &str, member: &str, span: &Span) {
+    pub fn a_member_this_type_does_not_have(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, ty: &str, member: &str, span: &Span) {
         if resolve_call(world, &format!("{}::{}", ty, member)).is_some() { return; }
         if self.type_parameters.contains_key(ty) {
             if member == "fields" || member == "variants" { self.a_shape_that_is_not_reachable_yet(ty, member, span); }
@@ -22946,7 +22954,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_path_in_a_pattern(&mut self, world: &CheckWorld<'_>, path: &[winnow_grammar::Symbol], span: &Span) {
+    pub fn a_path_in_a_pattern(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], span: &Span) {
         if path.len() != 2 { return; }
         let ty = world.words.resolve(*nikaia_std::index::get(&path, 0)).to_owned();
         let member = world.words.resolve(*nikaia_std::index::get(&path, 1)).to_owned();
@@ -22955,7 +22963,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn a_variant_pattern_with_other_parts(&mut self, world: &CheckWorld<'_>, path: &[winnow_grammar::Symbol], written: i64, span: &Span) {
+    fn a_variant_pattern_with_other_parts(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], written: i64, span: &Span) {
         if path.len() != 2 { return; }
         let ty = world.words.resolve(*nikaia_std::index::get(&path, 0)).to_owned();
         let member = world.words.resolve(*nikaia_std::index::get(&path, 1)).to_owned();
@@ -22973,7 +22981,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn a_rest_pattern(&mut self, world: &CheckWorld<'_>, path: &[winnow_grammar::Symbol], parts: &[MatchPattern], span: &Span) {
+    fn a_rest_pattern(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], parts: &[MatchPattern], span: &Span) {
         if !self.one_rest_at_most(parts, span) || path.len() != 2 { return; }
         let ty = world.words.resolve(*nikaia_std::index::get(&path, 0)).to_owned();
         let member = world.words.resolve(*nikaia_std::index::get(&path, 1)).to_owned();
@@ -23002,7 +23010,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_pattern_naming_a_member_a_type_does_not_have(&mut self, world: &CheckWorld<'_>, pattern: &MatchPattern, span: &Span) {
+    pub fn a_pattern_naming_a_member_a_type_does_not_have(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, pattern: &MatchPattern, span: &Span) {
         match pattern {
             MatchPattern::Path(path) => { self.a_path_in_a_pattern(world, path, span); },
             MatchPattern::Named { path, .. } => { self.a_path_in_a_pattern(world, path, span); },
@@ -23061,7 +23069,7 @@ fn check_name_wants_text(want: &Ty) -> bool {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn made_from_text(&self, world: &CheckWorld<'_>, expr: &Expr) -> bool {
+    pub fn made_from_text(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
             Expr::LitStr { .. } => true,
             Expr::Variable(symbol, _) => {
@@ -23092,7 +23100,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn a_hole_made_from_text(&self, world: &CheckWorld<'_>, hole: &Expr) -> bool {
+    fn a_hole_made_from_text(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, hole: &Expr) -> bool {
         match hole {
             Expr::Variable(symbol, _) => {
                 let symbol = *symbol;
@@ -23111,7 +23119,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_name_in_text(&mut self, world: &CheckWorld<'_>, want: &Ty, value: Option<&Expr>, span: &Span) -> bool {
+    pub fn a_name_in_text(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, want: &Ty, value: Option<&Expr>, span: &Span) -> bool {
         let literal = match value { Some(__nikaia_value) => __nikaia_value, None => return false };
         match literal {
             Expr::LitInterpolated { parts, .. } => {
@@ -23139,7 +23147,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn a_name_in_a_hole(&mut self, world: &CheckWorld<'_>, hole: &Expr, span: &Span) {
+    fn a_name_in_a_hole(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, hole: &Expr, span: &Span) {
         let written = written_expression(world.words, hole);
         let shown = match hole {
             Expr::Variable(_, _) => written.to_owned(),
@@ -23187,7 +23195,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_prelude_name_with_a_module_in_front(&mut self, world: &CheckWorld<'_>, name: &str, span: &Span) {
+    pub fn a_prelude_name_with_a_module_in_front(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, name: &str, span: &Span) {
         let at = match nikaia_std::search::find(&name, &"::", 0) { Some(__nikaia_value) => __nikaia_value, None => return };
         let module = nikaia_std::index::get(&name, nikaia_std::index::at(0..at)).to_owned();
         let last = nikaia_std::index::get(&name, nikaia_std::index::at(at + 2..)).to_owned();
@@ -23283,7 +23291,7 @@ pub enum CheckProved {
     No,
 }
 
-fn check_narrow_tested(world: &CheckWorld<'_>, side: &Expr, other: &Expr) -> Option<String> {
+fn check_narrow_tested(world: &CheckWorld<'_, '_, '_, '_, '_>, side: &Expr, other: &Expr) -> Option<String> {
     let null_other = matches!(other, Expr::LitNull(_));
     if !null_other { return None; }
     let mut name: String = String::from("");
@@ -23297,7 +23305,7 @@ fn check_narrow_tested(world: &CheckWorld<'_>, side: &Expr, other: &Expr) -> Opt
     Some(name)
 }
 
-pub fn check_narrow_proved_names(world: &CheckWorld<'_>, cond: &Expr, holds: bool) -> Vec<String> {
+pub fn check_narrow_proved_names(world: &CheckWorld<'_, '_, '_, '_, '_>, cond: &Expr, holds: bool) -> Vec<String> {
     let mut names: Vec<String> = vec![];
     match cond {
         Expr::Binary { op, lhs, rhs, .. } => {
@@ -23364,7 +23372,7 @@ pub fn check_narrow_proofs_for(state: &mut CheckState, names: &[String], frame: 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_narrow_proved_here(state: &mut CheckState, world: &CheckWorld<'_>, cond: &Expr, holds: bool) -> Vec<CheckLocal> {
+pub fn check_narrow_proved_here(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, cond: &Expr, holds: bool) -> Vec<CheckLocal> {
     let names = check_narrow_proved_names(world, cond, holds);
     let frame = state.scope.len() as i64;
     check_narrow_proofs_for(state, &names, frame)
@@ -23372,7 +23380,7 @@ pub fn check_narrow_proved_here(state: &mut CheckState, world: &CheckWorld<'_>, 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_narrow_proved_from_here(state: &mut CheckState, world: &CheckWorld<'_>, cond: &Expr, holds: bool) {
+pub fn check_narrow_proved_from_here(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, cond: &Expr, holds: bool) {
     let names = check_narrow_proved_names(world, cond, holds);
     if state.scope.is_empty() { return; }
     let frame = state.scope.len() as i64 - 1;
@@ -23521,7 +23529,7 @@ fn note_a_division(op: &BinaryOp) -> bool { *op == BinaryOp::Div || *op == Binar
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_sequence_that_cannot_do_this(&mut self, world: &CheckWorld<'_>, on: &Ty, method: winnow_grammar::Symbol, contract: &FnContract, found: &[Ty], span: &Span) {
+    pub fn a_sequence_that_cannot_do_this(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, on: &Ty, method: winnow_grammar::Symbol, contract: &FnContract, found: &[Ty], span: &Span) {
         let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
         let written = world.words.resolve(method).to_owned();
         let receiver_lacks = !signature.params.is_empty() && nikaia_std::index::get(&signature.params, 0).0 == "self" && self.a_sequence_lacks(&written, &nikaia_std::index::get(&signature.params, 0).1, on, span);
@@ -23570,7 +23578,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn a_cleanup_that_moved(&mut self, world: &CheckWorld<'_>, key: &str, param: &str, moved_now: bool, moved_ty: &str, want: &Ty, given: Option<&Expr>, span: &Span) {
+    pub fn a_cleanup_that_moved(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, key: &str, param: &str, moved_now: bool, moved_ty: &str, want: &Ty, given: Option<&Expr>, span: &Span) {
         let expr = match given { Some(__nikaia_value) => __nikaia_value, None => return };
         let value = match expr {
             Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_owned() },
@@ -23594,7 +23602,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn divisor_is_not_zero(&mut self, world: &CheckWorld<'_>, op: BinaryOp, rhs: &Expr, span: &Span) {
+    pub fn divisor_is_not_zero(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, op: BinaryOp, rhs: &Expr, span: &Span) {
         if !note_a_division(&op) { return; }
         let divisor = match self.constant_of(world, rhs) { Some(__nikaia_value) => __nikaia_value, None => return };
         if divisor.beyond || divisor.value.magnitude != 0u64 { return; }
@@ -23604,7 +23612,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn lambda_parameter(&mut self, world: &CheckWorld<'_>, name: winnow_grammar::Symbol, mutable: &[winnow_grammar::Symbol], ty: Ty, span: &Span) -> CheckLocal {
+    pub fn lambda_parameter(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, name: winnow_grammar::Symbol, mutable: &[winnow_grammar::Symbol], ty: Ty, span: &Span) -> CheckLocal {
         let mut written = false;
         for one in mutable.iter() {
             let one = *one;
@@ -23617,7 +23625,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn the_one_error(&self, world: &CheckWorld<'_>, expr: &Expr) -> Option<Ty> {
+    pub fn the_one_error(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr) -> Option<Ty> {
         let name = match expr {
             Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); match func {
                 Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_owned() },
@@ -23634,7 +23642,7 @@ impl CheckState {
     }
 }
 
-fn note_joined(world: &CheckWorld<'_>, segments: &[winnow_grammar::Symbol]) -> String {
+fn note_joined(world: &CheckWorld<'_, '_, '_, '_, '_>, segments: &[winnow_grammar::Symbol]) -> String {
     let mut parts: Vec<String> = vec![];
     for segment in segments.iter() {
         let segment = *segment;
@@ -23784,7 +23792,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn a_compound_over_two_integer_types(&mut self, world: &CheckWorld<'_>, op: BinaryOp, target: &Expr, into: &Ty, value: &Expr, found: &Ty, span: &Span) {
+    pub fn a_compound_over_two_integer_types(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, op: BinaryOp, target: &Expr, into: &Ty, value: &Expr, found: &Ty, span: &Span) {
         let x = match an_integer_named(into) { Some(__nikaia_value) => __nikaia_value, None => return };
         let v = match an_integer_named(found) { Some(__nikaia_value) => __nikaia_value, None => return };
         if x == v || is_a_literal(value) { return; }
@@ -23806,7 +23814,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn widen_operands(&mut self, world: &CheckWorld<'_>, value: &Expr, into: &str, within: &Span) -> bool {
+    pub fn widen_operands(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, value: &Expr, into: &str, within: &Span) -> bool {
         match value {
             Expr::Binary { op, lhs, rhs, span, .. } => {
                 let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
@@ -23832,7 +23840,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn widen_operand(&mut self, world: &CheckWorld<'_>, side: &Expr, into: &str, span: &Span) {
+    fn widen_operand(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, side: &Expr, into: &str, span: &Span) {
         if self.narrow_by_width(world, side, into, span) || self.widen_operands(world, side, into, span) { return; }
         let literal_int = matches!(side, Expr::LitInt { .. });
         if literal_int {
@@ -23844,7 +23852,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn widened_elements(&mut self, world: &CheckWorld<'_>, found: &Ty, want: &Ty, value: &Expr, span: &Span) -> Option<Ty> {
+    pub fn widened_elements(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr, span: &Span) -> Option<Ty> {
         let from = match found {
             Ty::Named { name, .. } => name.to_owned(),
             _ => return None,
@@ -23910,7 +23918,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn collect_by_use(&mut self, world: &CheckWorld<'_>, found: &Ty, want: &Ty, value: &Expr) -> Option<Ty> {
+    pub fn collect_by_use(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr) -> Option<Ty> {
         let receiver = collect_receiver(value);
         if receiver.len() != 1 || !a_collect_call(world, value) { return None; }
         let made = named_arguments_of(found);
@@ -23936,7 +23944,7 @@ impl CheckState {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn a_collect_call(world: &CheckWorld<'_>, value: &Expr) -> bool {
+fn a_collect_call(world: &CheckWorld<'_, '_, '_, '_, '_>, value: &Expr) -> bool {
     match value {
         Expr::MethodCall { method, args, .. } => { let method = *method; args.is_empty() && world.words.resolve(method) == "collect" },
         _ => false,
@@ -24176,7 +24184,7 @@ pub fn literals_in(expr: &Expr) -> Vec<(i64, Integer)> {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn open_element_of(&self, world: &CheckWorld<'_>, expr: &Expr) -> Option<i64> {
+    pub fn open_element_of(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr) -> Option<i64> {
         match expr {
             Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); self.open_element_in(world, base, index) },
             _ => None,
@@ -24184,7 +24192,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn open_element_in(&self, world: &CheckWorld<'_>, base: &Expr, index: &Expr) -> Option<i64> {
+    fn open_element_in(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, base: &Expr, index: &Expr) -> Option<i64> {
         match base {
             Expr::Variable(name, _) => { let name = *name; self.open_element_named(world, name, index) },
             _ => None,
@@ -24192,7 +24200,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn open_element_named(&self, world: &CheckWorld<'_>, name: winnow_grammar::Symbol, index: &Expr) -> Option<i64> {
+    fn open_element_named(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, name: winnow_grammar::Symbol, index: &Expr) -> Option<i64> {
         let is_a_slice = matches!(index, Expr::Range { .. });
         if is_a_slice { return None; }
         let local = match self.binding(world.words.resolve(name)) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -24200,7 +24208,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn element_constant(&self, world: &CheckWorld<'_>, expr: &Expr) -> Option<CheckConstant> {
+    pub fn element_constant(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr) -> Option<CheckConstant> {
         match expr {
             Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); self.element_constant_in(world, base, index) },
             _ => None,
@@ -24208,7 +24216,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn element_constant_in(&self, world: &CheckWorld<'_>, base: &Expr, index: &Expr) -> Option<CheckConstant> {
+    fn element_constant_in(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, base: &Expr, index: &Expr) -> Option<CheckConstant> {
         match base {
             Expr::Variable(name, _) => { let name = *name; self.element_of_a_name(world, name, index) },
             _ => None,
@@ -24216,7 +24224,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn element_of_a_name(&self, world: &CheckWorld<'_>, name: winnow_grammar::Symbol, index: &Expr) -> Option<CheckConstant> {
+    fn element_of_a_name(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, name: winnow_grammar::Symbol, index: &Expr) -> Option<CheckConstant> {
         let local = match self.binding(world.words.resolve(name)) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let elements = match *nikaia_std::index::get(&self.flow.list_constants, &local.id) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let at = match self.constant_of(world, index) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -24226,7 +24234,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn open_numbers_in(&self, world: &CheckWorld<'_>, expr: &Expr) -> Vec<i64> {
+    pub fn open_numbers_in(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr) -> Vec<i64> {
         let mut out: Vec<i64> = vec![];
         match expr {
             Expr::Variable(name, _) => {
@@ -24269,7 +24277,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn number_shaped(&self, world: &CheckWorld<'_>, expr: &Expr) -> bool {
+    pub fn number_shaped(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
             Expr::LitInt { .. } => true,
             Expr::Variable(name, _) => { let name = *name; self.a_name_of_an_open_number(world, name) },
@@ -24284,13 +24292,13 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn a_name_of_an_open_number(&self, world: &CheckWorld<'_>, name: winnow_grammar::Symbol) -> bool {
+    fn a_name_of_an_open_number(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, name: winnow_grammar::Symbol) -> bool {
         let local = match self.binding(world.words.resolve(name)) { Some(__nikaia_value) => __nikaia_value, None => return false };
         local.open_number.is_some()
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn a_call_of_numbers(&self, world: &CheckWorld<'_>, args: &[Expr]) -> bool {
+    fn a_call_of_numbers(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, args: &[Expr]) -> bool {
         if args.is_empty() { return false; }
         let calls = match *nikaia_std::index::get(&self.flow.open_calls, &(id_of(nikaia_std::index::get(&args, 0)) as i64)) { Some(__nikaia_value) => __nikaia_value, None => return false };
         for at in calls.iter() {
@@ -24301,7 +24309,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn a_choice_of_numbers(&self, world: &CheckWorld<'_>, expr: &Expr) -> bool {
+    fn a_choice_of_numbers(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         let tails = match number_branches(expr) { Some(__nikaia_value) => __nikaia_value, None => return false };
         if tails.is_empty() { return false; }
         for tail in tails.iter() {
@@ -24314,7 +24322,7 @@ impl CheckState {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn number_variable_name(world: &CheckWorld<'_>, expr: &Expr) -> Option<String> {
+fn number_variable_name(world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr) -> Option<String> {
     match expr {
         Expr::Variable(name, _) => {
             let name = *name;
@@ -24326,7 +24334,7 @@ fn number_variable_name(world: &CheckWorld<'_>, expr: &Expr) -> Option<String> {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn number_list_name(world: &CheckWorld<'_>, value: &Expr) -> Option<String> {
+fn number_list_name(world: &CheckWorld<'_, '_, '_, '_, '_>, value: &Expr) -> Option<String> {
     match value {
         Expr::MethodCall { receiver, method, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
@@ -24367,7 +24375,7 @@ fn number_position_code(what: &str) -> Option<String> {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn number_asked(&mut self, world: &CheckWorld<'_>, value: &Expr, want: &Ty, at: &Span, beside: bool) {
+    pub fn number_asked(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, value: &Expr, want: &Ty, at: &Span, beside: bool) {
         let seen = want.unseen();
         let copy = value_of_a_copy(&seen);
         if self.elements_asked(world, value, &copy, at, beside) { return; }
@@ -24377,7 +24385,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn elements_asked(&mut self, world: &CheckWorld<'_>, value: &Expr, copy: &Ty, at: &Span, beside: bool) -> bool {
+    fn elements_asked(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, value: &Expr, copy: &Ty, at: &Span, beside: bool) -> bool {
         let name = match number_list_name(world, value) { Some(__nikaia_value) => __nikaia_value, None => return false };
         let local = match self.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return false };
         let number = match *nikaia_std::index::get(&self.flow.open_elements, &local.id) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => return false };
@@ -24415,7 +24423,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn an_open_number_where_none_fits(&mut self, world: &CheckWorld<'_>, found: &Ty, want: &Ty, value: &Expr, span: &Span, what: &str, message: &impl Fn(&str, &str) -> String) -> bool {
+    pub fn an_open_number_where_none_fits(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr, span: &Span, what: &str, message: &impl Fn(&str, &str) -> String) -> bool {
         if !found.is_unknown() || !self.number_shaped(world, value) || a_lit_int(value) || !self.no_number_is(want) { return false; }
         let code = match number_position_code(what) { Some(__nikaia_value) => __nikaia_value, None => return false };
         let hole: String = String::from("\u{0}");
@@ -24494,7 +24502,7 @@ fn an_unsigned(named: Option<&str>) -> Option<String> {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn constant_of(&self, world: &CheckWorld<'_>, expr: &Expr) -> Option<CheckConstant> {
+    pub fn constant_of(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr) -> Option<CheckConstant> {
         let element = self.element_constant(world, expr);
         if element.is_some() { return std::convert::identity(element); }
         let folded = constant_of(expr, &|name| { self.a_name_folded(world, name) });
@@ -24502,7 +24510,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn a_name_folded(&self, world: &CheckWorld<'_>, name: winnow_grammar::Symbol) -> Folded {
+    fn a_name_folded(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, name: winnow_grammar::Symbol) -> Folded {
         let local = match self.binding(world.words.resolve(name)) { Some(__nikaia_value) => __nikaia_value, None => return Folded::Nothing };
         let value = match local.constant { Some(__nikaia_value) => __nikaia_value, None => return Folded::Nothing };
         if local.open_number.is_some() { return Folded::Value(Constant { value: value.clone(), pinned: "".to_owned() }); }
@@ -24513,7 +24521,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn an_open_comptime_in(&self, world: &CheckWorld<'_>, expr: &Expr) -> Option<CheckOpenComptime> {
+    pub fn an_open_comptime_in(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr) -> Option<CheckOpenComptime> {
         match expr {
             Expr::Variable(name, _) => { let name = *name; self.an_open_comptime_named(world, name) },
             Expr::Binary { lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); self.an_open_comptime_either(world, lhs, rhs) },
@@ -24523,21 +24531,21 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn an_open_comptime_named(&self, world: &CheckWorld<'_>, name: winnow_grammar::Symbol) -> Option<CheckOpenComptime> {
+    fn an_open_comptime_named(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, name: winnow_grammar::Symbol) -> Option<CheckOpenComptime> {
         let local = match self.binding(world.words.resolve(name)) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let at = match *nikaia_std::index::get(&self.open_comptimes, &local.id) { Some(__nikaia_value) => __nikaia_value, None => return None };
         Some(CheckOpenComptime { name: local.name.to_owned(), at: at.clone() })
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn an_open_comptime_either(&self, world: &CheckWorld<'_>, lhs: &Expr, rhs: &Expr) -> Option<CheckOpenComptime> {
+    fn an_open_comptime_either(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, lhs: &Expr, rhs: &Expr) -> Option<CheckOpenComptime> {
         let first = self.an_open_comptime_in(world, lhs);
         if first.is_some() { return std::convert::identity(first); }
         self.an_open_comptime_in(world, rhs)
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn constant_fits(&mut self, world: &CheckWorld<'_>, value: &Expr, want: Option<&Ty>, span: &Span) {
+    pub fn constant_fits(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, value: &Expr, want: Option<&Ty>, span: &Span) {
         self.number_asked_beside(world, value, want, span);
         let open = self.open_numbers_in(world, value);
         if want.is_none() && !open.is_empty() { return; }
@@ -24553,13 +24561,13 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn number_asked_beside(&mut self, world: &CheckWorld<'_>, value: &Expr, want: Option<&Ty>, span: &Span) {
+    fn number_asked_beside(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, value: &Expr, want: Option<&Ty>, span: &Span) {
         let ty = match want { Some(__nikaia_value) => __nikaia_value, None => return };
         self.number_asked(world, value, ty, span, true);
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn unsigned_literals_beside(&mut self, world: &CheckWorld<'_>, value: &Expr, want: Option<&Ty>, named: Option<&str>, span: &Span) {
+    fn unsigned_literals_beside(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, value: &Expr, want: Option<&Ty>, named: Option<&str>, span: &Span) {
         let single = an_unsigned(named);
         if single.is_some() { self.literals_are(value, &match single { Some(__nikaia_value) => __nikaia_value, None => return }); }
         let ty = match want { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -24587,7 +24595,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn labelled_with_its_comptime(&mut self, world: &CheckWorld<'_>, value: &Expr, ty: &str, span: &Span) {
+    fn labelled_with_its_comptime(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, value: &Expr, ty: &str, span: &Span) {
         let found = match self.an_open_comptime_in(world, value) { Some(__nikaia_value) => __nikaia_value, None => return };
         let mut finding = match self.findings.pop() { Some(__nikaia_value) => __nikaia_value, None => return };
         finding.labels.push(CheckLabel { span: span.clone(), word: found.name.to_owned(), text: format!("taken as a `{}` here", ty), main: true });
@@ -24596,7 +24604,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn open_number_given(&mut self, world: &CheckWorld<'_>, number: i64, value: &Expr, span: &Span) {
+    pub fn open_number_given(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, number: i64, value: &Expr, span: &Span) {
         let mut joined: Vec<i64> = vec![number];
         for at in self.open_numbers_in(world, value) { joined.push(at); }
         self.open_numbers_joined(&joined);
@@ -24630,7 +24638,7 @@ impl CheckState {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn an_operation_that_overflows(&mut self, world: &CheckWorld<'_>, op: BinaryOp, lhs: &Expr, rhs: &Expr, reach: Option<&str>, span: &Span) {
+    pub fn an_operation_that_overflows(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, op: BinaryOp, lhs: &Expr, rhs: &Expr, reach: Option<&str>, span: &Span) {
         let here = span.start as i64;
         if !(op == BinaryOp::Add || op == BinaryOp::Sub || op == BinaryOp::Mul || op == BinaryOp::Div || op == BinaryOp::Rem) || self.flow.overflowed.contains(&here) { return; }
         let left = match self.constant_of(world, lhs) { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -24734,7 +24742,7 @@ pub fn check_wrap_for(found: &Ty, want: &Ty, literal: bool) -> Option<FactWrap> 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_widened_slot<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_>, host: &H, found: &Ty, want: &Ty, value: Option<&Expr>, span: &Span) -> Option<FactWrap> {
+pub fn check_widened_slot<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, found: &Ty, want: &Ty, value: Option<&Expr>, span: &Span) -> Option<FactWrap> {
     let mut literal = false;
     if value.is_some() {
         let given = match value { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -24799,7 +24807,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_named_fold_part_that_may_pause(&mut self, world: &CheckWorld<'_>, part: &Expr, span: &Span) -> Option<Ty> {
+    pub fn a_named_fold_part_that_may_pause(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, part: &Expr, span: &Span) -> Option<Ty> {
         let mut name: String = String::from("");
         match part {
             Expr::Variable(written, _) => {
@@ -24825,7 +24833,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_field_that_is_code(&self, world: &CheckWorld<'_>, on: &Ty, method: winnow_grammar::Symbol) -> Option<Ty> {
+    pub fn a_field_that_is_code(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, on: &Ty, method: winnow_grammar::Symbol) -> Option<Ty> {
         let mut name: String = String::from("");
         match on {
             Ty::Named { name: written, .. } => { name = written.to_owned(); },
@@ -24868,7 +24876,7 @@ impl CheckState {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn pattern_parts(&self, world: &CheckWorld<'_>, pattern: &MatchPattern, on: &Ty) -> collections::BTreeMap<String, Ty> {
+    pub fn pattern_parts(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, pattern: &MatchPattern, on: &Ty) -> collections::BTreeMap<String, Ty> {
         let mut out: collections::BTreeMap<String, Ty> = collections::BTreeMap::new();
         match pattern {
             MatchPattern::Path(one) => {
@@ -24964,7 +24972,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn bind_positional(&self, world: &CheckWorld<'_>, parts: &[MatchPattern], types: &[Ty], out: &mut collections::BTreeMap<String, Ty>) {
+    fn bind_positional(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, parts: &[MatchPattern], types: &[Ty], out: &mut collections::BTreeMap<String, Ty>) {
         let mut rest_at: i64 = -1;
         let mut at: i64 = 0;
         while at < parts.len() as i64 {
@@ -24981,7 +24989,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn pattern_variant(&self, world: &CheckWorld<'_>, path: &[winnow_grammar::Symbol], owner: &str) -> String {
+    fn pattern_variant(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], owner: &str) -> String {
         let mut written: Vec<String> = vec![];
         for part in path.iter() {
             let part = *part;
@@ -24992,7 +25000,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn bind_a_part(&self, world: &CheckWorld<'_>, part: &MatchPattern, ty: &Ty, out: &mut collections::BTreeMap<String, Ty>) {
+    fn bind_a_part(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, part: &MatchPattern, ty: &Ty, out: &mut collections::BTreeMap<String, Ty>) {
         match part {
             MatchPattern::Path(one) => { if one.len() == 1 { out.insert(world.words.resolve(*nikaia_std::index::get(&one, 0)).to_owned(), ty.clone()); } },
             MatchPattern::Tuple { .. } => { for (entry_name, entry_value) in self.pattern_parts(world, part, ty) { out.insert(entry_name.to_owned(), entry_value.clone()); } },
@@ -25005,7 +25013,7 @@ impl CheckState {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn pattern_names(world: &CheckWorld<'_>, pattern: &MatchPattern) -> Vec<String> {
+pub fn pattern_names(world: &CheckWorld<'_, '_, '_, '_, '_>, pattern: &MatchPattern) -> Vec<String> {
     match pattern {
         MatchPattern::Path(segments) => if segments.len() == 1 { vec![world.words.resolve(*nikaia_std::index::get(&segments, 0)).to_owned()] } else { vec![] },
         MatchPattern::Tuple { parts, .. } => names_of_parts(world, parts),
@@ -25019,7 +25027,7 @@ pub fn pattern_names(world: &CheckWorld<'_>, pattern: &MatchPattern) -> Vec<Stri
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn names_of_parts(world: &CheckWorld<'_>, parts: &[MatchPattern]) -> Vec<String> {
+fn names_of_parts(world: &CheckWorld<'_, '_, '_, '_, '_>, parts: &[MatchPattern]) -> Vec<String> {
     let mut out: Vec<String> = vec![];
     for part in parts.iter() { for name in pattern_names(world, part) { out.push(name); } }
     out
@@ -25027,7 +25035,7 @@ fn names_of_parts(world: &CheckWorld<'_>, parts: &[MatchPattern]) -> Vec<String>
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn names_of_fields(world: &CheckWorld<'_>, fields: &[PatternField]) -> Vec<String> {
+fn names_of_fields(world: &CheckWorld<'_, '_, '_, '_, '_>, fields: &[PatternField]) -> Vec<String> {
     let mut out: Vec<String> = vec![];
     for field in fields.iter() { for name in pattern_names(world, &field.pat) { out.push(name); } }
     out
@@ -25202,7 +25210,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn an_owned_place(&self, world: &CheckWorld<'_>, value: &Expr, on: &Ty) -> bool {
+    pub fn an_owned_place(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, value: &Expr, on: &Ty) -> bool {
         let a_name = matches!(on, Ty::Named { .. });
         if on.is_a_view() || !a_name { return false; }
         let mut root = value;
@@ -25249,7 +25257,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn kept_arguments_are_its_own(&mut self, world: &CheckWorld<'_>, args: &[Expr], params: &[Ty]) {
+    pub fn kept_arguments_are_its_own(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, args: &[Expr], params: &[Ty]) {
         let mut at: i64 = 0;
         while at < args.len() as i64 && at < params.len() as i64 {
             let built = self.text_literal(world, nikaia_std::index::get(&params, nikaia_std::index::at(at)), nikaia_std::index::get(&args, nikaia_std::index::at(at)), true);
@@ -25258,7 +25266,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_match_over_several_error_types(&mut self, world: &CheckWorld<'_>, value: &Expr, arms: &[MatchArm], span: &Span) {
+    pub fn a_match_over_several_error_types(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, value: &Expr, arms: &[MatchArm], span: &Span) {
         if !self.flow.caught_several { return; }
         let is_error = match value {
             Expr::Variable(name, _) => { let name = *name; world.words.resolve(name) == "error" },
@@ -25321,7 +25329,7 @@ impl CheckState {
     pub fn counts_in_usize(&mut self, key: &str, args: &[Expr]) { if check_counts_first(key) && !args.is_empty() { let added = self.facts.count_args.insert(id_of(nikaia_std::index::get(&args, 0)) as i64); } }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_map_read_kept(&mut self, world: &CheckWorld<'_>, found: &Ty, want: &Ty, value: &Expr, span: &Span) {
+    pub fn a_map_read_kept(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr, span: &Span) {
         let node = id_of(value) as i64;
         if !self.flow.map_read_sites.contains(&node) { return; }
         let inner = match want {
@@ -25341,7 +25349,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_map_read_assigned(&mut self, world: &CheckWorld<'_>, into: &Ty, value: &Expr, span: &Span) {
+    pub fn a_map_read_assigned(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, into: &Ty, value: &Expr, span: &Span) {
         match value {
             Expr::Coalesce { value: read, fallback, .. } => {
                 let read = nikaia_std::boxed::open(read); let fallback = nikaia_std::boxed::open(fallback);
@@ -25358,7 +25366,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_view_that_copies(&self, world: &CheckWorld<'_>, ty: &Ty) -> bool {
+    pub fn a_view_that_copies(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, ty: &Ty) -> bool {
         if copies_as_a_view(ty) { return true; }
         match ty {
             Ty::Named { name, args, view } => {
@@ -25375,7 +25383,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_cast_over_a_lent_binding(&mut self, world: &CheckWorld<'_>, operand: &Expr, span: &Span) {
+    pub fn a_cast_over_a_lent_binding(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, operand: &Expr, span: &Span) {
         match operand {
             Expr::Variable(name, _) => {
                 let name = *name;
@@ -25388,7 +25396,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn a_lent_name(&self, world: &CheckWorld<'_>, side: &Expr) -> bool {
+    fn a_lent_name(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, side: &Expr) -> bool {
         match side {
             Expr::Variable(name, _) => {
                 let name = *name;
@@ -25400,19 +25408,19 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn a_side_is_a_view(&self, world: &CheckWorld<'_>, side: &Expr, ty: &Ty) -> bool { copies_as_a_view(ty) || check_view_of_a_type(ty) || self.a_lent_name(world, side) && (check_copied(ty) || check_owned_text(ty)) || self.a_side_is_lent(world, side, ty) }
+    fn a_side_is_a_view(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, side: &Expr, ty: &Ty) -> bool { copies_as_a_view(ty) || check_view_of_a_type(ty) || self.a_lent_name(world, side) && (check_copied(ty) || check_owned_text(ty)) || self.a_side_is_lent(world, side, ty) }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn a_side_is_lent(&self, world: &CheckWorld<'_>, side: &Expr, ty: &Ty) -> bool {
+    fn a_side_is_lent(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, side: &Expr, ty: &Ty) -> bool {
         if ty.is_unknown() { return false; }
         !ty.is_a_view() && !check_owned_text(ty) && self.a_lent_parameter(world, side) || self.a_lent_let(world, side)
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn a_side_is_a_value(&self, world: &CheckWorld<'_>, side: &Expr, ty: &Ty) -> bool { !ty.is_unknown() && !ty.is_a_view() && !self.a_lent_name(world, side) && !self.a_side_is_lent(world, side, ty) }
+    fn a_side_is_a_value(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, side: &Expr, ty: &Ty) -> bool { !ty.is_unknown() && !ty.is_a_view() && !self.a_lent_name(world, side) && !self.a_side_is_lent(world, side, ty) }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_view_compared_with_a_value(&mut self, world: &CheckWorld<'_>, lhs: &Expr, left: &Ty, rhs: &Expr, right: &Ty, at: &Span) {
+    pub fn a_view_compared_with_a_value(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, lhs: &Expr, left: &Ty, rhs: &Expr, right: &Ty, at: &Span) {
         let read_left = self.a_side_is_a_view(world, lhs, left) && self.a_side_is_a_value(world, rhs, right);
         let read_right = self.a_side_is_a_view(world, rhs, right) && self.a_side_is_a_value(world, lhs, left);
         let number_left = left.is_unknown() && self.a_lent_name(world, lhs) && self.a_number_beside(world, rhs, right);
@@ -25425,10 +25433,10 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn a_number_beside(&self, world: &CheckWorld<'_>, side: &Expr, ty: &Ty) -> bool { check_copied(ty) && self.a_side_is_a_value(world, side, ty) || check_number_by_form(side) }
+    fn a_number_beside(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, side: &Expr, ty: &Ty) -> bool { check_copied(ty) && self.a_side_is_a_value(world, side, ty) || check_number_by_form(side) }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_lookup_key_lent(&mut self, world: &CheckWorld<'_>, key: &str, args: &[Expr], found: &[Ty]) {
+    pub fn a_lookup_key_lent(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, key: &str, args: &[Expr], found: &[Ty]) {
         if !is_a_lookup(key) || !world.library.functions.contains_key(key) { return; }
         if args.len() != 1 || found.len() != 1 { return; }
         let given = nikaia_std::index::get(&args, 0);
@@ -25464,7 +25472,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn parts_taken_out_of_a_mut_parameter(&mut self, world: &CheckWorld<'_>, path: &str, body: &Expr, subject: &Ty, parts: &collections::BTreeMap<String, Ty>, handed_from: i64) {
+    pub fn parts_taken_out_of_a_mut_parameter(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, path: &str, body: &Expr, subject: &Ty, parts: &collections::BTreeMap<String, Ty>, handed_from: i64) {
         for repeat in self.repeats.iter() { if repeat.what == "lambda" { return; } }
         if self.scope.is_empty() { return; }
         let frame = (*nikaia_std::index::get(&self.scope, nikaia_std::index::at(self.scope.len() as i64 - 1))).to_owned();
@@ -25568,7 +25576,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn a_name_that_changes(&self, world: &CheckWorld<'_>, expr: &Expr) -> bool {
+    fn a_name_that_changes(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
             Expr::Variable(symbol, _) => {
                 let symbol = *symbol;
@@ -25581,7 +25589,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn a_name_that_is_lent(&self, world: &CheckWorld<'_>, expr: &Expr) -> bool {
+    fn a_name_that_is_lent(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
             Expr::Variable(symbol, _) => {
                 let symbol = *symbol;
@@ -25595,7 +25603,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn the_compiler_writes_the_reference(&mut self, world: &CheckWorld<'_>, contract: &FnContract, at: i64, given: Option<&Expr>, found: &Ty, want: &Ty, own: bool, written: &str, span: &Span) -> bool {
+    pub fn the_compiler_writes_the_reference(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, contract: &FnContract, at: i64, given: Option<&Expr>, found: &Ty, want: &Ty, own: bool, written: &str, span: &Span) -> bool {
         let mut takes_a_receiver = false;
         let mut changes = false;
         let mut position = at;
@@ -25776,7 +25784,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_fatal_type_that_is_no_error(&mut self, world: &CheckWorld<'_>, target: &str, span: &Span) {
+    pub fn a_fatal_type_that_is_no_error(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, target: &str, span: &Span) {
         let own = world.own.implementations.get("Error");
         if own.is_some() && nikaia_std::index::or(match own {
             Some(__nikaia_it) => Some(__nikaia_it.contains(target)),
@@ -25844,13 +25852,13 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_constructor_nothing_describes(&mut self, world: &CheckWorld<'_>, name: &str, args: &[Expr], span: &Span) {
+    pub fn a_constructor_nothing_describes(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, name: &str, args: &[Expr], span: &Span) {
         if !args.is_empty() || !world.library.types.contains_key(name) || resolve_call(world, name).is_some() { return; }
         self.findings.push(check_refusal("NK1190", span, format!("You can't call `{}(…)`: it has no constructor.", name), vec![format!("Calling `{}()` runs `{}::new` from the type's description, and that description has no `{}::new`.", name, name, name)], None));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn nothing_declares_it(&mut self, world: &CheckWorld<'_>, expr: &Expr, span: &Span) {
+    pub fn nothing_declares_it(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr, span: &Span) {
         let name = match expr {
             Expr::Variable(symbol, _) => { let symbol = *symbol; world.words.resolve(symbol).to_owned() },
             _ => return,
@@ -25862,7 +25870,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_cleanup_shaped(&mut self, world: &CheckWorld<'_>, target: &str, methods: &[Spanned<Item>], span: &Span) {
+    pub fn a_cleanup_shaped(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, target: &str, methods: &[Spanned<Item>], span: &Span) {
         let mut wrote_cleanup = false;
         let note: String = String::from("`impl Cleanup` has exactly one method, `fn cleanup(ref mut self)`, and it may pause and may fail.");
         for method in methods.iter() {
@@ -25957,7 +25965,7 @@ fn a_named_type(ty: &Ty) -> Option<String> {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn bounds_wanted(&self, world: &CheckWorld<'_>, key: &str) -> Option<collections::BTreeMap<String, Vec<String>>> {
+    fn bounds_wanted(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, key: &str) -> Option<collections::BTreeMap<String, Vec<String>>> {
         if self.declared_bounds.contains_key(key) {
             return match *nikaia_std::index::get(&self.declared_bounds, key) {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -25968,7 +25976,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_bound_the_argument_does_not_meet(&mut self, world: &CheckWorld<'_>, key: &str, bound: &collections::BTreeMap<String, Ty>, span: &Span) {
+    pub fn a_bound_the_argument_does_not_meet(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, key: &str, bound: &collections::BTreeMap<String, Ty>, span: &Span) {
         let wanted = match self.bounds_wanted(world, key) { Some(__nikaia_value) => __nikaia_value, None => return };
         for (parameter, traits) in wanted.iter() {
             let held = match bound.get(parameter) { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -26094,7 +26102,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_std_name_without_its_module(&mut self, world: &CheckWorld<'_>, name: &str, span: &Span) {
+    pub fn a_std_name_without_its_module(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, name: &str, span: &Span) {
         if name.contains("::") { return; }
         let known = self.binding(name).is_some() || resolve_call(world, name).is_some() || self.structs.contains_key(name) || self.enums.contains_key(name) || world.own.types.contains_key(name) || self.modules.contains(name) || self.grammars.contains_key(name) || name == "access_all" || name == "update_all" || is_hull(name);
         if known { return; }
@@ -26162,7 +26170,7 @@ impl CheckState {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn resolve_call(world: &CheckWorld<'_>, name: &str) -> Option<CheckResolved> {
+pub fn resolve_call(world: &CheckWorld<'_, '_, '_, '_, '_>, name: &str) -> Option<CheckResolved> {
     if world.own.functions.contains_key(name) {
         return Some(CheckResolved { key: name.to_owned(), contract: match match *nikaia_std::index::get(&world.own.functions, name) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -26193,7 +26201,7 @@ pub fn resolve_call(world: &CheckWorld<'_>, name: &str) -> Option<CheckResolved>
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn resolve_method(world: &CheckWorld<'_>, key: &str) -> Option<CheckResolved> {
+pub fn resolve_method(world: &CheckWorld<'_, '_, '_, '_, '_>, key: &str) -> Option<CheckResolved> {
     if world.own.functions.contains_key(key) {
         return Some(CheckResolved { key: key.to_owned(), contract: match match *nikaia_std::index::get(&world.own.functions, key) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -26235,14 +26243,14 @@ fn a_lock_refusal(verdict: &Crossing) -> bool {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn crosses_into_a_task(&mut self, world: &CheckWorld<'_>, body: &Expr, span: &Span) {
+    pub fn crosses_into_a_task(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, body: &Expr, span: &Span) {
         let mut named: collections::BTreeSet<String> = collections::BTreeSet::new();
         names_in(body, world.words, &mut named);
         for name in named.iter() { self.a_name_crosses(world, name, span); }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn a_name_crosses(&mut self, world: &CheckWorld<'_>, name: &str, span: &Span) {
+    fn a_name_crosses(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, name: &str, span: &Span) {
         let ty = match self.lookup(name) { Some(__nikaia_value) => __nikaia_value, None => return };
         let verdict = crossing(&ty, &Walking { own: world.own, library: world.library, into: Going::Ours });
         if verdict.refused_part().is_none() { return; }
@@ -26252,7 +26260,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn crosses_into_an_unseen_call(&mut self, world: &CheckWorld<'_>, callee: &str, args: &[Expr], found: &[Ty], config: &[ConfigArg], passed: &[(String, Ty)], span: &Span, why: &str) {
+    pub fn crosses_into_an_unseen_call(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, callee: &str, args: &[Expr], found: &[Ty], config: &[ConfigArg], passed: &[(String, Ty)], span: &Span, why: &str) {
         let mut at: i64 = 0;
         while at < args.len() as i64 && at < found.len() as i64 {
             let (what, path) = names_the_argument(world, nikaia_std::index::get(&args, nikaia_std::index::at(at)), at);
@@ -26271,7 +26279,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    fn a_value_crosses(&mut self, world: &CheckWorld<'_>, callee: &str, what: String, path: Option<String>, ty: &Ty, span: &Span, why: &str) {
+    fn a_value_crosses(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, callee: &str, what: String, path: Option<String>, ty: &Ty, span: &Span, why: &str) {
         let verdict = crossing(ty, &Walking { own: world.own, library: world.library, into: Going::Foreign });
         if verdict.refused_part().is_none() { return; }
         if a_lock_refusal(&verdict) {
@@ -26465,7 +26473,7 @@ pub fn constructed(constructor: &str) -> Option<String> {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_panic(&self, world: &CheckWorld<'_>, expr: &Expr) -> bool {
+    pub fn a_panic(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
             Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); match func {
                 Expr::Variable(name, _) => { let name = *name; world.words.resolve(name) == "panic" && self.lookup("panic").is_none() && !world.own.functions.contains_key("panic") },
@@ -26476,7 +26484,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn exits(&self, world: &CheckWorld<'_>, expr: &Expr) -> bool {
+    pub fn exits(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
             Expr::Throw(_, _) => true,
             Expr::Return(_, _) => true,
@@ -26486,7 +26494,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn block_exits(&self, world: &CheckWorld<'_>, block: &Block) -> bool {
+    pub fn block_exits(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, block: &Block) -> bool {
         if block.stmts.is_empty() { return false; }
         match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1)).node {
             Stmt::Return(_) => true,
@@ -26496,7 +26504,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn leaves(&self, world: &CheckWorld<'_>, expr: &Expr) -> bool {
+    pub fn leaves(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         if self.jumps(world, expr) { return true; }
         match expr {
             Expr::Block(block, _) => self.block_leaves(world, block),
@@ -26505,7 +26513,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn block_leaves(&self, world: &CheckWorld<'_>, block: &Block) -> bool {
+    pub fn block_leaves(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, block: &Block) -> bool {
         if block.stmts.is_empty() { return false; }
         match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1)).node {
             Stmt::Return(_) => true,
@@ -26517,7 +26525,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn jumps(&self, world: &CheckWorld<'_>, expr: &Expr) -> bool {
+    pub fn jumps(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         let plain = matches!(expr, Expr::Throw(_, _) | Expr::Return(_, _) | Expr::Break(_) | Expr::Continue(_));
         plain || self.a_panic(world, expr)
     }
@@ -26749,12 +26757,12 @@ pub struct CheckFinding {
 pub fn check_refusal(code: &str, span: &Span, message: String, notes: Vec<String>, help: Option<String>) -> CheckFinding { CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: code.to_owned(), message, notes, help, labels: vec![] } }
 
 #[derive(Debug, Clone)]
-pub struct CheckWorld<'a> {
+pub struct CheckWorld<'a, 'a1, 'a2, 'a3, 'a4> {
     pub words: &'a winnow_grammar::InternerContext,
-    pub own: &'a Ledger,
-    pub library: &'a Ledger,
-    pub here: ParsedView<'a>,
-    pub beside: Vec<ParsedView<'a>>,
+    pub own: &'a1 Ledger,
+    pub library: &'a2 Ledger,
+    pub here: ParsedView<'a3, 'a3, 'a3, 'a3, 'a3>,
+    pub beside: Vec<ParsedView<'a4, 'a4, 'a4, 'a4, 'a4>>,
     pub here_at: i64,
     pub fields_by_base: collections::BTreeMap<String, Vec<Ty>>,
     pub newly_throws: collections::BTreeMap<String, Vec<String>>,
@@ -26946,7 +26954,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_lent_let(&self, world: &CheckWorld<'_>, side: &Expr) -> bool {
+    pub fn a_lent_let(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, side: &Expr) -> bool {
         let name = match side {
             Expr::Variable(symbol, _) => { let symbol = *symbol; world.words.resolve(symbol).to_owned() },
             _ => return false,
@@ -26977,7 +26985,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_sequence_is_walked(&mut self, iter: &Expr, over: &Ty, span: &Span, world: &CheckWorld<'_>) {
+    pub fn a_sequence_is_walked(&mut self, iter: &Expr, over: &Ty, span: &Span, world: &CheckWorld<'_, '_, '_, '_, '_>) {
         if !a_sequence_that_is_used_up(over) { return; }
         let name = match iter {
             Expr::Variable(symbol, _) => { let symbol = *symbol; world.words.resolve(symbol).to_owned() },
@@ -26988,13 +26996,13 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn hands_over_name(&mut self, world: &CheckWorld<'_>, name: &str, to: &str, span: &Span) {
+    pub fn hands_over_name(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, name: &str, to: &str, span: &Span) {
         let ty = match self.lookup(name) { Some(__nikaia_value) => __nikaia_value, None => return };
         self.hands_over_path(world, name.to_owned(), &ty, self.read_seq, to, span);
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn hands_over_path(&mut self, world: &CheckWorld<'_>, path: String, ty: &Ty, seq: i64, to: &str, span: &Span) {
+    pub fn hands_over_path(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, path: String, ty: &Ty, seq: i64, to: &str, span: &Span) {
         if !self.task_bindings.is_empty() { return; }
         if !self.takes_away(world, &ty.unseen()) { return; }
         let root = a_root_segment(&path);
@@ -27225,7 +27233,7 @@ fn every_choice_held(given: &[(i64, i64)], taking: &[(i64, i64)], way: &[(i64, i
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn coalesces_not_lent_are_taken(&mut self, world: &CheckWorld<'_>) {
+    pub fn coalesces_not_lent_are_taken(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>) {
         let pending = self.flow.pending_coalesces.to_owned();
         self.flow.pending_coalesces = vec![];
         for one in pending.iter() {
@@ -27246,7 +27254,7 @@ impl CheckState {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_task_holds_these_across_a_pause<H: CheckHost>(&mut self, world: &CheckWorld<'_>, host: &H, body: &Block, bound: &[(String, Ty, i64)], span: &Span) {
+    pub fn a_task_holds_these_across_a_pause<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, body: &Block, bound: &[(String, Ty, i64)], span: &Span) {
         if bound.is_empty() { return; }
         let mut pauses: Vec<i64> = vec![];
         let mut named: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
@@ -27272,7 +27280,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn walk_the_body<H: CheckHost>(&self, world: &CheckWorld<'_>, host: &H, body: &Block, pauses: &mut Vec<i64>, named: &mut collections::BTreeMap<String, i64>) {
+    fn walk_the_body<H: CheckHost>(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, body: &Block, pauses: &mut Vec<i64>, named: &mut collections::BTreeMap<String, i64>) {
         for stmt in body.stmts.iter() {
             let at = stmt.span.start as i64;
             for each in check_visit_stmt(&stmt.node) { self.a_task_looks_at(world, host, each, at, pauses, named); }
@@ -27281,7 +27289,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn a_task_looks_at<H: CheckHost>(&self, world: &CheckWorld<'_>, host: &H, expr: &Expr, at: i64, pauses: &mut Vec<i64>, named: &mut collections::BTreeMap<String, i64>) {
+    fn a_task_looks_at<H: CheckHost>(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, expr: &Expr, at: i64, pauses: &mut Vec<i64>, named: &mut collections::BTreeMap<String, i64>) {
         if self.pauses_here(world, expr, at) { pauses.push(at); }
         let mut used: collections::BTreeSet<String> = collections::BTreeSet::new();
         names_in(expr, world.words, &mut used);
@@ -27293,7 +27301,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn pauses_here(&self, world: &CheckWorld<'_>, expr: &Expr, at: i64) -> bool {
+    fn pauses_here(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr, at: i64) -> bool {
         let callee = match callee_of(world.words, expr, world.own, world.library, world.here.items) { Some(__nikaia_value) => __nikaia_value, None => return false };
         match callee {
             Callee::Method => match expr {
@@ -27418,7 +27426,7 @@ fn a_string_type() -> Ty { Ty::Named { name: String::from("String"), args: vec![
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn method_word(world: &CheckWorld<'_>, expr: &Expr) -> String {
+fn method_word(world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr) -> String {
     match expr {
         Expr::MethodCall { method, args, .. } => { let method = *method; if args.is_empty() { world.words.resolve(method).to_owned() } else { String::from("") } },
         _ => String::from(""),
@@ -27441,7 +27449,7 @@ fn a_text_literal_expr(expr: &Expr) -> bool { matches!(expr, Expr::LitStr { .. }
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn text_literal(&mut self, world: &CheckWorld<'_>, want: &Ty, value: &Expr, owned: bool) -> Option<Ty> {
+    pub fn text_literal(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, want: &Ty, value: &Expr, owned: bool) -> Option<Ty> {
         match want {
             Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); return self.text_literal(world, inner, value, owned); },
             _ => { },
@@ -27534,7 +27542,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn tuple_literal(&mut self, world: &CheckWorld<'_>, found: &Ty, want: &Ty, value: &Expr) -> Option<Ty> {
+    pub fn tuple_literal(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr) -> Option<Ty> {
         let wants: Vec<Ty> = match want {
             Ty::Tuple(parts) => parts.to_owned(),
             _ => return None,
@@ -27562,7 +27570,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn list_of_tuple_literals(&mut self, world: &CheckWorld<'_>, found: &Ty, want: &Ty, value: &Expr) -> Option<Ty> {
+    pub fn list_of_tuple_literals(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr) -> Option<Ty> {
         let name = match want {
             Ty::Named { name, view, .. } => { let view = *view; if view { return None; } else { name.to_owned() } },
             _ => return None,
@@ -27934,10 +27942,10 @@ pub fn check_peeled(value: &Expr) -> &Expr {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn takes_away(&self, world: &CheckWorld<'_>, ty: &Ty) -> bool { moves_away(ty) && !a_ledger_copies(ty, &vec![world.library]) && !self.a_package_copy(world, ty) }
+    pub fn takes_away(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, ty: &Ty) -> bool { moves_away(ty) && !a_ledger_copies(ty, &vec![world.library]) && !self.a_package_copy(world, ty) }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_package_copy(&self, world: &CheckWorld<'_>, ty: &Ty) -> bool {
+    pub fn a_package_copy(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, ty: &Ty) -> bool {
         match ty {
             Ty::Named { name, args, view } => { let view = *view; !view && args.is_empty() && self.copies_in_the_package.contains(name) },
             Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); self.a_package_copy(world, inner) || !self.takes_away(world, inner) },
@@ -27947,13 +27955,13 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn no_part_is_taken_away(&self, world: &CheckWorld<'_>, parts: &[Ty]) -> bool {
+    fn no_part_is_taken_away(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, parts: &[Ty]) -> bool {
         for part in parts.iter() { if self.takes_away(world, part) { return false; } }
         true
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn copied(&self, world: &CheckWorld<'_>, ty: &Ty) -> bool { copies_plainly(ty) || a_ledger_copies(ty, &vec![world.library]) }
+    pub fn copied(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, ty: &Ty) -> bool { copies_plainly(ty) || a_ledger_copies(ty, &vec![world.library]) }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn no_number_is(&self, ty: &Ty) -> bool {
@@ -27989,7 +27997,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_view_of_what_does_not_copy(&self, world: &CheckWorld<'_>, found: &Ty, want: &Ty) -> bool {
+    pub fn a_view_of_what_does_not_copy(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, found: &Ty, want: &Ty) -> bool {
         match found {
             Ty::Named { name, args, view } => { let view = *view; view && self.is_a_view_of(world, name, args, want) },
             _ => false,
@@ -27997,7 +28005,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn is_a_view_of(&self, world: &CheckWorld<'_>, viewed: &str, viewed_args: &[Ty], want: &Ty) -> bool {
+    fn is_a_view_of(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, viewed: &str, viewed_args: &[Ty], want: &Ty) -> bool {
         match want {
             Ty::Named { name, args, view } => { let view = *view; !view && viewed == name && viewed_args == args && a_type_base(name) != "String" && a_type_base(name) != "str" && !self.copied(world, want) && !self.copies_in_the_package.contains(name) },
             _ => false,
@@ -28014,7 +28022,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_copy_under_another_name(&mut self, world: &CheckWorld<'_>, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], span: &Span) {
+    pub fn a_copy_under_another_name(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], span: &Span) {
         let written = world.words.resolve(method).to_owned();
         if !args.is_empty() || written != "to_owned" || !ledger_candidates(world.own, &written).is_empty() { return; }
         let shown: String = match receiver {
@@ -28366,7 +28374,7 @@ fn check_walks_clash(earlier: &Accounted, later: &Accounted) -> Option<Verdict> 
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn branches_meet_on_nothing(&mut self, world: &CheckWorld<'_>, block: &Block) {
+    pub fn branches_meet_on_nothing(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, block: &Block) {
         for stmt in block.stmts.iter() {
             match &stmt.node {
                 Stmt::Let { names, .. } => {
@@ -28397,7 +28405,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_guard_reading_inside_a_box<H: CheckHost>(&mut self, world: &CheckWorld<'_>, host: &H, pattern: &MatchPattern, body: &Expr, guard: &Expr) {
+    pub fn a_guard_reading_inside_a_box<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, pattern: &MatchPattern, body: &Expr, guard: &Expr) {
         let mut inside: Vec<String> = vec![];
         self.names_inside_boxes(world, pattern, &mut inside);
         if inside.is_empty() { return; }
@@ -28418,20 +28426,20 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_claim_reaches<H: CheckHost>(&self, world: &CheckWorld<'_>, host: &H, condition: &Expr, not_pure: &mut Vec<String>) {
+    pub fn a_claim_reaches<H: CheckHost>(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, condition: &Expr, not_pure: &mut Vec<String>) {
         let mut found: Vec<String> = vec![];
         for each in check_visit_preorder(condition) { self.a_claim_looks_at(world, host, each, &mut found); }
         not_pure.extend(found);
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn a_claim_looks_at<H: CheckHost>(&self, world: &CheckWorld<'_>, host: &H, expr: &Expr, found: &mut Vec<String>) {
+    fn a_claim_looks_at<H: CheckHost>(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, expr: &Expr, found: &mut Vec<String>) {
         self.a_claim_reads(world, expr, found);
         if check_visit_has_holes(expr) { for hole in host.literal_holes(expr) { for inner in check_visit_preorder(&hole) { self.a_claim_looks_at(world, host, inner, found); } } }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn a_claim_reads(&self, world: &CheckWorld<'_>, expr: &Expr, found: &mut Vec<String>) {
+    fn a_claim_reads(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr, found: &mut Vec<String>) {
         let form = check_walks_form(expr);
         if !form.is_empty() { found.push(format!("the condition {}", form)); }
         match expr {
@@ -28441,7 +28449,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn a_claim_names(&self, world: &CheckWorld<'_>, func: &Expr, found: &mut Vec<String>) {
+    fn a_claim_names(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, func: &Expr, found: &mut Vec<String>) {
         let mut name: String = "".to_owned();
         match func {
             Expr::Variable(symbol, _) => {
@@ -28509,7 +28517,7 @@ fn check_walks_form(expr: &Expr) -> String {
     }
 }
 
-fn check_walks_reads<H: CheckHost>(world: &CheckWorld<'_>, host: &H, expr: &Expr, inside: &[String], read: &mut collections::BTreeSet<String>) {
+fn check_walks_reads<H: CheckHost>(world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, expr: &Expr, inside: &[String], read: &mut collections::BTreeSet<String>) {
     match expr {
         Expr::Variable(symbol, _) => {
             let symbol = *symbol;
@@ -28759,7 +28767,7 @@ pub fn two_integer_types_for_one_variable(key: &str, variable: &str, bound: &str
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn one_type_variable_two_integer_types(&mut self, world: &CheckWorld<'_>, key: &str, wanted: &[(String, Ty)], given: &[Expr], found: &[Ty], span: &Span) {
+    pub fn one_type_variable_two_integer_types(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, key: &str, wanted: &[(String, Ty)], given: &[Expr], found: &[Ty], span: &Span) {
         let mut variables: Vec<String> = vec![];
         let mut types: Vec<String> = vec![];
         let mut places: Vec<i64> = vec![];
@@ -30545,7 +30553,7 @@ fn emit_is_a_par_fold(rule: &GrammarRule) -> bool {
     false
 }
 
-fn emit_either_at(world: &EmitWorld<'_>, item: &Item, own: &str, at: i64) -> i64 {
+fn emit_either_at(world: &EmitWorld<'_, '_, '_, '_>, item: &Item, own: &str, at: i64) -> i64 {
     match item {
         Item::Fn { name, args, .. } => {
             let name = *name;
@@ -30559,7 +30567,7 @@ fn emit_either_at(world: &EmitWorld<'_>, item: &Item, own: &str, at: i64) -> i64
     -1
 }
 
-fn emit_callee_text(world: &EmitWorld<'_>, func: &Expr) -> Option<String> {
+fn emit_callee_text(world: &EmitWorld<'_, '_, '_, '_>, func: &Expr) -> Option<String> {
     match func {
         Expr::Variable(name, _) => {
             let name = *name;
@@ -30579,7 +30587,7 @@ fn emit_callee_text(world: &EmitWorld<'_>, func: &Expr) -> Option<String> {
 }
 
 impl EmitState {
-    pub fn enters_a_grammar(&self, world: &EmitWorld<'_>, receiver: &Expr, method: winnow_grammar::Symbol) -> bool {
+    pub fn enters_a_grammar(&self, world: &EmitWorld<'_, '_, '_, '_>, receiver: &Expr, method: winnow_grammar::Symbol) -> bool {
         match receiver {
             Expr::Variable(name, _) => {
                 let name = *name;
@@ -30591,7 +30599,7 @@ impl EmitState {
         }
         false
     }
-    fn emit_enters_by_path(&self, world: &EmitWorld<'_>, expr: &Expr) -> bool {
+    fn emit_enters_by_path(&self, world: &EmitWorld<'_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
             Expr::Call { func, args, .. } => {
                 let func = nikaia_std::boxed::open(func);
@@ -30604,7 +30612,7 @@ impl EmitState {
         }
         false
     }
-    pub fn a_tail_that_enters_a_grammar(&self, world: &EmitWorld<'_>, stmt: &Stmt) -> bool {
+    pub fn a_tail_that_enters_a_grammar(&self, world: &EmitWorld<'_, '_, '_, '_>, stmt: &Stmt) -> bool {
         let mut inside: Vec<&Expr> = vec![];
         match stmt {
             Stmt::Expr(expr) => { inside = visited_in_expr(expr); },
@@ -30620,7 +30628,7 @@ impl EmitState {
         }
         false
     }
-    fn emit_enters_a_parallel_rule(&self, world: &EmitWorld<'_>, expr: &Expr) -> bool {
+    fn emit_enters_a_parallel_rule(&self, world: &EmitWorld<'_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
             Expr::Call { func, .. } => {
                 let func = nikaia_std::boxed::open(func);
@@ -30637,7 +30645,7 @@ impl EmitState {
         }
         false
     }
-    pub fn uses_driver(&self, world: &EmitWorld<'_>) -> bool {
+    pub fn uses_driver(&self, world: &EmitWorld<'_, '_, '_, '_>) -> bool {
         for item in world.items.iter() {
             match &item.node {
                 Item::Fn { body, .. } => { for expr in visited_in_block(body) { if self.emit_enters_a_parallel_rule(world, expr) { return true; } } },
@@ -30646,7 +30654,7 @@ impl EmitState {
         }
         false
     }
-    pub fn either_param(&self, world: &EmitWorld<'_>, callee: &str, at: i64) -> bool {
+    pub fn either_param(&self, world: &EmitWorld<'_, '_, '_, '_>, callee: &str, at: i64) -> bool {
         let own = emit_base(callee);
         let mut seen = 0;
         for item in world.items.iter() {
@@ -30667,7 +30675,7 @@ impl EmitState {
         }
         seen > 0
     }
-    pub fn either_field(&self, world: &EmitWorld<'_>, owner: &str, field: winnow_grammar::Symbol) -> bool {
+    pub fn either_field(&self, world: &EmitWorld<'_, '_, '_, '_>, owner: &str, field: winnow_grammar::Symbol) -> bool {
         let wanted = world.words.resolve(field);
         let own = emit_base(owner);
         for item in world.items.iter() {
@@ -30681,7 +30689,7 @@ impl EmitState {
         }
         false
     }
-    pub fn is_variant(&self, world: &EmitWorld<'_>, owner: &str, variant: &str) -> bool {
+    pub fn is_variant(&self, world: &EmitWorld<'_, '_, '_, '_>, owner: &str, variant: &str) -> bool {
         for item in world.items.iter() {
             match &item.node {
                 Item::Enum { name, variants, .. } => {
@@ -30695,7 +30703,7 @@ impl EmitState {
         for each in entry.variants.iter() { if each.name == variant { return true; } }
         false
     }
-    pub fn opens_a_paused_scope(&self, world: &EmitWorld<'_>, func: &Expr, args: &[Expr]) -> bool {
+    pub fn opens_a_paused_scope(&self, world: &EmitWorld<'_, '_, '_, '_>, func: &Expr, args: &[Expr]) -> bool {
         match func {
             Expr::Path(_, _) => { },
             _ => { return false; },
@@ -30704,7 +30712,7 @@ impl EmitState {
         if unaliased_in(world.aliases, &name) != "task::scope" || args.is_empty() { return false; }
         self.facts.paused_scopes.contains(&node_key(nikaia_std::index::get(&args, 0)))
     }
-    pub fn decided_by_its_lambda(&self, world: &EmitWorld<'_>, func: &Expr) -> bool {
+    pub fn decided_by_its_lambda(&self, world: &EmitWorld<'_, '_, '_, '_>, func: &Expr) -> bool {
         let name = match emit_callee_text(world, func) { Some(__nikaia_value) => __nikaia_value, None => return false };
         self.lambda_decides(&unaliased_in(world.aliases, &name))
     }
@@ -30714,16 +30722,16 @@ impl EmitState {
         let found = match self.shared.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return Count::Atomic };
         found.clone()
     }
-    fn emit_any_can_fail(&self, world: &EmitWorld<'_>, statement: i64, all: &[Expr]) -> bool {
+    fn emit_any_can_fail(&self, world: &EmitWorld<'_, '_, '_, '_>, statement: i64, all: &[Expr]) -> bool {
         for each in all.iter() { if self.branch_can_fail(world, statement, each) { return true; } }
         false
     }
-    fn emit_config_can_fail(&self, world: &EmitWorld<'_>, statement: i64, config: &[ConfigArg]) -> bool {
+    fn emit_config_can_fail(&self, world: &EmitWorld<'_, '_, '_, '_>, statement: i64, config: &[ConfigArg]) -> bool {
         for each in config.iter() { if self.branch_can_fail(world, statement, &each.value) { return true; } }
         false
     }
-    fn emit_method_can_fail(&self, world: &EmitWorld<'_>, statement: i64, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg]) -> bool { self.enters_a_grammar(world, receiver, method) || self.method_can_fail(node_key(receiver)) || self.branch_can_fail(world, statement, receiver) || self.emit_any_can_fail(world, statement, args) || self.emit_config_can_fail(world, statement, config) }
-    fn emit_block_can_fail(&self, world: &EmitWorld<'_>, statement: i64, block: &Block) -> bool {
+    fn emit_method_can_fail(&self, world: &EmitWorld<'_, '_, '_, '_>, statement: i64, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg]) -> bool { self.enters_a_grammar(world, receiver, method) || self.method_can_fail(node_key(receiver)) || self.branch_can_fail(world, statement, receiver) || self.emit_any_can_fail(world, statement, args) || self.emit_config_can_fail(world, statement, config) }
+    fn emit_block_can_fail(&self, world: &EmitWorld<'_, '_, '_, '_>, statement: i64, block: &Block) -> bool {
         for stmt in block.stmts.iter() {
             let at = stmt.span.start as i64;
             if nikaia_std::index::or(self.facts.settle_lets.get(&at), || false) { return true; }
@@ -30735,7 +30743,7 @@ impl EmitState {
         }
         false
     }
-    fn emit_handler_can_fail(&self, world: &EmitWorld<'_>, statement: i64, handler: &Block) -> bool {
+    fn emit_handler_can_fail(&self, world: &EmitWorld<'_, '_, '_, '_>, statement: i64, handler: &Block) -> bool {
         for stmt in handler.stmts.iter() {
             match &stmt.node {
                 Stmt::Expr(value) => { if self.branch_can_fail(world, statement, value) { return true; } },
@@ -30744,7 +30752,7 @@ impl EmitState {
         }
         false
     }
-    pub fn branch_can_fail(&self, world: &EmitWorld<'_>, statement: i64, value: &Expr) -> bool {
+    pub fn branch_can_fail(&self, world: &EmitWorld<'_, '_, '_, '_>, statement: i64, value: &Expr) -> bool {
         match value {
             Expr::Call { func, args, config, .. } => {
                 let func = nikaia_std::boxed::open(func);
@@ -30784,7 +30792,7 @@ impl EmitState {
 }
 
 impl EmitState {
-    pub fn path(&self, world: &EmitWorld<'_>, trusting: bool, unpinned: bool, segments: &[String]) -> String {
+    pub fn path(&self, world: &EmitWorld<'_, '_, '_, '_>, trusting: bool, unpinned: bool, segments: &[String]) -> String {
         if segments.len() == 2 && *nikaia_std::index::get(&segments, 1) == "new" {
             if unpinned && (*nikaia_std::index::get(&segments, 0) == "HashMap" || *nikaia_std::index::get(&segments, 0) == "HashSet") { return format!("{}::default", *nikaia_std::index::get(&segments, 0)); }
             let chosen = self.map_name(trusting, nikaia_std::index::get(&segments, 0));
@@ -30795,7 +30803,7 @@ impl EmitState {
         let joined = mapped.join("::");
         unaliased_in(world.aliases, &joined)
     }
-    pub fn written_name(&self, world: &EmitWorld<'_>, crossings: bool, trusting: bool, name: &str, count: Count) -> String {
+    pub fn written_name(&self, world: &EmitWorld<'_, '_, '_, '_>, crossings: bool, trusting: bool, name: &str, count: Count) -> String {
         if name == "Shared" { return rust_name(count); }
         if name == "Locked" {
             if !crossings { return lock_name(Count::Plain); }
@@ -30804,13 +30812,13 @@ impl EmitState {
         let mapped = self.mapped_path(trusting, name);
         unaliased_in(world.aliases, &mapped)
     }
-    pub fn hull_new(&self, world: &EmitWorld<'_>, crossings: bool, trusting: bool, name: &str, count: Count) -> Option<Vec<String>> {
+    pub fn hull_new(&self, world: &EmitWorld<'_, '_, '_, '_>, crossings: bool, trusting: bool, name: &str, count: Count) -> Option<Vec<String>> {
         if name == "Shared" { return Some(vec![self.written_name(world, crossings, trusting, "Shared", count)]); }
         if name == "Locked" { return Some(vec![self.written_name(world, crossings, trusting, "Locked", count)]); }
         if name == "SharedMut" { return Some(vec![self.written_name(world, crossings, trusting, "Shared", count), self.written_name(world, crossings, trusting, "Locked", count)]); }
         None
     }
-    pub fn attributes_read(&self, world: &EmitWorld<'_>, wanted: &str, args: &[Expr], texts: &[String]) -> String {
+    pub fn attributes_read(&self, world: &EmitWorld<'_, '_, '_, '_>, wanted: &str, args: &[Expr], texts: &[String]) -> String {
         let mut written: String = String::from("");
         if !args.is_empty() { written = nikaia_std::index::or(emit_callee_text(world, nikaia_std::index::get(&args, 0)), || "".into()); }
         let asked = unaliased_in(world.aliases, &written);
@@ -30831,7 +30839,7 @@ impl EmitState {
     }
 }
 
-pub fn emit_is_a_shape_bound(world: &EmitWorld<'_>, bound: &str) -> bool {
+pub fn emit_is_a_shape_bound(world: &EmitWorld<'_, '_, '_, '_>, bound: &str) -> bool {
     if bound != "Struct" && bound != "Enum" { return false; }
     for item in world.items.iter() {
         match &item.node {
@@ -30845,7 +30853,7 @@ pub fn emit_is_a_shape_bound(world: &EmitWorld<'_>, bound: &str) -> bool {
     true
 }
 
-pub fn emit_bounded(world: &EmitWorld<'_>, param: &GenericParam) -> String {
+pub fn emit_bounded(world: &EmitWorld<'_, '_, '_, '_>, param: &GenericParam) -> String {
     let name = escaped_name(world.words.resolve(param.name));
     let mut bounds: Vec<String> = vec![];
     for bound in param.bounds.iter() {
@@ -31052,7 +31060,7 @@ fn emit_arg_is_null(arg: &Expr) -> bool { matches!(arg, Expr::LitNull(_)) }
 
 fn emit_arg_is_text_literal(arg: &Expr) -> bool { matches!(arg, Expr::LitStr { .. }) }
 
-fn emit_arg_function_key(world: &EmitWorld<'_>, arg: &Expr) -> Option<String> {
+fn emit_arg_function_key(world: &EmitWorld<'_, '_, '_, '_>, arg: &Expr) -> Option<String> {
     match arg {
         Expr::Variable(name, _) => { let name = *name; Some(emit_text(world, name)) },
         Expr::Path(parts, _) => Some(emit_arg_joined(world, parts)),
@@ -31060,7 +31068,7 @@ fn emit_arg_function_key(world: &EmitWorld<'_>, arg: &Expr) -> Option<String> {
     }
 }
 
-fn emit_arg_joined(world: &EmitWorld<'_>, parts: &[winnow_grammar::Symbol]) -> String {
+fn emit_arg_joined(world: &EmitWorld<'_, '_, '_, '_>, parts: &[winnow_grammar::Symbol]) -> String {
     let mut names: Vec<String> = vec![];
     for part in parts.iter() {
         let part = *part;
@@ -31082,19 +31090,19 @@ impl EmitWalk {
 
 impl EmitState {
     fn emit_arg_calls_itself(&self, function: &str, callee: &str) -> bool { function == callee || function.ends_with(&format!("::{}", callee)) }
-    fn emit_arg_handed_on_changed(&self, world: &EmitWorld<'_>, function: &str, callee: &str, i: i64, arg: &Expr) -> bool {
+    fn emit_arg_handed_on_changed(&self, world: &EmitWorld<'_, '_, '_, '_>, function: &str, callee: &str, i: i64, arg: &Expr) -> bool {
         match arg {
             Expr::Variable(name, _) => { let name = *name; self.copied_in_place(function, &emit_text(world, name)) && self.changes_at(callee, i) },
             _ => false,
         }
     }
-    fn emit_arg_code_handed_on(&self, world: &EmitWorld<'_>, function: &str, callee: &str, i: i64, arg: &Expr) -> bool {
+    fn emit_arg_code_handed_on(&self, world: &EmitWorld<'_, '_, '_, '_>, function: &str, callee: &str, i: i64, arg: &Expr) -> bool {
         match arg {
             Expr::Variable(name, _) => { let name = *name; self.a_code_parameter_taken_whole(world, function, &emit_text(world, name)) && self.runs_code_at(callee, i) },
             _ => false,
         }
     }
-    fn emit_arg_only_read(&self, world: &EmitWorld<'_>, callee: &str, i: i64) -> bool {
+    fn emit_arg_only_read(&self, world: &EmitWorld<'_, '_, '_, '_>, callee: &str, i: i64) -> bool {
         let contract = match self.own_contracts.functions.get(callee) { Some(__nikaia_value) => __nikaia_value, None => return false };
         let signature = match match contract.signature.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -31122,7 +31130,7 @@ impl EmitState {
         if seen && agree { return first; }
         String::from("")
     }
-    fn emit_arg_run_async(&self, world: &EmitWorld<'_>, statement: i64, i: i64, arg: &Expr) -> i64 {
+    fn emit_arg_run_async(&self, world: &EmitWorld<'_, '_, '_, '_>, statement: i64, i: i64, arg: &Expr) -> i64 {
         let place = node_key(arg);
         if !self.facts.sync_functions_run_async.contains_key(&place) { return -1; }
         let key = match emit_arg_function_key(world, arg) { Some(__nikaia_value) => __nikaia_value, None => return -1 };
@@ -31132,7 +31140,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_args<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, callee: &str, args: &[Expr], takes_a_handle: &[bool], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_args<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, callee: &str, args: &[Expr], takes_a_handle: &[bool], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         let boxed_mask: Vec<bool> = nikaia_std::index::or(match walk.boxed_args.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
@@ -31154,7 +31162,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    fn emit_core_argument<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, callee: &str, arg: &Expr, i: i64, boxed_mask: &[bool], part_counts: &[Count], takes_a_handle: &[bool], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    fn emit_core_argument<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, callee: &str, arg: &Expr, i: i64, boxed_mask: &[bool], part_counts: &[Count], takes_a_handle: &[bool], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         if i < part_counts.len() as i64 { walk.hull_count = Some(*nikaia_std::index::get(&part_counts, nikaia_std::index::at(i))); } else { walk.hull_count = None; }
         let scalar = nikaia_std::index::or(self.facts.char_patterns.get(&node_key(arg)), || "");
         if scalar != "" {
@@ -31249,7 +31257,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    fn emit_arg_future<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, arg: &Expr, i: i64, depth: i64, inside: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    fn emit_arg_future<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, arg: &Expr, i: i64, depth: i64, inside: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         match arg {
             Expr::Closure { params, mutable, body, .. } => {
                 let mut names: Vec<String> = vec![];
@@ -31273,7 +31281,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    fn emit_arg_value<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, arg: &Expr, i: i64, depth: i64, inside: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    fn emit_arg_value<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, arg: &Expr, i: i64, depth: i64, inside: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         let node = node_key(arg);
         let buffers = walk.buffers_held_at(i);
         if buffers.is_some() {
@@ -31332,7 +31340,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_called<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, func: &Expr, args: &[Expr], config: &[ConfigArg], unchecked: bool, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_called<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, func: &Expr, args: &[Expr], config: &[ConfigArg], unchecked: bool, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         if self.emit_call_special(world, walk, out, host, func, args, config, depth, flow, scope)? { return Ok(()); }
         if self.opens_a_paused_scope(world, func, args) && self.emit_call_paused_scope(world, walk, out, host, args, depth, flow, scope)? { return Ok(()); }
         host.expr(walk, out, func, depth, flow, scope)?;
@@ -31431,7 +31439,7 @@ impl EmitState {
         if valued { out.push(".map(nikaia_std::task::valued)"); }
         Ok(())
     }
-    fn emit_call_callee(&self, world: &EmitWorld<'_>, func: &Expr) -> String {
+    fn emit_call_callee(&self, world: &EmitWorld<'_, '_, '_, '_>, func: &Expr) -> String {
         match func {
             Expr::Variable(name, _) => { let name = *name; emit_text(world, name) },
             Expr::Path(segments, _) => unaliased_in(world.aliases, &emit_arg_joined(world, segments)),
@@ -31441,7 +31449,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    fn emit_call_option<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, option: &ConfigContract, config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    fn emit_call_option<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, option: &ConfigContract, config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         for passed in config.iter() {
             if emit_text(world, passed.name) == option.name {
                 if self.facts.lent_options.contains(&node_key(&passed.value)) { out.push("&"); }
@@ -31470,7 +31478,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    fn emit_call_scope_body<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, body: &Block, depth: i64, flow: EmitFlow, scope: &EmitScope, channel: &str, owner: &str, paused: bool) -> Result<(), Box<dyn std::error::Error>> {
+    fn emit_call_scope_body<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, body: &Block, depth: i64, flow: EmitFlow, scope: &EmitScope, channel: &str, owner: &str, paused: bool) -> Result<(), Box<dyn std::error::Error>> {
         let failing = EmitFlow { in_lambda: !paused, can_throw: true, ..EmitFlow::plain().at(flow.statement) };
         let inner = EmitScope { origin: scope.origin.to_owned(), function: owner.to_owned(), channel: channel.to_owned(), changed: scope.changed.to_owned(), tasks_channel: channel.to_owned(), tasks_function: owner.to_owned(), ..EmitScope::plain() };
         self.emit_core_block(world, walk, out, host, body, depth, failing, &inner, EmitTail::Value)?;
@@ -31479,7 +31487,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    fn emit_call_paused_scope<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, args: &[Expr], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, Box<dyn std::error::Error>> {
+    fn emit_call_paused_scope<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, args: &[Expr], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, Box<dyn std::error::Error>> {
         if args.is_empty() { return Ok(false); }
         Ok(match nikaia_std::index::get(&args, 0) {
             Expr::Closure { params, body, .. } => {
@@ -31522,7 +31530,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    fn emit_call_special<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, func: &Expr, args: &[Expr], config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, Box<dyn std::error::Error>> {
+    fn emit_call_special<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, func: &Expr, args: &[Expr], config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, Box<dyn std::error::Error>> {
         if self.facts.unrolled_calls.contains_key(&node_key(func)) {
             let copy = match self.facts.unrolled_calls.get(&node_key(func)) { Some(__nikaia_value) => __nikaia_value, None => return Ok(false) };
             if self.emit_call_walks(world, func, &copy) {
@@ -31550,7 +31558,7 @@ impl EmitState {
             _ => return Ok(false),
         })
     }
-    fn emit_call_walks(&self, world: &EmitWorld<'_>, func: &Expr, copy: &str) -> bool {
+    fn emit_call_walks(&self, world: &EmitWorld<'_, '_, '_, '_>, func: &Expr, copy: &str) -> bool {
         match func {
             Expr::Variable(name, _) => { let name = *name; copy.starts_with(&format!("{}__", emit_text(world, name))) },
             _ => false,
@@ -31564,7 +31572,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    fn emit_call_supervised<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, func: &Expr, args: &[Expr], config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, Box<dyn std::error::Error>> {
+    fn emit_call_supervised<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, func: &Expr, args: &[Expr], config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, Box<dyn std::error::Error>> {
         Ok(match func {
             Expr::Path(segments, _) => {
                 if segments.len() != 2 || args.len() != 1 { return Ok(false); }
@@ -31592,7 +31600,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    fn emit_call_by_name<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, text: &str, args: &[Expr], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, Box<dyn std::error::Error>> {
+    fn emit_call_by_name<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, text: &str, args: &[Expr], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, Box<dyn std::error::Error>> {
         if (text == "access_all" || text == "update_all") && !args.is_empty() {
             out.push(&format!("nikaia_std::lock::{}(", text));
             let last = args.len() as i64 - 1;
@@ -31643,7 +31651,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    fn emit_call_print<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, text: &str, args: &[Expr], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    fn emit_call_print<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, text: &str, args: &[Expr], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         if args.len() == 1 {
             let given = nikaia_std::index::get(&args, 0);
             let key = node_key(&given);
@@ -31681,7 +31689,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    fn emit_call_by_path<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, segments: &[winnow_grammar::Symbol], args: &[Expr], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, Box<dyn std::error::Error>> {
+    fn emit_call_by_path<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, segments: &[winnow_grammar::Symbol], args: &[Expr], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, Box<dyn std::error::Error>> {
         if segments.len() == 2 {
             let module = emit_text(world, *nikaia_std::index::get(&segments, 0));
             let name = emit_text(world, *nikaia_std::index::get(&segments, 1));
@@ -31837,16 +31845,16 @@ pub fn emit_held_in(expr: &Expr, lazy: bool, called: bool) -> (Vec<&Expr>, EmitH
     (found, EmitHeldFound { safe: flags, called: ran })
 }
 
-fn emit_text(world: &EmitWorld<'_>, name: winnow_grammar::Symbol) -> String { world.words.resolve(name).to_owned() }
+fn emit_text(world: &EmitWorld<'_, '_, '_, '_>, name: winnow_grammar::Symbol) -> String { world.words.resolve(name).to_owned() }
 
-fn emit_declared_empty(world: &EmitWorld<'_>, declared: &Stmt) -> Option<String> {
+fn emit_declared_empty(world: &EmitWorld<'_, '_, '_, '_>, declared: &Stmt) -> Option<String> {
     match declared {
         Stmt::Let { names, mutable, value, .. } => { let mutable = *mutable; emit_empty_list_named(world, names, mutable, value) },
         _ => None,
     }
 }
 
-fn emit_empty_list_named(world: &EmitWorld<'_>, names: &[winnow_grammar::Symbol], mutable: bool, value: &Expr) -> Option<String> {
+fn emit_empty_list_named(world: &EmitWorld<'_, '_, '_, '_>, names: &[winnow_grammar::Symbol], mutable: bool, value: &Expr) -> Option<String> {
     if !mutable || names.len() != 1 { return None; }
     match value {
         Expr::ListLit { items, .. } => if items.is_empty() { Some(emit_text(world, *nikaia_std::index::get(&names, 0))) } else { None },
@@ -31854,7 +31862,7 @@ fn emit_empty_list_named(world: &EmitWorld<'_>, names: &[winnow_grammar::Symbol]
     }
 }
 
-fn emit_mentions(world: &EmitWorld<'_>, expr: &Expr, name: &str) -> bool {
+fn emit_mentions(world: &EmitWorld<'_, '_, '_, '_>, expr: &Expr, name: &str) -> bool {
     for each in visited_in_expr(expr) {
         match each {
             Expr::Variable(v, _) => {
@@ -31867,7 +31875,7 @@ fn emit_mentions(world: &EmitWorld<'_>, expr: &Expr, name: &str) -> bool {
     false
 }
 
-pub fn emit_filled_at_once(world: &EmitWorld<'_>, own: &Ledger, declared: &Stmt, next: &Stmt) -> bool {
+pub fn emit_filled_at_once(world: &EmitWorld<'_, '_, '_, '_>, own: &Ledger, declared: &Stmt, next: &Stmt) -> bool {
     let name = match emit_declared_empty(world, declared) { Some(__nikaia_value) => __nikaia_value, None => return false };
     match next {
         Stmt::Expr(inner) => emit_resizes(world, own, &name, inner),
@@ -31875,7 +31883,7 @@ pub fn emit_filled_at_once(world: &EmitWorld<'_>, own: &Ledger, declared: &Stmt,
     }
 }
 
-fn emit_resizes(world: &EmitWorld<'_>, own: &Ledger, name: &str, call: &Expr) -> bool {
+fn emit_resizes(world: &EmitWorld<'_, '_, '_, '_>, own: &Ledger, name: &str, call: &Expr) -> bool {
     match call {
         Expr::MethodCall { receiver, method, args, config, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
@@ -31932,7 +31940,7 @@ fn emit_arm_values(arms: &[SelectArm]) -> Vec<&Expr> {
     out
 }
 
-fn emit_written_callee(world: &EmitWorld<'_>, func: &Expr) -> Option<String> {
+fn emit_written_callee(world: &EmitWorld<'_, '_, '_, '_>, func: &Expr) -> Option<String> {
     match func {
         Expr::Variable(name, _) => { let name = *name; Some(emit_text(world, name)) },
         Expr::Path(_, _) => Some(unaliased_in(world.aliases, &nikaia_std::index::or(call_written_name(world.words, func), || "".into()))),
@@ -31946,7 +31954,7 @@ fn emit_ledger_takes_a_keep(ledger: &Ledger, name: &str) -> bool {
 }
 
 impl EmitWalk {
-    pub fn reflected(&self, world: &EmitWorld<'_>, base: &Expr, member: winnow_grammar::Symbol, wanted: &str) -> Option<String> {
+    pub fn reflected(&self, world: &EmitWorld<'_, '_, '_, '_>, base: &Expr, member: winnow_grammar::Symbol, wanted: &str) -> Option<String> {
         let pair = match self.at_field.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
         match base {
             Expr::Variable(name, _) => { let name = *name; if emit_text(world, name) == pair.first && emit_text(world, member) == wanted { Some(pair.second.to_owned()) } else { None } },
@@ -31956,7 +31964,7 @@ impl EmitWalk {
 }
 
 impl EmitState {
-    pub fn options_of(&self, world: &EmitWorld<'_>, func: &Expr) -> Vec<ConfigContract> {
+    pub fn options_of(&self, world: &EmitWorld<'_, '_, '_, '_>, func: &Expr) -> Vec<ConfigContract> {
         let name = match call_written_name(world.words, func) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
         let constructor = format!("{}::new", name);
         if self.own_contracts.functions.contains_key(&name) {
@@ -31973,14 +31981,14 @@ impl EmitState {
         }
         vec![]
     }
-    fn emit_joined_set(&self, world: &EmitWorld<'_>, expr: &Expr) -> Option<Vec<String>> {
+    fn emit_joined_set(&self, world: &EmitWorld<'_, '_, '_, '_>, expr: &Expr) -> Option<Vec<String>> {
         match expr {
             Expr::Overlap(block, _) => Some(call_joined_throws(world.words, world.aliases, &self.own_contracts, world.library, &emit_branch_values(block))),
             Expr::Select(arms, _) => Some(call_joined_throws(world.words, world.aliases, &self.own_contracts, world.library, &emit_arm_values(arms))),
             _ => None,
         }
     }
-    pub fn caught_channel_is_named(&self, world: &EmitWorld<'_>, expr: &Expr) -> bool {
+    pub fn caught_channel_is_named(&self, world: &EmitWorld<'_, '_, '_, '_>, expr: &Expr) -> bool {
         let joined = self.emit_joined_set(world, expr);
         if joined.is_some() { return self.named_error_of(world, &match joined { Some(__nikaia_value) => __nikaia_value, None => return false }) != 0; }
         let name = match call_callee_name(world.words, world.aliases, expr) { Some(__nikaia_value) => __nikaia_value, None => return false };
@@ -31989,7 +31997,7 @@ impl EmitState {
         if a_grammar { return false; }
         self.named_error(world, &name) != 0
     }
-    pub fn caught_sum(&self, world: &EmitWorld<'_>, expr: &Expr) -> Option<String> {
+    pub fn caught_sum(&self, world: &EmitWorld<'_, '_, '_, '_>, expr: &Expr) -> Option<String> {
         let joined = self.emit_joined_set(world, expr);
         if joined.is_some() {
             let sum = match self.sums.get(&match joined { Some(__nikaia_value) => __nikaia_value, None => return None }) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -32000,7 +32008,7 @@ impl EmitState {
         let sum = match self.sums.get(&contract.fails_with) { Some(__nikaia_value) => __nikaia_value, None => return None };
         Some(sum.to_owned())
     }
-    pub fn branch_pauses(&self, world: &EmitWorld<'_>, stmt: &Stmt, at: i64) -> bool {
+    pub fn branch_pauses(&self, world: &EmitWorld<'_, '_, '_, '_>, stmt: &Stmt, at: i64) -> bool {
         match stmt {
             Stmt::Expr(value) => {
                 for each in visited_in_expr(value) {
@@ -32034,7 +32042,7 @@ impl EmitState {
         out.push("\n");
         for _ in 0..depth { out.push("    "); }
     }
-    pub fn keeping_callee(&self, world: &EmitWorld<'_>, func: &Expr) -> Option<String> {
+    pub fn keeping_callee(&self, world: &EmitWorld<'_, '_, '_, '_>, func: &Expr) -> Option<String> {
         let name = match emit_written_callee(world, func) { Some(__nikaia_value) => __nikaia_value, None => return None };
         if self.own_contracts.functions.contains_key(&name) {
             if emit_ledger_takes_a_keep(&self.own_contracts, &name) { return Some(name); }
@@ -32047,14 +32055,14 @@ impl EmitState {
         let form = match self.facts.map_keys.get(&(node_key(index), written)) { Some(__nikaia_value) => __nikaia_value, None => return None };
         Some(form.clone())
     }
-    pub fn stays_the_callers(&self, world: &EmitWorld<'_>, function: &str, place: &Expr) -> bool {
+    pub fn stays_the_callers(&self, world: &EmitWorld<'_, '_, '_, '_>, function: &str, place: &Expr) -> bool {
         match place {
             Expr::Variable(name, _) => { let name = *name; self.changes_in_place(function, &emit_text(world, name)) },
             Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); self.stays_the_callers(world, function, base) },
             _ => false,
         }
     }
-    pub fn emit_core_guard_reopening<H: EmitHost>(&self, world: &EmitWorld<'_>, host: &H, pattern: &MatchPattern, guard: &Expr) -> String {
+    pub fn emit_core_guard_reopening<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, host: &H, pattern: &MatchPattern, guard: &Expr) -> String {
         let boxed = self.boxed_bindings(world, pattern);
         let mut read: Vec<String> = vec![];
         for each in host.names_read(guard) {
@@ -32110,7 +32118,7 @@ fn emit_call_owner(function: &str) -> Option<String> {
     Some(owner.join("::"))
 }
 
-fn emit_call_option_named(world: &EmitWorld<'_>, config: &[ConfigArg], wanted: &str) -> Vec<Expr> {
+fn emit_call_option_named(world: &EmitWorld<'_, '_, '_, '_>, config: &[ConfigArg], wanted: &str) -> Vec<Expr> {
     let mut found: Vec<Expr> = vec![];
     for a in config.iter() { if found.is_empty() && emit_text(world, a.name) == wanted { found.push(a.value.clone()); } }
     found
@@ -32118,7 +32126,7 @@ fn emit_call_option_named(world: &EmitWorld<'_>, config: &[ConfigArg], wanted: &
 
 fn emit_call_is_a_hull(name: &str) -> bool { name == "Shared" || name == "SharedMut" || name == "Locked" }
 
-fn emit_call_builds_a_hull(world: &EmitWorld<'_>, arg: &Expr) -> bool {
+fn emit_call_builds_a_hull(world: &EmitWorld<'_, '_, '_, '_>, arg: &Expr) -> bool {
     match arg {
         Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); match func {
             Expr::Variable(name, _) => { let name = *name; emit_call_is_a_hull(&emit_text(world, name)) },
@@ -32144,7 +32152,7 @@ fn emit_call_pausing_entry(facts: &CheckFacts, args: &[Expr]) -> (i64, String) {
     }
 }
 
-fn emit_call_on_self(world: &EmitWorld<'_>, receiver: Option<&Expr>) -> bool {
+fn emit_call_on_self(world: &EmitWorld<'_, '_, '_, '_>, receiver: Option<&Expr>) -> bool {
     let on = match receiver { Some(__nikaia_value) => __nikaia_value, None => return false };
     match on {
         Expr::Variable(name, _) => { let name = *name; emit_text(world, name) == "self" },
@@ -32152,7 +32160,7 @@ fn emit_call_on_self(world: &EmitWorld<'_>, receiver: Option<&Expr>) -> bool {
     }
 }
 
-fn emit_call_named(world: &EmitWorld<'_>, receiver: &Expr, wanted: &str) -> bool {
+fn emit_call_named(world: &EmitWorld<'_, '_, '_, '_>, receiver: &Expr, wanted: &str) -> bool {
     match receiver {
         Expr::Variable(name, _) => { let name = *name; emit_text(world, name) == wanted },
         _ => false,
@@ -32174,7 +32182,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_call<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, func: &Expr, args: &[Expr], config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_call<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, func: &Expr, args: &[Expr], config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         match func {
             Expr::Path(segments, _) => {
                 if segments.len() == 2 {
@@ -32222,7 +32230,7 @@ impl EmitState {
         self.emit_core_call_inner(world, walk, out, host, func, args, config, false, depth, flow, scope)?;
         Ok(())
     }
-    fn emit_call_checked_callee(&self, world: &EmitWorld<'_>, func: &Expr) -> Option<String> {
+    fn emit_call_checked_callee(&self, world: &EmitWorld<'_, '_, '_, '_>, func: &Expr) -> Option<String> {
         match func {
             Expr::Variable(name, _) => { let name = *name; if self.facts.entries.contains_key(&emit_text(world, name)) { Some(emit_text(world, name)) } else { None } },
             Expr::Path(segments, _) => self.emit_call_required(unaliased_in(world.aliases, &emit_arg_joined(world, segments))),
@@ -32237,7 +32245,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    fn emit_call_assert<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, func: &Expr, args: &[Expr], config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, Box<dyn std::error::Error>> {
+    fn emit_call_assert<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, func: &Expr, args: &[Expr], config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, Box<dyn std::error::Error>> {
         if args.len() != 1 { return Ok(false); }
         match func {
             Expr::Variable(name, _) => {
@@ -32289,7 +32297,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_call_inner<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, func: &Expr, args: &[Expr], config: &[ConfigArg], unchecked: bool, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_call_inner<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, func: &Expr, args: &[Expr], config: &[ConfigArg], unchecked: bool, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         if self.emit_call_assert(world, walk, out, host, func, args, config, depth, flow, scope)? { return Ok(()); }
         if self.emit_call_kept(world, walk, out, host, func, args, depth, flow, scope)? { return Ok(()); }
         if self.emit_call_grammar(world, walk, out, host, func, args, depth, flow, scope)? { return Ok(()); }
@@ -32325,7 +32333,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    fn emit_call_kept<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, func: &Expr, args: &[Expr], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, Box<dyn std::error::Error>> {
+    fn emit_call_kept<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, func: &Expr, args: &[Expr], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, Box<dyn std::error::Error>> {
         Ok(match func {
             Expr::Variable(name, _) => {
                 let name = *name;
@@ -32353,7 +32361,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    fn emit_call_grammar<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, func: &Expr, args: &[Expr], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, Box<dyn std::error::Error>> {
+    fn emit_call_grammar<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, func: &Expr, args: &[Expr], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, Box<dyn std::error::Error>> {
         Ok(match func {
             Expr::Path(segments, _) => {
                 if args.len() != 1 { return Ok(false); }
@@ -32393,7 +32401,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    fn emit_call_boxed_variant<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, func: &Expr, args: &[Expr], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, Box<dyn std::error::Error>> {
+    fn emit_call_boxed_variant<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, func: &Expr, args: &[Expr], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, Box<dyn std::error::Error>> {
         Ok(match func {
             Expr::Path(segments, _) => {
                 if segments.len() < 2 { return Ok(false); }
@@ -32432,7 +32440,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_method_call<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, receiver: Option<&Expr>, on_node: i64, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_method_call<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, receiver: Option<&Expr>, on_node: i64, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         let name = emit_text(world, method);
         if self.emit_call_chars(world, walk, out, host, receiver, &name, args, depth, flow, scope)? { return Ok(()); }
         if receiver.is_some() && args.len() == 1 {
@@ -32612,7 +32620,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    fn emit_call_chars<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, receiver: Option<&Expr>, name: &str, args: &[Expr], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, Box<dyn std::error::Error>> {
+    fn emit_call_chars<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, receiver: Option<&Expr>, name: &str, args: &[Expr], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, Box<dyn std::error::Error>> {
         if receiver.is_none() || name != "collect" || !args.is_empty() { return Ok(false); }
         let on = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(false) };
         Ok(match on {
@@ -32629,7 +32637,7 @@ impl EmitState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn emit_call_hold<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, host: &H, receiver: Option<&Expr>, scope: &EmitScope, flow: EmitFlow) {
+    fn emit_call_hold<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, host: &H, receiver: Option<&Expr>, scope: &EmitScope, flow: EmitFlow) {
         walk.hold_args = None;
         let on = match receiver { Some(__nikaia_value) => __nikaia_value, None => return };
         let root = match root_of(world.words, on) { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -32642,7 +32650,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_method_arm<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_method_arm<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         let name = emit_text(world, method);
         if (name == "compare" || name == "eq") && args.len() == 1 && self.facts.standard_compares.contains_key(&node_key(receiver)) {
             let flags = nikaia_std::index::or(*nikaia_std::index::get(&self.facts.standard_compares, &(node_key(receiver))), || 0);
@@ -32722,7 +32730,7 @@ impl EmitState {
         if self.facts.copied_walks.contains(&node_key(node)) { out.push(".copied()"); }
         Ok(())
     }
-    fn emit_call_attributes_of(&self, world: &EmitWorld<'_>, owner: &str, field: &str) -> Vec<String> {
+    fn emit_call_attributes_of(&self, world: &EmitWorld<'_, '_, '_, '_>, owner: &str, field: &str) -> Vec<String> {
         let found = self.field_contract(world, owner, field);
         if found.is_some() {
             let held = match found { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
@@ -32773,7 +32781,7 @@ fn emit_flow_wrapping(op: BinaryOp) -> String {
     }
 }
 
-fn emit_flow_never_returns(world: &EmitWorld<'_>, node: &Expr) -> bool {
+fn emit_flow_never_returns(world: &EmitWorld<'_, '_, '_, '_>, node: &Expr) -> bool {
     match node {
         Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); match func {
             Expr::Variable(name, _) => { let name = *name; emit_text(world, name) == "panic" },
@@ -32806,7 +32814,7 @@ fn emit_flow_a_field_of_an_index(node: &Expr) -> bool {
     }
 }
 
-fn emit_flow_an_iterator_answer(world: &EmitWorld<'_>, node: &Expr) -> bool {
+fn emit_flow_an_iterator_answer(world: &EmitWorld<'_, '_, '_, '_>, node: &Expr) -> bool {
     match node {
         Expr::MethodCall { method, .. } => {
             let method = *method;
@@ -32834,7 +32842,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_closure<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, params: &[winnow_grammar::Symbol], mutable: &[winnow_grammar::Symbol], body: &Block, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_closure<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, params: &[winnow_grammar::Symbol], mutable: &[winnow_grammar::Symbol], body: &Block, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         let mut names: Vec<String> = vec![];
         for p in params.iter() {
             let p = *p;
@@ -32875,7 +32883,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    fn emit_flow_kept<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, params: &[winnow_grammar::Symbol], mutable: &[winnow_grammar::Symbol], names: &[String], body: &Block, pauses: bool, fails: bool, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    fn emit_flow_kept<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, params: &[winnow_grammar::Symbol], mutable: &[winnow_grammar::Symbol], names: &[String], body: &Block, pauses: bool, fails: bool, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         let hulls = self.emit_flow_hulls(node_key(node));
         let owned = self.emit_flow_owned(node_key(node));
         let block = !hulls.is_empty() || !owned.is_empty();
@@ -32936,7 +32944,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_binary<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, op: BinaryOp, lhs: &Expr, rhs: &Expr, at: &Span, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_binary<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, op: BinaryOp, lhs: &Expr, rhs: &Expr, at: &Span, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         let site = at.start as i64;
         let mut wide = flow;
         if !flow.widen && !flow.inferred && host.wants_widening(node) { wide = flow.widened(); }
@@ -33014,7 +33022,7 @@ impl EmitState {
         self.emit_core_nested(world, walk, out, host, rhs, here + 1, depth, wide, scope)?;
         Ok(())
     }
-    fn emit_flow_a_declared_variant(&self, world: &EmitWorld<'_>, fallback: &Expr) -> bool {
+    fn emit_flow_a_declared_variant(&self, world: &EmitWorld<'_, '_, '_, '_>, fallback: &Expr) -> bool {
         match fallback {
             Expr::Path(segments, _) => segments.len() == 2 && self.is_variant(world, &emit_text(world, *nikaia_std::index::get(&segments, 0)), &emit_text(world, *nikaia_std::index::get(&segments, 1))),
             Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); match func {
@@ -33024,7 +33032,7 @@ impl EmitState {
             _ => false,
         }
     }
-    fn emit_flow_a_declared_constructor(&self, world: &EmitWorld<'_>, fallback: &Expr) -> bool {
+    fn emit_flow_a_declared_constructor(&self, world: &EmitWorld<'_, '_, '_, '_>, fallback: &Expr) -> bool {
         match fallback {
             Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); match func {
                 Expr::Path(segments, _) => segments.len() == 2 && self.emit_flow_constructs(&emit_text(world, *nikaia_std::index::get(&segments, 0)), &emit_text(world, *nikaia_std::index::get(&segments, 1))),
@@ -33056,7 +33064,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_coalesce<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, value: &Expr, fallback: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_coalesce<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, value: &Expr, fallback: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         if self.facts.plain_reaches.contains(&node_key(node)) {
             host.expr(walk, out, value, depth, flow, scope)?;
             return Ok(());
@@ -33131,7 +33139,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_try_catch<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, guarded_expr: &Expr, handler: &Block, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_try_catch<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, guarded_expr: &Expr, handler: &Block, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         out.push("match ");
         let mut guarded = flow.guarded();
         let a_scope_call = emit_catch_is_a_scope(world, guarded_expr);
@@ -33220,7 +33228,7 @@ impl EmitState {
         out.push(&format!(",\n{}}}", close));
         Ok(())
     }
-    pub fn fatal_passing(&self, world: &EmitWorld<'_>, guarded: &Expr, handler: &Block) -> Vec<String> {
+    pub fn fatal_passing(&self, world: &EmitWorld<'_, '_, '_, '_>, guarded: &Expr, handler: &Block) -> Vec<String> {
         let mut out: Vec<String> = vec![];
         let name = match call_callee_name(world.words, world.aliases, guarded) { Some(__nikaia_value) => __nikaia_value, None => return out };
         let mut arriving: Vec<String> = vec![];
@@ -33242,7 +33250,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_try<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, inner: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_try<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, inner: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         self.emit_core_postfix_base(world, walk, out, host, inner, depth, flow, scope)?;
         out.push("?");
         Ok(())
@@ -33250,7 +33258,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_return<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, value: Option<&Expr>, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_return<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, value: Option<&Expr>, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         if value.is_some() {
             let held = match value { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
             if flow.can_throw {
@@ -33276,7 +33284,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_throw<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, inner: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_throw<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, inner: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         let mut is_the_binding = false;
         match inner {
             Expr::Variable(name, _) => {
@@ -33320,7 +33328,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_spawn<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, lambda: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_spawn<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, lambda: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         match lambda {
             Expr::Closure { body, .. } => { self.emit_flow_task(world, walk, out, host, node_key(lambda), body, depth, flow, scope)?; },
             _ => { return Err(nikaia_std::error::raise(EmitRefused { message: "`spawn` takes a lambda. Write `spawn fn { … }`.".to_owned(), at: Some(flow.statement) }, &"emit_core_spawn")); },
@@ -33330,7 +33338,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    fn emit_flow_task<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, task: i64, body: &Block, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    fn emit_flow_task<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, task: i64, body: &Block, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         let handles = host.task_handles(task);
         if !handles.is_empty() {
             out.push("{ ");
@@ -33371,7 +33379,7 @@ fn emit_is_fatal(ledger: &Ledger, error: &str) -> bool {
     types.contains(error)
 }
 
-fn emit_join_receiver(world: &EmitWorld<'_>, guarded: &Expr) -> String {
+fn emit_join_receiver(world: &EmitWorld<'_, '_, '_, '_>, guarded: &Expr) -> String {
     match guarded {
         Expr::MethodCall { receiver, config, .. } => { let receiver = nikaia_std::boxed::open(receiver); match receiver {
             Expr::Variable(name, _) if config.is_empty() => { let name = *name; emit_text(world, name).to_owned() },
@@ -33381,7 +33389,7 @@ fn emit_join_receiver(world: &EmitWorld<'_>, guarded: &Expr) -> String {
     }
 }
 
-fn emit_catch_is_a_scope(world: &EmitWorld<'_>, guarded: &Expr) -> bool {
+fn emit_catch_is_a_scope(world: &EmitWorld<'_, '_, '_, '_>, guarded: &Expr) -> bool {
     match guarded {
         Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); unaliased_in(world.aliases, &nikaia_std::index::or(emit_callee_text(world, func), || "".into())) == "task::scope" },
         _ => false,
@@ -33389,7 +33397,7 @@ fn emit_catch_is_a_scope(world: &EmitWorld<'_>, guarded: &Expr) -> bool {
 }
 
 impl EmitState {
-    fn emit_catch_calls_given_code(&self, world: &EmitWorld<'_>, guarded: &Expr) -> bool {
+    fn emit_catch_calls_given_code(&self, world: &EmitWorld<'_, '_, '_, '_>, guarded: &Expr) -> bool {
         let name = match call_callee_name(world.words, world.aliases, guarded) { Some(__nikaia_value) => __nikaia_value, None => return false };
         let mut set: Vec<String> = vec![];
         let own = self.own_contracts.functions.get(&name);
@@ -33409,7 +33417,7 @@ impl EmitState {
     }
 }
 
-fn emit_catch_is_a_join(world: &EmitWorld<'_>, guarded: &Expr) -> bool {
+fn emit_catch_is_a_join(world: &EmitWorld<'_, '_, '_, '_>, guarded: &Expr) -> bool {
     match guarded {
         Expr::MethodCall { method, .. } => { let method = *method; emit_text(world, method) == "join" },
         _ => false,
@@ -33461,7 +33469,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_hole<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, at: i64, node: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_hole<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, at: i64, node: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         if self.hole_wraps.contains_key(&at) {
             let wraps = match self.hole_wraps.get(&at) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
             let wrapped = host.wrap_hole(node, &wraps);
@@ -33474,7 +33482,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_key<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, form: FactKeyForm, index: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_key<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, form: FactKeyForm, index: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         let kind = match form {
             FactKeyForm::Either => 1,
             FactKeyForm::Lent => 2,
@@ -33498,7 +33506,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_postfix_base<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_postfix_base<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         let mut parenthesise = false;
         if !flow.in_a_place {
             parenthesise = match node {
@@ -33534,7 +33542,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_nested<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, needs: i64, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_nested<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, needs: i64, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         let parenthesise = match node {
             Expr::Binary { op, .. } => precedence(*op) < needs || needs == precedence(BinaryOp::Lt) && self.ends_in_a_cast(world, node),
             _ => self.emits_as_cast(world, node) && (needs == 255 || needs == precedence(BinaryOp::Lt)),
@@ -33547,7 +33555,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_concatenated<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, side: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_concatenated<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, side: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         let indexed = matches!(side, Expr::Index { .. });
         if indexed {
             out.push("::core::convert::AsRef::<str>::as_ref(&");
@@ -33561,7 +33569,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_handed_back<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, value: &Expr, at: i64, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_handed_back<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, value: &Expr, at: i64, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         let (before, after) = emit_leaf_wrapped(&self.facts.nullable_sites, at, value);
         out.push(&before);
         let is_null = matches!(value, Expr::LitNull(_));
@@ -33576,7 +33584,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_joined_name<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, parts: &[FPart], names: &[bool], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_joined_name<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, parts: &[FPart], names: &[bool], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         out.push("nikaia_std::fs::path::joined(&[");
         let mut hole: i64 = 0;
         let mut n = 0;
@@ -33604,7 +33612,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_format_string<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, parts: &[FPart], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_format_string<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, parts: &[FPart], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         let mut head: String = String::from("\"");
         head.push_str(&format_of(parts));
         head.push_str("\"");
@@ -33624,7 +33632,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_string<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_string<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         match node {
             Expr::LitStr { text, .. } => { if self.facts.owned_texts.contains(&node_key(node)) { out.push(&format!("String::from(\"{}\")", text)); } else { out.push(&format!("\"{}\"", text)); } },
             Expr::LitInterpolated { parts, .. } => {
@@ -33648,7 +33656,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_dsl_parameters<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, callee: &str, args: i64, config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_dsl_parameters<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, callee: &str, args: i64, config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         if config.is_empty() || !self.dsl_drivers.contains(callee) { return Ok(()); }
         let mut names: Vec<String> = vec![];
         for a in config.iter() { names.push(emit_text(world, a.name)); }
@@ -33667,7 +33675,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_method_options<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, method: winnow_grammar::Symbol, args: i64, config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_method_options<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, method: winnow_grammar::Symbol, args: i64, config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         let name = emit_text(world, method);
         if self.dsl_drivers.contains(&name) { return Ok(()); }
         let options = match self.facts.method_options.get(&(flow.statement, name.to_owned())) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
@@ -33689,7 +33697,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_guard_written<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, pattern: &MatchPattern, guard: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_guard_written<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, pattern: &MatchPattern, guard: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         let reopening = self.emit_core_guard_reopening(world, host, pattern, guard);
         if reopening.is_empty() {
             host.expr(walk, out, guard, depth, flow, scope)?;
@@ -33704,7 +33712,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_grammar_entry<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, grammar_symbol: winnow_grammar::Symbol, entry: winnow_grammar::Symbol, input: &Expr, parallelism: &str, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_grammar_entry<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, grammar_symbol: winnow_grammar::Symbol, entry: winnow_grammar::Symbol, input: &Expr, parallelism: &str, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         let question = match flow.caught {
             true => "".to_owned(),
             false => "?".to_owned(),
@@ -33743,7 +33751,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_template_segments<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, site: i64, segments: &[Segment], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_template_segments<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, site: i64, segments: &[Segment], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         let pad = "    ".repeat(nikaia_std::count::of(depth));
         for segment in segments.iter() {
             match segment {
@@ -33770,7 +33778,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_template<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, name: &str, context: Option<winnow_grammar::Symbol>, content: &str, site: i64, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_template<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, name: &str, context: Option<winnow_grammar::Symbol>, content: &str, site: i64, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         if is_deferred(name, content) {
             if context.is_some() {
                 let given = match context { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
@@ -33812,14 +33820,14 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_block<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, block: &Block, depth: i64, flow: EmitFlow, scope: &EmitScope, tail: EmitTail) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_block<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, block: &Block, depth: i64, flow: EmitFlow, scope: &EmitScope, tail: EmitTail) -> Result<(), Box<dyn std::error::Error>> {
         host.block_opening_with(walk, out, block, depth, flow, scope, tail, None)?;
         Ok(())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_if_expr<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, condition: &Expr, then_block: &Block, else_block: Option<&Block>, depth: i64, flow: EmitFlow, scope: &EmitScope, tail: EmitTail) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_if_expr<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, condition: &Expr, then_block: &Block, else_block: Option<&Block>, depth: i64, flow: EmitFlow, scope: &EmitScope, tail: EmitTail) -> Result<(), Box<dyn std::error::Error>> {
         out.push("if ");
         host.expr(walk, out, condition, depth, flow, scope)?;
         out.push(" ");
@@ -33852,7 +33860,7 @@ impl EmitState {
 
 // --- emit_core_match.nika ---
 
-fn emit_match_is_caught(world: &EmitWorld<'_>, value: &Expr) -> bool {
+fn emit_match_is_caught(world: &EmitWorld<'_, '_, '_, '_>, value: &Expr) -> bool {
     match value {
         Expr::Variable(name, _) => { let name = *name; emit_text(world, name) == "error" },
         _ => false,
@@ -33922,7 +33930,7 @@ fn emit_match_is_list(pattern: &MatchPattern) -> bool {
     false
 }
 
-fn emit_match_path(world: &EmitWorld<'_>, path: &[winnow_grammar::Symbol]) -> String {
+fn emit_match_path(world: &EmitWorld<'_, '_, '_, '_>, path: &[winnow_grammar::Symbol]) -> String {
     let mut parts: Vec<String> = vec![];
     for each in path.iter() {
         let each = *each;
@@ -33932,7 +33940,7 @@ fn emit_match_path(world: &EmitWorld<'_>, path: &[winnow_grammar::Symbol]) -> St
 }
 
 impl EmitState {
-    fn emit_match_bound(&self, world: &EmitWorld<'_>, name: winnow_grammar::Symbol, wild: bool, lent_key: i64) -> String {
+    fn emit_match_bound(&self, world: &EmitWorld<'_, '_, '_, '_>, name: winnow_grammar::Symbol, wild: bool, lent_key: i64) -> String {
         if wild { return String::from("_"); }
         let text = emit_text(world, name);
         if lent_key < 0 || !self.facts.lent_bindings.contains_key(&lent_key) { return text; }
@@ -33943,7 +33951,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_pattern_written<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, pattern: &MatchPattern, wild: bool, lent_key: i64, collect: bool, found: i64, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<i64, Box<dyn std::error::Error>> {
+    pub fn emit_core_pattern_written<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, pattern: &MatchPattern, wild: bool, lent_key: i64, collect: bool, found: i64, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<i64, Box<dyn std::error::Error>> {
         let mut n = found;
         match pattern {
             MatchPattern::Otherwise => { out.push("_"); },
@@ -34031,7 +34039,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_nest_written<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, pattern: &MatchPattern, wanted: i64, before: i64, wild: bool, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<i64, Box<dyn std::error::Error>> {
+    pub fn emit_core_nest_written<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, pattern: &MatchPattern, wanted: i64, before: i64, wild: bool, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<i64, Box<dyn std::error::Error>> {
         let mut n = before;
         match pattern {
             MatchPattern::Tuple { path, parts } => {
@@ -34056,7 +34064,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_arm_body_led<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, pattern: &MatchPattern, nest_count: i64, body: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope, lead: &str) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_arm_body_led<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, pattern: &MatchPattern, nest_count: i64, body: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope, lead: &str) -> Result<(), Box<dyn std::error::Error>> {
         let mut taken_apart = lead.to_owned();
         for at in 0..nest_count {
             let mut written = EmitOut::empty();
@@ -34118,7 +34126,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_match_over_a_sum<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, sum: &str, arms: &[MatchArm], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_match_over_a_sum<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, sum: &str, arms: &[MatchArm], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         let listed = self.sum_members(sum);
         if listed.is_none() { return Err(nikaia_std::error::raise(EmitRefused { message: format!("There's no error set called `{}`.", sum), at: Some(flow.statement) }, &"emit_core_match_over_a_sum")); }
         let members = match listed { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
@@ -34203,7 +34211,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_match_over_a_box<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, arms: &[MatchArm], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_match_over_a_box<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, arms: &[MatchArm], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         let mut members: Vec<String> = vec![];
         let mut home: Vec<i64> = vec![];
         let mut catch_all = 0;
@@ -34276,7 +34284,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_match<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, value: &Expr, arms: &[MatchArm], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_match<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, value: &Expr, arms: &[MatchArm], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         if scope.caught_sum.is_some() && emit_match_is_caught(world, value) {
             let sum = match match scope.caught_sum.as_ref() {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -34400,7 +34408,7 @@ impl EmitState {
     }
 }
 
-fn emit_match_shorthand(world: &EmitWorld<'_>, field: &PatternField) -> bool {
+fn emit_match_shorthand(world: &EmitWorld<'_, '_, '_, '_>, field: &PatternField) -> bool {
     match &field.pat {
         MatchPattern::Path(one) => one.len() == 1 && emit_text(world, *nikaia_std::index::get(&one, 0)) == emit_text(world, field.name),
         _ => false,
@@ -34432,7 +34440,7 @@ fn emit_place_mixed(choices: &collections::BTreeSet<i64>, value: Option<&Expr>) 
 
 fn emit_place_an_index(node: &Expr) -> bool { matches!(node, Expr::Index { .. }) }
 
-fn emit_place_already_lent(world: &EmitWorld<'_>, node: &Expr) -> bool {
+fn emit_place_already_lent(world: &EmitWorld<'_, '_, '_, '_>, node: &Expr) -> bool {
     match node {
         Expr::MethodCall { method, .. } => {
             let method = *method;
@@ -34451,7 +34459,7 @@ impl EmitState {
             FactViewed::Plain => emit_place_plain_reach(place, flattens),
         }
     }
-    fn emit_place_default(&self, world: &EmitWorld<'_>, owner: &str, field: &str) -> String {
+    fn emit_place_default(&self, world: &EmitWorld<'_, '_, '_, '_>, owner: &str, field: &str) -> String {
         let found = self.field_contract(world, owner, field);
         let contract = match found { Some(__nikaia_value) => __nikaia_value, None => return "None".to_owned() };
         if contract.default != "" {
@@ -34467,7 +34475,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_safe_method<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_safe_method<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         let flattens = self.facts.flattened_reaches.contains(&node_key(receiver));
         let mut lent: String = String::from("");
         if self.facts.lent_reaches.contains(&node_key(receiver)) && !emit_place_already_lent(world, receiver) { lent = ".as_ref()".to_owned(); }
@@ -34493,7 +34501,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_tuple<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, parts: &[Expr], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_tuple<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, parts: &[Expr], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         out.push("(");
         let mut i = 0;
         for part in parts.iter() {
@@ -34507,7 +34515,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_list_lit<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, items: &[Expr], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_list_lit<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, items: &[Expr], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         if self.facts.array_literals.contains(&node_key(node)) { out.push("["); } else { out.push("vec!["); }
         let mut i = 0;
         for item in items.iter() {
@@ -34521,7 +34529,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_field<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, base: &Expr, name: winnow_grammar::Symbol, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_field<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, base: &Expr, name: winnow_grammar::Symbol, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         let named = walk.reflected(world, base, name, "name");
         if named.is_some() {
             out.push("\"");
@@ -34558,7 +34566,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_safe_field<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, base: &Expr, name: winnow_grammar::Symbol, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_safe_field<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, base: &Expr, name: winnow_grammar::Symbol, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         let field = emit_text(world, name);
         let flattens = self.facts.flattened_reaches.contains(&node_key(base));
         let mut how: String = String::from("map");
@@ -34577,7 +34585,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_index<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, base: &Expr, index: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_index<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, base: &Expr, index: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         if !flow.in_a_place {
             if self.facts.flat_reads.contains(&node_key(node)) {
                 host.take_lend(out);
@@ -34618,7 +34626,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_cast<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, operand: &Expr, ty: &Type, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_cast<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, operand: &Expr, ty: &Type, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         let into = self.emit_core_ty(world, walk, host.crossings_are_possible(), host.overlaps_user_code(), ty, EmitLifetimes::Elided);
         let mut viewed = false;
         match operand {
@@ -34658,7 +34666,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_struct_lit<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, name: winnow_grammar::Symbol, fields: &[FieldInit], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_struct_lit<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, name: winnow_grammar::Symbol, fields: &[FieldInit], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         let owner = unaliased_in(world.aliases, &emit_text(world, name));
         let cleaned = self.cleaned_types.contains(&owner);
         if cleaned { out.push(&format!("{}::new(", emit_cleaned(host.overlaps_user_code()))); }
@@ -34736,7 +34744,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_with<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, base: &Expr, fields: &[FieldInit], at: u32, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_with<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, base: &Expr, fields: &[FieldInit], at: u32, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         let known = self.facts.with_types.get(&node_key(node));
         if known.is_none() { return Err(nikaia_std::error::raise(EmitRefused { message: "The type of this `with` is unknown. This is a compiler bug: the check should have reported it first.".to_owned(), at: Some(at as i64) }, &"emit_core_with")); }
         let owner = nikaia_std::index::or(known, || "").to_owned();
@@ -34777,7 +34785,7 @@ impl EmitState {
 
 // --- emit_core_reads.nika ---
 
-fn emit_read_a_length(world: &EmitWorld<'_>, expr: &Expr) -> bool {
+fn emit_read_a_length(world: &EmitWorld<'_, '_, '_, '_>, expr: &Expr) -> bool {
     match expr {
         Expr::MethodCall { method, args, .. } => { let method = *method; args.is_empty() && emit_text(world, method) == "len" },
         _ => false,
@@ -34793,7 +34801,7 @@ fn emit_read_a_call(expr: &Expr) -> bool {
 
 fn emit_read_is_call(expr: &Expr) -> bool { matches!(expr, Expr::Call { .. }) }
 
-fn emit_read_root(world: &EmitWorld<'_>, place: &Expr) -> Option<String> {
+fn emit_read_root(world: &EmitWorld<'_, '_, '_, '_>, place: &Expr) -> Option<String> {
     match place {
         Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); emit_read_root(world, base) },
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); emit_read_root(world, base) },
@@ -34837,7 +34845,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_against_a_length<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, op: BinaryOp, lhs: &Expr, rhs: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, Box<dyn std::error::Error>> {
+    pub fn emit_core_against_a_length<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, op: BinaryOp, lhs: &Expr, rhs: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, Box<dyn std::error::Error>> {
         let mut counter_first = true;
         if emit_read_a_length(world, rhs) && !emit_read_a_length(world, lhs) && walk.never_negative(world, &scope.function, lhs) { counter_first = true; } else if emit_read_a_length(world, lhs) && !emit_read_a_length(world, rhs) && walk.never_negative(world, &scope.function, rhs) { counter_first = false; } else { return Ok(false); }
         let counter = if counter_first { lhs } else { rhs };
@@ -34886,7 +34894,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    fn emit_read_counted<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, host: &H, counter: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<String, Box<dyn std::error::Error>> {
+    fn emit_read_counted<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, host: &H, counter: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<String, Box<dyn std::error::Error>> {
         let mut scratch = EmitOut::empty();
         host.expr(walk, &mut scratch, counter, depth, flow, scope)?;
         Ok(format!("(({}) as usize)", scratch.buf))
@@ -34894,7 +34902,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_hold_temporaries<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, stmt: &Stmt, span: &Span, depth: i64, tail: EmitTail, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_hold_temporaries<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, stmt: &Stmt, span: &Span, depth: i64, tail: EmitTail, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         self.emit_core_hold_owned_receiver(world, walk, out, host, stmt, depth, flow, scope)?;
         self.emit_core_hold_indices_read_from_the_target(world, walk, out, host, stmt, depth, flow, scope)?;
         if self.facts.held_reaches.is_empty() { return Ok(()); }
@@ -34916,7 +34924,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    fn emit_core_hold_found<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, value: &Expr, holdable: bool, span: &Span, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    fn emit_core_hold_found<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, value: &Expr, holdable: bool, span: &Span, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         let (receivers, walked) = emit_held_in(value, false, false);
         let mut k: i64 = 0;
         for receiver in receivers.iter() {
@@ -34936,7 +34944,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_hold_indices_read_from_the_target<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, stmt: &Stmt, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_hold_indices_read_from_the_target<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, stmt: &Stmt, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         match stmt {
             Stmt::Assign { target, .. } => {
                 let root = match emit_read_root(world, target) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
@@ -34949,7 +34957,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    fn emit_core_hold_chain<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, at: &Expr, root: &str, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    fn emit_core_hold_chain<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, at: &Expr, root: &str, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         match at {
             Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); self.emit_core_hold_chain(world, walk, out, host, base, root, depth, flow, scope)?; },
             Expr::Index { base, index, .. } => {
@@ -34974,7 +34982,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_hold_owned_receiver<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, stmt: &Stmt, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_hold_owned_receiver<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, stmt: &Stmt, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         match stmt {
             Stmt::Let { value, .. } => {
                 let owns = match value {
@@ -34991,7 +34999,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    fn emit_core_hold_chain_base<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, at: &Expr, whole: i64, viewed: bool, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    fn emit_core_hold_chain_base<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, at: &Expr, whole: i64, viewed: bool, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         match at {
             Expr::MethodCall { receiver, method, .. } => {
                 let receiver = nikaia_std::boxed::open(receiver); let method = *method;
@@ -35014,7 +35022,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_receiver<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, receiver: Option<&Expr>, depth: i64, flow: EmitFlow, scope: &EmitScope, tight: bool) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_receiver<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, receiver: Option<&Expr>, depth: i64, flow: EmitFlow, scope: &EmitScope, tight: bool) -> Result<(), Box<dyn std::error::Error>> {
         if receiver.is_none() {
             out.push("__nikaia_it");
             return Ok(());
@@ -35031,7 +35039,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_a_field_call<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, receiver: &Expr, reached: bool, method: winnow_grammar::Symbol, args: &[Expr], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, Box<dyn std::error::Error>> {
+    pub fn emit_core_a_field_call<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, receiver: &Expr, reached: bool, method: winnow_grammar::Symbol, args: &[Expr], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, Box<dyn std::error::Error>> {
         if !self.facts.field_calls.contains_key(&node_key(receiver)) { return Ok(false); }
         let pauses = match self.facts.field_calls.get(&node_key(receiver)) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => return Ok(false) };
         if pauses && flow.in_lambda {
@@ -35055,7 +35063,7 @@ impl EmitState {
         if flow.can_throw && !flow.caught && self.method_can_fail(node_key(receiver)) { out.push("?"); }
         Ok(true)
     }
-    fn emit_read_nested(&self, world: &EmitWorld<'_>, walk: &EmitWalk, function: &str, base: &Expr) -> bool {
+    fn emit_read_nested(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, function: &str, base: &Expr) -> bool {
         match base {
             Expr::Index { base: inner, index: at, .. } => { let inner = nikaia_std::boxed::open(inner); let at = nikaia_std::boxed::open(at); !self.slices(at) && self.map_key(at, false).is_none() && !self.reads_through_handle(world, walk, function, inner) },
             _ => false,
@@ -35064,7 +35072,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_index_read<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, base: &Expr, index: &Expr, deref: bool, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_index_read<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, base: &Expr, index: &Expr, deref: bool, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         let slicing = self.slices(index);
         if deref && !slicing { out.push("*"); }
         let nested = self.emit_read_nested(world, &walk, &scope.function, base);
@@ -35129,7 +35137,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    fn emit_read_inner<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, base: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    fn emit_read_inner<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, base: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         match base {
             Expr::Index { base: inner, index: at, .. } => { let inner = nikaia_std::boxed::open(inner); let at = nikaia_std::boxed::open(at); self.emit_core_index_read(world, walk, out, host, inner, at, false, depth, flow, scope)?; },
             _ => { },
@@ -35140,14 +35148,14 @@ impl EmitState {
         let all: Vec<String> = vec![String::from("First"), String::from("Second"), String::from("Third"), String::from("Fourth"), String::from("Fifth"), String::from("Sixth"), String::from("Seventh"), String::from("Eighth")];
         (*nikaia_std::index::get(&all, nikaia_std::index::at(at))).to_owned()
     }
-    fn emit_read_joined_channel(&self, world: &EmitWorld<'_>, branches: &[&Expr]) -> String {
+    fn emit_read_joined_channel(&self, world: &EmitWorld<'_, '_, '_, '_>, branches: &[&Expr]) -> String {
         let joined = call_joined_throws(world.words, world.aliases, &self.own_contracts, world.library, branches);
         self.channel_of(world, &joined, true, "'_", "'static", false)
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_overlap<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, block: &Block, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_overlap<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, block: &Block, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         let count = block.stmts.len() as i64;
         if count < 2 { return Err(nikaia_std::error::raise(EmitRefused { message: "An `overlap` block needs at least two branches to run at the same time.".to_owned(), at: Some(flow.statement) }, &"emit_core_overlap")); }
         if count > 8 { return Err(nikaia_std::error::raise(EmitRefused { message: format!("This `overlap` block has {} branches, but at most 8 are supported.", count), at: Some(flow.statement) }, &"emit_core_overlap")); }
@@ -35227,7 +35235,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    fn emit_read_branch<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, stmt: &Spanned<Stmt>, body: &str, fallible: bool, queued: bool, wrapper: &str, channel: &str, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    fn emit_read_branch<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, stmt: &Spanned<Stmt>, body: &str, fallible: bool, queued: bool, wrapper: &str, channel: &str, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         out.push(body);
         out.push("async { ");
         let inside = EmitFlow { can_throw: fallible, statement: stmt.span.start as i64, ..EmitFlow::plain() };
@@ -35250,7 +35258,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_select<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, arms: &[SelectArm], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_select<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, arms: &[SelectArm], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         let count = arms.len() as i64;
         if count < 2 { return Err(nikaia_std::error::raise(EmitRefused { message: "A `select` needs at least two arms to choose between.".to_owned(), at: Some(flow.statement) }, &"emit_core_select")); }
         if count > 8 { return Err(nikaia_std::error::raise(EmitRefused { message: format!("This `select` has {} arms, but at most 8 are supported.", count), at: Some(flow.statement) }, &"emit_core_select")); }
@@ -35302,7 +35310,7 @@ impl EmitState {
     }
 }
 
-fn emit_read_ends_in_len(world: &EmitWorld<'_>, end: &Expr, base: &Expr) -> bool {
+fn emit_read_ends_in_len(world: &EmitWorld<'_, '_, '_, '_>, end: &Expr, base: &Expr) -> bool {
     match end {
         Expr::MethodCall { receiver, method, args, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; args.is_empty() && emit_text(world, method) == "len" && emit_read_same(receiver, base) },
         _ => false,
@@ -35340,7 +35348,7 @@ pub fn emit_counted_turn(counts_steps: bool, opening: Option<String>) -> Option<
 }
 
 impl EmitState {
-    pub fn pointer_for(&self, world: &EmitWorld<'_>, callee: &str, ty: &Type) -> Option<EmitPointer> {
+    pub fn pointer_for(&self, world: &EmitWorld<'_, '_, '_, '_>, callee: &str, ty: &Type) -> Option<EmitPointer> {
         let name = world.words.resolve(ty.name);
         if self.opaque_handles.contains_key(name) && !ty.is_view && !ty.is_slice {
             let release = nikaia_std::index::or(self.opaque_handles.get(name), || "");
@@ -35349,14 +35357,14 @@ impl EmitState {
         if self.writes_a_run(world, ty) { return Some(EmitPointer::Run { mutable: ty.is_mut }); }
         emit_pointer_for(ty)
     }
-    pub fn emit_core_ty(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, crossings: bool, overlaps: bool, ty: &Type, lifetimes: EmitLifetimes) -> String { self.emit_core_ty_counted(world, walk, crossings, overlaps, ty, lifetimes, Count::Atomic) }
+    pub fn emit_core_ty(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, crossings: bool, overlaps: bool, ty: &Type, lifetimes: EmitLifetimes) -> String { self.emit_core_ty_counted(world, walk, crossings, overlaps, ty, lifetimes, Count::Atomic) }
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_ty_counted(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, crossings: bool, overlaps: bool, ty: &Type, lifetimes: EmitLifetimes, count: Count) -> String {
+    pub fn emit_core_ty_counted(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, crossings: bool, overlaps: bool, ty: &Type, lifetimes: EmitLifetimes, count: Count) -> String {
         let name = world.words.resolve(ty.name).to_owned();
         self.emit_core_ty_named(world, walk, crossings, overlaps, ty, &name, lifetimes, count)
     }
     #[allow(clippy::too_many_arguments)]
-    fn emit_core_ty_named(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, crossings: bool, overlaps: bool, ty: &Type, name: &str, lifetimes: EmitLifetimes, count: Count) -> String {
+    fn emit_core_ty_named(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, crossings: bool, overlaps: bool, ty: &Type, name: &str, lifetimes: EmitLifetimes, count: Count) -> String {
         let mut out: String = String::from("");
         if (*ty.code).is_none() && (ty.is_tuple || !ty.generics.is_empty()) && walk.in_parameter {
             walk.in_parameter = false;
@@ -35473,7 +35481,7 @@ impl EmitState {
         }
         out
     }
-    pub fn emit_core_tether_wrapper(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, crossings: bool, overlaps: bool, ty: &Type) -> String {
+    pub fn emit_core_tether_wrapper(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, crossings: bool, overlaps: bool, ty: &Type) -> String {
         let any = self.emit_core_ty(world, walk, crossings, overlaps, ty, EmitLifetimes::Named);
         let long = self.emit_core_ty(world, walk, crossings, overlaps, ty, EmitLifetimes::Long);
         let shortened = self.emit_core_ty(world, walk, crossings, overlaps, ty, EmitLifetimes::Shortened);
@@ -35492,7 +35500,7 @@ impl EmitState {
 // --- emit_entry.nika ---
 
 impl EmitState {
-    pub fn user_main(&self, world: &EmitWorld<'_>) -> Option<bool> {
+    pub fn user_main(&self, world: &EmitWorld<'_, '_, '_, '_>) -> Option<bool> {
         if !self.entry { return None; }
         for item in world.items.iter() {
             match &item.node {
@@ -35506,7 +35514,7 @@ impl EmitState {
         }
         None
     }
-    pub fn entry_point(&self, world: &EmitWorld<'_>, concurrent: bool, channel: &str) -> String {
+    pub fn entry_point(&self, world: &EmitWorld<'_, '_, '_, '_>, concurrent: bool, channel: &str) -> String {
         let fails = match self.user_main(world) { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
         let mut user_code: String = String::from("Sequential");
         if concurrent { user_code = String::from("Concurrent"); }
@@ -35524,7 +35532,7 @@ impl EmitState {
         if exits { text = format!("{}    nikaia_runtime.finish();\n    nikaia_std::process::ended(outcome)\n}}\n", text); } else { text = format!("{}    nikaia_runtime.finish();\n    outcome\n}}\n", text); }
         text
     }
-    fn fatal_registrations(&self, world: &EmitWorld<'_>) -> String {
+    fn fatal_registrations(&self, world: &EmitWorld<'_, '_, '_, '_>) -> String {
         let fatal = match self.own_contracts.implementations.get("Fatal") { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
         let mut text: String = String::from("");
         for item in world.items.iter() {
@@ -35544,7 +35552,7 @@ impl EmitState {
         }
         text
     }
-    fn crossing_registrations(&self, world: &EmitWorld<'_>) -> String {
+    fn crossing_registrations(&self, world: &EmitWorld<'_, '_, '_, '_>) -> String {
         let errors = match self.own_contracts.implementations.get("Error") { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
         let mut text: String = String::from("");
         for item in world.items.iter() {
@@ -35564,7 +35572,7 @@ impl EmitState {
         }
         text
     }
-    pub fn held_structs(&self, world: &EmitWorld<'_>) -> String {
+    pub fn held_structs(&self, world: &EmitWorld<'_, '_, '_, '_>) -> String {
         let mut pays = false;
         for (_, plan) in self.keep_plans.iter() { if !plan.element_keepers.is_empty() || plan.task_keep { pays = true; } }
         if !pays { return String::from(""); }
@@ -35582,7 +35590,7 @@ impl EmitState {
         text
     }
     #[allow(clippy::too_many_arguments)]
-    fn emit_held_struct(&self, world: &EmitWorld<'_>, ty: String, a: String, any: String, long: String, short: String, fields: &[FieldDef]) -> String {
+    fn emit_held_struct(&self, world: &EmitWorld<'_, '_, '_, '_>, ty: String, a: String, any: String, long: String, short: String, fields: &[FieldDef]) -> String {
         let mut parts: Vec<String> = vec![];
         for field in fields.iter() {
             let field_name = escaped_name(world.words.resolve(field.name));
@@ -35747,7 +35755,7 @@ impl EmitState {
         let range = matches!(index, Expr::Range { .. });
         range || self.facts.slice_indices.contains(&node_key(index))
     }
-    pub fn walked_parameter<'r>(&self, world: &EmitWorld<'r>, item: &Item) -> &'r str {
+    pub fn walked_parameter<'r>(&self, world: &EmitWorld<'r, 'r, 'r, 'r>, item: &Item) -> &'r str {
         match item {
             Item::Fn { generics, .. } => self.first_generic(world.words, generics),
             _ => "",
@@ -35757,7 +35765,7 @@ impl EmitState {
         if generics.is_empty() { return ""; }
         words.resolve(nikaia_std::index::get(&generics, 0).name)
     }
-    pub fn walks_a_shape(&self, world: &EmitWorld<'_>, item: &Item) -> Option<String> {
+    pub fn walks_a_shape(&self, world: &EmitWorld<'_, '_, '_, '_>, item: &Item) -> Option<String> {
         match item {
             Item::Fn { name, .. } => {
                 let name = *name;
@@ -35769,36 +35777,36 @@ impl EmitState {
         }
         None
     }
-    pub fn constructs_by_name(&self, world: &EmitWorld<'_>, name: &str) -> bool {
+    pub fn constructs_by_name(&self, world: &EmitWorld<'_, '_, '_, '_>, name: &str) -> bool {
         let constructor = format!("{}::new", name);
         if self.declares_a_struct(name) { return self.own_contracts.functions.contains_key(&constructor); }
         world.library.functions.contains_key(&constructor)
     }
     pub fn is_counted(&self, receiver: &Expr, method: &str, args: &[Expr]) -> bool { method == "count" && args.is_empty() && self.facts.counted.contains(&node_key(receiver)) }
-    pub fn emits_as_cast(&self, world: &EmitWorld<'_>, expr: &Expr) -> bool {
+    pub fn emits_as_cast(&self, world: &EmitWorld<'_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
             Expr::Cast { .. } => true,
             Expr::MethodCall { receiver, method, args, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; self.method_emits_as_cast(world, receiver, method, args) },
             _ => false,
         }
     }
-    fn method_emits_as_cast(&self, world: &EmitWorld<'_>, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr]) -> bool {
+    fn method_emits_as_cast(&self, world: &EmitWorld<'_, '_, '_, '_>, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr]) -> bool {
         let name = world.words.resolve(method).to_owned();
         truncating(&name).is_some() || is_length(&name, args) || self.is_counted(receiver, &name, args)
     }
-    pub fn ends_in_a_cast(&self, world: &EmitWorld<'_>, expr: &Expr) -> bool {
+    pub fn ends_in_a_cast(&self, world: &EmitWorld<'_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
             Expr::Binary { op, rhs, .. } => { let rhs = nikaia_std::boxed::open(rhs); self.rhs_ends_in_a_cast(world, *op, rhs) },
             _ => self.emits_as_cast(world, expr),
         }
     }
-    fn rhs_ends_in_a_cast(&self, world: &EmitWorld<'_>, outer: BinaryOp, rhs: &Expr) -> bool {
+    fn rhs_ends_in_a_cast(&self, world: &EmitWorld<'_, '_, '_, '_>, outer: BinaryOp, rhs: &Expr) -> bool {
         match rhs {
             Expr::Binary { op, .. } => self.inner_ends_in_a_cast(world, outer, *op, rhs),
             _ => self.ends_in_a_cast(world, rhs),
         }
     }
-    fn inner_ends_in_a_cast(&self, world: &EmitWorld<'_>, op: BinaryOp, inner: BinaryOp, rhs: &Expr) -> bool {
+    fn inner_ends_in_a_cast(&self, world: &EmitWorld<'_, '_, '_, '_>, op: BinaryOp, inner: BinaryOp, rhs: &Expr) -> bool {
         if precedence(inner) < precedence(op) + 1 { return false; }
         self.ends_in_a_cast(world, rhs)
     }
@@ -35820,7 +35828,7 @@ impl EmitState {
 }
 
 impl EmitWalk {
-    pub fn never_negative(&self, world: &EmitWorld<'_>, function: &str, expr: &Expr) -> bool {
+    pub fn never_negative(&self, world: &EmitWorld<'_, '_, '_, '_>, function: &str, expr: &Expr) -> bool {
         match expr {
             Expr::LitInt { negative, .. } => { let negative = *negative; !negative },
             Expr::Variable(name, _) => { let name = *name; self.local_never_negative(world, function, name) },
@@ -35828,11 +35836,11 @@ impl EmitWalk {
             _ => false,
         }
     }
-    fn local_never_negative(&self, world: &EmitWorld<'_>, function: &str, name: winnow_grammar::Symbol) -> bool {
+    fn local_never_negative(&self, world: &EmitWorld<'_, '_, '_, '_>, function: &str, name: winnow_grammar::Symbol) -> bool {
         let set = match self.nonnegative.get(function) { Some(__nikaia_value) => __nikaia_value, None => return false };
         set.contains(world.words.resolve(name))
     }
-    fn sum_never_negative(&self, world: &EmitWorld<'_>, function: &str, op: BinaryOp, lhs: &Expr, rhs: &Expr) -> bool {
+    fn sum_never_negative(&self, world: &EmitWorld<'_, '_, '_, '_>, function: &str, op: BinaryOp, lhs: &Expr, rhs: &Expr) -> bool {
         let sums = matches!(op, BinaryOp::Add | BinaryOp::Mul);
         sums && self.never_negative(world, function, lhs) && self.never_negative(world, function, rhs)
     }
@@ -35865,7 +35873,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_operand<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, viewed: bool, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_operand<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, viewed: bool, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         if !viewed {
             host.expr(walk, out, node, depth, flow, scope)?;
             return Ok(());
@@ -35878,7 +35886,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_bare_range<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_bare_range<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         match node {
             Expr::Range { start, end, inclusive, .. } => {
                 let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end); let inclusive = *inclusive;
@@ -35893,7 +35901,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_index_expr<H: EmitHost>(&self, world: &EmitWorld<'_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_core_index_expr<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
         self.emit_core_bare_range(world, walk, out, host, node, depth, flow, scope)?;
         Ok(())
     }
@@ -36113,7 +36121,7 @@ impl EmitState {
         for held in contract.views.iter() { if held.position == position && held.state == State::Tethered { return true; } }
         false
     }
-    pub fn reads_through_handle(&self, world: &EmitWorld<'_>, walk: &EmitWalk, function: &str, expr: &Expr) -> bool {
+    pub fn reads_through_handle(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, function: &str, expr: &Expr) -> bool {
         match expr {
             Expr::Variable(name, _) => {
                 let name = *name;
@@ -36125,17 +36133,17 @@ impl EmitState {
         }
         false
     }
-    pub fn names_borrowing(&self, world: &EmitWorld<'_>, ty: &Type) -> bool {
+    pub fn names_borrowing(&self, world: &EmitWorld<'_, '_, '_, '_>, ty: &Type) -> bool {
         let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return self.names_borrowing_written(world, ty) };
         let result = match (*code.result).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
         self.names_borrowing(world, result)
     }
-    fn names_borrowing_written(&self, world: &EmitWorld<'_>, ty: &Type) -> bool {
+    fn names_borrowing_written(&self, world: &EmitWorld<'_, '_, '_, '_>, ty: &Type) -> bool {
         if self.borrowing.contains(world.words.resolve(ty.name)) { return true; }
         for inner in ty.generics.iter() { if self.names_borrowing(world, inner) { return true; } }
         false
     }
-    pub fn held_field_carries_view(&self, world: &EmitWorld<'_>, walk: &EmitWalk, function: &str, keeper: &Expr, field: winnow_grammar::Symbol) -> bool {
+    pub fn held_field_carries_view(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, function: &str, keeper: &Expr, field: winnow_grammar::Symbol) -> bool {
         match keeper {
             Expr::Variable(held, _) => {
                 let held = *held;
@@ -36160,7 +36168,7 @@ impl EmitState {
     }
 }
 
-fn emit_returned_by(world: &EmitWorld<'_>, wanted: &str) -> Option<Type> {
+fn emit_returned_by(world: &EmitWorld<'_, '_, '_, '_>, wanted: &str) -> Option<Type> {
     for item in world.items.iter() {
         match &item.node {
             Item::Fn { name, ret_type, .. } => {
@@ -36177,7 +36185,7 @@ fn emit_returned_by(world: &EmitWorld<'_>, wanted: &str) -> Option<Type> {
     None
 }
 
-pub fn emit_tethered_type(world: &EmitWorld<'_>, ty: Option<&Type>, value: &Expr) -> Option<Type> {
+pub fn emit_tethered_type(world: &EmitWorld<'_, '_, '_, '_>, ty: Option<&Type>, value: &Expr) -> Option<Type> {
     if ty.is_some() {
         return match ty {
             Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
@@ -36190,7 +36198,7 @@ pub fn emit_tethered_type(world: &EmitWorld<'_>, ty: Option<&Type>, value: &Expr
     }
 }
 
-fn emit_tethered_call(world: &EmitWorld<'_>, call: &Expr) -> Option<Type> {
+fn emit_tethered_call(world: &EmitWorld<'_, '_, '_, '_>, call: &Expr) -> Option<Type> {
     match call {
         Expr::Call { func, .. } => {
             let func = nikaia_std::boxed::open(func);
@@ -36682,7 +36690,7 @@ impl EmitState {
         for key in self.facts.unrolled.keys() { if key.1 == on { return Some(key.0.to_owned()); } }
         None
     }
-    pub fn unrolls_here(&self, world: &EmitWorld<'_>, name: &str, on: &str, iter: &Expr) -> Option<Vec<FieldContract>> {
+    pub fn unrolls_here(&self, world: &EmitWorld<'_, '_, '_, '_>, name: &str, on: &str, iter: &Expr) -> Option<Vec<FieldContract>> {
         match iter {
             Expr::Path(segments, _) => {
                 if segments.len() != 2 { return None; }
@@ -36697,7 +36705,7 @@ impl EmitState {
         }
         None
     }
-    pub fn boxed_bindings(&self, world: &EmitWorld<'_>, pattern: &MatchPattern) -> Vec<String> {
+    pub fn boxed_bindings(&self, world: &EmitWorld<'_, '_, '_, '_>, pattern: &MatchPattern) -> Vec<String> {
         let mut out: Vec<String> = vec![];
         match pattern {
             MatchPattern::Tuple { path, parts } => {
@@ -36728,18 +36736,18 @@ impl EmitState {
             _ => false,
         }
     }
-    fn single_binding(&self, world: &EmitWorld<'_>, pattern: &MatchPattern) -> Vec<String> {
+    fn single_binding(&self, world: &EmitWorld<'_, '_, '_, '_>, pattern: &MatchPattern) -> Vec<String> {
         match pattern {
             MatchPattern::Path(one) => self.binding_if_named(world, one),
             _ => vec![],
         }
     }
-    fn binding_if_named(&self, world: &EmitWorld<'_>, one: &[winnow_grammar::Symbol]) -> Vec<String> {
+    fn binding_if_named(&self, world: &EmitWorld<'_, '_, '_, '_>, one: &[winnow_grammar::Symbol]) -> Vec<String> {
         let name = world.words.resolve(*nikaia_std::index::get(&one, 0)).to_owned();
         if name == "_" { return vec![]; }
         vec![escaped_name(&name)]
     }
-    fn boxed_owner(&self, world: &EmitWorld<'_>, path: &[winnow_grammar::Symbol]) -> (String, String) {
+    fn boxed_owner(&self, world: &EmitWorld<'_, '_, '_, '_>, path: &[winnow_grammar::Symbol]) -> (String, String) {
         if path.is_empty() { return (String::from(""), String::from("")); }
         let last = world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 1))).to_owned();
         if path.len() >= 2 {
@@ -36752,7 +36760,7 @@ impl EmitState {
         let found = match self.facts.narrowing_casts.get(&node_key(operand)) { Some(__nikaia_value) => __nikaia_value, None => return None };
         Some(found.clone())
     }
-    pub fn a_code_parameter_taken_whole(&self, world: &EmitWorld<'_>, function: &str, name: &str) -> bool {
+    pub fn a_code_parameter_taken_whole(&self, world: &EmitWorld<'_, '_, '_, '_>, function: &str, name: &str) -> bool {
         let contract = match self.own_contracts.functions.get(function) { Some(__nikaia_value) => __nikaia_value, None => return false };
         let signature = match match contract.signature.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -36767,7 +36775,7 @@ impl EmitState {
         }
         false
     }
-    pub fn attribute_in_rust(&self, world: &EmitWorld<'_>, written: &str) -> String {
+    pub fn attribute_in_rust(&self, world: &EmitWorld<'_, '_, '_, '_>, written: &str) -> String {
         let pieces: Vec<&str> = written.split(" { ").collect::<Vec<_>>();
         let name = (*nikaia_std::index::get(&pieces, 0)).to_owned();
         let mut inside: String = String::from("");
@@ -37138,11 +37146,11 @@ pub struct EmitKeptCall {
 }
 
 #[derive(Debug, Clone)]
-pub struct EmitWorld<'a> {
+pub struct EmitWorld<'a, 'a1, 'a2, 'a3> {
     pub words: &'a winnow_grammar::InternerContext,
-    pub aliases: &'a collections::BTreeMap<String, String>,
-    pub items: &'a Vec<Spanned<Item>>,
-    pub library: &'a Ledger,
+    pub aliases: &'a1 collections::BTreeMap<String, String>,
+    pub items: &'a2 Vec<Spanned<Item>>,
+    pub library: &'a3 Ledger,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -37237,16 +37245,16 @@ impl EmitState {
         }
         None
     }
-    pub fn name_of_error(&self, world: &EmitWorld<'_>, name: &str) -> i64 { error_kind(&self.declared_errors, world.library, name) }
-    pub fn named_error_of(&self, world: &EmitWorld<'_>, thrown: &[String]) -> i64 {
+    pub fn name_of_error(&self, world: &EmitWorld<'_, '_, '_, '_>, name: &str) -> i64 { error_kind(&self.declared_errors, world.library, name) }
+    pub fn named_error_of(&self, world: &EmitWorld<'_, '_, '_, '_>, thrown: &[String]) -> i64 {
         if thrown.len() != 1 { return 0; }
         self.name_of_error(world, nikaia_std::index::get(&thrown, 0))
     }
-    pub fn named_error(&self, world: &EmitWorld<'_>, key: &str) -> i64 {
+    pub fn named_error(&self, world: &EmitWorld<'_, '_, '_, '_>, key: &str) -> i64 {
         let contract = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return 0 };
         self.named_error_of(world, &contract.fails_with)
     }
-    pub fn borrows_named(&self, world: &EmitWorld<'_>, name: &str) -> bool {
+    pub fn borrows_named(&self, world: &EmitWorld<'_, '_, '_, '_>, name: &str) -> bool {
         if self.tethered.contains(name) || self.borrowing.contains(name) { return true; }
         let contract = match world.library.types.get(name) { Some(__nikaia_value) => __nikaia_value, None => return false };
         !contract.tethered.is_empty()
@@ -37261,7 +37269,7 @@ impl EmitState {
         }
         parts.join(", ")
     }
-    pub fn error_sums(&self, world: &EmitWorld<'_>) -> collections::BTreeMap<Vec<String>, String> {
+    pub fn error_sums(&self, world: &EmitWorld<'_, '_, '_, '_>) -> collections::BTreeMap<Vec<String>, String> {
         let mut out: collections::BTreeMap<Vec<String>, String> = collections::BTreeMap::new();
         for key in self.own_contracts.functions.keys() {
             let contract = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -37273,11 +37281,11 @@ impl EmitState {
         }
         out
     }
-    pub fn sum_member_held(&self, world: &EmitWorld<'_>, member: &str, params: &str) -> String {
+    pub fn sum_member_held(&self, world: &EmitWorld<'_, '_, '_, '_>, member: &str, params: &str) -> String {
         if self.borrows_named(world, member) { return sum_member_type(&self.declared_errors, world.library, member, params); }
         sum_member_type(&self.declared_errors, world.library, member, "")
     }
-    pub fn write_error_sums(&self, world: &EmitWorld<'_>, out: &mut EmitOut) {
+    pub fn write_error_sums(&self, world: &EmitWorld<'_, '_, '_, '_>, out: &mut EmitOut) {
         if !self.entry { return; }
         for members in self.sums.keys() {
             let name = match self.sums.get(members) { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -37368,7 +37376,7 @@ impl EmitState {
             if !arms.is_empty() { out.push(&format!("impl{} nikaia_std::process::Ending for {}{} {{\n    fn exit_code(&self) -> Option<i32> {{\n        match self {{\n{}            #[allow(unreachable_patterns)] _ => None,\n        }}\n    }}\n    fn fatal_code(&self) -> Option<i32> {{\n        match self {{\n{}            #[allow(unreachable_patterns)] _ => None,\n        }}\n    }}\n}}\n\n", decl, name, params, arms, fatal_arms)); }
         }
     }
-    pub fn channel_of(&self, world: &EmitWorld<'_>, thrown: &[String], elided: bool, params: &str, static_params: &str, borrows: bool) -> String {
+    pub fn channel_of(&self, world: &EmitWorld<'_, '_, '_, '_>, thrown: &[String], elided: bool, params: &str, static_params: &str, borrows: bool) -> String {
         let sum = self.sums.get(thrown);
         if sum.is_some() {
             let mut shown: String = String::from("");
@@ -37389,7 +37397,7 @@ impl EmitState {
         if elided && !borrows { return format!("<{}>", static_params); }
         format!("<{}>", params)
     }
-    pub fn error_channel(&self, world: &EmitWorld<'_>, key: &str, elided: bool, params: &str, static_params: &str, borrows: bool) -> String {
+    pub fn error_channel(&self, world: &EmitWorld<'_, '_, '_, '_>, key: &str, elided: bool, params: &str, static_params: &str, borrows: bool) -> String {
         let contract = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return String::from("Box<dyn std::error::Error>") };
         self.channel_of(world, &contract.fails_with, elided, params, static_params, borrows)
     }
@@ -37550,7 +37558,7 @@ pub fn emit_base(name: &str) -> String {
     last
 }
 
-fn emit_segments(world: &EmitWorld<'_>, path: &[winnow_grammar::Symbol]) -> Vec<String> {
+fn emit_segments(world: &EmitWorld<'_, '_, '_, '_>, path: &[winnow_grammar::Symbol]) -> Vec<String> {
     let mut out: Vec<String> = vec![];
     for symbol in path.iter() {
         let symbol = *symbol;
@@ -37596,47 +37604,47 @@ impl EmitState {
         if self.is_boxed(owner, member) { return format!("Box<{}>", lowered); }
         lowered
     }
-    pub fn boxed_part(&self, world: &EmitWorld<'_>, path: &[winnow_grammar::Symbol], at: i64) -> bool {
+    pub fn boxed_part(&self, world: &EmitWorld<'_, '_, '_, '_>, path: &[winnow_grammar::Symbol], at: i64) -> bool {
         if path.len() < 2 { return false; }
         let names = emit_segments(world, path);
         let owner = (*nikaia_std::index::get(&names, nikaia_std::index::at(names.len() as i64 - 2))).to_owned();
         let variant = (*nikaia_std::index::get(&names, nikaia_std::index::at(names.len() as i64 - 1))).to_owned();
         self.facts.boxed_members.contains_key(&owner) && self.is_boxed(&owner, &boxed_member(&variant, at, ""))
     }
-    pub fn looks_inside_a_box(&self, world: &EmitWorld<'_>, pattern: &MatchPattern) -> bool {
+    pub fn looks_inside_a_box(&self, world: &EmitWorld<'_, '_, '_, '_>, pattern: &MatchPattern) -> bool {
         match pattern {
             MatchPattern::Tuple { path, parts } => self.looks_inside_parts(world, path, parts),
             MatchPattern::Or(alternatives) => self.looks_inside_any(world, alternatives),
             _ => false,
         }
     }
-    fn looks_inside_parts(&self, world: &EmitWorld<'_>, path: &[winnow_grammar::Symbol], parts: &[MatchPattern]) -> bool {
+    fn looks_inside_parts(&self, world: &EmitWorld<'_, '_, '_, '_>, path: &[winnow_grammar::Symbol], parts: &[MatchPattern]) -> bool {
         for at in 0..parts.len() as i64 {
             if self.boxed_part(world, path, at) && !binds_a_part(nikaia_std::index::get(&parts, nikaia_std::index::at(at))) { return true; }
             if self.looks_inside_a_box(world, nikaia_std::index::get(&parts, nikaia_std::index::at(at))) { return true; }
         }
         false
     }
-    fn looks_inside_any(&self, world: &EmitWorld<'_>, alternatives: &[MatchPattern]) -> bool {
+    fn looks_inside_any(&self, world: &EmitWorld<'_, '_, '_, '_>, alternatives: &[MatchPattern]) -> bool {
         for alternative in alternatives.iter() { if self.looks_inside_a_box(world, alternative) { return true; } }
         false
     }
-    pub fn borrows(&self, world: &EmitWorld<'_>, name: winnow_grammar::Symbol) -> bool {
+    pub fn borrows(&self, world: &EmitWorld<'_, '_, '_, '_>, name: winnow_grammar::Symbol) -> bool {
         let text = world.words.resolve(name);
         self.borrowing.contains(text) || self.tethered.contains(text)
     }
-    pub fn carries_a_view(&self, world: &EmitWorld<'_>, ty: &Type) -> bool {
+    pub fn carries_a_view(&self, world: &EmitWorld<'_, '_, '_, '_>, ty: &Type) -> bool {
         let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return self.carries_a_written_view(world, ty) };
         let result = match (*code.result).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
         self.carries_a_view(world, result)
     }
-    fn carries_a_written_view(&self, world: &EmitWorld<'_>, ty: &Type) -> bool {
+    fn carries_a_written_view(&self, world: &EmitWorld<'_, '_, '_, '_>, ty: &Type) -> bool {
         if ty.is_view || self.borrows(world, ty.name) { return true; }
         for inner in ty.generics.iter() { if self.carries_a_view(world, inner) { return true; } }
         false
     }
     pub fn declares_a_struct(&self, name: &str) -> bool { self.structs.contains(name) || self.structs_beside.contains(name) }
-    pub fn takes_a_handle(&self, world: &EmitWorld<'_>, callee: &str) -> Vec<bool> {
+    pub fn takes_a_handle(&self, world: &EmitWorld<'_, '_, '_, '_>, callee: &str) -> Vec<bool> {
         let mut found = self.handles_in(&self.own_contracts, callee);
         if found.is_none() { found = self.handles_in(world.library, callee); }
         nikaia_std::index::or(found, || vec![].into())
@@ -37664,24 +37672,24 @@ impl EmitState {
         for argument in call_arguments(&signature) { out.push(emit_a_handle(&argument.1)); }
         Some(out)
     }
-    pub fn takes_a_handle_at(&self, world: &EmitWorld<'_>, func: &Expr) -> Vec<bool> {
+    pub fn takes_a_handle_at(&self, world: &EmitWorld<'_, '_, '_, '_>, func: &Expr) -> Vec<bool> {
         let name = match call_written_name(world.words, func) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
         if self.declares_a_struct(&name) { return self.takes_a_handle(world, &format!("{}::new", name)); }
         self.takes_a_handle(world, &name)
     }
-    pub fn takes_a_size(&self, world: &EmitWorld<'_>, callee: &str, at: i64) -> bool {
+    pub fn takes_a_size(&self, world: &EmitWorld<'_, '_, '_, '_>, callee: &str, at: i64) -> bool {
         let params = match self.foreign_params.get(callee) { Some(__nikaia_value) => __nikaia_value, None => return false };
         if at < 0 || at >= params.len() as i64 { return false; }
         let ty = (*nikaia_std::index::get(&params, nikaia_std::index::at(at))).clone();
         !ty.is_view && !ty.is_slice && world.words.resolve(ty.name) == "usize"
     }
-    pub fn handle_named(&self, world: &EmitWorld<'_>, ty: &Type) -> Option<String> {
+    pub fn handle_named(&self, world: &EmitWorld<'_, '_, '_, '_>, ty: &Type) -> Option<String> {
         if ty.is_view || ty.is_slice { return None; }
         let name = world.words.resolve(ty.name).to_owned();
         if self.opaque_handles.contains_key(&name) || emit_base(&name) == "CStr" { return Some(name); }
         None
     }
-    pub fn handle_from(&self, world: &EmitWorld<'_>, func: &Expr) -> Option<String> {
+    pub fn handle_from(&self, world: &EmitWorld<'_, '_, '_, '_>, func: &Expr) -> Option<String> {
         match func {
             Expr::Variable(name, _) => {
                 let name = *name;
@@ -37692,7 +37700,7 @@ impl EmitState {
         }
         None
     }
-    pub fn handle_from_may_be_null(&self, world: &EmitWorld<'_>, func: &Expr) -> bool {
+    pub fn handle_from_may_be_null(&self, world: &EmitWorld<'_, '_, '_, '_>, func: &Expr) -> bool {
         match func {
             Expr::Variable(name, _) => {
                 let name = *name;
@@ -37703,11 +37711,11 @@ impl EmitState {
         }
         false
     }
-    pub fn pointed_at(&self, world: &EmitWorld<'_>, ty: &Type) -> String {
+    pub fn pointed_at(&self, world: &EmitWorld<'_, '_, '_, '_>, ty: &Type) -> String {
         if emit_base(world.words.resolve(ty.name)) == "CStr" { return String::from("core::ffi::c_char"); }
         String::from("core::ffi::c_void")
     }
-    pub fn writes_a_run(&self, world: &EmitWorld<'_>, ty: &Type) -> bool { ty.is_slice || ty.is_view && world.words.resolve(ty.name) == "Array" && ty.generics.len() == 1 }
+    pub fn writes_a_run(&self, world: &EmitWorld<'_, '_, '_, '_>, ty: &Type) -> bool { ty.is_slice || ty.is_view && world.words.resolve(ty.name) == "Array" && ty.generics.len() == 1 }
     pub fn called_name<'r>(&self, words: &'r winnow_grammar::InternerContext, func: &Expr) -> &'r str {
         match func {
             Expr::Variable(name, _) => {
@@ -37718,7 +37726,7 @@ impl EmitState {
         }
         ""
     }
-    pub fn derives(&self, world: &EmitWorld<'_>, name: winnow_grammar::Symbol) -> String {
+    pub fn derives(&self, world: &EmitWorld<'_, '_, '_, '_>, name: winnow_grammar::Symbol) -> String {
         let text = world.words.resolve(name).to_owned();
         let mut parts: Vec<String> = vec![String::from("Debug"), String::from("Clone")];
         if self.facts.copies.contains(&text) { parts.push(String::from("Copy")); }
@@ -37728,13 +37736,13 @@ impl EmitState {
         }
         format!("#[derive({})]\n", parts.join(", "))
     }
-    pub fn field_contract(&self, world: &EmitWorld<'_>, owner: &str, field: &str) -> Option<FieldContract> {
+    pub fn field_contract(&self, world: &EmitWorld<'_, '_, '_, '_>, owner: &str, field: &str) -> Option<FieldContract> {
         let contract = match emit_type_contract(&self.own_contracts, world.library, owner) { Some(__nikaia_value) => __nikaia_value, None => return None };
         for candidate in contract.fields.iter() { if candidate.name == field { return Some(candidate.clone()); } }
         None
     }
-    pub fn type_contract(&self, world: &EmitWorld<'_>, owner: &str) -> Option<TypeContract> { emit_type_contract(&self.own_contracts, world.library, owner) }
-    pub fn field_defaults(&self, world: &EmitWorld<'_>, owner: &str) -> Vec<(String, String, Ty)> {
+    pub fn type_contract(&self, world: &EmitWorld<'_, '_, '_, '_>, owner: &str) -> Option<TypeContract> { emit_type_contract(&self.own_contracts, world.library, owner) }
+    pub fn field_defaults(&self, world: &EmitWorld<'_, '_, '_, '_>, owner: &str) -> Vec<(String, String, Ty)> {
         let contract = match emit_type_contract(&self.own_contracts, world.library, owner) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
         let mut out: Vec<(String, String, Ty)> = vec![];
         for field in contract.fields.iter() { if !field.default.is_empty() { out.push((field.name.to_owned(), field.default.to_owned(), field.ty.clone())); } }
@@ -38836,21 +38844,21 @@ pub fn gr_main(named: &str, entry: &str, dump: &str) -> String { format!("\nfn m
 // --- http1.nika ---
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Field<'a> {
+pub struct Field<'a, 'a1> {
     pub name: &'a str,
-    pub value: &'a str,
+    pub value: &'a1 str,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Line<'a> {
-    Field(Field<'a>),
+    Field(Field<'a, 'a>),
     Skip,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Written<'a> {
+pub struct Written<'a, 'a1> {
     pub words: Vec<&'a str>,
-    pub fields: Vec<Field<'a>>,
+    pub fields: Vec<Field<'a1, 'a1>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -38860,13 +38868,13 @@ pub struct Header<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Read<'a> {
+pub struct Read<'a, 'a1, 'a2, 'a3> {
     pub refused: &'a str,
-    pub method: &'a str,
-    pub target: &'a str,
+    pub method: &'a1 str,
+    pub target: &'a2 str,
     pub length: i64,
     pub keep_alive: bool,
-    pub headers: Vec<Header<'a>>,
+    pub headers: Vec<Header<'a3>>,
 }
 
 grammar! {
@@ -38876,7 +38884,7 @@ grammar! {
             ""
             -> { }
 
-        pub rule head -> Written<'a> =
+        pub rule head -> Written<'a, 'a> =
             words:__nikaia_list<&'a str>(item = WORD, sep = " ") "\r\n" lines:line* "\r\n" eof
             -> { Written { words, fields: fields(lines) } }
 
@@ -38918,7 +38926,7 @@ grammar! {
     }
 }
 
-fn fields(lines: Vec<Line<'_>>) -> Vec<Field<'_>> {
+fn fields(lines: Vec<Line<'_>>) -> Vec<Field<'_, '_>> {
     let mut all = Vec::new();
     for line in lines.into_iter() {
         match line {
@@ -38931,7 +38939,7 @@ fn fields(lines: Vec<Line<'_>>) -> Vec<Field<'_>> {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn read_head<'a>(written: &Written<'a>) -> Read<'a> {
+pub fn read_head<'a>(written: &Written<'a, 'a>) -> Read<'a, 'a, 'a, 'a> {
     if written.words.len() < 3 { return refused("400 a request line that is not three words"); }
     let method = *nikaia_std::index::get(&written.words, 0);
     let target = *nikaia_std::index::get(&written.words, 1);
@@ -38955,7 +38963,7 @@ pub fn read_head<'a>(written: &Written<'a>) -> Read<'a> {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn refused(why: &str) -> Read<'_> { Read { refused: why, method: "", target: "", length: 0, keep_alive: false, headers: vec![] } }
+fn refused(why: &str) -> Read<'_, '_, '_, '_> { Read { refused: why, method: "", target: "", length: 0, keep_alive: false, headers: vec![] } }
 
 
 // --- integers.nika ---
@@ -41566,7 +41574,7 @@ pub fn derived_text(ledger: &Ledger) -> String {
     out.push_str("# What that contract was derived from: the compiler, the inference and\n");
     out.push_str("# the sources. A consumer believes the contract while the sources hash\n");
     out.push_str("# as recorded here. Part III, 13.5.\n");
-    out.push_str(&format!("version = {}\n", ledger.version));
+    out.push_str("version = 3\n");
     out.push_str(&format!("toolchain = \"{}\"\n", ledger.toolchain));
     out.push_str(&format!("inference = \"{}\"\n", ledger.inference));
     if !ledger.sources.is_empty() {
@@ -44874,7 +44882,7 @@ fn fits_with_the_front(run: &[Operation], at: i64) -> bool {
 
 const KNOWN_KINDS: [&str; 6] = ["file", "stdout", "stderr", "args", "lock", "socket"];
 
-pub fn accounted(stmt: &Stmt, words: &winnow_grammar::InternerContext, walking: &Walking<'_>) -> Accounted {
+pub fn accounted(stmt: &Stmt, words: &winnow_grammar::InternerContext, walking: &Walking<'_, '_>) -> Accounted {
     match stmt {
         Stmt::Let { names, value, ty, .. } => {
             if ty.is_some() { return Accounted::Opaque(String::from("a written type, which would have to be carried onto one half of a pattern")); }
@@ -44887,7 +44895,7 @@ pub fn accounted(stmt: &Stmt, words: &winnow_grammar::InternerContext, walking: 
     }
 }
 
-fn accounted_value(binds: Option<String>, value: &Expr, names: &winnow_grammar::InternerContext, walking: &Walking<'_>) -> Accounted {
+fn accounted_value(binds: Option<String>, value: &Expr, names: &winnow_grammar::InternerContext, walking: &Walking<'_, '_>) -> Accounted {
     match value {
         Expr::TryCatch { expr, handler, .. } => {
             let expr = nikaia_std::boxed::open(expr);
@@ -44910,7 +44918,7 @@ fn accounted_value(binds: Option<String>, value: &Expr, names: &winnow_grammar::
     }
 }
 
-fn accounted_reduced(binds: Option<String>, mentions: collections::BTreeSet<String>, reduced: &Reduced, caught: bool, walking: &Walking<'_>) -> Accounted {
+fn accounted_reduced(binds: Option<String>, mentions: collections::BTreeSet<String>, reduced: &Reduced, caught: bool, walking: &Walking<'_, '_>) -> Accounted {
     if reduced.calls.is_empty() && !reduced.performs { return Accounted::NotAnOperation; }
     let mut reaches: Vec<Reached> = vec![];
     let mut named_by: Vec<String> = vec![];
@@ -44928,7 +44936,7 @@ fn accounted_reduced(binds: Option<String>, mentions: collections::BTreeSet<Stri
     Accounted::Operation(Operation { binds, mentions, reaches, callee: named_by.join(" + ") })
 }
 
-fn a_call_reaches(call: &OneCall, caught: bool, walking: &Walking<'_>, reaches: &mut Vec<Reached>, named_by: &mut Vec<String>) -> Option<Accounted> {
+fn a_call_reaches(call: &OneCall, caught: bool, walking: &Walking<'_, '_>, reaches: &mut Vec<Reached>, named_by: &mut Vec<String>) -> Option<Accounted> {
     let key = call.key.to_owned();
     let contract = match touches_described(&key, walking) { Some(__nikaia_value) => __nikaia_value, None => return Some(Accounted::NoTouches(key)) };
     if !caught && !contract.fails_with.is_empty() { return Some(Accounted::UncaughtFailure(key)); }
@@ -44948,7 +44956,7 @@ fn a_call_reaches(call: &OneCall, caught: bool, walking: &Walking<'_>, reaches: 
     None
 }
 
-fn touches_described(key: &str, walking: &Walking<'_>) -> Option<FnContract> {
+fn touches_described(key: &str, walking: &Walking<'_, '_>) -> Option<FnContract> {
     let mine: Option<FnContract> = match *nikaia_std::index::get(&walking.own.functions, key) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
@@ -44993,7 +45001,7 @@ fn literal_text(expr: &Expr) -> Option<String> {
     }
 }
 
-fn reaches_nothing(method: &str, walking: &Walking<'_>) -> bool {
+fn reaches_nothing(method: &str, walking: &Walking<'_, '_>) -> bool {
     let mut candidates = method_entries(method, walking.own);
     if candidates.is_empty() { candidates = method_entries(method, walking.library); }
     if candidates.is_empty() { return false; }
@@ -45187,7 +45195,7 @@ fn an_arm_throws(arms: &[MatchArm], bound: bool) -> bool {
     false
 }
 
-pub fn overlap_report(items: &[Spanned<Item>], names: &winnow_grammar::InternerContext, walking: &Walking<'_>, overlaps_in: &impl Fn(&Block) -> Vec<Block>, pauses: &impl Fn(&Spanned<Stmt>) -> bool) -> String {
+pub fn overlap_report(items: &[Spanned<Item>], names: &winnow_grammar::InternerContext, walking: &Walking<'_, '_>, overlaps_in: &impl Fn(&Block) -> Vec<Block>, pauses: &impl Fn(&Spanned<Stmt>) -> bool) -> String {
     let mut out: String = String::from("");
     for item in items.iter() {
         match &item.node {
@@ -45203,7 +45211,7 @@ pub fn overlap_report(items: &[Spanned<Item>], names: &winnow_grammar::InternerC
     out
 }
 
-fn block_report(item: &Item, target: Option<&str>, names: &winnow_grammar::InternerContext, walking: &Walking<'_>, overlaps_in: &impl Fn(&Block) -> Vec<Block>, pauses: &impl Fn(&Spanned<Stmt>) -> bool, out: &mut String) {
+fn block_report(item: &Item, target: Option<&str>, names: &winnow_grammar::InternerContext, walking: &Walking<'_, '_>, overlaps_in: &impl Fn(&Block) -> Vec<Block>, pauses: &impl Fn(&Spanned<Stmt>) -> bool, out: &mut String) {
     match item {
         Item::Fn { name, body, .. } => {
             let name = *name;
@@ -45220,7 +45228,7 @@ fn keyed(target: Option<&str>, own_name: &str) -> String {
     format!("{}::{}", owner, own_name)
 }
 
-fn one_block_report(key: &str, block: &Block, names: &winnow_grammar::InternerContext, walking: &Walking<'_>, pauses: &impl Fn(&Spanned<Stmt>) -> bool, out: &mut String) {
+fn one_block_report(key: &str, block: &Block, names: &winnow_grammar::InternerContext, walking: &Walking<'_, '_>, pauses: &impl Fn(&Spanned<Stmt>) -> bool, out: &mut String) {
     if block.stmts.is_empty() { return; }
     let mut operations: Vec<Operation> = vec![];
     let mut present: Vec<bool> = vec![];
@@ -46011,15 +46019,15 @@ fn grown_variant(fields: &VariantFields, vec: winnow_grammar::Symbol) -> Variant
 // --- parsed_view.nika ---
 
 #[derive(Debug, Clone)]
-pub struct ParsedView<'a> {
+pub struct ParsedView<'a, 'a1, 'a2, 'a3, 'a4> {
     pub words: &'a winnow_grammar::InternerContext,
-    pub aliases: &'a collections::BTreeMap<String, String>,
-    pub items: &'a Vec<Spanned<Item>>,
-    pub package: Option<&'a str>,
-    pub spans: &'a collections::BTreeMap<u32, Span>,
+    pub aliases: &'a1 collections::BTreeMap<String, String>,
+    pub items: &'a2 Vec<Spanned<Item>>,
+    pub package: Option<&'a3 str>,
+    pub spans: &'a4 collections::BTreeMap<u32, Span>,
 }
 
-impl<'a> ParsedView<'a> {
+impl<'a> ParsedView<'a, 'a, 'a, 'a, 'a> {
     pub fn text(&self, sym: winnow_grammar::Symbol) -> String { self.words.resolve(sym).to_owned() }
     pub fn unaliased(&self, name: &str) -> String { unaliased_in(self.aliases, name) }
 }
@@ -48866,45 +48874,45 @@ pub fn relayed(message: &Relayed, path: &str, source: &str, generated_path: &str
 // --- rust.nika ---
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Part<'a> {
+pub struct Part<'a, 'a1> {
     pub name: &'a str,
-    pub ty: &'a str,
+    pub ty: &'a1 str,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Fun<'a> {
+pub struct Fun<'a, 'a1, 'a2, 'a3, 'a4, 'a5> {
     pub name: &'a str,
-    pub generics: &'a str,
-    pub calls: Vec<&'a str>,
-    pub wheres: &'a str,
+    pub generics: &'a1 str,
+    pub calls: Vec<&'a2 str>,
+    pub wheres: &'a3 str,
     pub pauses: bool,
-    pub parts: Vec<Part<'a>>,
-    pub result: &'a str,
+    pub parts: Vec<Part<'a4, 'a4>>,
+    pub result: &'a5 str,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Rec<'a> {
+pub struct Rec<'a, 'a1, 'a2, 'a3> {
     pub what: &'a str,
-    pub name: &'a str,
-    pub parts: Vec<Part<'a>>,
-    pub derives: Vec<&'a str>,
+    pub name: &'a1 str,
+    pub parts: Vec<Part<'a2, 'a2>>,
+    pub derives: Vec<&'a3 str>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Group<'a> {
+pub struct Group<'a, 'a1, 'a2, 'a3> {
     pub what: &'a str,
-    pub name: &'a str,
-    pub via: &'a str,
+    pub name: &'a1 str,
+    pub via: &'a2 str,
     pub visible: bool,
-    pub items: Vec<RustItem<'a>>,
+    pub items: Vec<RustItem<'a3>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RustItem<'a> {
-    Fun(Fun<'a>),
-    Rec(Rec<'a>),
-    Group(Group<'a>),
-    Hidden(Fun<'a>),
+    Fun(Fun<'a, 'a, 'a, 'a, 'a, 'a>),
+    Rec(Rec<'a, 'a, 'a, 'a>),
+    Group(Group<'a, 'a, 'a, 'a>),
+    Hidden(Fun<'a, 'a, 'a, 'a, 'a, 'a>),
     Used(&'a str),
     Export(&'a str),
 }
@@ -49001,11 +49009,11 @@ grammar! {
             not(";") (BRACES | LINE | BLOCK | ANY)
             -> { }
 
-        rule function -> Fun<'a> =
+        rule function -> Fun<'a, 'a, 'a, 'a, 'a, 'a> =
             PUB f:method
             -> { f }
 
-        rule method -> Fun<'a> =
+        rule method -> Fun<'a, 'a, 'a, 'a, 'a, 'a> =
             pauses:qualifiers FN name:IDENT g:generics parts:parameters result:result w:where_clause c:tail
             -> { Fun { name, generics: g, wheres: w, calls: c, pauses, parts, result } }
 
@@ -49081,11 +49089,11 @@ grammar! {
           | empty
             -> { }
 
-        rule parameters -> Vec<Part<'a>> =
+        rule parameters -> Vec<Part<'a, 'a>> =
             "(" ps:parameter_list ")"
             -> { ps }
 
-        rule parameter_list -> Vec<Part<'a>> =
+        rule parameter_list -> Vec<Part<'a, 'a>> =
             head:parameter tail:parameter_tail* COMMA
             -> {
                 let mut all = Vec::new();
@@ -49096,11 +49104,11 @@ grammar! {
           | empty
             -> { Vec::new() }
 
-        rule parameter_tail -> Part<'a> =
+        rule parameter_tail -> Part<'a, 'a> =
             "," p:parameter
             -> { p }
 
-        rule parameter -> Part<'a> =
+        rule parameter -> Part<'a, 'a> =
             t:text(receiver)
             -> { Part { name: "self", ty: t.trim() } }
           | MUT n:IDENT ":" t:PARAM_TYPE
@@ -49124,7 +49132,7 @@ grammar! {
           | SELF
             -> { }
 
-        rule record -> Rec<'a> =
+        rule record -> Rec<'a, 'a, 'a, 'a> =
             ds:attributes PUB STRUCT name:IDENT generics where_clause "{" fs:field_list "}"
             -> { Rec { what: "struct", name, parts: fs, derives: ds } }
           | ds:attributes PUB STRUCT name:IDENT generics tuple_body where_clause ";"
@@ -49152,7 +49160,7 @@ grammar! {
           | empty
             -> { }
 
-        rule field_list -> Vec<Part<'a>> =
+        rule field_list -> Vec<Part<'a, 'a>> =
             head:field tail:field_tail* COMMA
             -> {
                 let mut all = Vec::new();
@@ -49163,17 +49171,17 @@ grammar! {
           | empty
             -> { Vec::new() }
 
-        rule field_tail -> Part<'a> =
+        rule field_tail -> Part<'a, 'a> =
             "," f:field
             -> { f }
 
-        rule field -> Part<'a> =
+        rule field -> Part<'a, 'a> =
             PUB n:IDENT ":" t:FIELD_TYPE
             -> { Part { name: n, ty: t } }
           | n:IDENT ":" t:FIELD_TYPE
             -> { Part { name: n, ty: t } }
 
-        rule variant_list -> Vec<Part<'a>> =
+        rule variant_list -> Vec<Part<'a, 'a>> =
             head:variant tail:variant_tail* COMMA
             -> {
                 let mut all = Vec::new();
@@ -49184,11 +49192,11 @@ grammar! {
           | empty
             -> { Vec::new() }
 
-        rule variant_tail -> Part<'a> =
+        rule variant_tail -> Part<'a, 'a> =
             "," v:variant
             -> { v }
 
-        rule variant -> Part<'a> =
+        rule variant -> Part<'a, 'a> =
             n:IDENT t:text(payload)
             -> { Part { name: n, ty: t.trim() } }
 
@@ -49200,7 +49208,7 @@ grammar! {
           | empty
             -> { }
 
-        rule group -> Group<'a> =
+        rule group -> Group<'a, 'a, 'a, 'a> =
             UNSAFE IMPL generics v:IMPL_TYPE FOR t:IMPL_TYPE where_clause "{" items:exposed "}"
             -> { Group { what: "unsafe impl", name: t, via: v, visible: true, items } }
           | UNSAFE IMPL generics t:IMPL_TYPE where_clause "{" items:public "}"
@@ -49892,7 +49900,7 @@ fn any_holds_shared(types: &[Ty]) -> bool {
     false
 }
 
-pub fn shared_fields(ty: &str, asked: &Asked<'_>) -> Vec<String> {
+pub fn shared_fields(ty: &str, asked: &Asked<'_, '_, '_>) -> Vec<String> {
     let name = without_a_view(ty);
     let contract = match ledger_type(&name, asked.own, asked.library) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
     let mut out: Vec<String> = vec![];
@@ -49900,7 +49908,7 @@ pub fn shared_fields(ty: &str, asked: &Asked<'_>) -> Vec<String> {
     out
 }
 
-pub fn declared_field_type(ty: &str, field: &str, asked: &Asked<'_>) -> Option<Ty> {
+pub fn declared_field_type(ty: &str, field: &str, asked: &Asked<'_, '_, '_>) -> Option<Ty> {
     let contract = match ledger_type(&without_a_view(ty), asked.own, asked.library) { Some(__nikaia_value) => __nikaia_value, None => return None };
     for declared in contract.fields.iter() { if declared.name == field { return Some(declared.ty.clone()); } }
     None
@@ -50219,7 +50227,7 @@ fn method_name(names: &winnow_grammar::InternerContext, item: &Item) -> String {
     }
 }
 
-pub fn allocates_here(expr: &Expr, asked: &Asked<'_>) -> bool {
+pub fn allocates_here(expr: &Expr, asked: &Asked<'_, '_, '_>) -> bool {
     match expr {
         Expr::LitInt { .. } => true,
         Expr::LitFloat(_, _) => true,
@@ -50236,12 +50244,12 @@ pub fn allocates_here(expr: &Expr, asked: &Asked<'_>) -> bool {
     }
 }
 
-fn a_call_that_allocates(path: Option<&str>, asked: &Asked<'_>) -> bool {
+fn a_call_that_allocates(path: Option<&str>, asked: &Asked<'_, '_, '_>) -> bool {
     let callee = match path { Some(__nikaia_value) => __nikaia_value, None => return false };
     is_hull(callee) || hands_back_a_plain_value(callee, asked)
 }
 
-pub fn hands_back_a_plain_value(callee: &str, asked: &Asked<'_>) -> bool {
+pub fn hands_back_a_plain_value(callee: &str, asked: &Asked<'_, '_, '_>) -> bool {
     let suffix = format!("::{}", callee);
     if has_an_entry(asked.own, callee, &suffix) { return plain_in(asked.own, callee, &suffix); }
     plain_in(asked.library, callee, &suffix)
@@ -50356,7 +50364,7 @@ pub struct SharingWalk {
     pub scope: collections::BTreeMap<String, Ty>,
 }
 
-pub fn sharing_of(program: &Program, asked: &Asked<'_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, ty_of: &impl Fn(&Type) -> Ty, crossings_are_possible: bool) -> Sharing {
+pub fn sharing_of(program: &Program, asked: &Asked<'_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, ty_of: &impl Fn(&Type) -> Ty, crossings_are_possible: bool) -> Sharing {
     let mut walk = SharingWalk { slots: Slots::new(declared_here(asked.names, &program.items)), parallel: collections::BTreeSet::new(), function: String::from(""), scope: collections::BTreeMap::new() };
     for item in program.items.iter() {
         match &item.node {
@@ -50377,7 +50385,7 @@ pub fn sharing_of(program: &Program, asked: &Asked<'_>, holes_of: &impl Fn(&Expr
     sharing
 }
 
-fn public_fields(owner: &str, fields: &[FieldDef], asked: &Asked<'_>, ty_of: &impl Fn(&Type) -> Ty, walk: &mut SharingWalk) {
+fn public_fields(owner: &str, fields: &[FieldDef], asked: &Asked<'_, '_, '_>, ty_of: &impl Fn(&Type) -> Ty, walk: &mut SharingWalk) {
     for field in fields.iter() {
         if !field.is_public { continue; }
         let ty = ty_of(&field.ty);
@@ -50388,7 +50396,7 @@ fn public_fields(owner: &str, fields: &[FieldDef], asked: &Asked<'_>, ty_of: &im
     }
 }
 
-fn sharing_function(item: &Item, owner: &str, asked: &Asked<'_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, ty_of: &impl Fn(&Type) -> Ty, walk: &mut SharingWalk) {
+fn sharing_function(item: &Item, owner: &str, asked: &Asked<'_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, ty_of: &impl Fn(&Type) -> Ty, walk: &mut SharingWalk) {
     match item {
         Item::Fn { name, args, body, ret_type, is_public, .. } => {
             let is_public = *is_public; let name = *name;
@@ -50410,7 +50418,7 @@ fn sharing_function(item: &Item, owner: &str, asked: &Asked<'_>, holes_of: &impl
     }
 }
 
-fn position(named: &str, ty: &Ty, is_public: bool, asked: &Asked<'_>, walk: &mut SharingWalk) {
+fn position(named: &str, ty: &Ty, is_public: bool, asked: &Asked<'_, '_, '_>, walk: &mut SharingWalk) {
     let function = walk.function.to_owned();
     if holds_shared(ty) {
         walk.slots.note(&function, named, ty.clone(), named == RESULT, true);
@@ -50418,9 +50426,9 @@ fn position(named: &str, ty: &Ty, is_public: bool, asked: &Asked<'_>, walk: &mut
     } else if is_public { for field in shared_fields(&ty.text(), asked) { walk.slots.force(FIELDS, &field, published_reason(&function, named), Some(Fallback::PublicSignature)); } }
 }
 
-fn sharing_block(block: &Block, asked: &Asked<'_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, ty_of: &impl Fn(&Type) -> Ty, walk: &mut SharingWalk) { for stmt in block.stmts.iter() { sharing_statement(&stmt.node, asked, holes_of, ty_of, walk); } }
+fn sharing_block(block: &Block, asked: &Asked<'_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, ty_of: &impl Fn(&Type) -> Ty, walk: &mut SharingWalk) { for stmt in block.stmts.iter() { sharing_statement(&stmt.node, asked, holes_of, ty_of, walk); } }
 
-fn sharing_statement(stmt: &Stmt, asked: &Asked<'_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, ty_of: &impl Fn(&Type) -> Ty, walk: &mut SharingWalk) {
+fn sharing_statement(stmt: &Stmt, asked: &Asked<'_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, ty_of: &impl Fn(&Type) -> Ty, walk: &mut SharingWalk) {
     match stmt {
         Stmt::Let { names, ty, value, .. } => {
             if names.len() != 1 { return; }
@@ -50462,7 +50470,7 @@ fn sharing_statement(stmt: &Stmt, asked: &Asked<'_>, holes_of: &impl Fn(&Expr) -
     }
 }
 
-fn let_binding(named: String, written: Option<&Type>, value: &Expr, asked: &Asked<'_>, ty_of: &impl Fn(&Type) -> Ty, walk: &mut SharingWalk) {
+fn let_binding(named: String, written: Option<&Type>, value: &Expr, asked: &Asked<'_, '_, '_>, ty_of: &impl Fn(&Type) -> Ty, walk: &mut SharingWalk) {
     if walks_in_parallel(value, asked.names, &walk.parallel) { walk.parallel.insert(named.to_owned()); }
     let aliased = named_handle(value, asked.names, &walk.scope);
     let ty = match binding_type(written, (aliased).as_deref(), value, asked, ty_of, &walk.scope) { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -50477,7 +50485,7 @@ fn let_binding(named: String, written: Option<&Type>, value: &Expr, asked: &Aske
     walk.scope.insert(named, ty);
 }
 
-fn binding_type(written: Option<&Type>, aliased: Option<&str>, value: &Expr, asked: &Asked<'_>, ty_of: &impl Fn(&Type) -> Ty, scope: &collections::BTreeMap<String, Ty>) -> Option<Ty> {
+fn binding_type(written: Option<&Type>, aliased: Option<&str>, value: &Expr, asked: &Asked<'_, '_, '_>, ty_of: &impl Fn(&Type) -> Ty, scope: &collections::BTreeMap<String, Ty>) -> Option<Ty> {
     if written.is_some() { return Some(ty_of(match written { Some(__nikaia_value) => __nikaia_value, None => return None })); }
     if aliased.is_some() {
         let handle = match aliased { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -50491,7 +50499,7 @@ fn binding_type(written: Option<&Type>, aliased: Option<&str>, value: &Expr, ask
     }
 }
 
-fn hull_written(func: &Expr, args: &[Expr], asked: &Asked<'_>) -> Option<Ty> {
+fn hull_written(func: &Expr, args: &[Expr], asked: &Asked<'_, '_, '_>) -> Option<Ty> {
     let named = match func {
         Expr::Variable(name, _) => { let name = *name; asked.names.resolve(name).to_owned() },
         _ => return None,
@@ -50506,14 +50514,14 @@ fn hull_written(func: &Expr, args: &[Expr], asked: &Asked<'_>) -> Option<Ty> {
 
 fn plain_type(name: &str) -> Ty { Ty::Named { name: name.to_owned(), args: vec![], view: false } }
 
-fn hands_back(value: &Expr, asked: &Asked<'_>, walk: &mut SharingWalk) {
+fn hands_back(value: &Expr, asked: &Asked<'_, '_, '_>, walk: &mut SharingWalk) {
     let source = match slot_of(value, asked, walk) { Some(__nikaia_value) => __nikaia_value, None => return };
     walk.slots.join(&slot(&walk.function, RESULT), &source);
 }
 
-fn origin_unseen(function: &str, named: &str, value: &Expr, asked: &Asked<'_>, walk: &mut SharingWalk) { walk.slots.force(function, named, origin_reason(value, asked.names), Some(Fallback::UnseenOrigin)); }
+fn origin_unseen(function: &str, named: &str, value: &Expr, asked: &Asked<'_, '_, '_>, walk: &mut SharingWalk) { walk.slots.force(function, named, origin_reason(value, asked.names), Some(Fallback::UnseenOrigin)); }
 
-fn a_crossing_reaches(named: &str, why: &str, fallback: Option<Fallback>, asked: &Asked<'_>, walk: &mut SharingWalk) {
+fn a_crossing_reaches(named: &str, why: &str, fallback: Option<Fallback>, asked: &Asked<'_, '_, '_>, walk: &mut SharingWalk) {
     let ty = match match *nikaia_std::index::get(&walk.scope, named) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
@@ -50525,7 +50533,7 @@ fn a_crossing_reaches(named: &str, why: &str, fallback: Option<Fallback>, asked:
     for field in shared_fields(&ty.text(), asked) { walk.slots.force(FIELDS, &field, why.to_owned(), fallback); }
 }
 
-fn slot_of(expr: &Expr, asked: &Asked<'_>, walk: &mut SharingWalk) -> Option<String> {
+fn slot_of(expr: &Expr, asked: &Asked<'_, '_, '_>, walk: &mut SharingWalk) -> Option<String> {
     let handle = named_handle(expr, asked.names, &walk.scope);
     if handle.is_some() { return Some(slot(&walk.function, nikaia_std::index::or(handle.as_deref(), || ""))); }
     match expr {
@@ -50534,7 +50542,7 @@ fn slot_of(expr: &Expr, asked: &Asked<'_>, walk: &mut SharingWalk) -> Option<Str
     }
 }
 
-fn field_slot(base: &Expr, field: &str, asked: &Asked<'_>, walk: &mut SharingWalk) -> Option<String> {
+fn field_slot(base: &Expr, field: &str, asked: &Asked<'_, '_, '_>, walk: &mut SharingWalk) -> Option<String> {
     let owner = match named_type(base, asked.names, &walk.scope) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let ty = match declared_field_type(&owner, field, asked) { Some(__nikaia_value) => __nikaia_value, None => return None };
     if !holds_shared(&ty) { return None; }
@@ -50543,7 +50551,7 @@ fn field_slot(base: &Expr, field: &str, asked: &Asked<'_>, walk: &mut SharingWal
     Some(slot(FIELDS, &key))
 }
 
-fn sharing_expression(expr: &Expr, asked: &Asked<'_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, ty_of: &impl Fn(&Type) -> Ty, walk: &mut SharingWalk) {
+fn sharing_expression(expr: &Expr, asked: &Asked<'_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, ty_of: &impl Fn(&Type) -> Ty, walk: &mut SharingWalk) {
     match expr {
         Expr::Spawn { body, .. } => {
             let body = nikaia_std::boxed::open(body);
@@ -50631,14 +50639,14 @@ fn sharing_expression(expr: &Expr, asked: &Asked<'_>, holes_of: &impl Fn(&Expr) 
     }
 }
 
-fn a_kept_lambda_uses(lambda: &Expr, asked: &Asked<'_>, walk: &mut SharingWalk) {
+fn a_kept_lambda_uses(lambda: &Expr, asked: &Asked<'_, '_, '_>, walk: &mut SharingWalk) {
     for named in names_used_by(lambda, asked) {
         if a_handle_by_value(&named, &walk) { walk.slots.duplicates(&walk.function, &named, String::from("used by a kept lambda, which takes a handle of its own")); }
         a_crossing_reaches(&named, "a kept lambda uses it, and a kept function may be called on any thread", None, asked, walk);
     }
 }
 
-fn names_used_by(expr: &Expr, asked: &Asked<'_>) -> collections::BTreeSet<String> {
+fn names_used_by(expr: &Expr, asked: &Asked<'_, '_, '_>) -> collections::BTreeSet<String> {
     let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
     names_in(expr, asked.names, &mut out);
     out
@@ -50649,7 +50657,7 @@ fn a_handle_by_value(named: &str, walk: &SharingWalk) -> bool {
     by_value_shared(ty)
 }
 
-fn struct_field(owner: &str, field: &FieldInit, asked: &Asked<'_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, ty_of: &impl Fn(&Type) -> Ty, walk: &mut SharingWalk) {
+fn struct_field(owner: &str, field: &FieldInit, asked: &Asked<'_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, ty_of: &impl Fn(&Type) -> Ty, walk: &mut SharingWalk) {
     let field_name = asked.names.resolve(field.name).to_owned();
     let value = nikaia_std::index::or(match field.value.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -50676,7 +50684,7 @@ fn struct_field(owner: &str, field: &FieldInit, asked: &Asked<'_>, holes_of: &im
     sharing_expression(&value, asked, holes_of, ty_of, walk);
 }
 
-fn sharing_method(call: &Expr, asked: &Asked<'_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, ty_of: &impl Fn(&Type) -> Ty, walk: &mut SharingWalk) {
+fn sharing_method(call: &Expr, asked: &Asked<'_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, ty_of: &impl Fn(&Type) -> Ty, walk: &mut SharingWalk) {
     let (receiver, method, args, config) = match call {
         Expr::MethodCall { receiver, method, args, config, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; (receiver, asked.names.resolve(method).to_owned(), args, config) },
         Expr::SafeMethod { receiver, method, args, config, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; (receiver, asked.names.resolve(method).to_owned(), args, config) },
@@ -50691,7 +50699,7 @@ fn sharing_method(call: &Expr, asked: &Asked<'_>, holes_of: &impl Fn(&Expr) -> V
     sharing_expression(receiver, asked, holes_of, ty_of, walk);
 }
 
-fn a_copy_out_of_the_lock(receiver: &Expr, asked: &Asked<'_>, walk: &mut SharingWalk) {
+fn a_copy_out_of_the_lock(receiver: &Expr, asked: &Asked<'_, '_, '_>, walk: &mut SharingWalk) {
     let handle = match named_handle(receiver, asked.names, &walk.scope) { Some(__nikaia_value) => __nikaia_value, None => return };
     let ty = match *nikaia_std::index::get(&walk.scope, &handle) { Some(__nikaia_value) => __nikaia_value, None => return };
     let held = match held_that_does_not_copy(ty) { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -50704,7 +50712,7 @@ struct SharingCall {
     is_method: bool,
 }
 
-fn sharing_arguments(called: &SharingCall, args: &[Expr], config: &[ConfigArg], asked: &Asked<'_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, ty_of: &impl Fn(&Type) -> Ty, walk: &mut SharingWalk) {
+fn sharing_arguments(called: &SharingCall, args: &[Expr], config: &[ConfigArg], asked: &Asked<'_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, ty_of: &impl Fn(&Type) -> Ty, walk: &mut SharingWalk) {
     let described = parameters_of((called.callee).as_deref(), asked);
     for at in 0..args.len() as i64 {
         let arg = nikaia_std::index::get(&args, nikaia_std::index::at(at));
@@ -50726,7 +50734,7 @@ fn sharing_arguments(called: &SharingCall, args: &[Expr], config: &[ConfigArg], 
     }
 }
 
-fn a_lambda_handed_on(described: Option<&Described>, at: i64, arg: &Expr, asked: &Asked<'_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, ty_of: &impl Fn(&Type) -> Ty, walk: &mut SharingWalk) {
+fn a_lambda_handed_on(described: Option<&Described>, at: i64, arg: &Expr, asked: &Asked<'_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, ty_of: &impl Fn(&Type) -> Ty, walk: &mut SharingWalk) {
     match arg {
         Expr::Closure { body, .. } => {
             if described.is_some() && a_kept_position(match described { Some(__nikaia_value) => __nikaia_value, None => return }, at) { a_kept_lambda_uses(arg, asked, walk); }
@@ -50738,7 +50746,7 @@ fn a_lambda_handed_on(described: Option<&Described>, at: i64, arg: &Expr, asked:
 
 fn a_kept_position(known: &Described, at: i64) -> bool { at < known.params.len() as i64 && known.keeps.contains(&nikaia_std::index::get(&known.params, nikaia_std::index::at(at)).0) }
 
-fn an_argument_that_is_not_a_handle(called: &SharingCall, described: Option<&Described>, at: i64, arg: &Expr, asked: &Asked<'_>, walk: &mut SharingWalk) {
+fn an_argument_that_is_not_a_handle(called: &SharingCall, described: Option<&Described>, at: i64, arg: &Expr, asked: &Asked<'_, '_, '_>, walk: &mut SharingWalk) {
     if described.is_none() {
         let why = unseen((called.callee).as_deref());
         for named in names_used_by(arg, asked) { a_crossing_reaches(&named, &why, Some(unseen_kind(called)), asked, walk); }
@@ -50786,7 +50794,7 @@ struct Described {
     keeps: Vec<String>,
 }
 
-fn parameters_of(callee: Option<&str>, asked: &Asked<'_>) -> Option<Described> {
+fn parameters_of(callee: Option<&str>, asked: &Asked<'_, '_, '_>) -> Option<Described> {
     let named = match callee { Some(__nikaia_value) => __nikaia_value, None => return None };
     let in_own = described_key(named, asked.own);
     if in_own.is_some() { return described_by(nikaia_std::index::or(in_own.as_deref(), || ""), asked.own); }
@@ -51387,7 +51395,7 @@ fn walk(surface: &mut Surface, items: &[RustItem<'_>], at: &str, imports: &colle
     }
 }
 
-fn function_of(f: &Fun<'_>, imports: &collections::BTreeMap<String, String>) -> Function {
+fn function_of(f: &Fun<'_, '_, '_, '_, '_, '_>, imports: &collections::BTreeMap<String, String>) -> Function {
     let mut parameters: Vec<String> = vec![];
     for written in split_top_level(f.generics) {
         if written.starts_with('\'') { continue; }
@@ -52190,7 +52198,7 @@ pub fn declares_text(names: &winnow_grammar::InternerContext, ty: Option<&Type>)
     names.resolve(written.name) == "String" && written.generics.is_empty() && !written.is_view && !written.is_nullable
 }
 
-pub fn makes_a_buffer(expr: &Expr, asked: &Asked<'_>, unaliased: &impl Fn(&str) -> String) -> Buffer {
+pub fn makes_a_buffer(expr: &Expr, asked: &Asked<'_, '_, '_>, unaliased: &impl Fn(&str) -> String) -> Buffer {
     match expr {
         Expr::MethodCall { method, receiver, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; a_method_buffer(asked.names.resolve(method), receiver) },
         Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); a_call_buffer(func, asked, unaliased) },
@@ -52221,7 +52229,7 @@ fn a_method_buffer(method: &str, receiver: &Expr) -> Buffer {
     Buffer::None
 }
 
-fn a_call_buffer(func: &Expr, asked: &Asked<'_>, unaliased: &impl Fn(&str) -> String) -> Buffer {
+fn a_call_buffer(func: &Expr, asked: &Asked<'_, '_, '_>, unaliased: &impl Fn(&str) -> String) -> Buffer {
     let name = match func {
         Expr::Variable(name, _) => { let name = *name; asked.names.resolve(name).to_owned() },
         Expr::Path(segments, _) => unaliased(&joined_segments(segments, asked.names)),
@@ -52235,7 +52243,7 @@ fn a_call_buffer(func: &Expr, asked: &Asked<'_>, unaliased: &impl Fn(&str) -> St
     Buffer::None
 }
 
-fn an_entry(key: &str, asked: &Asked<'_>) -> Option<FnContract> {
+fn an_entry(key: &str, asked: &Asked<'_, '_, '_>) -> Option<FnContract> {
     let mine: Option<FnContract> = match *nikaia_std::index::get(&asked.own.functions, key) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
@@ -52491,10 +52499,10 @@ pub fn hand_number(hand: &Hand) -> i64 {
 }
 
 #[derive(Debug, Clone)]
-pub struct TierAsk<'a> {
+pub struct TierAsk<'a, 'a1, 'a2> {
     pub names: &'a winnow_grammar::InternerContext,
-    pub aliases: &'a collections::BTreeMap<String, String>,
-    pub library: &'a Ledger,
+    pub aliases: &'a1 collections::BTreeMap<String, String>,
+    pub library: &'a2 Ledger,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -52742,7 +52750,7 @@ fn a_map(names: &winnow_grammar::InternerContext, ty: &Type) -> bool {
 
 fn a_container(names: &winnow_grammar::InternerContext, ty: &Type) -> bool { container_of(names, ty).is_some() }
 
-fn flow_type(owner: &TextOwner, ty: &Type, path: &mut Vec<i64>, kinds: &Kinds, ask: &TierAsk<'_>, walk: &mut TierWalk) {
+fn flow_type(owner: &TextOwner, ty: &Type, path: &mut Vec<i64>, kinds: &Kinds, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) {
     if plain_string(ask.names, ty) {
         let word = seen(owner, &path, walk);
         let before = nikaia_std::index::or(match *nikaia_std::index::get(&walk.flows.positions, &word) {
@@ -52763,7 +52771,7 @@ fn flow_type(owner: &TextOwner, ty: &Type, path: &mut Vec<i64>, kinds: &Kinds, a
     }
 }
 
-fn flow_value(going: &TierGoing, value: Option<&Expr>, kinds: &Kinds, ask: &TierAsk<'_>, walk: &mut TierWalk) {
+fn flow_value(going: &TierGoing, value: Option<&Expr>, kinds: &Kinds, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) {
     let owner = going.owner.clone();
     let ty = going.ty.clone();
     let path = going.path.to_owned();
@@ -52801,7 +52809,7 @@ fn going_into(owner: &TextOwner, ty: &Type, path: Vec<i64>, wrap: bool) -> TierG
 
 fn a_null(value: &Expr) -> bool { matches!(value, Expr::LitNull(_)) }
 
-fn handed_parameter(value: Option<&Expr>, ask: &TierAsk<'_>, walk: &TierWalk) -> Option<String> {
+fn handed_parameter(value: Option<&Expr>, ask: &TierAsk<'_, '_, '_>, walk: &TierWalk) -> Option<String> {
     let given = match value { Some(__nikaia_value) => __nikaia_value, None => return None };
     let name = match given {
         Expr::Variable(name, _) => { let name = *name; ask.names.resolve(name).to_owned() },
@@ -52815,7 +52823,7 @@ fn handed_parameter(value: Option<&Expr>, ask: &TierAsk<'_>, walk: &TierWalk) ->
     Some(position_word(&declared.owner, &empty))
 }
 
-fn comes_whole(value: Option<&Expr>, ask: &TierAsk<'_>, walk: &TierWalk) -> bool {
+fn comes_whole(value: Option<&Expr>, ask: &TierAsk<'_, '_, '_>, walk: &TierWalk) -> bool {
     let given = match value { Some(__nikaia_value) => __nikaia_value, None => return false };
     let collected = match given {
         Expr::MethodCall { method, args, .. } => { let method = *method; args.is_empty() && ask.names.resolve(method) == "collect" },
@@ -52825,7 +52833,7 @@ fn comes_whole(value: Option<&Expr>, ask: &TierAsk<'_>, walk: &TierWalk) -> bool
     !collected && source_of(given, ask, walk).is_some()
 }
 
-fn flow_whole(going: &TierGoing, value: &Expr, ask: &TierAsk<'_>, walk: &mut TierWalk) {
+fn flow_whole(going: &TierGoing, value: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) {
     let ty = going.ty.clone();
     let a_list = a_container(ask.names, &ty) && !a_map(ask.names, &ty) && !ty.generics.is_empty();
     match value {
@@ -52851,13 +52859,13 @@ fn flow_whole(going: &TierGoing, value: &Expr, ask: &TierAsk<'_>, walk: &mut Tie
     }
 }
 
-fn link_from(going: &TierGoing, value: &Expr, ask: &TierAsk<'_>, walk: &mut TierWalk) {
+fn link_from(going: &TierGoing, value: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) {
     let from = match source_of(value, ask, &walk) { Some(__nikaia_value) => __nikaia_value, None => return };
     let to = Declaring { owner: going.owner.clone(), ty: going.ty.clone() };
     link(&from, &mut vec![], &to, &mut going.path.to_owned(), ask, walk);
 }
 
-fn collected_into(going: &TierGoing, receiver: &Expr, ask: &TierAsk<'_>, walk: &mut TierWalk) {
+fn collected_into(going: &TierGoing, receiver: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) {
     let ty = going.ty.clone();
     if a_map(ask.names, &ty) {
         let keys = mixed_part(going, 0, ask, walk);
@@ -52873,7 +52881,7 @@ fn collected_into(going: &TierGoing, receiver: &Expr, ask: &TierAsk<'_>, walk: &
     if walk.in_hole && walk.hole_text < 0 { walk.flows.unwrappable.insert(word); } else if mixed_at(&word, &walk) { hand_value_over(receiver, Hand::Items, walk); }
 }
 
-fn mixed_part(going: &TierGoing, at: i64, ask: &TierAsk<'_>, walk: &mut TierWalk) -> bool {
+fn mixed_part(going: &TierGoing, at: i64, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) -> bool {
     if (going.ty.generics.len() as i64) <= at { return false; }
     if !plain_string(ask.names, nikaia_std::index::get(&going.ty.generics, nikaia_std::index::at(at))) { return false; }
     let mut path = going.path.to_owned();
@@ -52886,7 +52894,7 @@ fn mixed_part(going: &TierGoing, at: i64, ask: &TierAsk<'_>, walk: &mut TierWalk
     mixed_at(&word, &walk)
 }
 
-fn source_of(value: &Expr, ask: &TierAsk<'_>, walk: &TierWalk) -> Option<Declaring> {
+fn source_of(value: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &TierWalk) -> Option<Declaring> {
     match value {
         Expr::Variable(_, _) => place_of(value, ask, walk),
         Expr::Field { .. } => place_of(value, ask, walk),
@@ -52897,7 +52905,7 @@ fn source_of(value: &Expr, ask: &TierAsk<'_>, walk: &TierWalk) -> Option<Declari
     }
 }
 
-fn called_result(func: &Expr, ask: &TierAsk<'_>, walk: &TierWalk) -> Option<Declaring> {
+fn called_result(func: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &TierWalk) -> Option<Declaring> {
     let callee = match tier_callee(func, ask) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let function = match *nikaia_std::index::get(&walk.declared.fns, &callee) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let result = match function.result.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -52913,9 +52921,9 @@ fn method_result(method: &str, walk: &TierWalk) -> Option<Declaring> {
     Some(Declaring { owner: TextOwner::Returned(key.to_owned()), ty: result.clone() })
 }
 
-fn tier_callee(func: &Expr, ask: &TierAsk<'_>) -> Option<String> { written_callee(ask.names, func, &|name| { unaliased_in(ask.aliases, name) }) }
+fn tier_callee(func: &Expr, ask: &TierAsk<'_, '_, '_>) -> Option<String> { written_callee(ask.names, func, &|name| { unaliased_in(ask.aliases, name) }) }
 
-fn link(from: &Declaring, from_path: &mut Vec<i64>, to: &Declaring, to_path: &mut Vec<i64>, ask: &TierAsk<'_>, walk: &mut TierWalk) {
+fn link(from: &Declaring, from_path: &mut Vec<i64>, to: &Declaring, to_path: &mut Vec<i64>, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) {
     let from_ty = from.ty.clone();
     let to_ty = to.ty.clone();
     if plain_string(ask.names, &from_ty) && plain_string(ask.names, &to_ty) {
@@ -52950,7 +52958,7 @@ fn hand_value_over(value: &Expr, hand: Hand, walk: &mut TierWalk) {
     walk.flows.wraps.insert(node_key(value), hand);
 }
 
-fn kinds_of(owner: &TextOwner, ty: &Type, path: &mut Vec<i64>, ask: &TierAsk<'_>, walk: &TierWalk) -> Kinds {
+fn kinds_of(owner: &TextOwner, ty: &Type, path: &mut Vec<i64>, ask: &TierAsk<'_, '_, '_>, walk: &TierWalk) -> Kinds {
     if plain_string(ask.names, ty) {
         return match tier_at(&position_word(owner, &path), walk) {
             Tier::Owned => owned_kinds(),
@@ -52973,9 +52981,9 @@ fn kinds_of(owner: &TextOwner, ty: &Type, path: &mut Vec<i64>, ask: &TierAsk<'_>
     owned_kinds()
 }
 
-fn kinds_of_declared(declared: &Declaring, ask: &TierAsk<'_>, walk: &TierWalk) -> Kinds { kinds_of(&declared.owner, &declared.ty, &mut vec![], ask, walk) }
+fn kinds_of_declared(declared: &Declaring, ask: &TierAsk<'_, '_, '_>, walk: &TierWalk) -> Kinds { kinds_of(&declared.owner, &declared.ty, &mut vec![], ask, walk) }
 
-fn element_kinds(declared: &Declaring, keys: bool, ask: &TierAsk<'_>, walk: &TierWalk) -> Kinds {
+fn element_kinds(declared: &Declaring, keys: bool, ask: &TierAsk<'_, '_, '_>, walk: &TierWalk) -> Kinds {
     let ty = declared.ty.clone();
     if !a_container(ask.names, &ty) { return kinds_of_declared(declared, ask, walk); }
     let mut at: i64 = 0;
@@ -52984,7 +52992,7 @@ fn element_kinds(declared: &Declaring, keys: bool, ask: &TierAsk<'_>, walk: &Tie
     kinds_of(&declared.owner, nikaia_std::index::get(&ty.generics, (at) as usize), &mut vec![at], ask, walk)
 }
 
-fn place_of(expr: &Expr, ask: &TierAsk<'_>, walk: &TierWalk) -> Option<Declaring> {
+fn place_of(expr: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &TierWalk) -> Option<Declaring> {
     match expr {
         Expr::Variable(name, _) => { let name = *name; declared_local(ask.names.resolve(name), walk) },
         Expr::Field { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; field_place(base, ask.names.resolve(name), ask, walk) },
@@ -53000,14 +53008,14 @@ fn declared_local(name: &str, walk: &TierWalk) -> Option<Declaring> {
     }
 }
 
-fn field_place(base: &Expr, field: &str, ask: &TierAsk<'_>, walk: &TierWalk) -> Option<Declaring> {
+fn field_place(base: &Expr, field: &str, ask: &TierAsk<'_, '_, '_>, walk: &TierWalk) -> Option<Declaring> {
     let owner = match tier_struct_of(base, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let key = (owner.to_owned(), field.to_owned());
     let found = match *nikaia_std::index::get(&walk.declared.fields, &key) { Some(__nikaia_value) => __nikaia_value, None => return None };
     Some(Declaring { owner: TextOwner::Field(owner.to_owned(), field.to_owned()), ty: found.ty.clone() })
 }
 
-fn tier_block(block: &Block, ask: &TierAsk<'_>, walk: &mut TierWalk) -> Kinds {
+fn tier_block(block: &Block, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) -> Kinds {
     open_tier_scope(walk);
     let mut tail = no_kinds();
     let mut k: i64 = 0;
@@ -53020,7 +53028,7 @@ fn tier_block(block: &Block, ask: &TierAsk<'_>, walk: &mut TierWalk) -> Kinds {
     tail
 }
 
-fn tier_statement(stmt: &Stmt, at: i64, ask: &TierAsk<'_>, walk: &mut TierWalk) -> Kinds {
+fn tier_statement(stmt: &Stmt, at: i64, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) -> Kinds {
     match stmt {
         Stmt::Let { names, value, ty, .. } => { tier_let(names, value, (ty).as_ref(), at, ask, walk); },
         Stmt::Assign { target, value, .. } => { tier_assign(target, value, ask, walk); },
@@ -53049,7 +53057,7 @@ fn tier_statement(stmt: &Stmt, at: i64, ask: &TierAsk<'_>, walk: &mut TierWalk) 
     no_kinds()
 }
 
-fn tier_let(names: &[winnow_grammar::Symbol], value: &Expr, ty: Option<&Type>, at: i64, ask: &TierAsk<'_>, walk: &mut TierWalk) {
+fn tier_let(names: &[winnow_grammar::Symbol], value: &Expr, ty: Option<&Type>, at: i64, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) {
     let kinds = tier_expr(value, ask, walk);
     let mut of = tier_struct_of(value, ask, &walk);
     let mut literal: i64 = -1;
@@ -53084,7 +53092,7 @@ fn tier_let(names: &[winnow_grammar::Symbol], value: &Expr, ty: Option<&Type>, a
     }
 }
 
-fn container_source(source: Option<&Declaring>, ask: &TierAsk<'_>) -> bool {
+fn container_source(source: Option<&Declaring>, ask: &TierAsk<'_, '_, '_>) -> bool {
     let found = match source { Some(__nikaia_value) => __nikaia_value, None => return false };
     a_container(ask.names, &found.ty)
 }
@@ -53114,7 +53122,7 @@ fn a_literal_tail(block: &Block) -> bool {
     }
 }
 
-fn tier_assign(target: &Expr, value: &Expr, ask: &TierAsk<'_>, walk: &mut TierWalk) {
+fn tier_assign(target: &Expr, value: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) {
     let kinds = tier_expr(value, ask, walk);
     match target {
         Expr::Index { base, index, .. } => {
@@ -53150,7 +53158,7 @@ fn tier_assign(target: &Expr, value: &Expr, ask: &TierAsk<'_>, walk: &mut TierWa
     }
 }
 
-fn flow_result(value: &Expr, kinds: &Kinds, ask: &TierAsk<'_>, walk: &mut TierWalk) {
+fn flow_result(value: &Expr, kinds: &Kinds, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) {
     let key = match match walk.result.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
@@ -53163,7 +53171,7 @@ fn flow_result(value: &Expr, kinds: &Kinds, ask: &TierAsk<'_>, walk: &mut TierWa
     flow_value(&going_into(&TextOwner::Returned(key.to_owned()), &result, vec![], false), Some(value), kinds, ask, walk);
 }
 
-fn kept_literal(value: &Expr, owner: &TextOwner, path: &[i64], ty: &Type, ask: &TierAsk<'_>, walk: &mut TierWalk) {
+fn kept_literal(value: &Expr, owner: &TextOwner, path: &[i64], ty: &Type, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) {
     if !plain_string(ask.names, ty) { return; }
     let name = match value {
         Expr::Variable(name, _) => { let name = *name; ask.names.resolve(name).to_owned() },
@@ -53180,7 +53188,7 @@ fn kept_literal(value: &Expr, owner: &TextOwner, path: &[i64], ty: &Type, ask: &
     walk.flows.literal_lets.insert(local.literal, kept);
 }
 
-fn tier_struct_of(expr: &Expr, ask: &TierAsk<'_>, walk: &TierWalk) -> Option<String> {
+fn tier_struct_of(expr: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &TierWalk) -> Option<String> {
     match expr {
         Expr::StructLit { name, .. } => { let name = *name; Some(ask.names.resolve(name).to_owned()) },
         Expr::Variable(name, _) => { let name = *name; struct_of_local(ask.names.resolve(name), walk) },
@@ -53198,7 +53206,7 @@ fn struct_of_local(name: &str, walk: &TierWalk) -> Option<String> {
     }
 }
 
-fn flow_args(key: &str, args: &[Expr], given: &[Kinds], ask: &TierAsk<'_>, walk: &mut TierWalk) {
+fn flow_args(key: &str, args: &[Expr], given: &[Kinds], ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) {
     let function = match match *nikaia_std::index::get(&walk.declared.fns, key) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
@@ -53213,7 +53221,7 @@ fn flow_args(key: &str, args: &[Expr], given: &[Kinds], ask: &TierAsk<'_>, walk:
     }
 }
 
-fn tier_expr(expr: &Expr, ask: &TierAsk<'_>, walk: &mut TierWalk) -> Kinds {
+fn tier_expr(expr: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) -> Kinds {
     match expr {
         Expr::LitStr { .. } => lasting_kinds(),
         Expr::LitNull(_) => no_kinds(),
@@ -53380,19 +53388,19 @@ fn kinds_of_local(name: &str, walk: &TierWalk) -> Kinds {
     local.kinds.clone()
 }
 
-fn items_kinds(items: &[Expr], ask: &TierAsk<'_>, walk: &mut TierWalk) -> Kinds {
+fn items_kinds(items: &[Expr], ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) -> Kinds {
     let mut out = no_kinds();
     for item in items.iter() { out = kinds_joined(&out, &tier_expr(item, ask, walk)); }
     out
 }
 
-fn field_kinds(expr: &Expr, base: &Expr, ask: &TierAsk<'_>, walk: &mut TierWalk) -> Kinds {
+fn field_kinds(expr: &Expr, base: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) -> Kinds {
     tier_expr(base, ask, walk);
     let place = match place_of(expr, ask, &walk) { Some(__nikaia_value) => __nikaia_value, None => return owned_kinds() };
     kinds_of_declared(&place, ask, &walk)
 }
 
-fn tier_struct_field(owner: &str, field: &FieldInit, ask: &TierAsk<'_>, walk: &mut TierWalk) {
+fn tier_struct_field(owner: &str, field: &FieldInit, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) {
     let shorthand = Expr::Variable(field.name, fresh_id());
     let kinds = field_value_kinds(field, &shorthand, ask, walk);
     let name = ask.names.resolve(field.name).to_owned();
@@ -53406,7 +53414,7 @@ fn tier_struct_field(owner: &str, field: &FieldInit, ask: &TierAsk<'_>, walk: &m
     if field.value.is_none() { kept_literal(&shorthand, &into, &no_path(), &found.ty, ask, walk); }
 }
 
-fn field_value_kinds(field: &FieldInit, shorthand: &Expr, ask: &TierAsk<'_>, walk: &mut TierWalk) -> Kinds {
+fn field_value_kinds(field: &FieldInit, shorthand: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) -> Kinds {
     if field.value.is_some() {
         let value = match field.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return no_kinds() };
         return tier_expr(value, ask, walk);
@@ -53414,7 +53422,7 @@ fn field_value_kinds(field: &FieldInit, shorthand: &Expr, ask: &TierAsk<'_>, wal
     tier_expr(shorthand, ask, walk)
 }
 
-fn call_kinds(func: &Expr, args: &[Expr], ask: &TierAsk<'_>, walk: &mut TierWalk) -> Kinds {
+fn call_kinds(func: &Expr, args: &[Expr], ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) -> Kinds {
     let mut given: Vec<Kinds> = vec![];
     for arg in args.iter() { given.push(tier_expr(arg, ask, walk)); }
     let callee = match tier_callee(func, ask) { Some(__nikaia_value) => __nikaia_value, None => return owned_kinds() };
@@ -53426,7 +53434,7 @@ fn call_kinds(func: &Expr, args: &[Expr], ask: &TierAsk<'_>, walk: &mut TierWalk
     std_result(&callee, ask)
 }
 
-fn method_kinds(receiver: &Expr, method: &str, args: &[Expr], ask: &TierAsk<'_>, walk: &mut TierWalk) -> Kinds {
+fn method_kinds(receiver: &Expr, method: &str, args: &[Expr], ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) -> Kinds {
     let received = tier_expr(receiver, ask, walk);
     let mut given: Vec<Kinds> = vec![];
     for arg in args.iter() { given.push(tier_expr(arg, ask, walk)); }
@@ -53463,7 +53471,7 @@ fn method_kinds(receiver: &Expr, method: &str, args: &[Expr], ask: &TierAsk<'_>,
     owned_kinds()
 }
 
-fn put_into_container(place: &Declaring, method: &str, args: &[Expr], given: &[Kinds], ask: &TierAsk<'_>, walk: &mut TierWalk) {
+fn put_into_container(place: &Declaring, method: &str, args: &[Expr], given: &[Kinds], ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) {
     let ty = place.ty.clone();
     if a_map(ask.names, &ty) {
         if args.len() == 2 && given.len() == 2 && ty.generics.len() == 2 {
@@ -53477,7 +53485,7 @@ fn put_into_container(place: &Declaring, method: &str, args: &[Expr], given: &[K
     flow_value(&going_into(&place.owner, nikaia_std::index::get(&ty.generics, 0), vec![0], wrap), Some(nikaia_std::index::get(&args, nikaia_std::index::at(args.len() as i64 - 1))), nikaia_std::index::get(&given, nikaia_std::index::at(given.len() as i64 - 1)), ask, walk);
 }
 
-fn mapped(params: &[winnow_grammar::Symbol], body: &Block, received: &Kinds, ask: &TierAsk<'_>, walk: &mut TierWalk) -> Kinds {
+fn mapped(params: &[winnow_grammar::Symbol], body: &Block, received: &Kinds, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) -> Kinds {
     let held = match walk.result.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
@@ -53495,7 +53503,7 @@ fn mapped(params: &[winnow_grammar::Symbol], body: &Block, received: &Kinds, ask
     made
 }
 
-fn result_kinds(key: &str, ask: &TierAsk<'_>, walk: &TierWalk) -> Kinds {
+fn result_kinds(key: &str, ask: &TierAsk<'_, '_, '_>, walk: &TierWalk) -> Kinds {
     let function = match *nikaia_std::index::get(&walk.declared.fns, key) { Some(__nikaia_value) => __nikaia_value, None => return owned_kinds() };
     let result = match function.result.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return owned_kinds() };
     kinds_of(&TextOwner::Returned(key.to_owned()), result, &mut vec![], ask, walk)
@@ -53506,7 +53514,7 @@ fn viewed(received: &Kinds) -> Kinds {
     view_kinds()
 }
 
-fn std_result(callee: &str, ask: &TierAsk<'_>) -> Kinds {
+fn std_result(callee: &str, ask: &TierAsk<'_, '_, '_>) -> Kinds {
     let contract = match *nikaia_std::index::get(&ask.library.functions, callee) { Some(__nikaia_value) => __nikaia_value, None => return owned_kinds() };
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return owned_kinds() };
     let result = match signature.result.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return owned_kinds() };
@@ -53514,7 +53522,7 @@ fn std_result(callee: &str, ask: &TierAsk<'_>) -> Kinds {
     owned_kinds()
 }
 
-fn walk_program(program: &Program, ask: &TierAsk<'_>, walk: &mut TierWalk) {
+fn walk_program(program: &Program, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) {
     for item in program.items.iter() {
         match &item.node {
             Item::Fn { .. } => { walk_function(&item.node, None, ask, walk); },
@@ -53527,7 +53535,7 @@ fn walk_program(program: &Program, ask: &TierAsk<'_>, walk: &mut TierWalk) {
     }
 }
 
-fn walk_function(item: &Item, target: Option<String>, ask: &TierAsk<'_>, walk: &mut TierWalk) {
+fn walk_function(item: &Item, target: Option<String>, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) {
     let (name, receiver, args, body) = match item {
         Item::Fn { name, receiver, args, body, .. } => { let name = *name; (name, receiver, args, body) },
         _ => return,
@@ -53641,7 +53649,7 @@ fn tier_word(tier: &Tier) -> String {
     }
 }
 
-pub fn text_tiers(program: &Program, ask: &TierAsk<'_>) -> TextTiers {
+pub fn text_tiers(program: &Program, ask: &TierAsk<'_, '_, '_>) -> TextTiers {
     let declared = declared_of(program, ask.names);
     let text = string_type(&declared, ask.names);
     let mut walk = TierWalk { declared, tiers: collections::BTreeMap::new(), flows: no_flows(), locals: collections::BTreeMap::new(), frames: vec![], result: None, in_hole: false, hole_text: -1 };
@@ -53769,19 +53777,19 @@ fn held_clause(at: Option<&str>) -> String {
     format!(", which its field `{}` holds,", field)
 }
 
-pub fn crossing(ty: &Ty, walking: &Walking<'_>) -> Crossing {
+pub fn crossing(ty: &Ty, walking: &Walking<'_, '_>) -> Crossing {
     let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
     crossing_walk(ty, walking, &mut seen, CROSSING_DEPTH)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Walking<'a> {
+pub struct Walking<'a, 'a1> {
     pub own: &'a Ledger,
-    pub library: &'a Ledger,
+    pub library: &'a1 Ledger,
     pub into: Going,
 }
 
-fn crossing_walk(ty: &Ty, walking: &Walking<'_>, seen: &mut collections::BTreeSet<String>, depth: i64) -> Crossing {
+fn crossing_walk(ty: &Ty, walking: &Walking<'_, '_>, seen: &mut collections::BTreeSet<String>, depth: i64) -> Crossing {
     if depth == 0 { return Crossing::Undecided { part: ty.text() }; }
     match ty {
         Ty::Unknown => Crossing::Undecided { part: String::from("?") },
@@ -53796,7 +53804,7 @@ fn crossing_walk(ty: &Ty, walking: &Walking<'_>, seen: &mut collections::BTreeSe
     }
 }
 
-fn named_crossing(ty: &Ty, name: &str, args: &[Ty], walking: &Walking<'_>, seen: &mut collections::BTreeSet<String>, depth: i64) -> Crossing {
+fn named_crossing(ty: &Ty, name: &str, args: &[Ty], walking: &Walking<'_, '_>, seen: &mut collections::BTreeSet<String>, depth: i64) -> Crossing {
     let base = base_name(name);
     if one_of(&PLAIN_DATA, &base) {
         if args.is_empty() { return Crossing::May; }
@@ -53819,7 +53827,7 @@ fn named_crossing(ty: &Ty, name: &str, args: &[Ty], walking: &Walking<'_>, seen:
     described_crossing(ty, name, args, walking, seen, depth)
 }
 
-fn described_crossing(ty: &Ty, name: &str, args: &[Ty], walking: &Walking<'_>, seen: &mut collections::BTreeSet<String>, depth: i64) -> Crossing {
+fn described_crossing(ty: &Ty, name: &str, args: &[Ty], walking: &Walking<'_, '_>, seen: &mut collections::BTreeSet<String>, depth: i64) -> Crossing {
     let contract = match ledger_type(name, walking.own, walking.library) { Some(__nikaia_value) => __nikaia_value, None => return Crossing::Undecided { part: ty.text() } };
     if contract.crosses.may_not() { return Crossing::MayNot { part: ty.text(), at: None, why: Refusal::Said }; }
     if contract.crosses.may() && args.is_empty() { return Crossing::May; }
@@ -53834,7 +53842,7 @@ fn described_crossing(ty: &Ty, name: &str, args: &[Ty], walking: &Walking<'_>, s
     worst
 }
 
-fn all_of(parts: &[Ty], walking: &Walking<'_>, seen: &mut collections::BTreeSet<String>, depth: i64) -> Crossing {
+fn all_of(parts: &[Ty], walking: &Walking<'_, '_>, seen: &mut collections::BTreeSet<String>, depth: i64) -> Crossing {
     let mut worst = Crossing::May;
     for part in parts.iter() { worst = worst_of(worst, crossing_walk(part, walking, seen, depth - 1)); }
     worst
@@ -57262,10 +57270,10 @@ pub enum Destination {
 }
 
 #[derive(Debug, Clone)]
-pub struct Asked<'a> {
+pub struct Asked<'a, 'a1, 'a2> {
     pub names: &'a winnow_grammar::InternerContext,
-    pub own: &'a Ledger,
-    pub library: &'a Ledger,
+    pub own: &'a1 Ledger,
+    pub library: &'a2 Ledger,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -57293,7 +57301,7 @@ enum Root {
     Elsewhere,
 }
 
-pub fn views_stored(asked: &Asked<'_>, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool) -> Vec<Stored> {
+pub fn views_stored(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool) -> Vec<Stored> {
     let unit = Unit { borrowing: borrowing_types(asked.names, items), fields: view_fields(asked.names, items) };
     let mut found: Vec<Stored> = vec![];
     let nothing: Option<Type> = None;
@@ -57310,7 +57318,7 @@ pub fn views_stored(asked: &Asked<'_>, items: &[Spanned<Item>], own_buffer: &imp
     in_source_order(&found)
 }
 
-pub fn views_checked(asked: &Asked<'_>, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool) -> Vec<Finding> {
+pub fn views_checked(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool) -> Vec<Finding> {
     let mut out: Vec<Finding> = vec![];
     for stored in views_stored(asked, items, own_buffer) { if !stored.carried { out.push(finding(&stored)); } }
     rsrc_findings(asked, items, own_buffer, &mut out);
@@ -57359,7 +57367,7 @@ fn of_what(subject: Option<&str>, function: &str) -> String {
     format!("`{}.{}`", owner, function)
 }
 
-fn package_borrowing_types(asked: &Asked<'_>, items: &[Spanned<Item>]) -> collections::BTreeSet<String> {
+fn package_borrowing_types(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>]) -> collections::BTreeSet<String> {
     let mut borrowing = borrowing_types(asked.names, items);
     for (name, described) in asked.own.types.iter() { if !described.tethered.is_empty() { borrowing.insert(name.to_owned()); } }
     borrowing
@@ -57437,7 +57445,7 @@ fn names_borrowing(names: &winnow_grammar::InternerContext, ty: &Type, borrowing
     false
 }
 
-fn brings_buffer(unit: &Unit, asked: &Asked<'_>, ty: &Type) -> bool { holds_view(ty) || names_borrowing(asked.names, ty, &unit.borrowing) }
+fn brings_buffer(unit: &Unit, asked: &Asked<'_, '_, '_>, ty: &Type) -> bool { holds_view(ty) || names_borrowing(asked.names, ty, &unit.borrowing) }
 
 fn view_fields(names: &winnow_grammar::InternerContext, items: &[Spanned<Item>]) -> collections::BTreeMap<String, Vec<(String, Type)>> {
     let mut out: collections::BTreeMap<String, Vec<(String, Type)>> = collections::BTreeMap::new();
@@ -57486,7 +57494,7 @@ pub fn written_type(names: &winnow_grammar::InternerContext, ty: &Type) -> Strin
     out
 }
 
-fn scan(unit: &Unit, asked: &Asked<'_>, target: Option<&Type>, method: u32, item: &Item, own_buffer: &impl Fn(&Expr) -> bool, out: &mut Vec<Stored>) {
+fn scan(unit: &Unit, asked: &Asked<'_, '_, '_>, target: Option<&Type>, method: u32, item: &Item, own_buffer: &impl Fn(&Expr) -> bool, out: &mut Vec<Stored>) {
     match item {
         Item::Fn { name, receiver, args, config, ret_type, body, .. } => {
             let name = *name;
@@ -57532,7 +57540,7 @@ struct Scanned {
     names_a_buffer: bool,
 }
 
-fn one_answer(asked: &Asked<'_>, here: &Here, symbol: winnow_grammar::Symbol, signed: Scanned, out: &mut Vec<Stored>) {
+fn one_answer(asked: &Asked<'_, '_, '_>, here: &Here, symbol: winnow_grammar::Symbol, signed: Scanned, out: &mut Vec<Stored>) {
     let mut carriers: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut carrier: Option<winnow_grammar::Symbol> = None;
     for (_, into) in here.found.iter() {
@@ -57581,9 +57589,9 @@ fn takes_a_view_of_itself(receiver: Option<&Receiver>) -> bool {
     taken.is_ref
 }
 
-fn buffered(unit: &Unit, asked: &Asked<'_>, ty: Option<&Type>) -> bool { brings_buffer(unit, asked, match ty { Some(__nikaia_value) => __nikaia_value, None => return false }) }
+fn buffered(unit: &Unit, asked: &Asked<'_, '_, '_>, ty: Option<&Type>) -> bool { brings_buffer(unit, asked, match ty { Some(__nikaia_value) => __nikaia_value, None => return false }) }
 
-fn rsrc_unknown_named(unit: &Unit, asked: &Asked<'_>, ty: &Type) -> bool {
+fn rsrc_unknown_named(unit: &Unit, asked: &Asked<'_, '_, '_>, ty: &Type) -> bool {
     if (*ty.code).is_some() { return false; }
     let written = asked.names.resolve(ty.name).to_owned();
     let mut name = written.to_owned();
@@ -57610,12 +57618,12 @@ fn rsrc_unknown_named(unit: &Unit, asked: &Asked<'_>, ty: &Type) -> bool {
     false
 }
 
-fn named_in(asked: &Asked<'_>, ty: Option<&Type>, borrowing: &collections::BTreeSet<String>) -> bool {
+fn named_in(asked: &Asked<'_, '_, '_>, ty: Option<&Type>, borrowing: &collections::BTreeSet<String>) -> bool {
     let named = match ty { Some(__nikaia_value) => __nikaia_value, None => return false };
     borrowing.contains(asked.names.resolve(named.name))
 }
 
-fn text_of(asked: &Asked<'_>, ty: Option<&Type>) -> Option<String> {
+fn text_of(asked: &Asked<'_, '_, '_>, ty: Option<&Type>) -> Option<String> {
     let named = match ty { Some(__nikaia_value) => __nikaia_value, None => return None };
     Some(asked.names.resolve(named.name).to_owned())
 }
@@ -57625,7 +57633,7 @@ fn function_name(names: &winnow_grammar::InternerContext, name: Option<winnow_gr
     names.resolve(named).to_owned()
 }
 
-fn fields_of_type(unit: &Unit, asked: &Asked<'_>, ty: Option<&Type>) -> Vec<(String, Type)> {
+fn fields_of_type(unit: &Unit, asked: &Asked<'_, '_, '_>, ty: Option<&Type>) -> Vec<(String, Type)> {
     let named = match ty { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
     nikaia_std::index::or(match *nikaia_std::index::get(&unit.fields, asked.names.resolve(named.name)) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -57633,7 +57641,7 @@ fn fields_of_type(unit: &Unit, asked: &Asked<'_>, ty: Option<&Type>) -> Vec<(Str
     }, || vec![].into())
 }
 
-fn walk_block(unit: &Unit, asked: &Asked<'_>, block: &Block, tail: bool, own_buffer: &impl Fn(&Expr) -> bool, here: &mut Here) {
+fn walk_block(unit: &Unit, asked: &Asked<'_, '_, '_>, block: &Block, tail: bool, own_buffer: &impl Fn(&Expr) -> bool, here: &mut Here) {
     let count = block.stmts.len() as i64;
     for i in 0..count {
         let returning = tail && i + 1 == count;
@@ -57688,7 +57696,7 @@ fn walk_block(unit: &Unit, asked: &Asked<'_>, block: &Block, tail: bool, own_buf
     }
 }
 
-fn views_a_local_struct(asked: &Asked<'_>, block: &Block, at: i64, names: &[winnow_grammar::Symbol], value: &Expr) -> bool {
+fn views_a_local_struct(asked: &Asked<'_, '_, '_>, block: &Block, at: i64, names: &[winnow_grammar::Symbol], value: &Expr) -> bool {
     let literal = matches!(value, Expr::StructLit { .. });
     if !literal || names.len() != 1 { return false; }
     let name = asked.names.resolve(*nikaia_std::index::get(&names, 0)).to_owned();
@@ -57716,19 +57724,19 @@ fn views_a_local_struct(asked: &Asked<'_>, block: &Block, at: i64, names: &[winn
     uses == through
 }
 
-fn views_names(asked: &Asked<'_>, expr: &Expr, name: &str) -> bool {
+fn views_names(asked: &Asked<'_, '_, '_>, expr: &Expr, name: &str) -> bool {
     match expr {
         Expr::Variable(n, _) => { let n = *n; asked.names.resolve(n) == name },
         _ => false,
     }
 }
 
-fn handed_back_maybe(unit: &Unit, asked: &Asked<'_>, value: Option<&Expr>, span: &Span, own_buffer: &impl Fn(&Expr) -> bool, here: &mut Here) {
+fn handed_back_maybe(unit: &Unit, asked: &Asked<'_, '_, '_>, value: Option<&Expr>, span: &Span, own_buffer: &impl Fn(&Expr) -> bool, here: &mut Here) {
     let handed = match value { Some(__nikaia_value) => __nikaia_value, None => return };
     handed_back(unit, asked, handed, span, own_buffer, here);
 }
 
-fn handed_back(unit: &Unit, asked: &Asked<'_>, value: &Expr, span: &Span, own_buffer: &impl Fn(&Expr) -> bool, here: &mut Here) {
+fn handed_back(unit: &Unit, asked: &Asked<'_, '_, '_>, value: &Expr, span: &Span, own_buffer: &impl Fn(&Expr) -> bool, here: &mut Here) {
     match value {
         Expr::StructLit { name, .. } => {
             let name = *name;
@@ -57738,12 +57746,12 @@ fn handed_back(unit: &Unit, asked: &Asked<'_>, value: &Expr, span: &Span, own_bu
     }
 }
 
-fn ours_is(asked: &Asked<'_>, ours: Option<&str>, name: winnow_grammar::Symbol) -> bool {
+fn ours_is(asked: &Asked<'_, '_, '_>, ours: Option<&str>, name: winnow_grammar::Symbol) -> bool {
     let named = match ours { Some(__nikaia_value) => __nikaia_value, None => return false };
     named == asked.names.resolve(name)
 }
 
-fn assigned(unit: &Unit, asked: &Asked<'_>, target: &Expr, span: &Span, here: &mut Here) {
+fn assigned(unit: &Unit, asked: &Asked<'_, '_, '_>, target: &Expr, span: &Span, here: &mut Here) {
     match root(unit, asked, &here, target) {
         Root::SubjectField(ref field) => { field_of_subject(unit, asked, field, span, here); },
         Root::Subject => { subject_destination(unit, asked, span, here); },
@@ -57753,7 +57761,7 @@ fn assigned(unit: &Unit, asked: &Asked<'_>, target: &Expr, span: &Span, here: &m
     }
 }
 
-fn a_struct_parameter(unit: &Unit, asked: &Asked<'_>, here: &Here, name: winnow_grammar::Symbol) -> Option<String> {
+fn a_struct_parameter(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, name: winnow_grammar::Symbol) -> Option<String> {
     let wanted = asked.names.resolve(name);
     for (declared, ty) in here.declared.iter() {
         let declared = *declared;
@@ -57766,7 +57774,7 @@ fn a_struct_parameter(unit: &Unit, asked: &Asked<'_>, here: &Here, name: winnow_
     None
 }
 
-fn field_of_param(unit: &Unit, asked: &Asked<'_>, param: winnow_grammar::Symbol, field: &str, span: &Span, here: &mut Here) {
+fn field_of_param(unit: &Unit, asked: &Asked<'_, '_, '_>, param: winnow_grammar::Symbol, field: &str, span: &Span, here: &mut Here) {
     let owner = match a_struct_parameter(unit, asked, &here, param) { Some(__nikaia_value) => __nikaia_value, None => return };
     let declared = nikaia_std::index::or(match *nikaia_std::index::get(&unit.fields, &owner) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -57780,7 +57788,7 @@ fn field_of_param(unit: &Unit, asked: &Asked<'_>, param: winnow_grammar::Symbol,
     }
 }
 
-fn joined_path(asked: &Asked<'_>, parts: &[winnow_grammar::Symbol]) -> String {
+fn joined_path(asked: &Asked<'_, '_, '_>, parts: &[winnow_grammar::Symbol]) -> String {
     let mut written: Vec<String> = vec![];
     for part in parts.iter() {
         let part = *part;
@@ -57789,7 +57797,7 @@ fn joined_path(asked: &Asked<'_>, parts: &[winnow_grammar::Symbol]) -> String {
     written.join("::")
 }
 
-fn type_of(unit: &Unit, asked: &Asked<'_>, here: &Here, receiver: &Expr) -> Option<Type> {
+fn type_of(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, receiver: &Expr) -> Option<Type> {
     match receiver {
         Expr::Variable(name, _) => { let name = *name; variable_type(asked, here, asked.names.resolve(name)) },
         Expr::Field { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; field_type(unit, asked, here, base, asked.names.resolve(name)) },
@@ -57797,7 +57805,7 @@ fn type_of(unit: &Unit, asked: &Asked<'_>, here: &Here, receiver: &Expr) -> Opti
     }
 }
 
-fn variable_type(asked: &Asked<'_>, here: &Here, name: &str) -> Option<Type> {
+fn variable_type(asked: &Asked<'_, '_, '_>, here: &Here, name: &str) -> Option<Type> {
     if name == "self" {
         return match here.subject.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -57811,13 +57819,13 @@ fn variable_type(asked: &Asked<'_>, here: &Here, name: &str) -> Option<Type> {
     None
 }
 
-fn field_type(unit: &Unit, asked: &Asked<'_>, here: &Here, base: &Expr, name: &str) -> Option<Type> {
+fn field_type(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, base: &Expr, name: &str) -> Option<Type> {
     let fields = match fields_reached(unit, asked, here, base) { Some(__nikaia_value) => __nikaia_value, None => return None };
     for (field, ty) in fields.iter() { if field == name { return Some(ty.clone()); } }
     None
 }
 
-fn fields_reached(unit: &Unit, asked: &Asked<'_>, here: &Here, base: &Expr) -> Option<Vec<(String, Type)>> {
+fn fields_reached(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, base: &Expr) -> Option<Vec<(String, Type)>> {
     if is_self(asked, base) { return Some(here.subject_fields.to_owned()); }
     let ty = match type_of(unit, asked, here, base) { Some(__nikaia_value) => __nikaia_value, None => return None };
     match *nikaia_std::index::get(&unit.fields, asked.names.resolve(ty.name)) {
@@ -57826,14 +57834,14 @@ fn fields_reached(unit: &Unit, asked: &Asked<'_>, here: &Here, base: &Expr) -> O
     }
 }
 
-fn is_self(asked: &Asked<'_>, expr: &Expr) -> bool {
+fn is_self(asked: &Asked<'_, '_, '_>, expr: &Expr) -> bool {
     match expr {
         Expr::Variable(name, _) => { let name = *name; asked.names.resolve(name) == "self" },
         _ => false,
     }
 }
 
-fn stores(unit: &Unit, asked: &Asked<'_>, expr: &Expr, span: &Span, own_buffer: &impl Fn(&Expr) -> bool, here: &mut Here) {
+fn stores(unit: &Unit, asked: &Asked<'_, '_, '_>, expr: &Expr, span: &Span, own_buffer: &impl Fn(&Expr) -> bool, here: &mut Here) {
     match expr {
         Expr::MethodCall { receiver, args, config, .. } => {
             let receiver = nikaia_std::boxed::open(receiver);
@@ -57866,7 +57874,7 @@ fn stores(unit: &Unit, asked: &Asked<'_>, expr: &Expr, span: &Span, own_buffer: 
     }
 }
 
-fn handed_to(unit: &Unit, asked: &Asked<'_>, receiver: &Expr, args: &[Expr], config: &[ConfigArg], span: &Span, here: &mut Here) {
+fn handed_to(unit: &Unit, asked: &Asked<'_, '_, '_>, receiver: &Expr, args: &[Expr], config: &[ConfigArg], span: &Span, here: &mut Here) {
     let mut handed_over = false;
     for arg in args.iter() { if mentions(unit, asked, &here, arg) { handed_over = true; } }
     for setting in config.iter() { if mentions(unit, asked, &here, &setting.value) { handed_over = true; } }
@@ -57878,7 +57886,7 @@ fn handed_to(unit: &Unit, asked: &Asked<'_>, receiver: &Expr, args: &[Expr], con
     }
 }
 
-fn a_field_built(unit: &Unit, asked: &Asked<'_>, owner: &str, declared: &[(String, Type)], init: &FieldInit, span: &Span, here: &mut Here) {
+fn a_field_built(unit: &Unit, asked: &Asked<'_, '_, '_>, owner: &str, declared: &[(String, Type)], init: &FieldInit, span: &Span, here: &mut Here) {
     let field = asked.names.resolve(init.name).to_owned();
     let mentioned = value_mentions(unit, asked, &here, (init.value).as_ref(), &field);
     if !mentioned { return; }
@@ -57890,12 +57898,12 @@ fn a_field_built(unit: &Unit, asked: &Asked<'_>, owner: &str, declared: &[(Strin
     }
 }
 
-fn value_mentions(unit: &Unit, asked: &Asked<'_>, here: &Here, value: Option<&Expr>, field: &str) -> bool {
+fn value_mentions(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, value: Option<&Expr>, field: &str) -> bool {
     let written = match value { Some(__nikaia_value) => __nikaia_value, None => return here.carriers.contains(field) };
     mentions(unit, asked, here, written)
 }
 
-fn subject_destination(unit: &Unit, asked: &Asked<'_>, span: &Span, here: &mut Here) {
+fn subject_destination(unit: &Unit, asked: &Asked<'_, '_, '_>, span: &Span, here: &mut Here) {
     let owner = match text_of(asked, (here.subject).as_ref()) { Some(__nikaia_value) => __nikaia_value, None => return };
     let known = unit.fields.contains_key(&owner);
     let mut can_hold = false;
@@ -57905,14 +57913,14 @@ fn subject_destination(unit: &Unit, asked: &Asked<'_>, span: &Span, here: &mut H
     here.found.push((span.clone(), Destination::Subject { owner }));
 }
 
-fn declared_elsewhere_with_a_view(asked: &Asked<'_>, owner: &str) -> bool {
+fn declared_elsewhere_with_a_view(asked: &Asked<'_, '_, '_>, owner: &str) -> bool {
     let declared = match *nikaia_std::index::get(&asked.own.types, owner) { Some(__nikaia_value) => __nikaia_value, None => return true };
     for field in declared.fields.iter() { if a_ledger_type_with_a_view(&field.ty) { return true; } }
     for variant in declared.variants.iter() { for part in variant.holds.iter() { if a_ledger_type_with_a_view(&part.ty) { return true; } } }
     false
 }
 
-fn field_of_subject(unit: &Unit, asked: &Asked<'_>, field: &str, span: &Span, here: &mut Here) {
+fn field_of_subject(unit: &Unit, asked: &Asked<'_, '_, '_>, field: &str, span: &Span, here: &mut Here) {
     let mut written: Option<String> = None;
     for (name, ty) in here.subject_fields.iter() {
         if written.is_none() && name == field && brings_buffer(unit, asked, ty) { written = Some(written_type(asked.names, ty)); }
@@ -57923,7 +57931,7 @@ fn field_of_subject(unit: &Unit, asked: &Asked<'_>, field: &str, span: &Span, he
     here.found.push((span.clone(), Destination::Field { owner, field: field.to_owned(), ty }));
 }
 
-fn root(unit: &Unit, asked: &Asked<'_>, here: &Here, expr: &Expr) -> Root {
+fn root(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, expr: &Expr) -> Root {
     match expr {
         Expr::Variable(name, _) => { let name = *name; a_variable_root(unit, asked, here, name) },
         Expr::Field { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; match root(unit, asked, here, base) {
@@ -57941,13 +57949,13 @@ fn root(unit: &Unit, asked: &Asked<'_>, here: &Here, expr: &Expr) -> Root {
     }
 }
 
-fn a_variable_root(unit: &Unit, asked: &Asked<'_>, here: &Here, name: winnow_grammar::Symbol) -> Root {
+fn a_variable_root(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, name: winnow_grammar::Symbol) -> Root {
     if asked.names.resolve(name) == "self" { return Root::Subject; }
     if a_struct_parameter(unit, asked, here, name).is_some() { return Root::Param(name); }
     Root::Elsewhere
 }
 
-fn mentions(unit: &Unit, asked: &Asked<'_>, here: &Here, node: &Expr) -> bool {
+fn mentions(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, node: &Expr) -> bool {
     match node {
         Expr::Variable(name, _) => { let name = *name; here.carriers.contains(asked.names.resolve(name)) },
         Expr::MethodCall { receiver, args, config, .. } => { let receiver = nikaia_std::boxed::open(receiver); mentions(unit, asked, here, receiver) || any_mentions(unit, asked, here, args) || config_mentions(unit, asked, here, config) },
@@ -57992,41 +58000,41 @@ fn mentions(unit: &Unit, asked: &Asked<'_>, here: &Here, node: &Expr) -> bool {
     }
 }
 
-fn any_mentions(unit: &Unit, asked: &Asked<'_>, here: &Here, exprs: &[Expr]) -> bool {
+fn any_mentions(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, exprs: &[Expr]) -> bool {
     for expr in exprs.iter() { if mentions(unit, asked, here, expr) { return true; } }
     false
 }
 
-fn config_mentions(unit: &Unit, asked: &Asked<'_>, here: &Here, config: &[ConfigArg]) -> bool {
+fn config_mentions(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, config: &[ConfigArg]) -> bool {
     for setting in config.iter() { if mentions(unit, asked, here, &setting.value) { return true; } }
     false
 }
 
-fn fields_mention(unit: &Unit, asked: &Asked<'_>, here: &Here, fields: &[FieldInit]) -> bool {
+fn fields_mention(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, fields: &[FieldInit]) -> bool {
     for field in fields.iter() { if maybe_mentions(unit, asked, here, (field.value).as_ref()) { return true; } }
     false
 }
 
-fn arms_mention(unit: &Unit, asked: &Asked<'_>, here: &Here, arms: &[MatchArm]) -> bool {
+fn arms_mention(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, arms: &[MatchArm]) -> bool {
     for arm in arms.iter() { if mentions(unit, asked, here, &arm.body) { return true; } }
     false
 }
 
-fn select_mentions(unit: &Unit, asked: &Asked<'_>, here: &Here, arms: &[SelectArm]) -> bool {
+fn select_mentions(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, arms: &[SelectArm]) -> bool {
     for arm in arms.iter() { if mentions(unit, asked, here, &arm.value) || block_mentions(unit, asked, here, &arm.body) { return true; } }
     false
 }
 
-fn maybe_mentions(unit: &Unit, asked: &Asked<'_>, here: &Here, expr: Option<&Expr>) -> bool { mentions(unit, asked, here, match expr { Some(__nikaia_value) => __nikaia_value, None => return false }) }
+fn maybe_mentions(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, expr: Option<&Expr>) -> bool { mentions(unit, asked, here, match expr { Some(__nikaia_value) => __nikaia_value, None => return false }) }
 
-fn maybe_block_mentions(unit: &Unit, asked: &Asked<'_>, here: &Here, block: Option<&Block>) -> bool { block_mentions(unit, asked, here, match block { Some(__nikaia_value) => __nikaia_value, None => return false }) }
+fn maybe_block_mentions(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, block: Option<&Block>) -> bool { block_mentions(unit, asked, here, match block { Some(__nikaia_value) => __nikaia_value, None => return false }) }
 
-fn block_mentions(unit: &Unit, asked: &Asked<'_>, here: &Here, block: &Block) -> bool {
+fn block_mentions(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, block: &Block) -> bool {
     for stmt in block.stmts.iter() { if statement_mentions(unit, asked, here, &stmt.node) { return true; } }
     false
 }
 
-fn statement_mentions(unit: &Unit, asked: &Asked<'_>, here: &Here, stmt: &Stmt) -> bool {
+fn statement_mentions(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, stmt: &Stmt) -> bool {
     match stmt {
         Stmt::Let { value, .. } => mentions(unit, asked, here, value),
         Stmt::Comptime { value, .. } => mentions(unit, asked, here, value),
@@ -58040,7 +58048,7 @@ fn statement_mentions(unit: &Unit, asked: &Asked<'_>, here: &Here, stmt: &Stmt) 
     }
 }
 
-fn descend(unit: &Unit, asked: &Asked<'_>, node: &Expr, span: &Span, own_buffer: &impl Fn(&Expr) -> bool, here: &mut Here) {
+fn descend(unit: &Unit, asked: &Asked<'_, '_, '_>, node: &Expr, span: &Span, own_buffer: &impl Fn(&Expr) -> bool, here: &mut Here) {
     match node {
         Expr::MethodCall { receiver, args, config, .. } => {
             let receiver = nikaia_std::boxed::open(receiver);
@@ -58136,15 +58144,15 @@ fn descend(unit: &Unit, asked: &Asked<'_>, node: &Expr, span: &Span, own_buffer:
     }
 }
 
-fn stores_all(unit: &Unit, asked: &Asked<'_>, exprs: &[Expr], span: &Span, own_buffer: &impl Fn(&Expr) -> bool, here: &mut Here) { for expr in exprs.iter() { stores(unit, asked, expr, span, own_buffer, here); } }
+fn stores_all(unit: &Unit, asked: &Asked<'_, '_, '_>, exprs: &[Expr], span: &Span, own_buffer: &impl Fn(&Expr) -> bool, here: &mut Here) { for expr in exprs.iter() { stores(unit, asked, expr, span, own_buffer, here); } }
 
-fn stores_config(unit: &Unit, asked: &Asked<'_>, config: &[ConfigArg], span: &Span, own_buffer: &impl Fn(&Expr) -> bool, here: &mut Here) { for setting in config.iter() { stores(unit, asked, &setting.value, span, own_buffer, here); } }
+fn stores_config(unit: &Unit, asked: &Asked<'_, '_, '_>, config: &[ConfigArg], span: &Span, own_buffer: &impl Fn(&Expr) -> bool, here: &mut Here) { for setting in config.iter() { stores(unit, asked, &setting.value, span, own_buffer, here); } }
 
-fn stores_fields(unit: &Unit, asked: &Asked<'_>, fields: &[FieldInit], span: &Span, own_buffer: &impl Fn(&Expr) -> bool, here: &mut Here) { for field in fields.iter() { stores_maybe(unit, asked, (field.value).as_ref(), span, own_buffer, here); } }
+fn stores_fields(unit: &Unit, asked: &Asked<'_, '_, '_>, fields: &[FieldInit], span: &Span, own_buffer: &impl Fn(&Expr) -> bool, here: &mut Here) { for field in fields.iter() { stores_maybe(unit, asked, (field.value).as_ref(), span, own_buffer, here); } }
 
-fn stores_maybe(unit: &Unit, asked: &Asked<'_>, expr: Option<&Expr>, span: &Span, own_buffer: &impl Fn(&Expr) -> bool, here: &mut Here) { stores(unit, asked, match expr { Some(__nikaia_value) => __nikaia_value, None => return }, span, own_buffer, here); }
+fn stores_maybe(unit: &Unit, asked: &Asked<'_, '_, '_>, expr: Option<&Expr>, span: &Span, own_buffer: &impl Fn(&Expr) -> bool, here: &mut Here) { stores(unit, asked, match expr { Some(__nikaia_value) => __nikaia_value, None => return }, span, own_buffer, here); }
 
-fn walk_maybe_block(unit: &Unit, asked: &Asked<'_>, block: Option<&Block>, own_buffer: &impl Fn(&Expr) -> bool, here: &mut Here) { walk_block(unit, asked, match block { Some(__nikaia_value) => __nikaia_value, None => return }, false, own_buffer, here); }
+fn walk_maybe_block(unit: &Unit, asked: &Asked<'_, '_, '_>, block: Option<&Block>, own_buffer: &impl Fn(&Expr) -> bool, here: &mut Here) { walk_block(unit, asked, match block { Some(__nikaia_value) => __nikaia_value, None => return }, false, own_buffer, here); }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FieldsHeld {
@@ -58285,9 +58293,9 @@ fn rsrc_flow(at: &Span) -> ResultSrcFlow {
     ResultSrcFlow { env, ways: vec![], at: Span { start: at.start, end: at.end }, depth: 0, inner: rsrc_none(), shadow: rsrc_none(), annotated: collections::BTreeMap::new() }
 }
 
-fn rsrc_shadow(asked: &Asked<'_>, here: &Here, name: &str, flow: &mut ResultSrcFlow) { if variable_type(asked, here, name).is_some() { flow.shadow.insert(name.to_owned()); } }
+fn rsrc_shadow(asked: &Asked<'_, '_, '_>, here: &Here, name: &str, flow: &mut ResultSrcFlow) { if variable_type(asked, here, name).is_some() { flow.shadow.insert(name.to_owned()); } }
 
-fn rsrc_root_name(asked: &Asked<'_>, place: &Expr) -> Option<String> {
+fn rsrc_root_name(asked: &Asked<'_, '_, '_>, place: &Expr) -> Option<String> {
     match place {
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); rsrc_root_name(asked, base) },
         Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); rsrc_root_name(asked, base) },
@@ -58297,7 +58305,7 @@ fn rsrc_root_name(asked: &Asked<'_>, place: &Expr) -> Option<String> {
     }
 }
 
-fn rsrc_type(unit: &Unit, asked: &Asked<'_>, here: &Here, flow: &ResultSrcFlow, place: &Expr) -> Option<Type> {
+fn rsrc_type(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, flow: &ResultSrcFlow, place: &Expr) -> Option<Type> {
     let root = rsrc_root_name(asked, place);
     if root.is_some() {
         let named = nikaia_std::index::or(root, || "".into());
@@ -58320,12 +58328,12 @@ fn rsrc_bind(flow: &mut ResultSrcFlow, name: &str, reach: &collections::BTreeSet
     flow.env.insert(name.to_owned(), now);
 }
 
-fn rsrc_bind_symbol(asked: &Asked<'_>, binding: Option<winnow_grammar::Symbol>, reach: &collections::BTreeSet<String>, flow: &mut ResultSrcFlow) {
+fn rsrc_bind_symbol(asked: &Asked<'_, '_, '_>, binding: Option<winnow_grammar::Symbol>, reach: &collections::BTreeSet<String>, flow: &mut ResultSrcFlow) {
     let name = match binding { Some(__nikaia_value) => __nikaia_value, None => return };
     rsrc_bind(flow, asked.names.resolve(name), reach);
 }
 
-fn rsrc_bind_root(asked: &Asked<'_>, here: &Here, target: &Expr, reach: &collections::BTreeSet<String>, flow: &mut ResultSrcFlow) {
+fn rsrc_bind_root(asked: &Asked<'_, '_, '_>, here: &Here, target: &Expr, reach: &collections::BTreeSet<String>, flow: &mut ResultSrcFlow) {
     match target {
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); rsrc_bind_root(asked, here, base, reach, flow); },
         Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); rsrc_bind_root(asked, here, base, reach, flow); },
@@ -58339,13 +58347,13 @@ fn rsrc_bind_root(asked: &Asked<'_>, here: &Here, target: &Expr, reach: &collect
     }
 }
 
-fn rsrc_scalar(asked: &Asked<'_>, ty: &Type) -> bool {
+fn rsrc_scalar(asked: &Asked<'_, '_, '_>, ty: &Type) -> bool {
     if ty.is_view || !ty.generics.is_empty() { return false; }
     let name = asked.names.resolve(ty.name);
     name == "i8" || name == "i16" || name == "i32" || name == "i64" || name == "isize" || name == "u8" || name == "u16" || name == "u32" || name == "u64" || name == "usize" || name == "f32" || name == "f64" || name == "bool" || name == "char"
 }
 
-fn rsrc_ty_holds_view(asked: &Asked<'_>, ty: &Ty) -> bool {
+fn rsrc_ty_holds_view(asked: &Asked<'_, '_, '_>, ty: &Ty) -> bool {
     match ty {
         Ty::Named { name, args, view } => {
             let view = *view;
@@ -58373,12 +58381,12 @@ fn rsrc_ty_holds_view(asked: &Asked<'_>, ty: &Ty) -> bool {
 
 fn rsrc_plain_name(name: &str) -> bool { name == "String" || name == "bool" || name == "char" || name == "i8" || name == "i16" || name == "i32" || name == "i64" || name == "isize" || name == "u8" || name == "u16" || name == "u32" || name == "u64" || name == "usize" || name == "f32" || name == "f64" || name == "Vec" || name == "Array" || name == "Option" || name == "BTreeSet" || name == "BTreeMap" || name == "HashSet" || name == "HashMap" || name == "VecDeque" || name == "Box" || name == "Tuple" || name == "Duration" || name == "Instant" || name == "scalar" || name == "bytes" }
 
-fn rsrc_any_ty_holds_view(asked: &Asked<'_>, types: &[Ty]) -> bool {
+fn rsrc_any_ty_holds_view(asked: &Asked<'_, '_, '_>, types: &[Ty]) -> bool {
     for ty in types.iter() { if rsrc_ty_holds_view(asked, ty) { return true; } }
     false
 }
 
-fn rsrc_eval(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, node: &Expr, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+fn rsrc_eval(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, node: &Expr, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
     match node {
         Expr::Variable(name, _) => { let name = *name; rsrc_of_name(&flow, asked.names.resolve(name)) },
         Expr::Field { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; rsrc_field(unit, asked, here, known, own_buffer, base, asked.names.resolve(name), flow) },
@@ -58423,20 +58431,20 @@ fn rsrc_eval(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::B
     }
 }
 
-fn rsrc_nothing(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, node: &Expr, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+fn rsrc_nothing(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, node: &Expr, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
     let walked = rsrc_eval(unit, asked, here, known, own_buffer, node, flow);
     rsrc_none()
 }
 
 #[allow(clippy::too_many_arguments)]
-fn rsrc_nothing_of(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, first: &Expr, second: &Expr, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+fn rsrc_nothing_of(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, first: &Expr, second: &Expr, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
     let walked = rsrc_eval(unit, asked, here, known, own_buffer, first, flow);
     let other = rsrc_eval(unit, asked, here, known, own_buffer, second, flow);
     rsrc_none()
 }
 
 #[allow(clippy::too_many_arguments)]
-fn rsrc_both(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, first: &Expr, second: &Expr, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+fn rsrc_both(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, first: &Expr, second: &Expr, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
     let mut out = rsrc_eval(unit, asked, here, known, own_buffer, first, flow);
     let more = rsrc_eval(unit, asked, here, known, own_buffer, second, flow);
     rsrc_join(&mut out, &more);
@@ -58444,14 +58452,14 @@ fn rsrc_both(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::B
 }
 
 #[allow(clippy::too_many_arguments)]
-fn rsrc_both_blocks(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, first: &Expr, handler: &Block, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+fn rsrc_both_blocks(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, first: &Expr, handler: &Block, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
     let mut out = rsrc_eval(unit, asked, here, known, own_buffer, first, flow);
     let more = rsrc_block(unit, asked, here, known, own_buffer, handler, flow);
     rsrc_join(&mut out, &more);
     out
 }
 
-fn rsrc_all(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, exprs: &[Expr], flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+fn rsrc_all(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, exprs: &[Expr], flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
     let mut out = rsrc_none();
     for expr in exprs.iter() {
         let more = rsrc_eval(unit, asked, here, known, own_buffer, expr, flow);
@@ -58460,13 +58468,13 @@ fn rsrc_all(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::BT
     out
 }
 
-fn rsrc_maybe(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, expr: Option<&Expr>, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+fn rsrc_maybe(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, expr: Option<&Expr>, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
     let written = match expr { Some(__nikaia_value) => __nikaia_value, None => return rsrc_none() };
     rsrc_eval(unit, asked, here, known, own_buffer, written, flow)
 }
 
 #[allow(clippy::too_many_arguments)]
-fn rsrc_field(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, base: &Expr, name: &str, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+fn rsrc_field(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, base: &Expr, name: &str, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
     let inner = rsrc_eval(unit, asked, here, known, own_buffer, base, flow);
     let hidden = rsrc_type(unit, asked, here, &flow, base);
     if hidden.is_none() && rsrc_root_name(asked, base).is_some() && !is_self(asked, base) { return rsrc_out_of(name, &inner); }
@@ -58476,13 +58484,13 @@ fn rsrc_field(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::
 }
 
 #[allow(clippy::too_many_arguments)]
-fn rsrc_index(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, base: &Expr, index: &Expr, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+fn rsrc_index(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, base: &Expr, index: &Expr, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
     let inner = rsrc_eval(unit, asked, here, known, own_buffer, base, flow);
     let read = rsrc_eval(unit, asked, here, known, own_buffer, index, flow);
     inner
 }
 
-fn rsrc_fields(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, fields: &[FieldInit], flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+fn rsrc_fields(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, fields: &[FieldInit], flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
     let mut out = rsrc_none();
     for field in fields.iter() {
         let mut more = rsrc_none();
@@ -58493,14 +58501,14 @@ fn rsrc_fields(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections:
 }
 
 #[allow(clippy::too_many_arguments)]
-fn rsrc_with(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, base: &Expr, fields: &[FieldInit], flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+fn rsrc_with(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, base: &Expr, fields: &[FieldInit], flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
     let mut out = rsrc_eval(unit, asked, here, known, own_buffer, base, flow);
     let more = rsrc_fields(unit, asked, here, known, own_buffer, fields, flow);
     rsrc_join(&mut out, &more);
     out
 }
 
-fn rsrc_return(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, value: Option<&Expr>, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+fn rsrc_return(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, value: Option<&Expr>, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
     let reach = rsrc_maybe(unit, asked, here, known, own_buffer, value, flow);
     rsrc_record(&reach, flow);
     rsrc_none()
@@ -58515,7 +58523,7 @@ fn rsrc_record(reach: &collections::BTreeSet<String>, flow: &mut ResultSrcFlow) 
 }
 
 #[allow(clippy::too_many_arguments)]
-fn rsrc_if(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, cond: &Expr, then_branch: &Block, else_branch: Option<&Block>, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+fn rsrc_if(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, cond: &Expr, then_branch: &Block, else_branch: Option<&Block>, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
     let tested = rsrc_eval(unit, asked, here, known, own_buffer, cond, flow);
     let mut out = rsrc_block(unit, asked, here, known, own_buffer, then_branch, flow);
     let other = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return out };
@@ -58524,7 +58532,7 @@ fn rsrc_if(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::BTr
     out
 }
 
-fn rsrc_pattern_names(asked: &Asked<'_>, pattern: &MatchPattern, out: &mut Vec<String>) {
+fn rsrc_pattern_names(asked: &Asked<'_, '_, '_>, pattern: &MatchPattern, out: &mut Vec<String>) {
     match pattern {
         MatchPattern::Path(parts) => { if parts.len() == 1 { out.push(asked.names.resolve(*nikaia_std::index::get(&parts, 0)).to_owned()); } },
         MatchPattern::Tuple { parts, .. } => { for part in parts.iter() { rsrc_pattern_names(asked, part, out); } },
@@ -58537,7 +58545,7 @@ fn rsrc_pattern_names(asked: &Asked<'_>, pattern: &MatchPattern, out: &mut Vec<S
 }
 
 #[allow(clippy::too_many_arguments)]
-fn rsrc_match(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, value: &Expr, arms: &[MatchArm], flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+fn rsrc_match(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, value: &Expr, arms: &[MatchArm], flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
     let matched = rsrc_eval(unit, asked, here, known, own_buffer, value, flow);
     let mut out = rsrc_none();
     for arm in arms.iter() {
@@ -58554,7 +58562,7 @@ fn rsrc_match(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::
     out
 }
 
-fn rsrc_closure(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, body: &Block, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+fn rsrc_closure(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, body: &Block, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
     let saved = flow.inner.to_owned();
     flow.inner = rsrc_none();
     flow.depth += 1;
@@ -58565,7 +58573,7 @@ fn rsrc_closure(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections
     out
 }
 
-fn rsrc_task(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, body: &Expr, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+fn rsrc_task(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, body: &Expr, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
     let saved = flow.inner.to_owned();
     flow.depth += 1;
     let walked = rsrc_eval(unit, asked, here, known, own_buffer, body, flow);
@@ -58574,7 +58582,7 @@ fn rsrc_task(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::B
     rsrc_none()
 }
 
-fn rsrc_select(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, arms: &[SelectArm], flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+fn rsrc_select(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, arms: &[SelectArm], flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
     let mut out = rsrc_none();
     for arm in arms.iter() {
         let raced = rsrc_eval(unit, asked, here, known, own_buffer, &arm.value, flow);
@@ -58585,7 +58593,7 @@ fn rsrc_select(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections:
     out
 }
 
-fn rsrc_block(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, block: &Block, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+fn rsrc_block(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, block: &Block, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
     let count = block.stmts.len() as i64;
     let mut tail = rsrc_none();
     for i in 0..count {
@@ -58649,14 +58657,14 @@ fn rsrc_block(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::
     tail
 }
 
-fn rsrc_copy(unit: &Unit, asked: &Asked<'_>, here: &Here, flow: &ResultSrcFlow, receiver: &Expr, on: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {
+fn rsrc_copy(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, flow: &ResultSrcFlow, receiver: &Expr, on: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {
     let ty = match rsrc_type(unit, asked, here, flow, receiver) { Some(__nikaia_value) => __nikaia_value, None => return on.to_owned() };
     if names_borrowing(asked.names, &ty, &unit.borrowing) { return on.to_owned(); }
     for inner in ty.generics.iter() { if holds_view(inner) { return on.to_owned(); } }
     rsrc_none()
 }
 
-fn rsrc_may_hold(unit: &Unit, asked: &Asked<'_>, flow: &ResultSrcFlow, name: &str) -> bool {
+fn rsrc_may_hold(unit: &Unit, asked: &Asked<'_, '_, '_>, flow: &ResultSrcFlow, name: &str) -> bool {
     let written = match match *nikaia_std::index::get(&flow.annotated, name) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
@@ -58664,7 +58672,7 @@ fn rsrc_may_hold(unit: &Unit, asked: &Asked<'_>, flow: &ResultSrcFlow, name: &st
     brings_buffer(unit, asked, &written) || rsrc_unknown_named(unit, asked, &written)
 }
 
-fn rsrc_root_local(asked: &Asked<'_>, here: &Here, flow: &ResultSrcFlow, place: &Expr) -> Option<String> {
+fn rsrc_root_local(asked: &Asked<'_, '_, '_>, here: &Here, flow: &ResultSrcFlow, place: &Expr) -> Option<String> {
     match place {
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); rsrc_root_local(asked, here, flow, base) },
         Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); rsrc_root_local(asked, here, flow, base) },
@@ -58680,7 +58688,7 @@ fn rsrc_root_local(asked: &Asked<'_>, here: &Here, flow: &ResultSrcFlow, place: 
 }
 
 #[allow(clippy::too_many_arguments)]
-fn rsrc_method(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+fn rsrc_method(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
     let on = rsrc_eval(unit, asked, here, known, own_buffer, receiver, flow);
     let mut positional: Vec<collections::BTreeSet<String>> = vec![];
     positional.push(on.to_owned());
@@ -58729,7 +58737,7 @@ fn rsrc_method(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections:
 }
 
 #[allow(clippy::too_many_arguments)]
-fn rsrc_call(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, func: &Expr, args: &[Expr], config: &[ConfigArg], flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+fn rsrc_call(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, func: &Expr, args: &[Expr], config: &[ConfigArg], flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
     let mut key: String = String::from("");
     let mut named = false;
     let mut everything = rsrc_none();
@@ -58788,7 +58796,7 @@ fn rsrc_call(unit: &Unit, asked: &Asked<'_>, here: &Here, known: &collections::B
     rsrc_callee(asked, known, &key, &positional, &everything)
 }
 
-fn rsrc_callee(asked: &Asked<'_>, known: &collections::BTreeMap<String, ResultSrcKnown>, key: &str, positional: &[collections::BTreeSet<String>], everything: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {
+fn rsrc_callee(asked: &Asked<'_, '_, '_>, known: &collections::BTreeMap<String, ResultSrcKnown>, key: &str, positional: &[collections::BTreeSet<String>], everything: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {
     let found = nikaia_std::index::or(match *nikaia_std::index::get(&known, key) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
@@ -58858,7 +58866,7 @@ fn rsrc_written_paths(contract: &FnContract) -> Vec<(String, String)> {
     out
 }
 
-fn rsrc_result_is_receivers(asked: &Asked<'_>, signature: &Signature) -> bool {
+fn rsrc_result_is_receivers(asked: &Asked<'_, '_, '_>, signature: &Signature) -> bool {
     let result = match match signature.result.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
@@ -58898,7 +58906,7 @@ fn rsrc_ty_names(ty: &Ty, out: &mut Vec<String>) {
     }
 }
 
-fn rsrc_a_source(unit: &Unit, asked: &Asked<'_>, arg: &FnArg, contract: Option<&FnContract>, at: i64) -> bool {
+fn rsrc_a_source(unit: &Unit, asked: &Asked<'_, '_, '_>, arg: &FnArg, contract: Option<&FnContract>, at: i64) -> bool {
     if (*arg.ty.code).is_some() { return false; }
     if arg.ty.is_view || brings_buffer(unit, asked, &arg.ty) { return true; }
     let own = match contract { Some(__nikaia_value) => __nikaia_value, None => return false };
@@ -58916,7 +58924,7 @@ fn rsrc_key(owner: Option<&str>, function: &str) -> String {
     format!("{}::{}", named, function)
 }
 
-fn rsrc_params(asked: &Asked<'_>, receiver: Option<&Receiver>, args: &[FnArg], config: &[ConfigParam]) -> Vec<String> {
+fn rsrc_params(asked: &Asked<'_, '_, '_>, receiver: Option<&Receiver>, args: &[FnArg], config: &[ConfigParam]) -> Vec<String> {
     let mut params: Vec<String> = vec![];
     if receiver.is_some() {
         let self_name: String = String::from("self");
@@ -58927,7 +58935,7 @@ fn rsrc_params(asked: &Asked<'_>, receiver: Option<&Receiver>, args: &[FnArg], c
     params
 }
 
-fn rsrc_seed(unit: &Unit, asked: &Asked<'_>, subject: Option<&Type>, item: &Item, known: &mut collections::BTreeMap<String, ResultSrcKnown>) {
+fn rsrc_seed(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Option<&Type>, item: &Item, known: &mut collections::BTreeMap<String, ResultSrcKnown>) {
     match item {
         Item::Fn { name, receiver, args, config, ret_type, .. } => {
             let name = *name;
@@ -58942,7 +58950,7 @@ fn rsrc_seed(unit: &Unit, asked: &Asked<'_>, subject: Option<&Type>, item: &Item
 }
 
 #[allow(clippy::too_many_arguments)]
-fn rsrc_function(unit: &Unit, asked: &Asked<'_>, subject: Option<&Type>, trait_name: Option<&winnow_grammar::Symbol>, at: &Span, item: &Item, own_buffer: &impl Fn(&Expr) -> bool, known: &mut collections::BTreeMap<String, ResultSrcKnown>, out: &mut Vec<Finding>, report: bool) -> bool {
+fn rsrc_function(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Option<&Type>, trait_name: Option<&winnow_grammar::Symbol>, at: &Span, item: &Item, own_buffer: &impl Fn(&Expr) -> bool, known: &mut collections::BTreeMap<String, ResultSrcKnown>, out: &mut Vec<Finding>, report: bool) -> bool {
     match item {
         Item::Fn { name, receiver, args, config, ret_type, body, .. } => {
             let name = *name;
@@ -59046,7 +59054,7 @@ fn rsrc_tail(body: &Block, tail: &collections::BTreeSet<String>, flow: &mut Resu
 }
 
 #[allow(clippy::too_many_arguments)]
-fn rsrc_report(asked: &Asked<'_>, of: &str, sources: &[String], declared_views: &[String], ways: &[ResultSrcWay], reach: &collections::BTreeSet<String>, receiver: Option<&Receiver>, trait_name: Option<&winnow_grammar::Symbol>, at: &Span, out: &mut Vec<Finding>) {
+fn rsrc_report(asked: &Asked<'_, '_, '_>, of: &str, sources: &[String], declared_views: &[String], ways: &[ResultSrcWay], reach: &collections::BTreeSet<String>, receiver: Option<&Receiver>, trait_name: Option<&winnow_grammar::Symbol>, at: &Span, out: &mut Vec<Finding>) {
     for way in ways.iter() {
         for each in way.reach.iter() {
             if each.starts_with('!') {
@@ -59075,7 +59083,7 @@ fn rsrc_report(asked: &Asked<'_>, of: &str, sources: &[String], declared_views: 
     }
 }
 
-fn rsrc_function_type(unit: &Unit, asked: &Asked<'_>, ty: &Type, at: &Span, out: &mut Vec<Finding>) {
+fn rsrc_function_type(unit: &Unit, asked: &Asked<'_, '_, '_>, ty: &Type, at: &Span, out: &mut Vec<Finding>) {
     if (*ty.code).is_some() {
         let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
         let mut views = 0;
@@ -59095,7 +59103,7 @@ fn rsrc_function_type(unit: &Unit, asked: &Asked<'_>, ty: &Type, at: &Span, out:
     for part in ty.generics.iter() { rsrc_function_type(unit, asked, part, at, out); }
 }
 
-fn rsrc_function_types(unit: &Unit, asked: &Asked<'_>, args: &[FnArg], ret_type: Option<&Type>, at: &Span, out: &mut Vec<Finding>) {
+fn rsrc_function_types(unit: &Unit, asked: &Asked<'_, '_, '_>, args: &[FnArg], ret_type: Option<&Type>, at: &Span, out: &mut Vec<Finding>) {
     for arg in args.iter() { rsrc_function_type(unit, asked, &arg.ty, &arg.span, out); }
     let written = match ret_type { Some(__nikaia_value) => __nikaia_value, None => return };
     rsrc_function_type(unit, asked, written, at, out);
@@ -59108,7 +59116,7 @@ pub struct ResultSource {
     pub returns: String,
 }
 
-pub fn result_sources(asked: &Asked<'_>, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool) -> Vec<ResultSource> {
+pub fn result_sources(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool) -> Vec<ResultSource> {
     let unit = Unit { borrowing: package_borrowing_types(asked, items), fields: view_fields(asked.names, items) };
     let mut known: collections::BTreeMap<String, ResultSrcKnown> = collections::BTreeMap::new();
     let mut ignored: Vec<Finding> = vec![];
@@ -59144,13 +59152,13 @@ fn rsrc_returns_text(params: &[String], reach: &collections::BTreeSet<String>) -
     parts.join(", ")
 }
 
-fn rsrc_findings(asked: &Asked<'_>, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool, out: &mut Vec<Finding>) {
+fn rsrc_findings(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool, out: &mut Vec<Finding>) {
     let unit = Unit { borrowing: package_borrowing_types(asked, items), fields: view_fields(asked.names, items) };
     let mut known: collections::BTreeMap<String, ResultSrcKnown> = collections::BTreeMap::new();
     rsrc_solve(&unit, asked, items, own_buffer, &mut known, out);
 }
 
-fn rsrc_solve(unit: &Unit, asked: &Asked<'_>, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool, known: &mut collections::BTreeMap<String, ResultSrcKnown>, out: &mut Vec<Finding>) {
+fn rsrc_solve(unit: &Unit, asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool, known: &mut collections::BTreeMap<String, ResultSrcKnown>, out: &mut Vec<Finding>) {
     let nothing: Option<Type> = None;
     let no_trait: Option<winnow_grammar::Symbol> = None;
     for item in items.iter() {

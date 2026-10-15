@@ -375,6 +375,19 @@ fn let_statement(stmt: ref Stmt, span: ref Span, ask: ref BufferAsk, holes_of: f
         else => return,
     }
     let at = span.start as i64
+    // **A move into another local** while a view of the buffer is used
+    // afterwards (ADR-353 D3, `view_changes`' answer in `ask.given_up`): the
+    // buffer lives in the frame's keep from its `let`, and the new name holds
+    // the same data. No copy.
+    match value {
+        Expr::Variable(moved, _) => {
+            let bound = local_of(ask.names.resolve(moved).clone(), walk)
+            if bound != null && (bound?.buffer ?? false) {
+                given_up_inside(bound?.at ?? 0, ask, walk)
+            }
+        }
+        else => {}
+    }
     if names.len() == 1 {
         let from = taken_from(ask.names, value)
         if from != null {

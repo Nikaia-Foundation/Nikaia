@@ -54,6 +54,8 @@ struct View {
     way_out: HashMap<String, String>,
     /// The first later statement that uses it, where one does.
     used: Option<Span>,
+    /// The call that made it, as written (`longest(x, y)`), where one did.
+    call: Option<String>,
 }
 
 struct Walk<'a> {
@@ -97,6 +99,17 @@ pub fn analyse(
         }
     }
     (walk.findings, walk.give_ups)
+}
+
+/// Whether a callee takes its parameter `index` as its own: the body keeps it
+/// or changes it, so it is not lowered as a view (Part I 6.5).
+fn owns(contract: &crate::contracts::FnContract, index: usize) -> bool {
+    let Some(signature) = contract.signature.as_ref() else {
+        return false;
+    };
+    signature.params.get(index).is_some_and(|(param, _)| {
+        param != "self" && (contract.keeps.contains(param) || signature.mutable.contains(param))
+    })
 }
 
 fn root_of(parsed: &Parsed, expr: &Expr) -> Option<String> {
@@ -202,6 +215,7 @@ impl Walk<'_> {
                     from: format!("`{name}` is a view into `{root}`"),
                     way_out: HashMap::new(),
                     used: None,
+                    call: None,
                 })
             }
             Expr::Call { func, args, .. } => {
@@ -234,6 +248,13 @@ impl Walk<'_> {
                     from: format!("`{name}` is made here by `{callee}`"),
                     way_out,
                     used: None,
+                    call: Some(format!(
+                        "{callee}({})",
+                        args.iter()
+                            .map(|a| root_of(parsed, a).unwrap_or_else(|| "..".to_string()))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )),
                 })
             }
             _ => None,
@@ -337,6 +358,23 @@ impl Walk<'_> {
                     }
                     if let Some(view) = self.view_of(&at, &name, value, &views) {
                         views.push(view);
+                    } else if let Expr::Variable(other, _) = value {
+                        // A move into a local (D3): the new name holds the
+                        // same data, followed as the argument was, and the
+                        // old buffer lives in the frame's keep from its `let`.
+                        let other = parsed.text(*other).to_string();
+                        let mut viewer = None;
+                        for view in views.iter_mut() {
+                            if view.roots.contains(&other) {
+                                view.roots.insert(name.clone());
+                                if view.used.is_some() {
+                                    viewer.get_or_insert_with(|| view.name.clone());
+                                }
+                            }
+                        }
+                        if let (Some(viewer), Some(bound)) = (viewer, self.lets.get(&other)) {
+                            self.give_ups.kept.insert(*bound, viewer);
+                        }
                     }
                     self.lets.insert(name.clone(), at.start as i64);
                     declared.insert(name, (at.start as i64, *mutable));
@@ -478,6 +516,114 @@ impl Walk<'_> {
                 self.refuse(&root, at, views);
             }
         }
+        // D6: a whole variable handed to a parameter the callee keeps or
+        // changes - not lowered as a view (Part I 6.5) - has a new owner.
+        let mut handed: Vec<(String, String)> = Vec::new();
+        visit_stmt(parsed, stmt, &mut |e| match e {
+            Expr::Call { func, args, .. } => {
+                if let Expr::Variable(callee, _) = &**func {
+                    let callee = parsed.text(*callee);
+                    if let Some(contract) = self.contract(callee) {
+                        for (index, arg) in args.iter().enumerate() {
+                            if let Expr::Variable(name, _) = arg
+                                && owns(contract, index)
+                            {
+                                handed.push((parsed.text(*name).to_string(), callee.to_string()));
+                            }
+                        }
+                    }
+                }
+            }
+            Expr::MethodCall { method, args, .. } => {
+                let method = parsed.text(*method);
+                let suffix = format!("::{method}");
+                for (index, arg) in args.iter().enumerate() {
+                    let Expr::Variable(name, _) = arg else {
+                        continue;
+                    };
+                    let keeping = [self.own, self.library].iter().any(|ledger| {
+                        ledger.functions.iter().any(|(key, contract)| {
+                            key.ends_with(&suffix)
+                                && contract.signature.as_ref().is_some_and(|s| {
+                                    s.params.first().is_some_and(|p| p.0 == "self")
+                                })
+                                && owns(contract, index + 1)
+                        })
+                    });
+                    if keeping {
+                        handed.push((parsed.text(*name).to_string(), method.to_string()));
+                    }
+                }
+            }
+            _ => {}
+        });
+        for (root, callee) in handed {
+            if views
+                .iter()
+                .any(|v| v.used.is_some() && v.roots.contains(&root))
+            {
+                self.refuse_hand_over(&root, &callee, at, views);
+            }
+        }
+    }
+
+    /// D6: `root` handed to `callee`, which keeps it, while a view reads it.
+    fn refuse_hand_over(&mut self, root: &str, callee: &str, at: &Span, views: &[View]) {
+        let Some(view) = views
+            .iter()
+            .rev()
+            .find(|v| v.used.is_some() && v.roots.contains(root))
+        else {
+            return;
+        };
+        let label = |span: Span, word: &str, text: String, main: bool| {
+            nikaia_std::tools::check_state::CheckLabel {
+                span,
+                word: word.to_string(),
+                text,
+                main,
+            }
+        };
+        let name = &view.name;
+        let mut labels = vec![
+            label(
+                *at,
+                root,
+                format!("`{callee}` keeps `{root}` and may change or discard it"),
+                true,
+            ),
+            label(
+                view.made,
+                name,
+                format!("`{name}` may be the text of `{root}`"),
+                false,
+            ),
+        ];
+        if let Some(used) = view.used {
+            labels.push(label(used, name, format!("`{name}` is read here"), false));
+        }
+        let mut notes = Vec::new();
+        if let Some(way) = view.way_out.get(root) {
+            notes.push(way.clone());
+        }
+        let mut help =
+            format!("Use `{name}` first, or hand `{callee}` a copy: `{callee}({root}.clone())`.");
+        if let Some(call) = &view.call {
+            help.push_str(&format!(
+                " Or copy `{name}` itself: `let {name} = {call}.clone()`."
+            ));
+        }
+        self.findings.push(Finding {
+            severity: crate::check::Severity::Error,
+            span: *at,
+            code: "NK2305".to_string(),
+            message: format!(
+                "`{callee}` gets `{root}`, but `{name}` still reads its text afterwards."
+            ),
+            notes,
+            help: Some(help),
+            labels,
+        });
     }
 
     fn refuse(&mut self, root: &str, at: &Span, views: &[View]) {

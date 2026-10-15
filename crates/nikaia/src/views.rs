@@ -74,7 +74,7 @@ fn asked<'a>(
     parsed: &'a Parsed,
     own: &'a Ledger,
     library: &'a Ledger,
-) -> nikaia_std::tools::views::Asked<'a> {
+) -> nikaia_std::tools::views::Asked<'a, 'a, 'a> {
     nikaia_std::tools::views::Asked {
         names: &parsed.interner,
         own,

@@ -932,7 +932,7 @@ struct Checker<'a> {
     s: core::Baton,
     /// What it looks at and does not own: the names, and the two ledgers. A
     /// reference, so the moved code can be handed it while the checker is lent.
-    world: &'a CheckWorld<'a>,
+    world: &'a CheckWorld<'a, 'a, 'a, 'a, 'a>,
     /// States with nothing in them, for the crossings into Nikaia (`core.rs`).
     spares: Vec<Box<CheckState>>,
     parsed: &'a Parsed,
@@ -2626,7 +2626,7 @@ fn grown_text(parsed: &Parsed, body: &Block) -> BTreeSet<String> {
 }
 
 /// What the checker reads of a parsed file, borrowed (`tools/parsed_view.nika`).
-fn parsed_view_of(parsed: &Parsed) -> ParsedView<'_> {
+fn parsed_view_of(parsed: &Parsed) -> ParsedView<'_, '_, '_, '_, '_> {
     ParsedView {
         words: &parsed.interner,
         aliases: &parsed.aliases,

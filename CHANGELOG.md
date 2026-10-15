@@ -8,6 +8,14 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.969] — 2026-10-15
+
+**A hand-over under a view is NK2305, a move into a local keeps the buffer, a pub type keeps a place per view field (ADR-353 D3, D6, D7, #614)**
+
+- Handing a value to a parameter the callee keeps or changes (`take(y)`, `v.push(y)`) while a view that may point into it is still read is `NK2305` at the call (D6).
+- `let z = y` while a view of `y` is read puts `y`'s buffer into the frame's keep from its `let`, with no copy; `z` is followed, so changing it in place is `NK2305` (D3).
+- A `pub` struct keeps one lifetime per view field, and a reading package takes them from the ledger's `tethered`; the ledger's `version` is 4, `nikaia.derived` stays at 3 (D7).
+
 ## [0.0.968] — 2026-10-15
 
 **check: what the core crossed back into Rust for, in Nikaia (C-7 U-d1, #125, #558)**

@@ -1098,7 +1098,7 @@ struct Emitter<'p> {
     /// An error raised by Rust code under a crossing (`host.rs`).
     failed: std::cell::RefCell<Option<anyhow::Error>>,
     /// What the emitter looks at and does not own.
-    world: EmitWorld<'p>,
+    world: EmitWorld<'p, 'p, 'p, 'p>,
     /// **Which `pub` items hold map positions** (ADR-010 D9): read from every
     /// file of the build, so a program knows the hidden parameters of the
     /// library types it names.
@@ -1901,7 +1901,10 @@ impl<'p> Emitter<'p> {
         let package_wide = package_borrowing(&units);
         let state = EmitState {
             described: described.clone(),
-            view_slots: view_slots(&units, &package_wide),
+            view_slots: view_slots(&units, &package_wide)
+                .into_iter()
+                .chain(read_view_slots(described))
+                .collect(),
             borrowing: borrowing_structs_beside(parsed, &package_wide)
                 .into_iter()
                 .map(|s| parsed.text(s).to_string())
@@ -8102,9 +8105,31 @@ fn renamed_lifetime(text: &str, from: &str, to: &str) -> String {
     out
 }
 
+/// **The places of each type another package declares** (ADR-353 D7): the
+/// ledger's `tethered` lists its view fields in the order written, one
+/// lifetime each where there are two or more. An enum, and a type a function
+/// there throws, keeps one place.
+fn read_view_slots(
+    ledger: &crate::contracts::Ledger,
+) -> std::collections::BTreeMap<String, Vec<String>> {
+    let thrown: std::collections::BTreeSet<&String> = ledger
+        .functions
+        .values()
+        .flat_map(|f| f.fails_with.iter())
+        .collect();
+    ledger
+        .types
+        .iter()
+        .filter(|(name, contract)| {
+            contract.tethered.len() >= 2 && contract.variants.is_empty() && !thrown.contains(name)
+        })
+        .map(|(name, contract)| (name.clone(), contract.tethered.clone()))
+        .collect()
+}
+
 /// **The view-holding fields of each struct that holds two or more**
-/// (ADR-353 D1): one lifetime each. Only a struct the package keeps to itself
-/// and that is no error, whose every mention this emitter writes.
+/// (ADR-353 D1, D7): one lifetime each, `pub` or not, in the order written.
+/// An error keeps one place.
 pub(crate) fn view_slots(
     units: &[&Parsed],
     borrowing: &std::collections::BTreeSet<String>,
@@ -8116,7 +8141,6 @@ pub(crate) fn view_slots(
             if let Item::Struct {
                 name,
                 fields,
-                is_public: false,
                 is_extern: false,
                 ..
             } = &item.node

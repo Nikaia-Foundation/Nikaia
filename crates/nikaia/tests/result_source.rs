@@ -1464,3 +1464,244 @@ pub fn run() -> String {
     assert!(rust.contains("-> Pick<'r, 'r1>"), "{rust}");
     compiled("a_union_field_takes_one_lifetime_over_its_group", source);
 }
+
+// ---- ADR-353 D6: handing the data to a new owner; D3: a move into a local ----
+
+const TAKE: &str = r#"fn take(s: String) -> i64 {
+    let mut v: Vec[String] = []
+    v.push(s)
+    return v.len()
+}
+fn show(s: ref String) -> i64 {
+    return s.len()
+}
+"#;
+
+/// D6: `take` keeps `y` while `r` still reads it: refused at the call, with
+/// the hand-over label and both ways out.
+#[test]
+fn a_hand_over_under_a_view_is_nk2305() {
+    let source = format!(
+        "{LONGEST}{TAKE}pub fn both() -> String {{
+    let x = \"ab\".clone()
+    let y = \"short\".clone()
+    let r = longest(x, y)
+    let n = take(y)
+    return f\"{{r}} {{n}}\"
+}}
+"
+    );
+    let found = changed_under(&source);
+    assert_eq!(found.len(), 1, "{found:?}");
+    let f = &found[0];
+    assert!(
+        f.message.contains("`take` gets `y`") && f.message.contains("`r`"),
+        "{}",
+        f.message
+    );
+    assert!(
+        f.labels
+            .iter()
+            .any(|l| l.main && l.text == "`take` keeps `y` and may change or discard it"),
+        "{:?}",
+        f.labels
+    );
+    assert!(
+        f.labels.iter().any(|l| l.text == "`r` is read here"),
+        "{:?}",
+        f.labels
+    );
+    let help = f.help.clone().unwrap_or_default();
+    assert!(
+        help.contains("`take(y.clone())`") && help.contains("`let r = longest(x, y).clone()`"),
+        "{help}"
+    );
+}
+
+/// D6: `push` keeps its value (`keeps = ["value"]`); the receiver shifts the
+/// index by one.
+#[test]
+fn a_push_under_a_view_is_nk2305() {
+    let source = format!(
+        "{LONGEST}pub fn both() -> String {{
+    let x = \"ab\".clone()
+    let y = \"short\".clone()
+    let r = longest(x, y)
+    let mut v: Vec[String] = []
+    v.push(y)
+    return f\"{{r}} {{v.len()}}\"
+}}
+"
+    );
+    let found = changed_under(&source);
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert!(
+        found[0].message.contains("`push` gets `y`"),
+        "{}",
+        found[0].message
+    );
+}
+
+/// D6: after the last use of the view the hand-over compiles; a view
+/// parameter is no hand-over.
+#[test]
+fn a_hand_over_after_the_last_use_or_to_a_view_compiles() {
+    let source = format!(
+        "{LONGEST}{TAKE}pub fn both() -> String {{
+    let x = \"ab\".clone()
+    let y = \"short\".clone()
+    let r = longest(x, y)
+    let said = f\"{{r}}\"
+    let n = take(y)
+    return f\"{{said}} {{n}}\"
+}}
+pub fn shown() -> String {{
+    let x = \"ab\".clone()
+    let y = \"short\".clone()
+    let r = longest(x, y)
+    let n = show(y)
+    return f\"{{r}} {{n}}\"
+}}
+"
+    );
+    assert!(changed_under(&source).is_empty());
+    compiled(
+        "a_hand_over_after_the_last_use_or_to_a_view_compiles",
+        &source,
+    );
+}
+
+/// D3: a move into a local while the view is used keeps the old buffer.
+#[test]
+fn a_move_into_a_local_keeps_the_data() {
+    let source = format!(
+        "{LONGEST}pub fn both() -> String {{
+    let x = \"ab\".clone()
+    let y = \"short\".clone()
+    let r = longest(x, y)
+    let z = y
+    let said = f\"{{r}}\"
+    return f\"{{said}} {{z}}\"
+}}
+"
+    );
+    assert!(changed_under(&source).is_empty());
+    let rust = lowered(&source);
+    assert!(!rust.contains("y.clone()"), "{rust}");
+    compiled("a_move_into_a_local_keeps_the_data", &source);
+}
+
+/// D3 and D4: the local the value moved into is followed; changing it in
+/// place is `NK2305`, naming `z` and `r`.
+#[test]
+fn a_change_to_the_local_moved_into_is_nk2305() {
+    let source = format!(
+        "{LONGEST}pub fn both() -> String {{
+    let x = \"ab\".clone()
+    let y = \"short\".clone()
+    let r = longest(x, y)
+    let mut z = y
+    z.push_str(\"!\")
+    return f\"{{r}} {{z}}\"
+}}
+"
+    );
+    let found = changed_under(&source);
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert!(
+        found[0].message.contains("`z`") && found[0].message.contains("`r`"),
+        "{}",
+        found[0].message
+    );
+}
+
+// ---- ADR-353 D7: a pub type keeps a place per view field ----
+
+const PUB_PAIR: &str = "pub struct Pair { pub left: ref String, pub right: ref String }\n\
+     pub fn pair(a: ref String, b: ref String) -> Pair {\n    return Pair { left: a, right: b }\n}\n";
+
+/// D7 in one file: `pub` changes nothing, so `y` may take a new value while
+/// `.left` is used.
+#[test]
+fn a_pub_struct_keeps_a_place_per_view_field() {
+    let source = format!(
+        "{PUB_PAIR}pub fn both() -> String {{
+    let x = \"left\".clone()
+    let mut y = \"right\".clone()
+    let l = pair(x, y).left
+    y = \"replaced\".clone()
+    return f\"{{l}} {{y}}\"
+}}
+"
+    );
+    let rust = lowered(&source);
+    assert!(rust.contains("pub struct Pair<'a, 'a1>"), "{rust}");
+    compiled("a_pub_struct_keeps_a_place_per_view_field", &source);
+}
+
+/// D7: a field whose type holds several views is one place; an enum keeps one.
+#[test]
+fn a_nested_view_struct_is_one_place_and_an_enum_one() {
+    let source = format!(
+        "{PUB_PAIR}pub struct Outer {{ pub inner: Pair, pub name: ref String }}
+pub enum Either {{ Both {{ a: ref String, b: ref String }}, None }}
+pub fn both() -> String {{
+    let x = \"l\".clone()
+    let y = \"r\".clone()
+    let o = Outer {{ inner: pair(x, y), name: x }}
+    let e = Either::Both {{ a: x, b: y }}
+    let said = match e {{
+        Either::Both {{ a, b }} => f\"{{a}}{{b}}\",
+        Either::None => \"\".clone(),
+    }}
+    return f\"{{o.inner.left}} {{o.name}} {{said}}\"
+}}
+"
+    );
+    let rust = lowered(&source);
+    assert!(rust.contains("pub struct Outer<'a, 'a1>"), "{rust}");
+    assert!(rust.contains("pub enum Either<'a>"), "{rust}");
+    compiled("a_nested_view_struct_is_one_place_and_an_enum_one", &source);
+}
+
+/// D7 across packages: the reading package takes the places from the
+/// ledger's `tethered`, in order.
+#[test]
+fn a_pub_struct_keeps_its_places_across_packages() {
+    let dir = common::scratch_dir("d7-across");
+    let lib = format!("{PUB_PAIR}\nfn main() {{\n}}\n");
+    let app = "use lib\n\nfn main() {\n    let x = \"left\".clone()\n    let mut y = \"right\".clone()\n    let l = lib::pair(x, y).left\n    y = \"replaced\".clone()\n    println(l)\n    println(y)\n}\n";
+    for (package, source, manifest) in [
+        (
+            "lib",
+            lib.as_str(),
+            "[package]\nname = \"lib\"\nversion = \"0.1.0\"\n",
+        ),
+        (
+            "app",
+            app,
+            "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\nlib = { path = \"../lib\" }\n",
+        ),
+    ] {
+        std::fs::create_dir_all(dir.join(package).join("src")).expect("the package");
+        std::fs::write(dir.join(package).join("nikaia.toml"), manifest).expect("a manifest");
+        std::fs::write(dir.join(package).join("src/main.nika"), source).expect("a source");
+    }
+    let run = std::process::Command::new(env!("CARGO_BIN_EXE_nikaia"))
+        .current_dir(dir.join("app"))
+        .arg("run")
+        .env_remove("RUST_BACKTRACE")
+        .output()
+        .expect("the nikaia binary runs");
+    let stdout = String::from_utf8_lossy(&run.stdout);
+    let stderr = String::from_utf8_lossy(&run.stderr);
+    assert!(run.status.success(), "{stdout}{stderr}");
+    assert_eq!(stdout, "left\nreplaced\n", "{stderr}");
+    let ledger = std::fs::read_to_string(dir.join("lib/nikaia.contracts")).expect("the ledger");
+    assert!(ledger.contains("\nversion = 4\n"), "{ledger}");
+    assert!(
+        ledger.contains("tethered = [\"left\", \"right\"]"),
+        "{ledger}"
+    );
+    let _ = std::fs::remove_dir_all(dir);
+}
