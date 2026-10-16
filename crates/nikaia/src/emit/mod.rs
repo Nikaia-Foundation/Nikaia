@@ -27,6 +27,7 @@ use std::collections::{HashMap, HashSet};
 use anyhow::{Result, anyhow};
 
 mod host;
+mod rust_targets;
 pub(crate) mod seeds;
 pub mod template;
 use winnow_grammar::Symbol;
@@ -55,6 +56,10 @@ pub enum Target {
     X86_64Linux,
     Aarch64Linux,
     Wasm32Unknown,
+    /// Any other triple Rust knows (ADR-037 D9), named as Rust names it:
+    /// `aarch64-linux-android`, `thumbv7em-none-eabihf`. It is let through to
+    /// the backend; what it offers is read from the triple.
+    Rust(&'static str),
 }
 
 impl Default for Target {
@@ -271,13 +276,49 @@ impl Target {
         Target::Wasm32Unknown,
     ];
 
+    /// The short names first, then the short names of Android (ADR-037 D9),
+    /// then any triple Rust knows, written as Rust writes it. A triple that
+    /// has a short name is that target, not a second one.
     pub fn parse(name: &str) -> Result<Target> {
-        match Target::ALL.into_iter().find(|target| target.name() == name) {
-            Some(target) => Ok(target),
+        if let Some(target) = Target::ALL.into_iter().find(|target| target.name() == name) {
+            return Ok(target);
+        }
+        let triple = match name {
+            "aarch64-android" => "aarch64-linux-android",
+            "x86_64-android" => "x86_64-linux-android",
+            "armv7-android" => "armv7-linux-androideabi",
+            other => other,
+        };
+        if let Some(target) = Target::ALL
+            .into_iter()
+            .find(|target| target.triple() == triple)
+        {
+            return Ok(target);
+        }
+        match rust_targets::RUST_TARGETS
+            .iter()
+            .find(|known| **known == triple)
+        {
+            Some(known) => Ok(Target::Rust(known)),
             None => Err(refused!(
-                "There's no target called `{name}`. Use x86_64-linux, aarch64-linux or \
-                 wasm32-unknown."
+                "There's no target called `{name}`. Use x86_64-linux, aarch64-linux, \
+                 wasm32-unknown, aarch64-android, x86_64-android, armv7-android, or a \
+                 triple from `rustc --print target-list`."
             )),
+        }
+    }
+
+    /// No operating system under the program (ADR-037 D9): Rust's `-none`
+    /// triples, and UEFI. There is no `std` there to build on.
+    pub fn is_bare_metal(self) -> bool {
+        match self {
+            Target::Rust(triple) => {
+                triple
+                    .split('-')
+                    .any(|part| part == "none" || part.starts_with("none"))
+                    || triple.ends_with("-uefi")
+            }
+            _ => false,
         }
     }
 
@@ -287,6 +328,7 @@ impl Target {
             Target::X86_64Linux => "x86_64-linux",
             Target::Aarch64Linux => "aarch64-linux",
             Target::Wasm32Unknown => "wasm32-unknown",
+            Target::Rust(triple) => triple,
         }
     }
 
@@ -296,6 +338,7 @@ impl Target {
             Target::X86_64Linux => "x86_64-unknown-linux-gnu",
             Target::Aarch64Linux => "aarch64-unknown-linux-gnu",
             Target::Wasm32Unknown => "wasm32-unknown-unknown",
+            Target::Rust(triple) => triple,
         }
     }
 
@@ -319,7 +362,11 @@ impl Target {
     /// Whether this machine has threads at all. A target without them bounds
     /// `user_parallelism` to `0` however it is set.
     pub fn has_threads(self) -> bool {
-        matches!(self, Target::X86_64Linux | Target::Aarch64Linux)
+        match self {
+            Target::X86_64Linux | Target::Aarch64Linux => true,
+            Target::Wasm32Unknown => false,
+            Target::Rust(triple) => !self.is_bare_metal() && !triple.starts_with("wasm"),
+        }
     }
 
     /// Whether `std`'s own runtime exists for this machine (ADR-303 D4): the
@@ -332,7 +379,7 @@ impl Target {
     /// back to; a machine with threads but no completion queue has the runtime,
     /// and `std` is what decides there what a pair costs.
     pub fn has_runtime(self) -> bool {
-        matches!(self, Target::X86_64Linux | Target::Aarch64Linux)
+        self.has_threads()
     }
 
     /// What a target still needs before a program can be built for it.
@@ -346,7 +393,12 @@ impl Target {
                  exists on wasm32-unknown-unknown; what `std::fs` offers there is \
                  undecided",
             ),
-            Target::X86_64Linux | Target::Aarch64Linux => None,
+            Target::Rust(_) if self.is_bare_metal() => Some(
+                "there is no operating system under a program here, so no `std` to \
+                 build on; how such a program starts and waits (a loop, interrupts) is \
+                 a build profile's, which does not exist yet (ADR-037 D9)",
+            ),
+            Target::X86_64Linux | Target::Aarch64Linux | Target::Rust(_) => None,
         }
     }
 }
@@ -4965,7 +5017,7 @@ impl<'p> Emitter<'p> {
     }
 
     /// The count the analysis gave the `Shared` written at one position, with the
-    /// atomic floor where it has no answer (ADR-037 D6).
+    /// atomic floor where it has no answer (ADR-037 D9).
     fn count_at(&self, function: &str, value: &str) -> crate::contracts::sharing::Count {
         self.s
             .count_at(self.build.crossings_are_possible(), function, value)
@@ -4975,7 +5027,7 @@ impl<'p> Emitter<'p> {
     ///
     /// Every position whose count is actually known names it with
     /// [`Emitter::ty_counted`] instead. The floor is what a position nothing
-    /// decided gets, which is ADR-037 D6's answer and never a wrong one - only a
+    /// decided gets, which is ADR-037 D9's answer and never a wrong one - only a
     /// slower one.
     fn ty(&self, ty: &Type, lifetimes: Lifetimes) -> String {
         self.nikaia(|walk| {
@@ -8688,5 +8740,31 @@ fn tuple_pattern(names: &[String], shape: &[i64]) -> String {
         ([name], None) => name.clone(),
         (_, None) | (_, Some(-1)) => format!("({})", names.join(", ")),
         _ => one(names, shape, &mut 0, &mut 0),
+    }
+}
+
+#[cfg(test)]
+mod target_tests {
+    use super::Target;
+
+    /// Every triple Rust knows is a target (ADR-037 D9); a short name and its
+    /// triple are one target; a bare-metal one is refused with what is missing.
+    #[test]
+    fn every_rust_triple_is_a_target() {
+        let android = Target::parse("aarch64-android").expect("android");
+        assert_eq!(
+            android,
+            Target::parse("aarch64-linux-android").expect("triple")
+        );
+        assert_eq!(android.triple(), "aarch64-linux-android");
+        assert!(android.has_threads() && android.unbuildable().is_none());
+        assert_eq!(
+            Target::parse("x86_64-unknown-linux-gnu").expect("host triple"),
+            Target::X86_64Linux
+        );
+        let board = Target::parse("thumbv7em-none-eabihf").expect("bare metal");
+        assert!(board.is_bare_metal() && !board.has_threads());
+        assert!(board.unbuildable().is_some());
+        assert!(Target::parse("z80-spectrum").is_err());
     }
 }

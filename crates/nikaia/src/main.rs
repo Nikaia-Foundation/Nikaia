@@ -29,7 +29,8 @@ pub struct Cli {
     pub command: Option<Command>,
 
     /// The machine to build for (ADR-037 D1): `x86_64-linux`,
-    /// `aarch64-linux` or `wasm32-unknown`. It decides what `std` can offer and
+    /// `aarch64-linux`, `wasm32-unknown`, `aarch64-android`, or any Rust triple
+    /// (D9). It decides what `std` can offer and
     /// what a panic does, and nothing about what a program means.
     ///
     /// Overrides `nikaia.toml`'s `[build] target` for this one build; the

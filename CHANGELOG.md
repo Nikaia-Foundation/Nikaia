@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.973] — 2026-10-16
+
+**every target Rust knows is a target; Android has short names (ADR-037 D9)**
+- `target` takes `aarch64-android`, `x86_64-android`, `armv7-android` and every triple `rustc --print target-list` prints; a bare-metal (`-none`, `-uefi`) triple is refused with the reason. Build profiles (main loop or interrupts) are left to a record of their own.
+
 ## [0.0.972] — 2026-10-15
 
 **check: a loop body's tail if or match, and a discarded choice's arms, ask no common type (#596)**

@@ -1,7 +1,7 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.972 (Draft)
-**Date:** 2026-10-15
+**Version:** 0.0.973 (Draft)
+**Date:** 2026-10-16
 
 ---
 
@@ -40,8 +40,10 @@ the order they are written; a program that wants overlap writes
 standard library offers on it (Part III 17.2) and what a `panic` does: the
 stack unwinds where the machine unwinds, and the program traps where the
 machine traps (Part III, Appendix A). The targets are `x86_64-linux`,
-`aarch64-linux` and `wasm32-unknown`; the default is the machine the compiler
-runs on.
+`aarch64-linux`, `wasm32-unknown`, `aarch64-android`, `x86_64-android`,
+`armv7-android`, and every triple `rustc --print target-list` prints, written as
+Rust writes it; the default is the machine the compiler runs on. A target
+without an operating system (a `-none` or `-uefi` triple) is refused.
 
 #### `user_parallelism` — whether user code may run concurrently
 `user_parallelism` is a permission, not a thread count.

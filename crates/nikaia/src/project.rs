@@ -475,6 +475,13 @@ impl Settings {
         match self.build.target {
             Target::X86_64Linux | Target::Aarch64Linux => "unwind",
             Target::Wasm32Unknown => "abort",
+            target @ Target::Rust(triple) => {
+                if target.is_bare_metal() || triple.starts_with("wasm") {
+                    "abort"
+                } else {
+                    "unwind"
+                }
+            }
         }
     }
 }
