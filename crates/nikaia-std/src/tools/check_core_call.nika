@@ -539,12 +539,16 @@ fn check_core_call_described[H: CheckHost](mut state: CheckState, world: ref Che
         constructed = declared ?? check_core_call_named(base)
     }
     let mut options: Vec[i64] = []
+    let mut literals: Vec[bool] = []
     for option in config {
         options.push(id_of(option.value) as i64)
+        literals.push(a_text_literal_expr(option.value))
     }
     state.flow.option_values = options
+    state.flow.option_literals = literals
     let result = check_crossings_arguments(state, world, host, key, name, contract, args, found, passed, span)
     state.flow.option_values = []
+    state.flow.option_literals = []
     // **What the arguments tell the signature** (ADR-295 D2), and a bound
     // (D16).
     let bound = argument_bindings(contract, found)

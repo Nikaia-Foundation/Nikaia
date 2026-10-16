@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.974] — 2026-10-16
+
+**a text literal handed to a String option is a String (ADR-282 D4)**
+- `greet("Nika"; greeting: "Hallo")` against `greeting: String` was `NK1106`; a literal at an option is now constructed there, as at a parameter. The guide's and README's examples take `String`, not `ref String`.
+
 ## [0.0.973] — 2026-10-16
 
 **every target Rust knows is a target; Android has short names (ADR-037 D9)**

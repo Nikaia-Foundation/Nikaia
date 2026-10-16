@@ -75,6 +75,8 @@ pub struct CheckFlow {
     pub computes: bool,
     /// The addresses of the values a call names after its `;` (#455).
     pub option_values: Vec[i64],
+    /// Which of them is a text literal, in the same order.
+    pub option_literals: Vec[bool],
     /// The concrete type's name and the field the current unrolling stands at
     /// (ADR-304 D7); `null` in the generic body.
     pub unrolling: CheckUnrolling?,
@@ -182,6 +184,7 @@ impl CheckFlow {
             raised: (null, null),
             computes: computes,
             option_values: Vec(),
+            option_literals: Vec(),
             unrolling: null,
             harvesting: harvesting,
             inside_a_comptime: false,

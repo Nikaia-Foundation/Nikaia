@@ -95,7 +95,7 @@ while n < 5 {
 ## Functions
 
 ```nika
-fn greet(name: ref String; greeting: ref String = "Hello") -> String {
+fn greet(name: String; greeting: String = "Hello") -> String {
     return f"{greeting}, {name}!"
 }
 
@@ -108,8 +108,9 @@ data the function works on and are passed by position. Parameters after it are o
 they always have a default, and they are always passed **by name**. It is the same idea
 as keyword arguments in Python, made a rule.
 
-`ref String` says the function only *reads* the text and does not keep it. Parameters
-you do not mark are decided by the compiler.
+A `String` parameter needs no more: whether the function gets a view of the caller's
+text or text of its own is the compiler's decision. `ref String` is written only where
+a copy would be a mistake.
 
 📖 **Specification:** [Part I, §5.1 The subject ; config protocol](../docs/specification/10-nikaia-light.md#51-the-subject--config-protocol)
 
@@ -168,7 +169,7 @@ compile. When a match is not over an enum, `else =>` catches the rest.
 ## No `null` surprises
 
 ```nika
-fn find_nickname(name: ref String) -> String? {
+fn find_nickname(name: String) -> String? {
     if name == "Nika" {
         return "Nik"
     }
@@ -218,7 +219,7 @@ impl Error for AgeError {
     }
 }
 
-fn parse_age(text: ref String) -> i64 throws {
+fn parse_age(text: String) -> i64 throws {
     if text.len() == 0 {
         throw AgeError::Empty
     }
@@ -247,7 +248,7 @@ simply travels up to the caller.
 ```nika
 use std::fs
 
-fn size_of(path: ref String) -> i64 throws {
+fn size_of(path: String) -> i64 throws {
     let text = fs::read_to_string(path, fs::Root::Anywhere)
     return text.len()
 }

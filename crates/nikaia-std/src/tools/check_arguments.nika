@@ -166,6 +166,12 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             if found_option.fits(option.ty) {
                 continue
             }
+            // **A text literal handed to a `String` option is one** (ADR-282
+            // D4), as it is at a parameter: it is constructed there.
+            if at < state.flow.option_literals.len() && state.flow.option_literals[at] && a_plain_string(option.ty) {
+                state.facts.owned_texts.insert(state.flow.option_values[at])
+                continue
+            }
             // **An option of a `ref` type lends what it is passed** (#455),
             // as a `ref` parameter does (ADR-094 D1): the owned value fits
             // the view, and the `&` is the compiler's to write.

@@ -9854,6 +9854,10 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
             if option.name != *name || known { continue; }
             known = true;
             if found_option.fits(&option.ty) { continue; }
+            if at < state.flow.option_literals.len() as i64 && *nikaia_std::index::get(&state.flow.option_literals, nikaia_std::index::at(at)) && a_plain_string(&option.ty) {
+                state.facts.owned_texts.insert(*nikaia_std::index::get(&state.flow.option_values, nikaia_std::index::at(at)));
+                continue;
+            }
             if at < state.flow.option_values.len() as i64 && option.ty.is_a_view() && !found_option.is_a_view() && found_option.fits(&option.ty.owned()) {
                 let value = *nikaia_std::index::get(&state.flow.option_values, nikaia_std::index::at(at));
                 state.facts.lent_options.insert(value);
@@ -13552,10 +13556,16 @@ fn check_core_call_described<H: CheckHost>(state: &mut CheckState, world: &Check
         constructed = Some(nikaia_std::index::or(declared, || check_core_call_named(&base).into()));
     }
     let mut options: Vec<i64> = vec![];
-    for option in config.iter() { options.push(id_of(&option.value) as i64); }
+    let mut literals: Vec<bool> = vec![];
+    for option in config.iter() {
+        options.push(id_of(&option.value) as i64);
+        literals.push(a_text_literal_expr(&option.value));
+    }
     state.flow.option_values = options;
+    state.flow.option_literals = literals;
     let result = check_crossings_arguments(state, world, host, key, name, contract, args, found, passed, span);
     state.flow.option_values = vec![];
+    state.flow.option_literals = vec![];
     let bound = argument_bindings(contract, found);
     check_crossings_a_call_that_hands_its_number_back(state, world, contract, &bound, args);
     state.a_bound_the_argument_does_not_meet(world, key, &bound, span);
@@ -20753,6 +20763,7 @@ pub struct CheckFlow {
     pub raised: (Option<u64>, Option<u64>),
     pub computes: bool,
     pub option_values: Vec<i64>,
+    pub option_literals: Vec<bool>,
     pub unrolling: Option<CheckUnrolling>,
     pub harvesting: bool,
     pub inside_a_comptime: bool,
@@ -20801,7 +20812,7 @@ pub struct CheckFlow {
 }
 
 impl CheckFlow {
-    pub fn start(computes: bool, harvesting: bool) -> CheckFlow { CheckFlow { raised: (None, None), computes, option_values: Vec::new(), unrolling: None, harvesting, inside_a_comptime: false, literal_receivers: Vec::new(), expected_either: false, field_either: false, throwing: false, caught: false, caught_several: false, caught_one: None, guarded: None, loops: 0, barrier: None, fallible_methods: collections::BTreeSet::new(), opaque_methods: collections::BTreeSet::new(), pausing_methods: collections::BTreeSet::new(), settled_methods: collections::BTreeSet::new(), paused_args: Vec::new(), next_choice: 0, read_index: collections::BTreeMap::new(), pending_coalesces: Vec::new(), writing_index: false, read_a_map: false, map_read_sites: collections::BTreeSet::new(), map_views: collections::BTreeSet::new(), last_resolved: None, receiver_name: None, receiver_from_text: false, text_paths: collections::BTreeSet::new(), empty_lists: collections::BTreeMap::new(), open_numbers: collections::BTreeMap::new(), open_elements: collections::BTreeMap::new(), lambda_expected: None, open_calls: collections::BTreeMap::new(), unknown_bound: collections::BTreeSet::new(), unknown_said: 0, list_constants: collections::BTreeMap::new(), overflowed: collections::BTreeSet::new(), reaching: None, reached: None, grown_text: collections::BTreeSet::new(), widening_casts: collections::BTreeSet::new(), unsigned_slots: collections::BTreeMap::new(), at_a_write_door: false, pushed_into: None } }
+    pub fn start(computes: bool, harvesting: bool) -> CheckFlow { CheckFlow { raised: (None, None), computes, option_values: Vec::new(), option_literals: Vec::new(), unrolling: None, harvesting, inside_a_comptime: false, literal_receivers: Vec::new(), expected_either: false, field_either: false, throwing: false, caught: false, caught_several: false, caught_one: None, guarded: None, loops: 0, barrier: None, fallible_methods: collections::BTreeSet::new(), opaque_methods: collections::BTreeSet::new(), pausing_methods: collections::BTreeSet::new(), settled_methods: collections::BTreeSet::new(), paused_args: Vec::new(), next_choice: 0, read_index: collections::BTreeMap::new(), pending_coalesces: Vec::new(), writing_index: false, read_a_map: false, map_read_sites: collections::BTreeSet::new(), map_views: collections::BTreeSet::new(), last_resolved: None, receiver_name: None, receiver_from_text: false, text_paths: collections::BTreeSet::new(), empty_lists: collections::BTreeMap::new(), open_numbers: collections::BTreeMap::new(), open_elements: collections::BTreeMap::new(), lambda_expected: None, open_calls: collections::BTreeMap::new(), unknown_bound: collections::BTreeSet::new(), unknown_said: 0, list_constants: collections::BTreeMap::new(), overflowed: collections::BTreeSet::new(), reaching: None, reached: None, grown_text: collections::BTreeSet::new(), widening_casts: collections::BTreeSet::new(), unsigned_slots: collections::BTreeMap::new(), at_a_write_door: false, pushed_into: None } }
 }
 
 
@@ -27543,7 +27554,7 @@ fn receiver_of(expr: &Expr) -> Vec<&Expr> {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn a_text_literal_expr(expr: &Expr) -> bool { matches!(expr, Expr::LitStr { .. }) }
+pub fn a_text_literal_expr(expr: &Expr) -> bool { matches!(expr, Expr::LitStr { .. }) }
 
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -59818,7 +59829,7 @@ pub mod check_takes {
 pub mod check_task_pauses {}
 pub mod check_texts {
     #[allow(unused_imports)]
-    pub use super::{literal_is_a_byte, check_byte_literal, ends_in_text, ends_in_null};
+    pub use super::{literal_is_a_byte, check_byte_literal, ends_in_text, ends_in_null, a_text_literal_expr};
 }
 pub mod check_types {
     #[allow(unused_imports)]

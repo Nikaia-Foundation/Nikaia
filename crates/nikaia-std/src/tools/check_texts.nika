@@ -129,7 +129,7 @@ fn receiver_of(expr: ref Expr) -> Vec[ref Expr] sync {
     }
 }
 
-fn a_text_literal_expr(expr: ref Expr) -> bool sync {
+pub fn a_text_literal_expr(expr: ref Expr) -> bool sync {
     return match expr {
         Expr::LitStr { .. } => true,
         else => false,

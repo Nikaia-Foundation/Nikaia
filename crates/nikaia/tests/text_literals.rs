@@ -283,3 +283,18 @@ fn a_branch_of_literals_kept_is_declared_string_and_one_looked_at_is_not() {
     assert!(rust.contains("let r: String = match"), "{rust}");
     assert!(rust.contains("let v = if"), "{rust}");
 }
+
+/// A text literal handed to a `String` option is a `String`, as it is at a
+/// parameter (ADR-282 D4): the guide's `greet` example.
+#[test]
+fn a_literal_handed_to_a_string_option_is_one() {
+    let source = "fn greet(name: String; greeting: String = \"Hello\") -> String {\n\
+                      return f\"{greeting}, {name}!\"\n\
+                  }\n\
+                  fn main() {\n\
+                      println(greet(\"Nika\"))\n\
+                      println(greet(\"Nika\"; greeting: \"Hallo\"))\n\
+                  }\n";
+    assert!(findings(source).is_empty(), "{:?}", findings(source));
+    assert_eq!(ran("option", source), "Hello, Nika!\nHallo, Nika!\n");
+}

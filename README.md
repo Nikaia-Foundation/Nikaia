@@ -225,7 +225,7 @@ no `async`, no `await`, no callback and no thread in sight.
 ```nika
 use std::fs
 
-fn size_of(path: ref String) -> i64 throws {
+fn size_of(path: String) -> i64 throws {
     let text = fs::read_to_string(path, fs::Root::Anywhere)
     return text.len()
 }
