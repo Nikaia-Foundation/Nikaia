@@ -473,7 +473,7 @@ borrow it (`dyn for<'a> Fn(&'a P, i64) -> Pin<Box<dyn Future<Output = i64> + 'a>
 checker refuses it with a message that names `sync` or a parameter by value; then a test in
 `function_values.rs` with `fn(ref P, i64) -> i64` and a method that pauses.
 
-## D45 (new). `op ?? BinaryOp::Mul` over a `ref BinaryOp?` hands rustc `&BinaryOp` against `BinaryOp`
+## D47 (new). `op ?? BinaryOp::Mul` over a `ref BinaryOp?` hands rustc `&BinaryOp` against `BinaryOp`
 
 In a `match` on `Stmt::Assign { op, .. }` borrowed from a `ref Stmt`, `match op ?? BinaryOp::Mul {
 BinaryOp::Add => …, else => … }` passes the checker and lowers to `match nikaia_std::index::or(op,
