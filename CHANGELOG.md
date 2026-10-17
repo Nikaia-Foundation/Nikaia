@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.988] — 2026-10-17
+
+**ADR-359 D5, D7, D11-D13: a quotient of known numbers, a `comptime` and a call with known arguments are values to the prover (#632 step 1, #633)**
+- `/` and `%` of two known numbers fold in the prover, truncated toward zero; an integer `comptime` binding is its value.
+- Where a claim left open reads a call whose arguments are known, the call is compiled and run as a `comptime` is (`sync`, empty touch set, ADR-321's budget and cache), and its value is a fact; a call that cannot run leaves the claim a check and `--asserts` says why; a run that stops is `NK1207` in the program's words. `NK1207`'s note names each call value it read.
+- `--asserts` checks as the build does: files, reads and workshop.
+
 ## [0.0.987] — 2026-10-17
 
 **A subject `T?` of `main` may be left out (ADR-360, #635)**
