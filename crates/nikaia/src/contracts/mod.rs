@@ -1244,7 +1244,6 @@ fn argument_text(
         "an attribute's argument",
         argument,
         ty,
-        ledger,
         library,
     )
 }
@@ -1270,7 +1269,6 @@ fn evaluate_defaults(
     if defaults.is_empty() {
         return;
     }
-    let own = ledger.clone();
     for computed in defaults {
         // **Read where a run's sub-program is inferred** (#468): the program's
         // ledger has already computed it.
@@ -1293,7 +1291,6 @@ fn evaluate_defaults(
             &computed.option,
             computed.default,
             &ty,
-            &own,
             library,
         ) else {
             continue;
@@ -1305,49 +1302,45 @@ fn evaluate_defaults(
 }
 
 /// **A build-time value as the literal the ledger records** (ADR-318 D1-D3):
-/// compiled where the build has a workshop (ADR-321 D1), as the checker
-/// computes the same value; the interpreter answers a read with none.
-/// `None` where it cannot be computed or has no literal - the checker
-/// refuses it there.
+/// an initialiser of literals is folded, and anything else is compiled and run
+/// where the build has a workshop (ADR-321 D1), as the checker computes the
+/// same value; a call is never interpreted (D19). `None` where it cannot be
+/// computed or has no literal - the checker refuses it there.
 fn computed_literal(
     units: &[&Parsed],
     parsed: &Parsed,
     name: &str,
     expr: &Expr,
     ty: &ty::Ty,
-    own: &Ledger,
     library: &Ledger,
 ) -> Option<String> {
     let reads = crate::assets::Reads::none();
     let nothing = |_: &str| -> Option<crate::build_time::Value> { None };
-    let workshop = crate::comptime_run::defaults_workshop();
-    let compiled = workshop.as_ref().and_then(|workshop| {
-        let here = units.iter().position(|unit| std::ptr::eq(*unit, parsed))?;
-        let ty = crate::comptime_run::as_built(ty.clone());
-        match crate::comptime_run::compute(
-            units,
-            here,
-            name,
-            expr,
-            &ty,
-            &nothing,
-            library,
-            workshop,
-            workshop.bounds(),
-            None,
-        ) {
-            crate::comptime_run::Computed::Value(value) => Some(Some(value)),
-            crate::comptime_run::Computed::NotHere => None,
-            _ => Some(None),
-        }
-    });
-    let value = match compiled {
-        Some(value) => value,
-        None => crate::build_time::BuildTime::new(parsed, units, own, &reads, &nothing)
-            .evaluate(expr)
-            .ok(),
-    };
-    value.and_then(|v| literal_of(&v))
+    // **Literals alone are folded** (D1's last paragraph), with or without a
+    // workshop; the folder runs no call, so anything else is compiled.
+    if let Ok(folded) =
+        crate::build_time::BuildTime::new(parsed, units, &reads, &nothing).evaluate(expr)
+    {
+        return literal_of(&folded);
+    }
+    let workshop = crate::comptime_run::defaults_workshop()?;
+    let here = units.iter().position(|unit| std::ptr::eq(*unit, parsed))?;
+    let ty = crate::comptime_run::as_built(ty.clone());
+    match crate::comptime_run::compute(
+        units,
+        here,
+        name,
+        expr,
+        &ty,
+        &nothing,
+        library,
+        &workshop,
+        workshop.bounds(),
+        None,
+    ) {
+        crate::comptime_run::Computed::Value(value) => literal_of(&value),
+        _ => None,
+    }
 }
 
 /// A value as the literal both languages spell it the same way, where it has

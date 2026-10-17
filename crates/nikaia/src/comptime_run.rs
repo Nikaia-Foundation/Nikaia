@@ -434,8 +434,9 @@ pub(crate) enum Computed {
     },
     /// The run stopped, and what it said.
     Stopped(String),
-    /// This stage builds no program for it, and the interpreter answers.
-    NotHere,
+    /// This compiler builds no program for it, and why, as a sentence: the
+    /// value is refused (`NK1127`), never interpreted (ADR-321 D1).
+    NotHere(String),
 }
 
 /// What a call's left-out option stands for where its default is not known in
@@ -507,8 +508,22 @@ fn computed(
     bounds: Bounds,
 ) -> Computed {
     use crate::contracts::LedgerOps;
+    let not_here = |why: &str| Computed::NotHere(why.to_string());
     let Some(sub) = sub_program(files[here], bound, value, ty, known) else {
-        return Computed::NotHere;
+        // **A callee nothing declares is named** (0.0.113): its result has no
+        // type, so neither has the value, and the callee is why.
+        if let Some(callee) = undeclared_callee(files, here, value, library) {
+            return Computed::NotHere(format!(
+                "It calls `{callee}`, which no file of your program declares and `std` doesn't have"
+            ));
+        }
+        // The earlier constants, or else the type, had no written form.
+        return match unit_without_its_constants(files[here], bound, known) {
+            None => not_here(NOT_CARRIED),
+            Some(_) => not_here(
+                "Its type has no form this compiler writes into the program that computes it",
+            ),
+        };
     };
     let mut sub = Some(sub);
     let mut units: Vec<Parsed> = Vec::with_capacity(files.len());
@@ -519,7 +534,7 @@ fn computed(
         };
         match unit {
             Some(unit) => units.push(unit),
-            None => return Computed::NotHere,
+            None => return not_here(NOT_CARRIED),
         }
     }
     let carried = constants_of(&units);
@@ -531,10 +546,10 @@ fn computed(
         .difference(&absent)
         .cloned()
         .collect();
-    // A value that calls what went - a function reading a constant not worked
-    // out yet - is not this run's (the constants themselves it may name: those
-    // it holds are carried as `let`s): the interpreter answers it from the body's
-    // own file, as it did before anything was left out.
+    // **A value that reads what went** - a constant not worked out yet (one
+    // that is, it holds as a `let`), or a function that reads one - has it
+    // worked out first, here, as an item
+    // read before its declaration is (Part II 10.2), and runs again with it.
     if units[here]
         .program
         .items
@@ -547,12 +562,25 @@ fn computed(
             } if units[here].text(*name) == VALUE_FN => {
                 let mut named = BTreeSet::new();
                 nikaia_std::tools::names::names_in_block(body, &units[here].interner, &mut named);
-                named.iter().any(|name| left_out.contains(name))
+                named.iter().any(|name| {
+                    left_out.contains(name) || (absent.contains(name) && known(name).is_none())
+                })
             }
             _ => false,
         })
     {
-        return Computed::NotHere;
+        let ahead = worked_out_ahead(files, bound, &absent, known, library, workshop, bounds);
+        // **Only a constant worked out anew is a reason to run again**: one
+        // that stays out stays out, and asking again went round without end.
+        if ahead.keys().all(|name| known(name).is_some()) {
+            return not_here(
+                "It reads a `comptime` that can't be computed before it: one that reads it in turn",
+            );
+        }
+        let known = |name: &str| known(name).or_else(|| ahead.get(name).cloned());
+        return computed(
+            files, here, bound, value, ty, &known, library, workshop, bounds,
+        );
     }
     // **A dependency's functions are the program's to call** (ADR-321 D13):
     // each package's units are derived on their own, and the program's
@@ -591,30 +619,157 @@ fn computed(
         _ => lowered_units(&units, here, counted, &derived, &packages, library),
     };
     let Some(lowered) = lowered else {
-        return Computed::NotHere;
+        return not_here(NOT_LOWERED);
     };
     let Ok(dump) = crate::grammar_run::dumper(&units[here], ty) else {
-        return Computed::NotHere;
+        return not_here("Its type can't be handed back from the program that computes it");
     };
     let Some(program) = with_driver(&lowered, &dump, bounds) else {
-        return Computed::NotHere;
+        return not_here(NOT_LOWERED);
     };
     match workshop.run_comptime(&program, bound) {
         Ok(text) => match crate::grammar_run::decode(&text) {
             Ok(computed) => Computed::Value(computed),
-            Err(_) => Computed::NotHere,
+            Err(_) => not_here(NOT_READ),
         },
         // A default this run did not have is the default's own refusal,
         // said where it is written.
-        Err(Wall::Refused { detail }) if detail.contains(NOT_COMPUTED_YET) => Computed::NotHere,
+        Err(Wall::Refused { detail }) if detail.contains(NOT_COMPUTED_YET) => {
+            not_here("It leaves out an option whose default isn't computed")
+        }
         Err(Wall::Refused { detail }) => Computed::Stopped(detail),
-        Err(_) => Computed::NotHere,
+        Err(Wall::NowhereToBuild) => not_here(NOWHERE),
+        Err(Wall::InsideAnother { .. }) => not_here(
+            "It is met while another build-time program is built, and one isn't built inside another",
+        ),
+        Err(Wall::NoCrossedForm { ty, because }) => Computed::NotHere(format!(
+            "`{ty}` has no form that crosses from build time: {because}"
+        )),
+        Err(Wall::DidNotBuild { .. }) => not_here(NOT_LOWERED),
+        Err(Wall::Unreadable { .. }) => not_here(NOT_READ),
     }
 }
+
+/// **The constants a run reads before their turn**, worked out ahead
+/// (Part II 10.2: an item-level `comptime` may read one declared below it): a
+/// constant of literals folded, one that runs code and writes its type
+/// compiled and run as any `comptime` is. One already being worked out
+/// further up is left alone, which is how a ring ends: its run stays without
+/// it and is refused.
+fn worked_out_ahead(
+    files: &[&Parsed],
+    bound: &str,
+    absent: &BTreeSet<String>,
+    known: &dyn Fn(&str) -> Option<Value>,
+    library: &crate::contracts::Ledger,
+    workshop: &crate::grammar_run::Workshop,
+    bounds: Bounds,
+) -> std::collections::BTreeMap<String, Value> {
+    let mut ahead = std::collections::BTreeMap::new();
+    let entered = AHEAD.with(|held| held.borrow_mut().insert(bound.to_string()));
+    if !entered {
+        return ahead;
+    }
+    let reads = crate::assets::Reads::none();
+    for (at, file) in files.iter().enumerate() {
+        for item in &file.program.items {
+            let Item::Comptime {
+                name, ty, value, ..
+            } = &item.node
+            else {
+                continue;
+            };
+            let named = file.text(*name);
+            if !absent.contains(named) || AHEAD.with(|held| held.borrow().contains(named)) {
+                continue;
+            }
+            let so_far = |name: &str| known(name);
+            let folded = crate::build_time::BuildTime::new(file, files, &reads, &so_far)
+                .evaluate(value)
+                .ok();
+            let worked = match (folded, ty) {
+                (Some(value), _) => Some(value),
+                (None, Some(written)) => {
+                    let ty = <Ty as crate::contracts::ty::TyOps>::from_ast(file, written);
+                    match computed(
+                        files, at, named, value, &ty, known, library, workshop, bounds,
+                    ) {
+                        Computed::Value(value) => Some(value),
+                        _ => None,
+                    }
+                }
+                (None, None) => None,
+            };
+            if let Some(value) = worked {
+                ahead.insert(named.to_string(), value);
+            }
+        }
+    }
+    AHEAD.with(|held| held.borrow_mut().remove(bound));
+    ahead
+}
+
+thread_local! {
+    /// The constants being worked out ahead, so that a ring of them ends.
+    static AHEAD: std::cell::RefCell<BTreeSet<String>> =
+        const { std::cell::RefCell::new(BTreeSet::new()) };
+}
+
+/// Why a value is not computed, where this compiler cannot build its program.
+const NOT_LOWERED: &str =
+    "This compiler couldn't build the program that computes it, which is this compiler's fault";
+
+/// Why a value is not computed, where its run's answer could not be read.
+const NOT_READ: &str = "What the program that computed it handed back couldn't be read";
+
+/// Why a value is not computed, where an earlier `comptime` has no literal.
+const NOT_CARRIED: &str = "A `comptime` declared beside it came to a value this compiler can't write into the program that computes it";
+
+/// **ADR-321 D19's note**: a check with no place to compile build-time code.
+pub(crate) const NOWHERE: &str = "This check has no place to compile build-time code in, and a value that runs code is computed only by compiling it and running it";
 
 /// **The callee the rule forbids, named as the call resolves**: a function by
 /// its name or its path, a method by its key (`Reader::read`), read off the
 /// program's entries and then `std`'s.
+fn undeclared_callee(
+    files: &[&Parsed],
+    here: usize,
+    value: &Expr,
+    library: &crate::contracts::Ledger,
+) -> Option<String> {
+    let declared = |name: &str| {
+        library.functions.contains_key(name)
+            || files.iter().any(|file| {
+                file.program.items.iter().any(|item| match &item.node {
+                    Item::Fn {
+                        name: Some(named), ..
+                    } => file.text(*named) == name,
+                    Item::Struct { name: named, .. } | Item::Enum { name: named, .. } => {
+                        file.text(*named) == name
+                    }
+                    _ => false,
+                })
+            })
+    };
+    let mut found = None;
+    crate::emit::visit_expr(value, &mut |expr: &Expr| {
+        if found.is_some() {
+            return;
+        }
+        if let Expr::Call { func, .. } = expr
+            && let Expr::Variable(name, _) = &**func
+        {
+            let name = files[here].text(*name);
+            if !declared(name) {
+                found = Some(name.to_string());
+            }
+        }
+    });
+    found
+}
+
+/// **The callee the rule forbids**, see [`culprit`]'s callers; the callee
+/// nothing declares is [`undeclared_callee`]'s.
 fn culprit(
     parsed: &Parsed,
     value: &Expr,
@@ -1053,9 +1208,26 @@ pub(crate) fn run(at: &Path, bundle: &Bundle, program: &str, name: &str) -> Resu
         return Err(Wall::Refused { detail: said });
     }
     let did_not = |detail: String| Wall::DidNotBuild { detail };
+    // **A program that did not compile is not compiled again** in this
+    // process: the same text fails the same way, and a check asks for one
+    // value many times over (each test, each variant).
+    if let Some(detail) = NOT_BUILT
+        .lock()
+        .ok()
+        .and_then(|held| held.get(&key).cloned())
+    {
+        return Err(did_not(detail));
+    }
     let source = dir.join("main.rs");
     write_if_changed(&source, program).map_err(did_not)?;
-    let binary = dir.join("run");
+    // **Each build compiles and runs its own binary, in a directory of its
+    // own**, moved into place after: `rustc` names its object files after the
+    // crate, so two builds of the same program side by side wrote, linked and
+    // deleted each other's.
+    let scratch = unique_beside(&dir.join("build"));
+    std::fs::create_dir_all(&scratch)
+        .map_err(|e| did_not(format!("{}: {e}", scratch.display())))?;
+    let binary = scratch.join("run");
     let compiled = Command::new(rustc())
         .current_dir(orchestrator::cache::Layout::where_tools_start())
         .args([
@@ -1087,9 +1259,12 @@ pub(crate) fn run(at: &Path, bundle: &Bundle, program: &str, name: &str) -> Resu
         .output()
         .map_err(|e| did_not(format!("running rustc: {e}")))?;
     if !compiled.status.success() {
-        return Err(did_not(
-            String::from_utf8_lossy(&compiled.stderr).to_string(),
-        ));
+        let _ = std::fs::remove_dir_all(&scratch);
+        let detail = String::from_utf8_lossy(&compiled.stderr).to_string();
+        if let Ok(mut held) = NOT_BUILT.lock() {
+            held.insert(key, detail.clone());
+        }
+        return Err(did_not(detail));
     }
     let mut libraries: Vec<PathBuf> = Vec::new();
     if let Some(dir) = bundle.dylib.parent() {
@@ -1111,7 +1286,10 @@ pub(crate) fn run(at: &Path, bundle: &Bundle, program: &str, name: &str) -> Resu
         .spawn()
         .map_err(|e| did_not(format!("running {}: {e}", binary.display())))?;
     let ran =
-        waited(child, name).map_err(|e| did_not(format!("running {}: {e}", binary.display())))?;
+        waited(child, name).map_err(|e| did_not(format!("running {}: {e}", binary.display())));
+    let _ = std::fs::rename(&binary, dir.join("run"));
+    let _ = std::fs::remove_dir_all(&scratch);
+    let ran = ran?;
     if ran.status.success() {
         let answer = String::from_utf8_lossy(&ran.stdout).trim().to_string();
         write_if_changed(&answered, &answer).map_err(did_not)?;
@@ -1131,6 +1309,11 @@ pub(crate) fn run(at: &Path, bundle: &Bundle, program: &str, name: &str) -> Resu
     }
     Err(Wall::Refused { detail: said })
 }
+
+/// The programs this process could not compile, by their key, with what
+/// `rustc` said.
+static NOT_BUILT: std::sync::Mutex<BTreeMap<String, String>> =
+    std::sync::Mutex::new(BTreeMap::new());
 
 /// **The run, waited for, and named while it takes long**
 /// ([ADR-321](../../../docs/specification/adr/adr-321.md) D12): after a few
@@ -1227,5 +1410,22 @@ fn write_if_changed(path: &Path, text: &str) -> Result<(), String> {
     if std::fs::read_to_string(path).is_ok_and(|held| held == text) {
         return Ok(());
     }
-    std::fs::write(path, text).map_err(|e| format!("{}: {e}", path.display()))
+    // **Written whole or not at all**: builds side by side share the
+    // workshop, and one that read a file another was still writing compiled
+    // half a program or read half an answer.
+    let partial = unique_beside(path);
+    std::fs::write(&partial, text).map_err(|e| format!("{}: {e}", partial.display()))?;
+    std::fs::rename(&partial, path).map_err(|e| {
+        let _ = std::fs::remove_file(&partial);
+        format!("{}: {e}", path.display())
+    })
+}
+
+/// A path beside `path` that no other build writes at the same time.
+fn unique_beside(path: &Path) -> PathBuf {
+    static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let mut name = path.file_name().unwrap_or_default().to_os_string();
+    name.push(format!(".{}.{n}.partial", std::process::id()));
+    path.with_file_name(name)
 }

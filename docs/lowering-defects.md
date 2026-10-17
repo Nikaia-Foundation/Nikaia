@@ -49,6 +49,8 @@ finds two D8 casts in `check_numbers4.nika`.
 
 | D41 | `strip_prefix(prefix)` with an owned `prefix` declared outside a loop is `NK2105` (passed to a method that keeps it) | **built** (0.0.965: every text method's pattern is only read, `check_core_method_pattern_at`; `throws.nika` drops its `prefix.clone()`) | `selfhosting_defects::a_pattern_handed_to_strip_in_a_loop_is_only_read` |
 | D42 | a tools file whose function throws through `net`'s `io::IoError` without `use std::io` lowers to `Thrown<io::IoError>` with no `io` in scope (rustc E0433); a program has the prelude | open: write `use std::io` | `map_trust.rs` `HM_C` |
+| D45 | `throw made()`, a call whose result is an error type, does not name that type in the error set: the function lowers to `Box<dyn Error>` where `throw Bad::No` gives `Thrown<Bad>` (a tools caller that `split()`s it fails, E0599) | open: throw the constructor (`build_eval.nika`, #636) | probe: `fn made() -> Bad`, `fn f() -> i64 throws { throw made() }` |
+| D46 | `xs[i] = v` on an `Array[T, N]` does not build: `[i64; 5]: Set<_, _>` is not satisfied (`nikaia_std::index::set`); the interpreter used to compute such a `comptime` where the program could not run it | open: build with `push` on a `Vec` | `fn squares() -> Array[i64, 5] { let mut xs: Array[i64, 5] = [0, 0, 0, 0, 0]; for i in 0..<xs.len() { xs[i] = i * i }; return xs }` |
 ---
 
 ## D1. A by-value parameter that is only read lowers as `&T`, and `p with {..}` then writes `..p`
