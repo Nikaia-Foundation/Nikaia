@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.994] — 2026-10-17
+
+**the prover reads through a loop: Horn clauses, a portfolio of strategies, every invariant checked, proposers only checked (ADR-361)**
+- ADR-361; Part III 13.2 (nikaia prove --propose), 13.3 ([prove] proposers), 14.2 (a claim a loop stands before is asked through the loop; nobody has to write an invariant; an assert relates to the loop by the flow; every invariant is checked with three certificates and kept with its origin). ADR-269 D16's loop stop points here. Specification only; built under #640.
+
 ## [0.0.993] — 2026-10-17
 
 **a walk of a list of number literals hands its lambdas numbers (#594)**
