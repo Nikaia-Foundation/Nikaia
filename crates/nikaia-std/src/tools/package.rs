@@ -46375,6 +46375,11 @@ pub fn lin_term(expr: &Expr, words: &winnow_grammar::InternerContext, var: &impl
             if !var(&length) { return None; }
             Some(built(SolverTerm::Var(length), out))
         },
+        Expr::Call { .. } => {
+            let name = call_result_name(expr);
+            if !var(&name) { return None; }
+            Some(built(SolverTerm::Var(name), out))
+        },
         Expr::Unary { op, expr, .. } => {
             let expr = nikaia_std::boxed::open(expr);
             if *op != UnaryOp::Neg { return None; }
@@ -46403,6 +46408,8 @@ pub fn lin_term(expr: &Expr, words: &winnow_grammar::InternerContext, var: &impl
         _ => None,
     }
 }
+
+pub fn call_result_name(call: &Expr) -> String { format!("result@{}", node_key(call)) }
 
 pub fn claim_term(expr: &Expr, words: &winnow_grammar::InternerContext, var: &impl Fn(&str) -> bool, out: &mut Vec<SolverTerm>) -> Option<i64> {
     match expr {
@@ -47778,7 +47785,11 @@ impl ProverState {
         let sometimes_values = nikaia_std::index::or(sometimes, || collections::BTreeMap::new().into());
         if is_sometimes && !self.collecting { outcome.findings.push(Finding { code: String::from("NK1207"), span, message: format!("`{}` is false when {}.", written, shown(&sometimes_values)), notes: vec![String::from("That state reaches it: what is known here pins every name the claim depends on.")], help: Some(String::from("If the claim is right, the code before it is wrong; if the code is right, the claim is.")), warning: false, labels: vec![] }); }
         let mut why = String::from("nothing before it shows it");
-        if rejected.is_some() { why = nikaia_std::index::or(rejected, || "".into()); } else if is_refuted { why = format!("it is false every time it is reached ({})", shown(&refuted_values)); } else if is_sometimes { why = format!("it is false when {}", shown(&sometimes_values)); } else if claim.is_none() { why = String::from("it is not a comparison of whole numbers the prover reads"); } else if only_params && at.no_precondition.is_some() {
+        if rejected.is_some() { why = nikaia_std::index::or(rejected, || "".into()); } else if is_refuted { why = format!("it is false every time it is reached ({})", shown(&refuted_values)); } else if is_sometimes { why = format!("it is false when {}", shown(&sometimes_values)); } else if claim.is_none() {
+            why = String::from("it is not a comparison of whole numbers the prover reads");
+            let unread = unread_name(names, &scope);
+            if unread.is_some() { why = format!("`{}` is not a whole number the prover reads", nikaia_std::index::or(unread.as_deref(), || "")); }
+        } else if only_params && at.no_precondition.is_some() {
             let no = nikaia_std::index::or(claim_text_of((at.no_precondition).as_deref()), || "".into());
             why = format!("nothing before it shows it; {}", lowered_first(&without_full_stops(&no)));
         } else if only_params && !at.top { why = String::from("nothing before it shows it, and a claim about parameters is a precondition only at the top of the function's body"); }
@@ -47882,6 +47893,11 @@ impl ProverState {
         found.claims.push(carried);
         self.preconditions.insert(owner, found);
     }
+}
+
+fn unread_name(names: &collections::BTreeSet<String>, scope: &ProverScope) -> Option<String> {
+    for n in names.iter() { if scope.locals.contains(n) && !scope.ints.contains(n) && !scope.ints.contains(&length_of(n)) { return Some(n.to_owned()); } }
+    None
 }
 
 pub fn postconditions_for(arena: &mut TermArena, posts: &[PostClaim], params: &[String], args: &[Expr], bound: &str, scope: &ProverScope, words: &winnow_grammar::InternerContext) -> Vec<i64> {
@@ -48164,6 +48180,7 @@ fn prover_stmt(walk: &mut ProverWalk, stmt: &Spanned<Stmt>, scope: &mut ProverSc
 fn prover_let(walk: &mut ProverWalk, names: &[winnow_grammar::Symbol], mutable: bool, ty: Option<&Type>, value: &Expr, span: Span, scope: &mut ProverScope, nested: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) {
     prover_expr(walk, value, span, &scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
     let tainted = from_outside(value, &scope.tainted, words, library, holes_of);
+    if names.len() == 1 && !mutable { prover_call_results(walk, value, true, scope, program, words, own, unaliased, condition); }
     let value_lin = lin_term(value, words, &|name| { scope.ints.contains(name) }, &mut walk.arena.nodes);
     let mut value_at_entry: Option<i64> = None;
     if value_lin.is_some() { value_at_entry = scope.at_entry(&mut walk.arena, nikaia_std::index::or(value_lin, || 0)); }
@@ -48224,6 +48241,36 @@ fn prover_let(walk: &mut ProverWalk, names: &[winnow_grammar::Symbol], mutable: 
         },
         Expr::LitStr { .. } => { scope.has_length(&mut walk.arena, &name, None); },
         _ => { if prover_typed(ty, words, 2) { scope.has_length(&mut walk.arena, &name, None); } },
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn prover_call_results(walk: &mut ProverWalk, expr: &Expr, top: bool, scope: &mut ProverScope, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, unaliased: &impl Fn(&str) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) {
+    match expr {
+        Expr::Binary { lhs, rhs, .. } => {
+            let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
+            prover_call_results(walk, lhs, false, scope, program, words, own, unaliased, condition);
+            prover_call_results(walk, rhs, false, scope, program, words, own, unaliased, condition);
+        },
+        Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); prover_call_results(walk, expr, false, scope, program, words, own, unaliased, condition); },
+        Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); prover_call_results(walk, expr, false, scope, program, words, own, unaliased, condition); },
+        Expr::Call { func, args, .. } => {
+            let func = nikaia_std::boxed::open(func);
+            for arg in args.iter() { prover_call_results(walk, arg, false, scope, program, words, own, unaliased, condition); }
+            if top { return; }
+            let callee = match prover_bound_callee(func, &scope, words, unaliased) { Some(__nikaia_value) => __nikaia_value, None => return };
+            if !prover_returns_whole(walk, &callee, program, words, own, condition) { return; }
+            let name = call_result_name(expr);
+            scope.rebind(&walk.arena, &name);
+            let facts = prover_postconditions_of(walk, &callee, args, &name, &scope, program, words, own, condition);
+            scope.ints.insert(name.to_owned());
+            scope.loose.insert(name.to_owned());
+            for fact in facts.iter() {
+                let fact = nikaia_std::num::value(fact);
+                scope.facts.push(fact);
+            }
+        },
+        _ => { },
     }
 }
 
@@ -60122,7 +60169,7 @@ pub mod proofs_book {
 }
 pub mod prove_terms {
     #[allow(unused_imports)]
-    pub use super::{lin_term, claim_term};
+    pub use super::{lin_term, call_result_name, claim_term};
 }
 pub mod prove_text {
     #[allow(unused_imports)]

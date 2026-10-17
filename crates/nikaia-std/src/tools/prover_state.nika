@@ -285,6 +285,12 @@ impl ProverState {
             why = f"it is false when {shown(sometimes_values)}"
         } else if claim == null {
             why = "it is not a comparison of whole numbers the prover reads"
+            // **The part it could not read, named** (D7): a binding the claim
+            // reads that is not a whole number of the proof.
+            let unread = unread_name(names, scope)
+            if unread != null {
+                why = f"`{unread ?? ""}` is not a whole number the prover reads"
+            }
         } else if only_params && at.no_precondition != null {
             let no = claim_text_of(at.no_precondition) ?? ""
             why = f"nothing before it shows it; {lowered_first(without_full_stops(no))}"
@@ -452,6 +458,18 @@ impl ProverState {
         found.claims.push(carried)
         self.preconditions.insert(owner, found)
     }
+}
+
+/// **The first binding a claim reads that is not a whole number of the
+/// proof**: a local whose length is not one either, so that a claim about a
+/// text's `len()` does not name the text.
+fn unread_name(names: ref collections::BTreeSet[String], scope: ref ProverScope) -> String? {
+    for n in names {
+        if scope.locals.contains(n) && !scope.ints.contains(n) && !scope.ints.contains(length_of(n)) {
+            return n.clone()
+        }
+    }
+    return null
 }
 
 /// **What a call's postconditions say of the name its result is bound to**

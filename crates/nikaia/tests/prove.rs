@@ -883,3 +883,58 @@ fn an_exit_that_shows_nothing_makes_no_postcondition() {
         "{held:#?}"
     );
 }
+
+/// **ADR-314 D3: a call inside a `let`'s value is a whole number of its own**:
+/// what its callee ensures holds of it, so `10 + example(2)` reads as `10 +
+/// r` with `r == 10 + 2`, and an arithmetic around a call is proved - or
+/// shown false - as `let r = example(2)` alone already was.
+#[test]
+fn a_call_inside_a_lets_value_is_read_with_what_its_callee_ensures() {
+    use nikaia::prove::Held::*;
+    let source = "fn example(a: i64) -> i64 sync {\n\
+                  \x20   return 10 + a\n\
+                  }\n\
+                  \n\
+                  fn main() {\n\
+                  \x20   let e = 10 + example(2)\n\
+                  \x20   assert(e == 22)\n\
+                  \x20   let f = example(example(1)) - 1\n\
+                  \x20   assert(f == 20)\n\
+                  \x20   println(f\"{e} {f}\")\n\
+                  }\n";
+    let held = held(source);
+    assert!(matches!(held.as_slice(), [Proved, Proved]), "{held:#?}");
+    let refuted = "fn example(a: i64) -> i64 sync {\n\
+                   \x20   return 10 + a\n\
+                   }\n\
+                   \n\
+                   fn main() {\n\
+                   \x20   let b = 2 * example(2)\n\
+                   \x20   assert(b > 30)\n\
+                   \x20   println(f\"{b}\")\n\
+                   }\n";
+    let found = shown_false(refuted);
+    assert_eq!(found.len(), 1, "{found:#?}");
+    assert!(
+        found[0].message.contains("`b > 30` is false every time"),
+        "{found:#?}"
+    );
+}
+
+/// **D7: a claim the prover does not read names the part it could not read**:
+/// a binding whose value is outside D9 - here a quotient - is named, rather
+/// than the claim called something other than a comparison of whole numbers.
+#[test]
+fn a_claim_over_a_name_the_prover_does_not_read_names_it() {
+    let source = "fn main() {\n\
+                  \x20   let b = 48 / 4\n\
+                  \x20   assert(b > 10)\n\
+                  \x20   println(f\"{b}\")\n\
+                  }\n";
+    assert_eq!(
+        held(source),
+        [nikaia::prove::Held::AtRunTime(
+            "`b` is not a whole number the prover reads".to_string()
+        )]
+    );
+}
