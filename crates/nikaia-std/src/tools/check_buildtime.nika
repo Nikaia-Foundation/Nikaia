@@ -101,17 +101,6 @@ impl CheckState {
         self.findings.push(check_refusal("NK1153", span, f"`{name}` is an empty list, and nothing says what it holds.", ["An empty list gets its element type from how it's used, and it isn't used here.".clone()], f"Write the type, `let {name}: Vec[i64] = []`, or give it a first element."))
     }
 
-    /// The call-depth limit, which is **not** a step budget
-    /// ([ADR-287](../../docs/specification/adr/adr-287.md) D16).
-    ///
-    /// That record deliberately has none and wrote down what it costs: a body
-    /// that does not terminate hangs the build. A *recursion* that does not
-    /// terminate is a different failure — it takes this compiler's stack down
-    /// with it, and a compiler that falls over is not the hang D4 accepted.
-    pub fn a_build_time_call_went_too_deep(ref mut self, callee: ref String, span: ref Span) sync {
-        self.findings.push(check_refusal("NK1152", span, f"`{callee}` calls itself too deeply to be computed while the program is built.", ["The build limits how deep calls may go, so that a recursion without an end is reported instead of crashing the compiler.".clone()], "Give the recursion a base case, or compute it while the program runs.".clone()))
-    }
-
     /// `NK1149`: a type's constructor written `Type::new`
     /// ([ADR-140](../../docs/specification/adr/adr-140.md) D2).
     ///

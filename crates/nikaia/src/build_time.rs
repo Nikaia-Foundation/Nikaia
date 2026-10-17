@@ -1,54 +1,24 @@
-//! Running Nikaia while the program is built
-//! ([ADR-287](../../../docs/specification/adr/adr-287.md) D6's second stage).
+//! Folding a `comptime` of literals while the program is built
+//! ([ADR-287](../../../docs/specification/adr/adr-287.md) D6,
+//! [ADR-321](../../../docs/specification/adr/adr-321.md) D1).
 //!
-//! `comptime` has had an evaluator since the word existed, and what it knew was
-//! an integer literal, a name whose value already folded, a negation and
-//! `+ - * / %` — [`fold`](crate::fold), 124 lines with no call in it. That is
-//! D5's **first** stage, and the second one was written down as *when Q4 is
-//! answered*: a call, and with it the file reading
-//! [ADR-310](../../../docs/specification/adr/adr-310.md) waits behind.
-//!
-//! Q4 **is** answered — [ADR-287](../../../docs/specification/adr/adr-287.md)
-//! D1 and D2 say what a build-time body may do — so this is the call, and with
-//! it the **loop**: a `for` over a range, a `while`, `break`, `continue` and an
-//! assignment, because a loop that cannot change anything is not one.
-//!
-//! **What a block means had to grow a third answer.** It used to be *a value or
-//! an error*; a loop's body is neither — it runs to its end and produces
-//! nothing, which is ordinary — so [`Flow`] names the four ways out and the
-//! frame is shared rather than owned, since a `for` has to see what its body
-//! assigned on the last turn.
-//!
-//! **What bounds it is a ledger column and not a list of allowed functions.** A
-//! callee must be `sync` (D1) and its touch set must be empty or exactly the
-//! build's own parameters (D2), and both are answers the compiler already
-//! derives for every function it sees. Nothing here decides what is safe; it
-//! reads what was decided.
-//!
-//! **There is no step budget** (D4), deliberately and with the cost written
-//! down: a body that does not terminate hangs the build. What *is* bounded is
-//! the **call depth**, and that is a different thing — an unbounded recursion
-//! would overflow this compiler's own stack, and a compiler that falls over is
-//! not the hang D4 accepted. The limit is high enough that no terminating
-//! program meets it and the message says which call path found it.
+//! An initialiser of literals alone - numbers, text, a list, a struct, a
+//! variant, `f"…"`, an operator, an `if` whose branches are values, an index,
+//! another `comptime`, a file the build reads, a grammar run on a text - is
+//! folded here, by `tools/build_eval.nika`. **Nothing here calls a function**:
+//! build-time code that calls one is compiled to Rust and run with the
+//! program (`crate::comptime_run`), so the build-time answer is the run-time
+//! one, and a check with no place to compile it refuses the value (D19).
 
 use std::cell::RefCell;
 
-use nikaia_std::tools::build_eval::{
-    BtCallee, BtContract, BtHost, BtRan, BtRead, BtRefusal, bt_evaluate,
-};
+use nikaia_std::tools::build_eval::{BtHost, BtRan, BtRead, BtRefusal, bt_evaluate};
 
 use crate::assets::{Denied, Reads};
 use crate::ast::{Expr, Item};
+use crate::contracts::touch;
 use crate::contracts::ty::TyOps;
-use crate::contracts::{Ledger, touch};
 use crate::parser::Parsed;
-
-/// The stack [`BuildTime::evaluate`] runs on: room for `BT_DEEPEST` calls
-/// with a body nested deeply inside each, in a debug build, many times over.
-/// Reserved, not touched - the pages a shallow evaluation never reaches cost
-/// nothing.
-const EVALUATION_STACK: usize = 256 * 1024 * 1024;
 
 /// **What a build-time expression came to**, in Nikaia
 /// (`tools/build_values.nika`, ADR-294, #125): an integer as a magnitude and
@@ -64,22 +34,9 @@ pub enum Refusal {
     /// what `NK1127` reports, and what the staging above expects to keep
     /// reporting until every stage lands.
     Unevaluable,
-    /// The callee may not be run while the program is built
-    /// ([ADR-287](../../../docs/specification/adr/adr-287.md) D13, D14). A
-    /// different claim from the one above and it gets a different code: the
-    /// shape is understood and the rule says no.
-    NotAllowed { callee: String, because: String },
-    /// The call depth above.
-    TooDeep { callee: String },
-    /// **Understood, and not something this evaluator can do here.**
-    ///
-    /// A third thing, between the two above: `NotAllowed` is *the rule says
-    /// no*, `Unevaluable` is *this shape is not read*, and this is *the shape
-    /// is read and the thing it needs is somewhere this walk cannot reach*.
-    /// It exists because the three want different sentences — a reader who
-    /// calls `"a".to_uppercase()` is owed *its body is Rust* rather than a
-    /// catalogue of what does work, since no amount of rewriting the line will
-    /// help.
+    /// **Understood, and not something this folder computes**: code that runs,
+    /// which is compiled and run where it stands in a `comptime`'s own
+    /// initialiser (ADR-321 D1), and is never interpreted.
     NotHere {
         what: String,
         why: String,
@@ -92,10 +49,8 @@ pub enum Refusal {
     },
     /// A constant worked out from itself.
     ///
-    /// Not the call depth above, which is a *recursion* that would terminate if
-    /// the stack were deeper. This one never does: `comptime A = B` beside
-    /// `comptime B = A` has no base case to reach, and the message names the
-    /// ring rather than the limit it hit.
+    /// `comptime A = B` beside `comptime B = A` has no base case to reach, and
+    /// the message names the ring.
     Circular { ring: Vec<String> },
     /// **A file this build may not read**
     /// ([ADR-310](../../../docs/specification/adr/adr-310.md) D4 to D5).
@@ -139,17 +94,16 @@ pub enum Refusal {
 /// with two of them written in Nikaia (`tools/integers.nika`).
 pub use nikaia_std::tools::integers::Integer;
 
-pub type Known<'a> = &'a (dyn Fn(&str) -> Option<Value> + Sync);
+pub type Known<'a> = &'a dyn Fn(&str) -> Option<Value>;
 
 /// The evaluator, over one unit's items. The evaluator itself is
 /// `tools/build_eval.nika` (ADR-294, #125); this holds what it asks for - the
 /// program's files, the ledger, what a build may read, and the grammar workshop.
 pub struct BuildTime<'a> {
     parsed: &'a Parsed,
-    /// **Every file of this program**, because a body is an AST and an AST
-    /// belongs to the file that was parsed into it.
+    /// **Every file of this program**: a variant or a grammar may be declared
+    /// in any of them.
     beside: &'a [&'a Parsed],
-    own: &'a Ledger,
     /// **What this build may read while it builds**
     /// ([ADR-310](../../../docs/specification/adr/adr-310.md)). A caller that
     /// passes [`Reads::none`] gets D1: the whole class is off, which is what
@@ -162,40 +116,20 @@ impl<'a> BuildTime<'a> {
     pub fn new(
         parsed: &'a Parsed,
         beside: &'a [&'a Parsed],
-        own: &'a Ledger,
         reads: &'a Reads,
         known: Known<'a>,
     ) -> Self {
         Self {
             parsed,
             beside,
-            own,
             reads,
             known,
         }
     }
 
     /// What an initialiser comes to.
-    ///
-    /// **On a thread of its own, with a stack of its own size**
-    /// ([`EVALUATION_STACK`]). `BT_DEEPEST` (`tools/build_eval.nika`) counts calls, and what a call costs
-    /// on the stack differs by build profile and by how deeply the body nests.
-    /// Whether the refusal happens may not depend on which thread asked.
     pub fn evaluate(&mut self, expr: &Expr) -> Result<Value, Refusal> {
-        let this = &*self;
-        let run = move || this.run(expr);
-        std::thread::scope(|scope| {
-            std::thread::Builder::new()
-                .name("nikaia-build-time".to_string())
-                .stack_size(EVALUATION_STACK)
-                .spawn_scoped(scope, run)
-                .map(|thread| thread.join())
-        })
-        .unwrap_or_else(|_| {
-            // No thread to be had: the caller's own stack, as before.
-            Ok(self.run(expr))
-        })
-        .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+        self.run(expr)
     }
 
     fn run(&self, expr: &Expr) -> Result<Value, Refusal> {
@@ -203,7 +137,6 @@ impl<'a> BuildTime<'a> {
         units.extend(self.beside.iter().copied());
         let host = Host {
             units,
-            own: self.own,
             reads: self.reads,
             known: self.known,
             kept: RefCell::new(Vec::new()),
@@ -216,7 +149,6 @@ impl<'a> BuildTime<'a> {
 /// being checked), the ledger, what may be read, and the grammar workshop.
 struct Host<'h> {
     units: Vec<&'h Parsed>,
-    own: &'h Ledger,
     reads: &'h Reads,
     known: Known<'h>,
     /// The refusals the evaluator carries by their place here: a grammar that
@@ -228,8 +160,6 @@ impl Host<'_> {
     fn refusal(&self, refused: BtRefusal) -> Refusal {
         match refused {
             BtRefusal::Unevaluable => Refusal::Unevaluable,
-            BtRefusal::NotAllowed { callee, because } => Refusal::NotAllowed { callee, because },
-            BtRefusal::TooDeep { callee } => Refusal::TooDeep { callee },
             BtRefusal::NotHere { what, why, way_out } => Refusal::NotHere { what, why, way_out },
             BtRefusal::Circular { ring } => Refusal::Circular { ring },
             BtRefusal::MayNotRead { path, why } => Refusal::MayNotRead { path, why },
@@ -249,16 +179,6 @@ impl Host<'_> {
             .chain(1..self.units.len())
             .map(|at| (at, self.units[at]))
     }
-
-    fn in_file(&self, parsed: &Parsed, at: usize, name: &str) -> Option<BtCallee> {
-        // `Tag::doubled` is a method's key, and it is the ledger's own - so the
-        // split here is the same one `contracts` makes when it writes the
-        // entry, and the two cannot drift about which name a call resolves to.
-        match name.split_once("::") {
-            Some((target, method)) => method_of(parsed, at, target, method),
-            None => free_body_of(parsed, at, name),
-        }
-    }
 }
 
 impl BtHost for Host<'_> {
@@ -272,24 +192,6 @@ impl BtHost for Host<'_> {
 
     fn known(&self, name: &str) -> Option<Value> {
         (self.known)(name)
-    }
-
-    fn contract(&self, name: &str) -> BtContract {
-        match self.own.functions.get(name) {
-            None => BtContract {
-                declared: false,
-                reason: String::new(),
-            },
-            Some(contract) => BtContract {
-                declared: true,
-                reason: may_not_run(contract).unwrap_or_default().to_string(),
-            },
-        }
-    }
-
-    fn callee(&self, unit: i64, name: &str) -> Option<BtCallee> {
-        self.in_reach(unit)
-            .find_map(|(at, parsed)| self.in_file(parsed, at, name))
     }
 
     fn constant(&self, unit: i64, name: &str) -> Option<Expr> {
@@ -400,93 +302,6 @@ impl Host<'_> {
             Some((parsed, crate::contracts::ty::Ty::from_ast(parsed, ty)))
         })
     }
-}
-
-fn parameters(parsed: &Parsed, args: &[crate::ast::FnArg]) -> Vec<String> {
-    args.iter()
-        .map(|arg| parsed.text(arg.name).to_string())
-        .collect()
-}
-
-fn options_of(parsed: &Parsed, config: &[crate::ast::ConfigParam]) -> Vec<(String, Expr)> {
-    config
-        .iter()
-        .map(|option| (parsed.text(option.name).to_string(), option.default.clone()))
-        .collect()
-}
-
-fn free_body_of(parsed: &Parsed, owner: usize, name: &str) -> Option<BtCallee> {
-    parsed.program.items.iter().find_map(|item| {
-        let Item::Fn {
-            name: declared,
-            args,
-            receiver,
-            config,
-            body,
-            ..
-        } = &item.node
-        else {
-            return None;
-        };
-        if receiver.is_some() || parsed.text((*declared)?) != name {
-            return None;
-        }
-        Some(BtCallee {
-            args: parameters(parsed, args),
-            options: options_of(parsed, config),
-            body: body.clone(),
-            owner: owner as i64,
-        })
-    })
-}
-
-/// A method of a `struct` this file declares, by the key a call resolves to.
-///
-/// **`self` is the first parameter**, which is the shape the call site builds:
-/// the receiver is evaluated before the arguments, because it is what says
-/// *which* method. A method with **no receiver** is Kap 4.2's constructor and
-/// is reached by its own name (`Stats::new`), so it takes no `self`.
-fn method_of(parsed: &Parsed, owner: usize, target: &str, method: &str) -> Option<BtCallee> {
-    parsed.program.items.iter().find_map(|item| {
-        let Item::Impl {
-            target: on,
-            methods,
-            ..
-        } = &item.node
-        else {
-            return None;
-        };
-        if parsed.text(on.name) != target {
-            return None;
-        }
-        methods.iter().find_map(|declared| {
-            let Item::Fn {
-                name,
-                args,
-                receiver,
-                config,
-                body,
-                ..
-            } = &declared.node
-            else {
-                return None;
-            };
-            if parsed.text((*name)?) != method {
-                return None;
-            }
-            let mut names = match receiver {
-                Some(_) => vec!["self".to_string()],
-                None => Vec::new(),
-            };
-            names.extend(parameters(parsed, args));
-            Some(BtCallee {
-                args: names,
-                options: options_of(parsed, config),
-                body: body.clone(),
-                owner: owner as i64,
-            })
-        })
-    })
 }
 
 /// An escape the set does not name, as it is written, and why.

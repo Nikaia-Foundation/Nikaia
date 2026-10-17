@@ -434,8 +434,9 @@ pub(crate) enum Computed {
     },
     /// The run stopped, and what it said.
     Stopped(String),
-    /// This stage builds no program for it, and the interpreter answers.
-    NotHere,
+    /// This compiler builds no program for it, and why, as a sentence: the
+    /// value is refused (`NK1127`), never interpreted (ADR-321 D1).
+    NotHere(String),
 }
 
 /// What a call's left-out option stands for where its default is not known in
@@ -507,8 +508,15 @@ fn computed(
     bounds: Bounds,
 ) -> Computed {
     use crate::contracts::LedgerOps;
+    let not_here = |why: &str| Computed::NotHere(why.to_string());
     let Some(sub) = sub_program(files[here], bound, value, ty, known) else {
-        return Computed::NotHere;
+        // The earlier constants, or else the type, had no written form.
+        return match unit_without_its_constants(files[here], bound, known) {
+            None => not_here(NOT_CARRIED),
+            Some(_) => not_here(
+                "Its type has no form this compiler writes into the program that computes it",
+            ),
+        };
     };
     let mut sub = Some(sub);
     let mut units: Vec<Parsed> = Vec::with_capacity(files.len());
@@ -519,7 +527,7 @@ fn computed(
         };
         match unit {
             Some(unit) => units.push(unit),
-            None => return Computed::NotHere,
+            None => return not_here(NOT_CARRIED),
         }
     }
     let carried = constants_of(&units);
@@ -531,10 +539,9 @@ fn computed(
         .difference(&absent)
         .cloned()
         .collect();
-    // A value that calls what went - a function reading a constant not worked
-    // out yet - is not this run's (the constants themselves it may name: those
-    // it holds are carried as `let`s): the interpreter answers it from the body's
-    // own file, as it did before anything was left out.
+    // **A value that reads what went** - a constant not worked out yet, or a
+    // function that reads one - has it worked out first, here, as an item
+    // read before its declaration is (Part II 10.2), and runs again with it.
     if units[here]
         .program
         .items
@@ -547,12 +554,23 @@ fn computed(
             } if units[here].text(*name) == VALUE_FN => {
                 let mut named = BTreeSet::new();
                 nikaia_std::tools::names::names_in_block(body, &units[here].interner, &mut named);
-                named.iter().any(|name| left_out.contains(name))
+                named
+                    .iter()
+                    .any(|name| left_out.contains(name) || absent.contains(name))
             }
             _ => false,
         })
     {
-        return Computed::NotHere;
+        let ahead = worked_out_ahead(files, bound, &absent, known, library, workshop, bounds);
+        if ahead.is_empty() {
+            return not_here(
+                "It reads a `comptime` that can't be computed before it: one that reads it in turn",
+            );
+        }
+        let known = |name: &str| known(name).or_else(|| ahead.get(name).cloned());
+        return computed(
+            files, here, bound, value, ty, &known, library, workshop, bounds,
+        );
     }
     // **A dependency's functions are the program's to call** (ADR-321 D13):
     // each package's units are derived on their own, and the program's
@@ -591,26 +609,114 @@ fn computed(
         _ => lowered_units(&units, here, counted, &derived, &packages, library),
     };
     let Some(lowered) = lowered else {
-        return Computed::NotHere;
+        return not_here(NOT_LOWERED);
     };
     let Ok(dump) = crate::grammar_run::dumper(&units[here], ty) else {
-        return Computed::NotHere;
+        return not_here("Its type can't be handed back from the program that computes it");
     };
     let Some(program) = with_driver(&lowered, &dump, bounds) else {
-        return Computed::NotHere;
+        return not_here(NOT_LOWERED);
     };
     match workshop.run_comptime(&program, bound) {
         Ok(text) => match crate::grammar_run::decode(&text) {
             Ok(computed) => Computed::Value(computed),
-            Err(_) => Computed::NotHere,
+            Err(_) => not_here(NOT_READ),
         },
         // A default this run did not have is the default's own refusal,
         // said where it is written.
-        Err(Wall::Refused { detail }) if detail.contains(NOT_COMPUTED_YET) => Computed::NotHere,
+        Err(Wall::Refused { detail }) if detail.contains(NOT_COMPUTED_YET) => {
+            not_here("It leaves out an option whose default isn't computed")
+        }
         Err(Wall::Refused { detail }) => Computed::Stopped(detail),
-        Err(_) => Computed::NotHere,
+        Err(Wall::NowhereToBuild) => not_here(NOWHERE),
+        Err(Wall::InsideAnother { .. }) => not_here(
+            "It is met while another build-time program is built, and one isn't built inside another",
+        ),
+        Err(Wall::NoCrossedForm { ty, because }) => Computed::NotHere(format!(
+            "`{ty}` has no form that crosses from build time: {because}"
+        )),
+        Err(Wall::DidNotBuild { .. }) => not_here(NOT_LOWERED),
+        Err(Wall::Unreadable { .. }) => not_here(NOT_READ),
     }
 }
+
+/// **The constants a run reads before their turn**, worked out ahead
+/// (Part II 10.2: an item-level `comptime` may read one declared below it): a
+/// constant of literals folded, one that runs code and writes its type
+/// compiled and run as any `comptime` is. One already being worked out
+/// further up is left alone, which is how a ring ends: its run stays without
+/// it and is refused.
+fn worked_out_ahead(
+    files: &[&Parsed],
+    bound: &str,
+    absent: &BTreeSet<String>,
+    known: &dyn Fn(&str) -> Option<Value>,
+    library: &crate::contracts::Ledger,
+    workshop: &crate::grammar_run::Workshop,
+    bounds: Bounds,
+) -> std::collections::BTreeMap<String, Value> {
+    let mut ahead = std::collections::BTreeMap::new();
+    let entered = AHEAD.with(|held| held.borrow_mut().insert(bound.to_string()));
+    if !entered {
+        return ahead;
+    }
+    let reads = crate::assets::Reads::none();
+    for (at, file) in files.iter().enumerate() {
+        for item in &file.program.items {
+            let Item::Comptime {
+                name, ty, value, ..
+            } = &item.node
+            else {
+                continue;
+            };
+            let named = file.text(*name);
+            if !absent.contains(named) || AHEAD.with(|held| held.borrow().contains(named)) {
+                continue;
+            }
+            let so_far = |name: &str| known(name);
+            let folded = crate::build_time::BuildTime::new(file, files, &reads, &so_far)
+                .evaluate(value)
+                .ok();
+            let worked = match (folded, ty) {
+                (Some(value), _) => Some(value),
+                (None, Some(written)) => {
+                    let ty = <Ty as crate::contracts::ty::TyOps>::from_ast(file, written);
+                    match computed(
+                        files, at, named, value, &ty, known, library, workshop, bounds,
+                    ) {
+                        Computed::Value(value) => Some(value),
+                        _ => None,
+                    }
+                }
+                (None, None) => None,
+            };
+            if let Some(value) = worked {
+                ahead.insert(named.to_string(), value);
+            }
+        }
+    }
+    AHEAD.with(|held| held.borrow_mut().remove(bound));
+    ahead
+}
+
+thread_local! {
+    /// The constants being worked out ahead, so that a ring of them ends.
+    static AHEAD: std::cell::RefCell<BTreeSet<String>> =
+        const { std::cell::RefCell::new(BTreeSet::new()) };
+}
+
+/// Why a value is not computed, where this compiler cannot build its program.
+const NOT_LOWERED: &str =
+    "This compiler couldn't build the program that computes it, which is this compiler's fault";
+
+/// Why a value is not computed, where its run's answer could not be read.
+const NOT_READ: &str = "What the program that computed it handed back couldn't be read";
+
+/// Why a value is not computed, where an earlier `comptime` has no literal.
+const NOT_CARRIED: &str = "A `comptime` declared beside it came to a value this compiler can't write into the program that computes it";
+
+/// **ADR-321 D19's note**: a check with no place to compile build-time code.
+pub(crate) const NOWHERE: &str = "This check has no place to compile build-time code in, and a value that runs code is computed only by compiling it and running it";
 
 /// **The callee the rule forbids, named as the call resolves**: a function by
 /// its name or its path, a method by its key (`Reader::read`), read off the

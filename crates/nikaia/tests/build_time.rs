@@ -319,16 +319,16 @@ fn the_loops_binding_does_not_outlive_it() {
 /// `Array[T, N]` is for, because a `Vec` allocates and a `const` cannot hold
 /// one.
 ///
-/// **And it is an array rather than a `push`** for a reason that is measured
-/// and not chosen: `.push` on a list hands back a `Vec[?]`, and `NK1104`
-/// refuses that against an `Array[i64, 5]` long before this evaluator is
-/// reached. So a build-time table is written at its length and filled by index.
+/// **Grown with `push`, fixed once it crosses** (ADR-311 D1): the run is
+/// the program's, so the table is built as the program would build it. (An
+/// `Array[T, N]` filled by index does not build at run time yet,
+/// `docs/lowering-defects.md` D44, and so not at build time either.)
 #[test]
 fn a_table_is_computed_while_the_program_is_built() {
-    let source = "fn squares() -> Array[i64, 5] {\n\
-                  \x20   let mut xs: Array[i64, 5] = [0, 0, 0, 0, 0]\n\
-                  \x20   for i in 0..<xs.len() {\n\
-                  \x20       xs[i] = i * i\n\
+    let source = "fn squares() -> Vec[i64] {\n\
+                  \x20   let mut xs: Vec[i64] = []\n\
+                  \x20   for i in 0..<5 {\n\
+                  \x20       xs.push(i * i)\n\
                   \x20   }\n\
                   \x20   return xs\n\
                   }\n\
@@ -397,8 +397,8 @@ fn a_build_time_index_the_array_does_not_have_is_named() {
     let found = findings(source);
     let refusal = found
         .iter()
-        .find(|f| f.code == "NK1152")
-        .unwrap_or_else(|| panic!("NK1152: {found:#?}"));
+        .find(|f| f.code == "NK1244")
+        .unwrap_or_else(|| panic!("NK1244: {found:#?}"));
     assert_eq!(
         refusal.message,
         "`BAD` stopped while the program was built: index out of bounds: the len is 3 \

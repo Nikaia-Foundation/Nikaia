@@ -2,6 +2,8 @@
 //! a cast, `??`, a field or an `if`'s head is walked like one under a call, so
 //! what it calls reaches `sync`, `touches` and the build-time rule.
 
+mod common;
+
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::parser::parse_to_ast;
 
@@ -10,11 +12,13 @@ fn ledger(source: &str) -> Ledger {
     Ledger::infer(&parsed)
 }
 
+/// The check a build runs, with a place to compile build-time code: the rule
+/// is asked of a `comptime` that calls (ADR-321 D2, D19).
 fn findings(source: &str) -> Vec<nikaia::check::Finding> {
     let parsed = parse_to_ast(source).expect("the source parses");
     let own = Ledger::infer(&parsed);
     let library = Ledger::parse(STD).expect("std ships a ledger");
-    nikaia::check::check(&parsed, &own, &library).findings
+    common::checked(&parsed, &own, &library).findings
 }
 
 const FOREIGN_UNDER_A_CAST: &str = "\

@@ -254,8 +254,8 @@ impl CheckState {
         self.findings.push(check_refusal("NK1117", span, f"`{name}` isn't available without its module.", [f"`std` has `{key}`, and it's reached through its module.", "Only a few names are always available; the rest live in a module."], f"Write `use std::{module}` at the top of the file, and `{key}(…)` here."))
     }
 
-    /// **A build-time run that stopped as the program would** (ADR-321 D1):
-    /// the same code stops the program the same way. In its own words, at the
+    /// **`NK1244`: a build-time run that stopped as the program would**
+    /// (ADR-321 D1, D16): the same code stops the program the same way. In its own words, at the
     /// place it stopped (`at`, a byte of this file, or -1) and, where that is a
     /// function of another file, its name.
     pub fn a_build_time_run_that_stopped_at(ref mut self, bound: ref String, why: ref String, at: i64, function: ref String?, span: ref Span) sync {
@@ -274,6 +274,6 @@ impl CheckState {
         if self.computing_default {
             help = "Fix it as you would fix the program stopping there, or make the option a `T?` and compute the value in the body."
         }
-        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1152", message: f"`{bound}` stopped while the program was built: {why}.", notes: notes, help: help, labels: labels })
+        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1244", message: f"`{bound}` stopped while the program was built: {why}.", notes: notes, help: help, labels: labels })
     }
 }

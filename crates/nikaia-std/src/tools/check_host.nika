@@ -4,7 +4,7 @@
 // #558, C-4): the services that stay Rust because they are the parser's, the
 // interner's, the build's - reading a hole of an `f"..."` back as an expression,
 // the call a named function stands for, a symbol made, a build-time value
-// evaluated or compiled and run. `CheckHost` is what the Nikaia half of the
+// folded or compiled and run. `CheckHost` is what the Nikaia half of the
 // checker sees of them; `check/host.rs` implements it over the parsed files and
 // what the build may read. **Ids stay with the host**: an expression is known
 // here by `id_of`, a symbol is whatever the host's interner says.
@@ -14,14 +14,12 @@
 
 use std::collections
 
-/// How the evaluator of a build-time value came out: a value, or the refusal
+/// How folding an initialiser of literals came out: a value, or the refusal
 /// the build gave, with a grammar's wall already in the checker's own words.
 pub enum CheckBuilt {
     Value(BuildValue),
-    /// A shape the evaluator does not read. **Not an error by itself.**
+    /// A shape the folder does not read. **Not an error by itself.**
     Unevaluable,
-    NotAllowed { callee: String, because: String },
-    TooDeep { callee: String },
     OutOfBounds { at: Integer, len: i64 },
     Circular { ring: Vec[String] },
     NotHere { what: String, why: String, way_out: String },
@@ -37,13 +35,14 @@ pub enum CheckComputed {
     Forbidden { callee: String, because: String },
     /// The run stopped as the program would, in its own words.
     Stopped(String),
-    /// Nothing was compiled: the evaluator answers as before.
-    NotHere,
+    /// Nothing was compiled, and why: the value is refused, never interpreted
+    /// (ADR-321 D1).
+    NotHere(String),
 }
 
-/// What `compiled_build_time_value` came to: whether it answered at all (the
-/// build-time evaluator answers where it did not), the value, and whether the
-/// reader was told what is wrong.
+/// What `compiled_build_time_value` came to: whether it answered at all (an
+/// initialiser of literals is folded where it did not), the value, and
+/// whether the reader was told what is wrong.
 pub struct CheckCompiled {
     pub answered: bool,
     pub value: BuildValue?,
@@ -75,8 +74,8 @@ pub trait CheckHost {
     /// The free calls a lambda's body makes, for a function field it is
     /// stored in (ADR-230 D1).
     fn free_calls(ref self, body: ref Block) -> collections::BTreeSet[String] sync
-    /// What an initialiser comes to, the names in `held` being what the scope
-    /// knows.
+    /// What an initialiser of literals folds to, the names in `held` being
+    /// what the scope knows.
     fn evaluate(ref self, value: ref Expr, held: ref collections::BTreeMap[String, BuildValue]) -> CheckBuilt sync
     /// Compile an initialiser with the program's functions and run it.
     fn compute_comptime(ref self, value: ref Expr, found: ref Ty, bound: ref String, known: ref collections::BTreeMap[String, BuildValue], steps: u64?, bytes: u64?) -> CheckComputed sync
@@ -139,11 +138,89 @@ fn host_stopped_line(said: ref String) -> String {
     return said.clone()
 }
 
-/// The text of the `asset` calls an initialiser holds and whether it has any
-/// call that is the build's, in the order they stand.
-struct HostCalls {
-    calls: bool,
-    assets: Vec[(String, bool)],
+/// **Whether an initialiser is literals alone** (ADR-321 D1's last
+/// paragraph), which the checker folds without a run: a literal, a name, a
+/// tuple, a list, a struct, a variant built, `f"…"`, an operator, an index, a
+/// field, an `if` whose branches are values, and `asset("…")`. Anything else
+/// is code - a call, a method, a block with statements - and is compiled and
+/// run with the program, never interpreted.
+fn host_folds(world: ref CheckWorld, value: ref Expr, enums: ref collections::BTreeSet[String]) -> bool {
+    return match value {
+        Expr::LitInt { .. } => true,
+        Expr::LitFloat(_, _) => true,
+        Expr::LitBool(_, _) => true,
+        Expr::LitStr { .. } => true,
+        Expr::Variable(_, _) => true,
+        Expr::Path(_, _) => true,
+        Expr::Tuple(parts, _) => host_all_fold(world, parts, enums),
+        Expr::ListLit { items, .. } => host_all_fold(world, items, enums),
+        Expr::Unary { expr, .. } => host_folds(world, expr, enums),
+        Expr::Binary { lhs, rhs, .. } => host_folds(world, lhs, enums) && host_folds(world, rhs, enums),
+        Expr::Index { base, index, .. } => host_folds(world, base, enums) && host_folds(world, index, enums),
+        Expr::Field { base, .. } => host_folds(world, base, enums),
+        Expr::StructLit { fields, .. } => {
+            let mut all = true
+            for field in fields {
+                let given = field.value?.clone()
+                if given == null {
+                    all = false
+                } else if !host_folds(world, given ?? Expr::LitNull(fresh_id()), enums) {
+                    all = false
+                }
+            }
+            all
+        },
+        Expr::LitInterpolated { parts, .. } => {
+            let mut all = true
+            for part in parts {
+                match part {
+                    FPart::Hole { expr, .. } => {
+                        if !host_folds(world, expr, enums) {
+                            all = false
+                        }
+                    },
+                    else => {}
+                }
+            }
+            all
+        },
+        Expr::If { cond, then_branch, else_branch, .. } => {
+            let mut all = host_folds(world, cond, enums) && host_branch_folds(world, then_branch, enums)
+            if else_branch != null {
+                let other = else_branch?.clone() ?? Block { stmts: [] }
+                all = all && host_branch_folds(world, other, enums)
+            }
+            all
+        },
+        Expr::Call { func, args, config, .. } => {
+            match func {
+                Expr::Variable(name, _) => world.words.resolve(name) == "asset",
+                Expr::Path(path, _) => path.len() == 2 && enums.contains(world.words.resolve(path[0])) && config.len() == 0 && host_all_fold(world, args, enums),
+                else => false,
+            }
+        },
+        else => false,
+    }
+}
+
+fn host_all_fold(world: ref CheckWorld, values: ref Vec[Expr], enums: ref collections::BTreeSet[String]) -> bool {
+    for value in values {
+        if !host_folds(world, value, enums) {
+            return false
+        }
+    }
+    return true
+}
+
+/// A branch that is one value.
+fn host_branch_folds(world: ref CheckWorld, block: ref Block, enums: ref collections::BTreeSet[String]) -> bool {
+    if block.stmts.len() != 1 {
+        return false
+    }
+    return match block.stmts[0].node {
+        Stmt::Expr(inner) => host_folds(world, inner, enums),
+        else => false,
+    }
 }
 
 fn host_enum_names(view: ref ParsedView, mut out: collections::BTreeSet[String]) {
@@ -202,8 +279,10 @@ fn host_runs_a_grammar(world: ref CheckWorld, value: ref Expr, grammars: ref col
     return runs
 }
 
-fn host_calls_in[H: CheckHost](world: ref CheckWorld, host: ref H, value: ref Expr, enums: ref collections::BTreeSet[String]) -> HostCalls {
-    let mut found = HostCalls { calls: false, assets: [] }
+/// The `asset` calls an initialiser holds, in the order they stand: the path
+/// and whether it is a literal.
+fn host_assets_in[H: CheckHost](world: ref CheckWorld, host: ref H, value: ref Expr) -> Vec[(String, bool)] {
+    let mut found: Vec[(String, bool)] = []
     for expr in visited_in_expr(value) {
         match expr {
             Expr::Call { func, args, .. } => {
@@ -224,21 +303,12 @@ fn host_calls_in[H: CheckHost](world: ref CheckWorld, host: ref H, value: ref Ex
                                     else => {}
                                 }
                             }
-                            found.assets.push((path, literal))
-                        } else {
-                            found.calls = true
+                            found.push((path, literal))
                         }
                     },
-                    Expr::Path(path, _) => {
-                        if !(path.len() == 2 && enums.contains(world.words.resolve(path[0]))) {
-                            found.calls = true
-                        }
-                    },
-                    else => { found.calls = true },
+                    else => {}
                 }
             },
-            Expr::MethodCall { .. } => { found.calls = true },
-            Expr::SafeMethod { .. } => { found.calls = true },
             else => {}
         }
     }
@@ -277,8 +347,8 @@ impl CheckState {
         }
     }
 
-    /// **What the build worked out for an initialiser the evaluator reads**,
-    /// and the refusal it gave where it gave one.
+    /// **What an initialiser of literals folds to** (ADR-321 D1), and the
+    /// refusal the build gave where it gave one. Nothing here runs a call.
     pub fn build_time_value[H: CheckHost](ref mut self, host: ref H, value: ref Expr, bound: ref String, span: ref Span) -> (BuildValue?, bool) sync {
         // **Read off the scope before the evaluation starts**: later bindings of
         // a name go in after earlier ones, so the innermost is the one that
@@ -300,8 +370,6 @@ impl CheckState {
                 return (some, false)
             },
             CheckBuilt::Unevaluable => return (null, false),
-            CheckBuilt::NotAllowed { callee, because } => self.a_body_that_may_not_run_at_build_time(callee, because, span),
-            CheckBuilt::TooDeep { callee } => self.a_build_time_call_went_too_deep(callee, span),
             CheckBuilt::OutOfBounds { at, len } => self.a_build_time_index_is_not_there(at, len, span),
             CheckBuilt::Circular { ring } => self.a_constant_built_from_itself(bound, ring, span),
             CheckBuilt::NotHere { what, why, way_out } => self.a_build_time_body_that_is_not_here(bound, what, why, way_out, span),
@@ -312,9 +380,11 @@ impl CheckState {
         return (null, true)
     }
 
-    /// **A `comptime` whose initialiser calls the program's own functions**,
-    /// compiled and run (ADR-321 D1): nothing where it does not apply, and the
-    /// evaluator answers as before.
+    /// **A `comptime` whose initialiser runs code**, compiled and run
+    /// (ADR-321 D1): nothing where it is literals alone, which the checker
+    /// folds, or runs a grammar; refused where this check has no place to
+    /// compile it (D19) or this compiler builds no program for it. **Never
+    /// interpreted.**
     ///
     /// **The rule is asked first** (D2): each function the initialiser calls is
     /// read off the ledger, and one that may not run is `NK1152` before
@@ -330,11 +400,8 @@ impl CheckState {
         if here < 0 {
             here = 0
         }
-        if !host.somewhere() {
-            return nothing
-        }
-        // **A grammar run is its own** (ADR-177): an initialiser that runs one
-        // is answered as before.
+        // **A grammar run is its own** (ADR-177): its parser is compiled and
+        // run by the grammar's workshop, and the text it reads is folded.
         let mut grammars: collections::BTreeSet[String] = collections::BTreeSet()
         let mut enums: collections::BTreeSet[String] = collections::BTreeSet()
         if world.here_at < 0 {
@@ -348,17 +415,21 @@ impl CheckState {
         if host_runs_a_grammar(world, value, grammars) {
             return nothing
         }
-        // **A call somewhere in it**, which is what D1 compiles: an initialiser
+        // **Code somewhere in it**, which is what D1 compiles: an initialiser
         // of literals alone is folded. A variant built is a value written down.
-        let seen = host_calls_in(world, host, value, enums)
-        if !seen.calls {
+        if host_folds(world, value, enums) {
             return nothing
+        }
+        // **Nowhere to compile it is a refusal** (D19), not a value left open.
+        if !host.somewhere() {
+            self.a_build_time_value_with_nowhere_to_compile(bound, span)
+            return CheckCompiled { answered: true, value: null, said: true }
         }
         // **The build reads, the run does not** (ADR-310): each file is read
         // here, by the rules every read keeps, and its text stands where the
         // `asset` did.
         let mut read: collections::BTreeMap[String, String] = collections::BTreeMap()
-        for (path, literal) in seen.assets {
+        for (path, literal) in host_assets_in(world, host, value) {
             if !literal {
                 self.a_path_that_is_not_a_literal(span)
                 return CheckCompiled { answered: true, value: null, said: true }
@@ -384,9 +455,31 @@ impl CheckState {
             CheckComputed::Value(computed) => return CheckCompiled { answered: true, value: computed, said: false },
             CheckComputed::Forbidden { callee, because } => self.a_body_that_may_not_run_at_build_time(callee, because, span),
             CheckComputed::Stopped(detail) => self.a_build_time_run_that_stopped(host, bound, detail, here, span),
-            CheckComputed::NotHere => return nothing,
+            CheckComputed::NotHere(why) => self.a_build_time_value_not_compiled(bound, why, span),
         }
         return CheckCompiled { answered: true, value: null, said: true }
+    }
+
+    /// **`NK1127` where this check has no place to compile build-time code**
+    /// (ADR-321 D19): a value that runs code is computed by compiling it and
+    /// running it, and a caller is never told a program is checked when one
+    /// of its values was never computed.
+    pub fn a_build_time_value_with_nowhere_to_compile(ref mut self, bound: ref String, span: ref Span) sync {
+        let mut help: String = f"Check it with `nikaia check` or `nikaia build`, which have one, or write `let {bound} = …` to compute it while the program runs."
+        if self.computing_default {
+            help = f"Check it with `nikaia check` or `nikaia build`, which have one, or make `{bound}` a `T?` and compute it in the body."
+        }
+        self.findings.push(check_refusal("NK1127", span, f"`{bound}` can't be computed while the program is built.", ["This check has no place to compile build-time code in, and a value that runs code is computed only by compiling it and running it.".clone()], help))
+    }
+
+    /// **`NK1127` where this compiler builds no program for a value** (ADR-321
+    /// D1): it is not computed, and nothing interprets it instead.
+    pub fn a_build_time_value_not_compiled(ref mut self, bound: ref String, why: ref String, span: ref Span) sync {
+        let mut help: String = f"Write `let {bound} = …` to compute it while the program runs."
+        if self.computing_default {
+            help = f"Make `{bound}` a `T?` and compute it in the body."
+        }
+        self.findings.push(check_refusal("NK1127", span, f"`{bound}` can't be computed while the program is built.", [f"{why}."], help))
     }
 
     /// **A build-time run that stopped as the program would** (ADR-321 D1): the

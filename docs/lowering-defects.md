@@ -49,6 +49,8 @@ finds two D8 casts in `check_numbers4.nika`.
 
 | D41 | `strip_prefix(prefix)` with an owned `prefix` declared outside a loop is `NK2105` (passed to a method that keeps it) | **built** (0.0.965: every text method's pattern is only read, `check_core_method_pattern_at`; `throws.nika` drops its `prefix.clone()`) | `selfhosting_defects::a_pattern_handed_to_strip_in_a_loop_is_only_read` |
 | D42 | a tools file whose function throws through `net`'s `io::IoError` without `use std::io` lowers to `Thrown<io::IoError>` with no `io` in scope (rustc E0433); a program has the prelude | open: write `use std::io` | `map_trust.rs` `HM_C` |
+| D43 | `throw made()`, a call whose result is an error type, does not name that type in the error set: the function lowers to `Box<dyn Error>` where `throw Bad::No` gives `Thrown<Bad>` (a tools caller that `split()`s it fails, E0599) | open: throw the constructor (`build_eval.nika`, #636) | probe: `fn made() -> Bad`, `fn f() -> i64 throws { throw made() }` |
+| D44 | `xs[i] = v` on an `Array[T, N]` does not build: `[i64; 5]: Set<_, _>` is not satisfied (`nikaia_std::index::set`); the interpreter used to compute such a `comptime` where the program could not run it | open: build with `push` on a `Vec` | `fn squares() -> Array[i64, 5] { let mut xs: Array[i64, 5] = [0, 0, 0, 0, 0]; for i in 0..<xs.len() { xs[i] = i * i }; return xs }` |
 ---
 
 ## D1. A by-value parameter that is only read lowers as `&T`, and `p with {..}` then writes `..p`
@@ -453,3 +455,20 @@ Written as `let site = m[k] ?? continue` and `written_of(site)`, which lowers ri
 An argument that is an index fallback over a map whose value is not a word passes the reference
 the fallback already is, as a `let` of it does; then fold the two lines in `prover_claim_ran`
 back into one.
+
+## D44 (new). A function value kept with a `ref` parameter and a type that may pause: rustc "lifetime may not live long enough"
+
+`struct One { f: fn(ref P, i64) -> i64 }` and `One { f: fn(q, n) { q.add(n) } }` pass the
+checker. The kept type lowers to `Kept<dyn Fn(&P, i64) -> Boxed<i64>>`, and the closure to
+`move |q, n| Box::pin(async move { q.add(n) }) as Boxed<_>`: the future borrows `q`, and
+`Boxed` is `'static`, so rustc refuses it. A lambda, a named function and a method named by its
+path (`One { f: P::add }`, #601) all meet it; with `sync` in the type, or a parameter taken by
+value, they run. Met while building #601; its tests use `sync` kept types for methods that
+take `ref self`.
+
+### To build
+
+A kept function type that may pause and takes a `ref` parameter lowers to a future that may
+borrow it (`dyn for<'a> Fn(&'a P, i64) -> Pin<Box<dyn Future<Output = i64> + 'a>>`), or the
+checker refuses it with a message that names `sync` or a parameter by value; then a test in
+`function_values.rs` with `fn(ref P, i64) -> i64` and a method that pauses.

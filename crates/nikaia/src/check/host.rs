@@ -118,7 +118,7 @@ impl Host<'_> {
                 "`{callee}` may not run while the program is built: {because}"
             )),
             CheckComputed::Stopped(detail) => stopped_as_said(&detail),
-            CheckComputed::NotHere => {
+            CheckComputed::NotHere(_) => {
                 not_run("This compiler can't compile it while the program is built.")
             }
         }
@@ -214,16 +214,11 @@ impl CheckHost for Host<'_> {
 
     fn evaluate(&self, value: &Expr, held: &BTreeMap<String, build_time::Value>) -> CheckBuilt {
         let known = |name: &str| -> Option<build_time::Value> { held.get(name).cloned() };
-        let outcome =
-            build_time::BuildTime::new(self.parsed, self.beside, self.own, self.reads, &known)
-                .evaluate(value);
+        let outcome = build_time::BuildTime::new(self.parsed, self.beside, self.reads, &known)
+            .evaluate(value);
         match outcome {
             Ok(value) => CheckBuilt::Value(value),
             Err(build_time::Refusal::Unevaluable) => CheckBuilt::Unevaluable,
-            Err(build_time::Refusal::NotAllowed { callee, because }) => {
-                CheckBuilt::NotAllowed { callee, because }
-            }
-            Err(build_time::Refusal::TooDeep { callee }) => CheckBuilt::TooDeep { callee },
             Err(build_time::Refusal::OutOfBounds { at, len }) => CheckBuilt::OutOfBounds {
                 at,
                 len: len as i64,
@@ -285,7 +280,7 @@ impl CheckHost for Host<'_> {
                 }
             }
             crate::comptime_run::Computed::Stopped(detail) => CheckComputed::Stopped(detail),
-            crate::comptime_run::Computed::NotHere => CheckComputed::NotHere,
+            crate::comptime_run::Computed::NotHere(why) => CheckComputed::NotHere(why),
         }
     }
 

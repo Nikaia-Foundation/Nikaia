@@ -90,7 +90,7 @@ fn an_overflow_stops_the_build_where_it_would_stop_the_program() {
     let found = findings(source);
     let stopped = found
         .iter()
-        .find(|f| f.code == "NK1152")
+        .find(|f| f.code == "NK1244")
         .unwrap_or_else(|| panic!("the overflow stops the build: {found:#?}"));
     assert_eq!(
         stopped.message,
@@ -206,6 +206,13 @@ fn findings_bounded(source: &str, steps: u64, bytes: u64) -> Vec<Finding> {
         &reads,
     )
     .findings
+}
+
+/// The one run that stopped as the program would (ADR-321 D16): `NK1244`.
+fn the_stop(found: Vec<Finding>) -> Finding {
+    let mut stopped: Vec<Finding> = found.into_iter().filter(|f| f.code == "NK1244").collect();
+    assert_eq!(stopped.len(), 1, "{stopped:#?}");
+    stopped.remove(0)
 }
 
 fn the_one(found: Vec<Finding>) -> Finding {
@@ -379,7 +386,7 @@ fn a_callee_in_another_file_runs_and_a_stop_there_is_named() {
         &reads(),
     )
     .findings;
-    let stopped = the_one(found);
+    let stopped = the_stop(found);
     assert_eq!(
         stopped.message,
         "`C` stopped while the program was built: attempt to multiply with overflow."
@@ -545,7 +552,7 @@ fn a_program_with_a_grammar_compiles_its_other_comptimes() {
                   \x20   println(f\"{T} {C}\")\n\
                   }\n";
     // The overflow is the compiled run's answer: the interpreter computed it.
-    let stopped = the_one(findings(source));
+    let stopped = the_stop(findings(source));
     assert_eq!(
         stopped.message,
         "`C` stopped while the program was built: attempt to multiply with overflow."
@@ -582,7 +589,7 @@ fn an_options_default_is_compiled_and_recorded() {
     });
     assert!(lowered.contains("shout(\"go\", 4, 81)"), "{lowered}");
     let stopped = nikaia::comptime_run::defaults_compiled_in(Some(&at), || {
-        the_one(findings(&source("sq(100000)")))
+        the_stop(findings(&source("sq(100000)")))
     });
     assert_eq!(
         stopped.message,
@@ -702,4 +709,115 @@ fn a_comptime_a_call_computed_is_its_value_to_the_prover() {
         refuted[0].message.contains("`B > 10` is false every time"),
         "{found:#?}"
     );
+}
+
+// --- ADR-321 D19: no place to compile is a refusal, never an interpretation --
+
+/// A check made through the library with no workshop, as a caller that hands
+/// it none makes: nothing to compile build-time code in.
+fn findings_without_a_workshop(source: &str) -> Vec<Finding> {
+    let parsed = parse_to_ast(source).expect("the source parses");
+    let own = Ledger::infer(&parsed);
+    let library = Ledger::parse(STD).expect("std's shipped ledger parses");
+    check::check_program(&parsed, &own, &library, &BTreeSet::new()).findings
+}
+
+const DIVIDED: &str = "fn example(n: i64) -> i64 {\n\
+                       \x20   return n * 2\n\
+                       }\n\
+                       \n\
+                       comptime B = 4 / example(2)\n\
+                       \n\
+                       fn main() {\n\
+                       \x20   println(f\"{B}\")\n\
+                       }\n";
+
+/// **A `comptime` that calls a function is not interpreted** (ADR-321 D1,
+/// D19): a library check with no place to compile it refuses it with
+/// `NK1127` and says why; it neither computes it another way nor leaves it
+/// open.
+#[test]
+fn a_check_with_no_workshop_refuses_a_comptime_that_calls() {
+    let found = findings_without_a_workshop(DIVIDED);
+    let refused: Vec<_> = found.iter().filter(|f| f.code == "NK1127").collect();
+    assert_eq!(refused.len(), 1, "{found:#?}");
+    assert_eq!(
+        refused[0].message,
+        "`B` can't be computed while the program is built."
+    );
+    assert_eq!(
+        refused[0].notes,
+        vec![
+            "This check has no place to compile build-time code in, and a value that runs \
+             code is computed only by compiling it and running it."
+                .to_string()
+        ]
+    );
+    // An initialiser of literals alone is still folded (D1's last paragraph).
+    assert!(
+        findings_without_a_workshop(
+            "comptime K = 4 * 1024\n\nfn main() {\n    println(f\"{K}\")\n}\n"
+        )
+        .is_empty()
+    );
+}
+
+/// **The same program with a workshop**, as a check through the library
+/// that is handed one and as the command line has it, computes the value.
+#[test]
+fn a_check_with_a_workshop_computes_the_same_comptime() {
+    assert!(findings(DIVIDED).is_empty(), "{:#?}", findings(DIVIDED));
+    assert!(
+        lowered(DIVIDED).contains("const B: i64 = 1;"),
+        "{}",
+        lowered(DIVIDED)
+    );
+    let dir = common::scratch_dir("comptime-command-line");
+    std::fs::write(dir.join("divided.nika"), DIVIDED).expect("the file is written");
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_nikaia"))
+        .current_dir(&dir)
+        .args(["lower", "divided.nika", "--output", "divided.rs"])
+        .output()
+        .expect("the nikaia binary runs");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let rust = std::fs::read_to_string(dir.join("divided.rs")).expect("the lowered file");
+    assert!(rust.contains("const B: i64 = 1;"), "{rust}");
+}
+
+/// **An option's default that calls a function, both ways** (ADR-318 D1,
+/// ADR-321 D1, D19): compiled where the check has a workshop, `NK1127` at
+/// the default where it has none.
+#[test]
+fn an_options_default_that_calls_is_compiled_or_refused() {
+    let source = "fn sq(x: i64) -> i64 {\n\
+                  \x20   return x * x\n\
+                  }\n\
+                  \n\
+                  fn shout(label: ref String; times: i64 = sq(3)) -> String {\n\
+                  \x20   return f\"{label} {times}\"\n\
+                  }\n\
+                  \n\
+                  fn main() {\n\
+                  \x20   println(shout(\"go\"))\n\
+                  }\n";
+    let found = findings_without_a_workshop(source);
+    let refused: Vec<_> = found.iter().filter(|f| f.code == "NK1127").collect();
+    assert_eq!(refused.len(), 1, "{found:#?}");
+    assert_eq!(
+        refused[0].message,
+        "`times` can't be computed while the program is built."
+    );
+    let at = workshop();
+    let lowered = nikaia::comptime_run::defaults_compiled_in(Some(&at), || {
+        assert!(findings(source).is_empty(), "{:#?}", findings(source));
+        let parsed = parse_to_ast(source).expect("the source parses");
+        nikaia::emit::emit_program_reading(&parsed, Default::default(), &reads())
+            .expect("it lowers")
+            .rust
+    });
+    assert!(lowered.contains("shout(\"go\", 9)"), "{lowered}");
 }
