@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.990] — 2026-10-17
+
+**the --asserts report puts main's preconditions between the unproved and the proved, in light blue**
+- Part III 12 (--asserts): three groups - refused, checked at run time and checked by a test (red); checked where outside data arrives, main's preconditions (light blue); proved (green).
+
 ## [0.0.989] — 2026-10-17
 
 **the --asserts report lists what is not proved first, in red, and what the build proved last, in green**
