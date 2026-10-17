@@ -195,9 +195,11 @@ fn an_optional_subject_before_the_rest() {
     assert_eq!(run(&prog, &["1", "2"]).1, "1 2 0\n");
     assert_eq!(run(&prog, &["1", "2", "p", "q"]).1, "1 2 2\n");
     assert_eq!(run(&prog, &["1", "p"]).0, 2);
-    assert!(run(&prog, &["--help"])
-        .1
-        .contains("usage: prog <a> [<n>] [<xs>...]"));
+    assert!(
+        run(&prog, &["--help"])
+            .1
+            .contains("usage: prog <a> [<n>] [<xs>...]")
+    );
     std::fs::remove_dir_all(&dir).ok();
 }
 
