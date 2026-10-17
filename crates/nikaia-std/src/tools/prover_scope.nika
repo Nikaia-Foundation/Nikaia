@@ -58,6 +58,12 @@ pub struct ProverScope {
     /// **The loops passed whose names are not bound again since** (ADR-361
     /// D2): a claim what is known leaves open is asked through them.
     pub loops: Vec[LoopRecord],
+    /// **What the earlier values of the followed mutable whole numbers make
+    /// known** (ADR-361 D9): the facts that read a value an assignment left
+    /// behind (`x#12`, `x` before the statement at byte 12), and what a branch
+    /// that changed one leaves. A claim what is known leaves open is asked
+    /// once more with them (D2).
+    pub history: Vec[i64],
 }
 
 impl ProverScope {
@@ -77,6 +83,7 @@ impl ProverScope {
             leaned: collections::BTreeMap(),
             mutables: collections::BTreeSet(),
             loops: [],
+            history: [],
         }
     }
 
@@ -134,6 +141,96 @@ impl ProverScope {
             self.exact = false
         }
         self.facts = kept
+        if !self.history.is_empty() {
+            let mut earlier: Vec[i64] = []
+            for fact in self.history {
+                if !arena.mentions(fact, name) && !arena.mentions(fact, length) {
+                    earlier.push(fact)
+                }
+            }
+            self.history = earlier
+        }
+    }
+
+    /// **`name` is assigned** (ADR-361 D9): what was known of its value is
+    /// known of `earlier`, a name of its own among the history, and `name`
+    /// itself is known of nothing yet.
+    pub fn renamed(ref mut self, mut arena: TermArena, name: ref String, earlier: ref String) {
+        let mut given: collections::BTreeMap[String, i64] = collections::BTreeMap()
+        given.insert(name.clone(), arena.var(earlier))
+        let mut history: Vec[i64] = []
+        for fact in self.history {
+            if arena.mentions(fact, name) {
+                history.push(arena.substitute(fact, given))
+            } else {
+                history.push(fact)
+            }
+        }
+        let mut kept: Vec[i64] = []
+        for fact in self.facts {
+            if arena.mentions(fact, name) {
+                history.push(arena.substitute(fact, given))
+            } else {
+                kept.push(fact)
+            }
+        }
+        if kept.len() != self.facts.len() {
+            self.exact = false
+        }
+        self.facts = kept
+        self.history = history
+        self.ints.insert(earlier.clone())
+        if self.loose.contains(name) {
+            self.loose.insert(earlier.clone())
+        }
+        let at = self.entry.remove(name)
+        if at != null {
+            self.entry.insert(earlier.clone(), at ?? 0)
+        }
+        // What a loop or a call's summary said of the old value is not
+        // carried over.
+        let ints = self.ints.clone()
+        self.rebind(arena, name)
+        self.ints = ints
+    }
+
+    /// **Whether the history can say anything about `claim`**: it reads a
+    /// name the claim reads, or one the facts tie to it.
+    pub fn history_reads(ref self, arena: ref TermArena, claim: i64) -> bool {
+        if self.history.is_empty() {
+            return false
+        }
+        let mut names: collections::BTreeSet[String] = collections::BTreeSet()
+        arena.variables(claim, names)
+        let mut grown = true
+        while grown {
+            let before = names.len()
+            for fact in self.facts {
+                let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+                arena.variables(fact, read)
+                if ties(read, names) {
+                    for n in read {
+                        names.insert(n.clone())
+                    }
+                }
+            }
+            grown = names.len() != before
+        }
+        for fact in self.history {
+            let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+            arena.variables(fact, read)
+            if ties(read, names) {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// The facts and the history together.
+    pub fn with_history(ref self) -> Vec[i64] {
+        let mut all = self.facts.clone()
+        all.extend(self.history.clone())
+        return all
     }
 
     /// `name` is a list or text that does not change, so `name.len()` is a

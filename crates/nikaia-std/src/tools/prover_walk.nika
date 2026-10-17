@@ -201,14 +201,16 @@ fn prover_stmt(mut walk: ProverWalk, stmt: ref Spanned[Stmt], mut scope: ProverS
             }
             false
         },
-        Stmt::Assign { target, value, .. } => {
+        Stmt::Assign { target, op, value } => {
             prover_expr(walk, target, span, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
             prover_expr(walk, value, span, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
             match target {
                 Expr::Variable(name, _) => {
                     let n = words.resolve(name).clone()
-                    let tainted = from_outside(value, scope.tainted, words, library, holes_of)
-                    scope.rebind(walk.arena, n)
+                    let tainted = from_outside(value, scope.tainted, words, library, holes_of) || (op != null && scope.tainted.contains(n))
+                    if !prover_assigned(walk, n, op, value, span, scope, words) {
+                        scope.rebind(walk.arena, n)
+                    }
                     if tainted {
                         scope.tainted.insert(n)
                     }
@@ -235,7 +237,10 @@ fn prover_stmt(mut walk: ProverWalk, stmt: ref Spanned[Stmt], mut scope: ProverS
             }
             let mut records: Vec[LoopRecord] = []
             if !state.is_empty() {
-                let record = loop_record(walk.arena, span.start as i64, state, scope.facts, scope.ints, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, cond, body, words, walk.claims, fn(e) { prover_throws(e, at, program, words, own, library, unaliased) }, holes_of)
+                // What the earlier values make known says where the loop
+                // starts (D9).
+                let at_loop = scope.with_history()
+                let record = loop_record(walk.arena, span.start as i64, state, at_loop, scope.ints, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, cond, body, words, walk.claims, fn(e) { prover_throws(e, at, program, words, own, library, unaliased) }, holes_of)
                 if record != null {
                     records.push(record ?? return false)
                 }
@@ -947,7 +952,11 @@ fn prover_if(mut walk: ProverWalk, cond: ref Expr, then_branch: ref Block, else_
     let cond_leaves = leaves_expr(cond, fn(e) { prover_throws(e, at, program, words, own, library, unaliased) }, holes_of, true)
     then_scope.on_the_path(walk.arena, holds)
     let then_leaves = prover_block(walk, then_branch, then_scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
-    let else_leaves = prover_else(walk, else_branch, scope, fails, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
+    let mut else_scope = scope.clone()
+    let else_leaves = prover_else(walk, else_branch, else_scope, fails, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
+    if !(then_leaves && else_leaves) {
+        prover_join(walk, scope, then_scope, then_leaves, then_branch, else_scope, else_leaves, else_branch, span, words)
+    }
     // **What a branch that always leaves rules out** holds after it: `return
     // 250 if speed > 250` leaves `speed <= 250`.
     if then_leaves && else_leaves {
@@ -976,15 +985,166 @@ fn prover_if(mut walk: ProverWalk, cond: ref Expr, then_branch: ref Block, else_
 
 /// An `else` branch, walked knowing its condition failed; whether it always
 /// leaves. No branch never leaves.
-fn prover_else(mut walk: ProverWalk, else_branch: ref Block?, scope: ref ProverScope, fails: i64?, nested: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) -> bool {
-    let block = else_branch ?? return false
-    let mut else_scope = scope.clone()
+fn prover_else(mut walk: ProverWalk, else_branch: ref Block?, mut else_scope: ProverScope, fails: i64?, nested: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) -> bool {
     if fails != null {
         else_scope.facts.push(fails ?? 0)
     }
+    let block = else_branch ?? return false
     else_scope.exact = else_scope.exact && fails != null
     else_scope.on_the_path(walk.arena, fails)
     return prover_block(walk, block, else_scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
+}
+
+/// **The mutable whole numbers after an `if` that changes them** (ADR-361
+/// D9): each is one side's value or the other's, as the condition says - an
+/// `if` without `else` keeping the old value on the other side. What was
+/// known of the old value is kept under a name of its own (`x#12`, the
+/// `if`'s byte), and each side that goes on past the `if` adds what it made
+/// known over the names that live past it. One the walk stops following on
+/// either side is bound again.
+fn prover_join(mut walk: ProverWalk, mut scope: ProverScope, then_scope: ref ProverScope, then_leaves: bool, then_branch: ref Block, else_scope: ref ProverScope, else_leaves: bool, else_branch: ref Block?, span: Span, words: ref winnow_grammar::InternerContext) {
+    if scope.mutables.is_empty() {
+        return
+    }
+    let then_assigns = assigned_in(then_branch, words)
+    let else_assigns = prover_else_assigns(else_branch, words)
+    let mut changed: Vec[String] = []
+    for n in then_assigns {
+        if scope.mutables.contains(n) {
+            changed.push(n.clone())
+        }
+    }
+    for n in else_assigns {
+        if scope.mutables.contains(n) && !then_assigns.contains(n) {
+            changed.push(n.clone())
+        }
+    }
+    if changed.is_empty() {
+        return
+    }
+    // Which of them every side that goes on still follows.
+    let mut followed: Vec[String] = []
+    let mut dropped: collections::BTreeSet[String] = collections::BTreeSet()
+    for n in changed {
+        let on_then = then_leaves || then_scope.ints.contains(n)
+        let on_else = else_leaves || else_scope.ints.contains(n)
+        if on_then && on_else {
+            followed.push(n.clone())
+        } else {
+            dropped.insert(n.clone())
+        }
+    }
+    // What the walk knew before the `if`, which each side's own additions
+    // are told apart from.
+    let mut before: collections::BTreeSet[i64] = collections::BTreeSet()
+    for fact in scope.facts {
+        before.insert(fact)
+    }
+    for fact in scope.history {
+        before.insert(fact)
+    }
+    let outer = scope.ints.clone()
+    for n in dropped {
+        scope.rebind(walk.arena, n)
+    }
+    let mut earlier: collections::BTreeMap[String, String] = collections::BTreeMap()
+    for n in followed {
+        let old = f"{n}#{span.start}"
+        scope.renamed(walk.arena, n, old)
+        earlier.insert(n.clone(), old)
+    }
+    let mut sides: Vec[i64] = []
+    if !then_leaves {
+        let own = prover_own_names(then_branch, words)
+        sides.push(prover_side(walk.arena, then_scope, own, before, outer, dropped, earlier, then_assigns))
+    }
+    if !else_leaves {
+        let own = prover_else_own_names(else_branch, words)
+        sides.push(prover_side(walk.arena, else_scope, own, before, outer, dropped, earlier, else_assigns))
+    }
+    if !followed.is_empty() {
+        if sides.len() == 1 {
+            scope.history.push(sides[0])
+        } else {
+            scope.history.push(walk.arena.or(sides))
+        }
+    }
+    for n in followed {
+        scope.ints.insert(n.clone())
+        if (!then_leaves && then_scope.loose.contains(n)) || (!else_leaves && else_scope.loose.contains(n)) {
+            scope.loose.insert(n.clone())
+        }
+        if (!then_leaves && then_scope.tainted.contains(n)) || (!else_leaves && else_scope.tainted.contains(n)) {
+            scope.tainted.insert(n.clone())
+        }
+    }
+    scope.exact = false
+}
+
+/// **What one side of an `if` adds**, as one term: the facts it made known
+/// that read only names living past the `if` - not one its own block binds,
+/// nor one the walk stops following - and, for each followed name the side
+/// does not assign, that it is still its old value.
+fn prover_side(mut arena: TermArena, side: ref ProverScope, own: ref collections::BTreeSet[String], before: ref collections::BTreeSet[i64], outer: ref collections::BTreeSet[String], dropped: ref collections::BTreeSet[String], earlier: ref collections::BTreeMap[String, String], assigns: ref collections::BTreeSet[String]) -> i64 {
+    let mut parts: Vec[i64] = []
+    for fact in side.with_history() {
+        if before.contains(fact) {
+            continue
+        }
+        let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+        arena.variables(fact, read)
+        let mut lives = true
+        for name in read {
+            if !name.contains("#") && (!outer.contains(name) || own.contains(name) || dropped.contains(name)) {
+                lives = false
+            }
+        }
+        if lives {
+            parts.push(fact)
+        }
+    }
+    for (n, old) in earlier {
+        if !assigns.contains(n) {
+            let now = arena.var(n)
+            let then = arena.var(old)
+            parts.push(arena.equal(now, then))
+        }
+    }
+    if parts.is_empty() {
+        return arena.boolean(true)
+    }
+    return arena.and(parts)
+}
+
+/// Every name an `else` branch assigns, if there is one.
+fn prover_else_assigns(else_branch: ref Block?, words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] {
+    let block = else_branch ?? return collections::BTreeSet()
+    return assigned_in(block, words)
+}
+
+/// The names an `else` branch's own statements bind, if there is one.
+fn prover_else_own_names(else_branch: ref Block?, words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] {
+    let block = else_branch ?? return collections::BTreeSet()
+    return prover_own_names(block, words)
+}
+
+/// The names a block's own statements bind.
+fn prover_own_names(block: ref Block, words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] {
+    let mut own: collections::BTreeSet[String] = collections::BTreeSet()
+    for stmt in block.stmts {
+        match stmt.node {
+            Stmt::Let { names, .. } => {
+                for name in names {
+                    own.insert(words.resolve(name).clone())
+                }
+            },
+            Stmt::Comptime { name, .. } => {
+                own.insert(words.resolve(name).clone())
+            },
+            else => {},
+        }
+    }
+    return own
 }
 
 /// Whether an `else` branch may leave the block it stands in.
@@ -1397,6 +1557,107 @@ fn prover_variable_named(value: ref Expr?, words: ref winnow_grammar::InternerCo
     }
 }
 
+/// **An assignment to a mutable whole number the walk follows** (ADR-361
+/// D9): `x = e`, `x += e`, `x -= e` and `x *= k` give `x` the value over the
+/// old one, which keeps what was known of it under a name of its own
+/// (`x#12`, the statement's byte). False where the walk does not follow `x`
+/// or cannot read the value, which then binds `x` again.
+fn prover_assigned(mut walk: ProverWalk, n: ref String, op: ref BinaryOp?, value: ref Expr, span: Span, mut scope: ProverScope, words: ref winnow_grammar::InternerContext) -> bool {
+    if !scope.mutables.contains(n) {
+        return false
+    }
+    let read = lin_term(value, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes) ?? return false
+    let mut term = read
+    if op != null {
+        if !scope.ints.contains(n) {
+            return false
+        }
+        let old = walk.arena.var(n)
+        let written = op ?? return false
+        term = match written {
+            BinaryOp::Add => walk.arena.add(old, read),
+            BinaryOp::Sub => walk.arena.sub(old, read),
+            BinaryOp::Mul => {
+                if walk.arena.constant(read) == null {
+                    return false
+                }
+                walk.arena.mul(old, read)
+            },
+            else => return false,
+        }
+    }
+    // **An old value what is known pins to a number is that number**: the
+    // new one then needs no earlier name, and a loop after it starts there.
+    if walk.arena.mentions(term, n) {
+        let known = prover_known_value(walk.arena, scope.facts, n)
+        if known != null {
+            let mut pinned: collections::BTreeMap[String, i64] = collections::BTreeMap()
+            pinned.insert(n.clone(), walk.arena.int(known ?? 0))
+            term = walk.arena.substitute(term, pinned)
+            let folded = walk.arena.constant(term)
+            if folded != null {
+                term = walk.arena.int(folded ?? 0)
+            }
+        }
+    }
+    let at_entry = scope.at_entry(walk.arena, term)
+    let mut read_names: collections::BTreeSet[String] = collections::BTreeSet()
+    walk.arena.variables(term, read_names)
+    let mut loose = false
+    for name in read_names {
+        if scope.loose.contains(name) {
+            loose = true
+        }
+    }
+    let earlier = f"{n}#{span.start}"
+    scope.renamed(walk.arena, n, earlier)
+    let mut given: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    given.insert(n.clone(), walk.arena.var(earlier))
+    let over = walk.arena.substitute(term, given)
+    let named = walk.arena.var(n)
+    let fact = walk.arena.equal(named, over)
+    // A value that reads an earlier one is known only through the history.
+    let mut over_names: collections::BTreeSet[String] = collections::BTreeSet()
+    walk.arena.variables(over, over_names)
+    let mut earlier_read = false
+    for name in over_names {
+        if name.contains("#") {
+            earlier_read = true
+        }
+    }
+    if earlier_read {
+        scope.history.push(fact)
+    } else {
+        scope.facts.push(fact)
+    }
+    scope.ints.insert(n.clone())
+    if loose {
+        scope.loose.insert(n.clone())
+    }
+    if at_entry != null {
+        scope.entry.insert(n.clone(), at_entry ?? 0)
+    }
+    return true
+}
+
+/// The number a fact `n == k` pins `n` to.
+fn prover_known_value(arena: ref TermArena, facts: ref Vec[i64], n: ref String) -> i64? {
+    for fact in facts {
+        match arena.at(fact) {
+            SolverTerm::Eq(a, b) => {
+                if arena.is_the_variable(a, n) {
+                    let value = arena.constant(b)
+                    if value != null {
+                        return value
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+    return null
+}
+
 /// Whether a block binds one name with `let mut`.
 fn prover_binds_mutable(block: ref Block) -> bool {
     for stmt in block.stmts {
@@ -1415,8 +1676,8 @@ fn prover_binds_mutable(block: ref Block) -> bool {
 /// **The mutable whole numbers, after a statement** (ADR-361 D1): `let mut`
 /// binds one the walk follows where its value is a term and nothing in
 /// the block hands it on; a statement that changes one inside it - a branch,
-/// a block - leaves it unknown. A `while` and a `for` see to their own, and
-/// an assignment binds its name again where it stands.
+/// a block - leaves it unknown. A `while`, a `for`, an `if` and an
+/// assignment see to their own (ADR-361 D9).
 fn prover_follow_mutables(mut walk: ProverWalk, stmt: ref Stmt, mut scope: ProverScope, untracked: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext) {
     match stmt {
         Stmt::Let { names, mutable, value, .. } => {
@@ -1440,8 +1701,10 @@ fn prover_follow_mutables(mut walk: ProverWalk, stmt: ref Stmt, mut scope: Prove
         },
         Stmt::While { .. } => {},
         Stmt::For { .. } => {},
+        // An assignment and an `if` see to their own (D9).
+        Stmt::Assign { .. } => {},
         else => {
-            if !scope.mutables.is_empty() {
+            if !scope.mutables.is_empty() && !prover_an_if(stmt) {
                 for n in assigned_in_statement(stmt, words) {
                     if scope.mutables.contains(n) {
                         scope.rebind(walk.arena, n)

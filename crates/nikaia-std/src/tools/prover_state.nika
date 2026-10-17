@@ -341,6 +341,23 @@ impl ProverState {
                 SolverAnswer::NotProved => {},
             }
         }
+        // **Asked once more with what the earlier values of the mutable
+        // whole numbers make known** (ADR-361 D9, D2), where what is known
+        // leaves the claim open and the history can speak to it.
+        let mut with_history: Vec[i64]? = null
+        if claim != null && rejected == null && scope.history_reads(arena, claim ?? 0) {
+            let all = scope.with_history()
+            self.second_queries += 1
+            match ask(arena, all, claim ?? 0) {
+                SolverAnswer::Proved => {
+                    scope.facts.push(claim ?? 0)
+                    outcome.held = ClaimHeld::Proved
+                    return outcome
+                },
+                else => {},
+            }
+            with_history = all
+        }
 
         // **A claim the body cannot prove is its callers'** where it can be
         // carried back to the entry (D15): what it says about the parameters,
@@ -365,14 +382,19 @@ impl ProverState {
         let tainted_claim = tainted_name != null
         let mut refuted: collections::BTreeMap[String, i64]? = null
         if claim != null && !tainted_claim {
-            refuted = refuting_values(arena, scope.facts, claim ?? 0, ask, model)
+            if with_history != null {
+                let all = copied_path(with_history) ?? []
+                refuted = refuting_values(arena, all, claim ?? 0, ask, model)
+            } else {
+                refuted = refuting_values(arena, scope.facts, claim ?? 0, ask, model)
+            }
         }
         let mut is_refuted = refuted != null
         // **Asked once more with what the callees' bodies return** (ADR-359
         // D2), where what is known leaves the claim open and it reads a call
         // with a result summary.
         let mut through_summaries: Vec[String] = []
-        let mut loop_base: Vec[i64]? = null
+        let mut loop_base: Vec[i64]? = copied_path(with_history)
         if claim != null && !is_refuted && !tainted_claim && !scope.summed.is_empty() {
             let read = summed_read(arena, scope, claim ?? 0)
             if !read.is_empty() {

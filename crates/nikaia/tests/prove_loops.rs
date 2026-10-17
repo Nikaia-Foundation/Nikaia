@@ -178,9 +178,10 @@ fn a_fact_from_before_the_loop_does_not_survive_it() {
     assert!(found.iter().all(at_run_time), "{found:#?}");
 }
 
-/// A mutable whole number changed in a branch is unknown after it.
+/// A mutable whole number changed in a branch is either side's value after
+/// it (D9): the old value alone is not proved.
 #[test]
-fn a_branch_that_assigns_forgets_the_name() {
+fn a_branch_that_assigns_leaves_either_value() {
     let source = "fn main(a: int) {\n\
                   \x20   let mut x = 0\n\
                   \x20   if a > 3 {\n\
