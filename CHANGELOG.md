@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.996] — 2026-10-17
+
+**a comptime whose compiled run stops is NK1244 (#637)**
+- A `comptime` whose compiled run stops (an overflow, an index past the end, a `panic()`) is NK1244, as ADR-321 D16 says; NK1152 keeps the rule's refusals and the step, memory and depth bounds.
+
 ## [0.0.995] — 2026-10-17
 
 **NK1201 refuses a range, a tuple, and a struct or enum with no text form in an f-string hole (#638)**
