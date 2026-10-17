@@ -32,14 +32,32 @@ of what one person can hold in their head. This is not a war, and nobody has to 
 it. **Nikaia stands for not conquering that complexity, but moving it where it belongs: into the
 compiler.**
 
-## 2. The History: The End of the Schism
-The ancient city of Nikaia is known for its **council** — a place of consensus. We are living
-through a schism in programming today:
+## 2. The Space Between Scripting and Systems
+The ancient city of Nikaia is known for its **council**: a place where people who disagreed
+sat down at one table. Programming has its own two camps today:
 
-* The **"scripting faction"** (Python, JS): fast, flexible, but often fragile.
-* The **"systems faction"** (Rust, C++): powerful, safe, but often cognitively heavy.
+* The **scripting camp** (Python, JavaScript): direct, flexible, fast to write. And often
+  fragile.
+* The **systems camp** (Rust, C++): fast, safe, in control of the machine. And often heavy
+  to carry.
 
-Nikaia is the technical council. It ends the split with a **Unified Core Architecture**.
+The differences are real. But somewhere along the way we stopped calling them differences and
+started calling them laws. Why should simple code mean giving up guarantees? Why should safe,
+fast software mean that you manage the machinery yourself?
+
+We don't think it has to be that way. We think much of that weight can move from the
+programmer into the compiler.
+
+**Nikaia is an attempt to prove it.** Not to replace every scripting language, and not to
+make every trade-off disappear. Python will still be the right tool for a quick script.
+JavaScript's dynamic runtime will still be the point of some applications. Some systems will
+always need a hand on every byte. Nikaia doesn't need to beat them all.
+
+It needs to show one thing: that you can write plain, direct code, and still get native
+speed, memory safety, concurrency you can trust, and a compiler that proves more about your
+program every year.
+
+We won't declare the divide abolished. **We'll show that it was never as wide as we thought.**
 
 ## 3. The Agora and the Swarm
 Nikaia needs two images, and only one of them is a place.
@@ -72,7 +90,7 @@ it? What if the compiler is not our overseer, but our architect?
 
 We called the project **Nikaia**.
 
-Because intent should count again, and not implementation. Because it tears down the walls
+Because intent should count again, and not implementation. Because it pushes back the walls
 between the code we dream and the code the machine understands.
 
 **Nikaia: Good wins.**
@@ -94,7 +112,7 @@ locks and hope everyone else in the codebase takes them in the same order.
 None of that is your program. All of it is bookkeeping — and bookkeeping is exactly the kind
 of work a compiler is good at.
 
-**Nikaia is a bet that the whole tax is compiler work.** You write straight-line code that
+**Nikaia is a bet that most of that tax is compiler work.** You write straight-line code that
 says what should happen. The compiler decides the concurrency model, the pointer types, the
 lock order, the lifetimes, and the state machines. Not by guessing, and not by adding a
 garbage collector — by inference over a program it can see all of.
