@@ -60,14 +60,18 @@
 * **A red `develop` is fixed forward.** Whoever finds it red fixes it with the
   next commit, or reverts the commit that broke it. Until then `main` stays
   where it was, and work on `develop` goes on.
-* **Parallel agents in one session: one local branch each, never a shared
-  `develop`.** Worktrees of one clone share their branches. If two of them
-  (or a worktree and the main checkout) have `develop` checked out, a commit
-  in one moves the branch under the others, and their index then shows the
-  reverse of that commit as staged changes. Each agent works on its own
-  branch (`git fetch origin develop && git checkout -B work-<name> origin/develop`),
-  rebases with `git pull --rebase origin develop` and pushes with
-  `git push origin HEAD:develop`.
+* **Parallel agents in one session work together on `develop`, in one shared
+  checkout.** Each agent commits after every finished step, so the others see
+  the work at once. A commit adds exactly the files that agent changed
+  (`git add <files>`), never `git commit -a` or `git add -A`: the working tree
+  also holds the other agents' unfinished files. No separate worktrees with
+  `develop` checked out: a commit in one moves the branch under the others,
+  and their index then shows the reverse of that commit as staged changes.
+* **An error in another agent's file is not touched, it is escalated.** A
+  failing build, test or lint that comes from a file another agent changed is
+  reported to the supervisor (the session that started the agents), not
+  fixed. The supervisor resolves it if the agent that caused it does not
+  notice and repair it itself.
 * **Helper tools are written in Nikaia, not in Python or shell.** A new tool
   (a migration aid, a checker, a generator) is a `tools/*.nika` behind a
   `nikaia` subcommand or a program run with `nikaia run`; the existing Python
