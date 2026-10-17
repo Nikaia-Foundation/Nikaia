@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.992] — 2026-10-17
+
+**A struct, an enum, a range or a tuple in an f-string hole is refused (NK1201)**
+- Part III C (NK1201): a hole whose value has no text form - a list, map, set, range, tuple, or a struct or enum of the program that is not an error type - is refused by the checker instead of failing in rustc.
+
 ## [0.0.991] — 2026-10-17
 
 **A method named by its path where a function value is kept runs (#601)**
