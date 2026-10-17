@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.999] — 2026-10-17
+
+**A build-time value that runs code is compiled, never interpreted (ADR-321 D1, #636)**
+- `comptime` initialisers and option defaults that call functions are compiled and run with the program. The build-time evaluator only folds literals, and a call that reaches it is `NK1127`. A check with no place to compile is `NK1127` with ADR-321 D19's note, and each case the compiler cannot build says why. A ring through called bodies and left-out option defaults is `NK1168`, said once. A constant read before its turn is worked out first. Builds side by side no longer break each other's compiled runs.
+
 ## [0.0.998] — 2026-10-17
 
 **a proposer is a child process, one JSON line per problem each way (ADR-361 D6)**
