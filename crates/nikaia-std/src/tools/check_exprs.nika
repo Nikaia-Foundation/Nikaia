@@ -9,6 +9,15 @@
 // and a condition that is not a `bool` (`NK1108`). The words are
 // `written_expression` over the file's names.
 
+/// The name a tuple's part takes where the help takes it apart: `a`, `b`, …
+fn check_exprs_part_name(index: i64) -> String {
+    let letters = ["a", "b", "c", "d", "e", "f", "g", "h"]
+    if index < 8 {
+        return letters[index].clone()
+    }
+    return f"p{index}"
+}
+
 /// Whether a type is exactly `String`, held.
 pub fn a_plain_string(ty: ref Ty) -> bool {
     return match ty {
@@ -108,10 +117,11 @@ impl CheckState {
     /// `NK1201`: a list, map or set in an `f"…"` hole, which has no text form.
     /// `spec` is the hole's format spec, where it has one.
     pub fn a_collection_in_a_hole(ref mut self, world: ref CheckWorld, hole: ref Expr, held: ref Ty, spec: ref String?, span: ref Span) sync {
-        if !is_a_collection_type(held) {
+        if spec != null && (spec ?? "").contains("?") {
             return
         }
-        if spec != null && (spec ?? "").contains("?") {
+        if !is_a_collection_type(held) {
+            self.a_value_with_no_text_in_a_hole(world, hole, held, span)
             return
         }
         let written = written_expression(world.words, hole)
@@ -127,6 +137,106 @@ impl CheckState {
             help = f"Join its elements into text first: `let text = {shown}.iter().join(\", \")`, then write `{{text}}`."
         }
         let note = f"A hole is written as its value's text, and lists, maps and sets have no text form. `{written}` is {what}."
+        self.findings.push(check_refusal("NK1201", span, f"You can't put {what} in an `f\"…\"` hole.", [note], help))
+    }
+
+    /// `NK1201` for the rest of what has no text form (#638): a range, a
+    /// tuple, and a struct or `enum` of this package with no `impl Error`. An
+    /// error's text is its message, and the lowering writes a `Display` for
+    /// it and for a sum of errors; a type from another package is left alone.
+    fn a_value_with_no_text_in_a_hole(ref mut self, world: ref CheckWorld, hole: ref Expr, held: ref Ty, span: ref Span) sync {
+        let written = written_expression(world.words, hole)
+        let shown = match hole {
+            Expr::Variable(_, _) => written.clone(),
+            Expr::Field { .. } => written.clone(),
+            else => f"({written})",
+        }
+        let ty = held.unseen()
+        let mut what: String = ""
+        let mut kinds: String = ""
+        let mut help: String = ""
+        match ty {
+            Ty::Seq { .. } => {
+                what = "a range"
+                kinds = "a range or a sequence has"
+                help = f"Write the values you want in holes of their own, or write `{{{shown}:?}}` for its debug form."
+            }
+            Ty::Tuple(parts) => {
+                what = "a tuple"
+                kinds = "a tuple has"
+                let mut names: Vec[String] = []
+                let mut holes: Vec[String] = []
+                let mut index = 0
+                while index < parts.len() {
+                    let letter = check_exprs_part_name(index)
+                    holes.push(f"`{{{letter}}}`")
+                    names.push(letter)
+                    index += 1
+                }
+                let pattern = names.join(", ")
+                let listed = holes.join(" and ")
+                help = f"Take it apart first: `let ({pattern}) = {shown}`, then write {listed}."
+            }
+            Ty::Named { name, .. } => {
+                if name.contains("::") || name == "Self" {
+                    return
+                }
+                let is_enum = self.enums.contains_key(name)
+                let is_struct = self.structs.contains_key(name)
+                if !is_enum && !is_struct && !world.own.types.contains_key(name) {
+                    return
+                }
+                let own = world.own.implementations.get("Error")
+                if own != null && (own?.contains(name) ?? false) {
+                    return
+                }
+                let library = world.library.implementations.get("Error")
+                if library != null && (library?.contains(name) ?? false) {
+                    return
+                }
+                if implements_error(world.here, world.beside, name) {
+                    return
+                }
+                let mut fields: Vec[String] = []
+                let mut an_enum = is_enum
+                if is_struct {
+                    let own_fields = self.structs.get(name) ?? return
+                    for field in own_fields {
+                        fields.push(field.name.clone())
+                    }
+                } else if !is_enum {
+                    let contract = world.own.types.get(name) ?? return
+                    for field in contract.fields {
+                        fields.push(field.name.clone())
+                    }
+                    an_enum = contract.variants.len() > 0
+                }
+                if an_enum {
+                    what = f"the `enum` `{name}`"
+                    kinds = "an `enum` that is not an error has"
+                    help = f"Match on it and give each variant its text first, or write `{{{shown}:?}}` for its debug form."
+                } else {
+                    what = f"the struct `{name}`"
+                    kinds = "a struct that is not an error has"
+                    if fields.len() == 0 {
+                        help = f"Write `{{{shown}:?}}` for its debug form."
+                    } else {
+                        let mut holes: Vec[String] = []
+                        for field in fields {
+                            holes.push(f"`{{{shown}.{field}}}`")
+                        }
+                        let listed = holes.join(", ")
+                        help = f"Write its fields in holes of their own: {listed}."
+                    }
+                }
+            }
+            else => return,
+        }
+        let mut called: String = f"`{held.text()}`"
+        if what == "a range" || what == "a tuple" {
+            called = what.clone()
+        }
+        let note = f"A hole is written as its value's text, and {kinds} no text form. `{written}` is {called}."
         self.findings.push(check_refusal("NK1201", span, f"You can't put {what} in an `f\"…\"` hole.", [note], help))
     }
 

@@ -19662,6 +19662,12 @@ impl CheckState {
 
 // --- check_exprs.nika ---
 
+fn check_exprs_part_name(index: i64) -> String {
+    let letters = vec!["a", "b", "c", "d", "e", "f", "g", "h"];
+    if index < 8 { return (*nikaia_std::index::get(&letters, nikaia_std::index::at(index))).to_owned(); }
+    format!("p{}", index)
+}
+
 pub fn a_plain_string(ty: &Ty) -> bool {
     match ty {
         Ty::Named { name, args, view } => { let view = *view; !view && args.is_empty() && name == "String" },
@@ -19731,8 +19737,11 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_collection_in_a_hole(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, hole: &Expr, held: &Ty, spec: Option<&str>, span: &Span) {
-        if !is_a_collection_type(held) { return; }
         if spec.is_some() && nikaia_std::index::or(spec, || "").contains('?') { return; }
+        if !is_a_collection_type(held) {
+            self.a_value_with_no_text_in_a_hole(world, hole, held, span);
+            return;
+        }
         let written = written_expression(world.words, hole);
         let mut what: String = format!("`{}`", held.text());
         let mut help: String = String::from("Write the parts you want in holes of their own, or build the text in a loop first.");
@@ -19746,6 +19755,89 @@ impl CheckState {
             help = format!("Join its elements into text first: `let text = {}.iter().join(\", \")`, then write `{{text}}`.", shown);
         }
         let note = format!("A hole is written as its value's text, and lists, maps and sets have no text form. `{}` is {}.", written, what);
+        self.findings.push(check_refusal("NK1201", span, format!("You can't put {} in an `f\"…\"` hole.", what), vec![note], Some(help)));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn a_value_with_no_text_in_a_hole(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, hole: &Expr, held: &Ty, span: &Span) {
+        let written = written_expression(world.words, hole);
+        let shown = match hole {
+            Expr::Variable(_, _) => written.to_owned(),
+            Expr::Field { .. } => written.to_owned(),
+            _ => format!("({})", written),
+        };
+        let ty = held.unseen();
+        let mut what: String = String::from("");
+        let mut kinds: String = String::from("");
+        let mut help: String = String::from("");
+        match ty {
+            Ty::Seq { .. } => {
+                what = String::from("a range");
+                kinds = String::from("a range or a sequence has");
+                help = format!("Write the values you want in holes of their own, or write `{{{}:?}}` for its debug form.", shown);
+            },
+            Ty::Tuple(ref parts) => {
+                what = String::from("a tuple");
+                kinds = String::from("a tuple has");
+                let mut names: Vec<String> = vec![];
+                let mut holes: Vec<String> = vec![];
+                let mut index: i64 = 0;
+                while index < parts.len() as i64 {
+                    let letter = check_exprs_part_name(index);
+                    holes.push(format!("`{{{}}}`", letter));
+                    names.push(letter);
+                    index += 1;
+                }
+                let pattern = names.join(", ");
+                let listed = holes.join(" and ");
+                help = format!("Take it apart first: `let ({}) = {}`, then write {}.", pattern, shown, listed);
+            },
+            Ty::Named { ref name, .. } => {
+                if name.contains("::") || name == "Self" { return; }
+                let is_enum = self.enums.contains_key(name);
+                let is_struct = self.structs.contains_key(name);
+                if !is_enum && !is_struct && !world.own.types.contains_key(name) { return; }
+                let own = world.own.implementations.get("Error");
+                if own.is_some() && nikaia_std::index::or(match own {
+                    Some(__nikaia_it) => Some(__nikaia_it.contains(name)),
+                    None => None,
+                }, || false) { return; }
+                let library = world.library.implementations.get("Error");
+                if library.is_some() && nikaia_std::index::or(match library {
+                    Some(__nikaia_it) => Some(__nikaia_it.contains(name)),
+                    None => None,
+                }, || false) { return; }
+                if implements_error(&world.here, &world.beside, name) { return; }
+                let mut fields: Vec<String> = vec![];
+                let mut an_enum = is_enum;
+                if is_struct {
+                    let own_fields = match self.structs.get(name) { Some(__nikaia_value) => __nikaia_value, None => return };
+                    for field in own_fields.iter() { fields.push(field.name.to_owned()); }
+                } else if !is_enum {
+                    let contract = match world.own.types.get(name) { Some(__nikaia_value) => __nikaia_value, None => return };
+                    for field in contract.fields.iter() { fields.push(field.name.to_owned()); }
+                    an_enum = !contract.variants.is_empty();
+                }
+                if an_enum {
+                    what = format!("the `enum` `{}`", name);
+                    kinds = String::from("an `enum` that is not an error has");
+                    help = format!("Match on it and give each variant its text first, or write `{{{}:?}}` for its debug form.", shown);
+                } else {
+                    what = format!("the struct `{}`", name);
+                    kinds = String::from("a struct that is not an error has");
+                    if fields.is_empty() { help = format!("Write `{{{}:?}}` for its debug form.", shown); } else {
+                        let mut holes: Vec<String> = vec![];
+                        for field in fields.iter() { holes.push(format!("`{{{}.{}}}`", shown, field)); }
+                        let listed = holes.join(", ");
+                        help = format!("Write its fields in holes of their own: {}.", listed);
+                    }
+                }
+            },
+            _ => { return; },
+        }
+        let mut called: String = format!("`{}`", held.text());
+        if what == "a range" || what == "a tuple" { called = what.to_owned(); }
+        let note = format!("A hole is written as its value's text, and {} no text form. `{}` is {}.", kinds, written, called);
         self.findings.push(check_refusal("NK1201", span, format!("You can't put {} in an `f\"…\"` hole.", what), vec![note], Some(help)));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

@@ -13,6 +13,8 @@ use nikaia::contracts::LedgerOps;
 use nikaia::emit::{Build, emit_program};
 use nikaia::parser::parse_to_ast;
 
+mod common;
+
 fn emit(source: &str) -> String {
     let parsed = parse_to_ast(source).expect("the source parses");
     emit_program(&parsed, Build::default())
@@ -500,6 +502,158 @@ fn a_map_or_a_set_in_a_hole_is_refused_too() {
     assert!(
         found[1].notes[0].contains("`s` is `collections::HashSet[i64]`"),
         "{found:#?}"
+    );
+}
+
+/// The one `NK1201` a source raises, and that it is the only refusal.
+fn no_text_form(source: &str) -> nikaia::check::Finding {
+    let found: Vec<_> = findings(source)
+        .into_iter()
+        .filter(|f| f.severity == nikaia::check::Severity::Error)
+        .collect();
+    assert_eq!(found.len(), 1, "{found:#?}");
+    assert_eq!(found[0].code, "NK1201", "{found:#?}");
+    found.into_iter().next().expect("one finding")
+}
+
+/// **A range in a hole is refused here, not by `rustc`** (#638). `[0..5]` is
+/// a list holding one range, so `xs[0]` is that range, and the language below
+/// said *`Through<{integer}>` doesn't implement `std::fmt::Display`*.
+#[test]
+fn a_range_in_a_hole_is_refused() {
+    let found = no_text_form(
+        "fn main() {\n\
+         \x20   let xs = [0..5]\n\
+         \x20   let d = xs[0]\n\
+         \x20   println(f\"{d}\")\n\
+         }\n",
+    );
+    assert_eq!(found.message, "You can't put a range in an `f\"…\"` hole.");
+    assert!(
+        found.help.as_deref().unwrap_or("").contains("`{d:?}`"),
+        "{found:#?}"
+    );
+}
+
+/// **A tuple is refused, and the help takes it apart** into holes of their own.
+#[test]
+fn a_tuple_in_a_hole_is_refused() {
+    let found = no_text_form(
+        "fn main() {\n\
+         \x20   let t = (1, \"a\")\n\
+         \x20   println(f\"{t}\")\n\
+         }\n",
+    );
+    assert_eq!(found.message, "You can't put a tuple in an `f\"…\"` hole.");
+    assert_eq!(
+        found.help.as_deref(),
+        Some("Take it apart first: `let (a, b) = t`, then write `{a}` and `{b}`.")
+    );
+}
+
+/// **A struct of the program is refused, and the help names its fields** as
+/// holes; a hole that asks for `:?` is left to the form it asked for.
+#[test]
+fn a_struct_in_a_hole_is_refused_with_its_fields() {
+    let found = no_text_form(
+        "struct Point {\n\
+         \x20   x: i64,\n\
+         \x20   y: i64,\n\
+         }\n\
+         \n\
+         fn main() {\n\
+         \x20   let p = Point { x: 1, y: 2 }\n\
+         \x20   println(f\"{p}\")\n\
+         \x20   println(f\"{p:?}\")\n\
+         }\n",
+    );
+    assert_eq!(
+        found.message,
+        "You can't put the struct `Point` in an `f\"…\"` hole."
+    );
+    assert_eq!(
+        found.notes[0],
+        "A hole is written as its value's text, and a struct that is not an error has no \
+         text form. `p` is `Point`."
+    );
+    assert_eq!(
+        found.help.as_deref(),
+        Some("Write its fields in holes of their own: `{p.x}`, `{p.y}`.")
+    );
+}
+
+/// **An `enum` of the program is refused** the same way.
+#[test]
+fn an_enum_in_a_hole_is_refused() {
+    let found = no_text_form(
+        "enum Colour {\n\
+         \x20   Red,\n\
+         \x20   Green,\n\
+         }\n\
+         \n\
+         fn main() {\n\
+         \x20   let c = Colour::Green\n\
+         \x20   println(f\"{c}\")\n\
+         }\n",
+    );
+    assert_eq!(
+        found.message,
+        "You can't put the `enum` `Colour` in an `f\"…\"` hole."
+    );
+}
+
+/// Check, lower, compile and run a program; what it printed.
+fn printed(purpose: &str, source: &str) -> String {
+    let errors: Vec<_> = findings(source)
+        .into_iter()
+        .filter(|f| f.severity == nikaia::check::Severity::Error)
+        .collect();
+    assert!(errors.is_empty(), "{purpose}: {errors:#?}");
+    let rust = emit(source);
+    let dir = common::scratch_dir(purpose);
+    let file = dir.join("main.rs");
+    std::fs::write(&file, &rust).expect("write the Rust");
+    let binary = dir.join("program");
+    let out = common::compile(&file, &["-o", binary.to_str().expect("utf-8 path")]);
+    assert!(
+        out.status.success(),
+        "{purpose}: the lowering compiles:\n{}\n--- the Rust ---\n{rust}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let ran = std::process::Command::new(&binary)
+        .output()
+        .expect("run the program");
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(ran.status.success(), "{purpose}: {ran:?}");
+    String::from_utf8_lossy(&ran.stdout).to_string()
+}
+
+/// **What has a text form still runs** (#638): an error, whose text is its
+/// message, a number, a `bool`, a `char` and text.
+#[test]
+fn an_error_a_number_a_bool_a_char_and_text_in_a_hole_run() {
+    let source = "struct Late {\n\
+                  \x20   minutes: i64,\n\
+                  }\n\
+                  \n\
+                  impl Error for Late {\n\
+                  \x20   fn message(ref self) -> String {\n\
+                  \x20       return f\"late by {self.minutes}\"\n\
+                  \x20   }\n\
+                  }\n\
+                  \n\
+                  fn main() {\n\
+                  \x20   let e = Late { minutes: 3 }\n\
+                  \x20   let n = 7\n\
+                  \x20   let x = 1.5\n\
+                  \x20   let b = true\n\
+                  \x20   let c = 'z'\n\
+                  \x20   let s = \"text\"\n\
+                  \x20   println(f\"{e} {n} {x} {b} {c} {s}\")\n\
+                  }\n";
+    assert_eq!(
+        printed("hole_with_text", source),
+        "late by 3 7 1.5 true z text\n"
     );
 }
 
