@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.978] — 2026-10-17
+
+**Inside its package a callee's body answers a claim that needs it; a quotient by a known number is a term; across a package, a hint (ADR-359, #632)**
+- ADR-359: result summaries inside a package, used only where a claim is left open, written as `inferred` (an observation); `/` and `%` by a positive constant or a pinned divisor; a `comptime` binding is its value; `NK1263` hint across a package read from a path; a new refutation is fixed, `refuted-claims = "warn"` is for an emergency.
+- Part III 13.3, 14.2 and C.3 (`NK1263`, `NK1207`'s note). Specification only; the build is #632's To build list.
+
 ## [0.0.977] — 2026-10-17
 
 **The prover reads a call inside a let's value by its callee's ensures (ADR-314 D3, #631)**
