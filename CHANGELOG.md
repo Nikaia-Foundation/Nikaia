@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1006] — 2026-10-17
+
+**The toolchain's own Nikaia package is lowered at `user_parallelism = yes` (ADR-363, #646)**
+- Part III 13.2b: `src/tools` is lowered at `yes` whatever the build's setting, since only the compiler runs it; `std`'s own modules still lower the same at both settings (ADR-002 D4). The compiler may use `par_iter` and `task::scope`. Specified, not built yet.
+
 ## [0.0.1005] — 2026-10-17
 
 **`[v; n]` is a list literal of n copies of a value that copies; a list of one range is warned (ADR-362, #643, #644)**
