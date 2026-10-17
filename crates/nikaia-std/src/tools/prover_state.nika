@@ -40,6 +40,18 @@ pub struct ProverState {
     /// An integer `comptime` inside a body, by its statement's start: the
     /// value the build computed for it (D7).
     pub comptime_at: collections::BTreeMap[i64, i64],
+    /// **Each call with arguments the build knows** that a claim or a
+    /// binding read (ADR-359 D11), by `call_result_name`: the call as
+    /// written, and the callee with its arguments' values.
+    pub call_sites: collections::BTreeMap[String, Expr],
+    pub call_args: collections::BTreeMap[String, (String, Vec[i64])],
+    /// The calls an open claim reads that the build has not answered yet:
+    /// the compiler runs these, and walks again (D11, D13).
+    pub wanted: collections::BTreeSet[String],
+    /// A call the build could not run, and why (D12).
+    pub not_run: collections::BTreeMap[String, String],
+    /// A call whose run stopped, in the words the program would print (D12).
+    pub stopped: collections::BTreeMap[String, String],
 }
 
 impl ProverState {
@@ -58,6 +70,11 @@ impl ProverState {
             in_test: false,
             pinned: collections::BTreeMap(),
             comptime_at: collections::BTreeMap(),
+            call_sites: collections::BTreeMap(),
+            call_args: collections::BTreeMap(),
+            wanted: collections::BTreeSet(),
+            not_run: collections::BTreeMap(),
+            stopped: collections::BTreeMap(),
         }
     }
 
@@ -531,9 +548,10 @@ pub fn postconditions_for(mut arena: TermArena, posts: ref Vec[PostClaim], param
 }
 
 /// **The value the build knows for `name`** (ADR-359 D7, D11), where no
-/// local of this body hides it.
+/// local of this body hides it. A call's result has a name no local can
+/// spell, which the walk binds where it reads the call.
 pub fn prover_pinned(pinned: ref collections::BTreeMap[String, i64], scope: ref ProverScope, name: ref String) -> i64? {
-    if scope.locals.contains(name) {
+    if !name.starts_with("result@") && scope.locals.contains(name) {
         return null
     }
     return pinned[name]

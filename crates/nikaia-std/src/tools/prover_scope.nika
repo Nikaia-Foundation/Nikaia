@@ -37,6 +37,10 @@ pub struct ProverScope {
     /// a parameter, whatever its callers pass; a call's result, of which
     /// only its postconditions are known; a length nobody counted.
     pub loose: collections::BTreeSet[String],
+    /// **The calls with arguments the build knows that each binding's value
+    /// reads** (ADR-359 D11), directly or through the bindings it reads, by
+    /// `call_result_name`: what a claim over the binding may have run.
+    pub calls_of: collections::BTreeMap[String, collections::BTreeSet[String]],
 }
 
 impl ProverScope {
@@ -51,6 +55,7 @@ impl ProverScope {
             path: null,
             exact: false,
             loose: collections::BTreeSet(),
+            calls_of: collections::BTreeMap(),
         }
     }
 
@@ -73,6 +78,7 @@ impl ProverScope {
         self.locals.insert(name.clone())
         self.loose.remove(name)
         self.loose.remove(length)
+        self.calls_of.remove(name)
         let mut kept: Vec[i64] = []
         for fact in self.facts {
             if !arena.mentions(fact, name) && !arena.mentions(fact, length) {

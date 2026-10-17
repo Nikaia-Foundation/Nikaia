@@ -1024,3 +1024,247 @@ fn an_integer_comptime_binding_is_its_value() {
         held(hidden)
     );
 }
+
+// --- ADR-359 D11-D13: a call with known arguments a claim needs is run -------
+
+/// **A check with a place to compile build-time code**, as every command-line
+/// build has (ADR-321 D19): one workshop for the file, under Cargo's scratch
+/// directory.
+fn checked_building(source: &str) -> nikaia::check::Checked {
+    let workshop = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("claims-run");
+    let reads = nikaia::assets::Reads::at(&workshop).building_in(&workshop);
+    let parsed = parse_to_ast(source).expect("the source parses");
+    let own = Ledger::infer(&parsed);
+    let library = Ledger::parse(STD).expect("std's ledger");
+    nikaia::check::check_against(
+        &parsed,
+        &[],
+        &own,
+        &library,
+        &std::collections::BTreeSet::new(),
+        &nikaia::check::Newly::new(),
+        &reads,
+    )
+}
+
+fn held_building(source: &str) -> Vec<nikaia::prove::Held> {
+    checked_building(source)
+        .facts
+        .claims
+        .into_values()
+        .filter_map(|c| c.held)
+        .collect()
+}
+
+fn refuted_building(source: &str) -> Vec<nikaia::check::Finding> {
+    checked_building(source)
+        .findings
+        .into_iter()
+        .filter(|f| f.code == "NK1207")
+        .collect()
+}
+
+const FIB: &str = "fn fib(n: i64) -> i64 {\n\
+                   \x20   if n < 2 {\n\
+                   \x20       return n\n\
+                   \x20   }\n\
+                   \x20   return fib(n - 1) + fib(n - 2)\n\
+                   }\n\
+                   \n";
+
+const EXAMPLE: &str = "fn positive(whole: i64) -> i64 {\n\
+                       \x20   assert(whole > 0)\n\
+                       \x20   return whole\n\
+                       }\n\
+                       \n\
+                       fn example(a: i64) -> i64 {\n\
+                       \x20   let whole = 10 + a\n\
+                       \x20   return positive(whole)\n\
+                       }\n\
+                       \n";
+
+/// **D11: a recursive call with a known argument is compiled and run** where
+/// a claim needs its value: `fib(10)` is 55, so `== 55` is proved and `== 54`
+/// refused, the note naming the value the run gave.
+#[test]
+fn a_call_with_known_arguments_a_claim_needs_is_run() {
+    use nikaia::prove::Held::Proved;
+    let proved = format!(
+        "{FIB}fn main() {{\n\
+         \x20   assert(fib(10) == 55)\n\
+         \x20   println(\"ok\")\n\
+         }}\n"
+    );
+    assert!(
+        matches!(held_building(&proved).as_slice(), [Proved]),
+        "{:#?}",
+        held_building(&proved)
+    );
+    let refused = format!(
+        "{FIB}fn main() {{\n\
+         \x20   assert(fib(10) == 54)\n\
+         \x20   println(\"ok\")\n\
+         }}\n"
+    );
+    let found = refuted_building(&refused);
+    assert_eq!(found.len(), 1, "{found:#?}");
+    assert!(
+        found[0]
+            .message
+            .contains("`fib(10) == 54` is false every time"),
+        "{found:#?}"
+    );
+    assert!(
+        found[0]
+            .notes
+            .iter()
+            .any(|n| n.contains("`fib(10)` is 55, run while the program was built")),
+        "{found:#?}"
+    );
+}
+
+/// **D11 over the owner's `example`**: `example(2)` is 12, through
+/// `positive`, and `4 / example(2)` is 0 (#632's step 1 folds the quotient).
+#[test]
+fn the_value_of_example_is_known_by_running_it() {
+    use nikaia::prove::Held::Proved;
+    let proved = format!(
+        "{EXAMPLE}fn main() {{\n\
+         \x20   assert(example(2) == 12)\n\
+         \x20   let e = example(2) - 1\n\
+         \x20   assert(e == 11)\n\
+         \x20   println(f\"{{e}}\")\n\
+         }}\n"
+    );
+    let held = held_building(&proved);
+    assert!(
+        held.iter().filter(|h| matches!(h, Proved)).count() == 2,
+        "{held:#?}"
+    );
+    let refused = format!(
+        "{EXAMPLE}fn main() {{\n\
+         \x20   let b = 4 / example(2)\n\
+         \x20   assert(1 == 1)\n\
+         \x20   assert(b > 10)\n\
+         \x20   println(f\"Hello, Nikaia! {{b}}\")\n\
+         }}\n"
+    );
+    let found = refuted_building(&refused);
+    assert_eq!(found.len(), 1, "{found:#?}");
+    assert!(
+        found[0].message.contains("`b > 10` is false every time"),
+        "{found:#?}"
+    );
+    assert!(
+        found[0].notes.iter().any(|n| n.contains("`b` is 0"))
+            && found[0]
+                .notes
+                .iter()
+                .any(|n| n.contains("`example(2)` is 12")),
+        "{found:#?}"
+    );
+}
+
+/// **D11, D12: a callee that reads `cli::args` or touches the world is not
+/// run**: at build time the arguments are the builder's, and a write would
+/// happen on the building machine. The claim stays a check, and `--asserts`
+/// says why.
+#[test]
+fn a_callee_that_reads_the_arguments_or_does_io_is_not_run() {
+    use nikaia::prove::Held::AtRunTime;
+    let source = "use std::cli\n\
+                  \n\
+                  fn noisy(n: i64) -> i64 {\n\
+                  \x20   println(\"computing\")\n\
+                  \x20   return n + 1\n\
+                  }\n\
+                  \n\
+                  fn counted(n: i64) -> i64 {\n\
+                  \x20   return cli::args().len() + n\n\
+                  }\n\
+                  \n\
+                  fn main() {\n\
+                  \x20   let a = noisy(2)\n\
+                  \x20   assert(a == 3)\n\
+                  \x20   let c = counted(1)\n\
+                  \x20   assert(c > 1)\n\
+                  \x20   println(f\"{a} {c}\")\n\
+                  }\n";
+    let held = held_building(source);
+    let [AtRunTime(io), AtRunTime(args)] = held.as_slice() else {
+        panic!("{held:#?}");
+    };
+    assert!(
+        io.contains("`noisy(2)` was not run while the program was built")
+            && io.contains("touches the world outside the program"),
+        "{io}"
+    );
+    assert!(
+        args.contains("`counted(1)` was not run while the program was built")
+            && args.contains("arguments"),
+        "{args}"
+    );
+}
+
+/// **D12: a run that stops is a check the compiler shows fails**, in the
+/// words the program would print.
+#[test]
+fn a_callee_that_overflows_for_its_argument_is_refused() {
+    let source = "fn sq(n: i32) -> i32 {\n\
+                  \x20   return n * n\n\
+                  }\n\
+                  \n\
+                  fn main() {\n\
+                  \x20   assert(sq(100000) > 0)\n\
+                  \x20   println(\"ok\")\n\
+                  }\n";
+    let found = refuted_building(source);
+    assert_eq!(found.len(), 1, "{found:#?}");
+    assert!(
+        found[0]
+            .message
+            .contains("`sq(100000)` stops the program every time it is reached"),
+        "{found:#?}"
+    );
+    assert!(
+        found[0]
+            .notes
+            .iter()
+            .any(|n| n.contains("attempt to multiply with overflow")),
+        "{found:#?}"
+    );
+}
+
+/// **D13: only the claim that needs it pays**: a program whose claims are
+/// decided without a run runs nothing, though it calls a function with a
+/// known argument.
+#[test]
+fn a_program_whose_claims_are_decided_runs_nothing_at_build_time() {
+    use nikaia::prove::Held::AtRunTime;
+    let decided = format!(
+        "{EXAMPLE}fn main() {{\n\
+         \x20   let x = example(2)\n\
+         \x20   assert(1 == 1)\n\
+         \x20   let y = x + 1\n\
+         \x20   assert(y > x)\n\
+         \x20   println(f\"{{y}}\")\n\
+         }}\n"
+    );
+    let before = nikaia::prove::claim_runs();
+    let held = held_building(&decided);
+    assert!(!held.iter().any(|h| matches!(h, AtRunTime(_))), "{held:#?}");
+    assert_eq!(nikaia::prove::claim_runs(), before, "a run nobody needed");
+    // The same call, where a claim needs it, is run once.
+    let needed = format!(
+        "{EXAMPLE}fn main() {{\n\
+         \x20   let x = example(2)\n\
+         \x20   assert(x == 12)\n\
+         \x20   assert(x > 11)\n\
+         \x20   println(f\"{{x}}\")\n\
+         }}\n"
+    );
+    let before = nikaia::prove::claim_runs();
+    let held = held_building(&needed);
+    assert!(!held.iter().any(|h| matches!(h, AtRunTime(_))), "{held:#?}");
+    assert_eq!(nikaia::prove::claim_runs(), before + 1);
+}

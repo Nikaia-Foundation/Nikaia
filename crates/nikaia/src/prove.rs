@@ -111,18 +111,122 @@ pub fn call_key(parsed: &Parsed, callee: &str, args: &[Expr]) -> (String, String
     (callee.to_string(), args.join(", "))
 }
 
+/// **What running a call for a claim came to** (ADR-359 D11, D12).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ClaimRun {
+    /// The value it handed back.
+    Value(i64),
+    /// Why it was not run: the claim stays a check, and `--asserts` says this.
+    NotRun(String),
+    /// It ran and stopped, in the words the program would print.
+    Stopped(String),
+}
+
+/// **How a call is run while the program is built** (ADR-359 D11): the call
+/// as written with each argument the literal of its value, the callee by the
+/// ledger's key, and the values. The checker's runs it as a `comptime` runs
+/// (ADR-321 D1).
+pub type ClaimRunner<'a> = &'a dyn Fn(&Expr, &str, &[i64]) -> ClaimRun;
+
+/// How many times the walk is repeated with what the calls it wanted came to:
+/// a run's value can make another call's arguments known (`f(g(2))`).
+const RUN_ROUNDS: usize = 4;
+
+thread_local! {
+    /// **How many calls were run for claims on this thread** (ADR-359 D13): a
+    /// program whose claims are decided without a run runs none.
+    static CLAIM_RUNS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// How many calls were run for claims on this thread so far.
+pub fn claim_runs() -> usize {
+    CLAIM_RUNS.with(|runs| runs.get())
+}
+
 /// Prove every `assert` of the program. `claims` are the checker's: a call is
-/// an `assert` exactly where the checker recognised the prelude's.
+/// an `assert` exactly where the checker recognised the prelude's. `run`,
+/// where the build can compile and run code, runs a call an open claim reads
+/// (ADR-359 D11-D13): only then is the walk repeated, with its value.
 pub fn prove(
     parsed: &Parsed,
     own: &Ledger,
     library: &Ledger,
     claims: &BTreeSet<(usize, usize)>,
     comptimes: &Comptimes,
+    run: Option<ClaimRunner<'_>>,
 ) -> Proved {
-    let mut state = ProverState::fresh();
-    state.pinned = comptimes.by_name.clone();
-    state.comptime_at = comptimes.at.clone();
+    let mut pinned = comptimes.by_name.clone();
+    let mut not_run: BTreeMap<String, String> = BTreeMap::new();
+    let mut stopped: BTreeMap<String, String> = BTreeMap::new();
+    // **Once per call and its arguments** (D13): two calls of `f(2)` are one
+    // run.
+    let mut answered: BTreeMap<(String, Vec<i64>), ClaimRun> = BTreeMap::new();
+    let mut round = 0;
+    loop {
+        let mut state = ProverState::fresh();
+        state.pinned = pinned.clone();
+        state.comptime_at = comptimes.at.clone();
+        state.not_run = not_run.clone();
+        state.stopped = stopped.clone();
+        let (walk, answers) = walked(parsed, own, library, claims, state);
+        round += 1;
+        let wanted: Vec<String> = walk
+            .state
+            .wanted
+            .iter()
+            .filter(|call| {
+                !pinned.contains_key(*call)
+                    && !not_run.contains_key(*call)
+                    && !stopped.contains_key(*call)
+            })
+            .cloned()
+            .collect();
+        let Some(run) = run.filter(|_| !wanted.is_empty() && round <= RUN_ROUNDS) else {
+            return finished(walk, answers);
+        };
+        for call in wanted {
+            let (Some(site), Some((callee, args))) = (
+                walk.state.call_sites.get(&call),
+                walk.state.call_args.get(&call),
+            ) else {
+                continue;
+            };
+            let key = (callee.clone(), args.clone());
+            let came = match answered.get(&key) {
+                Some(came) => came.clone(),
+                None => {
+                    CLAIM_RUNS.with(|runs| runs.set(runs.get() + 1));
+                    let came = run(site, callee, args);
+                    answered.insert(key, came.clone());
+                    came
+                }
+            };
+            match came {
+                ClaimRun::Value(value) => {
+                    pinned.insert(call, value);
+                }
+                ClaimRun::NotRun(why) => {
+                    not_run.insert(call, why);
+                }
+                ClaimRun::Stopped(said) => {
+                    stopped.insert(call, said);
+                }
+            }
+        }
+    }
+}
+
+/// **The passes, and what they make** (`tools/prover_passes.nika`): the walk
+/// repeated until the preconditions, then the postconditions, stop changing
+/// (ADR-269 D15, D17); the checked entries (D20), what the ledger publishes
+/// (D18), and how a claim no walk reached is held.
+fn walked(
+    parsed: &Parsed,
+    own: &Ledger,
+    library: &Ledger,
+    claims: &BTreeSet<(usize, usize)>,
+    state: ProverState,
+) -> (ProverWalk, prover_passes::ProverAnswers) {
     let mut walk = ProverWalk {
         state,
         arena: TermArena::empty(),
@@ -134,10 +238,6 @@ pub fn prove(
             .map(|(at, node)| (*at as i64, *node as i64))
             .collect(),
     };
-    // **The passes, and what they make** (`tools/prover_passes.nika`): the
-    // walk repeated until the preconditions, then the postconditions, stop
-    // changing (ADR-269 D15, D17); the checked entries (D20), what the ledger
-    // publishes (D18), and how a claim no walk reached is held.
     let answers = prover_passes::prover_passes(
         &mut walk,
         &parsed.program,
@@ -152,6 +252,10 @@ pub fn prove(
         &|e| crate::check::written(parsed, e),
         &|text, names| condition_nodes(text, names),
     );
+    (walk, answers)
+}
+
+fn finished(walk: ProverWalk, answers: prover_passes::ProverAnswers) -> Proved {
     Proved {
         findings: walk
             .findings

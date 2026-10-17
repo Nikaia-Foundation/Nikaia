@@ -32,6 +32,124 @@ impl Host<'_> {
     }
 }
 
+/// The name a call run for a claim is computed under: none a program can
+/// spell, so no `comptime` of the program is left out for it.
+const CLAIM_BOUND: &str = "__nikaia_claim_value";
+
+impl Host<'_> {
+    /// **A call an open claim reads, run as a `comptime` is**
+    /// ([ADR-359](../../../../docs/specification/adr/adr-359.md) D11, D12):
+    /// compiled with the program's own lowering and run under ADR-321's
+    /// bounds, never interpreted. `call` is the call as written, `callee` its
+    /// ledger key and `args` its arguments' values; `comptimes` the program's
+    /// integer `comptime`s, which the callee may read.
+    ///
+    /// **Only a `sync` callee that touches nothing runs**: `args read`, which
+    /// a `comptime` may do, is the builder's arguments at build time and the
+    /// user's when the program runs, so its value would not be the program's.
+    pub(super) fn run_for_a_claim(
+        &self,
+        call: &Expr,
+        callee: &str,
+        args: &[i64],
+        comptimes: &BTreeMap<String, i64>,
+    ) -> crate::prove::ClaimRun {
+        use crate::prove::ClaimRun;
+        use nikaia_std::tools::integers::{integer_as_count, integer_of_count};
+        let not_run = |why: &str| ClaimRun::NotRun(why.to_string());
+        if !self.somewhere() {
+            return not_run("This build has no place to compile build-time code in.");
+        }
+        let Some(contract) = self.own.functions.get(callee) else {
+            return not_run("It is not a function of this package.");
+        };
+        if let Some(because) = build_time::may_not_run(contract) {
+            return not_run(because);
+        }
+        if !contract.touches.is_empty() {
+            return not_run(
+                "It reads the program's arguments, which while the program is built are the \
+                 builder's, not the user's.",
+            );
+        }
+        if !contract.fails_with.is_empty() {
+            return not_run("It can throw, and a claim reads only a value it hands back.");
+        }
+        let Some(result) = contract
+            .signature
+            .as_ref()
+            .and_then(|signature| signature.result.clone())
+        else {
+            return not_run("Nothing says what it hands back.");
+        };
+        let Expr::Call { func, .. } = call else {
+            return not_run("It is not a call of a function by name.");
+        };
+        let func = match &**func {
+            Expr::Variable(name, _) => Expr::Variable(*name, crate::ast::NodeId::fresh()),
+            Expr::Path(segments, _) => Expr::Path(segments.clone(), crate::ast::NodeId::fresh()),
+            _ => return not_run("It is not a call of a function by name."),
+        };
+        let value = Expr::Call {
+            func: Box::new(func),
+            args: args
+                .iter()
+                .map(|value| crate::ast::int_literal(i128::from(*value)))
+                .collect(),
+            config: Vec::new(),
+            id: crate::ast::NodeId::fresh(),
+        };
+        let known: BTreeMap<String, build_time::Value> = comptimes
+            .iter()
+            .map(|(name, value)| {
+                (
+                    name.clone(),
+                    build_time::Value::Int(integer_of_count(*value)),
+                )
+            })
+            .collect();
+        match self.compute_comptime(&value, &result, CLAIM_BOUND, &known, None, None) {
+            CheckComputed::Value(build_time::Value::Int(n)) => match integer_as_count(&n) {
+                Some(value) => ClaimRun::Value(value),
+                None => not_run("Its value is more than a whole number of the proof holds."),
+            },
+            CheckComputed::Value(_) => not_run("It did not hand back a whole number."),
+            CheckComputed::Forbidden { callee, because } => ClaimRun::NotRun(format!(
+                "`{callee}` may not run while the program is built: {because}"
+            )),
+            CheckComputed::Stopped(detail) => stopped_as_said(&detail),
+            CheckComputed::NotHere => {
+                not_run("This compiler can't compile it while the program is built.")
+            }
+        }
+    }
+}
+
+/// **A run that stopped, in the words the program would print**
+/// (ADR-321 D16, D17), or a bound of the build it went past (D7, D10), which
+/// is no stop of the program: the claim stays a check.
+fn stopped_as_said(detail: &str) -> crate::prove::ClaimRun {
+    use crate::prove::ClaimRun;
+    if let Some(over) = detail
+        .lines()
+        .find_map(|line| line.strip_prefix("nikaia-build-time: "))
+    {
+        return ClaimRun::NotRun(format!(
+            "It went past what a build-time run may spend: {}",
+            over.trim()
+        ));
+    }
+    let line = detail
+        .lines()
+        .find(|line| line.contains("the program stopped"))
+        .unwrap_or(detail);
+    let said = line
+        .split_once("the program stopped: ")
+        .map(|(_, said)| said)
+        .unwrap_or(line);
+    ClaimRun::Stopped(said.trim().trim_end_matches('.').to_string())
+}
+
 /// What a grammar's wall is, as the report of it is given it.
 pub(super) fn a_wall(why: &crate::grammar_run::Wall) -> CheckWall {
     use crate::grammar_run::Wall;

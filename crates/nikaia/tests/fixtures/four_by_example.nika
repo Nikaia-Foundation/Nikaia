@@ -1,0 +1,14 @@
+fn main() {
+   let b = 4/example(2)
+   assert(1==1)
+   assert(b>10)
+   println(f"Hello, Nikaia! {b}")
+}
+fn positive(whole: i64) -> i64 {
+    assert(whole > 0)
+    return whole
+}
+fn example(a:i64) -> i64 {
+    let whole = 10 + a
+    return positive(whole)
+}

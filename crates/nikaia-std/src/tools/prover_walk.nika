@@ -232,6 +232,12 @@ fn prover_stmt(mut walk: ProverWalk, stmt: ref Spanned[Stmt], mut scope: ProverS
 fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], mutable: bool, ty: ref Type?, value: ref Expr, span: Span, mut scope: ProverScope, nested: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) {
     prover_expr(walk, value, span, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
     let tainted = from_outside(value, scope.tainted, words, library, holes_of)
+    // **The calls with known arguments the value reads** (ADR-359 D11), kept
+    // with the name it binds, so a claim over it can have them run.
+    let mut known_calls: collections::BTreeSet[String] = collections::BTreeSet()
+    if names.len() == 1 && !mutable {
+        known_calls = prover_known_calls(walk, value, scope, program, words, own, holes_of, unaliased, condition)
+    }
     // **A call inside the value is a whole number of its own** (ADR-314 D3):
     // what its callee ensures holds of it, so `let e = 10 + f(2)` reads as
     // `10 + r` with `f`'s postconditions about `r`. The value's own call, `let
@@ -276,6 +282,9 @@ fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], muta
         return
     }
     let name = words.resolve(names[0]).clone()
+    if !known_calls.is_empty() {
+        scope.calls_of.insert(name.clone(), known_calls)
+    }
     if value_lin != null {
         let v = value_lin ?? 0
         scope.ints.insert(name.clone())
@@ -446,8 +455,18 @@ fn prover_expr_stmt(mut walk: ProverWalk, expr: ref Expr, span: Span, mut scope:
                 let message = prover_message(config, words)
                 let names = claim_names_in(cond, words, holes_of)
                 let outcome = walk.state.an_assert(walk.arena, words, cond, written_of(cond), names, message, span, scope, at, ask, model)
-                walk.held.insert((span.start as i64, node_key(cond)), outcome.held)
-                for found in outcome.findings {
+                let mut held = outcome.held.clone()
+                let mut findings = outcome.findings.clone()
+                if !walk.state.in_test {
+                    let read = prover_known_calls(walk, cond, scope, program, words, own, holes_of, unaliased, condition)
+                    if !read.is_empty() {
+                        let ran = prover_claim_ran(walk, read, held, findings, written_of(cond), span, written_of)
+                        held = ran.held
+                        findings = ran.findings
+                    }
+                }
+                walk.held.insert((span.start as i64, node_key(cond)), held)
+                for found in findings {
                     walk.findings.push(found.clone())
                 }
                 return false
@@ -997,4 +1016,131 @@ fn prover_cached_foreign(map: ref collections::BTreeMap[String, Foreign?], key: 
 fn prover_named_main(own: ref String?) -> bool {
     let name = own ?? return false
     return name == "main"
+}
+
+/// **The calls with arguments the build knows that `expr` reads** (ADR-359
+/// D11): each call in it whose callee is a function by name that hands back
+/// a whole number and whose arguments [`folded_whole`] gives, and the calls
+/// the bindings it reads hold. Each is kept in the walk's state by
+/// `call_result_name`, with its callee and its arguments' values.
+fn prover_known_calls(mut walk: ProverWalk, expr: ref Expr, scope: ref ProverScope, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) -> collections::BTreeSet[String] {
+    let mut found: collections::BTreeSet[String] = collections::BTreeSet()
+    for one in visited_in_expr(expr) {
+        match one {
+            Expr::Call { func, args, config, .. } => {
+                let callee = prover_bound_callee(func, scope, words, unaliased)
+                if callee != null && config.is_empty() {
+                    let c = callee ?? ""
+                    let mut values: Vec[i64] = []
+                    let mut all = true
+                    for arg in args {
+                        let v = folded_whole(arg, words, fn(n) { prover_pinned(walk.state.pinned, scope, n) })
+                        if v == null {
+                            all = false
+                        } else {
+                            values.push(v ?? 0)
+                        }
+                    }
+                    if all && prover_returns_whole(walk, c, program, words, own, condition) {
+                        let name = call_result_name(one)
+                        walk.state.call_sites.insert(name.clone(), one.clone())
+                        walk.state.call_args.insert(name.clone(), (c.clone(), values))
+                        found.insert(name)
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+    if scope.calls_of.is_empty() {
+        return found
+    }
+    let read = claim_names_in(expr, words, holes_of)
+    for (bound, calls) in scope.calls_of {
+        if read.contains(bound) {
+            for call in calls {
+                found.insert(call.clone())
+            }
+        }
+    }
+    return found
+}
+
+/// What a claim comes to once the calls it reads were asked of the build.
+struct ProverRan {
+    held: ClaimHeld,
+    findings: Vec[Finding],
+}
+
+/// **A claim and the calls with known arguments it reads** (ADR-359 D11-D13):
+/// where it is still checked at run time, a call not run yet is wanted - the
+/// compiler runs it and walks again -, a call that could not run says why
+/// (D12), and one whose run stopped is a check the compiler shows fails
+/// (`NK1207`). A refusal names the value of each call it read.
+fn prover_claim_ran(mut walk: ProverWalk, read: ref collections::BTreeSet[String], held: ClaimHeld, findings: Vec[Finding], written: String, span: Span, written_of: fn(ref Expr) -> String sync) -> ProverRan {
+    let mut out = ProverRan { held: held.clone(), findings: [] }
+    let mut values: Vec[String] = []
+    for call in read {
+        let site = walk.state.call_sites[call] ?? continue
+        let text = written_of(site)
+        let value = walk.state.pinned[call]
+        if value != null {
+            values.push(f"`{text}` is {value ?? 0}, run while the program was built")
+        }
+    }
+    let joined = values.join("; ")
+    for found in findings {
+        let mut one = found.clone()
+        if one.code == "NK1207" && !values.is_empty() {
+            one.notes.push(f"{joined}.")
+        }
+        out.findings.push(one)
+    }
+    let open = prover_open_reason(held) ?? return out
+    // A claim what is known already rules out needs no run.
+    if open.starts_with("it is false") {
+        return out
+    }
+    let mut why = open.clone()
+    for call in read {
+        if walk.state.pinned[call] != null {
+            continue
+        }
+        let site = walk.state.call_sites[call] ?? continue
+        let text = written_of(site)
+        let stop = walk.state.stopped[call]
+        if stop != null {
+            let words_said = (stop ?? "").clone()
+            if !walk.state.collecting {
+                out.findings.push(Finding {
+                    code: "NK1207",
+                    span: span,
+                    message: f"`{text}` stops the program every time it is reached, before `{written}` is checked.",
+                    notes: [f"The compiler ran `{text}` while the program was built, as the program runs it, and it stopped: {words_said}."],
+                    help: "Fix the call, or the function it calls, as you would fix the program stopping there.",
+                    warning: false,
+                    labels: [],
+                })
+            }
+            why = f"{why}; `{text}` stops the program: {words_said}"
+            continue
+        }
+        let not = walk.state.not_run[call]
+        if not != null {
+            let because = (not ?? "").clone()
+            why = f"{why}; `{text}` was not run while the program was built: {lowered_first(without_full_stops(because))}"
+            continue
+        }
+        walk.state.wanted.insert(call.clone())
+    }
+    out.held = ClaimHeld::AtRunTime(why)
+    return out
+}
+
+/// Why a claim is checked at run time, where it is.
+fn prover_open_reason(held: ref ClaimHeld) -> String? {
+    return match held {
+        ClaimHeld::AtRunTime(why) => why.clone(),
+        else => null,
+    }
 }

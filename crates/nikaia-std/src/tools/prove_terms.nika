@@ -218,3 +218,35 @@ fn literal_value(value: u64, negative: bool) -> i64? {
 pub fn nothing_pinned(name: ref String) -> i64? {
     return null
 }
+
+/// **A whole number the build knows** (ADR-359 D11): a literal, a name or a
+/// call `pinned` gives, and their negation, `+`, `-`, `*`, `/` and `%`, as
+/// Part I 2.2 folds them. Nothing where it reads anything else or a step has
+/// no answer in an `i64`.
+pub fn folded_whole(expr: ref Expr, words: ref winnow_grammar::InternerContext, pinned: fn(ref String) -> i64? sync) -> i64? {
+    return match expr {
+        Expr::LitInt { value, negative, .. } => literal_value(value, negative),
+        Expr::Variable(name, _) => pinned(words.resolve(name)),
+        Expr::Call { .. } => pinned(call_result_name(expr)),
+        Expr::Unary { op, expr, .. } => {
+            if op != UnaryOp::Neg {
+                return null
+            }
+            let v = folded_whole(expr, words, pinned) ?? return null
+            v.checked_neg()
+        },
+        Expr::Binary { op, lhs, rhs, .. } => {
+            let x = folded_whole(lhs, words, pinned) ?? return null
+            let y = folded_whole(rhs, words, pinned) ?? return null
+            match op {
+                BinaryOp::Add => x.checked_add(y),
+                BinaryOp::Sub => x.checked_sub(y),
+                BinaryOp::Mul => x.checked_mul(y),
+                BinaryOp::Div => x.checked_div(y),
+                BinaryOp::Rem => x.checked_rem(y),
+                else => null,
+            }
+        },
+        else => null,
+    }
+}

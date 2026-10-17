@@ -46521,6 +46521,34 @@ fn literal_value(value: u64, negative: bool) -> Option<i64> {
 
 pub fn nothing_pinned(name: &str) -> Option<i64> { None }
 
+pub fn folded_whole(expr: &Expr, words: &winnow_grammar::InternerContext, pinned: &impl Fn(&str) -> Option<i64>) -> Option<i64> {
+    match expr {
+        Expr::LitInt { value, negative, .. } => { let negative = *negative; let value = *value; literal_value(value, negative) },
+        Expr::Variable(name, _) => { let name = *name; pinned(words.resolve(name)) },
+        Expr::Call { .. } => pinned(&call_result_name(expr)),
+        Expr::Unary { op, expr, .. } => {
+            let expr = nikaia_std::boxed::open(expr);
+            if *op != UnaryOp::Neg { return None; }
+            let v = match folded_whole(expr, words, pinned) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            v.checked_neg()
+        },
+        Expr::Binary { op, lhs, rhs, .. } => {
+            let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
+            let x = match folded_whole(lhs, words, pinned) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let y = match folded_whole(rhs, words, pinned) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            match op {
+                BinaryOp::Add => x.checked_add(y),
+                BinaryOp::Sub => x.checked_sub(y),
+                BinaryOp::Mul => x.checked_mul(y),
+                BinaryOp::Div => x.checked_div(y),
+                BinaryOp::Rem => x.checked_rem(y),
+                _ => None,
+            }
+        },
+        _ => None,
+    }
+}
+
 
 // --- prove_text.nika ---
 
@@ -47477,10 +47505,11 @@ pub struct ProverScope {
     pub path: Option<Vec<i64>>,
     pub exact: bool,
     pub loose: collections::BTreeSet<String>,
+    pub calls_of: collections::BTreeMap<String, collections::BTreeSet<String>>,
 }
 
 impl ProverScope {
-    pub fn unknown() -> ProverScope { ProverScope { ints: collections::BTreeSet::new(), tainted: collections::BTreeSet::new(), locals: collections::BTreeSet::new(), facts: vec![], entry: collections::BTreeMap::new(), path: None, exact: false, loose: collections::BTreeSet::new() } }
+    pub fn unknown() -> ProverScope { ProverScope { ints: collections::BTreeSet::new(), tainted: collections::BTreeSet::new(), locals: collections::BTreeSet::new(), facts: vec![], entry: collections::BTreeMap::new(), path: None, exact: false, loose: collections::BTreeSet::new(), calls_of: collections::BTreeMap::new() } }
     pub fn at_the_entry() -> ProverScope {
         let mut scope = ProverScope::unknown();
         scope.path = Some(vec![]);
@@ -47497,6 +47526,7 @@ impl ProverScope {
         self.locals.insert(name.to_owned());
         self.loose.remove(name);
         self.loose.remove(&length);
+        self.calls_of.remove(name);
         let mut kept: Vec<i64> = vec![];
         for fact in self.facts.iter() {
             let fact = nikaia_std::num::value(fact);
@@ -47672,7 +47702,7 @@ fn values_of(names: &collections::BTreeSet<String>, values: &collections::BTreeM
 
 // --- prover_state.nika ---
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ProverState {
     pub foreign: collections::BTreeMap<String, Option<Foreign>>,
     pub preconditions: collections::BTreeMap<String, Precondition>,
@@ -47686,10 +47716,15 @@ pub struct ProverState {
     pub in_test: bool,
     pub pinned: collections::BTreeMap<String, i64>,
     pub comptime_at: collections::BTreeMap<i64, i64>,
+    pub call_sites: collections::BTreeMap<String, Expr>,
+    pub call_args: collections::BTreeMap<String, (String, Vec<i64>)>,
+    pub wanted: collections::BTreeSet<String>,
+    pub not_run: collections::BTreeMap<String, String>,
+    pub stopped: collections::BTreeMap<String, String>,
 }
 
 impl ProverState {
-    pub fn fresh() -> ProverState { ProverState { foreign: collections::BTreeMap::new(), preconditions: collections::BTreeMap::new(), known: collections::BTreeMap::new(), edges: collections::BTreeSet::new(), candidates: collections::BTreeMap::new(), postconditions: collections::BTreeMap::new(), broken: collections::BTreeSet::new(), before_return: collections::BTreeMap::new(), collecting: true, in_test: false, pinned: collections::BTreeMap::new(), comptime_at: collections::BTreeMap::new() } }
+    pub fn fresh() -> ProverState { ProverState { foreign: collections::BTreeMap::new(), preconditions: collections::BTreeMap::new(), known: collections::BTreeMap::new(), edges: collections::BTreeSet::new(), candidates: collections::BTreeMap::new(), postconditions: collections::BTreeMap::new(), broken: collections::BTreeSet::new(), before_return: collections::BTreeMap::new(), collecting: true, in_test: false, pinned: collections::BTreeMap::new(), comptime_at: collections::BTreeMap::new(), call_sites: collections::BTreeMap::new(), call_args: collections::BTreeMap::new(), wanted: collections::BTreeSet::new(), not_run: collections::BTreeMap::new(), stopped: collections::BTreeMap::new() } }
     pub fn reaches(&self, from: &str, to: &str) -> bool {
         let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
         let mut next: Vec<String> = vec![from.to_owned()];
@@ -47961,7 +47996,7 @@ pub fn postconditions_for(arena: &mut TermArena, posts: &[PostClaim], params: &[
 }
 
 pub fn prover_pinned(pinned: &collections::BTreeMap<String, i64>, scope: &ProverScope, name: &str) -> Option<i64> {
-    if scope.locals.contains(name) { return None; }
+    if !name.starts_with("result@") && scope.locals.contains(name) { return None; }
     (*nikaia_std::index::get(&pinned, name)).copied()
 }
 
@@ -48044,7 +48079,7 @@ fn without_full_stops(text: &str) -> String {
 
 // --- prover_walk.nika ---
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ProverWalk {
     pub state: ProverState,
     pub arena: TermArena,
@@ -48218,6 +48253,8 @@ fn prover_stmt(walk: &mut ProverWalk, stmt: &Spanned<Stmt>, scope: &mut ProverSc
 fn prover_let(walk: &mut ProverWalk, names: &[winnow_grammar::Symbol], mutable: bool, ty: Option<&Type>, value: &Expr, span: Span, scope: &mut ProverScope, nested: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) {
     prover_expr(walk, value, span, &scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
     let tainted = from_outside(value, &scope.tainted, words, library, holes_of);
+    let mut known_calls: collections::BTreeSet<String> = collections::BTreeSet::new();
+    if names.len() == 1 && !mutable { known_calls = prover_known_calls(walk, value, &scope, program, words, own, holes_of, unaliased, condition); }
     if names.len() == 1 && !mutable { prover_call_results(walk, value, true, scope, program, words, own, unaliased, condition); }
     let value_lin = lin_term(value, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, &scope, name) }, &mut walk.arena.nodes);
     let mut value_at_entry: Option<i64> = None;
@@ -48252,6 +48289,7 @@ fn prover_let(walk: &mut ProverWalk, names: &[winnow_grammar::Symbol], mutable: 
     }
     if names.len() != 1 || mutable { return; }
     let name = words.resolve(*nikaia_std::index::get(&names, 0)).to_owned();
+    if !known_calls.is_empty() { scope.calls_of.insert(name.to_owned(), known_calls); }
     if value_lin.is_some() {
         let v = nikaia_std::index::or(value_lin, || 0);
         scope.ints.insert(name.to_owned());
@@ -48385,8 +48423,18 @@ fn prover_expr_stmt(walk: &mut ProverWalk, expr: &Expr, span: Span, scope: &mut 
                 let message = prover_message(config, words);
                 let names = claim_names_in(&cond, words, holes_of);
                 let outcome = walk.state.an_assert(&mut walk.arena, words, &cond, written_of(&cond), &names, message, span, scope, at, ask, model);
-                walk.held.insert((span.start as i64, node_key(&cond)), outcome.held);
-                for found in outcome.findings.iter() { walk.findings.push(found.clone()); }
+                let mut held = outcome.held.clone();
+                let mut findings = outcome.findings.to_owned();
+                if !walk.state.in_test {
+                    let read = prover_known_calls(walk, &cond, &scope, program, words, own, holes_of, unaliased, condition);
+                    if !read.is_empty() {
+                        let ran = prover_claim_ran(walk, &read, &held, &findings, &written_of(&cond), span, written_of);
+                        held = ran.held;
+                        findings = ran.findings;
+                    }
+                }
+                walk.held.insert((span.start as i64, node_key(&cond)), held);
+                for found in findings.iter() { walk.findings.push(found.clone()); }
                 return false;
             }
         },
@@ -48801,6 +48849,93 @@ fn prover_cached_foreign(map: &collections::BTreeMap<String, Option<Foreign>>, k
 fn prover_named_main(own: Option<&str>) -> bool {
     let name = match own { Some(__nikaia_value) => __nikaia_value, None => return false };
     name == "main"
+}
+
+#[allow(clippy::too_many_arguments)]
+fn prover_known_calls(walk: &mut ProverWalk, expr: &Expr, scope: &ProverScope, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> collections::BTreeSet<String> {
+    let mut found: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for one in visited_in_expr(expr) {
+        match one {
+            Expr::Call { func, args, config, .. } => {
+                let func = nikaia_std::boxed::open(func);
+                let callee = prover_bound_callee(func, scope, words, unaliased);
+                if callee.is_some() && config.is_empty() {
+                    let c = nikaia_std::index::or(callee, || "".into());
+                    let mut values: Vec<i64> = vec![];
+                    let mut all = true;
+                    for arg in args.iter() {
+                        let v = folded_whole(arg, words, &|n| { prover_pinned(&walk.state.pinned, scope, n) });
+                        if v.is_none() { all = false; } else { values.push(nikaia_std::index::or(v, || 0)); }
+                    }
+                    if all && prover_returns_whole(walk, &c, program, words, own, condition) {
+                        let name = call_result_name(one);
+                        walk.state.call_sites.insert(name.to_owned(), one.clone());
+                        walk.state.call_args.insert(name.to_owned(), (c.to_owned(), values));
+                        found.insert(name);
+                    }
+                }
+            },
+            _ => { },
+        }
+    }
+    if scope.calls_of.is_empty() { return found; }
+    let read = claim_names_in(expr, words, holes_of);
+    for (bound, calls) in scope.calls_of.iter() { if read.contains(bound) { for call in calls.iter() { found.insert(call.to_owned()); } } }
+    found
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ProverRan {
+    held: ClaimHeld,
+    findings: Vec<Finding>,
+}
+
+fn prover_claim_ran(walk: &mut ProverWalk, read: &collections::BTreeSet<String>, held: &ClaimHeld, findings: &[Finding], written: &str, span: Span, written_of: &impl Fn(&Expr) -> String) -> ProverRan {
+    let mut out = ProverRan { held: held.clone(), findings: vec![] };
+    let mut values: Vec<String> = vec![];
+    for call in read.iter() {
+        let site = match *nikaia_std::index::get(&walk.state.call_sites, call) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let text = written_of(&site);
+        let value = *nikaia_std::index::get(&walk.state.pinned, call);
+        if value.is_some() { values.push(format!("`{}` is {}, run while the program was built", text, nikaia_std::index::or(value, || 0))); }
+    }
+    let joined = values.join("; ");
+    for found in findings.iter() {
+        let mut one = found.clone();
+        if one.code == "NK1207" && !values.is_empty() { one.notes.push(format!("{}.", joined)); }
+        out.findings.push(one);
+    }
+    let open = match prover_open_reason(&held) { Some(__nikaia_value) => __nikaia_value, None => return out };
+    if open.starts_with("it is false") { return out; }
+    let mut why = open.to_owned();
+    for call in read.iter() {
+        if (*nikaia_std::index::get(&walk.state.pinned, call)).is_some() { continue; }
+        let site = match *nikaia_std::index::get(&walk.state.call_sites, call) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let text = written_of(&site);
+        let stop = *nikaia_std::index::get(&walk.state.stopped, call);
+        if stop.is_some() {
+            let words_said = nikaia_std::index::or(stop, || "").to_owned();
+            if !walk.state.collecting { out.findings.push(Finding { code: String::from("NK1207"), span, message: format!("`{}` stops the program every time it is reached, before `{}` is checked.", text, written), notes: vec![format!("The compiler ran `{}` while the program was built, as the program runs it, and it stopped: {}.", text, words_said)], help: Some(String::from("Fix the call, or the function it calls, as you would fix the program stopping there.")), warning: false, labels: vec![] }); }
+            why = format!("{}; `{}` stops the program: {}", why, text, words_said);
+            continue;
+        }
+        let not = *nikaia_std::index::get(&walk.state.not_run, call);
+        if not.is_some() {
+            let because = nikaia_std::index::or(not, || "").to_owned();
+            why = format!("{}; `{}` was not run while the program was built: {}", why, text, lowered_first(&without_full_stops(&because)));
+            continue;
+        }
+        walk.state.wanted.insert(call.to_owned());
+    }
+    out.held = ClaimHeld::AtRunTime(why);
+    out
+}
+
+fn prover_open_reason(held: &ClaimHeld) -> Option<String> {
+    match held {
+        ClaimHeld::AtRunTime(why) => Some(why.to_owned()),
+        _ => None,
+    }
 }
 
 
@@ -60260,7 +60395,7 @@ pub mod proofs_book {
 }
 pub mod prove_terms {
     #[allow(unused_imports)]
-    pub use super::{lin_term, call_result_name, claim_term, nothing_pinned};
+    pub use super::{lin_term, call_result_name, claim_term, nothing_pinned, folded_whole};
 }
 pub mod prove_text {
     #[allow(unused_imports)]

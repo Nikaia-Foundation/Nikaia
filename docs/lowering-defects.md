@@ -439,3 +439,17 @@ parameter (#628). Worked around with `let other: Tier = ...`, which lowers `.cop
 
 A `let` without a type over an index fallback whose element is a word lowers the copy, as the
 typed one does; then remove the annotation in `same_tiers`.
+
+## D43 (new). `f(m[k] ?? continue)` over a map of a struct hands `&&T` to a `ref` parameter
+
+In `prover_claim_ran` (`prover_walk.nika`, #633), `written_of(walk.state.call_sites[call] ??
+continue)` with `call_sites: BTreeMap[String, Expr]` and `written_of: fn(ref Expr) -> String`
+lowered to `written_of(&match *get(..) { Some(v) => v, None => continue })`: `v` is already
+`&Expr`, and rustc refuses the extra `&` (`expected Expr, found &Expr`). The checker accepts it.
+Written as `let site = m[k] ?? continue` and `written_of(site)`, which lowers right.
+
+### To build
+
+An argument that is an index fallback over a map whose value is not a word passes the reference
+the fallback already is, as a `let` of it does; then fold the two lines in `prover_claim_ran`
+back into one.

@@ -1,0 +1,10 @@
+error[NK1207]: `b > 10` is false every time it is reached.
+  --> four_by_example.nika:4:4
+   |
+ 4 |    assert(b>10)
+   |    ^^^^^^^^^^^^
+   |
+   = note: What is known before it rules the claim out: `b` is 0.
+   = note: `example(2)` is 12, run while the program was built.
+   = help: If the claim is right, the code before it is wrong; if the code is right, the claim is.
+1 claim shown false

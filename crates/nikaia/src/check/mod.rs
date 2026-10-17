@@ -454,7 +454,18 @@ fn walked<'a>(
         .map(|(a, b)| (*a as usize, *b as usize))
         .collect();
     let comptimes = crate::prove::Comptimes::of(parsed, &checker.s.facts.comptime_values);
-    let proved = crate::prove::prove(parsed, own, library, &keys, &comptimes);
+    // **A call an open claim reads is run as a `comptime` is**
+    // ([ADR-359](../../docs/specification/adr/adr-359.md) D11-D13), where this
+    // build has a place to compile it.
+    let host = checker.host();
+    let runner = |call: &Expr, callee: &str, args: &[i64]| {
+        host.run_for_a_claim(call, callee, args, &comptimes.by_name)
+    };
+    let run: Option<crate::prove::ClaimRunner<'_>> = match reads.workshop().somewhere() {
+        true => Some(&runner),
+        false => None,
+    };
+    let proved = crate::prove::prove(parsed, own, library, &keys, &comptimes, run);
     checker.s.findings.extend(proved.findings);
     checker.s.facts.entries = proved.entries;
     checker.s.facts.reaches = proved.reaches;

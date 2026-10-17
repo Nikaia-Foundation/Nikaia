@@ -323,7 +323,8 @@ fn a_program_may_declare_its_own_assert() {
 
 /// **`--asserts` names every claim and how it is held** (ADR-269 D7): proved,
 /// a precondition and the calls that check it (D5), or checked at run time
-/// with the reason - and how many of each.
+/// with the reason - and how many of each. `twice > 2` reads `half(4)`, which
+/// the build runs for it (ADR-359 D11): 2.
 #[test]
 fn asserts_reports_every_claim() {
     let source = "fn half(n: i64) -> i64 sync {\n\
@@ -354,14 +355,13 @@ fn asserts_reports_every_claim() {
     );
     assert!(
         stdout.contains(
-            "asserts in claims.nika: 3 - proved 1, preconditions 1, checked at run time 1, \
+            "asserts in claims.nika: 3 - proved 2, preconditions 1, checked at run time 0, \
              checked by a test 0, refused 0\n\
              \x20 claims.nika:2  assert(n >= 0; message: \"not negative\")  precondition of \
              `half`: proved at every call the compiler sees; any other reaches the entry \
              that checks it\n\
              \x20 claims.nika:9  assert(four == 4)  proved\n\
-             \x20 claims.nika:11  assert(twice > 2)  checked at run time: nothing before it \
-             shows it\n"
+             \x20 claims.nika:11  assert(twice > 2)  proved\n"
         ),
         "{stdout}"
     );
@@ -415,5 +415,31 @@ fn a_body_that_leaves_is_not_followed_by_ok() {
     let said = String::from_utf8_lossy(&compiled.stderr);
     assert!(compiled.status.success(), "{said}");
     assert!(!said.contains("unreachable"), "{said}");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **The owner's program** (#632, #633): `example(2)` is 12, so `4 / example(2)`
+/// is 0 and `assert(b > 10)` is false every time it is reached. The compiler
+/// runs `example(2)` while it builds (ADR-359 D11), as a `comptime` runs, folds
+/// the quotient (D5) and refuses the program with what `fixtures/` says.
+#[test]
+fn the_owners_program_is_refused_while_it_is_built() {
+    let fixtures = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+    let source = std::fs::read_to_string(fixtures.join("four_by_example.nika")).expect("read");
+    let expected = std::fs::read_to_string(fixtures.join("four_by_example.stderr")).expect("read");
+    let dir = common::scratch_dir("assert-four-by-example");
+    std::fs::write(dir.join("four_by_example.nika"), source).expect("write");
+    let out = Command::new(env!("CARGO_BIN_EXE_nikaia"))
+        .current_dir(&dir)
+        .args([
+            "lower",
+            "four_by_example.nika",
+            "--output",
+            "four_by_example.rs",
+        ])
+        .output()
+        .expect("the nikaia binary runs");
+    assert!(!out.status.success());
+    assert_eq!(String::from_utf8_lossy(&out.stderr), expected);
     std::fs::remove_dir_all(&dir).ok();
 }
