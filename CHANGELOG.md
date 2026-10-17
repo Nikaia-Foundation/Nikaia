@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.976] — 2026-10-17
+
+**int: the values of an i64, its representation the compiler's choice (#630)**
+- Part I 2.2: `int` beside the five fixed widths; it holds an `i64`'s values and aborts where an `i64` would, `int` and `i64` take each other without `as`, its representation is the compiler's; a fixed width is exact (ADR-285 D36, D37, D39).
+- Part III C.3: `NK1262`, an `int` in an `extern "C"` signature or a described Rust contract (ADR-285 D38).
+- Specification only; the checker and the lowering follow in #630's To build list.
+
 ## [0.0.975] — 2026-10-17
 
 **ref String only at the C boundary; ref on a word refused everywhere (#628)**

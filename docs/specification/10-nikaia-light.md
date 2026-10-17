@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.975 (Draft)
+**Version:** 0.0.976 (Draft)
 **Date:** 2026-10-17
 
 ---
@@ -219,8 +219,16 @@ Three further rules about the list:
 Nikaia provides basic types to represent simple values.
 
 * **Integers:** whole numbers without fractions.
-    * `i64`: a 64-bit integer. It is the type of most numbers, and the type
-      of a **length**: `xs.len()` hands back an `i64`, and an index is one.
+    * `int`: an integer with the values of an `i64`. It is the type of most
+      numbers. It stops the program where an `i64` would, and an `int` and an
+      `i64` take each other without `as`. How many bits hold it is the
+      compiler's choice: fewer only where no value, no result and no abort
+      changes. An `extern "C"` signature and a described Rust contract take a
+      fixed width; an `int` there is refused with `NK1262`
+      ([ADR-285](adr/adr-285.md) D36-D39).
+    * `i64`: a 64-bit integer, exactly that width in memory and in arithmetic,
+      as each fixed width below is. It is the type of a **length**:
+      `xs.len()` hands back an `i64`, and an index is one.
     * `i32`: a 32-bit integer. It is written where the layout matters: a
       struct that has to be small, a wire format, a C header. An `i32` that
       meets an `i64` becomes one (below).
@@ -309,8 +317,10 @@ same way.
 **A number too wide for a `u64` is refused** (Part III C.1), and one above
 an `i64` is a `u64`'s: `let basis: u64 = 0xcbf29ce484222325`.
 
-**These five are the integer types a program writes:** `i64`, `i32`, `u8`,
-`u64` and `u32`. The specification does not offer others: a written `usize`,
+**These are the integer types a program writes:** `int`, and the five fixed
+widths `i64`, `i32`, `u8`, `u64` and `u32`. A fixed width is written where the
+width is the point; neither is a warning anywhere. The specification does not
+offer others: a written `usize`,
 `isize`, `i8`, `i16`, `u16`, `i128` or `u128` is refused with `NK1135`, and so is
 `str`, outside an `extern "C"` declaration (Part III 15.1). A **length** is an `i64`:
 `for i in 0..<xs.len()` gives an `i64`, `xs[i]` takes one, and neither
