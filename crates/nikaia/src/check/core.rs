@@ -203,10 +203,11 @@ impl CheckHost for Core<'_, '_> {
 
     fn kept_call(
         &self,
-        name: winnow_grammar::Symbol,
+        func: &Expr,
         arity: i64,
+        receiver: bool,
     ) -> (Vec<winnow_grammar::Symbol>, Expr) {
-        self.h.kept_call(name, arity)
+        self.h.kept_call(func, arity, receiver)
     }
 
     fn intern(&self, text: &str) -> winnow_grammar::Symbol {

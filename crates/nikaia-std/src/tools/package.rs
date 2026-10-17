@@ -15843,37 +15843,19 @@ pub fn check_core_a_kept_lambda<H: CheckHost>(state: &mut CheckState, world: &Ch
                 Expr::Variable(name, _) => {
                     let name = *name;
                     let named = world.words.resolve(name).to_owned();
-                    if state.lookup(&named).is_none() && world.own.functions.contains_key(&named) {
-                        state.facts.kept_functions.insert(id_of(value) as i64, (!is_sync, can_throw, params.len() as i64));
-                        let (names, call) = host.kept_call(name, params.len() as i64);
-                        let mut frame: Vec<CheckLocal> = vec![];
-                        let mut at: i64 = 0;
-                        for n in names.iter() {
-                            let n = *n;
-                            if ((at) as usize) < params.len() {
-                                let id = state.a_new_binding();
-                                frame.push(CheckLocal::free(world.words.resolve(n).to_owned(), (*nikaia_std::index::get(&params, (at) as usize)).clone(), id));
-                            }
-                            at += 1;
-                        }
-                        state.scope.push(frame);
-                        let was_caught = state.flow.caught;
-                        let enclosing: Option<CheckGuarded> = match state.flow.guarded.as_ref() {
-                            Some(__nikaia_it) => Some(__nikaia_it.clone()),
-                            None => None,
-                        };
-                        let handed: Option<CheckHanded> = match state.handed_over.as_ref() {
-                            Some(__nikaia_it) => Some(__nikaia_it.clone()),
-                            None => None,
-                        };
-                        state.flow.caught = true;
-                        state.flow.guarded = None;
-                        state.handed_over = None;
-                        check_core_expr(state, world, host, &call, span);
-                        state.flow.caught = was_caught;
-                        state.flow.guarded = enclosing;
-                        state.handed_over = handed;
-                        state.scope.pop();
+                    if state.lookup(&named).is_none() && world.own.functions.contains_key(&named) { check_core_a_kept_function(state, world, host, params, is_sync, can_throw, false, value, span); }
+                },
+                Expr::Path(segments, _) => {
+                    let mut names: Vec<String> = vec![];
+                    for segment in segments.iter() {
+                        let segment = *segment;
+                        names.push(world.words.resolve(segment).to_owned());
+                    }
+                    let joined = names.join("::");
+                    if world.own.functions.contains_key(&joined) {
+                        let contract = match ledger_function(world, &joined) { Some(__nikaia_value) => __nikaia_value, None => return };
+                        let signature = match contract.signature { Some(__nikaia_value) => __nikaia_value, None => return };
+                        check_core_a_kept_function(state, world, host, params, is_sync, can_throw, signature.takes_a_receiver(), value, span);
                     }
                 },
                 _ => { },
@@ -15881,6 +15863,42 @@ pub fn check_core_a_kept_lambda<H: CheckHost>(state: &mut CheckState, world: &Ch
         },
         _ => { },
     }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+fn check_core_a_kept_function<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, params: &[Ty], is_sync: bool, can_throw: bool, receiver: bool, value: &Expr, span: &Span) {
+    state.facts.kept_functions.insert(id_of(value) as i64, (!is_sync, can_throw, params.len() as i64));
+    let (names, call) = host.kept_call(value, params.len() as i64, receiver);
+    let mut frame: Vec<CheckLocal> = vec![];
+    let mut at: i64 = 0;
+    for n in names.iter() {
+        let n = *n;
+        if ((at) as usize) < params.len() {
+            let id = state.a_new_binding();
+            frame.push(CheckLocal::free(world.words.resolve(n).to_owned(), (*nikaia_std::index::get(&params, (at) as usize)).clone(), id));
+        }
+        at += 1;
+    }
+    state.scope.push(frame);
+    let was_caught = state.flow.caught;
+    let enclosing: Option<CheckGuarded> = match state.flow.guarded.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    };
+    let handed: Option<CheckHanded> = match state.handed_over.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    };
+    state.flow.caught = true;
+    state.flow.guarded = None;
+    state.handed_over = None;
+    check_core_expr(state, world, host, &call, span);
+    state.flow.caught = was_caught;
+    state.flow.guarded = enclosing;
+    state.handed_over = handed;
+    state.scope.pop();
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -21002,7 +21020,7 @@ pub struct CheckPlace {
 
 pub trait CheckHost {
     fn hole(&self, site: u32, text: &str) -> Option<Expr>;
-    fn kept_call(&self, name: winnow_grammar::Symbol, arity: i64) -> (Vec<winnow_grammar::Symbol>, Expr);
+    fn kept_call(&self, func: &Expr, arity: i64, receiver: bool) -> (Vec<winnow_grammar::Symbol>, Expr);
     fn intern(&self, text: &str) -> winnow_grammar::Symbol;
     fn wrap_hole(&self, hole: &Expr, wraps: &[(i64, winnow_grammar::Symbol)]) -> Expr;
     fn literal_holes(&self, literal: &Expr) -> Vec<Expr>;

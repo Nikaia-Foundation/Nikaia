@@ -181,10 +181,12 @@ impl CheckHost for Host<'_> {
 
     fn kept_call(
         &self,
-        name: winnow_grammar::Symbol,
+        func: &Expr,
         arity: i64,
+        receiver: bool,
     ) -> (Vec<winnow_grammar::Symbol>, Expr) {
-        self.parsed.kept_function_call(name, arity as usize)
+        self.parsed
+            .kept_function_call(func, arity as usize, receiver)
     }
 
     fn intern(&self, text: &str) -> winnow_grammar::Symbol {

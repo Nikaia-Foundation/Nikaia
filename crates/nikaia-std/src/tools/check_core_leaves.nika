@@ -107,33 +107,21 @@ pub fn check_core_a_kept_lambda[H: CheckHost](mut state: CheckState, world: ref 
                 Expr::Variable(name, _) => {
                     let named = world.words.resolve(name).clone()
                     if state.lookup(named) == null && world.own.functions.contains_key(named) {
-                        state.facts.kept_functions.insert(id_of(value) as i64, (!is_sync, can_throw, params.len() as i64))
-                        let (names, call) = host.kept_call(name, params.len() as i64)
-                        let mut frame: Vec[CheckLocal] = []
-                        let mut at = 0
-                        for n in names {
-                            if at < params.len() {
-                                let id = state.a_new_binding()
-                                frame.push(CheckLocal::free(world.words.resolve(n).clone(), params[at].clone(), id))
-                            }
-                            at += 1
-                        }
-                        state.scope.push(frame)
-                        // **Storing a function calls nothing** (ADR-351 D2):
-                        // the call typed here runs when the value is called,
-                        // so what it can fail with is the value's, not this
-                        // function's, and no `catch` around it counts it.
-                        let was_caught = state.flow.caught
-                        let enclosing: CheckGuarded? = state.flow.guarded?.clone()
-                        let handed: CheckHanded? = state.handed_over?.clone()
-                        state.flow.caught = true
-                        state.flow.guarded = null
-                        state.handed_over = null
-                        check_core_expr(state, world, host, call, span)
-                        state.flow.caught = was_caught
-                        state.flow.guarded = enclosing
-                        state.handed_over = handed
-                        state.scope.pop()
+                        check_core_a_kept_function(state, world, host, params, is_sync, can_throw, false, value, span)
+                    }
+                }
+                // **A method of this program named by its path** (`P::add`,
+                // #601) is the closure that calls it, as a named function is.
+                Expr::Path(segments, _) => {
+                    let mut names: Vec[String] = []
+                    for segment in segments {
+                        names.push(world.words.resolve(segment).clone())
+                    }
+                    let joined = names.join("::")
+                    if world.own.functions.contains_key(joined) {
+                        let contract = ledger_function(world, joined) ?? return
+                        let signature = contract.signature ?? return
+                        check_core_a_kept_function(state, world, host, params, is_sync, can_throw, signature.takes_a_receiver(), value, span)
                     }
                 }
                 else => {}
@@ -141,6 +129,39 @@ pub fn check_core_a_kept_lambda[H: CheckHost](mut state: CheckState, world: ref 
         }
         else => {}
     }
+}
+
+/// **A function of this program, named where a function value is kept**: the
+/// call it stands for (`CheckHost::kept_call`) is typed here, in a frame that
+/// binds the kept type's parameters, and recorded in `kept_functions` for the
+/// emitter. A method that takes a `self` (`receiver`) is called on the first.
+fn check_core_a_kept_function[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, params: ref Vec[Ty], is_sync: bool, can_throw: bool, receiver: bool, value: ref Expr, span: ref Span) sync {
+    state.facts.kept_functions.insert(id_of(value) as i64, (!is_sync, can_throw, params.len() as i64))
+    let (names, call) = host.kept_call(value, params.len() as i64, receiver)
+    let mut frame: Vec[CheckLocal] = []
+    let mut at = 0
+    for n in names {
+        if at < params.len() {
+            let id = state.a_new_binding()
+            frame.push(CheckLocal::free(world.words.resolve(n).clone(), params[at].clone(), id))
+        }
+        at += 1
+    }
+    state.scope.push(frame)
+    // **Storing a function calls nothing** (ADR-351 D2): the call typed here
+    // runs when the value is called, so what it can fail with is the value's,
+    // not this function's, and no `catch` around it counts it.
+    let was_caught = state.flow.caught
+    let enclosing: CheckGuarded? = state.flow.guarded?.clone()
+    let handed: CheckHanded? = state.handed_over?.clone()
+    state.flow.caught = true
+    state.flow.guarded = null
+    state.handed_over = null
+    check_core_expr(state, world, host, call, span)
+    state.flow.caught = was_caught
+    state.flow.guarded = enclosing
+    state.handed_over = handed
+    state.scope.pop()
 }
 
 /// **A literal takes the use's type, whichever literal it is**: an array where

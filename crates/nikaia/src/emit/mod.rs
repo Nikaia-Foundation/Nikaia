@@ -6947,7 +6947,7 @@ impl<'p> Emitter<'p> {
             Expr::Variable(name, _) if self.constructs_by_name(self.text(*name)) => {
                 out.push(&self.path(&[self.text(*name), "new"]))
             }
-            Expr::Variable(name, _)
+            Expr::Variable(_, _) | Expr::Path(_, _)
                 if !self.walk(|w| w.in_a_kept_call)
                     && self
                         .s
@@ -6955,12 +6955,19 @@ impl<'p> Emitter<'p> {
                         .kept_functions
                         .contains_key(&crate::check::value_node(expr)) =>
             {
-                // **A named function where a function value is kept** is the
-                // closure that calls it, written as the checker typed it.
+                // **A named function, or a method named by its path, where a
+                // function value is kept** is the closure that calls it,
+                // written as the checker typed it.
                 let (pauses, fails, arity) =
                     self.s.facts.kept_functions[&crate::check::value_node(expr)];
-                let (names, call) =
-                    crate::check::kept_function_call(self.parsed, *name, arity as usize);
+                // The call the checker built and typed, read back by its key
+                // ([`crate::parser::Parsed::kept_function_call`]): only the
+                // checker knows whether a method takes a `self`.
+                let key = (self.parsed.kept_function_text(expr), arity);
+                let Some(kept) = self.s.kept_calls.get(&key) else {
+                    return Err(anyhow!("no kept call was built for `{}`", key.0));
+                };
+                let (names, call) = (kept.names.clone(), kept.call.clone());
                 out.push(&format!(
                     "nikaia_std::func::Kept(std::sync::Arc::new(move |{}| ",
                     names

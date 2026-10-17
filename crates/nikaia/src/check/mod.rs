@@ -655,13 +655,6 @@ fn finished(checker: Checker<'_>) -> Checked {
 /// arm written `=> { throw NotFound }` still has.
 impl Checker<'_> {}
 
-/// **The call a named function stands for where a function value is kept**
-/// ([`Parsed::kept_function_call`]): one construction for the checker, which
-/// types it, and the emitter, which writes it.
-pub(crate) fn kept_function_call(parsed: &Parsed, name: Ident, arity: usize) -> (Vec<Ident>, Expr) {
-    parsed.kept_function_call(name, arity)
-}
-
 /// What a computed build-time value stands for, which its refusal names.
 #[derive(Clone, Copy)]
 pub(crate) enum Computing {

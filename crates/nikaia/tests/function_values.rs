@@ -221,3 +221,94 @@ fn a_named_function_handed_to_a_kept_parameter_runs() {
     );
     assert_eq!(String::from_utf8_lossy(&ran.stdout).trim(), "8 5 8 8 5");
 }
+
+/// **A method named by its path where a function value is kept** is the
+/// closure that calls it, as a named function is (#601): handed to a kept
+/// parameter (`keep(P::add)`) and put in a struct literal's field (`One { f:
+/// P::add }`), one that takes its `self` by value and pauses (`P::slowly`),
+/// one with no `self` that pauses (`P::scaled`), and a method beside a lambda
+/// in one call.
+#[test]
+fn a_method_named_where_a_function_value_is_kept_runs() {
+    let dir = common::scratch_dir("function-values-kept-method");
+    std::fs::write(
+        dir.join("kept.nika"),
+        "use std::time\n\
+         \n\
+         struct P {\n\
+         \x20   base: i64,\n\
+         }\n\
+         impl P {\n\
+         \x20   fn add(ref self, n: i64) -> i64 {\n\
+         \x20       return self.base + n\n\
+         \x20   }\n\
+         \x20   fn slowly(self, n: i64) -> i64 {\n\
+         \x20       time::sleep(1.millis())\n\
+         \x20       return self.base * n\n\
+         \x20   }\n\
+         \x20   fn scaled(n: i64) -> i64 {\n\
+         \x20       time::sleep(1.millis())\n\
+         \x20       return n * 3\n\
+         \x20   }\n\
+         }\n\
+         struct One {\n\
+         \x20   f: fn(ref P, i64) -> i64 sync,\n\
+         }\n\
+         struct Own {\n\
+         \x20   f: fn(P, i64) -> i64,\n\
+         }\n\
+         struct Slow {\n\
+         \x20   f: fn(i64) -> i64,\n\
+         }\n\
+         struct Two {\n\
+         \x20   f: fn(ref P, i64) -> i64 sync,\n\
+         \x20   g: fn(ref P, i64) -> i64 sync,\n\
+         }\n\
+         fn keep(f: fn(ref P, i64) -> i64 sync) -> One {\n\
+         \x20   return One { f: f }\n\
+         }\n\
+         fn keep_own(f: fn(P, i64) -> i64) -> Own {\n\
+         \x20   return Own { f: f }\n\
+         }\n\
+         fn keep_slow(f: fn(i64) -> i64) -> Slow {\n\
+         \x20   return Slow { f: f }\n\
+         }\n\
+         fn keep_two(f: fn(ref P, i64) -> i64 sync, g: fn(ref P, i64) -> i64 sync) -> Two {\n\
+         \x20   return Two { f: f, g: g }\n\
+         }\n\
+         fn main() {\n\
+         \x20   let p = P { base: 10 }\n\
+         \x20   let o = keep(P::add)\n\
+         \x20   let a = o.f\n\
+         \x20   let d = One { f: P::add }\n\
+         \x20   let b = d.f\n\
+         \x20   let w = keep_own(P::slowly)\n\
+         \x20   let c = w.f\n\
+         \x20   let s = keep_slow(P::scaled)\n\
+         \x20   let h = s.f\n\
+         \x20   let e = Slow { f: P::scaled }\n\
+         \x20   let k = e.f\n\
+         \x20   let t = keep_two(P::add, fn(q, n) { q.base - n })\n\
+         \x20   let x = t.f\n\
+         \x20   let y = t.g\n\
+         \x20   println(f\"{a(p, 4)} {b(p, 5)} {c(P { base: 10 }, 3)} {h(3)} {k(2)} {x(p, 1)} {y(p, 1)}\")\n\
+         }\n",
+    )
+    .expect("write the source");
+    let ran = Command::new(env!("CARGO_BIN_EXE_nikaia"))
+        .current_dir(&dir)
+        .args(["run", "--no-cache", "kept.nika"])
+        .env_remove("CARGO_TARGET_DIR")
+        .output()
+        .expect("the nikaia binary runs");
+    std::fs::remove_dir_all(&dir).ok();
+    assert!(
+        ran.status.success(),
+        "{}",
+        String::from_utf8_lossy(&ran.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&ran.stdout).trim(),
+        "14 15 30 9 6 11 9"
+    );
+}

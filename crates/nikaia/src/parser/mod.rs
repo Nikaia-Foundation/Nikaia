@@ -483,11 +483,20 @@ impl Parsed {
 
     /// **The call a named function stands for where a function value is
     /// kept**: `double` put in a field is `fn(__nikaia_arg0) {
-    /// double(__nikaia_arg0) }`. Built once for a name and an arity, with ids of
-    /// its own, and read by the checker, which types it, and the emitter, which
-    /// writes it - so the two agree about every key the call is looked up by.
-    pub fn kept_function_call(&self, name: Symbol, arity: usize) -> (Vec<Symbol>, ast::Expr) {
-        let key = (self.text(name).to_string(), arity);
+    /// double(__nikaia_arg0) }`, and a method named by its path, `P::add`, is
+    /// `fn(__nikaia_arg0, __nikaia_arg1) { __nikaia_arg0.add(__nikaia_arg1) }`
+    /// where it takes a `self` (`receiver`), and the call by its path where it
+    /// does not. `func` is the name or the path as written. Built once for a
+    /// name and an arity, with ids of its own, and read by the checker, which
+    /// types it, and the emitter, which writes it - so the two agree about
+    /// every key the call is looked up by ([`Parsed::kept_function_text`]).
+    pub fn kept_function_call(
+        &self,
+        func: &ast::Expr,
+        arity: usize,
+        receiver: bool,
+    ) -> (Vec<Symbol>, ast::Expr) {
+        let key = (self.kept_function_text(func), arity);
         let mut built = self.kept_calls.lock().expect("a kept call build panicked");
         built
             .entry(key)
@@ -495,18 +504,51 @@ impl Parsed {
                 let names: Vec<Symbol> = (0..arity)
                     .map(|at| self.interner.intern_string(&format!("__nikaia_arg{at}")))
                     .collect();
-                let call = ast::Expr::Call {
-                    func: Box::new(ast::Expr::Variable(name, ast::NodeId::fresh())),
-                    args: names
-                        .iter()
-                        .map(|n| ast::Expr::Variable(*n, ast::NodeId::fresh()))
-                        .collect(),
-                    config: Vec::new(),
-                    id: ast::NodeId::fresh(),
+                let mut args: Vec<ast::Expr> = names
+                    .iter()
+                    .map(|n| ast::Expr::Variable(*n, ast::NodeId::fresh()))
+                    .collect();
+                let call = match func {
+                    ast::Expr::Path(segments, _) if receiver && !args.is_empty() => {
+                        ast::Expr::MethodCall {
+                            receiver: Box::new(args.remove(0)),
+                            method: *segments.last().expect("a path has a segment"),
+                            args,
+                            config: Vec::new(),
+                            id: ast::NodeId::fresh(),
+                        }
+                    }
+                    ast::Expr::Path(segments, _) => ast::Expr::Call {
+                        func: Box::new(ast::Expr::Path(segments.clone(), ast::NodeId::fresh())),
+                        args,
+                        config: Vec::new(),
+                        id: ast::NodeId::fresh(),
+                    },
+                    ast::Expr::Variable(name, _) => ast::Expr::Call {
+                        func: Box::new(ast::Expr::Variable(*name, ast::NodeId::fresh())),
+                        args,
+                        config: Vec::new(),
+                        id: ast::NodeId::fresh(),
+                    },
+                    other => unreachable!("a kept function is a name or a path, not {other:?}"),
                 };
                 (names, call)
             })
             .clone()
+    }
+
+    /// **What a kept function's call is cached by**: the name, or the path
+    /// joined with `::` ([`Parsed::kept_function_call`]).
+    pub fn kept_function_text(&self, func: &ast::Expr) -> String {
+        match func {
+            ast::Expr::Path(segments, _) => segments
+                .iter()
+                .map(|s| self.text(*s))
+                .collect::<Vec<_>>()
+                .join("::"),
+            ast::Expr::Variable(name, _) => self.text(*name).to_string(),
+            other => unreachable!("a kept function is a name or a path, not {other:?}"),
+        }
     }
 
     /// Every hole parsed so far, by the site and the text: what the emitter is

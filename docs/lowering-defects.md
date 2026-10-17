@@ -453,3 +453,20 @@ Written as `let site = m[k] ?? continue` and `written_of(site)`, which lowers ri
 An argument that is an index fallback over a map whose value is not a word passes the reference
 the fallback already is, as a `let` of it does; then fold the two lines in `prover_claim_ran`
 back into one.
+
+## D44 (new). A function value kept with a `ref` parameter and a type that may pause: rustc "lifetime may not live long enough"
+
+`struct One { f: fn(ref P, i64) -> i64 }` and `One { f: fn(q, n) { q.add(n) } }` pass the
+checker. The kept type lowers to `Kept<dyn Fn(&P, i64) -> Boxed<i64>>`, and the closure to
+`move |q, n| Box::pin(async move { q.add(n) }) as Boxed<_>`: the future borrows `q`, and
+`Boxed` is `'static`, so rustc refuses it. A lambda, a named function and a method named by its
+path (`One { f: P::add }`, #601) all meet it; with `sync` in the type, or a parameter taken by
+value, they run. Met while building #601; its tests use `sync` kept types for methods that
+take `ref self`.
+
+### To build
+
+A kept function type that may pause and takes a `ref` parameter lowers to a future that may
+borrow it (`dyn for<'a> Fn(&'a P, i64) -> Pin<Box<dyn Future<Output = i64> + 'a>>`), or the
+checker refuses it with a message that names `sync` or a parameter by value; then a test in
+`function_values.rs` with `fn(ref P, i64) -> i64` and a method that pauses.

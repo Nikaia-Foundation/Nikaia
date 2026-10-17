@@ -62,9 +62,11 @@ pub trait CheckHost {
     /// The expression written in the hole `text` of a literal at byte `site`,
     /// where it parses.
     fn hole(ref self, site: u32, text: ref String) -> Expr? sync
-    /// The parameters and the call a named function stands for where a function
-    /// value is kept.
-    fn kept_call(ref self, name: winnow_grammar::Symbol, arity: i64) -> (Vec[winnow_grammar::Symbol], Expr) sync
+    /// The parameters and the call a named function, or a method named by its
+    /// path (`func`, as written), stands for where a function value is kept:
+    /// a method call on the first parameter where it takes a `self`
+    /// (`receiver`).
+    fn kept_call(ref self, func: ref Expr, arity: i64, receiver: bool) -> (Vec[winnow_grammar::Symbol], Expr) sync
     /// A symbol for a name, in the interner of this file.
     fn intern(ref self, text: ref String) -> winnow_grammar::Symbol sync
     /// A hole with the method calls the tier pass wraps its nodes in, by id.
