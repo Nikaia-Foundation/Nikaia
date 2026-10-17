@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1002] — 2026-10-17
+
+**The prover reads a claim past a `for` over a range through its invariant (ADR-361 D1, #640)**
+- `for i in a..<b` and `for i in a..b` are read as the `while` they mean: `i` starts at `a`, goes up by one each turn and stops once it reaches or passes `b`. A claim past the loop is proved through the invariant the strategies find and the three queries check. A `for` over a list or map leaves the claim open, as before.
+
 ## [0.0.1001] — 2026-10-17
 
 **The prover follows a `let mut` through each assignment (ADR-361 D9, #642)**
