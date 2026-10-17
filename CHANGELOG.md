@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1009] — 2026-10-17
+
+**The prover follows a `let mut` through each assignment and branch (ADR-361 D9, #642)**
+- An assignment `x = e`, `x += e`, `x -= e` or `x *= k` (k a constant) gives a tracked `let mut` whole number a new value over the old one. After an `if` that changes it, it is either side's value under that side's condition; an `if` without `else` keeps the old value on the other side. A binding handed to a call or changed from a lambda stays out. A claim already decided without these facts does not pay for them.
+
 ## [0.0.1008] — 2026-10-17
 
 **The toolchain's Nikaia package is lowered at `user_parallelism = yes` (ADR-363 D1, #646)**
