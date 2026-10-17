@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1000] — 2026-10-17
+
+**The prover reads through a `while` loop: closed forms and intervals find an invariant, three queries check it (ADR-361 D1-D5, D7, #640)**
+- A claim after or in a `while` loop that reads a name the loop changes is asked once more through the loop's problem in Horn clauses; an invariant from closed forms and intervals is used only once three queries prove it. A `let mut` whole number is a variable of the proof until it is assigned. `--asserts` names the invariant and the strategy that found it, or the loop and the names it changes; `NIKAIA_PROVER_COUNTS` counts loop claims and loop queries. A claim carried back to `main`'s entry that reads no parameter is not a precondition.
+
 ## [0.0.999] — 2026-10-17
 
 **A build-time value that runs code is compiled, never interpreted (ADR-321 D1, #636)**
