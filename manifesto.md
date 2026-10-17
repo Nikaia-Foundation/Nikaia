@@ -48,12 +48,22 @@ fast software mean that you manage the machinery yourself?
 We don't think it has to be that way. We think much of that weight can move from the
 programmer into the compiler.
 
-**Nikaia is an attempt to prove it.** It goes after ground that belongs to both camps today:
-the scripts, the services, the tools, the programs that have to be fast and right at once.
-Much of what is written in Python or JavaScript today could be written in Nikaia, and be
-faster and safer for it. But Nikaia doesn't have to win everywhere. There will be places
-where a dynamic runtime is the whole point, and systems that need a hand on every byte. Nikaia
-doesn't need to take every one of them to matter.
+**Nikaia is an attempt to prove it.** And it starts in the middle.
+
+Nikaia's home is application development: the backends, the web services, the tools and
+programs that have to be fast and right at the same time. That is where it is built to be
+strong, and where you can count on it today.
+
+From there it reaches out in both directions. Toward the machine: systems programming, down to
+bare metal. Toward the script: the small programs we reach for Python or JavaScript to write.
+Out there, Nikaia may serve you well. But this is a young language, and at the edges we make
+fewer promises. Close to the hardware, there may be cases where we cannot yet give you full
+control over how a structure is laid out in memory, or exactly when it is freed. Close to the
+script, Nikaia may not start as instantly or feel as loose as an interpreter, because it checks
+more before your program runs. Where we hit such a limit, we will name the trade-off, not
+hide it.
+
+A strong center, honest edges. Nikaia doesn't have to win everywhere to matter.
 
 It needs to show one thing: that you can write plain, direct code, and still get native
 speed, memory safety, concurrency you can trust, and a compiler that proves more about your
