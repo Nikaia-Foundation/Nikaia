@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.989] — 2026-10-17
+
+**the --asserts report lists what is not proved first, in red, and what the build proved last, in green**
+- Part III 12 (--asserts): refused, checked at run time, checked where outside data arrives and checked by a test come first, red on a terminal; proved claims and preconditions proved at every call come last, green; NO_COLOR or a non-terminal prints no colour.
+
 ## [0.0.988] — 2026-10-17
 
 **ADR-359 D5, D7, D11-D13: a quotient of known numbers, a `comptime` and a call with known arguments are values to the prover (#632 step 1, #633)**
