@@ -36,9 +36,9 @@ compiler.**
 The ancient city of Nikaia is known for its **council**: a place where people who disagreed
 sat down at one table. Programming has its own two camps today:
 
-* The **scripting camp** (Python, JavaScript): direct, flexible, fast to write. And often
+* The **scripting camp** (Python, JavaScript, PHP, Ruby): direct, flexible, fast to write. And often
   fragile.
-* The **systems camp** (Rust, C++): fast, safe, in control of the machine. And often heavy
+* The **systems camp** (C, C++, Rust, Zig): fast, safe, in control of the machine. And often heavy
   to carry.
 
 The differences are real. But somewhere along the way we stopped calling them differences and
@@ -55,7 +55,7 @@ programs that have to be fast and right at the same time. That is where it is bu
 strong, and where you can count on it today.
 
 From there it reaches out in both directions. Toward the machine: systems programming, down to
-bare metal. Toward the script: the small programs we reach for Python or JavaScript to write.
+bare metal. Toward the script: the small programs we reach for a scripting language to write.
 Out there, Nikaia may serve you well. But this is a young language, and at the edges we make
 fewer promises. Close to the hardware, there may be cases where we cannot yet give you full
 control over how a structure is laid out in memory, or exactly when it is freed. Close to the
