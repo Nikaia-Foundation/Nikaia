@@ -8,6 +8,14 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.979] — 2026-10-17
+
+**`ref` on a word refused at every position (#628)**
+- `NK1257` covers parameters, fields, results, trait method parameters and results, and enums whose variants hold nothing (ADR-354 D2); `extern "C"` keeps `ref i32` / `ref mut i32`.
+- `tools/*.nika` and `tests/language` migrated; lowering defect D42 filed (an untyped `let x = m[k] ?? return` over a map of scalars keeps a `&T`).
+- ADR-354 D2 and ADR-302 D5 corrected; the exported entry point is spelled `pub extern fn` in ADR-282 D28, Part I 2.2 and Part III's `NK1261` entry (ADR-324 D6).
+- `NK1261` (the warning for `ref String` inside Nikaia) is not built yet: `String` does not yet do everything `ref String` does; #628 keeps the build order.
+
 ## [0.0.978] — 2026-10-17
 
 **Inside its package a callee's body answers a claim that needs it; a quotient by a known number is a term; across a package, a hint (ADR-359, #632)**
