@@ -517,3 +517,200 @@ impl CheckState {
         }
     }
 }
+
+/// **The type variable a signature's receiver holds**: the `T` of
+/// `self: Seq[T]` or of `self: ref Vec[T]`.
+fn open_walk_variable(signature: ref Signature) -> String? sync {
+    if !signature.takes_a_receiver() {
+        return null
+    }
+    let item: Ty = open_walk_held(signature.params[0].1) ?? return null
+    return open_walk_named(item)
+}
+
+fn open_walk_held(ty: ref Ty) -> Ty? sync {
+    match ty {
+        Ty::Seq { item, .. } => {
+            return item.clone()
+        },
+        Ty::Named { args, .. } => {
+            if args.len() == 1 {
+                return args[0].clone()
+            }
+        },
+        else => {}
+    }
+    return null
+}
+
+fn open_walk_named(ty: ref Ty) -> String? sync {
+    return match ty {
+        Ty::Var { name, .. } => name.clone(),
+        else => null,
+    }
+}
+
+fn open_walk_a_view(ty: ref Ty) -> bool sync {
+    return match ty {
+        Ty::Var { view, .. } => view,
+        else => false,
+    }
+}
+
+/// Whether a type is the item itself, not a view of it: what a lambda's
+/// parameter is bound from.
+fn open_walk_the_item(ty: ref Ty, held: ref String) -> bool sync {
+    return match ty {
+        Ty::Var { name, view } => !view && name == held,
+        else => false,
+    }
+}
+
+fn open_walk_made(ty: ref Ty) -> Ty? sync {
+    return match ty {
+        Ty::Seq { item, .. } => item.clone(),
+        else => null,
+    }
+}
+
+fn open_walk_hands_back(ty: ref Ty, name: ref String) -> bool sync {
+    let result: Ty = match ty {
+        Ty::Fn { result, .. } => result?.clone() ?? Ty::Unknown,
+        else => Ty::Unknown,
+    }
+    let handed: String = open_walk_named(result) ?? "".clone()
+    return handed == name
+}
+
+/// The names of a lambda's parameters a signature types as the receiver's
+/// item.
+fn open_walk_item_params(world: ref CheckWorld, arg: ref Expr, ty: ref Ty, held: ref String) -> Vec[String] sync {
+    let mut out: Vec[String] = []
+    let types: Vec[Ty] = match ty {
+        Ty::Fn { params, .. } => params.clone(),
+        else => return out,
+    }
+    match arg {
+        Expr::Closure { params, .. } => {
+            let mut at = 0
+            for p in params {
+                if at < types.len() as i64 && open_walk_the_item(types[at], held) {
+                    out.push(world.words.resolve(p).clone())
+                }
+                at += 1
+            }
+        },
+        else => {}
+    }
+    return out
+}
+
+/// **The walks of an open number** (ADR-285 D34, #594): the items of a list
+/// written in number literals are one open number, and so are the items of a
+/// walk of it, wherever a signature hands them on: to a lambda's parameter
+/// typed as the item, and out as a walk of the item or of a lambda's value.
+/// Every number type copies, so such an item is taken as one that copies.
+impl CheckState {
+    /// The open number a receiver's items are: a list written in number
+    /// literals, or a walk of one.
+    pub fn open_items_of(ref self, world: ref CheckWorld, receiver: ref Expr) -> i64? sync {
+        let walked = self.flow.open_walks[id_of(receiver) as i64]
+        if walked != null {
+            return self.open_root(walked ?? 0)
+        }
+        return match receiver {
+            Expr::Variable(name, _) => self.open_items_named(world, name),
+            else => null,
+        }
+    }
+
+    fn open_items_named(ref self, world: ref CheckWorld, name: winnow_grammar::Symbol) -> i64? sync {
+        let local = self.binding(world.words.resolve(name)) ?? return null
+        let element = self.flow.open_elements[local.id] ?? return null
+        return self.open_root(element)
+    }
+
+    /// **A lambda handed the items is handed the open number**: each of its
+    /// parameters the signature types as the receiver's item, by name, for
+    /// `lambda_parameter` to bind.
+    pub fn open_walk_params(ref self, world: ref CheckWorld, contract: ref FnContract, args: ref Vec[Expr], items: i64?) -> collections::BTreeMap[String, i64] sync {
+        let mut out: collections::BTreeMap[String, i64] = collections::BTreeMap()
+        let number: i64 = items ?? return out
+        let signature = contract.signature ?? return out
+        let held = open_walk_variable(signature) ?? return out
+        let arguments = call_arguments(signature)
+        let mut at = 0
+        for arg in args {
+            if at < arguments.len() as i64 {
+                for name in open_walk_item_params(world, arg, arguments[at].1, held) {
+                    out.insert(name, number)
+                }
+            }
+            at += 1
+        }
+        return out
+    }
+
+    /// **What the call hands back** (`walk_open`): a walk of the same number
+    /// where the signature hands back the receiver's item, or of the number a
+    /// lambda's value is where it hands back that value.
+    pub fn open_walk_result(ref mut self, world: ref CheckWorld, contract: ref FnContract, args: ref Vec[Expr], items: i64?) sync {
+        self.flow.walk_open = null
+        self.flow.walk_view = false
+        let number: i64 = items ?? return
+        let signature = contract.signature ?? return
+        let result: Ty = signature.result?.clone() ?? return
+        let made: Ty = open_walk_made(result) ?? return
+        let name = open_walk_named(made) ?? return
+        let view = open_walk_a_view(made)
+        let held = open_walk_variable(signature) ?? return
+        if held == name {
+            self.open_walk_found(number, view)
+            return
+        }
+        let arguments = call_arguments(signature)
+        let mut at = 0
+        for arg in args {
+            if at < arguments.len() as i64 && open_walk_hands_back(arguments[at].1, name) {
+                let names = open_walk_item_params(world, arg, arguments[at].1, held)
+                let value = self.open_lambda_value(world, arg, names, number)
+                if value != null {
+                    self.open_walk_found(value ?? 0, view)
+                    return
+                }
+            }
+            at += 1
+        }
+    }
+
+    fn open_walk_found(ref mut self, number: i64, view: bool) sync {
+        self.flow.walk_open = self.open_root(number)
+        self.flow.walk_view = view
+    }
+
+    /// **A lambda's value is an open number** where its last expression is
+    /// made of one, its parameters bound as the walk binds them.
+    fn open_lambda_value(ref mut self, world: ref CheckWorld, lambda: ref Expr, names: ref Vec[String], number: i64) -> i64? sync {
+        let mut frame: Vec[CheckLocal] = []
+        for name in names {
+            let mut local = CheckLocal::free(name.clone(), Ty::Unknown, -1)
+            local.open_number = number
+            frame.push(local)
+        }
+        self.scope.push(frame)
+        let mut found: i64? = null
+        match lambda {
+            Expr::Closure { body, .. } => {
+                for tail in block_tail(body) {
+                    let numbers = self.open_numbers_in(world, tail)
+                    if numbers.len() > 0 {
+                        found = self.open_root(numbers[0])
+                    }
+                }
+            },
+            else => {}
+        }
+        self.scope.pop()
+        return found
+    }
+}

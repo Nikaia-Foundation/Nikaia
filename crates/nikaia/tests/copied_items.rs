@@ -121,3 +121,50 @@ fn a_value_read_through_a_view_is_the_value() {
     assert!(rust.contains("xs.iter().copied()"), "{rust}");
     assert!(rust.contains(".filter(|&c| "), "{rust}");
 }
+
+/// **The items of a list written in number literals are a number** (#594,
+/// ADR-285 D34): no annotation types the list while the walk is checked, yet
+/// every number type copies, so the walk yields values and `filter` takes its
+/// item by pattern - also behind a `map`, and where a later use makes the
+/// list `u8`s.
+const OPEN_ITEMS: &str = r##"fn bytes(b: Vec[u8]) -> i64 {
+    return b.len() as i64
+}
+
+fn main() {
+    let xs = [1, 2, 3, 4, 5]
+    let n = xs.iter().map fn(x) { x * 3 }.filter fn(v) { v > 4 }.count()
+    let m = xs.iter().filter fn(v) { v > 4 }.count()
+    let big = xs.iter().any fn(v) { v > 4 }
+    let first = xs.iter().find fn(v) { v > 2 } ?? 0
+    let head = xs.iter().take_while fn(v) { v < 3 }.count()
+    let rest = xs.iter().skip_while fn(v) { v < 4 }.count()
+    let ss = ["a", "bb", "ccc"]
+    let s = ss.iter().filter fn(s) { s.len() > 1 }.count()
+    let fs = [1.5, 2.5, 4.5]
+    let f = fs.iter().filter fn(v) { v > 2.0 }.count()
+    let us = [1, 2, 200]
+    let u = us.iter().filter fn(v) { v > 1 }.count()
+    let b = bytes(us)
+    println(f"{n} {m} {big} {first} {head} {rest} {s} {f} {u} {b}")
+}
+"##;
+
+#[test]
+fn the_items_of_a_list_of_number_literals_copy() {
+    runs("open-items", OPEN_ITEMS, "4 1 true 3 2 2 2 2 2 3");
+    let rust = lowered(OPEN_ITEMS, Build::default());
+    assert!(rust.contains(".filter(|&v| "), "{rust}");
+    assert!(rust.contains("Vec<u8>"), "{rust}");
+}
+
+/// **A lambda handed the items reads the list's number**: a use in it asks
+/// for the list's type as a use anywhere else does (ADR-285 D34).
+const ASKED_IN_A_LAMBDA: &str = "fn byte(b: u8) -> i64 {\n    return b as i64\n}\n\nfn main() {\n    let xs = [1, 2, 3]\n    let n = xs.iter().filter fn(v) { byte(v) > 1 }.count()\n    println(f\"{n}\")\n}\n";
+
+#[test]
+fn a_use_in_the_lambda_types_the_list() {
+    runs("asked-in-a-lambda", ASKED_IN_A_LAMBDA, "2");
+    let rust = lowered(ASKED_IN_A_LAMBDA, Build::default());
+    assert!(rust.contains("Vec<u8>"), "{rust}");
+}

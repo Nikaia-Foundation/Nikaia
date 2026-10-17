@@ -169,6 +169,12 @@ impl CheckState {
         if asked {
             local.immutable = CheckImmutable { at: span.clone(), kind: CheckKind::Parameter }
         }
+        // **Handed the items of a walk of an open number, it is that number**
+        // (ADR-285 D34, #594), as a `for` binding over its list is.
+        let opened = self.flow.open_params.remove(local.name)
+        if opened != null && local.ty.is_unknown() {
+            local.open_number = opened
+        }
         return local
     }
 

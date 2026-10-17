@@ -155,6 +155,16 @@ pub struct CheckFlow {
     /// A list written in number literals: the binding and the entry of
     /// `open_numbers` it names (ADR-285 D34).
     pub open_elements: collections::BTreeMap[i64, i64],
+    /// **A walk whose items are an open number** (ADR-285 D34, #594), by the
+    /// call that makes it, and the entry of `open_numbers` it names.
+    pub open_walks: collections::BTreeMap[i64, i64],
+    /// The parameters of a lambda the call being walked hands such items to,
+    /// by name, and the entry of `open_numbers` each is bound to.
+    pub open_params: collections::BTreeMap[String, i64],
+    /// What the method call just checked hands back: a walk of this open
+    /// number, and whether as views of it.
+    pub walk_open: i64?,
+    pub walk_view: bool,
     /// The `fn` type the place a lambda stands in declares (#497).
     pub lambda_expected: Ty?,
     /// A generic call that hands back the number it was given (#497), by the
@@ -224,6 +234,10 @@ impl CheckFlow {
             empty_lists: collections::BTreeMap(),
             open_numbers: collections::BTreeMap(),
             open_elements: collections::BTreeMap(),
+            open_walks: collections::BTreeMap(),
+            open_params: collections::BTreeMap(),
+            walk_open: null,
+            walk_view: false,
             lambda_expected: null,
             open_calls: collections::BTreeMap(),
             unknown_bound: collections::BTreeSet(),

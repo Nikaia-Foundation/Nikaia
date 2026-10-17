@@ -412,7 +412,10 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
     }
     state.flow.last_resolved = null
     state.flow.receiver_from_text = state.made_from_text(world, receiver)
+    state.flow.walk_open = null
     let value: Ty = check_core_call_on(state, world, host, on.clone(), receiver, method, args, written, span)
+    let walk_open: i64? = state.flow.walk_open
+    state.flow.walk_open = null
     state.flow.receiver_from_text = false
     check_core_method_resolved(state, world, receiver, args)
     state.flow.receiver_name = outer_named
@@ -424,6 +427,13 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
     let mut walked: Ty = value.clone()
     match value {
         Ty::Seq { item, is_sync, pauses, can_throw, parallel, shape } => {
+            // **Of an open number too** (#594): every number type copies.
+            if item.is_unknown() && walk_open != null {
+                state.flow.open_walks.insert(id_of(expr) as i64, walk_open ?? 0)
+                if state.flow.walk_view {
+                    state.facts.copied_walks.insert(id_of(expr) as i64)
+                }
+            }
             if copies_as_a_view(item) {
                 state.facts.copied_walks.insert(id_of(expr) as i64)
                 walked = Ty::Seq { item: unviewed_type(item), is_sync: is_sync, pauses: pauses, can_throw: can_throw, parallel: parallel, shape: shape.clone() }
@@ -433,12 +443,15 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
     }
     // **`filter` is handed a reference to the item** (ADR-231 D2), and so
     // are `find`'s, `take_while`'s and `skip_while`'s.
+    // An item that is an open number copies (#594).
+    let open_items = state.open_items_of(world, receiver) != null
     if (name == "filter" || name == "find" || name == "take_while" || name == "skip_while") && args.len() == 1 {
         match on {
             Ty::Seq { item, .. } => {
                 match args[0] {
                     Expr::Closure { params, .. } => {
-                        if params.len() == 1 && !item.is_unknown() && (item.is_a_view() || !moves(item)) {
+                        let copies = (item.is_unknown() && open_items) || (!item.is_unknown() && (item.is_a_view() || !moves(item)))
+                        if params.len() == 1 && copies {
                             state.facts.filter_patterns.insert(id_of(args[0]) as i64)
                         }
                     },

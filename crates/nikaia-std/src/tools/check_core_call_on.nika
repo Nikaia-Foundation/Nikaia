@@ -538,8 +538,15 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     if key == "task::Scope::spawn" {
         check_crossings_a_task_of_a_scope(state, args)
     }
+    // **The items of a walk of an open number are that number** (ADR-285
+    // D34, #594): handed to a lambda, and handed on.
+    let items: i64? = state.open_items_of(world, receiver)
+    let outer_params = state.flow.open_params.clone()
+    state.flow.open_params = state.open_walk_params(world, contract, args, items)
     let callee: FnContract? = contract.clone()
     let found = check_core_arguments_given(state, world, host, args, expected, world.own.functions.contains_key(key), callee, span)
+    state.flow.open_params = outer_params
+    state.open_walk_result(world, contract, args, items)
     state.in_parallel = outer_parallel
     state.scoped_task = outer_scoped
     check_core_call_on_pushed(state, world, entry, args, found, span)
