@@ -48,7 +48,26 @@ is not the output but the **prefix every turn re-reads**.
   transcript size: past about 150 turns or 250 k context the agent is told to
   push what is verified and finish.
 
+## Measured again (2026-10-17, ten build agents)
+
+| Fact | Number |
+| :--- | :--- |
+| Context at start | 52 k, of it about 35-40 k the descriptions of 41 tools a builder never calls (remote sessions, artifacts, docs) |
+| Growth per turn | about 1 k |
+| Growth, by kind | about half thinking, a quarter to a third tool results (`grep`, `sed`/`cat`, `git`), the rest tool calls |
+| Turns | 63-357; seven of ten past 200 |
+| Share of the cost after turn 120 | 52-79 % for the long ones |
+| Turns spent polling a build or a test | 10-20 % of the cost |
+
+So: build agents are the `builder` type (`.claude/agents/builder.md`, six
+tools, the limits above in its prompt); a task names one or two steps of a
+*To build* list, not the whole list; waiting is one call.
+
 ## Orchestrator
+
+* Start build agents as `builder`; give each one or two steps.
+* Watch each running agent's transcript (turns, context); past about 150
+  turns or 200 k tokens tell it to push what is verified and report.
 
 * At most 3 agents, one per module, none on a file another one edits; give
   each its own worktree (a shared checkout lets one agent switch the branch

@@ -262,6 +262,9 @@ Rules from the sessions that moved the most; they save tokens, not just time.
   than it saves. Leaves first: a consumer moved before its dependencies finds
   its errors late. Record the state in the commit message after each chunk.
 * **Tokens: one agent, one slice, at most 100-150 turns, then a fresh one.**
+  Build agents are started as the `builder` type (`.claude/agents/builder.md`):
+  six tools instead of about forty, which cuts the context every turn re-reads
+  from about 52 k to about 15 k tokens.
   The cost is the context every turn re-reads, not the output; long agents
   cost three times what restarted ones do. Scripts in files, not heredocs;
   small reads; plan and state from the repository, not from the prompt. The
