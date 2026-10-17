@@ -132,6 +132,9 @@ impl EmitState {
             if words_vec(arg.ty, world.words) {
                 kind = "Rest"
                 read = "rest"
+            } else if arg.ty.is_nullable {
+                kind = "Maybe"
+                read = "maybe"
             }
             let mut binding: String = ""
             if arg.mutable {

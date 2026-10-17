@@ -22843,20 +22843,6 @@ impl CheckState {
 }
 
 
-// --- check_may_fail.nika ---
-
-fn check_is_fatal(ledger: &Ledger, error: &str) -> bool {
-    let types = match ledger.implementations.get("Fatal") { Some(__nikaia_value) => __nikaia_value, None => return false };
-    types.contains(error)
-}
-
-impl CheckState {
-    pub fn a_fatal_error_passes(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, guarded: &CheckGuarded, handler: &Block, span: &Span) {
-        let named = fatal_named(handler, world.words);
-        let mut passing: Vec<String> = vec![];
-        for error in guarded.thrown.iter() { if (check_is_fatal(world.own, error) || check_is_fatal(world.library, error)) && !named.contains(error) { passing.push(error.to_owned()); } }
-        if passing.is_empty() { return; }
-        if self.flow.guarded.is_some() {
 // --- check_main.nika ---
 
 pub fn main_word_type(name: &str) -> bool { name == "int" || is_whole_number(name) || name == "f64" || name == "bool" || name == "String" }
@@ -22887,24 +22873,23 @@ impl CheckState {
                 let called = match name { Some(__nikaia_value) => __nikaia_value, None => return };
                 if receiver.is_some() || world.words.resolve(called) != "main" { return; }
                 let note = "A parameter of `main` is a word the program is started with: `int`, a fixed-width integer, `f64`, `bool`, `String`, or one of these behind `?`; the last subject parameter may be a `Vec[T]` of one of them (Part I 5.5).".to_owned();
+                let mut maybe: String = String::from("");
                 for index in 0..args.len() as i64 {
                     let arg = nikaia_std::index::get(&args, (index) as usize);
                     let param = world.words.resolve(arg.name).to_owned();
-                    let why = match main_refused_type(&arg.ty, world.words, ((index + 1) as usize) == args.len()) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                    let last = ((index + 1) as usize) == args.len();
+                    let refused = main_refused_type(&arg.ty, world.words, last);
+                    if refused.is_none() && maybe != "" && !arg.ty.is_nullable && !(last && world.words.resolve(arg.ty.name) == "Vec") { self.findings.push(check_refusal("NK1273", span, format!("`{}` of `main` is a required word after `{}`, which may be left out.", param, maybe), vec!["A subject of type `T?` may be left out at the end; it stands after every required subject and before a last `Vec[T]` (Part I 5.5).".to_owned()], Some(format!("Move `{}` before `{}`, or make it a `T?` too.", param, maybe)))); }
+                    if arg.ty.is_nullable && maybe == "" { maybe = param.to_owned(); }
+                    let why = match refused { Some(__nikaia_value) => __nikaia_value, None => continue };
                     self.findings.push(check_refusal("NK1273", span, format!("`{}` of `main` can't be a word on the command line: it is {}.", param, why), vec![note.to_owned()], Some("Take the word as a `String` and convert it in the body, or read `cli::args()` for a shape `main`'s parameters don't have.".to_string())));
                 }
-                let mut seen: collections::BTreeMap<String, String> = collections::BTreeMap::new();
                 for option in config.iter() {
                     let param = world.words.resolve(option.name).to_owned();
                     let why = main_refused_type(&option.ty, world.words, false);
                     if why.is_some() { self.findings.push(check_refusal("NK1273", span, format!("`{}` of `main` can't be a word on the command line: it is {}.", param, nikaia_std::index::or(why.as_deref(), || "")), vec![note.to_owned()], Some("Take the word as a `String` and convert it in the body, or read `cli::args()` for a shape `main`'s parameters don't have.".to_string()))); }
                     let word = main_option_word(&param);
                     if word == "help" { self.findings.push(check_refusal("NK1274", span, String::from("`main` has an option named `help`, and `--help` prints the program's help."), vec!["`--help` and `-h` are the program's own: they print the `///` lines above `main` and its parameters (Part I 5.5).".to_owned()], Some(String::from("Name the option differently.")))); }
-                    let earlier = seen.get(&word);
-                    if earlier.is_some() {
-                        let first = nikaia_std::index::or(earlier, || "").to_owned();
-                        self.findings.push(check_refusal("NK1274", span, format!("`{}` and `{}` of `main` are both `--{}` on the command line.", first, param, word), vec!["An `_` in an option's name is written `-` on the command line (Part I 5.5).".to_owned()], Some(String::from("Rename one of them."))));
-                    } else { seen.insert(word, param); }
                 }
             },
             _ => { },
@@ -22913,6 +22898,20 @@ impl CheckState {
 }
 
 
+// --- check_may_fail.nika ---
+
+fn check_is_fatal(ledger: &Ledger, error: &str) -> bool {
+    let types = match ledger.implementations.get("Fatal") { Some(__nikaia_value) => __nikaia_value, None => return false };
+    types.contains(error)
+}
+
+impl CheckState {
+    pub fn a_fatal_error_passes(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, guarded: &CheckGuarded, handler: &Block, span: &Span) {
+        let named = fatal_named(handler, world.words);
+        let mut passing: Vec<String> = vec![];
+        for error in guarded.thrown.iter() { if (check_is_fatal(world.own, error) || check_is_fatal(world.library, error)) && !named.contains(error) { passing.push(error.to_owned()); } }
+        if passing.is_empty() { return; }
+        if self.flow.guarded.is_some() {
             let held: Option<CheckGuarded> = match self.flow.guarded.as_ref() {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
@@ -35753,6 +35752,7 @@ impl EmitState {
     }
     pub fn entry_point(&self, world: &EmitWorld<'_, '_, '_, '_>, concurrent: bool, channel: &str, types: &[String], passing: &[String]) -> String {
         let fails = match self.user_main(world) { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
+        let (reads, passed) = self.main_words(world, types, passing);
         let mut user_code: String = String::from("Sequential");
         if concurrent { user_code = String::from("Concurrent"); }
         let mut ret: String = String::from("");
@@ -35762,12 +35762,103 @@ impl EmitState {
         let mut text: String = String::from("\n// ADR-303 D4: the runtime is running before the program's first\n// statement, so an operation inside it costs no thread wake-up. What\n// starts is what `user_parallelism` allows (ADR-037 D2): the I/O\n// worker always, a pool for user code only at `yes`.\n");
         text = format!("{}fn main(){} {{\n", text, ret);
         text = format!("{}    nikaia_std::abort::report_in_nikaia_terms(__NIKAIA_SITES);\n", text);
+        text = format!("{}{}", text, reads);
+        let mut body: String = String::from("__nikaia_main");
+        if !reads.is_empty() && self.facts.entries.contains_key("main") { body = String::from("__nikaia_main__unchecked"); }
         text = format!("{}{}{}", text, self.fatal_registrations(world), self.crossing_registrations(world));
         text = format!("{}    let nikaia_runtime = nikaia_std::rt::{}(nikaia_std::rt::UserCode::{});\n", text, start, user_code);
         let exits = main_exits(&self.own_contracts);
         if call_pauses(&self.own_contracts, "main") { text = format!("{}    let outcome = nikaia_std::rt::exec::block_on({}({}));\n", text, body, passed); } else { text = format!("{}    let outcome = {}({});\n", text, body, passed); }
         if exits { text = format!("{}    nikaia_runtime.finish();\n    nikaia_std::process::ended(outcome)\n}}\n", text); } else { text = format!("{}    nikaia_runtime.finish();\n    outcome\n}}\n", text); }
         text
+    }
+    fn main_words(&self, world: &EmitWorld<'_, '_, '_, '_>, types: &[String], passing: &[String]) -> (String, String) {
+        for item in world.items.iter() {
+            match &item.node {
+                Item::Fn { name, receiver, args, config, .. } => {
+                    let name = *name;
+                    let called = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
+                    if receiver.is_some() || world.words.resolve(called) != "main" { continue; }
+                    if args.is_empty() && config.is_empty() { return ("".to_owned(), "".to_owned()); }
+                    let about = nikaia_std::index::or(item.doc.as_deref(), || "").to_owned();
+                    return self.main_words_of(world, args, config, &about, types, passing);
+                },
+                _ => { },
+            }
+        }
+        ("".to_owned(), "".to_owned())
+    }
+    fn main_words_of(&self, world: &EmitWorld<'_, '_, '_, '_>, args: &[FnArg], config: &[ConfigParam], about: &str, types: &[String], passing: &[String]) -> (String, String) {
+        let __keep_frame = nikaia_std::tether::Keep::new();
+        let mut checks: Vec<PreconditionCheck> = vec![];
+        if self.facts.entries.contains_key("main") { checks = match self.facts.entries.get("main") { Some(__nikaia_value) => __nikaia_value, None => return ("".to_owned(), "".to_owned()) }.to_owned(); }
+        let mut options: Vec<ConfigContract> = vec![];
+        if self.own_contracts.functions.contains_key("main") {
+            let contract = match self.own_contracts.functions.get("main") { Some(__nikaia_value) => __nikaia_value, None => return ("".to_owned(), "".to_owned()) };
+            let signature = nikaia_std::index::or(match contract.signature.as_ref() {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || Signature::empty());
+            options = signature.config.to_owned();
+        }
+        let mut params: Vec<String> = vec![];
+        let mut reads: String = String::from("");
+        let mut passed: Vec<String> = vec![];
+        for index in 0..args.len() as i64 {
+            let arg = nikaia_std::index::get(&args, (index) as usize);
+            let param = world.words.resolve(arg.name).to_owned();
+            let local = __keep_frame.put(escaped_name(&param));
+            let ty = main_written_type(&arg.ty, world.words);
+            let mut rust: String = String::from("_");
+            if ((index) as usize) < types.len() { rust = (*nikaia_std::index::get(&types, (index) as usize)).to_owned(); }
+            let mut kind: String = String::from("Subject");
+            let mut read: String = String::from("subject");
+            if words_vec(&arg.ty, world.words) {
+                kind = String::from("Rest");
+                read = String::from("rest");
+            } else if arg.ty.is_nullable {
+                kind = String::from("Maybe");
+                read = String::from("maybe");
+            }
+            let mut binding: String = String::from("");
+            if arg.mutable {
+                binding = String::from("mut ");
+                passed.push(format!("&mut {}", local));
+            } else if ((index) as usize) < passing.len() { passed.push((*nikaia_std::index::get(&passing, (index) as usize)).replace("{}", &local)); } else { passed.push(local.to_owned()); }
+            reads = format!("{}    let {}{}: {} = __nikaia_words.{}({});\n", reads, binding, local, rust, read, index);
+            params.push(format!("nikaia_std::cli::Param {{ name: {}, ty: {}, kind: nikaia_std::cli::Kind::{}, default: \"\", pre: &[{}] }}", rust_string(&param), rust_string(&ty), kind, main_claims_of(&checks, &param)));
+        }
+        for k in 0..config.len() as i64 {
+            let option = nikaia_std::index::get(&config, (k) as usize);
+            let at = args.len() as i64 + k;
+            let param = world.words.resolve(option.name).to_owned();
+            let local = __keep_frame.put(escaped_name(&param));
+            let ty = main_written_type(&option.ty, world.words);
+            let mut rust: String = String::from("_");
+            if at < types.len() as i64 { rust = (*nikaia_std::index::get(&types, nikaia_std::index::at(at))).to_owned(); }
+            let mut default: String = String::from("");
+            let mut shown: String = String::from("");
+            for declared in options.iter() {
+                if declared.name == param {
+                    default = held_literal(&declared.default, &declared.ty);
+                    shown = declared.default.to_owned();
+                    if shown == "None" { shown = String::from("null"); }
+                }
+            }
+            let mut kind: String = String::from("Option");
+            if ty == "bool" { kind = String::from("Flag"); }
+            reads = format!("{}    let {}: {} = match __nikaia_words.option({}) {{ Some(__nikaia_word) => __nikaia_word, None => {} }};\n", reads, local, rust, at, default);
+            if at < passing.len() as i64 { passed.push((*nikaia_std::index::get(&passing, nikaia_std::index::at(at))).replace("{}", &local)); } else { passed.push(local.to_owned()); }
+            params.push(format!("nikaia_std::cli::Param {{ name: {}, ty: {}, kind: nikaia_std::cli::Kind::{}, default: {}, pre: &[{}] }}", rust_string(&param), rust_string(&ty), kind, rust_string(&shown), main_claims_of(&checks, &param)));
+        }
+        let mut text: String = format!("    static __NIKAIA_INTERFACE: nikaia_std::cli::Interface = nikaia_std::cli::Interface {{ about: {}, params: &[{}] }};\n", rust_string(about), params.join(", "));
+        text = format!("{}    let __nikaia_words = nikaia_std::cli::Words::read(&__NIKAIA_INTERFACE);\n{}", text, reads);
+        for check in checks.iter() {
+            let mut operands: String = String::from("");
+            for (name, value) in check.operands.iter() { operands.push_str(&format!("({}, (&&nikaia_std::abort::Operand(&{})).shown()), ", rust_string(name), value)); }
+            text = format!("{}    if !{} {{ __nikaia_words.breach({}, &[{}]) }}\n", text, check.rust, rust_string(&main_claim(&check.written)), operands);
+        }
+        (text, passed.join(", "))
     }
     fn fatal_registrations(&self, world: &EmitWorld<'_, '_, '_, '_>) -> String {
         let fatal = match self.own_contracts.implementations.get("Fatal") { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
@@ -35821,7 +35912,6 @@ impl EmitState {
                     let bare = world.words.resolve(name);
                     if self.borrowing.contains(bare) && generics.is_empty() { text = format!("{}{}", text, self.emit_held_struct(world, escaped_name(bare), self.lifetime_args(bare, "'a"), self.lifetime_args(bare, "'_"), self.lifetime_args(bare, "'long"), self.lifetime_args(bare, "'s"), fields)); }
                 },
-        let (reads, passed) = self.main_words(world, types, passing);
                 _ => { },
             }
         }
@@ -35831,9 +35921,6 @@ impl EmitState {
     fn emit_held_struct(&self, world: &EmitWorld<'_, '_, '_, '_>, ty: String, a: String, any: String, long: String, short: String, fields: &[FieldDef]) -> String {
         let mut parts: Vec<String> = vec![];
         for field in fields.iter() {
-        text = format!("{}{}", text, reads);
-        let mut body: String = String::from("__nikaia_main");
-        if !reads.is_empty() && self.facts.entries.contains_key("main") { body = String::from("__nikaia_main__unchecked"); }
             let field_name = escaped_name(world.words.resolve(field.name));
             if holds_view(&field.ty) || self.names_borrowing(world, &field.ty) { parts.push(format!("{}: nikaia_std::tether::Rebase::rebase(self.{}, keeps)", field_name, field_name)); } else { parts.push(format!("{}: self.{}", field_name, field_name)); }
         }
@@ -35841,91 +35928,6 @@ impl EmitState {
         let mut text: String = format!("\n/// `{}` held one handle per buffer (ADR-283).\n", ty);
         text = format!("{}#[allow(non_camel_case_types)]\nenum __Views_{} {{}}\n\n", text, ty);
         text = format!("{}impl nikaia_std::tether::Views for __Views_{} {{\n    type Of<'a> = {}<{}>;\n", text, ty, ty, a);
-    fn main_words(&self, world: &EmitWorld<'_, '_, '_, '_>, types: &[String], passing: &[String]) -> (String, String) {
-        for item in world.items.iter() {
-            match &item.node {
-                Item::Fn { name, receiver, args, config, .. } => {
-                    let name = *name;
-                    let called = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
-                    if receiver.is_some() || world.words.resolve(called) != "main" { continue; }
-                    if args.is_empty() && config.is_empty() { return ("".to_owned(), "".to_owned()); }
-                    let about = nikaia_std::index::or(item.doc.as_deref(), || "").to_owned();
-                    return self.main_words_of(world, args, config, &about, types, passing);
-                },
-                _ => { },
-            }
-        }
-        ("".to_owned(), "".to_owned())
-    }
-    fn main_words_of(&self, world: &EmitWorld<'_, '_, '_, '_>, args: &[FnArg], config: &[ConfigParam], about: &str, types: &[String], passing: &[String]) -> (String, String) {
-        let __keep_frame = nikaia_std::tether::Keep::new();
-        let mut checks: Vec<PreconditionCheck> = vec![];
-        if self.facts.entries.contains_key("main") { checks = match self.facts.entries.get("main") { Some(__nikaia_value) => __nikaia_value, None => return ("".to_owned(), "".to_owned()) }.to_owned(); }
-        let mut options: Vec<ConfigContract> = vec![];
-        if self.own_contracts.functions.contains_key("main") {
-            let contract = match self.own_contracts.functions.get("main") { Some(__nikaia_value) => __nikaia_value, None => return ("".to_owned(), "".to_owned()) };
-            let signature = nikaia_std::index::or(match contract.signature.as_ref() {
-                Some(__nikaia_it) => Some(__nikaia_it.clone()),
-                None => None,
-            }, || Signature::empty());
-            options = signature.config.to_owned();
-        }
-        let mut params: Vec<String> = vec![];
-        let mut reads: String = String::from("");
-        let mut passed: Vec<String> = vec![];
-        for index in 0..args.len() as i64 {
-            let arg = nikaia_std::index::get(&args, (index) as usize);
-            let param = world.words.resolve(arg.name).to_owned();
-            let local = __keep_frame.put(escaped_name(&param));
-            let ty = main_written_type(&arg.ty, world.words);
-            let mut rust: String = String::from("_");
-            if ((index) as usize) < types.len() { rust = (*nikaia_std::index::get(&types, (index) as usize)).to_owned(); }
-            let mut kind: String = String::from("Subject");
-            let mut read: String = String::from("subject");
-            if words_vec(&arg.ty, world.words) {
-                kind = String::from("Rest");
-                read = String::from("rest");
-            }
-            let mut binding: String = String::from("");
-            if arg.mutable {
-                binding = String::from("mut ");
-                passed.push(format!("&mut {}", local));
-            } else if ((index) as usize) < passing.len() { passed.push((*nikaia_std::index::get(&passing, (index) as usize)).replace("{}", &local)); } else { passed.push(local.to_owned()); }
-            reads = format!("{}    let {}{}: {} = __nikaia_words.{}({});\n", reads, binding, local, rust, read, index);
-            params.push(format!("nikaia_std::cli::Param {{ name: {}, ty: {}, kind: nikaia_std::cli::Kind::{}, default: \"\", pre: &[{}] }}", rust_string(&param), rust_string(&ty), kind, main_claims_of(&checks, &param)));
-        }
-        for k in 0..config.len() as i64 {
-            let option = nikaia_std::index::get(&config, (k) as usize);
-            let at = args.len() as i64 + k;
-            let param = world.words.resolve(option.name).to_owned();
-            let local = __keep_frame.put(escaped_name(&param));
-            let ty = main_written_type(&option.ty, world.words);
-            let mut rust: String = String::from("_");
-            if at < types.len() as i64 { rust = (*nikaia_std::index::get(&types, nikaia_std::index::at(at))).to_owned(); }
-            let mut default: String = String::from("");
-            let mut shown: String = String::from("");
-            for declared in options.iter() {
-                if declared.name == param {
-                    default = held_literal(&declared.default, &declared.ty);
-                    shown = declared.default.to_owned();
-                    if shown == "None" { shown = String::from("null"); }
-                }
-            }
-            let mut kind: String = String::from("Option");
-            if ty == "bool" { kind = String::from("Flag"); }
-            reads = format!("{}    let {}: {} = match __nikaia_words.option({}) {{ Some(__nikaia_word) => __nikaia_word, None => {} }};\n", reads, local, rust, at, default);
-            if at < passing.len() as i64 { passed.push((*nikaia_std::index::get(&passing, nikaia_std::index::at(at))).replace("{}", &local)); } else { passed.push(local.to_owned()); }
-            params.push(format!("nikaia_std::cli::Param {{ name: {}, ty: {}, kind: nikaia_std::cli::Kind::{}, default: {}, pre: &[{}] }}", rust_string(&param), rust_string(&ty), kind, rust_string(&shown), main_claims_of(&checks, &param)));
-        }
-        let mut text: String = format!("    static __NIKAIA_INTERFACE: nikaia_std::cli::Interface = nikaia_std::cli::Interface {{ about: {}, params: &[{}] }};\n", rust_string(about), params.join(", "));
-        text = format!("{}    let __nikaia_words = nikaia_std::cli::Words::read(&__NIKAIA_INTERFACE);\n{}", text, reads);
-        for check in checks.iter() {
-            let mut operands: String = String::from("");
-            for (name, value) in check.operands.iter() { operands.push_str(&format!("({}, (&&nikaia_std::abort::Operand(&{})).shown()), ", rust_string(name), value)); }
-            text = format!("{}    if !{} {{ __nikaia_words.breach({}, &[{}]) }}\n", text, check.rust, rust_string(&main_claim(&check.written)), operands);
-        }
-        (text, passed.join(", "))
-    }
         text = format!("{}    fn shorten<'long: 's, 's>(x: &'s {}<{}>) -> &'s {}<{}> {{\n        x\n    }}\n}}\n\n", text, ty, long, ty, short);
         text = format!("{}impl<'a> nikaia_std::tether::Rebase<'a> for {}<{}> {{\n    type At = {}<{}>;\n", text, ty, any, ty, a);
         text = format!("{}    fn rebase<const N: usize>(self, keeps: &nikaia_std::tether::Keeps<'a, N>) -> {}<{}> {{\n        {} {{ {} }}\n    }}\n}}\n\n", text, ty, a, ty, rebased);
@@ -35939,6 +35941,32 @@ fn main_exits(own: &Ledger) -> bool {
     let contract = match own.functions.get("main") { Some(__nikaia_value) => __nikaia_value, None => return false };
     for error in contract.fails_with.iter() { if error == "process::Exit" || error == "supervisor::Handed" { return true; } }
     false
+}
+
+fn main_written_type(ty: &Type, words: &winnow_grammar::InternerContext) -> String {
+    let mut text = words.resolve(ty.name).to_owned();
+    if !ty.generics.is_empty() {
+        let mut inner: Vec<String> = vec![];
+        for arg in ty.generics.iter() { inner.push(main_written_type(arg, words)); }
+        text = format!("{}[{}]", text, inner.join(", "));
+    }
+    if ty.is_nullable { text = format!("{}?", text); }
+    text
+}
+
+fn words_vec(ty: &Type, words: &winnow_grammar::InternerContext) -> bool { words.resolve(ty.name) == "Vec" && !ty.is_nullable }
+
+fn main_claim(written: &str) -> String { nikaia_std::index::or(written.strip_prefix("precondition of `main`: "), || written.into()).to_owned() }
+
+fn main_claims_of(checks: &[PreconditionCheck], param: &str) -> String {
+    let mut claims: Vec<String> = vec![];
+    let length = format!("{}.", param);
+    for check in checks.iter() {
+        let mut reads = false;
+        for (name, _) in check.operands.iter() { if name == param || name.starts_with(&length) { reads = true; } }
+        if reads { claims.push(rust_string(&main_claim(&check.written))); }
+    }
+    claims.join(", ")
 }
 
 
@@ -36009,32 +36037,6 @@ pub fn emit_around_held(held: &FactWrap) -> (String, String) {
         FactWrap::Conversion => emit_two("", ".into()"),
         FactWrap::Path => emit_two("std::path::PathBuf::from(", ")"),
         FactWrap::PathView => emit_two("std::path::Path::new(&(", "))"),
-fn main_written_type(ty: &Type, words: &winnow_grammar::InternerContext) -> String {
-    let mut text = words.resolve(ty.name).to_owned();
-    if !ty.generics.is_empty() {
-        let mut inner: Vec<String> = vec![];
-        for arg in ty.generics.iter() { inner.push(main_written_type(arg, words)); }
-        text = format!("{}[{}]", text, inner.join(", "));
-    }
-    if ty.is_nullable { text = format!("{}?", text); }
-    text
-}
-
-fn words_vec(ty: &Type, words: &winnow_grammar::InternerContext) -> bool { words.resolve(ty.name) == "Vec" && !ty.is_nullable }
-
-fn main_claim(written: &str) -> String { nikaia_std::index::or(written.strip_prefix("precondition of `main`: "), || written.into()).to_owned() }
-
-fn main_claims_of(checks: &[PreconditionCheck], param: &str) -> String {
-    let mut claims: Vec<String> = vec![];
-    let length = format!("{}.", param);
-    for check in checks.iter() {
-        let mut reads = false;
-        for (name, _) in check.operands.iter() { if name == param || name.starts_with(&length) { reads = true; } }
-        if reads { claims.push(rust_string(&main_claim(&check.written))); }
-    }
-    claims.join(", ")
-}
-
         FactWrap::Widen(into) => emit_two(&emit_widen(into), ")"),
         FactWrap::Unsigned(into) => emit_two(&emit_unsigned(into), ")"),
     }
@@ -60297,6 +60299,10 @@ pub mod check_lookups {
     #[allow(unused_imports)]
     pub use super::{names_of, as_this_program_says, bounds_in_a_signature, ledger_function};
 }
+pub mod check_main {
+    #[allow(unused_imports)]
+    pub use super::{main_word_type, main_option_word};
+}
 pub mod check_may_fail {}
 pub mod check_members {}
 pub mod check_name_in_text {}
@@ -60404,10 +60410,6 @@ pub mod check_widen {
 }
 pub mod check_with {
     #[allow(unused_imports)]
-pub mod check_main {
-    #[allow(unused_imports)]
-    pub use super::{main_word_type, main_option_word};
-}
     pub use super::{CheckCopyable};
 }
 pub mod check_words {

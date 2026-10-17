@@ -74,6 +74,9 @@ pub struct Param {
 pub enum Kind {
     /// Positional and required.
     Subject,
+    /// Positional, of type `T?`: after every required subject, and `null`
+    /// where it is left out at the end.
+    Maybe,
     /// The last subject, a `Vec[T]`: every positional word left.
     Rest,
     /// `--name value` or `--name=value`.
@@ -189,10 +192,14 @@ impl Words {
                 an(missing.ty)
             )));
         }
-        if positional.len() > subjects.len() && !params.iter().any(|p| p.kind == Kind::Rest) {
+        let places = params
+            .iter()
+            .filter(|p| matches!(p.kind, Kind::Subject | Kind::Maybe))
+            .count();
+        if positional.len() > places && !params.iter().any(|p| p.kind == Kind::Rest) {
             return Err(Stop::Wrong(format!(
                 "`{}` is one word too many.",
-                positional[subjects.len()]
+                positional[places]
             )));
         }
         Ok(Words {
@@ -207,6 +214,15 @@ impl Words {
     pub fn subject<T: Word>(&self, at: usize) -> T {
         let param = self.subject_param(at);
         self.converted(&self.positional[at], param.name, param.ty)
+    }
+
+    /// The `at`-th subject, a `T?`, converted, or nothing where it was left
+    /// out.
+    pub fn maybe<T: Word>(&self, at: usize) -> Option<T> {
+        let param = self.subject_param(at);
+        let word = self.positional.get(at)?;
+        let ty = param.ty.strip_suffix('?').unwrap_or(param.ty);
+        Some(self.converted(word, param.name, ty))
     }
 
     /// Every positional word from `from` on, each converted.
@@ -254,7 +270,7 @@ impl Words {
         self.interface
             .params
             .iter()
-            .filter(|p| matches!(p.kind, Kind::Subject | Kind::Rest))
+            .filter(|p| matches!(p.kind, Kind::Subject | Kind::Maybe | Kind::Rest))
             .nth(at)
             .expect("the lowering asks for a subject `main` has")
     }
@@ -303,6 +319,7 @@ pub fn usage(interface: &Interface, program: &str) -> String {
     for p in interface.params {
         match p.kind {
             Kind::Subject => text.push_str(&format!(" <{}>", p.name)),
+            Kind::Maybe => text.push_str(&format!(" [<{}>]", p.name)),
             Kind::Rest => text.push_str(&format!(" [<{}>...]", p.name)),
             _ => {}
         }
@@ -333,12 +350,16 @@ pub fn help(interface: &Interface, program: &str) -> String {
     let subjects: Vec<&Param> = interface
         .params
         .iter()
-        .filter(|p| matches!(p.kind, Kind::Subject | Kind::Rest))
+        .filter(|p| matches!(p.kind, Kind::Subject | Kind::Maybe | Kind::Rest))
         .collect();
     if !subjects.is_empty() {
         text.push_str("\narguments:\n");
         for p in subjects {
-            text.push_str(&line(p, format!("<{}>", p.name)));
+            let head = match p.kind {
+                Kind::Maybe => format!("[<{}>]", p.name),
+                _ => format!("<{}>", p.name),
+            };
+            text.push_str(&line(p, head));
         }
     }
     text.push_str("\noptions:\n");

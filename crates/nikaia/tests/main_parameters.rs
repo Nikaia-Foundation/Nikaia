@@ -156,6 +156,48 @@ fn every_kind_of_word() {
         "ab 3 0 2 x\n"
     );
     assert_eq!(run(&prog, &["ab", "3", "256"]).0, 2);
+    assert_eq!(run(&prog, &["ab"]).1, "ab 0 0 1.5 -\n");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// D1: a subject `T?` may be left out at the end and is then `null`; usage
+/// and help show it as optional.
+#[test]
+fn an_optional_subject_may_be_left_out() {
+    let (dir, prog) = built(
+        "maybe",
+        "fn main(a: i64, name: String?) {\n\
+         \x20   println(f\"{a} {name ?? \"null\"}\")\n\
+         }\n",
+    );
+    assert_eq!(run(&prog, &["5"]).1, "5 null\n");
+    assert_eq!(run(&prog, &["5", "x"]).1, "5 x\n");
+    let (status, _, err) = run(&prog, &["5", "x", "y"]);
+    assert_eq!(status, 2, "{err}");
+    assert!(err.contains("`y` is one word too many"), "{err}");
+    assert!(err.contains("usage: prog <a> [<name>]"), "{err}");
+    assert_eq!(run(&prog, &[]).0, 2);
+    let help = run(&prog, &["--help"]).1;
+    assert!(help.contains("[<name>]"), "{help}");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// D1: a subject `T?` before a last `Vec[T]`: the words fill the `T?` first.
+#[test]
+fn an_optional_subject_before_the_rest() {
+    let (dir, prog) = built(
+        "maybe-rest",
+        "fn main(a: i64, n: i64?, xs: Vec[String]) {\n\
+         \x20   println(f\"{a} {n ?? -1} {xs.len()}\")\n\
+         }\n",
+    );
+    assert_eq!(run(&prog, &["1"]).1, "1 -1 0\n");
+    assert_eq!(run(&prog, &["1", "2"]).1, "1 2 0\n");
+    assert_eq!(run(&prog, &["1", "2", "p", "q"]).1, "1 2 2\n");
+    assert_eq!(run(&prog, &["1", "p"]).0, 2);
+    assert!(run(&prog, &["--help"])
+        .1
+        .contains("usage: prog <a> [<n>] [<xs>...]"));
     std::fs::remove_dir_all(&dir).ok();
 }
 
@@ -240,6 +282,11 @@ fn a_parameter_no_word_can_be_is_refused() {
             "NK1274",
             "named `help`",
         ),
+        (
+            "fn main(a: i64?, b: i64) { }",
+            "NK1273",
+            "a required word after `a`",
+        ),
     ] {
         let found = codes(source);
         assert!(
@@ -252,6 +299,8 @@ fn a_parameter_no_word_can_be_is_refused() {
     for source in [
         "fn main(a: i64, b: u8, c: f64, d: bool, e: String, f: i32?, rest: Vec[String]; max_depth: i64 = 3) { }",
         "fn other(p: ref String) { }",
+        "fn main(a: i64?, b: String?, rest: Vec[String]) { }",
+        "fn main(a: i64; max_depth: i64 = 3, max_depth_x: i64 = 4) { }",
     ] {
         let found = codes(source);
         assert!(

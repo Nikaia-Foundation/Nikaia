@@ -2,11 +2,9 @@
 //
 // **`main`'s parameters are the command line** (Part I 5.5, ADR-360 D1, D2):
 // what a word can be, and the names the words use. A parameter no word can
-// be is `NK1273`; two options one name on the command line, or an option
-// named `help`, is `NK1274`. Whether the target has a command line at all is
+// be, or a required subject after a `T?` one, is `NK1273`; an option named
+// `help` is `NK1274`. Whether the target has a command line at all is
 // the emitter's to say, which knows it (`emit_entry.nika`).
-
-use std::collections
 
 /// Whether a word can be a value of the type named `name`: `int`, a
 /// fixed-width integer, `f64`, `bool` or `String` (ADR-360 D2).
@@ -48,8 +46,8 @@ pub fn main_option_word(name: ref String) -> String {
 
 impl CheckState {
     /// **What `main`'s parameters may be** (ADR-360 D2): `NK1273` for a
-    /// parameter no word can be, `NK1274` for an option named `help` or two
-    /// options one name once `_` is `-`. Only a free `fn main`.
+    /// parameter no word can be or a required subject after a `T?` one,
+    /// `NK1274` for an option named `help`. Only a free `fn main`.
     pub fn main_parameters(ref mut self, world: ref CheckWorld, item: ref Item, span: ref Span) sync {
         match item {
             Item::Fn { name, receiver, args, config, .. } => {
@@ -58,13 +56,21 @@ impl CheckState {
                     return
                 }
                 let note = "A parameter of `main` is a word the program is started with: `int`, a fixed-width integer, `f64`, `bool`, `String`, or one of these behind `?`; the last subject parameter may be a `Vec[T]` of one of them (Part I 5.5).".clone()
+                let mut maybe: String = ""
                 for index in 0..<args.len() {
                     let arg = args[index]
                     let param = world.words.resolve(arg.name).clone()
-                    let why = main_refused_type(arg.ty, world.words, index + 1 == args.len()) ?? continue
+                    let last = index + 1 == args.len()
+                    let refused = main_refused_type(arg.ty, world.words, last)
+                    if refused == null && maybe != "" && !arg.ty.is_nullable && !(last && world.words.resolve(arg.ty.name) == "Vec") {
+                        self.findings.push(check_refusal("NK1273", span, f"`{param}` of `main` is a required word after `{maybe}`, which may be left out.", ["A subject of type `T?` may be left out at the end; it stands after every required subject and before a last `Vec[T]` (Part I 5.5).".clone()], f"Move `{param}` before `{maybe}`, or make it a `T?` too."))
+                    }
+                    if arg.ty.is_nullable && maybe == "" {
+                        maybe = param.clone()
+                    }
+                    let why = refused ?? continue
                     self.findings.push(check_refusal("NK1273", span, f"`{param}` of `main` can't be a word on the command line: it is {why}.", [note.clone()], f"Take the word as a `String` and convert it in the body, or read `cli::args()` for a shape `main`'s parameters don't have."))
                 }
-                let mut seen: collections::BTreeMap[String, String] = collections::BTreeMap()
                 for option in config {
                     let param = world.words.resolve(option.name).clone()
                     let why = main_refused_type(option.ty, world.words, false)
@@ -74,13 +80,6 @@ impl CheckState {
                     let word = main_option_word(param)
                     if word == "help" {
                         self.findings.push(check_refusal("NK1274", span, "`main` has an option named `help`, and `--help` prints the program's help.", ["`--help` and `-h` are the program's own: they print the `///` lines above `main` and its parameters (Part I 5.5).".clone()], "Name the option differently."))
-                    }
-                    let earlier = seen.get(word)
-                    if earlier != null {
-                        let first = (earlier ?? "").clone()
-                        self.findings.push(check_refusal("NK1274", span, f"`{first}` and `{param}` of `main` are both `--{word}` on the command line.", ["An `_` in an option's name is written `-` on the command line (Part I 5.5).".clone()], "Rename one of them."))
-                    } else {
-                        seen.insert(word, param)
                     }
                 }
             },
