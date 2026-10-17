@@ -165,7 +165,7 @@ pub fn illegal(segments: ref Array[Segment]) -> Vec[(String, Position)] sync {
 }
 
 /// The message for one of them.
-pub fn illegal_message(expr: ref String, at: ref Position) -> String sync {
+pub fn illegal_message(expr: ref String, at: Position) -> String sync {
     let name = at.name()
     let why = at.why()
     return f"`{{{expr}}}` is in {name}, which this template cannot escape for\n     = {why}\n     = every hole is escaped, every time, and a position where that is not enough is an error rather than a promise that quietly does not hold (ADR-017 D1, D3)"

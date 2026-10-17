@@ -849,7 +849,7 @@ code at the call site. In an assembly block, `val` is the `val` in the enclosing
 ```nika
 use std::backend::x86
 
-fn fast_add(val: i64, ptr: ref i64) -> i64 {
+fn fast_add(val: i64, ptr: ref Array[i64]) -> i64 {
     let mut result: i64 = 0
 
     // The grammar parses the bindings and resolves 'val', 'ptr' and 'result'

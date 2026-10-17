@@ -130,7 +130,7 @@ fn a_copy_of(text: ref String?) -> String? {
     return there.clone()
 }
 
-fn way_out_of(why: ref Refusal) -> String {
+fn way_out_of(why: Refusal) -> String {
     return match why {
         Refusal::Lock => "Open the lock here and pass the value inside it, so the called code gets an ordinary value and no lock.",
         Refusal::Count => "Pass what the shared value holds, a view or a copy, instead of the shared value itself.",
@@ -138,7 +138,7 @@ fn way_out_of(why: ref Refusal) -> String {
     }
 }
 
-fn refusal_note(part: ref String, at: ref String?, why: ref Refusal) -> String {
+fn refusal_note(part: ref String, at: ref String?, why: Refusal) -> String {
     let clause = held_clause(at)
     return match why {
         Refusal::Lock => f"`{part}`{clause} holds a lock, and a lock can't be passed to code the compiler knows nothing about.",
@@ -295,7 +295,7 @@ fn name_the_field(field: ref String, answer: Crossing) -> Crossing {
     }
 }
 
-fn field_named_at(field: ref String, part: ref String, at: ref String?, why: ref Refusal) -> Crossing {
+fn field_named_at(field: ref String, part: ref String, at: ref String?, why: Refusal) -> Crossing {
     let already = at ?? return Crossing::MayNot { part: part.clone(), at: field.clone(), why: why.clone() }
     return Crossing::MayNot { part: part.clone(), at: already.clone(), why: why.clone() }
 }

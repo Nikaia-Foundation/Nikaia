@@ -26,7 +26,7 @@ pub enum Wrote {
 }
 
 /// How the report names it.
-pub fn spelled(wrote: ref Wrote) -> String {
+pub fn spelled(wrote: Wrote) -> String {
     return match wrote {
         Wrote::Anywhere => "Anywhere",
         Wrote::TheFilesystemRoot => "Dir(\"/\") - which is every directory",

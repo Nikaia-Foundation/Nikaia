@@ -83,6 +83,63 @@ fn a_word_declared_ref_is_refused() {
     assert!(!found.iter().any(|f| f.code == "NK1103"), "{found:#?}");
 }
 
+/// D2 at every position: `ref` on a word is `NK1257` at a parameter, a field,
+/// a result and a trait method's parameter alike (#628).
+#[test]
+fn a_word_declared_ref_is_refused_at_every_position() {
+    for (program, position) in [
+        (
+            "fn f(x: ref i32) -> i32 { return x + 1 }\n\nfn main() { println(f\"{f(2)}\") }\n",
+            "parameter",
+        ),
+        (
+            "struct S { n: ref i64 }\n\nfn main() { println(\"x\") }\n",
+            "field",
+        ),
+        (
+            "fn f(xs: ref Vec[bool]) -> ref bool { return xs[0] }\n\nfn main() { println(\"x\") }\n",
+            "result",
+        ),
+        (
+            "trait T { fn f(ref self, x: ref f64) -> f64 }\n\nfn main() { println(\"x\") }\n",
+            "parameter",
+        ),
+        (
+            "trait T { fn f(ref self) -> ref u8 }\n\nfn main() { println(\"x\") }\n",
+            "result",
+        ),
+        (
+            "enum Colour { Red, Green }\n\nfn f(c: ref Colour) -> i64 { return 1 }\n\nfn main() { println(\"x\") }\n",
+            "parameter",
+        ),
+    ] {
+        let found = findings(program);
+        let f = found
+            .iter()
+            .find(|f| f.code == "NK1257")
+            .unwrap_or_else(|| panic!("{program}\n{found:#?}"));
+        assert!(f.message.contains(position), "{}", f.message);
+        assert!(
+            f.help.as_deref().unwrap_or("").contains("without `ref`"),
+            "{f:#?}"
+        );
+    }
+}
+
+/// D2's exception: at the C boundary `ref i32` and `ref mut i32` are the
+/// pointers C expects, and stay.
+#[test]
+fn a_word_declared_ref_at_the_c_boundary_stays() {
+    let found = findings(
+        "extern \"C\" {\n\
+         \x20   fn takes_one(n: ref i32) -> i32\n\
+         \x20   fn fills_one(n: ref mut i32) -> i32\n\
+         }\n\n\
+         fn main() { println(\"x\") }\n",
+    );
+    assert!(!found.iter().any(|f| f.code == "NK1257"), "{found:#?}");
+}
+
 /// D3: a generic body's `ref T` is a view, and instantiated at `i64` runs.
 #[test]
 fn a_generic_ref_t_at_a_word_runs() {

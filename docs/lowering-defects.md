@@ -426,3 +426,16 @@ passed as `ref mut`), so handing it back would be a view of that view. It is ref
 ## D41 (new). A text method's pattern in a loop is taken: **built** (0.0.965)
 
 `error.strip_prefix(prefix)` inside a `for`, with `prefix` an `f"..."` declared before it, was refused with `NK2105`: only `starts_with`, `ends_with` and `contains` counted their pattern as read (D28), so `strip_prefix`'s was handed over. Met in `throws.nika` (0.0.963), worked around with `prefix.clone()`. Built: the argument a text method takes as its pattern (`check_core_method_pattern_at`, #617) is lent, for every such method (`check_arguments.nika`); the clone is gone.
+
+## D42 (new). `let x = m[k] ?? return` over a map of words keeps a `&T`
+
+In `same_tiers` (`text_tiers.nika`), `let other = b[word] ?? return false` over a
+`BTreeMap[String, Tier]` (`Tier` an enum of bare variants) lowered `other` as `&Tier`, and
+handing it to `tier_word(tier: Tier)` failed in Rust (`expected Tier, found &Tier`). The checker
+accepts it: a word is copied at a read (ADR-279 D8). Met when `NK1257` took `ref` off the
+parameter (#628). Worked around with `let other: Tier = ...`, which lowers `.copied()`.
+
+### To build
+
+A `let` without a type over an index fallback whose element is a word lowers the copy, as the
+typed one does; then remove the annotation in `same_tiers`.

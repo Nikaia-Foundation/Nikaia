@@ -62,7 +62,7 @@ impl CheckState {
     /// enum's is the one the record names by hand: `m with { x: 1 }` cannot be
     /// typed without knowing the variant, and `match` is where a variant is
     /// known.
-    pub fn a_with_over_something_else(ref mut self, ty: ref String, why: ref CheckCopyable, span: ref Span) sync {
+    pub fn a_with_over_something_else(ref mut self, ty: ref String, why: CheckCopyable, span: ref Span) sync {
         let mut message: String = ""
         let mut note: String = ""
         let mut way_out: String = ""

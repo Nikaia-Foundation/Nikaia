@@ -1082,8 +1082,10 @@ fn a_view_of_a_transparent_container_fits_what_it_derefs_to() {
 /// words.
 #[test]
 fn a_transparent_container_does_not_fit_just_anything() {
-    let (code, message) = one("use std::fs\n\nfn count(n: ref i64) -> i64 { return 1 }\n\
-         fn probe() -> i64 throws { let m = fs::map(\"x\", fs::Root::Anywhere)\n return count(ref m) }");
+    let (code, message) = one(
+        "use std::fs\n\nfn count(n: ref Vec[i64]) -> i64 { return 1 }\n\
+         fn probe() -> i64 throws { let m = fs::map(\"x\", fs::Root::Anywhere)\n return count(ref m) }",
+    );
     assert_eq!(code, "NK1102");
     assert!(message.contains("ref Mapped"), "{message}");
 }
@@ -1211,7 +1213,7 @@ fn a_view_of_a_shared_value_is_a_view_of_what_it_holds() {
 #[test]
 fn a_shared_value_does_not_fit_a_view_of_just_anything() {
     let (code, message) = one("struct Conn { host: String }\n\
-         fn count(n: ref i64) { }\n\
+         fn count(n: ref Vec[i64]) { }\n\
          fn connect() -> Conn { return Conn { host: \"h\" } }\n\
          fn main() { let db = Shared(connect())\n count(ref db) }");
     assert_eq!(code, "NK1102");

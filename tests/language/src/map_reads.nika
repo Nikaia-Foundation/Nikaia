@@ -96,7 +96,7 @@ test "a map keyed by numbers is read" {
 enum MapReadsKind { A, B }
 struct MapReadsUser { name: String }
 
-fn map_reads_label(k: ref MapReadsKind?) -> String {
+fn map_reads_label(k: MapReadsKind?) -> String {
     let known = k ?? MapReadsKind::B
     return match known {
         MapReadsKind::A => "a",

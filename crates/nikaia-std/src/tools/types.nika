@@ -30,6 +30,7 @@ pub fn types_checked(names: ref winnow_grammar::InternerContext, items: ref Vec[
     declared_once_in(names, items, found)
     let known = known_names(own, library, declared)
     let traits = known_traits(names, items, own, library)
+    let plain = types_plain_enums(names, items)
     for k in 0..<items.len() {
         let mut here = known.clone()
         for parameter in generic_names(names, items[k].node) {
@@ -39,7 +40,7 @@ pub fn types_checked(names: ref winnow_grammar::InternerContext, items: ref Vec[
             here.insert(parameter.clone())
         }
         bounds_of(names, items[k].node, traits, items[k].span, found)
-        item_types(names, items[k].node, here, items[k].span, found)
+        item_types(names, items[k].node, here, plain, items[k].span, found)
         inherent_at_home(names, items[k].node, library, declared, items[k].span, found)
     }
     return found
@@ -219,18 +220,25 @@ fn a_symbols_text(names: ref winnow_grammar::InternerContext, name: winnow_gramm
 }
 
 // Every type an item writes.
-fn item_types(names: ref winnow_grammar::InternerContext, item: ref Item, known: ref collections::BTreeSet[String], span: ref Span, mut out: Vec[Finding]) {
+fn item_types(names: ref winnow_grammar::InternerContext, item: ref Item, known: ref collections::BTreeSet[String], plain: ref collections::BTreeSet[String], span: ref Span, mut out: Vec[Finding]) {
     match item {
-        Item::Fn { args, ret_type, body, .. } => {
+        Item::Fn { args, ret_type, body, is_extern, .. } => {
             for arg in args {
                 written_at(names, arg.ty, known, true, span, out)
+                if !is_extern {
+                    types_word_by_ref(names, arg.ty, plain, "parameter", span, out)
+                }
             }
             maybe_written(names, ret_type, known, span, out)
+            if !is_extern {
+                types_word_by_ref_maybe(names, ret_type, plain, span, out)
+            }
             block_types(names, body, known, out)
         }
         Item::Struct { fields, .. } => {
             for field in fields {
                 written_at(names, field.ty, known, false, span, out)
+                types_word_by_ref(names, field.ty, plain, "field", span, out)
             }
         }
         Item::Enum { variants, .. } => {
@@ -266,8 +274,10 @@ fn item_types(names: ref winnow_grammar::InternerContext, item: ref Item, known:
                 }
                 for arg in method.node.args {
                     written_at(names, arg.ty, here, true, method.span, out)
+                    types_word_by_ref(names, arg.ty, plain, "parameter", method.span, out)
                 }
                 maybe_written(names, method.node.ret_type, here, method.span, out)
+                types_word_by_ref_maybe(names, method.node.ret_type, plain, method.span, out)
             }
         }
         Item::Impl { methods, .. } => {
@@ -276,11 +286,66 @@ fn item_types(names: ref winnow_grammar::InternerContext, item: ref Item, known:
                 for parameter in generic_names(names, method.node) {
                     here.insert(parameter)
                 }
-                item_types(names, method.node, here, method.span, out)
+                item_types(names, method.node, here, plain, method.span, out)
             }
         }
         else => {}
     }
+}
+
+// **`ref` on a word by its kind says nothing** (ADR-354 D2): a number, a
+// `bool` or a `scalar` is copied at a read, so a parameter, a field or a
+// result written `ref i64` is `NK1257` outside the C boundary. A `let` is
+// refused where its value is read (`check_core_stmt`).
+fn types_word_by_ref(names: ref winnow_grammar::InternerContext, ty: ref Type, plain: ref collections::BTreeSet[String], position: ref String, span: ref Span, mut out: Vec[Finding]) {
+    if !ty.is_view || ty.is_mut || ty.is_slice || ty.is_tuple || ty.generics.len() > 0 {
+        return
+    }
+    let name = names.resolve(ty.name).clone()
+    let words = ["i8", "i16", "i32", "i64", "i128", "u8", "u16", "u32", "u64", "u128", "isize", "usize", "f32", "f64", "bool", "scalar"]
+    let mut a_word = plain.contains(name)
+    for word in words {
+        if word == name {
+            a_word = true
+        }
+    }
+    if !a_word {
+        return
+    }
+    let mut written = name.clone()
+    if ty.is_nullable {
+        written = f"{name}?"
+    }
+    out.push(refusal("NK1257", span.clone(), f"A `{name}` is copied at a read, so a {position} can't be a `ref {written}`.", ["A number, a `bool`, a `scalar` and an enum whose variants hold nothing are copied at a read (ADR-279 D8): the copy is never dearer than a pointer, so `ref` on one says nothing. Only an `extern \"C\"` declaration writes it, as the pointer C expects.".clone()], f"Write `{written}` without `ref`; a parameter the function changes is `mut name: {written}`."))
+}
+
+fn types_word_by_ref_maybe(names: ref winnow_grammar::InternerContext, ty: ref Type?, plain: ref collections::BTreeSet[String], span: ref Span, mut out: Vec[Finding]) {
+    types_word_by_ref(names, ty ?? return, plain, "result", span, out)
+}
+
+// The program's enums whose variants hold nothing: words by their kind too.
+fn types_plain_enums(names: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]]) -> collections::BTreeSet[String] {
+    let mut plain: collections::BTreeSet[String] = collections::BTreeSet()
+    for item in items {
+        match item.node {
+            Item::Enum { name, variants, .. } => {
+                let mut holds = false
+                for variant in variants {
+                    match variant.fields {
+                        VariantFields::Unit => {}
+                        else => {
+                            holds = true
+                        }
+                    }
+                }
+                if !holds {
+                    plain.insert(names.resolve(name).clone())
+                }
+            }
+            else => {}
+        }
+    }
+    return plain
 }
 
 fn maybe_written(names: ref winnow_grammar::InternerContext, ty: ref Type?, known: ref collections::BTreeSet[String], span: ref Span, mut out: Vec[Finding]) {

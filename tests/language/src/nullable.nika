@@ -410,7 +410,7 @@ fn nullable_row_id(r: ref NullableRow) -> i64 {
     return r.id
 }
 
-fn nullable_square_named(s: ref NullableSquare) -> String {
+fn nullable_square_named(s: NullableSquare) -> String {
     return match s {
         NullableSquare::Square => "square",
         NullableSquare::Nothing => "nothing",
@@ -584,7 +584,7 @@ test "a name bound to a map read is read as one" {
 enum NullableKind { A, B }
 struct NullableGrid { cells: Array[f64, 8] }
 
-fn nullable_kind_named(k: ref NullableKind) -> String {
+fn nullable_kind_named(k: NullableKind) -> String {
     return match k {
         NullableKind::A => "a",
         NullableKind::B => "b",

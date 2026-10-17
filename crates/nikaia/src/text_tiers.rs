@@ -151,7 +151,7 @@ pub fn refine(parsed: &mut Parsed) {
     let wraps: BTreeMap<usize, usize> = decided
         .wraps
         .iter()
-        .map(|(at, hand)| (*at as usize, hand_number(hand) as usize))
+        .map(|(at, hand)| (*at as usize, hand_number(*hand) as usize))
         .collect();
     let said = said(&tiers);
     let into = [
@@ -173,7 +173,7 @@ pub fn refine(parsed: &mut Parsed) {
                 .map(|wrap| {
                     (
                         crate::check::value_node(&wrap.value) as usize,
-                        hand_number(&wrap.hand) as usize,
+                        hand_number(wrap.hand) as usize,
                     )
                 })
                 .collect();

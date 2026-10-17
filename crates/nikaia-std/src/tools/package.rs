@@ -1868,7 +1868,7 @@ struct ShapeSeen {
 pub fn shape_of(args: &[FnArg], body: &Block, pinned: &collections::BTreeSet<String>, around: &Around, words: &winnow_grammar::InternerContext) -> BodyShape {
     let mut seen = ShapeSeen { bound: collections::BTreeMap::new(), shape: BodyShape { constants: collections::BTreeMap::new(), unsigned: collections::BTreeSet::new(), roots: collections::BTreeSet::new(), aliases: collections::BTreeMap::new(), bound: collections::BTreeSet::new(), twice: collections::BTreeSet::new() }, lost: collections::BTreeSet::new() };
     for arg in args.iter() { bind_name(words.resolve(arg.name), &mut seen); }
-    look_block(body, &Look::Bound, false, around, words, &mut seen);
+    look_block(body, Look::Bound, false, around, words, &mut seen);
     for (name, times) in seen.bound.iter() {
         let times = nikaia_std::num::value(times);
         seen.shape.bound.insert(name.to_owned());
@@ -1878,11 +1878,11 @@ pub fn shape_of(args: &[FnArg], body: &Block, pinned: &collections::BTreeSet<Str
         let name = words.resolve(arg.name).to_owned();
         if once(&name, &seen) && is_unsigned(&plain_name(&arg.ty, words)) { seen.shape.unsigned.insert(name); }
     }
-    look_block(body, &Look::Lets, false, around, words, &mut seen);
-    look_block(body, &Look::Aliases, false, around, words, &mut seen);
-    look_block(body, &Look::Aliases, false, around, words, &mut seen);
+    look_block(body, Look::Lets, false, around, words, &mut seen);
+    look_block(body, Look::Aliases, false, around, words, &mut seen);
+    look_block(body, Look::Aliases, false, around, words, &mut seen);
     for name in pinned.iter() { seen.lost.insert(name.to_owned()); }
-    look_block(body, &Look::Lost, false, around, words, &mut seen);
+    look_block(body, Look::Lost, false, around, words, &mut seen);
     let mut through: Vec<String> = vec![];
     for name in seen.lost.iter() {
         let key = match seen.shape.aliases.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -2056,7 +2056,7 @@ fn hands_on(params: Option<&Vec<bool>>, at: i64) -> bool {
     true
 }
 
-fn look_statement_here(stmt: &Stmt, look: &Look, words: &winnow_grammar::InternerContext, seen: &mut ShapeSeen) {
+fn look_statement_here(stmt: &Stmt, look: Look, words: &winnow_grammar::InternerContext, seen: &mut ShapeSeen) {
     match look {
         Look::Bound => { match stmt {
             Stmt::Let { names, .. } => { bind_all(names, words, seen); },
@@ -2089,7 +2089,7 @@ fn look_statement_here(stmt: &Stmt, look: &Look, words: &winnow_grammar::Interne
     }
 }
 
-fn look_expr_here(expr: &Expr, look: &Look, deferred: bool, around: &Around, words: &winnow_grammar::InternerContext, seen: &mut ShapeSeen) {
+fn look_expr_here(expr: &Expr, look: Look, deferred: bool, around: &Around, words: &winnow_grammar::InternerContext, seen: &mut ShapeSeen) {
     match look {
         Look::Bound => { match expr {
             Expr::Closure { params, .. } => { bind_all(params, words, seen); },
@@ -2124,9 +2124,9 @@ fn look_expr_here(expr: &Expr, look: &Look, deferred: bool, around: &Around, wor
     }
 }
 
-fn look_block(block: &Block, look: &Look, deferred: bool, around: &Around, words: &winnow_grammar::InternerContext, seen: &mut ShapeSeen) { for stmt in block.stmts.iter() { look_statement(&stmt.node, look, deferred, around, words, seen); } }
+fn look_block(block: &Block, look: Look, deferred: bool, around: &Around, words: &winnow_grammar::InternerContext, seen: &mut ShapeSeen) { for stmt in block.stmts.iter() { look_statement(&stmt.node, look, deferred, around, words, seen); } }
 
-fn look_statement(stmt: &Stmt, look: &Look, deferred: bool, around: &Around, words: &winnow_grammar::InternerContext, seen: &mut ShapeSeen) {
+fn look_statement(stmt: &Stmt, look: Look, deferred: bool, around: &Around, words: &winnow_grammar::InternerContext, seen: &mut ShapeSeen) {
     look_statement_here(stmt, look, words, seen);
     match stmt {
         Stmt::For { iter, body, .. } => {
@@ -2149,15 +2149,15 @@ fn look_statement(stmt: &Stmt, look: &Look, deferred: bool, around: &Around, wor
     }
 }
 
-fn look_maybe(expr: Option<&Expr>, look: &Look, deferred: bool, around: &Around, words: &winnow_grammar::InternerContext, seen: &mut ShapeSeen) { look_expr(match expr { Some(__nikaia_value) => __nikaia_value, None => return }, look, deferred, around, words, seen); }
+fn look_maybe(expr: Option<&Expr>, look: Look, deferred: bool, around: &Around, words: &winnow_grammar::InternerContext, seen: &mut ShapeSeen) { look_expr(match expr { Some(__nikaia_value) => __nikaia_value, None => return }, look, deferred, around, words, seen); }
 
-fn look_all(exprs: &[Expr], look: &Look, deferred: bool, around: &Around, words: &winnow_grammar::InternerContext, seen: &mut ShapeSeen) { for e in exprs.iter() { look_expr(e, look, deferred, around, words, seen); } }
+fn look_all(exprs: &[Expr], look: Look, deferred: bool, around: &Around, words: &winnow_grammar::InternerContext, seen: &mut ShapeSeen) { for e in exprs.iter() { look_expr(e, look, deferred, around, words, seen); } }
 
-fn look_config(config: &[ConfigArg], look: &Look, deferred: bool, around: &Around, words: &winnow_grammar::InternerContext, seen: &mut ShapeSeen) { for c in config.iter() { look_expr(&c.value, look, deferred, around, words, seen); } }
+fn look_config(config: &[ConfigArg], look: Look, deferred: bool, around: &Around, words: &winnow_grammar::InternerContext, seen: &mut ShapeSeen) { for c in config.iter() { look_expr(&c.value, look, deferred, around, words, seen); } }
 
-fn look_fields(fields: &[FieldInit], look: &Look, deferred: bool, around: &Around, words: &winnow_grammar::InternerContext, seen: &mut ShapeSeen) { for field in fields.iter() { look_maybe((field.value).as_ref(), look, deferred, around, words, seen); } }
+fn look_fields(fields: &[FieldInit], look: Look, deferred: bool, around: &Around, words: &winnow_grammar::InternerContext, seen: &mut ShapeSeen) { for field in fields.iter() { look_maybe((field.value).as_ref(), look, deferred, around, words, seen); } }
 
-fn look_expr(expr: &Expr, look: &Look, deferred: bool, around: &Around, words: &winnow_grammar::InternerContext, seen: &mut ShapeSeen) {
+fn look_expr(expr: &Expr, look: Look, deferred: bool, around: &Around, words: &winnow_grammar::InternerContext, seen: &mut ShapeSeen) {
     look_expr_here(expr, look, deferred, around, words, seen);
     match expr {
         Expr::Match { value, arms, .. } => {
@@ -17785,22 +17785,22 @@ pub fn check_core_with<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
             view = v;
         },
         _ => {
-            state.a_with_over_something_else(&found.text(), &CheckCopyable::Unnamed, span);
+            state.a_with_over_something_else(&found.text(), CheckCopyable::Unnamed, span);
             return Ty::Unknown;
         },
     }
     let name: String = world.here.unaliased(&written);
     if state.enums.contains_key(&name) {
-        state.a_with_over_something_else(&name, &CheckCopyable::AnEnum, span);
+        state.a_with_over_something_else(&name, CheckCopyable::AnEnum, span);
         return found;
     }
     if view {
-        state.a_with_over_something_else(&name, &CheckCopyable::AView, span);
+        state.a_with_over_something_else(&name, CheckCopyable::AView, span);
         return check_core_places_named(&name);
     }
     let fields_of: Option<Vec<FieldContract>> = state.fields_of(world, &name);
     if fields_of.is_none() {
-        state.a_with_over_something_else(&name, &CheckCopyable::NotAStruct, span);
+        state.a_with_over_something_else(&name, CheckCopyable::NotAStruct, span);
         return found;
     }
     let declared: Vec<FieldContract> = match fields_of { Some(__nikaia_value) => __nikaia_value, None => return found };
@@ -28950,7 +28950,7 @@ impl CheckState {
     pub fn a_with_that_changes_nothing(&mut self, ty: &str, span: &Span) { self.findings.push(check_refusal("NK1174", span, format!("This `with` changes no field, so it's just a copy of the `{}`.", ty), vec!["`with` means \"this value, with these fields different\", so one without fields makes a reader look for a change that isn't there.".to_owned()], Some("Name the fields that change, or remove the `with`.".to_owned()))); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_with_over_something_else(&mut self, ty: &str, why: &CheckCopyable, span: &Span) {
+    pub fn a_with_over_something_else(&mut self, ty: &str, why: CheckCopyable, span: &Span) {
         let mut message: String = String::from("");
         let mut note: String = String::from("");
         let mut way_out: String = String::from("");
@@ -49942,7 +49942,7 @@ pub fn sharing_report(sharing: &Sharing) -> String {
         if decision.count != Count::Plain { atomic += 1; }
         if decision.undecided() {
             undecided += 1;
-            caught.push(fallback_text((decision.fallback).as_ref()));
+            caught.push(fallback_text(decision.fallback));
         }
     }
     let all = sharing.decisions.len() as i64;
@@ -49959,7 +49959,7 @@ pub fn sharing_report(sharing: &Sharing) -> String {
     out
 }
 
-fn fallback_text(fallback: Option<&Fallback>) -> String {
+fn fallback_text(fallback: Option<Fallback>) -> String {
     let row = match fallback { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
     row.as_str()
 }
@@ -52604,9 +52604,9 @@ fn tier_of_kinds(kinds: &Kinds) -> Tier {
     Tier::Owned
 }
 
-fn mixed(tier: &Tier) -> bool { matches!(tier, Tier::Mixed) }
+fn mixed(tier: Tier) -> bool { matches!(tier, Tier::Mixed) }
 
-fn owned_tier(tier: &Tier) -> bool { matches!(tier, Tier::Owned) }
+fn owned_tier(tier: Tier) -> bool { matches!(tier, Tier::Owned) }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TextOwner {
@@ -52651,7 +52651,7 @@ pub enum Hand {
     Pairs,
 }
 
-pub fn hand_number(hand: &Hand) -> i64 {
+pub fn hand_number(hand: Hand) -> i64 {
     match hand {
         Hand::Either => 0,
         Hand::Maybe => 1,
@@ -52899,7 +52899,7 @@ fn tier_at(word: &str, walk: &TierWalk) -> Tier {
     found.clone()
 }
 
-fn mixed_at(word: &str, walk: &TierWalk) -> bool { mixed(&tier_at(word, walk)) }
+fn mixed_at(word: &str, walk: &TierWalk) -> bool { mixed(tier_at(word, walk)) }
 
 fn seen(owner: &TextOwner, path: &[i64], walk: &mut TierWalk) -> String {
     let word = position_word(owner, path);
@@ -53772,8 +53772,8 @@ fn decide_tiers(flows: &Flows, declared: &TextDeclared) -> collections::BTreeMap
     for (word, kinds) in positions.iter() {
         let kinds = *kinds;
         let mut tier = tier_of_kinds(&kinds);
-        if mixed(&tier) && fixed.contains(word) { tier = Tier::Owned; }
-        if !owned_tier(&tier) { out.insert(word.to_owned(), tier); }
+        if mixed(tier) && fixed.contains(word) { tier = Tier::Owned; }
+        if !owned_tier(tier) { out.insert(word.to_owned(), tier); }
     }
     out
 }
@@ -53799,13 +53799,13 @@ fn same_tiers(a: &collections::BTreeMap<String, Tier>, b: &collections::BTreeMap
     if (a.len() as i64) != b.len() as i64 { return false; }
     for (word, tier) in a.iter() {
         let tier = *tier;
-        let other = match *nikaia_std::index::get(&b, word) { Some(__nikaia_value) => __nikaia_value, None => return false };
-        if tier_word(&tier) != tier_word(other) { return false; }
+        let other: Tier = match (*nikaia_std::index::get(&b, word)).copied() { Some(__nikaia_value) => __nikaia_value, None => return false };
+        if tier_word(tier) != tier_word(other) { return false; }
     }
     true
 }
 
-fn tier_word(tier: &Tier) -> String {
+fn tier_word(tier: Tier) -> String {
     match tier {
         Tier::Owned => String::from("owned"),
         Tier::View => String::from("view"),
@@ -53901,14 +53901,14 @@ impl Crossing {
     }
     pub fn way_out(&self) -> Option<String> {
         match self {
-            Crossing::MayNot { why, .. } => Some(way_out_of(why)),
+            Crossing::MayNot { why, .. } => Some(way_out_of(*why)),
             _ => None,
         }
     }
     pub fn note(&self) -> Option<String> {
         match self {
             Crossing::May => None,
-            Crossing::MayNot { part, at, why } => Some(refusal_note(part, (at).as_deref(), why)),
+            Crossing::MayNot { part, at, why } => Some(refusal_note(part, (at).as_deref(), *why)),
             Crossing::Undecided { part } => Some(format!("Nothing says whether `{}` can move to another thread, so the compiler assumes it can't.", part)),
         }
     }
@@ -53919,7 +53919,7 @@ fn a_copy_of(text: Option<&str>) -> Option<String> {
     Some(there.to_owned())
 }
 
-fn way_out_of(why: &Refusal) -> String {
+fn way_out_of(why: Refusal) -> String {
     match why {
         Refusal::Lock => String::from("Open the lock here and pass the value inside it, so the called code gets an ordinary value and no lock."),
         Refusal::Count => String::from("Pass what the shared value holds, a view or a copy, instead of the shared value itself."),
@@ -53927,7 +53927,7 @@ fn way_out_of(why: &Refusal) -> String {
     }
 }
 
-fn refusal_note(part: &str, at: Option<&str>, why: &Refusal) -> String {
+fn refusal_note(part: &str, at: Option<&str>, why: Refusal) -> String {
     let clause = held_clause(at);
     match why {
         Refusal::Lock => format!("`{}`{} holds a lock, and a lock can't be passed to code the compiler knows nothing about.", part, clause),
@@ -55170,7 +55170,7 @@ pub enum Wrote {
     TheFilesystemRoot,
 }
 
-pub fn spelled(wrote: &Wrote) -> String {
+pub fn spelled(wrote: Wrote) -> String {
     match wrote {
         Wrote::Anywhere => String::from("Anywhere"),
         Wrote::TheFilesystemRoot => String::from("Dir(\"/\") - which is every directory"),
@@ -55224,7 +55224,7 @@ pub fn render(untrusted: bool, reasons: &[Reason], places: &[Place], path: &str)
     out.push_str(&format!("hash for a map keyed by the input: {}\n", hash));
     out.push_str("file access with no root to check against:\n");
     if places.is_empty() { out.push_str("    none - every path here names a directory it may not leave\n"); }
-    for place in places.iter() { out.push_str(&format!("    {}:{}:{}  {} writes {}\n", path, place.line, place.column, place.entry, spelled(&place.wrote))); }
+    for place in places.iter() { out.push_str(&format!("    {}:{}:{}  {} writes {}\n", path, place.line, place.column, place.entry, spelled(place.wrote))); }
     out
 }
 
@@ -57107,12 +57107,13 @@ pub fn types_checked(names: &winnow_grammar::InternerContext, items: &[Spanned<I
     declared_once_in(names, items, &mut found);
     let known = known_names(own, library, declared);
     let traits = known_traits(names, items, own, library);
+    let plain = types_plain_enums(names, items);
     for k in 0..items.len() as i64 {
         let mut here = known.to_owned();
         for parameter in generic_names(names, &nikaia_std::index::get(&items, (k) as usize).node) { here.insert(parameter); }
         for parameter in (*nikaia_std::index::get(&impl_parameters, (k) as usize)).iter() { here.insert(parameter.to_owned()); }
         bounds_of(names, &nikaia_std::index::get(&items, (k) as usize).node, &traits, &nikaia_std::index::get(&items, (k) as usize).span, &mut found);
-        item_types(names, &nikaia_std::index::get(&items, (k) as usize).node, &here, &nikaia_std::index::get(&items, (k) as usize).span, &mut found);
+        item_types(names, &nikaia_std::index::get(&items, (k) as usize).node, &here, &plain, &nikaia_std::index::get(&items, (k) as usize).span, &mut found);
         inherent_at_home(names, &nikaia_std::index::get(&items, (k) as usize).node, library, declared, &nikaia_std::index::get(&items, (k) as usize).span, &mut found);
     }
     found
@@ -57249,14 +57250,24 @@ fn a_symbols_text(names: &winnow_grammar::InternerContext, name: Option<winnow_g
     names.resolve(symbol).to_owned()
 }
 
-fn item_types(names: &winnow_grammar::InternerContext, item: &Item, known: &collections::BTreeSet<String>, span: &Span, out: &mut Vec<Finding>) {
+fn item_types(names: &winnow_grammar::InternerContext, item: &Item, known: &collections::BTreeSet<String>, plain: &collections::BTreeSet<String>, span: &Span, out: &mut Vec<Finding>) {
     match item {
-        Item::Fn { args, ret_type, body, .. } => {
-            for arg in args.iter() { written_at(names, &arg.ty, known, true, span, out); }
+        Item::Fn { args, ret_type, body, is_extern, .. } => {
+            let is_extern = *is_extern;
+            for arg in args.iter() {
+                written_at(names, &arg.ty, known, true, span, out);
+                if !is_extern { types_word_by_ref(names, &arg.ty, plain, "parameter", span, out); }
+            }
             maybe_written(names, (ret_type).as_ref(), known, span, out);
+            if !is_extern { types_word_by_ref_maybe(names, (ret_type).as_ref(), plain, span, out); }
             block_types(names, body, known, out);
         },
-        Item::Struct { fields, .. } => { for field in fields.iter() { written_at(names, &field.ty, known, false, span, out); } },
+        Item::Struct { fields, .. } => {
+            for field in fields.iter() {
+                written_at(names, &field.ty, known, false, span, out);
+                types_word_by_ref(names, &field.ty, plain, "field", span, out);
+            }
+        },
         Item::Enum { variants, .. } => {
             for variant in variants.iter() {
                 match &variant.fields {
@@ -57276,19 +57287,61 @@ fn item_types(names: &winnow_grammar::InternerContext, item: &Item, known: &coll
             for method in methods.iter() {
                 let mut here = known.to_owned();
                 for parameter in method.node.generics.iter() { here.insert(names.resolve(parameter.name).to_owned()); }
-                for arg in method.node.args.iter() { written_at(names, &arg.ty, &here, true, &method.span, out); }
+                for arg in method.node.args.iter() {
+                    written_at(names, &arg.ty, &here, true, &method.span, out);
+                    types_word_by_ref(names, &arg.ty, plain, "parameter", &method.span, out);
+                }
                 maybe_written(names, (method.node.ret_type).as_ref(), &here, &method.span, out);
+                types_word_by_ref_maybe(names, (method.node.ret_type).as_ref(), plain, &method.span, out);
             }
         },
         Item::Impl { methods, .. } => {
             for method in methods.iter() {
                 let mut here = known.to_owned();
                 for parameter in generic_names(names, &method.node) { here.insert(parameter); }
-                item_types(names, &method.node, &here, &method.span, out);
+                item_types(names, &method.node, &here, plain, &method.span, out);
             }
         },
         _ => { },
     }
+}
+
+fn types_word_by_ref(names: &winnow_grammar::InternerContext, ty: &Type, plain: &collections::BTreeSet<String>, position: &str, span: &Span, out: &mut Vec<Finding>) {
+    if !ty.is_view || ty.is_mut || ty.is_slice || ty.is_tuple || !ty.generics.is_empty() { return; }
+    let name = names.resolve(ty.name).to_owned();
+    let words = vec!["i8", "i16", "i32", "i64", "i128", "u8", "u16", "u32", "u64", "u128", "isize", "usize", "f32", "f64", "bool", "scalar"];
+    let mut a_word = plain.contains(&name);
+    for word in words.iter() {
+        let word = *word;
+        if word == name { a_word = true; }
+    }
+    if !a_word { return; }
+    let mut written = name.to_owned();
+    if ty.is_nullable { written = format!("{}?", name); }
+    out.push(refusal("NK1257", span.clone(), format!("A `{}` is copied at a read, so a {} can't be a `ref {}`.", name, position, written), vec!["A number, a `bool`, a `scalar` and an enum whose variants hold nothing are copied at a read (ADR-279 D8): the copy is never dearer than a pointer, so `ref` on one says nothing. Only an `extern \"C\"` declaration writes it, as the pointer C expects.".to_owned()], format!("Write `{}` without `ref`; a parameter the function changes is `mut name: {}`.", written, written)));
+}
+
+fn types_word_by_ref_maybe(names: &winnow_grammar::InternerContext, ty: Option<&Type>, plain: &collections::BTreeSet<String>, span: &Span, out: &mut Vec<Finding>) { types_word_by_ref(names, match ty { Some(__nikaia_value) => __nikaia_value, None => return }, plain, "result", span, out); }
+
+fn types_plain_enums(names: &winnow_grammar::InternerContext, items: &[Spanned<Item>]) -> collections::BTreeSet<String> {
+    let mut plain: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for item in items.iter() {
+        match &item.node {
+            Item::Enum { name, variants, .. } => {
+                let name = *name;
+                let mut holds = false;
+                for variant in variants.iter() {
+                    match &variant.fields {
+                        VariantFields::Unit => { },
+                        _ => { holds = true; },
+                    }
+                }
+                if !holds { plain.insert(names.resolve(name).to_owned()); }
+            },
+            _ => { },
+        }
+    }
+    plain
 }
 
 fn maybe_written(names: &winnow_grammar::InternerContext, ty: Option<&Type>, known: &collections::BTreeSet<String>, span: &Span, out: &mut Vec<Finding>) { written_at(names, match ty { Some(__nikaia_value) => __nikaia_value, None => return }, known, false, span, out); }

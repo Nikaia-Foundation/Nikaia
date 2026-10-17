@@ -494,6 +494,7 @@ enum BinaryOp {
     Add,
     Sub,
     Mul,
+    Pow(i64),
 }
 
 enum Shape {
@@ -507,6 +508,7 @@ fn name(op: ref BinaryOp) -> String {
         BinaryOp::Add => "add".clone()
         BinaryOp::Sub => "sub".clone()
         BinaryOp::Mul => "mul".clone()
+        BinaryOp::Pow(_) => "pow".clone()
     }
 }
 

@@ -30,11 +30,11 @@ test "the comparisons run" {
 // statement are told apart - only the one against a value reads it.
 enum ComparisonOp { Add, Neg }
 
-fn comparison_is_neg(op: ref ComparisonOp) -> bool {
+fn comparison_is_neg(op: ComparisonOp) -> bool {
     return op == ComparisonOp::Neg
 }
 
-fn comparison_both(a: ref ComparisonOp, b: ref ComparisonOp) -> bool {
+fn comparison_both(a: ComparisonOp, b: ComparisonOp) -> bool {
     return a == b && ComparisonOp::Add != a
 }
 

@@ -170,7 +170,7 @@ fn from_does_not_let_io_into_a_sync_function() {
 fn a_throwing_lambda_is_already_in_the_enclosing_functions_error_set() {
     let l = ledger(
         "enum LeereZeile { Leer }\n\
-         fn pruefe(n: ref i64) -> i64 throws {\n\
+         fn pruefe(n: i64) -> i64 throws {\n\
              if n == 0 { throw LeereZeile::Leer }\n\
              return 1\n\
          }\n\

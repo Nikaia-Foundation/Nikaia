@@ -252,7 +252,7 @@ fn a_throwing_neighbour_is_named_rather_than_unknown() {
                 "helper.nika",
                 "pub enum LeereZeile { Leer }\n\
                  \n\
-                 pub fn pruefe(n: ref i64) -> i64 throws {\n\
+                 pub fn pruefe(n: i64) -> i64 throws {\n\
                  \x20   if n == 0 { throw LeereZeile::Leer }\n\
                  \x20   return 1\n\
                  }\n",

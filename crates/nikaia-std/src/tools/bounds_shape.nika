@@ -360,7 +360,7 @@ fn hands_on(params: ref Vec[bool]?, at: i64) -> bool {
     return true
 }
 
-fn look_statement_here(stmt: ref Stmt, look: ref Look, words: ref winnow_grammar::InternerContext, mut seen: ShapeSeen) {
+fn look_statement_here(stmt: ref Stmt, look: Look, words: ref winnow_grammar::InternerContext, mut seen: ShapeSeen) {
     match look {
         Look::Bound => match stmt {
             Stmt::Let { names, .. } => bind_all(names, words, seen),
@@ -404,7 +404,7 @@ fn look_statement_here(stmt: ref Stmt, look: ref Look, words: ref winnow_grammar
     }
 }
 
-fn look_expr_here(expr: ref Expr, look: ref Look, deferred: bool, around: ref Around, words: ref winnow_grammar::InternerContext, mut seen: ShapeSeen) {
+fn look_expr_here(expr: ref Expr, look: Look, deferred: bool, around: ref Around, words: ref winnow_grammar::InternerContext, mut seen: ShapeSeen) {
     match look {
         Look::Bound => match expr {
             Expr::Closure { params, .. } => bind_all(params, words, seen),
@@ -443,13 +443,13 @@ fn look_expr_here(expr: ref Expr, look: ref Look, deferred: bool, around: ref Ar
     }
 }
 
-fn look_block(block: ref Block, look: ref Look, deferred: bool, around: ref Around, words: ref winnow_grammar::InternerContext, mut seen: ShapeSeen) {
+fn look_block(block: ref Block, look: Look, deferred: bool, around: ref Around, words: ref winnow_grammar::InternerContext, mut seen: ShapeSeen) {
     for stmt in block.stmts {
         look_statement(stmt.node, look, deferred, around, words, seen)
     }
 }
 
-fn look_statement(stmt: ref Stmt, look: ref Look, deferred: bool, around: ref Around, words: ref winnow_grammar::InternerContext, mut seen: ShapeSeen) {
+fn look_statement(stmt: ref Stmt, look: Look, deferred: bool, around: ref Around, words: ref winnow_grammar::InternerContext, mut seen: ShapeSeen) {
     look_statement_here(stmt, look, words, seen)
     match stmt {
         Stmt::For { iter, body, .. } => {
@@ -472,23 +472,23 @@ fn look_statement(stmt: ref Stmt, look: ref Look, deferred: bool, around: ref Ar
     }
 }
 
-fn look_maybe(expr: ref Expr?, look: ref Look, deferred: bool, around: ref Around, words: ref winnow_grammar::InternerContext, mut seen: ShapeSeen) {
+fn look_maybe(expr: ref Expr?, look: Look, deferred: bool, around: ref Around, words: ref winnow_grammar::InternerContext, mut seen: ShapeSeen) {
     look_expr(expr ?? return, look, deferred, around, words, seen)
 }
 
-fn look_all(exprs: ref Vec[Expr], look: ref Look, deferred: bool, around: ref Around, words: ref winnow_grammar::InternerContext, mut seen: ShapeSeen) {
+fn look_all(exprs: ref Vec[Expr], look: Look, deferred: bool, around: ref Around, words: ref winnow_grammar::InternerContext, mut seen: ShapeSeen) {
     for e in exprs {
         look_expr(e, look, deferred, around, words, seen)
     }
 }
 
-fn look_config(config: ref Vec[ConfigArg], look: ref Look, deferred: bool, around: ref Around, words: ref winnow_grammar::InternerContext, mut seen: ShapeSeen) {
+fn look_config(config: ref Vec[ConfigArg], look: Look, deferred: bool, around: ref Around, words: ref winnow_grammar::InternerContext, mut seen: ShapeSeen) {
     for c in config {
         look_expr(c.value, look, deferred, around, words, seen)
     }
 }
 
-fn look_fields(fields: ref Vec[FieldInit], look: ref Look, deferred: bool, around: ref Around, words: ref winnow_grammar::InternerContext, mut seen: ShapeSeen) {
+fn look_fields(fields: ref Vec[FieldInit], look: Look, deferred: bool, around: ref Around, words: ref winnow_grammar::InternerContext, mut seen: ShapeSeen) {
     for field in fields {
         look_maybe(field.value, look, deferred, around, words, seen)
     }
@@ -497,7 +497,7 @@ fn look_fields(fields: ref Vec[FieldInit], look: ref Look, deferred: bool, aroun
 /// The expression, then each expression directly inside it, then each block:
 /// the order the aliases are read in. A lambda, a task, an `overlap` and a
 /// `select` arm's body are deferred.
-fn look_expr(expr: ref Expr, look: ref Look, deferred: bool, around: ref Around, words: ref winnow_grammar::InternerContext, mut seen: ShapeSeen) {
+fn look_expr(expr: ref Expr, look: Look, deferred: bool, around: ref Around, words: ref winnow_grammar::InternerContext, mut seen: ShapeSeen) {
     look_expr_here(expr, look, deferred, around, words, seen)
     match expr {
         Expr::Match { value, arms, .. } => {

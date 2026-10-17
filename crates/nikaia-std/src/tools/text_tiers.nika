@@ -81,14 +81,14 @@ fn tier_of_kinds(kinds: ref Kinds) -> Tier {
     return Tier::Owned
 }
 
-fn mixed(tier: ref Tier) -> bool {
+fn mixed(tier: Tier) -> bool {
     return match tier {
         Tier::Mixed => true,
         else => false,
     }
 }
 
-fn owned_tier(tier: ref Tier) -> bool {
+fn owned_tier(tier: Tier) -> bool {
     return match tier {
         Tier::Owned => true,
         else => false,
@@ -151,7 +151,7 @@ pub enum Hand {
     Pairs,
 }
 
-pub fn hand_number(hand: ref Hand) -> i64 {
+pub fn hand_number(hand: Hand) -> i64 {
     return match hand {
         Hand::Either => 0,
         Hand::Maybe => 1,
@@ -1510,7 +1510,7 @@ fn same_tiers(a: ref collections::BTreeMap[String, Tier], b: ref collections::BT
         return false
     }
     for (word, tier) in a {
-        let other = b[word] ?? return false
+        let other: Tier = b[word] ?? return false
         if tier_word(tier) != tier_word(other) {
             return false
         }
@@ -1518,7 +1518,7 @@ fn same_tiers(a: ref collections::BTreeMap[String, Tier], b: ref collections::BT
     return true
 }
 
-fn tier_word(tier: ref Tier) -> String {
+fn tier_word(tier: Tier) -> String {
     return match tier {
         Tier::Owned => "owned",
         Tier::View => "view",
