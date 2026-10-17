@@ -1,0 +1,810 @@
+// crates/nikaia-std/src/tools/prover_loops.nika
+//
+// **A loop, read by the prover through its invariant** (ADR-361 D1-D5,
+// D7): the frontend's half. A `while` whose turn changes whole numbers the
+// walk follows becomes the logic layer's loop problem (`logic_horn.nika`):
+// each path through the body is one alternative of a turn, or a way out of
+// its own - a `break`, a `continue` that ends the turn, a `return`. Only a
+// claim what is known leaves open asks for it (D2); then the strategies
+// propose, cheapest first - closed forms, then intervals (D5) - and only
+// what the three queries prove is used (D4).
+//
+// The names: a state name `i` is itself at the head of a turn and `i'` after
+// it (`lg_primed`); `i@S` is its value when the loop at byte `S` is reached,
+// and `i#S` its value at the head of the turn the loop is left in. Neither
+// can be a name of the program.
+
+use std::collections
+
+/// **A loop the walk passed, as the logic layer states it** (ADR-361 D1),
+/// kept in the scope after it until one of its names is bound again.
+pub struct LoopRecord {
+    /// Where the loop starts, which names its values before it and at the
+    /// head of the last turn.
+    pub start: i64,
+    pub problem: LgLoop,
+    /// **What one turn adds to each state name**, path by path, where every
+    /// path adds a constant: the closed forms' and the intervals' input.
+    pub steps: collections::BTreeMap[String, Vec[i64]],
+}
+
+/// **The invariant the strategies found and the three queries proved**
+/// (ADR-361 D4, D5): its parts, each with the strategy that proposed it.
+pub struct LoopFound {
+    pub parts: Vec[(i64, String)],
+}
+
+/// One path through a turn: what it has met, and each name's value as a term
+/// over the head of the turn.
+struct LoopPath {
+    constraints: Vec[i64],
+    values: collections::BTreeMap[String, i64],
+    /// Locals of the body that are no whole number the prover reads.
+    unread: collections::BTreeSet[String],
+}
+
+/// A path that left the turn: `turn` (its end or a `continue`), `break` or
+/// `return`.
+struct LoopEnd {
+    kind: String,
+    path: LoopPath,
+}
+
+/// The paths a turn may take, at most: past it the loop is not stated.
+fn loop_paths_most() -> i64 {
+    return 32
+}
+
+/// The name of a state name's value when the loop is reached.
+pub fn loop_before_name(name: ref String, start: i64) -> String {
+    return f"{name}@{start}"
+}
+
+/// The name of a state name's value at the head of the turn the loop is left in.
+fn loop_head_name(name: ref String, start: i64) -> String {
+    return f"{name}#{start}"
+}
+
+/// **A `while` as the logic layer's loop problem** (ADR-361 D1): `state` the
+/// whole numbers its turn changes, `facts` what holds before it, `ints` the
+/// whole numbers the prover reads there. Nothing where a turn holds what this
+/// does not follow - a way out it does not know, more paths than it counts.
+pub fn loop_record(mut arena: TermArena, start: i64, state: ref Vec[String], facts: ref Vec[i64], ints: ref collections::BTreeSet[String], pinned: fn(ref String) -> i64? sync, cond: ref Expr, body: ref Block, words: ref winnow_grammar::InternerContext, claims: ref collections::BTreeSet[(i64, i64)], throwing: fn(ref Expr) -> bool sync, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> LoopRecord? {
+    let mut before: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    let mut entry: Vec[i64] = []
+    let mut head: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    for name in state {
+        let ghost = arena.var(loop_before_name(name, start))
+        before.insert(name.clone(), ghost)
+        let here = arena.var(name)
+        head.insert(name.clone(), here)
+        entry.push(arena.equal(here, ghost))
+    }
+    let mut fixed: Vec[i64] = []
+    for fact in facts {
+        fixed.push(arena.substitute(fact, before))
+    }
+    let condition = claim_term(cond, words, fn(name) { ints.contains(name) }, pinned, arena.nodes)
+    let first = LoopPath { constraints: [], values: head, unread: collections::BTreeSet() }
+    let mut ends: Vec[LoopEnd] = []
+    let live = loop_block(arena, body, [first], ends, state, ints, pinned, words, claims, throwing, holes_of) ?? return null
+    for path in live {
+        ends.push(LoopEnd { kind: "turn".clone(), path: path.clone() })
+    }
+    let mut turns: Vec[i64] = []
+    let mut exits: Vec[LgExit] = []
+    let mut same: Vec[i64] = []
+    for name in state {
+        let primed = arena.var(lg_primed(name))
+        let here = arena.var(name)
+        same.push(arena.equal(primed, here))
+    }
+    let c = condition ?? -1
+    if c >= 0 {
+        let not_c = arena.not(c)
+        same.insert(0, not_c)
+    }
+    exits.push(LgExit { kind: "condition".clone(), relation: arena.and(same) })
+    let mut steps: collections::BTreeMap[String, Vec[i64]] = collections::BTreeMap()
+    let mut unsteady: collections::BTreeSet[String] = collections::BTreeSet()
+    for end in ends {
+        let mut parts = end.path.constraints.clone()
+        for name in state {
+            let primed = arena.var(lg_primed(name))
+            let value = end.path.values[name] ?? arena.var(name)
+            parts.push(arena.equal(primed, value))
+            if end.kind == "turn" {
+                let delta = loop_constant_step(arena, name, value)
+                if delta == null {
+                    unsteady.insert(name.clone())
+                } else {
+                    let mut seen = steps.remove(name) ?? []
+                    seen.push(delta ?? 0)
+                    steps.insert(name.clone(), seen)
+                }
+            }
+        }
+        if end.kind == "turn" {
+            turns.push(arena.and(parts))
+        } else {
+            if c >= 0 {
+                parts.insert(0, c)
+            }
+            exits.push(LgExit { kind: end.kind.clone(), relation: arena.and(parts) })
+        }
+    }
+    for name in unsteady {
+        steps.remove(name)
+    }
+    let mut step = arena.boolean(false)
+    if !turns.is_empty() {
+        step = arena.or(turns)
+    }
+    let problem = LgLoop { state: state.clone(), fixed: fixed, entry: entry, condition: condition, step: step, exits: exits, goals: [] }
+    return LoopRecord { start: start, problem: problem, steps: steps }
+}
+
+/// What a turn adds to `name` where `value` is it plus a constant: the same
+/// difference under two choices of every name it reads. A guess only - what
+/// it proposes is proved or dropped (D4).
+fn loop_constant_step(mut arena: TermArena, name: ref String, value: i64) -> i64? {
+    let here = arena.var(name)
+    let difference = arena.sub(value, here)
+    let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+    arena.variables(difference, read)
+    let mut low: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    let mut high: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    let mut k = 0
+    for n in read {
+        low.insert(n.clone(), 3 + 7 * k)
+        high.insert(n.clone(), 11 + 13 * k)
+        k += 1
+    }
+    let a = arena.int_value(difference, low) ?? return null
+    let b = arena.int_value(difference, high) ?? return null
+    if a != b {
+        return null
+    }
+    return a
+}
+
+/// What `name op= value` makes of `old`: the value itself for `=`, a sum or
+/// a difference for `+=` and `-=`, nothing else.
+fn loop_assigned(mut arena: TermArena, op: ref BinaryOp?, old: i64, value: i64) -> i64? {
+    let operation = op ?? return value
+    return match operation {
+        BinaryOp::Add => arena.add(old, value),
+        BinaryOp::Sub => arena.sub(old, value),
+        else => null,
+    }
+}
+
+/// A term of the body, read on `path`: each name the path has a value for
+/// replaced by it.
+fn loop_read(mut arena: TermArena, expr: ref Expr, path: ref LoopPath, ints: ref collections::BTreeSet[String], pinned: fn(ref String) -> i64? sync, words: ref winnow_grammar::InternerContext, claim: bool) -> i64? {
+    let mut term: i64? = null
+    if claim {
+        term = claim_term(expr, words, fn(name) { path.values.contains_key(name) || (ints.contains(name) && !path.unread.contains(name)) }, pinned, arena.nodes)
+    } else {
+        term = lin_term(expr, words, fn(name) { path.values.contains_key(name) || (ints.contains(name) && !path.unread.contains(name)) }, pinned, arena.nodes)
+    }
+    let t = term ?? return null
+    return arena.substitute(t, path.values)
+}
+
+/// `name` gets a value nothing follows on `path`.
+fn loop_forget(mut arena: TermArena, mut path: LoopPath, name: ref String) {
+    let fresh = arena.var(f"{name}~{arena.nodes.len()}")
+    path.values.insert(name.clone(), fresh)
+}
+
+/// **The statements of a block, on each live path** (ADR-361 D1): the paths
+/// still running after it; each that left is in `ends`. Nothing where a
+/// statement leaves in a way this does not follow.
+fn loop_block(mut arena: TermArena, block: ref Block, first: ref Vec[LoopPath], mut ends: Vec[LoopEnd], state: ref Vec[String], ints: ref collections::BTreeSet[String], pinned: fn(ref String) -> i64? sync, words: ref winnow_grammar::InternerContext, claims: ref collections::BTreeSet[(i64, i64)], throwing: fn(ref Expr) -> bool sync, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> Vec[LoopPath]? {
+    let mut live = first.clone()
+    for stmt in block.stmts {
+        let mut next: Vec[LoopPath] = []
+        for path in live {
+            let mut p = path.clone()
+            let mut ended: String = ""
+            let mut keep = true
+            match stmt.node {
+                Stmt::Break => {
+                    ended = "break"
+                },
+                Stmt::Continue => {
+                    ended = "turn"
+                },
+                Stmt::Return(_) => {
+                    ended = "return"
+                },
+                Stmt::Let { names, value, .. } => {
+                    if leaves_stmt(stmt.node, throwing, holes_of, true) {
+                        return null
+                    }
+                    for n in assigned_in_statement(stmt.node, words) {
+                        if p.values.contains_key(n) {
+                            loop_forget(arena, p, n)
+                        }
+                    }
+                    let mut term: i64? = null
+                    if names.len() == 1 {
+                        term = loop_read(arena, value, p, ints, pinned, words, false)
+                    }
+                    for name in names {
+                        let n = words.resolve(name).clone()
+                        if state.contains(n) {
+                            return null
+                        }
+                        p.values.remove(n)
+                        p.unread.insert(n.clone())
+                    }
+                    if term != null {
+                        let n = words.resolve(names[0]).clone()
+                        p.unread.remove(n)
+                        p.values.insert(n, term ?? 0)
+                    }
+                },
+                Stmt::Assign { target, op, value } => {
+                    if leaves_stmt(stmt.node, throwing, holes_of, true) {
+                        return null
+                    }
+                    let name = match target {
+                        Expr::Variable(s, _) => words.resolve(s).clone(),
+                        else => "".clone(),
+                    }
+                    if name != "" && p.values.contains_key(name) {
+                        let read = loop_read(arena, value, p, ints, pinned, words, false)
+                        let old = p.values[name] ?? arena.var(name)
+                        let mut updated: i64? = null
+                        if read != null {
+                            let r = read ?? 0
+                            updated = loop_assigned(arena, op, old, r)
+                        }
+                        if updated == null {
+                            loop_forget(arena, p, name)
+                        } else {
+                            p.values.insert(name.clone(), updated ?? 0)
+                        }
+                    }
+                },
+                Stmt::Expr(expr) => {
+                    let handled = loop_expr_stmt(arena, expr, stmt.span, p, next, ends, state, ints, pinned, words, claims, throwing, holes_of) ?? return null
+                    if handled {
+                        keep = false
+                    } else {
+                        if leaves_stmt(stmt.node, throwing, holes_of, true) {
+                            return null
+                        }
+                        for n in assigned_in_statement(stmt.node, words) {
+                            if p.values.contains_key(n) {
+                                loop_forget(arena, p, n)
+                            }
+                        }
+                    }
+                },
+                else => {
+                    if leaves_stmt(stmt.node, throwing, holes_of, true) {
+                        return null
+                    }
+                    for n in assigned_in_statement(stmt.node, words) {
+                        if p.values.contains_key(n) {
+                            loop_forget(arena, p, n)
+                        }
+                    }
+                },
+            }
+            if ended != "" {
+                ends.push(LoopEnd { kind: ended, path: p })
+            } else if keep {
+                next.push(p)
+            }
+        }
+        live = next
+        if live.len() + ends.len() > loop_paths_most() {
+            return null
+        }
+    }
+    return live
+}
+
+/// An `if` or an `assert` standing as a statement, on one path: whether it
+/// was handled - the paths it leaves running pushed onto `next` - or is an
+/// ordinary statement. Nothing where a branch leaves in a way not followed.
+fn loop_expr_stmt(mut arena: TermArena, expr: ref Expr, span: Span, path: ref LoopPath, mut next: Vec[LoopPath], mut ends: Vec[LoopEnd], state: ref Vec[String], ints: ref collections::BTreeSet[String], pinned: fn(ref String) -> i64? sync, words: ref winnow_grammar::InternerContext, claims: ref collections::BTreeSet[(i64, i64)], throwing: fn(ref Expr) -> bool sync, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> bool? {
+    match expr {
+        Expr::If { cond, then_branch, else_branch, .. } => {
+            let c = loop_read(arena, cond, path, ints, pinned, words, true)
+            let mut yes = path.clone()
+            let mut no = path.clone()
+            if c != null {
+                yes.constraints.push(c ?? 0)
+                no.constraints.push(arena.not(c ?? 0))
+            }
+            let after_yes = loop_block(arena, then_branch, [yes], ends, state, ints, pinned, words, claims, throwing, holes_of) ?? return null
+            next.extend(after_yes)
+            let otherwise = else_branch ?? {
+                next.push(no)
+                return true
+            }
+            let after_no = loop_block(arena, otherwise, [no], ends, state, ints, pinned, words, claims, throwing, holes_of) ?? return null
+            next.extend(after_no)
+            return true
+        },
+        Expr::Call { func, args, .. } => {
+            if prover_an_assert_call(func, args, span, claims) {
+                // Past an `assert` its claim holds: proved, or checked
+                // where it is reached.
+                let mut p = path.clone()
+                let c = loop_read(arena, args[0], p, ints, pinned, words, true)
+                if c != null {
+                    p.constraints.push(c ?? 0)
+                }
+                next.push(p)
+                return true
+            }
+            return false
+        },
+        else => return false,
+    }
+}
+
+/// **The candidates, cheapest strategy first** (ADR-361 D5): closed forms
+/// - a name a turn changes by one constant on every path is its start plus
+/// that constant times the turns taken, and a counter stops at its bound -
+/// then intervals.
+fn loop_candidates(mut arena: TermArena, record: ref LoopRecord) -> Vec[(i64, String)] {
+    let mut found: Vec[(i64, String)] = []
+    let start = record.start
+    // Closed forms: each name against its start, each pair against each other.
+    let mut steady: Vec[(String, i64)] = []
+    for (name, deltas) in record.steps {
+        if deltas.is_empty() {
+            continue
+        }
+        let k = deltas[0]
+        let mut one = true
+        for d in deltas {
+            if d != k {
+                one = false
+            }
+        }
+        if one {
+            steady.push((name.clone(), k))
+        }
+    }
+    for (name, k) in steady {
+        let here = arena.var(name)
+        let before = arena.var(loop_before_name(name, start))
+        if k == 0 {
+            found.push((arena.equal(here, before), "closed forms".clone()))
+        } else if k > 0 {
+            found.push((arena.ge(here, before), "closed forms".clone()))
+        } else {
+            found.push((arena.le(here, before), "closed forms".clone()))
+        }
+    }
+    for i in 0..<steady.len() {
+        for j in (i + 1)..<steady.len() {
+            let (x, kx) = steady[i]
+            let (y, ky) = steady[j]
+            if kx == 0 || ky == 0 {
+                continue
+            }
+            // ky · (x - x@) == kx · (y - y@)
+            let left = loop_scaled_offset(arena, record, x, ky)
+            let right = loop_scaled_offset(arena, record, y, kx)
+            found.push((arena.equal(left, right), "closed forms".clone()))
+        }
+    }
+    // A counter against its bound: it ends within one step past it, or
+    // never moved.
+    let c = record.problem.condition ?? -1
+    if c >= 0 {
+        for (name, k) in steady {
+            let bound = loop_bound_of(arena, c, name, record.problem.state) ?? continue
+            let op = bound.op.clone()
+            let e = bound.value
+            let here = arena.var(name)
+            let before = arena.var(loop_before_name(name, start))
+            let kc = arena.int(k)
+            let mut reach = arena.add(e, kc)
+            let constant = arena.constant(e)
+            if constant != null {
+                reach = arena.int((constant ?? 0) + k)
+            }
+            let mut near: i64? = null
+            if k > 0 && op == "<" {
+                near = arena.lt(here, reach)
+            } else if k > 0 && op == "<=" {
+                near = arena.le(here, reach)
+            } else if k < 0 && op == ">" {
+                near = arena.gt(here, reach)
+            } else if k < 0 && op == ">=" {
+                near = arena.ge(here, reach)
+            }
+            let n = near ?? continue
+            found.push((n, "closed forms".clone()))
+            let unmoved = arena.equal(here, before)
+            found.push((arena.or([n, unmoved]), "closed forms".clone()))
+        }
+    }
+    // Intervals, widened to what the condition stops: a name whose every
+    // path adds a constant of one sign, from a known start.
+    for (name, deltas) in record.steps {
+        let mut up = true
+        let mut down = true
+        let mut most = 0
+        let mut least = 0
+        for d in deltas {
+            if d < 0 {
+                up = false
+            }
+            if d > 0 {
+                down = false
+            }
+            if d > most {
+                most = d
+            }
+            if d < least {
+                least = d
+            }
+        }
+        if deltas.is_empty() || (up && down) {
+            continue
+        }
+        let ghost = loop_before_name(name, start)
+        let known = loop_known_value(arena, record.problem.fixed, ghost) ?? continue
+        let here = arena.var(name)
+        let at_start = arena.int(known)
+        let limit = loop_constant_limit(arena, c, name)
+        if up {
+            found.push((arena.ge(here, at_start), "intervals".clone()))
+            let found_limit = limit ?? continue
+            let op = found_limit.op.clone()
+            let value = found_limit.value
+            let mut top: i64? = null
+            if op == "<" {
+                top = value - 1 + most
+            } else if op == "<=" {
+                top = value + most
+            }
+            let t = top ?? continue
+            let highest = if t > known { t } else { known }
+            let h = arena.int(highest)
+            found.push((arena.le(here, h), "intervals".clone()))
+        } else {
+            found.push((arena.le(here, at_start), "intervals".clone()))
+            let found_limit = limit ?? continue
+            let op = found_limit.op.clone()
+            let value = found_limit.value
+            let mut bottom: i64? = null
+            if op == ">" {
+                bottom = value + 1 + least
+            } else if op == ">=" {
+                bottom = value + least
+            }
+            let b = bottom ?? continue
+            let lowest = if b < known { b } else { known }
+            let l = arena.int(lowest)
+            found.push((arena.ge(here, l), "intervals".clone()))
+        }
+    }
+    return found
+}
+
+/// `k · (name - start)`, written as plainly as the start allows: a start
+/// the facts before the loop pin is its value, and `0` and `1` leave no trace.
+fn loop_scaled_offset(mut arena: TermArena, record: ref LoopRecord, name: ref String, k: i64) -> i64 {
+    let ghost = loop_before_name(name, record.start)
+    let here = arena.var(name)
+    let known = loop_known_value(arena, record.problem.fixed, ghost)
+    let mut offset = here
+    if known == null {
+        let before = arena.var(ghost)
+        offset = arena.sub(here, before)
+    } else if (known ?? 0) != 0 {
+        let before = arena.int(known ?? 0)
+        offset = arena.sub(here, before)
+    }
+    if k == 1 {
+        return offset
+    }
+    let factor = arena.int(k)
+    return arena.mul(factor, offset)
+}
+
+/// **`name op e`, where the condition is that comparison** and `e` reads no
+/// state name: `<`, `<=`, `>` or `>=`, with the sides turned where `name`
+/// stands on the right.
+fn loop_bound_of(arena: ref TermArena, c: i64, name: ref String, state: ref Vec[String]) -> LoopBound? {
+    let (op, left, right) = match arena.at(c) {
+        SolverTerm::Lt(a, b) => ("<".clone(), a, b),
+        SolverTerm::Le(a, b) => ("<=".clone(), a, b),
+        SolverTerm::Gt(a, b) => (">".clone(), a, b),
+        SolverTerm::Ge(a, b) => (">=".clone(), a, b),
+        else => return null,
+    }
+    let mut other = right
+    let mut turned = false
+    if arena.is_the_variable(left, name) {
+        other = right
+    } else if arena.is_the_variable(right, name) {
+        other = left
+        turned = true
+    } else {
+        return null
+    }
+    for s in state {
+        if arena.mentions(other, s) {
+            return null
+        }
+    }
+    if !turned {
+        return LoopBound { op: op, value: other }
+    }
+    let flipped = if op == "<" { ">" } else if op == "<=" { ">=" } else if op == ">" { "<" } else { "<=" }
+    return LoopBound { op: flipped.clone(), value: other }
+}
+
+/// A comparison's operator and its other side: a term, or a constant.
+struct LoopBound {
+    op: String,
+    value: i64,
+}
+
+/// The condition as `name op constant`, where it is one.
+fn loop_constant_limit(arena: ref TermArena, c: i64, name: ref String) -> LoopBound? {
+    if c < 0 {
+        return null
+    }
+    let none: Vec[String] = []
+    let bound = loop_bound_of(arena, c, name, none) ?? return null
+    let value = arena.constant(bound.value) ?? return null
+    return LoopBound { op: bound.op.clone(), value: value }
+}
+
+/// **What a state name was when the loop was reached**, as a term over the
+/// names the loop does not change: the other side of a fact `name == t`.
+fn loop_start_term(arena: ref TermArena, facts: ref Vec[i64], name: ref String) -> i64? {
+    for fact in facts {
+        match arena.at(fact) {
+            SolverTerm::Eq(a, b) => {
+                if arena.is_the_variable(a, name) && !arena.text(b).contains("@") {
+                    return b
+                }
+                if arena.is_the_variable(b, name) && !arena.text(a).contains("@") {
+                    return a
+                }
+            },
+            else => {},
+        }
+    }
+    return null
+}
+
+/// The value a fact `name == constant` among `facts` pins `name` to.
+fn loop_known_value(arena: ref TermArena, facts: ref Vec[i64], name: ref String) -> i64? {
+    for fact in facts {
+        match arena.at(fact) {
+            SolverTerm::Eq(a, b) => {
+                if arena.is_the_variable(a, name) {
+                    let v = arena.constant(b)
+                    if v != null {
+                        return v
+                    }
+                }
+                if arena.is_the_variable(b, name) {
+                    let v = arena.constant(a)
+                    if v != null {
+                        return v
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+    return null
+}
+
+/// **The invariant, found and checked** (ADR-361 D4, D5): every candidate
+/// that holds at entry, then those a turn keeps while the others are
+/// assumed, until none falls; what is left is asked once more as one
+/// invariant, by the three queries' first two - the third is the claim's
+/// own (`loop_facts`). Nothing where no candidate survives. `asked` counts
+/// the queries.
+pub fn loop_found(mut arena: TermArena, record: ref LoopRecord, proved: fn(ref TermArena, ref Vec[i64], i64) -> bool sync, mut asked: Vec[i64]) -> LoopFound? {
+    let mut kept: Vec[(i64, String)] = []
+    for (term, origin) in loop_candidates(arena, record) {
+        let query = lg_loop_entry_query(record.problem, term)
+        asked.push(1)
+        if proved(arena, query.facts, query.goal) {
+            kept.push((term, origin.clone()))
+        }
+    }
+    let mut rounds = 0
+    let mut changed = true
+    while changed && !kept.is_empty() && rounds < 4 {
+        changed = false
+        rounds += 1
+        let mut all: Vec[i64] = []
+        for (term, _) in kept {
+            all.push(term)
+        }
+        let assumed = arena.and(all)
+        let mut still: Vec[(i64, String)] = []
+        for (term, origin) in kept {
+            let mut query = lg_loop_turn_query(arena, record.problem, assumed)
+            query.goal = lg_loop_primed(arena, record.problem, term)
+            asked.push(1)
+            if proved(arena, query.facts, query.goal) {
+                still.push((term, origin.clone()))
+            } else {
+                changed = true
+            }
+        }
+        kept = still
+    }
+    if kept.is_empty() || changed {
+        return null
+    }
+    let mut all: Vec[i64] = []
+    for (term, _) in kept {
+        all.push(term)
+    }
+    let invariant = arena.and(all)
+    let verdict = lg_loop_check(arena, record.problem, invariant, proved)
+    asked.push(2)
+    if !verdict.proved() {
+        return null
+    }
+    return LoopFound { parts: kept }
+}
+
+/// **What holds past the loop** (ADR-361 D4): what held before it, about
+/// the values it started from; the invariant at the head of the last turn;
+/// and one of the ways out that reach past it, from there.
+pub fn loop_facts(mut arena: TermArena, record: ref LoopRecord, found: ref LoopFound) -> Vec[i64] {
+    let start = record.start
+    let mut renamed: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    let mut ghosts: Vec[String] = []
+    for name in record.problem.state {
+        renamed.insert(name.clone(), arena.var(loop_head_name(name, start)))
+        renamed.insert(lg_primed(name), arena.var(name))
+        ghosts.push(loop_before_name(name, start))
+    }
+    let mut facts: Vec[i64] = []
+    for fact in record.problem.fixed {
+        for g in ghosts {
+            if arena.mentions(fact, g) {
+                facts.push(fact)
+                break
+            }
+        }
+    }
+    for (term, _) in found.parts {
+        facts.push(arena.substitute(term, renamed))
+    }
+    let mut ways: Vec[i64] = []
+    for exit in record.problem.exits {
+        if exit.kind != "return" {
+            ways.push(arena.substitute(exit.relation, renamed))
+        }
+    }
+    facts.push(arena.or(ways))
+    return facts
+}
+
+/// **The invariant as `--asserts` names it** (ADR-361 D7): its parts, each
+/// start the facts before the loop pin written as its value, and the
+/// strategies that found them.
+pub fn loop_found_text(mut arena: TermArena, record: ref LoopRecord, found: ref LoopFound) -> String {
+    let mut known: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    for name in record.problem.state {
+        let ghost = loop_before_name(name, record.start)
+        let value = loop_start_term(arena, record.problem.fixed, ghost) ?? continue
+        known.insert(ghost, value)
+    }
+    let mut parts: Vec[String] = []
+    let mut origins: Vec[String] = []
+    for (term, origin) in found.parts {
+        let shown = arena.substitute(term, known)
+        let mut text = arena.text(shown)
+        if text.contains(" || ") {
+            text = f"({text})"
+        }
+        // A part another already says - the same text, or a disjunction
+        // whose first side stands on its own - is not said twice.
+        let mut said = parts.contains(text)
+        for other in parts {
+            if text.starts_with(f"({other} || ") {
+                said = true
+            }
+        }
+        if said {
+            continue
+        }
+        parts.push(text)
+        if !origins.contains(origin) {
+            origins.push(origin.clone())
+        }
+    }
+    let changes = record.problem.state.join("`, `")
+    return f"proved through the loop that changes `{changes}`, with the invariant `{parts.join(" && ")}`, found by {origins.join(" and ")} and checked by three queries"
+}
+
+/// **Why a claim past a loop stays open** (ADR-361 D7): the loop and the
+/// names it changes.
+pub fn loop_open_text(records: ref Vec[LoopRecord]) -> String {
+    let mut names: Vec[String] = []
+    for record in records {
+        for n in record.problem.state {
+            if !names.contains(n) {
+                names.push(n.clone())
+            }
+        }
+    }
+    return f"nothing before it shows it; no invariant found for the loop that changes `{names.join("`, `")}` carries it"
+}
+
+/// **Whether a claim reads what one of the loops changes** (ADR-361 D2):
+/// through the facts that tie its names to others, one of their state names.
+pub fn loop_reads(arena: ref TermArena, facts: ref Vec[i64], claim: i64, records: ref Vec[LoopRecord]) -> bool {
+    let mut names: collections::BTreeSet[String] = collections::BTreeSet()
+    arena.variables(claim, names)
+    let mut used: collections::BTreeSet[i64] = collections::BTreeSet()
+    let mut grew = true
+    while grew {
+        grew = false
+        for record in records {
+            for s in record.problem.state {
+                if names.contains(s) {
+                    return true
+                }
+            }
+        }
+        for k in 0..<facts.len() {
+            if used.contains(k) {
+                continue
+            }
+            let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+            arena.variables(facts[k], read)
+            let mut ties = false
+            for n in read {
+                if names.contains(n) {
+                    ties = true
+                    break
+                }
+            }
+            if ties {
+                used.insert(k)
+                for n in read {
+                    if !names.contains(n) {
+                        names.insert(n.clone())
+                        grew = true
+                    }
+                }
+            }
+        }
+    }
+    return false
+}
+
+/// A loop's record.problem as text: the key its invariant is kept under, so that a
+/// later pass that states it again finds it.
+pub fn loop_key(arena: ref TermArena, record: ref LoopRecord) -> String {
+    let mut parts: Vec[String] = [f"{record.start}"]
+    for fact in record.problem.fixed {
+        parts.push(arena.text(fact))
+    }
+    for fact in record.problem.entry {
+        parts.push(arena.text(fact))
+    }
+    parts.push(arena.text(record.problem.step))
+    parts.push(arena.text(record.problem.condition ?? record.problem.step))
+    for exit in record.problem.exits {
+        parts.push(arena.text(exit.relation))
+    }
+    return parts.join(" ; ")
+}

@@ -147,6 +147,12 @@ fn prover_function(mut walk: ProverWalk, item: ref Spanned[Item], owner: String?
 
 /// A block; whether it always leaves.
 fn prover_block(mut walk: ProverWalk, block: ref Block, mut scope: ProverScope, at: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) -> bool {
+    // **The names of this block the walk may not follow as mutable whole
+    // numbers** (ADR-361 D1), asked only where it binds one.
+    let mut untracked: collections::BTreeSet[String] = collections::BTreeSet()
+    if prover_binds_mutable(block) {
+        untracked = untracked_in(block, words)
+    }
     for index in 0..<block.stmts.len() {
         let stmt = block.stmts[index]
         if walk.state.collecting && index + 1 < block.stmts.len() {
@@ -158,6 +164,7 @@ fn prover_block(mut walk: ProverWalk, block: ref Block, mut scope: ProverScope, 
         if prover_stmt(walk, stmt, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition) {
             return true
         }
+        prover_follow_mutables(walk, stmt.node, scope, untracked, words)
         // A statement that may leave for some states and not for others
         // narrows what goes on past it, and only an `if` the prover reads says
         // how (`prover_expr_stmt`).
@@ -216,7 +223,38 @@ fn prover_stmt(mut walk: ProverWalk, stmt: ref Spanned[Stmt], mut scope: ProverS
         },
         Stmt::While { cond, body } => {
             prover_expr(walk, cond, span, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
+            // **What the turn changes** (ADR-361 D1): unknown at the head of
+            // a turn and past the loop; a whole number the walk follows is
+            // read past it through the loop's invariant (D2).
+            let changed = assigned_in(body, words)
+            let mut state: Vec[String] = []
+            for n in changed {
+                if scope.mutables.contains(n) && scope.ints.contains(n) {
+                    state.push(n.clone())
+                }
+            }
+            let mut records: Vec[LoopRecord] = []
+            if !state.is_empty() {
+                let record = loop_record(walk.arena, span.start as i64, state, scope.facts, scope.ints, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, cond, body, words, walk.claims, fn(e) { prover_throws(e, at, program, words, own, library, unaliased) }, holes_of)
+                if record != null {
+                    records.push(record ?? return false)
+                }
+            }
             let mut inner = scope.clone()
+            for n in changed {
+                inner.rebind(walk.arena, n)
+                scope.rebind(walk.arena, n)
+            }
+            for n in state {
+                inner.ints.insert(n.clone())
+                inner.loose.insert(n.clone())
+                scope.ints.insert(n.clone())
+                scope.loose.insert(n.clone())
+            }
+            if !changed.is_empty() {
+                scope.exact = false
+            }
+            scope.loops.extend(records)
             inner.path = null
             // Which turns there are depends on what the loop changes.
             inner.exact = false
@@ -694,6 +732,15 @@ fn prover_for(mut walk: ProverWalk, bindings: ref Vec[winnow_grammar::Symbol], i
     prover_expr(walk, iter, span, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
     let tainted = from_outside(iter, scope.tainted, words, library, holes_of)
     let mut inner = scope.clone()
+    // What a turn changes is unknown at its head and past the loop.
+    let changed = assigned_in(body, words)
+    for n in changed {
+        inner.rebind(walk.arena, n)
+        scope.rebind(walk.arena, n)
+    }
+    if !changed.is_empty() {
+        scope.exact = false
+    }
     for binding in bindings {
         let n = words.resolve(binding).clone()
         inner.rebind(walk.arena, n)
@@ -1261,7 +1308,7 @@ fn prover_qualified(segments: ref Vec[winnow_grammar::Symbol], words: ref winnow
 }
 
 /// Whether a call is one of the checker's `assert`s.
-fn prover_an_assert_call(func: ref Expr, args: ref Vec[Expr], span: Span, claims: ref collections::BTreeSet[(i64, i64)]) -> bool {
+pub fn prover_an_assert_call(func: ref Expr, args: ref Vec[Expr], span: Span, claims: ref collections::BTreeSet[(i64, i64)]) -> bool {
     let named = match func {
         Expr::Variable(_, _) => true,
         else => false,
@@ -1298,6 +1345,61 @@ fn prover_variable_named(value: ref Expr?, words: ref winnow_grammar::InternerCo
     return match present {
         Expr::Variable(name, _) => words.resolve(name).clone(),
         else => null,
+    }
+}
+
+/// Whether a block binds one name with `let mut`.
+fn prover_binds_mutable(block: ref Block) -> bool {
+    for stmt in block.stmts {
+        match stmt.node {
+            Stmt::Let { names, mutable, .. } => {
+                if mutable && names.len() == 1 {
+                    return true
+                }
+            },
+            else => {},
+        }
+    }
+    return false
+}
+
+/// **The mutable whole numbers, after a statement** (ADR-361 D1): `let mut`
+/// binds one the walk follows where its value is a term and nothing in
+/// the block hands it on; a statement that changes one inside it - a branch,
+/// a block - leaves it unknown. A `while` and a `for` see to their own, and
+/// an assignment binds its name again where it stands.
+fn prover_follow_mutables(mut walk: ProverWalk, stmt: ref Stmt, mut scope: ProverScope, untracked: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext) {
+    match stmt {
+        Stmt::Let { names, mutable, value, .. } => {
+            if mutable && names.len() == 1 {
+                let n = words.resolve(names[0]).clone()
+                if !untracked.contains(n) {
+                    let term = lin_term(value, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes)
+                    if term != null && !walk.arena.mentions(term ?? 0, n) {
+                        let v = term ?? 0
+                        let at_entry = scope.at_entry(walk.arena, v)
+                        scope.ints.insert(n.clone())
+                        scope.mutables.insert(n.clone())
+                        let named = walk.arena.var(n)
+                        scope.facts.push(walk.arena.equal(named, v))
+                        if at_entry != null {
+                            scope.entry.insert(n.clone(), at_entry ?? 0)
+                        }
+                    }
+                }
+            }
+        },
+        Stmt::While { .. } => {},
+        Stmt::For { .. } => {},
+        else => {
+            if !scope.mutables.is_empty() {
+                for n in assigned_in_statement(stmt, words) {
+                    if scope.mutables.contains(n) {
+                        scope.rebind(walk.arena, n)
+                    }
+                }
+            }
+        },
     }
 }
 

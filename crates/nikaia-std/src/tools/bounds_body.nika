@@ -24,6 +24,14 @@ enum Ask {
     Changes(String),
     /// The names a deferred body changes or hands on.
     Pinned,
+    /// **Every name assigned anywhere** (ADR-361 D1): what a loop's turn may
+    /// change, deferred or not.
+    Assigned,
+    /// **The names the prover may not follow as a mutable whole number**
+    /// (ADR-361 D1): what a deferred body changes, and every name handed to a
+    /// call or a method, which a `mut` parameter changes in place with
+    /// nothing at the call to show it (Part I 6.4).
+    Untracked,
 }
 
 struct Tally {
@@ -51,6 +59,29 @@ pub fn breaks(body: ref Block, words: ref winnow_grammar::InternerContext) -> bo
 pub fn pinned_in(body: ref Block, words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] {
     let mut found = tally()
     tally_block(body, Ask::Pinned, false, words, found)
+    return found.names
+}
+
+/// **Every name a statement assigns**, at any depth (ADR-361 D1).
+pub fn assigned_in_statement(stmt: ref Stmt, words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] {
+    let mut found = tally()
+    tally_statement(stmt, Ask::Assigned, false, words, found)
+    return found.names
+}
+
+/// **Every name a block assigns**, at any depth (ADR-361 D1).
+pub fn assigned_in(body: ref Block, words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] {
+    let mut found = tally()
+    tally_block(body, Ask::Assigned, false, words, found)
+    return found.names
+}
+
+/// **The names in `body` the prover may not follow as mutable whole
+/// numbers** (ADR-361 D1): changed by a deferred body or through an index or
+/// a field, or handed to a call or a method.
+pub fn untracked_in(body: ref Block, words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] {
+    let mut found = tally()
+    tally_block(body, Ask::Untracked, false, words, found)
     return found.names
 }
 
@@ -174,6 +205,28 @@ fn tally_statement(stmt: ref Stmt, ask: ref Ask, deferred: bool, words: ref winn
             }
         },
         Ask::Changes(_) => {},
+        Ask::Assigned => match stmt {
+            Stmt::Assign { target, .. } => {
+                let root = assigned_root(target, words)
+                if root != null {
+                    tally.names.insert(root ?? "")
+                }
+            },
+            else => {},
+        },
+        Ask::Untracked => {
+            match stmt {
+                Stmt::Assign { target, .. } => {
+                    // Through an index or a field, or from a deferred body.
+                    let root = assigned_root(target, words)
+                    let direct = variable_text(target, words) != null
+                    if root != null && (deferred || !direct) {
+                        tally.names.insert(root ?? "")
+                    }
+                },
+                else => {},
+            }
+        },
     }
     match stmt {
         Stmt::For { iter, body, .. } => {
@@ -255,6 +308,19 @@ fn tally_here(expr: ref Expr, ask: ref Ask, deferred: bool, words: ref winnow_gr
             Expr::Call { args, .. } if names_the(args, list, words) => {
                 tally.count += 2
             },
+            else => {},
+        },
+        Ask::Assigned => {},
+        Ask::Untracked => match expr {
+            Expr::MethodCall { receiver, args, .. } => {
+                add_variable(receiver, words, tally.names)
+                add_variables(args, words, tally.names)
+            },
+            Expr::SafeMethod { receiver, args, .. } => {
+                add_variable(receiver, words, tally.names)
+                add_variables(args, words, tally.names)
+            },
+            Expr::Call { args, .. } => add_variables(args, words, tally.names),
             else => {},
         },
         Ask::Pinned => {

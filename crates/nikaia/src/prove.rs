@@ -153,6 +153,19 @@ thread_local! {
 static TOTAL_RUNS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 static TOTAL_SECOND: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 static TOTAL_DIVISORS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static TOTAL_LOOP_CLAIMS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static TOTAL_LOOP_QUERIES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// **What reading through loops came to in this process** (ADR-361 D8):
+/// claims asked through a loop, and the queries that found and checked the
+/// invariants and asked those claims.
+pub fn loop_totals() -> (usize, usize) {
+    use std::sync::atomic::Ordering::Relaxed;
+    (
+        TOTAL_LOOP_CLAIMS.load(Relaxed),
+        TOTAL_LOOP_QUERIES.load(Relaxed),
+    )
+}
 
 /// **What the prover's extra work came to in this process** (ADR-359 D13,
 /// D2, D6): calls run for claims, claims asked a second time, divisors asked
@@ -205,6 +218,14 @@ pub fn prove(
         );
         TOTAL_DIVISORS.fetch_add(
             walk.state.divisor_queries as usize,
+            std::sync::atomic::Ordering::Relaxed,
+        );
+        TOTAL_LOOP_CLAIMS.fetch_add(
+            walk.state.loop_claims as usize,
+            std::sync::atomic::Ordering::Relaxed,
+        );
+        TOTAL_LOOP_QUERIES.fetch_add(
+            walk.state.loop_queries as usize,
             std::sync::atomic::Ordering::Relaxed,
         );
         round += 1;

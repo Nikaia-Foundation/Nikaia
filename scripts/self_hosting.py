@@ -107,6 +107,7 @@ COMPILER_NIKA = {
     "logic_smtlib.nika": "logic: a query as SMT-LIB 2, and a script read back (0.0.754)",
     "logic_alethe.nika": "logic: a proof as Alethe (0.0.754)",
     "logic_horn.nika": "logic: a loop as Horn clauses, its SMT-LIB HORN text, and an invariant checked by three queries (0.0.998)",
+    "prover_loops.nika": "prove: a while loop as the logic layer's loop problem, closed forms and intervals, an invariant checked by three queries (0.0.998)",
     "grammar_decode.nika": "grammar_run: what a grammar run at build time printed read back, and the text of the sub-program and its manifest (0.0.755)",
     "comptime_driver.nika": "comptime_run: the sub-program's main and its site table, and the bundle it links against (0.0.757)",
     "build_eval.nika": "build_time: the evaluator of a build-time expression - calls, loops, text, structs, variants and a grammar run (0.0.760)",

@@ -1,0 +1,188 @@
+//! **The prover reads through a loop** (ADR-361 D1-D5, D7; issue #640 steps
+//! 3-6): a claim past a `while` that changes a whole number it reads is asked
+//! once more through the loop's invariant, which closed forms and intervals
+//! find and three queries check.
+
+use nikaia::contracts::{Ledger, LedgerOps, STD};
+use nikaia::parser::parse_to_ast;
+use nikaia::prove::Held;
+
+/// How each `assert` is held, in the order they stand.
+fn held(source: &str) -> Vec<Held> {
+    let parsed = parse_to_ast(source).expect("the source parses");
+    let own = Ledger::infer(&parsed);
+    let library = Ledger::parse(STD).expect("std's ledger");
+    nikaia::check::check(&parsed, &own, &library)
+        .facts
+        .claims
+        .into_values()
+        .filter_map(|c| c.held)
+        .collect()
+}
+
+fn through(h: &Held) -> bool {
+    matches!(h, Held::ProvedThrough(_))
+}
+
+fn at_run_time(h: &Held) -> bool {
+    matches!(h, Held::AtRunTime(_))
+}
+
+/// ADR-361 §1, the owner's program: both claims about `b` are proved.
+#[test]
+fn the_owners_program_is_proved_through_its_loop() {
+    let source = "fn main(a: int) {\n\
+                  \x20   assert(a > 0)\n\
+                  \x20   assert(a <= 10)\n\
+                  \x20   let mut i = 0\n\
+                  \x20   let mut total = 0\n\
+                  \x20   while i < a {\n\
+                  \x20       i = i + 1\n\
+                  \x20       total = total + 10\n\
+                  \x20   }\n\
+                  \x20   let b = 4 * example(a) + total\n\
+                  \x20   let c = (0 * 4 + 1)\n\
+                  \x20   assert(c == 1)\n\
+                  \x20   assert(b > 40)\n\
+                  \x20   assert(b < 181)\n\
+                  \x20   let safety_buffer = (0..<181).collect()\n\
+                  \x20   let d = safety_buffer[b]\n\
+                  \x20   println(f\"Hello, Nikaia! {b} {c} {d}\")\n\
+                  }\n\
+                  fn positive(width: int) -> int {\n\
+                  \x20   assert(width > 0)\n\
+                  \x20   return width\n\
+                  }\n\
+                  fn example(a: int) -> int {\n\
+                  \x20   let whole = 10 + a\n\
+                  \x20   return positive(whole)\n\
+                  }\n";
+    let found = held(source);
+    assert!(through(&found[3]) && through(&found[4]), "{found:#?}");
+    let Held::ProvedThrough(how) = &found[3] else {
+        unreachable!()
+    };
+    assert!(
+        how.contains("10 * i == total") && how.contains("closed forms"),
+        "{how}"
+    );
+}
+
+/// A `break` is a way out of its own: what holds past the loop is what holds
+/// at either, so the counter's end value is not claimed.
+#[test]
+fn a_break_keeps_the_end_value_from_being_claimed() {
+    let source = "fn main(a: int) {\n\
+                  \x20   assert(a > 0)\n\
+                  \x20   let mut i = 0\n\
+                  \x20   while i < a {\n\
+                  \x20       if i == 3 {\n\
+                  \x20           break\n\
+                  \x20       }\n\
+                  \x20       i = i + 1\n\
+                  \x20   }\n\
+                  \x20   assert(i <= a)\n\
+                  \x20   assert(i == a)\n\
+                  }\n";
+    let found = held(source);
+    assert!(through(&found[1]), "{found:#?}");
+    assert!(at_run_time(&found[2]), "{found:#?}");
+}
+
+#[test]
+fn a_countdown_ends_at_zero() {
+    let source = "fn main(n: int) {\n\
+                  \x20   assert(n >= 0)\n\
+                  \x20   let mut k = n\n\
+                  \x20   while k > 0 {\n\
+                  \x20       k = k - 1\n\
+                  \x20   }\n\
+                  \x20   assert(k == 0)\n\
+                  }\n";
+    let found = held(source);
+    assert!(through(&found[1]), "{found:#?}");
+}
+
+/// Two counters with different steps are tied by their closed forms.
+#[test]
+fn two_counters_with_different_steps() {
+    let source = "fn main() {\n\
+                  \x20   let mut i = 0\n\
+                  \x20   let mut j = 100\n\
+                  \x20   while i < 10 {\n\
+                  \x20       i = i + 1\n\
+                  \x20       j = j - 3\n\
+                  \x20   }\n\
+                  \x20   assert(i == 10)\n\
+                  \x20   assert(j == 70)\n\
+                  }\n";
+    let found = held(source);
+    assert!(found.iter().all(through), "{found:#?}");
+}
+
+/// Intervals, widened to the condition (D5.2): `x` ends within one step past
+/// 100.
+#[test]
+fn an_interval_bounds_a_counter_past_its_condition() {
+    let source = "fn main() {\n\
+                  \x20   let mut x = 0\n\
+                  \x20   while x < 100 {\n\
+                  \x20       x = x + 3\n\
+                  \x20   }\n\
+                  \x20   assert(x <= 102)\n\
+                  }\n";
+    let found = held(source);
+    assert!(through(&found[0]), "{found:#?}");
+    let Held::ProvedThrough(how) = &found[0] else {
+        unreachable!()
+    };
+    assert!(how.contains("x <= 102"), "{how}");
+}
+
+/// A loop no strategy reads leaves the claim open, and says which loop and
+/// which names (D7); nothing false is proved.
+#[test]
+fn a_loop_no_strategy_reads_names_its_loop() {
+    let source = "fn main(a: int) {\n\
+                  \x20   let mut x = 0\n\
+                  \x20   while x < a {\n\
+                  \x20       x = x * 2 + 1\n\
+                  \x20   }\n\
+                  \x20   assert(x == 7)\n\
+                  }\n";
+    let found = held(source);
+    let [Held::AtRunTime(why)] = found.as_slice() else {
+        panic!("{found:#?}")
+    };
+    assert!(why.contains("the loop that changes `x`"), "{why}");
+}
+
+/// A name a turn changes is unknown inside the loop and past it, unless the
+/// invariant says otherwise: a fact from before the loop does not survive it.
+#[test]
+fn a_fact_from_before_the_loop_does_not_survive_it() {
+    let source = "fn main(a: int) {\n\
+                  \x20   let mut x = 0\n\
+                  \x20   while x < a {\n\
+                  \x20       assert(x == 0)\n\
+                  \x20       x = x + 1\n\
+                  \x20   }\n\
+                  \x20   assert(x == 0)\n\
+                  }\n";
+    let found = held(source);
+    assert!(found.iter().all(at_run_time), "{found:#?}");
+}
+
+/// A mutable whole number changed in a branch is unknown after it.
+#[test]
+fn a_branch_that_assigns_forgets_the_name() {
+    let source = "fn main(a: int) {\n\
+                  \x20   let mut x = 0\n\
+                  \x20   if a > 3 {\n\
+                  \x20       x = 5\n\
+                  \x20   }\n\
+                  \x20   assert(x == 0)\n\
+                  }\n";
+    let found = held(source);
+    assert!(found.iter().all(at_run_time), "{found:#?}");
+}

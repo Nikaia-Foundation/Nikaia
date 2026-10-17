@@ -338,6 +338,7 @@ fn check_claim_held(held: ref ClaimHeld?) -> String {
     let given = held ?? return "refused: a claim about data from outside the program".clone()
     return match given {
         ClaimHeld::Proved => "proved".clone(),
+        ClaimHeld::ProvedThrough(how) => how.clone(),
         ClaimHeld::Precondition(f, n) => {
             // **`main`'s caller is the command line** (ADR-360 D4).
             if f == "main" {
@@ -371,6 +372,7 @@ pub fn check_claims_report(claims: ref collections::BTreeMap[(i64, i64), FactCla
     let mut arrives: Vec[String] = []
     let mut by_the_test: Vec[String] = []
     let mut proved: Vec[String] = []
+    let mut through_loops = 0
     let mut preconditions: Vec[String] = []
     let mut mains: collections::BTreeSet[String] = collections::BTreeSet()
     let mut line = 1
@@ -391,6 +393,9 @@ pub fn check_claims_report(claims: ref collections::BTreeMap[(i64, i64), FactCla
         let how = check_claim_held(claim.held)
         let row = f"  {path}:{line}  {claim.written}  {how}"
         if how == "proved" {
+            proved.push(row)
+        } else if how.starts_with("proved through") {
+            through_loops += 1
             proved.push(row)
         } else if how.starts_with("precondition of `main`") {
             mains.insert(claim.written.clone())
@@ -421,7 +426,12 @@ pub fn check_claims_report(claims: ref collections::BTreeMap[(i64, i64), FactCla
     }
     let unproved = refused.len() + at_run_time.len() + by_the_test.len()
     let done = proved.len() + preconditions.len()
-    let mut out: String = f"asserts in {path}: {unproved + arrives.len() + done} - not proved {unproved} (refused {refused.len()}, checked at run time {at_run_time.len()}, checked by a test {by_the_test.len()}); checked where the words arrive {arrives.len()}; proved {done} (proved {proved.len()}, preconditions proved at every call {preconditions.len()})\n"
+    // **What a loop carried** (ADR-361 D7), counted where there is any.
+    let mut looped: String = ""
+    if through_loops > 0 {
+        looped = f", through a loop {through_loops}"
+    }
+    let mut out: String = f"asserts in {path}: {unproved + arrives.len() + done} - not proved {unproved} (refused {refused.len()}, checked at run time {at_run_time.len()}, checked by a test {by_the_test.len()}); checked where the words arrive {arrives.len()}; proved {done} (proved {proved.len()}{looped}, preconditions proved at every call {preconditions.len()})\n"
     let mut red: Vec[String] = []
     red.extend(refused)
     red.extend(at_run_time)

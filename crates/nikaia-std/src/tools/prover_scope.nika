@@ -50,6 +50,14 @@ pub struct ProverScope {
     /// divisor it pinned, with where that value came from, for a refutation's
     /// note.
     pub leaned: collections::BTreeMap[String, Vec[String]],
+    /// **The mutable whole numbers the walk follows** (ADR-361 D1): bound
+    /// by `let mut` to a value it reads, never handed to a call nor changed
+    /// by a deferred body. Each is a variable of the proof until the next
+    /// assignment, and a loop that changes it is read through its invariant.
+    pub mutables: collections::BTreeSet[String],
+    /// **The loops passed whose names are not bound again since** (ADR-361
+    /// D2): a claim what is known leaves open is asked through them.
+    pub loops: Vec[LoopRecord],
 }
 
 impl ProverScope {
@@ -67,6 +75,8 @@ impl ProverScope {
             calls_of: collections::BTreeMap(),
             summed: collections::BTreeMap(),
             leaned: collections::BTreeMap(),
+            mutables: collections::BTreeSet(),
+            loops: [],
         }
     }
 
@@ -92,6 +102,15 @@ impl ProverScope {
         self.calls_of.remove(name)
         self.summed.remove(name)
         self.leaned.remove(name)
+        if !self.loops.is_empty() {
+            let mut standing: Vec[LoopRecord] = []
+            for record in self.loops {
+                if !record.problem.state.contains(name) {
+                    standing.push(record.clone())
+                }
+            }
+            self.loops = standing
+        }
         let mut gone: Vec[String] = []
         for (bound, alts) in self.summed {
             for alt in alts {

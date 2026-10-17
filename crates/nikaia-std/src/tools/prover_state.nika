@@ -67,6 +67,15 @@ pub struct ProverState {
     pub divisor_queries: i64,
     /// Where a divisor a summary pinned got its value, by `divisor_name` (D8).
     pub divisor_notes: collections::BTreeMap[String, Vec[String]],
+    /// **Each loop's invariant, once found and checked** (ADR-361 D4), by
+    /// the loop's problem as text; a problem none was found for is in
+    /// `loops_failed`.
+    pub loops_found: collections::BTreeMap[String, LoopFound],
+    pub loops_failed: collections::BTreeSet[String],
+    /// **How many claims were asked through a loop**, and how many queries
+    /// finding and checking invariants took (ADR-361 D8).
+    pub loop_claims: i64,
+    pub loop_queries: i64,
 }
 
 impl ProverState {
@@ -94,6 +103,10 @@ impl ProverState {
             summing: [],
             unsummed: false,
             second_queries: 0,
+            loops_found: collections::BTreeMap(),
+            loops_failed: collections::BTreeSet(),
+            loop_claims: 0,
+            loop_queries: 0,
             divisor_queries: 0,
             divisor_notes: collections::BTreeMap(),
         }
@@ -161,6 +174,49 @@ impl ProverState {
         }
     }
 
+
+    /// **A claim asked through the loops before it** (ADR-361 D2, D4): each
+    /// loop's invariant, found and checked once, and what holds past it
+    /// joined to `base`. What `--asserts` says, where that proves it.
+    fn through_loops(ref mut self, mut arena: TermArena, scope: ref ProverScope, claim: i64, base: Vec[i64], ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync) -> String? {
+        let mut facts = base
+        let mut texts: Vec[String] = []
+        for record in scope.loops {
+            let key = loop_key(arena, record)
+            if self.loops_failed.contains(key) {
+                continue
+            }
+            if !self.loops_found.contains_key(key) {
+                let mut asked: Vec[i64] = []
+                let found = loop_found(arena, record, fn(on, given, goal) {
+                    match ask(on, given, goal) {
+                        SolverAnswer::Proved => true,
+                        else => false,
+                    }
+                }, asked)
+                for n in asked {
+                    self.loop_queries += n
+                }
+                if found == null {
+                    self.loops_failed.insert(key.clone())
+                    continue
+                }
+                self.loops_found.insert(key.clone(), found ?? LoopFound { parts: [] })
+            }
+            let held = self.loops_found[key] ?? continue
+            facts.extend(loop_facts(arena, record, held))
+            texts.push(loop_found_text(arena, record, held))
+        }
+        if texts.is_empty() {
+            return null
+        }
+        self.loop_claims += 1
+        self.loop_queries += 1
+        return match ask(arena, facts, claim) {
+            SolverAnswer::Proved => texts.join("; "),
+            else => null,
+        }
+    }
 
     /// Whether a claim was carried back from the call `site` to the entry
     /// of `function` in the first pass.
@@ -249,10 +305,12 @@ impl ProverState {
         // D2), where what is known leaves the claim open and it reads a call
         // with a result summary.
         let mut through_summaries: Vec[String] = []
+        let mut loop_base: Vec[i64]? = null
         if claim != null && !is_refuted && !tainted_claim && !scope.summed.is_empty() {
             let read = summed_read(arena, scope, claim ?? 0)
             if !read.is_empty() {
                 let facts = summed_facts(arena, scope, read)
+                loop_base = facts.clone()
                 self.second_queries += 1
                 match ask(arena, facts, claim ?? 0) {
                     SolverAnswer::Proved => {
@@ -267,6 +325,21 @@ impl ProverState {
                 if is_refuted && !self.collecting {
                     through_summaries = summed_notes(arena, scope, read, facts, ask, model)
                 }
+            }
+        }
+        // **Asked once more through the loops before it** (ADR-361 D2), where
+        // it reads what one of them changes and is still open.
+        let mut loop_open = false
+        if claim != null && !is_refuted && !tainted_claim && !scope.loops.is_empty() {
+            let base = loop_base ?? scope.facts.clone()
+            if loop_reads(arena, base, claim ?? 0, scope.loops) {
+                let through = self.through_loops(arena, scope, claim ?? 0, base, ask)
+                if through != null {
+                    scope.facts.push(claim ?? 0)
+                    outcome.held = ClaimHeld::ProvedThrough(through ?? "")
+                    return outcome
+                }
+                loop_open = true
             }
         }
         let owner = carrying_function(at.function)
@@ -357,6 +430,8 @@ impl ProverState {
             why = f"it is false every time it is reached ({shown(refuted_values)})"
         } else if is_sometimes {
             why = f"it is false when {shown(sometimes_values)}"
+        } else if loop_open {
+            why = loop_open_text(scope.loops)
         } else if claim == null {
             why = "it is not a comparison of whole numbers the prover reads"
             // **The part it could not read, named** (D7): a binding the claim

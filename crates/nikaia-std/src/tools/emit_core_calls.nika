@@ -34,6 +34,7 @@ fn emit_call_claim_held(claim: ref FactClaim) -> bool {
     let held = claim.held ?? return false
     return match held {
         ClaimHeld::Proved => true,
+        ClaimHeld::ProvedThrough(_) => true,
         ClaimHeld::Precondition(_, _) => true,
         else => false,
     }

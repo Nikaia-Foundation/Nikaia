@@ -472,3 +472,18 @@ A kept function type that may pause and takes a `ref` parameter lowers to a futu
 borrow it (`dyn for<'a> Fn(&'a P, i64) -> Pin<Box<dyn Future<Output = i64> + 'a>>`), or the
 checker refuses it with a message that names `sync` or a parameter by value; then a test in
 `function_values.rs` with `fn(ref P, i64) -> i64` and a method that pauses.
+
+## D45 (new). `op ?? BinaryOp::Mul` over a `ref BinaryOp?` hands rustc `&BinaryOp` against `BinaryOp`
+
+In a `match` on `Stmt::Assign { op, .. }` borrowed from a `ref Stmt`, `match op ?? BinaryOp::Mul {
+BinaryOp::Add => …, else => … }` passes the checker and lowers to `match nikaia_std::index::or(op,
+|| &BinaryOp::Mul) { … }`, which rustc refuses (`expected BinaryOp, found &BinaryOp`). `op.clone()
+?? BinaryOp::Mul` is `NK1125`. Met while building #640: `prover_loops.nika` reads the operator in a
+function of its own, `loop_assigned(arena, op, old, value)`, with `let operation = op ?? return
+value`, as `bounding_compound` in `bounds_walk.nika` does, which lowers right.
+
+### To build
+
+A fallback that is a variant literal, after an option of a borrowed enum, lowers to the same
+reference on both sides (or both by value); then fold `loop_assigned` back into its one caller,
+with a test in `lowering.rs`.

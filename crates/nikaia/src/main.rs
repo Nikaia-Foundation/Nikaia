@@ -887,8 +887,9 @@ pub fn main() -> std::process::ExitCode {
 fn prover_counts() {
     if std::env::var_os("NIKAIA_PROVER_COUNTS").is_some() {
         let (runs, second, divisors) = nikaia::prove::totals();
+        let (loop_claims, loop_queries) = nikaia::prove::loop_totals();
         eprintln!(
-            "prover: {runs} calls run for claims, {second} claims asked a second time, {divisors} divisors asked"
+            "prover: {runs} calls run for claims, {second} claims asked a second time, {divisors} divisors asked, {loop_claims} claims asked through a loop with {loop_queries} loop queries"
         );
     }
 }

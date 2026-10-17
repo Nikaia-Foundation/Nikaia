@@ -21,6 +21,9 @@ pub enum ClaimHeld {
     AtRunTime(String),
     /// A claim about data from outside the program (D6): `NK1202`.
     Refused,
+    /// **Proved through a loop** (ADR-361 D4, D7): no check is emitted; the
+    /// text names the loop's invariant and the strategy that found it.
+    ProvedThrough(String),
 }
 
 /// A precondition checked before a function's body runs (ADR-269 D5,
