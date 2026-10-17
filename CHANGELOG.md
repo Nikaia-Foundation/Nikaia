@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.997] — 2026-10-17
+
+**inside its package a callee's body answers a claim left open; a quotient by a known number is a term; the --asserts report in three groups (#632)**
+- `/` and `%` by a positive constant are read, truncated toward zero (ADR-359 D5). A function whose every exit the prover reads has a result summary, used in a second query only for a claim left open, and written to the ledger as `inferred` (D1-D3). A divisor pinned by what is known is its value (D6). NK1207 names where a call's value came from (D8). `--asserts` lists red, then light blue, then green, and has a row for a precondition of `main` carried back from a callee. `NIKAIA_PROVER_COUNTS=1` counts calls run, second queries and divisor queries.
+
 ## [0.0.996] — 2026-10-17
 
 **a comptime whose compiled run stops is NK1244 (#637)**
