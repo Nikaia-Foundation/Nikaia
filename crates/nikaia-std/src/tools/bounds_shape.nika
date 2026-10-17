@@ -191,7 +191,7 @@ pub fn is_unsigned(ty: ref String) -> bool {
 
 pub fn is_whole_number(ty: ref String) -> bool {
     return match ty {
-        "i8" => true, "i16" => true, "i32" => true, "i64" => true, "isize" => true,
+        "int" => true, "i8" => true, "i16" => true, "i32" => true, "i64" => true, "isize" => true,
         else => is_unsigned(ty),
     }
 }

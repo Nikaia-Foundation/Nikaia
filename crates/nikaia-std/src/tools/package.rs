@@ -1945,6 +1945,7 @@ pub fn is_unsigned(ty: &str) -> bool { matches!(ty, "u8" | "u16" | "u32" | "u64"
 
 pub fn is_whole_number(ty: &str) -> bool {
     match ty {
+        "int" => true,
         "i8" => true,
         "i16" => true,
         "i32" => true,

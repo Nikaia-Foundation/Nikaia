@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.986] — 2026-10-17
+
+**The prover reads an `int` (#630)**
+- A claim about an `int` is read as one about an `i64`: it becomes a precondition, is carried back and is a fact after it, as ADR-285 D36 says. Before, every claim over an `int` stayed a check, and a `main(a: int)` lost its preconditions.
+
 ## [0.0.985] — 2026-10-17
 
 **`int`: an `i64`'s values, the representation the compiler's; Rust's other widths are refused (ADR-285 D36-D39, #629, #630)**

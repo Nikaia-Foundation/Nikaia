@@ -275,3 +275,44 @@ fn the_owners_example_checks_with_int() {
         "{found:#?}"
     );
 }
+
+/// **The prover reads an `int` as it reads an `i64`** (D36): a claim about an
+/// `int` parameter is a precondition, carried back from a callee, and a fact
+/// after it. Before, every claim over an `int` was *not a whole number the
+/// prover reads* and stayed a check.
+#[test]
+fn the_prover_reads_an_int() {
+    let source = "fn positive(whole: int) -> int {\n\
+                  \x20   assert(whole > 0)\n\
+                  \x20   return whole\n\
+                  }\n\
+                  \n\
+                  fn main() {\n\
+                  \x20   let a: int = 3\n\
+                  \x20   let b = 4 * (10 + positive(a))\n\
+                  \x20   assert(a > 0)\n\
+                  \x20   println(f\"{b}\")\n\
+                  }\n";
+    let dir = common::scratch_dir("int-prover");
+    std::fs::write(dir.join("claims.nika"), source).expect("write");
+    let out = Command::new(env!("CARGO_BIN_EXE_nikaia"))
+        .current_dir(&dir)
+        .args(["lower", "claims.nika", "--output", "claims.rs", "--asserts"])
+        .output()
+        .expect("the nikaia binary runs");
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        stdout.contains("claims.nika:2  assert(whole > 0)  precondition of `positive`"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("claims.nika:9  assert(a > 0)  proved"),
+        "{stdout}"
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
