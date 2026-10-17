@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.992 (Draft)
+**Version:** 0.0.993 (Draft)
 **Date:** 2026-10-17
 
 ---
@@ -1467,7 +1467,7 @@ comma is allowed, and the type is `Vec[T]` where `T` is what the elements agree
 on. Elements that do not agree are refused with `NK1154`. Elements written only
 in number literals are one number without a type, decided as a `let`'s is
 (2.4): by the uses, and where none asks, `i32`, or `i64` where an element does
-not fit an `i32`. `[]` is the empty
+not fit an `i32`. An item a walk of the list hands a lambda is that number too, and a use of it inside the lambda is a use of the list's number: `xs.iter().filter(fn(v) { byte(v) })` makes `xs` a `Vec[u8]`. `[]` is the empty
 list and **takes its element type from the first use that says one**:
 `let xs: Vec[i64] = []`, or a `push`. Where nothing ever says the type, `[]` is
 refused with `NK1153`, asking for the type. A `[` at the **start of a line**

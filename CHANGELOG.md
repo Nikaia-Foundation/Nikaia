@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.993] — 2026-10-17
+
+**a walk of a list of number literals hands its lambdas numbers (#594)**
+- Part I 3 (lists): the items of a list written in number literals are its open number through a walk too: a lambda parameter handed them is bound to that number, and a walk of the item or of a lambda's value keeps it (ADR-285 D34). Every number type copies, so `xs.iter()` over such a list is copied and `filter`/`find`/`take_while`/`skip_while` take the item by pattern (ADR-231 D1, D2). `let xs = [1, 2, 3]; xs.iter().filter fn(v) { v > 4 }` now compiles; a use in the lambda decides the list's type.
+
 ## [0.0.992] — 2026-10-17
 
 **A struct, an enum, a range or a tuple in an f-string hole is refused (NK1201)**
