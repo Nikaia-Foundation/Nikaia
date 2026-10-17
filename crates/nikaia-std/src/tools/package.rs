@@ -20173,7 +20173,7 @@ fn check_claim_held(held: Option<&ClaimHeld>) -> String {
         ClaimHeld::Proved => "proved".to_owned(),
         ClaimHeld::Precondition(f, n) => {
             let n = *n;
-            if n == 0 { format!("precondition of `{}`: proved at every call the compiler sees; any other reaches the entry that checks it", f) } else if n == 1 { format!("precondition of `{}`: one call checks it when it runs; any other call proves it or reaches the entry that checks it", f) } else { format!("precondition of `{}`: {} calls check it when they run; any other call proves it or reaches the entry that checks it", f, n) }
+            if f == "main" { "precondition of `main`, checked where the words arrive".to_owned() } else if n == 0 { format!("precondition of `{}`: proved at every call the compiler sees; any other reaches the entry that checks it", f) } else if n == 1 { format!("precondition of `{}`: one call checks it when it runs; any other call proves it or reaches the entry that checks it", f) } else { format!("precondition of `{}`: {} calls check it when they run; any other call proves it or reaches the entry that checks it", f, n) }
         },
         ClaimHeld::AtRunTime(why) => format!("checked at run time: {}", why),
         ClaimHeld::ByTheTest => "checked when the test runs".to_owned(),
@@ -48152,7 +48152,7 @@ fn prover_function(walk: &mut ProverWalk, item: &Spanned<Item>, owner: Option<St
                 }
             }
             let mut no_precondition: Option<String> = None;
-            if of_a_trait { no_precondition = Some(String::from("A method of a trait's implementation can't have a precondition: a call through the trait doesn't know it, and there is no second entry to check it.")); } else if prover_named_main((key).as_deref()) { no_precondition = Some(String::from("`main` has no callers.")); }
+            if of_a_trait { no_precondition = Some(String::from("A method of a trait's implementation can't have a precondition: a call through the trait doesn't know it, and there is no second entry to check it.")); }
             let free = !has_owner && !was_a_test;
             let at = ProverWhere { function: claim_text_of((key).as_deref()), params, no_precondition, top: true, free, lambda: false, throws_out: can_throw };
             walk.state.in_test = was_a_test;
@@ -48844,11 +48844,6 @@ fn prover_precondition_in(map: &collections::BTreeMap<String, Precondition>, cal
 fn prover_cached_foreign(map: &collections::BTreeMap<String, Option<Foreign>>, key: &str) -> Option<Foreign> {
     let found = match nikaia_std::index::flat(*nikaia_std::index::get(&map, key)) { Some(__nikaia_value) => __nikaia_value, None => return None };
     Some(found.clone())
-}
-
-fn prover_named_main(own: Option<&str>) -> bool {
-    let name = match own { Some(__nikaia_value) => __nikaia_value, None => return false };
-    name == "main"
 }
 
 #[allow(clippy::too_many_arguments)]

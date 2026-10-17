@@ -339,7 +339,10 @@ fn check_claim_held(held: ref ClaimHeld?) -> String {
     return match given {
         ClaimHeld::Proved => "proved".clone(),
         ClaimHeld::Precondition(f, n) => {
-            if n == 0 {
+            // **`main`'s caller is the command line** (ADR-360 D4).
+            if f == "main" {
+                "precondition of `main`, checked where the words arrive".clone()
+            } else if n == 0 {
                 f"precondition of `{f}`: proved at every call the compiler sees; any other reaches the entry that checks it"
             } else if n == 1 {
                 f"precondition of `{f}`: one call checks it when it runs; any other call proves it or reaches the entry that checks it"

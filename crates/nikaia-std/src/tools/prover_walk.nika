@@ -107,11 +107,12 @@ fn prover_function(mut walk: ProverWalk, item: ref Spanned[Item], owner: String?
                     scope.entry.insert(length, at_entry)
                 }
             }
+            // **`main`'s preconditions are derived as every function's are**
+            // (ADR-360 D3): its caller is the command line, and the words are
+            // checked where they arrive (D4).
             let mut no_precondition: String? = null
             if of_a_trait {
                 no_precondition = "A method of a trait's implementation can't have a precondition: a call through the trait doesn't know it, and there is no second entry to check it."
-            } else if prover_named_main(key) {
-                no_precondition = "`main` has no callers."
             }
             let free = !has_owner && !was_a_test
             let at = ProverWhere { function: claim_text_of(key), params: params, no_precondition: no_precondition, top: true, free: free, lambda: false, throws_out: can_throw }
@@ -1011,11 +1012,6 @@ fn prover_precondition_in(map: ref collections::BTreeMap[String, Precondition], 
 fn prover_cached_foreign(map: ref collections::BTreeMap[String, Foreign?], key: ref String) -> Foreign? {
     let found = map[key] ?? return null
     return found.clone()
-}
-
-fn prover_named_main(own: ref String?) -> bool {
-    let name = own ?? return false
-    return name == "main"
 }
 
 /// **The calls with arguments the build knows that `expr` reads** (ADR-359
