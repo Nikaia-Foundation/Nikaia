@@ -187,6 +187,13 @@ impl ProverScope {
         if !only_parameters(arena, term, params) || arena.size(term) > precondition_terms() {
             return null
         }
+        // **A claim that reads no parameter at the entry asks nothing of a
+        // caller** (Part I 5.5): no call can make it hold or break it.
+        let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+        arena.variables(term, read)
+        if read.is_empty() {
+            return null
+        }
         return term
     }
 

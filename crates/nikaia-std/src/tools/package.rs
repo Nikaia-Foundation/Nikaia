@@ -48328,6 +48328,9 @@ impl ProverScope {
             term = arena.or(vec![not_taken, at_entry]);
         }
         if !only_parameters(&arena, term, params) || arena.size(term) > precondition_terms() { return None; }
+        let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
+        arena.variables(term, &mut read);
+        if read.is_empty() { return None; }
         Some(term)
     }
     pub fn postcondition_at(&self, arena: &mut TermArena, claim: i64, returned: &str, params: &collections::BTreeSet<String>) -> Option<i64> {
