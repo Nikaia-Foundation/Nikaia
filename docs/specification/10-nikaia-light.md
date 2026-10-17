@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.981 (Draft)
+**Version:** 0.0.982 (Draft)
 **Date:** 2026-10-17
 
 ---
@@ -1893,6 +1893,55 @@ fn main() {
     println(f"{b.on_click(4)} {add(1)}")
 }
 ```
+
+### 5.5. `main`'s Parameters Are the Command Line
+
+A program starts at `main`. `main` may take parameters; they are the words the
+program is started with ([ADR-360](adr/adr-360.md)).
+
+```nika
+/// Multiplies a positive number.
+fn main(a: int; times: int = 4, verbose: bool = false) {
+    assert(a > 0)
+    let b = times * a
+    if verbose {
+        println(f"{times} * {a} = {b}")
+    } else {
+        println(f"{b}")
+    }
+}
+```
+
+`prog 5`, `prog 5 --times 3`, `prog --verbose --times=3 5`.
+
+* **Subject parameters are positional**, in order, each required. **Options
+  are named**: `--name value` or `--name=value`, the default where one is left
+  out, an `_` in the name written `-` (`max_depth` is `--max-depth`). An option
+  of type `bool` is a bare `--name`, which sets it to `true`; `--name=false`
+  sets it to `false`. Named words may stand anywhere among positional ones;
+  `--` ends them, and every word after it is positional. A word that is `-`
+  followed by a digit is a value, never a name.
+* **A parameter of `main`** is `int`, a fixed-width integer, `f64`, `bool`,
+  `String`, or one of these behind `?`; the last subject parameter may be a
+  `Vec[T]` of one of them, which takes every positional word left, none
+  included. A number is read in the shape `std` reads one from text (Part III
+  17.1) and must fit its type. Another type, a `ref` parameter, an option named
+  `help`, two options that are one name once `_` is `-`, and a parameter of
+  `main` on a target with no command line (`wasm32-unknown`) are refused
+  (`NK1273`, `NK1274`).
+* **`main`'s preconditions are derived as every function's are** (Part III
+  14.2): a claim carried back to `main`'s entry that reads only its parameters.
+  They are checked after the words are read and before the body runs, and in
+  the body each is a fact.
+* **A wrong word ends the program with exit status 2**: a word missing, left
+  over, not of its type, or a precondition that does not hold. One line on
+  standard error names the parameter, the claim as written and the value
+  given, followed by the short usage. Nothing of the body has run.
+* **`--help` and `-h`** print the program's name, the `///` lines above
+  `main`, and each parameter with its type, default and preconditions, and end
+  the program with status 0.
+* **A call to `main` inside the program is an ordinary call**, and
+  `cli::args()` still returns every word the program was started with.
 
 ---
 

@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.982] — 2026-10-17
+
+**`main`'s parameters are the command line (ADR-360, #635)**
+- Part I 5.5: `main`'s subject parameters are the positional words, its options `--name value` with their defaults; a parameter is `int`, a fixed width, `f64`, `bool`, `String`, one behind `?`, or a last `Vec[T]` (`NK1273`, `NK1274`). `main`'s preconditions are derived as every function's are and checked where the words arrive; a wrong word or a breach ends the program with exit status 2 before the body runs (Part III 14.2, A.2). `--help` is generated from `///`, types, defaults and preconditions. Specified; not built yet.
+
 ## [0.0.981] — 2026-10-17
 
 **A named function handed to a parameter the callee keeps runs (#601)**
