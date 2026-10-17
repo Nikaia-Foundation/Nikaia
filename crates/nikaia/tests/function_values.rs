@@ -178,3 +178,46 @@ fn a_parameter_that_may_pause_runs_either_kind_of_function() {
     );
     assert_eq!(String::from_utf8_lossy(&ran.stdout).trim(), "6 10");
 }
+
+/// **A named function handed to a parameter the callee keeps** is the closure
+/// that calls it, as a lambda handed there is (#601): one the kept type says
+/// may pause (`double`, `slow`), one it says never does (`keep_quick`), and a
+/// named function beside a lambda in one call.
+#[test]
+fn a_named_function_handed_to_a_kept_parameter_runs() {
+    let dir = common::scratch_dir("function-values-kept");
+    std::fs::write(
+        dir.join("kept.nika"),
+        "use std::time\n\
+         \n\
+         struct One {\n    f: fn(i64) -> i64,\n}\n\
+         struct Quick {\n    f: fn(i64) -> i64 sync,\n}\n\
+         struct Two {\n    f: fn(i64) -> i64,\n    g: fn(i64) -> i64,\n}\n\
+         fn keep(f: fn(i64) -> i64) -> One {\n    return One { f: f }\n}\n\
+         fn keep_quick(f: fn(i64) -> i64 sync) -> Quick {\n    return Quick { f: f }\n}\n\
+         fn keep_two(f: fn(i64) -> i64, g: fn(i64) -> i64) -> Two {\n    return Two { f: f, g: g }\n}\n\
+         fn double(x: i64) -> i64 {\n    return x * 2\n}\n\
+         fn slow(n: i64) -> i64 {\n    time::sleep(1.millis())\n    return n + 1\n}\n\
+         fn main() {\n\
+         \x20   let o = keep(double)\n    let g = o.f\n\
+         \x20   let s = keep(slow)\n    let h = s.f\n\
+         \x20   let q = keep_quick(double)\n    let k = q.f\n\
+         \x20   let t = keep_two(double, fn(x) { x + 1 })\n    let a = t.f\n    let b = t.g\n\
+         \x20   println(f\"{g(4)} {h(4)} {k(4)} {a(4)} {b(4)}\")\n\
+         }\n",
+    )
+    .expect("write the source");
+    let ran = Command::new(env!("CARGO_BIN_EXE_nikaia"))
+        .current_dir(&dir)
+        .args(["run", "--no-cache", "kept.nika"])
+        .env_remove("CARGO_TARGET_DIR")
+        .output()
+        .expect("the nikaia binary runs");
+    std::fs::remove_dir_all(&dir).ok();
+    assert!(
+        ran.status.success(),
+        "{}",
+        String::from_utf8_lossy(&ran.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&ran.stdout).trim(), "8 5 8 8 5");
+}

@@ -12828,6 +12828,7 @@ fn check_core_args_other<H: CheckHost>(state: &mut CheckState, world: &CheckWorl
     }
     if declared_here && named && runs && wants_pausing_fn && found_fn { state.facts.sync_functions_run_async.insert(id_of(arg) as i64, arity); }
     if declared_here && wants_fn && found_fn && runs && !check_core_args_a_run_parameter(&state, world, arg) && !named { state.facts.kept_args.insert(id_of(arg) as i64); }
+    if wants_fn && found_fn && !runs && named { check_core_a_kept_lambda(state, world, host, nikaia_std::index::get(&expected, nikaia_std::index::at(at)), arg, span); }
     found
 }
 
