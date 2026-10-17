@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1004 (Draft)
+**Version:** 0.0.1005 (Draft)
 **Date:** 2026-10-17
 
 ---
@@ -1386,6 +1386,14 @@ The standard library provides types for groups of values.
     ```nika
     let numbers = [1, 2, 3, 4]
     ```
+    **`[v; n]` is `n` copies of `v`** ([ADR-362](adr/adr-362.md)):
+    `[0; 181]` is 181 zeros. `v` is worked out once and must be a value that
+    copies (8.3); one that does not, a `String` or a `Vec`, is refused with
+    `NK1280`, and `(0..<n).map(fn(_i) { v.clone() }).collect()` writes each
+    copy. For a list `n` is any whole number, and a negative one aborts as an
+    index out of range does. A list literal whose only element is a range,
+    `[0..181]`, is a list of one range and warned (`NK1281`): the numbers are
+    `(0..181).collect()`; a written type, `Vec[Range[i64]]`, says it is meant.
     A list keeps the order it was given, and that order can be changed:
     `xs.sort()` puts the elements in their natural order, and
     `xs.sort_by_key fn(x) { … }` in the order of what the closure returns. **Both
@@ -1504,6 +1512,8 @@ and the answer descends with the literal, so `Vec[Array[f64, 2]]` and
 `Array[Array[i64, 2], 2]` take their shape too. The length is part of the type,
 so `Array[f64, 3]` and `Array[f64, 4]` are different types and a literal whose
 length does not match `N` is refused with `NK1157` naming both numbers.
+`[v; n]` (4.5) is such a literal too: `let buf: Array[u8, 4096] = [0; 4096]`,
+where `n` is a number the build knows and equal to `N`.
 
 ### 4.6. Generics (Type Parameters)
 A **generic** declaration is written once for several types. A type parameter is

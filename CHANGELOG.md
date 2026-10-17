@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1005] — 2026-10-17
+
+**`[v; n]` is a list literal of n copies of a value that copies; a list of one range is warned (ADR-362, #643, #644)**
+- Part I 4.5: `[v; n]` is `n` copies of `v`, typed by its use as every list literal is (a `Vec`, or an `Array[T, N]` with `n` equal to `N`); `v` must be a value that copies (`NK1280`, the help writes the `.clone()`). A list literal whose only element is a range is the warning `NK1281`. `NK1157` covers an `n` that is not `N`. Specified, not built yet.
+
 ## [0.0.1004] — 2026-10-17
 
 **`nikaia.proofs` keeps each loop invariant (ADR-361 D4, #640)**
