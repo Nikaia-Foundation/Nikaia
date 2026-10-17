@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.975] — 2026-10-17
+
+**ref String only at the C boundary; ref on a word refused everywhere (#628)**
+- ADR-282 D2 rewritten, D28 added: inside Nikaia `ref String` is redundant (warning `NK1261`), the ledger states what a published signature does; at `extern "C"` and `pub extern "C" fn` a view is written, required and checked.
+- ADR-354 D2 widened: `ref` on a word by its kind is `NK1257` at a `let`, parameter, field and result outside `extern "C"`.
+- Part III C.1: `NK1257` was listed as `NK1258`; `NK1261` added.
+
 ## [0.0.974] — 2026-10-16
 
 **a text literal handed to a String option is a String (ADR-282 D4)**

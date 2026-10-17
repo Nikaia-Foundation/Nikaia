@@ -1,7 +1,7 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.974 (Draft)
-**Date:** 2026-10-16
+**Version:** 0.0.975 (Draft)
+**Date:** 2026-10-17
 
 ---
 
@@ -252,10 +252,14 @@ Nikaia provides basic types to represent simple values.
       a field, a result, a parameter, a `let`, the element of a list, the key
       or value of a map - it is text of its own where only text of its own is
       put there, a view where only views are, and either, per value, where
-      both are; a published field, parameter or result is never the third.
-    * `ref String`: the same text with a promise attached: *this is a borrowed
-      view, no copy and no handle*. The compiler holds the program to the
-      promise. It is written where allocating would be a mistake.
+      both are; a published field or result is never the third. What a
+      published field, parameter or result is - a view, and of which
+      parameter, or text of its own; lent or kept - is recorded in the ledger
+      (Part III 13.5).
+    * `ref String`: a view of text, written in an `extern "C"` declaration and
+      on a `pub extern "C" fn` (Part III 15.1), where it is required and the
+      body is held to it. Anywhere else it says what `String` already says,
+      and it is a warning (`NK1261`).
     * `scalar`: one Unicode scalar value - a code point that is not a
       surrogate - and not a byte. It is written between single quotes, with
       the escapes a string uses: `'a'`, `'ä'`, `'\n'` (2.6). Walking a text's
@@ -2300,9 +2304,12 @@ fn pick(given: ref Vec[Expr], tail: ref Expr, c: bool) -> i64 {
 }
 ```
 
-A value that is a word by its kind is copied at a read, so there is no view of
-it to declare: `let n: ref i64 = counts[0]` is refused with `NK1257`, and
-`let n = counts[0]` is the program. A `ref T` in a body generic over `T` is a
+A value that is a word by its kind - a number, a `bool`, a `scalar`, an enum
+whose variants hold nothing - is copied at a read, so there is no view of it to
+declare: `ref` on such a type is refused with `NK1257` on a `let`, a parameter,
+a field and a result. `let n: ref i64 = counts[0]` is refused, and
+`let n = counts[0]` is the program. In an `extern "C"` declaration `ref i32`
+and `ref mut i32` are the pointers C expects and stay (Part III 15.1). A `ref T` in a body generic over `T` is a
 view whatever `T` becomes.
 
 Nothing here inserts a copy. A value handed to a function that keeps it, and
