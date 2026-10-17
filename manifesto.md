@@ -48,10 +48,12 @@ fast software mean that you manage the machinery yourself?
 We don't think it has to be that way. We think much of that weight can move from the
 programmer into the compiler.
 
-**Nikaia is an attempt to prove it.** Not to replace every scripting language, and not to
-make every trade-off disappear. Python will still be the right tool for a quick script.
-JavaScript's dynamic runtime will still be the point of some applications. Some systems will
-always need a hand on every byte. Nikaia doesn't need to beat them all.
+**Nikaia is an attempt to prove it.** It goes after ground that belongs to both camps today:
+the scripts, the services, the tools, the programs that have to be fast and right at once.
+Much of what is written in Python or JavaScript today could be written in Nikaia, and be
+faster and safer for it. But Nikaia doesn't have to win everywhere. There will be places
+where a dynamic runtime is the whole point, and systems that need a hand on every byte. Nikaia
+doesn't need to take every one of them to matter.
 
 It needs to show one thing: that you can write plain, direct code, and still get native
 speed, memory safety, concurrency you can trust, and a compiler that proves more about your
