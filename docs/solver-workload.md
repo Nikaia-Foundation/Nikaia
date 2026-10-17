@@ -427,6 +427,23 @@ After: **442**. Of 479 indexes, 207 are proved; of 290 operations, 120.
 The first row is the report's catch-all. It holds #432's counters, #388's
 paired lists and every value read from outside, and is not one fact.
 
+### 8.6 What running a claim's call costs a build (ADR-359 D5, D7, D11-D13)
+
+`nikaia lower --no-cache` and `nikaia lower-std`, release build (the
+workspace's profile on both sides), instructions counted by callgrind, the
+compiler before #632 step 1 (8506ecd) against the one with D5's folding, D7
+and D11-D13 (ef12f50). Each binary lowers the same files; `lower-std` lowers
+the same copy of `std`'s sources.
+
+| | before | after |
+| :--- | ---: | ---: |
+| 26 files that lower alone (`benches/`, `examples/`) | 3 696.0 M | 3 710.5 M (+0.39 %) |
+| `lower-std` | 679 084.7 M | 681 571.7 M (+0.37 %) |
+
+No claim in these files needs a run, so this is the walk's own share: each
+`let` and open claim looks for calls with known arguments. The largest single
+file, `examples/n-body`, is +1.2 %.
+
 ## 9. What this does not measure
 
 * **SMT-LIB.** The QF_LIA and QF_LRA benchmark sets are on Zenodo, which the
