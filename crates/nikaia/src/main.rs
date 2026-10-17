@@ -888,8 +888,9 @@ fn prover_counts() {
     if std::env::var_os("NIKAIA_PROVER_COUNTS").is_some() {
         let (runs, second, divisors) = nikaia::prove::totals();
         let (loop_claims, loop_queries) = nikaia::prove::loop_totals();
+        let (searched, read, unfound, outside) = nikaia::prove::invariant_totals();
         eprintln!(
-            "prover: {runs} calls run for claims, {second} claims asked a second time, {divisors} divisors asked, {loop_claims} claims asked through a loop with {loop_queries} loop queries"
+            "prover: {runs} calls run for claims, {second} claims asked a second time, {divisors} divisors asked, {loop_claims} claims asked through a loop with {loop_queries} loop queries, {searched} invariants searched, {read} read from nikaia.proofs, {unfound} searches found none, {outside} invariants searched outside a build"
         );
     }
 }

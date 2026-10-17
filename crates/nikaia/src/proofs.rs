@@ -75,12 +75,47 @@ pub struct Book {
     pub searched: usize,
     /// Where those questions were asked, for `--locked`'s message (D22).
     pub searched_at: BTreeSet<Place>,
+    /// **Each loop's invariant** (ADR-361 D4), by the loop's place
+    /// (`src/main.nika:4:5`): its parts as `prover_loops.nika`'s
+    /// `loop_parts_text` writes them.
+    invariants: BTreeMap<String, String>,
+    /// The places whose invariant this build used: what the file keeps.
+    used: BTreeSet<String>,
+    /// The project the file belongs to, which a place is relative to.
+    root: Option<PathBuf>,
+}
+
+/// What a book had asked, to go back to when a walk is repeated.
+#[derive(Debug, Clone, Default)]
+pub struct AskedSoFar {
+    asked: BTreeSet<String>,
+    used: BTreeSet<String>,
 }
 
 thread_local! {
     static BOOK: RefCell<Option<Book>> = const { RefCell::new(None) };
     static IN_FILE: RefCell<Option<(PathBuf, String)>> = const { RefCell::new(None) };
     static FUNCTION: RefCell<Option<(String, usize)>> = const { RefCell::new(None) };
+    static UNITS: RefCell<Vec<(PathBuf, String)>> = const { RefCell::new(Vec::new()) };
+}
+
+/// `run` with the files of a package named in order, so that a pass over
+/// the package's units by their place ([`in_unit`]) asks each question in
+/// its file.
+pub fn with_units<R>(units: Vec<(PathBuf, String)>, run: impl FnOnce() -> R) -> R {
+    let outer = UNITS.with(|held| held.replace(units));
+    let out = run();
+    UNITS.with(|held| held.replace(outer));
+    out
+}
+
+/// `run` in the file [`with_units`] names at place `at`, or as it is where
+/// it names none.
+pub fn in_unit<R>(at: usize, run: impl FnOnce() -> R) -> R {
+    match UNITS.with(|held| held.borrow().get(at).cloned()) {
+        Some((path, source)) => in_file(&path, &source, run),
+        None => run(),
+    }
 }
 
 /// **Where a question was asked** (D22): the file, and the function and its
@@ -212,6 +247,113 @@ pub fn ask(arena: &TermArena, facts: &[i64], goal: i64) -> Asked {
     asked
 }
 
+/// **The invariants the book holds for the file being checked** (ADR-361
+/// D4), by the byte its loop starts at: the prover checks each with the
+/// three queries before it uses it. Nothing outside a build.
+pub fn invariants_here() -> BTreeMap<i64, String> {
+    let held = IN_FILE.with(|held| held.borrow().clone());
+    let Some((path, source)) = held else {
+        return BTreeMap::new();
+    };
+    BOOK.with(|book| {
+        let book = book.borrow();
+        let Some(book) = book.as_ref() else {
+            return BTreeMap::new();
+        };
+        let file = book.file_of(&path);
+        book.invariants
+            .iter()
+            .filter_map(|(place, parts)| {
+                let at = byte_of(place.strip_prefix(&file)?.strip_prefix(':')?, &source)?;
+                Some((at as i64, parts.clone()))
+            })
+            .collect()
+    })
+}
+
+/// **Keep the invariants a walk of the file being checked used** (ADR-361
+/// D4), by the byte each loop starts at.
+pub fn record_invariants(used: &BTreeMap<i64, String>) {
+    let held = IN_FILE.with(|held| held.borrow().clone());
+    let Some((path, source)) = held else {
+        return;
+    };
+    BOOK.with(|book| {
+        let mut book = book.borrow_mut();
+        let Some(book) = book.as_mut() else {
+            return;
+        };
+        // A file outside the project is another package's, whose file
+        // this is not.
+        if book
+            .root
+            .as_ref()
+            .is_some_and(|root| !path.starts_with(root))
+        {
+            return;
+        }
+        let file = book.file_of(&path);
+        for (at, parts) in used {
+            let place = format!("{file}:{}", place_of(*at as usize, &source));
+            book.invariants.insert(place.clone(), parts.clone());
+            book.used.insert(place);
+        }
+    });
+}
+
+/// Whether a build's book is open on this thread.
+pub fn book_open() -> bool {
+    BOOK.with(|book| book.borrow().is_some())
+}
+
+/// What the open book has been asked so far.
+pub fn asked_so_far() -> AskedSoFar {
+    BOOK.with(|book| match book.borrow().as_ref() {
+        Some(book) => AskedSoFar {
+            asked: book.asked.clone(),
+            used: book.used.clone(),
+        },
+        None => AskedSoFar::default(),
+    })
+}
+
+/// **Forget what was asked after `before`**: a walk that is repeated keeps
+/// only what its repetition asks. What was searched stays searched.
+pub fn ask_again_from(before: &AskedSoFar) {
+    BOOK.with(|book| {
+        if let Some(book) = book.borrow_mut().as_mut() {
+            book.asked = before.asked.clone();
+            book.used = before.used.clone();
+        }
+    });
+}
+
+/// `line:column` of byte `at` of `source`, both from 1.
+fn place_of(at: usize, source: &str) -> String {
+    let before = &source.as_bytes()[..at.min(source.len())];
+    let line = before.iter().filter(|b| **b == b'\n').count() + 1;
+    let start = before
+        .iter()
+        .rposition(|b| *b == b'\n')
+        .map_or(0, |n| n + 1);
+    format!("{line}:{}", before.len() - start + 1)
+}
+
+/// [`place_of`] read back.
+fn byte_of(place: &str, source: &str) -> Option<usize> {
+    let (line, column) = place.split_once(':')?;
+    let (line, column): (usize, usize) = (line.parse().ok()?, column.parse().ok()?);
+    let mut start = 0;
+    for _ in 1..line {
+        start += source[start..].find('\n')? + 1;
+    }
+    let at = start + column.checked_sub(1)?;
+    let end = source[start..]
+        .find('\n')
+        .map_or(source.len(), |n| start + n);
+    (at <= end).then_some(at)
+}
+
 /// A recorded entry, where it checks (D20) - and an `unknown` only from the
 /// solver this compiler has, since a newer one is searched again (D21).
 fn read(normal: &LgNormal, entry: &Entry) -> Option<Asked> {
@@ -264,12 +406,25 @@ impl Book {
     /// does not read is left out: it is missing, and missing is searched
     /// (D20).
     pub fn read(root: &Path) -> Book {
-        let mut book = Book::default();
+        let mut book = Book {
+            root: Some(root.to_path_buf()),
+            ..Book::default()
+        };
         let Ok(text) = std::fs::read_to_string(root.join(FILE)) else {
             return book;
         };
         let long = |key: &str| std::fs::read_to_string(root.join(LONG_DIR).join(key)).ok();
         for line in pb_read(&text, &long) {
+            if line.kind == "invariant" {
+                // Under the SHA-256 of its place: a line whose key is not
+                // that is missing.
+                if let Some((place, parts)) = line.body.split_once(' ')
+                    && orchestrator::cache::sha256_hex(place.as_bytes()) == line.key
+                {
+                    book.invariants.insert(place.to_string(), parts.to_string());
+                }
+                continue;
+            }
             let entry = match line.kind.as_str() {
                 "proved" => Entry::Proved(line.body),
                 "refuted" => Entry::Refuted(line.body),
@@ -284,7 +439,7 @@ impl Book {
     /// sorted by key, so that two branches that add entries merge without a
     /// conflict (D19, D21). An entry nothing asked is gone.
     pub fn render(&self) -> (String, BTreeMap<String, String>) {
-        let asked: Vec<PbLine> = self
+        let mut asked: Vec<PbLine> = self
             .entries
             .iter()
             .filter(|(key, _)| self.asked.contains(*key))
@@ -301,6 +456,17 @@ impl Book {
                 }
             })
             .collect();
+        asked.extend(
+            self.invariants
+                .iter()
+                .filter(|(place, _)| self.used.contains(*place))
+                .map(|(place, parts)| PbLine {
+                    key: orchestrator::cache::sha256_hex(place.as_bytes()),
+                    kind: "invariant".to_string(),
+                    body: format!("{place} {parts}"),
+                }),
+        );
+        asked.sort_by(|a, b| a.key.cmp(&b.key));
         let rendered = pb_render(&asked, LONG as i64);
         (rendered.text, rendered.long)
     }
@@ -358,6 +524,21 @@ impl Book {
             .keys()
             .filter(|key| self.asked.contains(*key))
             .count()
+            + self.used.len()
+    }
+
+    /// `path` as a place names it: relative to the project, `/` between
+    /// its parts.
+    fn file_of(&self, path: &Path) -> String {
+        let shown = match &self.root {
+            Some(root) => path.strip_prefix(root).unwrap_or(path),
+            None => path,
+        };
+        shown
+            .components()
+            .map(|c| c.as_os_str().to_string_lossy().to_string())
+            .collect::<Vec<_>>()
+            .join("/")
     }
 
     pub fn is_empty(&self) -> bool {
@@ -424,6 +605,18 @@ mod tests {
         assert_eq!(again.searched, 2);
         assert_eq!(again.render(), first.render());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// **ADR-361 D4**: a loop's place is its line and column, read back to
+    /// the same byte; one past its line's end is nothing.
+    #[test]
+    fn a_loop_place_reads_back_to_its_byte() {
+        let source = "fn f() {\n    while x {\n    }\n}\n";
+        let at = source.find("while").expect("the loop");
+        assert_eq!(place_of(at, source), "2:5");
+        assert_eq!(byte_of("2:5", source), Some(at));
+        assert_eq!(byte_of("2:40", source), None);
+        assert_eq!(byte_of("9:1", source), None);
     }
 
     /// Outside a build nothing is recorded, and the answer is the same.

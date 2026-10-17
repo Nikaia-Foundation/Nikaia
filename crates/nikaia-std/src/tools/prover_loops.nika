@@ -15,6 +15,7 @@
 // can be a name of the program.
 
 use std::collections
+use std::text
 
 /// **A loop the walk passed, as the logic layer states it** (ADR-361 D1),
 /// kept in the scope after it until one of its names is bound again.
@@ -869,4 +870,210 @@ pub fn loop_key(arena: ref TermArena, record: ref LoopRecord) -> String {
         parts.push(arena.text(exit.relation))
     }
     return parts.join(" ; ")
+}
+
+/// **An invariant as `nikaia.proofs` keeps it** (ADR-361 D4): its parts in
+/// order, each `strategy=term`, joined by `;`. A term is written as its
+/// operator and its operands, `ge(i,0)`; a space in a strategy's name is a
+/// `-`.
+pub fn loop_parts_text(arena: ref TermArena, found: ref LoopFound) -> String {
+    let mut parts: Vec[String] = []
+    for (term, origin) in found.parts {
+        parts.push(f"{origin.replace(" ", "-")}={loop_term_word(arena, term)}")
+    }
+    return parts.join(";")
+}
+
+fn loop_term_word(arena: ref TermArena, id: i64) -> String {
+    return match arena.at(id) {
+        SolverTerm::Bool(b) => f"{b}",
+        SolverTerm::Int(n) => f"{n}",
+        SolverTerm::Var(name) => loop_name_word(name),
+        SolverTerm::Add(a, b) => loop_pair_word(arena, "add", a, b),
+        SolverTerm::Sub(a, b) => loop_pair_word(arena, "sub", a, b),
+        SolverTerm::Neg(a) => f"neg({loop_term_word(arena, a)})",
+        SolverTerm::Mul(a, b) => loop_pair_word(arena, "mul", a, b),
+        SolverTerm::Quot(a, k) => f"quot({loop_term_word(arena, a)},{k})",
+        SolverTerm::Le(a, b) => loop_pair_word(arena, "le", a, b),
+        SolverTerm::Lt(a, b) => loop_pair_word(arena, "lt", a, b),
+        SolverTerm::Ge(a, b) => loop_pair_word(arena, "ge", a, b),
+        SolverTerm::Gt(a, b) => loop_pair_word(arena, "gt", a, b),
+        SolverTerm::Eq(a, b) => loop_pair_word(arena, "eq", a, b),
+        SolverTerm::Ne(a, b) => loop_pair_word(arena, "ne", a, b),
+        SolverTerm::And(parts) => f"and({loop_list_word(arena, parts)})",
+        SolverTerm::Or(parts) => f"or({loop_list_word(arena, parts)})",
+        SolverTerm::Not(a) => f"not({loop_term_word(arena, a)})",
+        else => f"?",
+    }
+}
+
+fn loop_pair_word(arena: ref TermArena, op: ref String, a: i64, b: i64) -> String {
+    return f"{op}({loop_term_word(arena, a)},{loop_term_word(arena, b)})"
+}
+
+fn loop_list_word(arena: ref TermArena, parts: ref Vec[i64]) -> String {
+    let mut words: Vec[String] = []
+    for p in parts {
+        words.push(loop_term_word(arena, p))
+    }
+    return words.join(",")
+}
+
+/// A name with the characters the term's text uses escaped as `%XX`.
+fn loop_name_word(name: ref String) -> String {
+    return name.replace("%", "%25").replace("(", "%28").replace(")", "%29").replace(",", "%2C").replace(";", "%3B").replace("=", "%3D").replace("|", "%7C").replace(" ", "%20")
+}
+
+fn loop_name_of(word: ref String) -> String? {
+    if word.len() == 0 || word.contains("?") {
+        return null
+    }
+    return word.replace("%20", " ").replace("%7C", "|").replace("%3D", "=").replace("%3B", ";").replace("%2C", ",").replace("%29", ")").replace("%28", "(").replace("%25", "%")
+}
+
+/// A term read and what is left of the text.
+struct LoopParsed {
+    term: i64,
+    rest: String,
+}
+
+/// **`loop_term_word` read back**, its nodes appended to the arena; nothing
+/// for text it did not write.
+fn loop_term_of(mut arena: TermArena, word: ref String) -> LoopParsed? {
+    let mut end = word.len()
+    let open = word.find("(") ?? end
+    let comma = word.find(",") ?? end
+    let close = word.find(")") ?? end
+    if open < end {
+        end = open
+    }
+    if comma < end {
+        end = comma
+    }
+    if close < end {
+        end = close
+    }
+    let head = word[0..<end].clone()
+    let rest = word[end..<word.len()].clone()
+    if !rest.starts_with("(") {
+        if head == "true" || head == "false" {
+            return LoopParsed { term: arena.boolean(head == "true"), rest: rest }
+        }
+        let n = text::parse_i64(head)
+        if n != null {
+            return LoopParsed { term: arena.int(n ?? 0), rest: rest }
+        }
+        let name = loop_name_of(head) ?? return null
+        return LoopParsed { term: arena.var(name), rest: rest }
+    }
+    let mut after = rest[1..<rest.len()].clone()
+    if head == "quot" {
+        let inner = loop_term_of(arena, after) ?? return null
+        if !inner.rest.starts_with(",") {
+            return null
+        }
+        let tail = inner.rest[1..<inner.rest.len()].clone()
+        let shut = tail.find(")") ?? return null
+        let k = text::parse_i64(tail[0..<shut].clone()) ?? return null
+        if k <= 0 {
+            return null
+        }
+        return LoopParsed { term: arena.quot(inner.term, k), rest: tail[shut + 1..<tail.len()].clone() }
+    }
+    let mut args: Vec[i64] = []
+    while true {
+        let arg = loop_term_of(arena, after) ?? return null
+        args.push(arg.term)
+        if arg.rest.starts_with(",") {
+            after = arg.rest[1..<arg.rest.len()].clone()
+        } else if arg.rest.starts_with(")") {
+            after = arg.rest[1..<arg.rest.len()].clone()
+            break
+        } else {
+            return null
+        }
+    }
+    let term = loop_built(arena, head, args) ?? return null
+    return LoopParsed { term: term, rest: after }
+}
+
+fn loop_built(mut arena: TermArena, op: ref String, args: Vec[i64]) -> i64? {
+    if op == "and" {
+        return arena.and(args)
+    }
+    if op == "or" {
+        return arena.or(args)
+    }
+    if args.len() == 1 {
+        if op == "neg" {
+            return arena.neg(args[0])
+        }
+        if op == "not" {
+            return arena.not(args[0])
+        }
+        return null
+    }
+    if args.len() != 2 {
+        return null
+    }
+    let a = args[0]
+    let b = args[1]
+    if op == "add" {
+        return arena.add(a, b)
+    }
+    if op == "sub" {
+        return arena.sub(a, b)
+    }
+    if op == "mul" {
+        return arena.mul(a, b)
+    }
+    if op == "le" {
+        return arena.le(a, b)
+    }
+    if op == "lt" {
+        return arena.lt(a, b)
+    }
+    if op == "ge" {
+        return arena.ge(a, b)
+    }
+    if op == "gt" {
+        return arena.gt(a, b)
+    }
+    if op == "eq" {
+        return arena.equal(a, b)
+    }
+    if op == "ne" {
+        return arena.unequal(a, b)
+    }
+    return null
+}
+
+/// **The invariant `nikaia.proofs` holds for a loop, checked** (ADR-361
+/// D4): its parts read back, then the three queries asked of them as of any
+/// invariant found - nothing is searched. Nothing where the text does not
+/// read or a query is not proved; the loop is then searched as if the file
+/// held nothing for it. `asked` counts the queries.
+pub fn loop_recorded(mut arena: TermArena, record: ref LoopRecord, recorded: ref String, proved: fn(ref TermArena, ref Vec[i64], i64) -> bool sync, mut asked: Vec[i64]) -> LoopFound? {
+    let mut parts: Vec[(i64, String)] = []
+    let mut all: Vec[i64] = []
+    for part in recorded.split(";") {
+        let at = part.find("=") ?? return null
+        let origin = part[0..<at].replace("-", " ")
+        let read = loop_term_of(arena, part[at + 1..<part.len()].clone()) ?? return null
+        if read.rest.len() != 0 || origin.len() == 0 {
+            return null
+        }
+        parts.push((read.term, origin))
+        all.push(read.term)
+    }
+    if parts.is_empty() {
+        return null
+    }
+    let invariant = arena.and(all)
+    let verdict = lg_loop_check(arena, record.problem, invariant, proved)
+    asked.push(2)
+    if !verdict.proved() {
+        return null
+    }
+    return LoopFound { parts: parts }
 }

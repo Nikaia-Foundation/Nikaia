@@ -155,6 +155,24 @@ static TOTAL_SECOND: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicU
 static TOTAL_DIVISORS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 static TOTAL_LOOP_CLAIMS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 static TOTAL_LOOP_QUERIES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static TOTAL_LOOP_SEARCHED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static TOTAL_LOOP_READ: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static TOTAL_LOOP_UNFOUND: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static TOTAL_LOOP_OUTSIDE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// **How the invariants used came about in this process** (ADR-361 D4):
+/// searched for and found while a build's `nikaia.proofs` was open, or read
+/// from it and only checked; the searches that found none; and those
+/// found where no file was open, which no file can spare.
+pub fn invariant_totals() -> (usize, usize, usize, usize) {
+    use std::sync::atomic::Ordering::Relaxed;
+    (
+        TOTAL_LOOP_SEARCHED.load(Relaxed),
+        TOTAL_LOOP_READ.load(Relaxed),
+        TOTAL_LOOP_UNFOUND.load(Relaxed),
+        TOTAL_LOOP_OUTSIDE.load(Relaxed),
+    )
+}
 
 /// **What reading through loops came to in this process** (ADR-361 D8):
 /// claims asked through a loop, and the queries that found and checked the
@@ -205,12 +223,33 @@ pub fn prove(
     let mut answered: BTreeMap<(String, Vec<i64>), ClaimRun> = BTreeMap::new();
     let mut round = 0;
     loop {
-        let mut state = ProverState::fresh();
-        state.pinned = pinned.clone();
-        state.comptime_at = comptimes.at.clone();
-        state.not_run = not_run.clone();
-        state.stopped = stopped.clone();
-        let (walk, answers) = walked(parsed, own, library, claims, state);
+        let state = |recorded: &BTreeMap<i64, String>| {
+            let mut state = ProverState::fresh();
+            state.pinned = pinned.clone();
+            state.comptime_at = comptimes.at.clone();
+            state.not_run = not_run.clone();
+            state.stopped = stopped.clone();
+            state.loops_recorded = recorded.clone();
+            state
+        };
+        // **The invariants in `nikaia.proofs`** (ADR-361 D4) are checked and
+        // used without a search. A walk that searched one is repeated with
+        // what it found, so that what the file keeps is what the next build,
+        // reading it, asks.
+        let before = crate::proofs::asked_so_far();
+        let mut recorded = crate::proofs::invariants_here();
+        let (mut walk, mut answers) = walked(parsed, own, library, claims, state(&recorded));
+        count_invariants(&walk.state);
+        for _ in 0..2 {
+            if walk.state.loops_used == recorded {
+                break;
+            }
+            crate::proofs::ask_again_from(&before);
+            recorded = walk.state.loops_used.clone();
+            (walk, answers) = walked(parsed, own, library, claims, state(&recorded));
+            count_invariants(&walk.state);
+        }
+        crate::proofs::record_invariants(&walk.state.loops_used);
         SECOND_QUERIES.with(|n| n.set(n.get() + walk.state.second_queries as usize));
         TOTAL_SECOND.fetch_add(
             walk.state.second_queries as usize,
@@ -280,6 +319,17 @@ pub fn prove(
 /// repeated until the preconditions, then the postconditions, stop changing
 /// (ADR-269 D15, D17); the checked entries (D20), what the ledger publishes
 /// (D18), and how a claim no walk reached is held.
+fn count_invariants(state: &ProverState) {
+    use std::sync::atomic::Ordering::Relaxed;
+    let searched = match crate::proofs::book_open() {
+        true => &TOTAL_LOOP_SEARCHED,
+        false => &TOTAL_LOOP_OUTSIDE,
+    };
+    searched.fetch_add(state.loops_searched as usize, Relaxed);
+    TOTAL_LOOP_READ.fetch_add(state.loops_read as usize, Relaxed);
+    TOTAL_LOOP_UNFOUND.fetch_add(state.loops_unfound as usize, Relaxed);
+}
+
 fn walked(
     parsed: &Parsed,
     own: &Ledger,

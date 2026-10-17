@@ -25,6 +25,12 @@ pub fn pb_read(text: ref String, long: fn(ref String) -> String? sync) -> Vec[Pb
             continue
         }
         let words: Vec[ref String] = line.split(" ").collect()
+        // **An invariant** (ADR-361 D4): the loop's place and its parts,
+        // two words.
+        if words.len() == 4 && words[1] == "invariant" {
+            out.push(PbLine { key: words[0].clone(), kind: words[1].clone(), body: f"{words[2]} {words[3]}" })
+            continue
+        }
         if words.len() != 3 {
             continue
         }

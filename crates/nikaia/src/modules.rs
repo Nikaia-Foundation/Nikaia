@@ -960,7 +960,16 @@ impl Program {
             .filter(|u| u.package.is_none())
             .map(|u| &u.parsed)
             .collect();
-        let mut trust = crate::contracts::trust::analyse_package(&package, std_ledger());
+        // Each question the package's ledger walk asks, in its file.
+        let files = self
+            .units
+            .iter()
+            .filter(|u| u.package.is_none())
+            .map(|u| (u.path.clone(), u.source.clone()))
+            .collect();
+        let mut trust = crate::proofs::with_units(files, || {
+            crate::contracts::trust::analyse_package(&package, std_ledger())
+        });
         // **A package whose `pub` items hold maps fills them with the hasher of
         // the program that uses it** (ADR-010 D9), and the ledger says what
         // each function of it puts in (13.5, `maps`): a program that calls one

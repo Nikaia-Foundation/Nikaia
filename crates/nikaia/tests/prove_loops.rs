@@ -3,6 +3,11 @@
 //! once more through the loop's invariant, which closed forms and intervals
 //! find and three queries check.
 
+mod common;
+
+use std::path::Path;
+use std::process::{Command, Output};
+
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::parser::parse_to_ast;
 use nikaia::prove::Held;
@@ -272,4 +277,168 @@ fn a_claim_a_for_makes_false_is_not_proved() {
             .any(|h| through(h) || matches!(h, Held::Proved)),
         "{found:#?}"
     );
+}
+
+/// A package whose one claim is proved through its loop.
+const LOOPED: &str = "fn main() {\n\
+                      \x20   let mut total = 0\n\
+                      \x20   for i in 0..<10 {\n\
+                      \x20       total = total + 2\n\
+                      \x20   }\n\
+                      \x20   assert(total == 20)\n\
+                      \x20   println(f\"{total}\")\n\
+                      }\n";
+
+fn looped_package(purpose: &str) -> std::path::PathBuf {
+    let dir = common::scratch_dir(purpose);
+    std::fs::create_dir_all(dir.join("src")).expect("the package");
+    std::fs::write(
+        dir.join("nikaia.toml"),
+        "[package]\nname = \"lp\"\nversion = \"0.1.0\"\n",
+    )
+    .expect("a manifest");
+    std::fs::write(dir.join("src/main.nika"), LOOPED).expect("a source");
+    dir
+}
+
+fn build_in(dir: &Path, args: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_nikaia"))
+        .current_dir(dir)
+        .args(args)
+        .env("NIKAIA_PROVER_COUNTS", "1")
+        .output()
+        .expect("the nikaia binary runs")
+}
+
+/// `(searched, read)`: the invariants a build searched for and read from
+/// `nikaia.proofs`, as `NIKAIA_PROVER_COUNTS` says them.
+fn invariants(out: &Output) -> (usize, usize) {
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    let line = stderr
+        .lines()
+        .find(|l| l.starts_with("prover: "))
+        .unwrap_or_else(|| panic!("the counts: {stderr}"));
+    let number = |before: &str| -> usize {
+        let head = line.split(before).next().expect("the counts");
+        head.rsplit(' ')
+            .next()
+            .expect("a number")
+            .parse()
+            .expect("a number")
+    };
+    (
+        number(" invariants searched"),
+        number(" read from nikaia.proofs"),
+    )
+}
+
+/// The `invariant` lines of the package's `nikaia.proofs`.
+fn invariant_lines(dir: &Path) -> Vec<String> {
+    std::fs::read_to_string(dir.join("nikaia.proofs"))
+        .expect("the file is written")
+        .lines()
+        .filter(|l| l.split(' ').nth(1) == Some("invariant"))
+        .map(str::to_string)
+        .collect()
+}
+
+/// **ADR-361 D4**: the invariant used is kept in `nikaia.proofs` with its
+/// loop's place and the strategy that found it; a second build reads it,
+/// checks it with the three queries and searches nothing, and leaves the
+/// file as it was - which `--locked` then accepts.
+#[test]
+fn an_invariant_is_kept_and_read_back_without_a_search() {
+    let dir = looped_package("proofs-invariant");
+    let first = build_in(&dir, &["build", "--no-cache"]);
+    assert!(
+        first.status.success(),
+        "{}",
+        String::from_utf8_lossy(&first.stderr)
+    );
+    let (searched, _) = invariants(&first);
+    assert!(searched >= 1, "{}", String::from_utf8_lossy(&first.stderr));
+    let written = std::fs::read_to_string(dir.join("nikaia.proofs")).expect("written");
+    let lines = invariant_lines(&dir);
+    assert_eq!(lines.len(), 1, "{written}");
+    let words: Vec<&str> = lines[0].split(' ').collect();
+    assert_eq!(words.len(), 4, "{written}");
+    assert_eq!(words[0].len(), 64, "a SHA-256: {written}");
+    assert_eq!(words[2], "src/main.nika:3:5", "the loop's place: {written}");
+    assert!(
+        words[3].contains("closed-forms=") || words[3].contains("intervals="),
+        "{written}"
+    );
+    assert!(words[3].contains("total"), "{written}");
+
+    let second = build_in(&dir, &["build", "--no-cache"]);
+    assert!(
+        second.status.success(),
+        "{}",
+        String::from_utf8_lossy(&second.stderr)
+    );
+    let (searched, read) = invariants(&second);
+    assert!(
+        searched == 0 && read >= 1,
+        "{}",
+        String::from_utf8_lossy(&second.stderr)
+    );
+    let again = std::fs::read_to_string(dir.join("nikaia.proofs")).expect("still there");
+    assert_eq!(again, written);
+
+    let locked = build_in(&dir, &["build", "--no-cache", "--locked"]);
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(
+        locked.status.success(),
+        "{}",
+        String::from_utf8_lossy(&locked.stderr)
+    );
+    assert_eq!(invariants(&locked).0, 0);
+}
+
+/// **ADR-361 D4**: an invariant broken by hand fails the three queries and
+/// proves nothing: the build searches the loop again and writes the
+/// invariant it finds, and `--locked` refuses the file as it refuses any
+/// entry that does not check.
+#[test]
+fn a_broken_invariant_in_the_file_is_searched_again_or_refused() {
+    let dir = looped_package("proofs-invariant-broken");
+    let first = build_in(&dir, &["build", "--no-cache"]);
+    assert!(
+        first.status.success(),
+        "{}",
+        String::from_utf8_lossy(&first.stderr)
+    );
+    let written = std::fs::read_to_string(dir.join("nikaia.proofs")).expect("written");
+    let line = invariant_lines(&dir).pop().expect("an invariant line");
+    let words: Vec<&str> = line.split(' ').collect();
+    // Holds at entry, and a turn does not keep it.
+    let wrong = format!(
+        "{} {} {} closed-forms=eq(total,0)",
+        words[0], words[1], words[2]
+    );
+    let broken = written.replace(&line, &wrong);
+    std::fs::write(dir.join("nikaia.proofs"), &broken).expect("rewritten");
+
+    let locked = build_in(&dir, &["build", "--no-cache", "--locked"]);
+    let stderr = String::from_utf8_lossy(&locked.stderr).to_string();
+    assert!(!locked.status.success(), "{stderr}");
+    assert!(stderr.contains("commit `nikaia.proofs`"), "{stderr}");
+    assert!(invariants(&locked).0 >= 1, "searched again: {stderr}");
+    assert_eq!(
+        std::fs::read_to_string(dir.join("nikaia.proofs")).expect("left alone"),
+        broken,
+        "--locked writes nothing"
+    );
+
+    let again = build_in(&dir, &["build", "--no-cache"]);
+    assert!(
+        again.status.success(),
+        "{}",
+        String::from_utf8_lossy(&again.stderr)
+    );
+    let (searched, _) = invariants(&again);
+    assert!(searched >= 1, "{}", String::from_utf8_lossy(&again.stderr));
+    let repaired = std::fs::read_to_string(dir.join("nikaia.proofs")).expect("written");
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(repaired, written);
 }

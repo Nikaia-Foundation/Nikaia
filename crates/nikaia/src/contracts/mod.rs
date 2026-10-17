@@ -649,13 +649,15 @@ impl LedgerOps for Ledger {
                     .filter(|(other, _)| *other != at)
                     .map(|(_, other)| *other)
                     .collect();
-                crate::check::check_for_the_ledger(
-                    parsed,
-                    &beside,
-                    &ledger,
-                    library,
-                    &crate::assets::Reads::none(),
-                )
+                crate::proofs::in_unit(at, || {
+                    crate::check::check_for_the_ledger(
+                        parsed,
+                        &beside,
+                        &ledger,
+                        library,
+                        &crate::assets::Reads::none(),
+                    )
+                })
             })
             .collect();
         let resolved: BTreeMap<String, crate::check::MethodCalls> = checked

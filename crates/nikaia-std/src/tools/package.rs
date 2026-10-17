@@ -47060,6 +47060,10 @@ pub fn pb_read(text: &str, long: &impl Fn(&str) -> Option<String>) -> Vec<PbLine
     for line in text.lines() {
         if line.starts_with('#') || line.trim().is_empty() { continue; }
         let words: Vec<&str> = line.split(' ').collect::<Vec<_>>();
+        if words.len() == 4 && *nikaia_std::index::get(&words, 1) == "invariant" {
+            out.push(PbLine { key: (*nikaia_std::index::get(&words, 0)).to_owned(), kind: (*nikaia_std::index::get(&words, 1)).to_owned(), body: format!("{} {}", *nikaia_std::index::get(&words, 2), *nikaia_std::index::get(&words, 3)) });
+            continue;
+        }
         if words.len() != 3 { continue; }
         let key = (*nikaia_std::index::get(&words, 0)).to_owned();
         let kind = (*nikaia_std::index::get(&words, 1)).to_owned();
@@ -48690,6 +48694,144 @@ pub fn loop_key(arena: &TermArena, record: &LoopRecord) -> String {
     parts.join(" ; ")
 }
 
+pub fn loop_parts_text(arena: &TermArena, found: &LoopFound) -> String {
+    let mut parts: Vec<String> = vec![];
+    for (term, origin) in found.parts.iter() {
+        let term = nikaia_std::num::value(term);
+        parts.push(format!("{}={}", origin.replace(' ', "-"), loop_term_word(arena, term)));
+    }
+    parts.join(";")
+}
+
+fn loop_term_word(arena: &TermArena, id: i64) -> String {
+    match arena.at(id) {
+        SolverTerm::Bool(b) => format!("{}", b),
+        SolverTerm::Int(n) => format!("{}", n),
+        SolverTerm::Var(ref name) => loop_name_word(name),
+        SolverTerm::Add(a, b) => loop_pair_word(arena, "add", a, b),
+        SolverTerm::Sub(a, b) => loop_pair_word(arena, "sub", a, b),
+        SolverTerm::Neg(a) => format!("neg({})", loop_term_word(arena, a)),
+        SolverTerm::Mul(a, b) => loop_pair_word(arena, "mul", a, b),
+        SolverTerm::Quot(a, k) => format!("quot({},{})", loop_term_word(arena, a), k),
+        SolverTerm::Le(a, b) => loop_pair_word(arena, "le", a, b),
+        SolverTerm::Lt(a, b) => loop_pair_word(arena, "lt", a, b),
+        SolverTerm::Ge(a, b) => loop_pair_word(arena, "ge", a, b),
+        SolverTerm::Gt(a, b) => loop_pair_word(arena, "gt", a, b),
+        SolverTerm::Eq(a, b) => loop_pair_word(arena, "eq", a, b),
+        SolverTerm::Ne(a, b) => loop_pair_word(arena, "ne", a, b),
+        SolverTerm::And(ref parts) => format!("and({})", loop_list_word(arena, &parts)),
+        SolverTerm::Or(ref parts) => format!("or({})", loop_list_word(arena, &parts)),
+        SolverTerm::Not(a) => format!("not({})", loop_term_word(arena, a)),
+        _ => "?".to_string(),
+    }
+}
+
+fn loop_pair_word(arena: &TermArena, op: &str, a: i64, b: i64) -> String { format!("{}({},{})", op, loop_term_word(arena, a), loop_term_word(arena, b)) }
+
+fn loop_list_word(arena: &TermArena, parts: &[i64]) -> String {
+    let mut words: Vec<String> = vec![];
+    for p in parts.iter() {
+        let p = nikaia_std::num::value(p);
+        words.push(loop_term_word(arena, p));
+    }
+    words.join(",")
+}
+
+fn loop_name_word(name: &str) -> String { name.replace('%', "%25").replace('(', "%28").replace(')', "%29").replace(',', "%2C").replace(';', "%3B").replace('=', "%3D").replace('|', "%7C").replace(' ', "%20") }
+
+fn loop_name_of(word: &str) -> Option<String> {
+    if word.is_empty() || word.contains('?') { return None; }
+    Some(word.replace("%20", " ").replace("%7C", "|").replace("%3D", "=").replace("%3B", ";").replace("%2C", ",").replace("%29", ")").replace("%28", "(").replace("%25", "%"))
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct LoopParsed {
+    term: i64,
+    rest: String,
+}
+
+fn loop_term_of(arena: &mut TermArena, word: &str) -> Option<LoopParsed> {
+    let mut end = word.len() as i64;
+    let open = nikaia_std::index::or(nikaia_std::search::find(&word, &"(", 0), || end.into());
+    let comma = nikaia_std::index::or(nikaia_std::search::find(&word, &",", 0), || end.into());
+    let close = nikaia_std::index::or(nikaia_std::search::find(&word, &")", 0), || end.into());
+    if open < end { end = open; }
+    if comma < end { end = comma; }
+    if close < end { end = close; }
+    let head = nikaia_std::index::get(&word, nikaia_std::index::at(0..end)).to_owned();
+    let rest = nikaia_std::index::get(&word, nikaia_std::index::at(end..)).to_owned();
+    if !rest.starts_with('(') {
+        if head == "true" || head == "false" { return Some(LoopParsed { term: arena.boolean(head == "true"), rest }); }
+        let n = text::parse_i64(&head);
+        if n.is_some() { return Some(LoopParsed { term: arena.int(nikaia_std::index::or(n, || 0)), rest }); }
+        let name = match loop_name_of(&head) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        return Some(LoopParsed { term: arena.var(&name), rest });
+    }
+    let mut after = nikaia_std::index::get(&rest, 1..).to_owned();
+    if head == "quot" {
+        let inner = match loop_term_of(arena, &after) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        if !inner.rest.starts_with(',') { return None; }
+        let tail = nikaia_std::index::get(&inner.rest, 1..).to_owned();
+        let shut = match nikaia_std::search::find(&tail, &")", 0) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let k = match text::parse_i64(&nikaia_std::index::get(&tail, nikaia_std::index::at(0..shut)).to_owned()) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        if k <= 0 { return None; }
+        return Some(LoopParsed { term: arena.quot(inner.term, k), rest: nikaia_std::index::get(&tail, nikaia_std::index::at(shut + 1..)).to_owned() });
+    }
+    let mut args: Vec<i64> = vec![];
+    loop {
+        let arg = match loop_term_of(arena, &after) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        args.push(arg.term);
+        if arg.rest.starts_with(',') { after = nikaia_std::index::get(&arg.rest, 1..).to_owned(); } else if arg.rest.starts_with(')') {
+            after = nikaia_std::index::get(&arg.rest, 1..).to_owned();
+            break;
+        } else { return None; }
+    }
+    let term = match loop_built(arena, &head, args) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    Some(LoopParsed { term, rest: after })
+}
+
+fn loop_built(arena: &mut TermArena, op: &str, args: Vec<i64>) -> Option<i64> {
+    if op == "and" { return Some(arena.and(args)); }
+    if op == "or" { return Some(arena.or(args)); }
+    if args.len() == 1 {
+        if op == "neg" { return Some(arena.neg(*nikaia_std::index::get(&args, 0))); }
+        if op == "not" { return Some(arena.not(*nikaia_std::index::get(&args, 0))); }
+        return None;
+    }
+    if args.len() != 2 { return None; }
+    let a = *nikaia_std::index::get(&args, 0);
+    let b = *nikaia_std::index::get(&args, 1);
+    if op == "add" { return Some(arena.add(a, b)); }
+    if op == "sub" { return Some(arena.sub(a, b)); }
+    if op == "mul" { return Some(arena.mul(a, b)); }
+    if op == "le" { return Some(arena.le(a, b)); }
+    if op == "lt" { return Some(arena.lt(a, b)); }
+    if op == "ge" { return Some(arena.ge(a, b)); }
+    if op == "gt" { return Some(arena.gt(a, b)); }
+    if op == "eq" { return Some(arena.equal(a, b)); }
+    if op == "ne" { return Some(arena.unequal(a, b)); }
+    None
+}
+
+pub fn loop_recorded(arena: &mut TermArena, record: &LoopRecord, recorded: &str, proved: &impl Fn(&TermArena, &[i64], i64) -> bool, asked: &mut Vec<i64>) -> Option<LoopFound> {
+    let mut parts: Vec<(i64, String)> = vec![];
+    let mut all: Vec<i64> = vec![];
+    for part in recorded.split(';') {
+        let at = match nikaia_std::search::find(&part, &"=", 0) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let origin = nikaia_std::index::get(&part, nikaia_std::index::at(0..at)).replace('-', " ");
+        let read = match loop_term_of(arena, &nikaia_std::index::get(&part, nikaia_std::index::at(at + 1..)).to_owned()) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        if !read.rest.is_empty() || origin.is_empty() { return None; }
+        parts.push((read.term, origin));
+        all.push(read.term);
+    }
+    if parts.is_empty() { return None; }
+    let invariant = arena.and(all);
+    let verdict = lg_loop_check(arena, &record.problem, invariant, proved);
+    asked.push(2);
+    if !verdict.proved() { return None; }
+    Some(LoopFound { parts })
+}
+
 
 // --- prover_passes.nika ---
 
@@ -49174,10 +49316,15 @@ pub struct ProverState {
     pub loops_failed: collections::BTreeSet<String>,
     pub loop_claims: i64,
     pub loop_queries: i64,
+    pub loops_recorded: collections::BTreeMap<i64, String>,
+    pub loops_used: collections::BTreeMap<i64, String>,
+    pub loops_searched: i64,
+    pub loops_read: i64,
+    pub loops_unfound: i64,
 }
 
 impl ProverState {
-    pub fn fresh() -> ProverState { ProverState { foreign: collections::BTreeMap::new(), preconditions: collections::BTreeMap::new(), known: collections::BTreeMap::new(), edges: collections::BTreeSet::new(), candidates: collections::BTreeMap::new(), postconditions: collections::BTreeMap::new(), broken: collections::BTreeSet::new(), before_return: collections::BTreeMap::new(), collecting: true, in_test: false, pinned: collections::BTreeMap::new(), comptime_at: collections::BTreeMap::new(), call_sites: collections::BTreeMap::new(), call_args: collections::BTreeMap::new(), wanted: collections::BTreeSet::new(), not_run: collections::BTreeMap::new(), stopped: collections::BTreeMap::new(), summaries: collections::BTreeMap::new(), summing: vec![], unsummed: false, second_queries: 0, loops_found: collections::BTreeMap::new(), loops_failed: collections::BTreeSet::new(), loop_claims: 0, loop_queries: 0, divisor_queries: 0, divisor_notes: collections::BTreeMap::new() } }
+    pub fn fresh() -> ProverState { ProverState { foreign: collections::BTreeMap::new(), preconditions: collections::BTreeMap::new(), known: collections::BTreeMap::new(), edges: collections::BTreeSet::new(), candidates: collections::BTreeMap::new(), postconditions: collections::BTreeMap::new(), broken: collections::BTreeSet::new(), before_return: collections::BTreeMap::new(), collecting: true, in_test: false, pinned: collections::BTreeMap::new(), comptime_at: collections::BTreeMap::new(), call_sites: collections::BTreeMap::new(), call_args: collections::BTreeMap::new(), wanted: collections::BTreeSet::new(), not_run: collections::BTreeMap::new(), stopped: collections::BTreeMap::new(), summaries: collections::BTreeMap::new(), summing: vec![], unsummed: false, second_queries: 0, loops_found: collections::BTreeMap::new(), loops_failed: collections::BTreeSet::new(), loop_claims: 0, loop_queries: 0, loops_recorded: collections::BTreeMap::new(), loops_used: collections::BTreeMap::new(), loops_searched: 0, loops_read: 0, loops_unfound: 0, divisor_queries: 0, divisor_notes: collections::BTreeMap::new() } }
     pub fn reaches(&self, from: &str, to: &str) -> bool {
         let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
         let mut next: Vec<String> = vec![from.to_owned()];
@@ -49224,16 +49371,40 @@ impl ProverState {
             if self.loops_failed.contains(&key) { continue; }
             if !self.loops_found.contains_key(&key) {
                 let mut asked: Vec<i64> = vec![];
-                let found = loop_found(arena, record, &|on, given, goal| { matches!(ask(on, given, goal), SolverAnswer::Proved) }, &mut asked);
+                let recorded: String = nikaia_std::index::or(*nikaia_std::index::get(&self.loops_recorded, &record.start), || "").to_owned();
+                let mut found: Option<LoopFound> = None;
+                let mut kept: String = String::from("");
+                if !recorded.is_empty() {
+                    for alternative in recorded.split('|') {
+                        found = loop_recorded(arena, record, alternative, &|on, given, goal| { matches!(ask(on, given, goal), SolverAnswer::Proved) }, &mut asked);
+                        if found.is_some() {
+                            self.loops_read += 1;
+                            kept = alternative.to_owned();
+                            break;
+                        }
+                    }
+                }
+                if found.is_none() {
+                    found = loop_found(arena, record, &|on, given, goal| { matches!(ask(on, given, goal), SolverAnswer::Proved) }, &mut asked);
+                    if found.is_none() { self.loops_unfound += 1; } else { self.loops_searched += 1; }
+                }
                 for n in asked.iter() {
                     let n = nikaia_std::num::value(n);
                     self.loop_queries += n;
                 }
-                if found.is_none() {
+                let held = nikaia_std::index::or(found, || LoopFound { parts: vec![] });
+                if held.parts.is_empty() {
                     self.loops_failed.insert(key.to_owned());
                     continue;
                 }
-                self.loops_found.insert(key.to_owned(), nikaia_std::index::or(found, || LoopFound { parts: vec![] }));
+                if kept.is_empty() { kept = loop_parts_text(&arena, &held); }
+                let used: String = nikaia_std::index::or(*nikaia_std::index::get(&self.loops_used, &record.start), || "").to_owned();
+                if used.is_empty() { self.loops_used.insert(record.start, kept); } else {
+                    let mut known = false;
+                    for alternative in used.split('|') { if alternative == kept { known = true; } }
+                    if !known { self.loops_used.insert(record.start, format!("{}|{}", used, kept)); }
+                }
+                self.loops_found.insert(key.to_owned(), held);
             }
             let held = match *nikaia_std::index::get(&self.loops_found, &key) { Some(__nikaia_value) => __nikaia_value, None => continue };
             facts.extend(loop_facts(arena, record, held));
@@ -62422,7 +62593,7 @@ pub mod prover_claims {
 }
 pub mod prover_loops {
     #[allow(unused_imports)]
-    pub use super::{LoopRecord, LoopFound, loop_before_name, loop_record, loop_record_range, loop_found, loop_facts, loop_found_text, loop_open_text, loop_reads, loop_key};
+    pub use super::{LoopRecord, LoopFound, loop_before_name, loop_record, loop_record_range, loop_found, loop_facts, loop_found_text, loop_open_text, loop_reads, loop_key, loop_parts_text, loop_recorded};
 }
 pub mod prover_passes {
     #[allow(unused_imports)]

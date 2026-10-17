@@ -76,6 +76,21 @@ pub struct ProverState {
     /// finding and checking invariants took (ADR-361 D8).
     pub loop_claims: i64,
     pub loop_queries: i64,
+    /// **The invariants `nikaia.proofs` holds for this file** (ADR-361 D4),
+    /// by the byte the loop starts at, as `loop_parts_text` writes them: one
+    /// is checked by the three queries, and used without a search where it
+    /// passes.
+    pub loops_recorded: collections::BTreeMap[i64, String],
+    /// **The invariants this walk used**, by the same byte: what the file
+    /// keeps. A loop stated twice, with an invariant each that the other's
+    /// statement does not take, keeps both, joined by `|` in the order they
+    /// were found.
+    pub loops_used: collections::BTreeMap[i64, String],
+    /// How many invariants were searched for and found, how many read from
+    /// the file and checked, and how many searches found none.
+    pub loops_searched: i64,
+    pub loops_read: i64,
+    pub loops_unfound: i64,
 }
 
 impl ProverState {
@@ -107,6 +122,11 @@ impl ProverState {
             loops_failed: collections::BTreeSet(),
             loop_claims: 0,
             loop_queries: 0,
+            loops_recorded: collections::BTreeMap(),
+            loops_used: collections::BTreeMap(),
+            loops_searched: 0,
+            loops_read: 0,
+            loops_unfound: 0,
             divisor_queries: 0,
             divisor_notes: collections::BTreeMap(),
         }
@@ -188,20 +208,67 @@ impl ProverState {
             }
             if !self.loops_found.contains_key(key) {
                 let mut asked: Vec[i64] = []
-                let found = loop_found(arena, record, fn(on, given, goal) {
-                    match ask(on, given, goal) {
-                        SolverAnswer::Proved => true,
-                        else => false,
+                // The file's invariant is checked, never believed (D4); one
+                // that fails is searched for as if it were not there.
+                let recorded: String = (self.loops_recorded[record.start] ?? "").clone()
+                let mut found: LoopFound? = null
+                let mut kept: String = ""
+                if recorded.len() > 0 {
+                    // A loop the walk states more than once may have one
+                    // invariant for each statement: the first that passes.
+                    for alternative in recorded.split("|") {
+                        found = loop_recorded(arena, record, alternative, fn(on, given, goal) {
+                            match ask(on, given, goal) {
+                                SolverAnswer::Proved => true,
+                                else => false,
+                            }
+                        }, asked)
+                        if found != null {
+                            self.loops_read += 1
+                            kept = alternative.clone()
+                            break
+                        }
                     }
-                }, asked)
+                }
+                if found == null {
+                    found = loop_found(arena, record, fn(on, given, goal) {
+                        match ask(on, given, goal) {
+                            SolverAnswer::Proved => true,
+                            else => false,
+                        }
+                    }, asked)
+                    if found == null {
+                        self.loops_unfound += 1
+                    } else {
+                        self.loops_searched += 1
+                    }
+                }
                 for n in asked {
                     self.loop_queries += n
                 }
-                if found == null {
+                let held = found ?? LoopFound { parts: [] }
+                if held.parts.is_empty() {
                     self.loops_failed.insert(key.clone())
                     continue
                 }
-                self.loops_found.insert(key.clone(), found ?? LoopFound { parts: [] })
+                if kept.len() == 0 {
+                    kept = loop_parts_text(arena, held)
+                }
+                let used: String = (self.loops_used[record.start] ?? "").clone()
+                if used.len() == 0 {
+                    self.loops_used.insert(record.start, kept)
+                } else {
+                    let mut known = false
+                    for alternative in used.split("|") {
+                        if alternative == kept {
+                            known = true
+                        }
+                    }
+                    if !known {
+                        self.loops_used.insert(record.start, f"{used}|{kept}")
+                    }
+                }
+                self.loops_found.insert(key.clone(), held)
             }
             let held = self.loops_found[key] ?? continue
             facts.extend(loop_facts(arena, record, held))
