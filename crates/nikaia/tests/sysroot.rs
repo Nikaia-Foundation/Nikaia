@@ -73,7 +73,8 @@ fn the_committed_rust_is_what_this_compiler_lowers() {
     }
 }
 
-/// The constraint ADR-002 D4 states, enforced.
+/// The constraint ADR-002 D4 states, enforced, and the line ADR-363 draws
+/// around it.
 ///
 /// `std`'s Nikaia half is lowered once, at `Build::default()`, and linked into
 /// programs built at either setting of `user_parallelism`. That is sound only
@@ -87,22 +88,25 @@ fn the_committed_rust_is_what_this_compiler_lowers() {
 /// catches whatever else the emitter comes to write per switch - which is the
 /// third answer this one type has had, and the reason the guard is a byte
 /// comparison and not a list of names.
+///
+/// **The toolchain's own package is not compared** (ADR-363 D1): no program
+/// links it, only the compiler runs it, and it is lowered at `yes`, which is
+/// correct at one thread too. What is checked for it instead is that the
+/// committed file is the package lowered at `yes`.
 #[test]
 fn stds_nikaia_half_lowers_the_same_at_both_switches() {
     let sysroot = Sysroot::resolve();
     let sequential = Build::parse("x86_64-linux", "no", "yes").expect("a switch that exists");
     let concurrent = Build::parse("x86_64-linux", "yes", "yes").expect("a switch that exists");
 
-    // **The toolchain's files are one package** (ADR-286 D1) and are lowered
-    // as one, each with the others beside it: a code parameter handed to a
-    // function of another file is lent there, and read alone it would be a
-    // callee nobody can see. So the package is compared as it is lowered.
     let tools = sysroot.tools_dir();
+    let at = sysroot::tools_lowered_path(&tools);
     assert_eq!(
-        sysroot::lower_tools_at(&tools, sequential).expect("the tools lower at `no`"),
+        std::fs::read_to_string(&at)
+            .unwrap_or_else(|e| panic!("{} is not committed: {e}", at.display())),
         sysroot::lower_tools_at(&tools, concurrent).expect("the tools lower at `yes`"),
-        "the toolchain's Nikaia package lowers differently at the two settings of \
-         `user_parallelism`, and it is lowered once for both (ADR-002 D4).",
+        "{} is not the toolchain's package lowered at `user_parallelism = yes` (ADR-363 D1).",
+        at.display(),
     );
     for nika in sysroot.std_modules().expect("std's Nikaia modules") {
         let source = std::fs::read_to_string(&nika).expect("the source reads");

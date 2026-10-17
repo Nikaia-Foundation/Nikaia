@@ -334,19 +334,27 @@ fn every_refusal(path: &Path, source: &str, refusals: &[&crate::check::Finding])
 /// each file's items, then one module per file that names what that file
 /// offers - `tools::ty::Ty`, `tools::ledger::read` - so a Rust caller still
 /// says which file a name is in, and the name is one name underneath.
+///
+/// **At `user_parallelism = yes`, whatever this binary's default**
+/// ([ADR-363](../../../docs/specification/adr/adr-363.md) D1): only the
+/// compiler runs this code, and the compiler may be concurrent (Part I 1.2).
+/// Code lowered at `yes` is correct where one thread runs it; code lowered at
+/// `no` is not correct where several do.
 pub fn lower_tools(dir: &Path) -> Result<String> {
-    lower_tools_at(
-        dir,
-        crate::emit::Build {
-            target: crate::emit::Target::X86_64Linux,
-            ..crate::emit::Build::default()
-        },
-    )
+    lower_tools_at(dir, tools_build())
 }
 
-/// The same at a given build: the package is lowered once and linked into
-/// programs built at either setting of `user_parallelism`, so a test lowers
-/// it at both and compares (ADR-002 D4).
+/// The build the toolchain's package is lowered at (ADR-363 D1).
+pub fn tools_build() -> crate::emit::Build {
+    crate::emit::Build {
+        target: crate::emit::Target::X86_64Linux,
+        user_parallelism: crate::emit::UserParallelism::Yes,
+        ..crate::emit::Build::default()
+    }
+}
+
+/// The same at a given build, for a test that lowers the package at another
+/// setting than [`tools_build`].
 pub fn lower_tools_at(dir: &Path, build: crate::emit::Build) -> Result<String> {
     let mut paths: Vec<PathBuf> = std::fs::read_dir(dir)
         .with_context(|| format!("reading {}", dir.display()))?
