@@ -143,6 +143,35 @@ pub fn claim_runs() -> usize {
     CLAIM_RUNS.with(|runs| runs.get())
 }
 
+thread_local! {
+    /// **How many claims were asked a second time, with result summaries, on
+    /// this thread** (ADR-359 D2): a program whose claims are decided without
+    /// them asks none.
+    static SECOND_QUERIES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+static TOTAL_RUNS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static TOTAL_SECOND: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static TOTAL_DIVISORS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// **What the prover's extra work came to in this process** (ADR-359 D13,
+/// D2, D6): calls run for claims, claims asked a second time, divisors asked
+/// whether what is known pins them. `NIKAIA_PROVER_COUNTS` prints it when the
+/// compiler ends, so a build's cost is counted, not timed.
+pub fn totals() -> (usize, usize, usize) {
+    use std::sync::atomic::Ordering::Relaxed;
+    (
+        TOTAL_RUNS.load(Relaxed),
+        TOTAL_SECOND.load(Relaxed),
+        TOTAL_DIVISORS.load(Relaxed),
+    )
+}
+
+/// How many claims were asked a second time on this thread so far.
+pub fn second_queries() -> usize {
+    SECOND_QUERIES.with(|n| n.get())
+}
+
 /// Prove every `assert` of the program. `claims` are the checker's: a call is
 /// an `assert` exactly where the checker recognised the prelude's. `run`,
 /// where the build can compile and run code, runs a call an open claim reads
@@ -169,6 +198,15 @@ pub fn prove(
         state.not_run = not_run.clone();
         state.stopped = stopped.clone();
         let (walk, answers) = walked(parsed, own, library, claims, state);
+        SECOND_QUERIES.with(|n| n.set(n.get() + walk.state.second_queries as usize));
+        TOTAL_SECOND.fetch_add(
+            walk.state.second_queries as usize,
+            std::sync::atomic::Ordering::Relaxed,
+        );
+        TOTAL_DIVISORS.fetch_add(
+            walk.state.divisor_queries as usize,
+            std::sync::atomic::Ordering::Relaxed,
+        );
         round += 1;
         let wanted: Vec<String> = walk
             .state
@@ -196,6 +234,7 @@ pub fn prove(
                 Some(came) => came.clone(),
                 None => {
                     CLAIM_RUNS.with(|runs| runs.set(runs.get() + 1));
+                    TOTAL_RUNS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     let came = run(site, callee, args);
                     answered.insert(key, came.clone());
                     came

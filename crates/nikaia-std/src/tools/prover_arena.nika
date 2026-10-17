@@ -59,6 +59,11 @@ impl TermArena {
         return self.push(SolverTerm::Mul(a, b))
     }
 
+    /// `a / k` for a positive constant `k`, truncated toward zero.
+    pub fn quot(ref mut self, a: i64, k: i64) -> i64 {
+        return self.push(SolverTerm::Quot(a, k))
+    }
+
     pub fn le(ref mut self, a: i64, b: i64) -> i64 {
         return self.push(SolverTerm::Le(a, b))
     }
@@ -104,6 +109,7 @@ impl TermArena {
             SolverTerm::Add(a, b) => self.mentions(a, name) || self.mentions(b, name),
             SolverTerm::Sub(a, b) => self.mentions(a, name) || self.mentions(b, name),
             SolverTerm::Mul(a, b) => self.mentions(a, name) || self.mentions(b, name),
+            SolverTerm::Quot(a, _) => self.mentions(a, name),
             SolverTerm::Le(a, b) => self.mentions(a, name) || self.mentions(b, name),
             SolverTerm::Lt(a, b) => self.mentions(a, name) || self.mentions(b, name),
             SolverTerm::Ge(a, b) => self.mentions(a, name) || self.mentions(b, name),
@@ -136,6 +142,7 @@ impl TermArena {
             SolverTerm::Add(a, b) => self.both_variables(a, b, names),
             SolverTerm::Sub(a, b) => self.both_variables(a, b, names),
             SolverTerm::Mul(a, b) => self.both_variables(a, b, names),
+            SolverTerm::Quot(a, _) => self.variables(a, names),
             SolverTerm::Le(a, b) => self.both_variables(a, b, names),
             SolverTerm::Lt(a, b) => self.both_variables(a, b, names),
             SolverTerm::Ge(a, b) => self.both_variables(a, b, names),
@@ -184,6 +191,10 @@ impl TermArena {
                 let y = self.constant(b) ?? return null
                 x.checked_mul(y)
             },
+            SolverTerm::Quot(a, k) => {
+                let x = self.constant(a) ?? return null
+                x.checked_div(k)
+            },
             else => null,
         }
     }
@@ -215,6 +226,10 @@ impl TermArena {
                 let x = self.int_value(a, values) ?? return null
                 let y = self.int_value(b, values) ?? return null
                 x.checked_mul(y)
+            },
+            SolverTerm::Quot(a, k) => {
+                let x = self.int_value(a, values) ?? return null
+                x.checked_div(k)
             },
             else => null,
         }
@@ -251,6 +266,10 @@ impl TermArena {
                 let x = self.substitute(a, given)
                 let y = self.substitute(b, given)
                 self.push(SolverTerm::Mul(x, y))
+            },
+            SolverTerm::Quot(a, k) => {
+                let x = self.substitute(a, given)
+                self.push(SolverTerm::Quot(x, k))
             },
             SolverTerm::Le(a, b) => {
                 let x = self.substitute(a, given)
@@ -308,6 +327,7 @@ impl TermArena {
             SolverTerm::Add(a, b) => self.size(a) + self.size(b),
             SolverTerm::Sub(a, b) => self.size(a) + self.size(b),
             SolverTerm::Mul(a, b) => self.size(a) + self.size(b),
+            SolverTerm::Quot(a, _) => self.size(a),
             SolverTerm::Le(a, b) => self.size(a) + self.size(b),
             SolverTerm::Lt(a, b) => self.size(a) + self.size(b),
             SolverTerm::Ge(a, b) => self.size(a) + self.size(b),
@@ -345,6 +365,7 @@ impl TermArena {
                 SolverTerm::Sub(a, b) => SolverTerm::Sub(a + base, b + base),
                 SolverTerm::Neg(a) => SolverTerm::Neg(a + base),
                 SolverTerm::Mul(a, b) => SolverTerm::Mul(a + base, b + base),
+                SolverTerm::Quot(a, k) => SolverTerm::Quot(a + base, k),
                 SolverTerm::Le(a, b) => SolverTerm::Le(a + base, b + base),
                 SolverTerm::Lt(a, b) => SolverTerm::Lt(a + base, b + base),
                 SolverTerm::Ge(a, b) => SolverTerm::Ge(a + base, b + base),

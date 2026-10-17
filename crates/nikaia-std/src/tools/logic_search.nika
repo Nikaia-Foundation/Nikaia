@@ -174,7 +174,7 @@ fn lg_refuted(arena: ref TermArena, facts: ref Vec[i64], goal: i64, values: ref 
 /// Fourier-Motzkin elimination with integer tightening (ADR-270 D1): the
 /// reference solver's answer to whether `facts` imply `goal`.
 pub fn lg_check(arena: ref TermArena, facts: ref Vec[i64], goal: i64, budget: ref LgBudget) -> LgAnswer {
-    let mut why = LgWhy { unknown: LgUnknown::NoContradiction }
+    let mut why = lg_why()
     let read = lg_indexed(arena, facts, goal, why)
     if read == null {
         return LgAnswer::Unknown { why: why.unknown.clone() }
@@ -301,7 +301,7 @@ struct LgVerdict {
 /// Whether `certificate` shows that the query's facts imply its goal: nothing
 /// where it does, why not otherwise.
 pub fn lg_verify(arena: ref TermArena, facts: ref Vec[i64], goal: i64, certificate: ref LgCertificate) -> LgRejected? {
-    let mut why = LgWhy { unknown: LgUnknown::NoContradiction }
+    let mut why = lg_why()
     let read = lg_indexed(arena, facts, goal, why)
     if read == null {
         return LgRejected::NotReadable

@@ -356,7 +356,7 @@ fn lg_choice(mut arena: TermArena, mut proof: LgProof, chosen: ref Vec[LgPart]) 
     let refutation = lg_refutation_of(answer)
     // A conjunction of literals: no disjunction, and the atoms are its bounds in
     // order.
-    let mut why = LgWhy { unknown: LgUnknown::NoContradiction }
+    let mut why = lg_why()
     let read = lg_indexed(arena, facts, falsum, why)
     if read == null || refutation == null {
         return null
@@ -490,7 +490,7 @@ fn lg_hulled(mut arena: TermArena, mut proof: LgProof, clause: ref LgClause) -> 
     let either = arena.or(parts)
     let falsum = arena.boolean(false)
     let facts: Vec[i64] = [either]
-    let mut why = LgWhy { unknown: LgUnknown::NoContradiction }
+    let mut why = lg_why()
     let read = lg_indexed(arena, facts, falsum, why)
     let mut out: Vec[LgClause] = []
     if read == null {

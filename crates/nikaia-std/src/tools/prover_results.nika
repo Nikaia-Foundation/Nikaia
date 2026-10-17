@@ -84,12 +84,15 @@ pub struct Published {
     pub requires: Vec[String],
     /// Over the parameters and `result`.
     pub ensures: Vec[String],
+    /// **What the body was observed to return** (ADR-359 D3): the result
+    /// summary's exits, over the parameters and `result`.
+    pub inferred: Vec[String],
     /// For each of `requires`, then of `ensures`: the `assert` it came from.
     pub from: Vec[String],
 }
 
 impl Published {
     pub fn nothing() -> Published {
-        return Published { requires: [], ensures: [], from: [] }
+        return Published { requires: [], ensures: [], inferred: [], from: [] }
     }
 }

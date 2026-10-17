@@ -73,6 +73,28 @@ pub struct PostClaim {
     pub written: String,
 }
 
+/// **One exit of a function's result summary** (ADR-359 D1): where the
+/// path to it holds at the entry (`guard`, over the parameters), the value
+/// handed back is `value`. `term` is `!guard || result == value`; `written`
+/// says where it came from, for a note (D8) and the ledger (D3).
+pub struct SummaryExit {
+    pub guard: i64,
+    pub value: i64,
+    pub term: i64,
+    pub written: String,
+}
+
+/// **A summary's exit at one call** (ADR-359 D2): its path and value with
+/// the call's arguments in place of the parameters, the call as written, and
+/// where the value came from.
+pub struct SummaryAlt {
+    pub guard: i64,
+    pub value: i64,
+    pub callee: String,
+    pub call: String,
+    pub why: String,
+}
+
 /// **Another package's function, as its ledger states it** (ADR-269 D18):
 /// its parameters, whether it hands back a whole number, and its contract
 /// read back into terms.

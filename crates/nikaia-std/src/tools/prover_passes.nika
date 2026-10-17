@@ -145,12 +145,23 @@ fn published_contracts(walk: ref ProverWalk) -> collections::BTreeMap[String, Pu
         }
         published.insert(function.clone(), entry)
     }
+    // **A result summary is an observation** (ADR-359 D3): written as
+    // `inferred`: each exit's path and the value handed back there.
+    for (function, _) in walk.state.summaries {
+        if !published.contains_key(function) {
+            published.insert(function.clone(), Published::nothing())
+        }
+    }
     let mut out: collections::BTreeMap[String, Published] = collections::BTreeMap()
     for (function, entry) in published {
         let mut full = entry.clone()
         let posts = standing_posts(walk.state.postconditions, function) ?? []
         for post in posts {
             full.from.push(f"assert({post.written})")
+        }
+        let exits = walk.state.summaries[function]?.clone() ?? []
+        for exit in exits {
+            full.inferred.push(ledger_term_text(walk.arena, exit.term))
         }
         out.insert(function.clone(), full)
     }

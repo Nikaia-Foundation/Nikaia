@@ -52,6 +52,21 @@ pub struct ProverState {
     pub not_run: collections::BTreeMap[String, String],
     /// A call whose run stopped, in the words the program would print (D12).
     pub stopped: collections::BTreeMap[String, String],
+    /// **Each function's result summary** (ADR-359 D1), by the ledger's key:
+    /// what every exit hands back, over the parameters. Kept from one pass
+    /// to the next, so a caller walked before its callee reads it in the
+    /// next pass.
+    pub summaries: collections::BTreeMap[String, Vec[SummaryExit]],
+    /// The exits of the function being walked, until its end decides.
+    pub summing: Vec[SummaryExit],
+    /// Whether an exit of the function being walked gave no summary.
+    pub unsummed: bool,
+    /// **How many claims were asked a second time**, with summaries (D2).
+    pub second_queries: i64,
+    /// How many divisors were asked whether what is known pins them (D6).
+    pub divisor_queries: i64,
+    /// Where a divisor a summary pinned got its value, by `divisor_name` (D8).
+    pub divisor_notes: collections::BTreeMap[String, Vec[String]],
 }
 
 impl ProverState {
@@ -75,6 +90,12 @@ impl ProverState {
             wanted: collections::BTreeSet(),
             not_run: collections::BTreeMap(),
             stopped: collections::BTreeMap(),
+            summaries: collections::BTreeMap(),
+            summing: [],
+            unsummed: false,
+            second_queries: 0,
+            divisor_queries: 0,
+            divisor_notes: collections::BTreeMap(),
         }
     }
 
@@ -223,7 +244,31 @@ impl ProverState {
         if claim != null && !tainted_claim {
             refuted = refuting_values(arena, scope.facts, claim ?? 0, ask, model)
         }
-        let is_refuted = refuted != null
+        let mut is_refuted = refuted != null
+        // **Asked once more with what the callees' bodies return** (ADR-359
+        // D2), where what is known leaves the claim open and it reads a call
+        // with a result summary.
+        let mut through_summaries: Vec[String] = []
+        if claim != null && !is_refuted && !tainted_claim && !scope.summed.is_empty() {
+            let read = summed_read(arena, scope, claim ?? 0)
+            if !read.is_empty() {
+                let facts = summed_facts(arena, scope, read)
+                self.second_queries += 1
+                match ask(arena, facts, claim ?? 0) {
+                    SolverAnswer::Proved => {
+                        scope.facts.push(claim ?? 0)
+                        outcome.held = ClaimHeld::Proved
+                        return outcome
+                    },
+                    else => {},
+                }
+                refuted = refuting_values(arena, facts, claim ?? 0, ask, model)
+                is_refuted = refuted != null
+                if is_refuted && !self.collecting {
+                    through_summaries = summed_notes(arena, scope, read, facts, ask, model)
+                }
+            }
+        }
         let owner = carrying_function(at.function)
         if claim != null && at.no_precondition == null && owner != null && !is_refuted {
             let term = scope.precondition_at(arena, claim ?? 0, at.params)
@@ -274,11 +319,13 @@ impl ProverState {
         // is told, with values (D8).
         let refuted_values = refuted ?? collections::BTreeMap()
         if is_refuted && !self.collecting {
+            let mut notes: Vec[String] = [f"What is known before it rules the claim out: {shown(refuted_values)}."]
+            notes.extend(through_summaries)
             outcome.findings.push(Finding {
                 code: "NK1207",
                 span: span,
                 message: f"`{written}` is false every time it is reached.",
-                notes: [f"What is known before it rules the claim out: {shown(refuted_values)}."],
+                notes: notes,
                 help: "If the claim is right, the code before it is wrong; if the code is right, the claim is.",
                 warning: false,
                 labels: [],
@@ -547,11 +594,139 @@ pub fn postconditions_for(mut arena: TermArena, posts: ref Vec[PostClaim], param
     return out
 }
 
+/// **The calls with a result summary a claim reads** (ADR-359 D2): the names
+/// their results are bound to, which the claim reads directly or through the
+/// facts that tie them to its names.
+pub fn summed_read(arena: ref TermArena, scope: ref ProverScope, claim: i64) -> Vec[String] {
+    let mut names: collections::BTreeSet[String] = collections::BTreeSet()
+    arena.variables(claim, names)
+    let mut grown = true
+    while grown {
+        let before = names.len()
+        for fact in scope.facts {
+            let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+            arena.variables(fact, read)
+            if summed_ties(read, names) {
+                for n in read {
+                    names.insert(n.clone())
+                }
+            }
+        }
+        for (bound, alts) in scope.summed {
+            if !names.contains(bound) {
+                continue
+            }
+            for alt in alts {
+                arena.variables(alt.guard, names)
+                arena.variables(alt.value, names)
+            }
+        }
+        grown = names.len() != before
+    }
+    let mut out: Vec[String] = []
+    for (bound, _) in scope.summed {
+        if names.contains(bound) {
+            out.push(bound.clone())
+        }
+    }
+    return out
+}
+
+/// **Where the values a claim leaned on came from** (ADR-359 D8): for each
+/// binding the claim reads, directly or through the facts, whose divisor a
+/// summary pinned.
+pub fn leaned_notes(arena: ref TermArena, scope: ref ProverScope, names: ref collections::BTreeSet[String]) -> Vec[String] {
+    let mut read = names.clone()
+    let mut grown = true
+    while grown {
+        let before = read.len()
+        for fact in scope.facts {
+            let mut fact_names: collections::BTreeSet[String] = collections::BTreeSet()
+            arena.variables(fact, fact_names)
+            if summed_ties(fact_names, read) {
+                for n in fact_names {
+                    read.insert(n.clone())
+                }
+            }
+        }
+        grown = read.len() != before
+    }
+    let mut notes: Vec[String] = []
+    for (name, said) in scope.leaned {
+        if read.contains(name) {
+            notes.extend(said.clone())
+        }
+    }
+    return notes
+}
+
+fn summed_ties(read: ref collections::BTreeSet[String], names: ref collections::BTreeSet[String]) -> bool {
+    for n in read {
+        if names.contains(n) {
+            return true
+        }
+    }
+    return false
+}
+
+/// What is known, and for each of `read` what its callee's exits hand back:
+/// `!path || bound == value`.
+pub fn summed_facts(mut arena: TermArena, scope: ref ProverScope, read: ref Vec[String]) -> Vec[i64] {
+    let mut facts = scope.facts.clone()
+    for bound in read {
+        let alts = scope.summed[bound] ?? continue
+        for alt in alts {
+            let named = arena.var(bound)
+            let equal = arena.equal(named, alt.value)
+            let not_taken = arena.not(alt.guard)
+            facts.push(arena.or([not_taken, equal]))
+        }
+    }
+    return facts
+}
+
+/// **Where each call's value came from** (ADR-359 D8), for a refutation
+/// through summaries: `` `example(2)` is 12: `example` returns … ``, the value
+/// given only where what is known pins it.
+fn summed_notes(mut arena: TermArena, scope: ref ProverScope, read: ref Vec[String], facts: ref Vec[i64], ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync) -> Vec[String] {
+    let falsum = arena.boolean(false)
+    let values = model(arena, facts, falsum) ?? collections::BTreeMap()
+    let mut notes: Vec[String] = []
+    for bound in read {
+        let alts = scope.summed[bound] ?? continue
+        if alts.is_empty() {
+            continue
+        }
+        let mut whys: Vec[String] = []
+        for alt in alts {
+            whys.push(alt.why.clone())
+        }
+        let call = alts[0].call.clone()
+        let how = whys.join("; ")
+        let mut said = f"`{call}`: {how}."
+        let value = values[bound]
+        if value != null {
+            let v = value ?? 0
+            let named = arena.var(bound)
+            let constant = arena.int(v)
+            let pinned = arena.equal(named, constant)
+            match ask(arena, facts, pinned) {
+                SolverAnswer::Proved => {
+                    said = f"`{call}` is {v}: {how}."
+                },
+                else => {},
+            }
+        }
+        notes.push(said)
+    }
+    return notes
+}
+
 /// **The value the build knows for `name`** (ADR-359 D7, D11), where no
 /// local of this body hides it. A call's result has a name no local can
 /// spell, which the walk binds where it reads the call.
 pub fn prover_pinned(pinned: ref collections::BTreeMap[String, i64], scope: ref ProverScope, name: ref String) -> i64? {
-    if !name.starts_with("result@") && scope.locals.contains(name) {
+    if !name.starts_with("result@") && !name.starts_with("divisor@") && scope.locals.contains(name) {
         return null
     }
     return pinned[name]

@@ -355,13 +355,14 @@ fn asserts_reports_every_claim() {
     );
     assert!(
         stdout.contains(
-            "asserts in claims.nika: 3 - proved 2, preconditions 1, checked at run time 0, \
-             checked by a test 0, refused 0\n\
+            "asserts in claims.nika: 3 - not proved 0 (refused 0, checked at run time 0, \
+             checked by a test 0); checked where the words arrive 0; proved 3 (proved 2, \
+             preconditions proved at every call 1)\n\
+             \x20 claims.nika:9  assert(four == 4)  proved\n\
+             \x20 claims.nika:11  assert(twice > 2)  proved\n\
              \x20 claims.nika:2  assert(n >= 0; message: \"not negative\")  precondition of \
              `half`: proved at every call the compiler sees; any other reaches the entry \
-             that checks it\n\
-             \x20 claims.nika:9  assert(four == 4)  proved\n\
-             \x20 claims.nika:11  assert(twice > 2)  proved\n"
+             that checks it\n"
         ),
         "{stdout}"
     );
@@ -442,4 +443,88 @@ fn the_owners_program_is_refused_while_it_is_built() {
     assert!(!out.status.success());
     assert_eq!(String::from_utf8_lossy(&out.stderr), expected);
     std::fs::remove_dir_all(&dir).ok();
+}
+
+/// `--asserts` over a program, with `NO_COLOR` set and its output not a
+/// terminal: the report as printed, without colour.
+fn asserts_report(name: &str, source: &str) -> String {
+    let dir = common::scratch_dir(&format!("assert-report-{name}"));
+    std::fs::write(dir.join(format!("{name}.nika")), source).expect("write");
+    let out = Command::new(env!("CARGO_BIN_EXE_nikaia"))
+        .current_dir(&dir)
+        .env("NO_COLOR", "1")
+        .args([
+            "lower",
+            &format!("{name}.nika"),
+            "--output",
+            &format!("{name}.rs"),
+            "--asserts",
+        ])
+        .output()
+        .expect("the nikaia binary runs");
+    std::fs::remove_dir_all(&dir).ok();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    String::from_utf8_lossy(&out.stdout).into_owned()
+}
+
+/// **The owner's program with a parameter** (ADR-359 D1, D2): `b` is
+/// `4 * example(a)`, and `example`'s body returns `positive(10 + a)`, whose
+/// body returns its argument - so with `a > 0`, `b > 40` is proved while the
+/// program is built. `b > 50` is not: `a = 3` makes it true, so it is neither
+/// proved nor refused, and stays a check. The report lists what is not proved
+/// first, `main`'s preconditions next, and what the build proved last.
+#[test]
+fn the_owners_program_with_a_parameter_is_proved_through_the_bodies() {
+    let fixtures = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+    let source = std::fs::read_to_string(fixtures.join("owners_main.nika")).expect("read");
+    let report = asserts_report("owners_main", &source);
+    assert_eq!(
+        report
+            .lines()
+            .take(5)
+            .map(|l| format!("{l}\n"))
+            .collect::<String>(),
+        "asserts in owners_main.nika: 4 - not proved 0 (refused 0, checked at run time 0, checked by a test 0); checked where the words arrive 1; proved 3 (proved 2, preconditions proved at every call 1)\n\
+         \x20 owners_main.nika:2  assert(a > 0)  precondition of `main`, checked where the words arrive\n\
+         \x20 owners_main.nika:5  assert(c == 1)  proved\n\
+         \x20 owners_main.nika:6  assert(b > 40)  proved\n\
+         \x20 owners_main.nika:10  assert(whole > 0)  precondition of `positive`: proved at every call the compiler sees; any other reaches the entry that checks it\n"
+    );
+    let fifty = source.replace("assert(b>40)", "assert(b>50)");
+    let report = asserts_report("owners_fifty", &fifty);
+    assert!(
+        report.contains("owners_fifty.nika:6  assert(b > 50)  checked at run time"),
+        "{report}"
+    );
+    // The order: what is not proved, then `main`'s preconditions, then what
+    // the build proved.
+    let at_run_time = report.find("assert(b > 50)").expect("listed");
+    let arrives = report.find("assert(a > 0)").expect("listed");
+    let proved = report.find("assert(c == 1)").expect("listed");
+    assert!(at_run_time < arrives && arrives < proved, "{report}");
+    assert!(!report.contains('\u{1b}'), "no colour: {report:?}");
+}
+
+/// **`main`'s precondition carried back from a callee has a row** (ADR-269
+/// D15, ADR-360 D3): without `assert(a > 0)`, `positive`'s claim becomes
+/// `10 + a > 0` at `main`'s entry, checked where the words arrive.
+#[test]
+fn a_precondition_of_main_carried_back_from_a_callee_is_listed() {
+    let fixtures = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+    let source = std::fs::read_to_string(fixtures.join("owners_main.nika"))
+        .expect("read")
+        .replace("   assert(a>0)\n", "");
+    let report = asserts_report("owners_carried", &source);
+    assert!(
+        report.contains("  owners_carried.nika  10 + a > 0  precondition of `main` carried back from `assert(whole > 0)`, checked where the words arrive\n"),
+        "{report}"
+    );
+    assert!(
+        report.contains("assert(b > 40)  checked at run time"),
+        "{report}"
+    );
 }

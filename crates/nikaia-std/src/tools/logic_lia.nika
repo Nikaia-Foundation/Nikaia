@@ -38,6 +38,14 @@ pub enum LgUnknown {
 /// What a function that may not know says why not.
 pub struct LgWhy {
     pub unknown: LgUnknown,
+    /// The quotients (`SolverTerm::Quot`) the query read, by their place:
+    /// each is a fresh name `quot#place` whose definition joins the query.
+    pub quotients: Vec[i64],
+}
+
+/// A `LgWhy` before anything was read.
+pub fn lg_why() -> LgWhy {
+    return LgWhy { unknown: LgUnknown::NoContradiction, quotients: [] }
 }
 
 /// How much work a solver may do on one query, counted in its own units
@@ -292,6 +300,18 @@ fn lg_linear(arena: ref TermArena, id: i64, mut why: LgWhy) -> LgLin? {
                 why.unknown = LgUnknown::OutsideTheTheory
                 null
             }
+        },
+        // **A quotient by a positive constant is a fresh name** (ADR-359 D5),
+        // defined in `lg_indexed` by ADR-270 D5's extension.
+        SolverTerm::Quot(a, k) => {
+            if k <= 0 {
+                why.unknown = LgUnknown::OutsideTheTheory
+                return null
+            }
+            if !why.quotients.contains(id) {
+                why.quotients.push(id)
+            }
+            lg_variable(lg_quotient_name(id))
         },
         else => {
             why.unknown = LgUnknown::OutsideTheTheory
@@ -548,10 +568,52 @@ pub fn lg_indexed(arena: ref TermArena, facts: ref Vec[i64], goal: i64, mut why:
         all.push(lg_formula(arena, fact, true, why) ?? return null)
     }
     all.push(lg_formula(arena, goal, false, why) ?? return null)
+    // Each quotient read, defined - a definition may read a further one.
+    let mut at = 0
+    while at < why.quotients.len() {
+        all.push(lg_quotient(arena, why.quotients[at], why) ?? return null)
+        at += 1
+    }
     let mut indexed = LgIndexed { atoms: [], ors: [], top: [] }
     let whole = LgFormula::And(all)
     indexed.top = indexed.items(whole)
     return indexed
+}
+
+/// The name the solver gives the quotient at `id`.
+fn lg_quotient_name(id: i64) -> String {
+    return f"quot#{id}"
+}
+
+/// **The definition of the quotient at `id`** (ADR-359 D5): `q = e / k`
+/// truncated toward zero is `e >= 0 → k·q <= e <= k·q + k - 1` and
+/// `e < 0 → k·q - k + 1 <= e <= k·q` - for each sign ADR-270 D5's extension,
+/// which exists for every `e`, so it makes no satisfiable query unsatisfiable.
+fn lg_quotient(arena: ref TermArena, id: i64, mut why: LgWhy) -> LgFormula? {
+    return match arena.at(id) {
+        SolverTerm::Quot(a, k) => lg_quotient_of(arena, id, a, k, why),
+        else => null,
+    }
+}
+
+fn lg_quotient_of(arena: ref TermArena, id: i64, a: i64, k: i64, mut why: LgWhy) -> LgFormula? {
+    let e = lg_linear(arena, a, why) ?? return null
+    let kq = lg_overflowed(lg_scale(lg_variable(lg_quotient_name(id)), k), why) ?? return null
+    let e_minus_kq = lg_overflowed(lg_sub(e, kq), why) ?? return null
+    let kq_minus_e = lg_overflowed(lg_sub(kq, e), why) ?? return null
+    let negative = lg_add_constant(e, 1)
+    let not_negative = lg_overflowed(lg_scale(e, -1), why) ?? return null
+    let below = lg_overflowed(lg_add_constant_checked(e_minus_kq, 1 - k), why) ?? return null
+    let above = lg_overflowed(lg_add_constant_checked(kq_minus_e, 1 - k), why) ?? return null
+    let upwards = LgFormula::Or([LgFormula::Le(negative), LgFormula::And([LgFormula::Le(kq_minus_e.clone()), LgFormula::Le(below)])])
+    let downwards = LgFormula::Or([LgFormula::Le(not_negative), LgFormula::And([LgFormula::Le(e_minus_kq.clone()), LgFormula::Le(above)])])
+    return LgFormula::And([upwards, downwards])
+}
+
+/// `a + c`, where the constant fits.
+fn lg_add_constant_checked(a: ref LgLin, c: i64) -> LgLin? {
+    let sum = a.constant.checked_add(c) ?? return null
+    return LgLin { terms: a.terms.clone(), constant: sum }
 }
 
 /// A bound the elimination holds, and the step that made it.
@@ -682,11 +744,23 @@ fn lg_contradictory(bounds: ref Vec[LgLin], budget: ref LgBudget) -> LgClosed {
                 names.insert(name.clone())
             }
         }
-        // Eliminate the name whose elimination makes the fewest new bounds.
+        // Eliminate the name whose elimination makes the fewest new bounds -
+        // a quotient's name last (ADR-359 D5), so that what is left of it is
+        // a bound of its own, tightened to the integers: `2·q = -7` has no
+        // integer `q`.
         let mut chosen: String = ""
         let mut have = false
         let mut fewest = 0
+        let mut others = false
         for name in names {
+            if !name.starts_with("quot#") {
+                others = true
+            }
+        }
+        for name in names {
+            if others && name.starts_with("quot#") {
+                continue
+            }
             let mut up = 0
             let mut down = 0
             for one in bounds_now {

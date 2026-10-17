@@ -459,6 +459,8 @@ fn function_key(mut entry: FnContract, name: ref String, key: ref String, value:
         entry.requires = entries(value, n)
     } else if key == "ensures" {
         entry.ensures = entries(value, n)
+    } else if key == "inferred" {
+        entry.inferred = entries(value, n)
     } else if key == "from" {
         entry.from = entries(value, n)
     } else {

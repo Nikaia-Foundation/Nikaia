@@ -877,6 +877,23 @@ fn single_file(args: &Cli, input: &std::path::Path, verb: Verb<'_>) -> Result<()
 /// what was wrong (`diagnostics::Refused`). For a compiler that cannot read a file
 /// the frames are the most useful thing there is, so those are untouched.
 pub fn main() -> std::process::ExitCode {
+    let code = main_run();
+    prover_counts();
+    code
+}
+
+/// `NIKAIA_PROVER_COUNTS`: what the prover's extra work came to (ADR-359
+/// D2, D6, D13), counted.
+fn prover_counts() {
+    if std::env::var_os("NIKAIA_PROVER_COUNTS").is_some() {
+        let (runs, second, divisors) = nikaia::prove::totals();
+        eprintln!(
+            "prover: {runs} calls run for claims, {second} claims asked a second time, {divisors} divisors asked"
+        );
+    }
+}
+
+fn main_run() -> std::process::ExitCode {
     match run() {
         Ok(()) => std::process::ExitCode::SUCCESS,
         Err(error) if diagnostics::is_a_refusal(&error) => {
@@ -932,6 +949,7 @@ fn run() -> Result<()> {
         }
         command => {
             let code = project_command(&args, command)?;
+            prover_counts();
             std::process::exit(code);
         }
     }

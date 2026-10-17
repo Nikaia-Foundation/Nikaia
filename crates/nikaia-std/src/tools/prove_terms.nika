@@ -89,24 +89,47 @@ pub fn lin_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, var:
                 // **A quotient or a remainder of two known numbers is its
                 // value** (ADR-359 D5), as Part I 2.2 folds it: truncated
                 // toward zero. A division by zero or past the type's range
-                // stops the program, and is no number here.
+                // stops the program, and is no number here. **By a positive
+                // constant**, a quotient is a term of its own, truncated
+                // toward zero, and `e % k` is `e - k·(e / k)`.
                 BinaryOp::Div => {
-                    let x = constant_at(l, out) ?? return null
-                    let y = constant_at(r, out) ?? return null
-                    let q = x.checked_div(y) ?? return null
-                    built(SolverTerm::Int(q), out)
+                    let y = constant_at(r, out) ?? pinned(divisor_name(rhs)) ?? return null
+                    let known = constant_at(l, out)
+                    if known != null {
+                        let q = (known ?? 0).checked_div(y) ?? return null
+                        return built(SolverTerm::Int(q), out)
+                    }
+                    if y <= 0 {
+                        return null
+                    }
+                    built(SolverTerm::Quot(l, y), out)
                 },
                 BinaryOp::Rem => {
-                    let x = constant_at(l, out) ?? return null
-                    let y = constant_at(r, out) ?? return null
-                    let m = x.checked_rem(y) ?? return null
-                    built(SolverTerm::Int(m), out)
+                    let y = constant_at(r, out) ?? pinned(divisor_name(rhs)) ?? return null
+                    let known = constant_at(l, out)
+                    if known != null {
+                        let m = (known ?? 0).checked_rem(y) ?? return null
+                        return built(SolverTerm::Int(m), out)
+                    }
+                    if y <= 0 {
+                        return null
+                    }
+                    let q = built(SolverTerm::Quot(l, y), out)
+                    let k = built(SolverTerm::Int(y), out)
+                    let kq = built(SolverTerm::Mul(k, q), out)
+                    built(SolverTerm::Sub(l, kq), out)
                 },
                 else => null,
             }
         },
         else => null,
     }
+}
+
+/// **The name a divisor what is known pins has** (ADR-359 D6): by the
+/// divisor's id, in a form no binding can spell.
+pub fn divisor_name(divisor: ref Expr) -> String {
+    return f"divisor@{node_key(divisor)}"
 }
 
 /// **The name a call's result has in the proof**: the call's id (ADR-340),
@@ -193,6 +216,10 @@ fn constant_at(at: i64, out: ref Vec[SolverTerm]) -> i64? {
             let x = constant_at(a, out) ?? return null
             let y = constant_at(b, out) ?? return null
             x.checked_mul(y)
+        },
+        SolverTerm::Quot(a, k) => {
+            let x = constant_at(a, out) ?? return null
+            x.checked_div(k)
         },
         else => null,
     }

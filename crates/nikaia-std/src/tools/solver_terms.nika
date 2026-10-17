@@ -15,6 +15,11 @@ pub enum SolverTerm {
     Sub(i64, i64),
     Neg(i64),
     Mul(i64, i64),
+    /// **The quotient of a term by a positive constant**, truncated toward
+    /// zero as Part I 2.2 divides (ADR-359 D5): the term's place and the
+    /// divisor's value. The solver reads it as a fresh name with ADR-270 D5's
+    /// extension.
+    Quot(i64, i64),
     Le(i64, i64),
     Lt(i64, i64),
     Ge(i64, i64),

@@ -815,7 +815,7 @@ fn a_computed_precondition_names_both_ends() {
 /// `b >= 0` stays a check.
 #[test]
 fn a_claim_shown_at_every_exit_is_a_postcondition() {
-    use nikaia::prove::Held::{AtRunTime, Proved};
+    use nikaia::prove::Held::Proved;
     let source = "fn clamp(n: i64) -> i64 {\n\
                   \x20   return 0 if n < 0\n\
                   \x20   assert(n >= 0)\n\
@@ -849,13 +849,15 @@ fn a_claim_shown_at_every_exit_is_a_postcondition() {
     assert!(
         matches!(
             held.as_slice(),
-            [Proved, Proved, Proved, Proved, AtRunTime(_), Proved]
+            [Proved, Proved, Proved, Proved, Proved, Proved]
         ),
         "{held:#?}"
     );
+    // `wrong` has no postcondition, but inside the package its body says
+    // what `wrong(5)` returns (ADR-359 D1, D2): 5.
     let (out, rust) = ran("prove-postcondition", source);
     assert_eq!(out, "0 5 6\n");
-    assert_eq!(rust.matches("assertion_failed(").count(), 1, "{rust}");
+    assert_eq!(rust.matches("assertion_failed(").count(), 0, "{rust}");
 }
 
 /// **What a postcondition is not shown by**: a `return` inside a lambda is
@@ -873,9 +875,13 @@ fn an_exit_that_shows_nothing_makes_no_postcondition() {
                   \x20   return 0 - 1\n\
                   }\n\
                   \n\
-                  fn main() {\n\
-                  \x20   let a = open_end(2)\n\
+                  fn caller(x: i64) {\n\
+                  \x20   let a = open_end(x)\n\
                   \x20   assert(a > 0)\n\
+                  }\n\
+                  \n\
+                  fn main() {\n\
+                  \x20   caller(2)\n\
                   }\n";
     let held = held(source);
     assert!(
@@ -1176,7 +1182,9 @@ fn a_callee_that_reads_the_arguments_or_does_io_is_not_run() {
                   \n\
                   fn noisy(n: i64) -> i64 {\n\
                   \x20   println(\"computing\")\n\
-                  \x20   return n + 1\n\
+                  \x20   let mut m = n\n\
+                  \x20   m = m + 1\n\
+                  \x20   return m\n\
                   }\n\
                   \n\
                   fn counted(n: i64) -> i64 {\n\
@@ -1255,9 +1263,16 @@ fn a_program_whose_claims_are_decided_runs_nothing_at_build_time() {
     assert!(!held.iter().any(|h| matches!(h, AtRunTime(_))), "{held:#?}");
     assert_eq!(nikaia::prove::claim_runs(), before, "a run nobody needed");
     // The same call, where a claim needs it, is run once.
+    // A body with an assignment has no summary (ADR-359 D1), so only the run
+    // answers.
     let needed = format!(
-        "{EXAMPLE}fn main() {{\n\
-         \x20   let x = example(2)\n\
+        "{EXAMPLE}fn looped(n: i64) -> i64 {{\n\
+         \x20   let mut s = n\n\
+         \x20   s = s + 10\n\
+         \x20   return s\n\
+         }}\n\
+         fn main() {{\n\
+         \x20   let x = looped(2)\n\
          \x20   assert(x == 12)\n\
          \x20   assert(x > 11)\n\
          \x20   println(f\"{{x}}\")\n\
@@ -1267,4 +1282,123 @@ fn a_program_whose_claims_are_decided_runs_nothing_at_build_time() {
     let held = held_building(&needed);
     assert!(!held.iter().any(|h| matches!(h, AtRunTime(_))), "{held:#?}");
     assert_eq!(nikaia::prove::claim_runs(), before + 1);
+}
+
+/// **D5: a quotient or a remainder by a positive constant is a term**,
+/// truncated toward zero for both signs of the dividend.
+#[test]
+fn a_quotient_by_a_positive_constant_is_a_term() {
+    use nikaia::prove::Held::*;
+    let source = "fn half(n: i64) {\n\
+                  \x20   assert(n > 0)\n\
+                  \x20   assert(n / 2 < n)\n\
+                  }\n\
+                  fn negative(m: i64) {\n\
+                  \x20   assert(m == -7)\n\
+                  \x20   assert(m / 2 == -3)\n\
+                  \x20   assert(m % 2 == -1)\n\
+                  }\n\
+                  fn every() {\n\
+                  \x20   for n in -10..<10 {\n\
+                  \x20       assert(n / 3 * 3 + n % 3 == n)\n\
+                  \x20   }\n\
+                  }\n\
+                  fn main() {\n\
+                  \x20   half(3)\n\
+                  \x20   negative(-7)\n\
+                  \x20   every()\n\
+                  }\n";
+    assert!(findings(source).is_empty(), "{:#?}", findings(source));
+    let held = held(source);
+    assert!(matches!(held[1], Proved), "{held:#?}");
+    assert!(matches!(held[3], Proved), "{held:#?}");
+    assert!(matches!(held[4], Proved), "{held:#?}");
+    assert!(matches!(held[5], Proved), "{held:#?}");
+    let refused = the_one(
+        "fn main() {\n    let n = 4\n    assert(n / 2 > n)\n}\n",
+        "NK1207",
+    );
+    assert!(
+        refused.notes.iter().any(|n| n.contains("`n` is 4")),
+        "{refused:#?}"
+    );
+}
+
+/// **D1, D2: inside its package, a call's result is known by its callee's
+/// body**, asked only where what is known leaves a claim open - and a
+/// program whose claims are decided without it asks no second query.
+#[test]
+fn a_callees_body_answers_an_open_claim() {
+    use nikaia::prove::Held::*;
+    let clamp = "fn clamp(n: i64) -> i64 {\n\
+                 \x20   if n < 0 {\n\
+                 \x20       return 0\n\
+                 \x20   }\n\
+                 \x20   return n\n\
+                 }\n\
+                 fn use_it(x: i64) {\n\
+                 \x20   let c = clamp(x)\n\
+                 \x20   assert(c >= 0)\n\
+                 }\n\
+                 fn main() {\n    use_it(2)\n}\n";
+    assert!(matches!(held(clamp)[0], Proved), "{:#?}", held(clamp));
+    let one = format!("{EXAMPLE}fn main() {{\n    assert(example(2) - 1 == 11)\n}}\n");
+    let before = nikaia::prove::second_queries();
+    assert!(
+        held(&one)
+            .iter()
+            .all(|h| matches!(h, Proved | Precondition(..))),
+        "{:#?}",
+        held(&one)
+    );
+    assert!(nikaia::prove::second_queries() > before);
+    // Decided without a summary: no second query.
+    let decided = format!(
+        "{EXAMPLE}fn main() {{\n    let x = 3\n    assert(x > 2)\n    let y = example(x)\n    println(f\"{{y}}\")\n}}\n"
+    );
+    let before = nikaia::prove::second_queries();
+    assert!(
+        held(&decided)
+            .iter()
+            .all(|h| matches!(h, Proved | Precondition(..))),
+        "{:#?}",
+        held(&decided)
+    );
+    assert_eq!(
+        nikaia::prove::second_queries(),
+        before,
+        "a second query nobody needed"
+    );
+    // A body with a loop gives no summary.
+    let looping = "fn count(n: i64) -> i64 {\n\
+                   \x20   let mut i = 0\n\
+                   \x20   while i < n {\n\
+                   \x20       i = i + 1\n\
+                   \x20   }\n\
+                   \x20   return n\n\
+                   }\n\
+                   fn main() {\n    let c = count(3)\n    assert(c == 3)\n}\n";
+    assert!(
+        matches!(held(looping)[0], AtRunTime(_)),
+        "{:#?}",
+        held(looping)
+    );
+}
+
+/// **D6, D8: a divisor a summary pins is its value, and the refusal says
+/// where the value came from** - without running anything.
+#[test]
+fn a_divisor_a_summary_pins_is_its_value_and_the_note_says_so() {
+    let source =
+        format!("{EXAMPLE}fn main() {{\n    let b = 4 / example(2)\n    assert(b > 10)\n}}\n");
+    let refused = the_one(&source, "NK1207");
+    assert!(
+        refused.notes.iter().any(|n| n.contains("`b` is 0")),
+        "{refused:#?}"
+    );
+    assert!(
+        refused.notes.iter().any(|n| n
+            == "`example(2)` is 12: `example` returns `positive(whole)`, `positive` returns `whole`."),
+        "{refused:#?}"
+    );
 }

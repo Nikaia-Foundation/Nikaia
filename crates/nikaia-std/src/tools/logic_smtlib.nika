@@ -83,6 +83,12 @@ pub fn lg_term(arena: ref TermArena, id: i64) -> String {
         SolverTerm::Sub(a, b) => lg_smt_binary("-", arena, a, b),
         SolverTerm::Neg(a) => f"(- {lg_term(arena, a)})",
         SolverTerm::Mul(a, b) => lg_smt_binary("*", arena, a, b),
+        // SMT-LIB's `div` rounds toward minus infinity for a positive
+        // divisor; the language truncates toward zero.
+        SolverTerm::Quot(a, k) => {
+            let e = lg_term(arena, a)
+            f"(ite (>= {e} 0) (div {e} {k}) (- (div (- {e}) {k})))"
+        },
         SolverTerm::Le(a, b) => lg_smt_binary("<=", arena, a, b),
         SolverTerm::Lt(a, b) => lg_smt_binary("<", arena, a, b),
         SolverTerm::Ge(a, b) => lg_smt_binary(">=", arena, a, b),

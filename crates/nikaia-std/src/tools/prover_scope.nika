@@ -41,6 +41,15 @@ pub struct ProverScope {
     /// reads** (ADR-359 D11), directly or through the bindings it reads, by
     /// `call_result_name`: what a claim over the binding may have run.
     pub calls_of: collections::BTreeMap[String, collections::BTreeSet[String]],
+    /// **What each call's callee's body returns** (ADR-359 D1, D2), by the
+    /// name the call's result is bound to: each exit's path and value with
+    /// this call's arguments in place of the parameters. Not a fact: a claim
+    /// what is known leaves open is asked once more with them.
+    pub summed: collections::BTreeMap[String, Vec[SummaryAlt]],
+    /// **The bindings whose value leaned on a summary** (ADR-359 D6, D8): a
+    /// divisor it pinned, with where that value came from, for a refutation's
+    /// note.
+    pub leaned: collections::BTreeMap[String, Vec[String]],
 }
 
 impl ProverScope {
@@ -56,6 +65,8 @@ impl ProverScope {
             exact: false,
             loose: collections::BTreeSet(),
             calls_of: collections::BTreeMap(),
+            summed: collections::BTreeMap(),
+            leaned: collections::BTreeMap(),
         }
     }
 
@@ -79,6 +90,20 @@ impl ProverScope {
         self.loose.remove(name)
         self.loose.remove(length)
         self.calls_of.remove(name)
+        self.summed.remove(name)
+        self.leaned.remove(name)
+        let mut gone: Vec[String] = []
+        for (bound, alts) in self.summed {
+            for alt in alts {
+                if arena.mentions(alt.guard, name) || arena.mentions(alt.value, name) || arena.mentions(alt.guard, length) || arena.mentions(alt.value, length) {
+                    gone.push(bound.clone())
+                    break
+                }
+            }
+        }
+        for bound in gone {
+            self.summed.remove(bound)
+        }
         let mut kept: Vec[i64] = []
         for fact in self.facts {
             if !arena.mentions(fact, name) && !arena.mentions(fact, length) {
@@ -255,7 +280,7 @@ fn pushed(path: Vec[i64]?, c: i64) -> Vec[i64]? {
     return p
 }
 
-fn copied_path(path: ref Vec[i64]?) -> Vec[i64]? {
+pub fn copied_path(path: ref Vec[i64]?) -> Vec[i64]? {
     let p = path ?? return null
     return p.clone()
 }

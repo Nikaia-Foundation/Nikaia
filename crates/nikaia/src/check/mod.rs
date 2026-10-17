@@ -2771,7 +2771,17 @@ pub fn claims_report(
         &Newly::new(),
         reads,
     );
-    nikaia_std::tools::check_facts::check_claims_report(&checked.facts.claims, source, path)
+    // **Red and green only on a terminal**, and never where `NO_COLOR` is set
+    // (Part III, `--asserts`).
+    let colour = std::env::var_os("NO_COLOR").is_none()
+        && std::io::IsTerminal::is_terminal(&std::io::stdout());
+    nikaia_std::tools::check_facts::check_claims_report(
+        &checked.facts.claims,
+        source,
+        path,
+        &checked.facts.published,
+        colour,
+    )
 }
 
 /// The prelude's claim ([ADR-269](../../docs/specification/adr/adr-269.md) D2).

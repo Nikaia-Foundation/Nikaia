@@ -117,8 +117,20 @@ fn prover_function(mut walk: ProverWalk, item: ref Spanned[Item], owner: String?
             let free = !has_owner && !was_a_test
             let at = ProverWhere { function: claim_text_of(key), params: params, no_precondition: no_precondition, top: true, free: free, lambda: false, throws_out: can_throw }
             walk.state.in_test = was_a_test
+            // **A result summary** (ADR-359 D1): every exit of a free
+            // function's body the walk reads in full.
+            walk.state.summing = []
+            walk.state.unsummed = !free || key == null || !prover_summable(body)
             let leaves = prover_block(walk, body, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
             walk.state.in_test = false
+            let summed_key = key?.clone() ?? ""
+            if !summed_key.is_empty() {
+                if leaves && !walk.state.unsummed && !walk.state.summing.is_empty() {
+                    walk.state.summaries.insert(summed_key, walk.state.summing.clone())
+                } else {
+                    walk.state.summaries.remove(summed_key)
+                }
+            }
             // A body that can end without a `return` has an exit no candidate
             // was shown at.
             if !leaves && !walk.state.collecting && key != null {
@@ -244,8 +256,9 @@ fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], muta
     // `10 + r` with `f`'s postconditions about `r`. The value's own call, `let
     // r = f(x)`, is the case below.
     if names.len() == 1 && !mutable {
-        prover_call_results(walk, value, true, scope, program, words, own, unaliased, condition)
+        prover_call_results(walk, value, true, scope, program, words, own, unaliased, condition, written_of)
     }
+    let leaned = prover_pin_divisors(walk, value, scope, words, ask, model)
     let value_lin = lin_term(value, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes)
     let mut value_at_entry: i64? = null
     if value_lin != null {
@@ -256,6 +269,7 @@ fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], muta
     let mut called = false
     let mut called_whole = false
     let mut called_facts: Vec[i64] = []
+    let mut called_summed: Vec[SummaryAlt]? = null
     if names.len() == 1 && !mutable {
         match value {
             Expr::Call { func, args, .. } => {
@@ -265,6 +279,7 @@ fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], muta
                     let bound = words.resolve(names[0]).clone()
                     called_facts = prover_postconditions_of(walk, c, args, bound, scope, program, words, own, condition)
                     called_whole = prover_returns_whole(walk, c, program, words, own, condition)
+                    called_summed = prover_summed(walk, c, args, bound, scope, program, words, written_of(value))
                     called = true
                 }
             },
@@ -283,6 +298,9 @@ fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], muta
         return
     }
     let name = words.resolve(names[0]).clone()
+    if !leaned.is_empty() {
+        scope.leaned.insert(name.clone(), leaned)
+    }
     if !known_calls.is_empty() {
         scope.calls_of.insert(name.clone(), known_calls)
     }
@@ -313,6 +331,9 @@ fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], muta
         for fact in called_facts {
             scope.facts.push(fact)
         }
+        if called_summed != null {
+            scope.summed.insert(name.clone(), called_summed ?? [])
+        }
     }
     if prover_typed(ty, words, 1) && scope.ints.contains(name) {
         scope.not_negative(walk.arena, name)
@@ -336,17 +357,17 @@ fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], muta
 /// callee ensures is known of it, so it is loose. A call's arguments first, so
 /// `f(g(2))` reads `g`'s result in `f`'s. `top` is the value itself, whose
 /// call `prover_let` binds to the name it gives.
-fn prover_call_results(mut walk: ProverWalk, expr: ref Expr, top: bool, mut scope: ProverScope, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, unaliased: fn(ref String) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) {
+fn prover_call_results(mut walk: ProverWalk, expr: ref Expr, top: bool, mut scope: ProverScope, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, unaliased: fn(ref String) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync, written_of: fn(ref Expr) -> String sync) {
     match expr {
         Expr::Binary { lhs, rhs, .. } => {
-            prover_call_results(walk, lhs, false, scope, program, words, own, unaliased, condition)
-            prover_call_results(walk, rhs, false, scope, program, words, own, unaliased, condition)
+            prover_call_results(walk, lhs, false, scope, program, words, own, unaliased, condition, written_of)
+            prover_call_results(walk, rhs, false, scope, program, words, own, unaliased, condition, written_of)
         },
-        Expr::Unary { expr, .. } => prover_call_results(walk, expr, false, scope, program, words, own, unaliased, condition),
-        Expr::Cast { expr, .. } => prover_call_results(walk, expr, false, scope, program, words, own, unaliased, condition),
+        Expr::Unary { expr, .. } => prover_call_results(walk, expr, false, scope, program, words, own, unaliased, condition, written_of),
+        Expr::Cast { expr, .. } => prover_call_results(walk, expr, false, scope, program, words, own, unaliased, condition, written_of),
         Expr::Call { func, args, .. } => {
             for arg in args {
-                prover_call_results(walk, arg, false, scope, program, words, own, unaliased, condition)
+                prover_call_results(walk, arg, false, scope, program, words, own, unaliased, condition, written_of)
             }
             if top {
                 return
@@ -363,9 +384,308 @@ fn prover_call_results(mut walk: ProverWalk, expr: ref Expr, top: bool, mut scop
             for fact in facts {
                 scope.facts.push(fact)
             }
+            let alts = prover_summed(walk, callee, args, name, scope, program, words, written_of(expr))
+            if alts != null {
+                scope.summed.insert(name.clone(), alts ?? [])
+            }
         },
         else => {},
     }
+}
+
+/// **Each divisor in `expr` that what is known pins to one value** (ADR-359
+/// D6), recorded under `divisor_name` for the terms built next: a model gives
+/// its value and a proof shows it is the only one - with what is known, and
+/// where that leaves it open, with the summaries of the calls it reads (D2).
+/// The notes say where a value that leaned on a summary came from (D8).
+fn prover_pin_divisors(mut walk: ProverWalk, expr: ref Expr, scope: ref ProverScope, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync) -> Vec[String] {
+    let mut notes: Vec[String] = []
+    match expr {
+        Expr::Binary { op, lhs, rhs, .. } => {
+            notes.extend(prover_pin_divisors(walk, lhs, scope, words, ask, model))
+            notes.extend(prover_pin_divisors(walk, rhs, scope, words, ask, model))
+            if op != BinaryOp::Div && op != BinaryOp::Rem {
+                return notes
+            }
+            let key = divisor_name(rhs)
+            if walk.state.pinned.contains_key(key) {
+                let said = walk.state.divisor_notes[key]?.clone() ?? []
+                notes.extend(said)
+                return notes
+            }
+            let d = lin_term(rhs, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes) ?? return notes
+            if walk.arena.constant(d) != null {
+                return notes
+            }
+            walk.state.divisor_queries += 1
+            let mut facts = scope.facts.clone()
+            let mut pinned = prover_pinned_value(walk.arena, facts, d, ask, model)
+            if pinned == null && !scope.summed.is_empty() {
+                let here = walk.arena.equal(d, d)
+                let read = summed_read(walk.arena, scope, here)
+                if !read.is_empty() {
+                    facts = summed_facts(walk.arena, scope, read)
+                    walk.state.second_queries += 1
+                    pinned = prover_pinned_value(walk.arena, facts, d, ask, model)
+                    if pinned != null {
+                        let mut said: Vec[String] = []
+                        for bound in read {
+                            let alts = scope.summed[bound] ?? continue
+                            if alts.is_empty() {
+                                continue
+                            }
+                            let mut whys: Vec[String] = []
+                            for alt in alts {
+                                whys.push(alt.why.clone())
+                            }
+                            said.push(f"`{alts[0].call}` is {pinned ?? 0}: {whys.join("; ")}.")
+                        }
+                        notes.extend(said.clone())
+                        walk.state.divisor_notes.insert(key.clone(), said)
+                    }
+                }
+            }
+            if pinned != null {
+                walk.state.pinned.insert(key, pinned ?? 0)
+            }
+        },
+        Expr::Unary { expr, .. } => notes.extend(prover_pin_divisors(walk, expr, scope, words, ask, model)),
+        Expr::Cast { expr, .. } => notes.extend(prover_pin_divisors(walk, expr, scope, words, ask, model)),
+        else => {},
+    }
+    return notes
+}
+
+/// The one value `d` has where `facts` hold: a model's, proved the only one.
+fn prover_pinned_value(mut arena: TermArena, facts: ref Vec[i64], d: i64, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync) -> i64? {
+    let falsum = arena.boolean(false)
+    let values = model(arena, facts, falsum) ?? return null
+    let v = arena.int_value(d, values) ?? return null
+    let constant = arena.int(v)
+    let same = arena.equal(d, constant)
+    return match ask(arena, facts, same) {
+        SolverAnswer::Proved => v,
+        else => null,
+    }
+}
+
+/// **A call's summary at this call** (ADR-359 D2): each exit of the callee's
+/// result summary with the call's arguments in place of its parameters.
+/// Nothing where the callee has none, an argument is not a term the prover
+/// reads, or one reads the name the result is bound to.
+fn prover_summed(mut walk: ProverWalk, callee: ref String, args: ref Vec[Expr], bound: ref String, scope: ref ProverScope, program: ref Program, words: ref winnow_grammar::InternerContext, call: String) -> Vec[SummaryAlt]? {
+    let exits = walk.state.summaries[callee] ?? return null
+    let function = free_function(program, words, callee) ?? return null
+    if function.params.len() != args.len() {
+        return null
+    }
+    let mut given: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    for k in 0..<args.len() {
+        let term = lin_term(args[k], words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes) ?? return null
+        if walk.arena.mentions(term, bound) {
+            return null
+        }
+        given.insert(function.params[k].clone(), term)
+    }
+    let mut alts: Vec[SummaryAlt] = []
+    for exit in exits {
+        let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+        walk.arena.variables(exit.guard, read)
+        walk.arena.variables(exit.value, read)
+        for name in read {
+            if !given.contains_key(name) {
+                return null
+            }
+        }
+        let guard = walk.arena.substitute(exit.guard, given)
+        let value = walk.arena.substitute(exit.value, given)
+        alts.push(SummaryAlt { guard: guard, value: value, callee: callee.clone(), call: call.clone(), why: exit.written.clone() })
+    }
+    return alts
+}
+
+/// **An exit of the function walked, as a summary's exit** (ADR-359 D1):
+/// the value handed back, each call in it read by its callee's summary,
+/// carried to the entry with the path to it. Where that cannot be done - a
+/// call without a summary or one that can come back here, a name whose value
+/// at the entry is not known, more than the fixed term bound - the function
+/// has no summary.
+fn prover_sum_exit(mut walk: ProverWalk, value: ref Expr, scope: ref ProverScope, at: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, unaliased: fn(ref String) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync, written_of: fn(ref Expr) -> String sync) {
+    if walk.state.unsummed {
+        return
+    }
+    let made = prover_summary_exits(walk, value, scope, at, program, words, own, unaliased, condition, written_of)
+    if made == null {
+        walk.state.unsummed = true
+        return
+    }
+    for exit in made ?? [] {
+        walk.state.summing.push(exit.clone())
+    }
+}
+
+fn prover_summary_exits(mut walk: ProverWalk, value: ref Expr, scope: ref ProverScope, at: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, unaliased: fn(ref String) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync, written_of: fn(ref Expr) -> String sync) -> Vec[SummaryExit]? {
+    let function = carrying_function(at.function) ?? return null
+    let path = copied_path(scope.path) ?? return null
+    let mut here = scope.clone()
+    prover_call_results(walk, value, false, here, program, words, own, unaliased, condition, written_of)
+    let returned = lin_term(value, words, fn(name) { here.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, here, name) }, walk.arena.nodes) ?? return null
+    let truth = walk.arena.boolean(true)
+    let mut alts: Vec[SummaryAlt] = [SummaryAlt { guard: truth, value: returned, callee: "", call: "", why: f"`{function}` returns `{written_of(value)}`" }]
+    // Each call's result replaced by what its callee's exits hand back - a
+    // value may read a further call, `f(g(x))`, so a few rounds.
+    for _ in 0..<4 {
+        let mut next: Vec[SummaryAlt] = []
+        let mut grew = false
+        for alt in alts {
+            let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+            walk.arena.variables(alt.guard, read)
+            walk.arena.variables(alt.value, read)
+            let mut named: String? = null
+            for name in read {
+                if named == null && here.summed.contains_key(name) {
+                    named = name.clone()
+                }
+            }
+            if named == null {
+                next.push(alt.clone())
+                continue
+            }
+            grew = true
+            let name = named ?? ""
+            let inner = here.summed[name] ?? return null
+            for c in inner {
+                if c.callee == function || walk.state.reaches(c.callee, function) {
+                    return null
+                }
+                let mut given: collections::BTreeMap[String, i64] = collections::BTreeMap()
+                given.insert(name.clone(), c.value)
+                let v = walk.arena.substitute(alt.value, given)
+                let g0 = walk.arena.substitute(alt.guard, given)
+                let g = walk.arena.and([g0, c.guard])
+                next.push(SummaryAlt { guard: g, value: v, callee: "", call: "", why: f"{alt.why}, {c.why}" })
+            }
+        }
+        if next.len() > 8 {
+            return null
+        }
+        alts = next
+        if !grew {
+            break
+        }
+    }
+    let mut params = at.params.clone()
+    params.insert(result_name())
+    let mut out: Vec[SummaryExit] = []
+    for alt in alts {
+        let g = here.at_entry(walk.arena, alt.guard) ?? return null
+        let v = here.at_entry(walk.arena, alt.value) ?? return null
+        let mut parts = path.clone()
+        prover_conjuncts(walk.arena, g, parts)
+        let result = walk.arena.var(result_name())
+        let equal = walk.arena.equal(result, v)
+        let mut guard = walk.arena.boolean(true)
+        let mut term = equal
+        let guarded = !parts.is_empty()
+        if parts.len() == 1 {
+            guard = parts[0]
+        } else if parts.len() > 1 {
+            guard = walk.arena.and(parts)
+        }
+        if guarded {
+            let not_taken = walk.arena.not(guard)
+            term = walk.arena.or([not_taken, equal])
+        }
+        let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+        walk.arena.variables(term, read)
+        for name in read {
+            if !is_a_parameter(name, params) {
+                return null
+            }
+        }
+        if walk.arena.size(term) > precondition_terms() {
+            return null
+        }
+        out.push(SummaryExit { guard: guard, value: v, term: term, written: alt.why.clone() })
+    }
+    return out
+}
+
+/// The parts of a conjunction, each `true` left out, added to `parts`.
+fn prover_conjuncts(arena: ref TermArena, id: i64, mut parts: Vec[i64]) {
+    match arena.at(id) {
+        SolverTerm::Bool(b) => {
+            if !b {
+                parts.push(id)
+            }
+        },
+        SolverTerm::And(inner) => {
+            for part in inner {
+                prover_conjuncts(arena, part, parts)
+            }
+        },
+        else => parts.push(id),
+    }
+}
+
+/// **Whether a body is one a summary reads every exit of** (ADR-359 D1):
+/// `let`s, `comptime`s, `return`s and `if`s around them, with no loop, no
+/// assignment, no `match`, no block or lambda inside an expression - so
+/// every `return` is one the walk reaches with the path to it.
+fn prover_summable(block: ref Block) -> bool {
+    for stmt in block.stmts {
+        let fine = match stmt.node {
+            Stmt::Let { value, .. } => prover_plain(value),
+            Stmt::Comptime { .. } => true,
+            Stmt::Return(value) => prover_plain_maybe(value),
+            Stmt::Expr(expr) => match expr {
+                Expr::If { cond, then_branch, else_branch, .. } => prover_plain(cond) && prover_summable(then_branch) && prover_summable_maybe(else_branch),
+                else => prover_plain(expr),
+            },
+            else => false,
+        }
+        if !fine {
+            return false
+        }
+    }
+    return true
+}
+
+fn prover_summable_maybe(block: ref Block?) -> bool {
+    let b = block ?? return true
+    return prover_summable(b)
+}
+
+fn prover_plain_maybe(expr: ref Expr?) -> bool {
+    let e = expr ?? return true
+    return prover_plain(e)
+}
+
+/// An expression with no block, lambda, `match`, jump or `?` inside.
+fn prover_plain(expr: ref Expr) -> bool {
+    return match expr {
+        Expr::LitInt { .. } => true,
+        Expr::LitBool(_, _) => true,
+        Expr::LitStr { .. } => true,
+        Expr::Variable(_, _) => true,
+        Expr::Path(_, _) => true,
+        Expr::Unary { expr, .. } => prover_plain(expr),
+        Expr::Cast { expr, .. } => prover_plain(expr),
+        Expr::Binary { lhs, rhs, .. } => prover_plain(lhs) && prover_plain(rhs),
+        Expr::Field { .. } => false,
+        Expr::Call { func, args, config, .. } => config.is_empty() && prover_plain(func) && prover_all_plain(args),
+        Expr::MethodCall { receiver, args, config, .. } => config.is_empty() && prover_plain(receiver) && prover_all_plain(args),
+        else => false,
+    }
+}
+
+fn prover_all_plain(exprs: ref Vec[Expr]) -> bool {
+    for e in exprs {
+        if !prover_plain(e) {
+            return false
+        }
+    }
+    return true
 }
 
 /// A `for`: a range's binding is bounded by its ends, every other binding is
@@ -440,6 +760,9 @@ fn prover_return(mut walk: ProverWalk, value: ref Expr?, span: Span, scope: ref 
     let returned = value ?? return
     prover_expr(walk, returned, span, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
     walk.state.exit(walk.arena, returned, words, scope, at.function, !at.lambda && at.free, at.params, ask)
+    if !at.lambda && at.free {
+        prover_sum_exit(walk, returned, scope, at, program, words, own, unaliased, condition, written_of)
+    }
 }
 
 /// An expression standing as a statement: an `assert`, an `if` whose
@@ -455,9 +778,30 @@ fn prover_expr_stmt(mut walk: ProverWalk, expr: ref Expr, span: Span, mut scope:
                 // a precondition checked elsewhere says it too.
                 let message = prover_message(config, words)
                 let names = claim_names_in(cond, words, holes_of)
+                let mut leaned: Vec[String] = []
+                if !walk.state.in_test {
+                    // **A call inside the claim is a whole number of its own**,
+                    // as inside a `let`'s value (ADR-314 D3): its callee's
+                    // postconditions hold of it, and its summary answers a
+                    // claim what is known leaves open (ADR-359 D2).
+                    prover_call_results(walk, cond, false, scope, program, words, own, unaliased, condition, written_of)
+                    leaned = prover_pin_divisors(walk, cond, scope, words, ask, model)
+                    leaned.extend(leaned_notes(walk.arena, scope, names))
+                }
                 let outcome = walk.state.an_assert(walk.arena, words, cond, written_of(cond), names, message, span, scope, at, ask, model)
                 let mut held = outcome.held.clone()
-                let mut findings = outcome.findings.clone()
+                let mut findings: Vec[Finding] = []
+                for found in outcome.findings {
+                    let mut one = found.clone()
+                    if one.code == "NK1207" {
+                        for note in leaned {
+                            if !one.notes.contains(note) {
+                                one.notes.push(note.clone())
+                            }
+                        }
+                    }
+                    findings.push(one)
+                }
                 if !walk.state.in_test {
                     let read = prover_known_calls(walk, cond, scope, program, words, own, holes_of, unaliased, condition)
                     if !read.is_empty() {

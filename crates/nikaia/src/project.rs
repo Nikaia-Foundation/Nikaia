@@ -1288,6 +1288,7 @@ pub fn lower_reading(
                     contract.requires = published.requires.clone();
                     contract.ensures = published.ensures.clone();
                     contract.from = published.from.clone();
+                    contract.inferred = published.inferred.clone();
                     for (ensures, from) in expression {
                         contract.ensures.push(ensures);
                         contract.from.push(from);

@@ -1,0 +1,16 @@
+fn main(a: int) {
+   assert(a>0)
+   let b = 4*example(a)
+   let c = (0*4+1)
+   assert(c==1)
+   assert(b>40)
+   println(f"Hello, Nikaia! {b} {c}")
+}
+fn positive(whole: int) -> int {
+    assert(whole > 0)
+    return whole
+}
+fn example(a: int) -> int {
+    let whole = 10 + a
+    return positive(whole)
+}

@@ -1112,6 +1112,11 @@ pub struct FnContract {
     /// **What a caller may rely on afterwards**: its postconditions, over the
     /// parameters and `result` (ADR-269 D17, D18).
     pub ensures: Vec[String],
+    /// **What the body was observed to return** (ADR-359 D3): each exit of
+    /// the function's result summary, `!path || result == value`, over the
+    /// parameters - for the package's own prover; a consumer in another
+    /// package reads it as absent, and `NK1208` does not compare it.
+    pub inferred: Vec[String],
     /// For each entry of `requires` and then of `ensures`, the `assert` it was
     /// computed from, as written (ADR-269 D18).
     pub from: Vec[String],
@@ -1142,6 +1147,7 @@ impl FnContract {
             pieces: false,
             requires: [],
             ensures: [],
+            inferred: [],
             from: [],
         }
     }

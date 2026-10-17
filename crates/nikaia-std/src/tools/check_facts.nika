@@ -356,16 +356,23 @@ fn check_claim_held(held: ref ClaimHeld?) -> String {
     }
 }
 
-/// **`--asserts`** (ADR-269 D7): every `assert` of one file, by line, how the
-/// compiler holds it, and how many of each. The claims are keyed by their
-/// start, so they come in the order of their lines.
-pub fn check_claims_report(claims: ref collections::BTreeMap[(i64, i64), FactClaim], source: ref String, path: ref String) -> String {
-    let mut proved = 0
-    let mut preconditions = 0
-    let mut at_run_time = 0
-    let mut by_the_test = 0
-    let mut refused = 0
-    let mut rows: String = ""
+/// **`--asserts`** (ADR-269 D7): every `assert` of one file, by line, how
+/// the compiler holds it, and how many of each. What is not proved comes
+/// first, in red - refused, checked at run time, checked by a test -, then
+/// what is checked where outside data arrives (`main`'s preconditions), in
+/// light blue, and what the build proved last, in green: proved claims, and
+/// preconditions proved at every call. Within a group the claims are in the
+/// order of their lines; `colour` asks for the colours. `published` gives
+/// `main`'s preconditions carried back from a callee (ADR-269 D15, ADR-360
+/// D3), which no `assert` of `main` states: each is a row of its own.
+pub fn check_claims_report(claims: ref collections::BTreeMap[(i64, i64), FactClaim], source: ref String, path: ref String, published: ref collections::BTreeMap[String, Published], colour: bool) -> String {
+    let mut refused: Vec[String] = []
+    let mut at_run_time: Vec[String] = []
+    let mut arrives: Vec[String] = []
+    let mut by_the_test: Vec[String] = []
+    let mut proved: Vec[String] = []
+    let mut preconditions: Vec[String] = []
+    let mut mains: collections::BTreeSet[String] = collections::BTreeSet()
     let mut line = 1
     let mut at = 0
     for (key, claim) in claims {
@@ -382,20 +389,64 @@ pub fn check_claims_report(claims: ref collections::BTreeMap[(i64, i64), FactCla
             at = start
         }
         let how = check_claim_held(claim.held)
+        let row = f"  {path}:{line}  {claim.written}  {how}"
         if how == "proved" {
-            proved = proved + 1
-        } else if how.starts_with("precondition") {
-            preconditions = preconditions + 1
-        } else if how.starts_with("checked at run time") {
-            at_run_time = at_run_time + 1
+            proved.push(row)
+        } else if how.starts_with("precondition of `main`") {
+            mains.insert(claim.written.clone())
+            arrives.push(row)
+        } else if how.starts_with("precondition") && how.contains("proved at every call") {
+            preconditions.push(row)
+        } else if how.starts_with("precondition") || how.starts_with("checked at run time") {
+            at_run_time.push(row)
         } else if how.starts_with("checked when") {
-            by_the_test = by_the_test + 1
+            by_the_test.push(row)
         } else if claim.held != null {
-            refused = refused + 1
+            refused.push(row)
         }
-        rows.push_str(f"  {path}:{line}  {claim.written}  {how}\n")
     }
-    let mut out: String = f"asserts in {path}: {claims.len()} - proved {proved}, preconditions {preconditions}, checked at run time {at_run_time}, checked by a test {by_the_test}, refused {refused}\n"
-    out.push_str(rows)
+    let main = published["main"]
+    if main != null {
+        let entry = main?.clone() ?? Published::nothing()
+        for k in 0..<entry.requires.len() {
+            if k >= entry.from.len() {
+                continue
+            }
+            let from = entry.from[k]
+            if mains.contains(from) {
+                continue
+            }
+            arrives.push(f"  {path}  {entry.requires[k]}  precondition of `main` carried back from `{from}`, checked where the words arrive")
+        }
+    }
+    let unproved = refused.len() + at_run_time.len() + by_the_test.len()
+    let done = proved.len() + preconditions.len()
+    let mut out: String = f"asserts in {path}: {unproved + arrives.len() + done} - not proved {unproved} (refused {refused.len()}, checked at run time {at_run_time.len()}, checked by a test {by_the_test.len()}); checked where the words arrive {arrives.len()}; proved {done} (proved {proved.len()}, preconditions proved at every call {preconditions.len()})\n"
+    let mut red: Vec[String] = []
+    red.extend(refused)
+    red.extend(at_run_time)
+    red.extend(by_the_test)
+    let mut green: Vec[String] = []
+    green.extend(proved)
+    green.extend(preconditions)
+    out.push_str(check_report_rows(red, "\x1b[31m", colour))
+    out.push_str(check_report_rows(arrives, "\x1b[94m", colour))
+    out.push_str(check_report_rows(green, "\x1b[32m", colour))
+    return out
+}
+
+/// Each row on a line of its own, in `paint` where `colour` asks for it.
+fn check_report_rows(rows: ref Vec[String], paint: ref String, colour: bool) -> String {
+    let mut out: String = ""
+    for row in rows {
+        if colour {
+            out.push_str(paint)
+            out.push_str(row)
+            out.push_str("\x1b[0m\n")
+        } else {
+            out.push_str(row)
+            out.push_str("\n")
+        }
+    }
     return out
 }

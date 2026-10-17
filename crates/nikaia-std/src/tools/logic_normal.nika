@@ -118,6 +118,7 @@ fn lg_written(arena: ref TermArena, id: i64, shape: bool) -> String {
         SolverTerm::Add(a, b) => lg_binary("+", arena, a, b, shape),
         SolverTerm::Sub(a, b) => lg_binary("-", arena, a, b, shape),
         SolverTerm::Mul(a, b) => lg_binary("*", arena, a, b, shape),
+        SolverTerm::Quot(a, k) => f"(quot {lg_written(arena, a, shape)} {k})",
         SolverTerm::Le(a, b) => lg_binary("<=", arena, a, b, shape),
         SolverTerm::Lt(a, b) => lg_binary("<", arena, a, b, shape),
         SolverTerm::Ge(a, b) => lg_binary(">=", arena, a, b, shape),
@@ -183,6 +184,10 @@ fn lg_copy(mut normal: LgNormal, from: ref TermArena, id: i64, mut renamed: coll
             let x = lg_copy(normal, from, a, renamed)
             let y = lg_copy(normal, from, b, renamed)
             normal.arena.mul(x, y)
+        },
+        SolverTerm::Quot(a, k) => {
+            let x = lg_copy(normal, from, a, renamed)
+            normal.arena.quot(x, k)
         },
         SolverTerm::Le(a, b) => {
             let x = lg_copy(normal, from, a, renamed)
