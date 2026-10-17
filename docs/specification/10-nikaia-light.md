@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.983 (Draft)
+**Version:** 0.0.984 (Draft)
 **Date:** 2026-10-17
 
 ---
@@ -1914,7 +1914,9 @@ fn main(a: int; times: int = 4, verbose: bool = false) {
 
 `prog 5`, `prog 5 --times 3`, `prog --verbose --times=3 5`.
 
-* **Subject parameters are positional**, in order, each required. **Options
+* **Subject parameters are positional**, in order, each required unless its
+  type is `T?`: such a subject may be left out at the end and is then `null`.
+  **Options
   are named**: `--name value` or `--name=value`, the default where one is left
   out, an `_` in the name written `-` (`max_depth` is `--max-depth`). An option
   of type `bool` is a bare `--name`, which sets it to `true`; `--name=false`
@@ -1925,10 +1927,11 @@ fn main(a: int; times: int = 4, verbose: bool = false) {
   `String`, or one of these behind `?`; the last subject parameter may be a
   `Vec[T]` of one of them, which takes every positional word left, none
   included. A number is read in the shape `std` reads one from text (Part III
-  17.1) and must fit its type. Another type, a `ref` parameter, an option named
-  `help`, two options that are one name once `_` is `-`, and a parameter of
-  `main` on a target with no command line (`wasm32-unknown`) are refused
-  (`NK1273`, `NK1274`).
+  17.1) and must fit its type. A subject of type `T?` stands after every
+  required subject and before a last `Vec[T]`. Another type, a `ref`
+  parameter, a required subject after a `T?` one, and a parameter of `main` on
+  a target with no command line (`wasm32-unknown`) are refused (`NK1273`); so
+  is an option named `help` (`NK1274`).
 * **`main`'s preconditions are derived as every function's are** (Part III
   14.2): a claim carried back to `main`'s entry that reads only its parameters.
   They are checked after the words are read and before the body runs, and in

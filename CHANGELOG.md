@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.984] — 2026-10-17
+
+**ADR-360: a subject `T?` of `main` may be left out; `NK1274` is an option named `help` (#635)**
+- A subject parameter of `main` of type `T?` may be left out at the end and is then `null`; it stands after every required subject and before a last `Vec[T]`, and a required subject after it is `NK1273`. The clause on two options that are one name once `_` is `-` is removed (a name cannot hold `-`); `NK1274` is an option named `help`. Specified; the `T?` subject is not built yet.
+
 ## [0.0.983] — 2026-10-17
 
 **`main`'s parameters are the command line (ADR-360, #635)**
