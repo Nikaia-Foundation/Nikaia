@@ -216,6 +216,10 @@ fn counted_children(expr: ref Expr, over: ref Vec[CountedLoop], words: ref winno
             counted_expr(end, over, words, out)
         },
         Expr::Tuple(items, _) => counted_all(items, over, words, out),
+        Expr::ListRepeat { value, count, .. } => {
+            counted_expr(value, over, words, out)
+            counted_expr(count, over, words, out)
+        },
         Expr::ListLit { items, .. } => counted_all(items, over, words, out),
         Expr::LitInterpolated { parts, .. } => {
             for part in parts {
@@ -492,6 +496,7 @@ fn seek_expr(expr: ref Expr, seek: ref Seek, words: ref winnow_grammar::Interner
         Expr::Match { value, arms, .. } => seek_expr(value, seek, words) || seek_arms(arms, seek, words),
         Expr::Range { start, end, .. } => seek_expr(start, seek, words) || seek_expr(end, seek, words),
         Expr::Tuple(items, _) => seek_all(items, seek, words),
+        Expr::ListRepeat { value, count, .. } => seek_expr(value, seek, words) || seek_expr(count, seek, words),
         Expr::ListLit { items, .. } => seek_all(items, seek, words),
         Expr::LitInterpolated { parts, .. } => seek_holes(parts, seek, words),
         Expr::If { cond, then_branch, else_branch, .. } => seek_expr(cond, seek, words) || seek_block(then_branch, seek, words) || seek_maybe_block(else_branch, seek, words),

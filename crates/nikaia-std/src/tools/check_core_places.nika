@@ -380,6 +380,7 @@ pub fn check_core_places_code_into[H: CheckHost](state: ref CheckState, world: r
                 check_core_places_code_into(state, world, host, item, stored)
             }
         },
+        Expr::ListRepeat { value, .. } => check_core_places_code_into(state, world, host, value, stored),
         Expr::Match { arms, .. } => {
             for arm in arms {
                 check_core_places_code_into(state, world, host, arm.body, stored)

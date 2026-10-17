@@ -100,6 +100,10 @@ pub fn check_visit_children(expr: ref Expr) -> Vec[ref Expr] {
                 }
             }
         },
+        Expr::ListRepeat { value, count, .. } => {
+            out.push(value)
+            out.push(count)
+        },
         Expr::ListLit { items, .. } => {
             for item in items {
                 out.push(item)

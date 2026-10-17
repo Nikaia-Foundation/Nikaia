@@ -42,6 +42,7 @@ pub fn written_expression(names: ref winnow_grammar::InternerContext, expr: ref 
         Expr::Coalesce { value, fallback, .. } => f"{operand(names, value)} ?? {operand(names, fallback)}",
         Expr::Tuple(items, _) => f"({all_written(names, items)})",
         Expr::ListLit { items, .. } => f"[{all_written(names, items)}]",
+        Expr::ListRepeat { value, count, .. } => f"[{written_expression(names, value)}; {written_expression(names, count)}]",
         Expr::Range { start, end, inclusive, .. } => {
             let dots = if inclusive { ".." } else { "..<" }
             f"{operand(names, start)}{dots}{operand(names, end)}"

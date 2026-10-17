@@ -260,6 +260,7 @@ fn literal_count(expr: ref Expr) -> i64? {
 fn is_list_literal(expr: ref Expr) -> bool {
     return match expr {
         Expr::ListLit { .. } => true,
+        Expr::ListRepeat { .. } => true,
         else => false,
     }
 }
@@ -512,6 +513,10 @@ fn look_expr(expr: ref Expr, look: Look, deferred: bool, around: ref Around, wor
             look_expr(end, look, deferred, around, words, seen)
         },
         Expr::Tuple(items, _) => look_all(items, look, deferred, around, words, seen),
+        Expr::ListRepeat { value, count, .. } => {
+            look_expr(value, look, deferred, around, words, seen)
+            look_expr(count, look, deferred, around, words, seen)
+        },
         Expr::ListLit { items, .. } => look_all(items, look, deferred, around, words, seen),
         Expr::LitInterpolated { parts, .. } => {
             for part in parts {

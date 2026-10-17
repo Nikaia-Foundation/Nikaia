@@ -146,6 +146,7 @@ pub enum Expr {
     Range { start: Box<Expr>, end: Box<Expr>, inclusive: bool, id: node_id::NodeId },
     Tuple(Vec<Expr>, node_id::NodeId),
     ListLit { items: Vec<Expr>, id: node_id::NodeId },
+    ListRepeat { value: Box<Expr>, count: Box<Expr>, id: node_id::NodeId },
     LitStr { text: String, id: node_id::NodeId },
     LitInterpolated { parts: Vec<FPart>, id: node_id::NodeId },
     LitChar(String, node_id::NodeId),
@@ -191,6 +192,7 @@ pub fn id_of(expr: &Expr) -> u32 {
         Expr::Match { id, .. } => { let id = *id; id.get() },
         Expr::Range { id, .. } => { let id = *id; id.get() },
         Expr::ListLit { id, .. } => { let id = *id; id.get() },
+        Expr::ListRepeat { id, .. } => { let id = *id; id.get() },
         Expr::LitStr { id, .. } => { let id = *id; id.get() },
         Expr::LitInterpolated { id, .. } => { let id = *id; id.get() },
         Expr::If { id, .. } => { let id = *id; id.get() },
@@ -758,6 +760,11 @@ fn counted_children(expr: &Expr, over: &[CountedLoop], words: &winnow_grammar::I
             counted_expr(end, over, words, out);
         },
         Expr::Tuple(items, _) => { counted_all(items, over, words, out); },
+        Expr::ListRepeat { value, count, .. } => {
+            let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count);
+            counted_expr(value, over, words, out);
+            counted_expr(count, over, words, out);
+        },
         Expr::ListLit { items, .. } => { counted_all(items, over, words, out); },
         Expr::LitInterpolated { parts, .. } => {
             for part in parts.iter() {
@@ -955,6 +962,7 @@ fn seek_expr(expr: &Expr, seek: &Seek, words: &winnow_grammar::InternerContext) 
         Expr::Match { value, arms, .. } => { let value = nikaia_std::boxed::open(value); seek_expr(value, seek, words) || seek_arms(arms, seek, words) },
         Expr::Range { start, end, .. } => { let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end); seek_expr(start, seek, words) || seek_expr(end, seek, words) },
         Expr::Tuple(items, _) => seek_all(items, seek, words),
+        Expr::ListRepeat { value, count, .. } => { let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count); seek_expr(value, seek, words) || seek_expr(count, seek, words) },
         Expr::ListLit { items, .. } => seek_all(items, seek, words),
         Expr::LitInterpolated { parts, .. } => seek_holes(parts, seek, words),
         Expr::If { cond, then_branch, else_branch, .. } => { let cond = nikaia_std::boxed::open(cond); seek_expr(cond, seek, words) || seek_block(then_branch, seek, words) || seek_maybe_block((else_branch).as_ref(), seek, words) },
@@ -1294,6 +1302,11 @@ fn tally_expr(expr: &Expr, ask: &Ask, deferred: bool, words: &winnow_grammar::In
             tally_expr(end, ask, deferred, words, tally);
         },
         Expr::Tuple(items, _) => { tally_all(items, ask, deferred, words, tally); },
+        Expr::ListRepeat { value, count, .. } => {
+            let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count);
+            tally_expr(value, ask, deferred, words, tally);
+            tally_expr(count, ask, deferred, words, tally);
+        },
         Expr::ListLit { items, .. } => { tally_all(items, ask, deferred, words, tally); },
         Expr::LitInterpolated { parts, .. } => {
             for part in parts.iter() {
@@ -2045,7 +2058,7 @@ fn literal_count(expr: &Expr) -> Option<i64> {
     }
 }
 
-fn is_list_literal(expr: &Expr) -> bool { matches!(expr, Expr::ListLit { .. }) }
+fn is_list_literal(expr: &Expr) -> bool { matches!(expr, Expr::ListLit { .. } | Expr::ListRepeat { .. }) }
 
 fn is_index(expr: &Expr) -> bool { matches!(expr, Expr::Index { .. }) }
 
@@ -2227,6 +2240,11 @@ fn look_expr(expr: &Expr, look: Look, deferred: bool, around: &Around, words: &w
             look_expr(end, look, deferred, around, words, seen);
         },
         Expr::Tuple(items, _) => { look_all(items, look, deferred, around, words, seen); },
+        Expr::ListRepeat { value, count, .. } => {
+            let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count);
+            look_expr(value, look, deferred, around, words, seen);
+            look_expr(count, look, deferred, around, words, seen);
+        },
         Expr::ListLit { items, .. } => { look_all(items, look, deferred, around, words, seen); },
         Expr::LitInterpolated { parts, .. } => {
             for part in parts.iter() {
@@ -2480,6 +2498,11 @@ fn bounding_write(walk: &mut BoundsWalk, key: &str, value: &Expr, facts: &Bounds
     match value {
         Expr::ListLit { items, .. } => {
             for item in items.iter() { bounding_write(walk, &inner, item, facts, context, program, words, ask); }
+            return;
+        },
+        Expr::ListRepeat { value: item, .. } => {
+            let item = nikaia_std::boxed::open(item);
+            bounding_write(walk, &inner, item, facts, context, program, words, ask);
             return;
         },
         _ => { },
@@ -3328,6 +3351,7 @@ fn bounding_let(walk: &mut BoundsWalk, names: &[winnow_grammar::Symbol], ty: Opt
     if walk.shape.roots.contains(&name) {
         match value {
             Expr::ListLit { items, .. } => { for item in items.iter() { bounding_write(walk, &name, item, &facts, context, program, words, ask); } },
+            Expr::ListRepeat { value: item, .. } => { let item = nikaia_std::boxed::open(item); bounding_write(walk, &name, item, &facts, context, program, words, ask); },
             _ => { },
         }
     }
@@ -3822,6 +3846,11 @@ fn bounding_children(walk: &mut BoundsWalk, expr: &Expr, facts: &mut BoundsFacts
             bounding_expr(walk, end, facts, context, program, words, ask);
         },
         Expr::Tuple(items, _) => { for item in items.iter() { bounding_expr(walk, item, facts, context, program, words, ask); } },
+        Expr::ListRepeat { value, count, .. } => {
+            let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count);
+            bounding_expr(walk, value, facts, context, program, words, ask);
+            bounding_expr(walk, count, facts, context, program, words, ask);
+        },
         Expr::ListLit { items, .. } => { for item in items.iter() { bounding_expr(walk, item, facts, context, program, words, ask); } },
         Expr::LitInterpolated { parts, .. } => {
             for part in parts.iter() {
@@ -3936,6 +3965,11 @@ fn changed_in_expr(expr: &Expr, context: &BoundsContext, words: &winnow_grammar:
             changed_in_expr(end, context, words, out);
         },
         Expr::Tuple(items, _) => { changed_in_all(items, context, words, out); },
+        Expr::ListRepeat { value, count, .. } => {
+            let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count);
+            changed_in_expr(value, context, words, out);
+            changed_in_expr(count, context, words, out);
+        },
         Expr::ListLit { items, .. } => { changed_in_all(items, context, words, out); },
         Expr::LitInterpolated { parts, .. } => {
             for part in parts.iter() {
@@ -4720,6 +4754,11 @@ fn spawn_bodies(expr: &Expr, holes_of: &impl Fn(&Expr) -> Vec<Expr>, out: &mut V
             }
         },
         Expr::StructLit { fields, .. } => { for field in fields.iter() { spawn_bodies(match field.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue }, holes_of, out); } },
+        Expr::ListRepeat { value, count, .. } => {
+            let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count);
+            spawn_bodies(value, holes_of, out);
+            spawn_bodies(count, holes_of, out);
+        },
         Expr::ListLit { items, .. } => { for item in items.iter() { spawn_bodies(item, holes_of, out); } },
         Expr::With { base, fields, .. } => {
             let base = nikaia_std::boxed::open(base);
@@ -4813,6 +4852,7 @@ fn origins_of(expr: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_>, holes_of: &i
             out
         },
         Expr::ListLit { items, .. } => items_origins(items, ask, holes_of, unaliased, walk),
+        Expr::ListRepeat { value, .. } => { let value = nikaia_std::boxed::open(value); origins_of(value, ask, holes_of, unaliased, walk) },
         Expr::Tuple(items, _) => items_origins(items, ask, holes_of, unaliased, walk),
         Expr::If { cond, then_branch, else_branch, .. } => {
             let cond = nikaia_std::boxed::open(cond);
@@ -9610,7 +9650,7 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
         if kept && state.decided_by_this_argument(signature, &wanted, at) { literal_wants = Ty::Named { name: "String".to_owned(), args: vec![], view: false }; }
         if given_here.is_some() {
             let value = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };
-            let array = state.array_literal(&found_here, &want, value, span);
+            let array = state.array_literal(world, &found_here, &want, value, span);
             if array.is_some() { found_here = nikaia_std::index::or(array, || found_here.clone().into()); } else { found_here = nikaia_std::index::or(state.text_literal(world, &literal_wants, value, kept), || found_here.clone().into()); }
         }
         let string = Ty::Named { name: "String".to_owned(), args: vec![], view: false };
@@ -12604,6 +12644,14 @@ fn check_core_args_plain_name(ty: &Ty) -> String {
     }
 }
 
+fn check_core_args_array_element(declared: Option<&Ty>) -> Option<Ty> {
+    let ty = match declared { Some(__nikaia_value) => __nikaia_value, None => return None };
+    match ty {
+        Ty::Named { name, args, .. } => if name == "Array" && args.len() == 2 && holds_an_array(nikaia_std::index::get(&args, 0)) { Some((*nikaia_std::index::get(&args, 0)).clone()) } else { None },
+        _ => None,
+    }
+}
+
 fn check_core_args_a_closure(value: &Expr) -> bool { matches!(value, Expr::Closure { .. }) }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -12734,6 +12782,20 @@ pub fn check_core_list_literal<H: CheckHost>(state: &mut CheckState, world: &Che
     }
     if a_fn { for item in items.iter() { check_core_a_kept_lambda(state, world, host, &agreed, item, span); } }
     Ty::Named { name: "Vec".to_owned(), args: vec![agreed], view: false }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_core_list_repeat<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, value: &Expr, count: &Expr, span: &Span) -> Ty {
+    let wanted: Option<Ty> = check_core_args_array_element((state.flow.lambda_expected).as_ref());
+    state.flow.lambda_expected = None;
+    let inner_array = wanted.is_some() && is_a_list_literal(value);
+    if inner_array { state.flow.lambda_expected = wanted; }
+    let element = check_core_expr(state, world, host, value, span);
+    state.flow.lambda_expected = None;
+    check_core_expr(state, world, host, count, span);
+    if !inner_array && !element.is_unknown() && state.takes_away(world, &element) { state.findings.push(a_repeated_value_that_does_not_copy(world.words, value, count, &element, span)); }
+    Ty::Named { name: "Vec".to_owned(), args: vec![element], view: false }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -14205,7 +14267,7 @@ pub fn check_core_comptime_binding<H: CheckHost>(state: &mut CheckState, world: 
         }, || Ty::Unknown);
         state.constant_fits(world, value, Option::as_ref(&want), span);
         let mut narrowed: Ty = found.clone();
-        let literal = state.array_literal(&found, &wanted, value, span);
+        let literal = state.array_literal(world, &found, &wanted, value, span);
         if literal.is_some() { narrowed = nikaia_std::index::or(literal, || Ty::Unknown); }
         match state.crosses_as_fixed(&narrowed, &wanted, (evaluated).as_ref(), span) {
             CheckCrossing::Other => { check_core_comptime_other(state, world, &bound, &narrowed, &wanted, (evaluated).as_ref(), span); },
@@ -14499,6 +14561,7 @@ pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         Expr::Cast { expr: inner, ty, .. } => { let inner = nikaia_std::boxed::open(inner); check_core_cast(state, world, host, inner, ty, span) },
         Expr::Tuple(parts, _) => check_core_tuple(state, world, host, parts, span),
         Expr::ListLit { items, .. } => check_core_list_literal(state, world, host, items, span),
+        Expr::ListRepeat { value, count, .. } => { let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count); check_core_list_repeat(state, world, host, value, count, span) },
         Expr::Try(inner, _) => {
             let inner = nikaia_std::boxed::open(inner);
             check_core_expr(state, world, host, inner, span);
@@ -15565,7 +15628,7 @@ fn check_core_a_kept_function<H: CheckHost>(state: &mut CheckState, world: &Chec
 // this was written - see `contracts::sync`.
 pub fn check_core_literal_by_use<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, found: &Ty, want: &Ty, value: &Expr, span: &Span) -> Option<Ty> {
     check_core_a_kept_lambda(state, world, host, want, value, span);
-    let array = state.array_literal(found, want, value, span);
+    let array = state.array_literal(world, found, want, value, span);
     if array.is_some() { return std::convert::identity(array); }
     let text = state.text_literal(world, want, value, true);
     if text.is_some() { return std::convert::identity(text); }
@@ -17322,6 +17385,7 @@ pub fn check_core_places_code_into<H: CheckHost>(state: &CheckState, world: &Che
             }
         },
         Expr::ListLit { items, .. } => { for item in items.iter() { check_core_places_code_into(state, world, host, item, stored); } },
+        Expr::ListRepeat { value, .. } => { let value = nikaia_std::boxed::open(value); check_core_places_code_into(state, world, host, value, stored); },
         Expr::Match { arms, .. } => { for arm in arms.iter() { check_core_places_code_into(state, world, host, &arm.body, stored); } },
         Expr::If { then_branch, else_branch, .. } => {
             check_core_places_tail_into(state, world, host, then_branch, stored);
@@ -17698,7 +17762,7 @@ fn check_core_stmt_reaching(world: &CheckWorld<'_, '_, '_, '_, '_>, ty: Option<&
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_stmt_expects_a_lambda(value: &Expr) -> bool { matches!(value, Expr::Closure { .. } | Expr::ListLit { .. }) }
+fn check_core_stmt_expects_a_lambda(value: &Expr) -> bool { matches!(value, Expr::Closure { .. } | Expr::ListLit { .. } | Expr::ListRepeat { .. }) }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
@@ -17878,6 +17942,7 @@ fn check_core_stmt_code_given(value: &Expr) -> bool {
         Expr::Closure { .. } => return true,
         Expr::Variable(_, _) => return true,
         Expr::ListLit { .. } => return true,
+        Expr::ListRepeat { .. } => return true,
         Expr::If { .. } => return true,
         Expr::Match { .. } => return true,
         _ => return false,
@@ -18021,6 +18086,14 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
                         }
                         if every { element_constants = Some(constants); }
                     }
+                    element_at = Some(span.start as i64);
+                }
+            },
+            Expr::ListRepeat { value: item, .. } => {
+                let item = nikaia_std::boxed::open(item);
+                if state.number_shaped(world, item) {
+                    state.flow.open_numbers.insert(span.start as i64, check_core_stmt_open_number(&name, true, span));
+                    state.open_number_given(world, span.start as i64, item, span);
                     element_at = Some(span.start as i64);
                 }
             },
@@ -24120,7 +24193,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn array_literal(&mut self, found: &Ty, want: &Ty, value: &Expr, span: &Span) -> Option<Ty> {
+    pub fn array_literal(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr, span: &Span) -> Option<Ty> {
         if !is_a_list_literal(value) { return None; }
         let name = match want {
             Ty::Named { name, .. } => name.to_owned(),
@@ -24140,7 +24213,20 @@ impl CheckState {
             }
         } else if name == "Vec" && wanted.len() == 1 && holds_an_array(nikaia_std::index::get(&wanted, 0)) { has_count = false; } else { return None; }
         if has_count {
-            if (items.len() as i64) != count {
+            let repeated: Option<Expr> = repeat_count_of(value);
+            if repeated.is_some() {
+                let written = match repeated { Some(__nikaia_value) => __nikaia_value, None => return None };
+                let known = self.repeat_count_known(world, &written);
+                if known.is_none() {
+                    self.findings.push(a_repeat_count_unknown_for_its_array(&written_expression(world.words, &written), count, span));
+                    return Some(want.clone());
+                }
+                let n = nikaia_std::index::or(known, || 0);
+                if n != count {
+                    self.findings.push(a_list_the_wrong_length_for_its_array(n, count, span, false));
+                    return Some(want.clone());
+                }
+            } else if (items.len() as i64) != count {
                 self.findings.push(a_list_the_wrong_length_for_its_array(items.len() as i64, count, span, false));
                 return Some(want.clone());
             }
@@ -24152,7 +24238,7 @@ impl CheckState {
         let mut agreed: Option<Ty> = None;
         for item in items.iter() {
             let item = *item;
-            let inner = self.array_literal(&held, nikaia_std::index::get(&wanted, 0), item, span);
+            let inner = self.array_literal(world, &held, nikaia_std::index::get(&wanted, 0), item, span);
             if agreed.is_none() && inner.is_some() { agreed = std::convert::identity(inner); }
         }
         let element = nikaia_std::index::or(agreed.as_ref(), || &held).clone();
@@ -24205,7 +24291,26 @@ fn collect_receiver(value: &Expr) -> Vec<&Expr> {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn is_a_list_literal(value: &Expr) -> bool { matches!(value, Expr::ListLit { .. }) }
+pub fn is_a_list_literal(value: &Expr) -> bool { matches!(value, Expr::ListLit { .. } | Expr::ListRepeat { .. }) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn repeat_count_of(value: &Expr) -> Option<Expr> {
+    match value {
+        Expr::ListRepeat { count, .. } => { let count = nikaia_std::boxed::open(count); Some(count.clone()) },
+        _ => None,
+    }
+}
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn repeat_count_known(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, count: &Expr) -> Option<i64> {
+        let known = match self.constant_of(world, count) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        if known.beyond { return None; }
+        integer_as_count(&known.value)
+    }
+}
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
@@ -24213,6 +24318,7 @@ fn items_of(value: &Expr) -> Vec<&Expr> {
     let mut out: Vec<&Expr> = vec![];
     match value {
         Expr::ListLit { items, .. } => { for item in items.iter() { out.push(item); } },
+        Expr::ListRepeat { value, .. } => { let value = nikaia_std::boxed::open(value); out.push(value); },
         _ => { },
     }
     out
@@ -25068,6 +25174,7 @@ impl CheckState {
     fn literals_are_in_a_list(&mut self, value: &Expr, unsigned: &str) {
         match value {
             Expr::ListLit { items, .. } => { for item in items.iter() { self.literals_are(item, unsigned); } },
+            Expr::ListRepeat { value: item, .. } => { let item = nikaia_std::boxed::open(item); self.literals_are(item, unsigned); },
             _ => { },
         }
     }
@@ -28600,6 +28707,11 @@ pub fn check_visit_children(expr: &Expr) -> Vec<&Expr> {
             }
         },
         Expr::StructLit { fields, .. } => { for field in fields.iter() { if field.value.is_some() { out.push(match field.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return out }); } } },
+        Expr::ListRepeat { value, count, .. } => {
+            let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count);
+            out.push(value);
+            out.push(count);
+        },
         Expr::ListLit { items, .. } => { for item in items.iter() { out.push(item); } },
         Expr::With { base, fields, .. } => {
             let base = nikaia_std::boxed::open(base);
@@ -28756,6 +28868,11 @@ pub fn child_exprs_of(expr: &Expr) -> Vec<&Expr> {
             }
         },
         Expr::StructLit { fields, .. } => { for field in fields.iter() { if field.value.is_some() { out.push(match field.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return out }); } } },
+        Expr::ListRepeat { value, count, .. } => {
+            let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count);
+            out.push(value);
+            out.push(count);
+        },
         Expr::ListLit { items, .. } => { for item in items.iter() { out.push(item); } },
         Expr::With { base, fields, .. } => {
             let base = nikaia_std::boxed::open(base);
@@ -29244,6 +29361,22 @@ pub fn a_list_the_wrong_length_for_its_array(written: i64, wanted: i64, span: &S
     check_refusal("NK1157", span, message, notes, Some(help))
 }
 
+pub fn a_repeat_count_unknown_for_its_array(written: &str, wanted: i64, span: &Span) -> CheckFinding {
+    let message = format!("This has `{}` elements, a number the build doesn't know, but the array holds {}.", written, wanted);
+    let help = format!("Write the length as a number the build knows, `[…; {}]`, or make it a `Vec`.", wanted);
+    let notes: Vec<String> = vec!["The length is part of the type, so an `Array[T, N]` holds exactly `N` elements.".to_owned()];
+    check_refusal("NK1157", span, message, notes, Some(help))
+}
+
+pub fn a_repeated_value_that_does_not_copy(names: &winnow_grammar::InternerContext, value: &Expr, count: &Expr, ty: &Ty, span: &Span) -> CheckFinding {
+    let v = written_expression(names, value);
+    let n = written_expression(names, count);
+    let message = format!("`[{}; {}]` copies `{}`, and a `{}` doesn't copy.", v, n, v, ty.text());
+    let help = format!("Write each copy: `(0..<{}).map(fn(_i) {{ {}.clone() }}).collect()`.", n, v);
+    let notes: Vec<String> = vec!["`[v; n]` copies a number, a `bool`, a `char`, an `Array` or a value struct of them; a value that owns memory is duplicated where `.clone()` says so.".to_owned()];
+    check_refusal("NK1280", span, message, notes, Some(help))
+}
+
 pub fn two_integer_types_for_one_variable(key: &str, variable: &str, bound: &str, ty: &str, name: &str, wide: &str, span: &Span) -> CheckFinding {
     let message = format!("`{}` takes one type for `{}`, but you're passing `{}` and `{}`.", key, variable, bound, ty);
     let notes: Vec<String> = vec!["A type parameter takes the type it is given, and an integer is not widened to make two arguments agree.".to_owned()];
@@ -29668,6 +29801,11 @@ fn collect_names(expr: &Expr, words: &winnow_grammar::InternerContext, holes_of:
             }
         },
         Expr::StructLit { fields, .. } => { for field in fields.iter() { collect_maybe((field.value).as_ref(), words, holes_of, names); } },
+        Expr::ListRepeat { value, count, .. } => {
+            let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count);
+            collect_names(value, words, holes_of, names);
+            collect_names(count, words, holes_of, names);
+        },
         Expr::ListLit { items, .. } => { each_name(items, words, holes_of, names); },
         Expr::With { base, fields, .. } => {
             let base = nikaia_std::boxed::open(base);
@@ -32303,6 +32441,16 @@ pub fn emit_held_in(expr: &Expr, lazy: bool, called: bool) -> (Vec<&Expr>, EmitH
         Expr::If { cond, .. } => { let cond = nikaia_std::boxed::open(cond); return emit_held_in(cond, lazy, called); },
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); return emit_held_in(base, lazy, called); },
         Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); return emit_held_in(base, lazy, called); },
+        Expr::ListRepeat { value: base, count: index, .. } => {
+            let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
+            let (inner, after) = emit_held_in(base, lazy, ran);
+            found.extend(inner);
+            flags.extend(after.safe);
+            let (rest, last) = emit_held_in(index, lazy, after.called);
+            found.extend(rest);
+            flags.extend(last.safe);
+            ran = last.called;
+        },
         Expr::Index { base, index, .. } => {
             let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
             let (inner, after) = emit_held_in(base, lazy, ran);
@@ -35010,6 +35158,27 @@ impl EmitState {
             if i > 0 { out.push(", "); }
             i += 1;
             host.expr(walk, out, item, depth, flow, scope)?;
+        }
+        out.push("]");
+        Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn emit_core_list_repeat<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, value: &Expr, count: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+        if self.facts.array_literals.contains(&node_key(node)) {
+            out.push("[");
+            host.expr(walk, out, value, depth, flow, scope)?;
+            out.push("; _]");
+            return Ok(());
+        }
+        out.push("vec![");
+        host.expr(walk, out, value, depth, flow, scope)?;
+        out.push("; ");
+        if only_literals(count) { host.expr(walk, out, count, depth, flow.inferred(), scope)?; } else {
+            out.push("nikaia_std::count::of(");
+            host.expr(walk, out, count, depth, flow, scope)?;
+            out.push(")");
         }
         out.push("]");
         Ok(())
@@ -38447,6 +38616,11 @@ pub fn visited_in_expr(expr: &Expr) -> Vec<&Expr> {
         },
         Expr::Tuple(parts, _) => { out.extend(visited_in_all(parts)); },
         Expr::ListLit { items, .. } => { out.extend(visited_in_all(items)); },
+        Expr::ListRepeat { value, count, .. } => {
+            let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count);
+            out.extend(visited_in_expr(value));
+            out.extend(visited_in_expr(count));
+        },
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); out.extend(visited_in_expr(base)); },
         Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); out.extend(visited_in_expr(base)); },
         Expr::StructLit { fields, .. } => { for field in fields.iter() { out.extend(visited_in_maybe((field.value).as_ref())); } },
@@ -39101,6 +39275,11 @@ fn expression_paths(expr: &Expr, span: &Span, names: &winnow_grammar::InternerCo
             }
         },
         Expr::StructLit { fields, .. } => { for field in fields.iter() { maybe_expression_paths((field.value).as_ref(), span, names, unaliased, holes_of, root_at, found); } },
+        Expr::ListRepeat { value, count, .. } => {
+            let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count);
+            expression_paths(value, span, names, unaliased, holes_of, root_at, found);
+            expression_paths(count, span, names, unaliased, holes_of, root_at, found);
+        },
         Expr::ListLit { items, .. } => { for item in items.iter() { expression_paths(item, span, names, unaliased, holes_of, root_at, found); } },
         Expr::With { base, fields, .. } => {
             let base = nikaia_std::boxed::open(base);
@@ -39204,6 +39383,11 @@ fn expression_blocks(expr: &Expr, names: &winnow_grammar::InternerContext, unali
             let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback);
             expression_blocks(value, names, unaliased, holes_of, root_at, found);
             expression_blocks(fallback, names, unaliased, holes_of, root_at, found);
+        },
+        Expr::ListRepeat { value, count, .. } => {
+            let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count);
+            expression_blocks(value, names, unaliased, holes_of, root_at, found);
+            expression_blocks(count, names, unaliased, holes_of, root_at, found);
         },
         Expr::ListLit { items, .. } => { for item in items.iter() { expression_blocks(item, names, unaliased, holes_of, root_at, found); } },
         Expr::StructLit { fields, .. } => { for field in fields.iter() { maybe_expression_blocks((field.value).as_ref(), names, unaliased, holes_of, root_at, found); } },
@@ -40175,6 +40359,11 @@ fn keeps_expression(expr: &Expr, interner: &winnow_grammar::InternerContext, hol
             }
         },
         Expr::StructLit { fields, .. } => { for field in fields.iter() { keeps_maybe((field.value).as_ref(), interner, holes_of, context, own, library, uses); } },
+        Expr::ListRepeat { value, count, .. } => {
+            let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count);
+            keeps_expression(value, interner, holes_of, context, own, library, uses);
+            keeps_expression(count, interner, holes_of, context, own, library, uses);
+        },
         Expr::ListLit { items, .. } => { keeps_expressions(items, interner, holes_of, context, own, library, uses); },
         Expr::With { base, fields, .. } => {
             let base = nikaia_std::boxed::open(base);
@@ -40524,6 +40713,7 @@ fn leaves_within(expr: &Expr, throwing: &impl Fn(&Expr) -> bool, holes_of: &impl
             false
         },
         Expr::StructLit { fields, .. } => fields_leave_within(fields, throwing, holes_of, with_continue),
+        Expr::ListRepeat { value, count, .. } => { let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count); leaves_within(value, throwing, holes_of, with_continue) || leaves_within(count, throwing, holes_of, with_continue) },
         Expr::ListLit { items, .. } => any_leaves_within(items, throwing, holes_of, with_continue),
         Expr::With { base, fields, .. } => { let base = nikaia_std::boxed::open(base); leaves_within(base, throwing, holes_of, with_continue) || fields_leave_within(fields, throwing, holes_of, with_continue) },
         Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); maybe_leaves_within((value).as_ref(), throwing, holes_of, with_continue) },
@@ -45470,6 +45660,11 @@ pub fn names_in(expr: &Expr, words: &winnow_grammar::InternerContext, out: &mut 
             names_in(index, words, out);
         },
         Expr::Tuple(parts, _) => { for part in parts.iter() { names_in(part, words, out); } },
+        Expr::ListRepeat { value, count, .. } => {
+            let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count);
+            names_in(value, words, out);
+            names_in(count, words, out);
+        },
         Expr::ListLit { items, .. } => { for item in items.iter() { names_in(item, words, out); } },
         Expr::Coalesce { value, fallback, .. } => {
             let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback);
@@ -47882,6 +48077,7 @@ pub fn from_outside(expr: &Expr, tainted: &collections::BTreeSet<String>, words:
             for field in fields.iter() { if maybe_from_outside((field.value).as_ref(), tainted, words, library, holes_of) { return true; } }
             false
         },
+        Expr::ListRepeat { value, count, .. } => { let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count); from_outside(value, tainted, words, library, holes_of) || from_outside(count, tainted, words, library, holes_of) },
         Expr::ListLit { items, .. } => any_from_outside(items, tainted, words, library, holes_of),
         Expr::With { base, fields, .. } => {
             let base = nikaia_std::boxed::open(base);
@@ -50672,6 +50868,11 @@ fn prover_calls_in(walk: &mut ProverWalk, expr: &Expr, span: Span, scope: &Prove
             }
         },
         Expr::StructLit { fields, .. } => { for field in fields.iter() { prover_calls_in_maybe(walk, (field.value).as_ref(), span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition); } },
+        Expr::ListRepeat { value, count, .. } => {
+            let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count);
+            prover_calls_in(walk, value, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
+            prover_calls_in(walk, count, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
+        },
         Expr::ListLit { items, .. } => { for item in items.iter() { prover_calls_in(walk, item, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition); } },
         Expr::With { base, fields, .. } => {
             let base = nikaia_std::boxed::open(base);
@@ -53099,6 +53300,11 @@ fn sharing_expression(expr: &Expr, asked: &Asked<'_, '_, '_>, holes_of: &impl Fn
             let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end);
             sharing_expression(start, asked, holes_of, ty_of, walk);
             sharing_expression(end, asked, holes_of, ty_of, walk);
+        },
+        Expr::ListRepeat { value, count, .. } => {
+            let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count);
+            sharing_expression(value, asked, holes_of, ty_of, walk);
+            sharing_expression(count, asked, holes_of, ty_of, walk);
         },
         Expr::ListLit { items, .. } => { for item in items.iter() { sharing_expression(item, asked, holes_of, ty_of, walk); } },
         _ => { },
@@ -55838,6 +56044,12 @@ fn tier_expr(expr: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) -> Kin
         },
         Expr::Tuple(items, _) => items_kinds(items, ask, walk),
         Expr::ListLit { items, .. } => items_kinds(items, ask, walk),
+        Expr::ListRepeat { value, count, .. } => {
+            let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count);
+            tier_expr(value, ask, walk);
+            tier_expr(count, ask, walk);
+            owned_kinds()
+        },
         Expr::Range { start, end, .. } => {
             let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end);
             tier_expr(start, ask, walk);
@@ -56752,6 +56964,11 @@ fn thrown_in(expr: &Expr, names: &winnow_grammar::InternerContext, holes_of: &im
             }
         },
         Expr::StructLit { fields, .. } => { for field in fields.iter() { maybe_thrown_in((field.value).as_ref(), names, holes_of, contribution_of, in_a_handler, caught, out); } },
+        Expr::ListRepeat { value, count, .. } => {
+            let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count);
+            thrown_in(value, names, holes_of, contribution_of, in_a_handler, caught, out);
+            thrown_in(count, names, holes_of, contribution_of, in_a_handler, caught, out);
+        },
         Expr::ListLit { items, .. } => { for item in items.iter() { thrown_in(item, names, holes_of, contribution_of, in_a_handler, caught, out); } },
         Expr::With { base, fields, .. } => {
             let base = nikaia_std::boxed::open(base);
@@ -58060,6 +58277,11 @@ fn tm_walk_expr(expr: &Expr, words: &winnow_grammar::InternerContext, library: &
         },
         Expr::Tuple(items, _) => { for i in items.iter() { tm_walk_expr(i, words, library, env, classes, walk); } },
         Expr::ListLit { items, .. } => { for i in items.iter() { tm_walk_expr(i, words, library, env, classes, walk); } },
+        Expr::ListRepeat { value, count, .. } => {
+            let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count);
+            tm_walk_expr(value, words, library, env, classes, walk);
+            tm_walk_expr(count, words, library, env, classes, walk);
+        },
         Expr::LitInterpolated { parts, .. } => {
             for part in parts.iter() {
                 match part {
@@ -58140,6 +58362,7 @@ fn tm_deps_of(value: &Expr, words: &winnow_grammar::InternerContext, library: &L
         },
         Expr::Tuple(items, _) => tm_all_deps(items, words, library, env, walk),
         Expr::ListLit { items, .. } => tm_all_deps(items, words, library, env, walk),
+        Expr::ListRepeat { value, count, .. } => { let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count); tm_join(&tm_deps_of(value, words, library, env, walk), &tm_deps_of(count, words, library, env, walk)) },
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); tm_deps_of(expr, words, library, env, walk) },
         Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); tm_deps_of(expr, words, library, env, walk) },
         Expr::Binary { lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); tm_join(&tm_deps_of(lhs, words, library, env, walk), &tm_deps_of(rhs, words, library, env, walk)) },
@@ -60555,6 +60778,7 @@ fn mentions(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, node: &Expr) ->
         Expr::Coalesce { value, fallback, .. } => { let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback); mentions(unit, asked, here, value) || mentions(unit, asked, here, fallback) },
         Expr::Range { start, end, .. } => { let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end); mentions(unit, asked, here, start) || mentions(unit, asked, here, end) },
         Expr::Tuple(parts, _) => any_mentions(unit, asked, here, parts),
+        Expr::ListRepeat { value, count, .. } => { let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count); mentions(unit, asked, here, value) || mentions(unit, asked, here, count) },
         Expr::ListLit { items, .. } => any_mentions(unit, asked, here, items),
         Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); maybe_mentions(unit, asked, here, (value).as_ref()) },
         Expr::StructLit { fields, .. } => fields_mention(unit, asked, here, fields),
@@ -60678,6 +60902,11 @@ fn descend(unit: &Unit, asked: &Asked<'_, '_, '_>, node: &Expr, span: &Span, own
             stores(unit, asked, end, span, own_buffer, here);
         },
         Expr::Tuple(parts, _) => { stores_all(unit, asked, parts, span, own_buffer, here); },
+        Expr::ListRepeat { value, count, .. } => {
+            let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count);
+            stores(unit, asked, value, span, own_buffer, here);
+            stores(unit, asked, count, span, own_buffer, here);
+        },
         Expr::ListLit { items, .. } => { stores_all(unit, asked, items, span, own_buffer, here); },
         Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); stores_maybe(unit, asked, (value).as_ref(), span, own_buffer, here); },
         Expr::StructLit { fields, .. } => { stores_fields(unit, asked, fields, span, own_buffer, here); },
@@ -60982,6 +61211,7 @@ fn rsrc_eval(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collec
         Expr::Binary { lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); rsrc_nothing_of(unit, asked, here, known, own_buffer, lhs, rhs, flow) },
         Expr::Range { start, end, .. } => { let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end); rsrc_nothing_of(unit, asked, here, known, own_buffer, start, end, flow) },
         Expr::Tuple(parts, _) => rsrc_all(unit, asked, here, known, own_buffer, parts, flow),
+        Expr::ListRepeat { value, count, .. } => { let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count); rsrc_nothing_of(unit, asked, here, known, own_buffer, value, count, flow) },
         Expr::ListLit { items, .. } => rsrc_all(unit, asked, here, known, own_buffer, items, flow),
         Expr::StructLit { fields, .. } => rsrc_fields(unit, asked, here, known, own_buffer, fields, flow),
         Expr::With { base, fields, .. } => { let base = nikaia_std::boxed::open(base); rsrc_with(unit, asked, here, known, own_buffer, base, fields, flow) },
@@ -61840,6 +62070,7 @@ pub fn written_expression(names: &winnow_grammar::InternerContext, expr: &Expr) 
         Expr::Coalesce { value, fallback, .. } => { let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback); format!("{} ?? {}", operand(names, value), operand(names, fallback)) },
         Expr::Tuple(items, _) => format!("({})", all_written(names, items)),
         Expr::ListLit { items, .. } => format!("[{}]", all_written(names, items)),
+        Expr::ListRepeat { value, count, .. } => { let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count); format!("[{}; {}]", written_expression(names, value), written_expression(names, count)) },
         Expr::Range { start, end, inclusive, .. } => {
             let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end); let inclusive = *inclusive;
             let dots = if inclusive { ".." } else { "..<" };
@@ -62093,7 +62324,7 @@ pub mod check_copies {
 }
 pub mod check_core_args {
     #[allow(unused_imports)]
-    pub use super::{check_core_arguments_given, check_core_locks, check_core_list_literal, check_core_args_a_field_called, check_core_args_code_said, check_core_a_called_field};
+    pub use super::{check_core_arguments_given, check_core_locks, check_core_list_literal, check_core_list_repeat, check_core_args_a_field_called, check_core_args_code_said, check_core_a_called_field};
 }
 pub mod check_core_call {
     #[allow(unused_imports)]
@@ -62213,7 +62444,10 @@ pub mod check_numbers {
     #[allow(unused_imports)]
     pub use super::{a_number_that_does_not_fit};
 }
-pub mod check_numbers2 {}
+pub mod check_numbers2 {
+    #[allow(unused_imports)]
+    pub use super::{is_a_list_literal};
+}
 pub mod check_numbers3 {}
 pub mod check_numbers4 {
     #[allow(unused_imports)]
@@ -62300,7 +62534,7 @@ pub mod check_walks {
 }
 pub mod check_widen {
     #[allow(unused_imports)]
-    pub use super::{common_integer, widened_into, an_integer_that_does_not_widen, unsigned_from_signed, number_where_no_number_is, names_a_path, text_as_a_path, views_into_nullable_text, views_into_text, binary_op_text, a_number_asked_for_two_types, a_list_the_wrong_length_for_its_array, two_integer_types_for_one_variable};
+    pub use super::{common_integer, widened_into, an_integer_that_does_not_widen, unsigned_from_signed, number_where_no_number_is, names_a_path, text_as_a_path, views_into_nullable_text, views_into_text, binary_op_text, a_number_asked_for_two_types, a_list_the_wrong_length_for_its_array, a_repeat_count_unknown_for_its_array, a_repeated_value_that_does_not_copy, two_integer_types_for_one_variable};
 }
 pub mod check_with {
     #[allow(unused_imports)]

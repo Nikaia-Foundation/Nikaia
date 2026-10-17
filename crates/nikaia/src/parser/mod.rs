@@ -3453,17 +3453,30 @@ grammar! {
         // it is laid out inline or allocated is its *use*'s answer, the use is
         // the checker's and the lowering is the emitter's, and a statement's
         // byte cannot tell two literals in one statement apart.
+        //
+        // **`[v; n]`, `n` copies of `v`** ([ADR-362](../../../../docs/specification/adr/adr-362.md)
+        // D1): one value, a `;`, one count. Nothing else inside brackets takes
+        // a `;`, so `[1, 2; 3]` is refused as a syntax error.
+        // The first element is read once, and what follows it says which of
+        // the two it is: read twice, a list nested `d` deep would be read
+        // `2^d` times.
         rule list_lit -> Expr @=
-            "[" items:list_items? "]" -> {
-                Expr::ListLit { items: items.unwrap_or_default(), id: _state.user().id() }
+            "[" head:expr rest:list_rest "]" -> {
+                match rest {
+                    Ok(count) => Expr::ListRepeat { value: Box::new(head), count: Box::new(count), id: _state.user().id() },
+                    Err(tail) => {
+                        let mut items = vec![head];
+                        items.extend(tail);
+                        Expr::ListLit { items, id: _state.user().id() }
+                    }
+                }
             }
+          | "[" "]" -> { Expr::ListLit { items: Vec::new(), id: _state.user().id() } }
 
-        rule list_items -> Vec<Expr> =
-            head:expr tail:call_args_tail* ","? -> {
-                let mut items = vec![head];
-                items.extend(tail);
-                items
-            }
+        // `Ok` the count of `[v; n]`, `Err` the elements after the first.
+        rule list_rest -> Result<Expr, Vec<Expr>> =
+            ";" count:expr -> { Ok(count) }
+          | tail:call_args_tail* ","? -> { Err(tail) }
 
         // **Part I 8.2: `spawn fn { … }`, and that is the one spelling.**
         //

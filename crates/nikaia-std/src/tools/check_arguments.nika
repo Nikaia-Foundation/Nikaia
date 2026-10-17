@@ -313,7 +313,7 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         }
         if given_here != null {
             let value = given_here ?? continue
-            let array = state.array_literal(found_here, want, value, span)
+            let array = state.array_literal(world, found_here, want, value, span)
             if array != null {
                 found_here = array ?? found_here.clone()
             } else {

@@ -119,6 +119,15 @@ pub fn emit_held_in(expr: ref Expr, lazy: bool, called: bool) -> (Vec[ref Expr],
         Expr::If { cond, .. } => return emit_held_in(cond, lazy, called),
         Expr::Field { base, .. } => return emit_held_in(base, lazy, called),
         Expr::SafeField { base, .. } => return emit_held_in(base, lazy, called),
+        Expr::ListRepeat { value: base, count: index, .. } => {
+            let (inner, after) = emit_held_in(base, lazy, ran)
+            found.extend(inner)
+            flags.extend(after.safe)
+            let (rest, last) = emit_held_in(index, lazy, after.called)
+            found.extend(rest)
+            flags.extend(last.safe)
+            ran = last.called
+        },
         Expr::Index { base, index, .. } => {
             let (inner, after) = emit_held_in(base, lazy, ran)
             found.extend(inner)

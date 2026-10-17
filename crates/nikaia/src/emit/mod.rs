@@ -7194,6 +7194,20 @@ impl<'p> Emitter<'p> {
                     scope,
                 )
             })?,
+            Expr::ListRepeat { value, count, .. } => self.cross(flow, |walk, flow, scope| {
+                self.s.emit_core_list_repeat(
+                    &self.world,
+                    walk,
+                    out,
+                    self,
+                    expr,
+                    value,
+                    count,
+                    depth as i64,
+                    flow,
+                    scope,
+                )
+            })?,
             Expr::Field { base, name, .. } | Expr::SafeField { base, name, .. }
                 if matches!(expr, Expr::Field { .. })
                     || self

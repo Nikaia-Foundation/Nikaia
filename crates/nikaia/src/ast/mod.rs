@@ -37,6 +37,7 @@ pub fn set_id(expr: &mut Expr, id: NodeId) {
         | Expr::Match { id: slot, .. }
         | Expr::Range { id: slot, .. }
         | Expr::ListLit { id: slot, .. }
+        | Expr::ListRepeat { id: slot, .. }
         | Expr::LitStr { id: slot, .. }
         | Expr::LitInterpolated { id: slot, .. }
         | Expr::If { id: slot, .. }

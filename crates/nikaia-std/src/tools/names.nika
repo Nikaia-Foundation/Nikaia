@@ -82,6 +82,10 @@ pub fn names_in(expr: ref Expr, words: ref winnow_grammar::InternerContext, mut 
                 names_in(part, words, out)
             }
         }
+        Expr::ListRepeat { value, count, .. } => {
+            names_in(value, words, out)
+            names_in(count, words, out)
+        }
         Expr::ListLit { items, .. } => {
             for item in items {
                 names_in(item, words, out)

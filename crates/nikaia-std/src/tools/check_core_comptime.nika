@@ -230,7 +230,7 @@ pub fn check_core_comptime_binding[H: CheckHost](mut state: CheckState, world: r
         state.constant_fits(world, value, want, span)
         // **The annotation is a use, and a use answers the literal** (ADR-152 D4).
         let mut narrowed: Ty = found.clone()
-        let literal = state.array_literal(found, wanted, value, span)
+        let literal = state.array_literal(world, found, wanted, value, span)
         if literal != null {
             narrowed = literal ?? Ty::Unknown
         }

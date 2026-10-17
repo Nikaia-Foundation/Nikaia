@@ -99,6 +99,10 @@ fn collect_names(expr: ref Expr, words: ref winnow_grammar::InternerContext, hol
                 collect_maybe(field.value, words, holes_of, names)
             }
         },
+        Expr::ListRepeat { value, count, .. } => {
+            collect_names(value, words, holes_of, names)
+            collect_names(count, words, holes_of, names)
+        },
         Expr::ListLit { items, .. } => each_name(items, words, holes_of, names),
         Expr::With { base, fields, .. } => {
             collect_names(base, words, holes_of, names)

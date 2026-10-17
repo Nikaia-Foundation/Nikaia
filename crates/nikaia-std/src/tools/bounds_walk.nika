@@ -314,6 +314,10 @@ fn bounding_write(mut walk: BoundsWalk, key: ref String, value: ref Expr, facts:
             }
             return
         },
+        Expr::ListRepeat { value: item, .. } => {
+            bounding_write(walk, inner, item, facts, context, program, words, ask)
+            return
+        },
         else => {},
     }
     let range = bounding_range(walk, value, facts, context, program, words, ask)
@@ -1357,6 +1361,7 @@ fn bounding_let(mut walk: BoundsWalk, names: ref Vec[winnow_grammar::Symbol], ty
                     bounding_write(walk, name, item, facts, context, program, words, ask)
                 }
             },
+            Expr::ListRepeat { value: item, .. } => bounding_write(walk, name, item, facts, context, program, words, ask),
             else => {},
         }
     }
@@ -1970,6 +1975,10 @@ fn bounding_children(mut walk: BoundsWalk, expr: ref Expr, mut facts: BoundsFact
                 bounding_expr(walk, item, facts, context, program, words, ask)
             }
         },
+        Expr::ListRepeat { value, count, .. } => {
+            bounding_expr(walk, value, facts, context, program, words, ask)
+            bounding_expr(walk, count, facts, context, program, words, ask)
+        },
         Expr::ListLit { items, .. } => {
             for item in items {
                 bounding_expr(walk, item, facts, context, program, words, ask)
@@ -2104,6 +2113,10 @@ fn changed_in_expr(expr: ref Expr, context: ref BoundsContext, words: ref winnow
             changed_in_expr(end, context, words, out)
         },
         Expr::Tuple(items, _) => changed_in_all(items, context, words, out),
+        Expr::ListRepeat { value, count, .. } => {
+            changed_in_expr(value, context, words, out)
+            changed_in_expr(count, context, words, out)
+        },
         Expr::ListLit { items, .. } => changed_in_all(items, context, words, out),
         Expr::LitInterpolated { parts, .. } => {
             for part in parts {

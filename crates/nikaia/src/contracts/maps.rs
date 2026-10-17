@@ -435,6 +435,7 @@ impl<'a> Body<'a> {
             Expr::Tuple(items, _) | Expr::ListLit { items, .. } => items
                 .iter()
                 .fold(Dep::default(), |all, a| all.join(self.deps(a))),
+            Expr::ListRepeat { value, count, .. } => self.deps(value).join(self.deps(count)),
             Expr::LitInterpolated { parts, .. } => {
                 parts.iter().fold(Dep::default(), |all, p| match p {
                     FPart::Hole { expr, .. } => all.join(self.deps(expr)),
@@ -671,6 +672,10 @@ impl<'a> Body<'a> {
                 for i in items {
                     self.expr(i);
                 }
+            }
+            Expr::ListRepeat { value, count, .. } => {
+                self.expr(value);
+                self.expr(count);
             }
             Expr::Block(b, _) | Expr::Unsafe(b, _) => self.block(b, false),
             Expr::If {

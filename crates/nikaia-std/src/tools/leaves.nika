@@ -121,6 +121,7 @@ fn leaves_within(expr: ref Expr, throwing: fn(ref Expr) -> bool sync, holes_of: 
             false
         },
         Expr::StructLit { fields, .. } => fields_leave_within(fields, throwing, holes_of, with_continue),
+        Expr::ListRepeat { value, count, .. } => leaves_within(value, throwing, holes_of, with_continue) || leaves_within(count, throwing, holes_of, with_continue),
         Expr::ListLit { items, .. } => any_leaves_within(items, throwing, holes_of, with_continue),
         Expr::With { base, fields, .. } => leaves_within(base, throwing, holes_of, with_continue) || fields_leave_within(fields, throwing, holes_of, with_continue),
         Expr::Return(value, _) => maybe_leaves_within(value, throwing, holes_of, with_continue),

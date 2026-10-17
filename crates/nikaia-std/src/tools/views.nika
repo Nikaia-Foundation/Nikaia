@@ -1015,6 +1015,7 @@ fn mentions(unit: ref Unit, asked: ref Asked, here: ref Here, node: ref Expr) ->
         Expr::Coalesce { value, fallback, .. } => mentions(unit, asked, here, value) || mentions(unit, asked, here, fallback),
         Expr::Range { start, end, .. } => mentions(unit, asked, here, start) || mentions(unit, asked, here, end),
         Expr::Tuple(parts, _) => any_mentions(unit, asked, here, parts),
+        Expr::ListRepeat { value, count, .. } => mentions(unit, asked, here, value) || mentions(unit, asked, here, count),
         Expr::ListLit { items, .. } => any_mentions(unit, asked, here, items),
         Expr::Return(value, _) => maybe_mentions(unit, asked, here, value),
         Expr::StructLit { fields, .. } => fields_mention(unit, asked, here, fields),
@@ -1165,6 +1166,10 @@ fn descend(unit: ref Unit, asked: ref Asked, node: ref Expr, span: ref Span, own
             stores(unit, asked, end, span, own_buffer, here)
         }
         Expr::Tuple(parts, _) => stores_all(unit, asked, parts, span, own_buffer, here),
+        Expr::ListRepeat { value, count, .. } => {
+            stores(unit, asked, value, span, own_buffer, here)
+            stores(unit, asked, count, span, own_buffer, here)
+        }
         Expr::ListLit { items, .. } => stores_all(unit, asked, items, span, own_buffer, here),
         Expr::Return(value, _) => stores_maybe(unit, asked, value, span, own_buffer, here),
         Expr::StructLit { fields, .. } => stores_fields(unit, asked, fields, span, own_buffer, here),
@@ -1582,6 +1587,7 @@ fn rsrc_eval(unit: ref Unit, asked: ref Asked, here: ref Here, known: ref collec
         Expr::Binary { lhs, rhs, .. } => rsrc_nothing_of(unit, asked, here, known, own_buffer, lhs, rhs, flow),
         Expr::Range { start, end, .. } => rsrc_nothing_of(unit, asked, here, known, own_buffer, start, end, flow),
         Expr::Tuple(parts, _) => rsrc_all(unit, asked, here, known, own_buffer, parts, flow),
+        Expr::ListRepeat { value, count, .. } => rsrc_nothing_of(unit, asked, here, known, own_buffer, value, count, flow),
         Expr::ListLit { items, .. } => rsrc_all(unit, asked, here, known, own_buffer, items, flow),
         Expr::StructLit { fields, .. } => rsrc_fields(unit, asked, here, known, own_buffer, fields, flow),
         Expr::With { base, fields, .. } => rsrc_with(unit, asked, here, known, own_buffer, base, fields, flow),

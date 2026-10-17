@@ -412,6 +412,10 @@ pub(crate) fn child_exprs(expr: &Expr) -> Vec<&Expr> {
             out.extend(fields.iter().filter_map(|field| field.value.as_ref()));
         }
         Expr::ListLit { items, .. } => out.extend(items.iter()),
+        Expr::ListRepeat { value, count, .. } => {
+            out.push(value);
+            out.push(count);
+        }
         Expr::With { base, fields, .. } => {
             out.push(base);
             out.extend(fields.iter().filter_map(|field| field.value.as_ref()));
@@ -527,6 +531,10 @@ pub(crate) fn visit_expr(parsed: &Parsed, expr: &Expr, f: &mut impl FnMut(&Expr)
         // is made of and its fields, what a `return` hands back where it is an
         // expression (ADR-276), and what each arm of a `select` starts.
         Expr::ListLit { items, .. } => items.iter().for_each(|item| visit_expr(parsed, item, f)),
+        Expr::ListRepeat { value, count, .. } => {
+            visit_expr(parsed, value, f);
+            visit_expr(parsed, count, f);
+        }
         Expr::With { base, fields, .. } => {
             visit_expr(parsed, base, f);
             fields

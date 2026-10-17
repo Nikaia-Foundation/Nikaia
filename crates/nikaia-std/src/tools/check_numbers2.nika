@@ -235,7 +235,7 @@ impl CheckState {
     /// **A list literal where an `Array[T, N]` is wanted** (ADR-152 D4), and
     /// the array it is: `NK1157` where the length is wrong. It descends with the
     /// literal, so a `Vec` of arrays is walked through.
-    pub fn array_literal(ref mut self, found: ref Ty, want: ref Ty, value: ref Expr, span: ref Span) -> Ty? sync {
+    pub fn array_literal(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr, span: ref Span) -> Ty? sync {
         if !is_a_list_literal(value) {
             return null
         }
@@ -261,7 +261,22 @@ impl CheckState {
             return null
         }
         if has_count {
-            if items.len() != count {
+            // **`[v; n]` counts with `n`** (ADR-362 D2): a number the build
+            // knows, and the array's.
+            let repeated: Expr? = repeat_count_of(value)
+            if repeated != null {
+                let written = repeated ?? return null
+                let known = self.repeat_count_known(world, written)
+                if known == null {
+                    self.findings.push(a_repeat_count_unknown_for_its_array(written_expression(world.words, written), count, span))
+                    return want.clone()
+                }
+                let n = known ?? 0
+                if n != count {
+                    self.findings.push(a_list_the_wrong_length_for_its_array(n, count, span, false))
+                    return want.clone()
+                }
+            } else if items.len() != count {
                 self.findings.push(a_list_the_wrong_length_for_its_array(items.len(), count, span, false))
                 return want.clone()
             }
@@ -274,7 +289,7 @@ impl CheckState {
         }
         let mut agreed: Ty? = null
         for item in items {
-            let inner = self.array_literal(held, wanted[0], item, span)
+            let inner = self.array_literal(world, held, wanted[0], item, span)
             if agreed == null && inner != null {
                 agreed = inner
             }
@@ -341,10 +356,28 @@ fn collect_receiver(value: ref Expr) -> Vec[ref Expr] sync {
     }
 }
 
-fn is_a_list_literal(value: ref Expr) -> bool sync {
+pub fn is_a_list_literal(value: ref Expr) -> bool sync {
     return match value {
         Expr::ListLit { .. } => true,
+        Expr::ListRepeat { .. } => true,
         else => false,
+    }
+}
+
+/// The `n` of a `[v; n]`.
+fn repeat_count_of(value: ref Expr) -> Expr? sync {
+    return match value {
+        Expr::ListRepeat { count, .. } => count.clone(),
+        else => null,
+    }
+}
+
+impl CheckState {
+    /// What the `n` of a `[v; n]` comes to, where the build knows it.
+    fn repeat_count_known(ref self, world: ref CheckWorld, count: ref Expr) -> i64? sync {
+        let known = self.constant_of(world, count) ?? return null
+        return null if known.beyond
+        return integer_as_count(known.value)
     }
 }
 
@@ -356,6 +389,7 @@ fn items_of(value: ref Expr) -> Vec[ref Expr] sync {
                 out.push(item)
             }
         },
+        Expr::ListRepeat { value, .. } => out.push(value),
         else => {},
     }
     return out

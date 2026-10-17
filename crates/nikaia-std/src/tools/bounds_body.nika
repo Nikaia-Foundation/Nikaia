@@ -373,6 +373,10 @@ fn tally_expr(expr: ref Expr, ask: ref Ask, deferred: bool, words: ref winnow_gr
             tally_expr(end, ask, deferred, words, tally)
         },
         Expr::Tuple(items, _) => tally_all(items, ask, deferred, words, tally),
+        Expr::ListRepeat { value, count, .. } => {
+            tally_expr(value, ask, deferred, words, tally)
+            tally_expr(count, ask, deferred, words, tally)
+        },
         Expr::ListLit { items, .. } => tally_all(items, ask, deferred, words, tally),
         Expr::LitInterpolated { parts, .. } => {
             for part in parts {

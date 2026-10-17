@@ -171,6 +171,7 @@ impl CheckState {
                     self.literals_are(item, unsigned)
                 }
             },
+            Expr::ListRepeat { value: item, .. } => self.literals_are(item, unsigned),
             else => {},
         }
     }

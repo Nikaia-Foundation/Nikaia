@@ -465,6 +465,10 @@ pub(crate) fn visit_expr_mut(
         Expr::Tuple(items, _) | Expr::ListLit { items, .. } => {
             items.iter_mut().for_each(|i| visit_expr_mut(i, f, s))
         }
+        Expr::ListRepeat { value, count, .. } => {
+            visit_expr_mut(value, f, s);
+            visit_expr_mut(count, f, s);
+        }
         Expr::Coalesce {
             value, fallback, ..
         } => {

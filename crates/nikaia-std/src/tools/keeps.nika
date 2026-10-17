@@ -288,6 +288,10 @@ fn keeps_expression(expr: ref Expr, interner: ref winnow_grammar::InternerContex
                 keeps_maybe(field.value, interner, holes_of, context, own, library, uses)
             }
         }
+        Expr::ListRepeat { value, count, .. } => {
+            keeps_expression(value, interner, holes_of, context, own, library, uses)
+            keeps_expression(count, interner, holes_of, context, own, library, uses)
+        }
         Expr::ListLit { items, .. } => keeps_expressions(items, interner, holes_of, context, own, library, uses),
         Expr::With { base, fields, .. } => {
             keeps_expression(base, interner, holes_of, context, own, library, uses)

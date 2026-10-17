@@ -277,6 +277,26 @@ pub fn a_list_the_wrong_length_for_its_array(written: i64, wanted: i64, span: re
     return check_refusal("NK1157", span, message, notes, help)
 }
 
+/// `NK1157` for a `[v; n]` whose `n` the build does not know, where an
+/// `Array[T, N]` is wanted (ADR-362 D2): the count as written, and `N`.
+pub fn a_repeat_count_unknown_for_its_array(written: ref String, wanted: i64, span: ref Span) -> CheckFinding {
+    let message = f"This has `{written}` elements, a number the build doesn't know, but the array holds {wanted}."
+    let help = f"Write the length as a number the build knows, `[…; {wanted}]`, or make it a `Vec`."
+    let notes: Vec[String] = ["The length is part of the type, so an `Array[T, N]` holds exactly `N` elements.".clone()]
+    return check_refusal("NK1157", span, message, notes, help)
+}
+
+/// `NK1280`: a `[v; n]` whose `v` does not copy (ADR-362 D3). The help writes
+/// each copy where it is made, with the program's own `v` and `n`.
+pub fn a_repeated_value_that_does_not_copy(names: ref winnow_grammar::InternerContext, value: ref Expr, count: ref Expr, ty: ref Ty, span: ref Span) -> CheckFinding {
+    let v = written_expression(names, value)
+    let n = written_expression(names, count)
+    let message = f"`[{v}; {n}]` copies `{v}`, and a `{ty.text()}` doesn't copy."
+    let help = f"Write each copy: `(0..<{n}).map(fn(_i) {{ {v}.clone() }}).collect()`."
+    let notes: Vec[String] = ["`[v; n]` copies a number, a `bool`, a `char`, an `Array` or a value struct of them; a value that owns memory is duplicated where `.clone()` says so.".clone()]
+    return check_refusal("NK1280", span, message, notes, help)
+}
+
 /// `NK1102`: a type variable two integer types are handed to (ADR-285 D32).
 /// `wide` is the type to convert to, `name` the argument to convert.
 pub fn two_integer_types_for_one_variable(key: ref String, variable: ref String, bound: ref String, ty: ref String, name: ref String, wide: ref String, span: ref Span) -> CheckFinding {

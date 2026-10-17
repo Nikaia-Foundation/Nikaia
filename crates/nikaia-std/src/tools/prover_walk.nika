@@ -1086,6 +1086,10 @@ fn prover_calls_in(mut walk: ProverWalk, expr: ref Expr, span: Span, scope: ref 
                 prover_calls_in_maybe(walk, field.value, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
             }
         },
+        Expr::ListRepeat { value, count, .. } => {
+            prover_calls_in(walk, value, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
+            prover_calls_in(walk, count, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
+        },
         Expr::ListLit { items, .. } => {
             for item in items {
                 prover_calls_in(walk, item, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)

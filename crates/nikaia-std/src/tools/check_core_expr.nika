@@ -195,6 +195,7 @@ pub fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref Check
         Expr::Cast { expr: inner, ty, .. } => check_core_cast(state, world, host, inner, ty, span),
         Expr::Tuple(parts, _) => check_core_tuple(state, world, host, parts, span),
         Expr::ListLit { items, .. } => check_core_list_literal(state, world, host, items, span),
+        Expr::ListRepeat { value, count, .. } => check_core_list_repeat(state, world, host, value, count, span),
         // A `?` unwraps a failure: Stage 0 has no signature for it.
         Expr::Try(inner, _) => {
             check_core_expr(state, world, host, inner, span)

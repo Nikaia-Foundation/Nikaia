@@ -251,6 +251,10 @@ fn expression_paths(expr: ref Expr, span: ref Span, names: ref winnow_grammar::I
                 maybe_expression_paths(field.value, span, names, unaliased, holes_of, root_at, found)
             }
         }
+        Expr::ListRepeat { value, count, .. } => {
+            expression_paths(value, span, names, unaliased, holes_of, root_at, found)
+            expression_paths(count, span, names, unaliased, holes_of, root_at, found)
+        }
         Expr::ListLit { items, .. } => {
             for item in items {
                 expression_paths(item, span, names, unaliased, holes_of, root_at, found)
@@ -378,6 +382,10 @@ fn expression_blocks(expr: ref Expr, names: ref winnow_grammar::InternerContext,
         Expr::Coalesce { value, fallback, .. } => {
             expression_blocks(value, names, unaliased, holes_of, root_at, found)
             expression_blocks(fallback, names, unaliased, holes_of, root_at, found)
+        }
+        Expr::ListRepeat { value, count, .. } => {
+            expression_blocks(value, names, unaliased, holes_of, root_at, found)
+            expression_blocks(count, names, unaliased, holes_of, root_at, found)
         }
         Expr::ListLit { items, .. } => {
             for item in items {

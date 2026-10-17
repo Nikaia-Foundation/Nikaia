@@ -36,6 +36,7 @@ fn check_core_stmt_expects_a_lambda(value: ref Expr) -> bool sync {
     return match value {
         Expr::Closure { .. } => true,
         Expr::ListLit { .. } => true,
+        Expr::ListRepeat { .. } => true,
         else => false,
     }
 }
@@ -253,6 +254,7 @@ fn check_core_stmt_code_given(value: ref Expr) -> bool {
         Expr::Closure { .. } => return true,
         Expr::Variable(_, _) => return true,
         Expr::ListLit { .. } => return true,
+        Expr::ListRepeat { .. } => return true,
         Expr::If { .. } => return true,
         Expr::Match { .. } => return true,
         else => return false,
@@ -464,6 +466,14 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
                             element_constants = constants
                         }
                     }
+                    element_at = span.start as i64
+                }
+            },
+            // **So has `[v; n]` whose `v` is a number** (ADR-362 D1).
+            Expr::ListRepeat { value: item, .. } => {
+                if state.number_shaped(world, item) {
+                    state.flow.open_numbers.insert(span.start as i64, check_core_stmt_open_number(name, true, span))
+                    state.open_number_given(world, span.start as i64, item, span)
                     element_at = span.start as i64
                 }
             },

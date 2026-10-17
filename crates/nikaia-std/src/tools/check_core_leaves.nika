@@ -169,7 +169,7 @@ fn check_core_a_kept_function[H: CheckHost](mut state: CheckState, world: ref Ch
 /// `String` is (ADR-282 D4). One entry for every position that is a use.
 pub fn check_core_literal_by_use[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, found: ref Ty, want: ref Ty, value: ref Expr, span: ref Span) -> Ty? sync {
     check_core_a_kept_lambda(state, world, host, want, value, span)
-    let array = state.array_literal(found, want, value, span)
+    let array = state.array_literal(world, found, want, value, span)
     if array != null {
         return array
     }

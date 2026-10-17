@@ -1186,6 +1186,11 @@ fn tier_expr(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
         }
         Expr::Tuple(items, _) => items_kinds(items, ask, walk),
         Expr::ListLit { items, .. } => items_kinds(items, ask, walk),
+        Expr::ListRepeat { value, count, .. } => {
+            tier_expr(value, ask, walk)
+            tier_expr(count, ask, walk)
+            owned_kinds()
+        }
         Expr::Range { start, end, .. } => {
             tier_expr(start, ask, walk)
             tier_expr(end, ask, walk)

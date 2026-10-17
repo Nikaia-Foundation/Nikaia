@@ -443,6 +443,16 @@ pub enum Expr {
         items: Vec[Expr],
         id: node_id::NodeId,
     },
+    /// `[v; n]` - Kap 4.5. **`n` copies of `v`**
+    /// ([ADR-362](../../../docs/specification/adr/adr-362.md)): a list
+    /// literal typed by its use as `ListLit` is, so it carries the id that
+    /// hands the answer to the emitter. A variant of its own, not a flag on
+    /// `ListLit`: a walk that counted `items` would take `n` for an element.
+    ListRepeat {
+        value: Expr,
+        count: Expr,
+        id: node_id::NodeId,
+    },
     /// `"…"` - Kap 2.5. **Inert text.** A `{` is a brace and nothing else, so
     /// a program that writes JSON, CSS or a regular expression says what it
     /// means. The body is kept as written, escapes and all, for the same
@@ -782,6 +792,7 @@ pub fn id_of(expr: ref Expr) -> u32 sync {
         Expr::Match { id, .. } => id.get(),
         Expr::Range { id, .. } => id.get(),
         Expr::ListLit { id, .. } => id.get(),
+        Expr::ListRepeat { id, .. } => id.get(),
         Expr::LitStr { id, .. } => id.get(),
         Expr::LitInterpolated { id, .. } => id.get(),
         Expr::If { id, .. } => id.get(),

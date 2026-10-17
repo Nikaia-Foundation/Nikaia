@@ -564,6 +564,10 @@ fn thrown_in(expr: ref Expr, names: ref winnow_grammar::InternerContext, holes_o
                 maybe_thrown_in(field.value, names, holes_of, contribution_of, in_a_handler, caught, out)
             }
         }
+        Expr::ListRepeat { value, count, .. } => {
+            thrown_in(value, names, holes_of, contribution_of, in_a_handler, caught, out)
+            thrown_in(count, names, holes_of, contribution_of, in_a_handler, caught, out)
+        }
         Expr::ListLit { items, .. } => {
             for item in items {
                 thrown_in(item, names, holes_of, contribution_of, in_a_handler, caught, out)

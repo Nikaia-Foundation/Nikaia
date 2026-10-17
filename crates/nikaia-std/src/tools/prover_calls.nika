@@ -150,6 +150,7 @@ pub fn from_outside(expr: ref Expr, tainted: ref collections::BTreeSet[String], 
             }
             false
         },
+        Expr::ListRepeat { value, count, .. } => from_outside(value, tainted, words, library, holes_of) || from_outside(count, tainted, words, library, holes_of),
         Expr::ListLit { items, .. } => any_from_outside(items, tainted, words, library, holes_of),
         Expr::With { base, fields, .. } => {
             if from_outside(base, tainted, words, library, holes_of) {

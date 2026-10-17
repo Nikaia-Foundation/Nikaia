@@ -308,6 +308,15 @@ fn check_core_args_plain_name(ty: ref Ty) -> String {
     }
 }
 
+/// The element of an `Array[T, N]`, where `T` holds an array.
+fn check_core_args_array_element(declared: ref Ty?) -> Ty? {
+    let ty = declared ?? return null
+    return match ty {
+        Ty::Named { name, args, .. } => if name == "Array" && args.len() == 2 && holds_an_array(args[0]) { args[0].clone() } else { null },
+        else => null,
+    }
+}
+
 /// Whether `value` is a closure.
 fn check_core_args_a_closure(value: ref Expr) -> bool {
     return match value {
@@ -459,6 +468,28 @@ pub fn check_core_list_literal[H: CheckHost](mut state: CheckState, world: ref C
         }
     }
     return Ty::Named { name: "Vec".clone(), args: [agreed], view: false }
+}
+
+/// **`[v; n]`, `n` copies of `v`** (ADR-362 D1, D3): a `Vec` of what `v` is,
+/// where no use says more; `check_numbers2`'s `array_literal` makes it the
+/// array a use asks for. `v` is worked out once and copied, so one that does
+/// not copy is `NK1280`.
+pub fn check_core_list_repeat[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr, count: ref Expr, span: ref Span) -> Ty sync {
+    // **An inner literal an array is wanted for is that array** (ADR-152
+    // D4), which copies: `[[0; 2]; 3]` where `Array[Array[i64, 2], 3]` is.
+    let wanted: Ty? = check_core_args_array_element(state.flow.lambda_expected)
+    state.flow.lambda_expected = null
+    let inner_array = wanted != null && is_a_list_literal(value)
+    if inner_array {
+        state.flow.lambda_expected = wanted
+    }
+    let element = check_core_expr(state, world, host, value, span)
+    state.flow.lambda_expected = null
+    check_core_expr(state, world, host, count, span)
+    if !inner_array && !element.is_unknown() && state.takes_away(world, element) {
+        state.findings.push(a_repeated_value_that_does_not_copy(world.words, value, count, element, span))
+    }
+    return Ty::Named { name: "Vec".clone(), args: [element], view: false }
 }
 
 /// Record that the function being walked calls the field `key`.

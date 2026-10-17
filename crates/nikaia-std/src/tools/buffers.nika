@@ -846,6 +846,10 @@ fn spawn_bodies(expr: ref Expr, holes_of: fn(ref Expr) -> Vec[Expr] sync, mut ou
                 spawn_bodies(field.value ?? continue, holes_of, out)
             }
         }
+        Expr::ListRepeat { value, count, .. } => {
+            spawn_bodies(value, holes_of, out)
+            spawn_bodies(count, holes_of, out)
+        }
         Expr::ListLit { items, .. } => {
             for item in items {
                 spawn_bodies(item, holes_of, out)
@@ -974,6 +978,7 @@ fn origins_of(expr: ref Expr, ask: ref BufferAsk, holes_of: fn(ref Expr) -> Vec[
         }
         // **And into a list or a tuple whole**, for the same reason.
         Expr::ListLit { items, .. } => items_origins(items, ask, holes_of, unaliased, walk),
+        Expr::ListRepeat { value, .. } => origins_of(value, ask, holes_of, unaliased, walk),
         Expr::Tuple(items, _) => items_origins(items, ask, holes_of, unaliased, walk),
         Expr::If { cond, then_branch, else_branch, .. } => {
             origins_of(cond, ask, holes_of, unaliased, walk)

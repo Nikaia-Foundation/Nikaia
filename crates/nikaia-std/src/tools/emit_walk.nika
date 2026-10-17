@@ -92,6 +92,10 @@ pub fn visited_in_expr(expr: ref Expr) -> Vec[ref Expr] {
         },
         Expr::Tuple(parts, _) => out.extend(visited_in_all(parts)),
         Expr::ListLit { items, .. } => out.extend(visited_in_all(items)),
+        Expr::ListRepeat { value, count, .. } => {
+            out.extend(visited_in_expr(value))
+            out.extend(visited_in_expr(count))
+        },
         Expr::Field { base, .. } => out.extend(visited_in_expr(base)),
         Expr::SafeField { base, .. } => out.extend(visited_in_expr(base)),
         Expr::StructLit { fields, .. } => {

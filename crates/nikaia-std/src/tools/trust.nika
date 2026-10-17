@@ -783,6 +783,10 @@ fn tm_walk_expr(expr: ref Expr, words: ref winnow_grammar::InternerContext, libr
                 tm_walk_expr(i, words, library, env, classes, walk)
             }
         },
+        Expr::ListRepeat { value, count, .. } => {
+            tm_walk_expr(value, words, library, env, classes, walk)
+            tm_walk_expr(count, words, library, env, classes, walk)
+        },
         Expr::LitInterpolated { parts, .. } => {
             for part in parts {
                 match part {
@@ -883,6 +887,7 @@ fn tm_deps_of(value: ref Expr, words: ref winnow_grammar::InternerContext, libra
         },
         Expr::Tuple(items, _) => tm_all_deps(items, words, library, env, walk),
         Expr::ListLit { items, .. } => tm_all_deps(items, words, library, env, walk),
+        Expr::ListRepeat { value, count, .. } => tm_join(tm_deps_of(value, words, library, env, walk), tm_deps_of(count, words, library, env, walk)),
         Expr::Unary { expr, .. } => tm_deps_of(expr, words, library, env, walk),
         Expr::Cast { expr, .. } => tm_deps_of(expr, words, library, env, walk),
         Expr::Binary { lhs, rhs, .. } => tm_join(tm_deps_of(lhs, words, library, env, walk), tm_deps_of(rhs, words, library, env, walk)),

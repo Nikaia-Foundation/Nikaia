@@ -178,6 +178,30 @@ impl EmitState {
         out.push("]")
     }
 
+    /// **`[v; n]`, Rust's own spelling** (ADR-362 D1): `[v; _]` where the use
+    /// asked for an array, whose length the checker found equal to the type's,
+    /// and `vec![v; n]` for a `Vec`, where a count not written in literals goes
+    /// through `count::of`, which aborts on a negative one (D2).
+    pub fn emit_core_list_repeat[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, value: ref Expr, count: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        if self.facts.array_literals.contains(node_key(node)) {
+            out.push("[")
+            host.expr(walk, out, value, depth, flow, scope)
+            out.push("; _]")
+            return
+        }
+        out.push("vec![")
+        host.expr(walk, out, value, depth, flow, scope)
+        out.push("; ")
+        if only_literals(count) {
+            host.expr(walk, out, count, depth, flow.inferred(), scope)
+        } else {
+            out.push("nikaia_std::count::of(")
+            host.expr(walk, out, count, depth, flow, scope)
+            out.push(")")
+        }
+        out.push("]")
+    }
+
     /// `base.name`, and a `?.` after a value that cannot be absent, which is the
     /// same (ADR-279 D13).
     pub fn emit_core_field[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, base: ref Expr, name: winnow_grammar::Symbol, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
