@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1004] — 2026-10-17
+
+**`nikaia.proofs` keeps each loop invariant (ADR-361 D4, #640)**
+- Each invariant the prover uses is written to `nikaia.proofs` under the hash of its loop's place, with the strategy that found it. A build reads it and checks it with the three queries instead of searching. A missing or wrong entry is searched again, and `--locked` refuses it. `NIKAIA_PROVER_COUNTS` counts invariants searched and read.
+
 ## [0.0.1003] — 2026-10-17
 
 **A claim carried back to `main`'s entry that reads no parameter is not a precondition (ADR-360 D3)**
