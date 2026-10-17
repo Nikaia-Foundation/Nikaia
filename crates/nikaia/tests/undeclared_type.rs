@@ -85,7 +85,7 @@ fn an_argument_inside_a_type_is_read() {
 fn every_kind_of_declared_name_is_left_alone() {
     for source in [
         "fn f(a: i64, b: f64, c: bool, d: scalar, e: String, g: ref String) { }\nfn main() { }\n",
-        "fn f(a: u8, b: usize, c: i128) { }\nfn main() { }\n",
+        "fn f(a: u8, b: int, c: u32) { }\nfn main() { }\n",
         "use std::collections\n\nfn f(a: Vec[i64], b: collections::HashMap[ref String, i64], c: collections::BTreeMap[ref String, i64]) { }\nfn main() { }\n",
         "fn f(a: Shared[i64], b: SharedMut[i64]) { }\nfn main() { }\n",
         "struct Row { n: i64 }\nfn f(a: Row) { }\nfn main() { }\n",

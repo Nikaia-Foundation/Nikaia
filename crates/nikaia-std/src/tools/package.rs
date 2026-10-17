@@ -29840,7 +29840,8 @@ pub fn written_ty(names: &winnow_grammar::InternerContext, aliases: &collections
         return Ty::Nullable(Box::new(written_ty(names, aliases, &inner)));
     }
     let written_name = unaliased_in(aliases, names.resolve(ty.name));
-    let name = if written_name == "char" { String::from("scalar") } else { written_name };
+    let named = if written_name == "char" { String::from("scalar") } else { written_name };
+    let name = if named == "int" { String::from("i64") } else { named };
     if ty.either { return Ty::Named { name: TEXT.to_owned(), args: vec![], view: false }; }
     if ty.is_view && name == TEXT { return Ty::Named { name: TEXT_VIEW.to_owned(), args: written_all(names, aliases, &ty.generics), view: true }; }
     Ty::Named { name, args: written_all(names, aliases, &ty.generics), view: ty.is_view }
@@ -35594,7 +35595,8 @@ impl EmitState {
     pub fn emit_core_ty(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, crossings: bool, overlaps: bool, ty: &Type, lifetimes: EmitLifetimes) -> String { self.emit_core_ty_counted(world, walk, crossings, overlaps, ty, lifetimes, Count::Atomic) }
     #[allow(clippy::too_many_arguments)]
     pub fn emit_core_ty_counted(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, crossings: bool, overlaps: bool, ty: &Type, lifetimes: EmitLifetimes, count: Count) -> String {
-        let name = world.words.resolve(ty.name).to_owned();
+        let written = world.words.resolve(ty.name).to_owned();
+        let name = if written == "int" { "i64".to_owned() } else { written };
         self.emit_core_ty_named(world, walk, crossings, overlaps, ty, &name, lifetimes, count)
     }
     #[allow(clippy::too_many_arguments)]
@@ -57503,7 +57505,9 @@ const SHAPE_BOUNDS: [&str; 2] = ["Struct", "Enum"];
 
 const STANDARD_BOUNDS: [&str; 2] = ["Eq", "Ord"];
 
-const BUILT_IN: [&str; 27] = ["i8", "i16", "i32", "i64", "i128", "isize", "u8", "u16", "u32", "u64", "u128", "usize", "f32", "f64", "bool", "char", "scalar", "String", "str", "Self", "Vec", "Shared", "SharedMut", "Locked", "TaskHandle", "Array", "Bytes"];
+const BUILT_IN: [&str; 28] = ["int", "i8", "i16", "i32", "i64", "i128", "isize", "u8", "u16", "u32", "u64", "u128", "usize", "f32", "f64", "bool", "char", "scalar", "String", "str", "Self", "Vec", "Shared", "SharedMut", "Locked", "TaskHandle", "Array", "Bytes"];
+
+const UNOFFERED_WIDTHS: [&str; 7] = ["usize", "isize", "i8", "i16", "u16", "i128", "u128"];
 
 const STD_MODULES: [&str; 7] = ["cli", "collections", "channel", "foreign", "fs", "io", "time"];
 
@@ -57661,15 +57665,19 @@ fn item_types(names: &winnow_grammar::InternerContext, item: &Item, known: &coll
             let is_extern = *is_extern;
             for arg in args.iter() {
                 written_at(names, &arg.ty, known, true, span, out);
+                widths_written(names, &arg.ty, is_extern, span, out);
                 if !is_extern { types_word_by_ref(names, &arg.ty, plain, "parameter", span, out); }
             }
             maybe_written(names, (ret_type).as_ref(), known, span, out);
+            widths_written_maybe(names, (ret_type).as_ref(), is_extern, span, out);
             if !is_extern { types_word_by_ref_maybe(names, (ret_type).as_ref(), plain, span, out); }
             block_types(names, body, known, out);
         },
-        Item::Struct { fields, .. } => {
+        Item::Struct { fields, is_extern, .. } => {
+            let is_extern = *is_extern;
             for field in fields.iter() {
                 written_at(names, &field.ty, known, false, span, out);
+                widths_written(names, &field.ty, is_extern, span, out);
                 types_word_by_ref(names, &field.ty, plain, "field", span, out);
             }
         },
@@ -57677,15 +57685,29 @@ fn item_types(names: &winnow_grammar::InternerContext, item: &Item, known: &coll
             for variant in variants.iter() {
                 match &variant.fields {
                     VariantFields::Unit => { },
-                    VariantFields::Tuple(parts) => { for ty in parts.iter() { written_at(names, ty, known, false, span, out); } },
-                    VariantFields::Named(fields) => { for field in fields.iter() { written_at(names, &field.ty, known, false, span, out); } },
+                    VariantFields::Tuple(parts) => {
+                        for ty in parts.iter() {
+                            written_at(names, ty, known, false, span, out);
+                            widths_written(names, ty, false, span, out);
+                        }
+                    },
+                    VariantFields::Named(fields) => {
+                        for field in fields.iter() {
+                            written_at(names, &field.ty, known, false, span, out);
+                            widths_written(names, &field.ty, false, span, out);
+                        }
+                    },
                 }
             }
         },
         Item::Extern { declarations, .. } => {
             for declaration in declarations.iter() {
-                for arg in declaration.node.args.iter() { written_foreign(names, &arg.ty, known, true, &declaration.span, out); }
+                for arg in declaration.node.args.iter() {
+                    written_foreign(names, &arg.ty, known, true, &declaration.span, out);
+                    widths_written(names, &arg.ty, true, &declaration.span, out);
+                }
                 maybe_written_foreign(names, (declaration.node.ret_type).as_ref(), known, &declaration.span, out);
+                widths_written_maybe(names, (declaration.node.ret_type).as_ref(), true, &declaration.span, out);
             }
         },
         Item::Trait { methods, .. } => {
@@ -57694,9 +57716,11 @@ fn item_types(names: &winnow_grammar::InternerContext, item: &Item, known: &coll
                 for parameter in method.node.generics.iter() { here.insert(names.resolve(parameter.name).to_owned()); }
                 for arg in method.node.args.iter() {
                     written_at(names, &arg.ty, &here, true, &method.span, out);
+                    widths_written(names, &arg.ty, false, &method.span, out);
                     types_word_by_ref(names, &arg.ty, plain, "parameter", &method.span, out);
                 }
                 maybe_written(names, (method.node.ret_type).as_ref(), &here, &method.span, out);
+                widths_written_maybe(names, (method.node.ret_type).as_ref(), false, &method.span, out);
                 types_word_by_ref_maybe(names, (method.node.ret_type).as_ref(), plain, &method.span, out);
             }
         },
@@ -57749,6 +57773,22 @@ fn types_plain_enums(names: &winnow_grammar::InternerContext, items: &[Spanned<I
     plain
 }
 
+fn widths_written(names: &winnow_grammar::InternerContext, ty: &Type, at_c: bool, span: &Span, out: &mut Vec<Finding>) {
+    let name = names.resolve(ty.name).to_owned();
+    if at_c && name == "int" {
+        out.push(refusal("NK1262", span.clone(), String::from("`int` can't be written where C sees the value."), vec![String::from("An `int` holds the values of an `i64`, but how it is stored is the compiler's choice (ADR-285 D37); C reads the bytes, so the width has to be written.")], String::from("Write `i64` here, or the fixed width the C side declares.")));
+        return;
+    }
+    if !at_c && nikaia_std::list::contains(&UNOFFERED_WIDTHS, &name) {
+        out.push(refusal("NK1135", span.clone(), format!("There's no type called `{}`.", name), vec![String::from("Nikaia's integers are `int` and the fixed widths `i64`, `i32`, `u8`, `u32` and `u64` (Part I 2.2); Rust's other widths are written only in an `extern \"C\"` declaration.")], String::from("Write `int` for an ordinary number, or the fixed width that holds the values.")));
+        return;
+    }
+    for argument in ty.generics.iter() { widths_written(names, argument, at_c, span, out); }
+    widths_written_maybe(names, (*ty.code).as_ref().and_then(|__nikaia_it| (*__nikaia_it.result).as_ref()), at_c, span, out);
+}
+
+fn widths_written_maybe(names: &winnow_grammar::InternerContext, ty: Option<&Type>, at_c: bool, span: &Span, out: &mut Vec<Finding>) { widths_written(names, match ty { Some(__nikaia_value) => __nikaia_value, None => return }, at_c, span, out); }
+
 fn maybe_written(names: &winnow_grammar::InternerContext, ty: Option<&Type>, known: &collections::BTreeSet<String>, span: &Span, out: &mut Vec<Finding>) { written_at(names, match ty { Some(__nikaia_value) => __nikaia_value, None => return }, known, false, span, out); }
 
 fn maybe_written_foreign(names: &winnow_grammar::InternerContext, ty: Option<&Type>, known: &collections::BTreeSet<String>, span: &Span, out: &mut Vec<Finding>) { written_foreign(names, match ty { Some(__nikaia_value) => __nikaia_value, None => return }, known, false, span, out); }
@@ -57758,6 +57798,7 @@ fn block_types(names: &winnow_grammar::InternerContext, block: &Block, known: &c
         match &stmt.node {
             Stmt::Let { ty, value, .. } => {
                 maybe_written(names, (ty).as_ref(), known, &stmt.span, out);
+                widths_written_maybe(names, (ty).as_ref(), false, &stmt.span, out);
                 blocks_types(names, value, known, out);
             },
             Stmt::Comptime { value, .. } => { blocks_types(names, value, known, out); },

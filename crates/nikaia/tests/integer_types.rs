@@ -150,3 +150,128 @@ fn a_method_of_an_open_number_keeps_the_function_plain() {
     assert!(clean, "{err}");
     assert_eq!(out.trim(), "5");
 }
+
+/// **#629 D-3: Rust's other widths are `NK1135`** outside an `extern "C"`
+/// declaration (Part I 2.2), in a parameter, a result, a field and a `let`.
+#[test]
+fn widths_the_language_does_not_offer_are_refused() {
+    for source in [
+        "fn g(n: i16) -> i64 {\n    return 1\n}\n",
+        "fn g(n: i64) -> usize {\n    return 1\n}\n",
+        "struct S {\n    a: i8,\n}\n",
+        "fn main() {\n    let x: usize = 3\n}\n",
+        "fn g(n: u128) -> i64 {\n    return 1\n}\n",
+        "fn g(xs: Vec[u16]) -> i64 {\n    return 1\n}\n",
+    ] {
+        let found = findings(source);
+        assert!(
+            found
+                .iter()
+                .any(|f| f.code == "NK1135" && f.message.starts_with("There's no type called")),
+            "{source}\n{found:#?}"
+        );
+    }
+}
+
+#[test]
+fn an_extern_c_signature_still_takes_rusts_widths() {
+    let found = findings(
+        "extern fn width(n: usize) -> i16 {\n\
+         \x20   return 1\n\
+         }\n\
+         extern struct Laid {\n\
+         \x20   n: u16,\n\
+         }\n",
+    );
+    assert!(!found.iter().any(|f| f.code == "NK1135"), "{found:#?}");
+}
+
+/// **#630: `int` holds an `i64`'s values** and takes an `i64` without `as` in
+/// both directions (ADR-285 D36).
+const WITH_INT: &str = "fn f(a: int) -> int {
+    return a + 5
+}
+
+fn main() {
+    let x: i64 = f(1)
+    let y: int = x
+    println(f\"{x} {f(y)}\")
+}
+";
+
+#[test]
+fn an_int_checks_and_runs() {
+    assert!(findings(WITH_INT).is_empty(), "{:#?}", findings(WITH_INT));
+    let (clean, out, err) = run("int-runs", WITH_INT);
+    assert!(clean, "{err}");
+    assert_eq!(out.trim(), "6 11");
+}
+
+/// **`int` is lowered as an `i64`** (D37: no narrowing is built yet): the same
+/// Rust as the program written with `i64`.
+#[test]
+fn an_int_lowers_as_an_i64() {
+    let written_wide = WITH_INT
+        .replace(": int", ": i64")
+        .replace("-> int", "-> i64");
+    assert_eq!(lowered(WITH_INT), lowered(&written_wide));
+}
+
+/// **`int` overflows where an `i64` does**, read at run time.
+#[test]
+fn an_int_aborts_at_the_i64_bound() {
+    let source = "use std::text
+
+fn next(a: int) -> int {
+    return a + 1
+}
+
+fn main() {
+    let read: int = text::parse_i64(\"9223372036854775807\") ?? 0
+    println(f\"{next(read)}\")
+}
+";
+    let (clean, out, err) = run("int-overflows", source);
+    assert!(!clean, "it must stop, and printed {out:?}");
+    assert!(err.contains("overflow"), "{err}");
+}
+
+/// **`NK1262`: `int` where C reads the bits** (D38), in an `extern "C"`
+/// function and in an `extern "C"` block.
+#[test]
+fn an_int_at_the_c_boundary_is_refused() {
+    for source in [
+        "extern fn g(n: int) -> i64 {\n    return 1\n}\n",
+        "extern fn g(n: i64) -> int {\n    return 1\n}\n",
+        "extern struct Laid {\n    n: int,\n}\n",
+        "extern {\n    fn abs(n: int) -> i32\n}\n",
+    ] {
+        let found = findings(source);
+        assert!(
+            found.iter().any(|f| f.code == "NK1262"),
+            "{source}\n{found:#?}"
+        );
+    }
+}
+
+/// **The owner's target** (#630): `int` through a `let` and a call. The
+/// `whole > 0` is the prover's (#632), so only the types are asked here.
+#[test]
+fn the_owners_example_checks_with_int() {
+    let found = findings(
+        "fn positive(whole: int) -> int {\n\
+         \x20   assert(whole > 0)\n\
+         \x20   return whole\n\
+         }\n\
+         fn example(a: int) -> int {\n\
+         \x20   let whole = 10 + a\n\
+         \x20   return positive(whole)\n\
+         }\n",
+    );
+    assert!(
+        !found
+            .iter()
+            .any(|f| f.code.starts_with("NK11") || f.code.starts_with("NK12")),
+        "{found:#?}"
+    );
+}

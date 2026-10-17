@@ -16,7 +16,11 @@ comptime SHAPE_BOUNDS: Array[ref String, 2] = ["Struct", "Enum"]
 comptime STANDARD_BOUNDS: Array[ref String, 2] = ["Eq", "Ord"]
 
 // Types every program has without declaring them.
-comptime BUILT_IN: Array[ref String, 27] = ["i8", "i16", "i32", "i64", "i128", "isize", "u8", "u16", "u32", "u64", "u128", "usize", "f32", "f64", "bool", "char", "scalar", "String", "str", "Self", "Vec", "Shared", "SharedMut", "Locked", "TaskHandle", "Array", "Bytes"]
+comptime BUILT_IN: Array[ref String, 28] = ["int", "i8", "i16", "i32", "i64", "i128", "isize", "u8", "u16", "u32", "u64", "u128", "usize", "f32", "f64", "bool", "char", "scalar", "String", "str", "Self", "Vec", "Shared", "SharedMut", "Locked", "TaskHandle", "Array", "Bytes"]
+
+// **The integer widths the language does not offer** (Part I 2.2): Rust's,
+// written only where the representation shows - an `extern "C"` declaration.
+comptime UNOFFERED_WIDTHS: Array[ref String, 7] = ["usize", "isize", "i8", "i16", "u16", "i128", "u128"]
 
 // The modules of `std` a type may live in.
 comptime STD_MODULES: Array[ref String, 7] = ["cli", "collections", "channel", "foreign", "fs", "io", "time"]
@@ -225,19 +229,22 @@ fn item_types(names: ref winnow_grammar::InternerContext, item: ref Item, known:
         Item::Fn { args, ret_type, body, is_extern, .. } => {
             for arg in args {
                 written_at(names, arg.ty, known, true, span, out)
+                widths_written(names, arg.ty, is_extern, span, out)
                 if !is_extern {
                     types_word_by_ref(names, arg.ty, plain, "parameter", span, out)
                 }
             }
             maybe_written(names, ret_type, known, span, out)
+            widths_written_maybe(names, ret_type, is_extern, span, out)
             if !is_extern {
                 types_word_by_ref_maybe(names, ret_type, plain, span, out)
             }
             block_types(names, body, known, out)
         }
-        Item::Struct { fields, .. } => {
+        Item::Struct { fields, is_extern, .. } => {
             for field in fields {
                 written_at(names, field.ty, known, false, span, out)
+                widths_written(names, field.ty, is_extern, span, out)
                 types_word_by_ref(names, field.ty, plain, "field", span, out)
             }
         }
@@ -248,11 +255,13 @@ fn item_types(names: ref winnow_grammar::InternerContext, item: ref Item, known:
                     VariantFields::Tuple(parts) => {
                         for ty in parts {
                             written_at(names, ty, known, false, span, out)
+                            widths_written(names, ty, false, span, out)
                         }
                     }
                     VariantFields::Named(fields) => {
                         for field in fields {
                             written_at(names, field.ty, known, false, span, out)
+                            widths_written(names, field.ty, false, span, out)
                         }
                     }
                 }
@@ -262,8 +271,10 @@ fn item_types(names: ref winnow_grammar::InternerContext, item: ref Item, known:
             for declaration in declarations {
                 for arg in declaration.node.args {
                     written_foreign(names, arg.ty, known, true, declaration.span, out)
+                    widths_written(names, arg.ty, true, declaration.span, out)
                 }
                 maybe_written_foreign(names, declaration.node.ret_type, known, declaration.span, out)
+                widths_written_maybe(names, declaration.node.ret_type, true, declaration.span, out)
             }
         }
         Item::Trait { methods, .. } => {
@@ -274,9 +285,11 @@ fn item_types(names: ref winnow_grammar::InternerContext, item: ref Item, known:
                 }
                 for arg in method.node.args {
                     written_at(names, arg.ty, here, true, method.span, out)
+                    widths_written(names, arg.ty, false, method.span, out)
                     types_word_by_ref(names, arg.ty, plain, "parameter", method.span, out)
                 }
                 maybe_written(names, method.node.ret_type, here, method.span, out)
+                widths_written_maybe(names, method.node.ret_type, false, method.span, out)
                 types_word_by_ref_maybe(names, method.node.ret_type, plain, method.span, out)
             }
         }
@@ -348,6 +361,29 @@ fn types_plain_enums(names: ref winnow_grammar::InternerContext, items: ref Vec[
     return plain
 }
 
+// **An integer's width where it is written** (Part I 2.2, ADR-285 D38): Rust's
+// other widths only at the C boundary (`NK1135` elsewhere), and `int`, whose
+// representation is the compiler's choice, never there (`NK1262`).
+fn widths_written(names: ref winnow_grammar::InternerContext, ty: ref Type, at_c: bool, span: ref Span, mut out: Vec[Finding]) {
+    let name = names.resolve(ty.name).clone()
+    if at_c && name == "int" {
+        out.push(refusal("NK1262", span.clone(), "`int` can't be written where C sees the value.", ["An `int` holds the values of an `i64`, but how it is stored is the compiler's choice (ADR-285 D37); C reads the bytes, so the width has to be written."], "Write `i64` here, or the fixed width the C side declares."))
+        return
+    }
+    if !at_c && UNOFFERED_WIDTHS.contains(name) {
+        out.push(refusal("NK1135", span.clone(), f"There's no type called `{name}`.", ["Nikaia's integers are `int` and the fixed widths `i64`, `i32`, `u8`, `u32` and `u64` (Part I 2.2); Rust's other widths are written only in an `extern \"C\"` declaration."], "Write `int` for an ordinary number, or the fixed width that holds the values."))
+        return
+    }
+    for argument in ty.generics {
+        widths_written(names, argument, at_c, span, out)
+    }
+    widths_written_maybe(names, ty.code?.result, at_c, span, out)
+}
+
+fn widths_written_maybe(names: ref winnow_grammar::InternerContext, ty: ref Type?, at_c: bool, span: ref Span, mut out: Vec[Finding]) {
+    widths_written(names, ty ?? return, at_c, span, out)
+}
+
 fn maybe_written(names: ref winnow_grammar::InternerContext, ty: ref Type?, known: ref collections::BTreeSet[String], span: ref Span, mut out: Vec[Finding]) {
     written_at(names, ty ?? return, known, false, span, out)
 }
@@ -362,6 +398,7 @@ fn block_types(names: ref winnow_grammar::InternerContext, block: ref Block, kno
         match stmt.node {
             Stmt::Let { ty, value, .. } => {
                 maybe_written(names, ty, known, stmt.span, out)
+                widths_written_maybe(names, ty, false, stmt.span, out)
                 blocks_types(names, value, known, out)
             }
             Stmt::Comptime { value, .. } => blocks_types(names, value, known, out),

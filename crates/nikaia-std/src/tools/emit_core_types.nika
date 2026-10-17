@@ -72,7 +72,10 @@ impl EmitState {
     /// The same, where the count a `Shared` in this position was given is
     /// known. The count rides down through the arguments.
     pub fn emit_core_ty_counted(ref self, world: ref EmitWorld, mut walk: EmitWalk, crossings: bool, overlaps: bool, ty: ref Type, lifetimes: EmitLifetimes, count: Count) -> String {
-        let name = world.words.resolve(ty.name).clone()
+        let written = world.words.resolve(ty.name).clone()
+        // **`int` is an `i64` in memory until a narrowing is built** (ADR-285
+        // D37): the representation is the compiler's, and today it is this one.
+        let name = if written == "int" { "i64".clone() } else { written }
         return self.emit_core_ty_named(world, walk, crossings, overlaps, ty, name, lifetimes, count)
     }
 
