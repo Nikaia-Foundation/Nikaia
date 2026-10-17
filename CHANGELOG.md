@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1003] — 2026-10-17
+
+**A claim carried back to `main`'s entry that reads no parameter is not a precondition (ADR-360 D3)**
+- Part I 5.5 and ADR-360 D3: a precondition of `main` is a carried-back claim that reads only parameters, at least one of them; one that reads none the prover decides, proved or refuted as any claim is. Built in 679ee67.
+
 ## [0.0.1002] — 2026-10-17
 
 **The prover reads a claim past a `for` over a range through its invariant (ADR-361 D1, #640)**

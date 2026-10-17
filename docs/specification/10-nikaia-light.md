@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1002 (Draft)
+**Version:** 0.0.1003 (Draft)
 **Date:** 2026-10-17
 
 ---
@@ -1933,7 +1933,8 @@ fn main(a: int; times: int = 4, verbose: bool = false) {
   a target with no command line (`wasm32-unknown`) are refused (`NK1273`); so
   is an option named `help` (`NK1274`).
 * **`main`'s preconditions are derived as every function's are** (Part III
-  14.2): a claim carried back to `main`'s entry that reads only its parameters.
+  14.2): a claim carried back to `main`'s entry that reads only its parameters,
+  at least one of them; one that reads none the prover decides.
   They are checked after the words are read and before the body runs, and in
   the body each is a fact.
 * **A wrong word ends the program with exit status 2**: a word missing, left
