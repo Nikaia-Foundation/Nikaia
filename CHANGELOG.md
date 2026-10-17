@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.991] — 2026-10-17
+
+**A method named by its path where a function value is kept runs (#601)**
+- `keep(P::add)` and `One { f: P::add }`, where `P::add` is a method of this program and the field or parameter keeps a function value, are lowered as the closure that calls it, as a named function or a lambda already was: a method that takes `self` is called on the first parameter, one without by its path. `CheckHost::kept_call(func, arity, receiver)`.
+
 ## [0.0.990] — 2026-10-17
 
 **the --asserts report puts main's preconditions between the unproved and the proved, in light blue**
