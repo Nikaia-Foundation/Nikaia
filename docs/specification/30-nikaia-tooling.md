@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part III: Tooling, Ecosystem & Interoperability**
-**Version:** 0.0.997 (Draft)
+**Version:** 0.0.998 (Draft)
 **Date:** 2026-10-17
 
 ---
@@ -73,7 +73,7 @@ The manifest carries what the **compiler** must know. How the program behaves on
 
 `reentrancy-check` is a build option. It changes what the compiler emits and is a cache-key dimension like `target` and `user-parallelism`. `refuted-claims` is one too ([ADR-269](adr/adr-269.md) D8): at `error`, the default, a claim the compiler shows false with values (`NK1207`, 14.2) refuses the program, and so does an index or an arithmetic operation it shows fails for a value the program reaches; at `warn` the program builds, each such claim a warning and a check where it is reached. `--refuted-claims` overrides it for a single build. It is the bypass for the day a better prover refutes what an older one built, and for that emergency only: a claim newly refuted in code is fixed in that code ([ADR-359](adr/adr-359.md) D9). `cleanup-deadline` is runtime configuration. It changes what a running program waits for; the compiler does not read it.
 
-**`[prove]`** names the proposers, `proposers = ["cmd arg", …]`: programs that `nikaia prove --propose` runs, each handed on its standard input, in a versioned format, every loop problem left open in SMT-LIB `HORN` with the loop's source and the names it reads, and answering with candidate invariants as terms over those names ([ADR-361](adr/adr-361.md) D6). A proposer may send what it is handed to a service outside the machine; that happens only through this entry and that command. No build reads `[prove]`.
+**`[prove]`** names the proposers, `proposers = ["cmd arg", …]`: programs that `nikaia prove --propose` runs, each handed every loop problem left open and answering with candidate invariants ([ADR-361](adr/adr-361.md) D6). The command starts each proposer once as a child process and writes to its standard input one JSON line per problem, `{"version": 1, "id": …, "problem": …, "source": …, "names": […]}`, the problem in SMT-LIB `HORN`, the loop's source and the names it reads, and closes the input after the last; the proposer writes to its standard output one JSON line per problem it answers, `{"id": …, "candidates": […]}`, each candidate an SMT-LIB term over those names, and ends. Its standard error is shown. A proposer that fails, ends early or writes another line is skipped; the other proposers and the built-in strategies go on. `nikaia prove --propose=CMD` runs `CMD` as the one proposer of that run. A proposer may send what it is handed to a service outside the machine; that happens only through this entry and that command. No build reads `[prove]`.
 
 ```toml
 [package]

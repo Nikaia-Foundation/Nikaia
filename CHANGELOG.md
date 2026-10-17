@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.998] — 2026-10-17
+
+**a proposer is a child process, one JSON line per problem each way (ADR-361 D6)**
+- ADR-361 D6, Part III 13.3: `nikaia prove --propose` starts each proposer once, writes one JSON line per open loop problem (version, id, problem in SMT-LIB HORN, source, names) to its standard input and reads one line per answer (id, candidates as SMT-LIB terms) from its standard output; a proposer that fails is skipped; `--propose=CMD` names one for a run.
+
 ## [0.0.997] — 2026-10-17
 
 **inside its package a callee's body answers a claim left open; a quotient by a known number is a term; the --asserts report in three groups (#632)**
