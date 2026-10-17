@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.981] — 2026-10-17
+
+**A named function handed to a parameter the callee keeps runs (#601)**
+- A named function of the program passed to a parameter the callee keeps (`keep(double)`) is lowered as the closure that calls it, as a lambda passed there is; before, the checker accepted it and rustc refused it. A method used as a value (`keep(P::add)`, `One { f: P::add }`) still fails the same way (#601 stays open).
+
 ## [0.0.980] — 2026-10-17
 
 **A call with known arguments that a claim needs is compiled and run while building (ADR-359 D11-D13, #633)**
