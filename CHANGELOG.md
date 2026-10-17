@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.980] — 2026-10-17
+
+**A call with known arguments that a claim needs is compiled and run while building (ADR-359 D11-D13, #633)**
+- Where a claim is left open and reads a call whose arguments the build knows, the call is compiled and run as a `comptime` is (ADR-321), never interpreted: `sync`, an empty touch set, under ADR-321's budget, cached; its value is a fact.
+- A call that cannot be run leaves the claim a check; one that stops is `NK1207`. Running such calls as an optimisation where no claim needs them is #634.
+- Part III 14.2.
+
 ## [0.0.979] — 2026-10-17
 
 **`ref` on a word refused at every position (#628)**
