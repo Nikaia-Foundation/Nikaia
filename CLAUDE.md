@@ -70,6 +70,12 @@
   agent goes on committing. No separate worktrees with
   `develop` checked out: a commit in one moves the branch under the others,
   and their index then shows the reverse of that commit as staged changes.
+* **Version raises and new error codes are the supervisor's.** An agent
+  commits its change without touching the version lines, `CHANGELOG.md` or
+  the badges, and names in its report what the change decided, for the
+  supervisor's heading; the supervisor raises the version once per finished
+  package. A new `NK` code is taken only from the block the supervisor
+  reserved for that agent; one that needs more asks for it in its report.
 * **An error in another agent's file is not touched, it is escalated.** A
   failing build, test or lint that comes from a file another agent changed is
   reported to the supervisor (the session that started the agents), not
