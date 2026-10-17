@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.977] — 2026-10-17
+
+**The prover reads a call inside a let's value by its callee's ensures (ADR-314 D3, #631)**
+- A call nested in a `let`'s value is a whole number of the proof, known by its callee's postconditions (Part III, assert paragraph).
+- `--asserts` names the binding a claim reads that the prover does not.
+
 ## [0.0.976] — 2026-10-17
 
 **int: the values of an i64, its representation the compiler's choice (#630)**
