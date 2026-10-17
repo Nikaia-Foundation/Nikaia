@@ -64,7 +64,10 @@
   checkout.** Each agent commits after every finished step, so the others see
   the work at once. A commit adds exactly the files that agent changed
   (`git add <files>`), never `git commit -a` or `git add -A`: the working tree
-  also holds the other agents' unfinished files. No separate worktrees with
+  also holds the other agents' unfinished files. After each commit the agent
+  pushes fast-forward only (`git push origin develop`). It does not rebase:
+  if the push is rejected, the supervisor rebases when needed, and the
+  agent goes on committing. No separate worktrees with
   `develop` checked out: a commit in one moves the branch under the others,
   and their index then shows the reverse of that commit as staged changes.
 * **An error in another agent's file is not touched, it is escalated.** A
