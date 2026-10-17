@@ -75,7 +75,7 @@ fn a_block_too_small_is_refused_on_its_line() {
          \x20   let x = overlap {\n\
          \x20       a()\n\
          \x20   }\n\
-         \x20   println(f\"{x}\")\n\
+         \x20   println(f\"{x.0}\")\n\
          }\n",
         "one-branch",
     );
@@ -97,7 +97,7 @@ fn it_reads_like_a_checkers_refusal() {
          \x20   let x = overlap {\n\
          \x20       a()\n\
          \x20   }\n\
-         \x20   println(f\"{x}\")\n\
+         \x20   println(f\"{x.0}\")\n\
          }\n",
         "shape-lowering",
     );
