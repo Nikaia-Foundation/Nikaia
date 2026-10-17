@@ -17,7 +17,7 @@ grammar Stock {
 pub struct Entry {
     pub category: ref String,
     pub item: ref String,
-    pub count: i64,
+    pub count: int,
 }
 
 // A grammar is only visible in the file that declares it, so `main.nika`
@@ -27,11 +27,11 @@ pub fn read(data: ref String) -> Vec[Entry] throws {
 }
 
 // Not `pub`: the other files of this package can call it, but nothing outside.
-fn weight(entry: ref Entry) -> i64 {
+fn weight(entry: ref Entry) -> int {
     return entry.count
 }
 
-pub fn total(entries: ref Vec[Entry]) -> i64 {
+pub fn total(entries: ref Vec[Entry]) -> int {
     let mut sum = 0
     for e in entries { sum += weight(e) }
     return sum

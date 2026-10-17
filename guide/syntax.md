@@ -23,7 +23,7 @@ count += x
 ```
 
 Values are **immutable unless declared `mut`**, as in Rust or Kotlin's `val`/`var`. Types
-are inferred. You write one where you want to, `let big: i64 = 3000000000`.
+are inferred. You write one where you want to, `let big: int = 3000000000`.
 
 There are no semicolons at the end of lines. A comment is `//` or `/* … */`.
 
@@ -33,13 +33,14 @@ There are no semicolons at the end of lines. A comment is `//` or `/* … */`.
 
 | Type | What it is |
 | :--- | :--- |
-| `i64`, `i32`, `u8`, `u64`, `u32` | integers. `i64` is the everyday one, and every length and index is one |
+| `int` | the everyday integer: the values of an `i64`, stored as the compiler sees fit |
+| `i64`, `i32`, `u8`, `u64`, `u32` | integers of exactly that width, for where the width is the point: a hash, a byte, C. Every length and index is an `i64`, and `int` and `i64` take each other |
 | `f64` | a floating-point number |
 | `bool` | `true` or `false` |
 | `char` | one Unicode character, `'a'` |
 | `String` | text |
 
-There is no `int`/`long`/`usize` zoo. An integer that overflows **stops the program** rather
+There is no `long`/`usize` zoo. An integer that overflows **stops the program** rather
 than wrapping silently. Where you mean to wrap, you say so: `h.wrapping_mul(31)`.
 Conversions are written with `as`: `(total as f64) / (count as f64)`.
 
@@ -118,12 +119,12 @@ a copy would be a mistake.
 
 ```nika
 struct Point {
-    x: i64,
-    y: i64,
+    x: int,
+    y: int,
 }
 
 impl Point {
-    fn length_squared(ref self) -> i64 {
+    fn length_squared(ref self) -> int {
         return self.x * self.x + self.y * self.y
     }
 }
@@ -219,7 +220,7 @@ impl Error for AgeError {
     }
 }
 
-fn parse_age(text: String) -> i64 throws {
+fn parse_age(text: String) -> int throws {
     if text.len() == 0 {
         throw AgeError::Empty
     }
@@ -248,7 +249,7 @@ simply travels up to the caller.
 ```nika
 use std::fs
 
-fn size_of(path: String) -> i64 throws {
+fn size_of(path: String) -> int throws {
     let text = fs::read_to_string(path, fs::Root::Anywhere)
     return text.len()
 }
@@ -316,7 +317,7 @@ the compiler needs a copy that you did not ask for, it refuses and tells you to 
 
 ```nika
 // file: src/stock.nika
-pub struct Item { pub name: String, pub count: i64 }
+pub struct Item { pub name: String, pub count: int }
 ```
 
 ```nika

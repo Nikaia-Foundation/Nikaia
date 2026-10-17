@@ -20,7 +20,7 @@ use std::cli
 
 // `separator` is an option: it stands after the `;`, has a default, and is
 // named where a call sets it. A caller that does not need it never sees it.
-fn summary(lines: i64, blank: i64; separator: ref String = " ") -> String {
+fn summary(lines: int, blank: int; separator: ref String = " ") -> String {
     return f"{lines}{separator}{blank}"
 }
 
