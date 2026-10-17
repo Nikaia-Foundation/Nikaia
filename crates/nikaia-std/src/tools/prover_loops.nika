@@ -26,6 +26,10 @@ pub struct LoopRecord {
     /// **What one turn adds to each state name**, path by path, where every
     /// path adds a constant: the closed forms' and the intervals' input.
     pub steps: collections::BTreeMap[String, Vec[i64]],
+    /// **A `for` over a range's binding** (ADR-361 D1), the last state
+    /// name: it starts at the range's start and goes up by one each turn.
+    /// Empty for a `while`.
+    pub counter: String,
 }
 
 /// **The invariant the strategies found and the three queries proved**
@@ -65,15 +69,46 @@ fn loop_head_name(name: ref String, start: i64) -> String {
     return f"{name}#{start}"
 }
 
+/// The name of a `for` binding's value when the loop is left: out of scope
+/// past it, so not the name of anything the program reads there.
+fn loop_after_name(name: ref String, start: i64) -> String {
+    return f"{name}${start}"
+}
+
 /// **A `while` as the logic layer's loop problem** (ADR-361 D1): `state` the
 /// whole numbers its turn changes, `facts` what holds before it, `ints` the
 /// whole numbers the prover reads there. Nothing where a turn holds what this
 /// does not follow - a way out it does not know, more paths than it counts.
 pub fn loop_record(mut arena: TermArena, start: i64, state: ref Vec[String], facts: ref Vec[i64], ints: ref collections::BTreeSet[String], pinned: fn(ref String) -> i64? sync, cond: ref Expr, body: ref Block, words: ref winnow_grammar::InternerContext, claims: ref collections::BTreeSet[(i64, i64)], throwing: fn(ref Expr) -> bool sync, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> LoopRecord? {
+    let condition = claim_term(cond, words, fn(name) { ints.contains(name) }, pinned, arena.nodes)
+    return loop_record_of(arena, start, state, facts, ints, pinned, condition, "", -1, body, words, claims, throwing, holes_of)
+}
+
+/// **A `for` over a range as the `while` it means** (ADR-361 D1): its
+/// binding `counter` is a state name that starts at `low` and goes up by one
+/// at the end of each turn, a `continue`'s too; the loop ends once it passes
+/// `high` (`inclusive`) or reaches it. `low` and `high` are terms over the
+/// names before the loop; `high` reads none the turn changes.
+pub fn loop_record_range(mut arena: TermArena, start: i64, state: ref Vec[String], facts: ref Vec[i64], ints: ref collections::BTreeSet[String], pinned: fn(ref String) -> i64? sync, counter: ref String, low: i64, high: i64, inclusive: bool, body: ref Block, words: ref winnow_grammar::InternerContext, claims: ref collections::BTreeSet[(i64, i64)], throwing: fn(ref Expr) -> bool sync, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> LoopRecord? {
+    let here = arena.var(counter)
+    let mut condition = arena.lt(here, high)
+    if inclusive {
+        condition = arena.le(here, high)
+    }
+    return loop_record_of(arena, start, state, facts, ints, pinned, condition, counter, low, body, words, claims, throwing, holes_of)
+}
+
+/// The loop problem of a `while` (`counter` empty) or of a `for` over a
+/// range: `condition` the term that keeps it turning, if the prover reads it.
+fn loop_record_of(mut arena: TermArena, start: i64, outer: ref Vec[String], facts: ref Vec[i64], ints: ref collections::BTreeSet[String], pinned: fn(ref String) -> i64? sync, condition: i64?, counter: ref String, low: i64, body: ref Block, words: ref winnow_grammar::InternerContext, claims: ref collections::BTreeSet[(i64, i64)], throwing: fn(ref Expr) -> bool sync, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> LoopRecord? {
+    let mut state = outer.clone()
+    if counter != "" {
+        state.push(counter.clone())
+    }
     let mut before: collections::BTreeMap[String, i64] = collections::BTreeMap()
     let mut entry: Vec[i64] = []
     let mut head: collections::BTreeMap[String, i64] = collections::BTreeMap()
-    for name in state {
+    for name in outer {
         let ghost = arena.var(loop_before_name(name, start))
         before.insert(name.clone(), ghost)
         let here = arena.var(name)
@@ -84,12 +119,35 @@ pub fn loop_record(mut arena: TermArena, start: i64, state: ref Vec[String], fac
     for fact in facts {
         fixed.push(arena.substitute(fact, before))
     }
-    let condition = claim_term(cond, words, fn(name) { ints.contains(name) }, pinned, arena.nodes)
+    // A `for`'s binding starts at the range's start, read before the loop.
+    if counter != "" {
+        let ghost = arena.var(loop_before_name(counter, start))
+        let here = arena.var(counter)
+        head.insert(counter.clone(), here)
+        entry.push(arena.equal(here, ghost))
+        let begins = arena.substitute(low, before)
+        fixed.push(arena.equal(ghost, begins))
+    }
     let first = LoopPath { constraints: [], values: head, unread: collections::BTreeSet() }
     let mut ends: Vec[LoopEnd] = []
     let live = loop_block(arena, body, [first], ends, state, ints, pinned, words, claims, throwing, holes_of) ?? return null
     for path in live {
         ends.push(LoopEnd { kind: "turn".clone(), path: path.clone() })
+    }
+    // A `for`'s binding goes up by one at the end of every turn.
+    if counter != "" {
+        let one = arena.int(1)
+        let mut stepped: Vec[LoopEnd] = []
+        for end in ends {
+            let mut p = end.path.clone()
+            if end.kind == "turn" {
+                let value = p.values[counter] ?? arena.var(counter)
+                let next = arena.add(value, one)
+                p.values.insert(counter.clone(), next)
+            }
+            stepped.push(LoopEnd { kind: end.kind.clone(), path: p })
+        }
+        ends = stepped
     }
     let mut turns: Vec[i64] = []
     let mut exits: Vec[LgExit] = []
@@ -141,7 +199,7 @@ pub fn loop_record(mut arena: TermArena, start: i64, state: ref Vec[String], fac
         step = arena.or(turns)
     }
     let problem = LgLoop { state: state.clone(), fixed: fixed, entry: entry, condition: condition, step: step, exits: exits, goals: [] }
-    return LoopRecord { start: start, problem: problem, steps: steps }
+    return LoopRecord { start: start, problem: problem, steps: steps, counter: counter.clone() }
 }
 
 /// What a turn adds to `name` where `value` is it plus a constant: the same
@@ -671,7 +729,11 @@ pub fn loop_facts(mut arena: TermArena, record: ref LoopRecord, found: ref LoopF
     let mut ghosts: Vec[String] = []
     for name in record.problem.state {
         renamed.insert(name.clone(), arena.var(loop_head_name(name, start)))
-        renamed.insert(lg_primed(name), arena.var(name))
+        if name == record.counter {
+            renamed.insert(lg_primed(name), arena.var(loop_after_name(name, start)))
+        } else {
+            renamed.insert(lg_primed(name), arena.var(name))
+        }
         ghosts.push(loop_before_name(name, start))
     }
     let mut facts: Vec[i64] = []

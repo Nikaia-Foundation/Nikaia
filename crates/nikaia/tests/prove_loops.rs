@@ -186,3 +186,90 @@ fn a_branch_that_assigns_forgets_the_name() {
     let found = held(source);
     assert!(found.iter().all(at_run_time), "{found:#?}");
 }
+
+/// A `for` over a range is the `while` it means (ADR-361 D1): its binding
+/// starts at the range's start and goes up by one each turn.
+#[test]
+fn a_sum_over_an_exclusive_range_is_proved_past_the_loop() {
+    let source = "fn main(n: int) {\n\
+                  \x20   assert(n >= 0)\n\
+                  \x20   let mut total = 0\n\
+                  \x20   for i in 0..<n {\n\
+                  \x20       total = total + 3\n\
+                  \x20   }\n\
+                  \x20   assert(total == 3 * n)\n\
+                  }\n";
+    let found = held(source);
+    assert!(through(&found[1]), "{found:#?}");
+}
+
+/// An inclusive range turns once more: its end is the last value.
+#[test]
+fn an_inclusive_range_counts_its_end() {
+    let source = "fn main() {\n\
+                  \x20   let mut total = 0\n\
+                  \x20   for i in 1..10 {\n\
+                  \x20       total = total + 2\n\
+                  \x20   }\n\
+                  \x20   assert(total == 20)\n\
+                  }\n";
+    let found = held(source);
+    assert!(through(&found[0]), "{found:#?}");
+}
+
+/// A `break` in a `for` is a way out of its own: the bound is proved, the
+/// count reaching the end is not.
+#[test]
+fn a_break_in_a_for_keeps_the_end_value_from_being_claimed() {
+    let source = "fn main(n: int) {\n\
+                  \x20   assert(n >= 0)\n\
+                  \x20   let mut count = 0\n\
+                  \x20   for i in 0..<n {\n\
+                  \x20       if i == 3 {\n\
+                  \x20           break\n\
+                  \x20       }\n\
+                  \x20       count = count + 1\n\
+                  \x20   }\n\
+                  \x20   assert(count <= n)\n\
+                  \x20   assert(count == n)\n\
+                  }\n";
+    let found = held(source);
+    assert!(through(&found[1]), "{found:#?}");
+    assert!(at_run_time(&found[2]), "{found:#?}");
+}
+
+/// A `for` over a list is no counter the prover follows: the claim stays
+/// open.
+#[test]
+fn a_for_over_a_list_stays_open() {
+    let source = "fn main() {\n\
+                  \x20   let xs = [1, 2, 3]\n\
+                  \x20   let mut total = 0\n\
+                  \x20   for x in xs {\n\
+                  \x20       total = total + 1\n\
+                  \x20   }\n\
+                  \x20   assert(total == 3)\n\
+                  }\n";
+    let found = held(source);
+    assert!(found.iter().all(at_run_time), "{found:#?}");
+}
+
+/// A claim the loop makes false is never proved through it.
+#[test]
+fn a_claim_a_for_makes_false_is_not_proved() {
+    let source = "fn main(n: int) {\n\
+                  \x20   assert(n >= 0)\n\
+                  \x20   let mut total = 0\n\
+                  \x20   for i in 0..<n {\n\
+                  \x20       total = total + 3\n\
+                  \x20   }\n\
+                  \x20   assert(total == 3 * n + 1)\n\
+                  }\n";
+    let found = held(source);
+    assert!(
+        !found
+            .iter()
+            .any(|h| through(h) || matches!(h, Held::Proved)),
+        "{found:#?}"
+    );
+}

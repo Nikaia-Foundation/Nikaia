@@ -48084,6 +48084,7 @@ pub struct LoopRecord {
     pub start: i64,
     pub problem: LgLoop,
     pub steps: collections::BTreeMap<String, Vec<i64>>,
+    pub counter: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -48110,12 +48111,30 @@ pub fn loop_before_name(name: &str, start: i64) -> String { format!("{}@{}", nam
 
 fn loop_head_name(name: &str, start: i64) -> String { format!("{}#{}", name, start) }
 
+fn loop_after_name(name: &str, start: i64) -> String { format!("{}${}", name, start) }
+
 #[allow(clippy::too_many_arguments)]
 pub fn loop_record(arena: &mut TermArena, start: i64, state: &[String], facts: &[i64], ints: &collections::BTreeSet<String>, pinned: &impl Fn(&str) -> Option<i64>, cond: &Expr, body: &Block, words: &winnow_grammar::InternerContext, claims: &collections::BTreeSet<(i64, i64)>, throwing: &impl Fn(&Expr) -> bool, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> Option<LoopRecord> {
+    let condition = claim_term(cond, words, &|name| { ints.contains(name) }, pinned, &mut arena.nodes);
+    loop_record_of(arena, start, state, facts, ints, pinned, condition, "", -1, body, words, claims, throwing, holes_of)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn loop_record_range(arena: &mut TermArena, start: i64, state: &[String], facts: &[i64], ints: &collections::BTreeSet<String>, pinned: &impl Fn(&str) -> Option<i64>, counter: &str, low: i64, high: i64, inclusive: bool, body: &Block, words: &winnow_grammar::InternerContext, claims: &collections::BTreeSet<(i64, i64)>, throwing: &impl Fn(&Expr) -> bool, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> Option<LoopRecord> {
+    let here = arena.var(counter);
+    let mut condition = arena.lt(here, high);
+    if inclusive { condition = arena.le(here, high); }
+    loop_record_of(arena, start, state, facts, ints, pinned, Some(condition), counter, low, body, words, claims, throwing, holes_of)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn loop_record_of(arena: &mut TermArena, start: i64, outer: &[String], facts: &[i64], ints: &collections::BTreeSet<String>, pinned: &impl Fn(&str) -> Option<i64>, condition: Option<i64>, counter: &str, low: i64, body: &Block, words: &winnow_grammar::InternerContext, claims: &collections::BTreeSet<(i64, i64)>, throwing: &impl Fn(&Expr) -> bool, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> Option<LoopRecord> {
+    let mut state = outer.to_owned();
+    if counter != "" { state.push(counter.to_owned()); }
     let mut before: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
     let mut entry: Vec<i64> = vec![];
     let mut head: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
-    for name in state.iter() {
+    for name in outer.iter() {
         let ghost = arena.var(&loop_before_name(name, start));
         before.insert(name.to_owned(), ghost);
         let here = arena.var(name);
@@ -48127,11 +48146,32 @@ pub fn loop_record(arena: &mut TermArena, start: i64, state: &[String], facts: &
         let fact = nikaia_std::num::value(fact);
         fixed.push(arena.substitute(fact, &before));
     }
-    let condition = claim_term(cond, words, &|name| { ints.contains(name) }, pinned, &mut arena.nodes);
+    if counter != "" {
+        let ghost = arena.var(&loop_before_name(counter, start));
+        let here = arena.var(counter);
+        head.insert(counter.to_owned(), here);
+        entry.push(arena.equal(here, ghost));
+        let begins = arena.substitute(low, &before);
+        fixed.push(arena.equal(ghost, begins));
+    }
     let first = LoopPath { constraints: vec![], values: head, unread: collections::BTreeSet::new() };
     let mut ends: Vec<LoopEnd> = vec![];
-    let live = match loop_block(arena, body, &vec![first], &mut ends, state, ints, pinned, words, claims, throwing, holes_of) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let live = match loop_block(arena, body, &vec![first], &mut ends, &state, ints, pinned, words, claims, throwing, holes_of) { Some(__nikaia_value) => __nikaia_value, None => return None };
     for path in live.iter() { ends.push(LoopEnd { kind: "turn".to_owned(), path: path.clone() }); }
+    if counter != "" {
+        let one = arena.int(1);
+        let mut stepped: Vec<LoopEnd> = vec![];
+        for end in ends.iter() {
+            let mut p = end.path.clone();
+            if end.kind == "turn" {
+                let value = nikaia_std::index::or(*nikaia_std::index::get(&p.values, counter), || arena.var(counter).into());
+                let next = arena.add(value, one);
+                p.values.insert(counter.to_owned(), next);
+            }
+            stepped.push(LoopEnd { kind: end.kind.to_owned(), path: p });
+        }
+        ends = stepped;
+    }
     let mut turns: Vec<i64> = vec![];
     let mut exits: Vec<LgExit> = vec![];
     let mut same: Vec<i64> = vec![];
@@ -48172,7 +48212,7 @@ pub fn loop_record(arena: &mut TermArena, start: i64, state: &[String], facts: &
     let mut step = arena.boolean(false);
     if !turns.is_empty() { step = arena.or(turns); }
     let problem = LgLoop { state: state.to_owned(), fixed, entry, condition, step, exits, goals: vec![] };
-    Some(LoopRecord { start, problem, steps })
+    Some(LoopRecord { start, problem, steps, counter: counter.to_owned() })
 }
 
 fn loop_constant_step(arena: &mut TermArena, name: &str, value: i64) -> Option<i64> {
@@ -48548,7 +48588,7 @@ pub fn loop_facts(arena: &mut TermArena, record: &LoopRecord, found: &LoopFound)
     let mut ghosts: Vec<String> = vec![];
     for name in record.problem.state.iter() {
         renamed.insert(name.to_owned(), arena.var(&loop_head_name(name, start)));
-        renamed.insert(lg_primed(name), arena.var(name));
+        if *name == record.counter { renamed.insert(lg_primed(name), arena.var(&loop_after_name(name, start))); } else { renamed.insert(lg_primed(name), arena.var(name)); }
         ghosts.push(loop_before_name(name, start));
     }
     let mut facts: Vec<i64> = vec![];
@@ -50191,12 +50231,41 @@ fn prover_all_plain(exprs: &[Expr]) -> bool {
 fn prover_for(walk: &mut ProverWalk, bindings: &[winnow_grammar::Symbol], iter: &Expr, body: &Block, span: Span, scope: &mut ProverScope, at: &ProverWhere, nested: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) {
     prover_expr(walk, iter, span, &scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
     let tainted = from_outside(iter, &scope.tainted, words, library, holes_of);
-    let mut inner = scope.clone();
     let changed = assigned_in(body, words);
+    let mut state: Vec<String> = vec![];
+    let mut records: Vec<LoopRecord> = vec![];
+    if bindings.len() == 1 {
+        let counter = words.resolve(*nikaia_std::index::get(&bindings, 0)).to_owned();
+        match iter {
+            Expr::Range { start, end, inclusive, .. } => {
+                let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end); let inclusive = *inclusive;
+                for n in changed.iter() { if scope.mutables.contains(n) && scope.ints.contains(n) { state.push(n.to_owned()); } }
+                let low = lin_term(start, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, &scope, name) }, &mut walk.arena.nodes);
+                let high = lin_term(end, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, &scope, name) }, &mut walk.arena.nodes);
+                let mut fits = !state.is_empty() && low.is_some() && high.is_some() && !scope.ints.contains(&counter) && !changed.contains(&counter);
+                if fits { for n in changed.iter() { if walk.arena.mentions(nikaia_std::index::or(high, || 0), n) { fits = false; } } }
+                if fits {
+                    let mut ints = scope.ints.to_owned();
+                    ints.insert(counter.to_owned());
+                    let record = loop_record_range(&mut walk.arena, span.start as i64, &state, &scope.facts, &ints, &|name| { prover_pinned(&walk.state.pinned, &scope, name) }, &counter, nikaia_std::index::or(low, || 0), nikaia_std::index::or(high, || 0), inclusive, body, words, &walk.claims, &|e| { prover_throws(e, at, program, words, own, library, unaliased) }, holes_of);
+                    if record.is_some() { records.push(match record { Some(__nikaia_value) => __nikaia_value, None => return }); }
+                }
+            },
+            _ => { },
+        }
+    }
+    let mut inner = scope.clone();
     for n in changed.iter() {
         inner.rebind(&walk.arena, n);
         scope.rebind(&walk.arena, n);
     }
+    for n in state.iter() {
+        inner.ints.insert(n.to_owned());
+        inner.loose.insert(n.to_owned());
+        scope.ints.insert(n.to_owned());
+        scope.loose.insert(n.to_owned());
+    }
+    scope.loops.extend(records);
     if !changed.is_empty() { scope.exact = false; }
     for binding in bindings.iter() {
         let binding = *binding;
@@ -62353,7 +62422,7 @@ pub mod prover_claims {
 }
 pub mod prover_loops {
     #[allow(unused_imports)]
-    pub use super::{LoopRecord, LoopFound, loop_before_name, loop_record, loop_found, loop_facts, loop_found_text, loop_open_text, loop_reads, loop_key};
+    pub use super::{LoopRecord, LoopFound, loop_before_name, loop_record, loop_record_range, loop_found, loop_facts, loop_found_text, loop_open_text, loop_reads, loop_key};
 }
 pub mod prover_passes {
     #[allow(unused_imports)]

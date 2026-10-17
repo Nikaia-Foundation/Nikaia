@@ -727,17 +727,62 @@ fn prover_all_plain(exprs: ref Vec[Expr]) -> bool {
 }
 
 /// A `for`: a range's binding is bounded by its ends, every other binding is
-/// a name nothing pins.
+/// a name nothing pins. A `for` over a range whose turn changes whole numbers
+/// the walk follows is the `while` it means (ADR-361 D1): read past it
+/// through its invariant; over anything else what it changes is unknown.
 fn prover_for(mut walk: ProverWalk, bindings: ref Vec[winnow_grammar::Symbol], iter: ref Expr, body: ref Block, span: Span, mut scope: ProverScope, at: ref ProverWhere, nested: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) {
     prover_expr(walk, iter, span, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
     let tainted = from_outside(iter, scope.tainted, words, library, holes_of)
-    let mut inner = scope.clone()
     // What a turn changes is unknown at its head and past the loop.
     let changed = assigned_in(body, words)
+    let mut state: Vec[String] = []
+    let mut records: Vec[LoopRecord] = []
+    if bindings.len() == 1 {
+        let counter = words.resolve(bindings[0]).clone()
+        match iter {
+            Expr::Range { start, end, inclusive, .. } => {
+                for n in changed {
+                    if scope.mutables.contains(n) && scope.ints.contains(n) {
+                        state.push(n.clone())
+                    }
+                }
+                let low = lin_term(start, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes)
+                let high = lin_term(end, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes)
+                // The end is reached once, before the first turn: a bound
+                // that reads what a turn changes is not the `while`'s, and a
+                // binding that shadows a whole number is not stated.
+                let mut fits = !state.is_empty() && low != null && high != null && !scope.ints.contains(counter) && !changed.contains(counter)
+                if fits {
+                    for n in changed {
+                        if walk.arena.mentions(high ?? 0, n) {
+                            fits = false
+                        }
+                    }
+                }
+                if fits {
+                    let mut ints = scope.ints.clone()
+                    ints.insert(counter.clone())
+                    let record = loop_record_range(walk.arena, span.start as i64, state, scope.facts, ints, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, counter, low ?? 0, high ?? 0, inclusive, body, words, walk.claims, fn(e) { prover_throws(e, at, program, words, own, library, unaliased) }, holes_of)
+                    if record != null {
+                        records.push(record ?? return)
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+    let mut inner = scope.clone()
     for n in changed {
         inner.rebind(walk.arena, n)
         scope.rebind(walk.arena, n)
     }
+    for n in state {
+        inner.ints.insert(n.clone())
+        inner.loose.insert(n.clone())
+        scope.ints.insert(n.clone())
+        scope.loose.insert(n.clone())
+    }
+    scope.loops.extend(records)
     if !changed.is_empty() {
         scope.exact = false
     }
