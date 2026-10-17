@@ -453,7 +453,8 @@ fn walked<'a>(
         .keys()
         .map(|(a, b)| (*a as usize, *b as usize))
         .collect();
-    let proved = crate::prove::prove(parsed, own, library, &keys);
+    let comptimes = crate::prove::Comptimes::of(parsed, &checker.s.facts.comptime_values);
+    let proved = crate::prove::prove(parsed, own, library, &keys, &comptimes);
     checker.s.findings.extend(proved.findings);
     checker.s.facts.entries = proved.entries;
     checker.s.facts.reaches = proved.reaches;
@@ -2741,14 +2742,28 @@ impl Checker<'_> {}
 /// a precondition and how many calls check it, checked at run time and why, a
 /// test's check, or refused (D6) - and how many of each, so that the number
 /// checked at run time can be watched.
+///
+/// **Checked as the build checks it**: with the program's other files and
+/// what the build may read and compile, so that a `comptime` a call computes
+/// and a call run for a claim (ADR-359 D7, D11) answer here as they did there.
 pub fn claims_report(
     parsed: &Parsed,
     source: &str,
     path: &str,
+    beside: &[&Parsed],
     own: &Ledger,
     library: &Ledger,
+    reads: &Reads,
 ) -> String {
-    let checked = check(parsed, own, library);
+    let checked = check_against(
+        parsed,
+        beside,
+        own,
+        library,
+        &BTreeSet::new(),
+        &Newly::new(),
+        reads,
+    );
     nikaia_std::tools::check_facts::check_claims_report(&checked.facts.claims, source, path)
 }
 

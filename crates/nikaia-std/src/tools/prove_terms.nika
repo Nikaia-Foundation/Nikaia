@@ -12,8 +12,10 @@
 
 /// `expr` as a linear term over the names `var` admits: the node's place in
 /// `out`, or nothing where it is not one. A product is linear where one side
-/// is a constant.
-pub fn lin_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, var: fn(ref String) -> bool sync, mut out: Vec[SolverTerm]) -> i64? {
+/// is a constant. A name or a call `pinned` gives a value the build knows is
+/// that value: a `comptime` binding (ADR-359 D7), a call run while the
+/// program was built (D11).
+pub fn lin_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, var: fn(ref String) -> bool sync, pinned: fn(ref String) -> i64? sync, mut out: Vec[SolverTerm]) -> i64? {
     return match expr {
         // A literal no `i64` holds is outside what the solver reads.
         Expr::LitInt { value, negative, .. } => {
@@ -23,7 +25,8 @@ pub fn lin_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, var:
         Expr::Variable(name, _) => {
             let text = words.resolve(name)
             if !var(text) {
-                return null
+                let known = pinned(text) ?? return null
+                return built(SolverTerm::Int(known), out)
             }
             built(SolverTerm::Var(text.clone()), out)
         },
@@ -45,6 +48,10 @@ pub fn lin_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, var:
         // (`call_result_name`, ADR-314 D3).
         Expr::Call { .. } => {
             let name = call_result_name(expr)
+            let ran = pinned(name)
+            if ran != null {
+                return built(SolverTerm::Int(ran ?? 0), out)
+            }
             if !var(name) {
                 return null
             }
@@ -54,7 +61,7 @@ pub fn lin_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, var:
             if op != UnaryOp::Neg {
                 return null
             }
-            let a = lin_term(expr, words, var, out) ?? return null
+            let a = lin_term(expr, words, var, pinned, out) ?? return null
             built(SolverTerm::Neg(a), out)
         },
         // **A conversion into a whole number keeps the value or stops the
@@ -65,11 +72,11 @@ pub fn lin_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, var:
             if !ty.generics.is_empty() || !is_whole_number(words.resolve(ty.name)) {
                 return null
             }
-            lin_term(expr, words, var, out)
+            lin_term(expr, words, var, pinned, out)
         },
         Expr::Binary { op, lhs, rhs, .. } => {
-            let l = lin_term(lhs, words, var, out) ?? return null
-            let r = lin_term(rhs, words, var, out) ?? return null
+            let l = lin_term(lhs, words, var, pinned, out) ?? return null
+            let r = lin_term(rhs, words, var, pinned, out) ?? return null
             match op {
                 BinaryOp::Add => built(SolverTerm::Add(l, r), out),
                 BinaryOp::Sub => built(SolverTerm::Sub(l, r), out),
@@ -78,6 +85,22 @@ pub fn lin_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, var:
                         return null
                     }
                     built(SolverTerm::Mul(l, r), out)
+                },
+                // **A quotient or a remainder of two known numbers is its
+                // value** (ADR-359 D5), as Part I 2.2 folds it: truncated
+                // toward zero. A division by zero or past the type's range
+                // stops the program, and is no number here.
+                BinaryOp::Div => {
+                    let x = constant_at(l, out) ?? return null
+                    let y = constant_at(r, out) ?? return null
+                    let q = x.checked_div(y) ?? return null
+                    built(SolverTerm::Int(q), out)
+                },
+                BinaryOp::Rem => {
+                    let x = constant_at(l, out) ?? return null
+                    let y = constant_at(r, out) ?? return null
+                    let m = x.checked_rem(y) ?? return null
+                    built(SolverTerm::Int(m), out)
                 },
                 else => null,
             }
@@ -94,33 +117,33 @@ pub fn call_result_name(call: ref Expr) -> String {
 
 /// The claim `expr` as a formula over [`lin_term`]s, where it is one this
 /// prover reads.
-pub fn claim_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, var: fn(ref String) -> bool sync, mut out: Vec[SolverTerm]) -> i64? {
+pub fn claim_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, var: fn(ref String) -> bool sync, pinned: fn(ref String) -> i64? sync, mut out: Vec[SolverTerm]) -> i64? {
     return match expr {
         Expr::LitBool(b, _) => built(SolverTerm::Bool(b), out),
         Expr::Unary { op, expr, .. } => {
             if op != UnaryOp::Not {
                 return null
             }
-            let a = claim_term(expr, words, var, out) ?? return null
+            let a = claim_term(expr, words, var, pinned, out) ?? return null
             built(SolverTerm::Not(a), out)
         },
         Expr::Binary { op, lhs, rhs, .. } => match op {
             BinaryOp::And => {
-                let l = claim_term(lhs, words, var, out) ?? return null
-                let r = claim_term(rhs, words, var, out) ?? return null
+                let l = claim_term(lhs, words, var, pinned, out) ?? return null
+                let r = claim_term(rhs, words, var, pinned, out) ?? return null
                 built(SolverTerm::And([l, r]), out)
             },
             BinaryOp::Or => {
-                let l = claim_term(lhs, words, var, out) ?? return null
-                let r = claim_term(rhs, words, var, out) ?? return null
+                let l = claim_term(lhs, words, var, pinned, out) ?? return null
+                let r = claim_term(rhs, words, var, pinned, out) ?? return null
                 built(SolverTerm::Or([l, r]), out)
             },
-            BinaryOp::Lt => compared(op, lhs, rhs, words, var, out),
-            BinaryOp::Le => compared(op, lhs, rhs, words, var, out),
-            BinaryOp::Gt => compared(op, lhs, rhs, words, var, out),
-            BinaryOp::Ge => compared(op, lhs, rhs, words, var, out),
-            BinaryOp::Eq => compared(op, lhs, rhs, words, var, out),
-            BinaryOp::Ne => compared(op, lhs, rhs, words, var, out),
+            BinaryOp::Lt => compared(op, lhs, rhs, words, var, pinned, out),
+            BinaryOp::Le => compared(op, lhs, rhs, words, var, pinned, out),
+            BinaryOp::Gt => compared(op, lhs, rhs, words, var, pinned, out),
+            BinaryOp::Ge => compared(op, lhs, rhs, words, var, pinned, out),
+            BinaryOp::Eq => compared(op, lhs, rhs, words, var, pinned, out),
+            BinaryOp::Ne => compared(op, lhs, rhs, words, var, pinned, out),
             else => null,
         },
         else => null,
@@ -128,9 +151,9 @@ pub fn claim_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, va
 }
 
 /// A comparison of two linear terms.
-fn compared(op: BinaryOp, lhs: ref Expr, rhs: ref Expr, words: ref winnow_grammar::InternerContext, var: fn(ref String) -> bool sync, mut out: Vec[SolverTerm]) -> i64? {
-    let a = lin_term(lhs, words, var, out) ?? return null
-    let b = lin_term(rhs, words, var, out) ?? return null
+fn compared(op: BinaryOp, lhs: ref Expr, rhs: ref Expr, words: ref winnow_grammar::InternerContext, var: fn(ref String) -> bool sync, pinned: fn(ref String) -> i64? sync, mut out: Vec[SolverTerm]) -> i64? {
+    let a = lin_term(lhs, words, var, pinned, out) ?? return null
+    let b = lin_term(rhs, words, var, pinned, out) ?? return null
     return match op {
         BinaryOp::Lt => built(SolverTerm::Lt(a, b), out),
         BinaryOp::Le => built(SolverTerm::Le(a, b), out),
@@ -187,5 +210,11 @@ fn literal_value(value: u64, negative: bool) -> i64? {
     if negative && value == 9223372036854775808 {
         return -9223372036854775808
     }
+    return null
+}
+
+/// No name pinned: for a term read where no `comptime` and no call run
+/// while building can stand.
+pub fn nothing_pinned(name: ref String) -> i64? {
     return null
 }

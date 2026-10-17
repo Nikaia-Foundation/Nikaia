@@ -932,6 +932,13 @@ fn reads_for(layout: &Layout, allowlist: Option<&Path>) -> Result<assets::Reads>
 /// declares, resolved by [`packages_of`] exactly as a build resolves them.
 /// Outside one it is standalone and has none - which is what its `use` lines
 /// are then told (`modules::collect_one`).
+/// **What a build of one file may read and where it compiles build-time
+/// code**: the same [`reads_for`] its lowering uses, for a report that has to
+/// answer as the lowering did.
+pub fn reads_for_file(input: &Path, allowlist: Option<&Path>) -> Result<assets::Reads> {
+    reads_for(&Layout::resolve(input), allowlist)
+}
+
 pub fn read_file(input: &Path) -> Result<(modules::Program, Vec<modules::Dependency>)> {
     let layout = Layout::resolve(input);
     if !layout.in_project {
@@ -2275,7 +2282,12 @@ impl Explain {
 ///
 /// The file name is printed where there is more than one, because a slot key
 /// (`zaehle::counts`) does not say which file it is in - one namespace or not.
-pub fn explain(program: &modules::Program, settings: &Settings, want: Explain) -> Result<()> {
+pub fn explain(
+    program: &modules::Program,
+    settings: &Settings,
+    want: Explain,
+    reads: &assets::Reads,
+) -> Result<()> {
     if !want.asked() {
         return Ok(());
     }
@@ -2348,8 +2360,14 @@ pub fn explain(program: &modules::Program, settings: &Settings, want: Explain) -
                     &unit.parsed,
                     &unit.source,
                     &unit.path.display().to_string(),
+                    &program
+                        .units
+                        .iter()
+                        .map(|unit| &unit.parsed)
+                        .collect::<Vec<_>>(),
                     &program.contracts,
                     library,
+                    reads,
                 )
             );
         }
@@ -2741,7 +2759,8 @@ impl Project {
         // passes.
         if want.asked() {
             let program = modules::Program::read_with(&entry, &self.packages()?)?;
-            explain(&program, &self.settings, want)?;
+            let reads = reads_for(&Layout::resolve(&self.entry()), allowlist)?;
+            explain(&program, &self.settings, want, &reads)?;
         }
 
         // Every package of this build, resolved before anything is read: a

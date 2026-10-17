@@ -166,7 +166,19 @@ fn prover_stmt(mut walk: ProverWalk, stmt: ref Spanned[Stmt], mut scope: ProverS
         },
         Stmt::Comptime { name, value, .. } => {
             prover_expr(walk, value, span, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
-            scope.rebind(walk.arena, words.resolve(name))
+            let bound = words.resolve(name).clone()
+            scope.rebind(walk.arena, bound)
+            // **An integer `comptime` is its value** (ADR-359 D7): the one
+            // the build computed, which every state that reaches here has.
+            let computed = walk.state.comptime_at[span.start as i64]
+            if computed != null {
+                scope.ints.insert(bound.clone())
+                let named = walk.arena.var(bound)
+                let value = walk.arena.int(computed ?? 0)
+                let fact = walk.arena.equal(named, value)
+                scope.facts.push(fact)
+                scope.entry.insert(bound.clone(), value)
+            }
             false
         },
         Stmt::Assign { target, value, .. } => {
@@ -196,7 +208,7 @@ fn prover_stmt(mut walk: ProverWalk, stmt: ref Spanned[Stmt], mut scope: ProverS
             // Which turns there are depends on what the loop changes.
             inner.exact = false
             scope.path = null
-            let holds = claim_term(cond, words, fn(name) { inner.ints.contains(name) }, walk.arena.nodes)
+            let holds = claim_term(cond, words, fn(name) { inner.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, inner, name) }, walk.arena.nodes)
             if holds != null {
                 inner.facts.push(holds ?? 0)
             }
@@ -227,7 +239,7 @@ fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], muta
     if names.len() == 1 && !mutable {
         prover_call_results(walk, value, true, scope, program, words, own, unaliased, condition)
     }
-    let value_lin = lin_term(value, words, fn(name) { scope.ints.contains(name) }, walk.arena.nodes)
+    let value_lin = lin_term(value, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes)
     let mut value_at_entry: i64? = null
     if value_lin != null {
         value_at_entry = scope.at_entry(walk.arena, value_lin ?? 0)
@@ -363,8 +375,8 @@ fn prover_for(mut walk: ProverWalk, bindings: ref Vec[winnow_grammar::Symbol], i
     if bindings.len() == 1 {
         match iter {
             Expr::Range { start, end, inclusive, .. } => {
-                let low = lin_term(start, words, fn(name) { scope.ints.contains(name) }, walk.arena.nodes)
-                let high = lin_term(end, words, fn(name) { scope.ints.contains(name) }, walk.arena.nodes)
+                let low = lin_term(start, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes)
+                let high = lin_term(end, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes)
                 if low != null && high != null {
                     ranged = true
                     let name = words.resolve(bindings[0]).clone()
@@ -464,7 +476,7 @@ fn prover_expr_stmt(mut walk: ProverWalk, expr: ref Expr, span: Span, mut scope:
 /// branch that always leaves rules out holds after it.
 fn prover_if(mut walk: ProverWalk, cond: ref Expr, then_branch: ref Block, else_branch: ref Block?, span: Span, mut scope: ProverScope, at: ref ProverWhere, nested: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) -> bool {
     prover_expr(walk, cond, span, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
-    let holds = claim_term(cond, words, fn(name) { scope.ints.contains(name) }, walk.arena.nodes)
+    let holds = claim_term(cond, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes)
     let mut fails: i64? = null
     if holds != null {
         fails = walk.arena.not(holds ?? 0)
@@ -825,10 +837,10 @@ fn prover_postconditions_of(mut walk: ProverWalk, callee: ref String, args: ref 
     let posts = standing_posts(walk.state.postconditions, callee)
     if posts != null {
         let function = free_function(program, words, callee) ?? return []
-        return postconditions_for(walk.arena, posts ?? [], function.params, args, bound, scope, words)
+        return postconditions_for(walk.arena, posts ?? [], function.params, args, bound, scope, words, walk.state.pinned)
     }
     let foreign = prover_foreign_contract(walk, callee, own, condition) ?? return []
-    return postconditions_for(walk.arena, foreign.ensures, foreign.params, args, bound, scope, words)
+    return postconditions_for(walk.arena, foreign.ensures, foreign.params, args, bound, scope, words, walk.state.pinned)
 }
 
 /// Whether a function hands back a whole number.

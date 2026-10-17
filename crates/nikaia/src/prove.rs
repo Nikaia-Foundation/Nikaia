@@ -62,6 +62,46 @@ pub struct Proved {
     pub published: BTreeMap<String, Published>,
 }
 
+/// **What the build computed for each integer `comptime`** (ADR-359 D7): an
+/// item's by its name, one inside a body by its statement's start.
+#[derive(Debug, Default, Clone)]
+pub struct Comptimes {
+    pub by_name: BTreeMap<String, i64>,
+    pub at: BTreeMap<i64, i64>,
+}
+
+impl Comptimes {
+    /// Read off the checker's `comptime_values` (the type below and the
+    /// literal, by the start of the item or statement): each one whose type is
+    /// a whole number and whose literal an `i64` holds.
+    pub fn of(parsed: &Parsed, values: &BTreeMap<i64, (String, String)>) -> Comptimes {
+        let mut found = Comptimes::default();
+        let whole = |below: &str| {
+            matches!(
+                below,
+                "i8" | "i16" | "i32" | "i64" | "isize" | "u8" | "u16" | "u32" | "u64" | "usize"
+            )
+        };
+        for (at, (below, written)) in values {
+            if !whole(below) {
+                continue;
+            }
+            let Ok(value) = written.trim().replace('_', "").parse::<i64>() else {
+                continue;
+            };
+            found.at.insert(*at, value);
+        }
+        for item in &parsed.program.items {
+            if let Item::Comptime { name, .. } = &item.node
+                && let Some(value) = found.at.remove(&(item.span.start as i64))
+            {
+                found.by_name.insert(parsed.text(*name).to_string(), value);
+            }
+        }
+        found
+    }
+}
+
 /// How a call is named in [`Reaches`].
 pub fn call_key(parsed: &Parsed, callee: &str, args: &[Expr]) -> (String, String) {
     let args: Vec<String> = args
@@ -78,9 +118,13 @@ pub fn prove(
     own: &Ledger,
     library: &Ledger,
     claims: &BTreeSet<(usize, usize)>,
+    comptimes: &Comptimes,
 ) -> Proved {
+    let mut state = ProverState::fresh();
+    state.pinned = comptimes.by_name.clone();
+    state.comptime_at = comptimes.at.clone();
     let mut walk = ProverWalk {
-        state: ProverState::fresh(),
+        state,
         arena: TermArena::empty(),
         held: BTreeMap::new(),
         reaches: BTreeMap::new(),
@@ -196,6 +240,7 @@ fn condition(arena: &mut TermArena, text: &str, names: &BTreeSet<String>) -> Opt
         args.first()?,
         &parsed.interner,
         &|name| names.contains(name),
+        &|_| None,
         &mut arena.nodes,
     )
 }

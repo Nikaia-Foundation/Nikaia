@@ -435,6 +435,7 @@ fn lower_to_rust(
             asserts: args.asserts,
             bounds: args.bounds,
         },
+        &project::reads_for_file(input, args.allow_read_from_list.as_deref())?,
     )?;
 
     // The cache key gains the dependencies with them: their units are part of

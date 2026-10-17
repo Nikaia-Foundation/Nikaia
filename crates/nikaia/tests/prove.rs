@@ -926,8 +926,8 @@ fn a_call_inside_a_lets_value_is_read_with_what_its_callee_ensures() {
 /// than the claim called something other than a comparison of whole numbers.
 #[test]
 fn a_claim_over_a_name_the_prover_does_not_read_names_it() {
-    let source = "fn main() {\n\
-                  \x20   let b = 48 / 4\n\
+    let source = "fn quotient(n: i64, m: i64) {\n\
+                  \x20   let b = n / m\n\
                   \x20   assert(b > 10)\n\
                   \x20   println(f\"{b}\")\n\
                   }\n";
@@ -936,5 +936,91 @@ fn a_claim_over_a_name_the_prover_does_not_read_names_it() {
         [nikaia::prove::Held::AtRunTime(
             "`b` is not a whole number the prover reads".to_string()
         )]
+    );
+}
+
+/// **ADR-359 D5: a quotient or a remainder of two known numbers is its
+/// value**, truncated toward zero as Part I 2.2 folds it (#632 step 1).
+#[test]
+fn a_quotient_of_two_literals_is_its_value() {
+    let refuted = "fn main() {\n\
+                   \x20   let b = 4 / 12\n\
+                   \x20   assert(b > 10)\n\
+                   \x20   println(f\"{b}\")\n\
+                   }\n";
+    let found = shown_false(refuted);
+    assert_eq!(found.len(), 1, "{found:#?}");
+    assert!(
+        found[0].message.contains("`b > 10` is false every time"),
+        "{found:#?}"
+    );
+    assert!(
+        found[0].notes.iter().any(|n| n.contains("`b` is 0")),
+        "{found:#?}"
+    );
+    let proved = "fn main() {\n\
+                  \x20   let q = -7 / 2\n\
+                  \x20   let r = -7 % 2\n\
+                  \x20   let s = 48 / 4\n\
+                  \x20   assert(q == -3)\n\
+                  \x20   assert(r == -1)\n\
+                  \x20   assert(s == 12)\n\
+                  \x20   assert(7 % 3 == 1)\n\
+                  \x20   println(f\"{q} {r} {s}\")\n\
+                  }\n";
+    let answers = held(proved);
+    assert!(
+        answers
+            .iter()
+            .all(|h| matches!(h, nikaia::prove::Held::Proved))
+            && answers.len() == 4,
+        "{answers:#?}"
+    );
+}
+
+/// **ADR-359 D7: an integer `comptime` binding is its value**, in a body and
+/// as an item (#632 step 1).
+#[test]
+fn an_integer_comptime_binding_is_its_value() {
+    // A value the checker folds; one a call computes is compiled and run
+    // (ADR-321 D1), and is `comptime_compiled.rs`'s.
+    let in_a_body = "fn main() {\n\
+                     \x20   comptime B: i64 = 4 / 12\n\
+                     \x20   assert(B > 10)\n\
+                     \x20   println(f\"{B}\")\n\
+                     }\n";
+    let found = shown_false(in_a_body);
+    assert_eq!(found.len(), 1, "{found:#?}");
+    assert!(
+        found[0].message.contains("`B > 10` is false every time"),
+        "{found:#?}"
+    );
+    let an_item = "comptime LIMIT: i64 = 6 * 7\n\
+                   \n\
+                   fn main() {\n\
+                   \x20   assert(LIMIT == 42)\n\
+                   \x20   assert(LIMIT / 5 == 8)\n\
+                   \x20   println(f\"{LIMIT}\")\n\
+                   }\n";
+    let answers = held(an_item);
+    assert!(
+        answers
+            .iter()
+            .all(|h| matches!(h, nikaia::prove::Held::Proved))
+            && answers.len() == 2,
+        "{answers:#?}"
+    );
+    // A parameter of the same name is not the `comptime`.
+    let hidden = "comptime LIMIT: i64 = 42\n\
+                  \n\
+                  fn check(LIMIT: i64) {\n\
+                  \x20   assert(LIMIT == 42)\n\
+                  }\n";
+    assert!(
+        !held(hidden)
+            .iter()
+            .any(|h| matches!(h, nikaia::prove::Held::Proved)),
+        "{:#?}",
+        held(hidden)
     );
 }

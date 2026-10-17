@@ -270,7 +270,7 @@ pub fn expression_ensures(item: ref Item, words: ref winnow_grammar::InternerCon
         names.insert(words.resolve(arg.name).clone())
     }
     let mut nodes: Vec[SolverTerm] = []
-    let term = lin_term(value, words, fn(candidate) { names.contains(candidate) }, nodes) ?? return null
+    let term = lin_term(value, words, fn(candidate) { names.contains(candidate) }, fn(name) { nothing_pinned(name) }, nodes) ?? return null
     let text = term_ledger_text(term, fn(at) { nodes[at].clone() })
     let condition = f"result == {text}"
     let mut readable = names.clone()

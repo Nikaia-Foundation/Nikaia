@@ -674,3 +674,32 @@ fn a_bound_with_another_name_or_no_number_is_refused() {
         "{found:#?}"
     );
 }
+
+/// **A `comptime` binding is its value to the prover**
+/// ([ADR-359](../../../docs/specification/adr/adr-359.md) D7, #632 step 1):
+/// the value the run computed, here `4 / example(2)`, which is 0.
+#[test]
+fn a_comptime_a_call_computed_is_its_value_to_the_prover() {
+    let source = "fn positive(whole: i64) -> i64 {\n\
+                  \x20   assert(whole > 0)\n\
+                  \x20   return whole\n\
+                  }\n\
+                  \n\
+                  fn example(a: i64) -> i64 {\n\
+                  \x20   let whole = 10 + a\n\
+                  \x20   return positive(whole)\n\
+                  }\n\
+                  \n\
+                  fn main() {\n\
+                  \x20   comptime B: i64 = 4 / example(2)\n\
+                  \x20   assert(B > 10)\n\
+                  \x20   println(f\"{B}\")\n\
+                  }\n";
+    let found = findings(source);
+    let refuted: Vec<&Finding> = found.iter().filter(|f| f.code == "NK1207").collect();
+    assert_eq!(refuted.len(), 1, "{found:#?}");
+    assert!(
+        refuted[0].message.contains("`B > 10` is false every time"),
+        "{found:#?}"
+    );
+}

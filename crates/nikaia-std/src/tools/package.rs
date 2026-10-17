@@ -41466,7 +41466,7 @@ pub fn expression_ensures(item: &Item, words: &winnow_grammar::InternerContext, 
     let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
     for arg in args.iter() { names.insert(words.resolve(arg.name).to_owned()); }
     let mut nodes: Vec<SolverTerm> = vec![];
-    let term = match lin_term(value, words, &|candidate| { names.contains(candidate) }, &mut nodes) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let term = match lin_term(value, words, &|candidate| { names.contains(candidate) }, &|name| { nothing_pinned(name) }, &mut nodes) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let text = term_ledger_text(term, &|at| { (*nikaia_std::index::get(&nodes, nikaia_std::index::at(at))).clone() });
     let condition = format!("result == {}", text);
     let mut readable = names.to_owned();
@@ -46352,7 +46352,7 @@ pub fn pb_render(entries: &[PbLine], limit: i64) -> PbRendered {
 
 // --- prove_terms.nika ---
 
-pub fn lin_term(expr: &Expr, words: &winnow_grammar::InternerContext, var: &impl Fn(&str) -> bool, out: &mut Vec<SolverTerm>) -> Option<i64> {
+pub fn lin_term(expr: &Expr, words: &winnow_grammar::InternerContext, var: &impl Fn(&str) -> bool, pinned: &impl Fn(&str) -> Option<i64>, out: &mut Vec<SolverTerm>) -> Option<i64> {
     match expr {
         Expr::LitInt { value, negative, .. } => {
             let negative = *negative; let value = *value;
@@ -46362,7 +46362,10 @@ pub fn lin_term(expr: &Expr, words: &winnow_grammar::InternerContext, var: &impl
         Expr::Variable(name, _) => {
             let name = *name;
             let text = words.resolve(name);
-            if !var(text) { return None; }
+            if !var(text) {
+                let known = match pinned(text) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                return Some(built(SolverTerm::Int(known), out));
+            }
             Some(built(SolverTerm::Var(text.to_owned()), out))
         },
         Expr::MethodCall { receiver, method, args, .. } => {
@@ -46377,30 +46380,44 @@ pub fn lin_term(expr: &Expr, words: &winnow_grammar::InternerContext, var: &impl
         },
         Expr::Call { .. } => {
             let name = call_result_name(expr);
+            let ran = pinned(&name);
+            if ran.is_some() { return Some(built(SolverTerm::Int(nikaia_std::index::or(ran, || 0)), out)); }
             if !var(&name) { return None; }
             Some(built(SolverTerm::Var(name), out))
         },
         Expr::Unary { op, expr, .. } => {
             let expr = nikaia_std::boxed::open(expr);
             if *op != UnaryOp::Neg { return None; }
-            let a = match lin_term(expr, words, var, out) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let a = match lin_term(expr, words, var, pinned, out) { Some(__nikaia_value) => __nikaia_value, None => return None };
             Some(built(SolverTerm::Neg(a), out))
         },
         Expr::Cast { expr, ty, .. } => {
             let expr = nikaia_std::boxed::open(expr);
             if !ty.generics.is_empty() || !is_whole_number(words.resolve(ty.name)) { return None; }
-            lin_term(expr, words, var, out)
+            lin_term(expr, words, var, pinned, out)
         },
         Expr::Binary { op, lhs, rhs, .. } => {
             let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
-            let l = match lin_term(lhs, words, var, out) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            let r = match lin_term(rhs, words, var, out) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let l = match lin_term(lhs, words, var, pinned, out) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let r = match lin_term(rhs, words, var, pinned, out) { Some(__nikaia_value) => __nikaia_value, None => return None };
             match op {
                 BinaryOp::Add => Some(built(SolverTerm::Add(l, r), out)),
                 BinaryOp::Sub => Some(built(SolverTerm::Sub(l, r), out)),
                 BinaryOp::Mul => {
                     if constant_at(l, &out).is_none() && constant_at(r, &out).is_none() { return None; }
                     Some(built(SolverTerm::Mul(l, r), out))
+                },
+                BinaryOp::Div => {
+                    let x = match constant_at(l, &out) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                    let y = match constant_at(r, &out) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                    let q = match x.checked_div(y) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                    Some(built(SolverTerm::Int(q), out))
+                },
+                BinaryOp::Rem => {
+                    let x = match constant_at(l, &out) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                    let y = match constant_at(r, &out) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                    let m = match x.checked_rem(y) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                    Some(built(SolverTerm::Int(m), out))
                 },
                 _ => None,
             }
@@ -46411,41 +46428,41 @@ pub fn lin_term(expr: &Expr, words: &winnow_grammar::InternerContext, var: &impl
 
 pub fn call_result_name(call: &Expr) -> String { format!("result@{}", node_key(call)) }
 
-pub fn claim_term(expr: &Expr, words: &winnow_grammar::InternerContext, var: &impl Fn(&str) -> bool, out: &mut Vec<SolverTerm>) -> Option<i64> {
+pub fn claim_term(expr: &Expr, words: &winnow_grammar::InternerContext, var: &impl Fn(&str) -> bool, pinned: &impl Fn(&str) -> Option<i64>, out: &mut Vec<SolverTerm>) -> Option<i64> {
     match expr {
         Expr::LitBool(b, _) => { let b = *b; Some(built(SolverTerm::Bool(b), out)) },
         Expr::Unary { op, expr, .. } => {
             let expr = nikaia_std::boxed::open(expr);
             if *op != UnaryOp::Not { return None; }
-            let a = match claim_term(expr, words, var, out) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let a = match claim_term(expr, words, var, pinned, out) { Some(__nikaia_value) => __nikaia_value, None => return None };
             Some(built(SolverTerm::Not(a), out))
         },
         Expr::Binary { op, lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); match op {
             BinaryOp::And => {
-                let l = match claim_term(lhs, words, var, out) { Some(__nikaia_value) => __nikaia_value, None => return None };
-                let r = match claim_term(rhs, words, var, out) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                let l = match claim_term(lhs, words, var, pinned, out) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                let r = match claim_term(rhs, words, var, pinned, out) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 Some(built(SolverTerm::And(vec![l, r]), out))
             },
             BinaryOp::Or => {
-                let l = match claim_term(lhs, words, var, out) { Some(__nikaia_value) => __nikaia_value, None => return None };
-                let r = match claim_term(rhs, words, var, out) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                let l = match claim_term(lhs, words, var, pinned, out) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                let r = match claim_term(rhs, words, var, pinned, out) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 Some(built(SolverTerm::Or(vec![l, r]), out))
             },
-            BinaryOp::Lt => compared(*op, lhs, rhs, words, var, out),
-            BinaryOp::Le => compared(*op, lhs, rhs, words, var, out),
-            BinaryOp::Gt => compared(*op, lhs, rhs, words, var, out),
-            BinaryOp::Ge => compared(*op, lhs, rhs, words, var, out),
-            BinaryOp::Eq => compared(*op, lhs, rhs, words, var, out),
-            BinaryOp::Ne => compared(*op, lhs, rhs, words, var, out),
+            BinaryOp::Lt => compared(*op, lhs, rhs, words, var, pinned, out),
+            BinaryOp::Le => compared(*op, lhs, rhs, words, var, pinned, out),
+            BinaryOp::Gt => compared(*op, lhs, rhs, words, var, pinned, out),
+            BinaryOp::Ge => compared(*op, lhs, rhs, words, var, pinned, out),
+            BinaryOp::Eq => compared(*op, lhs, rhs, words, var, pinned, out),
+            BinaryOp::Ne => compared(*op, lhs, rhs, words, var, pinned, out),
             _ => None,
         } },
         _ => None,
     }
 }
 
-fn compared(op: BinaryOp, lhs: &Expr, rhs: &Expr, words: &winnow_grammar::InternerContext, var: &impl Fn(&str) -> bool, out: &mut Vec<SolverTerm>) -> Option<i64> {
-    let a = match lin_term(lhs, words, var, out) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let b = match lin_term(rhs, words, var, out) { Some(__nikaia_value) => __nikaia_value, None => return None };
+fn compared(op: BinaryOp, lhs: &Expr, rhs: &Expr, words: &winnow_grammar::InternerContext, var: &impl Fn(&str) -> bool, pinned: &impl Fn(&str) -> Option<i64>, out: &mut Vec<SolverTerm>) -> Option<i64> {
+    let a = match lin_term(lhs, words, var, pinned, out) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let b = match lin_term(rhs, words, var, pinned, out) { Some(__nikaia_value) => __nikaia_value, None => return None };
     Some(match op {
         BinaryOp::Lt => built(SolverTerm::Lt(a, b), out),
         BinaryOp::Le => built(SolverTerm::Le(a, b), out),
@@ -46500,6 +46517,8 @@ fn literal_value(value: u64, negative: bool) -> Option<i64> {
     if negative && value == 9223372036854775808u64 { return Some(-9223372036854775808i64); }
     None
 }
+
+pub fn nothing_pinned(name: &str) -> Option<i64> { None }
 
 
 // --- prove_text.nika ---
@@ -47664,10 +47683,12 @@ pub struct ProverState {
     pub before_return: collections::BTreeMap<i64, String>,
     pub collecting: bool,
     pub in_test: bool,
+    pub pinned: collections::BTreeMap<String, i64>,
+    pub comptime_at: collections::BTreeMap<i64, i64>,
 }
 
 impl ProverState {
-    pub fn fresh() -> ProverState { ProverState { foreign: collections::BTreeMap::new(), preconditions: collections::BTreeMap::new(), known: collections::BTreeMap::new(), edges: collections::BTreeSet::new(), candidates: collections::BTreeMap::new(), postconditions: collections::BTreeMap::new(), broken: collections::BTreeSet::new(), before_return: collections::BTreeMap::new(), collecting: true, in_test: false } }
+    pub fn fresh() -> ProverState { ProverState { foreign: collections::BTreeMap::new(), preconditions: collections::BTreeMap::new(), known: collections::BTreeMap::new(), edges: collections::BTreeSet::new(), candidates: collections::BTreeMap::new(), postconditions: collections::BTreeMap::new(), broken: collections::BTreeSet::new(), before_return: collections::BTreeMap::new(), collecting: true, in_test: false, pinned: collections::BTreeMap::new(), comptime_at: collections::BTreeMap::new() } }
     pub fn reaches(&self, from: &str, to: &str) -> bool {
         let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
         let mut next: Vec<String> = vec![from.to_owned()];
@@ -47685,7 +47706,7 @@ impl ProverState {
         if self.collecting || !counts { return; }
         let owner = match carrying_function(function) { Some(__nikaia_value) => __nikaia_value, None => return };
         let posts = match standing_posts(&self.postconditions, &owner) { Some(__nikaia_value) => __nikaia_value, None => return };
-        let returned = lin_term(value, words, &|name| { scope.ints.contains(name) }, &mut arena.nodes);
+        let returned = lin_term(value, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&self.pinned, scope, name) }, &mut arena.nodes);
         let mut unshadowed = true;
         for p in params.iter() {
             let key = if scope.entry.contains_key(p) { p.to_owned() } else { length_of(p) };
@@ -47716,7 +47737,7 @@ impl ProverState {
     pub fn an_assert(&mut self, arena: &mut TermArena, words: &winnow_grammar::InternerContext, cond: &Expr, written: String, names: &collections::BTreeSet<String>, message: Option<String>, span: Span, scope: &mut ProverScope, at: &ProverWhere, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>) -> AssertOutcome {
         let mut outcome = AssertOutcome { held: ClaimHeld::ByTheTest, findings: vec![] };
         if self.in_test { return outcome; }
-        let claim = claim_term(cond, words, &|name| { scope.ints.contains(name) }, &mut arena.nodes);
+        let claim = claim_term(cond, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&self.pinned, &scope, name) }, &mut arena.nodes);
         let at_byte = span.start as i64;
         if self.collecting && at.free && !at.lambda && claim.is_some() {
             let function = carrying_function((at.function).as_deref());
@@ -47807,7 +47828,7 @@ impl ProverState {
             for arg in args.iter() {
                 if ((k) as usize) >= params.len() { break; }
                 let param = nikaia_std::index::get(&params, (k) as usize);
-                let term = lin_term(arg, words, &|name| { scope.ints.contains(name) }, &mut arena.nodes);
+                let term = lin_term(arg, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&self.pinned, scope, name) }, &mut arena.nodes);
                 if term.is_some() { given_by.insert(param.to_owned(), nikaia_std::index::or(term, || 0)); }
                 match arg {
                     Expr::Variable(name, _) => {
@@ -47900,13 +47921,14 @@ fn unread_name(names: &collections::BTreeSet<String>, scope: &ProverScope) -> Op
     None
 }
 
-pub fn postconditions_for(arena: &mut TermArena, posts: &[PostClaim], params: &[String], args: &[Expr], bound: &str, scope: &ProverScope, words: &winnow_grammar::InternerContext) -> Vec<i64> {
+#[allow(clippy::too_many_arguments)]
+pub fn postconditions_for(arena: &mut TermArena, posts: &[PostClaim], params: &[String], args: &[Expr], bound: &str, scope: &ProverScope, words: &winnow_grammar::InternerContext, pinned: &collections::BTreeMap<String, i64>) -> Vec<i64> {
     let mut args_given: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
     let mut k: i64 = 0;
     for arg in args.iter() {
         if ((k) as usize) >= params.len() { break; }
         let param = nikaia_std::index::get(&params, (k) as usize);
-        let term = lin_term(arg, words, &|name| { scope.ints.contains(name) }, &mut arena.nodes);
+        let term = lin_term(arg, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(pinned, scope, name) }, &mut arena.nodes);
         if term.is_some() { args_given.insert(param.to_owned(), nikaia_std::index::or(term, || 0)); }
         match arg {
             Expr::Variable(name, _) => {
@@ -47935,6 +47957,11 @@ pub fn postconditions_for(arena: &mut TermArena, posts: &[PostClaim], params: &[
         if every_given(&read, &args_given) { out.push(arena.substitute(post.term, &args_given)); }
     }
     out
+}
+
+pub fn prover_pinned(pinned: &collections::BTreeMap<String, i64>, scope: &ProverScope, name: &str) -> Option<i64> {
+    if scope.locals.contains(name) { return None; }
+    (*nikaia_std::index::get(&pinned, name)).copied()
 }
 
 fn every_given(names: &collections::BTreeSet<String>, args_given: &collections::BTreeMap<String, i64>) -> bool {
@@ -48132,7 +48159,17 @@ fn prover_stmt(walk: &mut ProverWalk, stmt: &Spanned<Stmt>, scope: &mut ProverSc
         Stmt::Comptime { name, value, .. } => {
             let name = *name;
             prover_expr(walk, value, span, &scope, &nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
-            scope.rebind(&walk.arena, words.resolve(name));
+            let bound = words.resolve(name).to_owned();
+            scope.rebind(&walk.arena, &bound);
+            let computed = *nikaia_std::index::get(&walk.state.comptime_at, &(span.start as i64));
+            if computed.is_some() {
+                scope.ints.insert(bound.to_owned());
+                let named = walk.arena.var(&bound);
+                let value = walk.arena.int(nikaia_std::index::or(computed, || 0));
+                let fact = walk.arena.equal(named, value);
+                scope.facts.push(fact);
+                scope.entry.insert(bound.to_owned(), value);
+            }
             false
         },
         Stmt::Assign { target, value, .. } => {
@@ -48160,7 +48197,7 @@ fn prover_stmt(walk: &mut ProverWalk, stmt: &Spanned<Stmt>, scope: &mut ProverSc
             inner.path = None;
             inner.exact = false;
             scope.path = None;
-            let holds = claim_term(cond, words, &|name| { inner.ints.contains(name) }, &mut walk.arena.nodes);
+            let holds = claim_term(cond, words, &|name| { inner.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, &inner, name) }, &mut walk.arena.nodes);
             if holds.is_some() { inner.facts.push(nikaia_std::index::or(holds, || 0)); }
             prover_block(walk, body, &mut inner, &nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
             if leaves_block(body, &|e| { prover_throws(e, at, program, words, own, library, unaliased) }, holes_of, false) { scope.exact = false; }
@@ -48181,7 +48218,7 @@ fn prover_let(walk: &mut ProverWalk, names: &[winnow_grammar::Symbol], mutable: 
     prover_expr(walk, value, span, &scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
     let tainted = from_outside(value, &scope.tainted, words, library, holes_of);
     if names.len() == 1 && !mutable { prover_call_results(walk, value, true, scope, program, words, own, unaliased, condition); }
-    let value_lin = lin_term(value, words, &|name| { scope.ints.contains(name) }, &mut walk.arena.nodes);
+    let value_lin = lin_term(value, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, &scope, name) }, &mut walk.arena.nodes);
     let mut value_at_entry: Option<i64> = None;
     if value_lin.is_some() { value_at_entry = scope.at_entry(&mut walk.arena, nikaia_std::index::or(value_lin, || 0)); }
     let mut called = false;
@@ -48290,8 +48327,8 @@ fn prover_for(walk: &mut ProverWalk, bindings: &[winnow_grammar::Symbol], iter: 
         match iter {
             Expr::Range { start, end, inclusive, .. } => {
                 let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end); let inclusive = *inclusive;
-                let low = lin_term(start, words, &|name| { scope.ints.contains(name) }, &mut walk.arena.nodes);
-                let high = lin_term(end, words, &|name| { scope.ints.contains(name) }, &mut walk.arena.nodes);
+                let low = lin_term(start, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, &scope, name) }, &mut walk.arena.nodes);
+                let high = lin_term(end, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, &scope, name) }, &mut walk.arena.nodes);
                 if low.is_some() && high.is_some() {
                     ranged = true;
                     let name = words.resolve(*nikaia_std::index::get(&bindings, 0)).to_owned();
@@ -48377,7 +48414,7 @@ fn prover_expr_stmt(walk: &mut ProverWalk, expr: &Expr, span: Span, scope: &mut 
 #[allow(clippy::too_many_arguments)]
 fn prover_if(walk: &mut ProverWalk, cond: &Expr, then_branch: &Block, else_branch: Option<&Block>, span: Span, scope: &mut ProverScope, at: &ProverWhere, nested: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> bool {
     prover_expr(walk, cond, span, &scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
-    let holds = claim_term(cond, words, &|name| { scope.ints.contains(name) }, &mut walk.arena.nodes);
+    let holds = claim_term(cond, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, &scope, name) }, &mut walk.arena.nodes);
     let mut fails: Option<i64> = None;
     if holds.is_some() { fails = Some(walk.arena.not(nikaia_std::index::or(holds, || 0))); }
     let mut then_scope = scope.clone();
@@ -48639,10 +48676,10 @@ fn prover_postconditions_of(walk: &mut ProverWalk, callee: &str, args: &[Expr], 
     let posts = standing_posts(&walk.state.postconditions, callee);
     if posts.is_some() {
         let function = match free_function(program, words, callee) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
-        return postconditions_for(&mut walk.arena, &nikaia_std::index::or(posts, || vec![].into()), &function.params, args, bound, scope, words);
+        return postconditions_for(&mut walk.arena, &nikaia_std::index::or(posts, || vec![].into()), &function.params, args, bound, scope, words, &walk.state.pinned);
     }
     let foreign = match prover_foreign_contract(walk, callee, own, condition) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
-    postconditions_for(&mut walk.arena, &foreign.ensures, &foreign.params, args, bound, scope, words)
+    postconditions_for(&mut walk.arena, &foreign.ensures, &foreign.params, args, bound, scope, words, &walk.state.pinned)
 }
 
 fn prover_returns_whole(walk: &mut ProverWalk, callee: &str, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> bool {
@@ -60222,7 +60259,7 @@ pub mod proofs_book {
 }
 pub mod prove_terms {
     #[allow(unused_imports)]
-    pub use super::{lin_term, call_result_name, claim_term};
+    pub use super::{lin_term, call_result_name, claim_term, nothing_pinned};
 }
 pub mod prove_text {
     #[allow(unused_imports)]
@@ -60258,7 +60295,7 @@ pub mod prover_solver {
 }
 pub mod prover_state {
     #[allow(unused_imports)]
-    pub use super::{ProverState, postconditions_for, ProverWhere, CallOutcome, AssertOutcome};
+    pub use super::{ProverState, postconditions_for, prover_pinned, ProverWhere, CallOutcome, AssertOutcome};
 }
 pub mod prover_walk {
     #[allow(unused_imports)]

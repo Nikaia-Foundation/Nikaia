@@ -32,6 +32,14 @@ pub struct ProverState {
     /// Pass 1 records preconditions and says nothing.
     pub collecting: bool,
     pub in_test: bool,
+    /// **Names whose value the build knows** (ADR-359 D7, D11): each
+    /// integer `comptime` of the program's items, and each call run while
+    /// the program was built, by `call_result_name`. A local of the same name
+    /// hides a `comptime`.
+    pub pinned: collections::BTreeMap[String, i64],
+    /// An integer `comptime` inside a body, by its statement's start: the
+    /// value the build computed for it (D7).
+    pub comptime_at: collections::BTreeMap[i64, i64],
 }
 
 impl ProverState {
@@ -48,6 +56,8 @@ impl ProverState {
             before_return: collections::BTreeMap(),
             collecting: true,
             in_test: false,
+            pinned: collections::BTreeMap(),
+            comptime_at: collections::BTreeMap(),
         }
     }
 
@@ -86,7 +96,7 @@ impl ProverState {
         }
         let owner = carrying_function(function) ?? return
         let posts = standing_posts(self.postconditions, owner) ?? return
-        let returned = lin_term(value, words, fn(name) { scope.ints.contains(name) }, arena.nodes)
+        let returned = lin_term(value, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(self.pinned, scope, name) }, arena.nodes)
         let mut unshadowed = true
         for p in params {
             let key = if scope.entry.contains_key(p) { p.clone() } else { length_of(p) }
@@ -139,7 +149,7 @@ impl ProverState {
         if self.in_test {
             return outcome
         }
-        let claim = claim_term(cond, words, fn(name) { scope.ints.contains(name) }, arena.nodes)
+        let claim = claim_term(cond, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(self.pinned, scope, name) }, arena.nodes)
         let at_byte = span.start as i64
         // A claim about the value the next statement returns is a candidate
         // postcondition (D17).
@@ -327,7 +337,7 @@ impl ProverState {
                     break
                 }
                 let param = params[k]
-                let term = lin_term(arg, words, fn(name) { scope.ints.contains(name) }, arena.nodes)
+                let term = lin_term(arg, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(self.pinned, scope, name) }, arena.nodes)
                 if term != null {
                     given_by.insert(param.clone(), term ?? 0)
                 }
@@ -477,7 +487,7 @@ fn unread_name(names: ref collections::BTreeSet[String], scope: ref ProverScope)
 /// `params` and `bound` in place of `result`. Computed before the name is
 /// bound, so an argument that reads the name it shadows makes none; a
 /// postcondition that reads a parameter no argument gives makes none either.
-pub fn postconditions_for(mut arena: TermArena, posts: ref Vec[PostClaim], params: ref Vec[String], args: ref Vec[Expr], bound: ref String, scope: ref ProverScope, words: ref winnow_grammar::InternerContext) -> Vec[i64] {
+pub fn postconditions_for(mut arena: TermArena, posts: ref Vec[PostClaim], params: ref Vec[String], args: ref Vec[Expr], bound: ref String, scope: ref ProverScope, words: ref winnow_grammar::InternerContext, pinned: ref collections::BTreeMap[String, i64]) -> Vec[i64] {
     let mut args_given: collections::BTreeMap[String, i64] = collections::BTreeMap()
     let mut k = 0
     for arg in args {
@@ -485,7 +495,7 @@ pub fn postconditions_for(mut arena: TermArena, posts: ref Vec[PostClaim], param
             break
         }
         let param = params[k]
-        let term = lin_term(arg, words, fn(name) { scope.ints.contains(name) }, arena.nodes)
+        let term = lin_term(arg, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(pinned, scope, name) }, arena.nodes)
         if term != null {
             args_given.insert(param.clone(), term ?? 0)
         }
@@ -518,6 +528,15 @@ pub fn postconditions_for(mut arena: TermArena, posts: ref Vec[PostClaim], param
         }
     }
     return out
+}
+
+/// **The value the build knows for `name`** (ADR-359 D7, D11), where no
+/// local of this body hides it.
+pub fn prover_pinned(pinned: ref collections::BTreeMap[String, i64], scope: ref ProverScope, name: ref String) -> i64? {
+    if scope.locals.contains(name) {
+        return null
+    }
+    return pinned[name]
 }
 
 /// Whether `args_given` gives each of `names`.
