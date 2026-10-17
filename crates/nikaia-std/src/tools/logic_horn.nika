@@ -1,0 +1,271 @@
+// crates/nikaia-std/src/tools/logic_horn.nika
+//
+// **A loop as constrained Horn clauses** (ADR-361 D1, D4): the problem every
+// method of finding an invariant solves, stated without the syntax of any
+// language - the names a turn changes, what holds when the loop is reached,
+// its condition, one turn as a relation between the names before it and the
+// same names primed after it, each way out, and what must hold past the loop.
+// Public as the rest of the logic layer is (ADR-270 D24); SMT-LIB's `HORN`
+// is its form at the edge (ADR-270 D6).
+//
+// **An invariant is believed only through three ordinary queries** (D4): it
+// holds at entry, a turn keeps it, and with each way out it gives every goal.
+// Whoever proposed it - a strategy of the compiler or a program outside it -
+// never enters into it.
+
+use std::collections
+
+/// One way out of a loop (ADR-361 D1): the condition turning false, a
+/// `break`, a `return` - each its own, never folded into the condition.
+pub struct LgExit {
+    /// `condition`, `break` or `return`: what kind of way out it is. Only a
+    /// `return` does not reach the code past the loop.
+    pub kind: String,
+    /// What holds when the loop is left this way: a relation between the
+    /// state at the head of the turn it is left in (the plain names) and the
+    /// state it is left with (the primed names, `lg_primed`).
+    pub relation: i64,
+}
+
+/// **A loop's problem** (ADR-361 D1). Every term is one of the arena's; a
+/// name that is neither in `state` nor primed is one the loop does not
+/// change.
+pub struct LgLoop {
+    /// The names a turn changes.
+    pub state: Vec[String],
+    /// What holds throughout: facts over names the loop does not change.
+    pub fixed: Vec[i64],
+    /// What holds when the loop is reached, over its state.
+    pub entry: Vec[i64],
+    /// The condition a turn is taken under, where it is known.
+    pub condition: i64?,
+    /// One turn, under the condition: a relation between the state before it
+    /// (plain names) and after it (primed names). Each path through the body
+    /// that ends a turn - its end or a `continue` - is one alternative.
+    pub step: i64,
+    pub exits: Vec[LgExit],
+    /// What must hold past the loop, over its state as it is left.
+    pub goals: Vec[i64],
+}
+
+/// **One query of the three** (ADR-270 D3): whether `facts` imply `goal`.
+pub struct LgQuery {
+    pub facts: Vec[i64],
+    pub goal: i64,
+}
+
+/// What became of a candidate invariant (ADR-361 D4): each of the three
+/// questions, and whether it may be used - only where all three are proved.
+pub struct LgLoopVerdict {
+    pub holds_at_entry: bool,
+    pub kept_by_a_turn: bool,
+    /// One per goal and way out past the loop, in order.
+    pub gives_the_goals: Vec[bool],
+}
+
+impl LgLoopVerdict {
+    pub fn proved(ref self) -> bool {
+        if !self.holds_at_entry || !self.kept_by_a_turn {
+            return false
+        }
+        for g in self.gives_the_goals {
+            if !g {
+                return false
+            }
+        }
+        return true
+    }
+}
+
+/// A state name after a turn, or as a way out leaves it: `i'`.
+pub fn lg_primed(name: ref String) -> String {
+    return f"{name}'"
+}
+
+/// `term` with each state name replaced by its primed one.
+pub fn lg_loop_primed(mut arena: TermArena, problem: ref LgLoop, term: i64) -> i64 {
+    let mut given: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    for name in problem.state {
+        let primed = arena.var(lg_primed(name))
+        given.insert(name.clone(), primed)
+    }
+    return arena.substitute(term, given)
+}
+
+/// **It holds at entry**: what holds when the loop is reached implies it.
+pub fn lg_loop_entry_query(problem: ref LgLoop, invariant: i64) -> LgQuery {
+    let mut facts = problem.fixed.clone()
+    for fact in problem.entry {
+        facts.push(fact)
+    }
+    return LgQuery { facts: facts, goal: invariant }
+}
+
+/// **A turn keeps it**: it, the condition and a turn imply it after the turn.
+pub fn lg_loop_turn_query(mut arena: TermArena, problem: ref LgLoop, invariant: i64) -> LgQuery {
+    let mut facts = problem.fixed.clone()
+    facts.push(invariant)
+    let condition = problem.condition ?? -1
+    if condition >= 0 {
+        facts.push(condition)
+    }
+    facts.push(problem.step)
+    let goal = lg_loop_primed(arena, problem, invariant)
+    return LgQuery { facts: facts, goal: goal }
+}
+
+/// **With each way out it gives the goal**: one query per goal and way out
+/// that reaches the code past the loop - a `return` does not.
+pub fn lg_loop_exit_queries(mut arena: TermArena, problem: ref LgLoop, invariant: i64) -> Vec[LgQuery] {
+    let mut queries: Vec[LgQuery] = []
+    for goal in problem.goals {
+        let after = lg_loop_primed(arena, problem, goal)
+        for exit in problem.exits {
+            if exit.kind == "return" {
+                continue
+            }
+            let mut facts = problem.fixed.clone()
+            facts.push(invariant)
+            facts.push(exit.relation)
+            queries.push(LgQuery { facts: facts, goal: after })
+        }
+    }
+    return queries
+}
+
+/// **A candidate invariant checked** (ADR-361 D4): the three questions,
+/// each answered by `proved` - which says yes only for a proof whose
+/// certificate checked. A question after one that failed is not asked.
+pub fn lg_loop_check(mut arena: TermArena, problem: ref LgLoop, invariant: i64, proved: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> LgLoopVerdict {
+    let mut verdict = LgLoopVerdict { holds_at_entry: false, kept_by_a_turn: false, gives_the_goals: [] }
+    let entry = lg_loop_entry_query(problem, invariant)
+    verdict.holds_at_entry = proved(arena, entry.facts, entry.goal)
+    if !verdict.holds_at_entry {
+        return verdict
+    }
+    let turn = lg_loop_turn_query(arena, problem, invariant)
+    verdict.kept_by_a_turn = proved(arena, turn.facts, turn.goal)
+    if !verdict.kept_by_a_turn {
+        return verdict
+    }
+    for query in lg_loop_exit_queries(arena, problem, invariant) {
+        let holds = proved(arena, query.facts, query.goal)
+        verdict.gives_the_goals.push(holds)
+        if !holds {
+            return verdict
+        }
+    }
+    return verdict
+}
+
+/// **The reference solver's yes** (ADR-270 D5): proved, and the certificate
+/// it gave checked.
+pub fn lg_proved(arena: ref TermArena, facts: ref Vec[i64], goal: i64) -> bool {
+    return match lg_check(arena, facts, goal, lg_budget()) {
+        LgAnswer::Proved { certificate } => lg_verify(arena, facts, goal, certificate) == null,
+        else => false,
+    }
+}
+
+/// **The loop in SMT-LIB's `HORN`** (ADR-361 D1, ADR-270 D6): one unknown
+/// relation `inv` over the names the problem reads at the head, a clause for
+/// entry, one for a turn, and one per goal and way out past the loop. `sat`
+/// means an invariant exists that gives every goal.
+pub fn lg_horn_write(mut arena: TermArena, problem: ref LgLoop) -> String {
+    let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+    for fact in problem.fixed {
+        arena.variables(fact, read)
+    }
+    for fact in problem.entry {
+        arena.variables(fact, read)
+    }
+    let condition = problem.condition ?? -1
+    if condition >= 0 {
+        arena.variables(condition, read)
+    }
+    arena.variables(problem.step, read)
+    for exit in problem.exits {
+        arena.variables(exit.relation, read)
+    }
+    for goal in problem.goals {
+        arena.variables(goal, read)
+    }
+    for name in problem.state {
+        read.insert(name.clone())
+    }
+    // The head's names: the state and every name the loop does not change.
+    let mut primed_names: collections::BTreeSet[String] = collections::BTreeSet()
+    for name in problem.state {
+        primed_names.insert(lg_primed(name))
+    }
+    let mut head: Vec[String] = []
+    for name in read {
+        if !primed_names.contains(name) {
+            head.push(name.clone())
+        }
+    }
+    let mut sorts: Vec[String] = []
+    let mut bound: Vec[String] = []
+    let mut at_head: Vec[String] = []
+    let mut after: Vec[String] = []
+    for name in head {
+        sorts.push("Int".clone())
+        bound.push(f"({lg_symbol(name)} Int)")
+        at_head.push(lg_symbol(name))
+        if primed_names.contains(lg_primed(name)) {
+            after.push(lg_symbol(lg_primed(name)))
+        } else {
+            after.push(lg_symbol(name))
+        }
+    }
+    let mut with_primed = bound.clone()
+    for name in problem.state {
+        with_primed.push(f"({lg_symbol(lg_primed(name))} Int)")
+    }
+    let inv_head = f"(inv {at_head.join(" ")})"
+    let inv_after = f"(inv {after.join(" ")})"
+    let mut out: String = "(set-logic HORN)\n"
+    out.push_str(f"(declare-fun inv ({sorts.join(" ")}) Bool)\n")
+    let mut entry_parts = problem.fixed.clone()
+    for fact in problem.entry {
+        entry_parts.push(fact)
+    }
+    out.push_str(f"(assert (forall ({bound.join(" ")}) (=> {lg_horn_and(arena, entry_parts, "")} {inv_head})))\n")
+    let mut turn_parts = problem.fixed.clone()
+    if condition >= 0 {
+        turn_parts.push(condition)
+    }
+    turn_parts.push(problem.step)
+    out.push_str(f"(assert (forall ({with_primed.join(" ")}) (=> {lg_horn_and(arena, turn_parts, inv_head)} {inv_after})))\n")
+    for goal in problem.goals {
+        let reached = lg_loop_primed(arena, problem, goal)
+        for exit in problem.exits {
+            if exit.kind == "return" {
+                continue
+            }
+            let mut parts = problem.fixed.clone()
+            parts.push(exit.relation)
+            out.push_str(f"(assert (forall ({with_primed.join(" ")}) (=> {lg_horn_and(arena, parts, inv_head)} {lg_term(arena, reached)})))\n")
+        }
+    }
+    out.push_str("(check-sat)\n")
+    return out
+}
+
+/// `(and ...)` of `first`, where it is not empty, and the terms.
+fn lg_horn_and(arena: ref TermArena, parts: ref Vec[i64], first: ref String) -> String {
+    let mut written: Vec[String] = []
+    if !first.is_empty() {
+        written.push(first.clone())
+    }
+    for part in parts {
+        written.push(lg_term(arena, part))
+    }
+    if written.is_empty() {
+        return "true".clone()
+    }
+    if written.len() == 1 {
+        return written[0].clone()
+    }
+    return f"(and {written.join(" ")})"
+}

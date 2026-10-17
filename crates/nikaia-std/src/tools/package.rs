@@ -43432,6 +43432,194 @@ pub fn lg_alethe_write(source: &TermArena, facts: &[i64], goal: i64) -> Option<S
 }
 
 
+// --- logic_horn.nika ---
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LgExit {
+    pub kind: String,
+    pub relation: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LgLoop {
+    pub state: Vec<String>,
+    pub fixed: Vec<i64>,
+    pub entry: Vec<i64>,
+    pub condition: Option<i64>,
+    pub step: i64,
+    pub exits: Vec<LgExit>,
+    pub goals: Vec<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LgQuery {
+    pub facts: Vec<i64>,
+    pub goal: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LgLoopVerdict {
+    pub holds_at_entry: bool,
+    pub kept_by_a_turn: bool,
+    pub gives_the_goals: Vec<bool>,
+}
+
+impl LgLoopVerdict {
+    pub fn proved(&self) -> bool {
+        if !self.holds_at_entry || !self.kept_by_a_turn { return false; }
+        for g in self.gives_the_goals.iter() {
+            let g = nikaia_std::num::value(g);
+            if !g { return false; }
+        }
+        true
+    }
+}
+
+pub fn lg_primed(name: &str) -> String { format!("{}'", name) }
+
+pub fn lg_loop_primed(arena: &mut TermArena, problem: &LgLoop, term: i64) -> i64 {
+    let mut given: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
+    for name in problem.state.iter() {
+        let primed = arena.var(&lg_primed(name));
+        given.insert(name.to_owned(), primed);
+    }
+    arena.substitute(term, &given)
+}
+
+pub fn lg_loop_entry_query(problem: &LgLoop, invariant: i64) -> LgQuery {
+    let mut facts = problem.fixed.to_owned();
+    for fact in problem.entry.iter() {
+        let fact = nikaia_std::num::value(fact);
+        facts.push(fact);
+    }
+    LgQuery { facts, goal: invariant }
+}
+
+pub fn lg_loop_turn_query(arena: &mut TermArena, problem: &LgLoop, invariant: i64) -> LgQuery {
+    let mut facts = problem.fixed.to_owned();
+    facts.push(invariant);
+    let condition = nikaia_std::index::or(problem.condition, || -1);
+    if condition >= 0 { facts.push(condition); }
+    facts.push(problem.step);
+    let goal = lg_loop_primed(arena, problem, invariant);
+    LgQuery { facts, goal }
+}
+
+pub fn lg_loop_exit_queries(arena: &mut TermArena, problem: &LgLoop, invariant: i64) -> Vec<LgQuery> {
+    let mut queries: Vec<LgQuery> = vec![];
+    for goal in problem.goals.iter() {
+        let goal = nikaia_std::num::value(goal);
+        let after = lg_loop_primed(arena, problem, goal);
+        for exit in problem.exits.iter() {
+            if exit.kind == "return" { continue; }
+            let mut facts = problem.fixed.to_owned();
+            facts.push(invariant);
+            facts.push(exit.relation);
+            queries.push(LgQuery { facts, goal: after });
+        }
+    }
+    queries
+}
+
+pub fn lg_loop_check(arena: &mut TermArena, problem: &LgLoop, invariant: i64, proved: &impl Fn(&TermArena, &[i64], i64) -> bool) -> LgLoopVerdict {
+    let mut verdict = LgLoopVerdict { holds_at_entry: false, kept_by_a_turn: false, gives_the_goals: vec![] };
+    let entry = lg_loop_entry_query(problem, invariant);
+    verdict.holds_at_entry = proved(&arena, &entry.facts, entry.goal);
+    if !verdict.holds_at_entry { return verdict; }
+    let turn = lg_loop_turn_query(arena, problem, invariant);
+    verdict.kept_by_a_turn = proved(&arena, &turn.facts, turn.goal);
+    if !verdict.kept_by_a_turn { return verdict; }
+    for query in lg_loop_exit_queries(arena, problem, invariant) {
+        let holds = proved(&arena, &query.facts, query.goal);
+        verdict.gives_the_goals.push(holds);
+        if !holds { return verdict; }
+    }
+    verdict
+}
+
+pub fn lg_proved(arena: &TermArena, facts: &[i64], goal: i64) -> bool {
+    match lg_check(arena, facts, goal, &lg_budget()) {
+        LgAnswer::Proved { ref certificate } => lg_verify(arena, facts, goal, certificate).is_none(),
+        _ => false,
+    }
+}
+
+pub fn lg_horn_write(arena: &mut TermArena, problem: &LgLoop) -> String {
+    let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for fact in problem.fixed.iter() {
+        let fact = nikaia_std::num::value(fact);
+        arena.variables(fact, &mut read);
+    }
+    for fact in problem.entry.iter() {
+        let fact = nikaia_std::num::value(fact);
+        arena.variables(fact, &mut read);
+    }
+    let condition = nikaia_std::index::or(problem.condition, || -1);
+    if condition >= 0 { arena.variables(condition, &mut read); }
+    arena.variables(problem.step, &mut read);
+    for exit in problem.exits.iter() { arena.variables(exit.relation, &mut read); }
+    for goal in problem.goals.iter() {
+        let goal = nikaia_std::num::value(goal);
+        arena.variables(goal, &mut read);
+    }
+    for name in problem.state.iter() { read.insert(name.to_owned()); }
+    let mut primed_names: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for name in problem.state.iter() { primed_names.insert(lg_primed(name)); }
+    let mut head: Vec<String> = vec![];
+    for name in read.iter() { if !primed_names.contains(name) { head.push(name.to_owned()); } }
+    let mut sorts: Vec<String> = vec![];
+    let mut bound: Vec<String> = vec![];
+    let mut at_head: Vec<String> = vec![];
+    let mut after: Vec<String> = vec![];
+    for name in head.iter() {
+        sorts.push("Int".to_owned());
+        bound.push(format!("({} Int)", lg_symbol(name)));
+        at_head.push(lg_symbol(name));
+        if primed_names.contains(&lg_primed(name)) { after.push(lg_symbol(&lg_primed(name))); } else { after.push(lg_symbol(name)); }
+    }
+    let mut with_primed = bound.to_owned();
+    for name in problem.state.iter() { with_primed.push(format!("({} Int)", lg_symbol(&lg_primed(name)))); }
+    let inv_head = format!("(inv {})", at_head.join(" "));
+    let inv_after = format!("(inv {})", after.join(" "));
+    let mut out: String = String::from("(set-logic HORN)\n");
+    out.push_str(&format!("(declare-fun inv ({}) Bool)\n", sorts.join(" ")));
+    let mut entry_parts = problem.fixed.to_owned();
+    for fact in problem.entry.iter() {
+        let fact = nikaia_std::num::value(fact);
+        entry_parts.push(fact);
+    }
+    out.push_str(&format!("(assert (forall ({}) (=> {} {})))\n", bound.join(" "), lg_horn_and(&arena, &entry_parts, ""), inv_head));
+    let mut turn_parts = problem.fixed.to_owned();
+    if condition >= 0 { turn_parts.push(condition); }
+    turn_parts.push(problem.step);
+    out.push_str(&format!("(assert (forall ({}) (=> {} {})))\n", with_primed.join(" "), lg_horn_and(&arena, &turn_parts, &inv_head), inv_after));
+    for goal in problem.goals.iter() {
+        let goal = nikaia_std::num::value(goal);
+        let reached = lg_loop_primed(arena, problem, goal);
+        for exit in problem.exits.iter() {
+            if exit.kind == "return" { continue; }
+            let mut parts = problem.fixed.to_owned();
+            parts.push(exit.relation);
+            out.push_str(&format!("(assert (forall ({}) (=> {} {})))\n", with_primed.join(" "), lg_horn_and(&arena, &parts, &inv_head), lg_term(&arena, reached)));
+        }
+    }
+    out.push_str("(check-sat)\n");
+    out
+}
+
+fn lg_horn_and(arena: &TermArena, parts: &[i64], first: &str) -> String {
+    let mut written: Vec<String> = vec![];
+    if !first.is_empty() { written.push(first.to_owned()); }
+    for part in parts.iter() {
+        let part = nikaia_std::num::value(part);
+        written.push(lg_term(arena, part));
+    }
+    if written.is_empty() { return "true".to_owned(); }
+    if written.len() == 1 { return (*nikaia_std::index::get(&written, 0)).to_owned(); }
+    format!("(and {})", written.join(" "))
+}
+
+
 // --- logic_lia.nika ---
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -61491,6 +61679,10 @@ pub mod locks {
 pub mod logic_alethe {
     #[allow(unused_imports)]
     pub use super::{lg_alethe_write};
+}
+pub mod logic_horn {
+    #[allow(unused_imports)]
+    pub use super::{LgExit, LgLoop, LgQuery, LgLoopVerdict, lg_primed, lg_loop_primed, lg_loop_entry_query, lg_loop_turn_query, lg_loop_exit_queries, lg_loop_check, lg_proved, lg_horn_write};
 }
 pub mod logic_lia {
     #[allow(unused_imports)]
