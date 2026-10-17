@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1007] — 2026-10-17
+
+**`[v; n]` is n copies of a value that copies (ADR-362, #643)**
+- `[v; n]` parses as a list literal of its own and is typed by its use: with no use it is a `Vec[T]`, and where an `Array[T, N]` is wanted `n` must be a number the build knows and equal to `N` (`NK1157`, naming both). A `v` that does not copy is refused with `NK1280`, whose help writes `(0..<n).map(fn(_i) { v.clone() }).collect()`. It lowers to `[v; _]` for an array and to `vec![v; n]` for a list; a negative count aborts.
+
 ## [0.0.1006] — 2026-10-17
 
 **The toolchain's own Nikaia package is lowered at `user_parallelism = yes` (ADR-363, #646)**
