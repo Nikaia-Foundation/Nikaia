@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1001] — 2026-10-17
+
+**The prover follows a `let mut` through each assignment (ADR-361 D9, #642)**
+- Part III 14.2 reads a `let mut` whole-number binding that no call is handed and no lambda changes through each assignment: after `x = x + 1` it is the old value plus 1, after a branch either side's value, and through a loop by the loop's invariant. ADR-361 gains D9; ADR-269 D9 notes the change.
+
 ## [0.0.1000] — 2026-10-17
 
 **The prover reads through a `while` loop: closed forms and intervals find an invariant, three queries check it (ADR-361 D1-D5, D7, #640)**
