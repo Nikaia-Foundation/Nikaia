@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.985] — 2026-10-17
+
+**`int`: an `i64`'s values, the representation the compiler's; Rust's other widths are refused (ADR-285 D36-D39, #629, #630)**
+- `int` is a built-in type with every rule of `i64`; `int` and `i64` take each other without `as`, and `int` is lowered as `i64` (D36, D37). `int` in an `extern fn`, `extern struct` or `extern { }` declaration is `NK1262` (D38).
+- An `as` out of a number with no annotation is checked as one out of a typed number: `v as u8` stops where the value does not fit instead of truncating (#629 D-1). A method called on such a number no longer makes the function `async` (#629 D-2).
+- `usize`, `isize`, `i8`, `i16`, `u16`, `i128` and `u128` are `NK1135` outside an `extern` declaration (#629 D-3).
+
 ## [0.0.984] — 2026-10-17
 
 **ADR-360: a subject `T?` of `main` may be left out; `NK1274` is an option named `help` (#635)**
