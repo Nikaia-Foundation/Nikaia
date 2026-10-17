@@ -821,7 +821,10 @@ pub fn check_core_cast[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         },
         else => {}
     }
-    state.record_cast(from, into, id_of(inner) as i64)
+    // A cast out of an open number is recorded once the number has its type.
+    if !(from.is_unknown() && state.open_number_cast(world, inner, into)) {
+        state.record_cast(from, into, id_of(inner) as i64)
+    }
     let from_a_char = match from {
         Ty::Named { name, .. } => name == "char" || name == "scalar",
         else => false,

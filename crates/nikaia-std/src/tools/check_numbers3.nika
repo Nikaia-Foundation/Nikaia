@@ -150,10 +150,22 @@ impl CheckState {
                     }
                 }
             }
+            // **A cast out of it is kept or checked as out of the type it got**
+            // (#629 D-1), and a cast or a method call needs that type written
+            // even where no use asked for one (D-2).
+            let mut typed = false
+            for member in members {
+                typed = typed || member.1.typed
+                for cast in member.1.casts {
+                    let from = Ty::Named { name: held.clone(), args: [], view: false }
+                    let into = Ty::Named { name: cast.1.clone(), args: [], view: false }
+                    self.record_cast(from, into, cast.0)
+                }
+            }
             // **The type is written** (D4), and a literal the emitter would
             // otherwise give an `i64`'s suffix is given this one.
-            if decided != null {
-                let ty = (decided ?? "").clone()
+            if decided != null || typed {
+                let ty = held.clone()
                 for member in members {
                     // A list's elements: the list is written with the type
                     // (D34), so the language below infers nothing either.

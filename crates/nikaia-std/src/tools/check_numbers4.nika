@@ -202,6 +202,11 @@ impl CheckState {
                     }
                 }
             },
+            Expr::MethodCall { receiver, .. } => {
+                if self.a_method_of_a_number(receiver) {
+                    out.extend(self.open_numbers_in(world, receiver))
+                }
+            },
             // **A choice between numbers is one number** (D1): each branch's
             // value is the `if`'s.
             Expr::If { .. } => {
@@ -241,6 +246,7 @@ impl CheckState {
             Expr::Variable(name, _) => self.a_name_of_an_open_number(world, name),
             Expr::Index { .. } => self.open_element_of(world, expr) != null,
             Expr::Call { args, .. } => self.a_call_of_numbers(world, args),
+            Expr::MethodCall { receiver, .. } => self.a_method_of_a_number(receiver) && self.number_shaped(world, receiver),
             Expr::If { .. } => self.a_choice_of_numbers(world, expr),
             Expr::Match { .. } => self.a_choice_of_numbers(world, expr),
             Expr::Binary { op, lhs, rhs, .. } => an_operation_of_one_type(op) && self.number_shaped(world, lhs) && self.number_shaped(world, rhs),
@@ -252,6 +258,13 @@ impl CheckState {
     fn a_name_of_an_open_number(ref self, world: ref CheckWorld, name: winnow_grammar::Symbol) -> bool sync {
         let local = self.binding(world.words.resolve(name)) ?? return false
         return local.open_number != null
+    }
+
+    /// **A method of a number that hands back the number's own type** (#629
+    /// D-2): `n.abs()`, `n.pow(2)`, `n.max(m)` are the open number `n` is.
+    pub fn a_method_of_a_number(ref self, receiver: ref Expr) -> bool sync {
+        let calls = self.flow.open_calls[id_of(receiver) as i64] ?? return false
+        return calls.len() == 1 && calls[0] == -1
     }
 
     fn a_call_of_numbers(ref self, world: ref CheckWorld, args: ref Vec[Expr]) -> bool sync {
@@ -374,6 +387,45 @@ impl CheckState {
         let ty = number_list_element(copy) ?? return false
         let root = self.open_root(number)
         self.add_ask(root, ty, at, beside)
+        return true
+    }
+
+    /// **A cast out of an open number waits for its type** (#629 D-1): what it
+    /// keeps or checks is decided with the number, as on a typed one. `false`
+    /// where the value is no open number.
+    pub fn open_number_cast(ref mut self, world: ref CheckWorld, value: ref Expr, into: ref Ty) -> bool sync {
+        let into_name = match into {
+            Ty::Named { name, .. } => name.clone(),
+            else => return false,
+        }
+        let numbers = self.open_numbers_in(world, value)
+        if numbers.len() == 0 {
+            return false
+        }
+        let head = self.open_root(numbers[0])
+        let found = self.flow.open_numbers[head] ?? return false
+        let mut entry = found.clone()
+        entry.casts.push((id_of(value) as i64, into_name))
+        entry.typed = true
+        self.flow.open_numbers.insert(head, entry)
+        return true
+    }
+
+    /// **A method called on an open number needs its type written** (#629
+    /// D-2): the language below has no method on a number it cannot name.
+    /// `false` where the value is no open number.
+    pub fn open_number_typed(ref mut self, world: ref CheckWorld, value: ref Expr) -> bool sync {
+        let numbers = self.open_numbers_in(world, value)
+        if numbers.len() == 0 {
+            return false
+        }
+        for number in numbers {
+            let head = self.open_root(number)
+            let found = self.flow.open_numbers[head] ?? continue
+            let mut entry = found.clone()
+            entry.typed = true
+            self.flow.open_numbers.insert(head, entry)
+        }
         return true
     }
 

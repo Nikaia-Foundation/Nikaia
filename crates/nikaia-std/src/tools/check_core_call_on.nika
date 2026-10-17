@@ -341,7 +341,7 @@ fn check_core_call_on_pushed(mut state: CheckState, world: ref CheckWorld, entry
         let local = state.binding(pushed_name) ?? return
         let id = local.id
         let at = span.start as i64
-        state.flow.open_numbers.insert(at, CheckOpenNumber { name: pushed_name.clone(), element: true, at: span.clone(), joined: at, asks: [], given: [], derived: [], written: [] })
+        state.flow.open_numbers.insert(at, CheckOpenNumber { name: pushed_name.clone(), element: true, at: span.clone(), joined: at, asks: [], given: [], derived: [], written: [], casts: [], typed: false })
         state.open_number_given(world, at, args[0], span)
         state.flow.open_elements.insert(id, at)
     } else if open >= 0 && one_pushed {
@@ -637,6 +637,21 @@ pub fn check_core_call_on[H: CheckHost](mut state: CheckState, world: ref CheckW
         if copied != null {
             return copied ?? Ty::Unknown
         }
+    }
+    // **A method of an open number is the method of an integer** (#629 D-2):
+    // every integer type has the same methods, none of them pauses, and one
+    // that hands back the receiver's type hands back the open number.
+    if on.is_unknown() && state.open_number_typed(world, receiver) {
+        let result = check_core_call_on(state, world, host, check_core_call_on_named("i64"), receiver, method, args, entry, span)
+        let same = match result {
+            Ty::Named { name, args: inner, .. } => name == "i64" && inner.len() == 0,
+            else => false,
+        }
+        if same {
+            state.flow.open_calls.insert(id_of(receiver) as i64, [-1])
+            return Ty::Unknown
+        }
+        return result
     }
     if !has_name {
         for a in args {

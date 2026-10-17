@@ -14048,7 +14048,7 @@ fn check_core_call_on_pushed(state: &mut CheckState, world: &CheckWorld<'_, '_, 
         let local = match state.binding(&pushed_name) { Some(__nikaia_value) => __nikaia_value, None => return };
         let id = local.id;
         let at = span.start as i64;
-        state.flow.open_numbers.insert(at, CheckOpenNumber { name: pushed_name.to_owned(), element: true, at: span.clone(), joined: at, asks: vec![], given: vec![], derived: vec![], written: vec![] });
+        state.flow.open_numbers.insert(at, CheckOpenNumber { name: pushed_name.to_owned(), element: true, at: span.clone(), joined: at, asks: vec![], given: vec![], derived: vec![], written: vec![], casts: vec![], typed: false });
         state.open_number_given(world, at, nikaia_std::index::get(&args, 0), span);
         state.flow.open_elements.insert(id, at);
     } else if open >= 0 && one_pushed {
@@ -14281,6 +14281,18 @@ pub fn check_core_call_on<H: CheckHost>(state: &mut CheckState, world: &CheckWor
     if entry == "clone" && args.is_empty() {
         let copied: Option<Ty> = check_core_call_on_copied(&on);
         if copied.is_some() { return nikaia_std::index::or(copied, || Ty::Unknown); }
+    }
+    if on.is_unknown() && state.open_number_typed(world, receiver) {
+        let result = check_core_call_on(state, world, host, check_core_call_on_named("i64"), receiver, method, args, entry, span);
+        let same = match result {
+            Ty::Named { ref name, args: ref inner, .. } => name == "i64" && inner.is_empty(),
+            _ => false,
+        };
+        if same {
+            state.flow.open_calls.insert(id_of(receiver) as i64, vec![-1]);
+            return Ty::Unknown;
+        }
+        return result;
     }
     if !has_name {
         for a in args.iter() { check_core_expr(state, world, host, a, span); }
@@ -17956,7 +17968,7 @@ pub fn check_core_cast<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
         Ty::Named { ref name, .. } => { if !check_core_places_offered(name) { state.cast_names_a_foreign_type(name, span); } },
         _ => { },
     }
-    state.record_cast(&from, &into, id_of(inner) as i64);
+    if !(from.is_unknown() && state.open_number_cast(world, inner, &into)) { state.record_cast(&from, &into, id_of(inner) as i64); }
     let from_a_char = match from {
         Ty::Named { ref name, .. } => name == "char" || name == "scalar",
         _ => false,
@@ -18081,7 +18093,7 @@ fn check_core_stmt_a_path(ty: &Ty) -> bool {
     }
 }
 
-fn check_core_stmt_open_number(name: &str, element: bool, span: &Span) -> CheckOpenNumber { CheckOpenNumber { name: name.to_owned(), element, at: Span { start: span.start, end: span.end }, joined: span.start as i64, asks: vec![], given: vec![], derived: vec![], written: vec![] } }
+fn check_core_stmt_open_number(name: &str, element: bool, span: &Span) -> CheckOpenNumber { CheckOpenNumber { name: name.to_owned(), element, at: Span { start: span.start, end: span.end }, joined: span.start as i64, asks: vec![], given: vec![], derived: vec![], written: vec![], casts: vec![], typed: false } }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
@@ -20740,6 +20752,8 @@ pub struct CheckOpenNumber {
     pub given: Vec<(CheckConstant, Span, bool)>,
     pub derived: Vec<(CheckConstant, Span)>,
     pub written: Vec<(i64, Vec<(i64, Integer)>, bool)>,
+    pub casts: Vec<(i64, String)>,
+    pub typed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -24260,8 +24274,17 @@ impl CheckState {
                     }
                 }
             }
-            if decided.is_some() {
-                let ty = nikaia_std::index::or(decided.as_deref(), || "").to_owned();
+            let mut typed = false;
+            for member in members.iter() {
+                typed = typed || member.1.typed;
+                for cast in member.1.casts.iter() {
+                    let from = Ty::Named { name: held.to_owned(), args: vec![], view: false };
+                    let into = Ty::Named { name: cast.1.to_owned(), args: vec![], view: false };
+                    self.record_cast(&from, &into, cast.0);
+                }
+            }
+            if decided.is_some() || typed {
+                let ty = held.to_owned();
                 for member in members.iter() {
                     let mut written: String = ty.to_owned();
                     if member.1.element { written = format!("Vec<{}>", ty); }
@@ -24425,6 +24448,10 @@ impl CheckState {
                     }, || vec![].into()) { out.extend(self.open_numbers_in(world, nikaia_std::index::get(&args, nikaia_std::index::at(at)))); }
                 }
             },
+            Expr::MethodCall { receiver, .. } => {
+                let receiver = nikaia_std::boxed::open(receiver);
+                if self.a_method_of_a_number(receiver) { out.extend(self.open_numbers_in(world, receiver)); }
+            },
             Expr::If { .. } => { for tail in nikaia_std::index::or(number_branches(expr), || vec![].into()) { out.extend(self.open_numbers_in(world, tail)); } },
             Expr::Match { .. } => { for tail in nikaia_std::index::or(number_branches(expr), || vec![].into()) { out.extend(self.open_numbers_in(world, tail)); } },
             Expr::Binary { op, lhs, rhs, .. } => {
@@ -24450,6 +24477,7 @@ impl CheckState {
             Expr::Variable(name, _) => { let name = *name; self.a_name_of_an_open_number(world, name) },
             Expr::Index { .. } => self.open_element_of(world, expr).is_some(),
             Expr::Call { args, .. } => self.a_call_of_numbers(world, args),
+            Expr::MethodCall { receiver, .. } => { let receiver = nikaia_std::boxed::open(receiver); self.a_method_of_a_number(receiver) && self.number_shaped(world, receiver) },
             Expr::If { .. } => self.a_choice_of_numbers(world, expr),
             Expr::Match { .. } => self.a_choice_of_numbers(world, expr),
             Expr::Binary { op, lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); an_operation_of_one_type(*op) && self.number_shaped(world, lhs) && self.number_shaped(world, rhs) },
@@ -24462,6 +24490,12 @@ impl CheckState {
     fn a_name_of_an_open_number(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, name: winnow_grammar::Symbol) -> bool {
         let local = match self.binding(world.words.resolve(name)) { Some(__nikaia_value) => __nikaia_value, None => return false };
         local.open_number.is_some()
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_method_of_a_number(&self, receiver: &Expr) -> bool {
+        let calls = match *nikaia_std::index::get(&self.flow.open_calls, &(id_of(receiver) as i64)) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        calls.len() == 1 && *nikaia_std::index::get(&calls, 0) == -1
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -24559,6 +24593,38 @@ impl CheckState {
         let ty = match number_list_element(copy) { Some(__nikaia_value) => __nikaia_value, None => return false };
         let root = self.open_root(number);
         self.add_ask(root, ty, at, beside);
+        true
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn open_number_cast(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, value: &Expr, into: &Ty) -> bool {
+        let into_name = match into {
+            Ty::Named { name, .. } => name.to_owned(),
+            _ => return false,
+        };
+        let numbers = self.open_numbers_in(world, value);
+        if numbers.is_empty() { return false; }
+        let head = self.open_root(*nikaia_std::index::get(&numbers, 0));
+        let found = match *nikaia_std::index::get(&self.flow.open_numbers, &head) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let mut entry = found.clone();
+        entry.casts.push((id_of(value) as i64, into_name));
+        entry.typed = true;
+        self.flow.open_numbers.insert(head, entry);
+        true
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn open_number_typed(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, value: &Expr) -> bool {
+        let numbers = self.open_numbers_in(world, value);
+        if numbers.is_empty() { return false; }
+        for number in numbers.iter() {
+            let number = nikaia_std::num::value(number);
+            let head = self.open_root(number);
+            let found = match *nikaia_std::index::get(&self.flow.open_numbers, &head) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let mut entry = found.clone();
+            entry.typed = true;
+            self.flow.open_numbers.insert(head, entry);
+        }
         true
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -38418,7 +38484,7 @@ pub fn build(keys: &[String]) -> Option<Table> {
     let mut buckets = (n + 4) / 5;
     if buckets < 1 { buckets = 1; }
     for seed in 0..200 {
-        let table = attempt(keys, seed as u64, buckets, n);
+        let table = attempt(keys, u64::try_from(seed).unwrap_or_else(|_| panic!("the value does not fit in an `u64`")), buckets, n);
         if table.is_some() { return std::convert::identity(table); }
     }
     None
@@ -46208,7 +46274,7 @@ pub fn number_at(text: &str, signed: bool) -> Number {
             let mut fits = true;
             for ch in value.chars() {
                 let d = u64::try_from(digit_of(ch, radix)).unwrap_or_else(|_| panic!("the value does not fit in an `u64`"));
-                let times_radix = n.checked_mul(radix as u64);
+                let times_radix = n.checked_mul(u64::try_from(radix).unwrap_or_else(|_| panic!("the value does not fit in an `u64`")));
                 if times_radix.is_none() {
                     fits = false;
                     break;

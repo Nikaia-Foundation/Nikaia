@@ -45,6 +45,13 @@ pub struct CheckOpenNumber {
     /// The statements that give it a number, by the byte they start at, and
     /// every literal in them.
     pub written: Vec[(i64, Vec[(i64, Integer)], bool)],
+    /// The casts out of it, by the operand's id and the type cast into: what
+    /// a cast keeps or checks is known once the number's type is (#629 D-1).
+    pub casts: Vec[(i64, String)],
+    /// A use that needs its type written even where no use asks for one: a
+    /// cast or a method call (#629 D-1, D-2), which the language below cannot
+    /// read off an unsuffixed literal.
+    pub typed: bool,
 }
 
 /// A signed value put where an unsigned type is stated, until the walk proves
