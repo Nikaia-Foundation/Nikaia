@@ -90,7 +90,7 @@ fn an_overflow_stops_the_build_where_it_would_stop_the_program() {
     let found = findings(source);
     let stopped = found
         .iter()
-        .find(|f| f.code == "NK1152")
+        .find(|f| f.code == "NK1244")
         .unwrap_or_else(|| panic!("the overflow stops the build: {found:#?}"));
     assert_eq!(
         stopped.message,
@@ -206,6 +206,13 @@ fn findings_bounded(source: &str, steps: u64, bytes: u64) -> Vec<Finding> {
         &reads,
     )
     .findings
+}
+
+/// The one run that stopped as the program would (ADR-321 D16): `NK1244`.
+fn the_stop(found: Vec<Finding>) -> Finding {
+    let mut stopped: Vec<Finding> = found.into_iter().filter(|f| f.code == "NK1244").collect();
+    assert_eq!(stopped.len(), 1, "{stopped:#?}");
+    stopped.remove(0)
 }
 
 fn the_one(found: Vec<Finding>) -> Finding {
@@ -379,7 +386,7 @@ fn a_callee_in_another_file_runs_and_a_stop_there_is_named() {
         &reads(),
     )
     .findings;
-    let stopped = the_one(found);
+    let stopped = the_stop(found);
     assert_eq!(
         stopped.message,
         "`C` stopped while the program was built: attempt to multiply with overflow."
@@ -545,7 +552,7 @@ fn a_program_with_a_grammar_compiles_its_other_comptimes() {
                   \x20   println(f\"{T} {C}\")\n\
                   }\n";
     // The overflow is the compiled run's answer: the interpreter computed it.
-    let stopped = the_one(findings(source));
+    let stopped = the_stop(findings(source));
     assert_eq!(
         stopped.message,
         "`C` stopped while the program was built: attempt to multiply with overflow."
@@ -582,7 +589,7 @@ fn an_options_default_is_compiled_and_recorded() {
     });
     assert!(lowered.contains("shout(\"go\", 4, 81)"), "{lowered}");
     let stopped = nikaia::comptime_run::defaults_compiled_in(Some(&at), || {
-        the_one(findings(&source("sq(100000)")))
+        the_stop(findings(&source("sq(100000)")))
     });
     assert_eq!(
         stopped.message,

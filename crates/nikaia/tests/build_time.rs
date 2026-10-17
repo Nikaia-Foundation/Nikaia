@@ -397,8 +397,8 @@ fn a_build_time_index_the_array_does_not_have_is_named() {
     let found = findings(source);
     let refusal = found
         .iter()
-        .find(|f| f.code == "NK1152")
-        .unwrap_or_else(|| panic!("NK1152: {found:#?}"));
+        .find(|f| f.code == "NK1244")
+        .unwrap_or_else(|| panic!("NK1244: {found:#?}"));
     assert_eq!(
         refusal.message,
         "`BAD` stopped while the program was built: index out of bounds: the len is 3 \
