@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.995] — 2026-10-17
+
+**NK1201 refuses a range, a tuple, and a struct or enum with no text form in an f-string hole (#638)**
+- The checker refuses what rustc refused: a range, a tuple, and a struct or enum of the package with no `impl Error` in a hole. The help offers `{x:?}` for a range or an enum, takes a tuple apart, and names a struct's fields as holes. Errors, sums of errors, numbers, `bool`, `char`, text, a hole asking for `:?` and a type from another package still pass.
+
 ## [0.0.994] — 2026-10-17
 
 **the prover reads through a loop: Horn clauses, a portfolio of strategies, every invariant checked, proposers only checked (ADR-361)**
