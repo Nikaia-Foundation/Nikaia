@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.987] — 2026-10-17
+
+**A subject `T?` of `main` may be left out (ADR-360, #635)**
+- A subject parameter of `main` of type `T?` may be left out at the end and is then `null`; usage and help show it as `[<name>]`. A required subject after a `T?` one is `NK1273`; `NK1274` is only an option named `help`.
+
 ## [0.0.986] — 2026-10-17
 
 **The prover reads an `int` (#630)**
