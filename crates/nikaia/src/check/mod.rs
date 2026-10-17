@@ -1132,6 +1132,9 @@ impl<'a> Checker<'a> {
                 }
                 Item::Fn { .. } => {
                     self.an_entry_point(&item.node, &item.span, false);
+                    // **`main`'s parameters are the command line**
+                    // ([ADR-360](../../docs/specification/adr/adr-360.md) D2).
+                    self.s.main_parameters(self.world, &item.node, &item.span);
                     self.function(&item.node, None)
                 }
                 Item::Struct { fields, .. } => {

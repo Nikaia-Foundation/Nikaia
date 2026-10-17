@@ -182,6 +182,7 @@ COMPILER_NIKA = {
     "check_notes.nika": "check: small refusals and warnings: NK2703, NK2402, NK2403, NK1118, lambda parameter (0.0.827)",
     "check_kinds.nika": "check: comptime bounds, a count beside its buffer, update blocks, a variant on a T? (0.0.827)",
     "check_arith.nika": "check: arithmetic on something that has none, a value of no known type (NK1191, NK1245) (0.0.827)",
+    "check_main.nika": "check: what main's parameters may be, the command line (NK1273, NK1274) (0.0.983)",
     "check_extern.nika": "check: what crosses to C: entry points, extern structs and enums (NK1237-NK1240, NK1145) (0.0.827)",
     "check_members.nika": "check: a member nothing writes down (NK1171) (0.0.827)",
     "check_core_pilot.nika": "check: the pilot of the core: grammar_call, NK1162, instantiations, NK1131 (U-c0) (0.0.828)",

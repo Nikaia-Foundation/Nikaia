@@ -10,9 +10,9 @@ use std::collections
 
 impl EmitState {
     /// The program's own `main`, if this file carries one the runtime can
-    /// wrap: `Some(throws)` for the plain shape - `fn main()` or
-    /// `fn main() throws`, no receiver, no parameters, no returned value - and
-    /// `None` for anything else. A `main` this does not recognise is emitted as
+    /// wrap: `Some(throws)` for `fn main(…)` or `fn main(…) throws` with no
+    /// receiver and no returned value, whose parameters are the command line
+    /// (ADR-360 D1) - and `None` for anything else. A `main` this does not recognise is emitted as
     /// written and keeps its name.
     pub fn user_main(ref self, world: ref EmitWorld) -> bool? {
         if !self.entry {
@@ -20,9 +20,9 @@ impl EmitState {
         }
         for item in world.items {
             match item.node {
-                Item::Fn { name, receiver, args, config, spread, ret_type, can_throw, .. } => {
+                Item::Fn { name, receiver, spread, ret_type, can_throw, .. } => {
                     let called = name ?? continue
-                    if world.words.resolve(called) == "main" && receiver == null && args.len() == 0 && config.len() == 0 && spread == null && ret_type == null {
+                    if world.words.resolve(called) == "main" && receiver == null && spread == null && ret_type == null {
                         return can_throw
                     }
                 },
@@ -34,9 +34,12 @@ impl EmitState {
 
     /// The `fn main` Rust runs (ADR-303 D4), as the lines of generated code.
     /// `channel` is the failure channel of the program's `main`, `concurrent`
-    /// whether user code may run on a pool.
-    pub fn entry_point(ref self, world: ref EmitWorld, concurrent: bool, channel: ref String) -> String {
+    /// whether user code may run on a pool; `types` are the types of
+    /// `main`'s parameters in the language below, subjects then options, and
+    /// `passing` how each is handed to the body, `{}` standing for the local.
+    pub fn entry_point(ref self, world: ref EmitWorld, concurrent: bool, channel: ref String, types: ref Vec[String], passing: ref Vec[String]) -> String {
         let fails = self.user_main(world) ?? return ""
+        let (reads, passed) = self.main_words(world, types, passing)
         let mut user_code: String = "Sequential"
         if concurrent {
             user_code = "Concurrent"
@@ -52,15 +55,22 @@ impl EmitState {
         let mut text: String = "\n// ADR-303 D4: the runtime is running before the program's first\n// statement, so an operation inside it costs no thread wake-up. What\n// starts is what `user_parallelism` allows (ADR-037 D2): the I/O\n// worker always, a pool for user code only at `yes`.\n"
         text = f"{text}fn main(){ret} {{\n"
         text = f"{text}    nikaia_std::abort::report_in_nikaia_terms(__NIKAIA_SITES);\n"
+        // ADR-360 D4: the words are read and `main`'s preconditions checked
+        // before anything starts; a wrong word ends the program here.
+        text = f"{text}{reads}"
+        let mut body: String = "__nikaia_main"
+        if reads.len() > 0 && self.facts.entries.contains_key("main") {
+            body = "__nikaia_main__unchecked"
+        }
         text = f"{text}{self.fatal_registrations(world)}{self.crossing_registrations(world)}"
         text = f"{text}    let nikaia_runtime = nikaia_std::rt::{start}(nikaia_std::rt::UserCode::{user_code});\n"
         // ADR-345 D4: where `process::Exit` may leave `main`, the process ends
         // with its code after the drain.
         let exits = main_exits(self.own_contracts)
         if call_pauses(self.own_contracts, "main") {
-            text = f"{text}    let outcome = nikaia_std::rt::exec::block_on(__nikaia_main());\n"
+            text = f"{text}    let outcome = nikaia_std::rt::exec::block_on({body}({passed}));\n"
         } else {
-            text = f"{text}    let outcome = __nikaia_main();\n"
+            text = f"{text}    let outcome = {body}({passed});\n"
         }
         if exits {
             text = f"{text}    nikaia_runtime.finish();\n    nikaia_std::process::ended(outcome)\n}}\n"
@@ -68,6 +78,116 @@ impl EmitState {
             text = f"{text}    nikaia_runtime.finish();\n    outcome\n}}\n"
         }
         return text
+    }
+
+    /// **`main`'s parameters are the command line** (ADR-360 D1-D5): the
+    /// lines that read the words into locals named as the parameters and
+    /// check `main`'s preconditions, and the arguments the body is called
+    /// with. Nothing for a `main` without parameters.
+    fn main_words(ref self, world: ref EmitWorld, types: ref Vec[String], passing: ref Vec[String]) -> (String, String) {
+        for item in world.items {
+            match item.node {
+                Item::Fn { name, receiver, args, config, .. } => {
+                    let called = name ?? continue
+                    if receiver != null || world.words.resolve(called) != "main" {
+                        continue
+                    }
+                    if args.len() == 0 && config.len() == 0 {
+                        return ("".clone(), "".clone())
+                    }
+                    let about = (item.doc ?? "").clone()
+                    return self.main_words_of(world, args, config, about, types, passing)
+                },
+                else => {},
+            }
+        }
+        return ("".clone(), "".clone())
+    }
+
+    fn main_words_of(ref self, world: ref EmitWorld, args: ref Vec[FnArg], config: ref Vec[ConfigParam], about: ref String, types: ref Vec[String], passing: ref Vec[String]) -> (String, String) {
+        let mut checks: Vec[PreconditionCheck] = []
+        if self.facts.entries.contains_key("main") {
+            checks = (self.facts.entries.get("main") ?? return ("".clone(), "".clone())).clone()
+        }
+        let mut options: Vec[ConfigContract] = []
+        if self.own_contracts.functions.contains_key("main") {
+            let contract = self.own_contracts.functions.get("main") ?? return ("".clone(), "".clone())
+            let signature = contract.signature?.clone() ?? Signature::empty()
+            options = signature.config.clone()
+        }
+        let mut params: Vec[String] = []
+        let mut reads: String = ""
+        let mut passed: Vec[String] = []
+        for index in 0..<args.len() {
+            let arg = args[index]
+            let param = world.words.resolve(arg.name).clone()
+            let local = escaped_name(param)
+            let ty = main_written_type(arg.ty, world.words)
+            let mut rust: String = "_"
+            if index < types.len() {
+                rust = types[index].clone()
+            }
+            let mut kind: String = "Subject"
+            let mut read: String = "subject"
+            if words_vec(arg.ty, world.words) {
+                kind = "Rest"
+                read = "rest"
+            }
+            let mut binding: String = ""
+            if arg.mutable {
+                binding = "mut "
+                passed.push(f"&mut {local}")
+            } else if index < passing.len() {
+                passed.push(passing[index].replace("{}", local))
+            } else {
+                passed.push(local.clone())
+            }
+            reads = f"{reads}    let {binding}{local}: {rust} = __nikaia_words.{read}({index});\n"
+            params.push(f"nikaia_std::cli::Param {{ name: {rust_string(param)}, ty: {rust_string(ty)}, kind: nikaia_std::cli::Kind::{kind}, default: \"\", pre: &[{main_claims_of(checks, param)}] }}")
+        }
+        for k in 0..<config.len() {
+            let option = config[k]
+            let at = args.len() + k
+            let param = world.words.resolve(option.name).clone()
+            let local = escaped_name(param)
+            let ty = main_written_type(option.ty, world.words)
+            let mut rust: String = "_"
+            if at < types.len() {
+                rust = types[at].clone()
+            }
+            let mut default: String = ""
+            let mut shown: String = ""
+            for declared in options {
+                if declared.name == param {
+                    default = held_literal(declared.default, declared.ty)
+                    shown = declared.default.clone()
+                    if shown == "None" {
+                        shown = "null"
+                    }
+                }
+            }
+            let mut kind: String = "Option"
+            if ty == "bool" {
+                kind = "Flag"
+            }
+            reads = f"{reads}    let {local}: {rust} = match __nikaia_words.option({at}) {{ Some(__nikaia_word) => __nikaia_word, None => {default} }};\n"
+            if at < passing.len() {
+                passed.push(passing[at].replace("{}", local))
+            } else {
+                passed.push(local.clone())
+            }
+            params.push(f"nikaia_std::cli::Param {{ name: {rust_string(param)}, ty: {rust_string(ty)}, kind: nikaia_std::cli::Kind::{kind}, default: {rust_string(shown)}, pre: &[{main_claims_of(checks, param)}] }}")
+        }
+        let mut text: String = f"    static __NIKAIA_INTERFACE: nikaia_std::cli::Interface = nikaia_std::cli::Interface {{ about: {rust_string(about)}, params: &[{params.join(", ")}] }};\n"
+        text = f"{text}    let __nikaia_words = nikaia_std::cli::Words::read(&__NIKAIA_INTERFACE);\n{reads}"
+        for check in checks {
+            let mut operands: String = ""
+            for (name, value) in check.operands {
+                operands.push_str(f"({rust_string(name)}, (&&nikaia_std::abort::Operand(&{value})).shown()), ")
+            }
+            text = f"{text}    if !{check.rust} {{ __nikaia_words.breach({rust_string(main_claim(check.written))}, &[{operands}]) }}\n"
+        }
+        return (text, passed.join(", "))
     }
 
     /// **The program's own fatal types** (ADR-345 D1), registered so that the
@@ -185,4 +305,50 @@ fn main_exits(own: ref Ledger) -> bool {
         }
     }
     return false
+}
+
+/// A parameter's type as the program wrote it: `int`, `i64?`, `Vec[String]`.
+fn main_written_type(ty: ref Type, words: ref winnow_grammar::InternerContext) -> String {
+    let mut text = words.resolve(ty.name).clone()
+    if ty.generics.len() > 0 {
+        let mut inner: Vec[String] = []
+        for arg in ty.generics {
+            inner.push(main_written_type(arg, words))
+        }
+        text = f"{text}[{inner.join(", ")}]"
+    }
+    if ty.is_nullable {
+        text = f"{text}?"
+    }
+    return text
+}
+
+/// Whether a parameter of `main` takes every positional word left: the last
+/// subject, a `Vec[T]` (ADR-360 D2).
+fn words_vec(ty: ref Type, words: ref winnow_grammar::InternerContext) -> bool {
+    return words.resolve(ty.name) == "Vec" && !ty.is_nullable
+}
+
+/// A precondition's claim as `main`'s messages write it: `` `a > 0` ``, or
+/// `` `10 + a > 0`, from `assert(whole > 0)` in `positive` ``.
+fn main_claim(written: ref String) -> String {
+    return (written.strip_prefix("precondition of `main`: ") ?? written).clone()
+}
+
+/// The claims among `checks` that read `param`, as the help lists them.
+fn main_claims_of(checks: ref Vec[PreconditionCheck], param: ref String) -> String {
+    let mut claims: Vec[String] = []
+    let length = f"{param}."
+    for check in checks {
+        let mut reads = false
+        for (name, _) in check.operands {
+            if name == param || name.starts_with(length) {
+                reads = true
+            }
+        }
+        if reads {
+            claims.push(rust_string(main_claim(check.written)))
+        }
+    }
+    return claims.join(", ")
 }

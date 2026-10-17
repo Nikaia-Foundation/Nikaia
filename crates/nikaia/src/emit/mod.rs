@@ -1163,6 +1163,10 @@ struct Emitter<'p> {
     place: std::cell::RefCell<seeds::Place>,
     /// A signature of a barrier is being written: its maps are the keyed ones.
     floor: std::cell::Cell<bool>,
+    /// **The program's `main`'s parameters as its definition wrote them**,
+    /// `name: type`, for the entry that reads the words into them
+    /// ([ADR-360](../../docs/specification/adr/adr-360.md) D1).
+    main_params: std::cell::RefCell<Vec<String>>,
 }
 
 /// What an `impl` says about a method. Enough to adapt a `&mut self` method to
@@ -2119,6 +2123,7 @@ impl<'p> Emitter<'p> {
             seeds: seeds_of,
             place: std::cell::RefCell::new(seeds::Place::default()),
             floor: std::cell::Cell::new(false),
+            main_params: std::cell::RefCell::new(Vec::new()),
         };
         made.s.sums = made.s.error_sums(&made.world);
         made
@@ -2465,7 +2470,29 @@ impl<'p> Emitter<'p> {
     fn entry_point(&self, out: &mut Out) {
         let concurrent = matches!(self.build.user_parallelism, UserParallelism::Yes);
         let channel = self.error_channel(MAIN, Lifetimes::Elided, false);
-        let entry = self.s.entry_point(&self.world, concurrent, &channel);
+        // **`main`'s parameters as its definition spells them**
+        // ([ADR-360](../../docs/specification/adr/adr-360.md) D1): the words
+        // are read into locals that own them, and a parameter the body only
+        // reads (`&[T]`, `&str`) is lent from its local: `passing` writes the
+        // argument, `{}` standing for the local.
+        let mut types: Vec<String> = Vec::new();
+        let mut passing: Vec<String> = Vec::new();
+        for param in self.main_params.borrow().iter() {
+            let ty = param.split_once(": ").map_or("_", |(_, ty)| ty);
+            let (owned, pass) = match ty {
+                "&str" => ("String".to_string(), "&{}"),
+                "Option<&str>" => ("Option<String>".to_string(), "{}.as_deref()"),
+                _ => match ty.strip_prefix("&[").and_then(|t| t.strip_suffix(']')) {
+                    Some(element) => (format!("Vec<{element}>"), "&{}"),
+                    None => (ty.trim_start_matches("&mut ").to_string(), "{}"),
+                },
+            };
+            types.push(owned);
+            passing.push(pass.to_string());
+        }
+        let entry = self
+            .s
+            .entry_point(&self.world, concurrent, &channel, &types, &passing);
         if entry.is_empty() {
             return;
         }
@@ -4206,6 +4233,9 @@ impl<'p> Emitter<'p> {
             Some(on) => crate::check::specialised(&emitted, &on),
             None => emitted,
         };
+        if emitted == PROGRAM_MAIN {
+            *self.main_params.borrow_mut() = params.clone();
+        }
 
         // ADR-055 D1: a function that can pause is an `async fn`, and one the
         // ledger's `sync` column says cannot is a plain `fn`. The property is
