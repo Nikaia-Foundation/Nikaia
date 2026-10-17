@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1008] — 2026-10-17
+
+**The toolchain's Nikaia package is lowered at `user_parallelism = yes` (ADR-363 D1, #646)**
+- `nikaia lower-std` lowers `src/tools` at `user_parallelism = yes` whatever the build's default (`sysroot::tools_build`). The sysroot test compares only `std`'s own modules at both settings, and checks that the committed `package.rs` is the package lowered at `yes`.
+
 ## [0.0.1007] — 2026-10-17
 
 **`[v; n]` is n copies of a value that copies (ADR-362, #643)**
