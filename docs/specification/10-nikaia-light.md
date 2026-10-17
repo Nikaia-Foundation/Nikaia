@@ -265,7 +265,7 @@ Nikaia provides basic types to represent simple values.
       parameter, or text of its own; lent or kept - is recorded in the ledger
       (Part III 13.5).
     * `ref String`: a view of text, written in an `extern "C"` declaration and
-      on a `pub extern "C" fn` (Part III 15.1), where it is required and the
+      on a `pub extern fn` (Part III 15.1), where it is required and the
       body is held to it. Anywhere else it says what `String` already says,
       and it is a warning (`NK1261`).
     * `scalar`: one Unicode scalar value - a code point that is not a
