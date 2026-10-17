@@ -19965,6 +19965,7 @@ fn check_claim_held(held: Option<&ClaimHeld>) -> String {
     let given = match held { Some(__nikaia_value) => __nikaia_value, None => return "refused: a claim about data from outside the program".to_owned() };
     match given {
         ClaimHeld::Proved => "proved".to_owned(),
+        ClaimHeld::ProvedThrough(how) => how.to_owned(),
         ClaimHeld::Precondition(f, n) => {
             let n = *n;
             if f == "main" { "precondition of `main`, checked where the words arrive".to_owned() } else if n == 0 { format!("precondition of `{}`: proved at every call the compiler sees; any other reaches the entry that checks it", f) } else if n == 1 { format!("precondition of `{}`: one call checks it when it runs; any other call proves it or reaches the entry that checks it", f) } else { format!("precondition of `{}`: {} calls check it when they run; any other call proves it or reaches the entry that checks it", f, n) }
@@ -19981,6 +19982,7 @@ pub fn check_claims_report(claims: &collections::BTreeMap<(i64, i64), FactClaim>
     let mut arrives: Vec<String> = vec![];
     let mut by_the_test: Vec<String> = vec![];
     let mut proved: Vec<String> = vec![];
+    let mut through_loops = 0;
     let mut preconditions: Vec<String> = vec![];
     let mut mains: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut line = 1;
@@ -20367,7 +20369,6 @@ impl CheckState {
             let note = "A list read never comes back empty: an index that does not fit stops the program, and `?.` only passes over a `null`.";
             self.findings.push(check_refusal("NK1121", span, message, vec![note.to_owned()], Some(format!("Check the length first: `if {} < {}.len()`, then write `{}`.", *nikaia_std::index::get(&pieces, 1), *nikaia_std::index::get(&pieces, 0), plain))));
             return;
-        ClaimHeld::ProvedThrough(how) => how.to_owned(),
         }
         self.facts.plain_reaches.insert(fact_key(reach));
         let note = format!("`?.` is for a value that may be missing: it reaches the {} when there's something there and gives `null` otherwise. A type without `?` always has a value, so this is the plain `{}`.", what, plain);
@@ -20384,7 +20385,6 @@ impl CheckState {
         };
         if !never_absent { return false; }
         let shown = written_expression(world.words, value);
-    let mut through_loops = 0;
         let pieces = match value {
             Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); vec![written_expression(world.words, base), written_expression(world.words, index)] },
             _ => vec![],
@@ -48077,178 +48077,6 @@ fn assert_of(contract: &FnContract, at: i64) -> String {
 }
 
 
-// --- prover_passes.nika ---
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ProverAnswers {
-    pub entries: collections::BTreeMap<String, Vec<PreconditionCheck>>,
-    pub published: collections::BTreeMap<String, Published>,
-}
-
-#[allow(clippy::too_many_arguments)]
-pub fn prover_passes(walk: &mut ProverWalk, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> ProverAnswers {
-    let bound = program.items.len() as i64 + 2;
-    let mut preconditions: collections::BTreeMap<String, Precondition> = collections::BTreeMap::new();
-    for _ in 0..bound {
-        walk.state.known = preconditions;
-        walk.state.preconditions = collections::BTreeMap::new();
-        walk.state.candidates = collections::BTreeMap::new();
-        prover_bodies(walk, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
-        preconditions = walk.state.preconditions.to_owned();
-        if same_preconditions(&walk.arena, &preconditions, &walk.state.known) { break; }
-    }
-    walk.state.known = collections::BTreeMap::new();
-    walk.state.collecting = false;
-    walk.state.preconditions = preconditions;
-    walk.state.postconditions = walk.state.candidates.to_owned();
-    walk.state.candidates = collections::BTreeMap::new();
-    let mut settled = false;
-    while !settled {
-        walk.held = collections::BTreeMap::new();
-        walk.reaches = collections::BTreeMap::new();
-        walk.findings = vec![];
-        walk.state.broken = collections::BTreeSet::new();
-        prover_bodies(walk, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
-        settled = walk.state.broken.is_empty();
-        if !settled { strike_broken(&mut walk.state); }
-    }
-    let answers = ProverAnswers { entries: checked_entries(&walk, escape), published: published_contracts(&walk) };
-    count_checked_calls(walk);
-    hold_unreached(walk, program);
-    answers
-}
-
-fn strike_broken(state: &mut ProverState) {
-    let mut broken: Vec<(String, i64)> = vec![];
-    for one in state.broken.iter() { broken.push(one.clone()); }
-    let mut k = broken.len() as i64;
-    while k > 0 {
-        k -= 1;
-        let (function, index) = nikaia_std::index::get(&broken, nikaia_std::index::at(k)); let index = nikaia_std::num::value(index);
-        let mut posts = match state.postconditions.remove(function) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        posts.remove(nikaia_std::count::of(index));
-        state.postconditions.insert(function.to_owned(), posts);
-    }
-    state.broken = collections::BTreeSet::new();
-}
-
-fn same_preconditions(arena: &TermArena, a: &collections::BTreeMap<String, Precondition>, b: &collections::BTreeMap<String, Precondition>) -> bool { precondition_texts(arena, a) == precondition_texts(arena, b) }
-
-fn precondition_texts(arena: &TermArena, m: &collections::BTreeMap<String, Precondition>) -> Vec<(String, Vec<String>)> {
-    let mut out: Vec<(String, Vec<String>)> = vec![];
-    for (function, pre) in m.iter() {
-        let mut claims: Vec<String> = vec![];
-        for claim in pre.claims.iter() { claims.push(arena.text(claim.term)); }
-        out.push((function.to_owned(), claims));
-    }
-    out
-}
-
-fn checked_entries(walk: &ProverWalk, escape: &impl Fn(&str) -> String) -> collections::BTreeMap<String, Vec<PreconditionCheck>> {
-    let mut entries: collections::BTreeMap<String, Vec<PreconditionCheck>> = collections::BTreeMap::new();
-    for (function, pre) in walk.state.preconditions.iter() {
-        let mut checks: Vec<PreconditionCheck> = vec![];
-        for claim in pre.claims.iter() {
-            let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
-            walk.arena.variables(claim.term, &mut read);
-            let mut operands: Vec<(String, String)> = vec![];
-            for name in read.iter() { operands.push((name.to_owned(), rust_of_name(name, escape))); }
-            checks.push(PreconditionCheck { rust: rust_text(&walk.arena, claim.term, escape), written: claim.failure(function), message: claim_text_of((claim.message).as_deref()), operands });
-        }
-        entries.insert(function.to_owned(), checks);
-    }
-    entries
-}
-
-fn published_contracts(walk: &ProverWalk) -> collections::BTreeMap<String, Published> {
-    let mut published: collections::BTreeMap<String, Published> = collections::BTreeMap::new();
-    for (function, pre) in walk.state.preconditions.iter() {
-        let mut entry = nikaia_std::index::or(published.remove(function), || Published::nothing());
-        for claim in pre.claims.iter() {
-            entry.requires.push(ledger_term_text(&walk.arena, claim.term));
-            entry.from.push(format!("assert({})", claim.written));
-        }
-        published.insert(function.to_owned(), entry);
-    }
-    for (function, posts) in walk.state.postconditions.iter() {
-        if posts.is_empty() { continue; }
-        let mut entry = nikaia_std::index::or(published.remove(function), || Published::nothing());
-        for post in posts.iter() { entry.ensures.push(ledger_term_text(&walk.arena, post.term)); }
-        published.insert(function.to_owned(), entry);
-    }
-    for (function, _) in walk.state.summaries.iter() { if !published.contains_key(function) { published.insert(function.to_owned(), Published::nothing()); } }
-    let mut out: collections::BTreeMap<String, Published> = collections::BTreeMap::new();
-    for (function, entry) in published.iter() {
-        let mut full = entry.clone();
-        let posts = nikaia_std::index::or(standing_posts(&walk.state.postconditions, function), || vec![].into());
-        for post in posts.iter() { full.from.push(format!("assert({})", post.written)); }
-        let exits = nikaia_std::index::or(match *nikaia_std::index::get(&walk.state.summaries, function) {
-            Some(__nikaia_it) => Some(__nikaia_it.clone()),
-            None => None,
-        }, || vec![].into());
-        for exit in exits.iter() { full.inferred.push(ledger_term_text(&walk.arena, exit.term)); }
-        out.insert(function.to_owned(), full);
-    }
-    out
-}
-
-fn ledger_term_text(arena: &TermArena, id: i64) -> String { term_ledger_text(id, &|at| { arena.at(at) }) }
-
-fn count_checked_calls(walk: &mut ProverWalk) {
-    let mut checked: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
-    for (key, reach) in walk.reaches.iter() {
-        match reach {
-            CallReach::Checked(_) => {
-                let (callee, _) = key;
-                let so_far = nikaia_std::index::or(*nikaia_std::index::get(&checked, callee), || 0);
-                checked.insert(callee.to_owned(), so_far + 1);
-            },
-            _ => { },
-        }
-    }
-    let mut counted: collections::BTreeMap<(i64, i64), ClaimHeld> = collections::BTreeMap::new();
-    for (key, held) in walk.held.iter() {
-        let now = match held {
-            ClaimHeld::Precondition(function, _) => ClaimHeld::Precondition(function.to_owned(), nikaia_std::index::or(*nikaia_std::index::get(&checked, function), || 0)),
-            _ => held.clone(),
-        };
-        counted.insert(key.clone(), now);
-    }
-    walk.held = counted;
-}
-
-fn hold_unreached(walk: &mut ProverWalk, program: &Program) {
-    let mut tests: Vec<(i64, i64)> = vec![];
-    for item in program.items.iter() {
-        match &item.node {
-            Item::Test { .. } => { tests.push((item.span.start as i64, item.span.end as i64)); },
-            Item::Bench { .. } => { tests.push((item.span.start as i64, item.span.end as i64)); },
-            _ => { },
-        }
-    }
-    for (at, node) in walk.claims.iter() {
-        let at = nikaia_std::num::value(at);let node = nikaia_std::num::value(node);
-        let key = (at, node);
-        if walk.held.contains_key(&key) { continue; }
-        let mut in_a_test = false;
-        for (start, end) in tests.iter() {
-            let start = nikaia_std::num::value(start);let end = nikaia_std::num::value(end);
-            if at >= start && at < end { in_a_test = true; }
-        }
-        if in_a_test { walk.held.insert(key, ClaimHeld::ByTheTest); } else { walk.held.insert(key, ClaimHeld::AtRunTime(String::from("it stands somewhere the prover doesn't look yet"))); }
-    }
-}
-
-
-// --- prover_results.nika ---
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ClaimHeld {
-    ByTheTest,
-    Proved,
-    Precondition(String, i64),
-    AtRunTime(String),
-    Refused,
 // --- prover_loops.nika ---
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -48823,6 +48651,179 @@ pub fn loop_key(arena: &TermArena, record: &LoopRecord) -> String {
 }
 
 
+// --- prover_passes.nika ---
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProverAnswers {
+    pub entries: collections::BTreeMap<String, Vec<PreconditionCheck>>,
+    pub published: collections::BTreeMap<String, Published>,
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn prover_passes(walk: &mut ProverWalk, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> ProverAnswers {
+    let bound = program.items.len() as i64 + 2;
+    let mut preconditions: collections::BTreeMap<String, Precondition> = collections::BTreeMap::new();
+    for _ in 0..bound {
+        walk.state.known = preconditions;
+        walk.state.preconditions = collections::BTreeMap::new();
+        walk.state.candidates = collections::BTreeMap::new();
+        prover_bodies(walk, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
+        preconditions = walk.state.preconditions.to_owned();
+        if same_preconditions(&walk.arena, &preconditions, &walk.state.known) { break; }
+    }
+    walk.state.known = collections::BTreeMap::new();
+    walk.state.collecting = false;
+    walk.state.preconditions = preconditions;
+    walk.state.postconditions = walk.state.candidates.to_owned();
+    walk.state.candidates = collections::BTreeMap::new();
+    let mut settled = false;
+    while !settled {
+        walk.held = collections::BTreeMap::new();
+        walk.reaches = collections::BTreeMap::new();
+        walk.findings = vec![];
+        walk.state.broken = collections::BTreeSet::new();
+        prover_bodies(walk, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
+        settled = walk.state.broken.is_empty();
+        if !settled { strike_broken(&mut walk.state); }
+    }
+    let answers = ProverAnswers { entries: checked_entries(&walk, escape), published: published_contracts(&walk) };
+    count_checked_calls(walk);
+    hold_unreached(walk, program);
+    answers
+}
+
+fn strike_broken(state: &mut ProverState) {
+    let mut broken: Vec<(String, i64)> = vec![];
+    for one in state.broken.iter() { broken.push(one.clone()); }
+    let mut k = broken.len() as i64;
+    while k > 0 {
+        k -= 1;
+        let (function, index) = nikaia_std::index::get(&broken, nikaia_std::index::at(k)); let index = nikaia_std::num::value(index);
+        let mut posts = match state.postconditions.remove(function) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        posts.remove(nikaia_std::count::of(index));
+        state.postconditions.insert(function.to_owned(), posts);
+    }
+    state.broken = collections::BTreeSet::new();
+}
+
+fn same_preconditions(arena: &TermArena, a: &collections::BTreeMap<String, Precondition>, b: &collections::BTreeMap<String, Precondition>) -> bool { precondition_texts(arena, a) == precondition_texts(arena, b) }
+
+fn precondition_texts(arena: &TermArena, m: &collections::BTreeMap<String, Precondition>) -> Vec<(String, Vec<String>)> {
+    let mut out: Vec<(String, Vec<String>)> = vec![];
+    for (function, pre) in m.iter() {
+        let mut claims: Vec<String> = vec![];
+        for claim in pre.claims.iter() { claims.push(arena.text(claim.term)); }
+        out.push((function.to_owned(), claims));
+    }
+    out
+}
+
+fn checked_entries(walk: &ProverWalk, escape: &impl Fn(&str) -> String) -> collections::BTreeMap<String, Vec<PreconditionCheck>> {
+    let mut entries: collections::BTreeMap<String, Vec<PreconditionCheck>> = collections::BTreeMap::new();
+    for (function, pre) in walk.state.preconditions.iter() {
+        let mut checks: Vec<PreconditionCheck> = vec![];
+        for claim in pre.claims.iter() {
+            let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
+            walk.arena.variables(claim.term, &mut read);
+            let mut operands: Vec<(String, String)> = vec![];
+            for name in read.iter() { operands.push((name.to_owned(), rust_of_name(name, escape))); }
+            checks.push(PreconditionCheck { rust: rust_text(&walk.arena, claim.term, escape), written: claim.failure(function), message: claim_text_of((claim.message).as_deref()), operands });
+        }
+        entries.insert(function.to_owned(), checks);
+    }
+    entries
+}
+
+fn published_contracts(walk: &ProverWalk) -> collections::BTreeMap<String, Published> {
+    let mut published: collections::BTreeMap<String, Published> = collections::BTreeMap::new();
+    for (function, pre) in walk.state.preconditions.iter() {
+        let mut entry = nikaia_std::index::or(published.remove(function), || Published::nothing());
+        for claim in pre.claims.iter() {
+            entry.requires.push(ledger_term_text(&walk.arena, claim.term));
+            entry.from.push(format!("assert({})", claim.written));
+        }
+        published.insert(function.to_owned(), entry);
+    }
+    for (function, posts) in walk.state.postconditions.iter() {
+        if posts.is_empty() { continue; }
+        let mut entry = nikaia_std::index::or(published.remove(function), || Published::nothing());
+        for post in posts.iter() { entry.ensures.push(ledger_term_text(&walk.arena, post.term)); }
+        published.insert(function.to_owned(), entry);
+    }
+    for (function, _) in walk.state.summaries.iter() { if !published.contains_key(function) { published.insert(function.to_owned(), Published::nothing()); } }
+    let mut out: collections::BTreeMap<String, Published> = collections::BTreeMap::new();
+    for (function, entry) in published.iter() {
+        let mut full = entry.clone();
+        let posts = nikaia_std::index::or(standing_posts(&walk.state.postconditions, function), || vec![].into());
+        for post in posts.iter() { full.from.push(format!("assert({})", post.written)); }
+        let exits = nikaia_std::index::or(match *nikaia_std::index::get(&walk.state.summaries, function) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || vec![].into());
+        for exit in exits.iter() { full.inferred.push(ledger_term_text(&walk.arena, exit.term)); }
+        out.insert(function.to_owned(), full);
+    }
+    out
+}
+
+fn ledger_term_text(arena: &TermArena, id: i64) -> String { term_ledger_text(id, &|at| { arena.at(at) }) }
+
+fn count_checked_calls(walk: &mut ProverWalk) {
+    let mut checked: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
+    for (key, reach) in walk.reaches.iter() {
+        match reach {
+            CallReach::Checked(_) => {
+                let (callee, _) = key;
+                let so_far = nikaia_std::index::or(*nikaia_std::index::get(&checked, callee), || 0);
+                checked.insert(callee.to_owned(), so_far + 1);
+            },
+            _ => { },
+        }
+    }
+    let mut counted: collections::BTreeMap<(i64, i64), ClaimHeld> = collections::BTreeMap::new();
+    for (key, held) in walk.held.iter() {
+        let now = match held {
+            ClaimHeld::Precondition(function, _) => ClaimHeld::Precondition(function.to_owned(), nikaia_std::index::or(*nikaia_std::index::get(&checked, function), || 0)),
+            _ => held.clone(),
+        };
+        counted.insert(key.clone(), now);
+    }
+    walk.held = counted;
+}
+
+fn hold_unreached(walk: &mut ProverWalk, program: &Program) {
+    let mut tests: Vec<(i64, i64)> = vec![];
+    for item in program.items.iter() {
+        match &item.node {
+            Item::Test { .. } => { tests.push((item.span.start as i64, item.span.end as i64)); },
+            Item::Bench { .. } => { tests.push((item.span.start as i64, item.span.end as i64)); },
+            _ => { },
+        }
+    }
+    for (at, node) in walk.claims.iter() {
+        let at = nikaia_std::num::value(at);let node = nikaia_std::num::value(node);
+        let key = (at, node);
+        if walk.held.contains_key(&key) { continue; }
+        let mut in_a_test = false;
+        for (start, end) in tests.iter() {
+            let start = nikaia_std::num::value(start);let end = nikaia_std::num::value(end);
+            if at >= start && at < end { in_a_test = true; }
+        }
+        if in_a_test { walk.held.insert(key, ClaimHeld::ByTheTest); } else { walk.held.insert(key, ClaimHeld::AtRunTime(String::from("it stands somewhere the prover doesn't look yet"))); }
+    }
+}
+
+
+// --- prover_results.nika ---
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ClaimHeld {
+    ByTheTest,
+    Proved,
+    Precondition(String, i64),
+    AtRunTime(String),
+    Refused,
+    ProvedThrough(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -48886,6 +48887,8 @@ pub struct ProverScope {
     pub calls_of: collections::BTreeMap<String, collections::BTreeSet<String>>,
     pub summed: collections::BTreeMap<String, Vec<SummaryAlt>>,
     pub leaned: collections::BTreeMap<String, Vec<String>>,
+    pub mutables: collections::BTreeSet<String>,
+    pub loops: Vec<LoopRecord>,
 }
 
 impl ProverScope {
@@ -48909,6 +48912,11 @@ impl ProverScope {
         self.calls_of.remove(name);
         self.summed.remove(name);
         self.leaned.remove(name);
+        if !self.loops.is_empty() {
+            let mut standing: Vec<LoopRecord> = vec![];
+            for record in self.loops.iter() { if !nikaia_std::list::contains(&record.problem.state, &name) { standing.push(record.clone()); } }
+            self.loops = standing;
+        }
         let mut gone: Vec<String> = vec![];
         for (bound, alts) in self.summed.iter() {
             for alt in alts.iter() {
@@ -48995,7 +49003,6 @@ impl ProverScope {
         }
         let term = arena.substitute(claim, &values);
         let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
-    ProvedThrough(String),
         arena.variables(term, &mut names);
         for name in names.iter() { if *name != result_name() && !is_a_parameter(name, params) { return None; } }
         Some(term)
@@ -49059,8 +49066,6 @@ fn ties(read: &collections::BTreeSet<String>, names: &collections::BTreeSet<Stri
 // --- prover_solver.nika ---
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-    pub mutables: collections::BTreeSet<String>,
-    pub loops: Vec<LoopRecord>,
 pub enum SolverAnswer {
     Proved,
     Rejected(String),
@@ -49084,11 +49089,6 @@ pub fn breaking_values(arena: &mut TermArena, scope: &ProverScope, claim: i64, m
     let names = match scope.pinned_names(&arena, claim) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let values = match model(&arena, &scope.facts, claim) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let shown = values_of(&names, &values);
-        if !self.loops.is_empty() {
-            let mut standing: Vec<LoopRecord> = vec![];
-            for record in self.loops.iter() { if !nikaia_std::list::contains(&record.problem.state, &name) { standing.push(record.clone()); } }
-            self.loops = standing;
-        }
     if shown.is_empty() { return None; }
     Some(shown)
 }
@@ -49130,6 +49130,10 @@ pub struct ProverState {
     pub second_queries: i64,
     pub divisor_queries: i64,
     pub divisor_notes: collections::BTreeMap<String, Vec<String>>,
+    pub loops_found: collections::BTreeMap<String, LoopFound>,
+    pub loops_failed: collections::BTreeSet<String>,
+    pub loop_claims: i64,
+    pub loop_queries: i64,
 }
 
 impl ProverState {
@@ -49170,6 +49174,37 @@ impl ProverState {
                 shown = matches!(ask(&arena, &scope.facts, goal), SolverAnswer::Proved);
             }
             if !shown { self.broken.insert((owner.to_owned(), index)); }
+        }
+    }
+    fn through_loops(&mut self, arena: &mut TermArena, scope: &ProverScope, claim: i64, base: Vec<i64>, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer) -> Option<String> {
+        let mut facts = base;
+        let mut texts: Vec<String> = vec![];
+        for record in scope.loops.iter() {
+            let key = loop_key(&arena, record);
+            if self.loops_failed.contains(&key) { continue; }
+            if !self.loops_found.contains_key(&key) {
+                let mut asked: Vec<i64> = vec![];
+                let found = loop_found(arena, record, &|on, given, goal| { matches!(ask(on, given, goal), SolverAnswer::Proved) }, &mut asked);
+                for n in asked.iter() {
+                    let n = nikaia_std::num::value(n);
+                    self.loop_queries += n;
+                }
+                if found.is_none() {
+                    self.loops_failed.insert(key.to_owned());
+                    continue;
+                }
+                self.loops_found.insert(key.to_owned(), nikaia_std::index::or(found, || LoopFound { parts: vec![] }));
+            }
+            let held = match *nikaia_std::index::get(&self.loops_found, &key) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            facts.extend(loop_facts(arena, record, held));
+            texts.push(loop_found_text(arena, record, held));
+        }
+        if texts.is_empty() { return None; }
+        self.loop_claims += 1;
+        self.loop_queries += 1;
+        match ask(&arena, &facts, claim) {
+            SolverAnswer::Proved => Some(texts.join("; ")),
+            _ => None,
         }
     }
     fn carried_here(&self, function: Option<&str>, site: &CarriedFrom) -> bool {
@@ -49218,10 +49253,12 @@ impl ProverState {
         if claim.is_some() && !tainted_claim { refuted = refuting_values(arena, &scope.facts, nikaia_std::index::or(claim, || 0), &ask, &model); }
         let mut is_refuted = refuted.is_some();
         let mut through_summaries: Vec<String> = vec![];
+        let mut loop_base: Option<Vec<i64>> = None;
         if claim.is_some() && !is_refuted && !tainted_claim && !scope.summed.is_empty() {
             let read = summed_read(&arena, &scope, nikaia_std::index::or(claim, || 0));
             if !read.is_empty() {
                 let facts = summed_facts(arena, &scope, &read);
+                loop_base = Some(facts.to_owned());
                 self.second_queries += 1;
                 match ask(&arena, &facts, nikaia_std::index::or(claim, || 0)) {
                     SolverAnswer::Proved => {
@@ -49234,6 +49271,19 @@ impl ProverState {
                 refuted = refuting_values(arena, &facts, nikaia_std::index::or(claim, || 0), &ask, &model);
                 is_refuted = refuted.is_some();
                 if is_refuted && !self.collecting { through_summaries = summed_notes(arena, &scope, &read, &facts, &ask, &model); }
+            }
+        }
+        let mut loop_open = false;
+        if claim.is_some() && !is_refuted && !tainted_claim && !scope.loops.is_empty() {
+            let base = nikaia_std::index::or(loop_base, || scope.facts.to_owned().into());
+            if loop_reads(&arena, &base, nikaia_std::index::or(claim, || 0), &scope.loops) {
+                let through = self.through_loops(arena, &scope, nikaia_std::index::or(claim, || 0), base, &ask);
+                if through.is_some() {
+                    scope.facts.push(nikaia_std::index::or(claim, || 0));
+                    outcome.held = ClaimHeld::ProvedThrough(nikaia_std::index::or(through, || "".into()));
+                    return outcome;
+                }
+                loop_open = true;
             }
         }
         let owner = carrying_function((at.function).as_deref());
@@ -49302,10 +49352,6 @@ impl ProverState {
                     Expr::Variable(name, _) => {
                         let name = *name;
                         let length = length_of(words.resolve(name));
-    pub loops_found: collections::BTreeMap<String, LoopFound>,
-    pub loops_failed: collections::BTreeSet<String>,
-    pub loop_claims: i64,
-    pub loop_queries: i64,
                         if scope.ints.contains(&length) {
                             let known = arena.var(&length);
                             given_by.insert(length_of(&param), known);
@@ -49348,37 +49394,6 @@ impl ProverState {
                 let breaking = breaking_values(arena, scope, nikaia_std::index::or(goal, || 0), &model);
                 if breaking.is_some() {
                     let values = nikaia_std::index::or(breaking, || collections::BTreeMap::new().into());
-    fn through_loops(&mut self, arena: &mut TermArena, scope: &ProverScope, claim: i64, base: Vec<i64>, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer) -> Option<String> {
-        let mut facts = base;
-        let mut texts: Vec<String> = vec![];
-        for record in scope.loops.iter() {
-            let key = loop_key(&arena, record);
-            if self.loops_failed.contains(&key) { continue; }
-            if !self.loops_found.contains_key(&key) {
-                let mut asked: Vec<i64> = vec![];
-                let found = loop_found(arena, record, &|on, given, goal| { matches!(ask(on, given, goal), SolverAnswer::Proved) }, &mut asked);
-                for n in asked.iter() {
-                    let n = nikaia_std::num::value(n);
-                    self.loop_queries += n;
-                }
-                if found.is_none() {
-                    self.loops_failed.insert(key.to_owned());
-                    continue;
-                }
-                self.loops_found.insert(key.to_owned(), nikaia_std::index::or(found, || LoopFound { parts: vec![] }));
-            }
-            let held = match *nikaia_std::index::get(&self.loops_found, &key) { Some(__nikaia_value) => __nikaia_value, None => continue };
-            facts.extend(loop_facts(arena, record, held));
-            texts.push(loop_found_text(arena, record, held));
-        }
-        if texts.is_empty() { return None; }
-        self.loop_claims += 1;
-        self.loop_queries += 1;
-        match ask(&arena, &facts, claim) {
-            SolverAnswer::Proved => Some(texts.join("; ")),
-            _ => None,
-        }
-    }
                     let given = values_given(&arena, &given_by, &read, &values);
                     let computed = claim_text_of((pre.computed).as_deref());
                     let has_computed = computed.is_some();
@@ -49425,12 +49440,10 @@ fn unread_name(names: &collections::BTreeSet<String>, scope: &ProverScope) -> Op
 }
 
 #[allow(clippy::too_many_arguments)]
-        let mut loop_base: Option<Vec<i64>> = None;
 pub fn postconditions_for(arena: &mut TermArena, posts: &[PostClaim], params: &[String], args: &[Expr], bound: &str, scope: &ProverScope, words: &winnow_grammar::InternerContext, pinned: &collections::BTreeMap<String, i64>) -> Vec<i64> {
     let mut args_given: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
     let mut k: i64 = 0;
     for arg in args.iter() {
-                loop_base = Some(facts.to_owned());
         if ((k) as usize) >= params.len() { break; }
         let param = nikaia_std::index::get(&params, (k) as usize);
         let term = lin_term(arg, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(pinned, scope, name) }, &mut arena.nodes);
@@ -49445,19 +49458,6 @@ pub fn postconditions_for(arena: &mut TermArena, posts: &[PostClaim], params: &[
                 }
             },
             _ => { },
-        let mut loop_open = false;
-        if claim.is_some() && !is_refuted && !tainted_claim && !scope.loops.is_empty() {
-            let base = nikaia_std::index::or(loop_base, || scope.facts.to_owned().into());
-            if loop_reads(&arena, &base, nikaia_std::index::or(claim, || 0), &scope.loops) {
-                let through = self.through_loops(arena, &scope, nikaia_std::index::or(claim, || 0), base, &ask);
-                if through.is_some() {
-                    scope.facts.push(nikaia_std::index::or(claim, || 0));
-                    outcome.held = ClaimHeld::ProvedThrough(nikaia_std::index::or(through, || "".into()));
-                    return outcome;
-                }
-                loop_open = true;
-            }
-        }
         }
         k += 1;
     }
@@ -49750,6 +49750,8 @@ fn prover_function(walk: &mut ProverWalk, item: &Spanned<Item>, owner: Option<St
 
 #[allow(clippy::too_many_arguments)]
 fn prover_block(walk: &mut ProverWalk, block: &Block, scope: &mut ProverScope, at: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> bool {
+    let mut untracked: collections::BTreeSet<String> = collections::BTreeSet::new();
+    if prover_binds_mutable(block) { untracked = untracked_in(block, words); }
     for index in 0..block.stmts.len() as i64 {
         let stmt = nikaia_std::index::get(&block.stmts, (index) as usize);
         if walk.state.collecting && ((index + 1) as usize) < block.stmts.len() {
@@ -49757,6 +49759,7 @@ fn prover_block(walk: &mut ProverWalk, block: &Block, scope: &mut ProverScope, a
             if returned.is_some() { walk.state.before_return.insert(stmt.span.start as i64, nikaia_std::index::or(returned, || "".into())); }
         }
         if prover_stmt(walk, &stmt, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition) { return true; }
+        prover_follow_mutables(walk, &stmt.node, scope, &untracked, words);
         if !prover_an_if(&stmt.node) && leaves_stmt(&stmt.node, &|e| { prover_throws(e, at, program, words, own, library, unaliased) }, holes_of, true) { scope.exact = false; }
     }
     false
@@ -49809,7 +49812,27 @@ fn prover_stmt(walk: &mut ProverWalk, stmt: &Spanned<Stmt>, scope: &mut ProverSc
         },
         Stmt::While { cond, body } => {
             prover_expr(walk, cond, span, &scope, &nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
+            let changed = assigned_in(body, words);
+            let mut state: Vec<String> = vec![];
+            for n in changed.iter() { if scope.mutables.contains(n) && scope.ints.contains(n) { state.push(n.to_owned()); } }
+            let mut records: Vec<LoopRecord> = vec![];
+            if !state.is_empty() {
+                let record = loop_record(&mut walk.arena, span.start as i64, &state, &scope.facts, &scope.ints, &|name| { prover_pinned(&walk.state.pinned, &scope, name) }, cond, body, words, &walk.claims, &|e| { prover_throws(e, at, program, words, own, library, unaliased) }, holes_of);
+                if record.is_some() { records.push(match record { Some(__nikaia_value) => __nikaia_value, None => return false }); }
+            }
             let mut inner = scope.clone();
+            for n in changed.iter() {
+                inner.rebind(&walk.arena, n);
+                scope.rebind(&walk.arena, n);
+            }
+            for n in state.iter() {
+                inner.ints.insert(n.to_owned());
+                inner.loose.insert(n.to_owned());
+                scope.ints.insert(n.to_owned());
+                scope.loose.insert(n.to_owned());
+            }
+            if !changed.is_empty() { scope.exact = false; }
+            scope.loops.extend(records);
             inner.path = None;
             inner.exact = false;
             scope.path = None;
@@ -49922,8 +49945,6 @@ fn prover_call_results(walk: &mut ProverWalk, expr: &Expr, top: bool, scope: &mu
             let callee = match prover_bound_callee(func, &scope, words, unaliased) { Some(__nikaia_value) => __nikaia_value, None => return };
             if !prover_returns_whole(walk, &callee, program, words, own, condition) { return; }
             let name = call_result_name(expr);
-    let mut untracked: collections::BTreeSet<String> = collections::BTreeSet::new();
-    if prover_binds_mutable(block) { untracked = untracked_in(block, words); }
             scope.rebind(&walk.arena, &name);
             let facts = prover_postconditions_of(walk, &callee, args, &name, &scope, program, words, own, condition);
             scope.ints.insert(name.to_owned());
@@ -49931,7 +49952,6 @@ fn prover_call_results(walk: &mut ProverWalk, expr: &Expr, top: bool, scope: &mu
             for fact in facts.iter() {
                 let fact = nikaia_std::num::value(fact);
                 scope.facts.push(fact);
-        prover_follow_mutables(walk, &stmt.node, scope, &untracked, words);
             }
             let alts = prover_summed(walk, &callee, args, &name, &scope, program, words, &written_of(expr));
             if alts.is_some() { scope.summed.insert(name.to_owned(), nikaia_std::index::or(alts, || vec![].into())); }
@@ -49984,27 +50004,7 @@ fn prover_pin_divisors(walk: &mut ProverWalk, expr: &Expr, scope: &ProverScope, 
                 }
             }
             if pinned.is_some() { walk.state.pinned.insert(key, nikaia_std::index::or(pinned, || 0)); }
-            let changed = assigned_in(body, words);
-            let mut state: Vec<String> = vec![];
-            for n in changed.iter() { if scope.mutables.contains(n) && scope.ints.contains(n) { state.push(n.to_owned()); } }
-            let mut records: Vec<LoopRecord> = vec![];
-            if !state.is_empty() {
-                let record = loop_record(&mut walk.arena, span.start as i64, &state, &scope.facts, &scope.ints, &|name| { prover_pinned(&walk.state.pinned, &scope, name) }, cond, body, words, &walk.claims, &|e| { prover_throws(e, at, program, words, own, library, unaliased) }, holes_of);
-                if record.is_some() { records.push(match record { Some(__nikaia_value) => __nikaia_value, None => return false }); }
-            }
         },
-            for n in changed.iter() {
-                inner.rebind(&walk.arena, n);
-                scope.rebind(&walk.arena, n);
-            }
-            for n in state.iter() {
-                inner.ints.insert(n.to_owned());
-                inner.loose.insert(n.to_owned());
-                scope.ints.insert(n.to_owned());
-                scope.loose.insert(n.to_owned());
-            }
-            if !changed.is_empty() { scope.exact = false; }
-            scope.loops.extend(records);
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); notes.extend(prover_pin_divisors(walk, expr, scope, words, ask, model)); },
         Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); notes.extend(prover_pin_divisors(walk, expr, scope, words, ask, model)); },
         _ => { },
@@ -50192,6 +50192,12 @@ fn prover_for(walk: &mut ProverWalk, bindings: &[winnow_grammar::Symbol], iter: 
     prover_expr(walk, iter, span, &scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
     let tainted = from_outside(iter, &scope.tainted, words, library, holes_of);
     let mut inner = scope.clone();
+    let changed = assigned_in(body, words);
+    for n in changed.iter() {
+        inner.rebind(&walk.arena, n);
+        scope.rebind(&walk.arena, n);
+    }
+    if !changed.is_empty() { scope.exact = false; }
     for binding in bindings.iter() {
         let binding = *binding;
         let n = words.resolve(binding).to_owned();
@@ -50364,12 +50370,6 @@ fn prover_calls_in(walk: &mut ProverWalk, expr: &Expr, span: Span, scope: &Prove
         Expr::Call { func, args, .. } => {
             let func = nikaia_std::boxed::open(func);
             let callee = prover_called(func, words, unaliased);
-    let changed = assigned_in(body, words);
-    for n in changed.iter() {
-        inner.rebind(&walk.arena, n);
-        scope.rebind(&walk.arena, n);
-    }
-    if !changed.is_empty() { scope.exact = false; }
             if callee.is_some() { prover_a_call(walk, nikaia_std::index::or(callee.as_deref(), || ""), args, span, scope, at, program, words, own, ask, model, escape, written_of, condition); }
         },
         _ => { },
@@ -50662,6 +50662,45 @@ fn prover_variable_named(value: Option<&Expr>, words: &winnow_grammar::InternerC
     }
 }
 
+fn prover_binds_mutable(block: &Block) -> bool {
+    for stmt in block.stmts.iter() {
+        match &stmt.node {
+            Stmt::Let { names, mutable, .. } => {
+                let mutable = *mutable;
+                if mutable && names.len() == 1 { return true; }
+            },
+            _ => { },
+        }
+    }
+    false
+}
+
+fn prover_follow_mutables(walk: &mut ProverWalk, stmt: &Stmt, scope: &mut ProverScope, untracked: &collections::BTreeSet<String>, words: &winnow_grammar::InternerContext) {
+    match stmt {
+        Stmt::Let { names, mutable, value, .. } => {
+            let mutable = *mutable;
+            if mutable && names.len() == 1 {
+                let n = words.resolve(*nikaia_std::index::get(&names, 0)).to_owned();
+                if !untracked.contains(&n) {
+                    let term = lin_term(value, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, &scope, name) }, &mut walk.arena.nodes);
+                    if term.is_some() && !walk.arena.mentions(nikaia_std::index::or(term, || 0), &n) {
+                        let v = nikaia_std::index::or(term, || 0);
+                        let at_entry = scope.at_entry(&mut walk.arena, v);
+                        scope.ints.insert(n.to_owned());
+                        scope.mutables.insert(n.to_owned());
+                        let named = walk.arena.var(&n);
+                        scope.facts.push(walk.arena.equal(named, v));
+                        if at_entry.is_some() { scope.entry.insert(n.to_owned(), nikaia_std::index::or(at_entry, || 0)); }
+                    }
+                }
+            }
+        },
+        Stmt::While { .. } => { },
+        Stmt::For { .. } => { },
+        _ => { if !scope.mutables.is_empty() { for n in assigned_in_statement(stmt, words) { if scope.mutables.contains(&n) { scope.rebind(&walk.arena, &n); } } } },
+    }
+}
+
 fn prover_an_if(stmt: &Stmt) -> bool {
     match stmt {
         Stmt::Expr(expr) => matches!(expr, Expr::If { .. }),
@@ -50834,45 +50873,6 @@ pub fn rendered(shown: &Shown, path: &str, source: &str) -> String {
     let mut line: i64 = -1;
     let mut column: i64 = -1;
     for one in placed.iter() {
-fn prover_binds_mutable(block: &Block) -> bool {
-    for stmt in block.stmts.iter() {
-        match &stmt.node {
-            Stmt::Let { names, mutable, .. } => {
-                let mutable = *mutable;
-                if mutable && names.len() == 1 { return true; }
-            },
-            _ => { },
-        }
-    }
-    false
-}
-
-fn prover_follow_mutables(walk: &mut ProverWalk, stmt: &Stmt, scope: &mut ProverScope, untracked: &collections::BTreeSet<String>, words: &winnow_grammar::InternerContext) {
-    match stmt {
-        Stmt::Let { names, mutable, value, .. } => {
-            let mutable = *mutable;
-            if mutable && names.len() == 1 {
-                let n = words.resolve(*nikaia_std::index::get(&names, 0)).to_owned();
-                if !untracked.contains(&n) {
-                    let term = lin_term(value, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, &scope, name) }, &mut walk.arena.nodes);
-                    if term.is_some() && !walk.arena.mentions(nikaia_std::index::or(term, || 0), &n) {
-                        let v = nikaia_std::index::or(term, || 0);
-                        let at_entry = scope.at_entry(&mut walk.arena, v);
-                        scope.ints.insert(n.to_owned());
-                        scope.mutables.insert(n.to_owned());
-                        let named = walk.arena.var(&n);
-                        scope.facts.push(walk.arena.equal(named, v));
-                        if at_entry.is_some() { scope.entry.insert(n.to_owned(), nikaia_std::index::or(at_entry, || 0)); }
-                    }
-                }
-            }
-        },
-        Stmt::While { .. } => { },
-        Stmt::For { .. } => { },
-        _ => { if !scope.mutables.is_empty() { for n in assigned_in_statement(stmt, words) { if scope.mutables.contains(&n) { scope.rebind(&walk.arena, &n); } } } },
-    }
-}
-
         if line < 0 && one.label.main {
             line = one.line;
             column = one.column;
@@ -62351,6 +62351,10 @@ pub mod prover_claims {
     #[allow(unused_imports)]
     pub use super::{PreClaim, CarriedFrom, Precondition, PostClaim, SummaryExit, SummaryAlt, Foreign, ForeignShape, foreign_shape, foreign_from};
 }
+pub mod prover_loops {
+    #[allow(unused_imports)]
+    pub use super::{LoopRecord, LoopFound, loop_before_name, loop_record, loop_found, loop_facts, loop_found_text, loop_open_text, loop_reads, loop_key};
+}
 pub mod prover_passes {
     #[allow(unused_imports)]
     pub use super::{ProverAnswers, prover_passes};
@@ -62474,8 +62478,4 @@ pub mod views {
 pub mod written {
     #[allow(unused_imports)]
     pub use super::{written_expression, written_pattern};
-}
-pub mod prover_loops {
-    #[allow(unused_imports)]
-    pub use super::{LoopRecord, LoopFound, loop_before_name, loop_record, loop_found, loop_facts, loop_found_text, loop_open_text, loop_reads, loop_key};
 }
