@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1022] — 2026-10-18
+
+**A `String` that only views reach is a view at grammar rules, parsed parameters, `std` views and map keys**
+- With `ref` dropped, a rule's result, a field filled by an action, a parameter handed to a parse, a `std` view method's result and a map key filled by `entry` or `split_at` now lower as they did with `ref String`, instead of NK1104/NK1106/NK2302 or a copy. A `String` key no longer reads as kept by `std`'s `get(self)`, so the generated Rust compiles. The ledger lists lent `String` parameters as `borrowed`. NK1257 now also refuses `ref int`.
+
 ## [0.0.1021] — 2026-10-18
 
 **A tail `if`/`match` takes the wanted `T?`; a shift past the width is `NK1116`**
