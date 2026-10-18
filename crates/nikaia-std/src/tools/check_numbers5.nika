@@ -63,8 +63,13 @@ impl CheckState {
     }
 
     fn a_name_folded(ref self, world: ref CheckWorld, name: winnow_grammar::Symbol) -> Folded sync {
-        let local = self.binding(world.words.resolve(name)) ?? return Folded::Nothing
-        let value = local.constant ?? return Folded::Nothing
+        let written = world.words.resolve(name)
+        let local = self.binding(written) ?? return Folded::Nothing
+        let mut known: Integer? = local.constant?.clone()
+        if known == null {
+            known = self.followed_here(local.id, written)
+        }
+        let value = known ?? return Folded::Nothing
         // **An open number pins nothing yet** (ADR-285 D25): its uses have not
         // all been seen, and what it comes to is held to the type they decide.
         if local.open_number != null {

@@ -195,6 +195,11 @@ pub struct CheckFlow {
     pub at_a_write_door: bool,
     /// The name of an empty list a `push` is being walked on (#523).
     pub pushed_into: String?,
+    /// **What a `let mut` holds where straight-line code has followed it**
+    /// (Part III C.4), by binding: its value, and each value assigned to it
+    /// in the frame it was bound in. An assignment in a nested block forgets
+    /// it, and a loop or a lambda around a read does not see it.
+    pub followed: collections::BTreeMap[i64, Integer],
 }
 
 impl CheckFlow {
@@ -247,6 +252,7 @@ impl CheckFlow {
             unknown_said: 0,
             list_constants: collections::BTreeMap(),
             overflowed: collections::BTreeSet(),
+            followed: collections::BTreeMap(),
             reaching: null,
             reached: null,
             grown_text: collections::BTreeSet(),

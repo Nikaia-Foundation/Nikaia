@@ -502,13 +502,17 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
             else => {},
         }
     }
-    // **Only an immutable `let` carries its value forward** (Part III, C.4).
+    // **Only an immutable `let` carries its value forward** (Part III, C.4);
+    // a `let mut`'s is followed through straight-line code.
     let mut constant: Integer? = null
-    if !mutable {
-        let c = state.constant_of(world, value)
-        if c != null {
-            let held: CheckConstant = c ?? return check_core_stmt_unit()
+    let mut followed: Integer? = null
+    let c = state.constant_of(world, value)
+    if c != null {
+        let held: CheckConstant = c ?? return check_core_stmt_unit()
+        if !mutable {
             constant = held.value
+        } else if !held.beyond {
+            followed = held.value
         }
     }
     // **What a task binds for itself** (ADR-055 D6).
@@ -517,6 +521,9 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
         state.task_bindings[tasks - 1].push((name.clone(), bound.clone(), span.start as i64))
     }
     let id = state.a_new_binding()
+    if followed != null {
+        state.flow.followed.insert(id, followed ?? return check_core_stmt_unit())
+    }
     if element_at != null {
         state.flow.open_elements.insert(id, element_at ?? 0)
         if element_constants != null {
@@ -733,6 +740,8 @@ pub fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref Ch
         }
         state.number_asked(world, value, into, span, true)
     }
+    // **A `let mut` is followed through what straight-line code assigns it**.
+    state.assigned_followed(world, target, op, value)
     // **What is assigned is given to the place** (ADR-293 D29).
     if op == null {
         let to: String = if check_core_stmt_an_index(target) { "written into a container".clone() } else { "assigned to another name".clone() }

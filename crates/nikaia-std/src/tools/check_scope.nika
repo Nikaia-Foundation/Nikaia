@@ -31,6 +31,71 @@ impl CheckState {
         return null
     }
 
+    /// The innermost frame a name is bound in, or -1.
+    pub fn frame_holding(ref self, name: ref String) -> i64 sync {
+        let mut frame_at = self.scope.len()
+        while frame_at > 0 {
+            frame_at = frame_at - 1
+            for local in self.scope[frame_at] {
+                if local.name == name {
+                    return frame_at
+                }
+            }
+        }
+        return -1
+    }
+
+    /// **What a `let mut` holds here, where it is followed** (Part III C.4):
+    /// not inside a loop or a lambda that began after it was bound, which may
+    /// run after a later assignment.
+    pub fn followed_here(ref self, id: i64, name: ref String) -> Integer? sync {
+        let value = self.flow.followed[id]?.clone() ?? return null
+        let count = self.repeats.len()
+        if count > 0 && self.repeats[count - 1].frame > self.frame_holding(name) {
+            return null
+        }
+        return value
+    }
+
+    /// **An assignment to a followed `let mut`**: in the frame it was bound
+    /// in, what it now holds where that folds; in a nested block (a branch,
+    /// a loop, a lambda), forgotten, since the code after it may or may not
+    /// have run it.
+    pub fn assigned_followed(ref mut self, world: ref CheckWorld, target: ref Expr, op: ref BinaryOp?, value: ref Expr) sync {
+        let name: String = match target {
+            Expr::Variable(written, _) => world.words.resolve(written).clone(),
+            else => return,
+        }
+        let local = self.binding(name) ?? return
+        let mut next: Integer? = null
+        if self.frame_holding(name) == self.scope.len() - 1 {
+            next = self.followed_value(world, local.id, op, value)
+        }
+        if next == null {
+            self.flow.followed.remove(local.id)
+        } else {
+            self.flow.followed.insert(local.id, next ?? return)
+        }
+    }
+
+    fn followed_value(ref self, world: ref CheckWorld, id: i64, op: ref BinaryOp?, value: ref Expr) -> Integer? sync {
+        let given = self.constant_of(world, value) ?? return null
+        if given.beyond {
+            return null
+        }
+        if op == null {
+            return given.value
+        }
+        let before = self.flow.followed[id]?.clone() ?? return null
+        let o: ref BinaryOp = op ?? return null
+        return match o {
+            BinaryOp::Add => integer_sum(before, given.value),
+            BinaryOp::Sub => integer_difference(before, given.value),
+            BinaryOp::Mul => integer_product(before, given.value),
+            else => null,
+        }
+    }
+
     /// The type of the innermost binding of a name.
     pub fn lookup(ref self, name: ref String) -> Ty? sync {
         let found = self.binding(name) ?? return null

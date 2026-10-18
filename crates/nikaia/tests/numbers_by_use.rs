@@ -299,3 +299,39 @@ fn a_walk_over_a_list_of_numbers_binds_an_open_number() {
         .is_empty()
     );
 }
+
+/// **A `let mut` is followed through straight-line code** (#656, Part III
+/// C.4): what it is given and what each assignment in its own block folds to
+/// is what an operation over it comes to, so `m * 3` after `m = m + 1` is
+/// `NK1116` as rustc's `arithmetic_overflow` would have it. A branch that
+/// assigns it, a loop around the read and a loop that assigns it forget it:
+/// the operation may or may not overflow there, and nothing is refused.
+#[test]
+fn a_mutable_number_is_followed_until_a_branch_or_a_loop() {
+    for (source, message) in [
+        (
+            "fn main() {\n    let mut m = 1000000000\n    m = m + 1\n    println(m * 3)\n}\n",
+            "This comes to 3000000003, which doesn't fit in an `i32`.",
+        ),
+        (
+            "fn main() {\n    let mut m: i32 = 5\n    m = 1000000000\n    m += 1000000000\n    println(m + 2000000000)\n}\n",
+            "This comes to 4000000000, which doesn't fit in an `i32`.",
+        ),
+    ] {
+        let found = findings(source);
+        assert!(
+            found
+                .iter()
+                .any(|f| f.code == "NK1116" && f.message == message),
+            "{source}: {found:#?}"
+        );
+    }
+    for source in [
+        "fn f(c: bool) {\n    let mut m = 1000000000\n    if c {\n        m = 1\n    }\n    println(m * 3)\n}\n\nfn main() {\n    f(true)\n}\n",
+        "fn f(n: i64) {\n    let mut m = 1000000000\n    for i in 0..<n {\n        m = m / 10\n    }\n    println(m * 3)\n}\n\nfn main() {\n    f(3)\n}\n",
+        "fn main() {\n    let mut m = 1000000000\n    let mut first = true\n    for i in 0..<2 {\n        if !first {\n            println(m * 3)\n        }\n        m = 1\n        first = false\n    }\n}\n",
+    ] {
+        let found = findings(source);
+        assert!(found.is_empty(), "{source}: {found:#?}");
+    }
+}

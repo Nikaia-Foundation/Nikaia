@@ -18105,16 +18105,16 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         }
     }
     let mut constant: Option<Integer> = None;
-    if !mutable {
-        let c = state.constant_of(world, value);
-        if c.is_some() {
-            let held: CheckConstant = match c { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_unit() };
-            constant = Some(held.value);
-        }
+    let mut followed: Option<Integer> = None;
+    let c = state.constant_of(world, value);
+    if c.is_some() {
+        let held: CheckConstant = match c { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_unit() };
+        if !mutable { constant = Some(held.value); } else if !held.beyond { followed = Some(held.value); }
     }
     let tasks = state.task_bindings.len() as i64;
     if tasks > 0 { state.task_bindings[nikaia_std::index::at(tasks - 1)].push((name.to_owned(), bound.clone(), span.start as i64)); }
     let id = state.a_new_binding();
+    if followed.is_some() { state.flow.followed.insert(id, match followed { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_unit() }); }
     if element_at.is_some() {
         state.flow.open_elements.insert(id, nikaia_std::index::or(element_at, || 0));
         if element_constants.is_some() { state.flow.list_constants.insert(id, nikaia_std::index::or(element_constants, || vec![].into())); }
@@ -18281,6 +18281,7 @@ pub fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world: &Chec
         if open.is_some() { if integer_named(&value_of_a_copy(&found.unseen())).is_some() { state.number_asked(world, target, &found, span, true); } else if state.number_shaped(world, value) { state.open_number_given(world, nikaia_std::index::or(open, || 0), value, span); } }
         state.number_asked(world, value, &into, span, true);
     }
+    state.assigned_followed(world, target, op, value);
     if op.is_none() {
         let to: String = if check_core_stmt_an_index(target) { "written into a container".to_owned() } else { "assigned to another name".to_owned() };
         state.hands_over(world, value, &found, &to, span);
@@ -20733,10 +20734,11 @@ pub struct CheckFlow {
     pub unsigned_slots: collections::BTreeMap<i64, Vec<CheckUnsignedSlot>>,
     pub at_a_write_door: bool,
     pub pushed_into: Option<String>,
+    pub followed: collections::BTreeMap<i64, Integer>,
 }
 
 impl CheckFlow {
-    pub fn start(computes: bool, harvesting: bool) -> CheckFlow { CheckFlow { raised: (None, None), computes, option_values: Vec::new(), option_literals: Vec::new(), unrolling: None, harvesting, inside_a_comptime: false, literal_receivers: Vec::new(), expected_either: false, field_either: false, throwing: false, caught: false, caught_several: false, caught_one: None, guarded: None, loops: 0, barrier: None, fallible_methods: collections::BTreeSet::new(), opaque_methods: collections::BTreeSet::new(), pausing_methods: collections::BTreeSet::new(), settled_methods: collections::BTreeSet::new(), paused_args: Vec::new(), next_choice: 0, read_index: collections::BTreeMap::new(), pending_coalesces: Vec::new(), writing_index: false, read_a_map: false, map_read_sites: collections::BTreeSet::new(), map_views: collections::BTreeSet::new(), last_resolved: None, receiver_name: None, receiver_from_text: false, text_paths: collections::BTreeSet::new(), empty_lists: collections::BTreeMap::new(), open_numbers: collections::BTreeMap::new(), open_elements: collections::BTreeMap::new(), open_walks: collections::BTreeMap::new(), open_params: collections::BTreeMap::new(), walk_open: None, walk_view: false, lambda_expected: None, open_calls: collections::BTreeMap::new(), unknown_bound: collections::BTreeSet::new(), unknown_said: 0, list_constants: collections::BTreeMap::new(), overflowed: collections::BTreeSet::new(), reaching: None, reached: None, grown_text: collections::BTreeSet::new(), widening_casts: collections::BTreeSet::new(), unsigned_slots: collections::BTreeMap::new(), at_a_write_door: false, pushed_into: None } }
+    pub fn start(computes: bool, harvesting: bool) -> CheckFlow { CheckFlow { raised: (None, None), computes, option_values: Vec::new(), option_literals: Vec::new(), unrolling: None, harvesting, inside_a_comptime: false, literal_receivers: Vec::new(), expected_either: false, field_either: false, throwing: false, caught: false, caught_several: false, caught_one: None, guarded: None, loops: 0, barrier: None, fallible_methods: collections::BTreeSet::new(), opaque_methods: collections::BTreeSet::new(), pausing_methods: collections::BTreeSet::new(), settled_methods: collections::BTreeSet::new(), paused_args: Vec::new(), next_choice: 0, read_index: collections::BTreeMap::new(), pending_coalesces: Vec::new(), writing_index: false, read_a_map: false, map_read_sites: collections::BTreeSet::new(), map_views: collections::BTreeSet::new(), last_resolved: None, receiver_name: None, receiver_from_text: false, text_paths: collections::BTreeSet::new(), empty_lists: collections::BTreeMap::new(), open_numbers: collections::BTreeMap::new(), open_elements: collections::BTreeMap::new(), open_walks: collections::BTreeMap::new(), open_params: collections::BTreeMap::new(), walk_open: None, walk_view: false, lambda_expected: None, open_calls: collections::BTreeMap::new(), unknown_bound: collections::BTreeSet::new(), unknown_said: 0, list_constants: collections::BTreeMap::new(), overflowed: collections::BTreeSet::new(), followed: collections::BTreeMap::new(), reaching: None, reached: None, grown_text: collections::BTreeSet::new(), widening_casts: collections::BTreeSet::new(), unsigned_slots: collections::BTreeMap::new(), at_a_write_door: false, pushed_into: None } }
 }
 
 
@@ -25177,8 +25179,14 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     fn a_name_folded(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, name: winnow_grammar::Symbol) -> Folded {
-        let local = match self.binding(world.words.resolve(name)) { Some(__nikaia_value) => __nikaia_value, None => return Folded::Nothing };
-        let value = match local.constant { Some(__nikaia_value) => __nikaia_value, None => return Folded::Nothing };
+        let written = world.words.resolve(name);
+        let local = match self.binding(written) { Some(__nikaia_value) => __nikaia_value, None => return Folded::Nothing };
+        let mut known: Option<Integer> = match local.constant.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        };
+        if known.is_none() { known = self.followed_here(local.id, written); }
+        let value = match known { Some(__nikaia_value) => __nikaia_value, None => return Folded::Nothing };
         if local.open_number.is_some() { return Folded::Value(Constant { value: value.clone(), pinned: "".to_owned() }); }
         let declared = integer_named(&local.ty);
         if declared.is_some() { return Folded::Value(Constant { value: value.clone(), pinned: match declared { Some(__nikaia_value) => __nikaia_value, None => return Folded::Nothing } }); }
@@ -26849,6 +26857,57 @@ impl CheckState {
             }
         }
         None
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn frame_holding(&self, name: &str) -> i64 {
+        let mut frame_at = self.scope.len() as i64;
+        while frame_at > 0 {
+            frame_at = frame_at - 1;
+            for local in (*nikaia_std::index::get(&self.scope, nikaia_std::index::at(frame_at))).iter() { if local.name == name { return frame_at; } }
+        }
+        -1
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn followed_here(&self, id: i64, name: &str) -> Option<Integer> {
+        let value = match match *nikaia_std::index::get(&self.flow.followed, &id) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        } { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let count = self.repeats.len() as i64;
+        if count > 0 && nikaia_std::index::get(&self.repeats, nikaia_std::index::at(count - 1)).frame > self.frame_holding(name) { return None; }
+        Some(value)
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn assigned_followed(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, target: &Expr, op: Option<&BinaryOp>, value: &Expr) {
+        let name: String = match target {
+            Expr::Variable(written, _) => { let written = *written; world.words.resolve(written).to_owned() },
+            _ => return,
+        };
+        let local = match self.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return };
+        let mut next: Option<Integer> = None;
+        if self.frame_holding(&name) == self.scope.len() as i64 - 1 { next = self.followed_value(world, local.id, op, value); }
+        if next.is_none() { self.flow.followed.remove(&local.id); } else { self.flow.followed.insert(local.id, match next { Some(__nikaia_value) => __nikaia_value, None => return }); }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn followed_value(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, id: i64, op: Option<&BinaryOp>, value: &Expr) -> Option<Integer> {
+        let given = match self.constant_of(world, value) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        if given.beyond { return None; }
+        if op.is_none() { return Some(given.value); }
+        let before = match match *nikaia_std::index::get(&self.flow.followed, &id) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        } { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let o: &BinaryOp = match op { Some(__nikaia_value) => __nikaia_value, None => return None };
+        match o {
+            BinaryOp::Add => integer_sum(&before, &given.value),
+            BinaryOp::Sub => integer_difference(&before, &given.value),
+            BinaryOp::Mul => integer_product(&before, &given.value),
+            _ => None,
+        }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
