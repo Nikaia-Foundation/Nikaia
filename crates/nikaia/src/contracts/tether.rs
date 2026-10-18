@@ -110,15 +110,17 @@ pub fn infer(ledger: &mut Ledger, units: &[&Parsed], library: &Ledger) {
         };
         for item in &parsed.program.items {
             match &item.node {
-                Item::Fn { name, .. } => keep(
-                    function_key(parsed, *name, None),
-                    nikaia_std::tools::tether::function_views(
+                Item::Fn { name, .. } => {
+                    let key = function_key(parsed, *name, None);
+                    let held = nikaia_std::tools::tether::function_views(
                         &item.node,
                         None,
                         &parsed.interner,
                         &borrowing,
-                    ),
-                ),
+                    );
+                    let held = lent_text(held, &item.node, &key, ledger, library, parsed);
+                    keep(key, held)
+                }
                 Item::Impl {
                     target, methods, ..
                 } => {
@@ -127,15 +129,15 @@ pub fn infer(ledger: &mut Ledger, units: &[&Parsed], library: &Ledger) {
                         let Item::Fn { name, .. } = &method.node else {
                             continue;
                         };
-                        keep(
-                            function_key(parsed, *name, Some(&target)),
-                            nikaia_std::tools::tether::function_views(
-                                &method.node,
-                                Some(&target),
-                                &parsed.interner,
-                                &borrowing,
-                            ),
+                        let key = function_key(parsed, *name, Some(&target));
+                        let held = nikaia_std::tools::tether::function_views(
+                            &method.node,
+                            Some(&target),
+                            &parsed.interner,
+                            &borrowing,
                         );
+                        let held = lent_text(held, &method.node, &key, ledger, library, parsed);
+                        keep(key, held);
                     }
                 }
                 Item::Grammar(def) => {
@@ -168,6 +170,70 @@ pub fn infer(ledger: &mut Ledger, units: &[&Parsed], library: &Ledger) {
         }
     }
     super::keep::infer(ledger, units, library);
+}
+
+/// **A `String` parameter the body only reads is lent**
+/// ([ADR-282](../../../../docs/specification/adr/adr-282.md) D2, D5): a `&str`
+/// below, as one written `ref String` is, so the ledger says `borrowed` for
+/// both alike. In the order the signature has them: the receiver, the
+/// parameters, the result.
+fn lent_text(
+    held: Vec<Held>,
+    item: &Item,
+    key: &str,
+    ledger: &Ledger,
+    library: &Ledger,
+    parsed: &Parsed,
+) -> Vec<Held> {
+    let Item::Fn { receiver, args, .. } = item else {
+        return held;
+    };
+    let Some(contract) = ledger.functions.get(key) else {
+        return held;
+    };
+    let named = |at: usize| parsed.text(args[at].name).to_string();
+    let lent: Vec<String> = (0..args.len())
+        .filter(|at| {
+            let ty = &args[*at].ty;
+            parsed.text(ty.name) == "String"
+                && ty.generics.is_empty()
+                && !ty.is_view
+                && !ty.is_nullable
+                && !ty.is_slice
+                && !args[*at].mutable
+                && !held.iter().any(|h| h.position == named(*at))
+                && super::keeps::lends_in_own(
+                    contract,
+                    *at + usize::from(receiver.is_some()),
+                    &[library],
+                )
+        })
+        .map(named)
+        .collect();
+    if lent.is_empty() {
+        return held;
+    }
+    let params: Vec<String> = (0..args.len()).map(named).collect();
+    let mut out: Vec<Held> = held
+        .iter()
+        .filter(|h| h.position == "self")
+        .cloned()
+        .collect();
+    for name in &params {
+        match held.iter().find(|h| &h.position == name) {
+            Some(h) => out.push(h.clone()),
+            None if lent.contains(name) => out.push(Held {
+                position: name.clone(),
+                state: State::Borrowed,
+            }),
+            None => {}
+        }
+    }
+    out.extend(
+        held.into_iter()
+            .filter(|h| h.position != "self" && !params.contains(&h.position)),
+    );
+    out
 }
 
 /// `Type::method`, or the function's own name; `new` for Part I 4.2's

@@ -182,3 +182,24 @@ fn main() {
         &program.replace("TEXT", "String"),
     );
 }
+
+/// The ledger says `borrowed` for a `String` parameter the body only reads,
+/// as it does for one written `ref String`: both are a `&str` below.
+#[test]
+fn a_lent_string_parameter_is_borrowed_in_the_ledger() {
+    let views = |source: &str| {
+        let parsed = nikaia::parser::parse_to_ast(source).expect("the source parses");
+        let ledger = common::infer(&parsed);
+        let contract = ledger.functions.get("report").expect("an entry");
+        contract
+            .views
+            .iter()
+            .map(|held| format!("{}: {}", held.position, held.state.as_str()))
+            .collect::<Vec<_>>()
+    };
+    let program = "fn report(dna: TEXT, k: i64) -> i64 {\n    return dna.len() + k\n}\n\n\
+                   fn main() {\n    let d = \"GGT\".clone()\n    println(f\"{report(d, 1)}\")\n}\n";
+    let written = views(&program.replace("TEXT", "ref String"));
+    assert_eq!(written, vec!["dna: borrowed".to_string()]);
+    assert_eq!(views(&program.replace("TEXT", "String")), written);
+}
