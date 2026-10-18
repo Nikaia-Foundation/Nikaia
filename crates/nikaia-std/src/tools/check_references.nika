@@ -225,6 +225,12 @@ impl CheckState {
         if self.a_pending_coalesce_is_lent(given_expr) {
             return true
         }
+        // **Nor a map's read past a jump**: `index::get` answers an
+        // `Option<&T>`, so what `m[k] ?? continue` opens is a view already, as
+        // `let site = m[k] ?? continue` binds one.
+        if moves(found) && self.a_map_read_past_a_jump(world, given_expr) {
+            return true
+        }
         // **A plain value lent to a `ref T?` is put in the option too** (Part
         // I 2.3's wrap at an argument).
         if want_nullable_view && !found_nullable && !found.is_unknown() {
@@ -339,4 +345,18 @@ fn check_gives_back_returns(expr: ref Expr, name: ref String, words: ref winnow_
         }
     }
     return found
+}
+
+impl CheckState {
+    /// `m[k] ?? continue`: a read through the brackets of a map whose fallback
+    /// jumps, and which is not copied out.
+    pub fn a_map_read_past_a_jump(ref self, world: ref CheckWorld, given: ref Expr) -> bool sync {
+        return match given {
+            Expr::Coalesce { value: read, fallback, .. } => {
+                let node = id_of(read) as i64
+                self.flow.map_read_sites.contains(node) && !self.facts.copied_reads.contains(node) && self.jumps(world, fallback)
+            }
+            else => false,
+        }
+    }
 }

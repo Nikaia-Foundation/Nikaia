@@ -12975,12 +12975,12 @@ fn check_core_call_declared(contract: &FnContract) -> Option<Ty> {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_call_lent(state: &mut CheckState, args: &[Expr], params: &[Ty], found: &[Ty]) {
+fn check_core_call_lent(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, args: &[Expr], params: &[Ty], found: &[Ty]) {
     let mut i: i64 = -1;
     for given in args.iter() {
         i += 1;
         if i >= params.len() as i64 || i >= found.len() as i64 { break; }
-        if (*nikaia_std::index::get(&params, nikaia_std::index::at(i))).is_a_view() && !(*nikaia_std::index::get(&found, nikaia_std::index::at(i))).is_a_view() && !check_core_call_opaque(nikaia_std::index::get(&found, nikaia_std::index::at(i))) { state.facts.lent_args.insert(id_of(given) as i64); }
+        if (*nikaia_std::index::get(&params, nikaia_std::index::at(i))).is_a_view() && !(*nikaia_std::index::get(&found, nikaia_std::index::at(i))).is_a_view() && !check_core_call_opaque(nikaia_std::index::get(&found, nikaia_std::index::at(i))) && !(moves(nikaia_std::index::get(&found, nikaia_std::index::at(i))) && state.a_map_read_past_a_jump(world, given)) { state.facts.lent_args.insert(id_of(given) as i64); }
     }
 }
 
@@ -12990,7 +12990,7 @@ fn check_core_call_lent(state: &mut CheckState, args: &[Expr], params: &[Ty], fo
 fn check_core_call_kept<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, func: &Expr, args: &[Expr], name: &str, params: &[Ty], gives: Ty, is_sync: bool, fails: bool, span: &Span) -> Ty {
     state.read_at.push((name.to_owned(), span.start as i64));
     let found = check_core_arguments_given(state, world, host, args, params, false, None, span);
-    check_core_call_lent(state, args, params, &found);
+    check_core_call_lent(state, world, args, params, &found);
     state.kept_arguments_are_its_own(world, args, params);
     state.facts.kept_calls.insert(id_of(func) as i64, (!is_sync, fails));
     if state.current.is_some() {
@@ -13234,7 +13234,7 @@ fn check_core_call_unresolved<H: CheckHost>(state: &mut CheckState, world: &Chec
         match looked {
             Ty::Fn { ref params, ref result, can_throw, .. } => {
                 let result = nikaia_std::boxed::open(result);
-                check_core_call_lent(state, args, params, found);
+                check_core_call_lent(state, world, args, params, found);
                 let current: String = nikaia_std::index::or(match state.current.as_ref() {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                     None => None,
@@ -26309,6 +26309,7 @@ impl CheckState {
         let found_a_function = matches!(found, Ty::Fn { .. });
         if found_a_function && self.a_lent_parameter(world, given_expr) { return false; }
         if self.a_pending_coalesce_is_lent(given_expr) { return true; }
+        if moves(found) && self.a_map_read_past_a_jump(world, given_expr) { return true; }
         if want_nullable_view && !found_nullable && !found.is_unknown() { self.facts.nullable_args.insert(id_of(given_expr) as i64, FactWrap::Constructor); }
         self.facts.lent_args.insert(id_of(given_expr) as i64);
         true
@@ -26388,6 +26389,21 @@ fn check_gives_back_returns(expr: &Expr, name: &str, words: &winnow_grammar::Int
         }
     }
     found
+}
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_map_read_past_a_jump(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, given: &Expr) -> bool {
+        match given {
+            Expr::Coalesce { value: read, fallback, .. } => {
+                let read = nikaia_std::boxed::open(read); let fallback = nikaia_std::boxed::open(fallback);
+                let node = id_of(read) as i64;
+                self.flow.map_read_sites.contains(&node) && !self.facts.copied_reads.contains(&node) && self.jumps(world, fallback)
+            },
+            _ => false,
+        }
+    }
 }
 
 

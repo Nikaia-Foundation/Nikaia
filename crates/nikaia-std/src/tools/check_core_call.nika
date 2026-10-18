@@ -154,15 +154,16 @@ fn check_core_call_declared(contract: ref FnContract) -> Ty? {
     return result.clone()
 }
 
-/// What a `ref` parameter of code takes is lent to it (D20).
-fn check_core_call_lent(mut state: CheckState, args: ref Vec[Expr], params: ref Vec[Ty], found: ref Vec[Ty]) sync {
+/// What a `ref` parameter of code takes is lent to it (D20), unless it is a
+/// view already: a map's read past a jump is.
+fn check_core_call_lent(mut state: CheckState, world: ref CheckWorld, args: ref Vec[Expr], params: ref Vec[Ty], found: ref Vec[Ty]) sync {
     let mut i = -1
     for given in args {
         i += 1
         if i >= params.len() as i64 || i >= found.len() as i64 {
             break
         }
-        if params[i].is_a_view() && !found[i].is_a_view() && !check_core_call_opaque(found[i]) {
+        if params[i].is_a_view() && !found[i].is_a_view() && !check_core_call_opaque(found[i]) && !(moves(found[i]) && state.a_map_read_past_a_jump(world, given)) {
             state.facts.lent_args.insert(id_of(given) as i64)
         }
     }
@@ -173,7 +174,7 @@ fn check_core_call_lent(mut state: CheckState, args: ref Vec[Expr], params: ref 
 fn check_core_call_kept[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, func: ref Expr, args: ref Vec[Expr], name: ref String, params: ref Vec[Ty], gives: Ty, is_sync: bool, fails: bool, span: ref Span) -> Ty sync {
     state.read_at.push((name.clone(), span.start as i64))
     let found = check_core_arguments_given(state, world, host, args, params, false, null, span)
-    check_core_call_lent(state, args, params, found)
+    check_core_call_lent(state, world, args, params, found)
     state.kept_arguments_are_its_own(world, args, params)
     state.facts.kept_calls.insert(id_of(func) as i64, (!is_sync, fails))
     if state.current != null {
@@ -486,7 +487,7 @@ fn check_core_call_unresolved[H: CheckHost](mut state: CheckState, world: ref Ch
         let looked: Ty = state.lookup(name) ?? Ty::Unknown
         match looked {
             Ty::Fn { params, result, can_throw, .. } => {
-                check_core_call_lent(state, args, params, found)
+                check_core_call_lent(state, world, args, params, found)
                 // **A parameter of code fails with what its callers hand
                 // it** (ADR-351 D1, D4).
                 let current: String = state.current?.clone() ?? ""
