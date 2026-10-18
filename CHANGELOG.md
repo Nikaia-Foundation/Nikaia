@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1015] — 2026-10-18
+
+**`(A, B)?` is a type**
+- A tuple type takes the trailing `?` in every type position, as every `T?` does, and lowers to `Option<(A, B)>` (ADR-364, Part I 2.3). `p?.0` is the first part as a nullable, a further `?.` step reaches on (ADR-278 D10, D14), and `p ?? ("", "")` falls back to one value, the tuple. `NK1254` is retired.
+
 ## [0.0.1014] — 2026-10-18
 
 **a build without --target is for the machine it runs on; nikaia run shows no Cargo progress**
