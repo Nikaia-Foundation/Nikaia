@@ -32,6 +32,13 @@ pub fn check_core_grammar_call[H: CheckHost](mut state: CheckState, world: ref C
             Ty::Named { name, args: inner, .. } => name == "Bytes" && inner.len() == 0,
             else => false,
         }
+        let over_text = match given {
+            Ty::Named { name, args: inner, .. } => (name == "String" || name == "str" || name == "Mapped") && inner.len() == 0,
+            else => false,
+        }
+        if !over_bytes && !over_text && !given.is_unknown() {
+            state.findings.push(check_core_grammar_input_refused(key, given, span))
+        }
         let cut = key.find("::") ?? 0
         if over_bytes && cut > 0 {
             state.facts.bytes_entries.insert(id_of(arg) as i64)
@@ -136,4 +143,13 @@ pub fn check_core_a_mut_parameter_given_away[H: CheckHost](mut state: CheckState
     let notes: Vec[String] = [f"`mut {name}` is passed as `ref mut`, so the caller's `{ty.text()}` is changed in place and stays the caller's. Giving it away would take it from them."]
     let help: String = f"Write `{name}.clone()` for a copy{way}, or drop the `mut` if the function is meant to use up its value."
     state.findings.push(check_refusal("NK1131", span, f"You can't give away `{name}` here: a `mut` parameter is only borrowed.", notes, help))
+}
+
+/// `NK1282`: an entry handed neither text (a `String`, or a mapping, which is
+/// checked text, ADR-016 D1) nor a `Bytes` (ADR-366 D1).
+fn check_core_grammar_input_refused(key: ref String, given: ref Ty, span: ref Span) -> CheckFinding {
+    let message = f"`{key}` parses a `String` or a `Bytes`, and is handed a `{given.text()}`."
+    let notes: Vec[String] = ["A grammar reads text or bytes; the argument decides which.".clone()]
+    let help = "Hand it the text or the bytes to parse.".clone()
+    return check_refusal("NK1282", span, message, notes, help)
 }

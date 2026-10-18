@@ -17080,6 +17080,11 @@ pub fn check_core_grammar_call<H: CheckHost>(state: &mut CheckState, world: &Che
             Ty::Named { ref name, args: ref inner, .. } => name == "Bytes" && inner.is_empty(),
             _ => false,
         };
+        let over_text = match given {
+            Ty::Named { ref name, args: ref inner, .. } => (name == "String" || name == "str" || name == "Mapped") && inner.is_empty(),
+            _ => false,
+        };
+        if !over_bytes && !over_text && !given.is_unknown() { state.findings.push(check_core_grammar_input_refused(key, &given, span)); }
         let cut = nikaia_std::index::or(nikaia_std::search::find(&key, &"::", 0), || 0);
         if over_bytes && cut > 0 {
             state.facts.bytes_entries.insert(id_of(arg) as i64);
@@ -17161,6 +17166,13 @@ pub fn check_core_a_mut_parameter_given_away<H: CheckHost>(state: &mut CheckStat
     let notes: Vec<String> = vec![format!("`mut {}` is passed as `ref mut`, so the caller's `{}` is changed in place and stays the caller's. Giving it away would take it from them.", name, ty.text())];
     let help: String = format!("Write `{}.clone()` for a copy{}, or drop the `mut` if the function is meant to use up its value.", name, way);
     state.findings.push(check_refusal("NK1131", span, format!("You can't give away `{}` here: a `mut` parameter is only borrowed.", name), notes, Some(help)));
+}
+
+fn check_core_grammar_input_refused(key: &str, given: &Ty, span: &Span) -> CheckFinding {
+    let message = format!("`{}` parses a `String` or a `Bytes`, and is handed a `{}`.", key, given.text());
+    let notes: Vec<String> = vec!["A grammar reads text or bytes; the argument decides which.".to_owned()];
+    let help = "Hand it the text or the bytes to parse.".to_owned();
+    check_refusal("NK1282", span, message, notes, Some(help))
 }
 
 

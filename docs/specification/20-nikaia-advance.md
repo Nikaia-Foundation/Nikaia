@@ -588,7 +588,7 @@ whose body is one `Json::value(text)` is `sync`.
 
 **Text or bytes.** An entry takes a `String` or a `Bytes`, and the argument
 decides which the grammar parses; a grammar called with both is compiled for
-both ([ADR-366](adr/adr-366.md)). Over a `Bytes`, an element that yields text or
+both ([ADR-366](adr/adr-366.md)); an argument that is neither text (a mapping is text, ADR-016 D1) nor a `Bytes` is refused (`NK1282`). Over a `Bytes`, an element that yields text or
 a `scalar` checks what it covered as UTF-8; one that matches by comparison (a
 literal, `digit`, whitespace, a frame boundary, `dec[T]`) checks nothing. A
 byte that is not UTF-8 ends the parse there, with no alternative retried: the

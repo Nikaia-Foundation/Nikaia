@@ -7,6 +7,7 @@
 
 mod common;
 
+use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::emit::{Build, emit_program};
 use nikaia::parser::parse_to_ast;
 
@@ -133,4 +134,49 @@ fn bytes_of_a_pattern_over_either_input() {
     assert!(rust.contains("let body = body.as_bytes();"), "{rust}");
     let out = run("grammar-bytes-of", &source, &[("d", "3:abc".as_bytes())]);
     assert_eq!(out, "3003 3003");
+}
+
+fn codes(source: &str) -> Vec<String> {
+    let parsed = parse_to_ast(source).expect("the source parses");
+    let own = Ledger::infer(&parsed);
+    let library = Ledger::parse(STD).expect("std's ledger");
+    nikaia::check::check(&parsed, &own, &library)
+        .findings
+        .into_iter()
+        .map(|f| f.code.to_string())
+        .collect()
+}
+
+/// An entry handed neither a `String` nor a `Bytes` is `NK1282` (ADR-366 D1);
+/// either of those is not.
+#[test]
+fn an_entry_takes_text_or_bytes_only() {
+    let refused =
+        format!("{GRAMMAR}\nfn read(n: i64) -> i64 {{ return Num::num(n) catch {{ 0 }} }}\n");
+    assert!(
+        codes(&refused).iter().any(|c| c == "NK1282"),
+        "{:?}",
+        codes(&refused)
+    );
+    let list =
+        format!("{GRAMMAR}\nfn read(n: Vec[u8]) -> i64 {{ return Num::num(n) catch {{ 0 }} }}\n");
+    assert!(
+        codes(&list).iter().any(|c| c == "NK1282"),
+        "{:?}",
+        codes(&list)
+    );
+    let text =
+        format!("{GRAMMAR}\nfn read(t: String) -> i64 {{ return Num::num(t) catch {{ 0 }} }}\n");
+    assert!(
+        !codes(&text).iter().any(|c| c == "NK1282"),
+        "{:?}",
+        codes(&text)
+    );
+    let bytes =
+        format!("{GRAMMAR}\nfn read(b: Bytes) -> i64 {{ return Num::num(b) catch {{ 0 }} }}\n");
+    assert!(
+        !codes(&bytes).iter().any(|c| c == "NK1282"),
+        "{:?}",
+        codes(&bytes)
+    );
 }
