@@ -62,13 +62,15 @@ fn main() {{
 ///
 /// Measured as a class before anything was built: a field read off a borrowed
 /// subject leaks by being handed back, by being bound, and by being passed —
-/// and nowhere else.
+/// and nowhere else. Handed back as the only text a `String` result gets, it
+/// is a view result now (ADR-282 D2, D12, #663), so it is handed back beside
+/// text of its own here, which leaves the result text of its own.
 #[test]
 fn every_by_value_position_is_refused() {
     let positions = [
         (
             "handed back",
-            "    fn m(ref self) -> String {\n        return self.name\n    }",
+            "    fn m(ref self, c: bool) -> String {\n        if c { return self.name }\n        return f\"x{1}\"\n    }",
         ),
         (
             "bound",
@@ -80,7 +82,12 @@ fn every_by_value_position_is_refused() {
         ),
     ];
     for (what, body) in positions {
-        let found = findings(&around(body, "r.m()"));
+        let call = if what == "handed back" {
+            "r.m(true)"
+        } else {
+            "r.m()"
+        };
+        let found = findings(&around(body, call));
         let refusal = found
             .iter()
             .find(|f| f.code == "NK1131")
@@ -275,7 +282,7 @@ fn the_ledger_says_the_result_borrows_the_subject() {
 fn the_third_way_out_is_named_only_where_the_result_is() {
     let positions = [
         (
-            "    fn m(ref self) -> String {\n        return self.name\n    }",
+            "    fn m(ref self, c: bool) -> String {\n        if c { return self.name }\n        return f\"x{1}\"\n    }",
             true,
         ),
         (
@@ -288,7 +295,8 @@ fn the_third_way_out_is_named_only_where_the_result_is() {
         ),
     ];
     for (body, offered) in positions {
-        let found = findings(&around(body, "r.m()"));
+        let call = if offered { "r.m(true)" } else { "r.m()" };
+        let found = findings(&around(body, call));
         let refusal = found
             .iter()
             .find(|f| f.code == "NK1131")

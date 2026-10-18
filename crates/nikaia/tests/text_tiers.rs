@@ -706,3 +706,87 @@ fn a_value_handed_over_inside_a_hole_is_handed_over_there() {
         "{rust}"
     );
 }
+
+// ---------------------------------------------------------------------------
+/// **A `String` result that hands back a view of a borrowed parameter is a
+/// view result** ([ADR-282](../../../docs/specification/adr/adr-282.md) D2,
+/// D12, #663): a field of `ref self`, and a method of the program's that
+/// returns a view of it, point into `self`, so `-> String` lowers exactly as
+/// `-> ref String` does. Both were refused before, `NK1131` and `NK1104`.
+const VIEW_RESULTS: &str = r##"struct Head { path: String }
+struct Req { head: Head, body: String }
+impl Head {
+    pub fn path(ref self) -> String { return self.path }
+}
+impl Req {
+    pub fn path(ref self) -> String { return self.head.path() }
+    pub fn body(ref self) -> String { return self.body }
+    pub fn trimmed(ref self) -> String { return self.body.trim() }
+}
+fn main() {
+    let r = Req { head: Head { path: f"/{1}" }, body: f" x{2} " }
+    println(r.path())
+    println(r.body())
+    println(r.trimmed())
+}
+"##;
+
+#[test]
+fn a_view_of_a_borrowed_parameter_handed_back_is_a_view_result() {
+    runs("view-results", VIEW_RESULTS, "/1\n x2 \nx2");
+    let written = VIEW_RESULTS.replace("-> String", "-> ref String");
+    assert_eq!(
+        lowered(VIEW_RESULTS, Build::default()),
+        lowered(&written, Build::default()),
+        "`-> String` lowers as `-> ref String` does"
+    );
+}
+
+/// **A result both kinds flow into hands over text of its own**: the view of
+/// `self` is refused, naming `.clone()`, and with it the result owns its text.
+/// A published one is refused the same way (ADR-282 D22).
+#[test]
+fn a_result_both_kinds_flow_into_owns_its_text() {
+    let mixed = r##"struct Head { path: String }
+impl Head {
+    fn pick(ref self, c: bool) -> String {
+        if c { return self.path }
+        return f"own{1}"
+    }
+}
+fn main() {
+    let h = Head { path: f"/{1}" }
+    println(h.pick(true))
+    println(h.pick(false))
+}
+"##;
+    let found = findings(mixed);
+    assert!(found.iter().any(|f| f.code == "NK1131"), "{found:#?}");
+    let published = mixed.replace("    fn pick", "    pub fn pick");
+    let found = findings(&published);
+    assert!(found.iter().any(|f| f.code == "NK1131"), "{found:#?}");
+    let copied = mixed.replace("return self.path }", "return self.path.clone() }");
+    runs("mixed-result", &copied, "/1\nown1");
+    let rust = lowered(&copied, Build::default());
+    assert!(
+        rust.contains("fn pick(&self, c: bool) -> String {"),
+        "{rust}"
+    );
+}
+
+/// **`examples/http` without `ref` on its results lowers to the same Rust**
+/// (#663, #654): its accessors hand back views of the head `std::http1`
+/// parsed and of the body, which is what the results are decided to be.
+#[test]
+fn the_http_example_without_ref_on_its_results_lowers_the_same() {
+    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../examples/http/src/main.nika");
+    let source = std::fs::read_to_string(&path).expect("examples/http/src/main.nika");
+    assert!(source.contains("-> ref String"), "the example writes `ref`");
+    let without = source.replace("-> ref String", "-> String");
+    assert!(findings(&without).is_empty(), "{:#?}", findings(&without));
+    assert_eq!(
+        lowered(&source, Build::default()),
+        lowered(&without, Build::default())
+    );
+}

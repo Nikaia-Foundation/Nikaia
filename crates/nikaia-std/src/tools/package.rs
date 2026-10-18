@@ -9548,7 +9548,7 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
                 state.facts.owned_texts.insert(*nikaia_std::index::get(&state.flow.option_values, nikaia_std::index::at(at)));
                 continue;
             }
-            if at < state.flow.option_values.len() as i64 && option.ty.is_a_view() && !found_option.is_a_view() && found_option.fits(&check_arguments_lent_value(&option.ty)) {
+            if at < state.flow.option_values.len() as i64 && option.ty.is_a_view() && !found_option.is_a_view() && found_option.fits(&option.ty.owned()) {
                 let value = *nikaia_std::index::get(&state.flow.option_values, nikaia_std::index::at(at));
                 state.facts.lent_options.insert(value);
                 continue;
@@ -9717,13 +9717,6 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
         state.findings.push(check_refusal("NK1102", &at_span, format!("`{}` expects `{}` to be `{}`, but you're passing `{}`.", key, name, want.text(), found_here.text()), notes, Some(help)));
     }
     signature.result_or_unit()
-}
-
-fn check_arguments_lent_value(ty: &Ty) -> Ty {
-    match ty {
-        Ty::Named { name, args, view } => { let view = *view; if view && name == TEXT_VIEW && args.is_empty() { Ty::Named { name: TEXT.to_owned(), args: vec![], view: false } } else { ty.owned() } },
-        _ => ty.owned(),
-    }
 }
 
 
@@ -56095,6 +56088,7 @@ struct TierWalk {
     result: Option<String>,
     in_hole: bool,
     hole_text: i64,
+    lent_self: bool,
 }
 
 fn open_tier_scope(walk: &mut TierWalk) { walk.frames.push(vec![]); }
@@ -56590,7 +56584,38 @@ fn flow_result(value: &Expr, kinds: &Kinds, ask: &TierAsk<'_, '_, '_>, walk: &mu
         None => None,
     } { Some(__nikaia_value) => __nikaia_value, None => return };
     let result = match function.result { Some(__nikaia_value) => __nikaia_value, None => return };
-    flow_value(&going_into(&TextOwner::Returned(key.to_owned()), &result, vec![], false), Some(value), kinds, ask, walk);
+    let mut handed = kinds.clone();
+    if same_kinds(&handed, &owned_kinds()) && lent_field(value, ask, &walk) { handed = view_kinds(); }
+    flow_value(&going_into(&TextOwner::Returned(key.to_owned()), &result, vec![], false), Some(value), &handed, ask, walk);
+}
+
+fn lent_field(value: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &TierWalk) -> bool {
+    let place = match place_of(value, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    if !plain_string(ask.names, &place.ty) || place.ty.is_nullable { return false; }
+    match value {
+        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); lent_root(base, ask, walk) },
+        _ => false,
+    }
+}
+
+fn lent_root(base: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &TierWalk) -> bool {
+    match base {
+        Expr::Variable(name, _) => { let name = *name; lent_parameter(ask.names.resolve(name), walk) },
+        Expr::Field { base: inner, .. } => {
+            let inner = nikaia_std::boxed::open(inner);
+            let place = match place_of(base, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return false };
+            !place.ty.is_view && !place.ty.is_nullable && lent_root(inner, ask, walk)
+        },
+        _ => false,
+    }
+}
+
+fn lent_parameter(name: &str, walk: &TierWalk) -> bool {
+    let local = match tier_local(name, walk) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    if name == "self" { return walk.lent_self && local.declared.is_none(); }
+    let declared = match local.declared { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let parameter = matches!(declared.owner, TextOwner::Param(_, _));
+    parameter && declared.ty.is_view && !declared.ty.is_nullable && local.of.is_some()
 }
 
 fn kept_literal(value: &Expr, owner: &TextOwner, path: &[i64], ty: &Type, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) {
@@ -56616,8 +56641,15 @@ fn tier_struct_of(expr: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &TierWalk) -> Op
         Expr::Variable(name, _) => { let name = *name; struct_of_local(ask.names.resolve(name), walk) },
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); tier_struct_of(expr, ask, walk) },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); tier_struct_of(inner, ask, walk) },
+        Expr::Field { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; field_struct(base, ask.names.resolve(name), ask, walk) },
         _ => None,
     }
+}
+
+fn field_struct(base: &Expr, field: &str, ask: &TierAsk<'_, '_, '_>, walk: &TierWalk) -> Option<String> {
+    let place = match field_place(base, field, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    if !place.ty.generics.is_empty() || place.ty.is_nullable || place.ty.is_tuple || place.ty.is_slice || (*place.ty.code).is_some() { return None; }
+    Some(ask.names.resolve(place.ty.name).to_owned())
 }
 
 fn struct_of_local(name: &str, walk: &TierWalk) -> Option<String> {
@@ -56880,11 +56912,16 @@ fn method_kinds(receiver: &Expr, method: &str, args: &[Expr], ask: &TierAsk<'_, 
     let received = tier_expr(receiver, ask, walk);
     let mut given: Vec<Kinds> = vec![];
     for arg in args.iter() { given.push(tier_expr(arg, ask, walk)); }
-    if walk.declared.methods.contains_key(method) {
-        let keys: Vec<String> = nikaia_std::index::or(match *nikaia_std::index::get(&walk.declared.methods, method) {
-            Some(__nikaia_it) => Some(__nikaia_it.clone()),
-            None => None,
-        }, || vec![].into());
+    let of = tier_struct_of(receiver, ask, &walk);
+    let mut keys: Vec<String> = nikaia_std::index::or(match *nikaia_std::index::get(&walk.declared.methods, method) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || vec![].into());
+    if of.is_some() {
+        let own = format!("{}::{}", nikaia_std::index::or(of.as_deref(), || ""), method);
+        if nikaia_std::list::contains(&keys, &own) { keys = vec![own]; } else if std_declares(method, Option::as_deref(&of), ask) { keys = vec![]; }
+    }
+    if !keys.is_empty() {
         for key in keys.iter() { flow_args(key, args, &given, ask, walk); }
         let mut out = no_kinds();
         for key in keys.iter() { out = kinds_joined(&out, &result_kinds(key, ask, &walk)); }
@@ -56914,19 +56951,33 @@ fn method_kinds(receiver: &Expr, method: &str, args: &[Expr], ask: &TierAsk<'_, 
     if owns_its_text(method) { return owned_kinds(); }
     if views_what_it_is_called_on(method) || cuts_in_two(method) { return viewed(&received); }
     if hands_back_an_element(method) { return received; }
-    if std_method_views(method, ask) { return view_kinds(); }
+    if std_method_views(method, (of).as_deref(), ask) { return view_kinds(); }
     owned_kinds()
 }
 
-fn std_method_views(method: &str, ask: &TierAsk<'_, '_, '_>) -> bool {
-    let suffix = format!("::{}", method);
+fn std_declares(method: &str, of: Option<&str>, ask: &TierAsk<'_, '_, '_>) -> bool {
+    let receiver = match of { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let own = format!("{}::{}", last_segment(receiver), method);
+    let within = format!("::{}", own);
+    for (key, _) in ask.library.functions.iter() { if *key == own || key.ends_with(&within) { return true; } }
+    false
+}
+
+fn std_method_views(method: &str, of: Option<&str>, ask: &TierAsk<'_, '_, '_>) -> bool {
+    let receiver = match of { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let own = format!("{}::{}", last_segment(receiver), method);
+    let within = format!("::{}", own);
     let mut any = false;
     for (key, contract) in ask.library.functions.iter() {
-        if !key.ends_with(&suffix) { continue; }
+        if *key != own && !key.ends_with(&within) { continue; }
         let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
         if !signature.takes_a_receiver() { continue; }
         let result = match signature.result.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
-        if !result.is_a_view() || result.owned().text() != "String" { return false; }
+        let text = match result {
+            Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); inner.clone() },
+            _ => result.clone(),
+        };
+        if !text.is_a_view() || text.owned().text() != "String" { return false; }
         any = true;
     }
     any
@@ -57114,7 +57165,9 @@ fn walk_function(item: &Item, target: Option<String>, ask: &TierAsk<'_, '_, '_>,
         bind_tier_local(ask.names.resolve(arg.name).to_owned(), local, walk);
         at += 1;
     }
+    walk.lent_self = false;
     if receiver.is_some() && target.is_some() {
+        walk.lent_self = nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_ref), || false);
         let local = TierLocal { kinds: owned_kinds(), of: match target.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
@@ -57211,7 +57264,7 @@ fn tier_word(tier: Tier) -> String {
 pub fn text_tiers(program: &Program, ask: &TierAsk<'_, '_, '_>) -> TextTiers {
     let declared = declared_of(program, ask.names);
     let text = string_type(&declared, ask.names);
-    let mut walk = TierWalk { declared, tiers: collections::BTreeMap::new(), flows: no_flows(), locals: collections::BTreeMap::new(), frames: vec![], result: None, in_hole: false, hole_text: -1 };
+    let mut walk = TierWalk { declared, tiers: collections::BTreeMap::new(), flows: no_flows(), locals: collections::BTreeMap::new(), frames: vec![], result: None, in_hole: false, hole_text: -1, lent_self: false };
     for _ in 0..16 {
         walk.flows = no_flows();
         walk_program(program, ask, &mut walk);
@@ -60083,7 +60136,7 @@ impl Ty {
     }
     pub fn owned(&self) -> Ty {
         match self {
-            Ty::Named { name, args, view } => { let view = *view; if view { Ty::Named { name: name.to_owned(), args: args.to_owned(), view: false } } else { self.clone() } },
+            Ty::Named { name, args, view } => { let view = *view; if view && name == TEXT_VIEW && args.is_empty() { Ty::Named { name: TEXT.to_owned(), args: vec![], view: false } } else if view { Ty::Named { name: name.to_owned(), args: args.to_owned(), view: false } } else { self.clone() } },
             _ => self.clone(),
         }
     }

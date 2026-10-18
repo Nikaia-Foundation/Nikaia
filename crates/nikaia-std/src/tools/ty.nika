@@ -1382,11 +1382,13 @@ impl Ty {
         return self.clone()
     }
 
-    /// **The value a view is of**: `ref Vec[i64]` is a view of `Vec[i64]`,
-    /// and any other type is itself. What a view of a value is lent (#455).
+    /// **The value a view is of**: `ref Vec[i64]` is a view of `Vec[i64]`, a
+    /// view of text is a view of a `String` - `str` is the compiler's noun for
+    /// the view alone (ADR-184 D2), which no value fits - and any other type
+    /// is itself. What a view of a value is lent (#455, #663).
     pub fn owned(ref self) -> Ty {
         return match self {
-            Ty::Named { name, args, view } => if view { Ty::Named { name: name.clone(), args: args.clone(), view: false } } else { self.clone() },
+            Ty::Named { name, args, view } => if view && name == TEXT_VIEW && args.is_empty() { Ty::Named { name: TEXT.clone(), args: [], view: false } } else if view { Ty::Named { name: name.clone(), args: args.clone(), view: false } } else { self.clone() },
             else => self.clone(),
         }
     }
