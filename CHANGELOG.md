@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1039] — 2026-10-18
+
+**rfind cuts its text (ADR-320 D5, #453)**
+- `t.rfind(…)` hands out a position of `t` as `find` does, and `t["lit".len()..]` (the start moved by a literal's byte length) cuts any text, as `t[0 + "lit".len()..]` already did (Part I 2.6, `NK1214`).
+
 ## [0.0.1038] — 2026-10-18
 
 **lower-std: five times faster, and seconds when nothing changed (#667)**

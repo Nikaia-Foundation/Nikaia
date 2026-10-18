@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1038 (Draft)
+**Version:** 0.0.1039 (Draft)
 **Date:** 2026-10-18
 
 ---
@@ -745,9 +745,10 @@ for c in name.scalars { if c == 'ä' { … } }
 
 **A position the text hands out cuts it without a view.** `s.find(needle; from:
 i64) -> i64?` gives the byte position of the first match at or after `from`
-(default `0`), or `null`. That position, a grammar's match in the text, either
-end of the text (an open end, `[..<p]` or `[p..]`), and such a position moved by
-the byte length of a text literal, cut the text they came from:
+(default `0`), or `null`; `s.rfind(needle) -> i64?` gives the last. That
+position, a grammar's match in the text, either end of the text (an open end,
+`[..<p]` or `[p..]`), and such a position moved by the byte length of a text
+literal, cut the text they came from:
 
 ```nika
 let sep = line.find(";") ?? return
