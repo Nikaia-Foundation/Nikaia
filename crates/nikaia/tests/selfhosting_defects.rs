@@ -1685,42 +1685,36 @@ fn main() {
     assert!(rust.contains("nikaia_std::error::Thrown<Bad>"), "{rust}");
 }
 
-/// **A map's read past a jump, handed to a `ref` parameter, is the view it
-/// already is**: `written_of(m[k] ?? continue)` over a map of a struct passes
-/// what `index::get` opened, to a function and to a function value alike (it
-/// wrote `&` before the `match`, and rustc refused `&&E`).
+/// **A map's read of a word past a jump is the word**: `let other = b[word] ??
+/// return false` over a map of an enum of bare variants binds a `Tier`, as
+/// `let other: Tier = …` does, and hands it to a parameter that takes one
+/// (it was `&Tier`, rustc E0308).
 #[test]
-fn a_map_read_past_a_jump_is_handed_to_a_ref_parameter_as_it_is() {
+fn a_word_read_out_of_a_map_past_a_jump_is_a_value() {
     let said = printed(
-        "map-read-to-a-ref-parameter",
+        "word-past-a-jump",
         r#"
 use std::collections
 
-struct E { n: i64 }
-fn written_of(e: ref E) -> String {
-    return f"<{e.n}>"
-}
-fn through(m: ref collections::BTreeMap[String, E], keys: ref Vec[String], shown: fn(ref E) -> String sync) -> String {
-    let mut out: String = ""
-    for k in keys {
-        out.push_str(shown(m[k] ?? continue))
+enum Tier { Low, High }
+fn tier_word(tier: Tier) -> String {
+    return match tier {
+        Tier::Low => "low",
+        Tier::High => "high",
     }
-    return out
+}
+fn same(b: ref collections::BTreeMap[String, Tier], word: ref String) -> String {
+    let other = b[word] ?? return "none"
+    return tier_word(other)
 }
 fn main() {
-    let mut m: collections::BTreeMap[String, E] = collections::BTreeMap()
-    m["a"] = E { n: 1 }
-    m["c"] = E { n: 3 }
-    let keys: Vec[String] = ["a", "b", "c"]
-    let mut out: String = ""
-    for k in keys {
-        out.push_str(written_of(m[k] ?? continue))
-    }
-    println(f"{out} {through(m, keys, written_of)}")
+    let mut m: collections::BTreeMap[String, Tier] = collections::BTreeMap()
+    m["x"] = Tier::High
+    println(f"{same(m, "x")} {same(m, "y")}")
 }
 "#,
     );
-    assert_eq!(said.trim(), "<1><3> <1><3>");
+    assert_eq!(said.trim(), "high none");
 }
 
 /// **A map's read past a jump, handed to a `ref` parameter, is the view it
