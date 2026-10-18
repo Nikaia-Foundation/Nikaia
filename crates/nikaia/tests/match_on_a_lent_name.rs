@@ -110,3 +110,26 @@ fn a_match_on_a_lent_part_runs() {
         "8\n3\n-1\n",
     );
 }
+
+/// D46: `xs[i] = v` on an `Array[T, N]` is the indexed write a `Vec` has
+/// (`nikaia_std::index::Set` for `[V; N]`), in a loop and at a constant.
+#[test]
+fn an_indexed_write_on_an_array_runs() {
+    runs(
+        "array-write",
+        "fn squares() -> Array[i64, 5] {\n\
+         \x20   let mut xs: Array[i64, 5] = [0, 0, 0, 0, 0]\n\
+         \x20   for i in 0..<xs.len() {\n\
+         \x20       xs[i] = i * i\n\
+         \x20   }\n\
+         \x20   return xs\n\
+         }\n\
+         fn main() {\n\
+         \x20   let mut ys: Array[i64, 3] = [1, 2, 3]\n\
+         \x20   ys[1] = 5\n\
+         \x20   let xs = squares()\n\
+         \x20   println(f\"{ys[1]} {xs[4]}\")\n\
+         }\n",
+        "5 16\n",
+    );
+}

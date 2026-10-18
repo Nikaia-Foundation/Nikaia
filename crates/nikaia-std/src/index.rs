@@ -616,6 +616,14 @@ impl<V> Set<usize, V> for Vec<V> {
     }
 }
 
+/// An `Array[T, N]` is written in place the same way: `xs[1] = 5`.
+impl<V, const N: usize> Set<usize, V> for [V; N] {
+    #[track_caller]
+    fn set(&mut self, key: usize, value: V) {
+        self[key] = value;
+    }
+}
+
 /// The write of the same: `out[i] = x` on a `mut out: Vec[u32]` parameter is
 /// `set(&mut out, …)` on what is already a `&mut Vec<u32>`.
 impl<K, V, T> Set<K, V> for &mut T

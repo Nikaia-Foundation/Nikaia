@@ -245,14 +245,13 @@ fn editing_a_second_file_rather_than_the_entry_reaches_the_binary() {
 /// was the channel, and `cargo --message-format=json` is it.
 ///
 /// The program here is one the frontend says nothing about and `rustc` refuses:
-/// `Ty::Unknown` means the checker does not guess at what a method on an integer
-/// is, so this is exactly the shape that used to escape to the terminal.
+/// a shift past the width, which rustc's `arithmetic_overflow` denies.
 #[test]
 fn a_backend_error_is_reported_against_the_nika_line() {
     let dir = a_project(
         "project-backend-error",
         "[package]\nname = \"refused\"\nversion = \"0.1.0\"\n",
-        "fn main() {\n    let n = 1\n    println(f\"{n.frobnicate()}\")\n}\n",
+        "fn main() {\n    let n: i64 = 1\n    let m = n << 64\n    println(f\"{m}\")\n}\n",
     );
 
     let built = nikaia(&["build"], &dir);
@@ -264,7 +263,7 @@ fn a_backend_error_is_reported_against_the_nika_line() {
         "the message names the `.nika` line: {complaint}"
     );
     assert!(
-        complaint.contains("n.frobnicate()"),
+        complaint.contains("n << 64"),
         "and shows it, with a caret under it: {complaint}"
     );
     assert!(

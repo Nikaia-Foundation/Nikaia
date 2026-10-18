@@ -159,16 +159,15 @@ fn a_program_with_a_rust_dependency_takes_cargos_path() {
 
 /// An error in the generated Rust is said against the `.nika` line, as the
 /// Cargo build says it. The program is one the frontend passes and `rustc`
-/// refuses (`docs/lowering-defects.md` D46); when D46 is built, another such
-/// program takes its place.
+/// refuses: a shift past the width, which rustc's `arithmetic_overflow`
+/// denies.
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 fn a_backend_error_is_still_said_in_nikaias_words() {
     let dir = a_project(
         "run-fast-backend-error",
         "[package]\nname = \"refused\"\nversion = \"0.1.0\"\n",
-        "fn main() {\n    let mut xs: Array[i64, 3] = [1, 2, 3]\n    xs[1] = 5\n    \
-         println(f\"{xs[1]}\")\n}\n",
+        "fn main() {\n    let n: i64 = 1\n    let m = n << 64\n    println(f\"{m}\")\n}\n",
     );
     let project = dir.to_string_lossy().to_string();
 
@@ -176,14 +175,14 @@ fn a_backend_error_is_still_said_in_nikaias_words() {
     assert!(!ran.status.success(), "{}", said(&ran));
     let complaint = said(&ran);
     assert!(
-        complaint.contains("is not satisfied") && !complaint.contains("error[NK"),
+        complaint.contains("will overflow") && !complaint.contains("error[NK"),
         "the backend refused it, not the checker: {complaint}"
     );
     assert!(
         complaint.contains("src/main.nika:3:"),
         "the message names the `.nika` line: {complaint}"
     );
-    assert!(complaint.contains("xs[1] = 5"), "{complaint}");
+    assert!(complaint.contains("n << 64"), "{complaint}");
     assert!(!complaint.contains("refused.rs"), "{complaint}");
     assert!(
         !dir.join("target/nikaia/bin").exists(),
