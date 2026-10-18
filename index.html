@@ -2,10 +2,10 @@
 layout: home
 title: Nikaia
 description: >-
-  A programming language that reads like a script and runs as optimised native
-  machine code, close to hand-tuned Rust. The compiler catches what can be
-  proven at compile time; an assert is a contract. No unsafe, no garbage
-  collector, no async/await.
+  A general-purpose programming language that is very safe, very fast and easy
+  to read, all three at once. The compiler proves what it can before a program
+  runs, the program becomes optimised machine code, and the code reads like a
+  script.
 ---
 <!--
   The home page. The words are the README's "The idea", "An assert is a
@@ -20,13 +20,13 @@ description: >-
   <div class="hero-inner">
     <div class="hero-text">
       <p class="hero-eyebrow">A programming language · pre-alpha</p>
-      <h1>Write it like a script.<br><span>Catch what can be proven at compile time.</span></h1>
+      <h1>Safe. Fast. Easy to read.<br><span>A programming language for software you can rely on.</span></h1>
       <p class="hero-lead">
-        Nikaia reads like a scripting language and runs as optimised native machine code: in
-        our benchmark within about a tenth of hand-tuned Rust, on one core or on all of them,
-        without a line of <code>unsafe</code>. You state a rule with <code>assert</code>, and a
-        call that breaks it does not build. There is no garbage collector and no
-        <code>async</code>/<code>await</code>, and data races are refused at compile time.
+        Nikaia is a general-purpose programming language, for a small script as much as for a
+        large service. It is built to be very safe, very fast and easy to understand, all three
+        at once, without trading one for another. And it aims at nothing less than making the
+        world a little better: software that fails less often, does more with less hardware,
+        and can be written and checked by anyone who wants to.
       </p>
       <div class="hero-actions">
         <a class="button button-primary" href="{{ "/guide/getting-started.html" | relative_url }}">Get started</a>
@@ -37,6 +37,45 @@ description: >-
     </div>
     <div class="hero-art">
       <img src="{{ "/assets/hero.jpg" | relative_url }}" alt="The Nikaia logo: a wing turning into a blue letter N" width="900" height="764">
+    </div>
+  </div>
+</section>
+
+<section class="home-section home-section-alt" id="promises">
+  <div class="home-inner">
+    <div class="features features-four">
+      <div class="feature">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l8 3v6c0 5-3.5 9-8 11-4.5-2-8-6-8-11V5z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></svg>
+        <h3>Very safe</h3>
+        <p>The compiler proves what it can before the program runs. A call that breaks a rule
+        you wrote does not build, and neither does code where two tasks change the same data, a
+        missing value goes unchecked or an error goes unhandled.
+        <a href="#proofs">How that works ↓</a></p>
+      </div>
+      <div class="feature">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>
+        <h3>Very fast</h3>
+        <p>A program becomes optimised native machine code, with no garbage collector and no
+        interpreter, on one core or on all of them. A check the compiler has proved can be
+        left out of the program entirely.
+        <a href="#performance">The measurements ↓</a></p>
+      </div>
+      <div class="feature">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5c3-1 6-1 9 1 3-2 6-2 9-1v14c-3-1-6-1-9 1-3-2-6-2-9-1zM12 6v14"/></svg>
+        <h3>Easy to understand</h3>
+        <p>Code reads like a script: no memory to free by hand, no <code>async</code> or
+        <code>await</code>, no lifetimes to annotate. When something is wrong, the
+        message says why and what to write instead.
+        <a href="#errors">An error message ↓</a></p>
+      </div>
+      <div class="feature">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-8-5-8-11a4.5 4.5 0 018-3 4.5 4.5 0 018 3c0 6-8 11-8 11z"/></svg>
+        <h3>Made for good</h3>
+        <p>Software that fails less hurts fewer people. Programs that do more with less
+        hardware use less energy. And a language anyone can read lets more people build.
+        That is why Nikaia exists.
+        <a href="{{ "/manifesto.html" | relative_url }}">The manifesto →</a></p>
+      </div>
     </div>
   </div>
 </section>
