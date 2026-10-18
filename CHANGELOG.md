@@ -8,6 +8,14 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1029] — 2026-10-18
+
+**A grammar reads Bytes (ADR-366)**
+- An entry takes a `String` or a `Bytes` (from `fs::read`); a grammar called with both is compiled for both (#422).
+- Over bytes, `until`, a literal's capture and a run of `any` are checked text; a byte that is not UTF-8 throws `ParseError` `invalid UTF-8 at byte N: 0xXX`, N from the start of the whole input, in `par_fold` pieces too.
+- `bytes(p)` hands back the bytes `p` covered, unchecked, over either input.
+- NK1282: an entry argument that is neither text nor `Bytes` is refused; a `Mapped` counts as text.
+
 ## [0.0.1028] — 2026-10-18
 
 **A `String` result that hands back a view of `ref self` is a view result (#663)**
