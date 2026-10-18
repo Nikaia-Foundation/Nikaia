@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1018] — 2026-10-18
+
+**A `match` on a lent name, and an indexed write on an `Array`, build**
+- A `match` on a name an enclosing arm lent, taken out of a box or not, lowers to a match on what the name points to; rustc refused it before (cannot explicitly borrow within an implicitly-borrowing pattern), or bound a number by reference. `xs[i] = v` on an `Array[T, N]` builds.
+
 ## [0.0.1017] — 2026-10-18
 
 **`split_once` and `rsplit_once` on `String`**
