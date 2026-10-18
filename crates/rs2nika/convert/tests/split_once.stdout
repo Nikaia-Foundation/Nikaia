@@ -1,0 +1,12 @@
+fn cut(line: ref String) -> (String, String)? sync {
+    let (key, value) = line.split_once('=') ?? return null
+    return (key.trim().to_string(), value.to_string())
+}
+fn owner(path: ref String) -> (ref String, ref String) sync {
+    return path.rsplit_once("::") ?? ("", path)
+}
+fn none_yet() -> (String, i64)? sync {
+    let found: (String, i64)? = null
+    return found
+}
+

@@ -137,11 +137,9 @@ has no `last`. *Others:* Rust has all of them, Kotlin `substringAfterLast`,
 `partition`/`rpartition`. *Fit:* text is a core type of the language, and
 splitting at the last separator is basic in every one of the four. `split_at`
 returns two views into one text, which is what ADR-283 D25 (one view
-parameter) allows. Tuple results are refused as `(A, B)?` (D5 in
-`docs/lowering-defects.md`, by design), so `split_once` would need its
-absent case written as a struct or a decision on `(A, B)?` first. *First
-recommendation:* `rsplit`, `split_at` and `Seq::last` (on a `Seq ... ends`)
-now; `split_once` waits for the `(A, B)?` question, *not decided here*.
+parameter) allows. *Built:* `rsplit`, `split_at` and `Seq::last` (on a
+`Seq ... ends`); `split_once` and `rsplit_once` since `(A, B)?` is a type
+(ADR-364, #648): two views of the text as a `(ref String, ref String)?`.
 
 ### `Seq::max`, `Seq::min`, `Seq::sum` (probe only)
 
@@ -227,7 +225,7 @@ checker refusal (`NK1125`) if `!= null` is not meant to narrow.
 | U-c4 `MultiLock::named(name)` in `call` | the two spellings compared, `writing: bool` to `check_core_locks` | yes: `MultiLock` stays a Rust enum for the tests' ledger walk |
 | U-c4 `name.strip_prefix(f"{ty}::")` | a helper over `ref String`; **removed (0.0.965)**: written inline (D38 built) | an owned `String` as a pattern lowers by value (E0277) |
 | U-c4 `result: ref Ty?` handed a `Fn`'s field | the caller unwraps to `Ty` first | `ref T?` is `Option<&T>`, a bound field `&Option<T>` |
-| U-c4 `rsplit_once` / `split_once` | `split("::")` collected, a loop | no `rsplit_once` |
+| U-c4 `rsplit_once` / `split_once` | `split("::")` collected, a loop | no longer: `std` entries since #648 |
 | U-c4 `arguments`, `an_attribute_read`, `a_call_that_hands_its_number_back`, `a_standard_bound_not_met` | host methods (hosted) | yes: Rust until C-5h |
 | U-c4 the `task::scope` half of `call` | host method `a_scope_that_pauses` | yes: #605's task work |
 | U-c4 a trait method's `ref Vec[T]` | fixed in the compiler: a slice in the declaration too | no: was `&Vec<T>` against `&[T]` (test in `trait_mut_parameter.rs`) |

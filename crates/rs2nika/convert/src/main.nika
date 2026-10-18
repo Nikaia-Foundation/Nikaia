@@ -1499,7 +1499,13 @@ fn rs2nika_question(mut ctx: Rs2nikaCtx, given: ref String) -> String {
     let mut changed = false
     let mut at = 0
     while at < c.len() {
-        if c[at] == '?' && at > 0 && (rs2nika_word(c[at - 1]) || c[at - 1] == ')' || c[at - 1] == ']') && (at + 1 == c.len() || rs2nika_in(c[at + 1], ".;,) \t")) {
+        // A `?` before ` =` ends the type of a `let` (`let p: (A, B)? = ..`).
+        let mut next = at + 1
+        while next < c.len() && c[next] == ' ' {
+            next = next + 1
+        }
+        let typed = next + 1 < c.len() && c[next] == '=' && c[next + 1] != '=' && c[next + 1] != '>'
+        if !typed && c[at] == '?' && at > 0 && (rs2nika_word(c[at - 1]) || c[at - 1] == ')' || c[at - 1] == ']') && (at + 1 == c.len() || rs2nika_in(c[at + 1], ".;,) \t")) {
             out.push_str(" ?? return null")
             changed = true
         } else {
@@ -2430,9 +2436,6 @@ fn rs2nika_todos(line: ref String) -> Vec[String] {
     let map_end = line.trim_end().ends_with(")") && line.contains(".map(|")
     if comb.contains(".and_then(") || (comb.contains(".map(|") && (line.contains("?") || line.contains("unwrap_or") || map_end) && !line.contains("iter()")) {
         todo.push("`Option::map`/`and_then`: `let x = e ?? <none>` then the body")
-    }
-    if line.contains("-> Option<(") {
-        todo.push("`(A, B)?` is not written (ADR-278 D1): a named struct")
     }
     if line.contains(".enumerate()") {
         todo.push("`.enumerate()`: a `while` with an index")
@@ -4671,23 +4674,6 @@ pub fn rs2nika_twins(ctx: ref Rs2nikaCtx, src: ref String) -> Vec[String] {
     return out
 }
 
-/// Whether `code` has `what` followed, after spaces, by one of `next`.
-fn rs2nika_then(code: ref String, what: ref String, next: ref String) -> bool {
-    let mut rest: String = code.clone()
-    while true {
-        let at = rest.find(what) ?? -1
-        if at < 0 {
-            return false
-        }
-        let after: String = rest[at + what.len()..<rest.len()].trim_start().clone()
-        if after.starts_with(next) {
-            return true
-        }
-        rest = rest[at + what.len()..<rest.len()].clone()
-    }
-    return false
-}
-
 /// The lint messages one line of hand-written Nikaia earns (strings emptied).
 pub fn rs2nika_lint_line(code: ref String, params: ref Vec[String]) -> Vec[String] {
     let mut out: Vec[String] = []
@@ -4745,9 +4731,6 @@ pub fn rs2nika_lint_line(code: ref String, params: ref Vec[String]) -> Vec[Strin
     }
     if rs2nika_replace_word(code, "if match", "@") != code {
         out.push("a `match` in a guard or condition needs parentheses: `if (match ..)`")
-    }
-    if rs2nika_then(code, ")?", "sync") || rs2nika_then(code, ")?", "{") || rs2nika_then(code, ")?", "throws") {
-        out.push("`(A, B)?` is not written (ADR-278 D1): a named struct")
     }
     return out
 }

@@ -20,7 +20,7 @@ finds two D8 casts in `check_numbers4.nika`.
 | D2 | `m.get(k)?.clone() ?? d` clones a reference | **built** (a duplicate of D36; 0.0.965: re-checked over a `BTreeMap` of a struct and a `HashMap` of text) | `selfhosting_defects::a_cloned_get_over_either_map_gives_the_value` |
 | D3 | `set.insert(..)` as an arm value: `bool` against `()` | not reproduced (0.0.951: runs) | d03_insert_tail.nika |
 | D4 | a `for` over `Vec[Symbol]` yields `ref Symbol` | **built** (0.0.965: an element of a type that copies by declaration, the package's or a ledger `copies` one, binds the value) | `selfhosting_defects::a_loop_over_copies_binds_the_value` |
-| D5 | `(A, B)?` does not parse | **superseded**: `(A, B)?` is written (ADR-364); to build in #648 | nullable.rs |
+| D5 | `(A, B)?` does not parse | **superseded**: `(A, B)?` is written (ADR-364, #648); `split_once`/`rsplit_once` are `std` entries | nullable.rs, seq_reductions.rs |
 | D6 | `HashSet`/`HashMap` fields lower to `TrustedSet`/`TrustedMap` | **built** (0.0.840-0.0.848, #581: one trust analysis per package, one Rust type per class, a `pub` type's maps are hidden parameters defaulting to `Keyed`; 0.0.970: a Rust adapter names them, the order of the files changes nothing) | `map_trust.rs` |
 | D7 | `x.len() as i64` writes `(x.len() as i64) as i64` | **built** (0.0.871: the cast is written once) | expressions.rs |
 | D8 | `get(x.span.start as i64)` lowers to `&x.span.start as i64` | **built** (0.0.871: `&(x as i64)`) | expressions.rs |
@@ -135,7 +135,7 @@ Workaround: `n.clone()` (a copy of the handle).
 
 ## D5. `(A, B)?` does not parse: by design, but the message does not name the way out
 
-Superseded (#648, ADR-364): `(A, B)?` is a type, written as every `T?`, and lowers to `Option<(A, B)>`; `NK1254` is retired (tests in `nullable.rs`).
+Superseded (#648, ADR-364): `(A, B)?` is a type, written as every `T?`, and lowers to `Option<(A, B)>`; `NK1254` is retired (tests in `nullable.rs`). `String::split_once` and `rsplit_once` return the two halves as a `(ref String, ref String)?` (tests in `seq_reductions.rs`), and the converter writes `Option<(A, B)>` as `(A, B)?`.
 
 ### Today
 `fn pair(n: i64) -> (i64, i64)? sync` is refused with `Expected { here, but found ?`. Part I 2.3 says `(A, B)?` is not written (ADR-278 D1), so the refusal is the rule. Only the message is short of it.
