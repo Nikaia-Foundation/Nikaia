@@ -2,9 +2,10 @@
 layout: home
 title: Nikaia
 description: >-
-  A programming language that reads like a script and compiles to Rust. The
-  compiler catches what can be proven at compile time; an assert is a contract.
-  No async/await and no garbage collector.
+  A programming language that reads like a script and runs as optimised native
+  machine code, close to hand-tuned Rust. The compiler catches what can be
+  proven at compile time; an assert is a contract. No unsafe, no garbage
+  collector, no async/await.
 ---
 <!--
   The home page. The words are the README's "The idea", "An assert is a
@@ -21,10 +22,11 @@ description: >-
       <p class="hero-eyebrow">A programming language · pre-alpha</p>
       <h1>Write it like a script.<br><span>Catch what can be proven at compile time.</span></h1>
       <p class="hero-lead">
-        Nikaia reads like a scripting language and compiles to Rust. You state a rule with
-        <code>assert</code>, and a call that breaks it does not build. It is fast as lightning,
-        without <code>unsafe</code>. There is no <code>async</code>/<code>await</code> and no garbage
-        collector, and data races are refused at compile time.
+        Nikaia reads like a scripting language and runs as optimised native machine code: in
+        our benchmark within about a tenth of hand-tuned Rust, on one core or on all of them,
+        without a line of <code>unsafe</code>. You state a rule with <code>assert</code>, and a
+        call that breaks it does not build. There is no garbage collector and no
+        <code>async</code>/<code>await</code>, and data races are refused at compile time.
       </p>
       <div class="hero-actions">
         <a class="button button-primary" href="{{ "/guide/getting-started.html" | relative_url }}">Get started</a>
@@ -448,9 +450,10 @@ fn main() throws {
       </div>
       <div class="compare-card compare-card-nikaia">
         <h3>Nikaia</h3>
-        <p class="compare-examples">compiles to Rust</p>
+        <p class="compare-examples">fast and safe</p>
         <p>A compiler that sees the whole program can work much of that out itself. You write
-        plain code, Nikaia translates it to Rust, and Rust's compiler checks memory safety.</p>
+        plain code; Nikaia turns it into optimised machine code, with memory safety checked by
+        the same compiler that checks Rust.</p>
       </div>
     </div>
   </div>
