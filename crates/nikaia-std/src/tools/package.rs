@@ -16252,7 +16252,7 @@ fn check_core_method_called<H: CheckHost>(state: &mut CheckState, world: &CheckW
         _ => { },
     }
     let open_items = state.open_items_of(world, receiver).is_some();
-    if (name == "filter" || name == "find" || name == "take_while" || name == "skip_while") && args.len() == 1 {
+    if (name == "filter" || name == "find" || name == "take_while" || name == "skip_while" || name == "min_by_key" || name == "max_by_key") && args.len() == 1 {
         match on {
             Ty::Seq { ref item, .. } => {
                 let item = nikaia_std::boxed::open(item);
@@ -16262,6 +16262,20 @@ fn check_core_method_called<H: CheckHost>(state: &mut CheckState, world: &CheckW
                         if params.len() == 1 && copies { state.facts.filter_patterns.insert(id_of(nikaia_std::index::get(&args, 0)) as i64); }
                     },
                     _ => { },
+                }
+            },
+            _ => { },
+        }
+    }
+    if name == "retain" && args.len() == 1 {
+        match on {
+            Ty::Named { name: ref list, args: ref items, .. } => {
+                if (list == "Vec" || list == "List") && items.len() == 1 {
+                    let item = nikaia_std::index::get(&items, 0);
+                    match nikaia_std::index::get(&args, 0) {
+                        Expr::Closure { params, .. } => { if params.len() == 1 && !item.is_unknown() && (item.is_a_view() || !moves(&item)) { state.facts.filter_patterns.insert(id_of(nikaia_std::index::get(&args, 0)) as i64); } },
+                        _ => { },
+                    }
                 }
             },
             _ => { },
@@ -25875,7 +25889,9 @@ impl CheckState {
 
 // --- check_reads.nika ---
 
-fn check_counts_first(key: &str) -> bool { key == "Seq::take" || key == "Seq::skip" || key == "Seq::step_by" || key == "Seq::nth" || key == "Vec::chunks" || key == "Vec::windows" || key == "Vec::insert" || key == "Vec::remove" || key == "Vec::swap_remove" || key == "Vec::truncate" || key == "Vec::resize" || key == "str::splitn" }
+fn check_counts_first(key: &str) -> bool { key == "Seq::take" || key == "Seq::skip" || key == "Seq::step_by" || key == "Seq::nth" || key == "Vec::chunks" || key == "Vec::windows" || key == "Vec::insert" || key == "Vec::remove" || key == "Vec::swap_remove" || key == "Vec::truncate" || key == "Vec::resize" || key == "Vec::swap" || key == "str::splitn" }
+
+fn check_counts_second(key: &str) -> bool { key == "Vec::swap" }
 
 fn check_numeric(name: &str) -> bool { name == "i32" || name == "i64" || name == "f64" || name == "u8" || name == "u32" || name == "u64" }
 
@@ -25919,7 +25935,10 @@ fn check_number_literal(side: &Expr) -> bool { matches!(side, Expr::LitInt { .. 
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn counts_in_usize(&mut self, key: &str, args: &[Expr]) { if check_counts_first(key) && !args.is_empty() { let added = self.facts.count_args.insert(id_of(nikaia_std::index::get(&args, 0)) as i64); } }
+    pub fn counts_in_usize(&mut self, key: &str, args: &[Expr]) {
+        if check_counts_first(key) && !args.is_empty() { let added = self.facts.count_args.insert(id_of(nikaia_std::index::get(&args, 0)) as i64); }
+        if check_counts_second(key) && args.len() > 1 { let second = self.facts.count_args.insert(id_of(nikaia_std::index::get(&args, 1)) as i64); }
+    }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_map_read_kept(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr, span: &Span) {

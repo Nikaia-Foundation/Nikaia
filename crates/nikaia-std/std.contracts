@@ -757,6 +757,14 @@ sync = true
 touches = []
 signature = "(self, i32) -> i32"
 
+# The number held between two bounds: `lo` below them, `hi` above them, itself
+# between. A `lo` above `hi` aborts.
+[fn."i32::clamp"]
+pub = true
+sync = true
+touches = []
+signature = "(self, lo: i32, hi: i32) -> i32"
+
 # The number to the power `exp`; a result that does not fit aborts, as `*` does.
 [fn."i32::pow"]
 pub = true
@@ -862,6 +870,14 @@ sync = true
 touches = []
 signature = "(self, u32) -> u32"
 
+# The number held between two bounds: `lo` below them, `hi` above them, itself
+# between. A `lo` above `hi` aborts.
+[fn."u32::clamp"]
+pub = true
+sync = true
+touches = []
+signature = "(self, lo: u32, hi: u32) -> u32"
+
 # The number to the power `exp`; a result that does not fit aborts, as `*` does.
 [fn."u32::pow"]
 pub = true
@@ -924,6 +940,14 @@ pub = true
 sync = true
 touches = []
 signature = "(self, u64) -> u64"
+
+# The number held between two bounds: `lo` below them, `hi` above them, itself
+# between. A `lo` above `hi` aborts.
+[fn."u64::clamp"]
+pub = true
+sync = true
+touches = []
+signature = "(self, lo: u64, hi: u64) -> u64"
 
 # The number to the power `exp`; a result that does not fit aborts, as `*` does.
 [fn."u64::pow"]
@@ -1148,6 +1172,14 @@ pub = true
 sync = true
 touches = []
 signature = "(self, i64) -> i64"
+
+# The number held between two bounds: `lo` below them, `hi` above them, itself
+# between. A `lo` above `hi` aborts.
+[fn."i64::clamp"]
+pub = true
+sync = true
+touches = []
+signature = "(self, lo: i64, hi: i64) -> i64"
 
 # Division rounded **down** for a positive divisor, so that the remainder it
 # leaves is never negative: `-7.div_euclid(2)` is `-4`, where `/` gives `-3`.
@@ -2801,6 +2833,41 @@ signature = "[T](mut self: ref Vec[T], items: Vec[T])"
 # It is **stable**: elements the order does not separate keep the order they
 # had, which is what lets two passes express a compound order.
 [fn."Vec::sort"]
+pub = true
+sync = true
+touches = []
+signature = "(mut self: ref Vec[?])"
+
+# Keep the elements the function says yes to and drop the rest, in place.
+#
+# The ones kept keep their order. Each element is handed to the function once,
+# front to back.
+[fn."Vec::retain"]
+pub = true
+sync = "sync(f)"
+signature = "[T](mut self: ref Vec[T], f: fn(ref T) -> bool)"
+
+# Exchange the elements at two positions, in place.
+#
+# A position past the end aborts, as an index does. The positions are `i64`s
+# here and `usize`s below (ADR-293 D20).
+[fn."Vec::swap"]
+pub = true
+sync = true
+touches = []
+signature = "(mut self: ref Vec[?], i: i64, j: i64)"
+
+# Put the elements in the opposite order, in place.
+[fn."Vec::reverse"]
+pub = true
+sync = true
+touches = []
+signature = "(mut self: ref Vec[?])"
+
+# Drop each element that equals the one before it, in place.
+#
+# Only **neighbours** are compared, so a sorted list ends with each value once.
+[fn."Vec::dedup"]
 pub = true
 sync = true
 touches = []

@@ -442,10 +442,11 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
         else => {}
     }
     // **`filter` is handed a reference to the item** (ADR-231 D2), and so
-    // are `find`'s, `take_while`'s and `skip_while`'s.
+    // are `find`'s, `take_while`'s, `skip_while`'s, `min_by_key`'s and
+    // `max_by_key`'s.
     // An item that is an open number copies (#594).
     let open_items = state.open_items_of(world, receiver) != null
-    if (name == "filter" || name == "find" || name == "take_while" || name == "skip_while") && args.len() == 1 {
+    if (name == "filter" || name == "find" || name == "take_while" || name == "skip_while" || name == "min_by_key" || name == "max_by_key") && args.len() == 1 {
         match on {
             Ty::Seq { item, .. } => {
                 match args[0] {
@@ -456,6 +457,26 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
                         }
                     },
                     else => {}
+                }
+            },
+            else => {}
+        }
+    }
+    // **And so is `retain`'s**, on the list itself: an element that copies is
+    // taken out by the pattern.
+    if name == "retain" && args.len() == 1 {
+        match on {
+            Ty::Named { name: list, args: items, .. } => {
+                if (list == "Vec" || list == "List") && items.len() == 1 {
+                    let item = items[0]
+                    match args[0] {
+                        Expr::Closure { params, .. } => {
+                            if params.len() == 1 && !item.is_unknown() && (item.is_a_view() || !moves(item)) {
+                                state.facts.filter_patterns.insert(id_of(args[0]) as i64)
+                            }
+                        },
+                        else => {}
+                    }
                 }
             },
             else => {}
