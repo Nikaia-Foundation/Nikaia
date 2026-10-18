@@ -451,6 +451,9 @@ pub struct CheckWorld {
     /// **The fields of every type in `own` and `library`, by the type's own
     /// name**: what a cleanup or a teardown a type holds is asked through.
     pub fields_by_base: collections::BTreeMap[String, Vec[Ty]],
+    /// **What each type the package's other files declare is made of**, by
+    /// its name (`check_parts_beside`), read once for the file.
+    pub parts_beside: collections::BTreeMap[String, Vec[Ty]],
     /// **What moved in the callees since the committed ledger** (the build's
     /// `Newly`): the errors each throws now and did not, what `NK2402` is
     /// told once.

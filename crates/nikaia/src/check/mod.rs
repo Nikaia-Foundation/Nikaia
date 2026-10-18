@@ -318,16 +318,19 @@ fn walked<'a>(
     harvesting: bool,
     computes: bool,
 ) -> Checked {
+    let views: Vec<_> = beside.iter().map(|other| parsed_view_of(other)).collect();
+    let here_at = beside
+        .iter()
+        .position(|other| std::ptr::eq(*other, parsed))
+        .map_or(-1, |at| at as i64);
     let world = CheckWorld {
         words: &parsed.interner,
         own,
         library,
         here: parsed_view_of(parsed),
-        beside: beside.iter().map(|other| parsed_view_of(other)).collect(),
-        here_at: beside
-            .iter()
-            .position(|other| std::ptr::eq(*other, parsed))
-            .map_or(-1, |at| at as i64),
+        parts_beside: nikaia_std::tools::check_copies::check_parts_beside(&views, here_at),
+        beside: views,
+        here_at,
         fields_by_base: check_items::fields_by_base(own, library),
         newly_throws: newly.throws.clone(),
         newly_keeps: newly
@@ -987,13 +990,6 @@ impl<'a> Checker<'a> {
             .map(|(_, other)| *other)
     }
 
-    /// **What each type another file of the package declares is made of**
-    /// (ADR-286 D1), read off its declaration: the fields of a struct, every
-    /// payload of an enum's variants.
-    fn parts_beside(&self) -> BTreeMap<String, Vec<Ty>> {
-        nikaia_std::tools::check_copies::check_parts_beside(self.world)
-    }
-
     /// **Which declared types derive `Copy`**
     /// ([ADR-294](../../docs/specification/adr/adr-294.md) D9.1,
     /// [`Checked::copies`]).
@@ -1017,9 +1013,8 @@ impl<'a> Checker<'a> {
     /// declared further down the file.
     fn collect_comparisons(&mut self) {
         // **And what another file of the package declares** (ADR-286 D1).
-        let beside = self.parts_beside();
         let asking = Comparable {
-            beside: &beside,
+            beside: &self.world.parts_beside,
             structs: &self.s.structs,
             enums: &self.s.enums,
             payloads: &self.s.enum_payloads,
@@ -2132,9 +2127,8 @@ impl<'a> Checker<'a> {
     /// answers from the ledger's `orders` column, whose absence is *no*. Asked at
     /// the positions a program writes a type, over everything inside it.
     fn a_key_with_no_order(&mut self, ty: &Ty, span: &Span) {
-        let beside = self.parts_beside();
         let asking = Comparable {
-            beside: &beside,
+            beside: &self.world.parts_beside,
             structs: &self.s.structs,
             enums: &self.s.enums,
             payloads: &self.s.enum_payloads,

@@ -11625,11 +11625,10 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn collect_types(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>) {
         for other in world.beside.iter() { for item in other.items.iter() { self.collect_types_beside(other, &item.node); } }
-        let beside = check_parts_beside(world);
         for item in world.here.items.iter() {
             match &item.node {
-                Item::Struct { name, generics, fields, .. } => { let name = *name; self.collect_struct(world, &beside, name, generics, fields, &item.span); },
-                Item::Enum { name, variants, .. } => { let name = *name; self.collect_enum(world, &beside, name, variants, &item.span); },
+                Item::Struct { name, generics, fields, .. } => { let name = *name; self.collect_struct(world, &world.parts_beside, name, generics, fields, &item.span); },
+                Item::Enum { name, variants, .. } => { let name = *name; self.collect_enum(world, &world.parts_beside, name, variants, &item.span); },
                 _ => { },
             }
         }
@@ -12361,11 +12360,11 @@ impl CheckState {
 
 // --- check_copies.nika ---
 
-pub fn check_parts_beside(world: &CheckWorld<'_, '_, '_, '_, '_>) -> collections::BTreeMap<String, Vec<Ty>> {
+pub fn check_parts_beside(beside: &[ParsedView<'_, '_, '_, '_, '_>], here_at: i64) -> collections::BTreeMap<String, Vec<Ty>> {
     let mut parts: collections::BTreeMap<String, Vec<Ty>> = collections::BTreeMap::new();
     let mut at: i64 = 0;
-    for other in world.beside.iter() {
-        if at != world.here_at { for item in other.items.iter() { copies_parts_of(other, &item.node, &mut parts); } }
+    for other in beside.iter() {
+        if at != here_at { for item in other.items.iter() { copies_parts_of(other, &item.node, &mut parts); } }
         at = at + 1;
     }
     parts
@@ -12436,7 +12435,6 @@ impl CheckState {
             if at != world.here_at { for name in copies_declared_in(other) { if !nikaia_std::list::contains(&declared, &name) { package.push(name); } } }
             at = at + 1;
         }
-        let beside_parts = check_parts_beside(world);
         let mut dropped: collections::BTreeSet<String> = collections::BTreeSet::new();
         copies_dropped_in(&world.here, &mut dropped);
         for unit in world.beside.iter() { copies_dropped_in(unit, &mut dropped); }
@@ -12456,7 +12454,7 @@ impl CheckState {
                         for field in fields.iter() { parts.push(field.ty.clone()); }
                     }
                 } else {
-                    let held = match beside_parts.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                    let held = match world.parts_beside.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
                     parts = held.to_owned();
                 }
                 let named = Ty::Named { name: name.to_owned(), args: vec![], view: false };
@@ -13713,8 +13711,7 @@ fn check_core_call_on_comparable(state: &CheckState, world: &CheckWorld<'_, '_, 
         Ty::Var { .. } => { return false; },
         _ => { },
     }
-    let beside = check_parts_beside(world);
-    check_core_call_on_compares(&beside, &state.structs, &state.enums, &state.enum_payloads, &state.struct_parameters, world, on, wants_order)
+    check_core_call_on_compares(&world.parts_beside, &state.structs, &state.enums, &state.enum_payloads, &state.struct_parameters, world, on, wants_order)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -19147,8 +19144,7 @@ fn check_crossings_refusal(beside: &collections::BTreeMap<String, Vec<Ty>>, stru
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn check_crossings_a_type_that_does_not_compare(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, left: &Ty, right: &Ty, span: &Span) {
-    let beside = check_parts_beside(world);
-    let refused: Option<CheckFinding> = check_crossings_refusal(&beside, &state.structs, &state.enums, &state.enum_payloads, &state.struct_parameters, world, left, right, span);
+    let refused: Option<CheckFinding> = check_crossings_refusal(&world.parts_beside, &state.structs, &state.enums, &state.enum_payloads, &state.struct_parameters, world, left, right, span);
     let finding = match refused { Some(__nikaia_value) => __nikaia_value, None => return };
     state.findings.push(finding);
 }
@@ -19163,9 +19159,8 @@ fn check_crossings_bounds(beside: &collections::BTreeMap<String, Vec<Ty>>, struc
 // this was written - see `contracts::sync`.
 pub fn check_crossings_a_standard_bound_not_met(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, key: &str, bound: &collections::BTreeMap<String, Ty>, span: &Span) {
     if !state.declared_bounds.contains_key(key) { return; }
-    let beside = check_parts_beside(world);
     let wanted = match state.declared_bounds.get(key) { Some(__nikaia_value) => __nikaia_value, None => return };
-    let refused = check_crossings_bounds(&beside, &state.structs, &state.enums, &state.enum_payloads, &state.struct_parameters, world, &state.type_parameters, key, &wanted, bound, span);
+    let refused = check_crossings_bounds(&world.parts_beside, &state.structs, &state.enums, &state.enum_payloads, &state.struct_parameters, world, &state.type_parameters, key, &wanted, bound, span);
     for finding in refused.iter() { state.findings.push(finding.clone()); }
 }
 
@@ -19177,8 +19172,7 @@ fn check_crossings_impls(beside: &collections::BTreeMap<String, Vec<Ty>>, struct
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn check_crossings_language_impls(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>) {
-    let beside = check_parts_beside(world);
-    let refused = check_crossings_impls(&beside, &state.structs, &state.enums, &state.enum_payloads, &state.struct_parameters, world);
+    let refused = check_crossings_impls(&world.parts_beside, &state.structs, &state.enums, &state.enum_payloads, &state.struct_parameters, world);
     for finding in refused.iter() { state.findings.push(finding.clone()); }
 }
 
@@ -27975,6 +27969,7 @@ pub struct CheckWorld<'a, 'a1, 'a2, 'a3, 'a4> {
     pub beside: Vec<ParsedView<'a4, 'a4, 'a4, 'a4, 'a4>>,
     pub here_at: i64,
     pub fields_by_base: collections::BTreeMap<String, Vec<Ty>>,
+    pub parts_beside: collections::BTreeMap<String, Vec<Ty>>,
     pub newly_throws: collections::BTreeMap<String, Vec<String>>,
     pub newly_keeps: collections::BTreeMap<String, Vec<(String, bool, String)>>,
 }

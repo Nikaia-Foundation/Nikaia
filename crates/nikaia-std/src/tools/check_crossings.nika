@@ -281,8 +281,7 @@ fn check_crossings_refusal(beside: ref collections::BTreeMap[String, Vec[Ty]], s
 /// ([ADR-204](../../../docs/specification/adr/adr-204.md) D3), asked of one
 /// side and only where its type is known.
 pub fn check_crossings_a_type_that_does_not_compare(mut state: CheckState, world: ref CheckWorld, left: ref Ty, right: ref Ty, span: ref Span) sync {
-    let beside = check_parts_beside(world)
-    let refused: CheckFinding? = check_crossings_refusal(beside, state.structs, state.enums, state.enum_payloads, state.struct_parameters, world, left, right, span)
+    let refused: CheckFinding? = check_crossings_refusal(world.parts_beside, state.structs, state.enums, state.enum_payloads, state.struct_parameters, world, left, right, span)
     let finding = refused ?? return
     state.findings.push(finding)
 }
@@ -300,9 +299,8 @@ pub fn check_crossings_a_standard_bound_not_met(mut state: CheckState, world: re
     if !state.declared_bounds.contains_key(key) {
         return
     }
-    let beside = check_parts_beside(world)
     let wanted = state.declared_bounds.get(key) ?? return
-    let refused = check_crossings_bounds(beside, state.structs, state.enums, state.enum_payloads, state.struct_parameters, world, state.type_parameters, key, wanted, bound, span)
+    let refused = check_crossings_bounds(world.parts_beside, state.structs, state.enums, state.enum_payloads, state.struct_parameters, world, state.type_parameters, key, wanted, bound, span)
     for finding in refused {
         state.findings.push(finding.clone())
     }
@@ -317,8 +315,7 @@ fn check_crossings_impls(beside: ref collections::BTreeMap[String, Vec[Ty]], str
 /// **`NK1249`: an `impl Eq` or `impl Ord` the language cannot honour**
 /// ([ADR-341](../../../docs/specification/adr/adr-341.md) D5).
 pub fn check_crossings_language_impls(mut state: CheckState, world: ref CheckWorld) sync {
-    let beside = check_parts_beside(world)
-    let refused = check_crossings_impls(beside, state.structs, state.enums, state.enum_payloads, state.struct_parameters, world)
+    let refused = check_crossings_impls(world.parts_beside, state.structs, state.enums, state.enum_payloads, state.struct_parameters, world)
     for finding in refused {
         state.findings.push(finding.clone())
     }

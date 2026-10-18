@@ -171,11 +171,10 @@ impl CheckState {
                 self.collect_types_beside(other, item.node)
             }
         }
-        let beside = check_parts_beside(world)
         for item in world.here.items {
             match item.node {
-                Item::Struct { name, generics, fields, .. } => self.collect_struct(world, beside, name, generics, fields, item.span),
-                Item::Enum { name, variants, .. } => self.collect_enum(world, beside, name, variants, item.span),
+                Item::Struct { name, generics, fields, .. } => self.collect_struct(world, world.parts_beside, name, generics, fields, item.span),
+                Item::Enum { name, variants, .. } => self.collect_enum(world, world.parts_beside, name, variants, item.span),
                 else => {},
             }
         }

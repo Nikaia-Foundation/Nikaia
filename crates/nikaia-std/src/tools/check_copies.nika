@@ -9,11 +9,13 @@ use std::collections
 /// **What each type another file of the package declares is made of**
 /// (ADR-286 D1), read off its declaration: the fields of a struct, every
 /// payload of an enum's variants. The first file to declare a name says it.
-pub fn check_parts_beside(world: ref CheckWorld) -> collections::BTreeMap[String, Vec[Ty]] {
+/// Read once per checked file, into `CheckWorld::parts_beside` (#667): asked
+/// at every written type, it read the whole package each time.
+pub fn check_parts_beside(beside: ref Vec[ParsedView], here_at: i64) -> collections::BTreeMap[String, Vec[Ty]] {
     let mut parts: collections::BTreeMap[String, Vec[Ty]] = collections::BTreeMap()
     let mut at: i64 = 0
-    for other in world.beside {
-        if at != world.here_at {
+    for other in beside {
+        if at != here_at {
             for item in other.items {
                 copies_parts_of(other, item.node, parts)
             }
@@ -116,7 +118,6 @@ impl CheckState {
             }
             at = at + 1
         }
-        let beside_parts = check_parts_beside(world)
         let mut dropped: collections::BTreeSet[String] = collections::BTreeSet()
         copies_dropped_in(world.here, dropped)
         for unit in world.beside {
@@ -146,7 +147,7 @@ impl CheckState {
                         }
                     }
                 } else {
-                    let held = beside_parts.get(name) ?? continue
+                    let held = world.parts_beside.get(name) ?? continue
                     parts = held.clone()
                 }
                 let named = Ty::Named { name: name.clone(), args: [], view: false }

@@ -198,8 +198,7 @@ fn check_core_call_on_comparable(state: ref CheckState, world: ref CheckWorld, o
         Ty::Var { .. } => return false,
         else => {}
     }
-    let beside = check_parts_beside(world)
-    return check_core_call_on_compares(beside, state.structs, state.enums, state.enum_payloads, state.struct_parameters, world, on, wants_order)
+    return check_core_call_on_compares(world.parts_beside, state.structs, state.enums, state.enum_payloads, state.struct_parameters, world, on, wants_order)
 }
 
 /// The language's own order or equality, asked of what the state collected

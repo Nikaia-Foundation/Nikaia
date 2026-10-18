@@ -80,7 +80,7 @@ pub const UNRESOLVED: &str = "a method call this compiler could not resolve";
 
 /// The provenance of this program's input.
 pub fn analyse(parsed: &Parsed, library: &Ledger) -> Trust {
-    join(&[parsed], Some(parsed), library)
+    join(&[parsed], Some(parsed), library, None)
 }
 
 /// **The trust of a package: the join over all its files** (ADR-010 D9, #581).
@@ -89,17 +89,33 @@ pub fn analyse(parsed: &Parsed, library: &Ledger) -> Trust {
 /// depend on which file is asked: a socket read in one file makes every file's
 /// maps keyed, whatever order the files are in. The roots are the package's.
 pub fn analyse_package(package: &[&Parsed], library: &Ledger) -> Trust {
-    join(package, None, library)
+    join(package, None, library, None)
+}
+
+/// The same, for a caller that already ran the ledger's pass over this
+/// package against this `library` (`Ledger::infer_package_checked`): its
+/// checked units are what the join would compute again (#667).
+pub fn analyse_package_checked(
+    package: &[&Parsed],
+    library: &Ledger,
+    checked: &[crate::check::Checked],
+) -> Trust {
+    join(package, None, library, Some(checked))
 }
 
 /// One file's roots, with the provenance and the reasons of the **package**
 /// it is a file of: what `--trust` prints per file, and what the emitter
 /// writes for it, are the one answer.
 pub fn analyse_in(parsed: &Parsed, package: &[&Parsed], library: &Ledger) -> Trust {
-    join(package, Some(parsed), library)
+    join(package, Some(parsed), library, None)
 }
 
-fn join(package: &[&Parsed], only: Option<&Parsed>, library: &Ledger) -> Trust {
+fn join(
+    package: &[&Parsed],
+    only: Option<&Parsed>,
+    library: &Ledger,
+    checked: Option<&[crate::check::Checked]>,
+) -> Trust {
     let mut reasons: Vec<Reason> = Vec::new();
     let mut roots: Vec<Root> = Vec::new();
 
@@ -150,7 +166,14 @@ fn join(package: &[&Parsed], only: Option<&Parsed>, library: &Ledger) -> Trust {
     // **And one it could not resolve counts as untrusted** (ADR-010 D1: a
     // barrier widens, never the other way). A map that gets the keyed hash
     // needlessly is slower; the opposite is an attack.
-    let (_, checked) = Ledger::infer_package_checked(package, library);
+    let computed;
+    let checked = match checked {
+        Some(checked) => checked,
+        None => {
+            computed = Ledger::infer_package_checked(package, library).1;
+            &computed
+        }
+    };
     let mut unresolved = false;
     for calls in checked.iter().flat_map(|c| c.methods.values()) {
         unresolved |= calls.unresolved;
