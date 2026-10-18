@@ -593,14 +593,42 @@ impl EmitState {
             out.push(".clone().into())")
             return
         }
+        // **A tuple fallback is converted part by part** (ADR-364): `("", "")`
+        // for a `(String, String)?` is `("".into(), "".into())`, as each part
+        // would be on its own; a number part takes its type as written.
+        match fallback {
+            Expr::Tuple(parts, _) => {
+                if !bare {
+                    out.push("(")
+                    let mut at = 0
+                    for part in parts {
+                        if at > 0 {
+                            out.push(", ")
+                        }
+                        at += 1
+                        let plain = a_number(part)
+                        let wrapped = !plain && (emit_flow_operated(part) || self.ends_in_a_cast(world, part))
+                        if wrapped {
+                            out.push("(")
+                        }
+                        host.expr(walk, out, part, depth, flow, scope)
+                        if wrapped {
+                            out.push(")")
+                        }
+                        if !plain {
+                            out.push(".into()")
+                        }
+                    }
+                    out.push("))")
+                    return
+                }
+            },
+            else => {}
+        }
         // **A fallback that comes out as a conversion is bracketed** before
         // `.into()`: `r.len() as i64.into()` is not Rust. So is one written
         // with an operator: `(0 - 1).into()` and not `0 - 1.into()`.
-        let operated = match fallback {
-            Expr::Binary { .. } => true,
-            Expr::Unary { .. } => true,
-            else => false,
-        }
+        let operated = emit_flow_operated(fallback)
         let cast = !bare && (operated || self.ends_in_a_cast(world, fallback))
         if cast {
             out.push("(")
@@ -1040,6 +1068,15 @@ impl EmitState {
 fn emit_catch_is_a_join(world: ref EmitWorld, guarded: ref Expr) -> bool {
     return match guarded {
         Expr::MethodCall { method, .. } => emit_text(world, method) == "join",
+        else => false,
+    }
+}
+
+/// A value written with an operator, which `.into()` needs bracketed.
+fn emit_flow_operated(expr: ref Expr) -> bool {
+    return match expr {
+        Expr::Binary { .. } => true,
+        Expr::Unary { .. } => true,
         else => false,
     }
 }

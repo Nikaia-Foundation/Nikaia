@@ -100,6 +100,10 @@ impl EmitState {
             for part in ty.generics {
                 parts.push(self.emit_core_ty_counted(world, walk, crossings, overlaps, part, lifetimes, count))
             }
+            // `(A, B)?` is an `Option<(A, B)>` (ADR-364).
+            if ty.is_nullable {
+                return f"Option<({parts.join(", ")})>"
+            }
             return f"({parts.join(", ")})"
         }
 

@@ -63,9 +63,15 @@ impl CheckState {
         }
         let declared = found ?? return Ty::Unknown
         self.field_is_reachable(ty, declared, span)
+        return self.a_safe_reach(base, declared.ty)
+    }
+
+    /// What `?.` reaches, of type `held`, on `base`: flattened where the
+    /// member is itself a `T?`, lent where it copies or comes out as a view.
+    pub fn a_safe_reach(ref mut self, base: ref Expr, held_ty: ref Ty) -> Ty sync {
         let place = roots_in_a_binding(base)
         let key = fact_key(base)
-        match declared.ty {
+        match held_ty {
             Ty::Nullable(held) => {
                 if place && moves(held) {
                     self.facts.viewed_reaches.insert(key, viewed_of(held))
@@ -73,19 +79,19 @@ impl CheckState {
                     return viewed_nullable(held)
                 }
                 self.facts.flattened_reaches.insert(key)
-                return declared.ty.clone()
+                return held_ty.clone()
             },
             else => {
-                if !moves(declared.ty) {
+                if !moves(held_ty) {
                     self.facts.copied_reaches.insert(key)
-                    return Ty::Nullable(declared.ty.clone())
+                    return Ty::Nullable(held_ty.clone())
                 }
                 if place {
-                    self.facts.viewed_reaches.insert(key, viewed_of(declared.ty))
+                    self.facts.viewed_reaches.insert(key, viewed_of(held_ty))
                     self.facts.copied_reaches.insert(key)
-                    return viewed_nullable(declared.ty)
+                    return viewed_nullable(held_ty)
                 }
-                return Ty::Nullable(declared.ty.clone())
+                return Ty::Nullable(held_ty.clone())
             },
         }
     }

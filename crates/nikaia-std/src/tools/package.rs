@@ -4668,7 +4668,7 @@ fn capture(name: &str, local: &Local, walk: &mut BufferWalk) {
     let mut held: (i64, collections::BTreeSet<(i64, String)>) = nikaia_std::index::or(match *nikaia_std::index::get(&walk.captured, name) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
-    }, || (local.at, collections::BTreeSet::new()).into());
+    }, || (local.at.into(), collections::BTreeSet::new().into()));
     for origin in local.origins.iter() { held.1.insert(origin.clone()); }
     walk.captured.insert(name.to_owned(), held);
 }
@@ -17179,6 +17179,15 @@ fn check_core_places_given<H: CheckHost>(state: &mut CheckState, world: &CheckWo
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+fn check_core_places_parts_of(ty: &Ty) -> Option<Vec<Ty>> {
+    match ty {
+        Ty::Tuple(parts) => return Some(parts.to_owned()),
+        _ => return None,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 fn check_core_places_tuple_part(state: &mut CheckState, parts: &[Ty], field: &str, span: &Span) -> Ty {
     let at = check_core_places_position(field);
     if at >= 0 && at >= parts.len() as i64 {
@@ -17243,6 +17252,12 @@ pub fn check_core_field<H: CheckHost>(state: &mut CheckState, world: &CheckWorld
         match on {
             Ty::Nullable(ref inner) => {
                 let inner = nikaia_std::boxed::open(inner);
+                let parts = check_core_places_parts_of(inner);
+                if parts.is_some() {
+                    let part = check_core_places_tuple_part(state, &nikaia_std::index::or(parts, || vec![].into()), &field, span);
+                    if part.is_unknown() { return Ty::Unknown; }
+                    return state.a_safe_reach(base, &part);
+                }
                 return state.a_safe_field(world, inner, base, &field, expr, span);
             },
             Ty::Unknown => { return Ty::Unknown; },
@@ -20409,10 +20424,15 @@ impl CheckState {
         }
         let declared = match found { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
         self.field_is_reachable(&ty, &declared, span);
+        self.a_safe_reach(base, &declared.ty)
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_safe_reach(&mut self, base: &Expr, held_ty: &Ty) -> Ty {
         let place = roots_in_a_binding(base);
         let key = fact_key(base);
-        match declared.ty {
-            Ty::Nullable(ref held) => {
+        match held_ty {
+            Ty::Nullable(held) => {
                 let held = nikaia_std::boxed::open(held);
                 if place && moves(held) {
                     self.facts.viewed_reaches.insert(key, viewed_of(held));
@@ -20420,19 +20440,19 @@ impl CheckState {
                     return viewed_nullable(held);
                 }
                 self.facts.flattened_reaches.insert(key);
-                return declared.ty.clone();
+                return held_ty.clone();
             },
             _ => {
-                if !moves(&declared.ty) {
+                if !moves(held_ty) {
                     self.facts.copied_reaches.insert(key);
-                    return Ty::Nullable(Box::new(declared.ty.clone()));
+                    return Ty::Nullable(Box::new(held_ty.clone()));
                 }
                 if place {
-                    self.facts.viewed_reaches.insert(key, viewed_of(&declared.ty));
+                    self.facts.viewed_reaches.insert(key, viewed_of(held_ty));
                     self.facts.copied_reaches.insert(key);
-                    return viewed_nullable(&declared.ty);
+                    return viewed_nullable(held_ty);
                 }
-                return Ty::Nullable(Box::new(declared.ty.clone()));
+                return Ty::Nullable(Box::new(held_ty.clone()));
             },
         }
     }
@@ -28155,10 +28175,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn tuple_literal(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr) -> Option<Ty> {
-        let wants: Vec<Ty> = match want {
-            Ty::Tuple(parts) => parts.to_owned(),
-            _ => return None,
-        };
+        let wants: Vec<Ty> = match check_texts_wanted_parts(want) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let founds: Vec<Ty> = match found {
             Ty::Tuple(parts) => parts.to_owned(),
             _ => return None,
@@ -28201,6 +28218,16 @@ impl CheckState {
         }
         let element = match built { Some(__nikaia_value) => __nikaia_value, None => return None };
         Some(Ty::Named { name, args: vec![element], view: false })
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_texts_wanted_parts(ty: &Ty) -> Option<Vec<Ty>> {
+    match ty {
+        Ty::Tuple(parts) => Some(parts.to_owned()),
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); check_texts_wanted_parts(inner) },
+        _ => None,
     }
 }
 
@@ -30237,7 +30264,10 @@ pub fn written_ty(names: &winnow_grammar::InternerContext, aliases: &collections
         if ty.is_nullable { return Ty::Pointed { item: Box::new(Ty::Nullable(Box::new(item))), slice: ty.is_slice, mutable: ty.is_mut }; }
         return Ty::Pointed { item: Box::new(item), slice: ty.is_slice, mutable: ty.is_mut };
     }
-    if ty.is_tuple { return Ty::Tuple(written_all(names, aliases, &ty.generics)); }
+    if ty.is_tuple {
+        if ty.is_nullable { return Ty::Nullable(Box::new(Ty::Tuple(written_all(names, aliases, &ty.generics)))); }
+        return Ty::Tuple(written_all(names, aliases, &ty.generics));
+    }
     if (*ty.code).is_some() {
         let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
         let params = written_all(names, aliases, &ty.generics);
@@ -33783,7 +33813,28 @@ impl EmitState {
             out.push(".clone().into())");
             return Ok(());
         }
-        let operated = matches!(fallback, Expr::Binary { .. } | Expr::Unary { .. });
+        match fallback {
+            Expr::Tuple(parts, _) => {
+                if !bare {
+                    out.push("(");
+                    let mut at = 0;
+                    for part in parts.iter() {
+                        if at > 0 { out.push(", "); }
+                        at += 1;
+                        let plain = a_number(part);
+                        let wrapped = !plain && (emit_flow_operated(part) || self.ends_in_a_cast(world, part));
+                        if wrapped { out.push("("); }
+                        host.expr(walk, out, part, depth, flow, scope)?;
+                        if wrapped { out.push(")"); }
+                        if !plain { out.push(".into()"); }
+                    }
+                    out.push("))");
+                    return Ok(());
+                }
+            },
+            _ => { },
+        }
+        let operated = emit_flow_operated(fallback);
         let cast = !bare && (operated || self.ends_in_a_cast(world, fallback));
         if cast { out.push("("); }
         host.expr(walk, out, fallback, depth, flow, scope)?;
@@ -34078,6 +34129,8 @@ fn emit_catch_is_a_join(world: &EmitWorld<'_, '_, '_, '_>, guarded: &Expr) -> bo
         _ => false,
     }
 }
+
+fn emit_flow_operated(expr: &Expr) -> bool { matches!(expr, Expr::Binary { .. } | Expr::Unary { .. }) }
 
 
 // --- emit_core_leaves.nika ---
@@ -36052,6 +36105,7 @@ impl EmitState {
         if ty.is_tuple {
             let mut parts: Vec<String> = vec![];
             for part in ty.generics.iter() { parts.push(self.emit_core_ty_counted(world, walk, crossings, overlaps, part, lifetimes, count)); }
+            if ty.is_nullable { return format!("Option<({})>", parts.join(", ")); }
             return format!("({})", parts.join(", "));
         }
         let parameter = nikaia_std::index::or(walk.specialising.as_ref().map(|__nikaia_it| __nikaia_it.first.as_str()), || "").to_owned();
@@ -60259,10 +60313,6 @@ fn written_at(names: &winnow_grammar::InternerContext, ty: &Type, known: &collec
 fn written_at_the_boundary(names: &winnow_grammar::InternerContext, ty: &Type, known: &collections::BTreeSet<String>, a_parameter: bool, at_c: bool, span: &Span, out: &mut Vec<Finding>) {
     if ty.is_mut && !at_c {
         out.push(refusal("NK1158", span.clone(), String::from("`ref mut` can only be used when talking to C."), vec![String::from("`ref mut` is only for `extern \"C\"` declarations. Everywhere else, Nikaia has its own way to say it.")], String::from("Put `mut` in front of the name instead: `fn fill(mut out: Vec[i64])`.")));
-        return;
-    }
-    if ty.is_tuple && ty.is_nullable {
-        out.push(refusal("NK1254", span.clone(), String::from("A tuple cannot be nullable: `(A, B)?` is not written."), vec![String::from("The `?` makes a named type nullable (Part I 2.3); a tuple type has no `?`.")], String::from("Declare a struct for the parts and write `Name?`, or make the parts nullable: `(A?, B?)`.")));
         return;
     }
     let name = names.resolve(ty.name).to_owned();

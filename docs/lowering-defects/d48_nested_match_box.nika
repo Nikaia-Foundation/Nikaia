@@ -1,0 +1,30 @@
+enum Shape {
+    Leaf(i64),
+    Many(Vec[Shape]),
+    Maybe(Shape),
+}
+
+fn count(parts: ref Vec[Shape]) -> i64 {
+    return parts.len() as i64
+}
+
+fn size(s: ref Shape) -> i64 {
+    let on = s.clone()
+    match on {
+        Shape::Maybe(inner) => {
+            match inner {
+                Shape::Many(parts) => {
+                    return count(parts)
+                },
+                else => {}
+            }
+            return 0
+        },
+        else => {}
+    }
+    return -1
+}
+
+fn main() {
+    println(f"{size(Shape::Maybe(Shape::Many([Shape::Leaf(1), Shape::Leaf(2)])))}")
+}

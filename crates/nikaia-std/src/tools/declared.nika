@@ -45,7 +45,11 @@ pub fn written_ty(names: ref winnow_grammar::InternerContext, aliases: ref colle
         }
         return Ty::Pointed { item: item, slice: ty.is_slice, mutable: ty.is_mut }
     }
+    // `(A, B)?` is the tuple, nullable (ADR-364).
     if ty.is_tuple {
+        if ty.is_nullable {
+            return Ty::Nullable(Ty::Tuple(written_all(names, aliases, ty.generics)))
+        }
         return Ty::Tuple(written_all(names, aliases, ty.generics))
     }
     // **A parameter that is code** (ADR-277 D6), read before the `?`: the

@@ -1829,9 +1829,8 @@ grammar! {
           // `(A, B)`. The parts go where a named type's arguments go, so
           // everything that walks a type's arguments walks a tuple's parts.
           //
-          // **`(A, B)?` parses and the checker refuses it** (`NK1254`): Part I
-          // 2.3 does not write it, and the refusal says so in words rather
-          // than as a parse error at the `?`.
+          // `(A, B)?` is a nullable tuple, written as every `T?` (Part I 2.3,
+          // ADR-364); it lowers to `Option<(A, B)>`.
           | "(" parts:type_refs ")" nullable:question? -> {
                 Type {
                     name: _state.intern("tuple"),
@@ -2969,6 +2968,8 @@ grammar! {
           // `t.0` - a tuple's parts are numbered, and the number is a field
           // name like any other, so nothing downstream has to know.
           | "." index:digits -> { Postfix::Field(_state.intern(&index)) }
+          // `p?.0` - a part of a `(A, B)?`, as a nullable (ADR-364).
+          | "?." index:digits -> { Postfix::SafeField(_state.intern(&index)) }
           // **`value with { field: … }`**
           // ([ADR-118](../../../../docs/specification/adr/adr-118.md) D1): a
           // copy of a value with named fields changed. A postfix rather than a

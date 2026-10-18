@@ -51,6 +51,7 @@ finds two D8 casts in `check_numbers4.nika`.
 | D42 | a tools file whose function throws through `net`'s `io::IoError` without `use std::io` lowers to `Thrown<io::IoError>` with no `io` in scope (rustc E0433); a program has the prelude | open: write `use std::io` | `map_trust.rs` `HM_C` |
 | D45 | `throw made()`, a call whose result is an error type, does not name that type in the error set: the function lowers to `Box<dyn Error>` where `throw Bad::No` gives `Thrown<Bad>` (a tools caller that `split()`s it fails, E0599) | open: throw the constructor (`build_eval.nika`, #636) | probe: `fn made() -> Bad`, `fn f() -> i64 throws { throw made() }` |
 | D46 | `xs[i] = v` on an `Array[T, N]` does not build: `[i64; 5]: Set<_, _>` is not satisfied (`nikaia_std::index::set`); the interpreter used to compute such a `comptime` where the program could not run it | open: build with `push` on a `Vec` | `fn squares() -> Array[i64, 5] { let mut xs: Array[i64, 5] = [0, 0, 0, 0, 0]; for i in 0..<xs.len() { xs[i] = i * i }; return xs }` |
+| D48 | a `match` on a name an outer arm bound out of a box (`Ty::Nullable(inner) => match inner { Ty::Tuple(parts) => … }`) lowers to `Ty::Tuple(ref parts)` under the implicit borrow of the opened `&T` (rustc: cannot explicitly borrow within an implicitly-borrowing pattern) | open: match in a function of its own over a `ref T` (`check_core_places_parts_of`, `check_texts_wanted_parts`, #648) | d48_nested_match_box.nika |
 ---
 
 ## D1. A by-value parameter that is only read lowers as `&T`, and `p with {..}` then writes `..p`
@@ -134,7 +135,7 @@ Workaround: `n.clone()` (a copy of the handle).
 
 ## D5. `(A, B)?` does not parse: by design, but the message does not name the way out
 
-Built (0.0.913): the checker refuses it with `NK1254`, naming a struct and `Name?` or `(A?, B?)` (`types.nika`, test in `nullable.rs`).
+Superseded (#648, ADR-364): `(A, B)?` is a type, written as every `T?`, and lowers to `Option<(A, B)>`; `NK1254` is retired (tests in `nullable.rs`).
 
 ### Today
 `fn pair(n: i64) -> (i64, i64)? sync` is refused with `Expected { here, but found ?`. Part I 2.3 says `(A, B)?` is not written (ADR-278 D1), so the refusal is the rule. Only the message is short of it.
@@ -487,3 +488,18 @@ value`, as `bounding_compound` in `bounds_walk.nika` does, which lowers right.
 A fallback that is a variant literal, after an option of a borrowed enum, lowers to the same
 reference on both sides (or both by value); then fold `loop_assigned` back into its one caller,
 with a test in `lowering.rs`.
+
+## D48 (new). A `match` on a name an outer arm bound out of a box writes `ref` under an implicit borrow
+
+`match on { Shape::Maybe(inner) => { match inner { Shape::Many(parts) => count(parts), else => {} } } }`
+over an owned `on` of a recursive enum passes the checker and lowers to `Shape::Maybe(ref inner) =>
+{ let inner = nikaia_std::boxed::open(inner); match inner { Shape::Many(ref parts) => … } }`: `inner`
+is a `&Shape` there, so the inner pattern borrows implicitly and rustc refuses the `ref`
+(`docs/lowering-defects/d48_nested_match_box.nika`, also in a user program). Met while building #648:
+the checker reads the parts of a `(A, B)?` through a function of its own over a `ref Ty`
+(`check_core_places_parts_of`, `check_texts_wanted_parts`).
+
+### To build
+
+A binding an arm opened out of a box is matched by reference: the inner `match` writes no `ref`
+(as over a `ref` parameter); then fold the two helpers back, with a test in `lowering.rs`.

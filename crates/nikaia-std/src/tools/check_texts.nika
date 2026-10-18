@@ -264,10 +264,7 @@ impl CheckState {
     /// **A tuple of text literals where a tuple with text is wanted**: the
     /// tuple type it comes to, where any part was built.
     pub fn tuple_literal(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr) -> Ty? sync {
-        let wants: Vec[Ty] = match want {
-            Ty::Tuple(parts) => parts.clone(),
-            else => return null,
-        }
+        let wants: Vec[Ty] = check_texts_wanted_parts(want) ?? return null
         let founds: Vec[Ty] = match found {
             Ty::Tuple(parts) => parts.clone(),
             else => return null,
@@ -326,6 +323,16 @@ impl CheckState {
         }
         let element = built ?? return null
         return Ty::Named { name: name, args: [element], view: false }
+    }
+}
+
+/// The parts a tuple literal is wanted as: a tuple's, or those of the tuple
+/// a `(A, B)?` holds (ADR-364).
+fn check_texts_wanted_parts(ty: ref Ty) -> Vec[Ty]? sync {
+    return match ty {
+        Ty::Tuple(parts) => parts.clone(),
+        Ty::Nullable(inner) => check_texts_wanted_parts(inner),
+        else => null,
     }
 }
 

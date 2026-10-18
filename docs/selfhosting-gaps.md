@@ -245,7 +245,7 @@ checker refusal (`NK1125`) if `!= null` is not meant to narrow.
 | U-c6 the `(args, written)` rebinding to the list with the witness | the half after the door is its own function, called with `args` or the longer list | yes: no shadowing a `ref` parameter by a local slice |
 | U-c6 `Constant::of(..).first_type()` | `integer_fits` for `i64` and `i32` | yes: `Constant` is Rust's |
 | U-c7 `op ?? return` on a `ref BinaryOp?` | `let o: ref BinaryOp = …`, then `o.clone()` where a value is passed | no: a `ref` option unwraps to a `ref` |
-| U-c7 `fn …() -> (Expr, Expr)?` for a range's ends | the range's half of `for` is its own function over `match iter` | yes: `NK1254`, no nullable tuple |
+| U-c7 `fn …() -> (Expr, Expr)?` for a range's ends | the range's half of `for` is its own function over `match iter` | no longer: `(A, B)?` is a type since #648 (ADR-364) |
 | U-c7 `Local { .., ..self.local_free(..) }` | `CheckLocal::free` then field writes | yes: no struct update syntax |
 | U-c7 `frame.first_mut()` | `frame[0].open_number = …` behind `frame.len() > 0` | yes: no `if let` |
 | U-c9 `bound.get(p).cloned().unwrap_or(..)` | a loop over the map (`check_core_places_bound`); **removed (0.0.965)**: `bound.get(p)?.clone() ?? Ty::Unknown` | no: `bound.get(p)?.clone()`, which NK1185 names as the way, clones the reference (D36) |

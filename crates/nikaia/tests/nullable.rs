@@ -1551,20 +1551,88 @@ fn a_lambdas_arm_beside_a_null_is_wrapped() {
     assert_eq!(ran("lambda-arm-beside-null", source), "2 1 2\n");
 }
 
-/// `(A, B)?` is not written (Part I 2.3): refused with `NK1254`, which names
-/// a struct and `(A?, B?)`, not a parse error at the `?`.
+/// **`(A, B)?` is written as every `T?`** (Part I 2.3, ADR-364): a result,
+/// `?? return null` and a tuple tail, `let (a, b) = … ?? return`, a `match`
+/// with a `null` arm, and a list of them. It lowers to `Option<(A, B)>`.
 #[test]
-fn a_nullable_tuple_is_refused_naming_the_way_out() {
-    let found =
-        findings("fn pair(n: i64) -> (i64, i64)? {\n    return null\n}\n\nfn main() {\n}\n");
-    let refusal = found
-        .iter()
-        .find(|f| f.code == "NK1254")
-        .unwrap_or_else(|| panic!("{found:#?}"));
-    let text = format!("{refusal:?}");
-    assert!(
-        text.contains("struct") && text.contains("(A?, B?)"),
-        "{text}"
+fn a_nullable_tuple_is_a_type() {
+    let source = r#"fn cut(path: String, sep: String) -> (String, String)? {
+    let at = path.find(sep) ?? return null
+    return (path[0..<at].clone(), path[at + sep.len()..].clone())
+}
+
+fn show(path: String) {
+    let (a, b) = cut(path, "/") ?? return
+    println(f"{a} | {b}")
+}
+
+fn main() {
+    show("usr/lib")
+    show("nothing")
+    match cut("a=b", "=") {
+        null => println("none"),
+        (k, v) => println(f"{k} -> {v}"),
+    }
+    match cut("ab", "=") {
+        null => println("none"),
+        (k, v) => println(f"{k} -> {v}"),
+    }
+    let kept: Vec[(String, String)?] = [cut("x:y", ":"), cut("xy", ":")]
+    println(f"{kept.len()}")
+}
+"#;
+    assert!(findings(source).is_empty(), "{:?}", findings(source));
+    assert!(lowered(source).contains("-> Option<(String, String)>"));
+    assert_eq!(
+        ran("nullable-tuple", source),
+        "usr | lib\na -> b\nnone\n2\n"
+    );
+}
+
+/// **A part of a `(A, B)?` is reached with `?.`** (ADR-364, ADR-278 D10,
+/// D14): `p?.0` is an `A?`, `p?.1?.len()` reaches further, and `p ?? ("", "")`
+/// falls back to one value, the tuple, converted part by part. A field and a
+/// parameter of the type, and a tuple literal put into one.
+#[test]
+fn a_nullable_tuples_parts_are_reached_with_safe_navigation() {
+    let source = r#"fn cut(path: String, sep: String) -> (String, String)? {
+    let at = path.find(sep) ?? return null
+    return (path[0..<at].clone(), path[at + sep.len()..].clone())
+}
+
+fn main() {
+    let p = cut("key=value", "=")
+    let q = cut("plain", "=")
+    let first = p?.0 ?? "none"
+    let missing = q?.0 ?? "none"
+    println(f"{first} {missing}")
+    let n = p?.1?.len() ?? 0
+    let m = q?.1?.len() ?? 0
+    println(f"{n} {m}")
+    let (a, b) = q ?? ("", "")
+    println(f"[{a}] [{b}]")
+    second()
+}
+
+struct Entry {
+    pair: (String, i64)?,
+}
+
+fn told(pair: (String, i64)?) -> String {
+    let (name, n) = pair ?? ("-", 0)
+    return f"{name}:{n}"
+}
+
+fn second() {
+    let e = Entry { pair: ("k", 7) }
+    let none = Entry { pair: null }
+    println(f"{told(e.pair?.clone())} {told(none.pair?.clone())}")
+}
+"#;
+    assert!(findings(source).is_empty(), "{:?}", findings(source));
+    assert_eq!(
+        ran("nullable-tuple-parts", source),
+        "key none\n5 0\n[] []\nk:7 -:0\n"
     );
 }
 
