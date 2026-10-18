@@ -321,12 +321,13 @@ fn findings(source: &str) -> Vec<nikaia::check::Finding> {
 }
 
 /// **A view of a buffer the body owns is tethered, not refused**, with no word
-/// written anywhere (ADR-283 D10, D4).
+/// written anywhere (ADR-283 D10, D4). The buffer is a copy: a literal alone
+/// would be a view of static text, which needs no tether (ADR-282 D29).
 #[test]
 fn a_view_of_a_buffer_the_body_owns_is_tethered() {
     let source = "struct Token { text: ref String }\n\n\
                   fn first() -> ref String {\n\
-                  \x20   let held: String = \"a b\"\n\
+                  \x20   let held: String = \"a b\".clone()\n\
                   \x20   return held.trim()\n\
                   }\n";
     let parsed = parse_to_ast(source).expect("the source parses");
