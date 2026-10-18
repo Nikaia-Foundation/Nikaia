@@ -293,3 +293,46 @@ fn every_parsed_expression_has_its_span_and_a_built_one_has_none() {
     let built = nikaia_std::node_id::NodeId::fresh();
     assert_eq!(first.span_of(built.get()), None);
 }
+
+/// **A number literal the parser reads is numbered and placed like any other
+/// expression** (#602): two parses give it the same id and span, and the span
+/// is the literal's own text, integer, negative and float alike.
+#[test]
+fn a_number_literal_has_a_parse_order_id_and_its_own_span() {
+    let source = "fn main() {\n    let a = 17 + 2_500\n    let b = -9223372036854775808\n    let c = 1.25\n}";
+    let first = parse_to_ast(source).expect("parses");
+    let second = parse_to_ast(source).expect("parses");
+    assert_eq!(
+        ids_in(&format!("{:#?}", first.program)),
+        ids_in(&format!("{:#?}", second.program)),
+        "the same source gives the same ids"
+    );
+    assert_eq!(first.expr_spans, second.expr_spans);
+    let body = main_body(&first);
+    let Stmt::Let { value, .. } = &body.stmts[0].node else {
+        panic!("a let");
+    };
+    let Expr::Binary { lhs, rhs, .. } = value else {
+        panic!("a sum");
+    };
+    let mut literals = vec![&**lhs, &**rhs];
+    for at in [1, 2] {
+        let Stmt::Let { value, .. } = &body.stmts[at].node else {
+            panic!("a let");
+        };
+        literals.push(value);
+    }
+    let written: Vec<&str> = literals
+        .iter()
+        .map(|literal| {
+            let id = nikaia::ast::id_of(literal);
+            assert!(
+                id < nikaia_std::node_id::FIRST_BUILT,
+                "{literal:?} is numbered"
+            );
+            let span = first.span_of(id).expect("a literal has a span");
+            &source[span.start as usize..span.end as usize]
+        })
+        .collect();
+    assert_eq!(written, ["17", "2_500", "-9223372036854775808", "1.25"]);
+}

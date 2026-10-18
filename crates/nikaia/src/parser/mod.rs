@@ -116,9 +116,8 @@ pub struct Trivia {
 impl Trivia {
     /// Record where `expr` was read, unless a rule inside already did.
     pub fn at(&mut self, expr: ast::Expr, span: std::ops::Range<usize>) -> ast::Expr {
-        // A node the parser built with a fresh id (a number literal,
-        // `ast::int_literal`) is not numbered in parse order, so it has no
-        // entry and is reported at its statement.
+        // A node with a fresh id (one the compiler built, ADR-340 D2) is not
+        // numbered in parse order, so it has no entry.
         let id = ast::id_of(&expr);
         let mut span = span;
         if span.end == self.end && self.trivia_start >= span.start {
@@ -2865,7 +2864,7 @@ grammar! {
             // positive literal its digits do not fit the type it belongs to.
             // Every other number in the range parsed either way, which is why
             // this was one number missing rather than a hole.
-            n:negative_number_lit -> { crate::ast::int_literal(n) }
+            n:negative_number_lit -> { crate::ast::numbered_int_literal(n, _state.user().id()) }
           | op:unary_op e:unary_expr -> {
                 Expr::Unary { op, expr: Box::new(e), id: _state.user().id() }
             }
@@ -4259,7 +4258,7 @@ grammar! {
         // ([ADR-285](../../../../docs/specification/adr/adr-285.md)): see
         // `number_lit` above for why.
         rule int_lit -> Expr =
-            n:number_lit -> { crate::ast::int_literal(n) }
+            n:number_lit -> { crate::ast::numbered_int_literal(n, _state.user().id()) }
 
         // **A tuple's part is a plain run of digits** and takes neither form:
         // `t.0` is a *field name* that happens to be a number

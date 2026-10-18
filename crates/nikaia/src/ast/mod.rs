@@ -21,11 +21,22 @@ pub fn int_value(value: u64, negative: bool) -> i128 {
 /// The literal that says `n`. The parser reads only numbers ADR-285 D19
 /// allows, from `-9223372036854775808` to `18446744073709551615`, so the
 /// magnitude fits a `u64`.
+///
+/// A literal the compiler builds takes a fresh id
+/// ([ADR-340](../../../docs/specification/adr/adr-340.md) D2); one the parser
+/// reads takes its parse-order id ([`numbered_int_literal`]).
 pub fn int_literal(n: i128) -> Expr {
+    numbered_int_literal(n, crate::ast::NodeId::fresh())
+}
+
+/// The literal that says `n`, with the id `id`: how the parser numbers a
+/// literal it reads in parse order, so a refusal at it stands at its own
+/// text (#602).
+pub fn numbered_int_literal(n: i128, id: NodeId) -> Expr {
     Expr::LitInt {
         value: u64::try_from(n.unsigned_abs()).expect("a literal is as large as a u64 holds"),
         negative: n < 0,
-        id: crate::ast::NodeId::fresh(),
+        id,
     }
 }
 

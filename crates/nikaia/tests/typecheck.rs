@@ -1954,6 +1954,13 @@ fn every_refused_arm_shape_is_pointed_at() {
     assert_eq!((text.as_str(), line), ("\"x\"", 2));
 }
 
+/// A number literal stands where it was written, not at its statement (#602).
+#[test]
+fn a_refused_number_literal_is_pointed_at() {
+    let source = "fn f(c: bool) -> i64 {\n    let y: String = if c { \"a\".clone() } else { 1 }\n    return y.len()\n}\n";
+    assert_eq!(under(source, "NK1103"), ("1".to_string(), 2));
+}
+
 /// A loop body's value is never used: its tail `if` asks no common type of its
 /// arms (#596).
 #[test]
