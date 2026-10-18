@@ -130,6 +130,18 @@ fn check_core_places_a_named_field(mut state: CheckState, world: ref CheckWorld,
         state.facts.text_bytes.insert(id_of(expr) as i64)
         return check_core_places_named("Bytes")
     }
+    // **`s.scalars` walks the text's scalars, `s.graphemes` what a reader
+    // sees as one character each** (ADR-320 D3, D4, D9): sequences read with
+    // `take`, `skip`, `count` and `for`, borrowed from the text.
+    if (ty == "String" || ty == "str") && field == "scalars" {
+        state.facts.text_scalars.insert(id_of(expr) as i64)
+        return Ty::Seq { item: check_core_places_named("scalar"), is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: true, sized: false, replays: false } }
+    }
+    if (ty == "String" || ty == "str") && field == "graphemes" {
+        state.facts.text_graphemes.insert(id_of(expr) as i64)
+        let grapheme = check_core_places_str_view()
+        return Ty::Seq { item: grapheme, is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: false, sized: false, replays: false } }
+    }
     // **A boxed field is read through its box** (ADR-246 D2).
     let boxed = state.facts.boxed_members.get(ty)
     if boxed != null {

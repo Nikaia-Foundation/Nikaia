@@ -230,6 +230,18 @@ impl EmitState {
             out.push(".as_bytes()")
             return
         }
+        // **`s.scalars` and `s.graphemes` walk the text, borrowed**
+        // (ADR-320 D3, D9): Rust's `chars()`, and `std`'s UAX #29 segmentation.
+        if self.facts.text_scalars.contains(node_key(node)) {
+            self.emit_core_postfix_base(world, walk, out, host, base, depth, flow, scope)
+            out.push(".chars()")
+            return
+        }
+        if self.facts.text_graphemes.contains(node_key(node)) {
+            self.emit_core_postfix_base(world, walk, out, host, base, depth, flow, scope)
+            out.push(".graphemes()")
+            return
+        }
         // **A boxed field is read through its box** (ADR-246 D2):
         // `(*base.field)` is a place that behaves as the unboxed field would.
         let boxed = self.facts.boxed_reads.contains(node_key(node))

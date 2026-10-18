@@ -46,6 +46,7 @@ pub mod foreign;
 pub mod fs;
 pub mod func;
 pub mod grammar;
+pub mod graphemes;
 pub mod hash;
 pub mod html;
 pub mod http1;
@@ -585,8 +586,10 @@ pub mod prelude {
     pub use crate::bytes::ByteReads as _;
     // A copy of bytes, from a `Bytes` or a `&[u8]` (ADR-320 D11).
     pub use crate::bytes::ByteCopy as _;
+    // A text's graphemes, `s.graphemes` (ADR-320 D9).
     pub use crate::cli;
     pub use crate::collections;
+    pub use crate::graphemes::TextGraphemes as _;
     // **How a value goes into text both kinds flow into**
     // ([ADR-282](../../../docs/specification/adr/adr-282.md) D5): the tier
     // pass writes `value.into_either()` (and `into_either_maybe`,
