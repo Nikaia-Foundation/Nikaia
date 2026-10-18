@@ -7034,7 +7034,7 @@ impl<'p> Emitter<'p> {
             {
                 out.push(&crate::check::byte_literal(c))
             }
-            Expr::LitChar(c, _) => out.push(&format!("'{c}'")),
+            Expr::LitChar(c, _) => out.push(&crate::check::char_literal(c)),
             // **A range is a value**
             // ([ADR-293](../../docs/specification/adr/adr-293.md) D18): two
             // numbers, `Copy`, and walked as often as a program likes - which

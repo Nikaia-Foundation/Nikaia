@@ -4240,8 +4240,13 @@ grammar! {
         // Kap 2.2. Lexical, and the body is kept as written - a `'\n'` is two
         // characters here and one in the value, and the language below reads
         // the same two. Deciding what they mean would be decoding done twice.
+        // **Several scalars are read, and the checker decides** (ADR-320
+        // D8): one that NFC composes from two is that one, anything else is
+        // refused in words (`NK1212`) rather than as a token that never ends.
+        // A line break ends the attempt, so a stray `'` does not swallow the
+        // file up to the next one.
         rule CHAR -> String =
-            "'" c:CHAR_BODY "'" -> { c }
+            "'" parts:CHAR_BODY+ "'" -> { parts.concat() }
 
         rule CHAR_BODY -> String =
             "\\" c:any -> {
@@ -4249,7 +4254,7 @@ grammar! {
                 s.push(c);
                 s
             }
-          | not("'") c:any -> { c.to_string() }
+          | not("'") not("\n") c:any -> { c.to_string() }
 
         rule char_lit -> Expr =
             c:CHAR -> { Expr::LitChar(c, _state.user().id()) }

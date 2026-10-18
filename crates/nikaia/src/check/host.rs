@@ -294,6 +294,10 @@ impl CheckHost for Host<'_> {
         build_time::decoded(literal)
     }
 
+    fn composed(&self, text: &str) -> String {
+        nikaia_std::text::normalized(text, nikaia_std::text::Form::Nfc)
+    }
+
     fn read(&self, path: &str) -> BtRead {
         match self.reads.read(path) {
             Ok(text) => BtRead {

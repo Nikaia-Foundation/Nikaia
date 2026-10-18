@@ -53,6 +53,11 @@ rayon = "1.10"
 # UAX #29 as this crate implements it (1.13.3: Unicode 17.0.0, see
 # `text::UNICODE_VERSION`).
 unicode-segmentation = "1.13.3"
+# **Normalising is written, and it is the standard library's** (ADR-320 D8,
+# D10): `s.normalized(text::Form::Nfc)` and the compiler's reading of a `'…'`
+# of several scalars both go through this crate (see
+# `text::NORMALIZATION_UNICODE_VERSION`).
+unicode-normalization = "0.1.25"
 # ADR-303 D3's readiness half: `epoll`/`kqueue`/IOCP and nothing else. No
 # executor, no task model, no opinion about what the program does when a socket
 # is ready - which is what keeps D1's and D3's decisions from being remade by a

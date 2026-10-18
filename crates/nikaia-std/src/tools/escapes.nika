@@ -239,7 +239,7 @@ fn hex_digit(c: scalar) -> i64? sync {
 }
 
 // A number in lowercase hexadecimal, without leading zeros.
-fn hex_of(n: i64) -> String {
+pub fn hex_of(n: i64) -> String {
     if n == 0 {
         return "0"
     }

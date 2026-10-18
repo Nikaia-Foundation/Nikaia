@@ -2741,6 +2741,24 @@ pub fn a_byte(written: &str) -> bool {
 }
 
 /// The byte a `'…'` that [`a_byte`] took is, as the language below writes one.
+/// **A `'…'` as the language below writes it** (ADR-320 D8): as written
+/// where it is one scalar, and the one scalar NFC composes it to, as
+/// `'\u{…}'`, where it is several - the checker has said `NK1213` there, and
+/// refused (`NK1212`) every literal of several that composes to more than one.
+pub fn char_literal(written: &str) -> String {
+    let Some(value) = crate::build_time::decoded(written) else {
+        return format!("'{written}'");
+    };
+    if value.chars().count() <= 1 {
+        return format!("'{written}'");
+    }
+    let composed = nikaia_std::text::normalized(&value, nikaia_std::text::Form::Nfc);
+    match composed.chars().next() {
+        Some(one) => format!("'\\u{{{:x}}}'", one as u32),
+        None => format!("'{written}'"),
+    }
+}
+
 pub fn byte_literal(written: &str) -> String {
     nikaia_std::tools::check_texts::check_byte_literal(written)
 }

@@ -14498,6 +14498,32 @@ fn check_core_expr_escapes<H: CheckHost>(state: &mut CheckState, host: &H, text:
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+fn check_core_expr_char_scalars<H: CheckHost>(state: &mut CheckState, host: &H, text: &str, span: &Span) {
+    let value = match host.decoded(text) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let count = value.chars().count() as i64;
+    if count <= 1 { return; }
+    let composed = host.composed(&value);
+    let scalars: Vec<scalar> = nikaia_std::list::chars(composed.chars());
+    if scalars.len() == 1 {
+        let one = *nikaia_std::index::get(&scalars, 0);
+        let hex = hex_of(one as i64);
+        let note = format!("Your editor stored this character decomposed, as {} scalars; composed (NFC) they are the one scalar `'{}'`, and that is what the literal is.", count, one);
+        state.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: String::from("NK1213"), message: format!("This `'…'` is written as {} scalars that compose to one, `'{}'`.", count, one), notes: vec![note], help: Some(format!("Write the composed character, `'{}'`, or `'\\u{{{}}}'`.", one, hex)), labels: vec![] });
+        return;
+    }
+    let mut quoted: String = String::from("");
+    let mut escaped = false;
+    for c in text.chars() {
+        if c == '"' && !escaped { quoted.push('\\'); }
+        escaped = c == '\\' && !escaped;
+        quoted.push(c);
+    }
+    let note = format!("A `'…'` is one `u8` or one `scalar` (Part I 2.6), and these {} scalars do not compose to one: what a reader sees as one character here is a grapheme, which is text.", count);
+    state.findings.push(check_refusal("NK1212", span, format!("This `'…'` holds {} scalars, and a character literal holds one.", count), vec![note], Some(format!("Write it as a text literal: `\"{}\"`.", quoted))));
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub fn check_core_expr<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, expr: &Expr, span: &Span) -> Ty {
     let reaching: Option<String> = match state.flow.reaching.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -14602,6 +14628,7 @@ pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         Expr::LitInterpolated { parts, .. } => check_core_expr_interpolated(state, world, host, expr, parts, span),
         Expr::LitChar(text, _) => {
             check_core_expr_escapes(state, host, text, span);
+            check_core_expr_char_scalars(state, host, text, span);
             check_core_expr_named("scalar")
         },
         Expr::LitBool(_, _) => check_core_expr_named("bool"),
@@ -21083,6 +21110,7 @@ pub trait CheckHost {
     fn compute_comptime(&self, value: &Expr, found: &Ty, bound: &str, known: &collections::BTreeMap<String, BuildValue>, steps: Option<u64>, bytes: Option<u64>) -> CheckComputed;
     fn somewhere(&self) -> bool;
     fn decoded(&self, literal: &str) -> Option<String>;
+    fn composed(&self, text: &str) -> String;
     fn read(&self, path: &str) -> BtRead;
     fn assets_read_in(&self, value: &Expr, read: &collections::BTreeMap<String, String>) -> Expr;
     fn value_fn(&self) -> String;
@@ -39316,7 +39344,7 @@ fn hex_digit(c: scalar) -> Option<i64> {
     None
 }
 
-fn hex_of(n: i64) -> String {
+pub fn hex_of(n: i64) -> String {
     if n == 0 { return String::from("0"); }
     let digits: Vec<scalar> = nikaia_std::list::chars(HEX.chars());
     let mut backwards: Vec<scalar> = vec![];
@@ -63711,7 +63739,7 @@ pub mod emit_walk {
 }
 pub mod escapes {
     #[allow(unused_imports)]
-    pub use super::{NotAnEscape, an_escape_nothing_names, decoded, as_a_literal};
+    pub use super::{NotAnEscape, an_escape_nothing_names, decoded, as_a_literal, hex_of};
 }
 pub mod findings {
     #[allow(unused_imports)]

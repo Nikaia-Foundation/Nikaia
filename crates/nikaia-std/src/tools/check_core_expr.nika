@@ -40,6 +40,39 @@ fn check_core_expr_escapes[H: CheckHost](mut state: CheckState, host: ref H, tex
     state.an_escape_nothing_names(text, refused.written, refused.why, CHECK_CORE_EXPR_ESCAPES, span)
 }
 
+/// **A `'…'` holds one scalar** (ADR-320 D8). Several that compose (NFC) to
+/// one are that one, with the warning `NK1213`: an editor stored it
+/// decomposed. Anything else of several is `NK1212`, whose help is the text
+/// literal to write instead. An escape nothing names was said before this, and
+/// a surrogate is one of those (`NK1184`).
+fn check_core_expr_char_scalars[H: CheckHost](mut state: CheckState, host: ref H, text: ref String, span: ref Span) sync {
+    let value = host.decoded(text) ?? return
+    let count = value.chars().count()
+    if count <= 1 {
+        return
+    }
+    let composed = host.composed(value)
+    let scalars: Vec[scalar] = composed.chars().collect()
+    if scalars.len() == 1 {
+        let one = scalars[0]
+        let hex = hex_of(one as i64)
+        let note = f"Your editor stored this character decomposed, as {count} scalars; composed (NFC) they are the one scalar `'{one}'`, and that is what the literal is."
+        state.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: "NK1213", message: f"This `'…'` is written as {count} scalars that compose to one, `'{one}'`.", notes: [note], help: f"Write the composed character, `'{one}'`, or `'\\u{{{hex}}}'`.", labels: [] })
+        return
+    }
+    let mut quoted: String = ""
+    let mut escaped = false
+    for c in text.chars() {
+        if c == '"' && !escaped {
+            quoted.push('\\')
+        }
+        escaped = c == '\\' && !escaped
+        quoted.push(c)
+    }
+    let note = f"A `'…'` is one `u8` or one `scalar` (Part I 2.6), and these {count} scalars do not compose to one: what a reader sees as one character here is a grapheme, which is text."
+    state.findings.push(check_refusal("NK1212", span, f"This `'…'` holds {count} scalars, and a character literal holds one.", [note], f"Write it as a text literal: `\"{quoted}\"`."))
+}
+
 /// **The walk of one expression**, and what every arm asks of the ones inside
 /// it: the arm's type, and what holds of every expression whatever it is.
 pub fn check_core_expr[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, span: ref Span) -> Ty sync {
@@ -169,6 +202,7 @@ pub fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref Check
         Expr::LitInterpolated { parts, .. } => check_core_expr_interpolated(state, world, host, expr, parts, span),
         Expr::LitChar(text, _) => {
             check_core_expr_escapes(state, host, text, span)
+            check_core_expr_char_scalars(state, host, text, span)
             check_core_expr_named("scalar")
         },
         Expr::LitBool(_, _) => check_core_expr_named("bool"),

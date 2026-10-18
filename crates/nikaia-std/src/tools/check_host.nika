@@ -85,6 +85,8 @@ pub trait CheckHost {
     fn somewhere(ref self) -> bool sync
     /// The text a literal in source stands for.
     fn decoded(ref self, literal: ref String) -> String? sync
+    /// The text composed (NFC), by `std`'s own normalisation (ADR-320 D8).
+    fn composed(ref self, text: ref String) -> String sync
     /// The file a build reads, by the rules every read keeps.
     fn read(ref self, path: ref String) -> BtRead sync
     /// `value` with each `asset("path")` replaced by the text read for it.

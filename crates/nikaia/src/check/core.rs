@@ -253,6 +253,10 @@ impl CheckHost for Core<'_, '_> {
         self.h.decoded(literal)
     }
 
+    fn composed(&self, text: &str) -> String {
+        self.h.composed(text)
+    }
+
     fn read(&self, path: &str) -> BtRead {
         self.h.read(path)
     }

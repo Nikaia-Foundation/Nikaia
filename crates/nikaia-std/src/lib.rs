@@ -100,6 +100,7 @@ pub mod text {
     use crate::prelude::scalar;
     include!("text.rs");
     include!("text_float.rs");
+    include!("text_normal.rs");
 }
 
 /// **Nikaia that the toolchain - or `std` itself, below its surface - uses and
@@ -590,6 +591,8 @@ pub mod prelude {
     pub use crate::cli;
     pub use crate::collections;
     pub use crate::graphemes::TextGraphemes as _;
+    // A text in a normalisation form, `s.normalized(form)` (ADR-320 D10).
+    pub use crate::text::TextNormalized as _;
     // **How a value goes into text both kinds flow into**
     // ([ADR-282](../../../docs/specification/adr/adr-282.md) D5): the tier
     // pass writes `value.into_either()` (and `into_either_maybe`,

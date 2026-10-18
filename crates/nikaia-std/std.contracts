@@ -3377,6 +3377,18 @@ sync = true
 touches = []
 signature = "(ref self) -> String"
 
+# The same text in a normalisation form, as new text (ADR-320 D10).
+#
+# `==` compares bytes, so a precomposed and a decomposed `ä` differ until both
+# are written in one form: `a.normalized(text::Form::Nfc) ==
+# b.normalized(text::Form::Nfc)`. The form is always written, because `Nfkc`
+# and `Nfkd` also make `ﬁ` equal to `fi`.
+[fn."str::normalized"]
+pub = true
+sync = true
+touches = []
+signature = "(self: ref String, form: text::Form) -> String"
+
 # **The way out `NK1131` names, so it has to be described here**
 # ([ADR-083](../../docs/specification/adr/adr-083.md)). A field of a borrowed
 # subject cannot be handed out by value and the message says to write
@@ -4629,6 +4641,17 @@ touches = []
 signature = "() -> supervisor::Backoff"
 
 [impl."supervisor::Restart for supervisor::Backoff"]
+
+# One of Unicode's four normalisation forms (UAX #15), which `s.normalized`
+# takes (ADR-320 D10): `Nfc` and `Nfd` compose and decompose by canonical
+# equivalence, `Nfkc` and `Nfkd` by compatibility as well.
+[type."text::Form"]
+pub = true
+crosses = true
+compares = true
+equates = true
+copies = true
+variants = ["Nfc", "Nfd", "Nfkc", "Nfkd"]
 
 # Which siblings restart with a child that crashed.
 [type."supervisor::Strategy"]
