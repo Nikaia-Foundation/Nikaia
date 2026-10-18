@@ -12,6 +12,7 @@
     <a href="guide/getting-started.md">Getting started</a> •
     <a href="guide/syntax.md">Syntax tour</a> •
     <a href="guide/contracts.md">Contracts</a> •
+    <a href="guide/command-line.md">Command line</a> •
     <a href="manifesto.md">Manifesto</a> •
     <a href="docs/project_status_and_roadmap.md">Status &amp; roadmap</a> •
     <a href="docs/specification">Specification</a> •
@@ -105,8 +106,9 @@ The `assert` became a precondition, carried back through `share` to the call tha
 proved and has no check at run time. A claim the compiler cannot prove is checked at run time
 instead.
 
-More: loops without written invariants, the `--asserts` report, `main`'s parameters as the
-command line, and data from outside, in [Contracts](guide/contracts.md).
+More: loops without written invariants, the `--asserts` report, and data from outside, in
+[Contracts](guide/contracts.md); `main`'s parameters as the command line in [The command
+line](guide/command-line.md).
 
 ---
 
@@ -161,6 +163,7 @@ because…" arguments are welcome.
 | install the compiler and run a program | [Getting started](guide/getting-started.md) |
 | see what the language looks like | [A tour of the syntax](guide/syntax.md) |
 | see what the compiler proves | [Contracts](guide/contracts.md) |
+| give a program words on the command line | [The command line](guide/command-line.md) |
 | know why the project exists | [Manifesto](manifesto.md) |
 | see real programs | [examples/](examples/) |
 | learn the full rules | [Specification](docs/specification) and [the ADR index](docs/specification/adr/README.md) |

@@ -72,7 +72,8 @@ nikaia run              # or: nikaia build
 
 The first build compiles the standard library and its dependencies (about 15 s) and
 caches them in `~/.cache/nikaia`. Later builds reuse that. Arguments for your program go
-after `--`: `nikaia run -- a b c`.
+after `--`: `nikaia run -- a b c`. How `main` takes them, as typed parameters that are
+checked before it runs, is in [The command line](command-line.md).
 
 The build writes two files beside the manifest:
 
@@ -171,6 +172,7 @@ example exposed, and which are still open.
 * [A tour of the syntax](syntax.md): the language on one page, for readers coming from
   other languages.
 * [Contracts](contracts.md): what the compiler proves about an `assert`.
+* [The command line](command-line.md): `main`'s parameters, options, `--help`.
 * [Specification, Part I](../docs/specification/10-nikaia-light.md): the full rules.
 * [Specification, Part II](../docs/specification/20-nikaia-advance.md): concurrency,
   parallelism and grammars.

@@ -107,7 +107,8 @@ println(greet("Nika"; greeting: "Hallo"))    // Hallo, Nika!
 The semicolon in the parameter list is the unusual part. Parameters before it are the
 data the function works on and are passed by position. Parameters after it are options:
 they always have a default, and they are always passed by name, like keyword arguments
-in Python.
+in Python. On `main` the same split is the command line: positional words and `--name`
+options ([The command line](command-line.md)).
 
 A `String` parameter needs nothing more: whether the function gets a view of the caller's
 text or text of its own is the compiler's decision. `ref String` is written only in an

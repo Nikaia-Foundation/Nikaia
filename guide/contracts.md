@@ -210,11 +210,10 @@ asserts in …/rep/src/main.nika: 4 - not proved 1 (refused 0, checked at run ti
 
 ## `main`'s parameters are its command line
 
-`a` is a word the program needs. `times` comes after the `;`, so it is named: on the command
-line it is the option `--times`, and 4 where it is left out. The words come from outside, so
-an `assert` about them is checked once they are read, before the body runs. A wrong word
-ends the program with exit status 2 and a line that says what is wrong; `--help` lists the
-precondition ([ADR-360](../docs/specification/adr/adr-360.md)).
+`main`'s caller is the person at the terminal, so an `assert` about its parameters is
+checked by the program itself, once the words are read and before the body runs. A breach
+ends the program with exit status 2 and a line that says what is wrong. How the words reach
+the parameters, options, `--help` and the rest are in [The command line](command-line.md).
 
 ```nika
 /// Divides 100 by a, a few times.
@@ -239,22 +238,6 @@ usage: mainp [--times <int>] <a>
 For more, try `mainp --help`.
 $ echo $?
 2
-$ ./mainp five
-error: `a` is an `int`, and `five` is not one.
-usage: mainp [--times <int>] <a>
-For more, try `mainp --help`.
-$ ./mainp --help
-mainp
-Divides 100 by a, a few times.
-
-usage: mainp [--times <int>] <a>
-
-arguments:
-  <a>                  int; requires `a > 0`
-
-options:
-  --times <int>        int, default 4
-  -h, --help           prints this help
 ```
 
 ## Data from outside: a guard, not an assert
