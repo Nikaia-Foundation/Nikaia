@@ -2644,6 +2644,26 @@ impl Project {
         })
     }
 
+    /// **Whether `nikaia run` can compile this program without Cargo**
+    /// (`crate::run_fast`): one package, depending on no crate, linking no
+    /// library, built for this machine with the `dev` profile untouched and
+    /// `std` as its default features build it - which is what the bundle it
+    /// links against is. On Linux and macOS, where a path written into the
+    /// program finds the library at run time.
+    fn runs_without_cargo(&self, members: &[Member], link_flags: &[String]) -> bool {
+        cfg!(any(target_os = "linux", target_os = "macos"))
+            && members.len() == 1
+            && members[0].manifest.dependencies().is_empty()
+            && link_flags.is_empty()
+            && !self.settings.library()
+            && Some(self.settings.build.target) == Target::host()
+            && self.settings.panic_strategy() == "unwind"
+            && self.settings.build.reentrancy_check.is_on()
+            && self.manifest.codegen_for(&self.settings.target).is_empty()
+            // A trace is asked about the wrapper Cargo runs.
+            && std::env::var_os(TRACE_VAR).is_none()
+    }
+
     /// The generated workspace: one crate per Nikaia package
     /// ([ADR-286](../../docs/specification/adr/adr-286.md) D19).
     ///
@@ -2949,6 +2969,30 @@ impl Project {
         let manifest = self
             .cargo_workspace(&members, &rust)?
             .write_to(&self.build_dir())?;
+
+        // **A `run` of a program that needs nothing but `std` skips Cargo**
+        // (`crate::run_fast`): `rustc` compiles it against `std` as a dynamic
+        // library. The workspace above is still written, for whoever reads it;
+        // where that library cannot be built, Cargo's path follows.
+        if subcommand == "run"
+            && self.runs_without_cargo(&members, &link_flags)
+            && let Some(built) = crate::run_fast::compile(
+                &self.own_dir().join("fast"),
+                &members[0].name.replace('-', "_"),
+                &rust[0],
+                &self
+                    .gen_dir()
+                    .join(members[0].name.replace('-', "_"))
+                    .join(format!("{}.rs", members[0].name.replace('-', "_"))),
+            )?
+        {
+            self.report(&built.messages, allowlist)?;
+            return match built.binary {
+                // Cargo's own code for a crate that did not compile.
+                None => Ok((101, None)),
+                Some(binary) => Ok((run_directly(&binary, program_args)?, Some(binary))),
+            };
+        }
 
         let mut env = self.settings.as_env();
         env.push((WRAPPER_MARKER.to_string(), OsString::from("1")));

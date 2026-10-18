@@ -419,14 +419,25 @@ pub fn toolchain_can_build_for(triple: &str) -> Result<()> {
 
 /// `rustc --version`'s major and minor, where both can be read.
 fn installed_rustc() -> Option<(u32, u32)> {
-    let out = Command::new("rustc")
-        .current_dir(crate::cache::Layout::where_tools_start())
-        .arg("--version")
-        .output()
-        .ok()?;
-    let text = String::from_utf8(out.stdout).ok()?;
     // `rustc 1.86.0 (05f9846f8 2025-03-31)`
-    version_parts(text.split_whitespace().nth(1)?)
+    version_parts(rustc_version().split_whitespace().nth(1)?)
+}
+
+/// `rustc --version`, asked once per process: each question costs a start of
+/// the toolchain (through `rustup`, most of a tenth of a second), and a
+/// `nikaia run` that compiles without Cargo keys its caches on the answer too.
+/// Empty where there is no `rustc`.
+pub fn rustc_version() -> &'static str {
+    static HELD: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    HELD.get_or_init(|| {
+        Command::new("rustc")
+            .current_dir(crate::cache::Layout::where_tools_start())
+            .arg("--version")
+            .output()
+            .ok()
+            .and_then(|out| String::from_utf8(out.stdout).ok())
+            .unwrap_or_default()
+    })
 }
 
 /// `1.75` and `1.86.0` alike, as a pair that compares.

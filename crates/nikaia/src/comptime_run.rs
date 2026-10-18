@@ -1082,16 +1082,48 @@ pub(crate) const STOPPED_AT: &str = "@";
 #[derive(Debug)]
 pub(crate) struct Bundle {
     /// The library itself.
-    dylib: PathBuf,
+    pub(crate) dylib: PathBuf,
     /// Each crate it names, as Cargo compiled it, which `rustc` is pointed at
     /// so that a path `nikaia_std::…` resolves in every module; the code is
     /// the library's.
-    rlibs: Vec<(String, PathBuf)>,
+    pub(crate) rlibs: Vec<(String, PathBuf)>,
     /// Where the libraries it was built from are.
-    deps: PathBuf,
+    pub(crate) deps: PathBuf,
     /// What changes when the library is rebuilt: part of every key.
-    stamp: String,
+    pub(crate) stamp: String,
+    /// Where the toolchain's own `std` is, which a program linked with
+    /// `prefer-dynamic` loads - and beside which the toolchain's `rustc` is.
+    pub(crate) libdir: PathBuf,
 }
+
+/// **What a bundle is built for.** Build-time code counts what it allocates
+/// against its bound (D10); a program `nikaia run` compiles against the
+/// bundle ([`crate::run_fast`]) means what its Cargo build means, so its
+/// bundle has no counting allocator and the profile the generated workspace
+/// gives a dependency: no overflow checks, no debug assertions, no debug
+/// information, unwinding.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Flavour {
+    BuildTime,
+    Run,
+}
+
+/// The run bundle's one file: the crates, named, and nothing else.
+const RUN_SOURCE: &str = "// GENERATED: the library `nikaia run` links a program against.
+pub extern crate nikaia_std;
+pub extern crate winnow;
+pub extern crate winnow_grammar;
+";
+
+/// The run bundle's profile: what `[profile.dev]` of a generated workspace
+/// says about a crate that is not the program's.
+const RUN_PROFILE: &str = "
+[profile.dev]
+overflow-checks = false
+debug-assertions = false
+debug = 0
+panic = \"unwind\"
+";
 
 /// The crates the bundle names: `std`, and what a `grammar` lowers to.
 const NAMED: [&str; 3] = ["nikaia_std", "winnow", "winnow_grammar"];
@@ -1106,14 +1138,159 @@ const NAMED: [&str; 3] = ["nikaia_std", "winnow", "winnow_grammar"];
 /// the first `comptime` could run. Cargo's lock on the target directory is what
 /// makes two builds at once wait for one another rather than collide.
 pub(crate) fn bundle(_workshop: &Path) -> Result<Bundle, String> {
-    let manifest = nikaia_std::tools::comptime_driver::cr_bundle_manifest(
+    bundle_of(Flavour::BuildTime)
+}
+
+/// **The bundle `nikaia run` links a program against**, built once and then
+/// found from its record without starting Cargo: Cargo's start and freshness
+/// check is most of what a fast run saves. The record is trusted while this
+/// compiler, the toolchain and `std`'s sources are what they were when it was
+/// written, and every file it names is still there.
+pub(crate) fn run_bundle() -> Result<Bundle, String> {
+    let (manifest, source) = bundle_text(Flavour::Run);
+    let at = bundle_dir(Flavour::Run, &manifest, &source);
+    let record = at.join("built");
+    let fingerprint = run_fingerprint();
+    if let Some(bundle) = std::fs::read_to_string(&record)
+        .ok()
+        .and_then(|text| read_record(&text, &fingerprint))
+    {
+        return Ok(bundle);
+    }
+    let bundle = bundle_of(Flavour::Run)?;
+    let mut text = format!(
+        "{fingerprint}\n{}\n{}\n{}\n",
+        bundle.dylib.display(),
+        bundle.deps.display(),
+        bundle.libdir.display()
+    );
+    for (name, rlib) in &bundle.rlibs {
+        text.push_str(&format!("{name}={}\n", rlib.display()));
+    }
+    write_if_changed(&record, &text)?;
+    Ok(bundle)
+}
+
+/// What the run bundle's record is valid for: this compiler, the toolchain
+/// and the newest of `std`'s sources (a `std` edited under a development
+/// checkout is built again, as Cargo would).
+fn run_fingerprint() -> String {
+    let mut newest = 0u128;
+    let mut count = 0usize;
+    let mut pending = vec![crate::sysroot::Sysroot::resolve().std_dir()];
+    while let Some(dir) = pending.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path
+                .file_name()
+                .is_some_and(|n| n == "target" || n == "tests")
+            {
+                continue;
+            }
+            let Ok(meta) = entry.metadata() else {
+                continue;
+            };
+            if meta.is_dir() {
+                pending.push(path);
+                continue;
+            }
+            count += 1;
+            let modified = meta
+                .modified()
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_nanos())
+                .unwrap_or_default();
+            newest = newest.max(modified);
+        }
+    }
+    crate::assets::digest(
+        format!(
+            "{}\n{}\n{}\n{newest}:{count}",
+            env!("NIKAIA_COMPILER"),
+            orchestrator::project::rustc_version(),
+            rustc()
+        )
+        .as_bytes(),
+    )
+}
+
+/// The bundle a record names, where it is still the one it names.
+fn read_record(text: &str, fingerprint: &str) -> Option<Bundle> {
+    let mut lines = text.lines();
+    if lines.next()? != fingerprint {
+        return None;
+    }
+    let dylib = PathBuf::from(lines.next()?);
+    let deps = PathBuf::from(lines.next()?);
+    let libdir = PathBuf::from(lines.next()?);
+    let rlibs: Vec<(String, PathBuf)> = lines
+        .filter_map(|line| line.split_once('='))
+        .map(|(name, rlib)| (name.to_string(), PathBuf::from(rlib)))
+        .collect();
+    if rlibs.len() != NAMED.len() {
+        return None;
+    }
+    let stamp = stamp_of(&dylib, &rlibs).ok()?;
+    Some(Bundle {
+        dylib,
+        rlibs,
+        deps,
+        stamp,
+        libdir,
+    })
+}
+
+/// A bundle's manifest and its one file.
+fn bundle_text(flavour: Flavour) -> (String, String) {
+    let mut manifest = nikaia_std::tools::comptime_driver::cr_bundle_manifest(
         &crate::project::runtime_dependencies_for(NAMED.join(" ").as_str()),
     );
-    let bundle_source = nikaia_std::tools::comptime_driver::cr_bundle_source();
-    let key = orchestrator::cache::sha256_hex(format!("{manifest}\n{bundle_source}").as_bytes());
-    let at = orchestrator::cache::Layout::user_cache_dir()
-        .join("build-time-bundle")
-        .join(&key[..16]);
+    let source = match flavour {
+        Flavour::BuildTime => nikaia_std::tools::comptime_driver::cr_bundle_source(),
+        Flavour::Run => {
+            manifest.push_str(RUN_PROFILE);
+            RUN_SOURCE.to_string()
+        }
+    };
+    (manifest, source)
+}
+
+/// Where a bundle lives: the user cache, keyed by its manifest and its file.
+fn bundle_dir(flavour: Flavour, manifest: &str, source: &str) -> PathBuf {
+    let key = orchestrator::cache::sha256_hex(format!("{manifest}\n{source}").as_bytes());
+    orchestrator::cache::Layout::user_cache_dir()
+        .join(match flavour {
+            Flavour::BuildTime => "build-time-bundle",
+            Flavour::Run => "run-bundle",
+        })
+        .join(&key[..16])
+}
+
+/// The library and the crates it names, and when each was last built.
+fn stamp_of(dylib: &PathBuf, rlibs: &[(String, PathBuf)]) -> Result<String, String> {
+    Ok(std::iter::once(dylib)
+        .chain(rlibs.iter().map(|(_, rlib)| rlib))
+        .map(|file| {
+            let meta = std::fs::metadata(file).map_err(|e| format!("{}: {e}", file.display()))?;
+            let modified = meta
+                .modified()
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_nanos())
+                .unwrap_or_default();
+            Ok(format!("{}:{}:{modified}", file.display(), meta.len()))
+        })
+        .collect::<Result<Vec<String>, String>>()?
+        .join("\n"))
+}
+
+fn bundle_of(flavour: Flavour) -> Result<Bundle, String> {
+    let (manifest, bundle_source) = bundle_text(flavour);
+    let at = bundle_dir(flavour, &manifest, &bundle_source);
     orchestrator::cache::use_entry(&at);
     let dir = at.join("bundle");
     std::fs::create_dir_all(dir.join("src")).map_err(|e| format!("{}: {e}", dir.display()))?;
@@ -1170,25 +1347,13 @@ pub(crate) fn bundle(_workshop: &Path) -> Result<Bundle, String> {
         .parent()
         .map(Path::to_path_buf)
         .ok_or_else(|| "no directory for std".to_string())?;
-    let stamp = std::iter::once(&dylib)
-        .chain(rlibs.iter().map(|(_, rlib)| rlib))
-        .map(|file| {
-            let meta = std::fs::metadata(file).map_err(|e| format!("{}: {e}", file.display()))?;
-            let modified = meta
-                .modified()
-                .ok()
-                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                .map(|d| d.as_nanos())
-                .unwrap_or_default();
-            Ok(format!("{}:{}:{modified}", file.display(), meta.len()))
-        })
-        .collect::<Result<Vec<String>, String>>()?
-        .join("\n");
+    let stamp = stamp_of(&dylib, &rlibs)?;
     Ok(Bundle {
         dylib,
         rlibs,
         deps,
         stamp,
+        libdir: PathBuf::from(target_libdir()),
     })
 }
 
@@ -1371,12 +1536,12 @@ fn cargo() -> String {
     std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string())
 }
 
-fn rustc() -> String {
+pub(crate) fn rustc() -> String {
     std::env::var("RUSTC").unwrap_or_else(|_| "rustc".to_string())
 }
 
 /// `rustc -vV`, once: the toolchain a key is about.
-fn toolchain() -> &'static str {
+pub(crate) fn toolchain() -> &'static str {
     static HELD: OnceLock<String> = OnceLock::new();
     HELD.get_or_init(|| {
         Command::new(rustc())
@@ -1390,7 +1555,7 @@ fn toolchain() -> &'static str {
 
 /// Where the toolchain's own `std` is, which a program linked with
 /// `prefer-dynamic` loads.
-fn target_libdir() -> &'static str {
+pub(crate) fn target_libdir() -> &'static str {
     static HELD: OnceLock<String> = OnceLock::new();
     HELD.get_or_init(|| {
         Command::new(rustc())
@@ -1403,7 +1568,7 @@ fn target_libdir() -> &'static str {
 }
 
 /// Written only when it changed, so that Cargo's freshness keeps working.
-fn write_if_changed(path: &Path, text: &str) -> Result<(), String> {
+pub(crate) fn write_if_changed(path: &Path, text: &str) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
     }
@@ -1422,7 +1587,7 @@ fn write_if_changed(path: &Path, text: &str) -> Result<(), String> {
 }
 
 /// A path beside `path` that no other build writes at the same time.
-fn unique_beside(path: &Path) -> PathBuf {
+pub(crate) fn unique_beside(path: &Path) -> PathBuf {
     static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
     let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let mut name = path.file_name().unwrap_or_default().to_os_string();
