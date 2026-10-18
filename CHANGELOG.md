@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1025] — 2026-10-18
+
+**An overflow rustc would refuse is NK1116 first: shifts of open numbers, a followed `let mut`, `<<=` and `-x`**
+- A shift whose left side is a number with no written type is measured against the type its uses decide, `i32` where nothing asks (Part I 2.4), so `let n = 1; n << 40` is NK1116 rather than rustc's `arithmetic_overflow`. A `let mut`'s value is followed through the code of its own block: it is forgotten at an assignment inside a branch, loop or lambda, and not seen inside a loop or lambda that began after it. So `let mut m = 1000000000; m = m + 1; println(m * 3)` is NK1116, and a divisor assigned `0` is NK1118. `x <<= k` is checked like `x << k`, and `-x` over the smallest value of a signed constant is NK1116 (#656).
+
 ## [0.0.1024] — 2026-10-18
 
 **A position only literals flow into holds a view of static text**
