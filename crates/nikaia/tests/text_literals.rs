@@ -92,9 +92,11 @@ fn a_literal_is_a_string_wherever_one_is_kept() {
                   }\n";
     assert!(findings(source).is_empty(), "{:?}", findings(source));
     let rust = lowered(source);
-    assert!(rust.contains("name: String::from(\"Ada\")"), "{rust}");
-    assert!(rust.contains("Some(String::from(\"A\"))"), "{rust}");
-    assert!(rust.contains("keep(String::from(\"kept\"))"), "{rust}");
+    // Only literals flow into each position, so each holds the view of
+    // static text (ADR-282 D29) and nothing is built.
+    assert!(rust.contains("name: \"Ada\""), "{rust}");
+    assert!(rust.contains("Some(\"A\")"), "{rust}");
+    assert!(rust.contains("keep(\"kept\")"), "{rust}");
 }
 
 /// **A callee that only reads costs nothing** (D3): the parameter is a `&str`,
@@ -279,8 +281,11 @@ fn a_branch_of_literals_kept_is_declared_string_and_one_looked_at_is_not() {
     let found = findings(source);
     assert!(found.is_empty(), "{found:#?}");
     let rust = lowered(source);
-    assert!(rust.contains("let q: String = if"), "{rust}");
-    assert!(rust.contains("let r: String = match"), "{rust}");
+    // The list only literals flow into holds views of static text
+    // (ADR-282 D29), so neither branch is built.
+    assert!(rust.contains("let mut xs: Vec<&'static str>"), "{rust}");
+    assert!(rust.contains("let q = if"), "{rust}");
+    assert!(rust.contains("let r = match"), "{rust}");
     assert!(rust.contains("let v = if"), "{rust}");
 }
 

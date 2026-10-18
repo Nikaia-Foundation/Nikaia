@@ -64,10 +64,10 @@ fn a_mixed_signature_keeps_its_semicolon() {
     )
     .expect("it parses and lowers");
     assert!(
-        rust.contains("fn read(path: String, trusted: bool)"),
+        rust.contains("fn read(path: &'static str, trusted: bool)"),
         "{rust}"
     );
-    assert!(rust.contains("read(String::from(\"in\"), true)"), "{rust}");
+    assert!(rust.contains("read(\"in\", true)"), "{rust}");
 }
 
 /// **The leading `;` in a signature is refused, and the message names the new
@@ -160,7 +160,7 @@ fn a_mixed_call_keeps_its_semicolon() {
          fn main() { println(read(\"in\"; trusted: true)) }",
     )
     .expect("it lowers");
-    assert!(rust.contains("read(String::from(\"in\"), true)"), "{rust}");
+    assert!(rust.contains("read(\"in\", true)"), "{rust}");
 }
 
 /// **A method call takes the form too**, because one rule answers both: the

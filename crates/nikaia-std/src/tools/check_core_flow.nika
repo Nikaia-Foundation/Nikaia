@@ -522,16 +522,34 @@ fn check_core_flow_parts(mut state: CheckState, world: ref CheckWorld, pattern: 
 
 /// **A part copied out at the head of the arm** (0.0.236, ADR-246 D5,
 /// ADR-355 D5).
-fn check_core_flow_copied_parts(mut state: CheckState, world: ref CheckWorld, arm: ref MatchArm, typed: ref Ty) sync {
+fn check_core_flow_copied_parts(mut state: CheckState, world: ref CheckWorld, arm: ref MatchArm, typed: ref Ty, through_the_reference: bool) sync {
     let at = id_of(arm.body) as i64
     let mut parts = state.pattern_parts(world, arm.pattern, typed)
     state.typed_inside_boxes(world, arm.pattern, parts)
+    // `text => …` over a `ref T?` held by value: the name is the payload,
+    // which is already the view (`Some(text)` binds the `&T`).
+    let the_payload = !through_the_reference && check_core_flow_binds_the_payload(arm.pattern, typed)
     for (name, ty) in parts {
         // A view of a slice, `..rest`, is already the reference.
         let a_slice = check_core_flow_a_slice(ty)
-        if (state.copied(world, ty) || ty.is_a_view()) && !a_slice {
+        if (state.copied(world, ty) || (ty.is_a_view() && !the_payload)) && !a_slice {
             state.facts.copied_bindings.insert((at, name.clone()))
         }
+    }
+}
+
+/// Whether `pattern` names the whole payload of a nullable `typed`.
+fn check_core_flow_binds_the_payload(pattern: ref MatchPattern, typed: ref Ty) -> bool {
+    let nullable = match typed {
+        Ty::Nullable(_) => true,
+        else => false,
+    }
+    if !nullable {
+        return false
+    }
+    return match pattern {
+        MatchPattern::Path(p) => p.len() == 1,
+        else => false,
     }
 }
 
@@ -604,7 +622,7 @@ fn check_core_flow_arm[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     let parts = check_core_flow_parts(state, world, arm.pattern, typed, lendable)
     let a_list = check_core_flow_a_list(arm.pattern)
     if typed.is_a_view() || through_the_reference || a_list {
-        check_core_flow_copied_parts(state, world, arm, typed)
+        check_core_flow_copied_parts(state, world, arm, typed, through_the_reference)
     }
     let lent_parts = !lendable && typed.is_a_view()
     let mut owned_text: collections::BTreeSet[String] = collections::BTreeSet()

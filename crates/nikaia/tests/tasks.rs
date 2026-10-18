@@ -191,7 +191,7 @@ fn two_tasks_are_in_flight_before_either_finishes() {
 fn data_a_task_took_and_the_program_used_again_is_refused() {
     let found = findings(
         "fn main() {\n\
-         \x20   let message: String = \"Hello\"\n\
+         \x20   let message: String = \"Hello\".clone()\n\
          \x20   spawn fn { println(message) }\n\
          \x20   println(message)\n\
          }",

@@ -59,7 +59,7 @@ fn refused(source: &str) -> bool {
 fn the_declaration_and_the_call_gain_the_reference_together() {
     let rust = lowered(
         "fn width(text: String) -> i64 { return text.len() as i64 }\n\
-         fn main() { let t: String = \"hi\" println(f\"{width(t)}\") }\n",
+         fn main() { let t: String = \"hi\".clone() println(f\"{width(t)}\") }\n",
     );
     // A `String` the body only reads is a `&str` below (ADR-282 D5), and
     // the caller's `&t` reaches it the way it reached a `&String`.
@@ -92,7 +92,7 @@ fn a_kept_parameter_keeps_its_owned_argument() {
     let rust = lowered(
         "struct Row { name: String }\n\
          fn wrap(name: String) -> Row { return Row { name: name } }\n\
-         fn main() { let n = \"a\" let r = wrap(n) println(f\"{r.name}\") }\n",
+         fn main() { let n = \"a\".clone() let r = wrap(n) println(f\"{r.name}\") }\n",
     );
     assert!(rust.contains("fn wrap(name: String)"), "{rust}");
     assert!(!rust.contains("wrap(&n)"), "{rust}");

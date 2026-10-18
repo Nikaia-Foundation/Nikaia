@@ -319,7 +319,7 @@ fn a_branch_that_continues_takes_its_takings_with_it() {
     let outer = findings(
         "fn outer(names: ref Vec[String]) -> i64 {\n\
          \x20   let mut kept: Vec[String] = []\n\
-         \x20   let first: String = \"x\"\n\
+         \x20   let first: String = \"x\".clone()\n\
          \x20   for one in names {\n\
          \x20       if one.len() > 3 {\n\
          \x20           kept.push(first)\n\
@@ -375,7 +375,7 @@ fn a_fallback_block_that_returns_takes_its_takings_with_it() {
     let leaves = "use std::collections\n\
                   \n\
                   fn f(known: i64?, mut s: collections::BTreeSet[String]) -> i64 {\n\
-                  \x20   let name: String = \"xy\"\n\
+                  \x20   let name: String = \"xy\".clone()\n\
                   \x20   let n = known ?? {\n\
                   \x20       s.insert(name)\n\
                   \x20       return 0\n\
@@ -410,7 +410,7 @@ fn a_mapped_file_is_read_as_text() {
          \n\
          fn main() throws {\n\
          \x20   let data = fs::map(\"m.txt\", fs::Root::Anywhere)\n\
-         \x20   let a = data[0..<7]\n\
+         \x20   let a = data[0..<\"Hamburg\".len()]\n\
          \x20   let b = data.deref()\n\
          \x20   let c: ref String = data\n\
          \x20   let whole = fs::read_to_string(\"m.txt\", fs::Root::Anywhere)\n\

@@ -287,11 +287,14 @@ fn declared_of(program: ref Program, names: ref winnow_grammar::InternerContext)
                     declared.fields.insert(key, FieldDecl { ty: field.ty.clone(), published: is_public && field.is_public })
                 }
             }
-            Item::Fn { .. } => declare_function(item.node, null, names, declared),
-            Item::Impl { target, methods, .. } => {
+            Item::Fn { .. } => declare_function(item.node, null, names, declared, false),
+            // **A trait's method has the trait's signature** (ADR-282 D29):
+            // every type that implements it answers one type, so its
+            // positions are published ones.
+            Item::Impl { trait_name, target, methods } => {
                 let owner = names.resolve(target.name).clone()
                 for method in methods {
-                    declare_function(method.node, owner.clone(), names, declared)
+                    declare_function(method.node, owner.clone(), names, declared, trait_name != null)
                 }
             }
             Item::Grammar(def) => declare_rules(def, names, declared),
@@ -313,7 +316,7 @@ fn declare_rules(def: ref GrammarDef, names: ref winnow_grammar::InternerContext
     }
 }
 
-fn declare_function(item: ref Item, target: String?, names: ref winnow_grammar::InternerContext, mut declared: TextDeclared) {
+fn declare_function(item: ref Item, target: String?, names: ref winnow_grammar::InternerContext, mut declared: TextDeclared, of_a_trait: bool) {
     let (name, args, ret_type, is_public) = match item {
         Item::Fn { name, args, ret_type, is_public, .. } => (name, args, ret_type, is_public),
         else => return,
@@ -331,7 +334,7 @@ fn declare_function(item: ref Item, target: String?, names: ref winnow_grammar::
         params.push(arg.ty.clone())
         changes.push(arg.mutable)
     }
-    declared.fns.insert(key, FnDecl { params: params, changes: changes, result: ret_type?.clone(), published: is_public })
+    declared.fns.insert(key, FnDecl { params: params, changes: changes, result: ret_type?.clone(), published: is_public || of_a_trait })
 }
 
 fn own_name(name: ref winnow_grammar::Symbol?, names: ref winnow_grammar::InternerContext) -> String {
@@ -677,6 +680,13 @@ fn adopt(value: ref Expr?, going: ref TierGoing, ask: ref TierAsk, mut walk: Tie
     if local.empty < 0 {
         return
     }
+    // A hashed container's keys stay text of their own, and its `let` is
+    // seeded by the position it goes to (ADR-010 D9): declared with the
+    // position's written type it would be a local map of its own.
+    let kind = container_of(ask.names, going.ty) ?? ""
+    if is_a_map_name(kind) || kind == "HashSet" {
+        return
+    }
     walk.flows.adopted.insert(local.empty, Declaring { owner: going.owner.clone(), ty: going.ty.clone() })
 }
 
@@ -899,6 +909,19 @@ fn literals_beside_null(value: ref Expr) -> bool {
     return nulls
 }
 
+/// A list's items, literals and at least one `null`.
+fn items_beside_null(items: ref Vec[Expr]) -> bool {
+    let mut nulls = false
+    for item in items {
+        if a_null(item) {
+            nulls = true
+        } else if !a_literal_text(item) {
+            return false
+        }
+    }
+    return nulls
+}
+
 fn a_variable(expr: ref Expr) -> bool {
     return match expr {
         Expr::Variable(_, _) => true,
@@ -967,6 +990,15 @@ fn still_tail(block: ref Block, ask: ref TierAsk, mut walk: TierWalk, mut out: V
 /// position the changed value is declared as, or was read out of, has text
 /// of its own flowing in.
 fn changed_in_place(target: ref Expr, ask: ref TierAsk, mut walk: TierWalk) {
+    // `names[i] += "!"`: the element position of the list.
+    match target {
+        Expr::Index { base, .. } => {
+            let element = element_word(base, ask, walk) ?? return
+            flow_word(element, owned_kinds(), walk)
+            return
+        }
+        else => {}
+    }
     let place = place_of(target, ask, walk)
     if place != null {
         let found = place ?? return
@@ -1029,8 +1061,14 @@ fn flow_whole(going: ref TierGoing, value: ref Expr, ask: ref TierAsk, mut walk:
                 return
             }
             let element = ty.generics[0].clone()
+            // `["a", null]`: the checker types it `Vec[String?]`, text of its
+            // own with each literal built, as an `if` of literals and `null`.
+            let beside_null = items_beside_null(items)
             for item in items {
-                let kinds = tier_expr(item, ask, walk)
+                let mut kinds = tier_expr(item, ask, walk)
+                if beside_null && !a_null(item) {
+                    kinds = owned_kinds()
+                }
                 let mut at = going.path.clone()
                 at.push(0)
                 flow_value(going_into(going.owner, element, at, true), item, kinds, ask, walk)
@@ -1872,8 +1910,25 @@ fn call_kinds(func: ref Expr, args: ref Vec[Expr], ask: ref TierAsk, mut walk: T
     // (ADR-282 D29).
     if names_a_type(last_segment(callee)) || !ask.library.functions.contains_key(callee) {
         kept_args(args, given, ask, walk)
+    } else {
+        std_container_args(args, ask, walk)
     }
     return std_result(callee, ask)
+}
+
+/// **A container of text handed whole to `std` holds text of its own**
+/// (ADR-282 D29): `std`'s signature says `Vec[String]`, and a list of views
+/// is not one below.
+fn std_container_args(args: ref Vec[Expr], ask: ref TierAsk, mut walk: TierWalk) {
+    for arg in args {
+        let whole = source_of(arg, ask, walk)
+        if whole != null {
+            let found = whole ?? return
+            if a_container(ask.names, found.ty) && holds_text(ask.names, found.ty) {
+                demote_inside(found.owner, found.ty, [], ask, walk)
+            }
+        }
+    }
 }
 
 // **A parameter a parse is given is a view** (ADR-282 D2): what the parse
@@ -2413,10 +2468,48 @@ fn decide_tiers(flows: ref Flows, declared: ref TextDeclared, mut demoted: colle
             out.insert(word.clone(), tier)
         }
     }
+    // **A parameter the body only reads is the `&str` any `String` it only
+    // reads is** (ADR-282 D5): only one kept holds the view (D29). One handed
+    // on only to parameters that are themselves only read is read too.
+    let mut only_read: collections::BTreeSet[String] = collections::BTreeSet()
+    for (word, tier) in out {
+        if lasting_tier(tier) && a_parameter_itself(word, flows) {
+            only_read.insert(word.clone())
+        }
+    }
+    let mut shrinking = true
+    while shrinking {
+        shrinking = false
+        for (from, to) in flows.param_into {
+            if only_read.contains(from) && !only_read.contains(to) {
+                only_read.remove(from)
+                shrinking = true
+            }
+        }
+        for (from, to) in flows.still_into {
+            if only_read.contains(from) && !only_read.contains(to) {
+                only_read.remove(from)
+                shrinking = true
+            }
+        }
+    }
+    for word in only_read {
+        out.remove(word)
+    }
     for word in flows.viewed {
         out.insert(word.clone(), Tier::View)
     }
     return out
+}
+
+/// A parameter's own text, not an element of it.
+fn a_parameter_itself(word: ref String, flows: ref Flows) -> bool {
+    let position = flows.known[word] ?? return false
+    let a_parameter = match position.owner {
+        TextOwner::Param(_, _) => true,
+        else => false,
+    }
+    return a_parameter && position.path.len() == 0
 }
 
 fn a_published_parameter(word: ref String, flows: ref Flows, declared: ref TextDeclared) -> bool {
