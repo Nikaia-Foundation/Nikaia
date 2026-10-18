@@ -206,12 +206,6 @@ touches = []
 views = ["code: borrowed"]
 signature = "(code: ref String) -> String"
 
-[fn."rs2nika_flat_parts"]
-sync = "inferred"
-touches = []
-views = ["parts: borrowed"]
-signature = "(parts: ref Vec[String], mut lets: Vec[String]) -> Vec[String]"
-
 [fn."rs2nika_flush"]
 sync = "inferred"
 touches = []
@@ -230,12 +224,6 @@ keeps = ["t"]
 touches = []
 views = ["n: borrowed", "t: borrowed"]
 signature = "(mut ctx: Rs2nikaCtx, n: ref String, t: ref String) -> String"
-
-[fn."rs2nika_for_nested"]
-sync = "inferred"
-touches = []
-views = ["line: borrowed"]
-signature = "(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String]"
 
 [fn."rs2nika_format"]
 sync = "inferred"
@@ -707,15 +695,10 @@ signature = "(line: ref String) -> bool"
 
 [fn."rs2nika_text"]
 sync = "inferred"
+keeps = ["from"]
 touches = []
 views = ["c: borrowed"]
 signature = "(c: ref Vec[scalar], from: i64, to: i64) -> String"
-
-[fn."rs2nika_then"]
-sync = "inferred"
-touches = []
-views = ["code: borrowed", "what: borrowed", "next: borrowed"]
-signature = "(code: ref String, what: ref String, next: ref String) -> bool"
 
 [fn."rs2nika_thin_adapters"]
 sync = "inferred"

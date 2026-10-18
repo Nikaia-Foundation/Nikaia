@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1020] — 2026-10-18
+
+**A throw of a call, a map's read past a jump, a variant fallback and a kept pausing function lower as written**
+- `throw made()` throws the type `made` returns. In `std` and the tools package a library error is written by its full `nikaia_std::` path. An untyped `let x = m[k] ?? return` binds a word by value, as a typed one does. A map's read past a jump goes to a `ref` parameter without another `&`. A variant fallback beside a borrowed option of a word is by value. A kept `fn(ref P) -> T` that may pause borrows `P` for the call.
+
 ## [0.0.1019] — 2026-10-18
 
 **An `assert` on an option is a precondition**
