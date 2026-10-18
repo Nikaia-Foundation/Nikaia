@@ -169,27 +169,7 @@ fn check_core_a_kept_function[H: CheckHost](mut state: CheckState, world: ref Ch
 /// `String` is (ADR-282 D4). One entry for every position that is a use.
 pub fn check_core_literal_by_use[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, found: ref Ty, want: ref Ty, value: ref Expr, span: ref Span) -> Ty? sync {
     check_core_a_kept_lambda(state, world, host, want, value, span)
-    let array = state.array_literal(world, found, want, value, span)
-    if array != null {
-        return array
-    }
-    let text = state.text_literal(world, want, value, true)
-    if text != null {
-        return text
-    }
-    let tuple = state.tuple_literal(world, found, want, value)
-    if tuple != null {
-        return tuple
-    }
-    let tuples = state.list_of_tuple_literals(world, found, want, value)
-    if tuples != null {
-        return tuples
-    }
-    let collected = state.collect_by_use(world, found, want, value)
-    if collected != null {
-        return collected
-    }
-    return number_where_no_number_is(want, value)
+    return state.array_literal(world, found, want, value, span) ?? state.text_literal(world, want, value, true) ?? state.tuple_literal(world, found, want, value) ?? state.list_of_tuple_literals(world, found, want, value) ?? state.collect_by_use(world, found, want, value) ?? number_where_no_number_is(want, value)
 }
 
 /// Whether a type is a file's name (ADR-319 D4).

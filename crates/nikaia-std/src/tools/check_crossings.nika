@@ -74,16 +74,7 @@ fn check_crossings_path(world: ref CheckWorld, name: ref String, stmts: ref Vec[
 fn check_crossings_step(world: ref CheckWorld, name: ref String, stmt: ref Stmt, in_loop: bool) -> CheckCrossingsPath {
     match stmt {
         Stmt::Return(value) => return check_crossings_returned(world, name, value),
-        Stmt::Break => {
-            if !in_loop {
-                return CheckCrossingsPath::Left
-            }
-        }
-        Stmt::Continue => {
-            if !in_loop {
-                return CheckCrossingsPath::Left
-            }
-        }
+        Stmt::Break | Stmt::Continue if !in_loop => return CheckCrossingsPath::Left,
         Stmt::Expr(e) => return check_crossings_expr_path(world, name, e, in_loop),
         Stmt::Let { value, .. } => return check_crossings_expr_path(world, name, value, in_loop),
         Stmt::For { iter, body, .. } => {

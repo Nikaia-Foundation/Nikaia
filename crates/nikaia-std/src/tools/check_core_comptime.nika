@@ -38,14 +38,11 @@ fn check_core_comptime_first_type(n: ref Integer, beyond: bool) -> String {
 /// The type below for a `comptime` that declares one: Part I 2.2's, a type of
 /// this program, or the struct the value names.
 fn check_core_comptime_declared_below(state: ref CheckState, world: ref CheckWorld, want: ref Ty, evaluated: ref BuildValue?) -> String? {
-    let offered = rust_constant_type(world.library, want)
-    if offered != null {
-        return offered
-    }
-    let declared = state.declared_below(world, want)
-    if declared != null {
-        return declared
-    }
+    return rust_constant_type(world.library, want) ?? state.declared_below(world, want) ?? check_core_comptime_struct_named(want, evaluated)
+}
+
+/// The struct the value names, where it is the type `want` names.
+fn check_core_comptime_struct_named(want: ref Ty, evaluated: ref BuildValue?) -> String? {
     let value = evaluated ?? return null
     let mut named: String = ""
     match value {
@@ -390,11 +387,6 @@ pub fn check_core_a_block_over_a_grammar[H: CheckHost](mut state: CheckState, wo
     }
     // The block's type is the entry's result, as the call's would be.
     let contract = world.own.functions.get(f"{owner}::{entry}") ?? return Ty::Unknown
-    return check_core_comptime_result(contract)
-}
-
-/// The result type a contract declares, or `Unknown`.
-fn check_core_comptime_result(contract: ref FnContract) -> Ty {
     let signature = contract.signature ?? return Ty::Unknown
     return signature.result?.clone() ?? Ty::Unknown
 }
