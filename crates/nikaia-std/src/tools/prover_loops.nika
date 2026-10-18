@@ -227,17 +227,6 @@ fn loop_constant_step(mut arena: TermArena, name: ref String, value: i64) -> i64
     return a
 }
 
-/// What `name op= value` makes of `old`: the value itself for `=`, a sum or
-/// a difference for `+=` and `-=`, nothing else.
-fn loop_assigned(mut arena: TermArena, op: ref BinaryOp?, old: i64, value: i64) -> i64? {
-    let operation = op ?? return value
-    return match operation {
-        BinaryOp::Add => arena.add(old, value),
-        BinaryOp::Sub => arena.sub(old, value),
-        else => null,
-    }
-}
-
 /// A term of the body, read on `path`: each name the path has a value for
 /// replaced by it.
 fn loop_read(mut arena: TermArena, expr: ref Expr, path: ref LoopPath, ints: ref collections::BTreeSet[String], pinned: fn(ref String) -> i64? sync, words: ref winnow_grammar::InternerContext, claim: bool) -> i64? {
@@ -317,9 +306,20 @@ fn loop_block(mut arena: TermArena, block: ref Block, first: ref Vec[LoopPath], 
                         let read = loop_read(arena, value, p, ints, pinned, words, false)
                         let old = p.values[name] ?? arena.var(name)
                         let mut updated: i64? = null
+                        // What `name op= value` makes of `old`: the value
+                        // itself for `=`, a sum or a difference for `+=` and
+                        // `-=`, nothing else.
                         if read != null {
                             let r = read ?? 0
-                            updated = loop_assigned(arena, op, old, r)
+                            if op == null {
+                                updated = r
+                            } else {
+                                updated = match op ?? BinaryOp::Mul {
+                                    BinaryOp::Add => arena.add(old, r),
+                                    BinaryOp::Sub => arena.sub(old, r),
+                                    else => null,
+                                }
+                            }
                         }
                         if updated == null {
                             loop_forget(arena, p, name)

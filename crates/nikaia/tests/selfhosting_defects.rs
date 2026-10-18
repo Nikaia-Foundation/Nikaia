@@ -1760,3 +1760,37 @@ fn main() {
     );
     assert_eq!(said.trim(), "<1><3> <1><3>");
 }
+
+/// **A variant written beside an option of a borrowed word is the word**:
+/// `op ?? BinaryOp::Mul` over the `op` of a `ref Stmt`'s arm is a `BinaryOp`
+/// on both sides (it lent the fallback, `|| &BinaryOp::Mul`, where
+/// `index::or` copies the word out: rustc E0308).
+#[test]
+fn a_variant_fallback_beside_a_borrowed_option_of_a_word_is_a_value() {
+    let said = printed(
+        "variant-beside-a-borrowed-word",
+        r#"
+enum BinaryOp { Add, Sub, Mul }
+enum Stmt {
+    Assign { op: BinaryOp?, n: i64 },
+    Other,
+}
+fn shown(s: ref Stmt) -> String {
+    return match s {
+        Stmt::Assign { op, .. } => match op ?? BinaryOp::Mul {
+            BinaryOp::Add => "add",
+            BinaryOp::Sub => "sub",
+            else => "other",
+        },
+        Stmt::Other => "none",
+    }
+}
+fn main() {
+    let a = Stmt::Assign { op: BinaryOp::Add, n: 1 }
+    let b = Stmt::Assign { op: null, n: 2 }
+    println(f"{shown(a)} {shown(b)} {shown(Stmt::Other)}")
+}
+"#,
+    );
+    assert_eq!(said.trim(), "add other none");
+}

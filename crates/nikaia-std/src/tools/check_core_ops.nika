@@ -568,6 +568,13 @@ pub fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref C
         state.facts.lent_map_fallbacks.insert(id_of(expr) as i64)
         return view_of_type(other)
     }
+    // **A value written out beside a view of a word is the word** (ADR-279
+    // D8): `index::or` copies a `T: Copy` out of `&Option<T>` and
+    // `Option<&T>` alike, so `op ?? BinaryOp::Mul` is a `BinaryOp` on both
+    // sides.
+    if nullable && !from_a_map && inner.is_a_view() && !other.is_a_view() && state.a_package_copy(world, unviewed_type(inner)) && state.a_value_written_out(world, fallback) {
+        return unviewed_type(inner)
+    }
     // **A value written out beside a view of a type of the program's own**
     // (#574).
     if nullable && !from_a_map && inner.is_a_view() && !other.is_a_view() && check_core_ops_not_plain(inner) && state.a_value_written_out(world, fallback) {

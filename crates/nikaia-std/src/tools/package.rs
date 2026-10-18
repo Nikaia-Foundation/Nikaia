@@ -16905,6 +16905,7 @@ pub fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, world: &Che
         state.facts.lent_map_fallbacks.insert(id_of(expr) as i64);
         return view_of_type(&other);
     }
+    if nullable && !from_a_map && inner.is_a_view() && !other.is_a_view() && state.a_package_copy(world, &unviewed_type(&inner)) && state.a_value_written_out(world, fallback) { return unviewed_type(&inner); }
     if nullable && !from_a_map && inner.is_a_view() && !other.is_a_view() && check_core_ops_not_plain(&inner) && state.a_value_written_out(world, fallback) {
         state.facts.lent_map_fallbacks.insert(id_of(expr) as i64);
         return inner;
@@ -48571,15 +48572,6 @@ fn loop_constant_step(arena: &mut TermArena, name: &str, value: i64) -> Option<i
     Some(a)
 }
 
-fn loop_assigned(arena: &mut TermArena, op: Option<&BinaryOp>, old: i64, value: i64) -> Option<i64> {
-    let operation = match op { Some(__nikaia_value) => __nikaia_value, None => return Some(value) };
-    match operation {
-        BinaryOp::Add => Some(arena.add(old, value)),
-        BinaryOp::Sub => Some(arena.sub(old, value)),
-        _ => None,
-    }
-}
-
 fn loop_read(arena: &mut TermArena, expr: &Expr, path: &LoopPath, ints: &collections::BTreeSet<String>, pinned: &impl Fn(&str) -> Option<i64>, words: &winnow_grammar::InternerContext, claim: bool) -> Option<i64> {
     let mut term: Option<i64> = None;
     if claim { term = claim_term(expr, words, &|name| { path.values.contains_key(name) || ints.contains(name) && !path.unread.contains(name) }, pinned, &mut arena.nodes); } else { term = lin_term(expr, words, &|name| { path.values.contains_key(name) || ints.contains(name) && !path.unread.contains(name) }, pinned, &mut arena.nodes); }
@@ -48635,7 +48627,13 @@ fn loop_block(arena: &mut TermArena, block: &Block, first: &[LoopPath], ends: &m
                         let mut updated: Option<i64> = None;
                         if read.is_some() {
                             let r = nikaia_std::index::or(read, || 0);
-                            updated = loop_assigned(arena, (op).as_ref(), old, r);
+                            if op.is_none() { updated = Some(r); } else {
+                                updated = match nikaia_std::index::or(op, || BinaryOp::Mul) {
+                                    BinaryOp::Add => Some(arena.add(old, r)),
+                                    BinaryOp::Sub => Some(arena.sub(old, r)),
+                                    _ => None,
+                                };
+                            }
                         }
                         if updated.is_none() { loop_forget(arena, &mut p, &name); } else { p.values.insert(name.to_owned(), nikaia_std::index::or(updated, || 0)); }
                     }
