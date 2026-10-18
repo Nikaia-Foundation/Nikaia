@@ -40692,12 +40692,17 @@ fn keeps_at_in(ledger: &Ledger, method: &str, at: i64) -> CandidatesSay {
     let suffix = format!("::{}", method);
     let mut asked = CandidatesSay { any: false, hit: false };
     for (key, contract) in ledger.functions.iter() {
-        if key.ends_with(&suffix) && takes_self(contract) {
+        if key.ends_with(&suffix) && takes_self(contract) && has_position(contract, at) {
             asked.any = true;
             asked.hit = asked.hit || keeps_at(contract, at);
         }
     }
     asked
+}
+
+fn has_position(contract: &FnContract, at: i64) -> bool {
+    let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return true };
+    at < signature.params.len() as i64
 }
 
 fn takes_self(contract: &FnContract) -> bool {

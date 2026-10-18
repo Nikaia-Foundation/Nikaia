@@ -558,16 +558,26 @@ fn receiver_taken_in(ledger: ref Ledger, method: ref String) -> CandidatesSay {
     return asked
 }
 
+// **A candidate with no parameter at `at` is not one this call reaches**: it
+// takes fewer arguments than the call gives, so `m.get(key)` is not
+// `Locked::get(self)`, and that entry's silence about `key` is not a keep.
 fn keeps_at_in(ledger: ref Ledger, method: ref String, at: i64) -> CandidatesSay {
     let suffix = f"::{method}"
     let mut asked = CandidatesSay { any: false, hit: false }
     for (key, contract) in ledger.functions {
-        if key.ends_with(ref suffix) && takes_self(contract) {
+        if key.ends_with(ref suffix) && takes_self(contract) && has_position(contract, at) {
             asked.any = true
             asked.hit = asked.hit || keeps_at(contract, at)
         }
     }
     return asked
+}
+
+// Whether a candidate's signature has a parameter at `at`; one without a
+// signature may have, so it stays a candidate.
+fn has_position(contract: ref FnContract, at: i64) -> bool {
+    let signature = contract.signature ?? return true
+    return at < signature.params.len()
 }
 
 // **Every entry a bare method name could resolve to**: one whose key ends in

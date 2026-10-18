@@ -41,7 +41,6 @@ signature = "()"
 
 [fn."report_fragment"]
 sync = "inferred"
-keeps = ["fragment"]
 locks = true
 views = ["dna: borrowed", "fragment: borrowed"]
 signature = "(dna: ref String, fragment: ref String)"
