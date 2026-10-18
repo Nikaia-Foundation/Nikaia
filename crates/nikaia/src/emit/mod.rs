@@ -4638,9 +4638,25 @@ impl<'p> Emitter<'p> {
 
     // --- Grammars ---
 
+    /// A grammar, and where a call enters it with a `Bytes`, its copy over
+    /// bytes after it ([ADR-366](../../docs/specification/adr/adr-366.md) D1):
+    /// the backend reads one input per grammar (winnow-grammar ADR 25).
     fn grammar(&self, out: &mut Out, def: &GrammarDef) -> Result<()> {
+        let name = self.text(def.name).to_string();
+        self.grammar_over(out, def, &name, false)?;
+        if self.s.facts.bytes_grammars.contains(&name) {
+            let lowered = nikaia_std::tools::emit_core_leaves::emit_bytes_grammar(&name);
+            self.grammar_over(out, def, &lowered, true)?;
+        }
+        Ok(())
+    }
+
+    fn grammar_over(&self, out: &mut Out, def: &GrammarDef, name: &str, bytes: bool) -> Result<()> {
         out.push("grammar! {\n");
-        out.push(&format!("    grammar {} {{\n", self.text(def.name)));
+        out.push(&format!("    grammar {name} {{\n"));
+        if bytes {
+            out.push("        input bytes;\n");
+        }
 
         let types = def
             .rules
@@ -4659,7 +4675,9 @@ impl<'p> Emitter<'p> {
             {
                 let st = out.mark();
                 self.grammar_rule(out, rule)?;
-                out.record(&rule.span, st);
+                if !bytes {
+                    out.record(&rule.span, st);
+                }
             }
         }
         // **`list(item, sep)` is a rule the backend is given** (Part II

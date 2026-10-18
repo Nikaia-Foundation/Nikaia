@@ -429,16 +429,24 @@ impl EmitState {
             }
             throw EmitRefused { message: f"Grammar `{name}` has no entry called `{rule}`.", at: flow.statement }
         }
+        // **A `Bytes` argument enters the grammar's copy over bytes** (ADR-366
+        // D1), which the file holds beside the text one.
+        let mut over = ""
+        let mut lowered: String = name.clone()
+        if self.facts.bytes_entries.contains(node_key(input)) {
+            over = "_bytes"
+            lowered = emit_bytes_grammar(name)
+        }
         if parallel {
-            out.push("nikaia_std::grammar::parse_pieces(&*")
+            out.push(f"nikaia_std::grammar::parse{over}_pieces(&*")
             host.expr(walk, out, input, depth, flow, scope)
-            out.push(f", |source| {name}::parse_{rule_name}_pieces(source, &ParseContext::<()>::default(), {parallelism})){question}")
+            out.push(f", |source| {lowered}::parse_{rule_name}_pieces(source, &ParseContext::<()>::default(), {parallelism})){question}")
             return
         }
         // A sequential entry rule: the parser is driven over the whole input once.
-        out.push("nikaia_std::grammar::parse(&*")
+        out.push(f"nikaia_std::grammar::parse{over}(&*")
         host.expr(walk, out, input, depth, flow, scope)
-        out.push(f", {name}::parse_{rule_name}()){question}")
+        out.push(f", {lowered}::parse_{rule_name}()){question}")
     }
 
     /// The pieces of a template, appended to `__html` in order.
@@ -558,4 +566,11 @@ impl EmitState {
         }
         self.emit_core_block(world, walk, out, host, block, depth, flow, scope, tail)
     }
+}
+
+/// **The name the copy of grammar `name` over bytes is lowered under**
+/// (ADR-366 D1): the backend's grammar is one input, so a grammar entered with
+/// both is two.
+pub fn emit_bytes_grammar(name: ref String) -> String {
+    return f"{name}OverBytes"
 }

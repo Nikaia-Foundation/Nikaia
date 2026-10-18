@@ -167,6 +167,12 @@ pub struct CheckFacts {
     /// into an option stands directly around.
     pub narrowed_reads: collections::BTreeMap[i64, i64],
     pub task_handles: collections::BTreeSet[(i64, String)],
+    /// **An argument of a grammar's entry that is a `Bytes`** (ADR-366 D1), by
+    /// the argument: the call enters the grammar's copy over bytes.
+    pub bytes_entries: collections::BTreeSet[i64],
+    /// **A grammar of this file entered with a `Bytes`**, by its name: it is
+    /// lowered a second time, with `input bytes;`.
+    pub bytes_grammars: collections::BTreeSet[String],
     pub method_options: collections::BTreeMap[(i64, String), Vec[(String, String)]],
     pub lent_args: collections::BTreeSet[i64],
     /// **A value lent into a `ref` field of a struct literal** (D37), by the
@@ -299,6 +305,8 @@ impl CheckFacts {
             narrowing_casts: collections::BTreeMap(),
             narrowed_reads: collections::BTreeMap(),
             task_handles: collections::BTreeSet(),
+            bytes_entries: collections::BTreeSet(),
+            bytes_grammars: collections::BTreeSet(),
             method_options: collections::BTreeMap(),
             lent_args: collections::BTreeSet(),
             lent_fields: collections::BTreeSet(),

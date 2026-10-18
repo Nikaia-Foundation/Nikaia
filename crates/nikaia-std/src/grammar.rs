@@ -80,3 +80,26 @@ pub fn parse_pieces<'a, O>(
 ) -> Result<O, ParseError> {
     run(source).map_err(|error| ParseError::of(error.render(source)))
 }
+
+/// [`parse`] over a `Bytes` (ADR-366 D1): `rule` is the entry of the grammar's
+/// copy that declares `input bytes;`, and a failure is rendered against the
+/// bytes.
+pub fn parse_bytes<'a, O>(
+    source: &'a [u8],
+    mut rule: impl winnow::Parser<winnow_grammar::ParseBytes<'a, ()>, O, winnow_grammar::ParseError>,
+) -> Result<O, ParseError> {
+    let mut stream = winnow_grammar::ParseBytes::<()> {
+        state: winnow_grammar::ParseContext::<()>::default(),
+        input: winnow::stream::LocatingSlice::new(source),
+    };
+    rule.parse_next(&mut stream)
+        .map_err(|error| ParseError::of(error.render(source)))
+}
+
+/// [`parse_pieces`] over a `Bytes`.
+pub fn parse_bytes_pieces<'a, O>(
+    source: &'a [u8],
+    run: impl FnOnce(&'a [u8]) -> Result<O, winnow_grammar::ParseError>,
+) -> Result<O, ParseError> {
+    run(source).map_err(|error| ParseError::of(error.render(source)))
+}

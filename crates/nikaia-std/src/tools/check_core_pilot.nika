@@ -21,10 +21,22 @@ pub fn check_specialised(function: ref String, on: ref String) -> String {
 /// **A call of a grammar's entry rule** (ADR-308 D2): its arguments are walked,
 /// whether it can fail comes from the contract (a rule past a commit point is
 /// an entry in the ledger with `throws = ["?"]`, ADR-023 D9), and what it comes
-/// to is the contract's result.
+/// to is the contract's result. **An entry takes a `String` or a `Bytes`**
+/// (ADR-366 D1): the argument decides, and a `Bytes` one is kept in
+/// `bytes_entries` and its grammar in `bytes_grammars`, for the lowering to
+/// compile the grammar over bytes too. The result and `throws` are as for text.
 pub fn check_core_grammar_call[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, key: ref String, args: ref Vec[Expr], span: ref Span) -> Ty sync {
     for arg in args {
-        check_core_expr(state, world, host, arg, span)
+        let given = check_core_expr(state, world, host, arg, span)
+        let over_bytes = match given {
+            Ty::Named { name, args: inner, .. } => name == "Bytes" && inner.len() == 0,
+            else => false,
+        }
+        let cut = key.find("::") ?? 0
+        if over_bytes && cut > 0 {
+            state.facts.bytes_entries.insert(id_of(arg) as i64)
+            state.facts.bytes_grammars.insert(key[0..<cut].clone())
+        }
     }
     let contract = world.own.functions[key]?.clone() ?? return Ty::Unknown
     if contract.fails_with.len() > 0 && state.flow.guarded != null {
