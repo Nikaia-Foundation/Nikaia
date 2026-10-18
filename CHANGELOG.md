@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1032] — 2026-10-18
+
+**s.bytes kept beyond the text is copied wherever it goes; Bytes has clone (ADR-320 D11, #453)**
+- `s.bytes` bound by a `let`, pushed, stored in a field (also as `P { b }`) or returned is copied into a `Bytes` of its own where it is kept, and stays a view everywhere else.
+- `Bytes::clone()` is a copy of its own, also of `s.bytes` and of a read-only `Bytes` parameter.
+
 ## [0.0.1031] — 2026-10-18
 
 **s.bytes is a Bytes, borrowed (ADR-320 D11, #453)**
