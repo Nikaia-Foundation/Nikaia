@@ -543,10 +543,15 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     let items: i64? = state.open_items_of(world, receiver)
     let outer_params = state.flow.open_params.clone()
     state.flow.open_params = state.open_walk_params(world, contract, args, items)
+    // **And a lambda handed a lent item is lent it** (#626).
+    let outer_lent = state.flow.lent_params.clone()
+    state.flow.lent_params = state.lent_walk_params(world, contract, entry, receiver, args)
     let callee: FnContract? = contract.clone()
     let found = check_core_arguments_given(state, world, host, args, expected, world.own.functions.contains_key(key), callee, span)
     state.flow.open_params = outer_params
+    state.flow.lent_params = outer_lent
     state.open_walk_result(world, contract, args, items)
+    state.flow.walk_lent = state.a_walk_that_lends(contract, receiver)
     state.in_parallel = outer_parallel
     state.scoped_task = outer_scoped
     check_core_call_on_pushed(state, world, entry, args, found, span)

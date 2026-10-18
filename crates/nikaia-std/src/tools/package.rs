@@ -10594,6 +10594,35 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub fn lent_walk_params(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, contract: &FnContract, entry: &str, receiver: &Expr, args: &[Expr]) -> collections::BTreeSet<String> {
+        let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
+        let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return out };
+        let held = match open_walk_variable(signature) { Some(__nikaia_value) => __nikaia_value, None => return out };
+        let lends = self.flow.lent_walks.contains(&(id_of(receiver) as i64)) || binds_hands_a_view(entry);
+        let arguments = call_arguments(signature);
+        let mut at: i64 = 0;
+        for arg in args.iter() {
+            if at < arguments.len() as i64 { for (name, view) in binds_item_params(world, arg, &nikaia_std::index::get(&arguments, (at) as usize).1, &held) { if view || lends { let added = out.insert(name); } } }
+            at += 1;
+        }
+        out
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_walk_that_lends(&self, contract: &FnContract, receiver: &Expr) -> bool {
+        let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let result: Ty = match match signature.result.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        } { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let made: Ty = match open_walk_made(&result) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let name = match open_walk_named(&made) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let held = match open_walk_variable(signature) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        if name != held { return false; }
+        open_walk_a_view(&made) || self.flow.lent_walks.contains(&(id_of(receiver) as i64))
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     fn a_tuple_over_a_lent_name(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, value: &Expr) -> bool {
         match value {
             Expr::Variable(name, _) => { let name = *name; self.lent_here(world.words.resolve(name)) },
@@ -10652,6 +10681,35 @@ fn binds_tuple_parts(found: &Ty, count: i64) -> Vec<Ty> {
     let mut unknown: Vec<Ty> = vec![];
     for index in 0..count { unknown.push(Ty::Unknown); }
     unknown
+}
+
+pub fn binds_hands_a_view(method: &str) -> bool { method == "filter" || method == "find" || method == "take_while" || method == "skip_while" || method == "min_by_key" || method == "max_by_key" }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn binds_item_params(world: &CheckWorld<'_, '_, '_, '_, '_>, arg: &Expr, ty: &Ty, held: &str) -> Vec<(String, bool)> {
+    let mut out: Vec<(String, bool)> = vec![];
+    let types: Vec<Ty> = match ty {
+        Ty::Fn { params, .. } => params.to_owned(),
+        _ => return out,
+    };
+    match arg {
+        Expr::Closure { params, .. } => {
+            let mut at: i64 = 0;
+            for p in params.iter() {
+                let p = *p;
+                if at < types.len() as i64 {
+                    match *nikaia_std::index::get(&types, (at) as usize) {
+                        Ty::Var { ref name, view } => { if name == held { out.push((world.words.resolve(p).to_owned(), view)); } },
+                        _ => { },
+                    }
+                }
+                at += 1;
+            }
+        },
+        _ => { },
+    }
+    out
 }
 
 
@@ -13927,10 +13985,14 @@ fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState, world: &Ch
     let items: Option<i64> = state.open_items_of(world, receiver);
     let outer_params = state.flow.open_params.to_owned();
     state.flow.open_params = state.open_walk_params(world, contract, args, items);
+    let outer_lent = state.flow.lent_params.to_owned();
+    state.flow.lent_params = state.lent_walk_params(world, contract, entry, receiver, args);
     let callee: Option<FnContract> = Some(contract.clone());
     let found = check_core_arguments_given(state, world, host, args, &expected, world.own.functions.contains_key(key), (callee).as_ref(), span);
     state.flow.open_params = outer_params;
+    state.flow.lent_params = outer_lent;
     state.open_walk_result(world, contract, args, items);
+    state.flow.walk_lent = state.a_walk_that_lends(contract, receiver);
     state.in_parallel = outer_parallel;
     state.scoped_task = outer_scoped;
     check_core_call_on_pushed(state, world, entry, args, &found, span);
@@ -16199,9 +16261,12 @@ fn check_core_method_called<H: CheckHost>(state: &mut CheckState, world: &CheckW
     state.flow.last_resolved = None;
     state.flow.receiver_from_text = state.made_from_text(world, receiver);
     state.flow.walk_open = None;
+    state.flow.walk_lent = false;
     let value: Ty = check_core_call_on(state, world, host, on.clone(), receiver, method, args, written, span);
     let walk_open: Option<i64> = state.flow.walk_open;
     state.flow.walk_open = None;
+    if state.flow.walk_lent { let lent = state.flow.lent_walks.insert(id_of(expr) as i64); }
+    state.flow.walk_lent = false;
     state.flow.receiver_from_text = false;
     check_core_method_resolved(state, world, receiver, args);
     state.flow.receiver_name = outer_named;
@@ -16224,7 +16289,7 @@ fn check_core_method_called<H: CheckHost>(state: &mut CheckState, world: &CheckW
         _ => { },
     }
     let open_items = state.open_items_of(world, receiver).is_some();
-    if (name == "filter" || name == "find" || name == "take_while" || name == "skip_while" || name == "min_by_key" || name == "max_by_key") && args.len() == 1 {
+    if binds_hands_a_view(&name) && args.len() == 1 {
         match on {
             Ty::Seq { ref item, .. } => {
                 let item = nikaia_std::boxed::open(item);
@@ -20745,6 +20810,9 @@ pub struct CheckFlow {
     pub open_params: collections::BTreeMap<String, i64>,
     pub walk_open: Option<i64>,
     pub walk_view: bool,
+    pub lent_walks: collections::BTreeSet<i64>,
+    pub lent_params: collections::BTreeSet<String>,
+    pub walk_lent: bool,
     pub lambda_expected: Option<Ty>,
     pub open_calls: collections::BTreeMap<i64, Vec<i64>>,
     pub unknown_bound: collections::BTreeSet<i64>,
@@ -20762,7 +20830,7 @@ pub struct CheckFlow {
 }
 
 impl CheckFlow {
-    pub fn start(computes: bool, harvesting: bool) -> CheckFlow { CheckFlow { raised: (None, None), computes, option_values: Vec::new(), option_literals: Vec::new(), unrolling: None, harvesting, inside_a_comptime: false, literal_receivers: Vec::new(), expected_either: false, field_either: false, throwing: false, caught: false, caught_several: false, caught_one: None, guarded: None, loops: 0, barrier: None, fallible_methods: collections::BTreeSet::new(), opaque_methods: collections::BTreeSet::new(), pausing_methods: collections::BTreeSet::new(), settled_methods: collections::BTreeSet::new(), paused_args: Vec::new(), next_choice: 0, read_index: collections::BTreeMap::new(), pending_coalesces: Vec::new(), writing_index: false, read_a_map: false, map_read_sites: collections::BTreeSet::new(), map_views: collections::BTreeSet::new(), last_resolved: None, receiver_name: None, receiver_from_text: false, text_paths: collections::BTreeSet::new(), empty_lists: collections::BTreeMap::new(), open_numbers: collections::BTreeMap::new(), open_elements: collections::BTreeMap::new(), open_walks: collections::BTreeMap::new(), open_params: collections::BTreeMap::new(), walk_open: None, walk_view: false, lambda_expected: None, open_calls: collections::BTreeMap::new(), unknown_bound: collections::BTreeSet::new(), unknown_said: 0, list_constants: collections::BTreeMap::new(), overflowed: collections::BTreeSet::new(), followed: collections::BTreeMap::new(), reaching: None, reached: None, grown_text: collections::BTreeSet::new(), widening_casts: collections::BTreeSet::new(), unsigned_slots: collections::BTreeMap::new(), at_a_write_door: false, pushed_into: None } }
+    pub fn start(computes: bool, harvesting: bool) -> CheckFlow { CheckFlow { raised: (None, None), computes, option_values: Vec::new(), option_literals: Vec::new(), unrolling: None, harvesting, inside_a_comptime: false, literal_receivers: Vec::new(), expected_either: false, field_either: false, throwing: false, caught: false, caught_several: false, caught_one: None, guarded: None, loops: 0, barrier: None, fallible_methods: collections::BTreeSet::new(), opaque_methods: collections::BTreeSet::new(), pausing_methods: collections::BTreeSet::new(), settled_methods: collections::BTreeSet::new(), paused_args: Vec::new(), next_choice: 0, read_index: collections::BTreeMap::new(), pending_coalesces: Vec::new(), writing_index: false, read_a_map: false, map_read_sites: collections::BTreeSet::new(), map_views: collections::BTreeSet::new(), last_resolved: None, receiver_name: None, receiver_from_text: false, text_paths: collections::BTreeSet::new(), empty_lists: collections::BTreeMap::new(), open_numbers: collections::BTreeMap::new(), open_elements: collections::BTreeMap::new(), open_walks: collections::BTreeMap::new(), open_params: collections::BTreeMap::new(), walk_open: None, walk_view: false, lent_walks: collections::BTreeSet::new(), lent_params: collections::BTreeSet::new(), walk_lent: false, lambda_expected: None, open_calls: collections::BTreeMap::new(), unknown_bound: collections::BTreeSet::new(), unknown_said: 0, list_constants: collections::BTreeMap::new(), overflowed: collections::BTreeSet::new(), followed: collections::BTreeMap::new(), reaching: None, reached: None, grown_text: collections::BTreeSet::new(), widening_casts: collections::BTreeSet::new(), unsigned_slots: collections::BTreeMap::new(), at_a_write_door: false, pushed_into: None } }
 }
 
 
@@ -24035,6 +24103,7 @@ impl CheckState {
         let mut local = CheckLocal::free(world.words.resolve(name).to_owned(), ty, self.a_new_binding());
         if asked { local.immutable = Some(CheckImmutable { at: span.clone(), kind: CheckKind::Parameter }); }
         let opened = self.flow.open_params.remove(&local.name);
+        if self.flow.lent_params.remove(&local.name) && a_tuple(&local.ty) { local.lent = true; }
         if opened.is_some() && local.ty.is_unknown() { local.open_number = std::convert::identity(opened); }
         local
     }
@@ -63107,7 +63176,7 @@ pub mod check_arms {
 }
 pub mod check_binds {
     #[allow(unused_imports)]
-    pub use super::{CheckBoundary};
+    pub use super::{CheckBoundary, binds_hands_a_view};
 }
 pub mod check_boundary {
     #[allow(unused_imports)]

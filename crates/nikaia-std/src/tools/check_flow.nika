@@ -168,6 +168,14 @@ pub struct CheckFlow {
     /// number, and whether as views of it.
     pub walk_open: i64?,
     pub walk_view: bool,
+    /// **A walk whose items are lent** (#626), by the call that makes it: a
+    /// walk of views of a list's elements, and one that hands those on.
+    pub lent_walks: collections::BTreeSet[i64],
+    /// The parameters of a lambda the call being walked hands a lent item
+    /// to, by name, for `lambda_parameter` to bind as lent.
+    pub lent_params: collections::BTreeSet[String],
+    /// Whether the method call just checked hands back a walk that lends.
+    pub walk_lent: bool,
     /// The `fn` type the place a lambda stands in declares (#497).
     pub lambda_expected: Ty?,
     /// A generic call that hands back the number it was given (#497), by the
@@ -246,6 +254,9 @@ impl CheckFlow {
             open_params: collections::BTreeMap(),
             walk_open: null,
             walk_view: false,
+            lent_walks: collections::BTreeSet(),
+            lent_params: collections::BTreeSet(),
+            walk_lent: false,
             lambda_expected: null,
             open_calls: collections::BTreeMap(),
             unknown_bound: collections::BTreeSet(),

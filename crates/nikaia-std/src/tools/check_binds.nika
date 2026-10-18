@@ -118,6 +118,44 @@ impl CheckState {
         return out
     }
 
+    /// **The parameters of a lambda a walk lends its item to** (#626): one a
+    /// signature types as a view of the receiver's item, one `filter` and its
+    /// kin hand a reference to, and one handed the item of a walk that lends.
+    pub fn lent_walk_params(ref self, world: ref CheckWorld, contract: ref FnContract, entry: ref String, receiver: ref Expr, args: ref Vec[Expr]) -> collections::BTreeSet[String] sync {
+        let mut out: collections::BTreeSet[String] = collections::BTreeSet()
+        let signature = contract.signature ?? return out
+        let held = open_walk_variable(signature) ?? return out
+        let lends = self.flow.lent_walks.contains(id_of(receiver) as i64) || binds_hands_a_view(entry)
+        let arguments = call_arguments(signature)
+        let mut at = 0
+        for arg in args {
+            if at < arguments.len() as i64 {
+                for (name, view) in binds_item_params(world, arg, arguments[at].1, held) {
+                    if view || lends {
+                        let added = out.insert(name)
+                    }
+                }
+            }
+            at += 1
+        }
+        return out
+    }
+
+    /// **Whether the walk a call hands back lends its items** (#626): a walk
+    /// of views of the receiver's item, or of the item itself where the
+    /// receiver's walk lends it.
+    pub fn a_walk_that_lends(ref self, contract: ref FnContract, receiver: ref Expr) -> bool sync {
+        let signature = contract.signature ?? return false
+        let result: Ty = signature.result?.clone() ?? return false
+        let made: Ty = open_walk_made(result) ?? return false
+        let name = open_walk_named(made) ?? return false
+        let held = open_walk_variable(signature) ?? return false
+        if name != held {
+            return false
+        }
+        return open_walk_a_view(made) || self.flow.lent_walks.contains(id_of(receiver) as i64)
+    }
+
     fn a_tuple_over_a_lent_name(ref self, world: ref CheckWorld, value: ref Expr) -> bool sync {
         return match value {
             Expr::Variable(name, _) => self.lent_here(world.words.resolve(name)),
@@ -176,4 +214,41 @@ fn binds_tuple_parts(found: ref Ty, count: i64) -> Vec[Ty] {
         unknown.push(Ty::Unknown)
     }
     return unknown
+}
+
+/// **`filter` is handed a reference to the item** (ADR-231 D2), and so are
+/// `find`'s, `take_while`'s, `skip_while`'s, `min_by_key`'s and
+/// `max_by_key`'s.
+pub fn binds_hands_a_view(method: ref String) -> bool {
+    return method == "filter" || method == "find" || method == "take_while" || method == "skip_while" || method == "min_by_key" || method == "max_by_key"
+}
+
+/// The parameters of a lambda a signature types as the receiver's item `held`,
+/// by name, and whether as a view of it.
+fn binds_item_params(world: ref CheckWorld, arg: ref Expr, ty: ref Ty, held: ref String) -> Vec[(String, bool)] sync {
+    let mut out: Vec[(String, bool)] = []
+    let types: Vec[Ty] = match ty {
+        Ty::Fn { params, .. } => params.clone(),
+        else => return out,
+    }
+    match arg {
+        Expr::Closure { params, .. } => {
+            let mut at = 0
+            for p in params {
+                if at < types.len() as i64 {
+                    match types[at] {
+                        Ty::Var { name, view } => {
+                            if name == held {
+                                out.push((world.words.resolve(p).clone(), view))
+                            }
+                        },
+                        else => {}
+                    }
+                }
+                at += 1
+            }
+        },
+        else => {}
+    }
+    return out
 }

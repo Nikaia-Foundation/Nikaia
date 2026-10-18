@@ -1920,3 +1920,57 @@ fn main() {
     );
     assert_eq!(said.trim(), "false true false true 106 true false 1 true");
 }
+
+/// #626: a lambda handed a lent tuple takes it apart with a `let`, as NK1101's
+/// help says: a number among the parts is read as the number and text as a
+/// view, through `filter`, `map` and the chains between; a tuple the walk made
+/// is the lambda's own, and so are its parts.
+#[test]
+fn a_tuple_let_over_a_lent_lambda_parameter_reads_its_parts() {
+    let said = printed(
+        "tuple-let-over-a-lambda-parameter",
+        r#"
+fn main() {
+    let pairs: Vec[(String, i64)] = [("a".clone(), 1), ("b".clone(), 2)]
+    let n = pairs.iter().filter(fn(pair) {
+        let (name, v) = pair
+        v > 1
+    }).count()
+    println(f"{n}")
+    let doubled: Vec[i64] = pairs.iter().map(fn(pair) {
+        let (name, v) = pair
+        if name == "b" { v * 10 } else { v + name.len() }
+    }).collect()
+    println(f"{doubled[0]} {doubled[1]}")
+    let named: Vec[String] = pairs.iter().filter(fn(pair) {
+        let (name, v) = pair
+        !(v > 1) && name.starts_with("a")
+    }).map(fn(pair) {
+        let (name, v) = pair
+        f"{name}={v + 1}"
+    }).collect()
+    println(named.join(","))
+    let kept: Vec[String] = pairs.iter().map(fn(pair) {
+        let (name, v) = pair
+        name.clone()
+    }).collect()
+    println(kept.join("+"))
+    let owned: Vec[String] = pairs.iter().map(fn(pair) { (pair.0.clone(), pair.1 * 2) }).map(fn(pair) {
+        let (name, v) = pair
+        if v > 2 { return name }
+        "small".clone()
+    }).collect()
+    println(owned.join(" "))
+    let found: i64 = pairs.iter().filter(fn(pair) {
+        let (name, v) = pair
+        v > 0
+    }).take(5).map(fn(pair) {
+        let (name, v) = pair
+        v
+    }).sum()
+    println(f"{found}")
+}
+"#,
+    );
+    assert_eq!(said, "1\n2 20\na=2\na+b\nsmall b\n3\n");
+}

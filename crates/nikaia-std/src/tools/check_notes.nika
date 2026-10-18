@@ -267,6 +267,11 @@ impl CheckState {
         // **Handed the items of a walk of an open number, it is that number**
         // (ADR-285 D34, #594), as a `for` binding over its list is.
         let opened = self.flow.open_params.remove(local.name)
+        // **Handed a lent item, a tuple is a view of the walk's** (#626): a
+        // `let` that takes it apart binds views, a number among them read out.
+        if self.flow.lent_params.remove(local.name) && a_tuple(local.ty) {
+            local.lent = true
+        }
         if opened != null && local.ty.is_unknown() {
             local.open_number = opened
         }
