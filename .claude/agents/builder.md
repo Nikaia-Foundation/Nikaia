@@ -18,7 +18,8 @@ You build one small slice of an issue in the Nikaia repository and end.
   timeout, or with `run_in_background` and let its end wake you. Never poll
   with repeated `tail`, `ps` or `sleep` calls.
 * **Few release builds: finish first, then build once.** A release build
-  with `lower-std` costs 10-15 minutes. Before the first one, write down the
+  costs about 2.5 minutes, `lower-std` about 40 s (cached: under a second
+  when no `.nika` changed), and the touched tests often 10 minutes more. Before the first one, write down the
   whole probe matrix: every case the step must handle (own field, getter of
   a getter, `std` methods, the example programs the issue names). Then
   implement all of them and build once. Catch slips without a build:
