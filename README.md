@@ -35,7 +35,8 @@
 ## The idea
 
 Languages like Python or JavaScript are quick to write in. The programs are slower than they
-could be, they need more memory, and some mistakes only show up when the program runs.
+could be, they need more memory and more machines, and some mistakes only show up in
+production, under load, at night.
 
 Languages like C++ or Rust produce fast programs. In exchange, a good part of each program
 tells the compiler how memory, waiting and sharing should work.
