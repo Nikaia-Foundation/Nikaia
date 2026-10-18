@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1021] — 2026-10-18
+
+**A tail `if`/`match` takes the wanted `T?`; a shift past the width is `NK1116`**
+- The wanted `(A, B)?` or `T?` now reaches every end of an `if` or `match` used as a body's tail: tuples of text literals are built as `String`, a `null` end is allowed, and the other ends are put into `Some`. A shift by a constant count below 0, or as large as the left side's type is wide or larger, is refused with `NK1116` before the backend (Part III).
+
 ## [0.0.1020] — 2026-10-18
 
 **A throw of a call, a map's read past a jump, a variant fallback and a kept pausing function lower as written**
