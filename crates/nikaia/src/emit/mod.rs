@@ -3688,10 +3688,23 @@ impl<'p> Emitter<'p> {
         }
         // **An option is a parameter too**: a view among them is the source
         // where the body hands it back.
+        // **A `String` option the body does not keep is lent**, as a
+        // `String` parameter is (`lends::lends_option`): below it is the
+        // view one written `ref String` is.
+        let lent_option = |at: usize| {
+            lent.is_some_and(|c| {
+                c.signature
+                    .as_ref()
+                    .and_then(|s| s.config.get(at))
+                    .is_some_and(|o| nikaia_std::tools::lends::lends_option(c, o))
+            })
+        };
         let source_option: Option<usize> = match result_borrows {
-            Some(named) if plain_signature && named.len() == 1 && source_at.is_none() => config
-                .iter()
-                .position(|c| self.text(c.name) == named[0] && self.carries_a_view(&c.ty)),
+            Some(named) if plain_signature && named.len() == 1 && source_at.is_none() => {
+                config.iter().enumerate().position(|(at, c)| {
+                    self.text(c.name) == named[0] && (self.carries_a_view(&c.ty) || lent_option(at))
+                })
+            }
             _ => None,
         };
         // **What the parameter's views point into, not the parameter**: a
@@ -3941,10 +3954,12 @@ impl<'p> Emitter<'p> {
                 true => Lifetimes::Shared,
                 false => how(c.name),
             };
+            let mut ty = c.ty.clone();
+            ty.is_view |= lent_option(at);
             format!(
                 "{}: {}",
                 escaped(name),
-                self.ty_counted(&c.ty, position, self.count_at(&key, name))
+                self.ty_counted(&ty, position, self.count_at(&key, name))
             )
         }));
 

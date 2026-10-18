@@ -471,6 +471,5 @@ impl EmitState {
 }
 
 fn emit_config_of(contract: ref FnContract) -> Vec[ConfigContract] {
-    let signature = contract.signature?.clone() ?? return []
-    return signature.config.clone()
+    return lowered_options(contract)
 }

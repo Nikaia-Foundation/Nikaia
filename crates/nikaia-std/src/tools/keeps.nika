@@ -439,19 +439,24 @@ fn classify(expr: ref Expr, interner: ref winnow_grammar::InternerContext, holes
         }
         // **A task keeps everything it names** (ADR-312 D1).
         Expr::Spawn { body, .. } => keep_what_a_task_names(body, interner, holes_of, context, uses),
-        Expr::Call { func, args, .. } => {
+        Expr::Call { func, args, config, .. } => {
             let callee = resolved_callee(func, interner, own, library)
             for at in 0..<args.len() {
                 keep_argument(args[at], callee, at, interner, context, uses)
             }
+            for setting in config {
+                keep_option(setting, callee, interner, context, own, library, uses)
+            }
         }
-        Expr::MethodCall { receiver, method, args, .. } => {
+        Expr::MethodCall { receiver, method, args, config, .. } => {
             keep_receiver(receiver, interner.resolve(method), interner, context, own, library, uses)
             keep_method_arguments(args, interner.resolve(method), interner, context, own, library, uses)
+            keep_method_options(config, interner, context, uses)
         }
-        Expr::SafeMethod { receiver, method, args, .. } => {
+        Expr::SafeMethod { receiver, method, args, config, .. } => {
             keep_receiver(receiver, interner.resolve(method), interner, context, own, library, uses)
             keep_method_arguments(args, interner.resolve(method), interner, context, own, library, uses)
+            keep_method_options(config, interner, context, uses)
         }
         else => {}
     }
@@ -468,6 +473,35 @@ fn keep_argument(arg: ref Expr, callee: ref String?, at: i64, interner: ref winn
     }
     let known = callee ?? return
     uses.passed.push(Passed { parameter: parameter, callee: known.clone(), at: at })
+}
+
+// **A parameter handed to an option** is handed to the callee's option of that
+// name: at the position after the callee's parameters that the option has
+// among its options, as `parameter_at` counts them. A callee no ledger
+// describes, or an option it does not have, keeps.
+fn keep_option(setting: ref ConfigArg, callee: ref String?, interner: ref winnow_grammar::InternerContext, context: ref KeepsBody, own: ref Ledger, library: ref Ledger, mut uses: Uses) {
+    let parameter = part_of_a_parameter(setting.value, interner, context) ?? return
+    let known = (callee ?? "").clone()
+    let mut at: i64? = null
+    if own.functions.contains_key(known) {
+        at = option_at(own.functions[known] ?? return, interner.resolve(setting.name))
+    } else if library.functions.contains_key(known) {
+        at = option_at(library.functions[known] ?? return, interner.resolve(setting.name))
+    }
+    if at == null {
+        uses.kept.insert(parameter)
+        return
+    }
+    uses.passed.push(Passed { parameter: parameter, callee: known, at: at ?? 0 })
+}
+
+// **A parameter handed to a method's option keeps**: which entry the call goes
+// to is the type checker's answer (ADR-288), and an option is matched by name
+// in that entry, which this walk cannot see.
+fn keep_method_options(config: ref Vec[ConfigArg], interner: ref winnow_grammar::InternerContext, context: ref KeepsBody, mut uses: Uses) {
+    for setting in config {
+        uses.kept.insert(part_of_a_parameter(setting.value, interner, context) ?? continue)
+    }
 }
 
 // **A receiver a method takes by value is moved out of.** Which entry the

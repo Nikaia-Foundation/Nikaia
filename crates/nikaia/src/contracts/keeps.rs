@@ -243,6 +243,7 @@ fn uses_of(
         name,
         receiver,
         args,
+        config,
         body,
         ret_type,
         ..
@@ -260,9 +261,14 @@ fn uses_of(
         None => own,
     };
 
+    // **An option is a parameter too** (Part I 5.1): named at the call, but
+    // what the body does with it is asked as of any other, so a `String`
+    // option the body only reads is lent as a `String` parameter is
+    // ([ADR-282](../../../docs/specification/adr/adr-282.md) D2, D5).
     let mut parameters: BTreeSet<String> = args
         .iter()
         .map(|a| parsed.text(a.name).to_string())
+        .chain(config.iter().map(|c| parsed.text(c.name).to_string()))
         .collect();
     // A method's receiver is a parameter, and `self.field = x` is one of the
     // shapes this analysis exists for — so it is in the set like any other.
@@ -283,6 +289,12 @@ fn uses_of(
         .iter()
         .filter(|a| a.ty.is_view || a.mutable)
         .map(|a| parsed.text(a.name).to_string())
+        .chain(
+            config
+                .iter()
+                .filter(|c| c.ty.is_view)
+                .map(|c| parsed.text(c.name).to_string()),
+        )
         .collect();
     // Of those, the ones no body keeps: see below.
     let mut unkept: BTreeSet<String> = args

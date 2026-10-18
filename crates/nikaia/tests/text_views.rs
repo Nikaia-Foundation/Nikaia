@@ -203,3 +203,64 @@ fn a_lent_string_parameter_is_borrowed_in_the_ledger() {
     assert_eq!(written, vec!["dna: borrowed".to_string()]);
     assert_eq!(views(&program.replace("TEXT", "String")), written);
 }
+
+/// **An option is lent as a parameter is** (#654 step 0 c1): a `String`
+/// option the body only reads is the `&str` one written `ref String` is - at
+/// the declaration, for its default, for a literal and for an owned value
+/// passed to it.
+#[test]
+fn a_string_option_the_body_only_reads_is_lent() {
+    let program = "fn join(words: ref Vec[String]; sep: TEXT = \" \") -> String {\n\
+                   \x20   let mut out = \"\"\n\
+                   \x20   for w in words {\n\
+                   \x20       if out.len() > 0 {\n\
+                   \x20           out = f\"{out}{sep}\"\n\
+                   \x20       }\n\
+                   \x20       out = f\"{out}{w}\"\n\
+                   \x20   }\n\
+                   \x20   return out\n\
+                   }\n\n\
+                   fn main() {\n\
+                   \x20   let ws = [\"a\".clone(), \"b\".clone()]\n\
+                   \x20   let dash = \"-\".clone()\n\
+                   \x20   println(join(ws))\n\
+                   \x20   println(join(ws; sep: \"+\"))\n\
+                   \x20   println(join(ws; sep: dash))\n\
+                   \x20   println(dash)\n\
+                   }\n";
+    let plain = program.replace("TEXT", "String");
+    same_rust(
+        "string_option",
+        &program.replace("TEXT", "ref String"),
+        &plain,
+    );
+    assert_eq!(ran("string_option", &plain), "a b\na+b\na-b\n-\n");
+}
+
+/// **An option the body keeps is text of its own, and only then in the
+/// ledger's `keeps`**: one stored is kept, one only read is not listed, and a
+/// parameter handed to a kept option is kept too (the fixpoint reads an
+/// option as the position after the parameters).
+#[test]
+fn a_kept_option_is_owned_and_listed_in_keeps() {
+    let source = "struct Holder {\n    name: String,\n}\n\n\
+                  fn store(label: String = \"kept\") -> Holder {\n    return Holder { name: label }\n}\n\n\
+                  fn read(n: i64; sep: String = \",\") -> String {\n    return f\"{n}{sep}\"\n}\n\n\
+                  fn hands(text: String) -> Holder {\n    return store(label: text)\n}\n\n\
+                  fn main() {\n\
+                  \x20   println(store().name)\n\
+                  \x20   println(read(1; sep: \";\"))\n\
+                  \x20   println(hands(\"t\".clone()).name)\n\
+                  }\n";
+    let parsed = nikaia::parser::parse_to_ast(source).expect("the source parses");
+    let ledger = common::infer(&parsed);
+    let keeps = |name: &str| ledger.functions.get(name).expect("an entry").keeps.clone();
+    assert_eq!(keeps("store"), vec!["label".to_string()]);
+    assert!(keeps("read").is_empty(), "{:?}", keeps("read"));
+    assert_eq!(keeps("hands"), vec!["text".to_string()]);
+    let rust = lowered("kept_option", source);
+    assert!(rust.contains("fn store(label: String)"), "{rust}");
+    assert!(rust.contains("fn read(n: i64, sep: &str)"), "{rust}");
+    assert!(rust.contains("fn hands(text: String)"), "{rust}");
+    assert_eq!(ran("kept_option", source), "kept\n1;\nt\n");
+}

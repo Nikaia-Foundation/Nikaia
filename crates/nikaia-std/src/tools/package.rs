@@ -9540,7 +9540,7 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
         let at: i64 = index;
         index += 1;
         let mut known = false;
-        for option in signature.config.iter() {
+        for option in lowered_options(contract) {
             if option.name != *name || known { continue; }
             known = true;
             if found_option.fits(&option.ty) { continue; }
@@ -9548,7 +9548,7 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
                 state.facts.owned_texts.insert(*nikaia_std::index::get(&state.flow.option_values, nikaia_std::index::at(at)));
                 continue;
             }
-            if at < state.flow.option_values.len() as i64 && option.ty.is_a_view() && !found_option.is_a_view() && found_option.fits(&option.ty.owned()) {
+            if at < state.flow.option_values.len() as i64 && option.ty.is_a_view() && !found_option.is_a_view() && found_option.fits(&check_arguments_lent_value(&option.ty)) {
                 let value = *nikaia_std::index::get(&state.flow.option_values, nikaia_std::index::at(at));
                 state.facts.lent_options.insert(value);
                 continue;
@@ -9717,6 +9717,13 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
         state.findings.push(check_refusal("NK1102", &at_span, format!("`{}` expects `{}` to be `{}`, but you're passing `{}`.", key, name, want.text(), found_here.text()), notes, Some(help)));
     }
     signature.result_or_unit()
+}
+
+fn check_arguments_lent_value(ty: &Ty) -> Ty {
+    match ty {
+        Ty::Named { name, args, view } => { let view = *view; if view && name == TEXT_VIEW && args.is_empty() { Ty::Named { name: TEXT.to_owned(), args: vec![], view: false } } else { ty.owned() } },
+        _ => ty.owned(),
+    }
 }
 
 
@@ -32953,13 +32960,7 @@ impl EmitState {
     }
 }
 
-fn emit_config_of(contract: &FnContract) -> Vec<ConfigContract> {
-    let signature = match match contract.signature.as_ref() {
-        Some(__nikaia_it) => Some(__nikaia_it.clone()),
-        None => None,
-    } { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
-    signature.config.to_owned()
-}
+fn emit_config_of(contract: &FnContract) -> Vec<ConfigContract> { lowered_options(contract) }
 
 
 // --- emit_core_calls.nika ---
@@ -40751,20 +40752,23 @@ fn classify(expr: &Expr, interner: &winnow_grammar::InternerContext, holes_of: &
             if !context.lent.contains(&name) { uses.kept.insert(name); }
         },
         Expr::Spawn { body, .. } => { let body = nikaia_std::boxed::open(body); keep_what_a_task_names(body, interner, holes_of, context, uses); },
-        Expr::Call { func, args, .. } => {
+        Expr::Call { func, args, config, .. } => {
             let func = nikaia_std::boxed::open(func);
             let callee = resolved_callee(func, interner, own, library);
             for at in 0..args.len() as i64 { keep_argument(nikaia_std::index::get(&args, nikaia_std::index::at(at)), (callee).as_deref(), at, interner, context, uses); }
+            for setting in config.iter() { keep_option(setting, (callee).as_deref(), interner, context, own, library, uses); }
         },
-        Expr::MethodCall { receiver, method, args, .. } => {
+        Expr::MethodCall { receiver, method, args, config, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
             keep_receiver(receiver, interner.resolve(method), interner, context, own, library, uses);
             keep_method_arguments(args, interner.resolve(method), interner, context, own, library, uses);
+            keep_method_options(config, interner, context, uses);
         },
-        Expr::SafeMethod { receiver, method, args, .. } => {
+        Expr::SafeMethod { receiver, method, args, config, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
             keep_receiver(receiver, interner.resolve(method), interner, context, own, library, uses);
             keep_method_arguments(args, interner.resolve(method), interner, context, own, library, uses);
+            keep_method_options(config, interner, context, uses);
         },
         _ => { },
     }
@@ -40779,6 +40783,20 @@ fn keep_argument(arg: &Expr, callee: Option<&str>, at: i64, interner: &winnow_gr
     let known = match callee { Some(__nikaia_value) => __nikaia_value, None => return };
     uses.passed.push(Passed { parameter, callee: known.to_owned(), at });
 }
+
+fn keep_option(setting: &ConfigArg, callee: Option<&str>, interner: &winnow_grammar::InternerContext, context: &KeepsBody, own: &Ledger, library: &Ledger, uses: &mut Uses) {
+    let parameter = match part_of_a_parameter(&setting.value, interner, context) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let known = nikaia_std::index::or(callee, || "").to_owned();
+    let mut at: Option<i64> = None;
+    if own.functions.contains_key(&known) { at = option_at(match *nikaia_std::index::get(&own.functions, &known) { Some(__nikaia_value) => __nikaia_value, None => return }, interner.resolve(setting.name)); } else if library.functions.contains_key(&known) { at = option_at(match *nikaia_std::index::get(&library.functions, &known) { Some(__nikaia_value) => __nikaia_value, None => return }, interner.resolve(setting.name)); }
+    if at.is_none() {
+        uses.kept.insert(parameter);
+        return;
+    }
+    uses.passed.push(Passed { parameter, callee: known, at: nikaia_std::index::or(at, || 0) });
+}
+
+fn keep_method_options(config: &[ConfigArg], interner: &winnow_grammar::InternerContext, context: &KeepsBody, uses: &mut Uses) { for setting in config.iter() { uses.kept.insert(match part_of_a_parameter(&setting.value, interner, context) { Some(__nikaia_value) => __nikaia_value, None => continue }); } }
 
 fn keep_receiver(receiver: &Expr, method: &str, interner: &winnow_grammar::InternerContext, context: &KeepsBody, own: &Ledger, library: &Ledger, uses: &mut Uses) {
     let name = match parameter_named(receiver, interner, context) { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -43018,7 +43036,37 @@ fn parameter_at(contract: &FnContract, at: i64) -> Option<String> {
         if position == at { return Some(name.to_owned()); }
         position += 1;
     }
+    for option in signature.config.iter() {
+        if position == at { return Some(option.name.to_owned()); }
+        position += 1;
+    }
     None
+}
+
+pub fn option_at(contract: &FnContract, name: &str) -> Option<i64> {
+    let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let mut position = signature.params.len() as i64;
+    for option in signature.config.iter() {
+        if option.name == name { return Some(position); }
+        position += 1;
+    }
+    None
+}
+
+pub fn lends_option(contract: &FnContract, option: &ConfigContract) -> bool {
+    let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+    if signature.takes_a_receiver() || contract.keeps.contains(&option.name) { return false; }
+    match &option.ty {
+        Ty::Named { name, args, view } => { let view = *view; !view && args.is_empty() && name == "String" },
+        _ => false,
+    }
+}
+
+pub fn lowered_options(contract: &FnContract) -> Vec<ConfigContract> {
+    let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
+    let mut out: Vec<ConfigContract> = vec![];
+    for option in signature.config.iter() { if lends_option(contract, option) { out.push(ConfigContract { name: option.name.to_owned(), ty: Ty::Named { name: TEXT_VIEW.to_owned(), args: vec![], view: true }, default: option.default.to_owned() }); } else { out.push(option.clone()); } }
+    out
 }
 
 
@@ -63484,7 +63532,7 @@ pub mod ledger_text {
 }
 pub mod lends {
     #[allow(unused_imports)]
-    pub use super::{lends_in, lends_in_own, a_ledger_copies, moves, Passed, Uses, kept_by};
+    pub use super::{lends_in, lends_in_own, a_ledger_copies, moves, Passed, Uses, kept_by, option_at, lends_option, lowered_options};
 }
 pub mod libraries {
     #[allow(unused_imports)]

@@ -413,3 +413,21 @@ fn a_view_of_a_list_takes_a_list_default() {
     assert!(ledger.contains("xs: ref Vec[i64] = [1, 2, 3]"), "{ledger}");
     assert!(ledger.contains("xs: ref Vec[i64] = [4, 5]"), "{ledger}");
 }
+
+/// **An option of type `ref String` lends the text it is passed** (#455), as
+/// a `ref String` parameter does: an owned `String` fits the view, and the `&`
+/// is the compiler's to write (was `NK1106`: the view's owned type read as
+/// `str`, which no `String` fits).
+#[test]
+fn a_text_view_option_lends_an_owned_string() {
+    let source = "fn joined(n: i64; sep: ref String = \",\") -> String {\n\
+         \x20   return f\"{n}{sep}\"\n\
+         }\n\
+         \n\
+         fn main() {\n\
+         \x20   let v = \"-\".clone()\n\
+         \x20   println(joined(1; sep: v))\n\
+         \x20   println(v)\n\
+         }\n";
+    assert_eq!(codes(source), Vec::<String>::new());
+}

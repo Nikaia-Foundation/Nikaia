@@ -216,6 +216,8 @@ fn keeps_at(contract: ref FnContract, at: i64) -> bool {
     return contract.keeps.contains(parameter)
 }
 
+// The parameters first, then the options in the order the signature declares
+// them (`option_at`).
 fn parameter_at(contract: ref FnContract, at: i64) -> String? {
     let signature = contract.signature ?? return null
     let mut position = 0
@@ -225,5 +227,56 @@ fn parameter_at(contract: ref FnContract, at: i64) -> String? {
         }
         position += 1
     }
+    for option in signature.config {
+        if position == at {
+            return option.name.clone()
+        }
+        position += 1
+    }
     return null
+}
+
+/// The position `parameter_at` gives the option `name`: after every
+/// parameter, in the order the options are declared.
+pub fn option_at(contract: ref FnContract, name: ref String) -> i64? {
+    let signature = contract.signature ?? return null
+    let mut position = signature.params.len()
+    for option in signature.config {
+        if option.name == name {
+            return position
+        }
+        position += 1
+    }
+    return null
+}
+
+/// **An option is lent as a parameter is** (ADR-282 D2, D5): a `String`
+/// option of a function - not a method, whose call this cannot tie to one
+/// entry (ADR-288) - that the body does not keep is a view below, as one
+/// written `ref String` is. One answer for the declaration, the call and
+/// the checker.
+pub fn lends_option(contract: ref FnContract, option: ref ConfigContract) -> bool {
+    let signature = contract.signature ?? return false
+    if signature.takes_a_receiver() || contract.keeps.contains(option.name) {
+        return false
+    }
+    return match option.ty {
+        Ty::Named { name, args, view } => !view && args.is_empty() && name == "String",
+        else => false,
+    }
+}
+
+/// The options as they are lowered: a lent one (`lends_option`) as the view
+/// it is below, the others as declared.
+pub fn lowered_options(contract: ref FnContract) -> Vec[ConfigContract] {
+    let signature = contract.signature ?? return []
+    let mut out: Vec[ConfigContract] = []
+    for option in signature.config {
+        if lends_option(contract, option) {
+            out.push(ConfigContract { name: option.name.clone(), ty: Ty::Named { name: TEXT_VIEW.clone(), args: [], view: true }, default: option.default.clone() })
+        } else {
+            out.push(option.clone())
+        }
+    }
+    return out
 }

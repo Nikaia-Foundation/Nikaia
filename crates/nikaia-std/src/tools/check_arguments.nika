@@ -145,7 +145,9 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         let at = index
         index += 1
         let mut known = false
-        for option in signature.config {
+        // A lent `String` option is checked as the view it is below
+        // (`lends_option`), as one written `ref String` is.
+        for option in lowered_options(contract) {
             if option.name != name || known {
                 continue
             }
@@ -162,7 +164,7 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             // **An option of a `ref` type lends what it is passed** (#455),
             // as a `ref` parameter does (ADR-094 D1): the owned value fits
             // the view, and the `&` is the compiler's to write.
-            if at < state.flow.option_values.len() && option.ty.is_a_view() && !found_option.is_a_view() && found_option.fits(option.ty.owned()) {
+            if at < state.flow.option_values.len() && option.ty.is_a_view() && !found_option.is_a_view() && found_option.fits(check_arguments_lent_value(option.ty)) {
                 let value = state.flow.option_values[at]
                 state.facts.lent_options.insert(value)
                 continue
@@ -425,4 +427,14 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         state.findings.push(check_refusal("NK1102", at_span, f"`{key}` expects `{name}` to be `{want.text()}`, but you're passing `{found_here.text()}`.", notes, help))
     }
     return signature.result_or_unit()
+}
+
+// **The value a view lends**: `ref Vec[i64]` lends a `Vec[i64]`, and a view of
+// text lends a `String` - `str` is the compiler's noun for the view alone
+// (ADR-184 D2), which no value fits (#455).
+fn check_arguments_lent_value(ty: ref Ty) -> Ty {
+    return match ty {
+        Ty::Named { name, args, view } => if view && name == TEXT_VIEW && args.is_empty() { Ty::Named { name: TEXT.clone(), args: [], view: false } } else { ty.owned() },
+        else => ty.owned(),
+    }
 }
