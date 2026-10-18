@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1012 (Draft)
+**Version:** 0.0.1013 (Draft)
 **Date:** 2026-10-18
 
 ---
@@ -1311,18 +1311,80 @@ fn main() {
 ```
 
 ### 4.3. Why No Classes? (Data vs. Behavior)
-Nikaia has no **classes**. Data and behavior are declared apart:
-1.  A **struct** defines the **data**: what a value is.
-2.  An **`impl` block** defines the **behavior**: what a value does.
+In Java, C# or Python a **class** bundles three things: the data a value
+holds, the methods that work on it, and a place in a hierarchy it inherits
+from. Nikaia has no classes. Each of the three has its own construct:
+
+| A class gives | Nikaia writes |
+| :--- | :--- |
+| fields | a **struct** (4.1): what a value is |
+| methods | an **`impl` block**: what a value does |
+| a base class, shared behaviour | a **trait** (4.7): what several types can do, each in its own `impl` |
+| a fixed family of subclasses | an **enum** (4.4): one of a fixed set of variants |
 
 ```nika
-// Defining behavior for the User struct
-impl User {
-    fn login(ref self) {
-        println(f"{self.username} logged in.")
+struct Position {
+    x: int,
+    y: int,
+}
+
+struct Player {
+    name: String,
+    at: Position,          // a part, not a parent
+    health: int,
+}
+
+impl Player {
+    fn hit(ref mut self, damage: int) {
+        self.health = self.health - damage
     }
 }
 ```
+
+**What goes wrong with classes, and what Nikaia does instead:**
+
+* **Inheritance ties a subclass to its parent's insides.** A subclass
+  depends on fields and call orders of a class someone else maintains; a
+  change there breaks code that never changed (the *fragile base class*).
+  Nikaia has no inheritance. A type reuses another by holding it as a field,
+  as `Player` holds a `Position`, and calls its methods by name.
+* **A hierarchy forces one family tree.** A value that is both a `Reader`
+  and a `Closable` has to fit one tree, or the language needs multiple
+  inheritance and its diamond. A Nikaia type implements any number of
+  traits, each in an `impl` of its own, and no trait knows about another.
+* **A virtual call hides which code runs.** `shape.area()` through a base
+  reference reaches whatever subclass the value has, including ones written
+  later; neither a reader nor the compiler can say which body runs. In
+  Nikaia every call knows its body when the program is built. A closed set
+  of cases is an enum, and `match` must handle every variant (3.4); adding
+  a variant makes each `match` that misses it an error. An open set is a
+  type parameter bound by a trait (4.7), and each call is resolved for the
+  type it is given. So the prover reads the body or the contract of the
+  function a call reaches (Part III 14.2), and no call goes through a table.
+* **Objects hold hidden references to each other.** A class graph lets any
+  method change state that other objects also see, which is what makes
+  aliasing bugs and data races. A Nikaia struct is a plain value with one
+  owner (Chapter 6); a value with several owners is written `Shared[T]` or
+  `SharedMut[T]`, where the reader sees it. That is what lets the compiler
+  decide which data needs protecting when work runs in parallel.
+
+```nika
+enum Shape {
+    Circle { r: f64 },
+    Rect { w: f64, h: f64 },
+}
+
+fn area(s: ref Shape) -> f64 {
+    return match s {
+        Shape::Circle { r } => 3.14159 * r * r,
+        Shape::Rect { w, h } => w * h,
+    }
+}
+```
+
+A trait method has no default body and a trait is not a type (4.7): a list
+of values of different types is a list of an enum, and code shared by
+several `impl`s is a function they call.
 
 ### 4.4. Enums (Algebraic Data Types)
 An **enum** is a type whose value is one of several distinct variants.

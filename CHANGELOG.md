@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1013] — 2026-10-18
+
+**Part I 4.3 says what classes bundle, what goes wrong with them, and what Nikaia writes instead**
+- Part I 4.3: a table from class to struct, `impl`, trait and enum; inheritance, one family tree, virtual calls and hidden references each with what Nikaia does instead (a field, traits, enum and bound calls resolved at build time, one owner and `Shared`); a list of different types is a list of an enum. No rule changes.
+
 ## [0.0.1012] — 2026-10-18
 
 **standard input and files are untrusted unless marked trusted: true (ADR-365, #649)**
