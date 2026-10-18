@@ -376,7 +376,7 @@ fn rs2nika_ty(mut ctx: Rs2nikaCtx, given: ref String) -> String {
         let mut base: String = name.clone()
         let colon = name.rfind("::") ?? 0
         if name.contains("::") {
-            base = (name.bytes[colon + "::".len()..].text() catch { "" }).clone()
+            base = name[colon + "::".len()..].clone()
         }
         if base == "Option" {
             rs2nika_hit(ctx, "R7")
@@ -4162,7 +4162,7 @@ fn rs2nika_aliases(mut ctx: Rs2nikaCtx, given: ref String) -> String {
     for l in given.split("\n") {
         let st: String = l.trim().clone()
         let cut = st.rfind("::") ?? 0
-        if st.starts_with("use ") && cut > 0 && !st.contains("{") && ctx.alias_from.contains((st.bytes[cut + "::".len()..].text() catch { "" }).clone()) {
+        if st.starts_with("use ") && cut > 0 && !st.contains("{") && ctx.alias_from.contains(st[cut + "::".len()..].clone()) {
             rs2nika_hit(ctx, "R45")
             continue
         }
@@ -4416,7 +4416,7 @@ fn rs2nika_thin_adapters(mut ctx: Rs2nikaCtx, text: ref String) {
             let path: String = call[0..<open].clone()
             let cut = path.rfind("::") ?? path.len()
             if open > 0 && cut < path.len() {
-                let g: String = (path.bytes[cut + "::".len()..].text() catch { "" }).clone()
+                let g: String = path[cut + "::".len()..].clone()
                 if name != "" && g != name {
                     // a call only: a local of the same name stays
                     ctx.equiv_from.push(f"{name}(")
@@ -4460,7 +4460,7 @@ fn rs2nika_enum_arity(mut ctx: Rs2nikaCtx, text: ref String) {
             let open = variant.find("(") ?? 0
             let close = variant.rfind(")") ?? open
             let v: String = variant[0..<open].trim().clone()
-            let inner: String = (variant.bytes[open + "(".len()..<close].text() catch { "" }).clone()
+            let inner: String = variant[open + "(".len()..<close].clone()
             let mut n = 0
             for part in rs2nika_split_args(inner) {
                 if part.trim() != "" {
@@ -4602,7 +4602,7 @@ fn rs2nika_load(mut ctx: Rs2nikaCtx, repo: ref String) {
                     let cut = a.rfind("::") ?? a.len()
                     let mut short: String = a.clone()
                     if cut < a.len() {
-                        short = (a.bytes[cut + "::".len()..].text() catch { "" }).clone()
+                        short = a[cut + "::".len()..].clone()
                     }
                     ctx.alias_from.push(toks[i + 1].clone())
                     ctx.alias_to.push(short)
@@ -4815,7 +4815,7 @@ pub fn rs2nika_lint(path: ref String, text: ref String) -> i64 {
             let open = l.find("(") ?? l.len()
             let close = l.rfind(")") ?? 0
             if open < l.len() && close > open {
-                for p in (l.bytes[open + "(".len()..<close].text() catch { "" }).split(",") {
+                for p in l[open + "(".len()..<close].split(",") {
                     let mut q: String = p.trim().clone()
                     if q.starts_with("mut ") {
                         q = (q.strip_prefix("mut ") ?? "").clone()
