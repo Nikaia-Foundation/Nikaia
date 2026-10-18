@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1023] — 2026-10-18
+
+**A tail `if`/`match` with a `return` end puts only its values into `Some`**
+- In a function that returns `T?`, a tail `if` or `match` whose ends mix values with an end that jumps (`return`, `break`, `continue`, `throw`, or a block ending in one) now puts each value end into `Some` and leaves the jumping ends as written. Before, one jumping end left every end unwrapped, and the generated Rust was refused. The same holds beside a `null` arm.
+
 ## [0.0.1022] — 2026-10-18
 
 **A `String` that only views reach is a view at grammar rules, parsed parameters, `std` views and map keys**
