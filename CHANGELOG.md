@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1033] — 2026-10-18
+
+**s.scalars and s.graphemes walk a text (ADR-320 D3, D4, D9, #453)**
+- `s.scalars` is the text's scalars and `s.graphemes` is what a reader sees as one character each, by UAX #29 in Unicode 17.0.0 (`unicode-segmentation` 1.13.3); both are read with `take`, `skip`, `count` and `for`, and a grapheme compares with a text literal.
+
 ## [0.0.1032] — 2026-10-18
 
 **s.bytes kept beyond the text is copied wherever it goes; Bytes has clone (ADR-320 D11, #453)**
