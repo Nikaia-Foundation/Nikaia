@@ -190,15 +190,16 @@ Rules from the sessions that moved the most; they save tokens, not just time.
   * no `if let`: use `x ?? default`, or `starts_with` then `strip_prefix(..) ?? ""`;
   * no `*x`; loop variables over a `ref Vec` are values;
   * `.to_owned()` is `NK1189`: write `.clone()`;
-  * a literal is a `ref String`: `let mut s: String = "lit"` before assigning
-    an f-string (`NK1105`); a list mixing `f"..."` and a plain literal is
-    `NK1154`, so write `f"..."` or `.clone()`;
+  * text is `String`, also for a parameter, a field or a result that only
+    reads it: never write `ref String` outside `extern "C"` (`NK1261`, ADR-282
+    D2), and never `ref` on a number, `bool` or a data-less enum (`NK1257`);
   * `opt ?? ""` moves the option: `(opt ?? "").clone()` for a second use;
-    no method call on a `String?` directly;
+    a method on a `String?` is `opt?.len() ?? 0`;
   * f-string braces are `{{` `}}`; a plain string takes braces literally;
   * a function parameter is `fn(ref X) -> T sync`; a `Span` that arrives by
     reference is copied as `Span { start: s.start, end: s.end }`.
-* **Lowered types:** `ref String` is `&str`, `ref T` is `&T`, `Vec[String]` is
+* **Lowered types:** `String` is `&str` where a view suffices and `String`
+  where it is owned (the compiler decides, ADR-282 D2), `ref T` is `&T`, `Vec[String]` is
   `Vec<String>` (a `ref` one a slice), `String?` is `Option<String>`. Most Rust
   errors after a move are `&` against owned. Check that `Display` equals
   `Ty::text()` before replacing `{ty}` with it.
