@@ -17,6 +17,17 @@ You build one small slice of an issue in the Nikaia repository and end.
 * **Wait in one call.** Run a build or a test in the foreground with a long
   timeout, or with `run_in_background` and let its end wake you. Never poll
   with repeated `tail`, `ps` or `sleep` calls.
+* **Few release builds: finish first, then build once.** A release build
+  with `lower-std` costs 10-15 minutes. Before the first one, write down the
+  whole probe matrix: every case the step must handle (own field, getter of
+  a getter, `std` methods, the example programs the issue names). Then
+  implement all of them and build once. Catch slips without a build:
+  `lower-std` with the binary you already have reports every refusal in the
+  `.nika` files in seconds, and `cargo check --release -p nikaia
+  --message-format short` reports the Rust errors in under a minute. After
+  the build, run every probe and the touched tests in one go, and fix
+  everything they show before the next build. A release build only to try
+  out a single case is a wasted cycle.
 * **Small reads.** `grep -n -m 20` first, then `sed -n` of at most 80 lines.
   Filter cargo and test output to the errors and failures
   (`--message-format short`, `| grep -E 'error|FAILED|panicked' | head -40`).
