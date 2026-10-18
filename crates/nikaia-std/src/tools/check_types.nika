@@ -14,8 +14,7 @@ pub fn a_number_name(name: ref String) -> bool {
 
 /// A name's last segment: `fs::Root` is `Root`.
 pub fn type_last_segment(name: ref String) -> String {
-    let parts: Vec[ref String] = name.split("::").collect()
-    return parts[parts.len() - 1].clone()
+    return (name.rsplit("::").next() ?? name).clone()
 }
 
 /// **A view of a type**: a view of text is `str`, a view of anything else is
@@ -341,19 +340,10 @@ pub fn wholly_known(ty: ref Ty) -> bool {
     return match ty {
         Ty::Unknown => false,
         Ty::Nullable(inner) => wholly_known(inner),
-        Ty::Tuple(parts) => all_wholly_known(parts),
-        Ty::Named { args, .. } => all_wholly_known(args),
+        Ty::Tuple(parts) => parts.iter().all fn(part) { wholly_known(part) },
+        Ty::Named { args, .. } => args.iter().all fn(arg) { wholly_known(arg) },
         else => true,
     }
-}
-
-fn all_wholly_known(types: ref Vec[Ty]) -> bool {
-    for ty in types {
-        if !wholly_known(ty) {
-            return false
-        }
-    }
-    return true
 }
 
 /// The map types whose key and value a first `insert` decides (#543).
@@ -383,9 +373,9 @@ pub fn is_a_literal_other_than(expr: ref Expr, kind: ref String) -> bool {
 /// such, or a type the program declared as copying.
 pub fn a_copied_part(ty: ref Ty, copies: ref collections::BTreeSet[String]) -> bool {
     return match ty {
-        Ty::Named { name, args, view } => if name == "Array" { array_parts_copied(args, copies) } else { !view && args.len() == 0 && (a_copied_scalar(name) || copies.contains(name)) },
+        Ty::Named { name, args, view } => if name == "Array" { args.iter().all fn(arg) { a_count(arg) || a_copied_part(arg, copies) } } else { !view && args.len() == 0 && (a_copied_scalar(name) || copies.contains(name)) },
         Ty::Nullable(inner) => a_copied_part(inner, copies),
-        Ty::Tuple(parts) => all_copied_parts(parts, copies),
+        Ty::Tuple(parts) => parts.iter().all fn(part) { a_copied_part(part, copies) },
         else => false,
     }
 }
@@ -395,28 +385,6 @@ fn a_copied_scalar(name: ref String) -> bool {
         "i32" | "i64" | "u8" | "u32" | "u64" | "f64" | "bool" | "char" | "scalar" => true,
         else => false,
     }
-}
-
-fn all_copied_parts(types: ref Vec[Ty], copies: ref collections::BTreeSet[String]) -> bool {
-    for ty in types {
-        if !a_copied_part(ty, copies) {
-            return false
-        }
-    }
-    return true
-}
-
-fn array_parts_copied(args: ref Vec[Ty], copies: ref collections::BTreeSet[String]) -> bool {
-    for arg in args {
-        let counted = match arg {
-            Ty::Count(_) => true,
-            else => false,
-        }
-        if !counted && !a_copied_part(arg, copies) {
-            return false
-        }
-    }
-    return true
 }
 
 /// The value a block ends in: its last statement, where that is an expression.

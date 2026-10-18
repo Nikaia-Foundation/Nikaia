@@ -9439,17 +9439,6 @@ struct CheckArgument {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_arguments_moved(keeps: &[(String, bool, String)], param: &str) -> i64 {
-    let mut at: i64 = 0;
-    while ((at) as usize) < keeps.len() {
-        if nikaia_std::index::get(&keeps, (at) as usize).0 == param { return at; }
-        at += 1;
-    }
-    -1
-}
-
-// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
-// this was written - see `contracts::sync`.
 fn check_arguments_at(given: &[Expr], at: i64) -> Option<&Expr> {
     if at < given.len() as i64 { return Some(nikaia_std::index::get(&given, nikaia_std::index::at(at))); }
     None
@@ -9615,13 +9604,9 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
                 let number = match receiver { Some(__nikaia_value) => __nikaia_value, None => continue };
                 let node = check_arguments_receiver_node(value);
                 let pending = state.flow.literal_receivers.to_owned();
-                let mut hit: i64 = -1;
-                let mut i: i64 = 0;
-                while ((i) as usize) < pending.len() {
-                    if hit < 0 && nikaia_std::index::get(&pending, (i) as usize).0 == node && nikaia_std::index::get(&pending, (i) as usize).1 == number { hit = i; }
-                    i += 1;
-                }
-                if hit >= 0 {
+                let found_at = pending.iter().position(|p| { p.0 == node && p.1 == number }).map(|at| at as i64);
+                if found_at.is_some() {
+                    let hit = match found_at { Some(__nikaia_value) => __nikaia_value, None => continue };
                     state.flow.literal_receivers = vec![(*nikaia_std::index::get(&pending, nikaia_std::index::at(hit))).clone()];
                     state.literal_receivers_take(&want);
                     let mut rest: Vec<(i64, Integer)> = vec![];
@@ -9634,9 +9619,9 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
                 }
             }
         }
-        let moved = check_arguments_moved(keeps, &name);
-        if moved >= 0 {
-            let kept_now = (*nikaia_std::index::get(&keeps, nikaia_std::index::at(moved))).clone();
+        let moved = keeps.iter().find(|k| { k.0 == name });
+        if moved.is_some() {
+            let kept_now = match moved { Some(__nikaia_value) => __nikaia_value, None => continue };
             state.a_cleanup_that_moved(world, key, &name, kept_now.1, &kept_now.2, &want, given_here, span);
         }
         let mut lent = if own { lends_in_own(contract, at + offset, &vec![world.library]) } else { lends_in(contract, at + offset, &vec![world.library]) };
@@ -28300,10 +28285,7 @@ fn refs_of(items: &[Expr]) -> Vec<&Expr> {
 
 pub fn a_number_name(name: &str) -> bool { name == "i8" || name == "i16" || name == "i32" || name == "i64" || name == "isize" || name == "u8" || name == "u16" || name == "u32" || name == "u64" || name == "usize" || name == "f32" || name == "f64" }
 
-pub fn type_last_segment(name: &str) -> String {
-    let parts: Vec<&str> = name.split("::").collect::<Vec<_>>();
-    (*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_owned()
-}
+pub fn type_last_segment(name: &str) -> String { nikaia_std::index::or(name.rsplit("::").next(), || name.into()).to_owned() }
 
 pub fn view_of_type(inner: &Ty) -> Ty {
     match inner {
@@ -28533,15 +28515,10 @@ pub fn wholly_known(ty: &Ty) -> bool {
     match ty {
         Ty::Unknown => false,
         Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); wholly_known(inner) },
-        Ty::Tuple(parts) => all_wholly_known(parts),
-        Ty::Named { args, .. } => all_wholly_known(args),
+        Ty::Tuple(parts) => parts.iter().all(|part| { wholly_known(part) }),
+        Ty::Named { args, .. } => args.iter().all(|arg| { wholly_known(arg) }),
         _ => true,
     }
-}
-
-fn all_wholly_known(types: &[Ty]) -> bool {
-    for ty in types.iter() { if !wholly_known(ty) { return false; } }
-    true
 }
 
 pub fn a_map_type(name: &str) -> bool {
@@ -28564,27 +28541,14 @@ pub fn is_a_literal_other_than(expr: &Expr, kind: &str) -> bool {
 
 pub fn a_copied_part(ty: &Ty, copies: &collections::BTreeSet<String>) -> bool {
     match ty {
-        Ty::Named { name, args, view } => { let view = *view; if name == "Array" { array_parts_copied(args, copies) } else { !view && args.is_empty() && (a_copied_scalar(name) || copies.contains(name)) } },
+        Ty::Named { name, args, view } => { let view = *view; if name == "Array" { args.iter().all(|arg| { a_count(arg) || a_copied_part(arg, copies) }) } else { !view && args.is_empty() && (a_copied_scalar(name) || copies.contains(name)) } },
         Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); a_copied_part(inner, copies) },
-        Ty::Tuple(parts) => all_copied_parts(parts, copies),
+        Ty::Tuple(parts) => parts.iter().all(|part| { a_copied_part(part, copies) }),
         _ => false,
     }
 }
 
 fn a_copied_scalar(name: &str) -> bool { matches!(name, "i32" | "i64" | "u8" | "u32" | "u64" | "f64" | "bool" | "char" | "scalar") }
-
-fn all_copied_parts(types: &[Ty], copies: &collections::BTreeSet<String>) -> bool {
-    for ty in types.iter() { if !a_copied_part(ty, copies) { return false; } }
-    true
-}
-
-fn array_parts_copied(args: &[Ty], copies: &collections::BTreeSet<String>) -> bool {
-    for arg in args.iter() {
-        let counted = matches!(arg, Ty::Count(_));
-        if !counted && !a_copied_part(arg, copies) { return false; }
-    }
-    true
-}
 
 pub fn tail_value_of(block: &Block) -> Option<&Expr> {
     if block.stmts.is_empty() { return None; }

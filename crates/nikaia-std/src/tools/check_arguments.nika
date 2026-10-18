@@ -15,19 +15,6 @@ struct CheckArgument {
     found: Ty,
 }
 
-/// **A parameter whose `keeps` moved** (ADR-297 D12), as the host hands it:
-/// the parameter, whether the callee keeps it now, and its type.
-fn check_arguments_moved(keeps: ref Vec[(String, bool, String)], param: ref String) -> i64 sync {
-    let mut at = 0
-    while at < keeps.len() {
-        if keeps[at].0 == param {
-            return at
-        }
-        at += 1
-    }
-    return -1
-}
-
 /// The argument written at `at`, where one was.
 fn check_arguments_at(given: ref Vec[Expr], at: i64) -> ref Expr? sync {
     if at < given.len() {
@@ -260,15 +247,9 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
                 let number = receiver ?? continue
                 let node = check_arguments_receiver_node(value)
                 let pending = state.flow.literal_receivers.clone()
-                let mut hit = -1
-                let mut i = 0
-                while i < pending.len() {
-                    if hit < 0 && pending[i].0 == node && pending[i].1 == number {
-                        hit = i
-                    }
-                    i += 1
-                }
-                if hit >= 0 {
+                let found_at = pending.iter().position fn(p) { p.0 == node && p.1 == number }
+                if found_at != null {
+                    let hit = found_at ?? continue
                     state.flow.literal_receivers = [pending[hit].clone()]
                     state.literal_receivers_take(want)
                     let mut rest: Vec[(i64, Integer)] = []
@@ -283,9 +264,12 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
                 }
             }
         }
-        let moved = check_arguments_moved(keeps, name)
-        if moved >= 0 {
-            let kept_now = keeps[moved].clone()
+        // **A parameter whose `keeps` moved** (ADR-297 D12), as the host
+        // hands it: the parameter, whether the callee keeps it now, and its
+        // type.
+        let moved = keeps.iter().find fn(k) { k.0 == name }
+        if moved != null {
+            let kept_now = moved ?? continue
             state.a_cleanup_that_moved(world, key, name, kept_now.1, kept_now.2, want, given_here, span)
         }
         // **A parameter is a use** (ADR-152 D4), and a literal handed to one
