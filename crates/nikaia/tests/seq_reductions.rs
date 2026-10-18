@@ -1,7 +1,7 @@
 //! **The reductions and searches over a sequence, and two cuts of text**
 //! (`docs/selfhosting-gaps.md`, LANGUAGE): `any`, `all`, `find`, `position`,
-//! `filter_map`, `last`, `take_while`, `skip_while`, `max`, `min` and `sum` on
-//! `Seq`, `rsplit` and `split_at` on text. Each is run with `nikaia run`, with
+//! `filter_map`, `last`, `take_while`, `skip_while`, `max`, `min`, `sum`,
+//! `min_by_key`, `max_by_key` and `flat_map` on `Seq`, `rsplit` and `split_at` on text. Each is run with `nikaia run`, with
 //! its empty case, and the three that stop early show where they stopped.
 mod common;
 
@@ -142,4 +142,22 @@ fn split_at_cuts_the_text_in_two() {
         "    let name = \"a::b::c\"\n    let (before, from) = name.split_at(3)\n    let (empty, all) = name.split_at(0)\n    println(f\"{before}|{from}|{empty}|{all}\")",
     );
     assert_eq!(out, "a::|b::c||a::b::c\n");
+}
+
+#[test]
+fn min_and_max_by_key_pick_by_the_key_and_are_null_when_empty() {
+    let out = run(
+        "seq-by-key",
+        "    let near = xs.iter().min_by_key(fn(x) { (x - 5).abs() }) ?? -1\n    let high = xs.iter().max_by_key(fn(x) { x % 5 }) ?? -1\n    let first = xs.iter().min_by_key(fn(x) { x % 2 }) ?? -1\n    let lost = none.iter().min_by_key(fn(x) { x }) ?? -1\n    let gone = none.iter().max_by_key(fn(x) { x }) ?? -1\n    let words: Vec[String] = [\"bb\".clone(), \"a\".clone(), \"ccc\".clone()]\n    let short = words.iter().min_by_key(fn(w) { w.len() }) ?? \"none\"\n    let long = words.iter().max_by_key(fn(w) { w.len() }) ?? \"none\"\n    println(f\"{near} {high} {first} {lost} {gone} {short} {long}\")",
+    );
+    assert_eq!(out, "4 4 8 -1 -1 a ccc\n");
+}
+
+#[test]
+fn flat_map_takes_a_list_or_a_sequence_from_its_lambda() {
+    let out = run(
+        "seq-flat-map",
+        "    let pairs: Vec[i64] = xs.iter().flat_map(fn(x) { [x, x * 10] }).collect()\n    let runs: Vec[i64] = xs.iter().flat_map(fn(x) { 0..<x }).collect()\n    let rows: Vec[Vec[i64]] = [[1, 2], [3]]\n    let doubled: Vec[i64] = rows.iter().flat_map(fn(r) { r.iter().map(fn(v) { v * 2 }) }).collect()\n    let empty: Vec[i64] = none.iter().flat_map(fn(x) { [x] }).collect()\n    println(f\"{pairs.len()} {pairs[0]} {pairs[1]} {runs.len()} {doubled.len()} {doubled[2]} {empty.len()}\")",
+    );
+    assert_eq!(out, "10 3 30 25 3 6 0\n");
 }

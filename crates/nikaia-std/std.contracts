@@ -2079,6 +2079,47 @@ signature = "[K, V](self: ref collections::BTreeMap[K, V]) -> collections::BTree
 
 # A copy of the ordered set, owned by whoever asked for it (#125: without an entry a
 # `.clone()` of one resolved to nothing and read as a call that may pause).
+# The smallest element, or nothing where the set is empty.
+[fn."collections::BTreeSet::first"]
+pub = true
+sync = true
+touches = []
+signature = "[T](self: ref collections::BTreeSet[T]) -> T?"
+
+# The largest element, or nothing where the set is empty.
+[fn."collections::BTreeSet::last"]
+pub = true
+sync = true
+touches = []
+signature = "[T](self: ref collections::BTreeSet[T]) -> T?"
+
+# The elements in either set, each once, smallest first.
+#
+# Each is a view of the set that holds it, not a copy.
+[fn."collections::BTreeSet::union"]
+pub = true
+sync = true
+touches = []
+signature = "[T](self: ref collections::BTreeSet[T], other: ref collections::BTreeSet[T]) -> Seq[ref(self) T] sync"
+
+# The elements in both sets, smallest first.
+#
+# Each is a view of this set, not a copy.
+[fn."collections::BTreeSet::intersection"]
+pub = true
+sync = true
+touches = []
+signature = "[T](self: ref collections::BTreeSet[T], other: ref collections::BTreeSet[T]) -> Seq[ref(self) T] sync"
+
+# The elements in this set and not in the other, smallest first.
+#
+# Each is a view of this set, not a copy.
+[fn."collections::BTreeSet::difference"]
+pub = true
+sync = true
+touches = []
+signature = "[T](self: ref collections::BTreeSet[T], other: ref collections::BTreeSet[T]) -> Seq[ref(self) T] sync"
+
 [fn."collections::BTreeSet::clone"]
 pub = true
 sync = true
@@ -2585,6 +2626,35 @@ pub = true
 sync = true
 touches = []
 signature = "[T](self: Seq[T]) -> T?"
+
+# The element the function gives the smallest key, or nothing where the
+# sequence is empty; of equal keys the first. The function is handed a
+# reference to each element.
+[fn."Seq::min_by_key"]
+pub = true
+sync = "sync(f)"
+touches = []
+signature = "[T, K](self: Seq[T], f: fn(ref T) -> K) -> T?"
+
+# The element the function gives the largest key, or nothing where the
+# sequence is empty; of equal keys the last. The function is handed a
+# reference to each element.
+[fn."Seq::max_by_key"]
+pub = true
+sync = "sync(f)"
+touches = []
+signature = "[T, K](self: Seq[T], f: fn(ref T) -> K) -> T?"
+
+# Each element through a function that gives several, and those one after
+# another, in order.
+#
+# The function hands back a list or a sequence; nothing is built between the
+# steps but what it hands back.
+[fn."Seq::flat_map"]
+pub = true
+sync = "sync(f)"
+touches = []
+signature = "[T, U](self: Seq[T], f: fn(T) -> Vec[U]) -> Seq[U]"
 
 # The elements added up; `0` for an empty sequence.
 [fn."Seq::sum"]

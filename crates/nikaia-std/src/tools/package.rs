@@ -33474,7 +33474,7 @@ fn emit_flow_an_iterator_answer(world: &EmitWorld<'_, '_, '_, '_>, node: &Expr) 
         Expr::MethodCall { method, .. } => {
             let method = *method;
             let name = emit_text(world, method);
-            name == "find_map" || name == "find" || name == "next" || name == "last" || name == "nth" || name == "max" || name == "min"
+            name == "find_map" || name == "find" || name == "next" || name == "first" || name == "last" || name == "nth" || name == "max" || name == "min" || name == "min_by_key" || name == "max_by_key"
         },
         _ => false,
     }

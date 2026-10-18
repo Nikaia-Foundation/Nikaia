@@ -70,3 +70,12 @@ fn clamp_holds_a_number_between_bounds() {
     );
     assert_eq!(out, "10 0 15 5 64 7\n");
 }
+
+#[test]
+fn first_of_text_takes_a_text_fallback() {
+    let out = run(
+        "vec-first-text",
+        "    let names: Vec[String] = [\"b\".clone(), \"c\".clone()]\n    let empty: Vec[String] = []\n    println(f\"{names.first() ?? \"none\"} {names.last() ?? \"none\"} {empty.first() ?? \"none\"}\")",
+    );
+    assert_eq!(out, "b c none\n");
+}

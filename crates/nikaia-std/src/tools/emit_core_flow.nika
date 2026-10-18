@@ -114,13 +114,14 @@ fn emit_flow_a_field_of_an_index(node: ref Expr) -> bool {
 }
 
 /// An answer an iterator hands back, `xs.iter().find_map(..)` or
-/// `..filter_map(..).next()`: below it may be an `Option<&String>` or an
-/// `Option<String>`, which a literal fallback cannot tell apart.
+/// `..filter_map(..).next()`, or a list's or a set's `first`: below it may be
+/// an `Option<&String>` or an `Option<String>`, which a literal fallback cannot
+/// tell apart.
 fn emit_flow_an_iterator_answer(world: ref EmitWorld, node: ref Expr) -> bool {
     return match node {
         Expr::MethodCall { method, .. } => {
             let name = emit_text(world, method)
-            name == "find_map" || name == "find" || name == "next" || name == "last" || name == "nth" || name == "max" || name == "min"
+            name == "find_map" || name == "find" || name == "next" || name == "first" || name == "last" || name == "nth" || name == "max" || name == "min" || name == "min_by_key" || name == "max_by_key"
         },
         else => false,
     }
