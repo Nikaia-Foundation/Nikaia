@@ -384,8 +384,9 @@ impl EmitState {
         // them is a statement and not the arm's value.
         let body_flow = if statements && emit_match_is_match(body) { inside with { arms_are_statements: true } } else { inside }
         // **An arm of a statement `match` is a statement**
-        // (`match_patterns::a_statement_arm_that_hands_back_a_value_drops_it`): `k => seen.insert(k, v)` hands back an `Option`, which would make
-        // the arms disagree with `else => {}`, so its value is dropped with `;`.
+        // (`match_patterns::a_statement_arm_that_hands_back_a_value_drops_it`):
+        // `k => seen.insert(k, v)` hands back an `Option`, which would make the
+        // arms disagree with `else => {}`, so its value is dropped with `;`.
         if plain && statements {
             out.push("{ ")
             host.expr(walk, out, body, depth, body_flow, scope)

@@ -416,8 +416,8 @@ fn classify(expr: ref Expr, interner: ref winnow_grammar::InternerContext, holes
         Expr::SafeField { base, .. } => keep_named(base, interner, context, uses),
         Expr::Try(value, _) => keep_named(value, interner, context, uses),
         // **`p with { .. }` builds a value out of the whole of `p`** (Part I
-        // 4.1): `..p` moves it below, so `p` stays a value (lowering-defects
-        // D1). A field the literal names is a part like any other.
+        // 4.1): `..p` moves it below, so `p` stays a value
+        // (`defects_found_running::a_with_over_a_by_value_parameter_runs`). A field the literal names is a part like any other.
         Expr::With { base, fields, .. } => {
             keep_named(base, interner, context, uses)
             for field in fields {

@@ -1862,8 +1862,7 @@ fn prover_claim_ran(mut walk: ProverWalk, read: ref collections::BTreeSet[String
     let mut out = ProverRan { held: held.clone(), findings: [] }
     let mut values: Vec[String] = []
     for call in read {
-        let site = walk.state.call_sites[call] ?? continue
-        let text = written_of(site)
+        let text = written_of(walk.state.call_sites[call] ?? continue)
         let value = walk.state.pinned[call]
         if value != null {
             values.push(f"`{text}` is {value ?? 0}, run while the program was built")
@@ -1887,8 +1886,7 @@ fn prover_claim_ran(mut walk: ProverWalk, read: ref collections::BTreeSet[String
         if walk.state.pinned[call] != null {
             continue
         }
-        let site = walk.state.call_sites[call] ?? continue
-        let text = written_of(site)
+        let text = written_of(walk.state.call_sites[call] ?? continue)
         let stop = walk.state.stopped[call]
         if stop != null {
             let words_said = (stop ?? "").clone()

@@ -51654,8 +51654,7 @@ fn prover_claim_ran(walk: &mut ProverWalk, read: &collections::BTreeSet<String>,
     let mut out = ProverRan { held: held.clone(), findings: vec![] };
     let mut values: Vec<String> = vec![];
     for call in read.iter() {
-        let site = match *nikaia_std::index::get(&walk.state.call_sites, call) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        let text = written_of(&site);
+        let text = written_of(match *nikaia_std::index::get(&walk.state.call_sites, call) { Some(__nikaia_value) => __nikaia_value, None => continue });
         let value = *nikaia_std::index::get(&walk.state.pinned, call);
         if value.is_some() { values.push(format!("`{}` is {}, run while the program was built", text, nikaia_std::index::or(value, || 0))); }
     }
@@ -51670,8 +51669,7 @@ fn prover_claim_ran(walk: &mut ProverWalk, read: &collections::BTreeSet<String>,
     let mut why = open.to_owned();
     for call in read.iter() {
         if (*nikaia_std::index::get(&walk.state.pinned, call)).is_some() { continue; }
-        let site = match *nikaia_std::index::get(&walk.state.call_sites, call) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        let text = written_of(&site);
+        let text = written_of(match *nikaia_std::index::get(&walk.state.call_sites, call) { Some(__nikaia_value) => __nikaia_value, None => continue });
         let stop = *nikaia_std::index::get(&walk.state.stopped, call);
         if stop.is_some() {
             let words_said = nikaia_std::index::or(stop, || "").to_owned();
