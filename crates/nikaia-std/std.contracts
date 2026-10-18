@@ -3515,6 +3515,22 @@ sync = true
 touches = []
 signature = "(self: ref String, at: i64) -> (ref(self) String, ref(self) String)"
 
+# The text cut in two at the first `sep`: what stands before it and what after
+# it, both views into it, the separator in neither; nothing where `sep` does
+# not occur (ADR-364).
+[fn."str::split_once"]
+pub = true
+sync = true
+touches = []
+signature = "(self: ref String, sep: ?) -> (ref(self) String, ref(self) String)?"
+
+# The text cut in two at the last `sep`, as `split_once` cuts it at the first.
+[fn."str::rsplit_once"]
+pub = true
+sync = true
+touches = []
+signature = "(self: ref String, sep: ?) -> (ref(self) String, ref(self) String)?"
+
 # **Each place the pattern stands, as a view of it** (#548). Nothing described
 # it, so its `count()` came through as Rust's `usize` and `0 - n` stopped the
 # program where a length is an `i64` (Part I 2.2).

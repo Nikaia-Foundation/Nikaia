@@ -1,7 +1,7 @@
 //! **The reductions and searches over a sequence, and two cuts of text**
 //! (`docs/selfhosting-gaps.md`, LANGUAGE): `any`, `all`, `find`, `position`,
 //! `filter_map`, `last`, `take_while`, `skip_while`, `max`, `min`, `sum`,
-//! `min_by_key`, `max_by_key` and `flat_map` on `Seq`, `rsplit` and `split_at` on text. Each is run with `nikaia run`, with
+//! `min_by_key`, `max_by_key` and `flat_map` on `Seq`, `rsplit`, `split_at`, `split_once` and `rsplit_once` on text. Each is run with `nikaia run`, with
 //! its empty case, and the three that stop early show where they stopped.
 mod common;
 
@@ -142,6 +142,35 @@ fn split_at_cuts_the_text_in_two() {
         "    let name = \"a::b::c\"\n    let (before, from) = name.split_at(3)\n    let (empty, all) = name.split_at(0)\n    println(f\"{before}|{from}|{empty}|{all}\")",
     );
     assert_eq!(out, "a::|b::c||a::b::c\n");
+}
+
+/// **`split_once` and `rsplit_once` cut at the first and the last
+/// separator** (ADR-364, #648): two views of the text as a `(A, B)?`, `null`
+/// where the separator does not occur, an empty half where it stands at an
+/// end; taken by `?? return`, `??` with a tuple, a `match` and `?.`.
+#[test]
+fn split_once_and_rsplit_once_cut_at_one_separator() {
+    let out = run(
+        "text-split-once",
+        "    let line = \"key=value=x\"\n\
+         \x20   let (k, v) = line.split_once(\"=\") ?? (\"\", \"\")\n\
+         \x20   let (a, b) = line.rsplit_once(\"=\") ?? (\"\", \"\")\n\
+         \x20   println(f\"{k}|{v} {a}|{b}\")\n\
+         \x20   match \"plain\".split_once(\"=\") {\n\
+         \x20       null => println(\"none\"),\n\
+         \x20       (x, y) => println(f\"{x}{y}\"),\n\
+         \x20   }\n\
+         \x20   println(f\"{\"plain\".rsplit_once(\"=\") == null}\")\n\
+         \x20   let p = \"=end\".split_once(\"=\")\n\
+         \x20   let q = \"end=\".rsplit_once(\"=\")\n\
+         \x20   println(f\"[{p?.0 ?? \"-\"}][{p?.1 ?? \"-\"}] [{q?.0 ?? \"-\"}][{q?.1 ?? \"-\"}]\")\n\
+         \x20   let (m, n) = \"std::io::Read\".rsplit_once(\"::\") ?? return\n\
+         \x20   println(f\"{m} {n} {\"a::b\".split_once(\"::\")?.1?.len() ?? 0}\")",
+    );
+    assert_eq!(
+        out,
+        "key|value=x key=value|x\nnone\ntrue\n[][end] [end][]\nstd::io Read 1\n"
+    );
 }
 
 #[test]
