@@ -733,19 +733,107 @@ fn a_broken_hole_is_refused_by_the_parser() {
     assert!(stray.contains("app.nika:1:25"), "{stray}");
 }
 
-/// **A `'…'` is a byte only where it is one ASCII character** (ADR-320,
-/// Part I 2.6): `'a'` where a `u8` is wanted is written `b'a'`, and `'é'` there
-/// is refused rather than handed to the language below as a mismatch.
+/// **A `'…'` is a byte only where it can be one** (ADR-320 D8, Part I 2.6):
+/// `'a'` where a `u8` is wanted is written `b'a'`, and `'é'` there is refused
+/// (`NK1212`) with the text literal's bytes, rather than handed on as a
+/// mismatch of types.
 #[test]
 fn a_character_literal_is_a_byte_only_when_it_is_ascii() {
     let rust = emit("fn main() {\n    let a: u8 = 'a'\n    println(f\"{a}\")\n}\n");
     assert!(rust.contains("b'a'"), "{rust}");
+    let rust = emit("fn main() {\n    let a: scalar = 'a'\n    println(f\"{a}\")\n}\n");
+    assert!(rust.contains("'a'") && !rust.contains("b'a'"), "{rust}");
 
-    let parsed = parse_to_ast("fn main() {\n    let e: u8 = 'é'\n    println(f\"{e}\")\n}\n")
-        .expect("the source parses");
-    let own = nikaia::contracts::Ledger::infer(&parsed);
-    let library =
-        nikaia::contracts::Ledger::parse(nikaia::contracts::STD).expect("std's ledger parses");
-    let found = nikaia::check::check_program(&parsed, &own, &library, &Default::default()).findings;
-    assert!(found.iter().any(|f| f.code == "NK1103"), "{found:#?}");
+    let found = findings("fn main() {\n    let e: u8 = 'é'\n    println(f\"{e}\")\n}\n");
+    assert!(!found.iter().any(|f| f.code == "NK1103"), "{found:#?}");
+    let refused: Vec<_> = found.iter().filter(|f| f.code == "NK1212").collect();
+    assert_eq!(refused.len(), 1, "{found:#?}");
+    assert!(
+        refused[0].message.contains("2 bytes"),
+        "{}",
+        refused[0].message
+    );
+    let help = refused[0].help.as_deref().unwrap_or_default();
+    assert!(help.contains("\"é\".bytes"), "{help}");
+}
+
+/// The errors a source raises, by code.
+fn codes(source: &str) -> Vec<String> {
+    findings(source)
+        .into_iter()
+        .filter(|f| f.severity != nikaia::check::Severity::Warning)
+        .map(|f| f.code)
+        .collect()
+}
+
+/// **`'\xNN'` above `\x7F` is only a `u8`** (ADR-320 D8): read by the
+/// lexer, written `b'\xff'` where a byte is wanted, and refused (`NK1212`)
+/// where it is a `scalar` - by an annotation or because no use typed it -
+/// with the `\u{…}` of that number and the `u8` annotation.
+#[test]
+fn a_high_byte_escape_is_only_a_byte() {
+    let source = "fn main() {\n    let b: u8 = '\\xFF'\n    println(f\"{b}\")\n}\n";
+    assert!(codes(source).is_empty(), "{:#?}", findings(source));
+    assert!(emit(source).contains("b'\\xff'"), "{}", emit(source));
+    // Below `\x80` it is either.
+    let either = "fn main() {\n    let b: u8 = '\\x41'\n    let s: scalar = '\\x41'\n    println(f\"{b}{s}\")\n}\n";
+    assert!(codes(either).is_empty(), "{:#?}", findings(either));
+    assert!(emit(either).contains("b'A'"), "{}", emit(either));
+
+    for (source, annotation) in [
+        (
+            "fn main() {\n    let s: scalar = '\\xFF'\n    println(f\"{s}\")\n}\n",
+            "let b: u8 = '\\xFF'",
+        ),
+        (
+            "fn main() {\n    let s = '\\xff'\n    println(f\"{s}\")\n}\n",
+            "let s: u8",
+        ),
+    ] {
+        let found = findings(source);
+        let refused: Vec<_> = found
+            .iter()
+            .filter(|f| f.severity != nikaia::check::Severity::Warning)
+            .collect();
+        assert_eq!(refused.len(), 1, "{found:#?}");
+        assert_eq!(refused[0].code, "NK1212", "{found:#?}");
+        let help = refused[0].help.as_deref().unwrap_or_default();
+        assert!(help.contains("'\\u{ff}'"), "{help}");
+        assert!(help.contains(annotation), "{help}");
+    }
+}
+
+/// **A `let` of a `'…'` is typed by its later uses** (ADR-320 D8, as a number
+/// literal's binding is, ADR-285 D23): a byte where every use asks one, a
+/// `scalar` where none does, and refused (`NK1200`) where they ask both.
+#[test]
+fn a_character_binding_is_typed_by_its_uses() {
+    let bytes = "fn main() {\n    let line = \"ab;cd\"\n    let c = ';'\n    let at = line.bytes.find(c) ?? -1\n    let first = line.bytes[0] == c\n    println(f\"{at} {first}\")\n}\n";
+    assert!(codes(bytes).is_empty(), "{:#?}", findings(bytes));
+    assert!(emit(bytes).contains("let c = b';'"), "{}", emit(bytes));
+    let param = "fn main() {\n    let c = 'a'\n    println(f\"{half(c)}\")\n}\nfn half(b: u8) -> u8 {\n    return b / 2\n}\n";
+    assert!(codes(param).is_empty(), "{:#?}", findings(param));
+    assert!(emit(param).contains("let c = b'a'"), "{}", emit(param));
+    let scalar = "fn main() {\n    let c = 'a'\n    println(f\"{c}\")\n}\n";
+    assert!(codes(scalar).is_empty(), "{:#?}", findings(scalar));
+    assert!(emit(scalar).contains("let c = 'a'"), "{}", emit(scalar));
+    // A high byte bound by a `let` and used as a byte is one.
+    let high = "fn main() {\n    let c = '\\xFF'\n    let b: u8 = c\n    println(f\"{b}\")\n}\n";
+    assert!(codes(high).is_empty(), "{:#?}", findings(high));
+
+    let both = "fn main() {\n    let line = \"ab;cd\"\n    let c = ';'\n    let at = line.bytes.find(c) ?? -1\n    println(f\"{at} {c}\")\n}\n";
+    let found = findings(both);
+    let refused: Vec<_> = found
+        .iter()
+        .filter(|f| f.severity != nikaia::check::Severity::Warning)
+        .collect();
+    assert_eq!(refused.len(), 1, "{found:#?}");
+    assert_eq!(refused[0].code, "NK1200", "{found:#?}");
+    assert!(
+        refused[0].message.contains("`u8`") && refused[0].message.contains("`scalar`"),
+        "{}",
+        refused[0].message
+    );
+    let help = refused[0].help.as_deref().unwrap_or_default();
+    assert!(help.contains("let c: u8 = ';'"), "{help}");
 }

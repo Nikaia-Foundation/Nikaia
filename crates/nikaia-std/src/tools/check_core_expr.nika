@@ -99,6 +99,19 @@ pub fn check_core_expr[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     return ty
 }
 
+/// **A read of a `let` of a `'…'` its uses type** (ADR-320 D8): each read is
+/// a `scalar` unless a use that wants a `u8` takes it.
+fn check_core_expr_an_open_char_read(mut state: CheckState, expr: ref Expr, name: ref String, span: ref Span) sync {
+    if state.flow.open_chars.len() == 0 {
+        return
+    }
+    let local = state.binding(name) ?? return
+    let found = state.flow.open_chars[local.id] ?? return
+    let mut open = found.clone()
+    open.reads.insert(id_of(expr) as i64, span.clone())
+    state.flow.open_chars.insert(local.id, open)
+}
+
 /// A call, a method call or a struct literal: where a value is made.
 fn check_core_expr_makes_a_value(expr: ref Expr) -> bool {
     return match expr {
@@ -201,8 +214,19 @@ pub fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref Check
         Expr::LitStr { text, .. } => check_core_expr_text(state, world, host, text, span),
         Expr::LitInterpolated { parts, .. } => check_core_expr_interpolated(state, world, host, expr, parts, span),
         Expr::LitChar(text, _) => {
+            // **`'\xNN'` above `\x7F` is only a `u8`** (ADR-320 D8): a use
+            // that wants one makes it a byte, and one left a `scalar` is
+            // refused once the body is walked.
+            if a_high_byte(text) != null {
+                state.flow.high_bytes.insert(id_of(expr) as i64, (text.clone(), span.clone()))
+                return check_core_expr_named("scalar")
+            }
             check_core_expr_escapes(state, host, text, span)
             check_core_expr_char_scalars(state, host, text, span)
+            let value = host.decoded(text) ?? ""
+            if value.chars().count() == 1 && value.len() > 1 {
+                state.flow.wide_chars.insert(id_of(expr) as i64, (value.len(), span.clone()))
+            }
             check_core_expr_named("scalar")
         },
         Expr::LitBool(_, _) => check_core_expr_named("bool"),
@@ -305,6 +329,7 @@ fn check_core_expr_variable[H: CheckHost](mut state: CheckState, world: ref Chec
     if found != null {
         let ty: Ty = found ?? Ty::Unknown
         state.a_read(expr, name, span)
+        check_core_expr_an_open_char_read(state, expr, name, span)
         state.a_sequence_is_taken(name, ty, span)
         // What a test proves not `null` is read as the `T` (ADR-350).
         let nullable = match ty {

@@ -43,6 +43,7 @@ impl CheckState {
     /// **Every open number of a body, decided** once the body has been walked
     /// (ADR-285 D24, D25, D27).
     pub fn numbers_typed_by_their_uses(ref mut self) sync {
+        self.chars_typed_by_their_uses()
         if self.flow.open_numbers.len() == 0 {
             return
         }

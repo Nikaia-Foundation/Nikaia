@@ -14543,6 +14543,17 @@ pub fn check_core_expr<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
     ty
 }
 
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_expr_an_open_char_read(state: &mut CheckState, expr: &Expr, name: &str, span: &Span) {
+    if state.flow.open_chars.is_empty() { return; }
+    let local = match state.binding(name) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let found = match *nikaia_std::index::get(&state.flow.open_chars, &local.id) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let mut open = found.clone();
+    open.reads.insert(id_of(expr) as i64, span.clone());
+    state.flow.open_chars.insert(local.id, open);
+}
+
 fn check_core_expr_makes_a_value(expr: &Expr) -> bool { matches!(expr, Expr::Call { .. } | Expr::MethodCall { .. } | Expr::SafeMethod { .. } | Expr::StructLit { .. }) }
 
 fn check_core_expr_a_map_read(world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr) -> bool {
@@ -14627,8 +14638,14 @@ pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         Expr::LitStr { text, .. } => check_core_expr_text(state, world, host, text, span),
         Expr::LitInterpolated { parts, .. } => check_core_expr_interpolated(state, world, host, expr, parts, span),
         Expr::LitChar(text, _) => {
+            if a_high_byte(text).is_some() {
+                state.flow.high_bytes.insert(id_of(expr) as i64, (text.to_owned(), span.clone()));
+                return check_core_expr_named("scalar");
+            }
             check_core_expr_escapes(state, host, text, span);
             check_core_expr_char_scalars(state, host, text, span);
+            let value = nikaia_std::index::or(host.decoded(text), || "".into());
+            if (value.chars().count() as i64) == 1 && value.len() > 1 { state.flow.wide_chars.insert(id_of(expr) as i64, (value.len() as i64, span.clone())); }
             check_core_expr_named("scalar")
         },
         Expr::LitBool(_, _) => check_core_expr_named("bool"),
@@ -14722,6 +14739,7 @@ fn check_core_expr_variable<H: CheckHost>(state: &mut CheckState, world: &CheckW
     if found.is_some() {
         let ty: Ty = nikaia_std::index::or(found, || Ty::Unknown);
         state.a_read(expr, &name, span);
+        check_core_expr_an_open_char_read(state, expr, &name, span);
         state.a_sequence_is_taken(&name, &ty, span);
         let nullable = matches!(ty, Ty::Nullable(_));
         if !nullable || state.reading_only { return ty; }
@@ -18289,6 +18307,18 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     if tasks > 0 { state.task_bindings[nikaia_std::index::at(tasks - 1)].push((name.to_owned(), bound.clone(), span.start as i64)); }
     let id = state.a_new_binding();
     if bytes_view { state.text_bytes_lets.insert(id); }
+    if ty.is_none() && !mutable {
+        match value {
+            Expr::LitChar(written, _) => {
+                if literal_is_a_byte(written) {
+                    let literal = id_of(value) as i64;
+                    state.flow.high_bytes.remove(&literal);
+                    state.flow.open_chars.insert(id, CheckOpenChar { name: name.to_owned(), written: written.to_owned(), literal, at: span.clone(), reads: collections::BTreeMap::new(), bytes: collections::BTreeSet::new() });
+                }
+            },
+            _ => { },
+        }
+    }
     if followed.is_some() { state.flow.followed.insert(id, match followed { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_unit() }); }
     if element_at.is_some() {
         state.flow.open_elements.insert(id, nikaia_std::index::or(element_at, || 0));
@@ -20850,6 +20880,16 @@ pub struct CheckOpenNumber {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CheckOpenChar {
+    pub name: String,
+    pub written: String,
+    pub literal: i64,
+    pub at: Span,
+    pub reads: collections::BTreeMap<i64, Span>,
+    pub bytes: collections::BTreeSet<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CheckUnsignedSlot {
     pub node: i64,
     pub found: Ty,
@@ -20903,6 +20943,10 @@ pub struct CheckFlow {
     pub text_paths: collections::BTreeSet<i64>,
     pub empty_lists: collections::BTreeMap<i64, (String, Span)>,
     pub open_numbers: collections::BTreeMap<i64, CheckOpenNumber>,
+    pub open_chars: collections::BTreeMap<i64, CheckOpenChar>,
+    pub high_bytes: collections::BTreeMap<i64, (String, Span)>,
+    pub wide_chars: collections::BTreeMap<i64, (i64, Span)>,
+    pub chars_refused: collections::BTreeSet<i64>,
     pub open_elements: collections::BTreeMap<i64, i64>,
     pub open_walks: collections::BTreeMap<i64, i64>,
     pub open_params: collections::BTreeMap<String, i64>,
@@ -20928,7 +20972,7 @@ pub struct CheckFlow {
 }
 
 impl CheckFlow {
-    pub fn start(computes: bool, harvesting: bool) -> CheckFlow { CheckFlow { raised: (None, None), computes, option_values: Vec::new(), option_literals: Vec::new(), unrolling: None, harvesting, inside_a_comptime: false, literal_receivers: Vec::new(), expected_either: false, field_either: false, throwing: false, caught: false, caught_several: false, caught_one: None, guarded: None, loops: 0, barrier: None, fallible_methods: collections::BTreeSet::new(), opaque_methods: collections::BTreeSet::new(), pausing_methods: collections::BTreeSet::new(), settled_methods: collections::BTreeSet::new(), paused_args: Vec::new(), next_choice: 0, read_index: collections::BTreeMap::new(), pending_coalesces: Vec::new(), writing_index: false, read_a_map: false, map_read_sites: collections::BTreeSet::new(), map_views: collections::BTreeSet::new(), last_resolved: None, receiver_name: None, receiver_from_text: false, text_paths: collections::BTreeSet::new(), empty_lists: collections::BTreeMap::new(), open_numbers: collections::BTreeMap::new(), open_elements: collections::BTreeMap::new(), open_walks: collections::BTreeMap::new(), open_params: collections::BTreeMap::new(), walk_open: None, walk_view: false, lent_walks: collections::BTreeSet::new(), lent_params: collections::BTreeSet::new(), walk_lent: false, lambda_expected: None, open_calls: collections::BTreeMap::new(), unknown_bound: collections::BTreeSet::new(), unknown_said: 0, list_constants: collections::BTreeMap::new(), overflowed: collections::BTreeSet::new(), followed: collections::BTreeMap::new(), reaching: None, reached: None, grown_text: collections::BTreeSet::new(), widening_casts: collections::BTreeSet::new(), unsigned_slots: collections::BTreeMap::new(), at_a_write_door: false, pushed_into: None } }
+    pub fn start(computes: bool, harvesting: bool) -> CheckFlow { CheckFlow { raised: (None, None), computes, option_values: Vec::new(), option_literals: Vec::new(), unrolling: None, harvesting, inside_a_comptime: false, literal_receivers: Vec::new(), expected_either: false, field_either: false, throwing: false, caught: false, caught_several: false, caught_one: None, guarded: None, loops: 0, barrier: None, fallible_methods: collections::BTreeSet::new(), opaque_methods: collections::BTreeSet::new(), pausing_methods: collections::BTreeSet::new(), settled_methods: collections::BTreeSet::new(), paused_args: Vec::new(), next_choice: 0, read_index: collections::BTreeMap::new(), pending_coalesces: Vec::new(), writing_index: false, read_a_map: false, map_read_sites: collections::BTreeSet::new(), map_views: collections::BTreeSet::new(), last_resolved: None, receiver_name: None, receiver_from_text: false, text_paths: collections::BTreeSet::new(), empty_lists: collections::BTreeMap::new(), open_numbers: collections::BTreeMap::new(), open_chars: collections::BTreeMap::new(), high_bytes: collections::BTreeMap::new(), wide_chars: collections::BTreeMap::new(), chars_refused: collections::BTreeSet::new(), open_elements: collections::BTreeMap::new(), open_walks: collections::BTreeMap::new(), open_params: collections::BTreeMap::new(), walk_open: None, walk_view: false, lent_walks: collections::BTreeSet::new(), lent_params: collections::BTreeSet::new(), walk_lent: false, lambda_expected: None, open_calls: collections::BTreeMap::new(), unknown_bound: collections::BTreeSet::new(), unknown_said: 0, list_constants: collections::BTreeMap::new(), overflowed: collections::BTreeSet::new(), followed: collections::BTreeMap::new(), reaching: None, reached: None, grown_text: collections::BTreeSet::new(), widening_casts: collections::BTreeSet::new(), unsigned_slots: collections::BTreeMap::new(), at_a_write_door: false, pushed_into: None } }
 }
 
 
@@ -24637,6 +24681,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn numbers_typed_by_their_uses(&mut self) {
+        self.chars_typed_by_their_uses();
         if self.flow.open_numbers.is_empty() { return; }
         let mut groups: collections::BTreeMap<i64, Vec<(i64, CheckOpenNumber)>> = collections::BTreeMap::new();
         for (at, number) in self.flow.open_numbers.iter() {
@@ -28308,6 +28353,7 @@ fn ascii_scalar(n: i64) -> Option<scalar> {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn literal_is_a_byte(written: &str) -> bool {
+    if a_high_byte(written).is_some() { return true; }
     let text = match decoded(written, &|n| { ascii_scalar(n) }) { Some(__nikaia_value) => __nikaia_value, None => return false };
     (text.chars().count() as i64) == 1 && text.len() == 1
 }
@@ -28316,7 +28362,7 @@ pub fn literal_is_a_byte(written: &str) -> bool {
 // this was written - see `contracts::sync`.
 pub fn check_byte_literal(written: &str) -> String {
     let text = nikaia_std::index::or(decoded(written, &|n| { ascii_scalar(n) }), || "".into());
-    let mut byte: i64 = -1;
+    let mut byte: i64 = nikaia_std::index::or(a_high_byte(written), || -1);
     for b in text.bytes() { if byte < 0 { byte = b as i64; } }
     if byte < 0 { byte = 0; }
     let c = (u8::try_from(byte).unwrap_or_else(|_| panic!("the value does not fit in an `u8`"))) as scalar;
@@ -28439,6 +28485,36 @@ impl CheckState {
                 };
                 if u8_wanted && literal_is_a_byte(written) {
                     self.facts.byte_literals.insert(text_key(value));
+                    return Some(Ty::Named { name: String::from("u8"), args: vec![], view: false });
+                }
+                let key = text_key(value);
+                if u8_wanted && self.flow.wide_chars.contains_key(&key) {
+                    if !self.flow.chars_refused.contains(&key) {
+                        self.flow.chars_refused.insert(key);
+                        let wide = nikaia_std::index::or(match *nikaia_std::index::get(&self.flow.wide_chars, &key) {
+                            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                            None => None,
+                        }, || (2, Span { start: 0, end: 0 }.into()));
+                        let length = wide.0;
+                        let note = "A `'…'` is a `u8` only where it is one ASCII character or a `'\\xNN'` (Part I 2.6); in UTF-8 any other scalar is two to four bytes.";
+                        self.findings.push(check_refusal("NK1212", &wide.1, format!("`'{}'` is a scalar of {} bytes, and a `u8` is one.", written, length), vec![note.to_owned()], Some(format!("Its bytes are a text literal's: `\"{}\".bytes`; where one character is meant, ask for a `scalar`.", written))));
+                    }
+                    return Some(Ty::Named { name: String::from("u8"), args: vec![], view: false });
+                }
+            },
+            Expr::Variable(symbol, _) => {
+                let symbol = *symbol;
+                let u8_wanted = match want {
+                    Ty::Named { name, args, view } => { let view = *view; !view && name == "u8" && args.is_empty() },
+                    _ => false,
+                };
+                if u8_wanted {
+                    let name = world.words.resolve(symbol).to_owned();
+                    let local = match self.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                    let found = match *nikaia_std::index::get(&self.flow.open_chars, &local.id) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                    let mut open = found.clone();
+                    open.bytes.insert(text_key(value));
+                    self.flow.open_chars.insert(local.id, open);
                     return Some(Ty::Named { name: String::from("u8"), args: vec![], view: false });
                 }
             },
@@ -28668,6 +28744,52 @@ fn refs_of(items: &[Expr]) -> Vec<&Expr> {
     let mut out: Vec<&Expr> = vec![];
     for item in items.iter() { out.push(item); }
     out
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_texts_a_byte_as_a_scalar(written: &str, name: Option<String>, span: &Span) -> CheckFinding {
+    let value = nikaia_std::index::or(a_high_byte(written), || 128);
+    let hex = hex_of(value);
+    let note = "Above `\\x7F` a `'\\xNN'` names a byte, which is a `u8` and no `scalar`: the scalar of that number is another character, two bytes in UTF-8 (Part I 2.6).";
+    let mut annotated = format!("`let b: u8 = '{}'`", written);
+    if name.is_some() { annotated = format!("`let {}: u8 = '{}'`", nikaia_std::index::or(name.as_deref(), || ""), written); }
+    check_refusal("NK1212", span, format!("`'{}'` is the byte {}, and it is used as a `scalar`.", written, value), vec![note.to_owned()], Some(format!("For the scalar U+00{}, write `'\\u{{{}}}'`; for the byte, declare it a `u8`: {}.", hex.to_uppercase(), hex, annotated)))
+}
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn chars_typed_by_their_uses(&mut self) {
+        for (_, open) in self.flow.open_chars.iter() {
+            let mut first_byte: Option<Span> = None;
+            let mut first_scalar: Option<Span> = None;
+            for (read, at) in open.reads.iter() {
+                let read = nikaia_std::num::value(read);let at = *at;
+                if open.bytes.contains(&read) { if first_byte.is_none() || nikaia_std::index::or(first_byte.as_ref().map(|__nikaia_it| __nikaia_it.start), || 0) > at.start { first_byte = Some(at.clone()); } } else if first_scalar.is_none() || nikaia_std::index::or(first_scalar.as_ref().map(|__nikaia_it| __nikaia_it.start), || 0) > at.start { first_scalar = Some(at.clone()); }
+            }
+            if first_byte.is_some() && first_scalar.is_some() {
+                let byte_at = nikaia_std::index::or(first_byte, || open.at.clone().into());
+                let scalar_at = nikaia_std::index::or(first_scalar, || open.at.clone().into());
+                let mut first = "scalar";
+                let mut second = "u8";
+                let mut later = byte_at.clone();
+                if byte_at.start < scalar_at.start {
+                    first = "u8";
+                    second = "scalar";
+                    later = scalar_at.clone();
+                }
+                let note = "A `'…'` takes its type from how it's used, `u8` or `scalar`, and these uses want both.";
+                self.findings.push(check_refusal("NK1200", &later, format!("You're using `{}` as {} `{}` and here as {} `{}`.", open.name, an_or_a(first), first, an_or_a(second), second), vec![note.to_owned()], Some(format!("Declare its type, `let {}: u8 = '{}'`, and convert with `as` where the other one is needed.", open.name, open.written))));
+            } else if first_byte.is_some() { self.facts.byte_literals.insert(open.literal); } else if a_high_byte(&open.written).is_some() { self.findings.push(check_texts_a_byte_as_a_scalar(&open.written, Some(open.name.to_owned()), &open.at)); }
+        }
+        self.flow.open_chars = collections::BTreeMap::new();
+        for (literal, held) in self.flow.high_bytes.iter() {
+            let literal = nikaia_std::num::value(literal);
+            if !self.facts.byte_literals.contains(&literal) { self.findings.push(check_texts_a_byte_as_a_scalar(&held.0, None, &held.1)); }
+        }
+        self.flow.high_bytes = collections::BTreeMap::new();
+    }
 }
 
 
@@ -39268,6 +39390,18 @@ fn one_escape(c: &[scalar], at: i64, char_of: &impl Fn(i64) -> Option<scalar>) -
     if first == 'u' { return a_character(c, at + 1, &written, char_of); }
     let value = match named_escape(first) { Some(__nikaia_value) => __nikaia_value, None => return not_an_escape(&written, "no escape starts with that character") };
     EscapeRead::Means { value, next: at + 1 }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn a_high_byte(literal: &str) -> Option<i64> {
+    let c: Vec<scalar> = nikaia_std::list::chars(literal.chars());
+    if c.len() != 4 || *nikaia_std::index::get(&c, 0) != '\\' || *nikaia_std::index::get(&c, 1) != 'x' { return None; }
+    let high = match hex_digit(*nikaia_std::index::get(&c, 2)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let low = match hex_digit(*nikaia_std::index::get(&c, 3)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let value = high * 16 + low;
+    if value < 128 { return None; }
+    Some(value)
 }
 
 fn a_byte(c: &[scalar], from: i64, so_far: &str, char_of: &impl Fn(i64) -> Option<scalar>) -> EscapeRead {
@@ -63472,7 +63606,7 @@ pub mod check_fallible {
 pub mod check_fields {}
 pub mod check_flow {
     #[allow(unused_imports)]
-    pub use super::{CheckConstant, CheckOpenNumber, CheckUnsignedSlot, CheckUnrolling, CheckFlow};
+    pub use super::{CheckConstant, CheckOpenNumber, CheckOpenChar, CheckUnsignedSlot, CheckUnrolling, CheckFlow};
 }
 pub mod check_grammar {}
 pub mod check_host {
@@ -63739,7 +63873,7 @@ pub mod emit_walk {
 }
 pub mod escapes {
     #[allow(unused_imports)]
-    pub use super::{NotAnEscape, an_escape_nothing_names, decoded, as_a_literal, hex_of};
+    pub use super::{NotAnEscape, an_escape_nothing_names, decoded, as_a_literal, a_high_byte, hex_of};
 }
 pub mod findings {
     #[allow(unused_imports)]

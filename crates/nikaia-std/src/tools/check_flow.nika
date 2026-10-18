@@ -57,6 +57,23 @@ pub struct CheckOpenNumber {
     pub typed: bool,
 }
 
+/// **A `'…'` bound by a `let` that its uses type** (ADR-320 D8, as a number
+/// literal's binding is, ADR-285 D23): one ASCII character or a `'\xNN'`.
+pub struct CheckOpenChar {
+    /// The name, for the message.
+    pub name: String,
+    /// The literal as written, without its quotes.
+    pub written: String,
+    /// The literal's node, which is written as a byte where the uses ask one.
+    pub literal: i64,
+    /// The `let`, where a refusal of the literal points.
+    pub at: Span,
+    /// Every read of the name, by the read's node, with its statement.
+    pub reads: collections::BTreeMap[i64, Span],
+    /// The reads a use took as a `u8`; every other read is a `scalar`.
+    pub bytes: collections::BTreeSet[i64],
+}
+
 /// A signed value put where an unsigned type is stated, until the walk proves
 /// it `>= 0` or refuses it.
 pub struct CheckUnsignedSlot {
@@ -155,6 +172,17 @@ pub struct CheckFlow {
     pub empty_lists: collections::BTreeMap[i64, (String, Span)],
     /// The numbers whose uses decide their type, by the `let` (ADR-285).
     pub open_numbers: collections::BTreeMap[i64, CheckOpenNumber],
+    /// The `'…'`s a `let` binds whose uses decide `u8` or `scalar`, by the
+    /// binding (ADR-320 D8).
+    pub open_chars: collections::BTreeMap[i64, CheckOpenChar],
+    /// The `'\xNN'` above `\x7F` not bound by a `let`, by node: a use that
+    /// wants a `u8` makes each a byte, and one left a `scalar` is `NK1212`.
+    pub high_bytes: collections::BTreeMap[i64, (String, Span)],
+    /// The `'…'` of one scalar that is not ASCII, by node, and its length in
+    /// bytes and its statement: where a `u8` is wanted it is `NK1212`.
+    pub wide_chars: collections::BTreeMap[i64, (i64, Span)],
+    /// The `'…'`s already refused where a `u8` is wanted, said once.
+    pub chars_refused: collections::BTreeSet[i64],
     /// A list written in number literals: the binding and the entry of
     /// `open_numbers` it names (ADR-285 D34).
     pub open_elements: collections::BTreeMap[i64, i64],
@@ -249,6 +277,10 @@ impl CheckFlow {
             text_paths: collections::BTreeSet(),
             empty_lists: collections::BTreeMap(),
             open_numbers: collections::BTreeMap(),
+            open_chars: collections::BTreeMap(),
+            high_bytes: collections::BTreeMap(),
+            wide_chars: collections::BTreeMap(),
+            chars_refused: collections::BTreeSet(),
             open_elements: collections::BTreeMap(),
             open_walks: collections::BTreeMap(),
             open_params: collections::BTreeMap(),

@@ -543,6 +543,20 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
     if bytes_view {
         state.text_bytes_lets.insert(id)
     }
+    // **A `'…'` nothing typed is typed by its uses** (ADR-320 D8, as a
+    // number is, ADR-285 D23): a `u8` where they ask one.
+    if ty == null && !mutable {
+        match value {
+            Expr::LitChar(written, _) => {
+                if literal_is_a_byte(written) {
+                    let literal = id_of(value) as i64
+                    state.flow.high_bytes.remove(literal)
+                    state.flow.open_chars.insert(id, CheckOpenChar { name: name.clone(), written: written.clone(), literal: literal, at: span.clone(), reads: collections::BTreeMap(), bytes: collections::BTreeSet() })
+                }
+            },
+            else => {},
+        }
+    }
     if followed != null {
         state.flow.followed.insert(id, followed ?? return check_core_stmt_unit())
     }

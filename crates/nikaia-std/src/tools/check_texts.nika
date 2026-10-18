@@ -7,6 +7,8 @@
 // lists of tuples; a `'a'` where a `u8` is wanted is a byte. The facts go
 // straight into `CheckState.facts`.
 
+use std::collections
+
 fn text_key(expr: ref Expr) -> i64 sync {
     return id_of(expr) as i64
 }
@@ -20,8 +22,12 @@ fn ascii_scalar(n: i64) -> scalar? sync {
     return (n as u8) as scalar
 }
 
-/// Whether a `'…'` written as `written` is one ASCII byte.
+/// Whether a `'…'` written as `written` can be a byte: one ASCII character, or
+/// a `'\xNN'` above `\x7F`, which is only one.
 pub fn literal_is_a_byte(written: ref String) -> bool sync {
+    if a_high_byte(written) != null {
+        return true
+    }
     let text = decoded(written) fn(n) { ascii_scalar(n) } ?? return false
     return text.chars().count() == 1 && text.len() == 1
 }
@@ -30,7 +36,7 @@ pub fn literal_is_a_byte(written: ref String) -> bool sync {
 /// and `'` escaped and anything not printable as `\xNN`.
 pub fn check_byte_literal(written: ref String) -> String sync {
     let text = decoded(written) fn(n) { ascii_scalar(n) } ?? ""
-    let mut byte: i64 = -1
+    let mut byte: i64 = a_high_byte(written) ?? -1
     for b in text.bytes() {
         if byte < 0 {
             byte = b as i64
@@ -173,6 +179,36 @@ impl CheckState {
                 }
                 if u8_wanted && literal_is_a_byte(written) {
                     self.facts.byte_literals.insert(text_key(value))
+                    return Ty::Named { name: "u8", args: [], view: false }
+                }
+                // **A scalar that is not ASCII is several bytes** (ADR-320
+                // D8): `NK1212`, once, and the position's type stands.
+                let key = text_key(value)
+                if u8_wanted && self.flow.wide_chars.contains_key(key) {
+                    if !self.flow.chars_refused.contains(key) {
+                        self.flow.chars_refused.insert(key)
+                        let wide = self.flow.wide_chars[key]?.clone() ?? (2, Span { start: 0, end: 0 })
+                        let length = wide.0
+                        let note = "A `'…'` is a `u8` only where it is one ASCII character or a `'\\xNN'` (Part I 2.6); in UTF-8 any other scalar is two to four bytes."
+                        self.findings.push(check_refusal("NK1212", wide.1, f"`'{written}'` is a scalar of {length} bytes, and a `u8` is one.", [note.clone()], f"Its bytes are a text literal's: `\"{written}\".bytes`; where one character is meant, ask for a `scalar`."))
+                    }
+                    return Ty::Named { name: "u8", args: [], view: false }
+                }
+            },
+            Expr::Variable(symbol, _) => {
+                // **A `let` of a `'…'` is a byte where its use asks one**
+                // (ADR-320 D8, as a number's is, ADR-285 D23).
+                let u8_wanted = match want {
+                    Ty::Named { name, args, view } => !view && name == "u8" && args.len() == 0,
+                    else => false,
+                }
+                if u8_wanted {
+                    let name = world.words.resolve(symbol).clone()
+                    let local = self.binding(name) ?? return null
+                    let found = self.flow.open_chars[local.id] ?? return null
+                    let mut open = found.clone()
+                    open.bytes.insert(text_key(value))
+                    self.flow.open_chars.insert(local.id, open)
                     return Ty::Named { name: "u8", args: [], view: false }
                 }
             },
@@ -467,4 +503,65 @@ fn refs_of(items: ref Vec[Expr]) -> Vec[ref Expr] sync {
         out.push(item)
     }
     return out
+}
+
+/// `NK1212` for a `'\xNN'` above `\x7F` left a `scalar`: it names a byte, and
+/// the scalar of that number is written `\u{…}`. `name` is the `let` that
+/// binds it, where one does.
+fn check_texts_a_byte_as_a_scalar(written: ref String, name: String?, span: ref Span) -> CheckFinding sync {
+    let value = a_high_byte(written) ?? 128
+    let hex = hex_of(value)
+    let note = "Above `\\x7F` a `'\\xNN'` names a byte, which is a `u8` and no `scalar`: the scalar of that number is another character, two bytes in UTF-8 (Part I 2.6)."
+    let mut annotated = f"`let b: u8 = '{written}'`"
+    if name != null {
+        annotated = f"`let {name ?? ""}: u8 = '{written}'`"
+    }
+    return check_refusal("NK1212", span, f"`'{written}'` is the byte {value}, and it is used as a `scalar`.", [note.clone()], f"For the scalar U+00{hex.to_uppercase()}, write `'\\u{{{hex}}}'`; for the byte, declare it a `u8`: {annotated}.")
+}
+
+impl CheckState {
+    /// **The `'…'`s whose uses decide `u8` or `scalar`, decided once the body
+    /// is walked** (ADR-320 D8, as numbers are, ADR-285 D24): a `let` read
+    /// only where a `u8` is wanted is a byte, one read both ways is `NK1200`,
+    /// and a `'\xNN'` above `\x7F` that no use made a byte is `NK1212`.
+    pub fn chars_typed_by_their_uses(ref mut self) sync {
+        for (_, open) in self.flow.open_chars {
+            let mut first_byte: Span? = null
+            let mut first_scalar: Span? = null
+            for (read, at) in open.reads {
+                if open.bytes.contains(read) {
+                    if first_byte == null || (first_byte?.start ?? 0) > at.start {
+                        first_byte = at.clone()
+                    }
+                } else if first_scalar == null || (first_scalar?.start ?? 0) > at.start {
+                    first_scalar = at.clone()
+                }
+            }
+            if first_byte != null && first_scalar != null {
+                let byte_at = first_byte ?? open.at.clone()
+                let scalar_at = first_scalar ?? open.at.clone()
+                let mut first = "scalar"
+                let mut second = "u8"
+                let mut later = byte_at.clone()
+                if byte_at.start < scalar_at.start {
+                    first = "u8"
+                    second = "scalar"
+                    later = scalar_at.clone()
+                }
+                let note = "A `'…'` takes its type from how it's used, `u8` or `scalar`, and these uses want both."
+                self.findings.push(check_refusal("NK1200", later, f"You're using `{open.name}` as {an_or_a(first)} `{first}` and here as {an_or_a(second)} `{second}`.", [note.clone()], f"Declare its type, `let {open.name}: u8 = '{open.written}'`, and convert with `as` where the other one is needed."))
+            } else if first_byte != null {
+                self.facts.byte_literals.insert(open.literal)
+            } else if a_high_byte(open.written) != null {
+                self.findings.push(check_texts_a_byte_as_a_scalar(open.written, open.name.clone(), open.at))
+            }
+        }
+        self.flow.open_chars = collections::BTreeMap()
+        for (literal, held) in self.flow.high_bytes {
+            if !self.facts.byte_literals.contains(literal) {
+                self.findings.push(check_texts_a_byte_as_a_scalar(held.0, null, held.1))
+            }
+        }
+        self.flow.high_bytes = collections::BTreeMap()
+    }
 }

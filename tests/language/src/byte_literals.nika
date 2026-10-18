@@ -31,3 +31,26 @@ test "a byte of a bytes compares with a character literal" {
     assert(at == 2)
     assert(cut.len() == 2)
 }
+
+test "a high byte escape is a byte" {
+    let high: u8 = '\xFF'
+    let low: u8 = '\x41'
+    let letter: scalar = '\x41'
+    assert(high == 255)
+    assert(low == 65)
+    assert(letter == 'A')
+}
+
+test "a let of a character literal is a byte where its uses ask one" {
+    fs::write("byte_literals.txt", fs::Root::Anywhere, "ab;cd")
+    let bytes = fs::read("byte_literals.txt", fs::Root::Anywhere)
+    let sep = ';'
+    let letter = 'a'
+    let at = bytes.find(sep) ?? -1
+    assert(at == 2)
+    assert(bytes[0] == letter)
+    assert(byte_literals_semicolon(sep))
+    let quote = '"'
+    let shown = f"{quote}"
+    assert(shown == "\"")
+}

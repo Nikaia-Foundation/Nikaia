@@ -1607,6 +1607,8 @@ impl<'a> Checker<'a> {
         let tail_span = body.stmts.last().map(|s| s.span);
         let outer_lists = std::mem::take(&mut self.s.flow.empty_lists);
         let outer_numbers = std::mem::take(&mut self.s.flow.open_numbers);
+        let outer_chars = std::mem::take(&mut self.s.flow.open_chars);
+        let outer_bytes = std::mem::take(&mut self.s.flow.high_bytes);
         let outer_grown =
             std::mem::replace(&mut self.s.flow.grown_text, grown_text(self.parsed, body));
         let tail = self.block(body);
@@ -1634,6 +1636,8 @@ impl<'a> Checker<'a> {
         }
         self.numbers_typed_by_their_uses();
         self.s.flow.open_numbers = outer_numbers;
+        self.s.flow.open_chars = outer_chars;
+        self.s.flow.high_bytes = outer_bytes;
         self.s.scope.pop();
 
         // **`NK1153`, once the whole body has been seen**

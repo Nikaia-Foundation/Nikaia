@@ -136,6 +136,23 @@ fn one_escape(c: ref Vec[scalar], at: i64, char_of: fn(i64) -> scalar? sync) -> 
     return EscapeRead::Means { value: value, next: at + 1 }
 }
 
+/// **The byte a `'\xNN'` above `\x7F` names**, or `null` where the literal is
+/// anything else (ADR-320 D8): in a `'…'` such an escape is a byte, and the
+/// literal is only a `u8`.
+pub fn a_high_byte(literal: ref String) -> i64? sync {
+    let c: Vec[scalar] = literal.chars().collect()
+    if c.len() != 4 || c[0] != '\\' || c[1] != 'x' {
+        return null
+    }
+    let high = hex_digit(c[2]) ?? return null
+    let low = hex_digit(c[3]) ?? return null
+    let value = high * 16 + low
+    if value < 128 {
+        return null
+    }
+    return value
+}
+
 // `\x41`, which Rust limits to the ASCII range inside a string.
 fn a_byte(c: ref Vec[scalar], from: i64, so_far: ref String, char_of: fn(i64) -> scalar? sync) -> EscapeRead {
     let mut written = so_far.clone()
