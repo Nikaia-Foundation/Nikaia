@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1011] — 2026-10-18
+
+**std: list changes in place, clamp, min/max by key, flat_map and ordered-set walks**
+- `Vec::retain`, `swap(i, j)` (i64 positions), `reverse`, `dedup` (equal neighbours); `clamp` on i32, u32, u64, i64; `Seq::min_by_key`/`max_by_key` give `T?` (min the first of equal keys, max the last); `Seq::flat_map` with a lambda that hands back a list or a sequence; `BTreeSet::union`, `intersection`, `difference` give the elements in order as views, `first`/`last` give `T?`. Fixed: `names.first() ?? "none"` on a `Vec[String]` compiles.
+
 ## [0.0.1010] — 2026-10-18
 
 **a tuple may be nullable: (A, B)? is written (ADR-364, #648)**
