@@ -6991,7 +6991,7 @@ impl<'p> Emitter<'p> {
                     false => " }",
                 });
                 if pauses {
-                    out.push(&format!(") as {}<_>", self.boxed_future()));
+                    out.push(&format!(") as {}<'_, _>", self.boxed_future_in()));
                 }
                 out.push("))");
             }
@@ -7839,8 +7839,8 @@ impl<'p> Emitter<'p> {
 
     /// The future a kept function that may pause hands back: one that crosses
     /// threads where tasks run on them.
-    fn boxed_future(&self) -> String {
-        nikaia_std::tools::emit_core_types::emit_boxed_future(self.build.overlaps_user_code())
+    fn boxed_future_in(&self) -> String {
+        nikaia_std::tools::emit_core_types::emit_boxed_future_in(self.build.overlaps_user_code())
     }
 
     /// A member's lowered type, in its box where it has one.

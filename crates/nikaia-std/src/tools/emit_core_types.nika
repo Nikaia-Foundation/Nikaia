@@ -35,6 +35,15 @@ pub fn emit_boxed_future(overlaps: bool) -> String {
     return "nikaia_std::func::Boxed"
 }
 
+/// The same future, over a lifetime it may borrow for: `BoxedIn<'call, T>`
+/// in a kept type, `as BoxedIn<'_, _>` where a closure is made.
+pub fn emit_boxed_future_in(overlaps: bool) -> String {
+    if overlaps {
+        return "nikaia_std::func::SendBoxedIn"
+    }
+    return "nikaia_std::func::BoxedIn"
+}
+
 /// **A turn of a loop is a step of a build-time run** (ADR-321 D7): the count,
 /// in front of whatever else a loop's body opens with.
 pub fn emit_counted_turn(counts_steps: bool, opening: String?) -> String? {
@@ -140,10 +149,6 @@ impl EmitState {
             }
             let runs = walk.in_parameter && walk.code_parameter_runs
             if !runs {
-                if !code.is_sync {
-                    let future = emit_boxed_future(overlaps)
-                    outcome = f"{future}<{outcome}>"
-                }
                 let mut crossing: String = ""
                 if overlaps {
                     crossing = " + Send + Sync"
@@ -151,8 +156,28 @@ impl EmitState {
                 // What a kept function is handed is borrowed for the call
                 // alone: its parameters' references are elided.
                 let mut elided: Vec[String] = []
+                let mut lent = false
                 for part in ty.generics {
-                    elided.push(a_list_read_as_a_slice(self.emit_core_ty_counted(world, walk, crossings, overlaps, part, EmitLifetimes::Elided, count)))
+                    let written = a_list_read_as_a_slice(self.emit_core_ty_counted(world, walk, crossings, overlaps, part, EmitLifetimes::Elided, count))
+                    if written.contains("&") || written.contains("'_") {
+                        lent = true
+                    }
+                    elided.push(written)
+                }
+                if !code.is_sync && lent {
+                    // **A future that may pause borrows what the call lent
+                    // it**, for as long as the call: `for<'call>`, and the
+                    // future lives `'call`.
+                    let mut called: Vec[String] = []
+                    for part in ty.generics {
+                        called.push(a_list_read_as_a_slice(self.emit_core_ty_counted(world, walk, crossings, overlaps, part, EmitLifetimes::Call, count)))
+                    }
+                    let future = emit_boxed_future_in(overlaps)
+                    return f"nikaia_std::func::Kept<dyn for<'call> Fn({called.join(", ")}) -> {future}<'call, {outcome}>{crossing}>"
+                }
+                if !code.is_sync {
+                    let future = emit_boxed_future(overlaps)
+                    outcome = f"{future}<{outcome}>"
                 }
                 return f"nikaia_std::func::Kept<dyn Fn({elided.join(", ")}) -> {outcome}{crossing}>"
             }

@@ -33648,7 +33648,7 @@ impl EmitState {
             out.push("; Ok(__nikaia_done) }");
         } else { self.emit_core_block(world, walk, out, host, body, depth, inside, &inside_scope, EmitTail::Return)?; }
         if pauses {
-            out.push(&format!(") as {}<_>", emit_boxed_future(host.overlaps_user_code())));
+            out.push(&format!(") as {}<'_, _>", emit_boxed_future_in(host.overlaps_user_code())));
             if block { out.push(" }"); }
         }
         out.push("))");
@@ -36108,6 +36108,11 @@ pub fn emit_boxed_future(overlaps: bool) -> String {
     String::from("nikaia_std::func::Boxed")
 }
 
+pub fn emit_boxed_future_in(overlaps: bool) -> String {
+    if overlaps { return String::from("nikaia_std::func::SendBoxedIn"); }
+    String::from("nikaia_std::func::BoxedIn")
+}
+
 pub fn emit_counted_turn(counts_steps: bool, opening: Option<String>) -> Option<String> {
     if !counts_steps { return opening; }
     let step: String = String::from("nikaia_std::build_time::step();");
@@ -36174,14 +36179,25 @@ impl EmitState {
             } else if code.can_throw { outcome = String::from("Result<(), Box<dyn std::error::Error>>"); }
             let runs = walk.in_parameter && walk.code_parameter_runs;
             if !runs {
+                let mut crossing: String = String::from("");
+                if overlaps { crossing = String::from(" + Send + Sync"); }
+                let mut elided: Vec<String> = vec![];
+                let mut lent = false;
+                for part in ty.generics.iter() {
+                    let written = a_list_read_as_a_slice(self.emit_core_ty_counted(world, walk, crossings, overlaps, part, EmitLifetimes::Elided, count));
+                    if written.contains('&') || written.contains("'_") { lent = true; }
+                    elided.push(written);
+                }
+                if !code.is_sync && lent {
+                    let mut called: Vec<String> = vec![];
+                    for part in ty.generics.iter() { called.push(a_list_read_as_a_slice(self.emit_core_ty_counted(world, walk, crossings, overlaps, part, EmitLifetimes::Call, count))); }
+                    let future = emit_boxed_future_in(overlaps);
+                    return format!("nikaia_std::func::Kept<dyn for<'call> Fn({}) -> {}<'call, {}>{}>", called.join(", "), future, outcome, crossing);
+                }
                 if !code.is_sync {
                     let future = emit_boxed_future(overlaps);
                     outcome = format!("{}<{}>", future, outcome);
                 }
-                let mut crossing: String = String::from("");
-                if overlaps { crossing = String::from(" + Send + Sync"); }
-                let mut elided: Vec<String> = vec![];
-                for part in ty.generics.iter() { elided.push(a_list_read_as_a_slice(self.emit_core_ty_counted(world, walk, crossings, overlaps, part, EmitLifetimes::Elided, count))); }
                 return format!("nikaia_std::func::Kept<dyn Fn({}) -> {}{}>", elided.join(", "), outcome, crossing);
             }
             if code.is_sync {
@@ -37156,6 +37172,7 @@ pub enum EmitLifetimes {
     OfInputKept,
     OfInputShortened,
     OfInputLong,
+    Call,
 }
 
 impl EmitLifetimes {
@@ -37177,6 +37194,7 @@ impl EmitLifetimes {
             EmitLifetimes::ShortenedIn => String::from("&'s "),
             EmitLifetimes::LongIn => String::from("&'long "),
             EmitLifetimes::EachIn => String::from("&'e "),
+            EmitLifetimes::Call => String::from("&'call "),
             _ => String::from("&'a "),
         }
     }
@@ -37205,6 +37223,7 @@ impl EmitLifetimes {
             EmitLifetimes::OfInputKept => String::from("'k"),
             EmitLifetimes::OfInputShortened => String::from("'s"),
             EmitLifetimes::OfInputLong => String::from("'long"),
+            EmitLifetimes::Call => String::from("'call"),
         }
     }
     pub fn over_the_input(self) -> EmitLifetimes {
@@ -63018,7 +63037,7 @@ pub mod emit_core_places {}
 pub mod emit_core_reads {}
 pub mod emit_core_types {
     #[allow(unused_imports)]
-    pub use super::{emit_settle_kind, emit_cleaned, emit_boxed_future, emit_counted_turn};
+    pub use super::{emit_settle_kind, emit_cleaned, emit_boxed_future, emit_boxed_future_in, emit_counted_turn};
 }
 pub mod emit_entry {}
 pub mod emit_exprs {

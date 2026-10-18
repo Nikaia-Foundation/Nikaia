@@ -20,6 +20,15 @@ pub type Boxed<T> = Pin<Box<dyn Future<Output = T>>>;
 /// The same, where tasks run on threads and the future may cross one.
 pub type SendBoxed<T> = Pin<Box<dyn Future<Output = T> + Send>>;
 
+/// **A future that may borrow what the call was lent**: what a kept function
+/// that may pause and takes a `ref` parameter hands back,
+/// `dyn for<'call> Fn(&'call P) -> BoxedIn<'call, T>`. A closure's
+/// `as BoxedIn<'_, _>` is [`Boxed`] where nothing is lent.
+pub type BoxedIn<'a, T> = Pin<Box<dyn Future<Output = T> + 'a>>;
+
+/// The same, where tasks run on threads and the future may cross one.
+pub type SendBoxedIn<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
+
 impl<F: ?Sized> Clone for Kept<F> {
     fn clone(&self) -> Self {
         Kept(self.0.clone())

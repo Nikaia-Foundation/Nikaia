@@ -84,6 +84,9 @@ pub enum EmitLifetimes {
     OfInputShortened,
     /// `&'a ` and `'long`.
     OfInputLong,
+    /// `&'call ` and `'call`: what a kept function that may pause is lent
+    /// for the call (`for<'call>`).
+    Call,
 }
 
 impl EmitLifetimes {
@@ -106,6 +109,7 @@ impl EmitLifetimes {
             EmitLifetimes::ShortenedIn => "&'s ",
             EmitLifetimes::LongIn => "&'long ",
             EmitLifetimes::EachIn => "&'e ",
+            EmitLifetimes::Call => "&'call ",
             else => "&'a ",
         }
     }
@@ -136,6 +140,7 @@ impl EmitLifetimes {
             EmitLifetimes::OfInputKept => "'k",
             EmitLifetimes::OfInputShortened => "'s",
             EmitLifetimes::OfInputLong => "'long",
+            EmitLifetimes::Call => "'call",
         }
     }
 

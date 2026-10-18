@@ -295,7 +295,7 @@ impl EmitState {
             self.emit_core_block(world, walk, out, host, body, depth, inside, inside_scope, EmitTail::Return)
         }
         if pauses {
-            out.push(f") as {emit_boxed_future(host.overlaps_user_code())}<_>")
+            out.push(f") as {emit_boxed_future_in(host.overlaps_user_code())}<'_, _>")
             if block {
                 out.push(" }")
             }
@@ -924,8 +924,8 @@ impl EmitState {
         }
         // **A `throw` has a site whoever declared the error** (ADR-280 D14): a
         // library's error thrown by this program was raised here.
-        // **Into the box where the signature is the box** (lowering-defects
-        // D11): a trait's `throws` method is declared with the opaque channel
+        // **Into the box where the signature is the box**
+        // (`defects_found_running::a_typed_throw_in_a_trait_impl_is_boxed`): a trait's `throws` method is declared with the opaque channel
         // whatever its impl throws, so a typed error is raised into it.
         if self.named_error(world, scope.function) != 0 && scope.channel != "Box<dyn std::error::Error>" {
             out.push("return Err(nikaia_std::error::throwing(")

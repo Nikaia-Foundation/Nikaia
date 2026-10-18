@@ -312,3 +312,63 @@ fn a_method_named_where_a_function_value_is_kept_runs() {
         "14 15 30 9 6 11 9"
     );
 }
+
+/// **A kept function that may pause and takes a `ref` parameter hands back a
+/// future that borrows it for the call**: `fn(ref P, i64) -> i64` is
+/// `dyn for<'call> Fn(&'call P, i64) -> BoxedIn<'call, i64>` below. A lambda,
+/// a named function and a method that pauses, each with a `ref` parameter
+/// (rustc refused all three: "lifetime may not live long enough", the future
+/// was `'static`).
+#[test]
+fn a_kept_function_that_may_pause_borrows_its_ref_parameter() {
+    let dir = common::scratch_dir("function-values-kept-ref-pausing");
+    std::fs::write(
+        dir.join("kept.nika"),
+        r#"use std::time
+
+struct P {
+    base: i64,
+}
+impl P {
+    fn add(ref self, n: i64) -> i64 {
+        time::sleep(1.millis())
+        return self.base + n
+    }
+}
+fn joined(p: ref P, word: ref String) -> String {
+    time::sleep(1.millis())
+    return f"{word}{p.base}"
+}
+struct One {
+    f: fn(ref P, i64) -> i64,
+}
+struct Words {
+    f: fn(ref P, ref String) -> String,
+}
+fn main() {
+    let p = P { base: 10 }
+    let lambda = One { f: fn(q, n) { q.add(n) } }
+    let method = One { f: P::add }
+    let named = Words { f: joined }
+    let a = lambda.f
+    let b = method.f
+    let c = named.f
+    println(f"{a(p, 1)} {b(p, 2)} {c(p, "x")}")
+}
+"#,
+    )
+    .expect("write the source");
+    let ran = Command::new(env!("CARGO_BIN_EXE_nikaia"))
+        .current_dir(&dir)
+        .args(["run", "--no-cache", "kept.nika"])
+        .env_remove("CARGO_TARGET_DIR")
+        .output()
+        .expect("the nikaia binary runs");
+    std::fs::remove_dir_all(&dir).ok();
+    assert!(
+        ran.status.success(),
+        "{}",
+        String::from_utf8_lossy(&ran.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&ran.stdout).trim(), "11 12 x10");
+}
