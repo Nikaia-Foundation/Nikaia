@@ -235,9 +235,9 @@ readers who know Python, JavaScript, Go, Java or similar.
 * **Services that mostly wait**, such as web APIs, proxies, and command-line tools that talk
   to the network. Written much like Go or Node.js, without garbage-collection pauses.
 * **Data in unusual formats**, such as logs, telemetry and protocol frames, that you would
-  otherwise parse with regular expressions.
+  otherwise parse with regular expressions and hope.
 * **Heavy computation**, such as simulations, image and signal processing, and aggregating
-  large inputs, with the parallel parts checked by the compiler.
+  large inputs, with the parallel parts checked by the compiler instead of hoped for.
 * **Code written by AI.** When a model writes most of the code, a compiler that refuses
   races, deadlocks and unhandled errors acts as a reviewer
   ([why](manifesto.md), §8).
