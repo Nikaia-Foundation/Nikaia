@@ -810,6 +810,9 @@ pub struct CheckState {
     /// `let held = m.get(k) ?? continue` is a reference below, so a `match` on
     /// the name binds by reference by itself and writes no `ref`.
     pub got_past_a_jump: collections::BTreeSet[String],
+    /// **The `match` arm that bound a name**, by the binding's id: the arm's
+    /// body, whose lent names the lowering writes `ref` (`CheckFacts::arm_subjects`).
+    pub arm_bound: collections::BTreeMap[i64, i64],
     /// The statements whose value nothing reads.
     pub discarded: collections::BTreeSet[i64],
 }

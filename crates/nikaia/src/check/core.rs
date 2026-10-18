@@ -66,6 +66,7 @@ pub(super) fn hollow() -> Box<CheckState> {
         narrowing: CheckNarrowing::nothing(),
         arm_types: BTreeMap::new(),
         got_past_a_jump: BTreeSet::new(),
+        arm_bound: BTreeMap::new(),
         discarded: BTreeSet::new(),
         arm_disagreements: BTreeMap::new(),
         findings: Vec::new(),

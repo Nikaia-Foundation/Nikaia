@@ -15243,7 +15243,7 @@ fn check_core_flow_owned_texts(state: &mut CheckState, world: &CheckWorld<'_, '_
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_flow_frame(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, pattern: &MatchPattern, parts: &collections::BTreeMap<String, Ty>, lent_parts: bool, owned_text: &collections::BTreeSet<String>) -> Vec<CheckLocal> {
+fn check_core_flow_frame(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, pattern: &MatchPattern, at: i64, parts: &collections::BTreeMap<String, Ty>, lent_parts: bool, owned_text: &collections::BTreeSet<String>) -> Vec<CheckLocal> {
     let names = pattern_names(world, pattern);
     let mut bound: Vec<CheckLocal> = vec![];
     for name in names.iter() {
@@ -15260,6 +15260,7 @@ fn check_core_flow_frame(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, 
         let ty = nikaia_std::index::or(found, || Ty::Unknown);
         let text = owned_text.contains(&local.name);
         let id = state.a_new_binding();
+        state.arm_bound.insert(id, at);
         let mut kept = CheckLocal::free(local.name.to_owned(), ty.clone(), id);
         kept.lent = lent_parts && (!state.copied(world, &ty) || text);
         frame.push(kept);
@@ -15293,7 +15294,7 @@ fn check_core_flow_arm<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
     let lent_parts = !lendable && typed.is_a_view();
     let mut owned_text: collections::BTreeSet<String> = collections::BTreeSet::new();
     if lent_parts { owned_text = check_core_flow_owned_texts(state, world, &arm.pattern, typed); }
-    let frame = check_core_flow_frame(state, world, &arm.pattern, &parts, lent_parts, &owned_text);
+    let frame = check_core_flow_frame(state, world, &arm.pattern, id_of(&arm.body) as i64, &parts, lent_parts, &owned_text);
     state.scope.push(frame);
     state.branch.push((choice, taken));
     let from = state.taken_so_far();
@@ -15329,6 +15330,17 @@ fn check_core_flow_caught(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_,
 // this was written - see `contracts::sync`.
 pub fn check_core_flow_match<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, expr: &Expr, value: &Expr, arms: &[MatchArm], span: &Span) -> Ty {
     let on = check_core_expr(state, world, host, value, span);
+    let subject = check_core_flow_variable(world, value);
+    if subject != "" {
+        let bound = state.binding(&subject);
+        if bound.is_some() {
+            let id = nikaia_std::index::or(bound.as_ref().map(|__nikaia_it| __nikaia_it.id), || -1);
+            if state.arm_bound.contains_key(&id) {
+                let arm = nikaia_std::index::or(state.arm_bound.get(&id), || -1);
+                state.facts.arm_subjects.insert(id_of(value) as i64, arm);
+            }
+        }
+    }
     let several: Vec<Ty> = several_errors_of(&on);
     let mut typed = check_core_flow_caught(&state, world, &on, value);
     if !check_core_flow_unknown(&on) && !several.is_empty() { typed = Ty::Unknown; }
@@ -17179,15 +17191,6 @@ fn check_core_places_given<H: CheckHost>(state: &mut CheckState, world: &CheckWo
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn check_core_places_parts_of(ty: &Ty) -> Option<Vec<Ty>> {
-    match ty {
-        Ty::Tuple(parts) => return Some(parts.to_owned()),
-        _ => return None,
-    }
-}
-
-// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
-// this was written - see `contracts::sync`.
 fn check_core_places_tuple_part(state: &mut CheckState, parts: &[Ty], field: &str, span: &Span) -> Ty {
     let at = check_core_places_position(field);
     if at >= 0 && at >= parts.len() as i64 {
@@ -17252,11 +17255,13 @@ pub fn check_core_field<H: CheckHost>(state: &mut CheckState, world: &CheckWorld
         match on {
             Ty::Nullable(ref inner) => {
                 let inner = nikaia_std::boxed::open(inner);
-                let parts = check_core_places_parts_of(inner);
-                if parts.is_some() {
-                    let part = check_core_places_tuple_part(state, &nikaia_std::index::or(parts, || vec![].into()), &field, span);
-                    if part.is_unknown() { return Ty::Unknown; }
-                    return state.a_safe_reach(base, &part);
+                match *inner {
+                    Ty::Tuple(ref parts) => {
+                        let part = check_core_places_tuple_part(state, parts, &field, span);
+                        if part.is_unknown() { return Ty::Unknown; }
+                        return state.a_safe_reach(base, &part);
+                    },
+                    _ => { },
                 }
                 return state.a_safe_field(world, inner, base, &field, expr, span);
             },
@@ -19986,6 +19991,7 @@ pub struct CheckFacts {
     pub views_handed_on: collections::BTreeSet<i64>,
     pub comptime_uses: collections::BTreeMap<i64, String>,
     pub lent_scrutinees: collections::BTreeSet<i64>,
+    pub arm_subjects: collections::BTreeMap<i64, i64>,
     pub guards_inside_boxes: collections::BTreeMap<i64, collections::BTreeSet<String>>,
     pub collected_into: collections::BTreeSet<i64>,
     pub copied_walks: collections::BTreeSet<i64>,
@@ -20060,7 +20066,7 @@ pub struct CheckFacts {
 }
 
 impl CheckFacts {
-    pub fn empty() -> CheckFacts { CheckFacts { held_across_a_pause: collections::BTreeSet::new(), comptime_values: collections::BTreeMap::new(), dsl_values: collections::BTreeMap::new(), with_types: collections::BTreeMap::new(), unrolled: collections::BTreeMap::new(), walks_fields: collections::BTreeMap::new(), unrolled_calls: collections::BTreeMap::new(), fallible_loops: collections::BTreeSet::new(), pausing_walks: collections::BTreeSet::new(), pausing_loops: collections::BTreeSet::new(), owned_loops: collections::BTreeSet::new(), copied_loop_bindings: collections::BTreeSet::new(), copied_view_bindings: collections::BTreeSet::new(), unsigned_literals: collections::BTreeMap::new(), number_lets: collections::BTreeMap::new(), changed_elements: collections::BTreeSet::new(), text_finds: collections::BTreeSet::new(), char_patterns: collections::BTreeMap::new(), standard_compares: collections::BTreeMap::new(), count_args: collections::BTreeSet::new(), path_methods: collections::BTreeMap::new(), map_keys: collections::BTreeMap::new(), slice_indices: collections::BTreeSet::new(), list_indices: collections::BTreeSet::new(), copied_tuple_parts: collections::BTreeSet::new(), std_lengths: collections::BTreeSet::new(), sized_lengths: collections::BTreeSet::new(), char_codes: collections::BTreeSet::new(), arithmetic: collections::BTreeMap::new(), negations: collections::BTreeMap::new(), copied_slots: collections::BTreeSet::new(), owned_copies: collections::BTreeSet::new(), text_as_is: collections::BTreeSet::new(), lent_coalesces: collections::BTreeMap::new(), plain_reaches: collections::BTreeSet::new(), copied_jump_reads: collections::BTreeSet::new(), view_coalesces: collections::BTreeSet::new(), lent_map_fallbacks: collections::BTreeSet::new(), optional_fallbacks: collections::BTreeSet::new(), flat_reads: collections::BTreeSet::new(), copied_reads: collections::BTreeSet::new(), text_in_lists: collections::BTreeSet::new(), owned_patterns: collections::BTreeSet::new(), counted: collections::BTreeSet::new(), lent_bindings: collections::BTreeMap::new(), taking_arms: collections::BTreeMap::new(), views_handed_on: collections::BTreeSet::new(), comptime_uses: collections::BTreeMap::new(), lent_scrutinees: collections::BTreeSet::new(), guards_inside_boxes: collections::BTreeMap::new(), collected_into: collections::BTreeSet::new(), copied_walks: collections::BTreeSet::new(), filter_patterns: collections::BTreeSet::new(), kept_lambdas: collections::BTreeMap::new(), kept_hulls: collections::BTreeMap::new(), kept_owned: collections::BTreeMap::new(), field_calls: collections::BTreeMap::new(), kept_calls: collections::BTreeMap::new(), kept_args: collections::BTreeSet::new(), kept_functions: collections::BTreeMap::new(), fallible_methods: collections::BTreeSet::new(), future_lambdas: collections::BTreeSet::new(), run_lambdas: collections::BTreeSet::new(), run_code_fails: collections::BTreeSet::new(), sync_functions_run_async: collections::BTreeMap::new(), pausing_lambdas: collections::BTreeMap::new(), paused_scopes: collections::BTreeSet::new(), scope_tasks: collections::BTreeSet::new(), witnessed_sets: collections::BTreeSet::new(), pausing_methods: collections::BTreeSet::new(), nullable_sites: collections::BTreeMap::new(), concatenations: collections::BTreeSet::new(), path_comparisons: collections::BTreeSet::new(), mixed_comparisons: collections::BTreeMap::new(), path_holes: collections::BTreeMap::new(), flattened_reaches: collections::BTreeSet::new(), copied_reaches: collections::BTreeSet::new(), viewed_reaches: collections::BTreeMap::new(), lent_reaches: collections::BTreeSet::new(), held_reaches: collections::BTreeSet::new(), nullable_fields: collections::BTreeMap::new(), nullable_args: collections::BTreeMap::new(), narrowing_casts: collections::BTreeMap::new(), narrowed_reads: collections::BTreeMap::new(), task_handles: collections::BTreeSet::new(), method_options: collections::BTreeMap::new(), lent_args: collections::BTreeSet::new(), lent_fields: collections::BTreeSet::new(), lookup_keys: collections::BTreeSet::new(), boxed_members: collections::BTreeMap::new(), boxed_reads: collections::BTreeSet::new(), copied_bindings: collections::BTreeSet::new(), cloned_bindings: collections::BTreeSet::new(), some_tails: collections::BTreeSet::new(), mixed_leaves: collections::BTreeMap::new(), mixed_choices: collections::BTreeSet::new(), lent_options: collections::BTreeSet::new(), wrapped: collections::BTreeMap::new(), compared_views: collections::BTreeSet::new(), compared_numbers: collections::BTreeSet::new(), claims: collections::BTreeMap::new(), entries: collections::BTreeMap::new(), reaches: collections::BTreeMap::new(), published: collections::BTreeMap::new(), mut_args: collections::BTreeSet::new(), copied_args: collections::BTreeSet::new(), settle_fns: collections::BTreeMap::new(), settle_lets: collections::BTreeMap::new(), lent_lets: collections::BTreeSet::new(), lent_returns: collections::BTreeSet::new(), compares: collections::BTreeSet::new(), compares_totally: collections::BTreeSet::new(), copies: collections::BTreeSet::new(), viewed_numbers: collections::BTreeSet::new(), array_literals: collections::BTreeSet::new(), byte_literals: collections::BTreeSet::new(), owned_texts: collections::BTreeSet::new(), lent_list_reads: collections::BTreeSet::new(), lent_reads: collections::BTreeSet::new(), view_fallbacks: collections::BTreeSet::new() } }
+    pub fn empty() -> CheckFacts { CheckFacts { held_across_a_pause: collections::BTreeSet::new(), comptime_values: collections::BTreeMap::new(), dsl_values: collections::BTreeMap::new(), with_types: collections::BTreeMap::new(), unrolled: collections::BTreeMap::new(), walks_fields: collections::BTreeMap::new(), unrolled_calls: collections::BTreeMap::new(), fallible_loops: collections::BTreeSet::new(), pausing_walks: collections::BTreeSet::new(), pausing_loops: collections::BTreeSet::new(), owned_loops: collections::BTreeSet::new(), copied_loop_bindings: collections::BTreeSet::new(), copied_view_bindings: collections::BTreeSet::new(), unsigned_literals: collections::BTreeMap::new(), number_lets: collections::BTreeMap::new(), changed_elements: collections::BTreeSet::new(), text_finds: collections::BTreeSet::new(), char_patterns: collections::BTreeMap::new(), standard_compares: collections::BTreeMap::new(), count_args: collections::BTreeSet::new(), path_methods: collections::BTreeMap::new(), map_keys: collections::BTreeMap::new(), slice_indices: collections::BTreeSet::new(), list_indices: collections::BTreeSet::new(), copied_tuple_parts: collections::BTreeSet::new(), std_lengths: collections::BTreeSet::new(), sized_lengths: collections::BTreeSet::new(), char_codes: collections::BTreeSet::new(), arithmetic: collections::BTreeMap::new(), negations: collections::BTreeMap::new(), copied_slots: collections::BTreeSet::new(), owned_copies: collections::BTreeSet::new(), text_as_is: collections::BTreeSet::new(), lent_coalesces: collections::BTreeMap::new(), plain_reaches: collections::BTreeSet::new(), copied_jump_reads: collections::BTreeSet::new(), view_coalesces: collections::BTreeSet::new(), lent_map_fallbacks: collections::BTreeSet::new(), optional_fallbacks: collections::BTreeSet::new(), flat_reads: collections::BTreeSet::new(), copied_reads: collections::BTreeSet::new(), text_in_lists: collections::BTreeSet::new(), owned_patterns: collections::BTreeSet::new(), counted: collections::BTreeSet::new(), lent_bindings: collections::BTreeMap::new(), taking_arms: collections::BTreeMap::new(), views_handed_on: collections::BTreeSet::new(), comptime_uses: collections::BTreeMap::new(), lent_scrutinees: collections::BTreeSet::new(), arm_subjects: collections::BTreeMap::new(), guards_inside_boxes: collections::BTreeMap::new(), collected_into: collections::BTreeSet::new(), copied_walks: collections::BTreeSet::new(), filter_patterns: collections::BTreeSet::new(), kept_lambdas: collections::BTreeMap::new(), kept_hulls: collections::BTreeMap::new(), kept_owned: collections::BTreeMap::new(), field_calls: collections::BTreeMap::new(), kept_calls: collections::BTreeMap::new(), kept_args: collections::BTreeSet::new(), kept_functions: collections::BTreeMap::new(), fallible_methods: collections::BTreeSet::new(), future_lambdas: collections::BTreeSet::new(), run_lambdas: collections::BTreeSet::new(), run_code_fails: collections::BTreeSet::new(), sync_functions_run_async: collections::BTreeMap::new(), pausing_lambdas: collections::BTreeMap::new(), paused_scopes: collections::BTreeSet::new(), scope_tasks: collections::BTreeSet::new(), witnessed_sets: collections::BTreeSet::new(), pausing_methods: collections::BTreeSet::new(), nullable_sites: collections::BTreeMap::new(), concatenations: collections::BTreeSet::new(), path_comparisons: collections::BTreeSet::new(), mixed_comparisons: collections::BTreeMap::new(), path_holes: collections::BTreeMap::new(), flattened_reaches: collections::BTreeSet::new(), copied_reaches: collections::BTreeSet::new(), viewed_reaches: collections::BTreeMap::new(), lent_reaches: collections::BTreeSet::new(), held_reaches: collections::BTreeSet::new(), nullable_fields: collections::BTreeMap::new(), nullable_args: collections::BTreeMap::new(), narrowing_casts: collections::BTreeMap::new(), narrowed_reads: collections::BTreeMap::new(), task_handles: collections::BTreeSet::new(), method_options: collections::BTreeMap::new(), lent_args: collections::BTreeSet::new(), lent_fields: collections::BTreeSet::new(), lookup_keys: collections::BTreeSet::new(), boxed_members: collections::BTreeMap::new(), boxed_reads: collections::BTreeSet::new(), copied_bindings: collections::BTreeSet::new(), cloned_bindings: collections::BTreeSet::new(), some_tails: collections::BTreeSet::new(), mixed_leaves: collections::BTreeMap::new(), mixed_choices: collections::BTreeSet::new(), lent_options: collections::BTreeSet::new(), wrapped: collections::BTreeMap::new(), compared_views: collections::BTreeSet::new(), compared_numbers: collections::BTreeSet::new(), claims: collections::BTreeMap::new(), entries: collections::BTreeMap::new(), reaches: collections::BTreeMap::new(), published: collections::BTreeMap::new(), mut_args: collections::BTreeSet::new(), copied_args: collections::BTreeSet::new(), settle_fns: collections::BTreeMap::new(), settle_lets: collections::BTreeMap::new(), lent_lets: collections::BTreeSet::new(), lent_returns: collections::BTreeSet::new(), compares: collections::BTreeSet::new(), compares_totally: collections::BTreeSet::new(), copies: collections::BTreeSet::new(), viewed_numbers: collections::BTreeSet::new(), array_literals: collections::BTreeSet::new(), byte_literals: collections::BTreeSet::new(), owned_texts: collections::BTreeSet::new(), lent_list_reads: collections::BTreeSet::new(), lent_reads: collections::BTreeSet::new(), view_fallbacks: collections::BTreeSet::new() } }
 }
 
 fn check_claim_held(held: Option<&ClaimHeld>) -> String {
@@ -27500,6 +27506,7 @@ pub struct CheckState {
     pub arm_types: collections::BTreeMap<i64, Ty>,
     pub arm_disagreements: collections::BTreeMap<i64, CheckFinding>,
     pub got_past_a_jump: collections::BTreeSet<String>,
+    pub arm_bound: collections::BTreeMap<i64, i64>,
     pub discarded: collections::BTreeSet<i64>,
 }
 
@@ -28175,7 +28182,14 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn tuple_literal(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr) -> Option<Ty> {
-        let wants: Vec<Ty> = match check_texts_wanted_parts(want) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let wants: Vec<Ty> = match want {
+            Ty::Tuple(parts) => parts.to_owned(),
+            Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); match inner {
+                Ty::Tuple(parts) => parts.to_owned(),
+                _ => return None,
+            } },
+            _ => return None,
+        };
         let founds: Vec<Ty> = match found {
             Ty::Tuple(parts) => parts.to_owned(),
             _ => return None,
@@ -28218,16 +28232,6 @@ impl CheckState {
         }
         let element = match built { Some(__nikaia_value) => __nikaia_value, None => return None };
         Some(Ty::Named { name, args: vec![element], view: false })
-    }
-}
-
-// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
-// this was written - see `contracts::sync`.
-fn check_texts_wanted_parts(ty: &Ty) -> Option<Vec<Ty>> {
-    match ty {
-        Ty::Tuple(parts) => Some(parts.to_owned()),
-        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); check_texts_wanted_parts(inner) },
-        _ => None,
     }
 }
 
@@ -34620,10 +34624,10 @@ fn emit_match_yes_or_no(arms: &[MatchArm]) -> Option<bool> {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-fn emit_match_subject<H: EmitHost>(walk: &mut EmitWalk, out: &mut EmitOut, host: &H, value: &Expr, arms: &[MatchArm], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+fn emit_match_subject<H: EmitHost>(walk: &mut EmitWalk, out: &mut EmitOut, host: &H, value: &Expr, arms: &[MatchArm], depth: i64, flow: EmitFlow, scope: &EmitScope, deref: &str) -> Result<(), Box<dyn std::error::Error>> {
     let mut list = false;
     for arm in arms.iter() { if emit_match_is_list(&arm.pattern) { list = true; } }
-    if list { out.push("&("); }
+    if list { out.push("&("); } else { out.push(deref); }
     host.expr(walk, out, value, depth, flow, scope)?;
     if list { out.push(")[..]"); }
     Ok(())
@@ -34648,6 +34652,19 @@ fn emit_match_path(world: &EmitWorld<'_, '_, '_, '_>, path: &[winnow_grammar::Sy
 }
 
 impl EmitState {
+    fn emit_match_lent_subject(&self, world: &EmitWorld<'_, '_, '_, '_>, value: &Expr) -> String {
+        let key = node_key(value);
+        if !self.facts.arm_subjects.contains_key(&key) { return String::from(""); }
+        let arm = match self.facts.arm_subjects.get(&key) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => return String::from("") };
+        if !self.facts.lent_bindings.contains_key(&arm) { return String::from(""); }
+        let name = match value {
+            Expr::Variable(symbol, _) => { let symbol = *symbol; emit_text(world, symbol) },
+            _ => "".to_owned(),
+        };
+        let lent = match self.facts.lent_bindings.get(&arm) { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
+        if name != "" && lent.contains(&name) { return String::from("*"); }
+        String::from("")
+    }
     fn emit_match_bound(&self, world: &EmitWorld<'_, '_, '_, '_>, name: winnow_grammar::Symbol, wild: bool, lent_key: i64) -> String {
         if wild { return String::from("_"); }
         let text = emit_text(world, name);
@@ -35013,7 +35030,7 @@ impl EmitState {
             if !inside_a_box {
                 if !nikaia_std::index::or(answer, || true) { out.push("!"); }
                 out.push("matches!(");
-                emit_match_subject(walk, out, host, value, arms, depth, flow, scope)?;
+                emit_match_subject(walk, out, host, value, arms, depth, flow, scope, &self.emit_match_lent_subject(world, value))?;
                 out.push(", ");
                 let mut i: i64 = 0;
                 for arm in arms.iter() {
@@ -35029,7 +35046,7 @@ impl EmitState {
         }
         out.push("match ");
         if self.facts.lent_scrutinees.contains(&node_key(value)) { out.push("&"); }
-        emit_match_subject(walk, out, host, value, arms, depth, flow, scope)?;
+        emit_match_subject(walk, out, host, value, arms, depth, flow, scope, &self.emit_match_lent_subject(world, value))?;
         let pad = "    ".repeat(nikaia_std::count::of(depth + 1));
         let close = "    ".repeat(nikaia_std::count::of(depth));
         out.push(" {\n");

@@ -121,6 +121,10 @@ pub struct CheckFacts {
     pub views_handed_on: collections::BTreeSet[i64],
     pub comptime_uses: collections::BTreeMap[i64, String],
     pub lent_scrutinees: collections::BTreeSet[i64],
+    /// **A `match` on a name an enclosing arm bound**, by the subject: that
+    /// arm's body. Where the arm lent the name, it is a reference below, and
+    /// the `match` is over what it points to.
+    pub arm_subjects: collections::BTreeMap[i64, i64],
     pub guards_inside_boxes: collections::BTreeMap[i64, collections::BTreeSet[String]],
     pub collected_into: collections::BTreeSet[i64],
     pub copied_walks: collections::BTreeSet[i64],
@@ -258,6 +262,7 @@ impl CheckFacts {
             views_handed_on: collections::BTreeSet(),
             comptime_uses: collections::BTreeMap(),
             lent_scrutinees: collections::BTreeSet(),
+            arm_subjects: collections::BTreeMap(),
             guards_inside_boxes: collections::BTreeMap(),
             collected_into: collections::BTreeSet(),
             copied_walks: collections::BTreeSet(),

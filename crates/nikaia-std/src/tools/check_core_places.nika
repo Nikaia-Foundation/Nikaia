@@ -100,14 +100,6 @@ fn check_core_places_given[H: CheckHost](mut state: CheckState, world: ref Check
 
 /// **A tuple's part is the type written at its position**, and a position
 /// the tuple does not have is `NK1107` (#515).
-/// The parts of a tuple type, or `null` for any other type.
-fn check_core_places_parts_of(ty: ref Ty) -> Vec[Ty]? sync {
-    match ty {
-        Ty::Tuple(parts) => return parts.clone(),
-        else => return null,
-    }
-}
-
 fn check_core_places_tuple_part(mut state: CheckState, parts: ref Vec[Ty], field: ref String, span: ref Span) -> Ty sync {
     let at = check_core_places_position(field)
     if at >= 0 && at >= parts.len() as i64 {
@@ -192,13 +184,15 @@ pub fn check_core_field[H: CheckHost](mut state: CheckState, world: ref CheckWor
         match on {
             Ty::Nullable(inner) => {
                 // **`p?.0` is a part of a `(A, B)?`, as a nullable** (ADR-364).
-                let parts = check_core_places_parts_of(inner)
-                if parts != null {
-                    let part = check_core_places_tuple_part(state, parts ?? [], field, span)
-                    if part.is_unknown() {
-                        return Ty::Unknown
-                    }
-                    return state.a_safe_reach(base, part)
+                match inner {
+                    Ty::Tuple(parts) => {
+                        let part = check_core_places_tuple_part(state, parts, field, span)
+                        if part.is_unknown() {
+                            return Ty::Unknown
+                        }
+                        return state.a_safe_reach(base, part)
+                    },
+                    else => {}
                 }
                 return state.a_safe_field(world, inner, base, field, expr, span)
             },
