@@ -3,8 +3,8 @@
 From nothing to a running Nikaia program, and what to try after that.
 
 Nikaia is **pre-alpha**. Expect small programs to work and larger ones to hit a missing
-piece; the [roadmap](../docs/project_status_and_roadmap.md#where-the-project-actually-stands)
-lists exactly which.
+piece. The [roadmap](../docs/project_status_and_roadmap.md#where-the-project-actually-stands)
+lists which.
 
 ## What you need
 
@@ -12,8 +12,8 @@ Linux on x86_64 or on 64-bit ARM (aarch64). CI runs the whole suite on both. mac
 Windows are untested.
 
 Nikaia compiles to Rust and lets the Rust compiler build the binary, so the one thing to
-install is **a stable Rust toolchain, 1.88 or newer**. Nothing else: no nightly, no
-extra system libraries.
+install is a stable Rust toolchain, 1.88 or newer. No nightly toolchain and no extra
+system libraries are needed.
 
 ```sh
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
@@ -30,8 +30,8 @@ cargo build --release -p nikaia        # about a minute; the binary is target/re
 export PATH="$PWD/target/release:$PATH"
 ```
 
-The compiler finds its standard library in the checkout it was built from, so **leave
-the checkout where it is**. If you move it, point `NIKAIA_SYSROOT` at its `crates/`
+The compiler finds its standard library in the checkout it was built from, so leave
+the checkout where it is. If you move it, point `NIKAIA_SYSROOT` at its `crates/`
 directory.
 
 ## 2. Create a project
@@ -77,14 +77,14 @@ after `--`: `nikaia run -- a b c`.
 The build writes two files beside the manifest:
 
 * `nikaia.contracts` records what the compiler inferred about your functions: what they
-  borrow, whether they can fail, whether they can pause. **Commit it.** A change in it is
-  a change in your program's behaviour you can review.
+  borrow, whether they can fail, whether they can pause. Commit it: a change in it is a
+  change in your program's behaviour that you can review.
 * `nikaia.lock` pins your dependencies.
 
 ## 4. When the compiler says no
 
-Most mistakes are refused in Nikaia's own words, with a code and a line that says what to
-write instead:
+Most mistakes are reported in Nikaia's own words, with a code and a line that says what
+to write instead. For example:
 
 ```text
 error[NK1139]: You're changing `x`, but it wasn't declared as mutable.
@@ -104,44 +104,40 @@ useful: it is a message Nikaia should have written itself.
 
 ---
 
-## Two switches, one language
+## The two build settings
 
-There is one language, and two lines in `nikaia.toml` decide how it is **built**, never
-what it **means**. You do not rewrite code to move between them.
+Two lines in `nikaia.toml` decide how a program is built. They do not change what it
+means, and you do not rewrite code to move between them.
 
 ### `target`: which machine
 
 `x86_64-linux` by default, `aarch64-linux` too. The machine decides what the standard
-library can offer and what a crash does: an orderly unwind where the machine unwinds, a
-trap where it traps. `wasm32-unknown` is named and **refused**: the compiler says what is
-missing rather than emitting code for a different machine.
+library can offer and what a crash does: an unwind where the machine unwinds, a trap
+where it traps. `wasm32-unknown` is accepted as a name, but a program for it is refused
+for now, and the compiler says what is missing.
 
 ### `user_parallelism`: how much of *your* code runs at once
 
-* **`no`** (the default): your code runs on **one** thread, over an event loop. **Data
-  races are impossible**, because two pieces of your code are never in flight together.
-  This is the setting for web services, CLI tools and edge workers, where you would reach
-  for Node.js or Go.
-* **`yes`**: a multi-threaded work-stealing runtime keeps every core busy, and thread
-  safety is proven at compile time. This is the setting for heavy computation, where you
-  would reach for Rust or C++.
+* **`no`** (the default): your code runs on one thread, over an event loop. Two pieces
+  of your code are never running at the same moment, so there are no data races. This is
+  the setting for web services, CLI tools and edge workers, where you might otherwise use
+  Node.js or Go.
+* **`yes`**: a multi-threaded work-stealing runtime spreads the work over the cores, and
+  thread safety is checked at compile time. This is the setting for heavy computation,
+  where you might otherwise use Rust or C++.
 
-**This is not the single thread you know from Python.** There the single thread is the
-whole machine, and the other cores stand idle. Here it bounds **your instructions** and
-nothing else. Waiting for I/O happens on the runtime's own threads, and what the standard
-library does uses the whole machine whatever this switch says: a file's text is checked
-in chunks across every core
-([ADR-016](../docs/specification/adr/adr-016.md)). Your code stays a straight line, and
-the machine does not stand still.
+At `no`, only your own code is limited to one thread. Waiting for I/O happens on the
+runtime's own threads, and the standard library may still use every core: a file's text,
+for example, is checked in chunks across all of them
+([ADR-016](../docs/specification/adr/adr-016.md)).
 
-It is a permission, not a count. *How many* threads serve `yes` is for the runtime to
-decide, because the right answer depends on the machine and not on the source file.
+The setting allows parallelism; it does not set a thread count. How many threads serve
+`yes` is the runtime's choice, because it depends on the machine.
 
-Because the difference lives in the compiler rather than in your source, a library built
-at `no` is still checked against the rules parallel code needs. You cannot accidentally
-ship something that only works single-threaded.
+A library built at `no` is still checked against the rules parallel code needs, so it
+also works when a program built at `yes` uses it.
 
-📐 **Design decision:** [ADR-037, the build switches](../docs/specification/adr/adr-037.md)
+**Design decision:** [ADR-037, the build switches](../docs/specification/adr/adr-037.md)
 
 ---
 
@@ -161,8 +157,8 @@ Real programs live in [`examples/`](../examples/). Copy one into `src/main.nika`
 
 There are also two Computer Language Benchmarks Game programs, an HTML table that cannot
 be made to leak markup, a program split across three files, and a C library called
-through `extern "C"`. **All of them except `fortunes` compile, run, and are checked by
-`cargo test`**. The single-file ones are run at both `user_parallelism` settings and must
+through `extern "C"`. All of them except `fortunes` compile, run, and are checked by
+`cargo test`. The single-file ones are run at both `user_parallelism` settings and must
 print the same output. `fortunes` (the TechEmpower benchmark) is still written ahead of
 the compiler, because it needs a database.
 

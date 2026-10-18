@@ -161,7 +161,7 @@ its own section, §8 below.
 
 ## 6. What Nikaia Does Differently
 
-The two build switches ([Getting started](guide/getting-started.md#two-switches-one-language)) are the *packaging*. These are the actual claims — each one is specified, and
+The two build switches ([Getting started](guide/getting-started.md#the-two-build-settings)) are the *packaging*. These are the actual claims — each one is specified, and
 each one links to the decision record that argues it:
 
 **1. Functions have no colour.**

@@ -299,7 +299,7 @@ you cannot forget to take it. The compiler also refuses code that would wait for
 holding it.
 
 Whether this runs on one core or on all of them is not written here at all. It is one line
-in `nikaia.toml` ([Getting started](getting-started.md#two-switches-one-language)), and
+in `nikaia.toml` ([Getting started](getting-started.md#the-two-build-settings)), and
 the same source is correct either way.
 
 📖 **Specification:** [Part I, §6.2 Unified types](../docs/specification/10-nikaia-light.md#62-unified-types) · [§6.3 The four doors](../docs/specification/10-nikaia-light.md#63-changing-shared-data-the-four-doors) · [Part II, Chapter 12 Thread safety](../docs/specification/20-nikaia-advance.md#chapter-12-thread-safety-and-synchronization)
