@@ -1636,6 +1636,40 @@ fn second() {
     );
 }
 
+/// **A plain tail stands where a `T?` is returned**, as a plain `return`
+/// value does (ADR-278): text, a number, a literal and a tuple, each put into
+/// `Some` (#648; rustc refused the tail before).
+#[test]
+fn a_plain_tail_is_returned_as_a_nullable() {
+    let source = r#"fn first(s: ref String) -> String? {
+    let at = s.find(":") ?? return null
+    s[0..<at].clone()
+}
+
+fn lit(b: bool) -> String? {
+    if b { return null }
+    "lit"
+}
+
+fn twice(n: i64) -> i64? {
+    if n < 0 { return null }
+    n * 2
+}
+
+fn cut(s: ref String) -> (String, String)? {
+    let at = s.find(":") ?? return null
+    (s[0..<at].clone(), s[at + 1..].clone())
+}
+
+fn main() {
+    println(f"{first("a:b") ?? "-"} {first("ab") ?? "-"} {lit(false) ?? "-"} {lit(true) ?? "-"}")
+    println(f"{twice(4) ?? 0} {twice(-1) ?? 0} {cut("k:v")?.1 ?? "-"} {cut("kv")?.1 ?? "-"}")
+}
+"#;
+    assert!(findings(source).is_empty(), "{:?}", findings(source));
+    assert_eq!(ran("plain-tail-nullable", source), "a - lit -\n8 0 v -\n");
+}
+
 /// **What a test proves not `null`, the compiler uses** (ADR-350, #619): the
 /// right of `&&`, the right of `||` over `== null`, the branch, the `else`, the
 /// rest of a block after an early exit, a `while` body, a nested condition,

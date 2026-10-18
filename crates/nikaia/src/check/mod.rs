@@ -1680,8 +1680,10 @@ impl<'a> Checker<'a> {
             // **A tail widens as a `return` does** (ADR-285 D32).
             // **And into an unsigned type where the walk shows it is not
             // negative** (D32): the slot's own question, asked here too.
+            // **A plain tail stands where a `T?` is returned**, as a plain
+            // `return` value does (ADR-278): it is put into `Some`.
             if let Some(value) = value
-                && let Some(how @ (Wrap::Widen(_) | Wrap::Unsigned(_))) =
+                && let Some(how @ (Wrap::Widen(_) | Wrap::Unsigned(_) | Wrap::Constructor)) =
                     self.widened_slot(&tail, expected, Some(value), &span)
             {
                 self.s.facts.wrapped.insert(value_node(value), how);
