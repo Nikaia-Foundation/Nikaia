@@ -356,28 +356,47 @@ pub fn tools_build() -> crate::emit::Build {
 /// The same at a given build, for a test that lowers the package at another
 /// setting than [`tools_build`].
 pub fn lower_tools_at(dir: &Path, build: crate::emit::Build) -> Result<String> {
+    lower_tools_files(&tools_sources(dir)?, build)
+}
+
+/// The package's files: every `.nika` in `dir`, sorted.
+fn tools_sources(dir: &Path) -> Result<Vec<PathBuf>> {
     let mut paths: Vec<PathBuf> = std::fs::read_dir(dir)
         .with_context(|| format!("reading {}", dir.display()))?
         .filter_map(|entry| entry.ok().map(|entry| entry.path()))
         .filter(|path| path.extension().is_some_and(|e| e == NIKA))
         .collect();
     paths.sort();
-    lower_tools_files(&paths, build)
+    Ok(paths)
 }
 
 /// **The tools package from these files, in this order** (#581 step 9): what
 /// a file lowers to depends on the package, never on where the file stands in
 /// the list; only the order of the sections follows it.
 pub fn lower_tools_files(paths: &[PathBuf], build: crate::emit::Build) -> Result<String> {
+    lower_tools_files_on(paths, build, None)
+}
+
+/// The same on `threads` threads, or as [`in_parallel`] decides for `None`:
+/// the bytes are the same at every count (#667).
+pub fn lower_tools_files_on(
+    paths: &[PathBuf],
+    build: crate::emit::Build,
+    threads: Option<usize>,
+) -> Result<String> {
+    let mut timer = Phases::from_env();
     let mut parsed: Vec<crate::parser::Parsed> = Vec::new();
+    let mut sizes: Vec<usize> = Vec::new();
     for path in paths {
         let source =
             std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
+        sizes.push(source.len());
         parsed.push(
             crate::parser::parse_to_ast(&source)
                 .map_err(|e| anyhow::anyhow!("{}: {e}", path.display()))?,
         );
     }
+    timer.lap("parse");
     // **One package, one namespace** (ADR-286 D1), as a project's files are.
     let files: Vec<(&Path, &crate::parser::Parsed)> = paths
         .iter()
@@ -391,17 +410,25 @@ pub fn lower_tools_files(paths: &[PathBuf], build: crate::emit::Build) -> Result
     library.types.extend(described.types.clone());
     library.functions.extend(described.functions.clone());
     let units: Vec<&crate::parser::Parsed> = parsed.iter().collect();
-    let own = crate::contracts::Ledger::infer_package(&units, &library);
+    let (own, checked) = crate::contracts::Ledger::infer_package_checked(&units, &library);
+    timer.lap("ledger");
     // **The package's trust, asked once** (ADR-010 D9, #581): the join over all
     // its files is one answer, and asking it per file reads the package again
     // for each of them.
-    let provenance = crate::contracts::trust::analyse_package(&units, &library).provenance;
+    // The ledger's pass above is the one the join would run again.
+    let provenance =
+        crate::contracts::trust::analyse_package_checked(&units, &library, &checked).provenance;
+    drop(checked);
+    timer.lap("trust");
 
-    let mut imports: Vec<String> = Vec::new();
-    let mut bodies = String::new();
-    let mut facades = String::new();
-    let mut grammar = false;
-    for (at, (path, unit)) in paths.iter().zip(&parsed).enumerate() {
+    // **Each file checked and lowered on its own, on every core** (#667): a
+    // file's lowering reads the package (`beside`, `own`, `provenance`) and
+    // nothing another file's lowering writes, so the files are independent;
+    // the sections still follow `paths`, and the first refusal reported is
+    // the first in file order, as it was one file after the other.
+    let lower_one = |at: usize| -> (Result<String>, std::time::Duration, std::time::Duration) {
+        let started = std::time::Instant::now();
+        let (path, unit) = (&paths[at], &parsed[at]);
         let beside: Vec<&crate::parser::Parsed> = parsed
             .iter()
             .enumerate()
@@ -426,16 +453,37 @@ pub fn lower_tools_files(paths: &[PathBuf], build: crate::emit::Build) -> Result
             .collect();
         if !refusals.is_empty() {
             let source = std::fs::read_to_string(path).unwrap_or_default();
-            anyhow::bail!("{}", every_refusal(path, &source, &refusals));
+            let refused = Err(anyhow::anyhow!(
+                "{}",
+                every_refusal(path, &source, &refusals)
+            ));
+            return (refused, started.elapsed(), std::time::Duration::ZERO);
         }
+        let checking = started.elapsed();
         let lowered = crate::emit::emit_std_items_against_at(
             unit, &beside, &own, &described, build, provenance,
         )
-        .map_err(|e| anyhow::anyhow!("{}: {e}", path.display()))?;
+        .map(|lowered| lowered.rust)
+        .map_err(|e| anyhow::anyhow!("{}: {e}", path.display()));
+        (lowered, checking, started.elapsed() - checking)
+    };
+    // The largest first, so no core is left with a long file at the end.
+    let mut order: Vec<usize> = (0..paths.len()).collect();
+    order.sort_by_key(|at| std::cmp::Reverse(sizes[*at]));
+    let results = in_parallel(&order, threads, lower_one);
+    timer.lap("files");
+
+    let mut imports: Vec<String> = Vec::new();
+    let mut bodies = String::new();
+    let mut facades = String::new();
+    let mut grammar = false;
+    for ((path, unit), (lowered, checking, emitting)) in paths.iter().zip(&parsed).zip(results) {
+        timer.file(path, checking, emitting);
+        let lowered = lowered?;
         // **One preamble for the package**: a `use std::…` is the file's
         // import of a `std` module, and one namespace imports it once.
         let mut body = String::new();
-        let mut lines = lowered.rust.lines().peekable();
+        let mut lines = lowered.lines().peekable();
         while let Some(line) = lines.next() {
             if line == "#[allow(unused_imports)]"
                 && let Some(next) = lines.peek()
@@ -482,7 +530,144 @@ pub fn lower_tools_files(paths: &[PathBuf], build: crate::emit::Build) -> Result
     rust.push('\n');
     rust.push_str(&bodies);
     rust.push_str(&facades);
+    timer.lap("assemble");
+    timer.report();
     Ok(rust)
+}
+
+/// **Where `lower-std`'s time goes** (#667): with `NIKAIA_LOWER_TIMES` set,
+/// each phase's total and the slowest files of the per-file phases go to
+/// stderr. Unset, it reads no clock.
+struct Phases {
+    on: bool,
+    last: Option<std::time::Instant>,
+    totals: Vec<(String, std::time::Duration)>,
+    files: Vec<(String, String, std::time::Duration)>,
+}
+
+impl Phases {
+    fn from_env() -> Phases {
+        let on = std::env::var_os("NIKAIA_LOWER_TIMES").is_some();
+        Phases {
+            on,
+            last: on.then(std::time::Instant::now),
+            totals: Vec::new(),
+            files: Vec::new(),
+        }
+    }
+
+    fn take(&mut self) -> Option<std::time::Duration> {
+        let now = std::time::Instant::now();
+        let spent = now - self.last?;
+        self.last = Some(now);
+        Some(spent)
+    }
+
+    fn add(&mut self, phase: &str, spent: std::time::Duration) {
+        match self.totals.iter_mut().find(|(name, _)| name == phase) {
+            Some((_, total)) => *total += spent,
+            None => self.totals.push((phase.to_string(), spent)),
+        }
+    }
+
+    fn lap(&mut self, phase: &str) {
+        if let Some(spent) = self.take() {
+            self.add(phase, spent);
+        }
+    }
+
+    fn file(&mut self, path: &Path, checking: std::time::Duration, emitting: std::time::Duration) {
+        if !self.on {
+            return;
+        }
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_default();
+        for (phase, spent) in [("check", checking), ("emit", emitting)] {
+            self.add(phase, spent);
+            self.files
+                .push((phase.to_string(), name.to_string(), spent));
+        }
+    }
+
+    fn report(&mut self) {
+        if !self.on {
+            return;
+        }
+        for (phase, total) in &self.totals {
+            eprintln!("lower-std: {phase:<10} {:>9.3}s", total.as_secs_f64());
+        }
+        if self.totals.iter().any(|(phase, _)| phase == "check") {
+            eprintln!(
+                "lower-std: (check and emit are summed over the threads; files is the wall clock)"
+            );
+        }
+        self.files.sort_by_key(|file| std::cmp::Reverse(file.2));
+        for (phase, file, spent) in self.files.iter().take(25) {
+            eprintln!(
+                "lower-std:   {phase:<6} {file:<32} {:>8.3}s",
+                spent.as_secs_f64()
+            );
+        }
+    }
+}
+
+/// **`work` for each of `order`, on every core, the answers in index order**
+/// (#667): `order` says which index is started first and nothing else. The
+/// threads are `threads`, else `NIKAIA_LOWER_THREADS` where it is set, else
+/// one per core; at one, the work runs on the calling thread.
+fn in_parallel<T: Send>(
+    order: &[usize],
+    threads: Option<usize>,
+    work: impl Fn(usize) -> T + Sync,
+) -> Vec<T> {
+    // The checker and the emitter recurse as deep as the code they walk.
+    const STACK: usize = 256 << 20;
+    let threads = threads
+        .or_else(|| {
+            std::env::var("NIKAIA_LOWER_THREADS")
+                .ok()
+                .and_then(|n| n.parse::<usize>().ok())
+        })
+        .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get()))
+        .clamp(1, order.len().max(1));
+    let mut done: Vec<(usize, T)> = match threads {
+        1 => order.iter().map(|at| (*at, work(*at))).collect(),
+        _ => {
+            let next = std::sync::atomic::AtomicUsize::new(0);
+            let take = || {
+                let mut mine = Vec::new();
+                loop {
+                    let n = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    let Some(at) = order.get(n) else {
+                        return mine;
+                    };
+                    mine.push((*at, work(*at)));
+                }
+            };
+            std::thread::scope(|scope| {
+                let workers: Vec<_> = (0..threads)
+                    .map(|_| {
+                        std::thread::Builder::new()
+                            .stack_size(STACK)
+                            .spawn_scoped(scope, take)
+                            .expect("a thread to lower on")
+                    })
+                    .collect();
+                workers
+                    .into_iter()
+                    .flat_map(|worker| {
+                        worker
+                            .join()
+                            .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+                    })
+                    .collect()
+            })
+        }
+    };
+    done.sort_by_key(|(at, _)| *at);
+    done.into_iter().map(|(_, answer)| answer).collect()
 }
 
 /// **One file's names, as a path into the package**: `pub mod ty { pub use
@@ -557,12 +742,35 @@ pub fn tools_lowered_path(dir: &Path) -> PathBuf {
 pub fn lower_std(sysroot: &Sysroot) -> Result<Vec<PathBuf>> {
     let mut changed = Vec::new();
     let mut lowered: Vec<(PathBuf, String)> = Vec::new();
+    let cache = LoweredBefore::open();
     for nika in sysroot.std_modules()? {
-        lowered.push((lowered_path(&nika), lower_std_module(&nika)?));
+        let key = cache.key("module", std::slice::from_ref(&nika));
+        let rust = match cache.get(key.as_deref()) {
+            Some(rust) => rust,
+            None => {
+                let rust = lower_std_module(&nika)?;
+                cache.put(key.as_deref(), &rust);
+                rust
+            }
+        };
+        lowered.push((lowered_path(&nika), rust));
     }
     let tools = sysroot.tools_dir();
     if tools.is_dir() {
-        lowered.push((tools_lowered_path(&tools), lower_tools(&tools)?));
+        // **Keyed on every file of the package**: each file is checked and
+        // lowered against all the others (`beside`, the package's ledger, its
+        // trust), so a change in any of them may change any section.
+        let paths = tools_sources(&tools)?;
+        let key = cache.key("tools", &paths);
+        let rust = match cache.get(key.as_deref()) {
+            Some(rust) => rust,
+            None => {
+                let rust = lower_tools_files(&paths, tools_build())?;
+                cache.put(key.as_deref(), &rust);
+                rust
+            }
+        };
+        lowered.push((tools_lowered_path(&tools), rust));
     }
     for (rs, rust) in lowered {
         let current = std::fs::read_to_string(&rs).ok();
@@ -572,6 +780,83 @@ pub fn lower_std(sysroot: &Sysroot) -> Result<Vec<PathBuf>> {
         }
     }
     Ok(changed)
+}
+
+/// **What `lower-std` wrote before, by everything it read to write it**
+/// (#667): the same compiler lowering the same sources writes the same bytes,
+/// so a second run with nothing changed takes the answer from the user cache
+/// instead of five minutes.
+///
+/// The key is the compiler's own bytes - its lowering, `std`'s ledger and the
+/// tools' described one are all compiled into it - and the name and text of
+/// every file read, in order. Each entry is a directory of the cache's
+/// `lower-std/`, so `cache::use_entry`'s sweep keeps that from piling up.
+/// Failure here is never a failed lowering: no key or an unreadable entry
+/// lowers again, and an entry that cannot be written is not written.
+struct LoweredBefore {
+    root: PathBuf,
+    compiler: Option<String>,
+}
+
+/// The file in an entry's directory that holds what was lowered.
+const LOWERED: &str = "lowered.rs";
+
+impl LoweredBefore {
+    fn open() -> LoweredBefore {
+        let compiler = std::env::current_exe()
+            .and_then(std::fs::read)
+            .ok()
+            .map(|bytes| cache::sha256_hex(&bytes));
+        LoweredBefore {
+            root: Layout::user_cache_dir().join("lower-std"),
+            compiler,
+        }
+    }
+
+    /// The key for lowering `files` as `what`, or `None` where one of them
+    /// cannot be read (the lowering then says why) or the compiler could not.
+    fn key(&self, what: &str, files: &[PathBuf]) -> Option<String> {
+        let mut read: Vec<u8> = Vec::new();
+        for part in ["nikaia-lower-std-v1", self.compiler.as_deref()?, what] {
+            read.extend_from_slice(part.as_bytes());
+            read.push(0);
+        }
+        for file in files {
+            let source = std::fs::read(file).ok()?;
+            let name = file.file_name()?.as_encoded_bytes();
+            read.extend_from_slice(&(name.len() as u64).to_le_bytes());
+            read.extend_from_slice(name);
+            read.extend_from_slice(&(source.len() as u64).to_le_bytes());
+            read.extend_from_slice(&source);
+        }
+        Some(cache::sha256_hex(&read))
+    }
+
+    fn get(&self, key: Option<&str>) -> Option<String> {
+        let entry = self.root.join(key?);
+        let rust = std::fs::read_to_string(entry.join(LOWERED)).ok()?;
+        cache::use_entry(&entry);
+        Some(rust)
+    }
+
+    fn put(&self, key: Option<&str>, rust: &str) {
+        let Some(key) = key else {
+            return;
+        };
+        let entry = self.root.join(key);
+        if std::fs::create_dir_all(&entry).is_err() {
+            return;
+        }
+        // Whole or not at all: a reader never sees half an entry.
+        let partial = crate::comptime_run::unique_beside(&entry.join(LOWERED));
+        if std::fs::write(&partial, rust).is_ok()
+            && std::fs::rename(&partial, entry.join(LOWERED)).is_ok()
+        {
+            cache::use_entry(&entry);
+        } else {
+            let _ = std::fs::remove_file(&partial);
+        }
+    }
 }
 
 #[cfg(test)]

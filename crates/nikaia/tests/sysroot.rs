@@ -421,3 +421,100 @@ fn a_tools_file_with_two_refusals_reports_both_in_file_order() {
     );
     assert!(said.contains("2 refusals"), "{said}");
 }
+
+/// **The tools package is the same bytes on one thread as on every core**
+/// (#667): `the_committed_rust_is_what_this_compiler_lowers` lowers it on
+/// every core, this on one, and both against the committed file.
+#[test]
+fn the_tools_lower_the_same_on_one_thread_as_on_every_core() {
+    let sysroot = Sysroot::resolve();
+    let paths = sysroot
+        .tool_modules()
+        .expect("the toolchain's Nikaia modules");
+    let one = sysroot::lower_tools_files_on(&paths, sysroot::tools_build(), Some(1))
+        .expect("the toolchain's Nikaia lowers on one thread");
+    let at = sysroot::tools_lowered_path(&sysroot.tools_dir());
+    let committed = std::fs::read_to_string(&at).expect("the committed package");
+    assert!(
+        one == committed,
+        "{} is not what one thread lowers the package to",
+        at.display()
+    );
+}
+
+/// **On several threads, the refusal said is the first in file order**
+/// (#667), as it was when the files were lowered one after the other.
+#[test]
+fn the_first_refused_file_is_the_one_reported_on_every_core() {
+    let dir = std::env::temp_dir().join(format!("nikaia-tools-first-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("a directory to work in");
+    let mut paths = Vec::new();
+    for name in ["a_first", "b_second", "c_third", "d_fourth"] {
+        let path = dir.join(format!("{name}.nika"));
+        std::fs::write(&path, format!("fn {name}() -> i64 {{ return \"text\" }}\n"))
+            .expect("write a file");
+        paths.push(path);
+    }
+    let refused = sysroot::lower_tools_files_on(&paths, sysroot::tools_build(), Some(4))
+        .expect_err("every file is refused");
+    let said = format!("{refused:#}");
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(said.contains("a_first"), "{said}");
+    assert!(!said.contains("b_second"), "{said}");
+}
+
+/// **`lower-std` takes what it lowered before from the cache, and only
+/// that** (#667): nothing changed is the same bytes again without lowering;
+/// a changed file is a new key, so the package is lowered again.
+#[test]
+fn lower_std_takes_an_unchanged_lowering_from_the_cache() {
+    let root = std::env::temp_dir().join(format!("nikaia-lower-cache-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let tools = root.join("nikaia-std").join("src").join("tools");
+    std::fs::create_dir_all(&tools).expect("a sysroot to lower");
+    let cache = root.join("cache");
+    std::fs::write(tools.join("one.nika"), "pub fn one() -> i64 { return 1 }\n").expect("one");
+    std::fs::write(
+        tools.join("two.nika"),
+        "pub fn two() -> i64 { return one() + 1 }\n",
+    )
+    .expect("two");
+    let lower = || {
+        let out = std::process::Command::new(env!("CARGO_BIN_EXE_nikaia"))
+            .arg("lower-std")
+            .arg("--sysroot")
+            .arg(&root)
+            .env("NIKAIA_CACHE_DIR", &cache)
+            .output()
+            .expect("nikaia runs");
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        std::fs::read_to_string(tools.join("package.rs")).expect("the package is written")
+    };
+    let entries = || {
+        std::fs::read_dir(cache.join("lower-std"))
+            .map(|dir| {
+                dir.filter(|e| e.as_ref().is_ok_and(|e| e.path().is_dir()))
+                    .count()
+            })
+            .unwrap_or(0)
+    };
+    let first = lower();
+    assert!(first.contains("pub fn two"), "{first}");
+    assert_eq!(entries(), 1, "the first lowering is kept");
+    std::fs::write(tools.join("package.rs"), "stale").expect("spoil the package");
+    assert_eq!(lower(), first, "the same sources, the same bytes");
+    assert_eq!(entries(), 1, "and no second entry");
+    std::fs::write(
+        tools.join("two.nika"),
+        "pub fn two() -> i64 { return one() + 2 }\n",
+    )
+    .expect("change two");
+    let changed = lower();
+    assert_ne!(changed, first, "a changed file is lowered again");
+    assert_eq!(entries(), 2);
+    let _ = std::fs::remove_dir_all(&root);
+}
