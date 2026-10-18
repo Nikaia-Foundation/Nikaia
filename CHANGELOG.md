@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1040] — 2026-10-18
+
+**A map is hashbrown's table (#420, #434)**
+- `HashMap` and `TrustedMap` lower to `hashbrown::HashMap` with the keyed and the Fx hasher, and a lookup no longer reserves a slot: 1BRC from 300.1 to 273.3 instructions a row; messages still name `HashMap<K, V>`.
+
 ## [0.0.1039] — 2026-10-18
 
 **rfind cuts its text (ADR-320 D5, #453)**
