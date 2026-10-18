@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1023 (Draft)
+**Version:** 0.0.1024 (Draft)
 **Date:** 2026-10-18
 
 ---
@@ -254,9 +254,10 @@ Nikaia provides basic types to represent simple values.
       where they enter the program, with `NotText`. A file name need not be
       text, and is an `fs::Path` (Part III 17.1). Whether a value of it is a view into text that is
       already there, or text of its own, is the compiler's decision per use
-      (6.6). A literal is a view of the program's own text; where the use
-      keeps it as a `String` it is constructed there, and where the use only
-      reads it nothing is allocated. Wherever a program declares `String` -
+      (6.6). A literal is a view of the program's own text, wherever it goes:
+      where only literals and other views are put into a position, it holds
+      the view and nothing is allocated; where text of its own is put there
+      too, the literal is constructed there. Wherever a program declares `String` -
       a field, a result, a parameter, a `let`, the element of a list, the key
       or value of a map - it is text of its own where only text of its own is
       put there, a view where only views are, and either, per value, where
@@ -530,11 +531,14 @@ let mut maybe_string: ref String? = null // Valid
 maybe_string = "World"             // Valid (`mut`, as in 2.1)
 ```
 
-A literal is a **view** of text the program was compiled with (6.6). A literal
-stands wherever a `String` is wanted: where the use **keeps** it — a field, an
-annotated `let`, a `return`, an argument the callee keeps — it is constructed
-there, as `[1, 2]` is a `Vec` where one is wanted; where the use only **reads**
-it, nothing is allocated. A **view** of text the program *has* is not a literal,
+A literal is a **view** of text the program was compiled with (6.6), and it
+stays one wherever a `String` is wanted. Where the use only **reads** it, or
+**keeps** it in a position - a field, an annotated `let`, a `return`, an element
+of a list, an argument the callee keeps - into which only literals and other
+views flow, nothing is allocated: the position holds the view, and static text
+outlives every name. Where text of its own (an `f"…"`, a `.clone()`, a `String`
+handed over) flows into the same position, the literal is constructed there, as
+`[1, 2]` is a `Vec` where one is wanted. A **view** of text the program *has* is not a literal,
 and where it is kept `.clone()` makes the copy, written where it happens. A view
 in a published `String` slot that text of its own also flows into is refused without it (`NK1106`); any other `String` slot takes the view (2.2). **`.clone()` is the one
 word for a copy**, of text and of everything else: a copy of text is text of its

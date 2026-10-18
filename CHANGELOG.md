@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1024] — 2026-10-18
+
+**A position only literals flow into holds a view of static text**
+- A field, a result, a `let`, a list element or a map key or value into which only literals (and other views) flow now holds a view of the static text instead of a constructed copy; the literal is constructed only where text of its own also flows into the position (Part I 2.2, 2.3; ADR-282 D29, #659). Specification only: the compiler follows in #659.
+
 ## [0.0.1023] — 2026-10-18
 
 **A tail `if`/`match` with a `return` end puts only its values into `Some`**
