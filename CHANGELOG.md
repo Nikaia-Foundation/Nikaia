@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1019] — 2026-10-18
+
+**An `assert` on an option is a precondition**
+- A claim about an option (a parameter after `;`) is a precondition as one about a subject is: a call proves it with the value it names or the option's default; for `main` it is checked where the words arrive (exit 2) and listed in `--help`, `--asserts` and `nikaia.contracts`. An option's type is checked as a parameter's (`i8`, `i16`, `u16`, an undeclared type: NK1135). The usage error says a type with the article its sound takes (a `u8`, an `i64`).
+
 ## [0.0.1018] — 2026-10-18
 
 **A `match` on a lent name, and an indexed write on an `Array`, build**
