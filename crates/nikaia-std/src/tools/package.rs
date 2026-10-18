@@ -17837,6 +17837,10 @@ fn check_core_stmt_read_through_a_jump(state: &CheckState, world: &CheckWorld<'_
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+fn check_core_stmt_a_named(ty: &Ty) -> bool { matches!(ty, Ty::Named { .. }) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 fn check_core_stmt_a_read_that_leaves(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, value: &Expr) -> bool {
     match value {
         Expr::Coalesce { value: read, fallback, .. } => { let read = nikaia_std::boxed::open(read); let fallback = nikaia_std::boxed::open(fallback); (check_core_stmt_an_index(read) || check_core_stmt_a_get(world, read)) && state.leaves(world, fallback) },
@@ -18177,7 +18181,9 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     let jumped = check_core_stmt_read_through_a_jump(&state, world, value);
     let copied_read = a_copy_by_value(&bound) && check_core_stmt_a_read_that_leaves(&state, world, value);
     if copied_read { state.facts.copied_jump_reads.insert(id_of(value) as i64); }
-    let read_through_a_jump = jumped && !copied_read;
+    let copied_word = ty.is_none() && jumped && !copied_read && state.a_package_copy(world, &bound) && check_core_stmt_a_named(&bound);
+    if copied_word { state.a_map_read_assigned(world, &bound, value, span); }
+    let read_through_a_jump = jumped && !copied_read && !copied_word;
     if check_core_stmt_a_path(&bound) && state.made_from_text(world, value) { state.flow.text_paths.insert(id); }
     if bound.is_unknown() || state.a_drivers_row(world, value) { state.flow.unknown_bound.insert(id); }
     let mut literal: Option<String> = None;
@@ -48066,10 +48072,9 @@ fn moved_by(parts: &[i64], base: i64) -> Vec<i64> {
 
 // --- prover_calls.nika ---
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FreeFunction {
     pub params: Vec<String>,
-    pub options: Vec<(String, Expr)>,
     pub can_throw: bool,
     pub whole_result: bool,
 }
@@ -48077,33 +48082,18 @@ pub struct FreeFunction {
 pub fn free_function(program: &Program, words: &winnow_grammar::InternerContext, wanted: &str) -> Option<FreeFunction> {
     for item in program.items.iter() {
         match &item.node {
-            Item::Fn { name, receiver, args, config, ret_type, can_throw, .. } => {
+            Item::Fn { name, receiver, args, ret_type, can_throw, .. } => {
                 let can_throw = *can_throw; let name = *name;
                 if receiver.is_none() && named_as((name).as_ref(), words, wanted) {
                     let mut params: Vec<String> = vec![];
                     for arg in args.iter() { params.push(words.resolve(arg.name).to_owned()); }
-                    let mut options: Vec<(String, Expr)> = vec![];
-                    for option in config.iter() {
-                        params.push(words.resolve(option.name).to_owned());
-                        options.push((words.resolve(option.name).to_owned(), option.default.clone()));
-                    }
-                    return Some(FreeFunction { params, options, can_throw, whole_result: whole_type((ret_type).as_ref(), words) });
+                    return Some(FreeFunction { params, can_throw, whole_result: whole_type((ret_type).as_ref(), words) });
                 }
             },
             _ => { },
         }
     }
     None
-}
-
-pub fn arguments_in_order(function: &FreeFunction, args: &[Expr], config: &[ConfigArg], words: &winnow_grammar::InternerContext) -> Vec<Expr> {
-    let mut all: Vec<Expr> = args.to_owned();
-    for (option, default) in function.options.iter() {
-        let mut value = default.clone();
-        for given in config.iter() { if words.resolve(given.name) == option { value = given.value.clone(); } }
-        all.push(value);
-    }
-    all
 }
 
 fn named_as(named: Option<&winnow_grammar::Symbol>, words: &winnow_grammar::InternerContext, name: &str) -> bool {
@@ -50293,7 +50283,7 @@ fn prover_test(walk: &mut ProverWalk, body: &Block, program: &Program, words: &w
 #[allow(clippy::too_many_arguments)]
 fn prover_function(walk: &mut ProverWalk, item: &Spanned<Item>, owner: Option<String>, of_a_trait: bool, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) {
     match &item.node {
-        Item::Fn { name, receiver, args, config, body, can_throw, .. } => {
+        Item::Fn { name, receiver, args, body, can_throw, .. } => {
             let can_throw = *can_throw; let name = *name;
             let has_owner = owner.is_some();
             let mut key: Option<String> = None;
@@ -50322,26 +50312,6 @@ fn prover_function(walk: &mut ProverWalk, item: &Spanned<Item>, owner: Option<St
                     scope.has_length(&mut walk.arena, &arg_name, None);
                     params.insert(arg_name.to_owned());
                     let length = length_of(&arg_name);
-                    let at_entry = walk.arena.var(&length);
-                    scope.entry.insert(length, at_entry);
-                }
-            }
-            for option in config.iter() {
-                let option_name = words.resolve(option.name).to_owned();
-                scope.locals.insert(option_name.to_owned());
-                let ty = words.resolve(option.ty.name);
-                if option.ty.generics.is_empty() && is_whole_number(ty) {
-                    scope.ints.insert(option_name.to_owned());
-                    scope.loose.insert(option_name.to_owned());
-                    params.insert(option_name.to_owned());
-                    let at_entry = walk.arena.var(&option_name);
-                    scope.entry.insert(option_name.to_owned(), at_entry);
-                    if ty.starts_with('u') { scope.not_negative(&mut walk.arena, &option_name); }
-                }
-                if has_a_length(ty) {
-                    scope.has_length(&mut walk.arena, &option_name, None);
-                    params.insert(option_name.to_owned());
-                    let length = length_of(&option_name);
                     let at_entry = walk.arena.var(&length);
                     scope.entry.insert(length, at_entry);
                 }
@@ -50492,15 +50462,15 @@ fn prover_let(walk: &mut ProverWalk, names: &[winnow_grammar::Symbol], mutable: 
     let mut called_summed: Option<Vec<SummaryAlt>> = None;
     if names.len() == 1 && !mutable {
         match value {
-            Expr::Call { func, args, config, .. } => {
+            Expr::Call { func, args, .. } => {
                 let func = nikaia_std::boxed::open(func);
                 let callee = prover_bound_callee(func, &scope, words, unaliased);
                 if callee.is_some() {
                     let c = nikaia_std::index::or(callee, || "".into());
                     let bound = words.resolve(*nikaia_std::index::get(&names, 0)).to_owned();
-                    called_facts = prover_postconditions_of(walk, &c, args, config, &bound, &scope, program, words, own, condition);
+                    called_facts = prover_postconditions_of(walk, &c, args, &bound, &scope, program, words, own, condition);
                     called_whole = prover_returns_whole(walk, &c, program, words, own, condition);
-                    called_summed = prover_summed(walk, &c, args, config, &bound, &scope, program, words, &written_of(value));
+                    called_summed = prover_summed(walk, &c, args, &bound, &scope, program, words, &written_of(value));
                     called = true;
                 }
             },
@@ -50561,7 +50531,7 @@ fn prover_call_results(walk: &mut ProverWalk, expr: &Expr, top: bool, scope: &mu
         },
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); prover_call_results(walk, expr, false, scope, program, words, own, unaliased, condition, written_of); },
         Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); prover_call_results(walk, expr, false, scope, program, words, own, unaliased, condition, written_of); },
-        Expr::Call { func, args, config, .. } => {
+        Expr::Call { func, args, .. } => {
             let func = nikaia_std::boxed::open(func);
             for arg in args.iter() { prover_call_results(walk, arg, false, scope, program, words, own, unaliased, condition, written_of); }
             if top { return; }
@@ -50569,14 +50539,14 @@ fn prover_call_results(walk: &mut ProverWalk, expr: &Expr, top: bool, scope: &mu
             if !prover_returns_whole(walk, &callee, program, words, own, condition) { return; }
             let name = call_result_name(expr);
             scope.rebind(&walk.arena, &name);
-            let facts = prover_postconditions_of(walk, &callee, args, config, &name, &scope, program, words, own, condition);
+            let facts = prover_postconditions_of(walk, &callee, args, &name, &scope, program, words, own, condition);
             scope.ints.insert(name.to_owned());
             scope.loose.insert(name.to_owned());
             for fact in facts.iter() {
                 let fact = nikaia_std::num::value(fact);
                 scope.facts.push(fact);
             }
-            let alts = prover_summed(walk, &callee, args, config, &name, &scope, program, words, &written_of(expr));
+            let alts = prover_summed(walk, &callee, args, &name, &scope, program, words, &written_of(expr));
             if alts.is_some() { scope.summed.insert(name.to_owned(), nikaia_std::index::or(alts, || vec![].into())); }
         },
         _ => { },
@@ -50648,10 +50618,9 @@ fn prover_pinned_value(arena: &mut TermArena, facts: &[i64], d: i64, ask: &impl 
 }
 
 #[allow(clippy::too_many_arguments)]
-fn prover_summed(walk: &mut ProverWalk, callee: &str, written: &[Expr], config: &[ConfigArg], bound: &str, scope: &ProverScope, program: &Program, words: &winnow_grammar::InternerContext, call: &str) -> Option<Vec<SummaryAlt>> {
+fn prover_summed(walk: &mut ProverWalk, callee: &str, args: &[Expr], bound: &str, scope: &ProverScope, program: &Program, words: &winnow_grammar::InternerContext, call: &str) -> Option<Vec<SummaryAlt>> {
     let exits = match *nikaia_std::index::get(&walk.state.summaries, callee) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let function = match free_function(program, words, callee) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let args = arguments_in_order(&function, written, config, words);
     if (function.params.len() as i64) != args.len() as i64 { return None; }
     let mut given: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
     for k in 0..args.len() as i64 {
@@ -51124,10 +51093,10 @@ fn prover_expr(walk: &mut ProverWalk, expr: &Expr, span: Span, scope: &ProverSco
 #[allow(clippy::too_many_arguments)]
 fn prover_calls_in(walk: &mut ProverWalk, expr: &Expr, span: Span, scope: &ProverScope, at: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) {
     match expr {
-        Expr::Call { func, args, config, .. } => {
+        Expr::Call { func, args, .. } => {
             let func = nikaia_std::boxed::open(func);
             let callee = prover_called(func, words, unaliased);
-            if callee.is_some() { prover_a_call(walk, nikaia_std::index::or(callee.as_deref(), || ""), args, config, span, scope, at, program, words, own, ask, model, escape, written_of, condition); }
+            if callee.is_some() { prover_a_call(walk, nikaia_std::index::or(callee.as_deref(), || ""), args, span, scope, at, program, words, own, ask, model, escape, written_of, condition); }
         },
         _ => { },
     }
@@ -51288,7 +51257,7 @@ fn prover_nested(walk: &mut ProverWalk, block: &Block, lambda: Option<Vec<String
 }
 
 #[allow(clippy::too_many_arguments)]
-fn prover_a_call(walk: &mut ProverWalk, callee: &str, args: &[Expr], config: &[ConfigArg], span: Span, scope: &ProverScope, at: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) {
+fn prover_a_call(walk: &mut ProverWalk, callee: &str, args: &[Expr], span: Span, scope: &ProverScope, at: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) {
     if scope.locals.contains(callee) { return; }
     let caller = carrying_function((at.function).as_deref());
     if caller.is_some() { walk.state.edges.insert((nikaia_std::index::or(caller, || "".into()), callee.to_owned())); }
@@ -51296,8 +51265,7 @@ fn prover_a_call(walk: &mut ProverWalk, callee: &str, args: &[Expr], config: &[C
     if pre.is_some() {
         let function = match free_function(program, words, callee) { Some(__nikaia_value) => __nikaia_value, None => return };
         let found = nikaia_std::index::or(pre, || Precondition::none());
-        let all = arguments_in_order(&function, args, config, words);
-        prover_record_call(walk, callee, &function.params, &found.claims, &all, span, scope, at, words, ask, model, escape, written_of);
+        prover_record_call(walk, callee, &function.params, &found.claims, args, span, scope, at, words, ask, model, escape, written_of);
         return;
     }
     let foreign = match prover_foreign_contract(walk, callee, own, condition) { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -51339,12 +51307,11 @@ fn prover_condition_term(arena: &mut TermArena, text: &str, names: &collections:
 }
 
 #[allow(clippy::too_many_arguments)]
-fn prover_postconditions_of(walk: &mut ProverWalk, callee: &str, args: &[Expr], config: &[ConfigArg], bound: &str, scope: &ProverScope, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> Vec<i64> {
+fn prover_postconditions_of(walk: &mut ProverWalk, callee: &str, args: &[Expr], bound: &str, scope: &ProverScope, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> Vec<i64> {
     let posts = standing_posts(&walk.state.postconditions, callee);
     if posts.is_some() {
         let function = match free_function(program, words, callee) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
-        let all = arguments_in_order(&function, args, config, words);
-        return postconditions_for(&mut walk.arena, &nikaia_std::index::or(posts, || vec![].into()), &function.params, &all, bound, scope, words, &walk.state.pinned);
+        return postconditions_for(&mut walk.arena, &nikaia_std::index::or(posts, || vec![].into()), &function.params, args, bound, scope, words, &walk.state.pinned);
     }
     let foreign = match prover_foreign_contract(walk, callee, own, condition) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
     postconditions_for(&mut walk.arena, &foreign.ensures, &foreign.params, args, bound, scope, words, &walk.state.pinned)
@@ -56705,7 +56672,7 @@ fn same_tiers(a: &collections::BTreeMap<String, Tier>, b: &collections::BTreeMap
     if (a.len() as i64) != b.len() as i64 { return false; }
     for (word, tier) in a.iter() {
         let tier = *tier;
-        let other: Tier = match (*nikaia_std::index::get(&b, word)).copied() { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let other = match (*nikaia_std::index::get(&b, word)).copied() { Some(__nikaia_value) => __nikaia_value, None => return false };
         if tier_word(tier) != tier_word(other) { return false; }
     }
     true
@@ -60177,17 +60144,12 @@ fn a_symbols_text(names: &winnow_grammar::InternerContext, name: Option<winnow_g
 
 fn item_types(names: &winnow_grammar::InternerContext, item: &Item, known: &collections::BTreeSet<String>, plain: &collections::BTreeSet<String>, span: &Span, out: &mut Vec<Finding>) {
     match item {
-        Item::Fn { args, config, ret_type, body, is_extern, .. } => {
+        Item::Fn { args, ret_type, body, is_extern, .. } => {
             let is_extern = *is_extern;
             for arg in args.iter() {
                 written_at(names, &arg.ty, known, true, span, out);
                 widths_written(names, &arg.ty, is_extern, span, out);
                 if !is_extern { types_word_by_ref(names, &arg.ty, plain, "parameter", span, out); }
-            }
-            for option in config.iter() {
-                written_at(names, &option.ty, known, true, span, out);
-                widths_written(names, &option.ty, is_extern, span, out);
-                if !is_extern { types_word_by_ref(names, &option.ty, plain, "parameter", span, out); }
             }
             maybe_written(names, (ret_type).as_ref(), known, span, out);
             widths_written_maybe(names, (ret_type).as_ref(), is_extern, span, out);
@@ -63216,7 +63178,7 @@ pub mod prover_arena {
 }
 pub mod prover_calls {
     #[allow(unused_imports)]
-    pub use super::{FreeFunction, free_function, arguments_in_order, may_throw, from_outside};
+    pub use super::{FreeFunction, free_function, may_throw, from_outside};
 }
 pub mod prover_claims {
     #[allow(unused_imports)]

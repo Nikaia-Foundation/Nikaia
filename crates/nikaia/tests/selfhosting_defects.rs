@@ -1684,3 +1684,41 @@ fn main() {
     assert_eq!(said.trim(), "1 7");
     assert!(rust.contains("nikaia_std::error::Thrown<Bad>"), "{rust}");
 }
+
+/// **A map's read past a jump, handed to a `ref` parameter, is the view it
+/// already is**: `written_of(m[k] ?? continue)` over a map of a struct passes
+/// what `index::get` opened, to a function and to a function value alike (it
+/// wrote `&` before the `match`, and rustc refused `&&E`).
+#[test]
+fn a_map_read_past_a_jump_is_handed_to_a_ref_parameter_as_it_is() {
+    let said = printed(
+        "map-read-to-a-ref-parameter",
+        r#"
+use std::collections
+
+struct E { n: i64 }
+fn written_of(e: ref E) -> String {
+    return f"<{e.n}>"
+}
+fn through(m: ref collections::BTreeMap[String, E], keys: ref Vec[String], shown: fn(ref E) -> String sync) -> String {
+    let mut out: String = ""
+    for k in keys {
+        out.push_str(shown(m[k] ?? continue))
+    }
+    return out
+}
+fn main() {
+    let mut m: collections::BTreeMap[String, E] = collections::BTreeMap()
+    m["a"] = E { n: 1 }
+    m["c"] = E { n: 3 }
+    let keys: Vec[String] = ["a", "b", "c"]
+    let mut out: String = ""
+    for k in keys {
+        out.push_str(written_of(m[k] ?? continue))
+    }
+    println(f"{out} {through(m, keys, written_of)}")
+}
+"#,
+    );
+    assert_eq!(said.trim(), "<1><3> <1><3>");
+}

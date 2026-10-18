@@ -1515,7 +1515,7 @@ fn same_tiers(a: ref collections::BTreeMap[String, Tier], b: ref collections::BT
         return false
     }
     for (word, tier) in a {
-        let other: Tier = b[word] ?? return false
+        let other = b[word] ?? return false
         if tier_word(tier) != tier_word(other) {
             return false
         }
