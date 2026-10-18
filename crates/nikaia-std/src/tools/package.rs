@@ -16680,6 +16680,7 @@ pub fn check_core_ops_binary<H: CheckHost>(state: &mut CheckState, world: &Check
     let mut right: Ty = walked_right;
     if value_of_a_copy(&left.unseen()) == byte && state.text_literal(world, &byte, rhs, false).is_some() { right = byte.clone(); }
     state.divisor_is_not_zero(world, op, rhs, span);
+    state.shift_count_fits(world, op, &value_of_a_copy(&left.unseen()), rhs, span);
     state.an_operation_that_overflows(world, op, lhs, rhs, (reach).as_deref(), span);
     let stamped = left.is_seen() || right.is_seen();
     if !check_core_ops_equality(op) && !check_core_ops_logical(op) {
@@ -23836,6 +23837,17 @@ fn note_seq_item(ty: &Ty) -> Ty {
     }
 }
 
+fn note_an_integer(name: &str) -> bool { name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" }
+
+fn note_width_of(ty: &str) -> u64 {
+    match ty {
+        "u8" => 8u64,
+        "i32" => 32u64,
+        "u32" => 32u64,
+        _ => 64u64,
+    }
+}
+
 fn note_a_division(op: &BinaryOp) -> bool { *op == BinaryOp::Div || *op == BinaryOp::Rem }
 
 impl CheckState {
@@ -23921,6 +23933,23 @@ impl CheckState {
         let mut what: String = "takes the remainder".to_owned();
         if op == BinaryOp::Div { what = "divides".to_owned(); }
         self.findings.push(check_refusal("NK1118", span, format!("This {} by zero.", what), vec!["Dividing by zero would stop the program, and here it's certain to happen.".to_owned()], Some("If the divisor can really be zero, check it before dividing.".to_owned())));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn shift_count_fits(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, op: BinaryOp, left: &Ty, rhs: &Expr, span: &Span) {
+        if op != BinaryOp::Shl && op != BinaryOp::Shr { return; }
+        let count = match self.constant_of(world, rhs) { Some(__nikaia_value) => __nikaia_value, None => return };
+        let ty: String = match left {
+            Ty::Named { name, args, view } => { let view = *view; if !view && args.is_empty() && note_an_integer(name) { name.to_owned() } else { "i64".to_owned() } },
+            _ => "i64".to_owned(),
+        };
+        let width: u64 = note_width_of(&ty);
+        if !count.beyond && !count.value.negative && count.value.magnitude < width { return; }
+        let mut written: String = format!("{}", count.value.magnitude);
+        if count.value.negative { written = format!("-{}", count.value.magnitude); }
+        let article = if an_or_a(&ty) == "an" { "an" } else { "a" };
+        let last = width - 1u64;
+        self.findings.push(check_refusal("NK1116", span, format!("This shifts {} `{}` by {} places, and it has {} bits.", article, ty, written, width), vec!["A shift by a negative count, or by as many places as the type has bits or more, would stop the program, and here it's certain to happen.".to_owned()], Some(format!("Shift by 0 to {} places.", last).to_owned())));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

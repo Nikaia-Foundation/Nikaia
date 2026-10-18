@@ -108,3 +108,60 @@ fn a_large_constant_is_an_i64_and_mixes_with_nothing_else() {
     );
     assert_eq!(pinned.len(), 1, "one cause, one refusal: {pinned:#?}");
 }
+
+/// **A shift by a constant count outside `0..<width` is `NK1116`** (#653,
+/// Part I 2.2): it is certain to stop the program, so it is refused before
+/// the language below sees it, for `i64`, `u8` and `i32`, and for a negative
+/// count. A count inside the width passes.
+#[test]
+fn a_shift_past_the_width_is_refused() {
+    for (source, ty, count, width) in [
+        (
+            "fn main() {\n    let n: i64 = 1\n    let m = n << 64\n    println(f\"{m}\")\n}\n",
+            "an `i64`",
+            "64",
+            "64",
+        ),
+        (
+            "fn main() {\n    let n = 1\n    let m = n >> 70\n    println(f\"{m}\")\n}\n",
+            "an `i64`",
+            "70",
+            "64",
+        ),
+        (
+            "fn main() {\n    let b: u8 = 1\n    let m = b << 8\n    println(f\"{m}\")\n}\n",
+            "a `u8`",
+            "8",
+            "8",
+        ),
+        (
+            "fn main() {\n    let c: i32 = 1\n    let m = c >> 32\n    println(f\"{m}\")\n}\n",
+            "an `i32`",
+            "32",
+            "32",
+        ),
+        (
+            "fn main() {\n    let c: i32 = 1\n    let m = c << -1\n    println(f\"{m}\")\n}\n",
+            "an `i32`",
+            "-1",
+            "32",
+        ),
+    ] {
+        let found = findings(source);
+        let message = format!("This shifts {ty} by {count} places, and it has {width} bits.");
+        assert!(
+            found
+                .iter()
+                .any(|f| f.code == "NK1116" && f.message == message),
+            "{source}: {found:#?}"
+        );
+    }
+    for source in [
+        "fn main() {\n    let n: i64 = 1\n    let m = n << 63\n    println(f\"{m}\")\n}\n",
+        "fn main() {\n    let b: u8 = 1\n    let m = b << 7\n    println(f\"{m}\")\n}\n",
+        "fn main() {\n    let c: i32 = 1\n    let s = 3\n    let m = c >> s\n    println(f\"{m}\")\n}\n",
+    ] {
+        let found = findings(source);
+        assert!(found.is_empty(), "{source}: {found:#?}");
+    }
+}

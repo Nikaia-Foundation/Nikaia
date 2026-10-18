@@ -37,6 +37,26 @@ fn nikaia(args: &[&str], dir: &Path) -> std::process::Output {
         .expect("the nikaia binary runs")
 }
 
+/// **A `rustc` that denies warnings for one crate**, the program's (Cargo
+/// names a binary `<name>-<hash>`, so the name is a prefix): the
+/// author's choice, as `-D warnings` is, so what it refuses is a refusal of
+/// the language below that is no defect of this compiler (#653). Every other
+/// call - `-vV`, `std`'s build - is the toolchain's own.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn rustc_denying_warnings(dir: &Path, crate_name: &str) -> PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+    let script = dir.join("rustc-denying-warnings");
+    std::fs::write(
+        &script,
+        format!(
+            "#!/bin/sh\ncase \" $* \" in\n  *\" --crate-name {crate_name}\"*) exec rustc -D warnings \"$@\" ;;\nesac\nexec rustc \"$@\"\n"
+        ),
+    )
+    .expect("the wrapper");
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).expect("executable");
+    script
+}
+
 fn said(output: &std::process::Output) -> String {
     format!(
         "stdout:\n{}\nstderr:\n{}",
@@ -158,31 +178,40 @@ fn a_program_with_a_rust_dependency_takes_cargos_path() {
 }
 
 /// An error in the generated Rust is said against the `.nika` line, as the
-/// Cargo build says it. The program is one the frontend passes and `rustc`
-/// refuses: a shift past the width, which rustc's `arithmetic_overflow`
-/// denies.
+/// Cargo build says it. The program is one the frontend passes, with an
+/// unused name, and the `rustc` it is compiled with denies warnings
+/// ([`rustc_denying_warnings`]).
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 fn a_backend_error_is_still_said_in_nikaias_words() {
     let dir = a_project(
         "run-fast-backend-error",
         "[package]\nname = \"refused\"\nversion = \"0.1.0\"\n",
-        "fn main() {\n    let n: i64 = 1\n    let m = n << 64\n    println(f\"{m}\")\n}\n",
+        "fn main() {\n    let n: i64 = 1\n    let unused = n + 1\n    println(f\"{n}\")\n}\n",
     );
     let project = dir.to_string_lossy().to_string();
+    let rustc = rustc_denying_warnings(&dir, "refused");
 
-    let ran = nikaia(&["run", "--project", &project], &dir);
+    let ran = Command::new(env!("CARGO_BIN_EXE_nikaia"))
+        .args(["run", "--project", &project])
+        .current_dir(&dir)
+        .env("NIKAIA_CACHE_DIR", shared_cache_dir())
+        .env("RUSTC", &rustc)
+        .env_remove("CARGO_TARGET_DIR")
+        .env_remove("NIKAIA_WRAPPER_TRACE")
+        .output()
+        .expect("the nikaia binary runs");
     assert!(!ran.status.success(), "{}", said(&ran));
     let complaint = said(&ran);
     assert!(
-        complaint.contains("will overflow") && !complaint.contains("error[NK"),
+        complaint.contains("Unused variable") && !complaint.contains("error[NK"),
         "the backend refused it, not the checker: {complaint}"
     );
     assert!(
         complaint.contains("src/main.nika:3:"),
         "the message names the `.nika` line: {complaint}"
     );
-    assert!(complaint.contains("n << 64"), "{complaint}");
+    assert!(complaint.contains("let unused = n + 1"), "{complaint}");
     assert!(!complaint.contains("refused.rs"), "{complaint}");
     assert!(
         !dir.join("target/nikaia/bin").exists(),

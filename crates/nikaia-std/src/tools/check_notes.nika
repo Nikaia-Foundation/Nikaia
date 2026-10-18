@@ -23,6 +23,21 @@ fn note_seq_item(ty: ref Ty) -> Ty {
     }
 }
 
+/// Whether a type's name is an integer type's.
+fn note_an_integer(name: ref String) -> bool {
+    return name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64"
+}
+
+/// How many bits an integer type has.
+fn note_width_of(ty: ref String) -> u64 {
+    return match ty {
+        "u8" => 8,
+        "i32" => 32,
+        "u32" => 32,
+        else => 64,
+    }
+}
+
 fn note_a_division(op: BinaryOp) -> bool {
     return op == BinaryOp::Div || op == BinaryOp::Rem
 }
@@ -152,6 +167,33 @@ impl CheckState {
             what = "divides".clone()
         }
         self.findings.push(check_refusal("NK1118", span, f"This {what} by zero.", ["Dividing by zero would stop the program, and here it's certain to happen.".clone()], "If the divisor can really be zero, check it before dividing.".clone()))
+    }
+
+    /// **`NK1116`: a shift by a constant count below 0, or as large as the
+    /// left side's type is wide** (Part I 2.2): it would stop the program,
+    /// and here it is certain to. A left side whose type is not decided yet
+    /// is measured as an `i64`, the widest, so nothing is refused that a
+    /// narrower type would not refuse too.
+    pub fn shift_count_fits(ref mut self, world: ref CheckWorld, op: BinaryOp, left: ref Ty, rhs: ref Expr, span: ref Span) sync {
+        if op != BinaryOp::Shl && op != BinaryOp::Shr {
+            return
+        }
+        let count = self.constant_of(world, rhs) ?? return
+        let ty: String = match left {
+            Ty::Named { name, args, view } => if !view && args.len() == 0 && note_an_integer(name) { name.clone() } else { "i64".clone() },
+            else => "i64".clone(),
+        }
+        let width: u64 = note_width_of(ty)
+        if !count.beyond && !count.value.negative && count.value.magnitude < width {
+            return
+        }
+        let mut written: String = f"{count.value.magnitude}"
+        if count.value.negative {
+            written = f"-{count.value.magnitude}"
+        }
+        let article = if an_or_a(ty) == "an" { "an" } else { "a" }
+        let last = width - 1
+        self.findings.push(check_refusal("NK1116", span, f"This shifts {article} `{ty}` by {written} places, and it has {width} bits.", ["A shift by a negative count, or by as many places as the type has bits or more, would stop the program, and here it's certain to happen.".clone()], f"Shift by 0 to {last} places.".clone()))
     }
 
     /// **A lambda's parameter**, bound without `mut` where a write door asks
