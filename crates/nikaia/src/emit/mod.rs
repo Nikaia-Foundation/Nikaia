@@ -1157,6 +1157,9 @@ struct Emitter<'p> {
     place: std::cell::RefCell<seeds::Place>,
     /// A signature of a barrier is being written: its maps are the keyed ones.
     floor: std::cell::Cell<bool>,
+    /// A grammar's copy over bytes is being written (ADR-366 D2): what Nikaia
+    /// types as text is taken through the backend's checking `text(...)`.
+    grammar_bytes: std::cell::Cell<bool>,
     /// **The program's `main`'s parameters as its definition wrote them**,
     /// `name: type`, for the entry that reads the words into them
     /// ([ADR-360](../../docs/specification/adr/adr-360.md) D1).
@@ -2117,6 +2120,7 @@ impl<'p> Emitter<'p> {
             seeds: seeds_of,
             place: std::cell::RefCell::new(seeds::Place::default()),
             floor: std::cell::Cell::new(false),
+            grammar_bytes: std::cell::Cell::new(false),
             main_params: std::cell::RefCell::new(Vec::new()),
         };
         made.s.sums = made.s.error_sums(&made.world);
@@ -4657,7 +4661,13 @@ impl<'p> Emitter<'p> {
         if bytes {
             out.push("        input bytes;\n");
         }
+        self.grammar_bytes.set(bytes);
+        let written = self.grammar_body(out, def, bytes);
+        self.grammar_bytes.set(false);
+        written
+    }
 
+    fn grammar_body(&self, out: &mut Out, def: &GrammarDef, bytes: bool) -> Result<()> {
         let types = def
             .rules
             .iter()
@@ -4779,6 +4789,14 @@ impl<'p> Emitter<'p> {
             Pattern::Choice(parts) => self.patterns(out, parts, " | "),
             Pattern::Bind { name, pat } => {
                 out.push(&format!("{}:", self.text(*name)));
+                // A literal's capture is text in Nikaia; over bytes the backend
+                // hands back bytes, so it is checked (ADR-366 D2).
+                if self.grammar_bytes.get() && matches!(pat.node, Pattern::Literal(_)) {
+                    out.push("text(");
+                    self.pattern(out, pat)?;
+                    out.push(")");
+                    return Ok(());
+                }
                 self.pattern(out, pat)
             }
             Pattern::Literal(text) => {
@@ -4815,6 +4833,32 @@ impl<'p> Emitter<'p> {
                 name,
                 generics,
                 args,
+            } if self.grammar_bytes.get()
+                && generics.is_empty()
+                && !args.is_empty()
+                && matches!(self.text(*name), "until" | "bytes" | "text") =>
+            {
+                // Over bytes `until(t)` is bytes to the backend and text to
+                // Nikaia: it is checked where it becomes text (ADR-366 D2).
+                // Inside `bytes(...)` or `text(...)` what is captured is the
+                // outer one's, so nothing below is wrapped again.
+                let called = self.text(*name);
+                let wrap = called == "until";
+                out.push(if wrap { "text(until(" } else { called });
+                if !wrap {
+                    out.push("(");
+                }
+                self.grammar_bytes.set(false);
+                let written = self.patterns(out, args, ", ");
+                self.grammar_bytes.set(true);
+                written?;
+                out.push(if wrap { "))" } else { ")" });
+                Ok(())
+            }
+            Pattern::Ref {
+                name,
+                generics,
+                args,
             } => {
                 out.push(self.text(*name));
                 // `dec[i32](…)` -> `dec::<i32>(…)`? No: the backend's builtin
@@ -4832,6 +4876,19 @@ impl<'p> Emitter<'p> {
                     self.patterns(out, args, ", ")?;
                     out.push(")");
                 }
+                Ok(())
+            }
+            Pattern::Repeat { pat, rep }
+                if self.grammar_bytes.get()
+                    && !matches!(rep, Repeat::Optional)
+                    && matches!(&pat.node, Pattern::Ref { name, generics, args }
+                        if generics.is_empty() && args.is_empty() && self.text(*name) == "any") =>
+            {
+                // A run of `any` is text in Nikaia and bytes to the backend
+                // over bytes: it is checked where it becomes text (ADR-366 D2).
+                out.push("text(any");
+                out.push(&repeat_suffix(*rep));
+                out.push(")");
                 Ok(())
             }
             Pattern::Repeat { pat, rep } => {
