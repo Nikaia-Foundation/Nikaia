@@ -810,9 +810,10 @@ fn check_core_places_block_position(state: ref CheckState, world: ref CheckWorld
 }
 
 /// **A position a text hands out, and where it came from** (ADR-320 D5,
-/// Part I 2.6): `t.find(…)`, either end of `t` (`0`, `t.len()`), a name an
+/// Part I 2.6): `t.find(…)`, `t.rfind(…)`, either end of `t` (`0`, `t.len()`), a name an
 /// immutable `let` bound to one, and one moved by the byte length of a text
-/// literal - `+ ";".len()`, or `+ 1` after a `find(";")` - and an `if` whose
+/// literal - `+ ";".len()`, or `+ 1` after a `find(";")`, or `"ab".len()` from
+/// the start - and an `if` whose
 /// branches are each one of them. Anything else is a
 /// number the program made up, and `null`.
 pub fn check_core_places_text_position(state: ref CheckState, world: ref CheckWorld, expr: ref Expr) -> CheckTextPosition? sync {
@@ -830,8 +831,12 @@ pub fn check_core_places_text_position(state: ref CheckState, world: ref CheckWo
             if state.a_text_bytes_view(world, receiver) {
                 return null
             }
-            if called == "find" && args.len() >= 1 {
+            if (called == "find" || called == "rfind") && args.len() >= 1 {
                 return CheckTextPosition { text: check_core_places_text_key(state, world, receiver), step: check_core_places_literal_bytes(args[0]) }
+            }
+            // `"ab".len()`: the start of any text, moved by a literal's length.
+            if called == "len" && args.len() == 0 && check_core_places_literal_bytes(receiver) >= 0 {
+                return CheckTextPosition { text: "", step: -1 }
             }
             if called == "len" && args.len() == 0 {
                 return CheckTextPosition { text: check_core_places_text_key(state, world, receiver), step: -1 }

@@ -144,3 +144,34 @@ fn a_cut_inside_a_scalar_stops_the_program() {
     assert!(err.contains("byte position 2 is inside a scalar"), "{err}");
     assert!(!err.contains("char boundary"), "{err}");
 }
+
+/// `rfind` hands out a position of its text, as `find` does.
+#[test]
+fn a_position_from_rfind_cuts_its_text() {
+    let out = run(
+        "positions-rfind",
+        "fn last(name: String) -> String {\n    let colon = name.rfind(\"::\") ?? return name.clone()\n    return name[colon + \"::\".len()..].clone()\n}\n\nfn main() {\n    println(last(\"std::io::Write\"))\n    println(last(\"plain\"))\n}\n",
+    );
+    assert_eq!(out, "Write\nplain\n");
+}
+
+/// The start of a text moved by a literal's length, and its end moved back.
+#[test]
+fn the_ends_moved_by_a_literal_cut() {
+    let out = run(
+        "positions-literal-ends",
+        "fn main() {\n    let t = \"ab-cdx\"\n    println(t[\"ab\".len()..])\n    println(t[..<t.len() - \"x\".len()])\n}\n",
+    );
+    assert_eq!(out, "-cdx\nab-cd\n");
+}
+
+/// An `rfind` position of one text does not cut another.
+#[test]
+fn an_rfind_position_of_another_text_is_refused() {
+    let err = refused(
+        "positions-rfind-other",
+        "fn main() {\n    let a = \"ab;c\"\n    let b = \"abcdef\"\n    let sep = a.rfind(\";\") ?? return\n    println(b[..<sep])\n}\n",
+    );
+    assert!(err.contains("NK1214"), "{err}");
+    assert!(err.contains("another text"), "{err}");
+}

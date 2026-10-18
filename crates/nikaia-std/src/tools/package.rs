@@ -17878,7 +17878,8 @@ pub fn check_core_places_text_position(state: &CheckState, world: &CheckWorld<'_
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
             let called = world.words.resolve(method);
             if state.a_text_bytes_view(world, receiver) { return None; }
-            if called == "find" && !args.is_empty() { return Some(CheckTextPosition { text: check_core_places_text_key(state, world, receiver), step: check_core_places_literal_bytes(nikaia_std::index::get(&args, 0)) }); }
+            if (called == "find" || called == "rfind") && !args.is_empty() { return Some(CheckTextPosition { text: check_core_places_text_key(state, world, receiver), step: check_core_places_literal_bytes(nikaia_std::index::get(&args, 0)) }); }
+            if called == "len" && args.is_empty() && check_core_places_literal_bytes(receiver) >= 0 { return Some(CheckTextPosition { text: String::from(""), step: -1 }); }
             if called == "len" && args.is_empty() { return Some(CheckTextPosition { text: check_core_places_text_key(state, world, receiver), step: -1 }); }
             return None;
         },
