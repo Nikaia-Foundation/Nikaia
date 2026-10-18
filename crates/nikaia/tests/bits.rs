@@ -124,9 +124,9 @@ fn a_shift_past_the_width_is_refused() {
         ),
         (
             "fn main() {\n    let n = 1\n    let m = n >> 70\n    println(f\"{m}\")\n}\n",
-            "an `i64`",
+            "an `i32`",
             "70",
-            "64",
+            "32",
         ),
         (
             "fn main() {\n    let b: u8 = 1\n    let m = b << 8\n    println(f\"{m}\")\n}\n",
@@ -160,6 +160,38 @@ fn a_shift_past_the_width_is_refused() {
         "fn main() {\n    let n: i64 = 1\n    let m = n << 63\n    println(f\"{m}\")\n}\n",
         "fn main() {\n    let b: u8 = 1\n    let m = b << 7\n    println(f\"{m}\")\n}\n",
         "fn main() {\n    let c: i32 = 1\n    let s = 3\n    let m = c >> s\n    println(f\"{m}\")\n}\n",
+    ] {
+        let found = findings(source);
+        assert!(found.is_empty(), "{source}: {found:#?}");
+    }
+}
+
+/// **An open number is shifted as the type its uses decide** (#656, Part I
+/// 2.4): `let n = 1` is an `i32` where nothing asks, so `n << 40` is
+/// `NK1116`, and so is `1 << 40` given to a name nothing asks of; where a use
+/// asks for an `i64`, both shift by 40 places.
+#[test]
+fn an_open_number_is_shifted_as_the_type_it_gets() {
+    for source in [
+        "fn main() {\n    let n = 1\n    let m = n << 40\n    println(f\"{m}\")\n}\n",
+        "fn main() {\n    let m = 1 << 40\n    println(f\"{m}\")\n}\n",
+        "fn main() {\n    let m = (1 << 40) + 2\n    println(f\"{m}\")\n}\n",
+    ] {
+        let found = findings(source);
+        let message = "This shifts an `i32` by 40 places, and it has 32 bits.";
+        assert!(
+            found
+                .iter()
+                .any(|f| f.code == "NK1116" && f.message == message),
+            "{source}: {found:#?}"
+        );
+        assert_eq!(found.len(), 1, "{source}: {found:#?}");
+    }
+    for source in [
+        "fn main() {\n    let n = 1\n    let m: i64 = n << 40\n    println(f\"{m}\")\n}\n",
+        "fn main() {\n    let m = 1 << 40\n    let w: i64 = m\n    println(f\"{w}\")\n}\n",
+        "fn main() {\n    let n = 3000000000\n    let m = n << 4\n    println(f\"{m}\")\n}\n",
+        "fn main() {\n    let n = 1\n    let m = n << 31\n    println(f\"{m}\")\n}\n",
     ] {
         let found = findings(source);
         assert!(found.is_empty(), "{source}: {found:#?}");

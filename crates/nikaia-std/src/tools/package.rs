@@ -13753,7 +13753,7 @@ fn check_core_call_on_pushed(state: &mut CheckState, world: &CheckWorld<'_, '_, 
         let local = match state.binding(&pushed_name) { Some(__nikaia_value) => __nikaia_value, None => return };
         let id = local.id;
         let at = span.start as i64;
-        state.flow.open_numbers.insert(at, CheckOpenNumber { name: pushed_name.to_owned(), element: true, at: span.clone(), joined: at, asks: vec![], given: vec![], derived: vec![], written: vec![], casts: vec![], typed: false });
+        state.flow.open_numbers.insert(at, CheckOpenNumber { name: pushed_name.to_owned(), element: true, at: span.clone(), joined: at, asks: vec![], given: vec![], derived: vec![], written: vec![], casts: vec![], shifts: vec![], typed: false });
         state.open_number_given(world, at, nikaia_std::index::get(&args, 0), span);
         state.flow.open_elements.insert(id, at);
     } else if open >= 0 && one_pushed {
@@ -16680,7 +16680,7 @@ pub fn check_core_ops_binary<H: CheckHost>(state: &mut CheckState, world: &Check
     let mut right: Ty = walked_right;
     if value_of_a_copy(&left.unseen()) == byte && state.text_literal(world, &byte, rhs, false).is_some() { right = byte.clone(); }
     state.divisor_is_not_zero(world, op, rhs, span);
-    state.shift_count_fits(world, op, &value_of_a_copy(&left.unseen()), rhs, span);
+    state.shift_count_fits(world, op, lhs, &value_of_a_copy(&left.unseen()), rhs, span);
     state.an_operation_that_overflows(world, op, lhs, rhs, (reach).as_deref(), span);
     let stamped = left.is_seen() || right.is_seen();
     if !check_core_ops_equality(op) && !check_core_ops_logical(op) {
@@ -17839,7 +17839,7 @@ fn check_core_stmt_a_path(ty: &Ty) -> bool {
     }
 }
 
-fn check_core_stmt_open_number(name: &str, element: bool, span: &Span) -> CheckOpenNumber { CheckOpenNumber { name: name.to_owned(), element, at: Span { start: span.start, end: span.end }, joined: span.start as i64, asks: vec![], given: vec![], derived: vec![], written: vec![], casts: vec![], typed: false } }
+fn check_core_stmt_open_number(name: &str, element: bool, span: &Span) -> CheckOpenNumber { CheckOpenNumber { name: name.to_owned(), element, at: Span { start: span.start, end: span.end }, joined: span.start as i64, asks: vec![], given: vec![], derived: vec![], written: vec![], casts: vec![], shifts: vec![], typed: false } }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
@@ -20657,6 +20657,7 @@ pub struct CheckOpenNumber {
     pub derived: Vec<(CheckConstant, Span)>,
     pub written: Vec<(i64, Vec<(i64, Integer)>, bool)>,
     pub casts: Vec<(i64, String)>,
+    pub shifts: Vec<(CheckConstant, Span)>,
     pub typed: bool,
 }
 
@@ -23839,6 +23840,8 @@ fn note_seq_item(ty: &Ty) -> Ty {
 
 fn note_an_integer(name: &str) -> bool { name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" }
 
+fn note_keeps_the_type(op: &BinaryOp) -> bool { *op == BinaryOp::Add || *op == BinaryOp::Sub || *op == BinaryOp::Mul || *op == BinaryOp::Div || *op == BinaryOp::Rem || *op == BinaryOp::BitAnd || *op == BinaryOp::BitOr || *op == BinaryOp::BitXor }
+
 fn note_width_of(ty: &str) -> u64 {
     match ty {
         "u8" => 8u64,
@@ -23936,18 +23939,61 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn shift_count_fits(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, op: BinaryOp, left: &Ty, rhs: &Expr, span: &Span) {
+    pub fn shift_count_fits(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, op: BinaryOp, lhs: &Expr, left: &Ty, rhs: &Expr, span: &Span) {
         if op != BinaryOp::Shl && op != BinaryOp::Shr { return; }
         let count = match self.constant_of(world, rhs) { Some(__nikaia_value) => __nikaia_value, None => return };
+        let open = self.open_numbers_in(world, lhs);
+        if !open.is_empty() {
+            for number in open.iter() {
+                let number = nikaia_std::num::value(number);
+                let found = match *nikaia_std::index::get(&self.flow.open_numbers, &number) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                let mut entry = found.clone();
+                entry.shifts.push((count.clone(), span.clone()));
+                self.flow.open_numbers.insert(number, entry);
+            }
+            return;
+        }
         let ty: String = match left {
             Ty::Named { name, args, view } => { let view = *view; if !view && args.is_empty() && note_an_integer(name) { name.to_owned() } else { "i64".to_owned() } },
             _ => "i64".to_owned(),
         };
-        let width: u64 = note_width_of(&ty);
+        self.a_shift_too_far(&ty, &count, span);
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn literal_shifts_in(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, value: &Expr) -> Vec<CheckConstant> {
+        let mut out: Vec<CheckConstant> = vec![];
+        match value {
+            Expr::Binary { op, lhs, rhs, .. } => {
+                let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
+                if *op == BinaryOp::Shl || *op == BinaryOp::Shr {
+                    let literal = checked_constant(&constant_of(lhs, &|name| { Folded::Nothing }));
+                    if literal.is_some() {
+                        let count = self.constant_of(world, rhs);
+                        if count.is_some() {
+                            let found = match count { Some(__nikaia_value) => __nikaia_value, None => return out };
+                            if !found.beyond && !found.value.negative && found.value.magnitude < 64u64 { out.push(found); }
+                        }
+                    }
+                    out.extend(self.literal_shifts_in(world, lhs));
+                } else if note_keeps_the_type(op) {
+                    out.extend(self.literal_shifts_in(world, lhs));
+                    out.extend(self.literal_shifts_in(world, rhs));
+                }
+            },
+            Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); out.extend(self.literal_shifts_in(world, expr)); },
+            _ => { },
+        }
+        out
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_shift_too_far(&mut self, ty: &str, count: &CheckConstant, span: &Span) {
+        let width: u64 = note_width_of(ty);
         if !count.beyond && !count.value.negative && count.value.magnitude < width { return; }
         let mut written: String = format!("{}", count.value.magnitude);
         if count.value.negative { written = format!("-{}", count.value.magnitude); }
-        let article = if an_or_a(&ty) == "an" { "an" } else { "a" };
+        let article = if an_or_a(ty) == "an" { "an" } else { "a" };
         let last = width - 1u64;
         self.findings.push(check_refusal("NK1116", span, format!("This shifts {} `{}` by {} places, and it has {} bits.", article, ty, written, width), vec!["A shift by a negative count, or by as many places as the type has bits or more, would stop the program, and here it's certain to happen.".to_owned()], Some(format!("Shift by 0 to {} places.", last).to_owned())));
     }
@@ -24469,6 +24515,7 @@ impl CheckState {
                     }
                 }
             }
+            for member in members.iter() { for shift in member.1.shifts.iter() { self.a_shift_too_far(&held, &shift.0, &shift.1); } }
             let mut typed = false;
             for member in members.iter() {
                 typed = typed || member.1.typed;
@@ -25232,9 +25279,11 @@ impl CheckState {
         let known = checked_constant(&pure);
         let mut derived: Option<CheckConstant> = None;
         if known.is_none() { derived = self.constant_of(world, value); }
+        let shifts = self.literal_shifts_in(world, value);
         let found = match *nikaia_std::index::get(&self.flow.open_numbers, &number) { Some(__nikaia_value) => __nikaia_value, None => return };
         let mut entry = found.clone();
         self.given_to(&mut entry, known, derived, value, span);
+        for count in shifts.iter() { entry.shifts.push((count.clone(), span.clone())); }
         entry.written.push((span.start as i64, literals_in(value), wants_widening(&pure)));
         self.flow.open_numbers.insert(number, entry);
     }

@@ -216,9 +216,13 @@ impl CheckState {
         if known == null {
             derived = self.constant_of(world, value)
         }
+        let shifts = self.literal_shifts_in(world, value)
         let found = self.flow.open_numbers[number] ?? return
         let mut entry = found.clone()
         self.given_to(entry, known, derived, value, span)
+        for count in shifts {
+            entry.shifts.push((count.clone(), span.clone()))
+        }
         entry.written.push((span.start as i64, literals_in(value), wants_widening(pure)))
         self.flow.open_numbers.insert(number, entry)
     }

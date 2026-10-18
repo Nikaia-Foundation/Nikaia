@@ -150,6 +150,13 @@ impl CheckState {
                     }
                 }
             }
+            // **A shift of it by a constant count** is measured against the
+            // type it got (Part I 2.2).
+            for member in members {
+                for shift in member.1.shifts {
+                    self.a_shift_too_far(held, shift.0, shift.1)
+                }
+            }
             // **A cast out of it is kept or checked as out of the type it got**
             // (#629 D-1), and a cast or a method call needs that type written
             // even where no use asked for one (D-2).

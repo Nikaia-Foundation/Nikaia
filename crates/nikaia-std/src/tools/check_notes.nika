@@ -28,6 +28,11 @@ fn note_an_integer(name: ref String) -> bool {
     return name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64"
 }
 
+/// Whether an operator's result has its operands' type.
+fn note_keeps_the_type(op: ref BinaryOp) -> bool {
+    return op == BinaryOp::Add || op == BinaryOp::Sub || op == BinaryOp::Mul || op == BinaryOp::Div || op == BinaryOp::Rem || op == BinaryOp::BitAnd || op == BinaryOp::BitOr || op == BinaryOp::BitXor
+}
+
 /// How many bits an integer type has.
 fn note_width_of(ty: ref String) -> u64 {
     return match ty {
@@ -171,18 +176,66 @@ impl CheckState {
 
     /// **`NK1116`: a shift by a constant count below 0, or as large as the
     /// left side's type is wide** (Part I 2.2): it would stop the program,
-    /// and here it is certain to. A left side whose type is not decided yet
-    /// is measured as an `i64`, the widest, so nothing is refused that a
-    /// narrower type would not refuse too.
-    pub fn shift_count_fits(ref mut self, world: ref CheckWorld, op: BinaryOp, left: ref Ty, rhs: ref Expr, span: ref Span) sync {
+    /// and here it is certain to. A left side that is an open number is
+    /// measured once its uses have decided its type (2.4), like an operation
+    /// over it; a left side of literals alone, by the open number it is given
+    /// to (`literal_shifts_in`), and here only against an `i64`, the widest.
+    pub fn shift_count_fits(ref mut self, world: ref CheckWorld, op: BinaryOp, lhs: ref Expr, left: ref Ty, rhs: ref Expr, span: ref Span) sync {
         if op != BinaryOp::Shl && op != BinaryOp::Shr {
             return
         }
         let count = self.constant_of(world, rhs) ?? return
+        let open = self.open_numbers_in(world, lhs)
+        if open.len() > 0 {
+            for number in open {
+                let found = self.flow.open_numbers[number] ?? continue
+                let mut entry = found.clone()
+                entry.shifts.push((count.clone(), span.clone()))
+                self.flow.open_numbers.insert(number, entry)
+            }
+            return
+        }
         let ty: String = match left {
             Ty::Named { name, args, view } => if !view && args.len() == 0 && note_an_integer(name) { name.clone() } else { "i64".clone() },
             else => "i64".clone(),
         }
+        self.a_shift_too_far(ty, count, span)
+    }
+
+    /// **The shifts of literals alone in a value given to an open number**,
+    /// whose type that number's is: each count that folds and an `i64` holds
+    /// (a larger one `shift_count_fits` has refused already). The type flows
+    /// through arithmetic, a bit operation, a negation and a shift's left side.
+    pub fn literal_shifts_in(ref self, world: ref CheckWorld, value: ref Expr) -> Vec[CheckConstant] sync {
+        let mut out: Vec[CheckConstant] = []
+        match value {
+            Expr::Binary { op, lhs, rhs, .. } => {
+                if op == BinaryOp::Shl || op == BinaryOp::Shr {
+                    let literal = checked_constant(constant_of(lhs, fn(name) { Folded::Nothing }))
+                    if literal != null {
+                        let count = self.constant_of(world, rhs)
+                        if count != null {
+                            let found = count ?? return out
+                            if !found.beyond && !found.value.negative && found.value.magnitude < 64 {
+                                out.push(found)
+                            }
+                        }
+                    }
+                    out.extend(self.literal_shifts_in(world, lhs))
+                } else if note_keeps_the_type(op) {
+                    out.extend(self.literal_shifts_in(world, lhs))
+                    out.extend(self.literal_shifts_in(world, rhs))
+                }
+            },
+            Expr::Unary { expr, .. } => out.extend(self.literal_shifts_in(world, expr)),
+            else => {},
+        }
+        return out
+    }
+
+    /// `NK1116` for a shift of a `ty` by `count` places, where that is outside
+    /// `0..<width`.
+    pub fn a_shift_too_far(ref mut self, ty: ref String, count: ref CheckConstant, span: ref Span) sync {
         let width: u64 = note_width_of(ty)
         if !count.beyond && !count.value.negative && count.value.magnitude < width {
             return

@@ -356,7 +356,7 @@ pub fn check_core_ops_binary[H: CheckHost](mut state: CheckState, world: ref Che
         right = byte.clone()
     }
     state.divisor_is_not_zero(world, op, rhs, span)
-    state.shift_count_fits(world, op, value_of_a_copy(left.unseen()), rhs, span)
+    state.shift_count_fits(world, op, lhs, value_of_a_copy(left.unseen()), rhs, span)
     state.an_operation_that_overflows(world, op, lhs, rhs, reach, span)
     // **The stamp sticks** (ADR-281 D23).
     let stamped = left.is_seen() || right.is_seen()

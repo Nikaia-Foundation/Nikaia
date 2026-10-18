@@ -150,7 +150,7 @@ fn check_core_stmt_a_path(ty: ref Ty) -> bool sync {
 
 /// A fresh open number at a `let` or a `for`.
 fn check_core_stmt_open_number(name: ref String, element: bool, span: ref Span) -> CheckOpenNumber {
-    return CheckOpenNumber { name: name.clone(), element: element, at: Span { start: span.start, end: span.end }, joined: span.start as i64, asks: [], given: [], derived: [], written: [], casts: [], typed: false }
+    return CheckOpenNumber { name: name.clone(), element: element, at: Span { start: span.start, end: span.end }, joined: span.start as i64, asks: [], given: [], derived: [], written: [], casts: [], shifts: [], typed: false }
 }
 
 /// **A `let` whose declared type is a number and whose value is a `for`
