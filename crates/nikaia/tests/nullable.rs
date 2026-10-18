@@ -1913,3 +1913,41 @@ fn a_null_arm_on_a_plain_value_is_refused() {
     let found = findings(source);
     assert!(found.iter().any(|f| f.code == "NK1256"), "{found:#?}");
 }
+
+/// **The wanted `T?` reaches every end of an `if` or a `match` used as a
+/// body's tail** (#652, ADR-364), as it reaches a `return`: a tuple of text
+/// literals is built as `(String, i64)`, a `null` end stays `None`, and each
+/// other end is put into `Some` - numbers its uses have not typed too.
+#[test]
+fn a_tail_if_or_match_takes_the_wanted_nullable_type() {
+    let source = r#"fn pick(b: bool) -> (String, i64)? {
+    if b { ("a", 1) } else { ("b", 2) }
+}
+
+fn arm(b: bool) -> (String, i64)? {
+    match b {
+        true => ("c", 3),
+        false => null,
+    }
+}
+
+fn count(b: bool) -> i64? {
+    if b { 4 } else { 5 }
+}
+
+fn main() {
+    let (x, n) = pick(true) ?? ("z", 0)
+    let (y, m) = pick(false) ?? ("z", 0)
+    println(f"{x} {n} {y} {m}")
+    let (c, k) = arm(true) ?? ("z", 0)
+    let (d, j) = arm(false) ?? ("z", 0)
+    println(f"{c} {k} {d} {j}")
+    println(f"{count(true) ?? 0} {count(false) ?? 0}")
+}
+"#;
+    assert!(findings(source).is_empty(), "{:?}", findings(source));
+    assert_eq!(
+        ran("nullable-tail-branches", source),
+        "a 1 b 2\nc 3 z 0\n4 5\n"
+    );
+}

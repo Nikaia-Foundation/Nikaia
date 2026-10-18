@@ -273,6 +273,39 @@ impl CheckState {
             },
             else => return null,
         }
+        // **The wanted type reaches every end of an `if`, a `match` or a
+        // block** (ADR-364), as it reaches a text literal's: each end is a
+        // tuple literal or `null`, or none is built.
+        match value {
+            Expr::Tuple(_, _) => {},
+            else => {
+                if !ends_in_tuple(value) {
+                    return null
+                }
+                let (plain, nullable) = match found {
+                    Ty::Nullable(inner) => (inner.clone(), true),
+                    else => (found.clone(), false),
+                }
+                let mut answered: Ty? = null
+                for end in tuple_ends(value) {
+                    let a_null = match end {
+                        Expr::LitNull(_) => true,
+                        else => false,
+                    }
+                    if !a_null {
+                        answered = self.tuple_literal(world, plain, want, end)
+                        if answered == null {
+                            return null
+                        }
+                    }
+                }
+                let built = answered ?? return null
+                if nullable {
+                    return Ty::Nullable(built)
+                }
+                return built
+            },
+        }
         let founds: Vec[Ty] = match found {
             Ty::Tuple(parts) => parts.clone(),
             else => return null,
@@ -332,6 +365,59 @@ impl CheckState {
         let element = built ?? return null
         return Ty::Named { name: name, args: [element], view: false }
     }
+}
+
+/// Whether an expression's value is a tuple literal at every end.
+fn ends_in_tuple(expr: ref Expr) -> bool sync {
+    let ends = tuple_ends(expr)
+    if ends.len() == 0 {
+        return false
+    }
+    let mut tuples = 0
+    for end in ends {
+        match end {
+            Expr::Tuple(_, _) => { tuples = tuples + 1 },
+            Expr::LitNull(_) => {},
+            else => return false,
+        }
+    }
+    return tuples > 0
+}
+
+/// The ends of an `if` with an `else`, a `match` or a block, down to what is
+/// none of them; an expression that is none of them is its own end.
+fn tuple_ends(expr: ref Expr) -> Vec[ref Expr] sync {
+    let mut out: Vec[ref Expr] = []
+    match expr {
+        Expr::If { then_branch, else_branch, .. } => {
+            let otherwise = else_branch ?? return []
+            for block in [then_branch, otherwise] {
+                let tail = block_tail(block)
+                if tail.len() != 1 {
+                    return []
+                }
+                for end in tuple_ends(tail[0]) {
+                    out.push(end)
+                }
+            }
+        },
+        Expr::Match { arms, .. } => {
+            for arm in arms {
+                for end in tuple_ends(arm.body) {
+                    out.push(end)
+                }
+            }
+        },
+        Expr::Block(block, _) => {
+            let tail = block_tail(block)
+            if tail.len() != 1 {
+                return []
+            }
+            return tuple_ends(tail[0])
+        },
+        else => out.push(expr),
+    }
+    return out
 }
 
 fn literal_tuple_parts(value: ref Expr) -> Vec[ref Expr] sync {

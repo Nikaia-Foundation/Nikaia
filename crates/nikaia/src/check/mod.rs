@@ -1682,11 +1682,27 @@ impl<'a> Checker<'a> {
             // negative** (D32): the slot's own question, asked here too.
             // **A plain tail stands where a `T?` is returned**, as a plain
             // `return` value does (ADR-278): it is put into `Some`.
-            if let Some(value) = value
-                && let Some(how @ (Wrap::Widen(_) | Wrap::Unsigned(_) | Wrap::Constructor)) =
-                    self.widened_slot(&tail, expected, Some(value), &span)
-            {
-                self.s.facts.wrapped.insert(value_node(value), how);
+            // **An `if` or a `match` is put into `Some` at each end**, as an
+            // arm beside a `null` is: the tail is lowered as a statement, so a
+            // wrap around the whole would not be written. Numbers its uses
+            // have not typed yet (`?`) are plain too.
+            let branches = matches!(
+                value,
+                Some(Expr::If { .. } | Expr::Match { .. } | Expr::Block(..))
+            ) && value.is_some_and(every_end_is_a_value);
+            let how = value.and_then(|v| self.widened_slot(&tail, expected, Some(v), &span));
+            if let Some(value) = value {
+                match how {
+                    Some(Wrap::Constructor | Wrap::Conversion)
+                        if branches && matches!(expected, Ty::Nullable(_)) =>
+                    {
+                        self.s.some_at_the_tails(value)
+                    }
+                    Some(how @ (Wrap::Widen(_) | Wrap::Unsigned(_) | Wrap::Constructor)) => {
+                        self.s.facts.wrapped.insert(value_node(value), how);
+                    }
+                    _ => {}
+                }
             }
             self.expect_kept(
                 &tail,
@@ -2732,6 +2748,33 @@ pub fn byte_literal(written: &str) -> String {
 /// **What a table about an expression is keyed on**: the id the parser gave the
 /// node ([ADR-340](../../docs/specification/adr/adr-340.md) D4), which a clone
 /// keeps and an address does not.
+/// Whether every end of an `if`, a `match` or a block is a value, so that it
+/// can be put into `Some`: an end that jumps away (`return`, `break`,
+/// `continue`, `throw`) or a block that ends in a statement is none.
+fn every_end_is_a_value(expr: &Expr) -> bool {
+    fn tail_is_a_value(block: &crate::ast::Block) -> bool {
+        match block.stmts.last().map(|s| &s.node) {
+            Some(Stmt::Expr(value)) => every_end_is_a_value(value),
+            _ => false,
+        }
+    }
+    match expr {
+        Expr::If {
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            tail_is_a_value(then_branch)
+                && else_branch.is_some()
+                && else_branch.iter().all(tail_is_a_value)
+        }
+        Expr::Match { arms, .. } => arms.iter().all(|arm| every_end_is_a_value(&arm.body)),
+        Expr::Block(block, _) => tail_is_a_value(block),
+        Expr::Return(..) | Expr::Break(..) | Expr::Continue(..) | Expr::Throw(..) => false,
+        _ => true,
+    }
+}
+
 pub fn value_node(expr: &Expr) -> i64 {
     crate::ast::id_of(expr) as i64
 }

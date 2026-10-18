@@ -28164,6 +28164,27 @@ impl CheckState {
             } },
             _ => return None,
         };
+        match value {
+            Expr::Tuple(_, _) => { },
+            _ => {
+                if !ends_in_tuple(value) { return None; }
+                let (plain, nullable) = match found {
+                    Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); (inner.clone(), true) },
+                    _ => (found.clone(), false),
+                };
+                let mut answered: Option<Ty> = None;
+                for end in tuple_ends(value) {
+                    let a_null = matches!(end, Expr::LitNull(_));
+                    if !a_null {
+                        answered = self.tuple_literal(world, &plain, want, end);
+                        if answered.is_none() { return None; }
+                    }
+                }
+                let built = match answered { Some(__nikaia_value) => __nikaia_value, None => return None };
+                if nullable { return Some(Ty::Nullable(Box::new(built))); }
+                return Some(built);
+            },
+        }
         let founds: Vec<Ty> = match found {
             Ty::Tuple(parts) => parts.to_owned(),
             _ => return None,
@@ -28207,6 +28228,47 @@ impl CheckState {
         let element = match built { Some(__nikaia_value) => __nikaia_value, None => return None };
         Some(Ty::Named { name, args: vec![element], view: false })
     }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn ends_in_tuple(expr: &Expr) -> bool {
+    let ends = tuple_ends(expr);
+    if ends.is_empty() { return false; }
+    let mut tuples = 0;
+    for end in ends.iter() {
+        let end = *end;
+        match end {
+            Expr::Tuple(_, _) => { tuples = tuples + 1; },
+            Expr::LitNull(_) => { },
+            _ => { return false; },
+        }
+    }
+    tuples > 0
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn tuple_ends(expr: &Expr) -> Vec<&Expr> {
+    let mut out: Vec<&Expr> = vec![];
+    match expr {
+        Expr::If { then_branch, else_branch, .. } => {
+            let otherwise = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
+            for block in [then_branch, otherwise] {
+                let tail = block_tail(block);
+                if tail.len() != 1 { return vec![]; }
+                for end in tuple_ends(*nikaia_std::index::get(&tail, 0)) { out.push(end); }
+            }
+        },
+        Expr::Match { arms, .. } => { for arm in arms.iter() { for end in tuple_ends(&arm.body) { out.push(end); } } },
+        Expr::Block(block, _) => {
+            let tail = block_tail(block);
+            if tail.len() != 1 { return vec![]; }
+            return tuple_ends(*nikaia_std::index::get(&tail, 0));
+        },
+        _ => { out.push(expr); },
+    }
+    out
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
