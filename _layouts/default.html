@@ -66,7 +66,11 @@
       <div class="container-lg px-3 my-5 markdown-body">
       {{ content }}
 
-      {% if site.github.private != true and site.github.license %}
+      {% assign mirrored_issue = false %}
+      {% if page.url == "/issues.html" or page.url contains "/issues/" %}
+        {% assign mirrored_issue = true %}
+      {% endif %}
+      {% if site.github.private != true and site.github.license and mirrored_issue != true %}
       <div class="page-edit">This site is open source. {% github_edit_link "Improve this page" %}.</div>
       {% endif %}
       </div>

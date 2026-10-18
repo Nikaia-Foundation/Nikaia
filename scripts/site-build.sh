@@ -21,9 +21,9 @@ tar -C "$ROOT" -cf - \
   --exclude=./.jekyll-cache --exclude=./.sass-cache \
   --exclude=./.wrangler . | tar -C "$WORK" -xf -
 
-# The page of open issues, which `.github/workflows/issues-page.yml` keeps on
-# the branch `site-issues` (`scripts/site-issues.py`); before the fencing
-# below, since an issue's text may hold braces too.
+# The open-issue index and one page per issue. The workflow keeps their bundle
+# on the branch `site-issues` (`scripts/site-issues.py`); expand it before the
+# fencing below, since an issue's text may hold braces too.
 python3 "$ROOT/scripts/site-issues.py" "$WORK"
 
 # Literal braces, fenced off from Liquid. Nikaia writes a literal brace as
