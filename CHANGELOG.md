@@ -8,6 +8,14 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1037] — 2026-10-18
+
+**A text is cut by a position it handed out (ADR-320 D5, #453)**
+- `find`'s result, either end of the text, and such a position moved by a text literal's byte length cut a text without a view; any other number is `NK1214`, naming `s.bytes[a..<b].text()` and `s.graphemes.take(n)`.
+- A cut inside a scalar stops the program in the language's words, not the backend's.
+- In a `for` over a `Bytes` the loop variable is a `u8`, so `c == '
+'` compares bytes.
+
 ## [0.0.1036] — 2026-10-18
 
 **A position only literals flow into is a view of static text (#659)**
