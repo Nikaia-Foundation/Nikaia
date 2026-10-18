@@ -348,6 +348,7 @@ calculator in about 100 lines.
 ## Where next
 
 * [Getting started](getting-started.md): install the compiler and run a project.
+* [Contracts](contracts.md): what the compiler proves about an `assert`.
 * [`examples/`](../examples/): complete programs that compile and run.
 * [Specification, Part I](../docs/specification/10-nikaia-light.md): the rules, one
   chapter at a time.

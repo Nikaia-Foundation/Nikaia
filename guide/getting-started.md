@@ -78,7 +78,8 @@ The build writes two files beside the manifest:
 
 * `nikaia.contracts` records what the compiler inferred about your functions: what they
   borrow, whether they can fail, whether they can pause. Commit it: a change in it is a
-  change in your program's behaviour that you can review.
+  change in your program's behaviour that you can review. What the compiler proves about
+  an `assert` is shown in [Contracts](contracts.md).
 * `nikaia.lock` pins your dependencies.
 
 ## 4. When the compiler says no
@@ -169,6 +170,7 @@ example exposed, and which are still open.
 
 * [A tour of the syntax](syntax.md): the language on one page, for readers coming from
   other languages.
+* [Contracts](contracts.md): what the compiler proves about an `assert`.
 * [Specification, Part I](../docs/specification/10-nikaia-light.md): the full rules.
 * [Specification, Part II](../docs/specification/20-nikaia-advance.md): concurrency,
   parallelism and grammars.

@@ -30,6 +30,31 @@ is correct, because the big one is what is actually in the way.
 *The version number is a different thing.* `0.0.NN` counts **change packages**, one per
 [CHANGELOG](../CHANGELOG.md) heading, and says nothing about how far along anything is.
 
+### Progress over time
+
+The compiler is moving into Nikaia itself, a module at a time
+([ADR-294](specification/adr/adr-294.md)). The analyses that decide sharing, pausing,
+lifetimes of views, which statements may overlap and what a function throws are already
+Nikaia code that the Rust half of the compiler calls.
+
+| Self-hosted share of the toolchain | Sep 28 | Sep 29 | Sep 30 | Oct 1 | Oct 2 | Oct 3 | Oct 4 |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| lines of the toolchain written in Nikaia | 2.0 % | 2.4 % | 8.4 % | 10.2 % | 17.6 % | 19.7 % | **30.6 %** |
+
+From the first module on September 28 to 18 625 lines in 61 modules six days later, about
+4.8 percentage points a day. `scripts/self_hosting.py` recounts it from the sources.
+
+Claude Opus started writing the compiler on September 5, 2026. Each design decision is
+argued in an [ADR](specification/adr/README.md) and accepted by a human.
+
+| in 30 days | in all | per day |
+| :--- | ---: | ---: |
+| commits | 1 233 | **≈ 41** |
+| lines of toolchain code (no blanks, no comments) | 541 → 60 959 | **≈ 2 000** |
+| change packages, each a [CHANGELOG](../CHANGELOG.md) entry, since numbering began on Sep 19 | 0.0.8 → 0.0.454 | **≈ 28** |
+
+*As of 0.0.454, October 4, 2026. Counted from `git log` and `scripts/self_hosting.py`.*
+
 ## Where the project actually stands
 
 *In plain words: what works today, what does not, and where a bug report helps most.*
