@@ -172,7 +172,7 @@ fn gr_shaped(tag: ref String, mut at: GrCursor, char_of: fn(i64) -> scalar? sync
         let mut body = digits.clone()
         if digits.starts_with("-") {
             negative = true
-            body = digits[1..<digits.len()].clone()
+            body = (digits.strip_prefix("-") ?? "").clone()
         }
         let magnitude = text::parse_u64(body)
         if magnitude == null {

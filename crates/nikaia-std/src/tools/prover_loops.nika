@@ -940,21 +940,13 @@ struct LoopParsed {
 /// **`loop_term_word` read back**, its nodes appended to the arena; nothing
 /// for text it did not write.
 fn loop_term_of(mut arena: TermArena, word: ref String) -> LoopParsed? {
-    let mut end = word.len()
-    let open = word.find("(") ?? end
-    let comma = word.find(",") ?? end
-    let close = word.find(")") ?? end
-    if open < end {
-        end = open
-    }
-    if comma < end {
-        end = comma
-    }
-    if close < end {
-        end = close
-    }
+    let open = word.find("(") ?? word.len()
+    let comma = word.find(",") ?? word.len()
+    let close = word.find(")") ?? word.len()
+    let first = if open < comma { open } else { comma }
+    let end = if first < close { first } else { close }
     let head = word[0..<end].clone()
-    let rest = word[end..<word.len()].clone()
+    let rest = word[end..].clone()
     if !rest.starts_with("(") {
         if head == "true" || head == "false" {
             return LoopParsed { term: arena.boolean(head == "true"), rest: rest }
@@ -966,13 +958,13 @@ fn loop_term_of(mut arena: TermArena, word: ref String) -> LoopParsed? {
         let name = loop_name_of(head) ?? return null
         return LoopParsed { term: arena.var(name), rest: rest }
     }
-    let mut after = rest[1..<rest.len()].clone()
+    let mut after = (rest.strip_prefix("(") ?? "").clone()
     if head == "quot" {
         let inner = loop_term_of(arena, after) ?? return null
         if !inner.rest.starts_with(",") {
             return null
         }
-        let tail = inner.rest[1..<inner.rest.len()].clone()
+        let tail = (inner.rest.strip_prefix(",") ?? "").clone()
         let shut = tail.find(")") ?? return null
         let k = text::parse_i64(tail[0..<shut].clone()) ?? return null
         if k <= 0 {
@@ -985,9 +977,9 @@ fn loop_term_of(mut arena: TermArena, word: ref String) -> LoopParsed? {
         let arg = loop_term_of(arena, after) ?? return null
         args.push(arg.term)
         if arg.rest.starts_with(",") {
-            after = arg.rest[1..<arg.rest.len()].clone()
+            after = (arg.rest.strip_prefix(",") ?? "").clone()
         } else if arg.rest.starts_with(")") {
-            after = arg.rest[1..<arg.rest.len()].clone()
+            after = (arg.rest.strip_prefix(")") ?? "").clone()
             break
         } else {
             return null

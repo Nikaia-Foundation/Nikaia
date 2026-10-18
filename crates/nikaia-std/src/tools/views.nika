@@ -1411,7 +1411,7 @@ fn rsrc_out_of(name: ref String, entries: ref collections::BTreeSet[String]) -> 
             // to the whole value until a struct has a lifetime per view.
             out.insert(rsrc_loosened(rsrc_param_of(entry)))
         } else if path.starts_with(f"{name}.") {
-            let rest = path[(name.len() + 1)..<path.len()].clone()
+            let rest = (path.strip_prefix(f"{name}.") ?? "").clone()
             out.insert(f"{rest}:{rsrc_param_of(entry)}")
         }
     }
@@ -1429,7 +1429,7 @@ fn rsrc_plain(entries: ref collections::BTreeSet[String]) -> collections::BTreeS
 
 fn rsrc_bare(param: ref String) -> String {
     if param.starts_with("~") {
-        return param[1..<param.len()].clone()
+        return (param.strip_prefix("~") ?? "").clone()
     }
     return param.clone()
 }

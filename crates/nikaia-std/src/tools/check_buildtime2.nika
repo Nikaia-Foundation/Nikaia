@@ -27,7 +27,7 @@ impl CheckState {
         if bar != null {
             let at = bar ?? 0
             what = over[0..<at].trim()
-            path = over[at + 1..<over.len()].trim()
+            path = over[at + "|".len()..].trim()
         }
         let mut kind: String = what.clone()
         let mut limit: String = ""
@@ -35,7 +35,7 @@ impl CheckState {
         if space != null {
             let at = space ?? 0
             kind = what[0..<at].clone()
-            limit = what[at + 1..<what.len()].clone()
+            limit = what[at + " ".len()..].clone()
         }
         let mut message: String = f"`{bound}` took more than {limit} steps while the program was built."
         let mut note: String = "Each turn of a loop and each call is a step, and the count is the same on every machine."

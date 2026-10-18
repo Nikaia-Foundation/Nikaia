@@ -260,7 +260,7 @@ impl LgNormal {
 
     fn original(ref self, name: ref String) -> String {
         if name.starts_with("v") {
-            let digits = name[1..<name.len()].clone()
+            let digits = (name.strip_prefix("v") ?? "").clone()
             let mut plain = digits.len() > 0
             for c in digits.chars() {
                 if c < '0' || c > '9' {
@@ -324,7 +324,7 @@ pub fn lg_certificate_of(text: ref String) -> LgCertificate? {
 
 fn lg_certificate_from(text: ref String) -> LgParsed? {
     if text.starts_with("R(") {
-        let rest = text[2..<text.len()].clone()
+        let rest = (text.strip_prefix("R(") ?? "").clone()
         let end = rest.find(")") ?? return null
         let mut steps: Vec[LgStep] = []
         let inside = rest[0..<end].clone()
@@ -334,12 +334,12 @@ fn lg_certificate_from(text: ref String) -> LgParsed? {
             }
             steps.push(lg_step_of(word) ?? return null)
         }
-        return LgParsed { certificate: LgCertificate::Refuted(LgRefutation { steps: steps }), rest: rest[end + 1..<rest.len()].clone() }
+        return LgParsed { certificate: LgCertificate::Refuted(LgRefutation { steps: steps }), rest: rest[end + ")".len()..].clone() }
     }
     if !text.starts_with("S") {
         return null
     }
-    let rest = text[1..<text.len()].clone()
+    let rest = (text.strip_prefix("S") ?? "").clone()
     let open = rest.find("[") ?? return null
     let disjunction = lg_number(rest[0..<open].clone()) ?? return null
     let mut after = rest[open + 1..<rest.len()].clone()
@@ -348,12 +348,12 @@ fn lg_certificate_from(text: ref String) -> LgParsed? {
         let case = lg_certificate_from(after) ?? return null
         cases.push(case.certificate.clone())
         if case.rest.starts_with("|") {
-            after = case.rest[1..<case.rest.len()].clone()
+            after = (case.rest.strip_prefix("|") ?? "").clone()
         } else {
             if !case.rest.starts_with("]") {
                 return null
             }
-            return LgParsed { certificate: LgCertificate::Split { disjunction: disjunction, cases: cases }, rest: case.rest[1..<case.rest.len()].clone() }
+            return LgParsed { certificate: LgCertificate::Split { disjunction: disjunction, cases: cases }, rest: (case.rest.strip_prefix("]") ?? "").clone() }
         }
     }
 }
@@ -369,15 +369,15 @@ fn lg_number(word: ref String) -> i64? {
 
 fn lg_step_of(word: ref String) -> LgStep? {
     if word.starts_with("h") {
-        return LgStep::Hypothesis(lg_number(word[1..<word.len()].clone()) ?? return null)
+        return LgStep::Hypothesis(lg_number((word.strip_prefix("h") ?? "").clone()) ?? return null)
     }
     if word.starts_with("t") {
-        return LgStep::Tighten(lg_number(word[1..<word.len()].clone()) ?? return null)
+        return LgStep::Tighten(lg_number((word.strip_prefix("t") ?? "").clone()) ?? return null)
     }
     if !word.starts_with("c") {
         return null
     }
-    let body = word[1..<word.len()].clone()
+    let body = (word.strip_prefix("c") ?? "").clone()
     let parts: Vec[ref String] = body.split(":").collect()
     if parts.len() != 4 {
         return null

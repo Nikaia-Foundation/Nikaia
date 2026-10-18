@@ -740,6 +740,220 @@ fn check_core_places_lent_field(want: ref Ty, given: ref Ty) -> bool sync {
 }
 
 /// **`xs[i]`, `m[k]` and `xs[a..<b]`** (ADR-293 D1, D3, D23; ADR-320 D7).
+/// **Which text an expression is**, for a position's origin (ADR-320 D5): as
+/// written, behind the binding its first name stands for, so a name bound
+/// again is another text.
+pub fn check_core_places_text_key(state: ref CheckState, world: ref CheckWorld, text: ref Expr) -> String sync {
+    let mut root: ref Expr = text
+    let mut walking = true
+    while walking {
+        match root {
+            Expr::Field { base, .. } => { root = base },
+            else => { walking = false },
+        }
+    }
+    let mut id: i64 = -1
+    match root {
+        Expr::Variable(name, _) => {
+            let local = state.binding(world.words.resolve(name))
+            if local != null {
+                id = (local ?? return "").id
+            }
+        },
+        else => {},
+    }
+    return f"{id}:{written_expression(world.words, text)}"
+}
+
+/// The byte length of a text literal, or `-1`: `";"` and `';'` are one byte.
+fn check_core_places_literal_bytes(expr: ref Expr) -> i64 sync {
+    return match expr {
+        Expr::LitStr { text, .. } => text.len() as i64,
+        Expr::LitChar(written, _) => if literal_is_a_byte(written) { 1 } else { -1 },
+        else => -1,
+    }
+}
+
+/// Whether evaluating `expr` leaves: the fallback of `find(…) ?? return`.
+fn check_core_places_leaves(expr: ref Expr) -> bool sync {
+    return match expr {
+        Expr::Return(_, _) => true,
+        Expr::Break(_) => true,
+        Expr::Continue(_) => true,
+        Expr::Throw(_, _) => true,
+        else => false,
+    }
+}
+
+/// Two positions that may each be the value, of one text: `""` (the start)
+/// goes with any.
+fn check_core_places_either_position(one: ref CheckTextPosition, other: ref CheckTextPosition) -> CheckTextPosition? sync {
+    let step = if one.step == other.step { one.step } else { -1 }
+    if other.text == "" || other.text == one.text {
+        return CheckTextPosition { text: one.text.clone(), step: step }
+    }
+    if one.text == "" {
+        return CheckTextPosition { text: other.text.clone(), step: step }
+    }
+    return null
+}
+
+/// The position a block of one expression gives, `{ a }`.
+fn check_core_places_block_position(state: ref CheckState, world: ref CheckWorld, block: ref Block) -> CheckTextPosition? sync {
+    if block.stmts.len() != 1 {
+        return null
+    }
+    return match block.stmts[0].node {
+        Stmt::Expr(value) => check_core_places_text_position(state, world, value),
+        else => null,
+    }
+}
+
+/// **A position a text hands out, and where it came from** (ADR-320 D5,
+/// Part I 2.6): `t.find(…)`, either end of `t` (`0`, `t.len()`), a name an
+/// immutable `let` bound to one, and one moved by the byte length of a text
+/// literal - `+ ";".len()`, or `+ 1` after a `find(";")` - and an `if` whose
+/// branches are each one of them. Anything else is a
+/// number the program made up, and `null`.
+pub fn check_core_places_text_position(state: ref CheckState, world: ref CheckWorld, expr: ref Expr) -> CheckTextPosition? sync {
+    match expr {
+        Expr::LitInt { value, .. } => {
+            if value == 0 {
+                return CheckTextPosition { text: "", step: -1 }
+            }
+            return null
+        },
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let called = world.words.resolve(method)
+            // `s.bytes.find(…)` counts bytes of a `Bytes`, not a text's
+            // positions (Part I 2.6 names `s.find`).
+            if state.a_text_bytes_view(world, receiver) {
+                return null
+            }
+            if called == "find" && args.len() >= 1 {
+                return CheckTextPosition { text: check_core_places_text_key(state, world, receiver), step: check_core_places_literal_bytes(args[0]) }
+            }
+            if called == "len" && args.len() == 0 {
+                return CheckTextPosition { text: check_core_places_text_key(state, world, receiver), step: -1 }
+            }
+            return null
+        },
+        Expr::Coalesce { value, fallback, .. } => {
+            let found = check_core_places_text_position(state, world, value) ?? return null
+            if check_core_places_leaves(fallback) {
+                return found
+            }
+            let other = check_core_places_text_position(state, world, fallback) ?? return null
+            return check_core_places_either_position(found, other)
+        },
+        // `if a < b { a } else { b }`: a position of the text either way.
+        Expr::If { then_branch, else_branch, .. } => {
+            let otherwise: ref Block = else_branch ?? return null
+            let one = check_core_places_block_position(state, world, then_branch) ?? return null
+            let other = check_core_places_block_position(state, world, otherwise) ?? return null
+            return check_core_places_either_position(one, other)
+        },
+        Expr::Variable(name, _) => {
+            let local = state.binding(world.words.resolve(name)) ?? return null
+            let kept = state.text_positions[local.id] ?? return null
+            return CheckTextPosition { text: kept.text.clone(), step: kept.step }
+        },
+        Expr::Binary { op, lhs, rhs, .. } => {
+            let adds = match op {
+                BinaryOp::Add => true,
+                else => false,
+            }
+            let subtracts = match op {
+                BinaryOp::Sub => true,
+                else => false,
+            }
+            if !adds && !subtracts {
+                return null
+            }
+            let from = check_core_places_text_position(state, world, lhs) ?? return null
+            // `+ 1` after a `find(";")`: the literal's length, written out.
+            match rhs {
+                Expr::LitInt { value, negative, .. } => {
+                    if adds && !negative && from.step > 0 && value as i64 == from.step {
+                        return CheckTextPosition { text: from.text.clone(), step: -1 }
+                    }
+                    return null
+                },
+                Expr::MethodCall { receiver, method, args, .. } => {
+                    if world.words.resolve(method) == "len" && args.len() == 0 && check_core_places_literal_bytes(receiver) >= 0 {
+                        return CheckTextPosition { text: from.text.clone(), step: -1 }
+                    }
+                    return null
+                },
+                else => return null,
+            }
+        },
+        else => return null,
+    }
+}
+
+/// **A text is cut by a position it handed out** (ADR-320 D5): each bound of
+/// `text[a..<b]` is one of `text`'s, or the cut is `NK1214`, which names the
+/// view.
+fn check_core_places_text_cut(mut state: CheckState, world: ref CheckWorld, text: ref Expr, index: ref Expr, span: ref Span) sync {
+    let shown = written_expression(world.words, text)
+    let mut bounds: Vec[ref Expr] = []
+    let mut start_zero = false
+    let mut cut: String = written_expression(world.words, index)
+    match index {
+        Expr::Range { start, end, .. } => {
+            bounds.push(start)
+            bounds.push(end)
+            match start {
+                Expr::LitInt { value, .. } => { start_zero = value == 0 },
+                else => {},
+            }
+            match end {
+                Expr::MethodCall { receiver, method, args, .. } => {
+                    if world.words.resolve(method) == "len" && args.len() == 0 && written_expression(world.words, receiver) == shown {
+                        cut = f"{written_expression(world.words, start)}.."
+                    }
+                },
+                else => {},
+            }
+        },
+        else => {},
+    }
+    let key = check_core_places_text_key(state, world, text)
+    let mut message: String = ""
+    if bounds.len() == 0 {
+        message = f"`{shown}` is cut by a range kept in a name, and a text is cut only by a position it handed out."
+    }
+    for bound in bounds {
+        if message == "" {
+            let position: CheckTextPosition? = check_core_places_text_position(state, world, bound)
+            if position == null {
+                message = f"`{shown}` is cut at `{written_expression(world.words, bound)}`, a number the program made up: a text is cut only by a position it handed out (`find`, or one moved by the length of a text literal)."
+            } else {
+                let p = position ?? CheckTextPosition { text: "", step: -1 }
+                if p.text != "" && p.text != key {
+                    message = f"`{shown}` is cut at `{written_expression(world.words, bound)}`, a position of another text."
+                }
+            }
+        }
+    }
+    if message == "" {
+        return
+    }
+    let mut readers = f"`{shown}.graphemes` for what a reader sees"
+    if start_zero {
+        match index {
+            Expr::Range { end, inclusive, .. } => {
+                if !inclusive {
+                    readers = f"`{shown}.graphemes.take({written_expression(world.words, end)})` for what a reader sees"
+                }
+            },
+            else => {},
+        }
+    }
+    state.findings.push(check_refusal("NK1214", span, message, ["A number counts bytes, scalars or graphemes only through a view; the text's own positions are bytes it knows to be on a scalar's start."], f"Say the view: `{shown}.bytes[{cut}].text()` for bytes, {readers}."))
+}
+
 pub fn check_core_index[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, base: ref Expr, index: ref Expr, span: ref Span) -> Ty sync {
     let writing = state.flow.writing_index
     state.flow.writing_index = false
@@ -806,6 +1020,7 @@ pub fn check_core_index[H: CheckHost](mut state: CheckState, world: ref CheckWor
             return Ty::Named { name: "Array".clone(), args: [args[0].clone()], view: true }
         }
         if (b == "String" || b == "str") && args.len() == 0 {
+            check_core_places_text_cut(state, world, base, index, span)
             return check_core_places_str_view()
         }
         // **A cut of a `Bytes` is a `Bytes`** (ADR-320 D7).

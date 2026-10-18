@@ -140,7 +140,8 @@ fn unquote_at(value: ref String, at: ref String) -> String throws {
     if value.len() < 2 || !value.starts_with("\"") || !value.ends_with("\"") {
         throw Refused::Because(f"{at}expected a quoted string, found `{value}`")
     }
-    return unescaped(value[1..<value.len() - 1])
+    let opened: String = (value.strip_prefix("\"") ?? "").clone()
+    return unescaped((opened.strip_suffix("\"") ?? "").clone())
 }
 
 /// The entries of `["a", "b"]`, each unquoted, split where a comma stands

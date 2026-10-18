@@ -706,7 +706,7 @@ impl CheckState {
         if cut != null {
             let at = cut ?? 0
             place = line[0..<at].clone()
-            why = line[at + 23..<line.len()].clone()
+            why = line[at + ": the program stopped: ".len()..].clone()
         }
         let found = host.place_of(place, here)
         self.a_build_time_run_that_stopped_at(bound, why, found.at, found.function, span)

@@ -67,7 +67,9 @@ fn a_string_parameter_used_as_a_map_key_is_lent() {
 fn count(dna: ref String, k: i64) -> collections::HashMap[ref String, i64] {
     let mut counts: collections::HashMap[ref String, i64] = collections::HashMap()
     for i in 0..<dna.len() - k + 1 {
-        let fragment = ref dna[i..<i + k]
+        let fragment = dna.bytes[i..<i + k].text() catch {
+            continue
+        }
         counts.insert(fragment, 1)
     }
     return counts

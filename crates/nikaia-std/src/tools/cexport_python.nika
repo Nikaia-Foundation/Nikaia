@@ -461,8 +461,16 @@ impl CxPython {
                         name = word.clone()
                     }
                 } else {
-                    let first = spelled[0..<1].to_uppercase()
-                    name = f"{first}{spelled[1..<spelled.len()]}"
+                    // The first scalar in capitals, the rest as spelled.
+                    let mut capital: String = ""
+                    for c in spelled.chars() {
+                        if capital == "" {
+                            capital = f"{c}".to_uppercase()
+                        } else {
+                            capital = f"{capital}{c}"
+                        }
+                    }
+                    name = capital
                     taken.insert(name.clone())
                 }
                 let code_number = code.number

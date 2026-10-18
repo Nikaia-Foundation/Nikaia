@@ -177,7 +177,7 @@ impl CheckState {
             if at != null {
                 let cut = at ?? 0
                 let ty = name[0..<cut].clone()
-                let variant = name[cut + 2..<name.len()].clone()
+                let variant = name[cut + "::".len()..].clone()
                 constructs = self.is_variant(ty, variant)
             }
         }

@@ -621,7 +621,8 @@ impl EmitState {
                 let held = self.sum_member_held(world, member, "")
                 let mut bare = held.clone()
                 if held.starts_with("nikaia_std::error::Thrown<") && held.ends_with(">") {
-                    bare = held[26..<(held.len() - 1)].clone()
+                    let opened: String = (held.strip_prefix("nikaia_std::error::Thrown<") ?? "").clone()
+                    bare = (opened.strip_suffix(">") ?? "").clone()
                 }
                 inside = flow with { caught_named: own }
                 let named_member: String? = member.clone()

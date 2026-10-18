@@ -91,7 +91,12 @@ fn count(dna: ref String, k: i64) -> collections::HashMap[ref String, Tally] {
     }
 
     for i in 0..<dna.len() - k + 1 {
-        let fragment = ref dna[i..<i + k]
+        // `i` is a counter, not a position the text handed out: the bytes
+        // are cut, and made text again (Part I 2.6). A cut through a scalar
+        // is no fragment of DNA.
+        let fragment = dna.bytes[i..<i + k].text() catch {
+            continue
+        }
         counts
             .entry(fragment)
             .and_modify fn (tally) { tally.bump() }

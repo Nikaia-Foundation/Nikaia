@@ -543,6 +543,13 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
     if bytes_view {
         state.text_bytes_lets.insert(id)
     }
+    // **A position a text handed out keeps where it came from** (ADR-320 D5).
+    if !mutable && names.len() == 1 && shape.len() == 0 {
+        let position = check_core_places_text_position(state, world, value)
+        if position != null {
+            state.text_positions.insert(id, position ?? CheckTextPosition { text: "", step: -1 })
+        }
+    }
     // **A `'…'` nothing typed is typed by its uses** (ADR-320 D8, as a
     // number is, ADR-285 D23): a `u8` where they ask one.
     if ty == null && !mutable {

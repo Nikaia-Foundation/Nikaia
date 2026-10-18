@@ -1558,7 +1558,7 @@ fn a_lambdas_arm_beside_a_null_is_wrapped() {
 fn a_nullable_tuple_is_a_type() {
     let source = r#"fn cut(path: String, sep: String) -> (String, String)? {
     let at = path.find(sep) ?? return null
-    return (path[0..<at].clone(), path[at + sep.len()..].clone())
+    return (path[0..<at].clone(), (path[at..].strip_prefix(sep) ?? "").clone())
 }
 
 fn show(path: String) {
@@ -1597,7 +1597,7 @@ fn main() {
 fn a_nullable_tuples_parts_are_reached_with_safe_navigation() {
     let source = r#"fn cut(path: String, sep: String) -> (String, String)? {
     let at = path.find(sep) ?? return null
-    return (path[0..<at].clone(), path[at + sep.len()..].clone())
+    return (path[0..<at].clone(), (path[at..].strip_prefix(sep) ?? "").clone())
 }
 
 fn main() {

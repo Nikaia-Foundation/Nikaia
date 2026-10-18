@@ -9105,8 +9105,9 @@ impl CxPython {
                         name = word.to_owned();
                     }
                 } else {
-                    let first = nikaia_std::index::get(&spelled, 0..1).to_uppercase();
-                    name = format!("{}{}", first, nikaia_std::index::get(&spelled, 1..));
+                    let mut capital: String = String::from("");
+                    for c in spelled.chars() { if capital == "" { capital = format!("{}", c).to_uppercase(); } else { capital = format!("{}{}", capital, c); } }
+                    name = capital;
                     taken.insert(name.to_owned());
                 }
                 let code_number = code.number;
@@ -11330,7 +11331,7 @@ impl CheckState {
         if bar.is_some() {
             let at = nikaia_std::index::or(bar, || 0);
             what = nikaia_std::index::get(&over, nikaia_std::index::at(0..at)).trim();
-            path = nikaia_std::index::get(&over, nikaia_std::index::at(at + 1..)).trim();
+            path = nikaia_std::index::get(&over, nikaia_std::index::at(at + "|".len() as i64..)).trim();
         }
         let mut kind: String = what.to_owned();
         let mut limit: String = String::from("");
@@ -11338,7 +11339,7 @@ impl CheckState {
         if space.is_some() {
             let at = nikaia_std::index::or(space, || 0);
             kind = nikaia_std::index::get(&what, nikaia_std::index::at(0..at)).to_owned();
-            limit = nikaia_std::index::get(&what, nikaia_std::index::at(at + 1..)).to_owned();
+            limit = nikaia_std::index::get(&what, nikaia_std::index::at(at + " ".len() as i64..)).to_owned();
         }
         let mut message: String = format!("`{}` took more than {} steps while the program was built.", bound, limit);
         let mut note: String = String::from("Each turn of a loop and each call is a step, and the count is the same on every machine.");
@@ -16481,7 +16482,7 @@ fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, world: &CheckW
         if cut.is_some() {
             let split = nikaia_std::index::or(cut, || 0);
             owner = nikaia_std::index::get(&entry, nikaia_std::index::at(0..split)).to_owned();
-            rule = nikaia_std::index::get(&entry, nikaia_std::index::at(split + 2..)).to_owned();
+            rule = nikaia_std::index::get(&entry, nikaia_std::index::at(split + "::".len() as i64..)).to_owned();
         }
         state.a_grammar_reached_through_a_dot(&owner, &rule, span);
         return check_core_grammar_call(state, world, host, &entry, args, span);
@@ -17810,6 +17811,181 @@ fn check_core_places_lent_field(want: &Ty, given: &Ty) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub fn check_core_places_text_key(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, text: &Expr) -> String {
+    let mut root: &Expr = text;
+    let mut walking = true;
+    while walking {
+        match root {
+            Expr::Field { base, .. } => {
+                let base = nikaia_std::boxed::open(base);
+                root = base;
+            },
+            _ => { walking = false; },
+        }
+    }
+    let mut id: i64 = -1;
+    match root {
+        Expr::Variable(name, _) => {
+            let name = *name;
+            let local = state.binding(world.words.resolve(name));
+            if local.is_some() { id = match local { Some(__nikaia_value) => __nikaia_value, None => return String::from("") }.id; }
+        },
+        _ => { },
+    }
+    format!("{}:{}", id, written_expression(world.words, text))
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_places_literal_bytes(expr: &Expr) -> i64 {
+    match expr {
+        Expr::LitStr { text, .. } => text.len() as i64,
+        Expr::LitChar(written, _) => if literal_is_a_byte(written) { 1 } else { -1 },
+        _ => -1,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_places_leaves(expr: &Expr) -> bool { matches!(expr, Expr::Return(_, _) | Expr::Break(_) | Expr::Continue(_) | Expr::Throw(_, _)) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_places_either_position(one: &CheckTextPosition, other: &CheckTextPosition) -> Option<CheckTextPosition> {
+    let step = if one.step == other.step { one.step } else { -1 };
+    if other.text == "" || other.text == one.text { return Some(CheckTextPosition { text: one.text.to_owned(), step }); }
+    if one.text == "" { return Some(CheckTextPosition { text: other.text.to_owned(), step }); }
+    None
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_places_block_position(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, block: &Block) -> Option<CheckTextPosition> {
+    if block.stmts.len() != 1 { return None; }
+    match &nikaia_std::index::get(&block.stmts, 0).node {
+        Stmt::Expr(value) => check_core_places_text_position(state, world, value),
+        _ => None,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_core_places_text_position(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr) -> Option<CheckTextPosition> {
+    match expr {
+        Expr::LitInt { value, .. } => {
+            let value = *value;
+            if value == 0u64 { return Some(CheckTextPosition { text: String::from(""), step: -1 }); }
+            return None;
+        },
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            let called = world.words.resolve(method);
+            if state.a_text_bytes_view(world, receiver) { return None; }
+            if called == "find" && !args.is_empty() { return Some(CheckTextPosition { text: check_core_places_text_key(state, world, receiver), step: check_core_places_literal_bytes(nikaia_std::index::get(&args, 0)) }); }
+            if called == "len" && args.is_empty() { return Some(CheckTextPosition { text: check_core_places_text_key(state, world, receiver), step: -1 }); }
+            return None;
+        },
+        Expr::Coalesce { value, fallback, .. } => {
+            let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback);
+            let found = match check_core_places_text_position(state, world, value) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            if check_core_places_leaves(fallback) { return Some(found); }
+            let other = match check_core_places_text_position(state, world, fallback) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            return check_core_places_either_position(&found, &other);
+        },
+        Expr::If { then_branch, else_branch, .. } => {
+            let otherwise: &Block = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let one = match check_core_places_block_position(state, world, then_branch) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let other = match check_core_places_block_position(state, world, otherwise) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            return check_core_places_either_position(&one, &other);
+        },
+        Expr::Variable(name, _) => {
+            let name = *name;
+            let local = match state.binding(world.words.resolve(name)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let kept = match *nikaia_std::index::get(&state.text_positions, &local.id) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            return Some(CheckTextPosition { text: kept.text.to_owned(), step: kept.step });
+        },
+        Expr::Binary { op, lhs, rhs, .. } => {
+            let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
+            let adds = matches!(op, BinaryOp::Add);
+            let subtracts = matches!(op, BinaryOp::Sub);
+            if !adds && !subtracts { return None; }
+            let from = match check_core_places_text_position(state, world, lhs) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            match rhs {
+                Expr::LitInt { value, negative, .. } => {
+                    let negative = *negative; let value = *value;
+                    if adds && !negative && from.step > 0 && (i64::try_from(value).unwrap_or_else(|_| panic!("the value does not fit in an `i64`"))) == from.step { return Some(CheckTextPosition { text: from.text.to_owned(), step: -1 }); }
+                    return None;
+                },
+                Expr::MethodCall { receiver, method, args, .. } => {
+                    let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+                    if world.words.resolve(method) == "len" && args.is_empty() && check_core_places_literal_bytes(receiver) >= 0 { return Some(CheckTextPosition { text: from.text.to_owned(), step: -1 }); }
+                    return None;
+                },
+                _ => return None,
+            }
+        },
+        _ => return None,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_places_text_cut(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, text: &Expr, index: &Expr, span: &Span) {
+    let shown = written_expression(world.words, text);
+    let mut bounds: Vec<&Expr> = vec![];
+    let mut start_zero = false;
+    let mut cut: String = written_expression(world.words, index);
+    match index {
+        Expr::Range { start, end, .. } => {
+            let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end);
+            bounds.push(start);
+            bounds.push(end);
+            match start {
+                Expr::LitInt { value, .. } => {
+                    let value = *value;
+                    start_zero = value == 0u64;
+                },
+                _ => { },
+            }
+            match end {
+                Expr::MethodCall { receiver, method, args, .. } => {
+                    let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+                    if world.words.resolve(method) == "len" && args.is_empty() && written_expression(world.words, receiver) == shown { cut = format!("{}..", written_expression(world.words, start)); }
+                },
+                _ => { },
+            }
+        },
+        _ => { },
+    }
+    let key = check_core_places_text_key(&state, world, text);
+    let mut message: String = String::from("");
+    if bounds.is_empty() { message = format!("`{}` is cut by a range kept in a name, and a text is cut only by a position it handed out.", shown); }
+    for bound in bounds.iter() {
+        let bound = *bound;
+        if message == "" {
+            let position: Option<CheckTextPosition> = check_core_places_text_position(&state, world, bound);
+            if position.is_none() { message = format!("`{}` is cut at `{}`, a number the program made up: a text is cut only by a position it handed out (`find`, or one moved by the length of a text literal).", shown, written_expression(world.words, bound)); } else {
+                let p = nikaia_std::index::or(position, || CheckTextPosition { text: String::from(""), step: -1 });
+                if p.text != "" && p.text != key { message = format!("`{}` is cut at `{}`, a position of another text.", shown, written_expression(world.words, bound)); }
+            }
+        }
+    }
+    if message == "" { return; }
+    let mut readers = format!("`{}.graphemes` for what a reader sees", shown);
+    if start_zero {
+        match index {
+            Expr::Range { end, inclusive, .. } => {
+                let end = nikaia_std::boxed::open(end); let inclusive = *inclusive;
+                if !inclusive { readers = format!("`{}.graphemes.take({})` for what a reader sees", shown, written_expression(world.words, end)); }
+            },
+            _ => { },
+        }
+    }
+    state.findings.push(check_refusal("NK1214", span, message, vec![String::from("A number counts bytes, scalars or graphemes only through a view; the text's own positions are bytes it knows to be on a scalar's start.")], Some(format!("Say the view: `{}.bytes[{}].text()` for bytes, {}.", shown, cut, readers))));
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub fn check_core_index<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, expr: &Expr, base: &Expr, index: &Expr, span: &Span) -> Ty {
     let writing = state.flow.writing_index;
     state.flow.writing_index = false;
@@ -17859,7 +18035,10 @@ pub fn check_core_index<H: CheckHost>(state: &mut CheckState, world: &CheckWorld
     if !a_range && check_core_places_a_list(&b) { state.number_asked(world, index, &check_core_places_named("i64"), span, false); }
     if a_range {
         if check_core_places_a_list(&b) && !args.is_empty() { return Ty::Named { name: "Array".to_owned(), args: vec![(*nikaia_std::index::get(&args, 0)).clone()], view: true }; }
-        if (b == "String" || b == "str") && args.is_empty() { return check_core_places_str_view(); }
+        if (b == "String" || b == "str") && args.is_empty() {
+            check_core_places_text_cut(state, world, base, index, span);
+            return check_core_places_str_view();
+        }
         if b == "Bytes" && args.is_empty() { return check_core_places_named("Bytes"); }
         return Ty::Unknown;
     }
@@ -18315,6 +18494,10 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     if tasks > 0 { state.task_bindings[nikaia_std::index::at(tasks - 1)].push((name.to_owned(), bound.clone(), span.start as i64)); }
     let id = state.a_new_binding();
     if bytes_view { state.text_bytes_lets.insert(id); }
+    if !mutable && names.len() == 1 && shape.is_empty() {
+        let position = check_core_places_text_position(&state, world, value);
+        if position.is_some() { state.text_positions.insert(id, nikaia_std::index::or(position, || CheckTextPosition { text: String::from(""), step: -1 })); }
+    }
     if ty.is_none() && !mutable {
         match value {
             Expr::LitChar(written, _) => {
@@ -20285,7 +20468,10 @@ pub fn check_claims_report(claims: &collections::BTreeMap<(i64, i64), FactClaim>
         let mut start = key.0;
         if start > source.len() as i64 { start = source.len() as i64; }
         if start > at {
-            for c in nikaia_std::index::get(&source, nikaia_std::index::at(at..start)).chars() { if c == '\n' { line = line + 1; } }
+            for c in nikaia_std::index::get(&source.as_bytes(), nikaia_std::index::at(at..start)).iter() {
+                let c = nikaia_std::num::value(c);
+                if c == b'\x0a' { line = line + 1; }
+            }
             at = start;
         }
         let how = check_claim_held((claim.held).as_ref());
@@ -21632,7 +21818,7 @@ impl CheckState {
         if cut.is_some() {
             let at = nikaia_std::index::or(cut, || 0);
             place = nikaia_std::index::get(&line, nikaia_std::index::at(0..at)).to_owned();
-            why = nikaia_std::index::get(&line, nikaia_std::index::at(at + 23..)).to_owned();
+            why = nikaia_std::index::get(&line, nikaia_std::index::at(at + ": the program stopped: ".len() as i64..)).to_owned();
         }
         let found = host.place_of(&place, here);
         self.a_build_time_run_that_stopped_at(bound, &why, found.at, (found.function).as_deref(), span);
@@ -27564,6 +27750,12 @@ pub struct CheckImmutable {
     pub kind: CheckKind,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CheckTextPosition {
+    pub text: String,
+    pub step: i64,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct CheckLocal {
     pub name: String,
@@ -27863,6 +28055,7 @@ pub struct CheckState {
     pub reads_on_paths: Vec<CheckRead>,
     pub lent_lets: collections::BTreeSet<(String, i64)>,
     pub text_bytes_lets: collections::BTreeSet<i64>,
+    pub text_positions: collections::BTreeMap<i64, CheckTextPosition>,
     pub handed: Vec<CheckTaken>,
     pub read_at: Vec<(String, i64)>,
     pub written_at: Vec<(String, i64)>,
@@ -28380,7 +28573,9 @@ pub fn check_byte_literal(written: &str) -> String {
     let digits = "0123456789abcdef";
     let high = byte / 16;
     let low = byte % 16;
-    format!("b'\\x{}{}'", nikaia_std::index::get(&digits, nikaia_std::index::at(high..high + 1)), nikaia_std::index::get(&digits, nikaia_std::index::at(low..low + 1)))
+    let h = *nikaia_std::index::get(&digits.as_bytes(), nikaia_std::index::at(high)) as scalar;
+    let l = *nikaia_std::index::get(&digits.as_bytes(), nikaia_std::index::at(low)) as scalar;
+    format!("b'\\x{}{}'", h, l)
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -28997,7 +29192,7 @@ pub fn element_walked(over: &Ty, bindings: i64) -> Ty {
         Ty::Named { name, args, view } => {
             let view = *view;
             let last = type_last_segment(name);
-            if args.len() == 1 { if last == "Vec" || last == "List" || last == "BTreeSet" || last == "HashSet" { (*nikaia_std::index::get(&args, 0)).clone() } else { Ty::Unknown } } else if !args.is_empty() && !view && name == ARRAY { (*nikaia_std::index::get(&args, 0)).clone() } else { Ty::Unknown }
+            if args.len() == 1 { if last == "Vec" || last == "List" || last == "BTreeSet" || last == "HashSet" { (*nikaia_std::index::get(&args, 0)).clone() } else { Ty::Unknown } } else if !args.is_empty() && !view && name == ARRAY { (*nikaia_std::index::get(&args, 0)).clone() } else if args.is_empty() && last == "Bytes" { Ty::Named { name: String::from("u8"), args: vec![], view: false } } else { Ty::Unknown }
         },
         Ty::Pointed { item, slice, mutable } => { let item = nikaia_std::boxed::open(item); let mutable = *mutable; let slice = *slice; if slice && !mutable { item.clone() } else { Ty::Unknown } },
         Ty::Seq { item, .. } => { let item = nikaia_std::boxed::open(item); item.clone() },
@@ -29639,7 +29834,7 @@ impl CheckState {
             if at.is_some() {
                 let cut = nikaia_std::index::or(at, || 0);
                 let ty = nikaia_std::index::get(&name, nikaia_std::index::at(0..cut)).to_owned();
-                let variant = nikaia_std::index::get(&name, nikaia_std::index::at(cut + 2..)).to_owned();
+                let variant = nikaia_std::index::get(&name, nikaia_std::index::at(cut + "::".len() as i64..)).to_owned();
                 constructs = self.is_variant(&ty, &variant);
             }
         }
@@ -30479,9 +30674,8 @@ struct CrRow {
 #[allow(clippy::too_many_arguments)]
 pub fn cr_with_driver(rust: &str, rows: &[(i64, i64, i64)], value_fn: &str, dump: &str, helpers: &str, stopped_at: &str, budget: u64, memory: u64) -> Option<String> {
     let start = match nikaia_std::search::find(&rust, &"\nfn main() {\n", 0) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let tail = nikaia_std::index::get(&rust, nikaia_std::index::at(start + 1..)).to_owned();
-    let found = match nikaia_std::search::find(&tail, &"\n}\n", 0) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let end = start + 1 + found + 3;
+    let close = match nikaia_std::search::find(&rust, &"\n}\n", start + "\n".len() as i64) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let end = close + "\n}\n".len() as i64;
     let main = cr_main(value_fn, dump, budget, memory);
     let mut starts: Vec<i64> = vec![0];
     let mut byte = 0;
@@ -30513,8 +30707,8 @@ pub fn cr_with_driver(rust: &str, rows: &[(i64, i64, i64)], value_fn: &str, dump
     table.push_str("];\n");
     let rest = nikaia_std::index::get(&rust, nikaia_std::index::at(end..)).to_owned();
     let empty = match nikaia_std::search::find(&rest, &"const __NIKAIA_SITES", 0) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let after_empty = match nikaia_std::search::find(&nikaia_std::index::get(&rest, nikaia_std::index::at(empty..)), &"];\n", 0) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let after = empty + after_empty + 3;
+    let shut = match nikaia_std::search::find(&rest, &"];\n", empty) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let after = shut + "];\n".len() as i64;
     let front = nikaia_std::index::get(&rust, nikaia_std::index::at(0..start)).to_owned();
     let middle = nikaia_std::index::get(&rest, nikaia_std::index::at(0..empty)).to_owned();
     let back = nikaia_std::index::get(&rest, nikaia_std::index::at(after..)).to_owned();
@@ -35451,6 +35645,7 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub fn emit_core_match_over_a_box<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, arms: &[MatchArm], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), Box<dyn std::error::Error>> {
+        let __keep_frame = nikaia_std::tether::Keep::new();
         let mut members: Vec<String> = vec![];
         let mut home: Vec<i64> = vec![];
         let mut catch_all = 0;
@@ -35487,7 +35682,10 @@ impl EmitState {
                 let own = self.name_of_error(world, &member) != 0;
                 let held = self.sum_member_held(world, &member, "");
                 let mut bare = held.to_owned();
-                if held.starts_with("nikaia_std::error::Thrown<") && held.ends_with('>') { bare = nikaia_std::index::get(&held, nikaia_std::index::at(26..held.len() as i64 - 1)).to_owned(); }
+                if held.starts_with("nikaia_std::error::Thrown<") && held.ends_with('>') {
+                    let opened = __keep_frame.put(nikaia_std::index::or(held.strip_prefix("nikaia_std::error::Thrown<"), || "").to_owned());
+                    bare = nikaia_std::index::or(opened.strip_suffix('>'), || "").to_owned();
+                }
                 inside = EmitFlow { caught_named: own, ..flow };
                 let named_member: Option<String> = Some(member.to_owned());
                 inside_scope = EmitScope { caught_member: named_member, ..scope.clone() };
@@ -40211,7 +40409,7 @@ fn gr_shaped(tag: &str, at: &mut GrCursor, char_of: &impl Fn(i64) -> Option<scal
         let mut body = digits.to_owned();
         if digits.starts_with('-') {
             negative = true;
-            body = nikaia_std::index::get(&digits, 1..).to_owned();
+            body = nikaia_std::index::or(digits.strip_prefix('-'), || "").to_owned();
         }
         let magnitude = text::parse_u64(&body);
         if magnitude.is_none() {
@@ -41646,7 +41844,8 @@ pub fn unquote(value: &str) -> Result<String, nikaia_std::error::Thrown<Refused>
 
 fn unquote_at(value: &str, at: &str) -> Result<String, nikaia_std::error::Thrown<Refused>> {
     if value.len() < 2 || !value.starts_with("\"") || !value.ends_with("\"") { return Err(nikaia_std::error::throwing(Refused::Because(format!("{}expected a quoted string, found `{}`", at, value)), &"unquote_at")); }
-    Ok(unescaped(nikaia_std::index::get(&value, nikaia_std::index::at(1..value.len() as i64 - 1))))
+    let opened: String = nikaia_std::index::or(value.strip_prefix("\""), || "").to_owned();
+    Ok(unescaped(&nikaia_std::index::or(opened.strip_suffix("\""), || "").to_owned()))
 }
 
 pub fn list(value: &str) -> Result<Vec<String>, nikaia_std::error::Thrown<Refused>> {
@@ -43767,7 +43966,10 @@ fn lg_literal(arena: &TermArena, part: &LgPart) -> String {
 }
 
 fn lg_negation(literal: &str) -> String {
-    if literal.starts_with("(not ") && literal.ends_with(')') { return nikaia_std::index::get(&literal, nikaia_std::index::at(5..literal.len() as i64 - 1)).to_owned(); }
+    if literal.starts_with("(not ") && literal.ends_with(')') {
+        let opened: String = nikaia_std::index::or(literal.strip_prefix("(not "), || "").to_owned();
+        return nikaia_std::index::or(opened.strip_suffix(')'), || "").to_owned();
+    }
     format!("(not {})", literal)
 }
 
@@ -45310,7 +45512,7 @@ impl LgNormal {
     }
     fn original(&self, name: &str) -> String {
         if name.starts_with('v') {
-            let digits = nikaia_std::index::get(&name, 1..).to_owned();
+            let digits = nikaia_std::index::or(name.strip_prefix('v'), || "").to_owned();
             let mut plain = !digits.is_empty();
             for c in digits.chars() { if c < '0' || c > '9' { plain = false; } }
             if plain {
@@ -45363,7 +45565,7 @@ pub fn lg_certificate_of(text: &str) -> Option<LgCertificate> {
 
 fn lg_certificate_from(text: &str) -> Option<LgParsed> {
     if text.starts_with("R(") {
-        let rest = nikaia_std::index::get(&text, 2..).to_owned();
+        let rest = nikaia_std::index::or(text.strip_prefix("R("), || "").to_owned();
         let end = match nikaia_std::search::find(&rest, &")", 0) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let mut steps: Vec<LgStep> = vec![];
         let inside = nikaia_std::index::get(&rest, nikaia_std::index::at(0..end)).to_owned();
@@ -45371,10 +45573,10 @@ fn lg_certificate_from(text: &str) -> Option<LgParsed> {
             if word.is_empty() { continue; }
             steps.push(match lg_step_of(word) { Some(__nikaia_value) => __nikaia_value, None => return None });
         }
-        return Some(LgParsed { certificate: LgCertificate::Refuted(LgRefutation { steps }), rest: nikaia_std::index::get(&rest, nikaia_std::index::at(end + 1..)).to_owned() });
+        return Some(LgParsed { certificate: LgCertificate::Refuted(LgRefutation { steps }), rest: nikaia_std::index::get(&rest, nikaia_std::index::at(end + ")".len() as i64..)).to_owned() });
     }
     if !text.starts_with('S') { return None; }
-    let rest = nikaia_std::index::get(&text, 1..).to_owned();
+    let rest = nikaia_std::index::or(text.strip_prefix('S'), || "").to_owned();
     let open = match nikaia_std::search::find(&rest, &"[", 0) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let disjunction = match lg_number(&nikaia_std::index::get(&rest, nikaia_std::index::at(0..open)).to_owned()) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let mut after = nikaia_std::index::get(&rest, nikaia_std::index::at(open + 1..)).to_owned();
@@ -45382,9 +45584,9 @@ fn lg_certificate_from(text: &str) -> Option<LgParsed> {
     loop {
         let case = match lg_certificate_from(&after) { Some(__nikaia_value) => __nikaia_value, None => return None };
         cases.push(case.certificate.clone());
-        if case.rest.starts_with('|') { after = nikaia_std::index::get(&case.rest, 1..).to_owned(); } else {
+        if case.rest.starts_with('|') { after = nikaia_std::index::or(case.rest.strip_prefix('|'), || "").to_owned(); } else {
             if !case.rest.starts_with(']') { return None; }
-            return Some(LgParsed { certificate: LgCertificate::Split { disjunction, cases }, rest: nikaia_std::index::get(&case.rest, 1..).to_owned() });
+            return Some(LgParsed { certificate: LgCertificate::Split { disjunction, cases }, rest: nikaia_std::index::or(case.rest.strip_prefix(']'), || "").to_owned() });
         }
     }
 }
@@ -45396,10 +45598,10 @@ fn lg_number(word: &str) -> Option<i64> {
 }
 
 fn lg_step_of(word: &str) -> Option<LgStep> {
-    if word.starts_with('h') { return Some(LgStep::Hypothesis(match lg_number(&nikaia_std::index::get(&word, 1..).to_owned()) { Some(__nikaia_value) => __nikaia_value, None => return None })); }
-    if word.starts_with('t') { return Some(LgStep::Tighten(match lg_number(&nikaia_std::index::get(&word, 1..).to_owned()) { Some(__nikaia_value) => __nikaia_value, None => return None })); }
+    if word.starts_with('h') { return Some(LgStep::Hypothesis(match lg_number(&nikaia_std::index::or(word.strip_prefix('h'), || "").to_owned()) { Some(__nikaia_value) => __nikaia_value, None => return None })); }
+    if word.starts_with('t') { return Some(LgStep::Tighten(match lg_number(&nikaia_std::index::or(word.strip_prefix('t'), || "").to_owned()) { Some(__nikaia_value) => __nikaia_value, None => return None })); }
     if !word.starts_with('c') { return None; }
-    let body = nikaia_std::index::get(&word, 1..).to_owned();
+    let body = nikaia_std::index::or(word.strip_prefix('c'), || "").to_owned();
     let parts: Vec<&str> = body.split(':').collect::<Vec<_>>();
     if parts.len() != 4 { return None; }
     let left = match lg_number(*nikaia_std::index::get(&parts, 0)) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -45890,7 +46092,10 @@ fn lg_show(sexp: &LgSexp) -> String {
 }
 
 fn lg_unquoted(name: &str) -> String {
-    if name.len() >= 2 && name.starts_with('|') && name.ends_with('|') { return nikaia_std::index::get(&name, nikaia_std::index::at(1..name.len() as i64 - 1)).to_owned(); }
+    if name.len() >= 2 && name.starts_with('|') && name.ends_with('|') {
+        let opened: String = nikaia_std::index::or(name.strip_prefix('|'), || "").to_owned();
+        return nikaia_std::index::or(opened.strip_suffix('|'), || "").to_owned();
+    }
     name.to_owned()
 }
 
@@ -49676,13 +49881,11 @@ struct LoopParsed {
 }
 
 fn loop_term_of(arena: &mut TermArena, word: &str) -> Option<LoopParsed> {
-    let mut end = word.len() as i64;
-    let open = nikaia_std::index::or(nikaia_std::search::find(&word, &"(", 0), || end.into());
-    let comma = nikaia_std::index::or(nikaia_std::search::find(&word, &",", 0), || end.into());
-    let close = nikaia_std::index::or(nikaia_std::search::find(&word, &")", 0), || end.into());
-    if open < end { end = open; }
-    if comma < end { end = comma; }
-    if close < end { end = close; }
+    let open = nikaia_std::index::or(nikaia_std::search::find(&word, &"(", 0), || (word.len() as i64).into());
+    let comma = nikaia_std::index::or(nikaia_std::search::find(&word, &",", 0), || (word.len() as i64).into());
+    let close = nikaia_std::index::or(nikaia_std::search::find(&word, &")", 0), || (word.len() as i64).into());
+    let first = if open < comma { open } else { comma };
+    let end = if first < close { first } else { close };
     let head = nikaia_std::index::get(&word, nikaia_std::index::at(0..end)).to_owned();
     let rest = nikaia_std::index::get(&word, nikaia_std::index::at(end..)).to_owned();
     if !rest.starts_with('(') {
@@ -49692,11 +49895,11 @@ fn loop_term_of(arena: &mut TermArena, word: &str) -> Option<LoopParsed> {
         let name = match loop_name_of(&head) { Some(__nikaia_value) => __nikaia_value, None => return None };
         return Some(LoopParsed { term: arena.var(&name), rest });
     }
-    let mut after = nikaia_std::index::get(&rest, 1..).to_owned();
+    let mut after = nikaia_std::index::or(rest.strip_prefix('('), || "").to_owned();
     if head == "quot" {
         let inner = match loop_term_of(arena, &after) { Some(__nikaia_value) => __nikaia_value, None => return None };
         if !inner.rest.starts_with(',') { return None; }
-        let tail = nikaia_std::index::get(&inner.rest, 1..).to_owned();
+        let tail = nikaia_std::index::or(inner.rest.strip_prefix(','), || "").to_owned();
         let shut = match nikaia_std::search::find(&tail, &")", 0) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let k = match text::parse_i64(&nikaia_std::index::get(&tail, nikaia_std::index::at(0..shut)).to_owned()) { Some(__nikaia_value) => __nikaia_value, None => return None };
         if k <= 0 { return None; }
@@ -49706,8 +49909,8 @@ fn loop_term_of(arena: &mut TermArena, word: &str) -> Option<LoopParsed> {
     loop {
         let arg = match loop_term_of(arena, &after) { Some(__nikaia_value) => __nikaia_value, None => return None };
         args.push(arg.term);
-        if arg.rest.starts_with(',') { after = nikaia_std::index::get(&arg.rest, 1..).to_owned(); } else if arg.rest.starts_with(')') {
-            after = nikaia_std::index::get(&arg.rest, 1..).to_owned();
+        if arg.rest.starts_with(',') { after = nikaia_std::index::or(arg.rest.strip_prefix(','), || "").to_owned(); } else if arg.rest.starts_with(')') {
+            after = nikaia_std::index::or(arg.rest.strip_prefix(')'), || "").to_owned();
             break;
         } else { return None; }
     }
@@ -62746,7 +62949,7 @@ fn rsrc_out_of(name: &str, entries: &collections::BTreeSet<String>) -> collectio
     for entry in entries.iter() {
         let path = rsrc_path_of(entry);
         if path.is_empty() { out.insert(entry.to_owned()); } else if path == name { out.insert(rsrc_param_of(entry)); } else if !path.starts_with(&format!("{}.", name)) { out.insert(rsrc_loosened(&rsrc_param_of(entry))); } else if path.starts_with(&format!("{}.", name)) {
-            let rest = nikaia_std::index::get(&path, nikaia_std::index::at(name.len() as i64 + 1..)).to_owned();
+            let rest = nikaia_std::index::or(path.strip_prefix(&format!("{}.", name)), || "").to_owned();
             out.insert(format!("{}:{}", rest, rsrc_param_of(entry)));
         }
     }
@@ -62760,7 +62963,7 @@ fn rsrc_plain(entries: &collections::BTreeSet<String>) -> collections::BTreeSet<
 }
 
 fn rsrc_bare(param: &str) -> String {
-    if param.starts_with('~') { return nikaia_std::index::get(&param, 1..).to_owned(); }
+    if param.starts_with('~') { return nikaia_std::index::or(param.strip_prefix('~'), || "").to_owned(); }
     param.to_owned()
 }
 
@@ -64044,7 +64247,7 @@ pub mod check_core_pilot {
 }
 pub mod check_core_places {
     #[allow(unused_imports)]
-    pub use super::{check_core_field, check_core_places_stored, check_core_places_stored_keys, check_core_places_code_keys, check_core_places_code_into, check_core_struct_literal, check_core_with, check_core_index, check_core_cast, check_core_range};
+    pub use super::{check_core_field, check_core_places_stored, check_core_places_stored_keys, check_core_places_code_keys, check_core_places_code_into, check_core_struct_literal, check_core_with, check_core_places_text_key, check_core_places_text_position, check_core_index, check_core_cast, check_core_range};
 }
 pub mod check_core_stmt {
     #[allow(unused_imports)]
@@ -64181,7 +64384,7 @@ pub mod check_shapes {
 }
 pub mod check_state {
     #[allow(unused_imports)]
-    pub use super::{CheckKind, CheckImmutable, CheckLocal, CheckPromises, CheckHanded, CheckGuarded, CheckTaken, CheckRead, CheckPartOut, CheckGive, CheckWayOut, CheckPendingCoalesce, a_path_overlaps, a_path_revives, choices_apart, CheckRepeats, a_body_never_ends, a_jump_leaves, CheckSeverity, CheckLabel, CheckFinding, check_refusal, CheckWorld, CheckCallsInATask, CheckMethodCalls, CheckStoredCode, CheckState};
+    pub use super::{CheckKind, CheckImmutable, CheckTextPosition, CheckLocal, CheckPromises, CheckHanded, CheckGuarded, CheckTaken, CheckRead, CheckPartOut, CheckGive, CheckWayOut, CheckPendingCoalesce, a_path_overlaps, a_path_revives, choices_apart, CheckRepeats, a_body_never_ends, a_jump_leaves, CheckSeverity, CheckLabel, CheckFinding, check_refusal, CheckWorld, CheckCallsInATask, CheckMethodCalls, CheckStoredCode, CheckState};
 }
 pub mod check_takes {
     #[allow(unused_imports)]

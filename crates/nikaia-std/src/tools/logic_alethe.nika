@@ -88,7 +88,8 @@ fn lg_literal(arena: ref TermArena, part: ref LgPart) -> String {
 /// The literal's negation as a clause writes it.
 fn lg_negation(literal: ref String) -> String {
     if literal.starts_with("(not ") && literal.ends_with(")") {
-        return literal[5..<literal.len() - 1].clone()
+        let opened: String = (literal.strip_prefix("(not ") ?? "").clone()
+        return (opened.strip_suffix(")") ?? "").clone()
     }
     return f"(not {literal})"
 }

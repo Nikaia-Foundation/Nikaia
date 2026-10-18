@@ -39,6 +39,15 @@ pub struct CheckImmutable {
 /// argument all name something no compile-time evaluation reaches, so they
 /// carry `null` and the fold stops at them - the fail-closed direction the
 /// refusal needs (ADR-010 D1).
+/// **A position a text handed out** (ADR-320 D5): the text it came from, as
+/// `check_core_places_text_key` writes it (`""` is the start, `0`, which is a
+/// position of every text), and the byte length of the literal `find` looked
+/// for, `-1` where there is none or it has been moved by it already.
+pub struct CheckTextPosition {
+    pub text: String,
+    pub step: i64,
+}
+
 pub struct CheckLocal {
     pub name: String,
     /// **A `let mut`** (Part I 2.1): what a supervisor's child may not capture
@@ -758,6 +767,9 @@ pub struct CheckState {
     /// The `let`s that bound a text's own bytes, `s.bytes`, by the binding:
     /// the name is the view, and is copied where it is kept (ADR-320 D11).
     pub text_bytes_lets: collections::BTreeSet[i64],
+    /// The immutable `let`s bound to a position a text handed out, by the
+    /// binding (ADR-320 D5): such a name cuts the text it came from.
+    pub text_positions: collections::BTreeMap[i64, CheckTextPosition],
     /// **Data handed to something that keeps it** (ADR-293 D29): `NK2105` is a
     /// later read on the same path.
     pub handed: Vec[CheckTaken],

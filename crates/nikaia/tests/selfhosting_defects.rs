@@ -1164,7 +1164,7 @@ fn size(x: String) -> i64 {
 
 fn main() {
     let owned = "abc".clone()
-    let s = owned[0..<2]
+    let s = owned[..<(owned.find("c") ?? return)]
     println(f"{size(s) + size(owned)}")
 }
 "#,
@@ -1179,7 +1179,7 @@ fn size(x: String) -> i64 {
 
 fn main() {
     let owned = "abc".clone()
-    let s = owned[0..<2]
+    let s = owned[..<(owned.find("c") ?? return)]
     println(f"{size(s)}")
 }
 "#,
@@ -1194,7 +1194,7 @@ fn size(x: String?) -> i64 {
 
 fn main() {
     let owned = "abc".clone()
-    let s = owned[0..<2]
+    let s = owned[..<(owned.find("c") ?? return)]
     let none: String? = null
     println(f"{size(s) + size(owned) + size(none)}")
 }

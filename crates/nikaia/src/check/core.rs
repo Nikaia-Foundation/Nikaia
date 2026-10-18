@@ -106,6 +106,7 @@ pub(super) fn hollow() -> Box<CheckState> {
         reads_on_paths: Vec::new(),
         lent_lets: BTreeSet::new(),
         text_bytes_lets: BTreeSet::new(),
+        text_positions: BTreeMap::new(),
         handed: Vec::new(),
         read_at: Vec::new(),
         written_at: Vec::new(),

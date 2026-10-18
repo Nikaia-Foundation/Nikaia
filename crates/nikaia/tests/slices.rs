@@ -195,7 +195,7 @@ fn a_cut_with_an_open_end() {
          \x20   let sep = line.find(\";\") ?? return\n\
          \x20   let name = line[..<sep]\n\
          \x20   let rest = line[sep + 1..]\n\
-         \x20   let head = line[..2]\n\
+         \x20   let head = line[..sep]\n\
          \x20   let xs = [1, 2, 3, 4]\n\
          \x20   let tail = xs[1..]\n\
          \x20   println(f\"{name} {rest} {head} {tail.len()}\")\n\

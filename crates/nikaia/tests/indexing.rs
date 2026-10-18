@@ -129,7 +129,7 @@ fn main() {
 ///
 /// A range written in **literals** settles itself, because
 /// `RangeInclusive<usize>` is the only one of `At`'s candidates that is a
-/// `SliceIndex<str>` — and handing a bare `1..=3` to `at` settles *nothing*,
+/// `SliceIndex<[T]>` (a text is cut at positions, not literals: ADR-320 D5) — and handing a bare `1..=3` to `at` settles *nothing*,
 /// since `At` is implemented for a range of every signed type and all of them
 /// answer the same `usize`. A range built out of **names** is an `i64` one and
 /// has to be converted, which is [ADR-285](../../../docs/specification/adr/adr-285.md)
@@ -140,14 +140,15 @@ fn a_slice_of_text_is_converted_where_the_range_is_computed() {
         "a computed slice of text",
         "fn main() {\n\
          \x20   let text = \"hello\"\n\
-         \x20   let at: i64 = 1\n\
+         \x20   let at = text.find(\"ell\") ?? return\n\
          \x20   println(f\"{text[at..<at + 3]}\")\n\
-         \x20   println(f\"{text[1..3]}\")\n\
+         \x20   let xs = [1, 2, 3, 4, 5]\n\
+         \x20   println(f\"{xs[1..3].len()}\")\n\
          }\n",
     );
     assert!(
         rust.contains("nikaia_std::index::at(at..at + 3)")
-            && rust.contains("nikaia_std::index::get(&text, 1..=3)"),
+            && rust.contains("nikaia_std::index::get(&xs, 1..=3)"),
         "the computed range converts and the written one does not: {rust}"
     );
 }

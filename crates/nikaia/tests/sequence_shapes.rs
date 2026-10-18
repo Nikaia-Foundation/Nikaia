@@ -83,8 +83,8 @@ fn a_demand_is_met_only_by_a_sequence_that_has_the_word() {
 fn a_range_written_in_place_stays_the_language_belows() {
     let rust = lowered(
         "fn main() {\n\
-         \x20   let t = \"abcdef\"\n\
-         \x20   for i in 0..<2 { println(ref t[i..<i + 2]) }\n\
+         \x20   let t = [1, 2, 3, 4, 5, 6]\n\
+         \x20   for i in 0..<2 { println(f\"{t[i..<i + 2].len()}\") }\n\
          \x20   let kept = 0..<2\n\
          }\n",
         Build::default(),

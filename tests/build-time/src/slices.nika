@@ -69,7 +69,10 @@ fn slices_cuts() -> String {
     let sep = line.find(";") ?? return ""
     let name = line[..<sep]
     let rest = line[sep + 1..]
-    let head = line[..2]
+    // A number the program made up cuts the bytes, not the text (ADR-320 D5).
+    let head = line.bytes[..2].text() catch {
+        return ""
+    }
     let xs = [1, 2, 3, 4]
     let tail = xs[1..]
     return f"{name} {rest} {head} {tail.len()}"

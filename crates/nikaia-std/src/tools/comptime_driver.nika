@@ -116,9 +116,8 @@ struct CrRow {
 /// checker turns the byte back into a place in the file it is checking.
 pub fn cr_with_driver(rust: ref String, rows: ref Vec[(i64, i64, i64)], value_fn: ref String, dump: ref String, helpers: ref String, stopped_at: ref String, budget: u64, memory: u64) -> String? {
     let start = rust.find("\nfn main() {\n") ?? return null
-    let tail = rust[start + 1..<rust.len()].clone()
-    let found = tail.find("\n}\n") ?? return null
-    let end = start + 1 + found + 3
+    let close = rust.find("\n}\n"; from: start + "\n".len()) ?? return null
+    let end = close + "\n}\n".len()
     let main = cr_main(value_fn, dump, budget, memory)
     // Where each line of the lowered program starts, by byte.
     let mut starts: Vec[i64] = [0]
@@ -171,8 +170,8 @@ pub fn cr_with_driver(rust: ref String, rows: ref Vec[(i64, i64, i64)], value_fn
     table.push_str("];\n")
     let rest = rust[end..<rust.len()].clone()
     let empty = rest.find("const __NIKAIA_SITES") ?? return null
-    let after_empty = rest[empty..<rest.len()].find("];\n") ?? return null
-    let after = empty + after_empty + 3
+    let shut = rest.find("];\n"; from: empty) ?? return null
+    let after = shut + "];\n".len()
     // **Nothing goes in front of the program**: the table maps its lines, and one
     // line more above them would name the wrong one.
     let front = rust[0..<start].clone()

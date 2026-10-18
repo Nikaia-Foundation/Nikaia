@@ -229,3 +229,29 @@ fn clone_makes_a_bytes_of_its_own() {
         "3 113 3 4 195 98 99 3\n"
     );
 }
+
+/// **A `for` over a `Bytes` walks `u8`s** (ADR-320 D7), so a `'…'` compared
+/// with one is a byte (D8) - over `s.bytes`, a cut of it, and a `Bytes` (the
+/// lowering wrote a `char` there, which `rustc` refused against a `u8`).
+#[test]
+fn a_char_literal_compared_with_a_walked_byte_is_a_u8() {
+    let source = "fn lines(s: ref String, b: Bytes) -> i64 {\n\
+         \x20   let mut n = 0\n\
+         \x20   for c in s.bytes {\n\
+         \x20       if c == '\\n' { n = n + 1 }\n\
+         \x20   }\n\
+         \x20   for c in s.bytes[0..<2] {\n\
+         \x20       if c == '\\n' { n = n + 1 }\n\
+         \x20   }\n\
+         \x20   for c in b {\n\
+         \x20       if c == ';' { n = n + 1 }\n\
+         \x20   }\n\
+         \x20   return n\n\
+         }\n\
+         \n\
+         fn main() {\n\
+         \x20   let s = \"a\\nb\\nc\"\n\
+         \x20   println(f\"{lines(s, \"a;b;\".bytes[0..<4])}\")\n\
+         }\n";
+    assert_eq!(run("bytes-walked-literal", source, &[]), "5\n");
+}

@@ -257,9 +257,81 @@ where
     }
 }
 
+/// **A cut of text stops the program in the language's words** (ADR-320 D5):
+/// a bound past the end, or one inside a scalar, is said as a byte position of
+/// the text, not as the language below's *byte index is not a char boundary*.
+pub trait TextCut {
+    /// The byte positions the cut starts and ends at, an open end as `None`.
+    fn bounds(&self) -> (usize, Option<usize>);
+}
+
+impl TextCut for std::ops::Range<usize> {
+    fn bounds(&self) -> (usize, Option<usize>) {
+        (self.start, Some(self.end))
+    }
+}
+
+impl TextCut for std::ops::RangeFrom<usize> {
+    fn bounds(&self) -> (usize, Option<usize>) {
+        (self.start, None)
+    }
+}
+
+impl TextCut for std::ops::RangeTo<usize> {
+    fn bounds(&self) -> (usize, Option<usize>) {
+        (0, Some(self.end))
+    }
+}
+
+impl TextCut for std::ops::RangeInclusive<usize> {
+    fn bounds(&self) -> (usize, Option<usize>) {
+        (*self.start(), Some(self.end().saturating_add(1)))
+    }
+}
+
+impl TextCut for std::ops::RangeFull {
+    fn bounds(&self) -> (usize, Option<usize>) {
+        (0, None)
+    }
+}
+
+/// Checks a cut of `text` and stops the program where it falls outside the
+/// text, inside a scalar, or ends before it starts.
+#[inline]
+#[track_caller]
+fn text_cut<I: TextCut>(text: &str, key: &I) {
+    let (start, end) = key.bounds();
+    let end_at = end.unwrap_or(text.len());
+    if start > text.len() || end_at > text.len() || start > end_at {
+        text_cut_outside(start, end_at, text.len())
+    }
+    if !text.is_char_boundary(start) {
+        text_cut_inside(start)
+    }
+    if !text.is_char_boundary(end_at) {
+        text_cut_inside(end_at)
+    }
+}
+
+#[cold]
+#[inline(never)]
+#[track_caller]
+fn text_cut_outside(start: usize, end: usize, len: usize) -> ! {
+    panic!("the cut {start}..<{end} is outside the text, which has {len} bytes")
+}
+
+#[cold]
+#[inline(never)]
+#[track_caller]
+fn text_cut_inside(at: usize) -> ! {
+    panic!(
+        "byte position {at} is inside a scalar of the text: cut it at a position it handed out, or through `.bytes`"
+    )
+}
+
 impl<I> Get<I> for str
 where
-    I: std::slice::SliceIndex<str> + 'static,
+    I: std::slice::SliceIndex<str> + TextCut + 'static,
 {
     type Out<'a>
         = &'a I::Output
@@ -268,13 +340,14 @@ where
 
     #[track_caller]
     fn get(&self, key: I) -> &I::Output {
+        text_cut(self, &key);
         &self[key]
     }
 }
 
 impl<I> Get<I> for String
 where
-    I: std::slice::SliceIndex<str> + 'static,
+    I: std::slice::SliceIndex<str> + TextCut + 'static,
 {
     type Out<'a>
         = &'a I::Output
@@ -283,6 +356,7 @@ where
 
     #[track_caller]
     fn get(&self, key: I) -> &I::Output {
+        text_cut(self, &key);
         &self.as_str()[key]
     }
 }

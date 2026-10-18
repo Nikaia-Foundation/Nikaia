@@ -283,6 +283,10 @@ pub fn element_walked(over: ref Ty, bindings: i64) -> Ty {
                 if last == "Vec" || last == "List" || last == "BTreeSet" || last == "HashSet" { args[0].clone() } else { Ty::Unknown }
             } else if args.len() > 0 && !view && name == ARRAY {
                 args[0].clone()
+            } else if args.len() == 0 && last == "Bytes" {
+                // **A `Bytes` is walked byte by byte** (ADR-320 D7), so a
+                // `'…'` compared with one is a `u8` (D8).
+                Ty::Named { name: "u8", args: [], view: false }
             } else {
                 Ty::Unknown
             }

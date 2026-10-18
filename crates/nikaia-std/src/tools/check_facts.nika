@@ -422,7 +422,7 @@ pub fn check_claims_report(claims: ref collections::BTreeMap[(i64, i64), FactCla
             start = source.len()
         }
         if start > at {
-            for c in source[at..<start].chars() {
+            for c in source.bytes[at..<start] {
                 if c == '\n' {
                     line = line + 1
                 }

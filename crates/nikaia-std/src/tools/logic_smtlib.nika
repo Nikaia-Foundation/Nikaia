@@ -156,7 +156,8 @@ fn lg_show(sexp: ref LgSexp) -> String {
 
 fn lg_unquoted(name: ref String) -> String {
     if name.len() >= 2 && name.starts_with("|") && name.ends_with("|") {
-        return name[1..<name.len() - 1].clone()
+        let opened: String = (name.strip_prefix("|") ?? "").clone()
+        return (opened.strip_suffix("|") ?? "").clone()
     }
     return name.clone()
 }

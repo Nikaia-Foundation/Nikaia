@@ -610,7 +610,7 @@ fn check_core_method_walked[H: CheckHost](mut state: CheckState, world: ref Chec
         if cut != null {
             let split = cut ?? 0
             owner = entry[0..<split].clone()
-            rule = entry[split + 2..<entry.len()].clone()
+            rule = entry[split + "::".len()..].clone()
         }
         state.a_grammar_reached_through_a_dot(owner, rule, span)
         return check_core_grammar_call(state, world, host, entry, args, span)
