@@ -87,9 +87,8 @@
   in `scripts/` moves to Nikaia when it is next reworked. This is a principle,
   not a convenience: writing our own tools in the language shows where it has
   to be sharpened. What blocks or chafes on the way (a missing `std` entry, a
-  syntax gap, a lowering defect) is a finding: fix it in the compiler, or file
-  it in `docs/lowering-defects.md` or an issue - do not route around it in
-  another language.
+  syntax gap, a lowering defect) is a finding: fix it in the compiler - do not
+  route around it, in the tool or in another language.
 
 ## Decision rounds with the owner
 
@@ -227,16 +226,17 @@ Rules from the sessions that moved the most; they save tokens, not just time.
   pipes that look like git): put multi-step work in a script file and call it.
 * **Fix, do not work around** (owner's direction): a compiler or lowering
   defect met on the way is fixed in the compiler, with a test, as its own
-  commit, before or alongside the move. A workaround in `tools/*.nika` is
-  debt: take one only when the fix is clearly larger than the unit, file it in
-  `docs/lowering-defects.md`, name it in the report, and remove the
-  workaround in the commit that fixes the defect.
+  commit, before or alongside the move. No workaround goes into our own code
+  (owner's direction: no technical debt). A defect that cannot be fixed in
+  this round is filed as a GitHub issue with a probe and a *To build* list
+  (status label `ready`), never in a file in the repository, and the work that
+  needs it waits for the fix.
 * **Known compiler defects, to fix in the compiler** (ADR-294 D3): the
   generated package still has "never read" and unreachable-code warnings,
   allowed on the `tools` module. The rest of this list (`f().trim_start()`,
   an index fallback after `??`, mixed arms in a `T?` match, `strip_prefix` in a
   loop, `mut` parameter plus `.drain()`, `Spanned(x, span)`) runs today; the
-  open ones are in `docs/lowering-defects.md`.
+  open ones are GitHub issues.
 * **The disk is shared and small.** It ran out twice mid-test and once for the
   whole session (no command output at all). Delete `target/` of a worktree you
   no longer use, `target/nikaia-project-tests` and `target/release/nikaia-scratch`
@@ -282,6 +282,6 @@ Rules from the sessions that moved the most; they save tokens, not just time.
   tools/*.nika may already have; `--rules` lists its rules, `--lint F.nika`
   flags known defects in hand-written Nikaia, and `rs2nika.names` beside it
   maps Rust helpers to their Nikaia names. Rust's types come from
-  rust-analyzer (ADR-001 D5, `crates/rs2nika/facts`); the known lowering defects and
-  their workarounds are in `docs/lowering-defects.md`, the language options
+  rust-analyzer (ADR-001 D5, `crates/rs2nika/facts`); open lowering defects are
+  GitHub issues, the language options
   against the usual hurdles in `docs/history/mitigation-hurdles.md`.
