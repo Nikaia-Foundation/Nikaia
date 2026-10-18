@@ -1,8 +1,8 @@
 name: Issues page
 
-# The site's page of open issues (`scripts/site-issues.py`). This job reads the
-# issues and their comments with its own token and keeps the page as the one
-# file of the branch `site-issues`, which `scripts/site-build.sh` copies into
+# The site's open-issue index and issue pages (`scripts/site-issues.py`). This
+# job reads the issues and their comments with its own token and keeps them in
+# one bundle on the branch `site-issues`, which `scripts/site-build.sh` expands
 # the site. The branch holds nothing else and one commit, replaced each run.
 on:
   issues:
@@ -38,6 +38,6 @@ jobs:
           git init -q -b site-issues
           git config user.name "github-actions[bot]"
           git config user.email "41898+github-actions[bot]@users.noreply.github.com"
-          git add issues.md
-          git commit -q -m "Open issues, $(date -u +%Y-%m-%dT%H:%MZ)"
+          git add issues.json
+          git commit -q -m "Open issue pages, $(date -u +%Y-%m-%dT%H:%MZ)"
           git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" site-issues
