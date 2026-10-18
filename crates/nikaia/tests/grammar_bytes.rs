@@ -180,3 +180,84 @@ fn an_entry_takes_text_or_bytes_only() {
         codes(&bytes)
     );
 }
+
+/// **A binary record** read with `fs::read`: a length, then that many bytes
+/// that are not UTF-8, kept by `bytes(p)` (ADR-366 D4).
+#[test]
+fn a_length_prefixed_binary_record() {
+    let source = "use std::fs\n\ngrammar Record {\n    entry rule record -> i64 = \"REC\" n:dec[i64](digit+) \":\" body:bytes(any*) { if body.len() == n { n * 10 } else { -1 } }\n}\n\nfn main() {\n    let raw = fs::read(\"d\", fs::Root::Anywhere) catch { return }\n    let r = Record::record(raw) catch { -2 }\n    println(f\"{r}\")\n}\n";
+    let out = run(
+        "grammar-bytes-record",
+        source,
+        &[("d", b"REC4:\x00\xff\xfe\x80")],
+    );
+    assert_eq!(out, "40");
+}
+
+const ROW: &str = "use std::fs\n\ngrammar Row {\n    rule NAME -> ref String = s:until(\";\") { s }\n    entry rule row -> i64 = name:NAME \";\" t:dec[i64](digit+) { name.len() + t }\n}\n\nfn main() {\n    let raw = fs::read(\"d\", fs::Root::Anywhere) catch { return }\n    let r = Row::row(raw) catch {\n        println(f\"{error}\")\n        return\n    }\n    println(f\"{r}\")\n}\n";
+
+/// The first line of what the program printed.
+fn first_line(out: &str) -> &str {
+    out.lines().next().unwrap_or("")
+}
+
+/// **A bad byte in an `until` is a parse error at its own offset** (ADR-366
+/// D3), at the start, in the middle and at the end of the name.
+#[test]
+fn a_bad_byte_in_a_name_is_named_where_it_stands() {
+    for (input, at) in [
+        (&b"\xffab;12"[..], 0),
+        (&b"a\xffb;12"[..], 1),
+        (&b"ab\xff;12"[..], 2),
+    ] {
+        let out = run("grammar-bytes-bad-name", ROW, &[("d", input)]);
+        assert!(
+            first_line(&out).starts_with(&format!("invalid UTF-8 at byte {at}: 0xff")),
+            "{out}"
+        );
+    }
+    let out = run("grammar-bytes-good-name", ROW, &[("d", b"ab;12")]);
+    assert_eq!(out, "14");
+}
+
+/// **A bad byte inside a `digit` run is the ordinary parse error**: a digit is
+/// matched by comparison, so nothing there is checked as UTF-8 (ADR-366 D2).
+#[test]
+fn a_bad_byte_in_a_digit_run_is_an_ordinary_parse_error() {
+    let out = run("grammar-bytes-bad-digit", ROW, &[("d", b"ab;1\xff2")]);
+    assert!(!out.contains("invalid UTF-8"), "{out}");
+    assert!(!out.is_empty() && out != "15", "a parse error: {out}");
+}
+
+/// **Under `par_fold` the offset is the whole input's**, in a piece other than
+/// the first too (ADR-366 D3); good input gives the same sum over text and
+/// over bytes.
+#[test]
+fn a_bad_byte_in_a_later_piece_counts_from_the_start() {
+    let source = "use std::fs\n\ngrammar Sum {\n    rule NAME -> ref String = s:until(\";\" | frame_end) { s }\n\n    @frame(boundary: \"\\n\")\n    rule ROW -> i64 = name:NAME \";\" => n:dec[i64](digit+) frame_end { n + name.len() }\n\n    entry rule total -> i64 = par_fold(ROW, zero, fn(acc, m) { acc + m }, add)\n}\n\nfn zero() -> i64 { return 0 }\nfn add(a: i64, b: i64) -> i64 { return a + b }\n\nfn main() {\n    let ok = fs::read(\"ok\", fs::Root::Anywhere) catch { return }\n    let okt = fs::read_to_string(\"ok\", fs::Root::Anywhere) catch { return }\n    let a = Sum::total(ok) catch { -1 }\n    let b = Sum::total(okt) catch { -1 }\n    println(f\"{a} {b}\")\n    let raw = fs::read(\"d\", fs::Root::Anywhere) catch { return }\n    let r = Sum::total(raw) catch {\n        println(f\"{error}\")\n        return\n    }\n    println(f\"{r}\")\n}\n";
+    let rows: Vec<u8> = (0..4000)
+        .flat_map(|i| format!("r{i};{}\n", i % 10).into_bytes())
+        .collect();
+    // Past seven eighths of the input: in the last piece wherever the
+    // machine has more than one core.
+    let at = rows
+        .windows(6)
+        .position(|w| w == b"r3500;")
+        .expect("the row")
+        + 2;
+    let mut bad = rows.clone();
+    bad.insert(at, 0xff);
+    let out = run(
+        "grammar-bytes-pieces",
+        source,
+        &[("ok", &rows), ("d", &bad)],
+    );
+    let mut lines = out.lines();
+    assert_eq!(lines.next(), Some("36890 36890"), "{out}");
+    assert!(
+        lines
+            .next()
+            .is_some_and(|l| l.starts_with(&format!("invalid UTF-8 at byte {at}: 0xff"))),
+        "{out}"
+    );
+}
