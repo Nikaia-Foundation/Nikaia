@@ -45,45 +45,317 @@ description: >-
       <h2>An <code>assert</code> is a contract.</h2>
       <p>
         There is no separate specification language. You write
-        <code>assert(whole &gt; 0)</code>, and the compiler makes it a precondition that each
-        caller has to establish. A call that breaks it does not build, and the error shows the
-        value that breaks it.
+        <code>assert(whole &gt; 0)</code> at the top of <code>percent</code>, and it becomes a
+        precondition: each caller has to show that <code>whole</code> is positive.
       </p>
       <p>
-        A call the compiler proves correct has no check at run time. A claim it cannot prove yet
-        is checked when the program runs, so it does not stop the build. Contracts cross package
-        boundaries, and each proof carries a certificate that is checked before a check is
-        dropped.
+        <code>share</code> only passes its <code>total</code> on, so the duty passes on with it.
+        The call with <code>0</code> two functions up is refused, and the error names the value
+        and the <code>assert</code> it came from.
+      </p>
+      <p>
+        An <code>assert</code> about the value a function returns is a postcondition.
+        <code>at_least_zero</code> never returns less than 0, so <code>per_row</code> knows that
+        <code>r</code> is at least 1 and its call to <code>percent</code> needs no check.
+      </p>
+      <p>
+        A call whose arguments are all known is run while the program is built. So
+        <code>assert(fib(10) == 54)</code> does not build: <code>fib(10)</code> is 55.
       </p>
       <p><a href="{{ "/docs/specification/adr/adr-269.html" | relative_url }}">How a claim becomes a contract →</a></p>
     </div>
     <div class="home-code markdown-body home-code-stack">
 <pre><code class="language-nika">fn percent(part: int, whole: int) -&gt; int {
-    assert(whole &gt; 0)              // the whole specification
+    assert(whole &gt; 0)
     return part * 100 / whole
 }
 
-fn report(done: int, total: int) -&gt; int {
-    return 0 if total &lt;= 0         // proves it for this call
-    return percent(done, total)
+fn share(done: int, total: int) -&gt; int {
+    return percent(done, total)     // hands the duty on to its caller
+}
+
+fn at_least_zero(n: int) -&gt; int {
+    return 0 if n &lt; 0
+    assert(n &gt;= 0)                  // a claim about the result
+    return n
+}
+
+fn per_row(rows: int) -&gt; int {
+    let r = at_least_zero(rows) + 1
+    return percent(50, r)           // r &gt;= 1: proved, no check
 }
 
 fn main() {
-    println(f"{report(3, 4)}%")
-    println(f"{percent(1, 0)}%")   // breaks it
+    println(f"{per_row(4)}% {share(3, 4)}%")
+    // and this call breaks it:
+    println(f"{share(1, 0)}%")
 }
 </code></pre>
-<pre class="diagnostic"><code><span class="d-error">error[NK1207]</span><b>: This call breaks `percent`'s precondition
-`whole &gt; 0` every time it is reached.</b>
-<span class="d-gutter">   --&gt;</span> src/main.nika:13:5
+<pre class="diagnostic"><code><span class="d-gutter">$</span> <b>nikaia build</b>
+<span class="d-error">error[NK1207]</span><b>: This call breaks `share`'s precondition `total &gt; 0` every time it is reached.</b>
+<span class="d-gutter">   --&gt;</span> …/pre/src/main.nika:24:5
 <span class="d-gutter">    |</span>
-<span class="d-gutter"> 13 |</span>     println(f"{percent(1, 0)}%")
-<span class="d-gutter">    |</span>     <span class="d-error">^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span>
+<span class="d-gutter"> 24 |</span>     println(f"{share(1, 0)}%")
+<span class="d-gutter">    |</span>     <span class="d-error">^^^^^^^^^^^^^^^^^^^^^^^^^^</span>
 <span class="d-gutter">    |</span>
-<span class="d-gutter">    =</span> <span class="d-note">note:</span> Here `whole` is 0.
-<span class="d-gutter">    =</span> <span class="d-help">help:</span> Pass `percent` arguments for which `whole &gt; 0` holds,
-           or check them with a guard before the call.
+<span class="d-gutter">    =</span> <span class="d-note">note:</span> Here `total` is 0.
+<span class="d-gutter">    =</span> <span class="d-note">note:</span> The precondition is `assert(whole &gt; 0)` in `percent`, carried back to `share`'s entry.
+<span class="d-gutter">    =</span> <span class="d-help">help:</span> Pass `share` arguments for which `total &gt; 0` holds, or check them with a guard before the call.
 1 claim shown false</code></pre>
+<pre><code class="language-nika">fn fib(n: int) -&gt; int {
+    let mut a = 0
+    let mut b = 1
+    for _ in 0..&lt;n {
+        let next = a + b
+        a = b
+        b = next
+    }
+    return a
+}
+
+fn main() {
+    assert(fib(10) == 54)
+    println(f"{fib(10)}")
+}
+</code></pre>
+<pre class="diagnostic"><code><span class="d-gutter">$</span> <b>nikaia build</b>
+<span class="d-error">error[NK1207]</span><b>: `fib(10) == 54` is false every time it is reached.</b>
+<span class="d-gutter">   --&gt;</span> …/fib/src/main.nika:13:5
+<span class="d-gutter">    |</span>
+<span class="d-gutter"> 13 |</span>     assert(fib(10) == 54)
+<span class="d-gutter">    |</span>     <span class="d-error">^^^^^^^^^^^^^^^^^^^^^</span>
+<span class="d-gutter">    |</span>
+<span class="d-gutter">    =</span> <span class="d-note">note:</span> What is known before it rules the claim out: no value of its own; the claim is false as written.
+<span class="d-gutter">    =</span> <span class="d-note">note:</span> `fib(10)` is 55, run while the program was built.
+<span class="d-gutter">    =</span> <span class="d-help">help:</span> If the claim is right, the code before it is wrong; if the code is right, the claim is.
+1 claim shown false</code></pre>
+    </div>
+  </div>
+</section>
+
+<section class="home-section home-section-alt home-code-section" id="loops">
+  <div class="home-inner home-split">
+    <div class="home-split-text">
+      <p class="home-eyebrow">Loops</p>
+      <h2>A loop needs no invariant.</h2>
+      <p>
+        The <code>assert</code> after the loop in <code>steps</code> reads <code>total</code>,
+        which the loop changes. Usually a proof tool wants you to write what holds on every turn.
+        Here nobody did.
+      </p>
+      <p>
+        The compiler looks for such a fact itself, then checks it three times: it holds before
+        the first turn, each turn keeps it, and when the loop ends it gives the claim.
+        <code>--asserts</code> prints the fact it found and how it found it.
+      </p>
+      <p>
+        In <code>price</code>, <code>p</code> is followed through each assignment and both sides
+        of the <code>if</code>. Every claim here is proved, so none of them costs anything when
+        the program runs.
+      </p>
+      <p><a href="{{ "/docs/specification/adr/adr-361.html" | relative_url }}">How a loop is proved →</a></p>
+    </div>
+    <div class="home-code markdown-body home-code-stack">
+<pre><code class="language-nika">fn steps(n: int) -&gt; int {
+    assert(n &gt;= 0)
+    let mut i = 0
+    let mut total = 0
+    while i &lt; n {
+        i = i + 1
+        total = total + 2
+    }
+    assert(total == 2 * n)          // no invariant written
+    return total
+}
+
+fn price(base: int, member: bool) -&gt; int {
+    assert(base &gt;= 10)
+    let mut p = base
+    if member {
+        p = p - 5
+    } else {
+        p = p + 1
+    }
+    assert(p &gt;= 5)                  // followed through both branches
+    return p
+}
+
+fn main() {
+    println(f"{steps(5)} {price(12, true)}")
+}
+</code></pre>
+<pre class="diagnostic"><code><span class="d-gutter">$</span> <b>nikaia build --asserts</b>
+<b>asserts in …/loop/src/main.nika: 4 - not proved 0 (refused 0, checked at run time 0, checked by a test 0); checked where the words arrive 0; proved 4 (proved 2, through a loop 1, preconditions proved at every call 2)</b>
+  …/loop/src/main.nika:9  assert(total == 2 * n)  proved through the loop that changes `i`, `total`, with the invariant `i &gt;= 0 &amp;&amp; total &gt;= 0 &amp;&amp; 2 * i == total &amp;&amp; i &lt; n + 1`, found by closed forms and checked by three queries
+  …/loop/src/main.nika:21  assert(p &gt;= 5)  proved
+  …/loop/src/main.nika:2  assert(n &gt;= 0)  precondition of `steps`: proved at every call the compiler sees; any other reaches the entry that checks it
+  …/loop/src/main.nika:14  assert(base &gt;= 10)  precondition of `price`: proved at every call the compiler sees; any other reaches the entry that checks it
+<span class="d-gutter">$</span> <b>target/nikaia/bin/loop</b>
+10 7</code></pre>
+    </div>
+  </div>
+</section>
+
+<section class="home-section home-code-section" id="report">
+  <div class="home-inner home-split">
+    <div class="home-split-text">
+      <p class="home-eyebrow">The report</p>
+      <h2>Ask what was proved.</h2>
+      <p>
+        <code>nikaia build --asserts</code> lists every <code>assert</code> and what became of
+        it. <em>Proved</em> means no check is left in the program. A <em>precondition</em> is
+        each caller's to show; here every call shows it.
+      </p>
+      <p>
+        <em>Checked at run time</em> means the prover could not read the claim. It reads sums,
+        differences and comparisons, not the product of two names like <code>w * h</code>. Such
+        a claim does not stop the build. The program checks it when it runs, and the report
+        says why.
+      </p>
+    </div>
+    <div class="home-code markdown-body home-code-stack">
+<pre><code class="language-nika">fn average(total: int, count: int) -&gt; int {
+    assert(count &gt; 0)
+    return total / count
+}
+
+fn area(w: int, h: int) -&gt; int {
+    assert(w &gt;= 0 &amp;&amp; h &gt;= 0)
+    let a = w * h
+    assert(a &gt;= 0)
+    return a
+}
+
+fn main() {
+    let scores = [3, 5, 9]
+    let n = scores.len()
+    assert(n == 3)
+    println(f"{average(17, n)} {area(4, 5)}")
+}
+</code></pre>
+<pre class="diagnostic"><code><span class="d-gutter">$</span> <b>nikaia build --asserts</b>
+<b>asserts in …/rep/src/main.nika: 4 - not proved 1 (refused 0, checked at run time 1, checked by a test 0); checked where the words arrive 0; proved 3 (proved 1, preconditions proved at every call 2)</b>
+  …/rep/src/main.nika:9  assert(a &gt;= 0)  checked at run time: `a` is not a whole number the prover reads
+  …/rep/src/main.nika:16  assert(n == 3)  proved
+  …/rep/src/main.nika:2  assert(count &gt; 0)  precondition of `average`: proved at every call the compiler sees; any other reaches the entry that checks it
+  …/rep/src/main.nika:7  assert(w &gt;= 0 &amp;&amp; h &gt;= 0)  precondition of `area`: proved at every call the compiler sees; any other reaches the entry that checks it</code></pre>
+    </div>
+  </div>
+</section>
+
+<section class="home-section home-section-alt home-code-section" id="main-parameters">
+  <div class="home-inner home-split">
+    <div class="home-split-text">
+      <p class="home-eyebrow">The command line</p>
+      <h2><code>main</code>'s parameters are its command line.</h2>
+      <p>
+        <code>a</code> is a word the program needs. <code>times</code> comes after the
+        <code>;</code>, so it is named: on the command line it is the option
+        <code>--times</code>, and 4 where it is left out.
+      </p>
+      <p>
+        The words a program is started with come from outside, so an <code>assert</code> about
+        them cannot be proved. It is checked once the words are read, before the body runs.
+        A wrong word ends the program with exit status 2 and a line that says what is wrong.
+        <code>--help</code> lists the precondition next to the parameter.
+      </p>
+      <p><a href="{{ "/docs/specification/adr/adr-360.html" | relative_url }}">How main reads its words →</a></p>
+    </div>
+    <div class="home-code markdown-body home-code-stack">
+<pre><code class="language-nika">/// Divides 100 by a, a few times.
+fn main(a: int; times: int = 4) {
+    assert(a &gt; 0)
+    for i in 0..&lt;times {
+        println(f"{i}: {100 / a}")
+    }
+}
+</code></pre>
+<pre class="diagnostic"><code><span class="d-gutter">$</span> <b>nikaia build --asserts</b>
+<b>asserts in …/mainp/src/main.nika: 1 - not proved 0 (refused 0, checked at run time 0, checked by a test 0); checked where the words arrive 1; proved 0 (proved 0, preconditions proved at every call 0)</b>
+  …/mainp/src/main.nika:3  assert(a &gt; 0)  precondition of `main`, checked where the words arrive
+<span class="d-gutter">$</span> <b>./mainp 5 --times 2</b>
+0: 20
+1: 20
+<span class="d-gutter">$</span> <b>./mainp 0</b>
+<span class="d-error">error</span><b>: `a` is 0, which breaks `main`'s precondition `a &gt; 0`.</b>
+usage: mainp [--times &lt;int&gt;] &lt;a&gt;
+For more, try `mainp --help`.
+<span class="d-gutter">$</span> <b>echo $?</b>
+2
+<span class="d-gutter">$</span> <b>./mainp five</b>
+<span class="d-error">error</span><b>: `a` is an `int`, and `five` is not one.</b>
+usage: mainp [--times &lt;int&gt;] &lt;a&gt;
+For more, try `mainp --help`.
+<span class="d-gutter">$</span> <b>./mainp --help</b>
+mainp
+Divides 100 by a, a few times.
+
+usage: mainp [--times &lt;int&gt;] &lt;a&gt;
+
+arguments:
+  &lt;a&gt;                  int; requires `a &gt; 0`
+
+options:
+  --times &lt;int&gt;        int, default 4
+  -h, --help           prints this help</code></pre>
+    </div>
+  </div>
+</section>
+
+<section class="home-section home-code-section" id="outside">
+  <div class="home-inner home-split">
+    <div class="home-split-text">
+      <p class="home-eyebrow">Data from outside</p>
+      <h2>A guard, not an <code>assert</code>.</h2>
+      <p>
+        What another program prints is not up to your program. If it is not what you expected,
+        that is not a bug in your code. It is a case your code has to handle.
+      </p>
+      <p>
+        So an <code>assert</code> about such data is refused, and the error says what to write
+        instead. After an <code>if</code> that handles the bad case, the same
+        <code>assert</code> is proved.
+      </p>
+    </div>
+    <div class="home-code markdown-body home-code-stack">
+<pre><code class="language-nika">use std::process
+
+fn main() throws {
+    let out = process::run("git", ["rev-parse", "HEAD"])
+    let n: int = out.stdout.len()
+    assert(n == 41)
+    println(f"commit {out.stdout.trim()}")
+}
+</code></pre>
+<pre class="diagnostic"><code><span class="d-gutter">$</span> <b>nikaia build</b>
+<span class="d-error">error[NK1202]</span><b>: `n == 41` is a claim about data from outside the program.</b>
+<span class="d-gutter">  --&gt;</span> …/outa/src/main.nika:6:5
+<span class="d-gutter">   |</span>
+<span class="d-gutter"> 6 |</span>     assert(n == 41)
+<span class="d-gutter">   |</span>     <span class="d-error">^^^^^^^^^^^^^^^</span>
+<span class="d-gutter">   |</span>
+<span class="d-gutter">   =</span> <span class="d-note">note:</span> `n` comes from outside the program, so nothing the compiler can see says what it holds.
+<span class="d-gutter">   =</span> <span class="d-note">note:</span> That it is wrong is a case the program has to handle, not a defect an `assert` catches.
+<span class="d-gutter">   =</span> <span class="d-help">help:</span> Check it where it arrives, with a guard the program handles: `throw BadInput(n) if !(n == 41)`, or `return … if !(n == 41)`. After that line, this `assert` is proved.
+1 type error</code></pre>
+<pre><code class="language-nika">use std::process
+
+fn main() throws {
+    let out = process::run("git", ["rev-parse", "HEAD"])
+    let n: int = out.stdout.len()
+    if n != 41 {
+        println("not a commit id")
+        return
+    }
+    assert(n == 41)
+    println(f"commit {out.stdout.trim()}")
+}
+</code></pre>
+<pre class="diagnostic"><code><span class="d-gutter">$</span> <b>nikaia build --asserts</b>
+<b>asserts in …/outb/src/main.nika: 1 - not proved 0 (refused 0, checked at run time 0, checked by a test 0); checked where the words arrive 0; proved 1 (proved 1, preconditions proved at every call 0)</b>
+  …/outb/src/main.nika:10  assert(n == 41)  proved
+<span class="d-gutter">$</span> <b>target/nikaia/bin/outb</b>
+commit 7e84ae5c523c8b9937bb4faacc6d029bf49d4f75</code></pre>
     </div>
   </div>
 </section>
