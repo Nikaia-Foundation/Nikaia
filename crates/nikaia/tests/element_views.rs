@@ -126,6 +126,34 @@ fn a_word_declared_ref_is_refused_at_every_position() {
     }
 }
 
+/// D2 names a word by its kind, so `int` - the integer most programs write -
+/// is one too, at a parameter, a field and a result (#654).
+#[test]
+fn ref_int_is_refused_as_a_word() {
+    for (program, position) in [
+        (
+            "fn f(x: ref int) -> int { return x + 1 }\n\nfn main() { println(f\"{f(2)}\") }\n",
+            "parameter",
+        ),
+        (
+            "struct S { n: ref int }\n\nfn main() { println(\"x\") }\n",
+            "field",
+        ),
+        (
+            "fn f(xs: ref Vec[int]) -> ref int { return xs[0] }\n\nfn main() { println(\"x\") }\n",
+            "result",
+        ),
+    ] {
+        let found = findings(program);
+        let f = found
+            .iter()
+            .find(|f| f.code == "NK1257")
+            .unwrap_or_else(|| panic!("{program}\n{found:#?}"));
+        assert!(f.message.contains(position), "{}", f.message);
+        assert!(f.message.contains("`int`"), "{}", f.message);
+    }
+}
+
 /// D2's exception: at the C boundary `ref i32` and `ref mut i32` are the
 /// pointers C expects, and stay.
 #[test]

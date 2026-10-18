@@ -60473,7 +60473,7 @@ fn item_types(names: &winnow_grammar::InternerContext, item: &Item, known: &coll
 fn types_word_by_ref(names: &winnow_grammar::InternerContext, ty: &Type, plain: &collections::BTreeSet<String>, position: &str, span: &Span, out: &mut Vec<Finding>) {
     if !ty.is_view || ty.is_mut || ty.is_slice || ty.is_tuple || !ty.generics.is_empty() { return; }
     let name = names.resolve(ty.name).to_owned();
-    let words = vec!["i8", "i16", "i32", "i64", "i128", "u8", "u16", "u32", "u64", "u128", "isize", "usize", "f32", "f64", "bool", "scalar"];
+    let words = vec!["int", "i8", "i16", "i32", "i64", "i128", "u8", "u16", "u32", "u64", "u128", "isize", "usize", "f32", "f64", "bool", "scalar"];
     let mut a_word = plain.contains(&name);
     for word in words.iter() {
         let word = *word;

@@ -323,7 +323,7 @@ fn types_word_by_ref(names: ref winnow_grammar::InternerContext, ty: ref Type, p
         return
     }
     let name = names.resolve(ty.name).clone()
-    let words = ["i8", "i16", "i32", "i64", "i128", "u8", "u16", "u32", "u64", "u128", "isize", "usize", "f32", "f64", "bool", "scalar"]
+    let words = ["int", "i8", "i16", "i32", "i64", "i128", "u8", "u16", "u32", "u64", "u128", "isize", "usize", "f32", "f64", "bool", "scalar"]
     let mut a_word = plain.contains(name)
     for word in words {
         if word == name {
