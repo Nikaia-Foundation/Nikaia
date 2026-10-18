@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1016] — 2026-10-18
+
+**`nikaia run` compiles a program that needs only `std` without Cargo**
+- A single file, or a project with one package and no dependencies, run for the host is compiled by the toolchain's `rustc` directly against `std` built once as a dylib (ADR-321 D3/D4), at opt-level 0 without debug info; overflow checks stay on in the program, and the panic strategy is the same. It is rebuilt only when the lowered Rust, the toolchain or the `std` library changes. Output, abort text and exit codes match the Cargo build, and `rustc`'s messages still come out in Nikaia's words. `nikaia build`, other targets, dependencies and libraries still go through Cargo.
+
 ## [0.0.1015] — 2026-10-18
 
 **`(A, B)?` is a type**
