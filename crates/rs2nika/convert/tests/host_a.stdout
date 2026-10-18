@@ -51,7 +51,7 @@
     }
 
     fn newly_throws(ref self, world: ref CheckWorld, key: ref String) -> Vec[String]? sync {
-        return self.newly.throws.get(key) ?? return null.clone()
+        return self.newly.throws.get(key)?.clone()
     }
 
     /// Code below the core never walks an expression: the hubs are the core's

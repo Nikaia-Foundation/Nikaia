@@ -1,0 +1,12 @@
+pub struct Seen {
+    pub names: Vec[String],
+    pub count: i64,
+    // a comment stays
+    map: collections::BTreeMap[String, Vec[i64]],
+    best: Ty?,
+    lit: ref String,
+}
+pub struct Pair[T] {
+    a: T,
+}
+

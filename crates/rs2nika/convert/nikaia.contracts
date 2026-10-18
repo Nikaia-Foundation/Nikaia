@@ -409,7 +409,6 @@ views = ["given: borrowed", "call: borrowed", "left: borrowed", "right: borrowed
 signature = "(mut ctx: Rs2nikaCtx, given: ref String, call: ref String, left: ref String, right: ref String, rule: ref String) -> String"
 
 [fn."rs2nika_missing"]
-pub = true
 sync = "inferred"
 touches = []
 views = ["ctx: borrowed", "draft: borrowed"]
@@ -662,6 +661,24 @@ touches = []
 views = ["text: borrowed"]
 signature = "(mut ctx: Rs2nikaCtx, text: ref String) -> String"
 
+[fn."rs2nika_struct_field"]
+sync = "inferred"
+touches = []
+views = ["line: borrowed"]
+signature = "(mut ctx: Rs2nikaCtx, line: ref String) -> String"
+
+[fn."rs2nika_struct_head"]
+sync = "inferred"
+touches = []
+views = ["st: borrowed"]
+signature = "(st: ref String) -> bool"
+
+[fn."rs2nika_struct_header"]
+sync = "inferred"
+touches = []
+views = ["line: borrowed"]
+signature = "(mut ctx: Rs2nikaCtx, line: ref String) -> String"
+
 [fn."rs2nika_struct_open"]
 sync = "inferred"
 touches = []
@@ -720,7 +737,6 @@ views = ["given: borrowed"]
 signature = "(mut ctx: Rs2nikaCtx, given: ref String) -> String"
 
 [fn."rs2nika_twins"]
-pub = true
 sync = "inferred"
 touches = []
 views = ["ctx: borrowed", "src: borrowed"]
