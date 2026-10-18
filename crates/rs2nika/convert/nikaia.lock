@@ -4,7 +4,7 @@
 # what Cargo resolved, listed per name because one name can resolve twice.
 version = 1
 toolchain = "rustc 1.97.0 (2d8144b78 2026-07-07)"
-compiler = "ccca789bc44ad45dc7d0b14abd35eeb362c10c8eb77860a1d25ca495162fb67c"
+compiler = "25119f38a862deaec610eea0320f45f13116e2a54742f94098c128a1cbef1782"
 
 [dependencies]
 ahash = ["0.8.12"]
@@ -53,7 +53,10 @@ simdutf8 = ["0.1.5"]
 smallvec = ["1.16.3"]
 syn = ["2.0.119"]
 tether = ["0.1.0"]
+tinyvec = ["1.13.3"]
 unicode-ident = ["1.0.27"]
+unicode-normalization = ["0.1.26"]
+unicode-segmentation = ["1.13.3"]
 version_check = ["0.9.5"]
 wasip2 = ["1.0.4+wasi-0.2.12"]
 windows-link = ["0.2.1"]
@@ -67,4 +70,4 @@ zerocopy = ["0.8.63"]
 zerocopy-derive = ["0.8.63"]
 
 [units."src/main.nika"]
-source = "5c724769b6d0ed85a57849b938c8d94e97ac16dd13035a9f5261d7ef48a6c0a7"
+source = "9a1445c81f2077f90298a7ab1c9ac8c966dbcd978bbc8ef02d7d479d1d87ae89"

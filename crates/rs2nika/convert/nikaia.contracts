@@ -385,7 +385,7 @@ sync = "inferred"
 keeps = ["code"]
 touches = []
 views = ["code: borrowed", "params: borrowed"]
-signature = "(code: ref String, params: ref Vec[String]) -> Vec[String]"
+signature = "(code: ref String, params: ref Vec[String]) -> Vec[ref String]"
 
 [fn."rs2nika_load"]
 views = ["repo: borrowed"]
@@ -557,12 +557,6 @@ touches = []
 views = ["given: borrowed"]
 signature = "(mut ctx: Rs2nikaCtx, given: ref String) -> String"
 
-[fn."rs2nika_rfind"]
-sync = "inferred"
-touches = []
-views = ["text: borrowed", "what: borrowed"]
-signature = "(text: ref String, what: ref String) -> i64"
-
 [fn."rs2nika_rules"]
 pub = true
 sync = "inferred"
@@ -728,7 +722,7 @@ sync = "inferred"
 keeps = ["line"]
 touches = []
 views = ["line: borrowed"]
-signature = "(line: ref String) -> Vec[String]"
+signature = "(line: ref String) -> Vec[ref String]"
 
 [fn."rs2nika_turbofish"]
 sync = "inferred"
@@ -783,7 +777,7 @@ touches = []
 signature = "(c: scalar) -> bool"
 
 [type."Rs2nikaCtx"]
-fields = ["profile: String", "world: String", "prefix: String", "hits: Vec[String]", "fn_opt: bool", "methods: Vec[String]", "renamed_from: Vec[String]", "renamed_to: Vec[String]", "stack_ind: Vec[String]", "stack_kind: Vec[String]", "tool_fns: collections::BTreeSet[String]", "tool_names: Vec[String]", "tool_docs: Vec[String]", "tool_files: Vec[String]", "alias_from: Vec[String]", "alias_to: Vec[String]", "equiv_from: Vec[String]", "equiv_to: Vec[String]", "todo_extra: Vec[String]", "arity: Vec[String]"]
+fields = ["profile: String", "world: ref String", "prefix: String", "hits: Vec[String]", "fn_opt: bool", "methods: Vec[String]", "renamed_from: Vec[String]", "renamed_to: Vec[String]", "stack_ind: Vec[String]", "stack_kind: Vec[ref String]", "tool_fns: collections::BTreeSet[String]", "tool_names: Vec[String]", "tool_docs: Vec[String]", "tool_files: Vec[String]", "alias_from: Vec[String]", "alias_to: Vec[String]", "equiv_from: Vec[String]", "equiv_to: Vec[String]", "todo_extra: Vec[String]", "arity: Vec[String]"]
 
 [type."Rs2nikaOut"]
 pub = true
