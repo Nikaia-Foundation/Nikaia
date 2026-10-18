@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1034] — 2026-10-18
+
+**s.normalized(text::Form::Nfc); a '…' of several scalars (ADR-320 D8, D10, #453)**
+- `s.normalized(text::Form::Nfc)` (also `Nfd`, `Nfkc`, `Nfkd`) is std's normalisation (Unicode 17.0.0, `unicode-normalization` 0.1.25); a form is a value that can be held and passed on.
+- A `'…'` of several scalars is the one NFC composes them to, with the warning `NK1213`; otherwise it is refused with `NK1212`, whose help gives the text literal.
+- A `\u{…}` naming a surrogate is `NK1184`, in every literal; Part I 2.5 and Part III say so, and `NK1212` no longer lists it.
+
 ## [0.0.1033] — 2026-10-18
 
 **s.scalars and s.graphemes walk a text (ADR-320 D3, D4, D9, #453)**

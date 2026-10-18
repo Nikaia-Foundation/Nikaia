@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1033 (Draft)
+**Version:** 0.0.1034 (Draft)
 **Date:** 2026-10-18
 
 ---
@@ -701,7 +701,7 @@ or, if there is none, to the end of the file.
 | `\0` | the zero character |
 | `\\` `\'` `\"` | the backslash and the two quotes, standing for themselves |
 | `\xNN` | two hexadecimal digits, naming a byte: below `\x80` in text, any byte in a `'…'` that is a `u8` |
-| `\u{…}` | up to six hexadecimal digits, naming any character: `\u{1F600}` |
+| `\u{…}` | up to six hexadecimal digits, naming any scalar: `\u{1F600}`; a surrogate is refused |
 
 The same set holds in a `'…'`, in an `f"…"` and in a template. A `\` in front of
 anything else is refused (`NK1184`), naming the set; a literal backslash is
@@ -765,7 +765,7 @@ a scalar stops the program.
 
 **A `'…'` is a `u8` or a `scalar`, by its use.** One ASCII character is either;
 `'\xNN'` above `\x7F` is only a `u8`; one scalar that is not ASCII is only a
-`scalar`. A literal its uses do not type is a `scalar`. A surrogate is refused.
+`scalar`. A literal its uses do not type is a `scalar`. A surrogate is refused (`NK1184`).
 Several scalars that normalise (NFC) to one are that one, with the warning
 `NK1213`; anything else is refused with `NK1212`, which hands over the text
 literal: `"👍🏽"`.
