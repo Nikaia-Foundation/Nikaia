@@ -342,21 +342,15 @@ impl Target {
         }
     }
 
-    /// The machine this compiler is running on, where it is one of the
-    /// targets. The compiler is a native program, so the machine it was built
-    /// for is the machine it runs on.
+    /// The machine this compiler is running on. The compiler is a native
+    /// program, so the triple it was built for (`build.rs`) is the machine it
+    /// runs on: `x86_64-linux` on a Linux PC, `aarch64-linux-android` on a
+    /// phone, `aarch64-apple-darwin` on a Mac.
     ///
-    /// `None` on any other (macOS, a 32-bit ARM board, RISC-V): there is no
-    /// name for it, and a build there has to name one of the targets and have
-    /// the toolchain for it.
+    /// `None` only for a triple Rust's target list does not know: a build
+    /// there has to name its target.
     pub fn host() -> Option<Target> {
-        if cfg!(all(target_arch = "x86_64", target_os = "linux")) {
-            Some(Target::X86_64Linux)
-        } else if cfg!(all(target_arch = "aarch64", target_os = "linux")) {
-            Some(Target::Aarch64Linux)
-        } else {
-            None
-        }
+        Target::parse(env!("NIKAIA_HOST_TRIPLE")).ok()
     }
 
     /// Whether this machine has threads at all. A target without them bounds

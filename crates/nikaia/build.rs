@@ -32,6 +32,13 @@ fn main() {
     // on compiler developers, which is exactly why it would survive.
     println!("cargo:rustc-env=NIKAIA_COMPILER={}", compiler_fingerprint());
 
+    // The machine this compiler is built for, which is the machine it runs
+    // on: the target a build without `--target` is for (`Target::host`).
+    println!(
+        "cargo:rustc-env=NIKAIA_HOST_TRIPLE={}",
+        std::env::var("TARGET").unwrap_or_default()
+    );
+
     // The toolchain identity that goes into the build cache key (ADR-021 D2).
     // Resolved here rather than at run time: it is the rustc that built this
     // emitter, which is the one whose output the cache would be serving, and
