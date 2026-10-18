@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1028] — 2026-10-18
+
+**A `String` result that hands back a view of `ref self` is a view result (#663)**
+- `-> String` returning a field of `ref self` (or of a `ref T` parameter), or a method's view of it, is decided a view and lowers as `-> ref String`; NK1131/NK1104 no longer fire there. A result that also gets text of its own stays `String` and asks for `.clone()`, `pub` or not (ADR-282 D2, D12, D22). A `std` method's view result now counts only for a receiver of that `std` type.
+
 ## [0.0.1027] — 2026-10-18
 
 **A grammar reads Bytes (ADR-366); NK1116 once, a caret under a number, a tuple let over a lent item (#662, #602, #626)**
