@@ -81,9 +81,11 @@ test "a field of an indexed element compiles and runs" {
 // `examples/k-nucleotide/src/main.nika` writes the second shape.
 test "a slice of text is converted where the range is computed" {
     let text = "hello"
-    let part = ref text[1..3]
-    let at: i64 = 1
-    let computed = f"{text[at..<at + 3]}"
+    let at = text.find("e") ?? 0
+    let last = at + "el".len()
+    let part = ref text[at..last]
+    let end = at + "ell".len()
+    let computed = f"{text[at..<end]}"
     let written = part == "ell"
     assert(written)
     assert(computed == "ell")
@@ -96,10 +98,13 @@ test "a slice of text is converted where the range is computed" {
 // a run and a key is not, in this language and in the one below alike.
 test "a slice of text read as a value runs" {
     let text = "hello world"
-    let bare = f"{text[1..3]}"
-    let part = ref text[1..3]
+    let at = text.find("e") ?? 0
+    let last = at + "el".len()
+    let space = text.find(" ") ?? 0
+    let bare = f"{text[at..last]}"
+    let part = ref text[at..last]
     let viewed = f"{part}"
-    let open = f"{text[0..<5]}"
+    let open = f"{text[0..<space]}"
     assert(bare == "ell")
     assert(viewed == "ell")
     assert(open == "hello")

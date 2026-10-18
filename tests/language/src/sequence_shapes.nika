@@ -107,7 +107,7 @@ test "a slice is a run a function can take" {
     let q = 1..2
     let named = ref xs[q]
     let t = "hello"
-    let word = ref t[0..<1]
+    let word = ref t[0..<"h".len()]
     let shown = f"{sequence_shapes_total(part)} {sequence_shapes_total(named)} {sequence_shapes_total(xs)} {word}"
     assert(shown == "5 5 15 h")
     let mut sums: String = ""
