@@ -1689,7 +1689,7 @@ impl<'a> Checker<'a> {
             let branches = matches!(
                 value,
                 Some(Expr::If { .. } | Expr::Match { .. } | Expr::Block(..))
-            ) && value.is_some_and(every_end_is_a_value);
+            ) && value.is_some_and(every_end_is_a_value_or_a_jump);
             let how = value.and_then(|v| self.widened_slot(&tail, expected, Some(v), &span));
             if let Some(value) = value {
                 match how {
@@ -2751,10 +2751,14 @@ pub fn byte_literal(written: &str) -> String {
 /// Whether every end of an `if`, a `match` or a block is a value, so that it
 /// can be put into `Some`: an end that jumps away (`return`, `break`,
 /// `continue`, `throw`) or a block that ends in a statement is none.
-fn every_end_is_a_value(expr: &Expr) -> bool {
+/// Whether every end of an `if`, a `match` or a block is a value or a jump
+/// (`return`, `break`, `continue`, `throw`): a jumping end leaves with its own
+/// value and is left bare, the value ends are put into `Some` (#657).
+fn every_end_is_a_value_or_a_jump(expr: &Expr) -> bool {
     fn tail_is_a_value(block: &crate::ast::Block) -> bool {
         match block.stmts.last().map(|s| &s.node) {
-            Some(Stmt::Expr(value)) => every_end_is_a_value(value),
+            Some(Stmt::Expr(value)) => every_end_is_a_value_or_a_jump(value),
+            Some(Stmt::Return(_) | Stmt::Break | Stmt::Continue) => true,
             _ => false,
         }
     }
@@ -2768,9 +2772,10 @@ fn every_end_is_a_value(expr: &Expr) -> bool {
                 && else_branch.is_some()
                 && else_branch.iter().all(tail_is_a_value)
         }
-        Expr::Match { arms, .. } => arms.iter().all(|arm| every_end_is_a_value(&arm.body)),
+        Expr::Match { arms, .. } => arms
+            .iter()
+            .all(|arm| every_end_is_a_value_or_a_jump(&arm.body)),
         Expr::Block(block, _) => tail_is_a_value(block),
-        Expr::Return(..) | Expr::Break(..) | Expr::Continue(..) | Expr::Throw(..) => false,
         _ => true,
     }
 }

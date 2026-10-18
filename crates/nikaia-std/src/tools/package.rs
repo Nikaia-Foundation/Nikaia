@@ -28016,6 +28016,13 @@ fn block_tail(block: &Block) -> Vec<&Expr> {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+fn check_texts_ends_in_a_jump(block: &Block) -> bool {
+    if block.stmts.is_empty() { return false; }
+    matches!(nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1)).node, Stmt::Return(_) | Stmt::Break | Stmt::Continue)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub fn ends_in_text(expr: &Expr) -> bool {
     match expr {
         Expr::LitStr { .. } => true,
@@ -28164,7 +28171,7 @@ impl CheckState {
                 if else_branch.is_some() {
                     for block in [then_branch, match else_branch { Some(__nikaia_value) => __nikaia_value, None => return }] {
                         let tail = block_tail(block);
-                        if tail.len() == 1 { self.some_at_the_tails(*nikaia_std::index::get(&tail, 0)); } else {
+                        if tail.len() == 1 { self.some_at_the_tails(*nikaia_std::index::get(&tail, 0)); } else if !check_texts_ends_in_a_jump(block) {
                             self.facts.some_tails.insert(text_key(arm));
                             return;
                         }
@@ -28175,10 +28182,14 @@ impl CheckState {
             },
             Expr::Block(block, _) => {
                 let tail = block_tail(block);
-                if tail.len() == 1 { self.some_at_the_tails(*nikaia_std::index::get(&tail, 0)); } else { self.facts.some_tails.insert(text_key(arm)); }
+                if tail.len() == 1 { self.some_at_the_tails(*nikaia_std::index::get(&tail, 0)); } else if !check_texts_ends_in_a_jump(block) { self.facts.some_tails.insert(text_key(arm)); }
             },
             Expr::Match { arms, .. } => { for each in arms.iter() { self.some_at_the_tails(&each.body); } },
             Expr::LitNull(_) => { },
+            Expr::Return(_, _) => { },
+            Expr::Break(_) => { },
+            Expr::Continue(_) => { },
+            Expr::Throw(_, _) => { },
             _ => { self.facts.some_tails.insert(text_key(arm)); },
         }
     }

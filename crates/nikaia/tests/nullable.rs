@@ -1951,3 +1951,47 @@ fn main() {
         "a 1 b 2\nc 3 z 0\n4 5\n"
     );
 }
+
+/// **A jumping end of a tail `if` or `match` stays bare** (#657): in a `T?`
+/// function, each value end is put into `Some`, and an end that leaves with
+/// `return` keeps its own value - never `Some(return ..)`. Beside a `null`
+/// arm too.
+#[test]
+fn a_tail_with_a_jumping_end_wraps_only_its_values() {
+    let source = r#"fn pick(x: i64) -> i64? {
+    match x {
+        0 => return null,
+        1 => 10,
+        2 => if x > 1 { return 3 } else { 4 },
+        else => x * 2,
+    }
+}
+
+fn clamp(x: i64) -> i64? {
+    if x < 0 {
+        return 0
+    } else {
+        x + 1
+    }
+}
+
+fn mixed(x: i64) -> i64? {
+    match x {
+        0 => null,
+        1 => return 7,
+        else => x,
+    }
+}
+
+fn main() {
+    println(f"{pick(0) ?? -1} {pick(1) ?? -1} {pick(2) ?? -1} {pick(5) ?? -1}")
+    println(f"{clamp(-4) ?? -1} {clamp(4) ?? -1}")
+    println(f"{mixed(0) ?? -1} {mixed(1) ?? -1} {mixed(9) ?? -1}")
+}
+"#;
+    assert!(findings(source).is_empty(), "{:?}", findings(source));
+    assert_eq!(
+        ran("nullable-tail-jumps", source),
+        "-1 10 3 10\n0 5\n-1 7 9\n"
+    );
+}

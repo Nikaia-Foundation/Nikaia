@@ -63,6 +63,20 @@ fn block_tail(block: ref Block) -> Vec[ref Expr] sync {
     }
 }
 
+/// Whether a block ends in a statement that jumps: `return`, `break` or
+/// `continue`, which leave no value at the block's end.
+fn check_texts_ends_in_a_jump(block: ref Block) -> bool sync {
+    if block.stmts.len() == 0 {
+        return false
+    }
+    return match block.stmts[block.stmts.len() - 1].node {
+        Stmt::Return(_) => true,
+        Stmt::Break => true,
+        Stmt::Continue => true,
+        else => false,
+    }
+}
+
 /// Whether an expression's value is a text literal at every end.
 pub fn ends_in_text(expr: ref Expr) -> bool sync {
     return match expr {
@@ -232,7 +246,7 @@ impl CheckState {
                         let tail = block_tail(block)
                         if tail.len() == 1 {
                             self.some_at_the_tails(tail[0])
-                        } else {
+                        } else if !check_texts_ends_in_a_jump(block) {
                             self.facts.some_tails.insert(text_key(arm))
                             return
                         }
@@ -245,7 +259,7 @@ impl CheckState {
                 let tail = block_tail(block)
                 if tail.len() == 1 {
                     self.some_at_the_tails(tail[0])
-                } else {
+                } else if !check_texts_ends_in_a_jump(block) {
                     self.facts.some_tails.insert(text_key(arm))
                 }
             },
@@ -255,6 +269,12 @@ impl CheckState {
                 }
             },
             Expr::LitNull(_) => {},
+            // **A jumping end stays bare** (#657): it leaves with a value of
+            // its own, and `Some(return ..)` would wrap nothing.
+            Expr::Return(_, _) => {},
+            Expr::Break(_) => {},
+            Expr::Continue(_) => {},
+            Expr::Throw(_, _) => {},
             else => {
                 self.facts.some_tails.insert(text_key(arm))
             },
