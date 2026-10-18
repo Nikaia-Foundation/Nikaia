@@ -124,6 +124,18 @@ fn check_core_stmt_a_name(value: ref Expr) -> bool sync {
     }
 }
 
+/// Whether a `NK1116` was said since finding `from`.
+fn check_core_stmt_overflowed_since(state: ref CheckState, from: i64) -> bool sync {
+    let mut at = from
+    while at < state.findings.len() as i64 {
+        if state.findings[at].code == "NK1116" {
+            return true
+        }
+        at += 1
+    }
+    return false
+}
+
 /// The text of a string literal, where the value is one.
 fn check_core_stmt_literal(value: ref Expr) -> String? sync {
     return match value {
@@ -302,6 +314,7 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
     if code_place {
         state.stored_frames.push(CheckStoredCode::empty())
     }
+    let findings_before = state.findings.len() as i64
     let found = check_core_expr(state, world, host, value, span)
     state.flow.lambda_expected = null
     // **A map's read past a jump, bound to a declared type that owns its
@@ -507,7 +520,9 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
     let mut constant: Integer? = null
     let mut followed: Integer? = null
     let c = state.constant_of(world, value)
-    if c != null {
+    // **A constant that overflowed is said once, where it was written**
+    // (#662): the binding carries no value forward to be refused again.
+    if c != null && !check_core_stmt_overflowed_since(state, findings_before) {
         let held: CheckConstant = c ?? return check_core_stmt_unit()
         if !mutable {
             constant = held.value

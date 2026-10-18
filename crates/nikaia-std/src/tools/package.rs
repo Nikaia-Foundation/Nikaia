@@ -17822,6 +17822,17 @@ fn check_core_stmt_a_name(value: &Expr) -> bool { matches!(value, Expr::Variable
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+fn check_core_stmt_overflowed_since(state: &CheckState, from: i64) -> bool {
+    let mut at = from;
+    while at < state.findings.len() as i64 {
+        if nikaia_std::index::get(&state.findings, nikaia_std::index::at(at)).code == "NK1116" { return true; }
+        at += 1;
+    }
+    false
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 fn check_core_stmt_literal(value: &Expr) -> Option<String> {
     match value {
         Expr::LitStr { text, .. } => Some(text.to_owned()),
@@ -17975,6 +17986,7 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     }
     let code_place = names.len() == 1 && state.current.is_some() && check_core_stmt_code_given(value);
     if code_place { state.stored_frames.push(CheckStoredCode::empty()); }
+    let findings_before = state.findings.len() as i64;
     let found = check_core_expr(state, world, host, value, span);
     state.flow.lambda_expected = None;
     if ty.is_some() && names.len() == 1 && shape.is_empty() {
@@ -18115,7 +18127,7 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     let mut constant: Option<Integer> = None;
     let mut followed: Option<Integer> = None;
     let c = state.constant_of(world, value);
-    if c.is_some() {
+    if c.is_some() && !check_core_stmt_overflowed_since(&state, findings_before) {
         let held: CheckConstant = match c { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_unit() };
         if !mutable { constant = Some(held.value); } else if !held.beyond { followed = Some(held.value); }
     }

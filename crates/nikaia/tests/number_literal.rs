@@ -394,3 +394,17 @@ fn a_number_literal_where_text_is_declared_is_refused() {
             .is_empty()
     );
 }
+
+/// **A constant that overflows is said once, where it overflowed** (#662):
+/// the binding carries no known value, so a later use is not refused again.
+#[test]
+fn an_overflowed_constant_is_reported_once() {
+    let source = "fn main() {\n    let n: i64 = -9223372036854775807 - 1\n    let m = n * -1\n    println(m)\n}\n";
+    let found: Vec<_> = findings(source)
+        .into_iter()
+        .filter(|f| f.code == "NK1116")
+        .collect();
+    assert_eq!(found.len(), 1, "{found:#?}");
+    let line = source[..found[0].span.start as usize].matches('\n').count() + 1;
+    assert_eq!(line, 3, "{found:#?}");
+}
