@@ -89,3 +89,96 @@ fn main() {
     assert!(rust.contains("fragment: &str"), "{rust}");
     assert_eq!(ran("map_key_parameter_run", &plain), "1\tGGT\n");
 }
+
+/// A rule's result and a field its action fills, reached only by what the
+/// parse captures, are views (were `NK1104` and `NK1106`).
+#[test]
+fn a_rule_result_and_a_field_filled_by_an_action_are_views() {
+    let program = r#"grammar Hits {
+    rule WS = "" { }
+    entry rule file -> Vec[Hit] = hits:hit* { hits }
+    rule hit -> Hit = p:WORD "\n" { Hit { path: p } }
+    rule WORD -> TEXT = s:until("\n") { s }
+}
+
+pub struct Hit {
+    path: TEXT,
+}
+
+fn main() {
+    let text = "a\nb\n".clone()
+    let hits = Hits::file(text) catch { return }
+    for h in hits {
+        println(h.path)
+    }
+}
+"#;
+    same_rust(
+        "rule_result",
+        &program.replace("TEXT", "ref String"),
+        &program.replace("TEXT", "String"),
+    );
+}
+
+/// A parameter a parse is given, whose result views it, is lent as the view
+/// the result points into (was `NK2302`).
+#[test]
+fn a_parameter_a_parse_views_is_lent() {
+    let program = r#"grammar Stock {
+    rule FIELD -> TEXT = s:until(";" | frame_end) { s }
+    rule COUNT -> i64 = n:dec[i64](digit+) { n }
+    @frame(boundary: "\n")
+    rule ENTRY -> Entry =
+        category:FIELD ";" item:FIELD ";" count:COUNT frame_end
+        { Entry { category, item, count } }
+    entry rule file -> Vec[Entry] = entries:ENTRY* { entries }
+}
+
+pub struct Entry {
+    pub category: TEXT,
+    pub item: TEXT,
+    pub count: int,
+}
+
+pub fn read(data: TEXT) -> Vec[Entry] throws {
+    return Stock::file(data)
+}
+
+fn main() {
+    let text = "fruit;apple;3\n".clone()
+    let entries = read(text) catch { return }
+    for e in entries {
+        println(f"{e.category} {e.item} {e.count}")
+    }
+}
+"#;
+    same_rust(
+        "parsed_parameter",
+        &program.replace("TEXT", "ref String"),
+        &program.replace("TEXT", "String"),
+    );
+}
+
+/// A map's key filled only by views - a part of `split_at`, handed to
+/// `entry` - is a view (was `TrustedMap<String>`, a copy per line).
+#[test]
+fn a_map_key_filled_by_views_is_a_view() {
+    let program = r#"use std::collections
+
+fn main() {
+    let data = "a;1\nb;2\na;3\n".clone()
+    let mut seen: collections::HashMap[TEXT, i64] = collections::HashMap()
+    for line in data.lines() {
+        let at = line.find(";") ?? 0
+        let (name, _) = line.split_at(at)
+        seen.entry(name).and_modify fn(n) { n += 1 }.or_insert(1)
+    }
+    println(f"{seen.len()}")
+}
+"#;
+    same_rust(
+        "split_key",
+        &program.replace("TEXT", "ref String"),
+        &program.replace("TEXT", "String"),
+    );
+}

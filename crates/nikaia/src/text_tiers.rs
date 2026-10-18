@@ -290,6 +290,18 @@ fn rewrite(
             _ => None,
         })
         .collect();
+    // A grammar's rules, by `G::rule`, as the walk keys their results.
+    let mut rule_keys: BTreeMap<String, (usize, usize)> = BTreeMap::new();
+    for (i, item) in parsed.program.items.iter().enumerate() {
+        if let Item::Grammar(def) = &item.node {
+            for (j, rule) in def.rules.iter().enumerate() {
+                rule_keys.insert(
+                    format!("{}::{}", parsed.text(def.name), parsed.text(rule.name)),
+                    (i, j),
+                );
+            }
+        }
+    }
     let program = &mut parsed.program;
     for item in &mut program.items {
         wrap_item(&mut item.node, wraps, into);
@@ -313,6 +325,14 @@ fn rewrite(
                     if let Item::Struct { fields, .. } = &mut program.items[*i].node {
                         mark(&mut fields[j].ty, &position.path, *tier);
                     }
+                }
+            }
+            Owner::Result(key) if rule_keys.contains_key(key) => {
+                let (i, j) = rule_keys[key];
+                if let Item::Grammar(def) = &mut program.items[i].node
+                    && let Some(ty) = &mut def.rules[j].ret_type
+                {
+                    mark(ty, &position.path, *tier);
                 }
             }
             Owner::Result(key) | Owner::Param(key, _) => {

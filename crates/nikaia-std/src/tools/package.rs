@@ -55679,10 +55679,11 @@ struct TextDeclared {
     fields: collections::BTreeMap<(String, String), FieldDecl>,
     fns: collections::BTreeMap<String, FnDecl>,
     methods: collections::BTreeMap<String, Vec<String>>,
+    rules: collections::BTreeSet<String>,
 }
 
 fn declared_of(program: &Program, names: &winnow_grammar::InternerContext) -> TextDeclared {
-    let mut declared = TextDeclared { fields: collections::BTreeMap::new(), fns: collections::BTreeMap::new(), methods: collections::BTreeMap::new() };
+    let mut declared = TextDeclared { fields: collections::BTreeMap::new(), fns: collections::BTreeMap::new(), methods: collections::BTreeMap::new(), rules: collections::BTreeSet::new() };
     for item in program.items.iter() {
         match &item.node {
             Item::Struct { name, fields, is_public, .. } => {
@@ -55698,10 +55699,23 @@ fn declared_of(program: &Program, names: &winnow_grammar::InternerContext) -> Te
                 let owner = names.resolve(target.name).to_owned();
                 for method in methods.iter() { declare_function(&method.node, Some(owner.to_owned()), names, &mut declared); }
             },
+            Item::Grammar(def) => { declare_rules(def, names, &mut declared); },
             _ => { },
         }
     }
     declared
+}
+
+fn declare_rules(def: &GrammarDef, names: &winnow_grammar::InternerContext, declared: &mut TextDeclared) {
+    let gname = names.resolve(def.name).to_owned();
+    for rule in def.rules.iter() {
+        let key = format!("{}::{}", gname, names.resolve(rule.name));
+        declared.rules.insert(key.to_owned());
+        declared.fns.insert(key, FnDecl { params: vec![], result: match rule.ret_type.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, published: def.public && rule.is_entry });
+    }
 }
 
 fn declare_function(item: &Item, target: Option<String>, names: &winnow_grammar::InternerContext, declared: &mut TextDeclared) {
@@ -55791,9 +55805,10 @@ struct Flows {
     hole_wraps: collections::BTreeMap<i64, Vec<HoleWrap>>,
     links: collections::BTreeSet<(String, String)>,
     unwrappable: collections::BTreeSet<String>,
+    viewed: collections::BTreeSet<String>,
 }
 
-fn no_flows() -> Flows { Flows { positions: collections::BTreeMap::new(), known: collections::BTreeMap::new(), literal_lets: collections::BTreeMap::new(), wraps: collections::BTreeMap::new(), param_into: collections::BTreeSet::new(), hole_wraps: collections::BTreeMap::new(), links: collections::BTreeSet::new(), unwrappable: collections::BTreeSet::new() } }
+fn no_flows() -> Flows { Flows { positions: collections::BTreeMap::new(), known: collections::BTreeMap::new(), literal_lets: collections::BTreeMap::new(), wraps: collections::BTreeMap::new(), param_into: collections::BTreeSet::new(), hole_wraps: collections::BTreeMap::new(), links: collections::BTreeSet::new(), unwrappable: collections::BTreeSet::new(), viewed: collections::BTreeSet::new() } }
 
 #[derive(Debug, Clone, PartialEq)]
 struct TierWalk {
@@ -56214,6 +56229,13 @@ fn tier_let(names: &[winnow_grammar::Symbol], value: &Expr, ty: Option<&Type>, a
     if names.len() == 1 {
         let local = TierLocal { kinds: bound, of, literal, declared };
         bind_tier_local(ask.names.resolve(*nikaia_std::index::get(&names, 0)).to_owned(), local, walk);
+        return;
+    }
+    if !written && !(bound.owned && bound.view) && !bound.either {
+        for name in names.iter() {
+            let name = *name;
+            bind_tier_local(ask.names.resolve(name).to_owned(), plain_local(bound.clone()), walk);
+        }
     }
 }
 
@@ -56559,10 +56581,24 @@ fn call_kinds(func: &Expr, args: &[Expr], ask: &TierAsk<'_, '_, '_>, walk: &mut 
     let callee = match tier_callee(func, ask) { Some(__nikaia_value) => __nikaia_value, None => return owned_kinds() };
     if walk.declared.fns.contains_key(&callee) {
         flow_args(&callee, args, &given, ask, walk);
+        if walk.declared.rules.contains(&callee) && !args.is_empty() { parsed_parameter(nikaia_std::index::get(&args, 0), ask, walk); }
         return result_kinds(&callee, ask, &walk);
     }
     if args.is_empty() && is_a_container_name(&callee) { return no_kinds(); }
     std_result(&callee, ask)
+}
+
+fn parsed_parameter(value: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) {
+    let name = match value {
+        Expr::Variable(name, _) => { let name = *name; ask.names.resolve(name).to_owned() },
+        _ => return,
+    };
+    let local = match tier_local(&name, &walk) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let declared = match local.declared { Some(__nikaia_value) => __nikaia_value, None => return };
+    let parameter = matches!(declared.owner, TextOwner::Param(_, _));
+    if !parameter || !plain_string(ask.names, &declared.ty) { return; }
+    let word = seen(&declared.owner, &no_path(), walk);
+    walk.flows.viewed.insert(word);
 }
 
 fn method_kinds(receiver: &Expr, method: &str, args: &[Expr], ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) -> Kinds {
@@ -56587,6 +56623,10 @@ fn method_kinds(receiver: &Expr, method: &str, args: &[Expr], ask: &TierAsk<'_, 
             put_into_container(&found, method, args, &given, ask, walk);
             return owned_kinds();
         }
+        if method == "entry" && a_map(ask.names, &ty) && args.len() == 1 && given.len() == 1 && ty.generics.len() == 2 {
+            flow_value(&going_into(&found.owner, nikaia_std::index::get(&ty.generics, 0), vec![0], true), Some(nikaia_std::index::get(&args, 0)), nikaia_std::index::get(&given, 0), ask, walk);
+            return owned_kinds();
+        }
         if hands_back_an_element(method) { return element_kinds(&found, method == "keys", ask, &walk); }
     }
     if method == "map" && args.len() == 1 {
@@ -56597,10 +56637,27 @@ fn method_kinds(receiver: &Expr, method: &str, args: &[Expr], ask: &TierAsk<'_, 
     }
     if method == "filter" || method == "rev" || method == "skip" || method == "take" || method == "step_by" { return received; }
     if owns_its_text(method) { return owned_kinds(); }
-    if views_what_it_is_called_on(method) { return viewed(&received); }
+    if views_what_it_is_called_on(method) || cuts_in_two(method) { return viewed(&received); }
     if hands_back_an_element(method) { return received; }
+    if std_method_views(method, ask) { return view_kinds(); }
     owned_kinds()
 }
+
+fn std_method_views(method: &str, ask: &TierAsk<'_, '_, '_>) -> bool {
+    let suffix = format!("::{}", method);
+    let mut any = false;
+    for (key, contract) in ask.library.functions.iter() {
+        if !key.ends_with(&suffix) { continue; }
+        let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+        if !signature.takes_a_receiver() { continue; }
+        let result = match signature.result.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+        if !result.is_a_view() || result.owned().text() != "String" { return false; }
+        any = true;
+    }
+    any
+}
+
+fn cuts_in_two(method: &str) -> bool { method == "split_at" || method == "split_once" || method == "rsplit_once" }
 
 fn put_into_container(place: &Declaring, method: &str, args: &[Expr], given: &[Kinds], ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) {
     let ty = place.ty.clone();
@@ -56661,9 +56718,104 @@ fn walk_program(program: &Program, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWal
                 let owner = ask.names.resolve(target.name).to_owned();
                 for method in methods.iter() { walk_function(&method.node, Some(owner.to_owned()), ask, walk); }
             },
+            Item::Grammar(def) => { walk_grammar(def, ask, walk); },
             _ => { },
         }
     }
+}
+
+fn walk_grammar(def: &GrammarDef, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) {
+    let gname = ask.names.resolve(def.name).to_owned();
+    let mut rules: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for rule in def.rules.iter() { rules.insert(ask.names.resolve(rule.name).to_owned()); }
+    for rule in def.rules.iter() {
+        let key = format!("{}::{}", gname, ask.names.resolve(rule.name));
+        for alt in rule.alts.iter() {
+            walk.locals = collections::BTreeMap::new();
+            walk.frames = vec![];
+            walk.result = Some(key.to_owned());
+            walk.in_hole = false;
+            walk.hole_text = -1;
+            open_tier_scope(walk);
+            bind_grammar_pattern(&gname, &rules, &alt.pattern.node, ask, walk);
+            if alt.action.is_none() {
+                let kinds = grammar_pattern_kinds(&gname, &rules, &alt.pattern.node, ask, &walk);
+                flow_pattern_result(&key, (rule.ret_type).as_ref(), &kinds, ask, walk);
+            }
+            walk_action((alt.action).as_ref(), ask, walk);
+            close_tier_scope(walk);
+        }
+    }
+}
+
+fn flow_pattern_result(key: &str, ret_type: Option<&Type>, kinds: &Kinds, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) {
+    let ty = match ret_type { Some(__nikaia_value) => __nikaia_value, None => return };
+    if plain_string(ask.names, ty) { flow_type(&TextOwner::Returned(key.to_owned()), ty, &mut vec![], kinds, ask, walk); }
+}
+
+fn walk_action(action: Option<&Block>, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) {
+    let block = match action { Some(__nikaia_value) => __nikaia_value, None => return };
+    let tail = tier_block(block, ask, walk);
+    if !block.stmts.is_empty() {
+        match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1)).node {
+            Stmt::Expr(last) => { flow_result(last, &tail, ask, walk); },
+            _ => { },
+        }
+    }
+}
+
+fn bind_grammar_pattern(gname: &str, rules: &collections::BTreeSet<String>, pattern: &Pattern, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) {
+    match pattern {
+        Pattern::Bind { name, pat } => {
+            let pat = nikaia_std::boxed::open(pat); let name = *name;
+            let kinds = grammar_pattern_kinds(gname, rules, &pat.node, ask, &walk);
+            bind_tier_local(ask.names.resolve(name).to_owned(), plain_local(kinds), walk);
+            bind_grammar_pattern(gname, rules, &pat.node, ask, walk);
+        },
+        Pattern::Seq(parts) => { for part in parts.iter() { bind_grammar_pattern(gname, rules, &part.node, ask, walk); } },
+        Pattern::Choice(parts) => { for part in parts.iter() { bind_grammar_pattern(gname, rules, &part.node, ask, walk); } },
+        Pattern::Ref { args, .. } => { for arg in args.iter() { bind_grammar_pattern(gname, rules, &arg.node, ask, walk); } },
+        Pattern::Repeat { pat, .. } => { let pat = nikaia_std::boxed::open(pat); bind_grammar_pattern(gname, rules, &pat.node, ask, walk); },
+        Pattern::Group(pat) => { let pat = nikaia_std::boxed::open(pat); bind_grammar_pattern(gname, rules, &pat.node, ask, walk); },
+        _ => { },
+    }
+}
+
+fn grammar_pattern_kinds(gname: &str, rules: &collections::BTreeSet<String>, pattern: &Pattern, ask: &TierAsk<'_, '_, '_>, walk: &TierWalk) -> Kinds {
+    match pattern {
+        Pattern::Repeat { pat, .. } => { let pat = nikaia_std::boxed::open(pat); grammar_repeat_kinds(gname, rules, &pat.node, ask, walk) },
+        Pattern::Group(pat) => { let pat = nikaia_std::boxed::open(pat); grammar_pattern_kinds(gname, rules, &pat.node, ask, walk) },
+        Pattern::Choice(parts) => grammar_choice_kinds(gname, rules, parts, ask, walk),
+        Pattern::Ref { name, generics, args } => { let name = *name; grammar_reference_kinds(gname, rules, ask.names.resolve(name), generics.len() as i64, args, ask, walk) },
+        _ => no_kinds(),
+    }
+}
+
+fn grammar_repeat_kinds(gname: &str, rules: &collections::BTreeSet<String>, pat: &Pattern, ask: &TierAsk<'_, '_, '_>, walk: &TierWalk) -> Kinds {
+    match pat {
+        Pattern::Ref { name, generics, args } => {
+            let name = *name;
+            let called = ask.names.resolve(name);
+            if generics.is_empty() && args.is_empty() && !rules.contains(called) && (called == "digit" || called == "hex_digit" || called == "any") { return view_kinds(); }
+        },
+        _ => { },
+    }
+    grammar_pattern_kinds(gname, rules, pat, ask, walk)
+}
+
+fn grammar_choice_kinds(gname: &str, rules: &collections::BTreeSet<String>, parts: &[Spanned<Pattern>], ask: &TierAsk<'_, '_, '_>, walk: &TierWalk) -> Kinds {
+    let mut out = no_kinds();
+    for part in parts.iter() { out = kinds_joined(&out, &grammar_pattern_kinds(gname, rules, &part.node, ask, walk)); }
+    out
+}
+
+fn grammar_reference_kinds(gname: &str, rules: &collections::BTreeSet<String>, called: &str, generics: i64, args: &[Spanned<Pattern>], ask: &TierAsk<'_, '_, '_>, walk: &TierWalk) -> Kinds {
+    if rules.contains(called) { return result_kinds(&format!("{}::{}", gname, called), ask, walk); }
+    if generics > 0 { return no_kinds(); }
+    if (called == "peek" || called == "list") && !args.is_empty() { return grammar_pattern_kinds(gname, rules, &nikaia_std::index::get(&args, 0).node, ask, walk); }
+    if (called == "until" || called == "text") && !args.is_empty() { return view_kinds(); }
+    if args.is_empty() && (called == "raw_ident" || called == "string" || called == "alpha1" || called == "multispace0" || called == "multispace1") { return view_kinds(); }
+    no_kinds()
 }
 
 fn walk_function(item: &Item, target: Option<String>, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) {
@@ -56742,6 +56894,7 @@ fn decide_tiers(flows: &Flows, declared: &TextDeclared) -> collections::BTreeMap
         if mixed(tier) && fixed.contains(word) { tier = Tier::Owned; }
         if !owned_tier(tier) { out.insert(word.to_owned(), tier); }
     }
+    for word in flows.viewed.iter() { out.insert(word.to_owned(), Tier::View); }
     out
 }
 

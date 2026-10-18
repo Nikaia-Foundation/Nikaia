@@ -236,10 +236,12 @@ struct TextDeclared {
     fns: collections::BTreeMap[String, FnDecl],
     /// Method names declared in this program, to the keys that declare them.
     methods: collections::BTreeMap[String, Vec[String]],
+    /// The keys of the grammars' rules, `G::rule`.
+    rules: collections::BTreeSet[String],
 }
 
 fn declared_of(program: ref Program, names: ref winnow_grammar::InternerContext) -> TextDeclared {
-    let mut declared = TextDeclared { fields: collections::BTreeMap(), fns: collections::BTreeMap(), methods: collections::BTreeMap() }
+    let mut declared = TextDeclared { fields: collections::BTreeMap(), fns: collections::BTreeMap(), methods: collections::BTreeMap(), rules: collections::BTreeSet() }
     for item in program.items {
         match item.node {
             Item::Struct { name, fields, is_public, .. } => {
@@ -256,10 +258,23 @@ fn declared_of(program: ref Program, names: ref winnow_grammar::InternerContext)
                     declare_function(method.node, owner.clone(), names, declared)
                 }
             }
+            Item::Grammar(def) => declare_rules(def, names, declared),
             else => {}
         }
     }
     return declared
+}
+
+/// **A grammar's rule is a function of its grammar** for this walk: `G::rule`,
+/// no parameters, its declared result a position, published where the grammar
+/// is and the rule is its entry.
+fn declare_rules(def: ref GrammarDef, names: ref winnow_grammar::InternerContext, mut declared: TextDeclared) {
+    let gname = names.resolve(def.name).clone()
+    for rule in def.rules {
+        let key = f"{gname}::{names.resolve(rule.name)}"
+        declared.rules.insert(key.clone())
+        declared.fns.insert(key, FnDecl { params: [], result: rule.ret_type?.clone(), published: def.public && rule.is_entry })
+    }
 }
 
 fn declare_function(item: ref Item, target: String?, names: ref winnow_grammar::InternerContext, mut declared: TextDeclared) {
@@ -375,10 +390,13 @@ struct Flows {
     /// Positions a value goes into from inside an `f"…"` hole this pass has
     /// no place to hand it over in: never mixed.
     unwrappable: collections::BTreeSet[String],
+    /// Parameters handed as they are to a parse, whose result may view them:
+    /// views, whatever flows in, as if written `ref String`.
+    viewed: collections::BTreeSet[String],
 }
 
 fn no_flows() -> Flows {
-    return Flows { positions: collections::BTreeMap(), known: collections::BTreeMap(), literal_lets: collections::BTreeMap(), wraps: collections::BTreeMap(), param_into: collections::BTreeSet(), hole_wraps: collections::BTreeMap(), links: collections::BTreeSet(), unwrappable: collections::BTreeSet() }
+    return Flows { positions: collections::BTreeMap(), known: collections::BTreeMap(), literal_lets: collections::BTreeMap(), wraps: collections::BTreeMap(), param_into: collections::BTreeSet(), hole_wraps: collections::BTreeMap(), links: collections::BTreeSet(), unwrappable: collections::BTreeSet(), viewed: collections::BTreeSet() }
 }
 
 struct TierWalk {
@@ -900,6 +918,15 @@ fn tier_let(names: ref Vec[winnow_grammar::Symbol], value: ref Expr, ty: ref Typ
     if names.len() == 1 {
         let local = TierLocal { kinds: bound, of: of, literal: literal, declared: declared }
         bind_tier_local(ask.names.resolve(names[0]).clone(), local, walk)
+        return
+    }
+    // **Each part of a tuple is bound to the tuple's kind** where that is one
+    // kind (`let (name, rest) = line.split_at(at)` binds two views); parts of
+    // different kinds are text of their own, as an unbound name is.
+    if !written && !(bound.owned && bound.view) && !bound.either {
+        for name in names {
+            bind_tier_local(ask.names.resolve(name).clone(), plain_local(bound.clone()), walk)
+        }
     }
 }
 
@@ -1257,6 +1284,9 @@ fn call_kinds(func: ref Expr, args: ref Vec[Expr], ask: ref TierAsk, mut walk: T
     let callee = tier_callee(func, ask) ?? return owned_kinds()
     if walk.declared.fns.contains_key(callee) {
         flow_args(callee, args, given, ask, walk)
+        if walk.declared.rules.contains(callee) && args.len() >= 1 {
+            parsed_parameter(args[0], ask, walk)
+        }
         return result_kinds(callee, ask, walk)
     }
     // `Vec()`, `HashMap()`: empty, so no text of any kind.
@@ -1264,6 +1294,27 @@ fn call_kinds(func: ref Expr, args: ref Vec[Expr], ask: ref TierAsk, mut walk: T
         return no_kinds()
     }
     return std_result(callee, ask)
+}
+
+// **A parameter a parse is given is a view** (ADR-282 D2): what the parse
+// hands back may point into it, so the caller lends its text for as long as
+// that lives - what `ref String` written on it says.
+fn parsed_parameter(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) {
+    let name = match value {
+        Expr::Variable(name, _) => ask.names.resolve(name).clone(),
+        else => return,
+    }
+    let local = tier_local(name, walk) ?? return
+    let declared = local.declared ?? return
+    let parameter = match declared.owner {
+        TextOwner::Param(_, _) => true,
+        else => false,
+    }
+    if !parameter || !plain_string(ask.names, declared.ty) {
+        return
+    }
+    let word = seen(declared.owner, no_path(), walk)
+    walk.flows.viewed.insert(word)
 }
 
 fn method_kinds(receiver: ref Expr, method: ref String, args: ref Vec[Expr], ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
@@ -1294,6 +1345,12 @@ fn method_kinds(receiver: ref Expr, method: ref String, args: ref Vec[Expr], ask
             put_into_container(found, method, args, given, ask, walk)
             return owned_kinds()
         }
+        // **`entry(k)` puts its key into the map** whatever the chain after it
+        // does with the value.
+        if method == "entry" && a_map(ask.names, ty) && args.len() == 1 && given.len() == 1 && ty.generics.len() == 2 {
+            flow_value(going_into(found.owner, ty.generics[0], [0], true), args[0], given[0], ask, walk)
+            return owned_kinds()
+        }
         if hands_back_an_element(method) {
             return element_kinds(found, method == "keys", ask, walk)
         }
@@ -1312,13 +1369,45 @@ fn method_kinds(receiver: ref Expr, method: ref String, args: ref Vec[Expr], ask
     if owns_its_text(method) {
         return owned_kinds()
     }
-    if views_what_it_is_called_on(method) {
+    if views_what_it_is_called_on(method) || cuts_in_two(method) {
         return viewed(received)
     }
     if hands_back_an_element(method) {
         return received
     }
+    if std_method_views(method, ask) {
+        return view_kinds()
+    }
     return owned_kinds()
+}
+
+/// **A method of `std` whose every entry by that name hands back a view of
+/// text** (`head.path()`, `-> ref(self) String`): its result is a view. One
+/// entry that hands back anything else leaves it text of its own.
+fn std_method_views(method: ref String, ask: ref TierAsk) -> bool {
+    let suffix = f"::{method}"
+    let mut any = false
+    for (key, contract) in ask.library.functions {
+        if !key.ends_with(ref suffix) {
+            continue
+        }
+        let signature = contract.signature ?? return false
+        if !signature.takes_a_receiver() {
+            continue
+        }
+        let result = signature.result ?? return false
+        if !result.is_a_view() || result.owned().text() != "String" {
+            return false
+        }
+        any = true
+    }
+    return any
+}
+
+// Methods of text whose result is two views of it, in a tuple or an option of
+// one: each part bound by a `let (a, b)` is that view.
+fn cuts_in_two(method: ref String) -> bool {
+    return method == "split_at" || method == "split_once" || method == "rsplit_once"
 }
 
 fn put_into_container(place: ref Declaring, method: ref String, args: ref Vec[Expr], given: ref Vec[Kinds], ask: ref TierAsk, mut walk: TierWalk) {
@@ -1392,9 +1481,142 @@ fn walk_program(program: ref Program, ask: ref TierAsk, mut walk: TierWalk) {
                     walk_function(method.node, owner.clone(), ask, walk)
                 }
             }
+            Item::Grammar(def) => walk_grammar(def, ask, walk),
             else => {}
         }
     }
+}
+
+/// **A rule's action is walked as a function's body is**: the names its
+/// pattern binds are what they capture - a view of the input, or what the rule
+/// they call hands back - and its last value goes into the rule's result. A
+/// rule without an action hands back what its pattern captures.
+fn walk_grammar(def: ref GrammarDef, ask: ref TierAsk, mut walk: TierWalk) {
+    let gname = ask.names.resolve(def.name).clone()
+    let mut rules: collections::BTreeSet[String] = collections::BTreeSet()
+    for rule in def.rules {
+        rules.insert(ask.names.resolve(rule.name).clone())
+    }
+    for rule in def.rules {
+        let key = f"{gname}::{ask.names.resolve(rule.name)}"
+        for alt in rule.alts {
+            walk.locals = collections::BTreeMap()
+            walk.frames = []
+            walk.result = key.clone()
+            walk.in_hole = false
+            walk.hole_text = -1
+            open_tier_scope(walk)
+            bind_grammar_pattern(gname, rules, alt.pattern.node, ask, walk)
+            if alt.action == null {
+                let kinds = grammar_pattern_kinds(gname, rules, alt.pattern.node, ask, walk)
+                flow_pattern_result(key, rule.ret_type, kinds, ask, walk)
+            }
+            walk_action(alt.action, ask, walk)
+            close_tier_scope(walk)
+        }
+    }
+}
+
+fn flow_pattern_result(key: ref String, ret_type: ref Type?, kinds: ref Kinds, ask: ref TierAsk, mut walk: TierWalk) {
+    let ty = ret_type ?? return
+    if plain_string(ask.names, ty) {
+        flow_type(TextOwner::Returned(key.clone()), ty, [], kinds, ask, walk)
+    }
+}
+
+fn walk_action(action: ref Block?, ask: ref TierAsk, mut walk: TierWalk) {
+    let block = action ?? return
+    let tail = tier_block(block, ask, walk)
+    if block.stmts.len() > 0 {
+        match block.stmts[block.stmts.len() - 1].node {
+            Stmt::Expr(last) => flow_result(last, tail, ask, walk),
+            else => {}
+        }
+    }
+}
+
+fn bind_grammar_pattern(gname: ref String, rules: ref collections::BTreeSet[String], pattern: ref Pattern, ask: ref TierAsk, mut walk: TierWalk) {
+    match pattern {
+        Pattern::Bind { name, pat } => {
+            let kinds = grammar_pattern_kinds(gname, rules, pat.node, ask, walk)
+            bind_tier_local(ask.names.resolve(name).clone(), plain_local(kinds), walk)
+            bind_grammar_pattern(gname, rules, pat.node, ask, walk)
+        }
+        Pattern::Seq(parts) => {
+            for part in parts {
+                bind_grammar_pattern(gname, rules, part.node, ask, walk)
+            }
+        }
+        Pattern::Choice(parts) => {
+            for part in parts {
+                bind_grammar_pattern(gname, rules, part.node, ask, walk)
+            }
+        }
+        Pattern::Ref { args, .. } => {
+            for arg in args {
+                bind_grammar_pattern(gname, rules, arg.node, ask, walk)
+            }
+        }
+        Pattern::Repeat { pat, .. } => bind_grammar_pattern(gname, rules, pat.node, ask, walk),
+        Pattern::Group(pat) => bind_grammar_pattern(gname, rules, pat.node, ask, walk),
+        else => {}
+    }
+}
+
+/// What kind of text a pattern captures, as the checker types it: a rule of the
+/// grammar hands back its result, a repetition or a list its element's kind,
+/// the primitives that capture text a view of the input the parse was given,
+/// and anything else no text.
+fn grammar_pattern_kinds(gname: ref String, rules: ref collections::BTreeSet[String], pattern: ref Pattern, ask: ref TierAsk, walk: ref TierWalk) -> Kinds {
+    return match pattern {
+        Pattern::Repeat { pat, .. } => grammar_repeat_kinds(gname, rules, pat.node, ask, walk),
+        Pattern::Group(pat) => grammar_pattern_kinds(gname, rules, pat.node, ask, walk),
+        Pattern::Choice(parts) => grammar_choice_kinds(gname, rules, parts, ask, walk),
+        Pattern::Ref { name, generics, args } => grammar_reference_kinds(gname, rules, ask.names.resolve(name), generics.len(), args, ask, walk),
+        else => no_kinds(),
+    }
+}
+
+// `digit+` is the text the digits stand in; any other repetition a list of
+// what it repeats.
+fn grammar_repeat_kinds(gname: ref String, rules: ref collections::BTreeSet[String], pat: ref Pattern, ask: ref TierAsk, walk: ref TierWalk) -> Kinds {
+    match pat {
+        Pattern::Ref { name, generics, args } => {
+            let called = ask.names.resolve(name)
+            if generics.len() == 0 && args.len() == 0 && !rules.contains(called) && (called == "digit" || called == "hex_digit" || called == "any") {
+                return view_kinds()
+            }
+        }
+        else => {}
+    }
+    return grammar_pattern_kinds(gname, rules, pat, ask, walk)
+}
+
+fn grammar_choice_kinds(gname: ref String, rules: ref collections::BTreeSet[String], parts: ref Vec[Spanned[Pattern]], ask: ref TierAsk, walk: ref TierWalk) -> Kinds {
+    let mut out = no_kinds()
+    for part in parts {
+        out = kinds_joined(out, grammar_pattern_kinds(gname, rules, part.node, ask, walk))
+    }
+    return out
+}
+
+fn grammar_reference_kinds(gname: ref String, rules: ref collections::BTreeSet[String], called: ref String, generics: i64, args: ref Vec[Spanned[Pattern]], ask: ref TierAsk, walk: ref TierWalk) -> Kinds {
+    if rules.contains(called) {
+        return result_kinds(f"{gname}::{called}", ask, walk)
+    }
+    if generics > 0 {
+        return no_kinds()
+    }
+    if (called == "peek" || called == "list") && args.len() >= 1 {
+        return grammar_pattern_kinds(gname, rules, args[0].node, ask, walk)
+    }
+    if (called == "until" || called == "text") && args.len() >= 1 {
+        return view_kinds()
+    }
+    if args.len() == 0 && (called == "raw_ident" || called == "string" || called == "alpha1" || called == "multispace0" || called == "multispace1") {
+        return view_kinds()
+    }
+    return no_kinds()
 }
 
 fn walk_function(item: ref Item, target: String?, ask: ref TierAsk, mut walk: TierWalk) {
@@ -1485,6 +1707,9 @@ fn decide_tiers(flows: ref Flows, declared: ref TextDeclared) -> collections::BT
         if !owned_tier(tier) {
             out.insert(word.clone(), tier)
         }
+    }
+    for word in flows.viewed {
+        out.insert(word.clone(), Tier::View)
     }
     return out
 }
