@@ -1160,6 +1160,9 @@ struct Emitter<'p> {
     /// A grammar's copy over bytes is being written (ADR-366 D2): what Nikaia
     /// types as text is taken through the backend's checking `text(...)`.
     grammar_bytes: std::cell::Cell<bool>,
+    /// Inside `bytes(...)` of a grammar's copy over bytes: `any` there is the
+    /// backend's raw `byte`, since what is captured is not checked.
+    grammar_raw: std::cell::Cell<bool>,
     /// **The program's `main`'s parameters as its definition wrote them**,
     /// `name: type`, for the entry that reads the words into them
     /// ([ADR-360](../../docs/specification/adr/adr-360.md) D1).
@@ -2121,6 +2124,7 @@ impl<'p> Emitter<'p> {
             place: std::cell::RefCell::new(seeds::Place::default()),
             floor: std::cell::Cell::new(false),
             grammar_bytes: std::cell::Cell::new(false),
+            grammar_raw: std::cell::Cell::new(false),
             main_params: std::cell::RefCell::new(Vec::new()),
         };
         made.s.sums = made.s.error_sums(&made.world);
@@ -4876,7 +4880,11 @@ impl<'p> Emitter<'p> {
                     out.push("(");
                 }
                 let bytes = self.grammar_bytes.replace(false);
+                let raw = self
+                    .grammar_raw
+                    .replace(self.grammar_raw.get() || bytes && called == "bytes");
                 let written = self.patterns(out, args, ", ");
+                self.grammar_raw.set(raw);
                 self.grammar_bytes.set(bytes);
                 written?;
                 out.push(if wrap { "))" } else { ")" });
@@ -4887,7 +4895,11 @@ impl<'p> Emitter<'p> {
                 generics,
                 args,
             } => {
-                out.push(self.text(*name));
+                // Over bytes the backend's `any` is a checked `char`, as in
+                // Nikaia; under `bytes(...)` it is the raw `byte`.
+                let called = self.text(*name);
+                let raw_any = self.grammar_raw.get() && called == "any" && args.is_empty();
+                out.push(if raw_any { "byte" } else { called });
                 // `dec[i32](…)` -> `dec::<i32>(…)`? No: the backend's builtin
                 // takes its type between angles, not after a turbofish, and a
                 // grammar body is the backend's syntax once it is emitted.
@@ -4903,19 +4915,6 @@ impl<'p> Emitter<'p> {
                     self.patterns(out, args, ", ")?;
                     out.push(")");
                 }
-                Ok(())
-            }
-            Pattern::Repeat { pat, rep }
-                if self.grammar_bytes.get()
-                    && !matches!(rep, Repeat::Optional)
-                    && matches!(&pat.node, Pattern::Ref { name, generics, args }
-                        if generics.is_empty() && args.is_empty() && self.text(*name) == "any") =>
-            {
-                // A run of `any` is text in Nikaia and bytes to the backend
-                // over bytes: it is checked where it becomes text (ADR-366 D2).
-                out.push("text(any");
-                out.push(&repeat_suffix(*rep));
-                out.push(")");
                 Ok(())
             }
             Pattern::Repeat { pat, rep } => {

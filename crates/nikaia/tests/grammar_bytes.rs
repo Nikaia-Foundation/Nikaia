@@ -98,8 +98,9 @@ fn run(name: &str, source: &str, files: &[(&str, &[u8])]) -> String {
 const PAIR: &str = "grammar Pair {\n    entry rule pair -> i64 = name:until(\";\") sep:\";\" rest:any* { name.len() * 100 + sep.len() * 10 + rest.len() }\n}\n";
 
 /// What Nikaia types as text is checked text over bytes (ADR-366 D2): an
-/// `until`, a literal's capture and a run of `any` are taken through the
-/// backend's `text(...)`, so the action written for text compiles unchanged.
+/// `until` and a literal's capture are taken through the backend's
+/// `text(...)`, and a run of `any` is the backend's checked text by itself,
+/// so the action written for text compiles unchanged.
 #[test]
 fn what_is_text_over_bytes_is_checked_text() {
     let source = format!(
@@ -107,7 +108,7 @@ fn what_is_text_over_bytes_is_checked_text() {
     );
     let rust = emit(&source);
     assert!(
-        rust.contains("name:text(until(\";\")) sep:text(\";\") rest:text(any*)"),
+        rust.contains("name:text(until(\";\")) sep:text(\";\") rest:any*"),
         "{rust}"
     );
     assert!(
@@ -129,7 +130,8 @@ fn bytes_of_a_pattern_over_either_input() {
         "use std::fs\n\n{REC}\nfn main() {{\n    let raw = fs::read(\"d\", fs::Root::Anywhere) catch {{ return }}\n    let t = fs::read_to_string(\"d\", fs::Root::Anywhere) catch {{ return }}\n    let a = Rec::rec(raw) catch {{ -1 }}\n    let b = Rec::rec(t) catch {{ -1 }}\n    print(f\"{{a}} {{b}}\")\n}}\n"
     );
     let rust = emit(&source);
-    assert!(rust.contains("body:bytes(any*)"), "{rust}");
+    // Under `bytes(...)` nothing is checked: `any` is the backend's raw `byte`.
+    assert!(rust.contains("body:bytes(byte*)"), "{rust}");
     assert!(rust.contains("body:text(any*)"), "{rust}");
     assert!(rust.contains("let body = body.as_bytes();"), "{rust}");
     let out = run("grammar-bytes-of", &source, &[("d", "3:abc".as_bytes())]);
@@ -260,4 +262,25 @@ fn a_bad_byte_in_a_later_piece_counts_from_the_start() {
             .is_some_and(|l| l.starts_with(&format!("invalid UTF-8 at byte {at}: 0xff"))),
         "{out}"
     );
+}
+
+const FIRST: &str = "use std::fs\n\ngrammar First {\n    entry rule first -> i64 = \"<\" c:any \";\" { if c == '\u{20AC}' { 3 } else if c == '\u{E4}' { 2 } else { 1 } }\n}\n\nfn main() {\n    let raw = fs::read(\"d\", fs::Root::Anywhere) catch { return }\n    let a = First::first(raw) catch {\n        println(f\"{error}\")\n        return\n    }\n    let t = fs::read_to_string(\"d\", fs::Root::Anywhere) catch {\n        println(f\"{a}\")\n        return\n    }\n    let b = First::first(t) catch { -1 }\n    println(f\"{a} {b}\")\n}\n";
+
+/// **A lone `any` is one checked character over bytes too** (ADR-366 D2): the
+/// action that compares it with a character literal reads the same over a
+/// `String` and over its `Bytes`, for a multi-byte character as well, and a
+/// bad or truncated sequence is `invalid UTF-8 at byte N` where it stands.
+#[test]
+fn a_lone_any_is_a_checked_character_over_bytes() {
+    for (input, want) in [("<a;", "1 1"), ("<\u{E4};", "2 2"), ("<\u{20AC};", "3 3")] {
+        let out = run("grammar-bytes-any", FIRST, &[("d", input.as_bytes())]);
+        assert_eq!(out.trim(), want, "{input}");
+    }
+    for (input, byte) in [(&b"<\xff;"[..], "0xff"), (&b"<\xe2\x82"[..], "0xe2")] {
+        let out = run("grammar-bytes-any-bad", FIRST, &[("d", input)]);
+        assert!(
+            first_line(&out).starts_with(&format!("invalid UTF-8 at byte 1: {byte}")),
+            "{out}"
+        );
+    }
 }
