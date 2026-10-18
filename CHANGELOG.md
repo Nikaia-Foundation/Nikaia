@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1041] — 2026-10-18
+
+**Static views of text: a parameter only read is &str again (ADR-282 D5, D29, #659)**
+- A `String` parameter the body only reads is `&str` again, also when only literals reach it, and so is one that only hands it on to such parameters.
+- Text of its own where a static view does not fit: a list element changed in place, `["a", null]`, a list of text handed whole to a `std` function, a `let` map stored in a library field; methods in a trait `impl` count as published.
+- A `text => …` arm over a `ref T?` binds the reference, as it should; it no longer writes `let text = *text`.
+
 ## [0.0.1040] — 2026-10-18
 
 **A map is hashbrown's table (#420, #434)**
