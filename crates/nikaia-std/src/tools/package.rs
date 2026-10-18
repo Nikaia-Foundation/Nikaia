@@ -36878,9 +36878,16 @@ pub fn error_kind(declared: &collections::BTreeSet<String>, library: &Ledger, na
     0
 }
 
-pub fn sum_member_type(declared: &collections::BTreeSet<String>, library: &Ledger, name: &str, params: &str) -> String {
-    if error_kind(declared, library, name) == 0 { return name.to_owned(); }
+pub fn sum_member_type(declared: &collections::BTreeSet<String>, library: &Ledger, name: &str, params: &str, is_std: bool) -> String {
+    let kind = error_kind(declared, library, name);
+    if kind == 0 { return name.to_owned(); }
+    if kind == 2 { return format!("nikaia_std::error::Thrown<{}{}>", library_error_path(name, is_std), params); }
     format!("nikaia_std::error::Thrown<{}{}>", name, params)
+}
+
+pub fn library_error_path(name: &str, is_std: bool) -> String {
+    if is_std && name.contains("::") && !name.starts_with("nikaia_std::") { return format!("nikaia_std::{}", name); }
+    name.to_owned()
 }
 
 pub fn member_of(words: &winnow_grammar::InternerContext, declared: &collections::BTreeSet<String>, library: &Ledger, pattern: &MatchPattern) -> Option<String> {
@@ -38150,8 +38157,8 @@ impl EmitState {
         out
     }
     pub fn sum_member_held(&self, world: &EmitWorld<'_, '_, '_, '_>, member: &str, params: &str) -> String {
-        if self.borrows_named(world, member) { return sum_member_type(&self.declared_errors, world.library, member, params); }
-        sum_member_type(&self.declared_errors, world.library, member, "")
+        if self.borrows_named(world, member) { return sum_member_type(&self.declared_errors, world.library, member, params, self.is_std); }
+        sum_member_type(&self.declared_errors, world.library, member, "", self.is_std)
     }
     pub fn write_error_sums(&self, world: &EmitWorld<'_, '_, '_, '_>, out: &mut EmitOut) {
         if !self.entry { return; }
@@ -38256,7 +38263,7 @@ impl EmitState {
         let kind = self.named_error_of(world, thrown);
         if kind == 0 { return String::from("Box<dyn std::error::Error>"); }
         let name = (*nikaia_std::index::get(&thrown, 0)).to_owned();
-        if kind == 2 { return format!("nikaia_std::error::Thrown<{}>", name); }
+        if kind == 2 { return format!("nikaia_std::error::Thrown<{}>", library_error_path(&name, self.is_std)); }
         let mut shown: String = String::from("");
         if self.borrows_named(world, &name) { shown = self.channel_params(elided, params, static_params, borrows); }
         format!("nikaia_std::error::Thrown<{}{}>", name, shown)
@@ -62960,7 +62967,7 @@ pub mod emit_host {
 }
 pub mod emit_items {
     #[allow(unused_imports)]
-    pub use super::{foreign_params, opaque_handles, foreign_results, foreign_traits, declared_errors, sum_name, sum_variant, variant_slot, dsl_name, error_kind, sum_member_type, member_of};
+    pub use super::{foreign_params, opaque_handles, foreign_results, foreign_traits, declared_errors, sum_name, sum_variant, variant_slot, dsl_name, error_kind, sum_member_type, library_error_path, member_of};
 }
 pub mod emit_keeps {
     #[allow(unused_imports)]

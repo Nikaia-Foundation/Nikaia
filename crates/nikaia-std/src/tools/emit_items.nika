@@ -144,11 +144,27 @@ pub fn error_kind(declared: ref collections::BTreeSet[String], library: ref Ledg
 
 /// The type a member of a generated error sum is held as: in the envelope
 /// where it is a name, as it is written where not.
-pub fn sum_member_type(declared: ref collections::BTreeSet[String], library: ref Ledger, name: ref String, params: ref String) -> String {
-    if error_kind(declared, library, name) == 0 {
+pub fn sum_member_type(declared: ref collections::BTreeSet[String], library: ref Ledger, name: ref String, params: ref String, is_std: bool) -> String {
+    let kind = error_kind(declared, library, name)
+    if kind == 0 {
         return name.clone()
     }
+    if kind == 2 {
+        return f"nikaia_std::error::Thrown<{library_error_path(name, is_std)}{params}>"
+    }
     return f"nikaia_std::error::Thrown<{name}{params}>"
+}
+
+/// **A library's error by a path that resolves without the prelude**: `std`
+/// and the tools package have no `use nikaia_std::prelude::*`, so
+/// `io::IoError`, reached through a callee in a file that has no `use
+/// std::io`, is written `nikaia_std::io::IoError` there. A program has the
+/// prelude, and its path stays as the ledger names it.
+pub fn library_error_path(name: ref String, is_std: bool) -> String {
+    if is_std && name.contains("::") && !name.starts_with("nikaia_std::") {
+        return f"nikaia_std::{name}"
+    }
+    return name.clone()
 }
 
 /// The error a `match` arm's pattern names, written `Error::Variant`: the path

@@ -231,10 +231,6 @@ pub mod tools {
     #[allow(unused_imports)]
     use crate::prelude::scalar;
 
-    /// What a lowered `throws` of `std`'s `io` names: a tool has no prelude
-    /// to bring it in.
-    use crate::io;
-
     // --- http1.nika ---
 
     /// **The one call a Rust caller makes into the grammar**, for

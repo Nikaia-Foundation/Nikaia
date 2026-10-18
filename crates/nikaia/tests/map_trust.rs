@@ -335,9 +335,10 @@ const HM_B: &str = "use std::collections\n\n\
      \x20   let mut n = HmNames { seen: collections::HashSet(), ids: collections::HashMap() }\n\
      \x20   n.seen.insert(\"a\")\n\
      \x20   return n.seen.len()\n}\n";
-// `use std::io`: a tools file names the module its thrown error is in
-// (D42 in `docs/lowering-defects.md`).
-const HM_C: &str = "use std::net\n\nuse std::io\n\nuse std::collections\n\n\
+// No `use std::io`: the error `net::connect` throws is written by a path that
+// resolves without one (`nikaia_std::io::IoError`), checked by the adapter
+// test that compiles it.
+const HM_C: &str = "use std::net\n\nuse std::collections\n\n\
      pub fn hm_serve() -> i64 throws {\n\
      \x20   let mut c = net::connect(\"127.0.0.1:1\")\n\
      \x20   let b = c.read()\n\

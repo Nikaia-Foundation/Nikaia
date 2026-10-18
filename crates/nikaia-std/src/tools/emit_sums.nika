@@ -109,9 +109,9 @@ impl EmitState {
     /// the sum where the member carries a view.
     pub fn sum_member_held(ref self, world: ref EmitWorld, member: ref String, params: ref String) -> String {
         if self.borrows_named(world, member) {
-            return sum_member_type(self.declared_errors, world.library, member, params)
+            return sum_member_type(self.declared_errors, world.library, member, params, self.is_std)
         }
-        return sum_member_type(self.declared_errors, world.library, member, "")
+        return sum_member_type(self.declared_errors, world.library, member, "", self.is_std)
     }
 
     /// Write every generated sum, once, at the crate root: a module is its own
@@ -284,7 +284,7 @@ impl EmitState {
         let name = thrown[0].clone()
         // A library's error travels in an envelope too (ADR-280 D13).
         if kind == 2 {
-            return f"nikaia_std::error::Thrown<{name}>"
+            return f"nikaia_std::error::Thrown<{library_error_path(name, self.is_std)}>"
         }
         let mut shown: String = ""
         if self.borrows_named(world, name) {
