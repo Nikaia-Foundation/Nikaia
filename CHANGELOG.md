@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1031] — 2026-10-18
+
+**s.bytes is a Bytes, borrowed (ADR-320 D11, #453)**
+- s.bytes is a Bytes (ADR-320 D11): `s.bytes` reads the text's own bytes, borrowed, with every read a `Bytes` has; a read-only `Bytes` parameter is a `&[u8]`, so `fs::read` bytes and `s.bytes` go to the same function; kept in a field or handed back, it is copied.
+
 ## [0.0.1030] — 2026-10-18
 
 **s.bytes is a Bytes; a normal form is an argument; any over bytes**
