@@ -91,6 +91,13 @@ fn a_project_builds_runs_and_notices_an_edit() {
         "the built binary runs and prints what the program says: {}",
         said(&run)
     );
+    // A `run` shows the program, not Cargo's progress.
+    let stderr = String::from_utf8_lossy(&run.stderr);
+    assert!(
+        !stderr.contains("Compiling") && !stderr.contains("Finished"),
+        "a run prints no Cargo progress: {}",
+        said(&run)
+    );
 
     // The manifests Cargo was handed, and the ledger a build owes (13.5). The
     // root is the workspace and the package is a member of it, even where it is

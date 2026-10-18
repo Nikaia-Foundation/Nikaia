@@ -3036,7 +3036,16 @@ impl Project {
         if self.settings.library() && header.is_none() {
             return Err(crate::cexport::nothing_exported());
         }
-        let (mut code, messages) = cargo.messages("build", &target_args)?;
+        // **A `run` shows the program's output and nothing of Cargo's.** Its
+        // progress lines ("Compiling", "Finished") are not about the program,
+        // and on a terminal they mix into what the program prints. `--quiet`
+        // keeps what Cargo cannot do (a manifest it cannot read) on stderr;
+        // the diagnostics arrive on the JSON channel either way.
+        let mut build_args = target_args.to_vec();
+        if subcommand == "run" {
+            build_args.push("--quiet".to_string());
+        }
+        let (mut code, messages) = cargo.messages("build", &build_args)?;
         self.report(&messages, allowlist)?;
         // **The library and its header, together where a C build looks**
         // (ADR-284 D4, D12): `target/nikaia/c-library/`.
@@ -3129,7 +3138,7 @@ impl Project {
             // only remove a duplicate and never lose a run.
             code = match &binary {
                 Some(binary) => run_directly(binary, program_args)?,
-                None => cargo.run("run", &target_args, program_args)?,
+                None => cargo.run("run", &build_args, program_args)?,
             };
         }
         Ok((code, binary))
