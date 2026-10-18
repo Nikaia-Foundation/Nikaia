@@ -740,6 +740,11 @@ pub fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref Ch
         }
         state.number_asked(world, value, into, span, true)
     }
+    // **`x <<= k` shifts `x` as `x << k` does** (Part I 2.2).
+    if check_core_stmt_a_shift(op) {
+        let o: ref BinaryOp = op ?? return check_core_stmt_unit()
+        state.shift_count_fits(world, o.clone(), target, value_of_a_copy(into.unseen()), value, span)
+    }
     // **A `let mut` is followed through what straight-line code assigns it**.
     state.assigned_followed(world, target, op, value)
     // **What is assigned is given to the place** (ADR-293 D29).

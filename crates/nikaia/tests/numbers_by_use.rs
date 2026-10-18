@@ -335,3 +335,48 @@ fn a_mutable_number_is_followed_until_a_branch_or_a_loop() {
         assert!(found.is_empty(), "{source}: {found:#?}");
     }
 }
+
+/// **What rustc's `arithmetic_overflow` would refuse is refused here first**
+/// (#656): `x <<= k` by as many places as `x`'s type has bits, and `-x` over
+/// the smallest value of a signed type, each `NK1116` as `x << k` and `0 - x`
+/// are. A count inside the width and a negation that fits pass.
+#[test]
+fn a_compound_shift_and_a_negation_that_overflow_are_refused() {
+    for (source, message) in [
+        (
+            "fn main() {\n    let mut n = 1\n    n <<= 40\n    println(n)\n}\n",
+            "This shifts an `i32` by 40 places, and it has 32 bits.",
+        ),
+        (
+            "fn main() {\n    let mut b: u8 = 1\n    b <<= 8\n    println(b)\n}\n",
+            "This shifts a `u8` by 8 places, and it has 8 bits.",
+        ),
+        (
+            "fn main() {\n    let n = -2147483648\n    println(-n)\n}\n",
+            "This comes to 2147483648, which doesn't fit in an `i32`.",
+        ),
+        (
+            "fn main() {\n    let mut n = 5\n    n = -2147483648\n    println(-n)\n}\n",
+            "This comes to 2147483648, which doesn't fit in an `i32`.",
+        ),
+        (
+            "fn main() {\n    let n: i64 = -9223372036854775807 - 1\n    println(-n)\n}\n",
+            "This comes to 9223372036854775808, which doesn't fit in an `i64`.",
+        ),
+    ] {
+        let found = findings(source);
+        assert_eq!(found.len(), 1, "{source}: {found:#?}");
+        assert!(
+            found[0].code == "NK1116" && found[0].message == message,
+            "{source}: {found:#?}"
+        );
+    }
+    for source in [
+        "fn main() {\n    let mut n: i64 = 1\n    n <<= 40\n    println(n)\n}\n",
+        "fn main() {\n    let n = -2147483647\n    println(-n)\n}\n",
+        "fn main() {\n    let mut n = -2147483648\n    n = 5\n    println(-n)\n}\n",
+    ] {
+        let found = findings(source);
+        assert!(found.is_empty(), "{source}: {found:#?}");
+    }
+}

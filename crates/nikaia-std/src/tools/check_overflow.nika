@@ -82,6 +82,38 @@ impl CheckState {
         }
     }
 
+    /// **`NK1116` for `-x` over a constant whose negation does not fit** the
+    /// signed type it is computed in (Part I 2.2): its smallest value. An open
+    /// number in it is measured once its uses have decided its type; `-x` on
+    /// an unsigned type is the type check's.
+    pub fn a_negation_that_overflows(ref mut self, world: ref CheckWorld, inner: ref Expr, span: ref Span) sync {
+        let here = span.start as i64
+        if self.flow.overflowed.contains(here) {
+            return
+        }
+        let operand = self.constant_of(world, inner) ?? return
+        if operand.beyond {
+            return
+        }
+        let value = CheckConstant { value: integer_negated(operand.value), beyond: false, pinned: null }
+        let open = self.open_numbers_in(world, inner)
+        if open.len() > 0 {
+            for number in open {
+                self.overflow_derived(number, value, span)
+            }
+            return
+        }
+        let ty: String = (operand.pinned ?? return).clone()
+        if ty != "i32" && ty != "i64" {
+            return
+        }
+        let before = self.findings.len()
+        self.a_number_not_fitting(value, false, ty, span, null)
+        if self.findings.len() > before {
+            self.flow.overflowed.insert(here)
+        }
+    }
+
     fn overflow_derived(ref mut self, number: i64, value: ref CheckConstant, span: ref Span) sync {
         let found = self.flow.open_numbers[number] ?? return
         let mut entry = found.clone()

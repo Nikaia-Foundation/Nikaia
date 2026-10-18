@@ -412,6 +412,9 @@ fn check_core_expr_unary[H: CheckHost](mut state: CheckState, world: ref CheckWo
                 },
                 else => {},
             }
+            if !literal {
+                state.a_negation_that_overflows(world, inner, span)
+            }
             found
         },
         // **`!` on an integer flips its bits** (ADR-285 D3).

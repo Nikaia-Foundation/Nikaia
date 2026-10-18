@@ -14703,6 +14703,7 @@ fn check_core_expr_unary<H: CheckHost>(state: &mut CheckState, world: &CheckWorl
                 Ty::Named { ref name, ref args, view } => { if !view && args.is_empty() && (name == "i32" || name == "i64") && !literal { state.facts.negations.insert(id_of(whole) as i64, name.to_owned()); } },
                 _ => { },
             }
+            if !literal { state.a_negation_that_overflows(world, inner, span); }
             found
         },
         UnaryOp::Not => {
@@ -18280,6 +18281,10 @@ pub fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world: &Chec
         let open = check_core_stmt_open_target(&state, world, target);
         if open.is_some() { if integer_named(&value_of_a_copy(&found.unseen())).is_some() { state.number_asked(world, target, &found, span, true); } else if state.number_shaped(world, value) { state.open_number_given(world, nikaia_std::index::or(open, || 0), value, span); } }
         state.number_asked(world, value, &into, span, true);
+    }
+    if check_core_stmt_a_shift(op) {
+        let o: &BinaryOp = match op { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_unit() };
+        state.shift_count_fits(world, o.clone(), target, &value_of_a_copy(&into.unseen()), value, span);
     }
     state.assigned_followed(world, target, op, value);
     if op.is_none() {
@@ -25357,6 +25362,28 @@ impl CheckState {
             let common = nikaia_std::index::or(common_integer(&pinned, &into), || "".into());
             if common == into { ty = into; }
         }
+        let before = self.findings.len() as i64;
+        self.a_number_not_fitting(&value, false, &ty, span, None);
+        if (self.findings.len() as i64) > before { self.flow.overflowed.insert(here); }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_negation_that_overflows(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, inner: &Expr, span: &Span) {
+        let here = span.start as i64;
+        if self.flow.overflowed.contains(&here) { return; }
+        let operand = match self.constant_of(world, inner) { Some(__nikaia_value) => __nikaia_value, None => return };
+        if operand.beyond { return; }
+        let value = CheckConstant { value: integer_negated(&operand.value), beyond: false, pinned: None };
+        let open = self.open_numbers_in(world, inner);
+        if !open.is_empty() {
+            for number in open.iter() {
+                let number = nikaia_std::num::value(number);
+                self.overflow_derived(number, &value, span);
+            }
+            return;
+        }
+        let ty: String = match operand.pinned { Some(__nikaia_value) => __nikaia_value, None => return }.to_owned();
+        if ty != "i32" && ty != "i64" { return; }
         let before = self.findings.len() as i64;
         self.a_number_not_fitting(&value, false, &ty, span, None);
         if (self.findings.len() as i64) > before { self.flow.overflowed.insert(here); }
