@@ -47,7 +47,7 @@ fn facts_digit(ch: scalar) -> i64 {
 /// The number that follows `key` in `line`, or -1.
 fn facts_int(line: ref String, key: ref String) -> i64 {
     let at = line.find(key) ?? return -1
-    let rest: String = line[at + key.len()..<line.len()].clone()
+    let rest: String = (line[at..].strip_prefix(key) ?? "").clone()
     let mut n = 0
     let mut seen = false
     for ch in rest.chars() {
@@ -68,7 +68,7 @@ fn facts_int(line: ref String, key: ref String) -> i64 {
 fn facts_ints(line: ref String, key: ref String) -> Vec[i64] {
     let mut out: Vec[i64] = []
     let at = line.find(key) ?? return out
-    let rest: String = line[at + key.len()..<line.len()].clone()
+    let rest: String = (line[at..].strip_prefix(key) ?? "").clone()
     let mut n = 0
     let mut seen = false
     for ch in rest.chars() {
@@ -95,7 +95,7 @@ fn facts_ints(line: ref String, key: ref String) -> Vec[i64] {
 fn facts_str(line: ref String, key: ref String) -> String {
     let mut out: String = ""
     let at = line.find(key) ?? return out
-    let rest: String = line[at + key.len()..<line.len()].clone()
+    let rest: String = (line[at..].strip_prefix(key) ?? "").clone()
     let mut escaped = false
     let mut hex = 0
     for ch in rest.chars() {
@@ -283,7 +283,7 @@ fn facts_classify(hover: ref String, defined: bool) -> String {
         }
         let mut b: String = blocks[0].clone()
         if b.starts_with("let ") {
-            b = b[4..<b.len()].clone()
+            b = (b.strip_prefix("let ") ?? "").clone()
         } else if b.starts_with("const ") || b.starts_with("static ") || b.starts_with("extern ") || b.contains("\n") {
             return ""
         }
@@ -334,7 +334,7 @@ fn facts_starts(text: ref String, prefix: ref String) -> bool {
 fn facts_rel(d: ref FactsDump, uri: ref String) -> String {
     let cut = d.under.len()
     if facts_starts(uri, d.under) && uri.len() > cut {
-        let rel: String = uri[cut..<uri.len()].clone()
+        let rel: String = (uri.strip_prefix(d.under) ?? "").clone()
         return rel
     }
     return uri.clone()
@@ -440,7 +440,7 @@ fn main() throws {
     let mut done: collections::BTreeSet[String] = collections::BTreeSet()
     for (_, uri) in d.docs {
         let rel = facts_rel(d, uri)
-        let mut file: String = uri[7..<uri.len()].clone()
+        let mut file: String = (uri.bytes[7..].text() catch { "" }).clone()
         if src != "" {
             file = f"{src}/{rel}"
         }

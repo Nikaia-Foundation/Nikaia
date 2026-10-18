@@ -34,24 +34,28 @@ signature = "(ch: scalar) -> i64"
 
 [fn."facts_fn_name"]
 sync = "inferred"
+keeps = ["line"]
 touches = []
 views = ["line: borrowed"]
 signature = "(line: ref String) -> String"
 
 [fn."facts_hover"]
 sync = "inferred"
+keeps = ["range"]
 touches = []
 views = ["d: borrowed"]
 signature = "(d: ref FactsDump, range: i64) -> String"
 
 [fn."facts_int"]
 sync = "inferred"
+keeps = ["line"]
 touches = []
 views = ["line: borrowed", "key: borrowed"]
 signature = "(line: ref String, key: ref String) -> i64"
 
 [fn."facts_ints"]
 sync = "inferred"
+keeps = ["line"]
 touches = []
 views = ["line: borrowed", "key: borrowed"]
 signature = "(line: ref String, key: ref String) -> Vec[i64]"
@@ -82,6 +86,7 @@ signature = "(text: ref String, prefix: ref String) -> bool"
 
 [fn."facts_str"]
 sync = "inferred"
+keeps = ["line"]
 touches = []
 views = ["line: borrowed", "key: borrowed"]
 signature = "(line: ref String, key: ref String) -> String"
@@ -93,7 +98,7 @@ views = ["path: borrowed"]
 signature = "(path: ref String) -> bool"
 
 [fn."main"]
-throws = ["?"]
+throws = ["io::IoError"]
 locks = true
 signature = "()"
 
