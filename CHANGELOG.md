@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1014] — 2026-10-18
+
+**a build without --target is for the machine it runs on; nikaia run shows no Cargo progress**
+- `Target::host()` reads the triple the compiler was built for, so on Android (`aarch64-linux-android`), macOS and any triple Rust knows a build without `--target` is for that machine; before, it fell back to `x86_64-linux`. `nikaia run` builds with Cargo's `--quiet`: the terminal shows what the program prints and Nikaia's diagnostics, not "Compiling"/"Finished".
+
 ## [0.0.1013] — 2026-10-18
 
 **Part I 4.3 says what classes bundle, what goes wrong with them, and what Nikaia writes instead**
