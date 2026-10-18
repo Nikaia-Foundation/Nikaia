@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1012] — 2026-10-18
+
+**standard input and files are untrusted unless marked trusted: true (ADR-365, #649)**
+- Part III 14.2, 17.1: standard input and every file read while the program runs are untrusted, so an `assert` about them is `NK1202` and their maps take the keyed hash; `trusted: true` at the source says the operator chose the bytes; `asset("…")` is trusted without a marker. ADR-010 D2, D3 changed by ADR-365. Decided; the build is #649.
+
 ## [0.0.1011] — 2026-10-18
 
 **std: list changes in place, clamp, min/max by key, flat_map and ordered-set walks**

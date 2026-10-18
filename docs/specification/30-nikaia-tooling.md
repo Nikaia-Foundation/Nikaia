@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part III: Tooling, Ecosystem & Interoperability**
-**Version:** 0.0.1011 (Draft)
+**Version:** 0.0.1012 (Draft)
 **Date:** 2026-10-18
 
 ---
@@ -466,7 +466,7 @@ Each test runs under the `user_parallelism` the project names. `nikaia test --bo
 
 **A claim about parameters is the caller's** (ADR-269 D5). An `assert` at the top of a function that names only its parameters, and that the body cannot prove, is the function's precondition: the body assumes it, a call that proves it costs nothing, and a call that does not carries the check, so that a failure names the caller. `divide` below asks each caller to show `b != 0`. [ADR-269](adr/adr-269.md) D14-D21 generalise this, within a package and across packages, and it is built: a claim is **carried back to the entry** - a `let` is substituted, a parameter changed before the claim included, a branch becomes an implication, a guard weakens it - and where it then reads only the parameters it is a precondition, `path → claim`: `let y = x - 1` and `if mode == 1 { assert(y > 0) }` make `mode == 1 → x - 1 > 0`. **A call is carried back too**: a callee's precondition the body cannot show, with the arguments in place of the parameters, is the function's own, as an `assert` of it at the call would be - so the caller that passes the value is the one told, and the calls in between need no check. A call that can come back to the function, directly or through others, is not carried back. A loop, a lambda, a `match` arm or a call's result stops it, and the claim stays a check. A computed precondition is proved at each call or checked in the body, and a call that breaks it is told the condition and the `assert` it came from. **A claim about the value returned, shown at every exit, is a postcondition**, and a caller knows it of the result: after `let c = clamp(n)`, `clamp`'s `result >= 0` holds of `c`. So does a call inside a `let`'s value: `let e = 10 + clamp(n)` knows `clamp`'s postconditions of its result. **A `sync` function whose body is one `return e`**, with `e` a whole number the prover reads, ensures `result == e`, published with `from = ["return"]` ([ADR-314](adr/adr-314.md) D3): `text::digit_value` ensures `result == c - 48`, a `char` standing for its code. **Inside its package, a call's result is also known by what its callee's body returns**, where a claim needs it ([ADR-359](adr/adr-359.md) D1-D3): a body without a loop that changes a name it reads, a `match` or a call that can come back to it, whose every exit returns a whole number the prover reads, gives for each exit the path to it and the value returned, and a claim that what is known leaves open is asked once more with it. It is observed, not promised: the ledger writes it as `inferred`, a caller in another package does not see it, and a change to it is not warned of. So `example(2)` over `fn example(a: i64) -> i64 { let whole = 10 + a; return positive(whole) }` is 12, and `assert(4 / example(2) > 10)` is refused, the note naming the value of each call it read. Where only the body of a function in another package the build reads from a path would decide a claim, the claim stays as it is and a hint, `NK1263`, names the fact and the `assert` on the result that would promise it. **A call whose arguments are all values the build knows is run while the program is built**, where a claim that what is known leaves open reads its result ([ADR-359](adr/adr-359.md) D11-D13): compiled and run as a `comptime` is (Part II 10.2), its body `sync` with an empty touch set, under the same budget; its value is a fact, so `assert(fib(10) == 54)` is refused. A call that cannot be run - not `sync`, touching anything, outside this build or over the budget - leaves the claim a check; one that stops is told as a check that fails every time it is reached (`NK1207`). **The ledger publishes both** - `requires`, `ensures`, and the `assert` each came from - so a caller in another package proves the one and relies on the other; a guard is only observed and is not published. **A function with a precondition has two entries**: `f` checks it and calls the body, `f__unchecked`; a call that proves it or checks it where it stands calls the second, and every other caller - a function value, a method call, another package, the language below - reaches the first. A method of a trait's implementation has no precondition. **A contract changed in the breaking direction** - a precondition stronger, a postcondition weaker than the committed ledger's, decided by the solver - warns its author (`NK1208`) until the ledger is committed.
 
-**A claim about data from outside the program is refused** (`NK1202`, ADR-269 D6): it is not a defect when such data is wrong, so it is checked where it arrives, with a guard the program handles (ADR-010); after the guard, the claim is proved. **`main`'s parameters are such data, and the check is made for them** (Part I 5.5, [ADR-360](adr/adr-360.md) D3, D4): `main`'s preconditions are derived as any function's are, carried back to its entry, and are checked after the words the program was started with are read and before the body runs; a breach ends the program with exit status 2 (A.2). `--asserts` reports each as a precondition of `main` checked where the words arrive.
+**A claim about data from outside the program is refused** (`NK1202`, ADR-269 D6; standard input and files are such data unless marked `trusted: true`, [ADR-365](adr/adr-365.md)): it is not a defect when such data is wrong, so it is checked where it arrives, with a guard the program handles (ADR-010); after the guard, the claim is proved. **`main`'s parameters are such data, and the check is made for them** (Part I 5.5, [ADR-360](adr/adr-360.md) D3, D4): `main`'s preconditions are derived as any function's are, carried back to its entry, and are checked after the words the program was started with are read and before the body runs; a breach ends the program with exit status 2 (A.2). `--asserts` reports each as a precondition of `main` checked where the words arrive.
 
 **In a test, a claim is the test's verdict** and is checked when the test runs. A false one stops the test, as `panic` does (A.2), and says what only the compiler knew: the line, the message, the claim as written, and the value of each operand of its comparison - a literal's value is already on the line, and an operand whose type has no printed form is left out.
 
@@ -933,9 +933,8 @@ not own, and never into one it does.
 There is one standard input, so these are functions rather than a handle. Reading it a second
 time yields nothing.
 
-**Provenance** follows the rule files follow: standard input is **Trusted**. A request body
-arriving on standard input is the uploaded-file case and is read with
-`io::read_to_string(trusted: false)`.
+**Provenance** follows the rule files follow: standard input is **Untrusted**. A program that
+knows who writes it reads it with `io::read_to_string(; trusted: true)` ([ADR-365](adr/adr-365.md)).
 
 **Writing output**
 
@@ -1163,8 +1162,7 @@ under which the joined name is resolved and compared component by component, or 
 performs no check and is listed per site by `--trust` (on `nikaia build` and `nikaia lower`). A name that leaves its `Dir` is
 `io::IoError::Outside`, and the handler answers 404. The call refuses; it does not rewrite. Nothing
 is inferred about where the name came from; a `../../etc/shadow` is stopped at the call, before
-the headers are written. `trusted: false` on `fs::map` is about the file's content and is a
-different question.
+the headers are written. Whether `fs::map` trusts the file's content is a different question.
 
 What the library keeps between requests is bounded, dropped when the file's identity or
 modification time changes, and sized by the operator rather than the program. A page that must be
@@ -1371,8 +1369,8 @@ Every value of every build option has the same `std::fs` surface; only the targe
 
 Every input carries a **provenance**, because the compiler knows where a buffer came from (Part I 6.6):
 
-* **Untrusted**: a remote peer chose these bytes. HTTP requests, sockets, IPC, rows read back from a database.
-* **Trusted**: the operator chose these bytes. Files, command-line arguments, the environment, anything compiled in.
+* **Untrusted**: someone the program cannot vouch for may have chosen these bytes. HTTP requests, sockets, IPC, rows read back from a database, standard input, and every file read while the program runs.
+* **Trusted**: the operator chose these bytes. Command-line arguments, the environment, the project's assets read while building (`asset("…")`), and a source marked `trusted: true` ([ADR-365](adr/adr-365.md)).
 
 A value inherits the provenance of the buffer it comes from, and a collection takes the most cautious provenance of everything put into it. Where the compiler cannot tell, across a dynamic call or from a foreign library, the answer is Untrusted.
 
@@ -1387,12 +1385,11 @@ Two maps that must be hashed the same way but are made with two different `hashe
 **User code has the last word, at the place the data enters:**
 
 ```nika
-// A service that processes files uploaded by strangers:
-// a local path, but bytes nobody vetted.
-let data = fs::map(path, fs::Root::Anywhere; trusted: false)
+// A benchmark reading a file it generated itself.
+let data = fs::map(path, fs::Root::Anywhere; trusted: true)
 ```
 
-The reverse, `trusted: true`, exists for the case where the program knows the peer. Both are recorded in the ledger. A grammar for a wire format can pin the floor for everyone who uses it, `@untrusted grammar HttpHeaders`, so that no application can lower it ([ADR-010](adr/adr-010.md) D3-D4).
+`trusted: true` says the program knows who wrote the bytes; `trusted: false` makes a source that is trusted by default untrusted. Both are recorded in the ledger. A grammar for a wire format can pin the floor for everyone who uses it, `@untrusted grammar HttpHeaders`, so that no application can lower it ([ADR-010](adr/adr-010.md) D3-D4).
 
 `--trust` (on `nikaia build` and `nikaia lower`) prints where the program's bytes came from, which source said so, and which hasher its maps got:
 
@@ -1400,7 +1397,7 @@ The reverse, `trusted: true`, exists for the case where the program knows the pe
 $ nikaia lower 1brc.nika --trust
 input provenance: trusted
     cli::args is trusted
-    fs::map is trusted
+    fs::map is trusted: `trusted: true` at 1brc.nika:7
 hash for a map keyed by the input: fast, fixed seed - no adversary chooses these keys
 ```
 
