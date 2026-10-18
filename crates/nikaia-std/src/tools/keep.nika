@@ -106,7 +106,7 @@ impl KeepContext {
     /// Whether a written type holds a view: it is one, or names a type that
     /// holds one, or an argument of it does.
     pub fn carries(ref self, names: ref winnow_grammar::InternerContext, ty: ref Type) -> bool {
-        if ty.is_view || self.borrowing.contains(names.resolve(ty.name)) {
+        if (ty.is_view && !ty.lasting) || self.borrowing.contains(names.resolve(ty.name)) {
             return true
         }
         for argument in ty.generics {

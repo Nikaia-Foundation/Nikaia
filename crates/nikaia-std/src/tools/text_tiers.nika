@@ -8,8 +8,9 @@
 // A **position** is every place a program declares `String`: a struct's
 // field, a function's result, a function's parameter, an annotated `let` -
 // and inside each, the element of a list or a set and the key or value of a
-// map. Three tiers, and each pays only for itself: only text of its own flows
-// in, and it stays `String`; only views (and literals), and it becomes
+// map. Four tiers, and each pays only for itself: only text of its own flows
+// in, and it stays `String`; only literals, and it is a view of the program's
+// static text, `&'static str` below (D29); views (and literals), and it becomes
 // `ref String`; both, and it becomes `ref String` that is either, per value.
 //
 // **What is published may become a view but never both kinds** (D25), and a
@@ -23,45 +24,52 @@
 use std::collections
 
 /// What kinds of text a value may be: text of its own, a view, a literal (a
-/// view of text that lives as long as the program), or what a mixed position
-/// hands back - either of the first two, per value.
+/// view of text that lives as long as the program), a view of static text
+/// read out of a position only literals flow into (ADR-282 D29) - which,
+/// unlike a literal, cannot be built into text where it stands - or what a
+/// mixed position hands back - either of the first two, per value.
 pub struct Kinds {
     pub owned: bool,
     pub view: bool,
     pub lasting: bool,
+    pub still: bool,
     pub either: bool,
 }
 
 fn no_kinds() -> Kinds {
-    return Kinds { owned: false, view: false, lasting: false, either: false }
+    return Kinds { owned: false, view: false, lasting: false, still: false, either: false }
 }
 
 fn owned_kinds() -> Kinds {
-    return Kinds { owned: true, view: false, lasting: false, either: false }
+    return Kinds { owned: true, view: false, lasting: false, still: false, either: false }
 }
 
 fn view_kinds() -> Kinds {
-    return Kinds { owned: false, view: true, lasting: false, either: false }
+    return Kinds { owned: false, view: true, lasting: false, still: false, either: false }
 }
 
 fn lasting_kinds() -> Kinds {
-    return Kinds { owned: false, view: false, lasting: true, either: false }
+    return Kinds { owned: false, view: false, lasting: true, still: false, either: false }
+}
+
+fn still_kinds() -> Kinds {
+    return Kinds { owned: false, view: false, lasting: false, still: true, either: false }
 }
 
 fn either_kinds() -> Kinds {
-    return Kinds { owned: false, view: false, lasting: false, either: true }
+    return Kinds { owned: false, view: false, lasting: false, still: false, either: true }
 }
 
 fn kinds_joined(a: ref Kinds, b: ref Kinds) -> Kinds {
-    return Kinds { owned: a.owned || b.owned, view: a.view || b.view, lasting: a.lasting || b.lasting, either: a.either || b.either }
+    return Kinds { owned: a.owned || b.owned, view: a.view || b.view, lasting: a.lasting || b.lasting, still: a.still || b.still, either: a.either || b.either }
 }
 
 fn same_kinds(a: ref Kinds, b: ref Kinds) -> bool {
-    return a.owned == b.owned && a.view == b.view && a.lasting == b.lasting && a.either == b.either
+    return a.owned == b.owned && a.view == b.view && a.lasting == b.lasting && a.still == b.still && a.either == b.either
 }
 
 fn no_text(kinds: ref Kinds) -> bool {
-    return !kinds.owned && !kinds.view && !kinds.lasting && !kinds.either
+    return !kinds.owned && !kinds.view && !kinds.lasting && !kinds.still && !kinds.either
 }
 
 /// What a set of kinds makes of a position.
@@ -69,14 +77,23 @@ pub enum Tier {
     Owned,
     View,
     Mixed,
+    /// Only literals and views of them flow in: a view of the program's own
+    /// static text, which needs no lifetime (ADR-282 D29).
+    Lasting,
 }
 
 fn tier_of_kinds(kinds: ref Kinds) -> Tier {
-    if kinds.either || (kinds.view && kinds.owned) {
+    if kinds.either || ((kinds.view || kinds.still) && kinds.owned) {
         return Tier::Mixed
     }
     if kinds.view {
         return Tier::View
+    }
+    if kinds.lasting || kinds.still {
+        if kinds.owned {
+            return Tier::Owned
+        }
+        return Tier::Lasting
     }
     return Tier::Owned
 }
@@ -84,6 +101,13 @@ fn tier_of_kinds(kinds: ref Kinds) -> Tier {
 fn mixed(tier: Tier) -> bool {
     return match tier {
         Tier::Mixed => true,
+        else => false,
+    }
+}
+
+fn lasting_tier(tier: Tier) -> bool {
+    return match tier {
+        Tier::Lasting => true,
         else => false,
     }
 }
@@ -189,6 +213,16 @@ pub struct TextTiers {
     pub text: Type?,
     pub wraps: collections::BTreeMap[i64, Hand],
     pub hole_wraps: collections::BTreeMap[i64, Vec[HoleWrap]],
+    /// The `let`s bound to an empty list without a type that go whole into a
+    /// position, by the byte they stand at: each is declared with that
+    /// position's type and takes its tiers (ADR-282 D16).
+    pub adopted: collections::BTreeMap[i64, TierAdopted],
+}
+
+/// The position a `let` is linked to, and the type it is declared with.
+pub struct TierAdopted {
+    pub owner: TextOwner,
+    pub ty: Type,
 }
 
 /// A name as the program wrote it, with the alias a `use` gave its package
@@ -225,6 +259,8 @@ struct FieldDecl {
 
 struct FnDecl {
     params: Vec[Type],
+    /// Which parameters are `mut`: what is handed there may be changed.
+    changes: Vec[bool],
     result: Type?,
     published: bool,
 }
@@ -273,7 +309,7 @@ fn declare_rules(def: ref GrammarDef, names: ref winnow_grammar::InternerContext
     for rule in def.rules {
         let key = f"{gname}::{names.resolve(rule.name)}"
         declared.rules.insert(key.clone())
-        declared.fns.insert(key, FnDecl { params: [], result: rule.ret_type?.clone(), published: def.public && rule.is_entry })
+        declared.fns.insert(key, FnDecl { params: [], changes: [], result: rule.ret_type?.clone(), published: def.public && rule.is_entry })
     }
 }
 
@@ -290,10 +326,12 @@ fn declare_function(item: ref Item, target: String?, names: ref winnow_grammar::
         declared.methods.insert(own.clone(), keys)
     }
     let mut params: Vec[Type] = []
+    let mut changes: Vec[bool] = []
     for arg in args {
         params.push(arg.ty.clone())
+        changes.push(arg.mutable)
     }
-    declared.fns.insert(key, FnDecl { params: params, result: ret_type?.clone(), published: is_public })
+    declared.fns.insert(key, FnDecl { params: params, changes: changes, result: ret_type?.clone(), published: is_public })
 }
 
 fn own_name(name: ref winnow_grammar::Symbol?, names: ref winnow_grammar::InternerContext) -> String {
@@ -366,6 +404,13 @@ struct TierLocal {
     literal: i64,
     /// The position it is declared as, and the declared type.
     declared: Declaring?,
+    /// The word of the position its value was read out of, where it is a
+    /// `String` read whole: a change to it in place is a change to that
+    /// position's text (ADR-282 D29).
+    from: String?,
+    /// Bound by a `let` without a type to an empty list, set or map: the
+    /// byte the `let` stands at, and -1 for anything else (ADR-282 D16).
+    empty: i64,
 }
 
 /// What one walk found, every position by its word.
@@ -393,10 +438,24 @@ struct Flows {
     /// Parameters handed as they are to a parse, whose result may view them:
     /// views, whatever flows in, as if written `ref String`.
     viewed: collections::BTreeSet[String],
+    /// A view of static text read out of the first position going into the
+    /// second (ADR-282 D29): where the second keeps text of its own, the
+    /// first does too, and its literals are built where they stand.
+    still_into: collections::BTreeSet[(String, String)],
+    /// A `let` bound to an empty list without a type, by the byte it stands
+    /// at, and the position the list goes into whole: the name is linked to
+    /// it (ADR-282 D16).
+    adopted: collections::BTreeMap[i64, Declaring],
+    /// Positions a view of static text read out of them was kept where no
+    /// position says what it is: they keep text of their own (ADR-282 D29).
+    demoted: collections::BTreeSet[String],
+    /// A map's keys and values: looked up by text of any kind, so never a
+    /// view of static text (ADR-282 D29).
+    in_maps: collections::BTreeSet[String],
 }
 
 fn no_flows() -> Flows {
-    return Flows { positions: collections::BTreeMap(), known: collections::BTreeMap(), literal_lets: collections::BTreeMap(), wraps: collections::BTreeMap(), param_into: collections::BTreeSet(), hole_wraps: collections::BTreeMap(), links: collections::BTreeSet(), unwrappable: collections::BTreeSet(), viewed: collections::BTreeSet() }
+    return Flows { positions: collections::BTreeMap(), known: collections::BTreeMap(), literal_lets: collections::BTreeMap(), wraps: collections::BTreeMap(), param_into: collections::BTreeSet(), hole_wraps: collections::BTreeMap(), links: collections::BTreeSet(), unwrappable: collections::BTreeSet(), viewed: collections::BTreeSet(), still_into: collections::BTreeSet(), adopted: collections::BTreeMap(), demoted: collections::BTreeSet(), in_maps: collections::BTreeSet() }
 }
 
 struct TierWalk {
@@ -416,6 +475,12 @@ struct TierWalk {
     hole_text: i64,
     /// The function being walked borrows its subject: `ref self`.
     lent_self: bool,
+    /// The `let`s linked to where their list goes, found by the walk before.
+    adopted: collections::BTreeMap[i64, Declaring],
+    /// Every position found to keep text of its own because a view of static
+    /// text read out of it went where text of its own is kept, by any walk so
+    /// far: once found, it stays found, so the fixpoint does not swing.
+    demoted: collections::BTreeSet[String],
 }
 
 fn open_tier_scope(mut walk: TierWalk) {
@@ -466,7 +531,7 @@ fn bind_tier_local(name: String, local: TierLocal, mut walk: TierWalk) {
 }
 
 fn plain_local(kinds: Kinds) -> TierLocal {
-    return TierLocal { kinds: kinds, of: null, literal: -1, declared: null }
+    return TierLocal { kinds: kinds, of: null, literal: -1, declared: null, from: null, empty: -1 }
 }
 
 fn tier_at(word: ref String, walk: ref TierWalk) -> Tier {
@@ -507,8 +572,13 @@ fn flow_type(owner: ref TextOwner, ty: ref Type, mut path: Vec[i64], kinds: ref 
     }
     if a_container(ask.names, ty) {
         let mut at = 0
+        let keyed = a_map(ask.names, ty)
         for arg in ty.generics {
             path.push(at)
+            if keyed {
+                let word = seen(owner, path, walk)
+                walk.flows.in_maps.insert(word)
+            }
             flow_type(owner, arg, path, kinds, ask, walk)
             path.pop()
             at += 1
@@ -539,6 +609,28 @@ fn flow_value(going: ref TierGoing, value: ref Expr?, kinds: ref Kinds, ask: ref
     let linked = a_container(ask.names, ty) && comes_whole(value, ask, walk)
     if !linked {
         flow_type(owner, ty, path.clone(), kinds, ask, walk)
+    }
+    // **A view of static text read out of a position** is remembered with
+    // where it goes (ADR-282 D29).
+    if plain && kinds.still && value != null {
+        let given_value = value ?? return
+        let mut sources: Vec[String] = []
+        still_sources(given_value, ask, walk, sources)
+        let to = seen(owner, path, walk)
+        for from_word in sources {
+            if from_word != to {
+                walk.flows.still_into.insert((from_word.clone(), to.clone()))
+            }
+        }
+    }
+    if a_container(ask.names, ty) && path.len() == 0 && holds_text(ask.names, ty) {
+        adopt(value, going, ask, walk)
+    }
+    // **Into a type this walk does not follow** - a `ref` list, a tuple, a
+    // type of its own - a view of static text is kept unseen (ADR-282 D29).
+    if !plain && !a_container(ask.names, ty) && kinds.still && value != null {
+        let unseen = value ?? return
+        kept_unseen(unseen, ask, walk)
     }
     if walk.in_hole && walk.hole_text < 0 && going.wrap && plain {
         let word = seen(owner, path, walk)
@@ -571,6 +663,321 @@ struct TierGoing {
 
 fn going_into(owner: ref TextOwner, ty: ref Type, path: Vec[i64], wrap: bool) -> TierGoing {
     return TierGoing { owner: owner.clone(), ty: ty.clone(), path: path, wrap: wrap }
+}
+
+/// **An empty list going whole into a position is linked to it** (ADR-282
+/// D16): the `let` that bound it is declared with the position's type.
+fn adopt(value: ref Expr?, going: ref TierGoing, ask: ref TierAsk, mut walk: TierWalk) {
+    let given = value ?? return
+    let name = match given {
+        Expr::Variable(name, _) => ask.names.resolve(name).clone(),
+        else => return,
+    }
+    let local = tier_local(name, walk) ?? return
+    if local.empty < 0 {
+        return
+    }
+    walk.flows.adopted.insert(local.empty, Declaring { owner: going.owner.clone(), ty: going.ty.clone() })
+}
+
+/// `Vec()`, `collections::HashMap()`, `[]`: a list, a set or a map with
+/// nothing in it yet.
+fn an_empty_container(value: ref Expr, ask: ref TierAsk) -> bool {
+    return match value {
+        Expr::ListLit { items, .. } => items.len() == 0,
+        Expr::Call { func, args, .. } => {
+            if args.len() > 0 {
+                return false
+            }
+            let callee = tier_callee(func, ask) ?? return false
+            is_a_container_name(callee)
+        }
+        else => false,
+    }
+}
+
+/// Whether a container declares `String` anywhere inside it.
+fn holds_text(names: ref winnow_grammar::InternerContext, ty: ref Type) -> bool {
+    if plain_string(names, ty) {
+        return true
+    }
+    if !a_container(names, ty) {
+        return false
+    }
+    for arg in ty.generics {
+        if holds_text(names, arg) {
+            return true
+        }
+    }
+    return false
+}
+
+/// Record that values of these kinds go into the position of this word.
+fn flow_word(word: ref String, kinds: ref Kinds, mut walk: TierWalk) {
+    let before = walk.flows.positions[word]?.clone() ?? no_kinds()
+    walk.flows.positions.insert(word.clone(), kinds_joined(before, kinds))
+}
+
+/// The word of the `String` position a value is read out of whole: a name
+/// declared with one or read out of one, a field, what a function of this
+/// program hands back.
+fn text_source_word(value: ref Expr?, ask: ref TierAsk, mut walk: TierWalk) -> String? {
+    let given = value ?? return null
+    let source = source_of(given, ask, walk)
+    if source != null {
+        let found = source ?? return null
+        if !plain_string(ask.names, found.ty) {
+            return null
+        }
+        return seen(found.owner, no_path(), walk)
+    }
+    return match given {
+        Expr::Variable(name, _) => {
+            let local = tier_local(ask.names.resolve(name), walk) ?? return null
+            local.from?.clone()
+        }
+        else => null,
+    }
+}
+
+/// The word of the element position a loop over a declared list reads out of.
+fn element_word(iter: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> String? {
+    // `xs.iter()`, `xs.drain()`, `xs.into_iter()` hand out the elements of `xs`.
+    match iter {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let name = ask.names.resolve(method)
+            if args.len() == 0 && (name == "iter" || name == "drain" || name == "into_iter") {
+                return element_word(receiver, ask, walk)
+            }
+        }
+        else => {}
+    }
+    let found = source_of(iter, ask, walk) ?? return null
+    let ty = found.ty.clone()
+    if !a_container(ask.names, ty) || a_map(ask.names, ty) || ty.generics.len() == 0 {
+        return null
+    }
+    if !plain_string(ask.names, ty.generics[0]) {
+        return null
+    }
+    return seen(found.owner, [0], walk)
+}
+
+/// A view of static text and text of its own in one value: below they are
+/// one type, so the view's position keeps text of its own (ADR-282 D29).
+fn beside_its_own(kinds: ref Kinds) -> bool {
+    return kinds.still && kinds.owned
+}
+
+fn any_still(given: ref Vec[Kinds]) -> bool {
+    for kinds in given {
+        if kinds.still {
+            return true
+        }
+    }
+    return false
+}
+
+/// Whether `std` declares a method of this name on any type.
+fn std_has_method(method: ref String, ask: ref TierAsk) -> bool {
+    let within = f"::{method}"
+    for (key, _) in ask.library.functions {
+        if key.ends_with(ref within) {
+            return true
+        }
+    }
+    return false
+}
+
+/// Each argument a view of static text is in, kept where no position says
+/// what it is.
+fn kept_args(args: ref Vec[Expr], given: ref Vec[Kinds], ask: ref TierAsk, mut walk: TierWalk) {
+    let mut at = 0
+    for arg in args {
+        if at < given.len() && given[at].still {
+            kept_unseen(arg, ask, walk)
+        }
+        at += 1
+    }
+}
+
+/// A name that begins with a capital is a type's, or one of its variants'.
+fn names_a_type(name: ref String) -> bool {
+    let first = name.chars().next() ?? return false
+    return first >= 'A' && first <= 'Z'
+}
+
+/// **A value kept where no position says what it is** - a tuple's part, an
+/// enum's payload, one branch of an `if` beside text of its own - is text of
+/// its own: each position a view of static text in it was read out of keeps
+/// text of its own too (ADR-282 D29).
+fn kept_unseen(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) {
+    match value {
+        Expr::ListLit { items, .. } => {
+            for item in items {
+                kept_unseen(item, ask, walk)
+            }
+        }
+        Expr::Tuple(items, _) => {
+            for item in items {
+                kept_unseen(item, ask, walk)
+            }
+        }
+        Expr::Coalesce { value: first, fallback, .. } => {
+            kept_unseen(first, ask, walk)
+            kept_unseen(fallback, ask, walk)
+        }
+        // An element read out of a declared container: the container.
+        Expr::Index { base, .. } => {
+            let whole = source_of(base, ask, walk)
+            if container_source(whole, ask) {
+                kept_unseen(base, ask, walk)
+                return
+            }
+            let mut sources: Vec[String] = []
+            still_sources(value, ask, walk, sources)
+            for read_from in sources {
+                flow_word(read_from, owned_kinds(), walk)
+                walk.flows.demoted.insert(read_from.clone())
+            }
+        }
+        else => {
+            // A declared list, set or map: every `String` inside it.
+            let whole = source_of(value, ask, walk)
+            if whole != null {
+                let found = whole ?? return
+                if a_container(ask.names, found.ty) {
+                    demote_inside(found.owner, found.ty, [], ask, walk)
+                    return
+                }
+            }
+            let mut sources: Vec[String] = []
+            still_sources(value, ask, walk, sources)
+            for read_from in sources {
+                flow_word(read_from, owned_kinds(), walk)
+                walk.flows.demoted.insert(read_from.clone())
+            }
+        }
+    }
+}
+
+/// An `if` or a `match` whose values are literals and `null`: the checker
+/// types it `String?`, text of its own with each literal built (#441), so it
+/// is not static text yet.
+fn literals_beside_null(value: ref Expr) -> bool {
+    let mut tails: Vec[Expr] = []
+    match value {
+        Expr::If { then_branch, else_branch, .. } => {
+            let otherwise = else_branch ?? return false
+            if then_branch.stmts.len() != 1 || otherwise.stmts.len() != 1 {
+                return false
+            }
+            match then_branch.stmts[0].node {
+                Stmt::Expr(last) => tails.push(last.clone()),
+                else => return false,
+            }
+            match otherwise.stmts[0].node {
+                Stmt::Expr(last) => tails.push(last.clone()),
+                else => return false,
+            }
+        }
+        Expr::Match { arms, .. } => {
+            for arm in arms {
+                tails.push(arm.body.clone())
+            }
+        }
+        else => return false,
+    }
+    let mut nulls = false
+    for tail in tails {
+        if a_null(tail) {
+            nulls = true
+        } else if !a_literal_text(tail) {
+            return false
+        }
+    }
+    return nulls
+}
+
+fn a_variable(expr: ref Expr) -> bool {
+    return match expr {
+        Expr::Variable(_, _) => true,
+        else => false,
+    }
+}
+
+/// Every `String` inside a declared container keeps text of its own.
+fn demote_inside(owner: ref TextOwner, ty: ref Type, mut path: Vec[i64], ask: ref TierAsk, mut walk: TierWalk) {
+    if plain_string(ask.names, ty) {
+        let word = seen(owner, path, walk)
+        flow_word(word, owned_kinds(), walk)
+        walk.flows.demoted.insert(word)
+        return
+    }
+    if !a_container(ask.names, ty) {
+        return
+    }
+    let mut at = 0
+    for arg in ty.generics {
+        path.push(at)
+        demote_inside(owner, arg, path.clone(), ask, walk)
+        path.pop()
+        at += 1
+    }
+}
+
+/// Every position a value's text may be read out of whole: through the
+/// branches of an `if` or a `match`, a block's last value and both sides of
+/// `??`.
+fn still_sources(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk, mut out: Vec[String]) {
+    match value {
+        Expr::Block(block, _) => still_tail(block, ask, walk, out),
+        Expr::If { then_branch, else_branch, .. } => {
+            still_tail(then_branch, ask, walk, out)
+            let otherwise = else_branch ?? return
+            still_tail(otherwise, ask, walk, out)
+        }
+        Expr::Match { arms, .. } => {
+            for arm in arms {
+                still_sources(arm.body, ask, walk, out)
+            }
+        }
+        Expr::Coalesce { value: first, fallback, .. } => {
+            still_sources(first, ask, walk, out)
+            still_sources(fallback, ask, walk, out)
+        }
+        else => {
+            let read_from = text_source_word(value, ask, walk) ?? return
+            out.push(read_from)
+        }
+    }
+}
+
+fn still_tail(block: ref Block, ask: ref TierAsk, mut walk: TierWalk, mut out: Vec[String]) {
+    if block.stmts.len() == 0 {
+        return
+    }
+    match block.stmts[block.stmts.len() - 1].node {
+        Stmt::Expr(last) => still_sources(last, ask, walk, out),
+        else => {}
+    }
+}
+
+/// **Text changed in place is text of its own** (ADR-282 D29): the
+/// position the changed value is declared as, or was read out of, has text
+/// of its own flowing in.
+fn changed_in_place(target: ref Expr, ask: ref TierAsk, mut walk: TierWalk) {
+    let place = place_of(target, ask, walk)
+    if place != null {
+        let found = place ?? return
+        if plain_string(ask.names, found.ty) {
+            let word = seen(found.owner, no_path(), walk)
+            flow_word(word, owned_kinds(), walk)
+        }
+        return
+    }
+    let read_from = text_source_word(target, ask, walk) ?? return
+    flow_word(read_from, owned_kinds(), walk)
 }
 
 fn a_null(value: ref Expr) -> bool {
@@ -745,9 +1152,16 @@ fn link(from: ref Declaring, mut from_path: Vec[i64], to: ref Declaring, mut to_
     if !a_container(ask.names, from_ty) || !a_container(ask.names, to_ty) || from_ty.generics.len() != to_ty.generics.len() {
         return
     }
+    let keyed = a_map(ask.names, from_ty) || a_map(ask.names, to_ty)
     for at in 0..<from_ty.generics.len() {
         from_path.push(at)
         to_path.push(at)
+        if keyed {
+            let a = seen(from.owner, from_path, walk)
+            let b = seen(to.owner, to_path, walk)
+            walk.flows.in_maps.insert(a)
+            walk.flows.in_maps.insert(b)
+        }
         let inner_from = Declaring { owner: from.owner.clone(), ty: from_ty.generics[at].clone() }
         let inner_to = Declaring { owner: to.owner.clone(), ty: to_ty.generics[at].clone() }
         link(inner_from, from_path.clone(), inner_to, to_path.clone(), ask, walk)
@@ -778,6 +1192,7 @@ fn kinds_of(owner: ref TextOwner, ty: ref Type, mut path: Vec[i64], ask: ref Tie
             Tier::Owned => owned_kinds(),
             Tier::View => view_kinds(),
             Tier::Mixed => either_kinds(),
+            Tier::Lasting => still_kinds(),
         }
     }
     if ty.is_view && ask.names.resolve(ty.name) == "String" {
@@ -861,12 +1276,22 @@ fn tier_block(block: ref Block, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
 fn tier_statement(stmt: ref Stmt, at: i64, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
     match stmt {
         Stmt::Let { names, value, ty, .. } => tier_let(names, value, ty, at, ask, walk),
-        Stmt::Assign { target, value, .. } => tier_assign(target, value, ask, walk),
+        Stmt::Assign { target, op, value } => {
+            tier_assign(target, value, ask, walk)
+            if op != null {
+                changed_in_place(target, ask, walk)
+            }
+        }
         Stmt::For { bindings, iter, body, .. } => {
             let kinds = tier_expr(iter, ask, walk)
+            let from = element_word(iter, ask, walk)
             open_tier_scope(walk)
             for binding in bindings {
-                bind_tier_local(ask.names.resolve(binding).clone(), plain_local(kinds.clone()), walk)
+                let mut local = plain_local(kinds.clone())
+                if bindings.len() == 1 {
+                    local.from = from?.clone()
+                }
+                bind_tier_local(ask.names.resolve(binding).clone(), local, walk)
             }
             tier_block(body, ask, walk)
             close_tier_scope(walk)
@@ -890,8 +1315,10 @@ fn tier_let(names: ref Vec[winnow_grammar::Symbol], value: ref Expr, ty: ref Typ
     let kinds = tier_expr(value, ask, walk)
     let mut of = tier_struct_of(value, ask, walk)
     let mut literal = -1
+    let mut empty = -1
     let mut declared: Declaring? = null
     let written = ty != null
+    let from = text_source_word(value, ask, walk)
     if written {
         let declared_ty = ty?.clone() ?? return
         of = ask.names.resolve(declared_ty.name).clone()
@@ -906,6 +1333,12 @@ fn tier_let(names: ref Vec[winnow_grammar::Symbol], value: ref Expr, ty: ref Typ
         if container_source(source, ask) {
             declared = source
         }
+        // **And an empty one is the list it goes into whole**: what is put
+        // into it goes there.
+        if declared == null && an_empty_container(value, ask) {
+            empty = at
+            declared = walk.adopted[at]?.clone()
+        }
     }
     let mut bound = kinds
     if declared != null {
@@ -918,14 +1351,14 @@ fn tier_let(names: ref Vec[winnow_grammar::Symbol], value: ref Expr, ty: ref Typ
         }
     }
     if names.len() == 1 {
-        let local = TierLocal { kinds: bound, of: of, literal: literal, declared: declared }
+        let local = TierLocal { kinds: bound, of: of, literal: literal, declared: declared, from: from, empty: empty }
         bind_tier_local(ask.names.resolve(names[0]).clone(), local, walk)
         return
     }
     // **Each part of a tuple is bound to the tuple's kind** where that is one
     // kind (`let (name, rest) = line.split_at(at)` binds two views); parts of
     // different kinds are text of their own, as an unbound name is.
-    if !written && !(bound.owned && bound.view) && !bound.either {
+    if !written && !(bound.owned && (bound.view || bound.still)) && !bound.either {
         for name in names {
             bind_tier_local(ask.names.resolve(name).clone(), plain_local(bound.clone()), walk)
         }
@@ -981,7 +1414,18 @@ fn tier_assign(target: ref Expr, value: ref Expr, ask: ref TierAsk, mut walk: Ti
         // `m[k] = v`: a map's key and value, a run's element.
         Expr::Index { base, index, .. } => {
             let key = tier_expr(index, ask, walk)
-            let place = place_of(base, ask, walk) ?? return
+            let found_place = place_of(base, ask, walk)
+            if found_place == null {
+                // Into a container no position this walk sees declares.
+                if key.still {
+                    kept_unseen(index, ask, walk)
+                }
+                if kinds.still {
+                    kept_unseen(value, ask, walk)
+                }
+                return
+            }
+            let place = found_place ?? return
             let ty = place.ty.clone()
             if !a_container(ask.names, ty) {
                 return
@@ -1002,6 +1446,9 @@ fn tier_assign(target: ref Expr, value: ref Expr, ask: ref TierAsk, mut walk: Ti
             if place != null {
                 let found = place ?? return
                 flow_value(going_into(found.owner, found.ty, [], true), value, kinds, ask, walk)
+            } else if kinds.still && !a_variable(target) {
+                // A field of a struct this walk does not declare.
+                kept_unseen(value, ask, walk)
             }
             let name = match target {
                 Expr::Variable(name, _) => ask.names.resolve(name).clone(),
@@ -1010,6 +1457,12 @@ fn tier_assign(target: ref Expr, value: ref Expr, ask: ref TierAsk, mut walk: Ti
             let mut local = tier_local(name, walk) ?? return
             if local.declared == null {
                 local.kinds = kinds_joined(local.kinds, kinds)
+                // Below, the name is of the type of the position it was read
+                // out of (ADR-282 D29).
+                let read_from: String = local.from?.clone() ?? ""
+                if read_from != "" {
+                    flow_word(read_from, kinds, walk)
+                }
             }
             // Assigned again: no longer the literal it was bound to.
             local.literal = -1
@@ -1133,6 +1586,9 @@ fn flow_args(key: ref String, args: ref Vec[Expr], given: ref Vec[Kinds], ask: r
         if at < function.params.len() {
             let owner = TextOwner::Param(key.clone(), at)
             flow_value(going_into(owner, function.params[at], [], false), args[at], given[at], ask, walk)
+            if at < function.changes.len() && function.changes[at] {
+                changed_in_place(args[at], ask, walk)
+            }
         }
         at += 1
     }
@@ -1210,10 +1666,24 @@ fn tier_expr(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
                 let otherwise = else_branch ?? return out
                 out = kinds_joined(out, tier_block(otherwise, ask, walk))
             }
+            if beside_its_own(out) {
+                kept_unseen(expr, ask, walk)
+            }
+            if literals_beside_null(expr) {
+                return owned_kinds()
+            }
             out
         }
         Expr::Match { value, arms, .. } => {
-            tier_expr(value, ask, walk)
+            let scrutinee = tier_expr(value, ask, walk)
+            // **What a list pattern binds** is not followed: a list of static
+            // text matched on keeps text of its own (ADR-282 D29).
+            if scrutinee.still {
+                let whole = source_of(value, ask, walk)
+                if container_source(whole, ask) {
+                    kept_unseen(value, ask, walk)
+                }
+            }
             let mut out = no_kinds()
             for arm in arms {
                 if arm.guard != null {
@@ -1221,6 +1691,12 @@ fn tier_expr(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
                     tier_expr(guard, ask, walk)
                 }
                 out = kinds_joined(out, tier_expr(arm.body, ask, walk))
+            }
+            if beside_its_own(out) {
+                kept_unseen(expr, ask, walk)
+            }
+            if literals_beside_null(expr) {
+                return owned_kinds()
             }
             out
         }
@@ -1243,8 +1719,13 @@ fn tier_expr(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
             owned_kinds()
         }
         Expr::Coalesce { value, fallback, .. } => {
-            let out = tier_expr(value, ask, walk)
-            kinds_joined(out, tier_expr(fallback, ask, walk))
+            let first = tier_expr(value, ask, walk)
+            let out = kinds_joined(first, tier_expr(fallback, ask, walk))
+            if beside_its_own(out) {
+                kept_unseen(value, ask, walk)
+                kept_unseen(fallback, ask, walk)
+            }
+            out
         }
         Expr::TryCatch { expr, handler, .. } => {
             let out = tier_expr(expr, ask, walk)
@@ -1262,17 +1743,40 @@ fn tier_expr(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
             flow_result(given, kinds, ask, walk)
             no_kinds()
         }
-        Expr::Binary { lhs, rhs, .. } => {
-            tier_expr(lhs, ask, walk)
+        Expr::Binary { op, lhs, rhs, .. } => {
+            let left = tier_expr(lhs, ask, walk)
             tier_expr(rhs, ask, walk)
+            let adds = match op {
+                BinaryOp::Add => true,
+                else => false,
+            }
+            if adds && left.still {
+                kept_unseen(lhs, ask, walk)
+            }
             owned_kinds()
         }
         Expr::Cast { expr, .. } => {
             tier_expr(expr, ask, walk)
             owned_kinds()
         }
-        Expr::Tuple(items, _) => items_kinds(items, ask, walk),
-        Expr::ListLit { items, .. } => items_kinds(items, ask, walk),
+        Expr::Tuple(items, _) => {
+            let out = items_kinds(items, ask, walk)
+            if out.still {
+                for item in items {
+                    kept_unseen(item, ask, walk)
+                }
+            }
+            out
+        }
+        Expr::ListLit { items, .. } => {
+            let out = items_kinds(items, ask, walk)
+            if beside_its_own(out) {
+                for item in items {
+                    kept_unseen(item, ask, walk)
+                }
+            }
+            out
+        }
         Expr::ListRepeat { value, count, .. } => {
             tier_expr(value, ask, walk)
             tier_expr(count, ask, walk)
@@ -1320,6 +1824,15 @@ fn tier_struct_field(owner: ref String, field: ref FieldInit, ask: ref TierAsk, 
     let kinds = field_value_kinds(field, shorthand, ask, walk)
     let name = ask.names.resolve(field.name).clone()
     let key = (owner.clone(), name.clone())
+    if !walk.declared.fields.contains_key(key) {
+        if kinds.still && field.value != null {
+            let value = field.value ?? return
+            kept_unseen(value, ask, walk)
+        } else if kinds.still {
+            kept_unseen(shorthand, ask, walk)
+        }
+        return
+    }
     let found = walk.declared.fields[key]?.clone() ?? return
     let into = TextOwner::Field(owner.clone(), name)
     flow_value(going_into(into, found.ty, [], false), field.value, kinds, ask, walk)
@@ -1353,6 +1866,13 @@ fn call_kinds(func: ref Expr, args: ref Vec[Expr], ask: ref TierAsk, mut walk: T
     if args.len() == 0 && is_a_container_name(callee) {
         return no_kinds()
     }
+    // **A value built by a type's name keeps what it is given** - an
+    // enum's variant, `Escape::Outer(name)` - and so may a function of
+    // another file of the package: no position this walk sees says what
+    // (ADR-282 D29).
+    if names_a_type(last_segment(callee)) || !ask.library.functions.contains_key(callee) {
+        kept_args(args, given, ask, walk)
+    }
     return std_result(callee, ask)
 }
 
@@ -1379,6 +1899,9 @@ fn parsed_parameter(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) {
 
 fn method_kinds(receiver: ref Expr, method: ref String, args: ref Vec[Expr], ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
     let received = tier_expr(receiver, ask, walk)
+    if changes_its_text(method) {
+        changed_in_place(receiver, ask, walk)
+    }
     let mut given: Vec[Kinds] = []
     for arg in args {
         given.push(tier_expr(arg, ask, walk))
@@ -1408,6 +1931,16 @@ fn method_kinds(receiver: ref Expr, method: ref String, args: ref Vec[Expr], ask
         }
         return out
     }
+    // **A method neither this file nor `std` declares** - one of another
+    // file of the package - may keep what it is given (ADR-282 D29).
+    if !puts_its_argument(method) && any_still(given) && !std_has_method(method, ask) {
+        kept_args(args, given, ask, walk)
+    }
+    // **Into a container no position this walk sees declares**: a list of
+    // its own or of a struct of another file.
+    if puts_its_argument(method) && any_still(given) && place_of(receiver, ask, walk) == null {
+        kept_args(args, given, ask, walk)
+    }
     // **Into a container that declares its element `String`**.
     let place = place_of(receiver, ask, walk)
     if place != null {
@@ -1425,6 +1958,12 @@ fn method_kinds(receiver: ref Expr, method: ref String, args: ref Vec[Expr], ask
         }
         if hands_back_an_element(method) {
             return element_kinds(found, method == "keys", ask, walk)
+        }
+        // **A copy of a list is a list of the same text** below: where that
+        // text is static, the copy is a list of text of its own, so the list
+        // keeps text of its own (ADR-282 D29).
+        if (method == "clone" || method == "to_owned" || method == "to_vec") && args.len() == 0 && a_container(ask.names, ty) && received.still {
+            demote_inside(found.owner, ty, [], ask, walk)
         }
     }
     // **What `map` makes is what its lambda hands back**, with the lambda's
@@ -1548,7 +2087,10 @@ fn result_kinds(key: ref String, ask: ref TierAsk, walk: ref TierWalk) -> Kinds 
 /// A view of text of these kinds: a view of a literal is as lasting as the
 /// literal, and a view of anything else is a view.
 fn viewed(received: ref Kinds) -> Kinds {
-    if received.lasting && !received.owned && !received.view && !received.either {
+    if (received.lasting || received.still) && !received.owned && !received.view && !received.either {
+        if received.still {
+            return still_kinds()
+        }
         return lasting_kinds()
     }
     return view_kinds()
@@ -1577,9 +2119,22 @@ fn walk_program(program: ref Program, ask: ref TierAsk, mut walk: TierWalk) {
                 }
             }
             Item::Grammar(def) => walk_grammar(def, ask, walk),
+            // A test's and a bench's values flow as a function's do.
+            Item::Test { body, .. } => walk_body(body, ask, walk),
+            Item::Bench { body, .. } => walk_body(body, ask, walk),
             else => {}
         }
     }
+}
+
+fn walk_body(body: ref Block, ask: ref TierAsk, mut walk: TierWalk) {
+    walk.locals = collections::BTreeMap()
+    walk.frames = []
+    walk.result = null
+    walk.in_hole = false
+    walk.hole_text = -1
+    walk.lent_self = false
+    tier_block(body, ask, walk)
 }
 
 /// **A rule's action is walked as a function's body is**: the names its
@@ -1731,14 +2286,14 @@ fn walk_function(item: ref Item, target: String?, ask: ref TierAsk, mut walk: Ti
         let owner = TextOwner::Param(key.clone(), at)
         let kinds = kinds_of(owner, arg.ty, [], ask, walk)
         let of: String = ask.names.resolve(arg.ty.name).clone()
-        let local = TierLocal { kinds: kinds, of: of, literal: -1, declared: Declaring { owner: owner, ty: arg.ty.clone() } }
+        let local = TierLocal { kinds: kinds, of: of, literal: -1, declared: Declaring { owner: owner, ty: arg.ty.clone() }, from: null, empty: -1 }
         bind_tier_local(ask.names.resolve(arg.name).clone(), local, walk)
         at += 1
     }
     walk.lent_self = false
     if receiver != null && target != null {
         walk.lent_self = receiver?.is_ref ?? false
-        let local = TierLocal { kinds: owned_kinds(), of: target?.clone(), literal: -1, declared: null }
+        let local = TierLocal { kinds: owned_kinds(), of: target?.clone(), literal: -1, declared: null, from: null, empty: -1 }
         bind_tier_local("self", local, walk)
     }
     let tail = tier_block(body, ask, walk)
@@ -1756,13 +2311,22 @@ fn walk_function(item: ref Item, target: String?, ask: ref TierAsk, mut walk: Ti
 
 /// Linked positions are one representation: each gets what flows into any of
 /// them, and none is mixed where one of them cannot be.
-fn decide_tiers(flows: ref Flows, declared: ref TextDeclared) -> collections::BTreeMap[String, Tier] {
+fn decide_tiers(flows: ref Flows, declared: ref TextDeclared, mut demoted: collections::BTreeSet[String]) -> collections::BTreeMap[String, Tier] {
     let mut positions = flows.positions.clone()
+    for word in flows.demoted {
+        demoted.insert(word.clone())
+    }
+    for word in demoted {
+        let before = positions[word]?.clone() ?? no_kinds()
+        positions.insert(word.clone(), kinds_joined(before, owned_kinds()))
+    }
     // **A published parameter's text may be either kind** (ADR-282 D23):
     // below it takes whatever hands over as `EitherText`. Its elements, a
     // published field and a published result stay what they are published
     // as.
     let mut fixed: collections::BTreeSet[String] = collections::BTreeSet()
+    // Positions that are never static text: inside a map.
+    let mut never: collections::BTreeSet[String] = flows.in_maps.clone()
     for (word, _) in positions {
         if flows.unwrappable.contains(word) || fixed_by_publishing(word, flows, declared) {
             fixed.insert(word.clone())
@@ -1771,6 +2335,39 @@ fn decide_tiers(flows: ref Flows, declared: ref TextDeclared) -> collections::BT
     let mut changed = true
     while changed {
         changed = false
+        // **Where a view of static text goes beside text of its own, the
+        // position it was read out of keeps text of its own too** (ADR-282
+        // D29): its literals are built where they stand, as before.
+        for (from, to) in flows.still_into {
+            let into = positions[to]?.clone() ?? no_kinds()
+            let kept = into.owned || fixed.contains(to) || never.contains(to) || a_published_parameter(to, flows, declared)
+            if kept && !into.view && !into.either && joins_kinds(from, kinds_joined(positions[from]?.clone() ?? no_kinds(), owned_kinds()), positions) {
+                demoted.insert(from.clone())
+                changed = true
+            }
+        }
+        // **A name bound to a literal is one binding** (ADR-282 D17): kept
+        // anywhere as text of its own, it is text of its own everywhere it
+        // is kept.
+        for (_, kept) in flows.literal_lets {
+            let mut owned = false
+            for word in kept {
+                let tier = tier_of_kinds(positions[word]?.clone() ?? no_kinds())
+                let published = fixed.contains(word) || never.contains(word) || a_published_parameter(word, flows, declared)
+                if owned_tier(tier) || (lasting_tier(tier) && published) {
+                    owned = true
+                }
+            }
+            if owned {
+                for word in kept {
+                    let before = positions[word]?.clone() ?? no_kinds()
+                    if lasting_tier(tier_of_kinds(before)) && joins_kinds(word, kinds_joined(before, owned_kinds()), positions) {
+                        demoted.insert(word.clone())
+                        changed = true
+                    }
+                }
+            }
+        }
         for (a, b) in flows.links {
             let mut both = positions[a]?.clone() ?? no_kinds()
             both = kinds_joined(both, positions[b]?.clone() ?? no_kinds())
@@ -1783,6 +2380,11 @@ fn decide_tiers(flows: ref Flows, declared: ref TextDeclared) -> collections::BT
             if fixed.contains(a) != fixed.contains(b) {
                 fixed.insert(a.clone())
                 fixed.insert(b.clone())
+                changed = true
+            }
+            if never.contains(a) != never.contains(b) {
+                never.insert(a.clone())
+                never.insert(b.clone())
                 changed = true
             }
         }
@@ -1801,6 +2403,12 @@ fn decide_tiers(flows: ref Flows, declared: ref TextDeclared) -> collections::BT
         if mixed(tier) && fixed.contains(word) {
             tier = Tier::Owned
         }
+        // **What is published keeps text of its own** where only literals
+        // flow in: this walk reads one file, and another file of the package
+        // may put text of its own there (ADR-282 D22, D29).
+        if lasting_tier(tier) && (fixed.contains(word) || never.contains(word) || a_published_parameter(word, flows, declared)) {
+            tier = Tier::Owned
+        }
         if !owned_tier(tier) {
             out.insert(word.clone(), tier)
         }
@@ -1809,6 +2417,15 @@ fn decide_tiers(flows: ref Flows, declared: ref TextDeclared) -> collections::BT
         out.insert(word.clone(), Tier::View)
     }
     return out
+}
+
+fn a_published_parameter(word: ref String, flows: ref Flows, declared: ref TextDeclared) -> bool {
+    let position = flows.known[word] ?? return false
+    let a_parameter = match position.owner {
+        TextOwner::Param(_, _) => true,
+        else => false,
+    }
+    return a_parameter && position_published(position.owner, declared)
 }
 
 fn joins_kinds(word: ref String, both: ref Kinds, mut positions: collections::BTreeMap[String, Kinds]) -> bool {
@@ -1850,6 +2467,7 @@ fn tier_word(tier: Tier) -> String {
         Tier::Owned => "owned",
         Tier::View => "view",
         Tier::Mixed => "mixed",
+        Tier::Lasting => "lasting",
     }
 }
 
@@ -1858,15 +2476,18 @@ fn tier_word(tier: Tier) -> String {
 pub fn text_tiers(program: ref Program, ask: ref TierAsk) -> TextTiers {
     let declared = declared_of(program, ask.names)
     let text = string_type(declared, ask.names)
-    let mut walk = TierWalk { declared: declared, tiers: collections::BTreeMap(), flows: no_flows(), locals: collections::BTreeMap(), frames: [], result: null, in_hole: false, hole_text: -1, lent_self: false }
+    let mut walk = TierWalk { declared: declared, tiers: collections::BTreeMap(), flows: no_flows(), locals: collections::BTreeMap(), frames: [], result: null, in_hole: false, hole_text: -1, lent_self: false, adopted: collections::BTreeMap(), demoted: collections::BTreeSet() }
     for _ in 0..<16 {
         walk.flows = no_flows()
         walk_program(program, ask, walk)
-        let next = decide_tiers(walk.flows, walk.declared)
-        if same_tiers(next, walk.tiers) {
+        let demoted_before = walk.demoted.len()
+        let next = decide_tiers(walk.flows, walk.declared, walk.demoted)
+        let linked = same_adopted(walk.flows.adopted, walk.adopted)
+        if same_tiers(next, walk.tiers) && linked && walk.demoted.len() == demoted_before {
             break
         }
         walk.tiers = next
+        walk.adopted = walk.flows.adopted.clone()
     }
     let mut tiers: Vec[(TextPosition, Tier)] = []
     for (word, tier) in walk.tiers {
@@ -1884,7 +2505,24 @@ pub fn text_tiers(program: ref Program, ask: ref TierAsk) -> TextTiers {
             }
         }
     }
-    return TextTiers { tiers: tiers, lets: lets, text: text, wraps: walk.flows.wraps.clone(), hole_wraps: walk.flows.hole_wraps.clone() }
+    let mut adopted: collections::BTreeMap[i64, TierAdopted] = collections::BTreeMap()
+    for (at, target) in walk.flows.adopted {
+        adopted.insert(at.clone(), TierAdopted { owner: target.owner.clone(), ty: target.ty.clone() })
+    }
+    return TextTiers { tiers: tiers, lets: lets, text: text, wraps: walk.flows.wraps.clone(), hole_wraps: walk.flows.hole_wraps.clone(), adopted: adopted }
+}
+
+fn same_adopted(a: ref collections::BTreeMap[i64, Declaring], b: ref collections::BTreeMap[i64, Declaring]) -> bool {
+    if a.len() != b.len() {
+        return false
+    }
+    for (at, target) in a {
+        let other = b[at] ?? return false
+        if owner_word(target.owner) != owner_word(other.owner) {
+            return false
+        }
+    }
+    return true
 }
 
 fn no_path() -> Vec[i64] {

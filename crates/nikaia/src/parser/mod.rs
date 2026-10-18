@@ -1798,6 +1798,7 @@ grammar! {
                     is_mut: mutable,
                     is_slice: false,
                     either: false,
+                    lasting: false,
                 }
             }
           // **An integer where a type argument stands**
@@ -1823,6 +1824,7 @@ grammar! {
                     is_mut: false,
                     is_slice: false,
                     either: false,
+                    lasting: false,
                 }
             }
           // `(A, B)`. The parts go where a named type's arguments go, so
@@ -1842,6 +1844,7 @@ grammar! {
                     is_mut: false,
                     is_slice: false,
                     either: false,
+                    lasting: false,
                 }
             }
           // **A parameter may be code**
@@ -1872,6 +1875,7 @@ grammar! {
                     is_mut: false,
                     is_slice: false,
                     either: false,
+                    lasting: false,
                 }
             }
 

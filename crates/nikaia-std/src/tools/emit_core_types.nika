@@ -226,6 +226,11 @@ impl EmitState {
             let params = lifetimes.params()
             return f"nikaia_std::either_text::EitherText<{params}>"
         }
+        // A view of the program's own static text borrows nothing (ADR-282
+        // D29).
+        if ty.is_view && ty.lasting && name == "String" && ty.generics.len() == 0 {
+            return "&'static str"
+        }
         // A view is a borrow of the parser's input (ADR-283).
         if ty.is_view {
             out.push_str(lifetimes.reference())

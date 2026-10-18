@@ -739,6 +739,9 @@ pub fn check_core_a_safe_call[H: CheckHost](mut state: CheckState, world: ref Ch
     // **And a copy of a view is text of its own** (ADR-293 D24).
     if inner.is_a_view() && name == "clone" && given.len() == 0 {
         state.facts.owned_copies.insert(id_of(receiver) as i64)
+        if inner.owned().text() == "String" {
+            state.facts.text_copies.insert(id_of(receiver) as i64)
+        }
     }
     // **A field that holds a function is called as one** here too (#533).
     let inside = state.inside_a_door

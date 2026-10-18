@@ -790,3 +790,231 @@ fn the_http_example_without_ref_on_its_results_lowers_the_same() {
         lowered(&without, Build::default())
     );
 }
+
+// ---------------------------------------------------------------------------
+/// **A position only literals flow into is a view of the program's own text**
+/// ([ADR-282](../../../docs/specification/adr/adr-282.md) D29, #659):
+/// `&'static str` below, with no lifetime and no copy - a field, a list's
+/// element, a result (an all-literal `if` and `match` too) and a `let`. A
+/// map's keys and values stay text of their own: a lookup may be by any text.
+const LITERALS_ONLY: &str = r##"struct Row {
+    name: String,
+    note: String,
+}
+
+struct Team {
+    names: Vec[String],
+    lead: String,
+}
+
+impl Team {
+    fn first(ref self) -> String {
+        return self.lead
+    }
+}
+
+fn label(big: bool) -> String {
+    if big { "large" } else { "small" }
+}
+
+fn kind(n: i64) -> String {
+    return match n {
+        0 => "zero",
+        1 => "one",
+        else => "many",
+    }
+}
+
+fn make() -> Team {
+    return Team { names: ["Ada", "Grace"], lead: "Ada" }
+}
+
+fn main() {
+    let mut rows = Vec()
+    for i in 0..<3 {
+        rows.push(Row { name: "Hamburg", note: "a <note>" })
+    }
+    let t = make()
+    let x: String = "plain"
+    println(f"{rows.len()} {rows[0].name} {rows[2].note}")
+    println(f"{label(true)} {label(false)} {kind(1)}")
+    println(f"{t.names.len()} {t.names[1]} {t.first()} {x}")
+}
+"##;
+
+#[test]
+fn a_position_only_literals_flow_into_is_static_text() {
+    runs(
+        "literals-only",
+        LITERALS_ONLY,
+        "3 Hamburg a <note>\nlarge small one\n2 Grace Ada plain",
+    );
+    let rust = lowered(LITERALS_ONLY, Build::default());
+    assert!(!rust.contains("String::from"), "{rust}");
+    for wanted in [
+        "struct Row {\n    name: &'static str,\n    note: &'static str,",
+        "names: Vec<&'static str>,",
+        "lead: &'static str,",
+        "fn label(big: bool) -> &'static str",
+        "fn kind(n: i64) -> &'static str",
+        "fn first(&self) -> &'static str",
+        "let x: &'static str = \"plain\"",
+    ] {
+        assert!(rust.contains(wanted), "{wanted}\n{rust}");
+    }
+}
+
+/// **`benches/template.nika` without `ref` on its fields** keeps the literals
+/// as they are: no `String::from` per row, and `Row` takes no lifetime.
+#[test]
+fn the_template_bench_without_ref_copies_no_literal() {
+    let path =
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../benches/template.nika");
+    let source = std::fs::read_to_string(&path).expect("benches/template.nika");
+    let without = source.replace(": ref String", ": String");
+    assert!(findings(&without).is_empty(), "{:#?}", findings(&without));
+    let rust = lowered(&without, Build::default());
+    assert!(!rust.contains("String::from"), "{rust}");
+    assert!(
+        rust.contains("pub struct Row {\n    name: &'static str,\n    note: &'static str,"),
+        "{rust}"
+    );
+}
+
+/// **With text of its own beside the literals, the literals are built** as
+/// before (ADR-282 D4, D29): a result, a list's element and a field, one
+/// `f"…"` each.
+#[test]
+fn literals_beside_text_of_its_own_are_built() {
+    let source = r##"struct Team {
+    names: Vec[String],
+    lead: String,
+}
+
+fn label(big: bool, n: i64) -> String {
+    if big { "large" } else { f"small {n}" }
+}
+
+fn main() {
+    let n = 3
+    let t = Team { names: ["Ada", f"Grace {n}"], lead: "Ada" }
+    let u = Team { names: ["Bob"], lead: f"Lead {n}" }
+    println(f"{label(false, n)} {t.names[1]} {t.lead} {u.lead}")
+}
+"##;
+    runs("literals-beside-own", source, "small 3 Grace 3 Ada Lead 3");
+    let rust = lowered(source, Build::default());
+    for wanted in [
+        "fn label(big: bool, n: i64) -> String",
+        "String::from(\"large\")",
+        "String::from(\"Ada\")",
+        "names: Vec<String>,",
+        "lead: String,",
+    ] {
+        assert!(rust.contains(wanted), "{wanted}\n{rust}");
+    }
+}
+
+/// **A published position both kinds flow into stays text of its own** and
+/// its literals are built (ADR-282 D22, D29); the ledger says `String`.
+#[test]
+fn a_published_position_literals_and_own_text_flow_into_stays_a_string() {
+    let source = r##"pub struct Card {
+    pub note: String,
+}
+
+pub fn make(n: i64) -> Card {
+    if n > 1 {
+        return Card { note: f"note {n}" }
+    }
+    return Card { note: "plain" }
+}
+
+fn main() {
+    println(f"{make(2).note} {make(1).note}")
+}
+"##;
+    runs("published-mixed", source, "note 2 plain");
+    let parsed = parse_to_ast(source).expect("the source parses");
+    let ledger = nikaia::contracts::Ledger::infer(&parsed).render();
+    assert!(ledger.contains("\"pub note: String\""), "{ledger}");
+    let rust = lowered(source, Build::default());
+    assert!(rust.contains("String::from(\"plain\")"), "{rust}");
+}
+
+/// **A local list linked to a field takes the field's tier** (ADR-282 D16,
+/// D29): only literals pushed, and both are static text; one `f"…"` pushed,
+/// and both are text of their own, the literal built. Refused with `NK1106`
+/// before.
+#[test]
+fn a_local_list_linked_to_a_field_takes_its_tier() {
+    let source = r##"struct Team {
+    names: Vec[String],
+}
+
+fn main() {
+    let mut names = Vec()
+    names.push("Ada")
+    names.push("Grace")
+    let t = Team { names: names }
+    println(f"{t.names.len()} {t.names[1]}")
+}
+"##;
+    runs("linked-literals", source, "2 Grace");
+    let rust = lowered(source, Build::default());
+    assert!(rust.contains("names: Vec<&'static str>,"), "{rust}");
+    assert!(!rust.contains("String::from"), "{rust}");
+    let mixed = source.replace("names.push(\"Grace\")", "names.push(f\"Grace {2}\")");
+    runs("linked-mixed", &mixed, "2 Grace 2");
+    let rust = lowered(&mixed, Build::default());
+    assert!(rust.contains("names: Vec<String>,"), "{rust}");
+    assert!(rust.contains("names.push(String::from(\"Ada\"))"), "{rust}");
+}
+
+/// **Text changed in place, or kept where no position says what it is, is
+/// text of its own** (ADR-282 D29): `push_str`, `+=`, a `mut` parameter, a
+/// name read out of a result and changed or assigned, a tuple's part and a
+/// list beside text of its own all keep the literals' positions `String`.
+#[test]
+fn text_changed_or_kept_unseen_stays_a_string() {
+    let source = r##"struct Row {
+    name: String,
+}
+
+fn label() -> String {
+    return "lbl"
+}
+
+fn other() -> String {
+    return "oth"
+}
+
+fn fill(mut out: String) {
+    out.push_str("!")
+}
+
+fn pair() -> (i64, String) {
+    let r = Row { name: "Ada" }
+    return (1, r.name)
+}
+
+fn main() {
+    let mut s: String = ""
+    s.push_str("a")
+    let mut t: String = "b"
+    t += "c"
+    let mut u: String = "d"
+    fill(u)
+    let mut v = label()
+    v.push_str("e")
+    let mut w = other()
+    w = f"w{1}"
+    let r = Row { name: "Bo" }
+    let mut names: Vec[String] = []
+    names.push(r.name)
+    names.push(f"g{2}")
+    println(f"{s} {t} {u} {v} {w} {names[0]} {pair().1}")
+}
+"##;
+    runs("changed-in-place", source, "a bc d! lble w1 Bo Ada");
+}

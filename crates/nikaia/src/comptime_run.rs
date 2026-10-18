@@ -984,6 +984,7 @@ fn written_type(ty: &Ty, parsed: &Parsed) -> Option<ast::Type> {
         is_mut: false,
         is_slice: false,
         either: false,
+        lasting: false,
     };
     match ty {
         Ty::Named { name, args, view } => {

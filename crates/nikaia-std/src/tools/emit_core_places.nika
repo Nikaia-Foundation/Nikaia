@@ -133,7 +133,17 @@ impl EmitState {
         let copy = self.facts.owned_copies.contains(node_key(receiver))
         let held_copy = walk.reached_copy
         walk.reached_copy = copy
-        let done = self.emit_core_a_field_call(world, walk, out, host, receiver, true, method, args, depth + 1, flow, scope)
+        // **A copy of text reached is `to_string`**: the bound name is a
+        // reference to the text, and where that text is a view (ADR-282 D29)
+        // `to_owned` would copy the reference.
+        let text_copy = copy && self.facts.text_copies.contains(node_key(receiver)) && args.len() == 0 && world.words.resolve(method) == "clone"
+        let mut done = false
+        if text_copy {
+            out.push("__nikaia_it.to_string()")
+            done = true
+        } else {
+            done = self.emit_core_a_field_call(world, walk, out, host, receiver, true, method, args, depth + 1, flow, scope)
+        }
         if !done {
             self.emit_core_method_call(world, walk, out, host, null, node_key(receiver), method, args, config, depth + 1, flow, scope)
         }

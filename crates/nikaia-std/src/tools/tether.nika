@@ -76,7 +76,7 @@ pub fn declare_unit(names: ref winnow_grammar::InternerContext, items: ref Vec[S
 pub fn a_parse_that_views(names: ref winnow_grammar::InternerContext, result: ref Type?, package: ref PackageTypes) -> bool {
     let ty = result ?? return false
     let name = names.resolve(ty.name)
-    if ty.is_view || package.borrowing.contains(name) {
+    if (ty.is_view && !ty.lasting) || package.borrowing.contains(name) {
         return true
     }
     for argument in ty.generics {

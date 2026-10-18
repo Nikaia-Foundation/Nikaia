@@ -129,7 +129,7 @@ impl EmitState {
     }
 
     fn carries_a_written_view(ref self, world: ref EmitWorld, ty: ref Type) -> bool {
-        if ty.is_view || self.borrows(world, ty.name) {
+        if (ty.is_view && !ty.lasting) || self.borrows(world, ty.name) {
             return true
         }
         for inner in ty.generics {

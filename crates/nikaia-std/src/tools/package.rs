@@ -262,6 +262,7 @@ pub struct Type {
     pub is_mut: bool,
     pub is_slice: bool,
     pub either: bool,
+    pub lasting: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -6315,9 +6316,9 @@ fn cx_choice_arms_out(plain: &CxPlain) -> String {
     arms.join(" ")
 }
 
-fn cx_value_of(shape: &CxByValue) -> String {
-    if shape.scalar { return String::from("value as u32"); }
-    String::from("value")
+fn cx_value_of(shape: &CxByValue) -> &'static str {
+    if shape.scalar { return "value as u32"; }
+    "value"
 }
 
 fn cx_handed_back(result: &CxResult, ctx: &CxCtx) -> String {
@@ -6418,26 +6419,26 @@ fn cx_wrapper(words: &winnow_grammar::InternerContext, ctx: &CxCtx, contracts: &
         exclusive = held_exclusively;
         if by_value {
             if held_exclusively && pauses { return Err(nikaia_std::error::throwing(CxRefused::Because(cx_not_yet(&written, "changing `self` across a pause")), &"cx_wrapper")); }
-            let mut constant: String = String::from("");
-            let mut pointer: String = String::from("*mut");
-            let mut binding: String = String::from("mut ");
+            let mut constant: &'static str = "";
+            let mut pointer: &'static str = "*mut";
+            let mut binding: &'static str = "mut ";
             if !held_exclusively {
-                constant = String::from("const ");
-                pointer = String::from("*const");
-                binding = String::from("");
+                constant = "const ";
+                pointer = "*const";
+                binding = "";
             }
             rust_params.push(format!("__nikaia_at: {} __nikaia_c_{}", pointer, owner));
             c_params.push(format!("{}{}_{} *self", constant, prefix, owner));
             checks.push_str(&format!("    // SAFETY: the C caller hands its struct, or NULL, and leaves it alone for the call (ADR-284 D16).\n    let Some(__nikaia_self) = (unsafe {{ nikaia_std::c_boundary::read(__nikaia_at) }}) else {{ return -1; }};\n    let Some({}__nikaia_self) = __nikaia_self.into_nikaia() else {{ return -1; }};\n", binding));
         } else {
             rust_params.push(format!("__nikaia_self: *const nikaia_std::c_boundary::Handle<{}>", owner));
-            let mut constant: String = String::from("");
-            let mut how: String = String::from("exclusive");
-            let mut binding: String = String::from("mut ");
+            let mut constant: &'static str = "";
+            let mut how: &'static str = "exclusive";
+            let mut binding: &'static str = "mut ";
             if !held_exclusively {
-                constant = String::from("const ");
-                how = String::from("shared");
-                binding = String::from("");
+                constant = "const ";
+                how = "shared";
+                binding = "";
             }
             c_params.push(format!("{}{}_{} *self", constant, prefix, owner));
             checks.push_str(&format!("    // SAFETY: the C caller hands a handle this library made and has not freed, or NULL (ADR-284 D5).\n    let {}__nikaia_self = match unsafe {{ nikaia_std::c_boundary::{}(__nikaia_self) }} {{ Ok(held) => held, Err(status) => return __nikaia_refused(status) }};\n", binding, how));
@@ -6470,11 +6471,11 @@ fn cx_wrapper(words: &winnow_grammar::InternerContext, ctx: &CxCtx, contracts: &
     let name = cx_escaped(&entry.name);
     let variant_of = entry.of_variant.is_some();
     let variant: String = nikaia_std::index::or(match entry.of_variant.as_ref().map(|__nikaia_it| __nikaia_it.variant.as_str()) {
-        Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+        Some(__nikaia_it) => Some(__nikaia_it.to_string()),
         None => None,
     }, || "".into());
     let pattern: String = nikaia_std::index::or(match entry.of_variant.as_ref().map(|__nikaia_it| __nikaia_it.pattern.as_str()) {
-        Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+        Some(__nikaia_it) => Some(__nikaia_it.to_string()),
         None => None,
     }, || "".into());
     let variant_pattern = pattern.to_owned();
@@ -6594,8 +6595,8 @@ fn cx_parameter(ctx: &CxCtx, contracts: &Ledger, key: &str, position: i64, param
             let as_text = *as_text;
             params.rust_params.push(format!("{}: *const {}, {}_len: usize", local, rust, local));
             params.c_params.push(format!("const {} *{}, size_t {}_len", c, param, param));
-            let mut read: String = String::from("run");
-            if as_text { read = String::from("text"); }
+            let mut read: &'static str = "run";
+            if as_text { read = "text"; }
             params.checks.push_str(&format!("    // SAFETY: the C caller keeps `{}_len` values at `{}` for the call (ADR-284 D5).\n    let Some({}) = (unsafe {{ nikaia_std::c_boundary::{}({}, {}_len) }}) else {{ return -1; }};\n", param, param, local, read, local, local));
             params.call_args.push(local.to_owned());
         },
@@ -7425,10 +7426,10 @@ pub fn cx_handled_structs(words: &winnow_grammar::InternerContext, items: &[Span
                             pattern = format!("{}(..)", path);
                             let mut at: i64 = 0;
                             for field in types.iter() {
-                                let mut places: Vec<String> = vec![];
+                                let mut places: Vec<&'static str> = vec![];
                                 let mut other: i64 = 0;
                                 while ((other) as usize) < types.len() {
-                                    if other == at { places.push(String::from("__nikaia_v")); } else { places.push(String::from("_")); }
+                                    if other == at { places.push("__nikaia_v"); } else { places.push("_"); }
                                     other += 1;
                                 }
                                 fields.push((format!("{}_{}", variant_name, at), format!("{}({})", path, places.join(", ")), field.clone()));
@@ -7754,12 +7755,12 @@ impl CxNode {
                     if count < 1 { count = 1; }
                     let mut c_result: String = String::from("void");
                     let mut back: String = String::from("");
-                    let mut early: String = String::from("return;");
+                    let mut early: &'static str = "return;";
                     if result.is_some() {
                         let shape = match result { Some(__nikaia_value) => __nikaia_value, None => continue };
                         c_result = shape.c.to_owned();
                         back = format!("{} back = 0;\n    if (!nk_{}(call->env, result, \"the callback's result\", &back)) {{\n        call->failed = true;\n        return 0;\n    }}\n    return back;\n", shape.c, cx_node_scalar(&shape));
-                        early = String::from("return 0;");
+                        early = "return 0;";
                     }
                     let handed_text = handed.join("\n    ");
                     self.trampolines.push(format!("static {} {}({}) {{\n    nk_call *call = ctx;\n    napi_value handed[{}];\n    napi_value undefined;\n    napi_value result;\n    if (call->failed) {}\n    {}\n    napi_get_undefined(call->env, &undefined);\n    if (napi_call_function(call->env, undefined, call->fn, {}, handed, &result) != napi_ok) {{\n        call->failed = true;\n        {}\n    }}\n    (void)result;\n    {}}}\n", c_result, trampoline, c_params.join(", "), count, early, handed_text, lent.len() as i64, early, back));
@@ -7826,10 +7827,10 @@ impl CxNode {
                     },
                     _ => {
                         let (c, back) = cx_node_back(out, ctx, constructor, &owner_text);
-                        let mut zero: String = String::from("0");
+                        let mut zero: &'static str = "0";
                         match *out {
-                            CxOut::Record(_) => { zero = String::from("{0}"); },
-                            CxOut::AbsentRecord(_) => { zero = String::from("{0}"); },
+                            CxOut::Record(_) => { zero = "{0}"; },
+                            CxOut::AbsentRecord(_) => { zero = "{0}"; },
                             _ => { },
                         }
                         locals.push(format!("{} out = {};", c, zero));
@@ -7906,8 +7907,8 @@ impl CxNode {
             handed_args.push(String::from("nk_landed"));
             handed_args.push(String::from("job"));
             handed_args.push(String::from("&job->ticket->op"));
-            let mut started: String = String::from("NULL");
-            if has_out { started = String::from("out"); }
+            let mut started: &'static str = "NULL";
+            if has_out { started = "out"; }
             async_text.push_str(&format!("    job = nk_start(env, &kept, {}, {}, &result);\n    if (!job) goto done;\n    status = {}_async({});\n    if (status != 0) nk_abandon(env, job, status);\ndone:\n    nk_release(kept);\n    (void)self;\n    return result;\n}}\n", started, finisher, symbol, handed_args.join(", ")));
             self.functions.push(async_text);
             promised = format!("{}_async", function);
@@ -8834,8 +8835,8 @@ impl CxPython {
                     if shape.scalar { args.push(format!("ord({})", name)); } else { args.push(name.to_owned()); }
                 },
                 CxIn::Run { ref rust, as_text, .. } => {
-                    let mut element: String = String::from("ctypes.c_bool");
-                    if as_text { element = String::from("ctypes.c_uint8"); } else if rust == "i32" { element = String::from("ctypes.c_int32"); } else if rust == "i64" { element = String::from("ctypes.c_int64"); } else if rust == "u8" { element = String::from("ctypes.c_uint8"); } else if rust == "f64" { element = String::from("ctypes.c_double"); }
+                    let mut element: &'static str = "ctypes.c_bool";
+                    if as_text { element = "ctypes.c_uint8"; } else if rust == "i32" { element = "ctypes.c_int32"; } else if rust == "i64" { element = "ctypes.c_int64"; } else if rust == "u8" { element = "ctypes.c_uint8"; } else if rust == "f64" { element = "ctypes.c_double"; }
                     argtypes.push(format!("ctypes.POINTER({})", element));
                     argtypes.push(String::from("ctypes.c_size_t"));
                     if as_text { before.push(format!("{}_at, {}_len = _text({})", name, name, name)); } else { before.push(format!("{}_at, {}_len = _run({}, {})", name, name, element, name)); }
@@ -8910,10 +8911,10 @@ impl CxPython {
                     c_args.push(String::from("ctypes.c_void_p"));
                     params.push(String::from("ctx"));
                     let mut restype: String = String::from("None");
-                    let mut default: String = String::from("None");
+                    let mut default: &'static str = "None";
                     if result.is_some() {
                         restype = cx_python_scalar(&match result { Some(__nikaia_value) => __nikaia_value, None => continue });
-                        default = String::from("0");
+                        default = "0";
                     }
                     let kind = format!("ctypes.CFUNCTYPE({}, {})", restype, c_args.join(", "));
                     argtypes.push(kind.to_owned());
@@ -9115,8 +9116,8 @@ impl CxPython {
                 };
                 if errno.is_some() {
                     let named = nikaia_std::index::or(errno, || "".into());
-                    let mut os: String = String::from("OSError");
-                    if named == "ENOENT" { os = String::from("FileNotFoundError"); } else if named == "EACCES" { os = String::from("PermissionError"); }
+                    let mut os: &'static str = "OSError";
+                    if named == "ENOENT" { os = "FileNotFoundError"; } else if named == "EACCES" { os = "PermissionError"; }
                     out.push_str(&format!("class {}(Error, {}):\n    \"\"\"`{}`, `{}`.\"\"\"\n    code = {}\n\n    def __init__(self, said):\n        {}.__init__(self, {}, said)\n\n\n", name, os, what, named, code_number, os, code_number));
                 } else { out.push_str(&format!("class {}(Error):\n    \"\"\"`{}`.\"\"\"\n    code = {}\n\n\n", name, what, code_number)); }
                 errors.push((name, code_number));
@@ -9128,7 +9129,7 @@ impl CxPython {
             table.push(format!("{}: {}", code, name));
         }
         out.push_str(&cx_python_helpers(prefix, &table.join(", ")));
-        if self.any_stream { out.push_str(&cx_python_stream()); }
+        if self.any_stream { out.push_str(cx_python_stream()); }
         if any_pause && self.any_async { out.push_str(&cx_python_ticket(prefix)); }
         for plain in ctx.plains.iter() {
             let mut values: String = String::from("");
@@ -9233,8 +9234,8 @@ fn cx_python_value(shape: &CxByValue) -> String {
 
 fn cx_python_helpers(prefix: &str, table: &str) -> String { format!("_ERRORS = {{{}}}\n\n_lib.{}_last_error.argtypes = [ctypes.POINTER(ctypes.c_uint8), ctypes.c_size_t, ctypes.POINTER(ctypes.c_size_t)]\n_lib.{}_last_error.restype = ctypes.c_int\n\n\ndef _buffer(call):\n    \"\"\"Asks the size, then hands a buffer of it (ADR-284 D6).\"\"\"\n    written = ctypes.c_size_t(0)\n    _check(call(None, 0, ctypes.byref(written)))\n    room = (ctypes.c_uint8 * max(written.value, 1))()\n    _check(call(room, written.value, ctypes.byref(written)))\n    return bytes(room[: written.value])\n\n\ndef _structs(kind, call):\n    \"\"\"Asks the count, then hands room for it, counted in structs (ADR-284 D16).\"\"\"\n    written = ctypes.c_size_t(0)\n    _check(call(None, 0, ctypes.byref(written)))\n    room = (kind * max(written.value, 1))()\n    _check(call(room, written.value, ctypes.byref(written)))\n    return list(room[: written.value])\n\n\ndef _said():\n    written = ctypes.c_size_t(0)\n    _lib.{}_last_error(None, 0, ctypes.byref(written))\n    room = (ctypes.c_uint8 * max(written.value, 1))()\n    _lib.{}_last_error(room, written.value, ctypes.byref(written))\n    return bytes(room[: written.value]).decode(\"utf-8\", \"replace\")\n\n\ndef _check(status):\n    if status != 0:\n        raise _ERRORS.get(status, Error)(_said())\n\n\ndef _calling(raised, default, call, *args):\n    try:\n        return call(*args)\n    except BaseException as error:\n        raised.append(error)\n        return default\n\n\ndef _bytes(data):\n    data = bytes(data)\n    return (ctypes.c_uint8 * len(data)).from_buffer_copy(data), len(data)\n\n\ndef _text(text):\n    return _bytes(text.encode(\"utf-8\"))\n\n\ndef _run(kind, values):\n    values = list(values)\n    return (kind * len(values))(*values), len(values)\n\n\n_lib.{}_init.restype = ctypes.c_int\n_lib.{}_shutdown.restype = ctypes.c_int\n\n\ndef init():\n    \"\"\"Starts the library, and starts it again after `shutdown` (ADR-284 D10).\"\"\"\n    _check(_lib.{}_init())\n\n\ndef shutdown():\n    \"\"\"Stops the library; every call after it raises `NotRunningError` until `init`.\"\"\"\n    _check(_lib.{}_shutdown())\n\n\n", table, prefix, prefix, prefix, prefix, prefix, prefix, prefix, prefix) }
 
-fn cx_python_stream() -> String {
-    String::from("def _stream(call):
+fn cx_python_stream() -> &'static str {
+    "def _stream(call):
     \"\"\"The items a callback is handed, yielded one at a time: the next is made
     after this one was asked for, and closing the generator is the stop (ADR-284 D21).\"\"\"
     import queue
@@ -9275,7 +9276,7 @@ fn cx_python_stream() -> String {
         raise outcome[0]
 
 
-")
+"
 }
 
 fn cx_python_ticket(prefix: &str) -> String { format!("_DONE = ctypes.CFUNCTYPE(None, ctypes.c_int, ctypes.c_void_p)\n_lib.{}_cancel.argtypes = [ctypes.c_void_p]\n_lib.{}_cancel.restype = ctypes.c_int\n_lib.{}_op_free.argtypes = [ctypes.c_void_p]\n_lib.{}_op_free.restype = ctypes.c_int\n# Every call in flight, with what it must keep alive until `done`.\n_HELD = {{}}\n\n\nclass Ticket:\n    \"\"\"An `_async` call: `cancel()` cancels it at its next pause point (ADR-284 D19).\"\"\"\n\n    def __init__(self):\n        self._op = ctypes.c_void_p()\n\n    def cancel(self):\n        if self._op:\n            _check(_lib.{}_cancel(self._op))\n\n    def __del__(self):\n        # Only once `done` has run: until then `_HELD` holds this.\n        if self._op:\n            _lib.{}_op_free(self._op)\n\n\ndef _settle(future, value):\n    if future.done():\n        return\n    if isinstance(value, BaseException):\n        future.set_exception(value)\n    else:\n        future.set_result(value)\n\n\ndef _start(function, args, finish, done):\n    loop = None\n    if done is None:\n        import asyncio\n\n        loop = asyncio.get_running_loop()\n        future = loop.create_future()\n    ticket = Ticket()\n    held = []\n\n    def landed(status, ctx):\n        value = finish(status)\n        _HELD.pop(id(held), None)\n        if loop is None:\n            done(value)\n        else:\n            try:\n                loop.call_soon_threadsafe(_settle, future, value)\n            except RuntimeError:\n                pass  # the loop has closed: nobody waits for it\n\n    callback = _DONE(landed)\n    held.extend([callback, args, ticket])\n    _HELD[id(held)] = held\n    _check(function(*args, callback, None, ctypes.byref(ticket._op)))\n    if loop is None:\n        return ticket\n    future.add_done_callback(lambda f: f.cancelled() and ticket.cancel())\n    return future\n\n\n", prefix, prefix, prefix, prefix, prefix, prefix) }
@@ -10951,15 +10952,15 @@ impl CheckState {
                 for index in 0..parts.len() as i64 {
                     let part = nikaia_std::index::get(&parts, nikaia_std::index::at(index));
                     if !self.boxed_part(world, path, index) || binds_a_part(&part) { self.a_pattern_inside_a_box_at(world, &part, span, at); } else {
-                        let mut why: String = String::from("");
+                        let mut why: &'static str = "";
                         let mut reported = true;
                         match at {
                             CheckDepth::Arm => {
                                 self.a_pattern_inside_a_box_at(world, &part, span, CheckDepth::InsideABox);
                                 reported = false;
                             },
-                            CheckDepth::InsideABox => { why = String::from("inside a part that is itself behind a pointer"); },
-                            CheckDepth::InAlternative => { why = String::from("in one alternative of an `|` pattern"); },
+                            CheckDepth::InsideABox => { why = "inside a part that is itself behind a pointer"; },
+                            CheckDepth::InAlternative => { why = "in one alternative of an `|` pattern"; },
                         }
                         if reported {
                             let owner = written.join("::");
@@ -11250,8 +11251,8 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_shape_that_is_not_reachable_yet(&mut self, ty: &str, member: &str, span: &Span) {
-        let mut bound: String = String::from("Struct");
-        if member == "variants" { bound = String::from("Enum"); }
+        let mut bound: &'static str = "Struct";
+        if member == "variants" { bound = "Enum"; }
         let mut note: String = format!("A type's fields and variants are reached through a bound, not by the type's name: `fn describe[T: {}](value: T)`, and then `T::{}` inside it.", bound, member);
         if self.type_parameters.contains_key(ty) { note = format!("A type's fields and variants are reached through a bound: `{}::{}` needs `[{}: {}]`.", ty, member, ty, bound); }
         self.findings.push(check_refusal("NK1171", span, format!("You can't reach `{}::{}` directly: it's reached through a type parameter bound by `{}`.", ty, member, bound), vec![note], Some(format!("Write `fn describe[T: {}](value: T)`, and use `T::{}` inside it.", bound, member))));
@@ -12255,11 +12256,11 @@ pub fn written_below(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>,
     match value {
         BuildValue::List(items) => {
             let mut held: Ty = element_of(&wanted);
-            let mut borrow: String = String::from("");
+            let mut borrow: &'static str = "";
             let slice = slice_element(&wanted);
             if slice.is_some() {
                 held = nikaia_std::index::or(slice.as_ref(), || &Ty::Unknown).clone();
-                borrow = String::from("&");
+                borrow = "&";
             }
             let some_held: Option<Ty> = Some(held.clone());
             let mut written: Vec<String> = vec![];
@@ -12309,12 +12310,12 @@ impl CheckState {
         }
         let held: Ty = (*nikaia_std::index::get(&args, 1)).clone();
         let mut value_below: String = String::from("");
-        let mut borrow: String = String::from("");
+        let mut borrow: &'static str = "";
         let constant = rust_constant_type(world.library, &held);
         if constant.is_some() { value_below = nikaia_std::index::or(constant.as_deref(), || "").to_owned(); } else {
             let declared = match self.declared_below(world, &held) { Some(__nikaia_value) => __nikaia_value, None => return no_table(false) };
             value_below = format!("&'static {}", declared);
-            borrow = String::from("&");
+            borrow = "&";
         }
         let some_held: Option<Ty> = Some(held.clone());
         let mut keys: Vec<String> = vec![];
@@ -14138,7 +14139,10 @@ pub fn check_core_a_safe_call<H: CheckHost>(state: &mut CheckState, world: &Chec
     let is_index = matches!(receiver, Expr::Index { .. });
     let lent = candidates > 0 && all_read && !is_index && !inner.is_a_view();
     if lent { state.facts.lent_reaches.insert(id_of(receiver) as i64); }
-    if inner.is_a_view() && name == "clone" && given.is_empty() { state.facts.owned_copies.insert(id_of(receiver) as i64); }
+    if inner.is_a_view() && name == "clone" && given.is_empty() {
+        state.facts.owned_copies.insert(id_of(receiver) as i64);
+        if inner.owned().text() == "String" { state.facts.text_copies.insert(id_of(receiver) as i64); }
+    }
     let inside = state.inside_a_door;
     let called: Option<Ty> = check_core_a_called_field(state, world, host, &inner, receiver, method, &given, inside, span);
     let mut reached: Ty = Ty::Unknown;
@@ -15634,6 +15638,7 @@ pub fn check_core_a_field_of_a_lent_place_handed_back<H: CheckHost>(state: &mut 
     if root == "self" || !state.lent_here(&root) { return; }
     let ty = check_core_expr(state, world, host, value, span);
     if ty.is_unknown() || copies_plainly(&ty) { return; }
+    if state.a_text_bytes_view(world, value) { return; }
     let notes: Vec<String> = vec![format!("`{}` belongs to whoever lent it (a `ref` parameter, a `for` over a list, a `let` over a place), and `{}` is a `{}`. Giving it away would take a piece out of something this function doesn't own.", root, path, ty.text())];
     let help: String = format!("Declare the result `ref {}` to return a view of it, or write `{}.clone()` for a copy.", ty.text(), path);
     state.findings.push(check_refusal("NK1131", span, format!("You can't give away `{}` here: `{}` is only borrowed.", path, root), notes, Some(help)));
@@ -15762,7 +15767,7 @@ pub fn check_core_holes<H: CheckHost>(state: &mut CheckState, world: &CheckWorld
             for part in parts.iter() {
                 match part {
                     FPart::Hole { spec, .. } => { specs.push(match spec {
-                        Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+                        Some(__nikaia_it) => Some(__nikaia_it.to_string()),
                         None => None,
                     }); },
                     _ => { },
@@ -16225,7 +16230,10 @@ fn check_core_method_resolved(state: &mut CheckState, world: &CheckWorld<'_, '_,
     state.flow.last_resolved = None;
     let key: String = match last { Some(__nikaia_value) => __nikaia_value, None => return };
     let library = key.ends_with("::clone") && world.library.functions.contains_key(&key) && !world.own.functions.contains_key(&key);
-    if library && args.is_empty() { state.facts.owned_copies.insert(id_of(receiver) as i64); }
+    if library && args.is_empty() {
+        state.facts.owned_copies.insert(id_of(receiver) as i64);
+        if key == "String::clone" || key == "str::clone" { state.facts.text_copies.insert(id_of(receiver) as i64); }
+    }
     if (key == "Vec::contains" || key == "Array::contains") && args.len() == 1 {
         let text = match nikaia_std::index::get(&args, 0) {
             Expr::Variable(_, _) => check_core_method_text_local(&state, world, nikaia_std::index::get(&args, 0)),
@@ -16581,7 +16589,7 @@ fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, world: &CheckW
 
 fn check_core_method_pattern_at(name: &str) -> i64 {
     if name == "splitn" { return 1; }
-    let first: Vec<String> = vec![String::from("split"), String::from("rsplit"), String::from("replace"), String::from("contains"), String::from("starts_with"), String::from("ends_with"), String::from("matches"), String::from("trim_start_matches"), String::from("trim_end_matches"), String::from("strip_prefix"), String::from("strip_suffix")];
+    let first: Vec<&'static str> = vec!["split", "rsplit", "replace", "contains", "starts_with", "ends_with", "matches", "trim_start_matches", "trim_end_matches", "strip_prefix", "strip_suffix"];
     if nikaia_std::list::contains(&first, &name) { return 0; }
     -1
 }
@@ -19699,17 +19707,17 @@ impl CheckState {
         };
         let ty = held.unseen();
         let mut what: String = String::from("");
-        let mut kinds: String = String::from("");
+        let mut kinds: &'static str = "";
         let mut help: String = String::from("");
         match ty {
             Ty::Seq { .. } => {
                 what = String::from("a range");
-                kinds = String::from("a range or a sequence has");
+                kinds = "a range or a sequence has";
                 help = format!("Write the values you want in holes of their own, or write `{{{}:?}}` for its debug form.", shown);
             },
             Ty::Tuple(ref parts) => {
                 what = String::from("a tuple");
-                kinds = String::from("a tuple has");
+                kinds = "a tuple has";
                 let mut names: Vec<String> = vec![];
                 let mut holes: Vec<String> = vec![];
                 let mut index: i64 = 0;
@@ -19751,11 +19759,11 @@ impl CheckState {
                 }
                 if an_enum {
                     what = format!("the `enum` `{}`", name);
-                    kinds = String::from("an `enum` that is not an error has");
+                    kinds = "an `enum` that is not an error has";
                     help = format!("Match on it and give each variant its text first, or write `{{{}:?}}` for its debug form.", shown);
                 } else {
                     what = format!("the struct `{}`", name);
-                    kinds = String::from("a struct that is not an error has");
+                    kinds = "a struct that is not an error has";
                     if fields.is_empty() { help = format!("Write `{{{}:?}}` for its debug form.", shown); } else {
                         let mut holes: Vec<String> = vec![];
                         for field in fields.iter() { holes.push(format!("`{{{}.{}}}`", shown, field)); }
@@ -20143,6 +20151,7 @@ pub struct CheckFacts {
     pub negations: collections::BTreeMap<i64, String>,
     pub copied_slots: collections::BTreeSet<i64>,
     pub owned_copies: collections::BTreeSet<i64>,
+    pub text_copies: collections::BTreeSet<i64>,
     pub text_as_is: collections::BTreeSet<i64>,
     pub lent_coalesces: collections::BTreeMap<i64, String>,
     pub plain_reaches: collections::BTreeSet<i64>,
@@ -20243,7 +20252,7 @@ pub struct CheckFacts {
 }
 
 impl CheckFacts {
-    pub fn empty() -> CheckFacts { CheckFacts { held_across_a_pause: collections::BTreeSet::new(), comptime_values: collections::BTreeMap::new(), dsl_values: collections::BTreeMap::new(), with_types: collections::BTreeMap::new(), unrolled: collections::BTreeMap::new(), walks_fields: collections::BTreeMap::new(), unrolled_calls: collections::BTreeMap::new(), fallible_loops: collections::BTreeSet::new(), pausing_walks: collections::BTreeSet::new(), pausing_loops: collections::BTreeSet::new(), owned_loops: collections::BTreeSet::new(), copied_loop_bindings: collections::BTreeSet::new(), copied_view_bindings: collections::BTreeSet::new(), unsigned_literals: collections::BTreeMap::new(), number_lets: collections::BTreeMap::new(), changed_elements: collections::BTreeSet::new(), text_finds: collections::BTreeSet::new(), char_patterns: collections::BTreeMap::new(), standard_compares: collections::BTreeMap::new(), count_args: collections::BTreeSet::new(), path_methods: collections::BTreeMap::new(), map_keys: collections::BTreeMap::new(), slice_indices: collections::BTreeSet::new(), list_indices: collections::BTreeSet::new(), copied_tuple_parts: collections::BTreeSet::new(), std_lengths: collections::BTreeSet::new(), sized_lengths: collections::BTreeSet::new(), char_codes: collections::BTreeSet::new(), arithmetic: collections::BTreeMap::new(), negations: collections::BTreeMap::new(), copied_slots: collections::BTreeSet::new(), owned_copies: collections::BTreeSet::new(), text_as_is: collections::BTreeSet::new(), lent_coalesces: collections::BTreeMap::new(), plain_reaches: collections::BTreeSet::new(), copied_jump_reads: collections::BTreeSet::new(), view_coalesces: collections::BTreeSet::new(), lent_map_fallbacks: collections::BTreeSet::new(), optional_fallbacks: collections::BTreeSet::new(), flat_reads: collections::BTreeSet::new(), copied_reads: collections::BTreeSet::new(), text_in_lists: collections::BTreeSet::new(), owned_patterns: collections::BTreeSet::new(), counted: collections::BTreeSet::new(), lent_bindings: collections::BTreeMap::new(), taking_arms: collections::BTreeMap::new(), views_handed_on: collections::BTreeSet::new(), comptime_uses: collections::BTreeMap::new(), lent_scrutinees: collections::BTreeSet::new(), arm_subjects: collections::BTreeMap::new(), guards_inside_boxes: collections::BTreeMap::new(), collected_into: collections::BTreeSet::new(), copied_walks: collections::BTreeSet::new(), filter_patterns: collections::BTreeSet::new(), kept_lambdas: collections::BTreeMap::new(), kept_hulls: collections::BTreeMap::new(), kept_owned: collections::BTreeMap::new(), field_calls: collections::BTreeMap::new(), kept_calls: collections::BTreeMap::new(), kept_args: collections::BTreeSet::new(), kept_functions: collections::BTreeMap::new(), fallible_methods: collections::BTreeSet::new(), future_lambdas: collections::BTreeSet::new(), run_lambdas: collections::BTreeSet::new(), run_code_fails: collections::BTreeSet::new(), sync_functions_run_async: collections::BTreeMap::new(), pausing_lambdas: collections::BTreeMap::new(), paused_scopes: collections::BTreeSet::new(), scope_tasks: collections::BTreeSet::new(), witnessed_sets: collections::BTreeSet::new(), pausing_methods: collections::BTreeSet::new(), nullable_sites: collections::BTreeMap::new(), concatenations: collections::BTreeSet::new(), path_comparisons: collections::BTreeSet::new(), mixed_comparisons: collections::BTreeMap::new(), path_holes: collections::BTreeMap::new(), flattened_reaches: collections::BTreeSet::new(), copied_reaches: collections::BTreeSet::new(), viewed_reaches: collections::BTreeMap::new(), lent_reaches: collections::BTreeSet::new(), held_reaches: collections::BTreeSet::new(), nullable_fields: collections::BTreeMap::new(), nullable_args: collections::BTreeMap::new(), narrowing_casts: collections::BTreeMap::new(), narrowed_reads: collections::BTreeMap::new(), task_handles: collections::BTreeSet::new(), bytes_entries: collections::BTreeSet::new(), bytes_grammars: collections::BTreeSet::new(), method_options: collections::BTreeMap::new(), lent_args: collections::BTreeSet::new(), lent_fields: collections::BTreeSet::new(), lookup_keys: collections::BTreeSet::new(), boxed_members: collections::BTreeMap::new(), boxed_reads: collections::BTreeSet::new(), copied_bindings: collections::BTreeSet::new(), cloned_bindings: collections::BTreeSet::new(), some_tails: collections::BTreeSet::new(), mixed_leaves: collections::BTreeMap::new(), mixed_choices: collections::BTreeSet::new(), lent_options: collections::BTreeSet::new(), wrapped: collections::BTreeMap::new(), compared_views: collections::BTreeSet::new(), compared_numbers: collections::BTreeSet::new(), claims: collections::BTreeMap::new(), entries: collections::BTreeMap::new(), reaches: collections::BTreeMap::new(), published: collections::BTreeMap::new(), mut_args: collections::BTreeSet::new(), copied_args: collections::BTreeSet::new(), settle_fns: collections::BTreeMap::new(), settle_lets: collections::BTreeMap::new(), lent_lets: collections::BTreeSet::new(), lent_returns: collections::BTreeSet::new(), compares: collections::BTreeSet::new(), compares_totally: collections::BTreeSet::new(), copies: collections::BTreeSet::new(), viewed_numbers: collections::BTreeSet::new(), array_literals: collections::BTreeSet::new(), byte_literals: collections::BTreeSet::new(), owned_texts: collections::BTreeSet::new(), text_bytes: collections::BTreeSet::new(), text_scalars: collections::BTreeSet::new(), text_graphemes: collections::BTreeSet::new(), kept_text_bytes: collections::BTreeSet::new(), byte_copies: collections::BTreeSet::new(), kept_byte_fields: collections::BTreeSet::new(), lent_list_reads: collections::BTreeSet::new(), lent_reads: collections::BTreeSet::new(), view_fallbacks: collections::BTreeSet::new() } }
+    pub fn empty() -> CheckFacts { CheckFacts { held_across_a_pause: collections::BTreeSet::new(), comptime_values: collections::BTreeMap::new(), dsl_values: collections::BTreeMap::new(), with_types: collections::BTreeMap::new(), unrolled: collections::BTreeMap::new(), walks_fields: collections::BTreeMap::new(), unrolled_calls: collections::BTreeMap::new(), fallible_loops: collections::BTreeSet::new(), pausing_walks: collections::BTreeSet::new(), pausing_loops: collections::BTreeSet::new(), owned_loops: collections::BTreeSet::new(), copied_loop_bindings: collections::BTreeSet::new(), copied_view_bindings: collections::BTreeSet::new(), unsigned_literals: collections::BTreeMap::new(), number_lets: collections::BTreeMap::new(), changed_elements: collections::BTreeSet::new(), text_finds: collections::BTreeSet::new(), char_patterns: collections::BTreeMap::new(), standard_compares: collections::BTreeMap::new(), count_args: collections::BTreeSet::new(), path_methods: collections::BTreeMap::new(), map_keys: collections::BTreeMap::new(), slice_indices: collections::BTreeSet::new(), list_indices: collections::BTreeSet::new(), copied_tuple_parts: collections::BTreeSet::new(), std_lengths: collections::BTreeSet::new(), sized_lengths: collections::BTreeSet::new(), char_codes: collections::BTreeSet::new(), arithmetic: collections::BTreeMap::new(), negations: collections::BTreeMap::new(), copied_slots: collections::BTreeSet::new(), owned_copies: collections::BTreeSet::new(), text_copies: collections::BTreeSet::new(), text_as_is: collections::BTreeSet::new(), lent_coalesces: collections::BTreeMap::new(), plain_reaches: collections::BTreeSet::new(), copied_jump_reads: collections::BTreeSet::new(), view_coalesces: collections::BTreeSet::new(), lent_map_fallbacks: collections::BTreeSet::new(), optional_fallbacks: collections::BTreeSet::new(), flat_reads: collections::BTreeSet::new(), copied_reads: collections::BTreeSet::new(), text_in_lists: collections::BTreeSet::new(), owned_patterns: collections::BTreeSet::new(), counted: collections::BTreeSet::new(), lent_bindings: collections::BTreeMap::new(), taking_arms: collections::BTreeMap::new(), views_handed_on: collections::BTreeSet::new(), comptime_uses: collections::BTreeMap::new(), lent_scrutinees: collections::BTreeSet::new(), arm_subjects: collections::BTreeMap::new(), guards_inside_boxes: collections::BTreeMap::new(), collected_into: collections::BTreeSet::new(), copied_walks: collections::BTreeSet::new(), filter_patterns: collections::BTreeSet::new(), kept_lambdas: collections::BTreeMap::new(), kept_hulls: collections::BTreeMap::new(), kept_owned: collections::BTreeMap::new(), field_calls: collections::BTreeMap::new(), kept_calls: collections::BTreeMap::new(), kept_args: collections::BTreeSet::new(), kept_functions: collections::BTreeMap::new(), fallible_methods: collections::BTreeSet::new(), future_lambdas: collections::BTreeSet::new(), run_lambdas: collections::BTreeSet::new(), run_code_fails: collections::BTreeSet::new(), sync_functions_run_async: collections::BTreeMap::new(), pausing_lambdas: collections::BTreeMap::new(), paused_scopes: collections::BTreeSet::new(), scope_tasks: collections::BTreeSet::new(), witnessed_sets: collections::BTreeSet::new(), pausing_methods: collections::BTreeSet::new(), nullable_sites: collections::BTreeMap::new(), concatenations: collections::BTreeSet::new(), path_comparisons: collections::BTreeSet::new(), mixed_comparisons: collections::BTreeMap::new(), path_holes: collections::BTreeMap::new(), flattened_reaches: collections::BTreeSet::new(), copied_reaches: collections::BTreeSet::new(), viewed_reaches: collections::BTreeMap::new(), lent_reaches: collections::BTreeSet::new(), held_reaches: collections::BTreeSet::new(), nullable_fields: collections::BTreeMap::new(), nullable_args: collections::BTreeMap::new(), narrowing_casts: collections::BTreeMap::new(), narrowed_reads: collections::BTreeMap::new(), task_handles: collections::BTreeSet::new(), bytes_entries: collections::BTreeSet::new(), bytes_grammars: collections::BTreeSet::new(), method_options: collections::BTreeMap::new(), lent_args: collections::BTreeSet::new(), lent_fields: collections::BTreeSet::new(), lookup_keys: collections::BTreeSet::new(), boxed_members: collections::BTreeMap::new(), boxed_reads: collections::BTreeSet::new(), copied_bindings: collections::BTreeSet::new(), cloned_bindings: collections::BTreeSet::new(), some_tails: collections::BTreeSet::new(), mixed_leaves: collections::BTreeMap::new(), mixed_choices: collections::BTreeSet::new(), lent_options: collections::BTreeSet::new(), wrapped: collections::BTreeMap::new(), compared_views: collections::BTreeSet::new(), compared_numbers: collections::BTreeSet::new(), claims: collections::BTreeMap::new(), entries: collections::BTreeMap::new(), reaches: collections::BTreeMap::new(), published: collections::BTreeMap::new(), mut_args: collections::BTreeSet::new(), copied_args: collections::BTreeSet::new(), settle_fns: collections::BTreeMap::new(), settle_lets: collections::BTreeMap::new(), lent_lets: collections::BTreeSet::new(), lent_returns: collections::BTreeSet::new(), compares: collections::BTreeSet::new(), compares_totally: collections::BTreeSet::new(), copies: collections::BTreeSet::new(), viewed_numbers: collections::BTreeSet::new(), array_literals: collections::BTreeSet::new(), byte_literals: collections::BTreeSet::new(), owned_texts: collections::BTreeSet::new(), text_bytes: collections::BTreeSet::new(), text_scalars: collections::BTreeSet::new(), text_graphemes: collections::BTreeSet::new(), kept_text_bytes: collections::BTreeSet::new(), byte_copies: collections::BTreeSet::new(), kept_byte_fields: collections::BTreeSet::new(), lent_list_reads: collections::BTreeSet::new(), lent_reads: collections::BTreeSet::new(), view_fallbacks: collections::BTreeSet::new() } }
 }
 
 fn check_claim_held(held: Option<&ClaimHeld>) -> String {
@@ -20644,10 +20653,10 @@ impl CheckState {
     #[allow(clippy::too_many_arguments)]
     pub fn reaches_through_a_plain_value(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, on: &Ty, receiver: &Expr, member: &str, method: bool, reach: &Expr, span: &Span) {
         if on.is_unknown() { return; }
-        let mut what: String = String::from("field");
+        let mut what: &'static str = "field";
         let mut plain: String = format!(".{}", member);
         if method {
-            what = String::from("method");
+            what = "method";
             plain = format!(".{}(…)", member);
         }
         let pieces = match receiver {
@@ -23724,9 +23733,9 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn not_unescapable(&mut self, name: &str, span: &Span, what: &str) {
         if name != "crate" && name != "super" && name != "Self" { return; }
-        let mut instead: String = String::from("own");
-        if name == "crate" { instead = String::from("package"); }
-        if name == "super" { instead = String::from("parent"); }
+        let mut instead: &'static str = "own";
+        if name == "crate" { instead = "package"; }
+        if name == "super" { instead = "parent"; }
         self.findings.push(check_refusal("NK1128", span, format!("You can't call {} `{}`: that name is reserved.", what, name), vec!["Most reserved words are fine as names - a field called `type` works. `crate`, `super` and `Self` are the three that can't be used.".to_owned()], Some(format!("Pick another name, such as `{}`.", instead))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -23758,12 +23767,12 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_bit_operator_on_something_else(&mut self, op: BinaryOp, left: &Ty, right: &Ty, at: &Span) {
-        let written: String = match op {
-            BinaryOp::BitAnd => String::from("&"),
-            BinaryOp::BitOr => String::from("|"),
-            BinaryOp::BitXor => String::from("^"),
-            BinaryOp::Shl => String::from("<<"),
-            _ => String::from(">>"),
+        let written: &'static str = match op {
+            BinaryOp::BitAnd => "&",
+            BinaryOp::BitOr => "|",
+            BinaryOp::BitXor => "^",
+            BinaryOp::Shl => "<<",
+            _ => ">>",
         };
         for side in [left.clone(), right.clone()] {
             let side = value_of_a_copy(&side.unseen());
@@ -24284,23 +24293,23 @@ fn note_joined(world: &CheckWorld<'_, '_, '_, '_, '_>, segments: &[winnow_gramma
 
 const U64_HIGHEST: u64 = 18446744073709551615;
 
-fn the_low_end_of(ty: &str) -> String {
+fn the_low_end_of(ty: &str) -> &'static str {
     match ty {
-        "i32" => String::from("-2147483648"),
-        "u8" => String::from("0"),
-        "u32" => String::from("0"),
-        "u64" => String::from("0"),
-        _ => String::from("-9223372036854775808"),
+        "i32" => "-2147483648",
+        "u8" => "0",
+        "u32" => "0",
+        "u64" => "0",
+        _ => "-9223372036854775808",
     }
 }
 
-fn the_high_end_of(ty: &str) -> String {
+fn the_high_end_of(ty: &str) -> &'static str {
     match ty {
-        "i32" => String::from("2147483647"),
-        "u8" => String::from("255"),
-        "u32" => String::from("4294967295"),
-        "u64" => String::from("18446744073709551615"),
-        _ => String::from("9223372036854775807"),
+        "i32" => "2147483647",
+        "u8" => "255",
+        "u32" => "4294967295",
+        "u64" => "18446744073709551615",
+        _ => "9223372036854775807",
     }
 }
 
@@ -24358,9 +24367,9 @@ fn an_offered_number(name: &str) -> bool { name == "i32" || name == "i64" || nam
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn number_article(name: &str) -> String {
-    if name.starts_with('i') { return String::from("an"); }
-    String::from("a")
+fn number_article(name: &str) -> &'static str {
+    if name.starts_with('i') { return "an"; }
+    "a"
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -26759,13 +26768,13 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn fields_left_out(&mut self, owner: &str, missing: &[String], span: &Span) {
         let listed = left_out_text(missing);
-        let mut one: String = String::from("fields");
-        let mut them: String = String::from("them");
-        let mut has: String = String::from("have");
+        let mut one: &'static str = "fields";
+        let mut them: &'static str = "them";
+        let mut has: &'static str = "have";
         if missing.len() == 1 {
-            one = String::from("field");
-            them = String::from("it");
-            has = String::from("has");
+            one = "field";
+            them = "it";
+            has = "has";
         }
         self.findings.push(check_refusal("NK1234", span, format!("This `{}` literal leaves out the {} {}, which {} no default.", owner, one, listed, has), vec!["A literal may leave out only a field declared with a default (`size: i64 = 50`).".to_owned()], Some(format!("Give {} in the literal, or declare a default for {} in `{}`.", them, them, owner))));
     }
@@ -26830,7 +26839,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn a_cleanup_shaped(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, target: &str, methods: &[Spanned<Item>], span: &Span) {
         let mut wrote_cleanup = false;
-        let note: String = String::from("`impl Cleanup` has exactly one method, `fn cleanup(ref mut self)`, and it may pause and may fail.");
+        let note: &'static str = "`impl Cleanup` has exactly one method, `fn cleanup(ref mut self)`, and it may pause and may fail.";
         for method in methods.iter() {
             match &method.node {
                 Item::Fn { name, receiver, args, config, spread, ret_type, .. } => {
@@ -26947,8 +26956,8 @@ impl CheckState {
                 let mut note: String = String::from("");
                 let mut way_out: String = String::from("");
                 if shape {
-                    let mut article: String = String::from("a");
-                    if trait_name == "Enum" { article = String::from("an"); }
+                    let mut article: &'static str = "a";
+                    if trait_name == "Enum" { article = "an"; }
                     message = format!("`{}` needs {} `{}` here, but `{}` isn't one.", key, article, trait_name, actual);
                     note = format!("`[{}: {}]` asks what a type is, not what it does, so it's answered by the declaration, not an `impl`. `{}` is {}.", parameter, trait_name, actual, self.what_shape_it_is(&actual));
                     if of_the_caller { way_out = format!("Add it to the bound: `[{}: … + {}]`.", actual, trait_name); } else { way_out = format!("Pass a value of a type declared with `{}`, or remove the bound.", trait_name.to_lowercase()); }
@@ -28193,10 +28202,10 @@ impl CheckState {
         let mut labels: Vec<CheckLabel> = vec![label];
         if some { labels.push(CheckLabel { span: from.clone(), word: out.part.to_owned(), text: format!("taken out of `{}` here", subject), main: false }); }
         let mut kept: String = format!("`{}` is a `mut` parameter, so it is the caller's and is whole whenever the caller can see it. `{}` was {}, and nothing has put it back.", subject, out.part, taken.to);
-        let mut tail: String = String::from("");
+        let mut tail: &'static str = "";
         if fails {
             kept = format!("Between taking {} out of `{}` and giving it back, no call that can fail may stand: the caller would be left a `{}` with a part missing.", part, subject, subject);
-            tail = String::from(" and move the call out from between");
+            tail = " and move the call out from between";
         }
         CheckFinding { severity: CheckSeverity::Error, span, code: "NK2108".to_owned(), message, notes: vec![kept], help: Some(format!("Assign `{}` (or the part) before the function is left{}, or build the value by value with `fn f({}: T) -> T`.", subject, tail, subject)), labels }
     }
@@ -29118,8 +29127,8 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_pattern_of_owned_text(&mut self, key: &str, given: &[Expr], found: &[Ty], span: &Span) {
-        let mut param: String = String::from("");
-        if key == "str::starts_with" { param = String::from("prefix"); } else if key == "str::ends_with" { param = String::from("suffix"); } else if key == "str::contains" { param = String::from("part"); } else if key == "str::strip_prefix" { param = String::from("prefix"); } else if key == "str::strip_suffix" { param = String::from("suffix"); } else { return; }
+        let mut param: &'static str = "";
+        if key == "str::starts_with" { param = "prefix"; } else if key == "str::ends_with" { param = "suffix"; } else if key == "str::contains" { param = "part"; } else if key == "str::strip_prefix" { param = "prefix"; } else if key == "str::strip_suffix" { param = "suffix"; } else { return; }
         if found.is_empty() { return; }
         let a_list = match nikaia_std::index::get(&found, 0) {
             Ty::Named { name, .. } => name == "Vec" || name == "Array",
@@ -29649,25 +29658,25 @@ impl CheckState {
     }
 }
 
-fn check_walks_form(expr: &Expr) -> String {
+fn check_walks_form(expr: &Expr) -> &'static str {
     match expr {
-        Expr::Spawn { .. } => String::from("starts a task"),
-        Expr::Select(_, _) => String::from("waits in a `select`"),
-        Expr::Overlap(_, _) => String::from("runs an `overlap`"),
-        Expr::Dsl { .. } => String::from("runs a `dsl` block"),
-        Expr::Asm { .. } => String::from("runs `unsafe` code"),
-        Expr::Unsafe(_, _) => String::from("runs `unsafe` code"),
-        Expr::Try(_, _) => String::from("can fail"),
-        Expr::Throw(_, _) => String::from("can fail"),
-        Expr::TryCatch { .. } => String::from("can fail"),
-        Expr::Return(_, _) => String::from("jumps"),
-        Expr::Break(_) => String::from("jumps"),
-        Expr::Continue(_) => String::from("jumps"),
-        Expr::Block(_, _) => String::from("contains a block, which might change something"),
-        Expr::If { .. } => String::from("contains a block, which might change something"),
-        Expr::Match { .. } => String::from("contains a block, which might change something"),
-        Expr::Closure { .. } => String::from("contains a block, which might change something"),
-        _ => String::from(""),
+        Expr::Spawn { .. } => "starts a task",
+        Expr::Select(_, _) => "waits in a `select`",
+        Expr::Overlap(_, _) => "runs an `overlap`",
+        Expr::Dsl { .. } => "runs a `dsl` block",
+        Expr::Asm { .. } => "runs `unsafe` code",
+        Expr::Unsafe(_, _) => "runs `unsafe` code",
+        Expr::Try(_, _) => "can fail",
+        Expr::Throw(_, _) => "can fail",
+        Expr::TryCatch { .. } => "can fail",
+        Expr::Return(_, _) => "jumps",
+        Expr::Break(_) => "jumps",
+        Expr::Continue(_) => "jumps",
+        Expr::Block(_, _) => "contains a block, which might change something",
+        Expr::If { .. } => "contains a block, which might change something",
+        Expr::Match { .. } => "contains a block, which might change something",
+        Expr::Closure { .. } => "contains a block, which might change something",
+        _ => "",
     }
 }
 
@@ -30067,9 +30076,9 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn nothing_follows_a_jump(&mut self, jump: &Stmt, span: &Span) {
-        let word: String = match jump {
-            Stmt::Break => String::from("break"),
-            _ => String::from("continue"),
+        let word: &'static str = match jump {
+            Stmt::Break => "break",
+            _ => "continue",
         };
         self.findings.push(check_refusal("NK1133", span, format!("Nothing after `{}` in the same block can run.", word), vec![format!("`{}` takes no value, so `{} x` is two statements, and the second never runs.", word, word)], Some(format!("Delete it. To get a value out of the loop, assign to a `let` declared before it, or `return` the value if the function is done after the `{}`.", word))));
     }
@@ -32506,7 +32515,7 @@ fn emit_call_scope_channel(channel: &str) -> String {
     channel.to_owned()
 }
 
-fn emit_call_not_computed_yet() -> String { String::from("a default not computed yet") }
+fn emit_call_not_computed_yet() -> &'static str { "a default not computed yet" }
 
 fn emit_call_owned_text(ty: &Ty) -> bool {
     match ty {
@@ -32556,8 +32565,8 @@ impl EmitState {
         if !callee_parts.is_empty() { callee_last = (*nikaia_std::index::get(&callee_parts, nikaia_std::index::at(callee_parts.len() as i64 - 1))).to_owned(); }
         if self.seeded_calls.contains_key(&callee_last) {
             let hidden = match self.seeded_calls.get(&callee_last) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
-            let mut fill: String = String::from("nikaia_std::hash::Keyed");
-            if self.trusted_input { fill = String::from("nikaia_std::hash::Fast"); }
+            let mut fill: &'static str = "nikaia_std::hash::Keyed";
+            if self.trusted_input { fill = "nikaia_std::hash::Fast"; }
             let mut fills: Vec<String> = vec![];
             for at in 0..hidden.0 { if at < hidden.1 { fills.push(String::from("_")); } else { fills.push(fill.to_owned()); } }
             out.push(&format!("::<{}>", fills.join(", ")));
@@ -33559,8 +33568,8 @@ impl EmitState {
                 let book = emit_text(world, *nikaia_std::index::get(&segments, 1));
                 let rule = emit_text(world, *nikaia_std::index::get(&segments, 2));
                 if !self.a_package_grammar_entry(&format!("{}::{}::{}", package, book, rule)) { return Ok(false); }
-                let mut question: String = String::from("?");
-                if flow.caught { question = String::from(""); }
+                let mut question: &'static str = "?";
+                if flow.caught { question = ""; }
                 let mut pieces = false;
                 let contract = self.own_contracts.functions.get(&format!("{}::{}::{}", package, book, rule));
                 if contract.is_some() {
@@ -33948,22 +33957,22 @@ fn emit_flow_is_binary_below(node: &Expr, here: i64) -> bool {
     }
 }
 
-fn emit_flow_compared(op: BinaryOp) -> String {
+fn emit_flow_compared(op: BinaryOp) -> &'static str {
     match op {
-        BinaryOp::Lt => String::from(").is_lt()"),
-        BinaryOp::Le => String::from(").is_le()"),
-        BinaryOp::Gt => String::from(").is_gt()"),
-        BinaryOp::Ge => String::from(").is_ge()"),
-        BinaryOp::Eq => String::from(").is_eq()"),
-        _ => String::from(").is_ne()"),
+        BinaryOp::Lt => ").is_lt()",
+        BinaryOp::Le => ").is_le()",
+        BinaryOp::Gt => ").is_gt()",
+        BinaryOp::Ge => ").is_ge()",
+        BinaryOp::Eq => ").is_eq()",
+        _ => ").is_ne()",
     }
 }
 
-fn emit_flow_wrapping(op: BinaryOp) -> String {
+fn emit_flow_wrapping(op: BinaryOp) -> &'static str {
     match op {
-        BinaryOp::Add => String::from("wrapping_add"),
-        BinaryOp::Sub => String::from("wrapping_sub"),
-        _ => String::from("wrapping_mul"),
+        BinaryOp::Add => "wrapping_add",
+        BinaryOp::Sub => "wrapping_sub",
+        _ => "wrapping_mul",
     }
 }
 
@@ -34149,7 +34158,7 @@ impl EmitState {
             host.expr(walk, out, lhs, depth, wide, scope)?;
             out.push(", ");
             host.expr(walk, out, rhs, depth, wide, scope)?;
-            out.push(&emit_flow_compared(op));
+            out.push(emit_flow_compared(op));
             return Ok(());
         }
         if self.facts.concatenations.contains(&site) {
@@ -34559,10 +34568,10 @@ impl EmitState {
             self.emit_core_block(world, walk, &mut inner, host, body, depth, inside, &inside_scope, EmitTail::Value)?;
             failing = inner.buf.contains('?') || inner.buf.contains("return");
         }
-        let mut kind: String = String::from("TaskHandle");
+        let mut kind: &'static str = "TaskHandle";
         if failing {
-            kind = String::from("FailingTask");
-            if host.overlaps_user_code() && scope.channel == "Box<dyn std::error::Error>" { kind = String::from("BoxedTask"); }
+            kind = "FailingTask";
+            if host.overlaps_user_code() && scope.channel == "Box<dyn std::error::Error>" { kind = "BoxedTask"; }
         }
         if host.overlaps_user_code() { out.push(&format!("nikaia_std::task::{}::start_on_pool(async move ", kind)); } else { out.push(&format!("nikaia_std::task::{}::start(async move ", kind)); }
         if failing {
@@ -35721,7 +35730,12 @@ impl EmitState {
         let copy = self.facts.owned_copies.contains(&node_key(receiver));
         let held_copy = walk.reached_copy;
         walk.reached_copy = copy;
-        let done = self.emit_core_a_field_call(world, walk, out, host, receiver, true, method, args, depth + 1, flow, scope)?;
+        let text_copy = copy && self.facts.text_copies.contains(&node_key(receiver)) && args.is_empty() && world.words.resolve(method) == "clone";
+        let mut done = false;
+        if text_copy {
+            out.push("__nikaia_it.to_string()");
+            done = true;
+        } else { done = self.emit_core_a_field_call(world, walk, out, host, receiver, true, method, args, depth + 1, flow, scope)?; }
         if !done { self.emit_core_method_call(world, walk, out, host, None, node_key(receiver), method, args, config, depth + 1, flow, scope)?; }
         walk.reached_copy = held_copy;
         if !flattens { out.push(")"); }
@@ -36412,7 +36426,7 @@ impl EmitState {
         Ok(())
     }
     fn emit_read_ordinal(&self, at: i64) -> String {
-        let all: Vec<String> = vec![String::from("First"), String::from("Second"), String::from("Third"), String::from("Fourth"), String::from("Fifth"), String::from("Sixth"), String::from("Seventh"), String::from("Eighth")];
+        let all: Vec<&'static str> = vec!["First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh", "Eighth"];
         (*nikaia_std::index::get(&all, nikaia_std::index::at(at))).to_owned()
     }
     fn emit_read_joined_channel(&self, world: &EmitWorld<'_, '_, '_, '_>, branches: &[&Expr]) -> String {
@@ -36675,8 +36689,8 @@ impl EmitState {
             } else if code.can_throw { outcome = String::from("Result<(), Box<dyn std::error::Error>>"); }
             let runs = walk.in_parameter && walk.code_parameter_runs;
             if !runs {
-                let mut crossing: String = String::from("");
-                if overlaps { crossing = String::from(" + Send + Sync"); }
+                let mut crossing: &'static str = "";
+                if overlaps { crossing = " + Send + Sync"; }
                 let mut elided: Vec<String> = vec![];
                 let mut lent = false;
                 for part in ty.generics.iter() {
@@ -36726,6 +36740,7 @@ impl EmitState {
             let params = lifetimes.params();
             return format!("nikaia_std::either_text::EitherText<{}>", params);
         }
+        if ty.is_view && ty.lasting && name == "String" && ty.generics.is_empty() { return String::from("&'static str"); }
         if ty.is_view { out.push_str(&lifetimes.reference()); }
         if ty.is_view && name == "fs::Path" && ty.generics.is_empty() {
             out.push_str("std::path::Path");
@@ -36802,18 +36817,18 @@ impl EmitState {
     pub fn entry_point(&self, world: &EmitWorld<'_, '_, '_, '_>, concurrent: bool, channel: &str, types: &[String], passing: &[String]) -> String {
         let fails = match self.user_main(world) { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
         let (reads, passed) = self.main_words(world, types, passing);
-        let mut user_code: String = String::from("Sequential");
-        if concurrent { user_code = String::from("Concurrent"); }
+        let mut user_code: &'static str = "Sequential";
+        if concurrent { user_code = "Concurrent"; }
         let mut ret: String = String::from("");
         if fails { ret = format!(" -> Result<(), {}>", channel); }
-        let mut start: String = String::from("start");
-        if !call_pauses(&self.own_contracts, "main") && !concurrent { start = String::from("on_demand"); }
+        let mut start: &'static str = "start";
+        if !call_pauses(&self.own_contracts, "main") && !concurrent { start = "on_demand"; }
         let mut text: String = String::from("\n// ADR-303 D4: the runtime is running before the program's first\n// statement, so an operation inside it costs no thread wake-up. What\n// starts is what `user_parallelism` allows (ADR-037 D2): the I/O\n// worker always, a pool for user code only at `yes`.\n");
         text = format!("{}fn main(){} {{\n", text, ret);
         text = format!("{}    nikaia_std::abort::report_in_nikaia_terms(__NIKAIA_SITES);\n", text);
         text = format!("{}{}", text, reads);
-        let mut body: String = String::from("__nikaia_main");
-        if !reads.is_empty() && self.facts.entries.contains_key("main") { body = String::from("__nikaia_main__unchecked"); }
+        let mut body: &'static str = "__nikaia_main";
+        if !reads.is_empty() && self.facts.entries.contains_key("main") { body = "__nikaia_main__unchecked"; }
         text = format!("{}{}{}", text, self.fatal_registrations(world), self.crossing_registrations(world));
         text = format!("{}    let nikaia_runtime = nikaia_std::rt::{}(nikaia_std::rt::UserCode::{});\n", text, start, user_code);
         let exits = main_exits(&self.own_contracts);
@@ -36860,18 +36875,18 @@ impl EmitState {
             let ty = main_written_type(&arg.ty, world.words);
             let mut rust: String = String::from("_");
             if ((index) as usize) < types.len() { rust = (*nikaia_std::index::get(&types, (index) as usize)).to_owned(); }
-            let mut kind: String = String::from("Subject");
-            let mut read: String = String::from("subject");
+            let mut kind: &'static str = "Subject";
+            let mut read: &'static str = "subject";
             if words_vec(&arg.ty, world.words) {
-                kind = String::from("Rest");
-                read = String::from("rest");
+                kind = "Rest";
+                read = "rest";
             } else if arg.ty.is_nullable {
-                kind = String::from("Maybe");
-                read = String::from("maybe");
+                kind = "Maybe";
+                read = "maybe";
             }
-            let mut binding: String = String::from("");
+            let mut binding: &'static str = "";
             if arg.mutable {
-                binding = String::from("mut ");
+                binding = "mut ";
                 passed.push(format!("&mut {}", local));
             } else if ((index) as usize) < passing.len() { passed.push((*nikaia_std::index::get(&passing, (index) as usize)).replace("{}", &local)); } else { passed.push(local.to_owned()); }
             reads = format!("{}    let {}{}: {} = __nikaia_words.{}({});\n", reads, binding, local, rust, read, index);
@@ -36894,8 +36909,8 @@ impl EmitState {
                     if shown == "None" { shown = String::from("null"); }
                 }
             }
-            let mut kind: String = String::from("Option");
-            if ty == "bool" { kind = String::from("Flag"); }
+            let mut kind: &'static str = "Option";
+            if ty == "bool" { kind = "Flag"; }
             reads = format!("{}    let {}: {} = match __nikaia_words.option({}) {{ Some(__nikaia_word) => __nikaia_word, None => {} }};\n", reads, local, rust, at, default);
             if at < passing.len() as i64 { passed.push((*nikaia_std::index::get(&passing, nikaia_std::index::at(at))).replace("{}", &local)); } else { passed.push(local.to_owned()); }
             params.push(format!("nikaia_std::cli::Param {{ name: {}, ty: {}, kind: nikaia_std::cli::Kind::{}, default: {}, pre: &[{}] }}", rust_string(&param), rust_string(&ty), kind, rust_string(&shown), main_claims_of(&checks, &param)));
@@ -37976,17 +37991,17 @@ fn nn_note(stmt: &Stmt, state: &mut NnState) {
     }
 }
 
-fn nn_kind(stmt: &Stmt) -> String {
+fn nn_kind(stmt: &Stmt) -> &'static str {
     match stmt {
-        Stmt::Let { .. } => String::from("let"),
-        Stmt::Comptime { .. } => String::from("comptime"),
-        Stmt::Assign { .. } => String::from("assign"),
-        Stmt::For { .. } => String::from("for"),
-        Stmt::While { .. } => String::from("while"),
-        Stmt::Return(_) => String::from("return"),
-        Stmt::Break => String::from("break"),
-        Stmt::Continue => String::from("continue"),
-        Stmt::Expr(_) => String::from("expr"),
+        Stmt::Let { .. } => "let",
+        Stmt::Comptime { .. } => "comptime",
+        Stmt::Assign { .. } => "assign",
+        Stmt::For { .. } => "for",
+        Stmt::While { .. } => "while",
+        Stmt::Return(_) => "return",
+        Stmt::Break => "break",
+        Stmt::Continue => "continue",
+        Stmt::Expr(_) => "expr",
     }
 }
 
@@ -38643,7 +38658,7 @@ impl EmitWalk {
 
 // --- emit_sums.nika ---
 
-fn sum_input_lifetime() -> String { String::from("'a") }
+fn sum_input_lifetime() -> &'static str { "'a" }
 
 impl EmitState {
     pub fn sum_of(&self, key: &str) -> Option<String> {
@@ -38772,8 +38787,8 @@ impl EmitState {
             out.push(&format!("impl{} nikaia_std::error::Full for {}{} {{\n    fn full(&self) -> String {{\n        match self {{\n", decl, name, params));
             for member in members.iter() {
                 let variant = sum_variant(member);
-                let mut held: String = String::from("nikaia_std::error::Full::full(e)");
-                if self.name_of_error(world, member) != 0 { held = String::from("e.full()"); }
+                let mut held: &'static str = "nikaia_std::error::Full::full(e)";
+                if self.name_of_error(world, member) != 0 { held = "e.full()"; }
                 out.push(&format!("            {}::{}(e) => {},\n", name, variant, held));
             }
             out.push("        }\n    }\n}\n\n");
@@ -39052,7 +39067,7 @@ impl EmitState {
         self.carries_a_view(world, result)
     }
     fn carries_a_written_view(&self, world: &EmitWorld<'_, '_, '_, '_>, ty: &Type) -> bool {
-        if ty.is_view || self.borrows(world, ty.name) { return true; }
+        if ty.is_view && !ty.lasting || self.borrows(world, ty.name) { return true; }
         for inner in ty.generics.iter() { if self.carries_a_view(world, inner) { return true; } }
         false
     }
@@ -39141,11 +39156,11 @@ impl EmitState {
     }
     pub fn derives(&self, world: &EmitWorld<'_, '_, '_, '_>, name: winnow_grammar::Symbol) -> String {
         let text = world.words.resolve(name).to_owned();
-        let mut parts: Vec<String> = vec![String::from("Debug"), String::from("Clone")];
-        if self.facts.copies.contains(&text) { parts.push(String::from("Copy")); }
+        let mut parts: Vec<&'static str> = vec!["Debug", "Clone"];
+        if self.facts.copies.contains(&text) { parts.push("Copy"); }
         if self.facts.compares.contains(&text) {
-            parts.push(String::from("PartialEq"));
-            if self.facts.compares_totally.contains(&text) { parts.push(String::from("Eq")); }
+            parts.push("PartialEq");
+            if self.facts.compares_totally.contains(&text) { parts.push("Eq"); }
         }
         format!("#[derive({})]\n", parts.join(", "))
     }
@@ -40668,7 +40683,7 @@ impl KeepContext {
         None
     }
     pub fn carries(&self, names: &winnow_grammar::InternerContext, ty: &Type) -> bool {
-        if ty.is_view || self.borrowing.contains(names.resolve(ty.name)) { return true; }
+        if ty.is_view && !ty.lasting || self.borrowing.contains(names.resolve(ty.name)) { return true; }
         for argument in ty.generics.iter() { if self.carries(names, argument) { return true; } }
         false
     }
@@ -42868,7 +42883,7 @@ pub fn absorb_into(ledger: &mut Ledger, module: Option<&str>, renames: &collecti
     for (name, _) in other.types.iter() { declared.insert(name.to_owned()); }
     for (name, _) in other.traits.iter() { declared.insert(name.to_owned()); }
     let prefix = nikaia_std::index::or(match module {
-        Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+        Some(__nikaia_it) => Some(__nikaia_it.to_string()),
         None => None,
     }, || "".into());
     let qualified = module.is_some();
@@ -45188,7 +45203,7 @@ fn lg_copy(normal: &mut LgNormal, from: &TermArena, id: i64, renamed: &mut colle
             let mut fresh = format!("v{}", renamed.len() as i64);
             if known.is_some() {
                 fresh = nikaia_std::index::or(match known {
-                    Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+                    Some(__nikaia_it) => Some(__nikaia_it.to_string()),
                     None => None,
                 }, || fresh.into());
             } else {
@@ -46113,14 +46128,14 @@ pub enum Switch {
 
 pub fn known() -> Vec<String> { vec![String::from("target"), String::from("user-parallelism"), String::from("reentrancy-check"), String::from("cleanup-deadline"), String::from("optimization"), String::from("refuted-claims"), String::from("artifact"), String::from("symbol-prefix")] }
 
-fn withdrawn(key: &str) -> String {
-    if key == "ordering" { return String::from("statements run in the order they are written, so there's nothing left for it to turn off. To run two things together, write `overlap { … }`; `--overlaps` shows which branches did"); }
-    String::from("")
+fn withdrawn(key: &str) -> &'static str {
+    if key == "ordering" { return "statements run in the order they are written, so there's nothing left for it to turn off. To run two things together, write `overlap { … }`; `--overlaps` shows which branches did"; }
+    ""
 }
 
-fn moved(key: &str) -> String {
-    if key == "cleanup-deadline" { return String::from("the runtime configuration file `nikaia-runtime.toml`, which is read when the program starts. How long a program waits at exit is set by whoever runs it, and the compiler no longer reads this key"); }
-    String::from("")
+fn moved(key: &str) -> &'static str {
+    if key == "cleanup-deadline" { return "the runtime configuration file `nikaia-runtime.toml`, which is read when the program starts. How long a program waits at exit is set by whoever runs it, and the compiler no longer reads this key"; }
+    ""
 }
 
 pub fn build_key(key: &str) -> Result<Switch, nikaia_std::error::Thrown<Refused>> {
@@ -51934,7 +51949,7 @@ fn prover_foreign_contract(walk: &mut ProverWalk, key: &str, own: &Ledger, condi
 fn prover_condition_term(arena: &mut TermArena, text: &str, names: &collections::BTreeSet<String>, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> i64 {
     let nodes = condition(text, names);
     if nodes.is_empty() { return -1; }
-    arena.adopt(&nodes)
+    arena.adopt((nodes).as_ref())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -54659,7 +54674,7 @@ pub enum SolverTerm {
 // --- sources.nika ---
 
 pub async fn rust_sources(src: &str) -> Result<collections::BTreeMap<String, String>, nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
-    let mut out = collections::BTreeMap::new();
+    let mut out: collections::BTreeMap<String, String> = collections::BTreeMap::new();
     for name in fs::walk(std::path::Path::new(&(src)), &fs::Root::Anywhere).await? {
         if !nikaia_std::fs::path::ends_with(&(name), std::path::Path::new(&(".rs"))) { continue; }
         let text = fs::read_to_string(&nikaia_std::fs::path::joined(&[std::ffi::OsStr::new(&std::string::ToString::to_string(&(src))), std::ffi::OsStr::new("/"), std::convert::AsRef::<std::ffi::OsStr>::as_ref(&(name))]), &fs::Root::Anywhere).await?;
@@ -55444,7 +55459,7 @@ fn pausing_call(callee: Option<&Callee>, span: &Span, promise: &Promise, own: &L
         Callee::Opaque(name) => {
             if a_stop((name).as_deref()) { return; }
             let called = nikaia_std::index::or(match name {
-                Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+                Some(__nikaia_it) => Some(__nikaia_it.to_string()),
                 None => None,
             }, || "something this compiler cannot resolve".into());
             found.push(violation(promise, span, &called, false, false, false));
@@ -55808,7 +55823,7 @@ pub fn declare_unit(names: &winnow_grammar::InternerContext, items: &[Spanned<It
 pub fn a_parse_that_views(names: &winnow_grammar::InternerContext, result: Option<&Type>, package: &PackageTypes) -> bool {
     let ty = match result { Some(__nikaia_value) => __nikaia_value, None => return false };
     let name = names.resolve(ty.name);
-    if ty.is_view || package.borrowing.contains(name) { return true; }
+    if ty.is_view && !ty.lasting || package.borrowing.contains(name) { return true; }
     for argument in ty.generics.iter() {
         let inner: Option<Type> = Some(argument.clone());
         if a_parse_that_views(names, (inner).as_ref(), package) { return true; }
@@ -55936,13 +55951,13 @@ fn names_u8(ty: &Ty) -> bool {
     }
 }
 
-fn keep_words(keep: &KeepAt) -> String {
+fn keep_words(keep: &KeepAt) -> &'static str {
     match keep {
-        KeepAt::Param => String::from("in the caller's keep, because views of it leave this function"),
-        KeepAt::Frame => String::from("in a keep of this function until it returns, because something outside the loop or block keeps views of it"),
-        KeepAt::Local(_) => String::from("in a keep beside the call, as long as what the call hands back"),
-        KeepAt::Task => String::from("in a keep the task carries with it (one count per task, not per view)"),
-        KeepAt::Element(_) => String::from("in a keep of its own, held by each view kept of it, because what keeps the views drops entries while the loop goes on"),
+        KeepAt::Param => "in the caller's keep, because views of it leave this function",
+        KeepAt::Frame => "in a keep of this function until it returns, because something outside the loop or block keeps views of it",
+        KeepAt::Local(_) => "in a keep beside the call, as long as what the call hands back",
+        KeepAt::Task => "in a keep the task carries with it (one count per task, not per view)",
+        KeepAt::Element(_) => "in a keep of its own, held by each view kept of it, because what keeps the views drops entries while the loop goes on",
     }
 }
 
@@ -56069,39 +56084,49 @@ pub struct Kinds {
     pub owned: bool,
     pub view: bool,
     pub lasting: bool,
+    pub still: bool,
     pub either: bool,
 }
 
-fn no_kinds() -> Kinds { Kinds { owned: false, view: false, lasting: false, either: false } }
+fn no_kinds() -> Kinds { Kinds { owned: false, view: false, lasting: false, still: false, either: false } }
 
-fn owned_kinds() -> Kinds { Kinds { owned: true, view: false, lasting: false, either: false } }
+fn owned_kinds() -> Kinds { Kinds { owned: true, view: false, lasting: false, still: false, either: false } }
 
-fn view_kinds() -> Kinds { Kinds { owned: false, view: true, lasting: false, either: false } }
+fn view_kinds() -> Kinds { Kinds { owned: false, view: true, lasting: false, still: false, either: false } }
 
-fn lasting_kinds() -> Kinds { Kinds { owned: false, view: false, lasting: true, either: false } }
+fn lasting_kinds() -> Kinds { Kinds { owned: false, view: false, lasting: true, still: false, either: false } }
 
-fn either_kinds() -> Kinds { Kinds { owned: false, view: false, lasting: false, either: true } }
+fn still_kinds() -> Kinds { Kinds { owned: false, view: false, lasting: false, still: true, either: false } }
 
-fn kinds_joined(a: &Kinds, b: &Kinds) -> Kinds { Kinds { owned: a.owned || b.owned, view: a.view || b.view, lasting: a.lasting || b.lasting, either: a.either || b.either } }
+fn either_kinds() -> Kinds { Kinds { owned: false, view: false, lasting: false, still: false, either: true } }
 
-fn same_kinds(a: &Kinds, b: &Kinds) -> bool { a.owned == b.owned && a.view == b.view && a.lasting == b.lasting && a.either == b.either }
+fn kinds_joined(a: &Kinds, b: &Kinds) -> Kinds { Kinds { owned: a.owned || b.owned, view: a.view || b.view, lasting: a.lasting || b.lasting, still: a.still || b.still, either: a.either || b.either } }
 
-fn no_text(kinds: &Kinds) -> bool { !kinds.owned && !kinds.view && !kinds.lasting && !kinds.either }
+fn same_kinds(a: &Kinds, b: &Kinds) -> bool { a.owned == b.owned && a.view == b.view && a.lasting == b.lasting && a.still == b.still && a.either == b.either }
+
+fn no_text(kinds: &Kinds) -> bool { !kinds.owned && !kinds.view && !kinds.lasting && !kinds.still && !kinds.either }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tier {
     Owned,
     View,
     Mixed,
+    Lasting,
 }
 
 fn tier_of_kinds(kinds: &Kinds) -> Tier {
-    if kinds.either || kinds.view && kinds.owned { return Tier::Mixed; }
+    if kinds.either || (kinds.view || kinds.still) && kinds.owned { return Tier::Mixed; }
     if kinds.view { return Tier::View; }
+    if kinds.lasting || kinds.still {
+        if kinds.owned { return Tier::Owned; }
+        return Tier::Lasting;
+    }
     Tier::Owned
 }
 
 fn mixed(tier: Tier) -> bool { matches!(tier, Tier::Mixed) }
+
+fn lasting_tier(tier: Tier) -> bool { matches!(tier, Tier::Lasting) }
 
 fn owned_tier(tier: Tier) -> bool { matches!(tier, Tier::Owned) }
 
@@ -56179,14 +56204,21 @@ pub struct TextTiers {
     pub text: Option<Type>,
     pub wraps: collections::BTreeMap<i64, Hand>,
     pub hole_wraps: collections::BTreeMap<i64, Vec<HoleWrap>>,
+    pub adopted: collections::BTreeMap<i64, TierAdopted>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TierAdopted {
+    pub owner: TextOwner,
+    pub ty: Type,
 }
 
 pub fn unaliased_in(aliases: &collections::BTreeMap<String, String>, name: &str) -> String {
     if aliases.is_empty() { return name.to_owned(); }
-    let mut amp: String = String::from("");
+    let mut amp: &'static str = "";
     let mut bare = name.to_owned();
     if name.starts_with('&') {
-        amp = String::from("&");
+        amp = "&";
         let chars: Vec<scalar> = nikaia_std::list::chars(name.chars());
         bare = String::from("");
         for k in 1..chars.len() as i64 { bare.push(*nikaia_std::index::get(&chars, (k) as usize)); }
@@ -56206,6 +56238,7 @@ struct FieldDecl {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct FnDecl {
     params: Vec<Type>,
+    changes: Vec<bool>,
     result: Option<Type>,
     published: bool,
 }
@@ -56247,7 +56280,7 @@ fn declare_rules(def: &GrammarDef, names: &winnow_grammar::InternerContext, decl
     for rule in def.rules.iter() {
         let key = format!("{}::{}", gname, names.resolve(rule.name));
         declared.rules.insert(key.to_owned());
-        declared.fns.insert(key, FnDecl { params: vec![], result: match rule.ret_type.as_ref() {
+        declared.fns.insert(key, FnDecl { params: vec![], changes: vec![], result: match rule.ret_type.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         }, published: def.public && rule.is_entry });
@@ -56270,8 +56303,12 @@ fn declare_function(item: &Item, target: Option<String>, names: &winnow_grammar:
         declared.methods.insert(own.to_owned(), keys);
     }
     let mut params: Vec<Type> = vec![];
-    for arg in args.iter() { params.push(arg.ty.clone()); }
-    declared.fns.insert(key, FnDecl { params, result: match ret_type {
+    let mut changes: Vec<bool> = vec![];
+    for arg in args.iter() {
+        params.push(arg.ty.clone());
+        changes.push(arg.mutable);
+    }
+    declared.fns.insert(key, FnDecl { params, changes, result: match ret_type {
         Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
         None => None,
     }, published: is_public });
@@ -56329,6 +56366,8 @@ struct TierLocal {
     of: Option<String>,
     literal: i64,
     declared: Option<Declaring>,
+    from: Option<String>,
+    empty: i64,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -56342,9 +56381,13 @@ struct Flows {
     links: collections::BTreeSet<(String, String)>,
     unwrappable: collections::BTreeSet<String>,
     viewed: collections::BTreeSet<String>,
+    still_into: collections::BTreeSet<(String, String)>,
+    adopted: collections::BTreeMap<i64, Declaring>,
+    demoted: collections::BTreeSet<String>,
+    in_maps: collections::BTreeSet<String>,
 }
 
-fn no_flows() -> Flows { Flows { positions: collections::BTreeMap::new(), known: collections::BTreeMap::new(), literal_lets: collections::BTreeMap::new(), wraps: collections::BTreeMap::new(), param_into: collections::BTreeSet::new(), hole_wraps: collections::BTreeMap::new(), links: collections::BTreeSet::new(), unwrappable: collections::BTreeSet::new(), viewed: collections::BTreeSet::new() } }
+fn no_flows() -> Flows { Flows { positions: collections::BTreeMap::new(), known: collections::BTreeMap::new(), literal_lets: collections::BTreeMap::new(), wraps: collections::BTreeMap::new(), param_into: collections::BTreeSet::new(), hole_wraps: collections::BTreeMap::new(), links: collections::BTreeSet::new(), unwrappable: collections::BTreeSet::new(), viewed: collections::BTreeSet::new(), still_into: collections::BTreeSet::new(), adopted: collections::BTreeMap::new(), demoted: collections::BTreeSet::new(), in_maps: collections::BTreeSet::new() } }
 
 #[derive(Debug, Clone, PartialEq)]
 struct TierWalk {
@@ -56357,6 +56400,8 @@ struct TierWalk {
     in_hole: bool,
     hole_text: i64,
     lent_self: bool,
+    adopted: collections::BTreeMap<i64, Declaring>,
+    demoted: collections::BTreeSet<String>,
 }
 
 fn open_tier_scope(walk: &mut TierWalk) { walk.frames.push(vec![]); }
@@ -56405,7 +56450,7 @@ fn bind_tier_local(name: String, local: TierLocal, walk: &mut TierWalk) {
     }
 }
 
-fn plain_local(kinds: Kinds) -> TierLocal { TierLocal { kinds, of: None, literal: -1, declared: None } }
+fn plain_local(kinds: Kinds) -> TierLocal { TierLocal { kinds, of: None, literal: -1, declared: None, from: None, empty: -1 } }
 
 fn tier_at(word: &str, walk: &TierWalk) -> Tier {
     let found = match (*nikaia_std::index::get(&walk.tiers, word)).copied() { Some(__nikaia_value) => __nikaia_value, None => return Tier::Owned };
@@ -56439,8 +56484,13 @@ fn flow_type(owner: &TextOwner, ty: &Type, path: &mut Vec<i64>, kinds: &Kinds, a
     }
     if a_container(ask.names, ty) {
         let mut at = 0;
+        let keyed = a_map(ask.names, ty);
         for arg in ty.generics.iter() {
             path.push(at);
+            if keyed {
+                let word = seen(owner, &path, walk);
+                walk.flows.in_maps.insert(word);
+            }
             flow_type(owner, arg, path, kinds, ask, walk);
             path.pop();
             at += 1;
@@ -56463,6 +56513,18 @@ fn flow_value(going: &TierGoing, value: Option<&Expr>, kinds: &Kinds, ask: &Tier
     }
     let linked = a_container(ask.names, &ty) && comes_whole(value, ask, &walk);
     if !linked { flow_type(&owner, &ty, &mut path.to_owned(), kinds, ask, walk); }
+    if plain && kinds.still && value.is_some() {
+        let given_value = match value { Some(__nikaia_value) => __nikaia_value, None => return };
+        let mut sources: Vec<String> = vec![];
+        still_sources(given_value, ask, walk, &mut sources);
+        let to = seen(&owner, &path, walk);
+        for from_word in sources.iter() { if *from_word != to { walk.flows.still_into.insert((from_word.to_owned(), to.to_owned())); } }
+    }
+    if a_container(ask.names, &ty) && path.is_empty() && holds_text(ask.names, &ty) { adopt(value, going, ask, walk); }
+    if !plain && !a_container(ask.names, &ty) && kinds.still && value.is_some() {
+        let unseen = match value { Some(__nikaia_value) => __nikaia_value, None => return };
+        kept_unseen(unseen, ask, walk);
+    }
     if walk.in_hole && walk.hole_text < 0 && going.wrap && plain {
         let word = seen(&owner, &path, walk);
         walk.flows.unwrappable.insert(word);
@@ -56483,6 +56545,238 @@ struct TierGoing {
 }
 
 fn going_into(owner: &TextOwner, ty: &Type, path: Vec<i64>, wrap: bool) -> TierGoing { TierGoing { owner: owner.clone(), ty: ty.clone(), path, wrap } }
+
+fn adopt(value: Option<&Expr>, going: &TierGoing, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) {
+    let given = match value { Some(__nikaia_value) => __nikaia_value, None => return };
+    let name = match given {
+        Expr::Variable(name, _) => { let name = *name; ask.names.resolve(name).to_owned() },
+        _ => return,
+    };
+    let local = match tier_local(&name, &walk) { Some(__nikaia_value) => __nikaia_value, None => return };
+    if local.empty < 0 { return; }
+    walk.flows.adopted.insert(local.empty, Declaring { owner: going.owner.clone(), ty: going.ty.clone() });
+}
+
+fn an_empty_container(value: &Expr, ask: &TierAsk<'_, '_, '_>) -> bool {
+    match value {
+        Expr::ListLit { items, .. } => items.is_empty(),
+        Expr::Call { func, args, .. } => {
+            let func = nikaia_std::boxed::open(func);
+            if !args.is_empty() { return false; }
+            let callee = match tier_callee(func, ask) { Some(__nikaia_value) => __nikaia_value, None => return false };
+            is_a_container_name(&callee)
+        },
+        _ => false,
+    }
+}
+
+fn holds_text(names: &winnow_grammar::InternerContext, ty: &Type) -> bool {
+    if plain_string(names, ty) { return true; }
+    if !a_container(names, ty) { return false; }
+    for arg in ty.generics.iter() { if holds_text(names, arg) { return true; } }
+    false
+}
+
+fn flow_word(word: &str, kinds: &Kinds, walk: &mut TierWalk) {
+    let before = nikaia_std::index::or(match *nikaia_std::index::get(&walk.flows.positions, word) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || no_kinds().into());
+    walk.flows.positions.insert(word.to_owned(), kinds_joined(&before, kinds));
+}
+
+fn text_source_word(value: Option<&Expr>, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) -> Option<String> {
+    let given = match value { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let source = source_of(given, ask, &walk);
+    if source.is_some() {
+        let found = match source { Some(__nikaia_value) => __nikaia_value, None => return None };
+        if !plain_string(ask.names, &found.ty) { return None; }
+        return Some(seen(&found.owner, &no_path(), walk));
+    }
+    match given {
+        Expr::Variable(name, _) => {
+            let name = *name;
+            let local = match tier_local(ask.names.resolve(name), &walk) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            match local.from.as_ref() {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }
+        },
+        _ => None,
+    }
+}
+
+fn element_word(iter: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) -> Option<String> {
+    match iter {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            let name = ask.names.resolve(method);
+            if args.is_empty() && (name == "iter" || name == "drain" || name == "into_iter") { return element_word(receiver, ask, walk); }
+        },
+        _ => { },
+    }
+    let found = match source_of(iter, ask, &walk) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let ty = found.ty.clone();
+    if !a_container(ask.names, &ty) || a_map(ask.names, &ty) || ty.generics.is_empty() { return None; }
+    if !plain_string(ask.names, nikaia_std::index::get(&ty.generics, 0)) { return None; }
+    Some(seen(&found.owner, &vec![0], walk))
+}
+
+fn beside_its_own(kinds: &Kinds) -> bool { kinds.still && kinds.owned }
+
+fn any_still(given: &[Kinds]) -> bool {
+    for kinds in given.iter() {
+        let kinds = *kinds;
+        if kinds.still { return true; }
+    }
+    false
+}
+
+fn std_has_method(method: &str, ask: &TierAsk<'_, '_, '_>) -> bool {
+    let within = format!("::{}", method);
+    for (key, _) in ask.library.functions.iter() { if key.ends_with(&within) { return true; } }
+    false
+}
+
+fn kept_args(args: &[Expr], given: &[Kinds], ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) {
+    let mut at: i64 = 0;
+    for arg in args.iter() {
+        if ((at) as usize) < given.len() && nikaia_std::index::get(&given, (at) as usize).still { kept_unseen(arg, ask, walk); }
+        at += 1;
+    }
+}
+
+fn names_a_type(name: &str) -> bool {
+    let first = match name.chars().next() { Some(__nikaia_value) => __nikaia_value, None => return false };
+    first >= 'A' && first <= 'Z'
+}
+
+fn kept_unseen(value: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) {
+    match value {
+        Expr::ListLit { items, .. } => { for item in items.iter() { kept_unseen(item, ask, walk); } },
+        Expr::Tuple(items, _) => { for item in items.iter() { kept_unseen(item, ask, walk); } },
+        Expr::Coalesce { value: first, fallback, .. } => {
+            let first = nikaia_std::boxed::open(first); let fallback = nikaia_std::boxed::open(fallback);
+            kept_unseen(first, ask, walk);
+            kept_unseen(fallback, ask, walk);
+        },
+        Expr::Index { base, .. } => {
+            let base = nikaia_std::boxed::open(base);
+            let whole = source_of(base, ask, &walk);
+            if container_source((whole).as_ref(), ask) {
+                kept_unseen(base, ask, walk);
+                return;
+            }
+            let mut sources: Vec<String> = vec![];
+            still_sources(value, ask, walk, &mut sources);
+            for read_from in sources.iter() {
+                flow_word(read_from, &owned_kinds(), walk);
+                walk.flows.demoted.insert(read_from.to_owned());
+            }
+        },
+        _ => {
+            let whole = source_of(value, ask, &walk);
+            if whole.is_some() {
+                let found = match whole { Some(__nikaia_value) => __nikaia_value, None => return };
+                if a_container(ask.names, &found.ty) {
+                    demote_inside(&found.owner, &found.ty, &mut vec![], ask, walk);
+                    return;
+                }
+            }
+            let mut sources: Vec<String> = vec![];
+            still_sources(value, ask, walk, &mut sources);
+            for read_from in sources.iter() {
+                flow_word(read_from, &owned_kinds(), walk);
+                walk.flows.demoted.insert(read_from.to_owned());
+            }
+        },
+    }
+}
+
+fn literals_beside_null(value: &Expr) -> bool {
+    let mut tails: Vec<Expr> = vec![];
+    match value {
+        Expr::If { then_branch, else_branch, .. } => {
+            let otherwise = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return false };
+            if then_branch.stmts.len() != 1 || otherwise.stmts.len() != 1 { return false; }
+            match &nikaia_std::index::get(&then_branch.stmts, 0).node {
+                Stmt::Expr(last) => { tails.push(last.clone()); },
+                _ => { return false; },
+            }
+            match &nikaia_std::index::get(&otherwise.stmts, 0).node {
+                Stmt::Expr(last) => { tails.push(last.clone()); },
+                _ => { return false; },
+            }
+        },
+        Expr::Match { arms, .. } => { for arm in arms.iter() { tails.push(arm.body.clone()); } },
+        _ => { return false; },
+    }
+    let mut nulls = false;
+    for tail in tails.iter() { if a_null(tail) { nulls = true; } else if !a_literal_text(tail) { return false; } }
+    nulls
+}
+
+fn a_variable(expr: &Expr) -> bool { matches!(expr, Expr::Variable(_, _)) }
+
+fn demote_inside(owner: &TextOwner, ty: &Type, path: &mut Vec<i64>, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) {
+    if plain_string(ask.names, ty) {
+        let word = seen(owner, &path, walk);
+        flow_word(&word, &owned_kinds(), walk);
+        walk.flows.demoted.insert(word);
+        return;
+    }
+    if !a_container(ask.names, ty) { return; }
+    let mut at = 0;
+    for arg in ty.generics.iter() {
+        path.push(at);
+        demote_inside(owner, arg, &mut path.to_owned(), ask, walk);
+        path.pop();
+        at += 1;
+    }
+}
+
+fn still_sources(value: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk, out: &mut Vec<String>) {
+    match value {
+        Expr::Block(block, _) => { still_tail(block, ask, walk, out); },
+        Expr::If { then_branch, else_branch, .. } => {
+            still_tail(then_branch, ask, walk, out);
+            let otherwise = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return };
+            still_tail(otherwise, ask, walk, out);
+        },
+        Expr::Match { arms, .. } => { for arm in arms.iter() { still_sources(&arm.body, ask, walk, out); } },
+        Expr::Coalesce { value: first, fallback, .. } => {
+            let first = nikaia_std::boxed::open(first); let fallback = nikaia_std::boxed::open(fallback);
+            still_sources(first, ask, walk, out);
+            still_sources(fallback, ask, walk, out);
+        },
+        _ => {
+            let read_from = match text_source_word(Some(value), ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return };
+            out.push(read_from);
+        },
+    }
+}
+
+fn still_tail(block: &Block, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk, out: &mut Vec<String>) {
+    if block.stmts.is_empty() { return; }
+    match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1)).node {
+        Stmt::Expr(last) => { still_sources(last, ask, walk, out); },
+        _ => { },
+    }
+}
+
+fn changed_in_place(target: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) {
+    let place = place_of(target, ask, &walk);
+    if place.is_some() {
+        let found = match place { Some(__nikaia_value) => __nikaia_value, None => return };
+        if plain_string(ask.names, &found.ty) {
+            let word = seen(&found.owner, &no_path(), walk);
+            flow_word(&word, &owned_kinds(), walk);
+        }
+        return;
+    }
+    let read_from = match text_source_word(Some(target), ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return };
+    flow_word(&read_from, &owned_kinds(), walk);
+}
 
 fn a_null(value: &Expr) -> bool { matches!(value, Expr::LitNull(_)) }
 
@@ -56610,9 +56904,16 @@ fn link(from: &Declaring, from_path: &mut Vec<i64>, to: &Declaring, to_path: &mu
         return;
     }
     if !a_container(ask.names, &from_ty) || !a_container(ask.names, &to_ty) || (from_ty.generics.len() as i64) != to_ty.generics.len() as i64 { return; }
+    let keyed = a_map(ask.names, &from_ty) || a_map(ask.names, &to_ty);
     for at in 0..from_ty.generics.len() as i64 {
         from_path.push(at);
         to_path.push(at);
+        if keyed {
+            let a = seen(&from.owner, &from_path, walk);
+            let b = seen(&to.owner, &to_path, walk);
+            walk.flows.in_maps.insert(a);
+            walk.flows.in_maps.insert(b);
+        }
         let inner_from = Declaring { owner: from.owner.clone(), ty: (*nikaia_std::index::get(&from_ty.generics, nikaia_std::index::at(at))).clone() };
         let inner_to = Declaring { owner: to.owner.clone(), ty: (*nikaia_std::index::get(&to_ty.generics, nikaia_std::index::at(at))).clone() };
         link(&inner_from, &mut from_path.to_owned(), &inner_to, &mut to_path.to_owned(), ask, walk);
@@ -56641,6 +56942,7 @@ fn kinds_of(owner: &TextOwner, ty: &Type, path: &mut Vec<i64>, ask: &TierAsk<'_,
             Tier::Owned => owned_kinds(),
             Tier::View => view_kinds(),
             Tier::Mixed => either_kinds(),
+            Tier::Lasting => still_kinds(),
         };
     }
     if ty.is_view && ask.names.resolve(ty.name) == "String" { return view_kinds(); }
@@ -56708,13 +57010,24 @@ fn tier_block(block: &Block, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) -> 
 fn tier_statement(stmt: &Stmt, at: i64, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) -> Kinds {
     match stmt {
         Stmt::Let { names, value, ty, .. } => { tier_let(names, value, (ty).as_ref(), at, ask, walk); },
-        Stmt::Assign { target, value, .. } => { tier_assign(target, value, ask, walk); },
+        Stmt::Assign { target, op, value } => {
+            tier_assign(target, value, ask, walk);
+            if op.is_some() { changed_in_place(target, ask, walk); }
+        },
         Stmt::For { bindings, iter, body, .. } => {
             let kinds = tier_expr(iter, ask, walk);
+            let from = element_word(iter, ask, walk);
             open_tier_scope(walk);
             for binding in bindings.iter() {
                 let binding = *binding;
-                bind_tier_local(ask.names.resolve(binding).to_owned(), plain_local(kinds.clone()), walk);
+                let mut local = plain_local(kinds.clone());
+                if bindings.len() == 1 {
+                    local.from = match from.as_ref() {
+                        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                        None => None,
+                    };
+                }
+                bind_tier_local(ask.names.resolve(binding).to_owned(), local, walk);
             }
             tier_block(body, ask, walk);
             close_tier_scope(walk);
@@ -56738,8 +57051,10 @@ fn tier_let(names: &[winnow_grammar::Symbol], value: &Expr, ty: Option<&Type>, a
     let kinds = tier_expr(value, ask, walk);
     let mut of = tier_struct_of(value, ask, &walk);
     let mut literal: i64 = -1;
+    let mut empty: i64 = -1;
     let mut declared: Option<Declaring> = None;
     let written = ty.is_some();
+    let from = text_source_word(Some(value), ask, walk);
     if written {
         let declared_ty = match match ty {
             Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
@@ -56751,6 +57066,13 @@ fn tier_let(names: &[winnow_grammar::Symbol], value: &Expr, ty: Option<&Type>, a
         if a_literal_text(value) { literal = at; }
         let source = source_of(value, ask, &walk);
         if container_source((source).as_ref(), ask) { declared = source; }
+        if declared.is_none() && an_empty_container(value, ask) {
+            empty = at;
+            declared = match *nikaia_std::index::get(&walk.adopted, &at) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            };
+        }
     }
     let mut bound = kinds;
     if declared.is_some() {
@@ -56764,11 +57086,11 @@ fn tier_let(names: &[winnow_grammar::Symbol], value: &Expr, ty: Option<&Type>, a
         }
     }
     if names.len() == 1 {
-        let local = TierLocal { kinds: bound, of, literal, declared };
+        let local = TierLocal { kinds: bound, of, literal, declared, from, empty };
         bind_tier_local(ask.names.resolve(*nikaia_std::index::get(&names, 0)).to_owned(), local, walk);
         return;
     }
-    if !written && !(bound.owned && bound.view) && !bound.either {
+    if !written && !(bound.owned && (bound.view || bound.still)) && !bound.either {
         for name in names.iter() {
             let name = *name;
             bind_tier_local(ask.names.resolve(name).to_owned(), plain_local(bound.clone()), walk);
@@ -56812,7 +57134,13 @@ fn tier_assign(target: &Expr, value: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &mu
         Expr::Index { base, index, .. } => {
             let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
             let key = tier_expr(index, ask, walk);
-            let place = match place_of(base, ask, &walk) { Some(__nikaia_value) => __nikaia_value, None => return };
+            let found_place = place_of(base, ask, &walk);
+            if found_place.is_none() {
+                if key.still { kept_unseen(index, ask, walk); }
+                if kinds.still { kept_unseen(value, ask, walk); }
+                return;
+            }
+            let place = match found_place { Some(__nikaia_value) => __nikaia_value, None => return };
             let ty = place.ty.clone();
             if !a_container(ask.names, &ty) { return; }
             if a_map(ask.names, &ty) {
@@ -56829,13 +57157,20 @@ fn tier_assign(target: &Expr, value: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &mu
             if place.is_some() {
                 let found = match place { Some(__nikaia_value) => __nikaia_value, None => return };
                 flow_value(&going_into(&found.owner, &found.ty, vec![], true), Some(value), &kinds, ask, walk);
-            }
+            } else if kinds.still && !a_variable(target) { kept_unseen(value, ask, walk); }
             let name = match target {
                 Expr::Variable(name, _) => { let name = *name; ask.names.resolve(name).to_owned() },
                 _ => return,
             };
             let mut local = match tier_local(&name, &walk) { Some(__nikaia_value) => __nikaia_value, None => return };
-            if local.declared.is_none() { local.kinds = kinds_joined(&local.kinds, &kinds); }
+            if local.declared.is_none() {
+                local.kinds = kinds_joined(&local.kinds, &kinds);
+                let read_from: String = nikaia_std::index::or(match local.from.as_ref() {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                }, || "".into());
+                if read_from != "" { flow_word(&read_from, &kinds, walk); }
+            }
             local.literal = -1;
             set_tier_local(&name, local, walk);
         },
@@ -56938,6 +57273,7 @@ fn flow_args(key: &str, args: &[Expr], given: &[Kinds], ask: &TierAsk<'_, '_, '_
         if at < function.params.len() as i64 {
             let owner = TextOwner::Param(key.to_owned(), at);
             flow_value(&going_into(&owner, nikaia_std::index::get(&function.params, nikaia_std::index::at(at)), vec![], false), Some(nikaia_std::index::get(&args, nikaia_std::index::at(at))), nikaia_std::index::get(&given, nikaia_std::index::at(at)), ask, walk);
+            if at < function.changes.len() as i64 && *nikaia_std::index::get(&function.changes, nikaia_std::index::at(at)) { changed_in_place(nikaia_std::index::get(&args, nikaia_std::index::at(at)), ask, walk); }
         }
         at += 1;
     }
@@ -57017,11 +57353,17 @@ fn tier_expr(expr: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) -> Kin
                 let otherwise = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return out };
                 out = kinds_joined(&out, &tier_block(otherwise, ask, walk));
             }
+            if beside_its_own(&out) { kept_unseen(expr, ask, walk); }
+            if literals_beside_null(expr) { return owned_kinds(); }
             out
         },
         Expr::Match { value, arms, .. } => {
             let value = nikaia_std::boxed::open(value);
-            tier_expr(value, ask, walk);
+            let scrutinee = tier_expr(value, ask, walk);
+            if scrutinee.still {
+                let whole = source_of(value, ask, &walk);
+                if container_source((whole).as_ref(), ask) { kept_unseen(value, ask, walk); }
+            }
             let mut out = no_kinds();
             for arm in arms.iter() {
                 if arm.guard.is_some() {
@@ -57030,6 +57372,8 @@ fn tier_expr(expr: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) -> Kin
                 }
                 out = kinds_joined(&out, &tier_expr(&arm.body, ask, walk));
             }
+            if beside_its_own(&out) { kept_unseen(expr, ask, walk); }
+            if literals_beside_null(expr) { return owned_kinds(); }
             out
         },
         Expr::Block(block, _) => tier_block(block, ask, walk),
@@ -57058,8 +57402,13 @@ fn tier_expr(expr: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) -> Kin
         },
         Expr::Coalesce { value, fallback, .. } => {
             let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback);
-            let out = tier_expr(value, ask, walk);
-            kinds_joined(&out, &tier_expr(fallback, ask, walk))
+            let first = tier_expr(value, ask, walk);
+            let out = kinds_joined(&first, &tier_expr(fallback, ask, walk));
+            if beside_its_own(&out) {
+                kept_unseen(value, ask, walk);
+                kept_unseen(fallback, ask, walk);
+            }
+            out
         },
         Expr::TryCatch { expr, handler, .. } => {
             let expr = nikaia_std::boxed::open(expr);
@@ -57080,10 +57429,12 @@ fn tier_expr(expr: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) -> Kin
             flow_result(given, &kinds, ask, walk);
             no_kinds()
         },
-        Expr::Binary { lhs, rhs, .. } => {
+        Expr::Binary { op, lhs, rhs, .. } => {
             let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
-            tier_expr(lhs, ask, walk);
+            let left = tier_expr(lhs, ask, walk);
             tier_expr(rhs, ask, walk);
+            let adds = matches!(op, BinaryOp::Add);
+            if adds && left.still { kept_unseen(lhs, ask, walk); }
             owned_kinds()
         },
         Expr::Cast { expr, .. } => {
@@ -57091,8 +57442,16 @@ fn tier_expr(expr: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) -> Kin
             tier_expr(expr, ask, walk);
             owned_kinds()
         },
-        Expr::Tuple(items, _) => items_kinds(items, ask, walk),
-        Expr::ListLit { items, .. } => items_kinds(items, ask, walk),
+        Expr::Tuple(items, _) => {
+            let out = items_kinds(items, ask, walk);
+            if out.still { for item in items.iter() { kept_unseen(item, ask, walk); } }
+            out
+        },
+        Expr::ListLit { items, .. } => {
+            let out = items_kinds(items, ask, walk);
+            if beside_its_own(&out) { for item in items.iter() { kept_unseen(item, ask, walk); } }
+            out
+        },
         Expr::ListRepeat { value, count, .. } => {
             let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count);
             tier_expr(value, ask, walk);
@@ -57133,6 +57492,13 @@ fn tier_struct_field(owner: &str, field: &FieldInit, ask: &TierAsk<'_, '_, '_>, 
     let kinds = field_value_kinds(field, &shorthand, ask, walk);
     let name = ask.names.resolve(field.name).to_owned();
     let key = (owner.to_owned(), name.to_owned());
+    if !walk.declared.fields.contains_key(&key) {
+        if kinds.still && field.value.is_some() {
+            let value = match field.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
+            kept_unseen(value, ask, walk);
+        } else if kinds.still { kept_unseen(&shorthand, ask, walk); }
+        return;
+    }
     let found = match match *nikaia_std::index::get(&walk.declared.fields, &key) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
@@ -57160,6 +57526,7 @@ fn call_kinds(func: &Expr, args: &[Expr], ask: &TierAsk<'_, '_, '_>, walk: &mut 
         return result_kinds(&callee, ask, &walk);
     }
     if args.is_empty() && is_a_container_name(&callee) { return no_kinds(); }
+    if names_a_type(&last_segment(&callee)) || !ask.library.functions.contains_key(&callee) { kept_args(args, &given, ask, walk); }
     std_result(&callee, ask)
 }
 
@@ -57178,6 +57545,7 @@ fn parsed_parameter(value: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk
 
 fn method_kinds(receiver: &Expr, method: &str, args: &[Expr], ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) -> Kinds {
     let received = tier_expr(receiver, ask, walk);
+    if changes_its_text(method) { changed_in_place(receiver, ask, walk); }
     let mut given: Vec<Kinds> = vec![];
     for arg in args.iter() { given.push(tier_expr(arg, ask, walk)); }
     let of = tier_struct_of(receiver, ask, &walk);
@@ -57195,6 +57563,8 @@ fn method_kinds(receiver: &Expr, method: &str, args: &[Expr], ask: &TierAsk<'_, 
         for key in keys.iter() { out = kinds_joined(&out, &result_kinds(key, ask, &walk)); }
         return out;
     }
+    if !puts_its_argument(method) && any_still(&given) && !std_has_method(method, ask) { kept_args(args, &given, ask, walk); }
+    if puts_its_argument(method) && any_still(&given) && place_of(receiver, ask, &walk).is_none() { kept_args(args, &given, ask, walk); }
     let place = place_of(receiver, ask, &walk);
     if place.is_some() {
         let found = match place { Some(__nikaia_value) => __nikaia_value, None => return owned_kinds() };
@@ -57208,6 +57578,7 @@ fn method_kinds(receiver: &Expr, method: &str, args: &[Expr], ask: &TierAsk<'_, 
             return owned_kinds();
         }
         if hands_back_an_element(method) { return element_kinds(&found, method == "keys", ask, &walk); }
+        if (method == "clone" || method == "to_owned" || method == "to_vec") && args.is_empty() && a_container(ask.names, &ty) && received.still { demote_inside(&found.owner, &ty, &mut vec![], ask, walk); }
     }
     if method == "map" && args.len() == 1 {
         match nikaia_std::index::get(&args, 0) {
@@ -57292,7 +57663,10 @@ fn result_kinds(key: &str, ask: &TierAsk<'_, '_, '_>, walk: &TierWalk) -> Kinds 
 }
 
 fn viewed(received: &Kinds) -> Kinds {
-    if received.lasting && !received.owned && !received.view && !received.either { return lasting_kinds(); }
+    if (received.lasting || received.still) && !received.owned && !received.view && !received.either {
+        if received.still { return still_kinds(); }
+        return lasting_kinds();
+    }
     view_kinds()
 }
 
@@ -57313,9 +57687,21 @@ fn walk_program(program: &Program, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWal
                 for method in methods.iter() { walk_function(&method.node, Some(owner.to_owned()), ask, walk); }
             },
             Item::Grammar(def) => { walk_grammar(def, ask, walk); },
+            Item::Test { body, .. } => { walk_body(body, ask, walk); },
+            Item::Bench { body, .. } => { walk_body(body, ask, walk); },
             _ => { },
         }
     }
+}
+
+fn walk_body(body: &Block, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) {
+    walk.locals = collections::BTreeMap::new();
+    walk.frames = vec![];
+    walk.result = None;
+    walk.in_hole = false;
+    walk.hole_text = -1;
+    walk.lent_self = false;
+    tier_block(body, ask, walk);
 }
 
 fn walk_grammar(def: &GrammarDef, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) {
@@ -57429,7 +57815,7 @@ fn walk_function(item: &Item, target: Option<String>, ask: &TierAsk<'_, '_, '_>,
         let owner = TextOwner::Param(key.to_owned(), at);
         let kinds = kinds_of(&owner, &arg.ty, &mut vec![], ask, &walk);
         let of: String = ask.names.resolve(arg.ty.name).to_owned();
-        let local = TierLocal { kinds, of: Some(of), literal: -1, declared: Some(Declaring { owner, ty: arg.ty.clone() }) };
+        let local = TierLocal { kinds, of: Some(of), literal: -1, declared: Some(Declaring { owner, ty: arg.ty.clone() }), from: None, empty: -1 };
         bind_tier_local(ask.names.resolve(arg.name).to_owned(), local, walk);
         at += 1;
     }
@@ -57439,7 +57825,7 @@ fn walk_function(item: &Item, target: Option<String>, ask: &TierAsk<'_, '_, '_>,
         let local = TierLocal { kinds: owned_kinds(), of: match target.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
-        }, literal: -1, declared: None };
+        }, literal: -1, declared: None, from: None, empty: -1 };
         bind_tier_local(String::from("self"), local, walk);
     }
     let tail = tier_block(body, ask, walk);
@@ -57452,13 +57838,59 @@ fn walk_function(item: &Item, target: Option<String>, ask: &TierAsk<'_, '_, '_>,
     close_tier_scope(walk);
 }
 
-fn decide_tiers(flows: &Flows, declared: &TextDeclared) -> collections::BTreeMap<String, Tier> {
+fn decide_tiers(flows: &Flows, declared: &TextDeclared, demoted: &mut collections::BTreeSet<String>) -> collections::BTreeMap<String, Tier> {
     let mut positions = flows.positions.to_owned();
+    for word in flows.demoted.iter() { demoted.insert(word.to_owned()); }
+    for word in demoted.iter() {
+        let before = nikaia_std::index::or(match *nikaia_std::index::get(&positions, word) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || no_kinds().into());
+        positions.insert(word.to_owned(), kinds_joined(&before, &owned_kinds()));
+    }
     let mut fixed: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut never: collections::BTreeSet<String> = flows.in_maps.to_owned();
     for (word, _) in positions.iter() { if flows.unwrappable.contains(word) || fixed_by_publishing(word, flows, declared) { fixed.insert(word.to_owned()); } }
     let mut changed = true;
     while changed {
         changed = false;
+        for (from, to) in flows.still_into.iter() {
+            let into = nikaia_std::index::or(match *nikaia_std::index::get(&positions, to) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || no_kinds().into());
+            let kept = into.owned || fixed.contains(to) || never.contains(to) || a_published_parameter(to, flows, declared);
+            if kept && !into.view && !into.either && joins_kinds(from, &kinds_joined(&nikaia_std::index::or(match *nikaia_std::index::get(&positions, from) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || no_kinds().into()), &owned_kinds()), &mut positions) {
+                demoted.insert(from.to_owned());
+                changed = true;
+            }
+        }
+        for (_, kept) in flows.literal_lets.iter() {
+            let mut owned = false;
+            for word in kept.iter() {
+                let tier = tier_of_kinds(&nikaia_std::index::or(match *nikaia_std::index::get(&positions, word) {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                }, || no_kinds().into()));
+                let published = fixed.contains(word) || never.contains(word) || a_published_parameter(word, flows, declared);
+                if owned_tier(tier) || lasting_tier(tier) && published { owned = true; }
+            }
+            if owned {
+                for word in kept.iter() {
+                    let before = nikaia_std::index::or(match *nikaia_std::index::get(&positions, word) {
+                        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                        None => None,
+                    }, || no_kinds().into());
+                    if lasting_tier(tier_of_kinds(&before)) && joins_kinds(word, &kinds_joined(&before, &owned_kinds()), &mut positions) {
+                        demoted.insert(word.to_owned());
+                        changed = true;
+                    }
+                }
+            }
+        }
         for (a, b) in flows.links.iter() {
             let mut both = nikaia_std::index::or(match *nikaia_std::index::get(&positions, a) {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -57475,6 +57907,11 @@ fn decide_tiers(flows: &Flows, declared: &TextDeclared) -> collections::BTreeMap
                 fixed.insert(b.to_owned());
                 changed = true;
             }
+            if never.contains(a) != never.contains(b) {
+                never.insert(a.to_owned());
+                never.insert(b.to_owned());
+                changed = true;
+            }
         }
         for (from, to) in flows.param_into.iter() {
             if fixed.contains(to) && !fixed.contains(from) {
@@ -57488,10 +57925,17 @@ fn decide_tiers(flows: &Flows, declared: &TextDeclared) -> collections::BTreeMap
         let kinds = *kinds;
         let mut tier = tier_of_kinds(&kinds);
         if mixed(tier) && fixed.contains(word) { tier = Tier::Owned; }
+        if lasting_tier(tier) && (fixed.contains(word) || never.contains(word) || a_published_parameter(word, flows, declared)) { tier = Tier::Owned; }
         if !owned_tier(tier) { out.insert(word.to_owned(), tier); }
     }
     for word in flows.viewed.iter() { out.insert(word.to_owned(), Tier::View); }
     out
+}
+
+fn a_published_parameter(word: &str, flows: &Flows, declared: &TextDeclared) -> bool {
+    let position = match *nikaia_std::index::get(&flows.known, word) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let a_parameter = matches!(position.owner, TextOwner::Param(_, _));
+    a_parameter && position_published(&position.owner, declared)
 }
 
 fn joins_kinds(word: &str, both: &Kinds, positions: &mut collections::BTreeMap<String, Kinds>) -> bool {
@@ -57521,24 +57965,28 @@ fn same_tiers(a: &collections::BTreeMap<String, Tier>, b: &collections::BTreeMap
     true
 }
 
-fn tier_word(tier: Tier) -> String {
+fn tier_word(tier: Tier) -> &'static str {
     match tier {
-        Tier::Owned => String::from("owned"),
-        Tier::View => String::from("view"),
-        Tier::Mixed => String::from("mixed"),
+        Tier::Owned => "owned",
+        Tier::View => "view",
+        Tier::Mixed => "mixed",
+        Tier::Lasting => "lasting",
     }
 }
 
 pub fn text_tiers(program: &Program, ask: &TierAsk<'_, '_, '_>) -> TextTiers {
     let declared = declared_of(program, ask.names);
     let text = string_type(&declared, ask.names);
-    let mut walk = TierWalk { declared, tiers: collections::BTreeMap::new(), flows: no_flows(), locals: collections::BTreeMap::new(), frames: vec![], result: None, in_hole: false, hole_text: -1, lent_self: false };
+    let mut walk = TierWalk { declared, tiers: collections::BTreeMap::new(), flows: no_flows(), locals: collections::BTreeMap::new(), frames: vec![], result: None, in_hole: false, hole_text: -1, lent_self: false, adopted: collections::BTreeMap::new(), demoted: collections::BTreeSet::new() };
     for _ in 0..16 {
         walk.flows = no_flows();
         walk_program(program, ask, &mut walk);
-        let next = decide_tiers(&walk.flows, &walk.declared);
-        if same_tiers(&next, &walk.tiers) { break; }
+        let demoted_before = walk.demoted.len() as i64;
+        let next = decide_tiers(&walk.flows, &walk.declared, &mut walk.demoted);
+        let linked = same_adopted(&walk.flows.adopted, &walk.adopted);
+        if same_tiers(&next, &walk.tiers) && linked && (walk.demoted.len() as i64) == demoted_before { break; }
         walk.tiers = next;
+        walk.adopted = walk.flows.adopted.to_owned();
     }
     let mut tiers: Vec<(TextPosition, Tier)> = vec![];
     for (word, tier) in walk.tiers.iter() {
@@ -57559,7 +58007,22 @@ pub fn text_tiers(program: &Program, ask: &TierAsk<'_, '_, '_>) -> TextTiers {
             }
         }
     }
-    TextTiers { tiers, lets, text, wraps: walk.flows.wraps.to_owned(), hole_wraps: walk.flows.hole_wraps.to_owned() }
+    let mut adopted: collections::BTreeMap<i64, TierAdopted> = collections::BTreeMap::new();
+    for (at, target) in walk.flows.adopted.iter() {
+        let at = nikaia_std::num::value(at);
+        adopted.insert(at.clone(), TierAdopted { owner: target.owner.clone(), ty: target.ty.clone() });
+    }
+    TextTiers { tiers, lets, text, wraps: walk.flows.wraps.to_owned(), hole_wraps: walk.flows.hole_wraps.to_owned(), adopted }
+}
+
+fn same_adopted(a: &collections::BTreeMap<i64, Declaring>, b: &collections::BTreeMap<i64, Declaring>) -> bool {
+    if (a.len() as i64) != b.len() as i64 { return false; }
+    for (at, target) in a.iter() {
+        let at = nikaia_std::num::value(at);
+        let other = match *nikaia_std::index::get(&b, &at) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        if owner_word(&target.owner) != owner_word(&other.owner) { return false; }
+    }
+    true
 }
 
 fn no_path() -> Vec<i64> { vec![] }
@@ -58330,7 +58793,9 @@ const OWNS: [&str; 10] = ["clone", "to_owned", "to_string", "clone_text", "to_up
 
 const VIEWS: [&str; 17] = ["trim", "trim_start", "trim_end", "trim_matches", "trim_start_matches", "trim_end_matches", "strip_prefix", "strip_suffix", "lines", "split", "split_whitespace", "splitn", "rsplit", "rsplitn", "split_terminator", "matches", "as_str"];
 
-const ELEMENTS: [&str; 13] = ["collect", "next", "unwrap", "first", "last", "get", "iter", "nth", "peek", "pop", "remove", "values", "keys"];
+const ELEMENTS: [&str; 15] = ["collect", "next", "unwrap", "first", "last", "get", "iter", "nth", "peek", "pop", "remove", "values", "keys", "drain", "into_iter"];
+
+const CHANGES: [&str; 14] = ["push_str", "push", "insert", "insert_str", "clear", "truncate", "pop", "remove", "retain", "drain", "extend", "make_ascii_uppercase", "make_ascii_lowercase", "split_off"];
 
 const PUTS: [&str; 6] = ["push", "push_back", "push_front", "insert", "extend", "append"];
 
@@ -58358,6 +58823,14 @@ pub fn views_what_it_is_called_on(method: &str) -> bool {
 
 pub fn hands_back_an_element(method: &str) -> bool {
     for one in ELEMENTS.iter() {
+        let one = *one;
+        if one == method { return true; }
+    }
+    false
+}
+
+pub fn changes_its_text(method: &str) -> bool {
+    for one in CHANGES.iter() {
         let one = *one;
         if one == method { return true; }
     }
@@ -58764,12 +59237,12 @@ fn same_receiver(a: Option<Receiver>, b: Option<Receiver>) -> bool {
     one.is_ref == other.is_ref && one.is_mut == other.is_mut
 }
 
-fn receiver_text(receiver: Option<Receiver>) -> String {
-    let taken = match receiver { Some(__nikaia_value) => __nikaia_value, None => return String::from("no `self`") };
-    if taken.is_ref && taken.is_mut { return String::from("`ref mut self`"); }
-    if taken.is_ref { return String::from("`ref self`"); }
-    if taken.is_mut { return String::from("`mut self`"); }
-    String::from("`self`")
+fn receiver_text(receiver: Option<Receiver>) -> &'static str {
+    let taken = match receiver { Some(__nikaia_value) => __nikaia_value, None => return "no `self`" };
+    if taken.is_ref && taken.is_mut { return "`ref mut self`"; }
+    if taken.is_ref { return "`ref self`"; }
+    if taken.is_mut { return "`mut self`"; }
+    "`self`"
 }
 
 fn pausing(own: &Ledger, trait_name: &str, target: &str, method: &str, span: Span) -> Vec<Finding> {
@@ -58954,7 +59427,7 @@ pub fn render(untrusted: bool, reasons: &[Reason], places: &[Place], path: &str)
     out
 }
 
-fn provenance(untrusted: bool) -> String { if untrusted { String::from("untrusted") } else { String::from("trusted") } }
+fn provenance(untrusted: bool) -> &'static str { if untrusted { "untrusted" } else { "trusted" } }
 
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -61441,7 +61914,7 @@ pub fn holds_view(ty: &Type) -> bool {
 }
 
 fn holds_view_written(ty: &Type) -> bool {
-    if ty.is_view { return true; }
+    if ty.is_view && !ty.lasting { return true; }
     for inner in ty.generics.iter() { if holds_view(inner) { return true; } }
     false
 }
@@ -62982,7 +63455,7 @@ fn rsrc_function(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Option<&Type>,
                 None => None,
             };
             let params = rsrc_params(asked, (receiver).as_ref(), args, config);
-            let self_name: String = String::from("self");
+            let self_name: &'static str = "self";
             let mut sources: Vec<String> = vec![];
             let mut position: i64 = 0;
             if receiver.is_some() {
@@ -63357,34 +63830,34 @@ fn binds(op: &BinaryOp) -> i64 {
     }
 }
 
-fn binary_word(op: &BinaryOp) -> String {
+fn binary_word(op: &BinaryOp) -> &'static str {
     match op {
-        BinaryOp::Add => String::from("+"),
-        BinaryOp::Sub => String::from("-"),
-        BinaryOp::Mul => String::from("*"),
-        BinaryOp::Div => String::from("/"),
-        BinaryOp::Rem => String::from("%"),
-        BinaryOp::Eq => String::from("=="),
-        BinaryOp::Ne => String::from("!="),
-        BinaryOp::Lt => String::from("<"),
-        BinaryOp::Le => String::from("<="),
-        BinaryOp::Gt => String::from(">"),
-        BinaryOp::Ge => String::from(">="),
-        BinaryOp::And => String::from("&&"),
-        BinaryOp::Or => String::from("||"),
-        BinaryOp::BitAnd => String::from("&"),
-        BinaryOp::BitOr => String::from("|"),
-        BinaryOp::BitXor => String::from("^"),
-        BinaryOp::Shl => String::from("<<"),
-        BinaryOp::Shr => String::from(">>"),
+        BinaryOp::Add => "+",
+        BinaryOp::Sub => "-",
+        BinaryOp::Mul => "*",
+        BinaryOp::Div => "/",
+        BinaryOp::Rem => "%",
+        BinaryOp::Eq => "==",
+        BinaryOp::Ne => "!=",
+        BinaryOp::Lt => "<",
+        BinaryOp::Le => "<=",
+        BinaryOp::Gt => ">",
+        BinaryOp::Ge => ">=",
+        BinaryOp::And => "&&",
+        BinaryOp::Or => "||",
+        BinaryOp::BitAnd => "&",
+        BinaryOp::BitOr => "|",
+        BinaryOp::BitXor => "^",
+        BinaryOp::Shl => "<<",
+        BinaryOp::Shr => ">>",
     }
 }
 
-fn unary_word(op: &UnaryOp) -> String {
+fn unary_word(op: &UnaryOp) -> &'static str {
     match op {
-        UnaryOp::Neg => String::from("-"),
-        UnaryOp::Not => String::from("!"),
-        UnaryOp::Ref => String::from("&"),
+        UnaryOp::Neg => "-",
+        UnaryOp::Not => "!",
+        UnaryOp::Ref => "&",
     }
 }
 
@@ -64117,7 +64590,7 @@ pub mod tether {
 }
 pub mod text_tiers {
     #[allow(unused_imports)]
-    pub use super::{Kinds, Tier, TextOwner, TextPosition, Hand, hand_number, TierAsk, HoleWrap, TextTiers, unaliased_in, text_tiers};
+    pub use super::{Kinds, Tier, TextOwner, TextPosition, Hand, hand_number, TierAsk, HoleWrap, TextTiers, TierAdopted, unaliased_in, text_tiers};
 }
 pub mod threads {
     #[allow(unused_imports)]
@@ -64129,7 +64602,7 @@ pub mod throws {
 }
 pub mod tiers {
     #[allow(unused_imports)]
-    pub use super::{owns_its_text, views_what_it_is_called_on, hands_back_an_element, puts_its_argument, is_a_map_name, is_a_container_name, plain_string, container_of};
+    pub use super::{owns_its_text, views_what_it_is_called_on, hands_back_an_element, changes_its_text, puts_its_argument, is_a_map_name, is_a_container_name, plain_string, container_of};
 }
 pub mod touch {
     #[allow(unused_imports)]

@@ -104,6 +104,10 @@ pub struct CheckFacts {
     pub negations: collections::BTreeMap[i64, String],
     pub copied_slots: collections::BTreeSet[i64],
     pub owned_copies: collections::BTreeSet[i64],
+    /// The copies among them that copy text, by the receiver's id: reached
+    /// through `?.`, the receiver is a reference to the text, which may itself
+    /// be a view (ADR-282 D29), and only `to_string` copies both.
+    pub text_copies: collections::BTreeSet[i64],
     pub text_as_is: collections::BTreeSet[i64],
     pub lent_coalesces: collections::BTreeMap[i64, String],
     pub plain_reaches: collections::BTreeSet[i64],
@@ -266,6 +270,7 @@ impl CheckFacts {
             negations: collections::BTreeMap(),
             copied_slots: collections::BTreeSet(),
             owned_copies: collections::BTreeSet(),
+            text_copies: collections::BTreeSet(),
             text_as_is: collections::BTreeSet(),
             lent_coalesces: collections::BTreeMap(),
             plain_reaches: collections::BTreeSet(),

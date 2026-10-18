@@ -15,7 +15,10 @@ comptime VIEWS: Array[ref String, 17] = ["trim", "trim_start", "trim_end", "trim
 
 // Methods whose result is an element of what they are called on, so it is the
 // same kind of text as the elements are.
-comptime ELEMENTS: Array[ref String, 13] = ["collect", "next", "unwrap", "first", "last", "get", "iter", "nth", "peek", "pop", "remove", "values", "keys"]
+comptime ELEMENTS: Array[ref String, 15] = ["collect", "next", "unwrap", "first", "last", "get", "iter", "nth", "peek", "pop", "remove", "values", "keys", "drain", "into_iter"]
+
+// Methods that change the text they are called on in place (ADR-282 D29).
+comptime CHANGES: Array[ref String, 14] = ["push_str", "push", "insert", "insert_str", "clear", "truncate", "pop", "remove", "retain", "drain", "extend", "make_ascii_uppercase", "make_ascii_lowercase", "split_off"]
 
 // Methods that put their argument into a run or a set; `insert` on a map puts
 // a key and a value.
@@ -50,6 +53,16 @@ pub fn views_what_it_is_called_on(method: ref String) -> bool {
 /// A method whose result is an element of what it is called on.
 pub fn hands_back_an_element(method: ref String) -> bool {
     for one in ELEMENTS {
+        if one == method {
+            return true
+        }
+    }
+    return false
+}
+
+/// A method that changes the text it is called on in place.
+pub fn changes_its_text(method: ref String) -> bool {
+    for one in CHANGES {
         if one == method {
             return true
         }

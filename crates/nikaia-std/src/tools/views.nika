@@ -286,7 +286,8 @@ pub fn holds_view(ty: ref Type) -> bool {
 }
 
 fn holds_view_written(ty: ref Type) -> bool {
-    if ty.is_view {
+    // A view of static text borrows no buffer (ADR-282 D29).
+    if ty.is_view && !ty.lasting {
         return true
     }
     for inner in ty.generics {

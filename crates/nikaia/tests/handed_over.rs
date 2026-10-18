@@ -57,7 +57,7 @@ fn a_value_pushed_is_given_away() {
     one_refusal(
         "fn main() {\n\
          \x20   let mut xs: Vec[String] = []\n\
-         \x20   let name: String = \"b\"\n\
+         \x20   let name: String = \"b\".clone()\n\
          \x20   xs.push(name)\n\
          \x20   println(name)\n\
          }\n",
@@ -71,7 +71,7 @@ fn a_key_written_is_given_away() {
         "use std::collections\n\n\
          fn main() {\n\
          \x20   let mut m: collections::HashMap[String, i64] = collections::HashMap()\n\
-         \x20   let name: String = \"b\"\n\
+         \x20   let name: String = \"b\".clone()\n\
          \x20   m[name] = 2\n\
          \x20   println(name)\n\
          }\n",
@@ -84,7 +84,7 @@ fn a_field_holds_what_it_is_given() {
     one_refusal(
         &format!(
             "{PERSON}fn main() {{\n\
-             \x20   let name: String = \"b\"\n\
+             \x20   let name: String = \"b\".clone()\n\
              \x20   let p = Person {{ name: name }}\n\
              \x20   println(name)\n\
              }}\n"
@@ -94,7 +94,7 @@ fn a_field_holds_what_it_is_given() {
     one_refusal(
         &format!(
             "{PERSON}fn main() {{\n\
-             \x20   let name: String = \"b\"\n\
+             \x20   let name: String = \"b\".clone()\n\
              \x20   let p = Person {{ name }}\n\
              \x20   println(name)\n\
              }}\n"
@@ -107,7 +107,7 @@ fn a_field_holds_what_it_is_given() {
 fn a_rename_moves() {
     one_refusal(
         "fn main() {\n\
-         \x20   let name: String = \"b\"\n\
+         \x20   let name: String = \"b\".clone()\n\
          \x20   let t = name\n\
          \x20   println(name)\n\
          }\n",
@@ -120,7 +120,7 @@ fn a_loop_hands_it_over_again() {
     one_refusal(
         "fn main() {\n\
          \x20   let mut xs: Vec[String] = []\n\
-         \x20   let name: String = \"b\"\n\
+         \x20   let name: String = \"b\".clone()\n\
          \x20   for i in 0..<3 {\n\
          \x20       xs.push(name)\n\
          \x20   }\n\
@@ -189,7 +189,7 @@ fn a_statement_that_hands_over_twice_is_refused() {
          \x20   return xs.len()\n\
          }\n\n\
          fn main() {\n\
-         \x20   let name: String = \"n\"\n\
+         \x20   let name: String = \"n\".clone()\n\
          \x20   println(f\"{keep(name, name)}\")\n\
          }\n",
         "`name` again, but it was passed to `keep`, which keeps it",
@@ -206,7 +206,7 @@ fn a_part_handed_over_is_gone() {
         &format!(
             "{head}fn main() {{\n\
              \x20   let mut xs: Vec[String] = []\n\
-             \x20   let p = P {{ name: \"a\", x: 1 }}\n\
+             \x20   let p = P {{ name: \"a\".clone(), x: 1 }}\n\
              \x20   xs.push(p.name)\n\
              \x20   println(p.name)\n\
              }}\n"
@@ -217,7 +217,7 @@ fn a_part_handed_over_is_gone() {
         &format!(
             "{head}fn main() {{\n\
              \x20   let mut xs: Vec[String] = []\n\
-             \x20   let p = P {{ name: \"a\", x: 1 }}\n\
+             \x20   let p = P {{ name: \"a\".clone(), x: 1 }}\n\
              \x20   xs.push(p.name)\n\
              \x20   let q = p\n\
              }}\n"
@@ -341,7 +341,7 @@ fn insert_keeps_its_key() {
         "use std::collections\n\n\
          fn main() {\n\
          \x20   let mut m: collections::HashMap[String, i64] = collections::HashMap()\n\
-         \x20   let k: String = \"a\"\n\
+         \x20   let k: String = \"a\".clone()\n\
          \x20   m.insert(k, 1)\n\
          \x20   println(k)\n\
          }\n",
@@ -473,7 +473,7 @@ fn a_name_bound_again_is_not_the_one_handed_over() {
 fn owned_text_into_a_literal_binding_names_the_annotation() {
     let source = "fn main() {\n\
                   \x20   let mut s = \"a\"\n\
-                  \x20   let t: String = \"q\"\n\
+                  \x20   let t: String = \"q\".clone()\n\
                   \x20   s = t\n\
                   \x20   println(s)\n\
                   }\n";

@@ -932,6 +932,13 @@ pub struct Type {
     /// it is `nikaia_std::either_text::EitherText`, which borrows a view and
     /// owns what it was handed, so neither kind pays for the other.
     pub either: bool,
+    /// **A view of the program's own static text**
+    /// ([ADR-282](../../../docs/specification/adr/adr-282.md) D29). Never
+    /// written: set by [`crate::text_tiers`] on a `String` position only
+    /// literals (and views of them) flow into, which is then also `is_view`.
+    /// Below it is `&'static str`: it borrows no buffer, so it carries no
+    /// lifetime and a struct holding it takes none.
+    pub lasting: bool,
 }
 
 /// One line of an `extern` block, before the two shapes are taken apart

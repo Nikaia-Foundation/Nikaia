@@ -66,6 +66,10 @@ pub fn check_core_a_field_of_a_lent_place_handed_back[H: CheckHost](mut state: C
     if ty.is_unknown() || copies_plainly(ty) {
         return
     }
+    // **`s.bytes` handed back is copied** (ADR-320 D11), not given away.
+    if state.a_text_bytes_view(world, value) {
+        return
+    }
     let notes: Vec[String] = [f"`{root}` belongs to whoever lent it (a `ref` parameter, a `for` over a list, a `let` over a place), and `{path}` is a `{ty.text()}`. Giving it away would take a piece out of something this function doesn't own."]
     let help: String = f"Declare the result `ref {ty.text()}` to return a view of it, or write `{path}.clone()` for a copy."
     state.findings.push(check_refusal("NK1131", span, f"You can't give away `{path}` here: `{root}` is only borrowed.", notes, help))

@@ -5064,6 +5064,7 @@ impl<'p> Emitter<'p> {
                     is_mut: false,
                     is_slice: false,
                     either: false,
+                    lasting: false,
                 },
                 Lifetimes::Named,
             );

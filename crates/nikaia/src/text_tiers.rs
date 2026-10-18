@@ -24,9 +24,12 @@
 //!   and text of its own is owned, **each at its own line**, so no line pays for
 //!   another line's kind of text.
 //!
-//! A literal alone moves nothing: a position only literals and owned text flow
-//! into stays `String`, and the literal is built where it stands as before
-//! ([ADR-282](../../../docs/specification/adr/adr-282.md) D4).
+//! A position **only literals** (and views of them) flow into is a view of the
+//! program's own static text, `&'static str` below: it borrows no buffer, so it
+//! carries no lifetime and nothing is copied
+//! ([ADR-282](../../../docs/specification/adr/adr-282.md) D29). A position
+//! literals and text of its own flow into stays `String`, and the literal is
+//! built where it stands as before (D4).
 //!
 //! **What is published may become a view but never both kinds**: a `pub` field
 //! of a `pub` struct, and a `pub` function's parameters and result. Their
@@ -50,6 +53,9 @@ enum Tier {
     Owned,
     View,
     Mixed,
+    /// A view of the program's own static text, `&'static str` below
+    /// ([ADR-282](../../../docs/specification/adr/adr-282.md) D29).
+    Lasting,
 }
 
 /// Who declares a position.
@@ -94,6 +100,7 @@ fn tier_from(tier: nikaia_std::tools::text_tiers::Tier) -> Tier {
         Nika::Owned => Tier::Owned,
         Nika::View => Tier::View,
         Nika::Mixed => Tier::Mixed,
+        Nika::Lasting => Tier::Lasting,
     }
 }
 
@@ -136,16 +143,42 @@ pub fn refine(parsed: &mut Parsed) {
         library,
     };
     let decided = text_tiers(&parsed.program, &ask);
-    let tiers: Tiers = decided
+    let mut tiers: Tiers = decided
         .tiers
         .into_iter()
         .map(|(position, tier)| (position_from(position), tier_from(tier)))
         .collect();
+    // **An empty list linked to where it goes is declared as that position**
+    // (ADR-282 D16): its type, and the tiers inside it.
+    let mut adopted: BTreeMap<usize, Type> = BTreeMap::new();
+    for (at, target) in decided.adopted {
+        let at = at as usize;
+        let owner = position_from(nikaia_std::tools::text_tiers::TextPosition {
+            owner: target.owner,
+            path: Vec::new(),
+        })
+        .owner;
+        let inherited: Vec<(Vec<usize>, Tier)> = tiers
+            .iter()
+            .filter(|(position, _)| position.owner == owner)
+            .map(|(position, tier)| (position.path.clone(), *tier))
+            .collect();
+        for (path, tier) in inherited {
+            tiers.insert(
+                Position {
+                    owner: Owner::Let(at),
+                    path,
+                },
+                tier,
+            );
+        }
+        adopted.insert(at, target.ty);
+    }
     // **A name bound to a literal and kept where text of its own is wanted is
     // declared `String`** (ADR-282 D17): the literal is built into text once,
     // where it is bound, which is what the program would have written.
     let lets: BTreeSet<usize> = decided.lets.iter().map(|at| *at as usize).collect();
-    if tiers.is_empty() && lets.is_empty() {
+    if tiers.is_empty() && lets.is_empty() && adopted.is_empty() {
         return;
     }
     let wraps: BTreeMap<usize, usize> = decided
@@ -201,9 +234,10 @@ pub fn refine(parsed: &mut Parsed) {
             is_mut: false,
             is_slice: false,
             either: false,
+            lasting: false,
         })
     });
-    rewrite(parsed, &tiers, &lets, text, &wraps, into);
+    rewrite(parsed, &tiers, &lets, text, &adopted, &wraps, into);
     parsed.text_tiers = said;
 }
 
@@ -215,6 +249,10 @@ fn mark(ty: &mut Type, path: &[usize], tier: Tier) {
             Tier::Mixed => {
                 ty.is_view = true;
                 ty.either = true;
+            }
+            Tier::Lasting => {
+                ty.is_view = true;
+                ty.lasting = true;
             }
         }
         return;
@@ -229,6 +267,7 @@ fn rewrite(
     tiers: &Tiers,
     lets: &BTreeSet<usize>,
     text_type: Option<Type>,
+    adopted: &BTreeMap<usize, Type>,
     wraps: &BTreeMap<usize, usize>,
     into: [winnow_grammar::Symbol; 6],
 ) {
@@ -308,6 +347,7 @@ fn rewrite(
         if let Some(text_type) = &text_type {
             annotate_item(&mut item.node, lets, text_type);
         }
+        annotate_adopted(&mut item.node, adopted);
     }
     for (position, tier) in tiers {
         match &position.owner {
@@ -388,7 +428,7 @@ fn rewrite(
 
 pub(crate) fn each_block(item: &mut Item, f: &mut dyn FnMut(&mut Block)) {
     match item {
-        Item::Fn { body, .. } => f(body),
+        Item::Fn { body, .. } | Item::Test { body, .. } | Item::Bench { body, .. } => f(body),
         Item::Impl { methods, .. } => {
             for method in methods {
                 each_block(&mut method.node, f);
@@ -598,6 +638,22 @@ fn annotate_item(item: &mut Item, lets: &BTreeSet<usize>, text: &Type) {
     });
 }
 
+fn annotate_adopted(item: &mut Item, adopted: &BTreeMap<usize, Type>) {
+    if adopted.is_empty() {
+        return;
+    }
+    each_block(item, &mut |block| {
+        visit_block_mut(block, &mut |_| {}, &mut |stmt, at| {
+            if let Stmt::Let { ty, .. } = stmt
+                && ty.is_none()
+                && let Some(declared) = adopted.get(&at)
+            {
+                *ty = Some(declared.clone());
+            }
+        })
+    });
+}
+
 fn mark_let_item(item: &mut Item, wanted: usize, path: &[usize], tier: Tier) {
     each_block(item, &mut |block| {
         visit_block_mut(block, &mut |_| {}, &mut |stmt, at| {
@@ -617,6 +673,10 @@ fn said(tiers: &Tiers) -> Vec<String> {
         .filter_map(|(position, tier)| {
             let what = match tier {
                 Tier::View => "a view: only views and literals flow into it",
+                Tier::Lasting => {
+                    "a view of the program's own text: only literals flow into it, and none is \
+                     copied"
+                }
                 Tier::Mixed => {
                     "a view or text of its own, per value: both flow into it, and each is kept \
                      as it is"

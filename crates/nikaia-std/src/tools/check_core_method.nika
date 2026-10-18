@@ -296,6 +296,9 @@ fn check_core_method_resolved(mut state: CheckState, world: ref CheckWorld, rece
     let library = key.ends_with("::clone") && world.library.functions.contains_key(key) && !world.own.functions.contains_key(key)
     if library && args.len() == 0 {
         state.facts.owned_copies.insert(id_of(receiver) as i64)
+        if key == "String::clone" || key == "str::clone" {
+            state.facts.text_copies.insert(id_of(receiver) as i64)
+        }
     }
     // **A list of text asked for a view of text** (#125, #375).
     if (key == "Vec::contains" || key == "Array::contains") && args.len() == 1 {
