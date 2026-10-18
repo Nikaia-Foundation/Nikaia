@@ -90,7 +90,7 @@ fn alternatives_that_bind_different_names_are_refused() {
 }
 
 /// **`NK1253`: a positional variant's pattern names every part**
-/// (lowering-defects D33): `E::A(_)` against `A(i64, i64)` reached rustc.
+/// `E::A(_)` against `A(i64, i64)` reached rustc.
 #[test]
 fn a_variant_pattern_with_too_few_parts_is_refused() {
     let found: Vec<_> = findings(
@@ -112,7 +112,7 @@ fn a_variant_pattern_with_too_few_parts_is_refused() {
     assert!(fine.iter().all(|f| f.code != "NK1253"), "{fine:#?}");
 }
 
-/// **An arm of a statement `match` is a statement** (lowering-defects D34):
+/// **An arm of a statement `match` is a statement**:
 /// an arm that is a call handing back a value drops it with `;`, so it agrees
 /// with `else => {}`.
 #[test]
@@ -152,7 +152,7 @@ fn a_guard_is_written_if() {
 }
 
 /// **A `match` as a guard is written in brackets, and the refusal says so**
-/// (ADR-301 D4; lowering-defects D16).
+/// (ADR-301 D4).
 #[test]
 fn a_match_in_a_guard_without_brackets_names_them() {
     let source = "fn small(n: i64) -> bool { return n < 3 }\n\

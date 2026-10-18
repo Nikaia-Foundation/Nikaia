@@ -487,7 +487,7 @@ fn a_maybe_compared_with_a_value_is_refused() {
     assert!(found.is_empty(), "{found:#?}");
 }
 
-/// **lowering-defects D1: `p with { .. }` over a by-value parameter that is
+/// **`p with { .. }` over a by-value parameter that is
 /// only read.** `..p` moves the whole of `p`, so the parameter stays a value
 /// rather than a `&T` that `..p` cannot take - for a `Copy` struct and for one
 /// with text in it.
@@ -513,7 +513,7 @@ fn a_with_over_a_by_value_parameter_runs() {
     );
 }
 
-/// **lowering-defects D11: a typed `throw` in a trait impl of a `throws`
+/// **A typed `throw` in a trait impl of a `throws`
 /// method.** The trait declares the opaque channel, so what the impl throws
 /// is raised into it, and the caller catches it.
 #[test]
@@ -577,7 +577,7 @@ fn codes(source: &str) -> Vec<String> {
         .collect()
 }
 
-/// **lowering-defects D39: a struct literal at the head of a `catch`.** The
+/// **A struct literal at the head of a `catch`.** The
 /// guarded call is a `match` scrutinee in Rust, where a bare struct literal is
 /// refused, so it is written in brackets.
 #[test]
@@ -609,7 +609,7 @@ fn a_struct_literal_before_a_catch_runs() {
     );
 }
 
-/// **lowering-defects D10: a number as the fallback of a struct's `T?`** is
+/// **A number as the fallback of a struct's `T?`** is
 /// refused (`NK1103`); a value of the type is not.
 #[test]
 fn a_number_beside_a_struct_option_is_refused() {
@@ -629,7 +629,7 @@ fn a_number_beside_a_struct_option_is_refused() {
     assert!(codes(&source("Money { cents: 0 }")).is_empty());
 }
 
-/// **lowering-defects D18: a lambda that names the parts of the tuple it is
+/// **A lambda that names the parts of the tuple it is
 /// handed** is refused (`NK1101`), and the help writes the one-argument form.
 #[test]
 fn a_lambda_split_over_a_tuple_is_refused() {
@@ -648,7 +648,7 @@ fn a_lambda_split_over_a_tuple_is_refused() {
     );
 }
 
-/// **lowering-defects D26: a `mut` view parameter handed back** is refused
+/// **A `mut` view parameter handed back** is refused
 /// (`NK1131`): it would be a view of the caller's view. A local walks instead.
 #[test]
 fn a_mut_view_parameter_handed_back_is_refused() {
@@ -671,7 +671,7 @@ fn a_mut_view_parameter_handed_back_is_refused() {
     );
 }
 
-/// **lowering-defects D11b: a thrown type of the program's own with no
+/// **A thrown type of the program's own with no
 /// `impl Error`** is refused (`NK1161`) before `rustc` sees it.
 #[test]
 fn a_thrown_struct_without_impl_error_is_refused() {
@@ -699,7 +699,7 @@ fn a_thrown_struct_without_impl_error_is_refused() {
     );
 }
 
-/// **lowering-defects D40: a parameter bound by a `let mut` and changed** is
+/// **A parameter bound by a `let mut` and changed** is
 /// owned: lowered as a view, `push_str` on it did not compile.
 #[test]
 fn a_parameter_moved_into_a_let_mut_stays_owned() {

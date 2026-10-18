@@ -1,4 +1,4 @@
-//! **A `match` on a name an enclosing arm lent** (lowering-defects D48), and
+//! **A `match` on a name an enclosing arm lent**, and
 //! **an indexed write on an `Array`** (D46): programs `rustc` refused, run and
 //! their output compared.
 mod common;

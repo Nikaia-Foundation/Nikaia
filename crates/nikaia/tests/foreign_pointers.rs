@@ -994,7 +994,7 @@ fn what_is_thrown_is_an_error() {
 /// rule safe: a type the package declares with its `impl Error` (in any of its
 /// files: the package's ledger answers), a package's type is not this
 /// compiler's to answer for, and a caught error re-thrown is a `?`. A declared
-/// type with no `impl` anywhere is refused (lowering-defects D11b).
+/// type with no `impl` anywhere is refused.
 #[test]
 fn a_throw_this_compiler_cannot_type_is_left_alone() {
     let quiet = [

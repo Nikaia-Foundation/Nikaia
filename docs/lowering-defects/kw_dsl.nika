@@ -1,7 +1,0 @@
-struct S { dsl: i64 }
-fn f(dsl: i64) -> i64 sync {
-    return dsl
-}
-fn main() {
-    println(f"{f(1)}")
-}

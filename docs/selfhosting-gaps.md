@@ -9,7 +9,7 @@ side by side, and sorts every hand correction into one of five kinds:
 * **TOOL**: Nikaia has the form, the converter does not write it;
 * **LANGUAGE**: Nikaia has no direct form, so the code was restructured by hand;
 * **COMPILER**: the form is decided and the checker takes it, the lowering breaks
-  it (a defect, not a gap; they belong in `docs/lowering-defects.md`);
+  it (a defect, not a gap; they are GitHub issues);
 * **ADAPTER**: the code stays in Rust for a good reason (Rust types);
 * **STYLE**: the deviation was not needed.
 
@@ -180,7 +180,7 @@ not as a gap: *as it is today, until someone needs more*.
 | `if c { arm.tail } else { given[at] }` into `ref Expr?`: the plain arm is `Expr`, NK1103 | 1 | `given.get(at)` | helper `check_arguments_at` returning `ref Expr?` |
 | `std::ptr::eq(whole, arm)` | 1 | `arguments` | the arm's index says it is an arm |
 
-The last three belong in `docs/lowering-defects.md`; the last should be a
+The last three are GitHub issues; the last should be a
 checker refusal (`NK1125`) if `!= null` is not meant to narrow.
 
 ## ADAPTER (4)
@@ -206,15 +206,15 @@ checker refusal (`NK1125`) if `!= null` is not meant to narrow.
 | `count(\|h\| matches!(h, Held::Proved))` x5 | counters by `how.starts_with(..)` | no; a typed lambda works (`q17b`) |
 | `from[1..]` byte slicing with `find` | the whole text as `Vec[scalar]` | partly: follows from no `split_at` |
 | `Item::Enum { .. } if text == ty =>` | `if` inside the arm | no (`q06`) |
-| U-c1 `match hole { V(n, _) => seen.insert(..), _ => {} }` | the insert in a block arm | no: the arm lowered without `;`, `Option` against `()` (lowering-defects D34) |
-| U-c1 `fn compares(op: BinaryOp)` called with a bound `op` | the comparison inline; **removed (0.0.965)**: `check_core_ops_equality(op) \|\| check_core_ops_ordering(op)` | no: param lowered `&BinaryOp`, call `*op` (lowering-defects D34) |
+| U-c1 `match hole { V(n, _) => seen.insert(..), _ => {} }` | the insert in a block arm | no: the arm lowered without `;`, `Option` against `()` (D34) |
+| U-c1 `fn compares(op: BinaryOp)` called with a bound `op` | the comparison inline; **removed (0.0.965)**: `check_core_ops_equality(op) \|\| check_core_ops_ordering(op)` | no: param lowered `&BinaryOp`, call `*op` (D34) |
 | U-c1 `spec.clone()` on a `String?` from a pattern | `spec?.clone()` | yes (NK1125) |
 | U-c1 `.or_else` chain of five literal kinds | `if x != null { return x }` per kind | no, but no lazy `??` chain exists |
 | U-c1 `let [condition] = args else {..}` | `if args.len() != 1` then `args[0]` | no slice patterns |
 | U-c1 `message = Some(&option.value)` | the index of the option | yes: no `ref Expr?` local from a loop |
 | U-c2 `match (&evaluated, is_growable(want))` | a shape number from a helper over `ref BuildValue?`, then `if`s | no: no tuple pattern over an option |
 | U-c2 `evaluated` read again after `evaluated ?? return` | `evaluated?.clone() ?? return` | yes (NK2105), at the cost of a clone |
-| U-c2 `.get(..).and_then(|c| c.signature.as_ref())` | a helper over `ref FnContract` | no: `c.signature ?? return` on a `get(..) ??` local moves out of the reference (lowering-defects D35) |
+| U-c2 `.get(..).and_then(|c| c.signature.as_ref())` | a helper over `ref FnContract` | no: `c.signature ?? return` on a `get(..) ??` local moves out of the reference (D35) |
 | U-c2 `self.declared(ty, span)` and the `payload_of` / `{f:?}` closures | host methods `declared` (hosted), `payload_of`, `float_text` | yes: `Ty::from_ast` and `a_key_with_no_order` stay Rust |
 | U-c2 `rust_constant_type(..).or_else(..).or_else(..)` | `if x != null { return x }` per step | no lazy `??` chain |
 | U-c3 `door: MultiLock` across the crossing | `writing: bool`, the two spellings as helpers | yes: the Rust enum stays for `call`'s dispatch |

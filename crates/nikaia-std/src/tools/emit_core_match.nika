@@ -133,7 +133,7 @@ fn emit_match_path(world: ref EmitWorld, path: ref Vec[winnow_grammar::Symbol]) 
 }
 
 impl EmitState {
-    /// **`*` before a name an enclosing arm lent** (lowering-defects D48): the
+    /// **`*` before a name an enclosing arm lent** (`match_on_a_lent_name.rs`): the
     /// arm wrote `ref name` (or opened a lent box into a `&T`), so the name is
     /// a reference, and the patterns, written as over an owned value, match
     /// what it points to.

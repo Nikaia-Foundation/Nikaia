@@ -1,6 +1,0 @@
-fn pick(a: ref String, b: ref String) -> ref(a) String sync {
-    return a
-}
-fn main() {
-    println(pick("x", "y"))
-}

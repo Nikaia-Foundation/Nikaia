@@ -683,8 +683,8 @@ impl Program {
         // rather than a worse one derived here from half the graph. That order
         // is the whole of why this is two passes over the groups and not one.
         let mut library = crate::contracts::std_library();
-        // **And the described crates' answers** (D29 of
-        // `docs/lowering-defects.md`): the check reads `contracts/<crate>.contracts`
+        // **And the described crates' answers**:
+        // the check reads `contracts/<crate>.contracts`
         // beside `std`, so the program's own `sync` inference does too, or a
         // function that only calls a described `sync` entry is inferred to pause
         // and a `sync` caller is refused (`NK2202`). `std` wins a collision, as

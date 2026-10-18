@@ -280,12 +280,6 @@ touches = []
 views = ["set: borrowed"]
 signature = "(c: scalar, set: ref String) -> bool"
 
-[fn."rs2nika_in_match"]
-sync = "inferred"
-touches = []
-views = ["ctx: borrowed"]
-signature = "(ctx: ref Rs2nikaCtx) -> bool"
-
 [fn."rs2nika_indent"]
 sync = "inferred"
 touches = []

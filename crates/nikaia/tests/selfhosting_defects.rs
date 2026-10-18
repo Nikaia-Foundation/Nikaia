@@ -1510,7 +1510,7 @@ fn main() {
 }
 
 /// `get(k)?.clone() ?? d` over a `BTreeMap` of a struct and a `HashMap` of
-/// text clones the value, not the reference (lowering-defects D2, D36).
+/// text clones the value, not the reference.
 #[test]
 fn a_cloned_get_over_either_map_gives_the_value() {
     let said = printed(
@@ -1541,7 +1541,7 @@ fn main() {
 }
 
 /// A loop over a `ref Vec[T]` of a type that copies by declaration binds
-/// the value, as a loop over numbers does (lowering-defects D4).
+/// the value, as a loop over numbers does.
 #[test]
 fn a_loop_over_copies_binds_the_value() {
     let said = printed(
@@ -1571,8 +1571,8 @@ fn main() {
 }
 
 /// A `T?` parameter, by value and as a view, and a `match` of text literals
-/// over a `ref String`, also in a guard (lowering-defects D9, D19: not
-/// reproduced; kept as the path that runs).
+/// over a `ref String`, also in a guard
+/// (kept as the path that runs).
 #[test]
 fn an_optional_parameter_and_a_match_of_text_run() {
     let said = printed(
@@ -1619,8 +1619,8 @@ fn main() {
 }
 
 /// A text method's pattern is only read, in a loop too: `strip_prefix` and
-/// `strip_suffix` of an owned `String` declared outside it (lowering-defects
-/// D41, was `NK2105`).
+/// `strip_suffix` of an owned `String` declared outside it (was
+/// `NK2105`).
 #[test]
 fn a_pattern_handed_to_strip_in_a_loop_is_only_read() {
     let said = printed(

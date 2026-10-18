@@ -4179,12 +4179,6 @@ fn rs2nika_close_iflet(mut ctx: Rs2nikaCtx, line: ref String) -> Vec[String] {
     return []
 }
 
-/// Whether the innermost open block is an `if let` turned `match`.
-fn rs2nika_in_match(ctx: ref Rs2nikaCtx) -> bool {
-    let n = ctx.stack_kind.len()
-    return n > 0 && ctx.stack_kind[n - 1].starts_with("iflet")
-}
-
 /// R44: a whole tools file: `use std::collections`, free items at the top
 /// level, methods of `self` inside `impl <State> { }`.
 fn rs2nika_as_file(text: ref String, state: ref String) -> String {

@@ -1,7 +1,0 @@
-struct S { comptime: i64 }
-fn f(comptime: i64) -> i64 sync {
-    return comptime
-}
-fn main() {
-    println(f"{f(1)}")
-}

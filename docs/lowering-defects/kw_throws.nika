@@ -1,7 +1,0 @@
-struct S { throws: i64 }
-fn f(throws: i64) -> i64 sync {
-    return throws
-}
-fn main() {
-    println(f"{f(1)}")
-}

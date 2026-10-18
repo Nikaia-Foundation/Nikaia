@@ -321,8 +321,8 @@ fn the_loops_binding_does_not_outlive_it() {
 ///
 /// **Grown with `push`, fixed once it crosses** (ADR-311 D1): the run is
 /// the program's, so the table is built as the program would build it. (An
-/// `Array[T, N]` filled by index does not build at run time yet,
-/// `docs/lowering-defects.md` D46, and so not at build time either.)
+/// `Array[T, N]` filled by index did not build at run time,
+/// and so not at build time either.)
 #[test]
 fn a_table_is_computed_while_the_program_is_built() {
     let source = "fn squares() -> Vec[i64] {\n\

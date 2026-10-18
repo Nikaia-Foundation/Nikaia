@@ -673,7 +673,7 @@ fn check_core_flow_caught(state: ref CheckState, world: ref CheckWorld, on: ref 
 /// in a scope of its own; and the arms' types, met.
 pub fn check_core_flow_match[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, value: ref Expr, arms: ref Vec[MatchArm], span: ref Span) -> Ty sync {
     let on = check_core_expr(state, world, host, value, span)
-    // **A name an enclosing arm bound** (lowering-defects D48): where that arm
+    // **A name an enclosing arm bound** (`match_on_a_lent_name.rs`): where that arm
     // lends it, the lowering matches what it points to.
     let subject = check_core_flow_variable(world, value)
     if subject != "" {

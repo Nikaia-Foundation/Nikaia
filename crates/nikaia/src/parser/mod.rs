@@ -3414,7 +3414,7 @@ grammar! {
           // error has: `if { }` answered *"expected one of `!`, `-`, `dsl`,
           // `false`, `true`, identifier"*, leading with the rarest of the six.
           | d:dsl_from_expr -> { d }
-          // **The way out, named** (D4; lowering-defects D16): a `match` in a
+          // **The way out, named** (D4; ADR-301 D4): a `match` in a
           // condition or a guard is one of the brace-led forms a head leaves
           // out, and the parentheses are what takes it.
           | KW_MATCH fail(

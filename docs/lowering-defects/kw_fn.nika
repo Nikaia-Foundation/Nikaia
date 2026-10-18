@@ -1,6 +1,0 @@
-fn grammar() -> i64 sync {
-    return 1
-}
-fn main() {
-    println(f"{grammar()}")
-}

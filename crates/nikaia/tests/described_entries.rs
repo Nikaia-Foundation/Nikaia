@@ -358,7 +358,7 @@ fn a_view_crosses_to_a_described_view_and_is_refused_where_the_crate_keeps() {
 }
 
 /// **A function that only calls a described `sync` entry is inferred `sync`**
-/// in a project (D29 of `docs/lowering-defects.md`): the program's own
+/// in a project: the program's own
 /// inference reads `contracts/<crate>.contracts` as the check does, so a `sync`
 /// caller of it is not `NK2202`. One that calls the described pausing entry
 /// still is.
