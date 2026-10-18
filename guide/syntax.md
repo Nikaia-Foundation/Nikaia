@@ -22,29 +22,29 @@ let mut count = 0   // `mut` says it may change
 count += x
 ```
 
-Values are **immutable unless declared `mut`**, as in Rust or Kotlin's `val`/`var`. Types
+Values are immutable unless declared `mut`, as in Rust or Kotlin's `val`/`var`. Types
 are inferred. You write one where you want to, `let big: int = 3000000000`.
 
 There are no semicolons at the end of lines. A comment is `//` or `/* … */`.
 
-📖 **Specification:** [Part I, §2.1 Variables and assignment](../docs/specification/10-nikaia-light.md#21-variables-and-assignment)
+**Specification:** [Part I, §2.1 Variables and assignment](../docs/specification/10-nikaia-light.md#21-variables-and-assignment)
 
 ## Basic types
 
 | Type | What it is |
 | :--- | :--- |
-| `int` | the everyday integer: the values of an `i64`, stored as the compiler sees fit |
-| `i64`, `i32`, `u8`, `u64`, `u32` | integers of exactly that width, for where the width is the point: a hash, a byte, C. Every length and index is an `i64`, and `int` and `i64` take each other |
+| `int` | the integer for most numbers: the values of an `i64`, stored as the compiler sees fit |
+| `i64`, `i32`, `u8`, `u64`, `u32` | integers of exactly that width, for a hash, a byte, a wire format or C. Every length and index is an `i64`, and `int` and `i64` convert to each other without `as` |
 | `f64` | a floating-point number |
 | `bool` | `true` or `false` |
-| `char` | one Unicode character, `'a'` |
+| `scalar` | one Unicode scalar value, `'a'` (there is no `char`) |
 | `String` | text |
 
-There is no `long`/`usize` zoo. An integer that overflows **stops the program** rather
-than wrapping silently. Where you mean to wrap, you say so: `h.wrapping_mul(31)`.
+There is no `long` or `usize`. An integer that overflows stops the program instead of
+wrapping silently. Where you mean to wrap, you say so: `h.wrapping_mul(31)`.
 Conversions are written with `as`: `(total as f64) / (count as f64)`.
 
-📖 **Specification:** [Part I, §2.2 Primitive data types](../docs/specification/10-nikaia-light.md#22-primitive-data-types)
+**Specification:** [Part I, §2.2 Primitive data types](../docs/specification/10-nikaia-light.md#22-primitive-data-types)
 
 ## Text and interpolation
 
@@ -61,7 +61,7 @@ You never choose between a string type and a string-slice type. There is one `St
 and whether a value is text of its own or a view into text that already exists is the compiler's
 decision.
 
-📖 **Specification:** [Part I, §2.5 Strings, plain and interpolated](../docs/specification/10-nikaia-light.md#25-strings-plain-and-interpolated)
+**Specification:** [Part I, §2.5 Strings, plain and interpolated](../docs/specification/10-nikaia-light.md#25-strings-plain-and-interpolated)
 
 ## Everything is an expression
 
@@ -73,12 +73,12 @@ let status = if count > 5 { "big" } else { "small" }
 `if`, `match` and a `{ … }` block all have a value: the value of their last line. That is
 why there is no ternary operator.
 
-📖 **Specification:** [Part I, §3.1 Expressions and blocks](../docs/specification/10-nikaia-light.md#31-expressions-and-blocks) · [§3.2 if / else](../docs/specification/10-nikaia-light.md#32-conditional-logic-if--else)
+**Specification:** [Part I, §3.1 Expressions and blocks](../docs/specification/10-nikaia-light.md#31-expressions-and-blocks) · [§3.2 if / else](../docs/specification/10-nikaia-light.md#32-conditional-logic-if--else)
 
 ## Loops
 
 ```nika
-for i in 0..<3 {         // 0, 1, 2 — `..<` stops before the end
+for i in 0..<3 {         // 0, 1, 2: `..<` stops before the end
     println(f"step {i}")
 }
 
@@ -91,7 +91,7 @@ while n < 5 {
 `a..b` includes its end and `a..<b` excludes it. There is `for`, `while`, `break` and
 `continue`. An endless loop is `while true { … }`.
 
-📖 **Specification:** [Part I, §3.3 Loops](../docs/specification/10-nikaia-light.md#33-loops)
+**Specification:** [Part I, §3.3 Loops](../docs/specification/10-nikaia-light.md#33-loops)
 
 ## Functions
 
@@ -104,16 +104,16 @@ println(greet("Nika"))                       // Hello, Nika!
 println(greet("Nika"; greeting: "Hallo"))    // Hallo, Nika!
 ```
 
-The **semicolon in the parameter list** is the unusual part. Parameters before it are the
+The semicolon in the parameter list is the unusual part. Parameters before it are the
 data the function works on and are passed by position. Parameters after it are options:
-they always have a default, and they are always passed **by name**. It is the same idea
-as keyword arguments in Python, made a rule.
+they always have a default, and they are always passed by name, like keyword arguments
+in Python.
 
-A `String` parameter needs no more: whether the function gets a view of the caller's
-text or text of its own is the compiler's decision. `ref String` is written only where
-a copy would be a mistake.
+A `String` parameter needs nothing more: whether the function gets a view of the caller's
+text or text of its own is the compiler's decision. `ref String` is written only in an
+`extern "C"` declaration; elsewhere it is a warning.
 
-📖 **Specification:** [Part I, §5.1 The subject ; config protocol](../docs/specification/10-nikaia-light.md#51-the-subject--config-protocol)
+**Specification:** [Part I, §5.1 The subject ; config protocol](../docs/specification/10-nikaia-light.md#51-the-subject--config-protocol)
 
 ## Structs and methods
 
@@ -134,13 +134,13 @@ println(f"{p.length_squared()}")    // 25
 let moved = p with { x: 5 }         // a copy with one field changed
 ```
 
-There are **no classes and no inheritance**. A `struct` holds the data, and an `impl`
+There are no classes and no inheritance. A `struct` holds the data, and an `impl`
 block adds behaviour to it, as in Go or Rust. Shared behaviour across types is a
 `trait` (an interface).
 
 Everything is private unless it says `pub`.
 
-📖 **Specification:** [Part I, §4.1 Structs](../docs/specification/10-nikaia-light.md#41-structs-custom-data-types) · [§4.2 Constructors](../docs/specification/10-nikaia-light.md#42-constructors-and-instantiation) · [§4.3 Why no classes?](../docs/specification/10-nikaia-light.md#43-why-no-classes-data-vs-behavior) · [§4.7 Traits](../docs/specification/10-nikaia-light.md#47-traits-defining-behavior)
+**Specification:** [Part I, §4.1 Structs](../docs/specification/10-nikaia-light.md#41-structs-custom-data-types) · [§4.2 Constructors](../docs/specification/10-nikaia-light.md#42-constructors-and-instantiation) · [§4.3 Why no classes?](../docs/specification/10-nikaia-light.md#43-why-no-classes-data-vs-behavior) · [§4.7 Traits](../docs/specification/10-nikaia-light.md#47-traits-defining-behavior)
 
 ## Enums and `match`
 
@@ -158,16 +158,15 @@ fn area(shape: Shape) -> f64 {
 }
 ```
 
-An `enum` is a value that is **one of a fixed set of shapes**, and each shape may carry
-data. If you know TypeScript's discriminated unions, Swift's or Kotlin's sealed types,
-this is that.
+An `enum` is a value that is one of a fixed set of shapes, and each shape may carry
+data, like TypeScript's discriminated unions or Kotlin's sealed classes.
 
 `match` must cover every case. Leave out `Shape::Rectangle` and the program does not
 compile. When a match is not over an enum, `else =>` catches the rest.
 
-📖 **Specification:** [Part I, §3.4 Pattern matching](../docs/specification/10-nikaia-light.md#34-pattern-matching-match) · [§4.4 Enums](../docs/specification/10-nikaia-light.md#44-enums-algebraic-data-types)
+**Specification:** [Part I, §3.4 Pattern matching](../docs/specification/10-nikaia-light.md#34-pattern-matching-match) · [§4.4 Enums](../docs/specification/10-nikaia-light.md#44-enums-algebraic-data-types)
 
-## No `null` surprises
+## Null safety
 
 ```nika
 fn find_nickname(name: String) -> String? {
@@ -183,7 +182,7 @@ let nick = find_nickname("Ada") ?? "no nickname"
 A `String` is always a string. Only a `String?` may be `null`, and the compiler makes you
 handle it: `??` supplies a fallback, and `?.` reaches into a value only where it exists.
 
-📖 **Specification:** [Part I, §2.3 Nullable types](../docs/specification/10-nikaia-light.md#23-nullable-types-null-safety) · [§3.5 Null safety operators](../docs/specification/10-nikaia-light.md#35-null-safety-operators)
+**Specification:** [Part I, §2.3 Nullable types](../docs/specification/10-nikaia-light.md#23-nullable-types-null-safety) · [§3.5 Null safety operators](../docs/specification/10-nikaia-light.md#35-null-safety-operators)
 
 ## Lists, maps and lambdas
 
@@ -201,7 +200,7 @@ let age = ages["Nika"] ?? 0      // a key may be missing, so reading one gives a
 A lambda is always written `fn(arguments) { body }`. When it is the last argument it
 stands after the call, as with `map` above. There is no second short arrow form.
 
-📖 **Specification:** [Part I, §4.5 Collections](../docs/specification/10-nikaia-light.md#45-collections) · [§5.2 One lambda form](../docs/specification/10-nikaia-light.md#52-there-is-one-lambda-form) · [§5.3 Lambdas](../docs/specification/10-nikaia-light.md#53-lambdas-fn---)
+**Specification:** [Part I, §4.5 Collections](../docs/specification/10-nikaia-light.md#45-collections) · [§5.2 One lambda form](../docs/specification/10-nikaia-light.md#52-there-is-one-lambda-form) · [§5.3 Lambdas](../docs/specification/10-nikaia-light.md#53-lambdas-fn---)
 
 ## Errors
 
@@ -238,11 +237,11 @@ fn main() {
 
 A function that can fail says `throws`. What it can fail *with* is worked out by the
 compiler. If a function calls something that can fail and neither declares `throws` nor
-handles the failure with `catch`, it does not compile. So nothing is silently swallowed,
-and there is no `try`, no `?` and no `if err != nil` on every line: an unhandled failure
-simply travels up to the caller.
+handles the failure with `catch`, it does not compile, so no failure is silently dropped.
+There is no `try`, `?` or `if err != nil`: a failure the function does not catch goes up
+to its caller.
 
-📖 **Specification:** [Part I, §7.1 Recoverable errors](../docs/specification/10-nikaia-light.md#71-recoverable-errors-throws)
+**Specification:** [Part I, §7.1 Recoverable errors](../docs/specification/10-nikaia-light.md#71-recoverable-errors-throws)
 
 ## Waiting and doing things at the same time
 
@@ -270,15 +269,14 @@ fn main() throws {
 }
 ```
 
-This is where Nikaia differs most from JavaScript, Python or C#: **there is no `async` and
-no `await`.** Reading a file pauses the function without blocking the program. You write
+Unlike JavaScript, Python or C#, Nikaia has no `async` and no `await`. Reading a file
+pauses the function without blocking the program. You write
 it as an ordinary call, and the compiler works out which functions can pause.
 
-Lines run in the order they are written. Where you *want* things to happen together, you
-say so: `overlap { … }` runs its lines at the same time and waits for all of them, and
-`spawn` starts a task that runs on its own.
+Lines run in the order they are written. `overlap { … }` runs its lines at the same time
+and waits for all of them, and `spawn` starts a task that runs on its own.
 
-📖 **Specification:** [Part I, Chapter 8 Concurrency](../docs/specification/10-nikaia-light.md#chapter-8-concurrency-doing-things-at-the-same-time)
+**Specification:** [Part I, Chapter 8 Concurrency](../docs/specification/10-nikaia-light.md#chapter-8-concurrency-doing-things-at-the-same-time)
 
 ## Data that more than one task changes
 
@@ -300,9 +298,9 @@ holding it.
 
 Whether this runs on one core or on all of them is not written here at all. It is one line
 in `nikaia.toml` ([Getting started](getting-started.md#the-two-build-settings)), and
-the same source is correct either way.
+the source stays the same.
 
-📖 **Specification:** [Part I, §6.2 Unified types](../docs/specification/10-nikaia-light.md#62-unified-types) · [§6.3 The four doors](../docs/specification/10-nikaia-light.md#63-changing-shared-data-the-four-doors) · [Part II, Chapter 12 Thread safety](../docs/specification/20-nikaia-advance.md#chapter-12-thread-safety-and-synchronization)
+**Specification:** [Part I, §6.2 Unified types](../docs/specification/10-nikaia-light.md#62-unified-types) · [§6.3 The four doors](../docs/specification/10-nikaia-light.md#63-changing-shared-data-the-four-doors) · [Part II, Chapter 12 Thread safety](../docs/specification/20-nikaia-advance.md#chapter-12-thread-safety-and-synchronization)
 
 ## Memory
 
@@ -311,7 +309,7 @@ up at the end of the block that owns it, and a file or a socket is closed there 
 the compiler needs a copy that you did not ask for, it refuses and tells you to write
 `.clone()`, so every copy is visible in the source.
 
-📖 **Specification:** [Part I, Chapter 6 Memory and ownership](../docs/specification/10-nikaia-light.md#chapter-6-memory-and-ownership)
+**Specification:** [Part I, Chapter 6 Memory and ownership](../docs/specification/10-nikaia-light.md#chapter-6-memory-and-ownership)
 
 ## Modules
 
@@ -330,21 +328,20 @@ fn main() {
 }
 ```
 
-A package is a directory, and the `.nika` files in it simply see each other. Another
+A package is a directory, and the `.nika` files in it see each other. Another
 package is reached by its name, and what comes from it is always written with its prefix,
 `fs::read_to_string(…)`. Nothing is imported unprefixed, so you always see where a name
 comes from. `pub` makes something visible outside its package.
 
-📖 **Specification:** [Part I, Chapter 9 Project organization](../docs/specification/10-nikaia-light.md#chapter-9-project-organization-and-visibility)
+**Specification:** [Part I, Chapter 9 Project organization](../docs/specification/10-nikaia-light.md#chapter-9-project-organization-and-visibility)
 
 ## Grammars
 
-Nikaia can describe a text format as a **grammar** inside the program and get a parser
-for it, instead of splitting strings by hand or reaching for regular expressions. It is
-too large for this page. [`examples/calc/src/main.nika`](../examples/calc/src/main.nika) is a complete
+A program can describe a text format as a grammar, and the compiler builds a parser for
+it. A grammar is too large for this page. [`examples/calc/src/main.nika`](../examples/calc/src/main.nika) is a complete
 calculator in about 100 lines.
 
-📖 **Specification:** [Part II, Chapter 10 Metaprogramming](../docs/specification/20-nikaia-advance.md#chapter-10-metaprogramming-code-that-writes-code)
+**Specification:** [Part II, Chapter 10 Metaprogramming](../docs/specification/20-nikaia-advance.md#chapter-10-metaprogramming-code-that-writes-code)
 
 ---
 
