@@ -190,11 +190,13 @@ Rules from the sessions that moved the most; they save tokens, not just time.
   * no `if let`: use `x ?? default`, or `starts_with` then `strip_prefix(..) ?? ""`;
   * no `*x`; loop variables over a `ref Vec` are values;
   * `.to_owned()` is `NK1189`: write `.clone()`;
-  * text is `String`, also for a parameter that only reads it (ADR-282 D2),
-    and never `ref` on a number, `bool` or a data-less enum (`NK1257`). Until
-    #654 step 0 is built, a `ref String` stays where dropping it changes the
-    lowered Rust (an option's default, a rule's result, a field, a map key, a
-    view returned): check with `nikaia lower`, and do not add new ones;
+  * text is `String` (ADR-282 D2); never `ref` on a number, `bool` or a
+    data-less enum (`NK1257`). Until #654 step 0 is built, `ref String` is
+    written in exactly these places and nowhere else: a field; a type argument
+    (`Vec[ref String]`, a map's key); an option after `;`; a function's or a
+    rule's result; a parameter the result points into; a parameter used as a
+    key of a map keyed by `ref String`. Everywhere else, above all a
+    parameter that is only read, it is `String`;
   * `opt ?? ""` moves the option: `(opt ?? "").clone()` for a second use;
     a method on a `String?` is `opt?.len() ?? 0`;
   * f-string braces are `{{` `}}`; a plain string takes braces literally;
