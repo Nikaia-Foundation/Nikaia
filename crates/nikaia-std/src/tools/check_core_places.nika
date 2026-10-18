@@ -459,7 +459,11 @@ fn check_core_places_a_declared_field[H: CheckHost](mut state: CheckState, world
     // a view.
     if !want.is_a_view() {
         let to = f"stored in `{name}.{field}`"
-        if value == null {
+        if value == null && state.a_text_bytes_name(field) {
+            // **`P { b }` over a name bound to `s.bytes` keeps it**, copied
+            // (ADR-320 D11).
+            state.facts.kept_byte_fields.insert((id_of(expr) as i64, field.clone()))
+        } else if value == null {
             state.hands_over_name(world, field, to, span)
         } else {
             let v: ref Expr = value ?? return true

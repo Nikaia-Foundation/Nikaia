@@ -755,6 +755,9 @@ pub struct CheckState {
     /// The `let`s whose name is a **view** of a place (ADR-094 D4), by name and
     /// the frame it was bound in: a part of one cannot be handed over.
     pub lent_lets: collections::BTreeSet[(String, i64)],
+    /// The `let`s that bound a text's own bytes, `s.bytes`, by the binding:
+    /// the name is the view, and is copied where it is kept (ADR-320 D11).
+    pub text_bytes_lets: collections::BTreeSet[i64],
     /// **Data handed to something that keeps it** (ADR-293 D29): `NK2105` is a
     /// later read on the same path.
     pub handed: Vec[CheckTaken],

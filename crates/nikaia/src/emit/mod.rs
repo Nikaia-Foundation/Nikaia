@@ -6976,6 +6976,25 @@ impl<'p> Emitter<'p> {
         depth: usize,
         flow: Flow<'_>,
     ) -> Result<()> {
+        // **A text's own bytes kept beyond the text are copied** into a `Bytes`
+        // of their own (ADR-320 D11, `kept_text_bytes`): `s.bytes`, or a name
+        // a `let` bound to it, handed to what keeps it or handed back.
+        if self
+            .s
+            .facts
+            .kept_text_bytes
+            .contains(&(crate::check::value_node(expr)))
+        {
+            out.push("nikaia_std::bytes::Bytes::from(");
+            self.expr_written(out, expr, depth, flow)?;
+            out.push(")");
+            return Ok(());
+        }
+        self.expr_written(out, expr, depth, flow)
+    }
+
+    /// [`Emitter::expr_as_written`], past the copy of a text's bytes.
+    fn expr_written(&self, out: &mut Out, expr: &Expr, depth: usize, flow: Flow<'_>) -> Result<()> {
         // **An arm read off a place under a `ref T` is lent** (ADR-354 D1).
         if self
             .s

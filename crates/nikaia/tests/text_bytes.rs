@@ -129,3 +129,103 @@ fn s_bytes_kept_beyond_the_text_is_a_copy() {
          }\n";
     assert_eq!(run("text-bytes-kept", source, &[]), "4 195 3 99\n");
 }
+
+/// The copy follows the value: `s.bytes` bound by a `let` is the view, and the
+/// name is copied where it is kept - handed back, pushed into a list, stored in
+/// a field, written out or in the shorthand - while every other read of it
+/// costs no copy.
+#[test]
+fn s_bytes_through_a_let_is_copied_where_it_is_kept() {
+    let source = "struct Kept {\n\
+         \x20   b: Bytes\n\
+         }\n\
+         \n\
+         fn back(s: String) -> Bytes {\n\
+         \x20   let k = s.bytes\n\
+         \x20   return k\n\
+         }\n\
+         \n\
+         fn listed(s: String) -> Vec[Bytes] {\n\
+         \x20   let mut v: Vec[Bytes] = []\n\
+         \x20   v.push(s.bytes)\n\
+         \x20   let k = s.bytes\n\
+         \x20   v.push(k)\n\
+         \x20   v.push(k)\n\
+         \x20   return v\n\
+         }\n\
+         \n\
+         fn keep(s: String) -> Kept {\n\
+         \x20   let k = s.bytes\n\
+         \x20   return Kept { b: k }\n\
+         }\n\
+         \n\
+         fn keep_short(s: String) -> Kept {\n\
+         \x20   let b = s.bytes\n\
+         \x20   return Kept { b }\n\
+         }\n\
+         \n\
+         fn semis(b: Bytes) -> i64 {\n\
+         \x20   let mut n = 0\n\
+         \x20   for x in b {\n\
+         \x20       if x == 59 {\n\
+         \x20           n = n + 1\n\
+         \x20       }\n\
+         \x20   }\n\
+         \x20   return n\n\
+         }\n\
+         \n\
+         fn reads(s: String) -> i64 {\n\
+         \x20   let k = s.bytes\n\
+         \x20   let mut sum = 0\n\
+         \x20   for x in k {\n\
+         \x20       sum = sum + x as i64\n\
+         \x20   }\n\
+         \x20   return sum + k.len() + k[0] as i64 + semis(k)\n\
+         }\n\
+         \n\
+         fn main() {\n\
+         \x20   let b = back(\"abc\")\n\
+         \x20   let v = listed(\"xy\")\n\
+         \x20   let k = keep(\"ä;b\")\n\
+         \x20   let ks = keep_short(\"q;;\")\n\
+         \x20   println(f\"{b.len()} {b[2]} {v.len()} {v[0][0]} {v[1][1]} {v[2][0]} {k.b.len()} {k.b[0]} {ks.b.len()} {reads(\"a;b\")}\")\n\
+         }\n";
+    let sum: i64 = "a;b".bytes().map(i64::from).sum();
+    assert_eq!(
+        run("text-bytes-let-kept", source, &[]),
+        format!("3 99 3 120 121 120 4 195 3 {}\n", sum + 3 + 97 + 1)
+    );
+}
+
+/// `clone()` is a `Bytes` of its own: of the bytes `fs::read` hands out, of a
+/// text's own bytes, of a name bound to them, and of a read-only parameter.
+#[test]
+fn clone_makes_a_bytes_of_its_own() {
+    let source = "use std::fs\n\
+         \n\
+         fn copied(b: Bytes) -> Bytes {\n\
+         \x20   return b.clone()\n\
+         }\n\
+         \n\
+         fn copies(path: ref String) throws {\n\
+         \x20   let read = fs::read(ref path, fs::Root::Anywhere)\n\
+         \x20   let c = read.clone()\n\
+         \x20   let s = \"äbc\"\n\
+         \x20   let d = s.bytes.clone()\n\
+         \x20   let t = s.bytes\n\
+         \x20   let e = t.clone()\n\
+         \x20   let f = copied(s.bytes)\n\
+         \x20   let g = copied(read)\n\
+         \x20   println(f\"{c.len()} {c[0]} {read.len()} {d.len()} {d[0]} {e[2]} {f[3]} {g.len()}\")\n\
+         }\n\
+         \n\
+         fn main() {\n\
+         \x20   copies(\"x\") catch {\n\
+         \x20       println(\"failed\")\n\
+         \x20   }\n\
+         }\n";
+    assert_eq!(
+        run("text-bytes-clone", source, &[("x", b"q;;")]),
+        "3 113 3 4 195 98 99 3\n"
+    );
+}

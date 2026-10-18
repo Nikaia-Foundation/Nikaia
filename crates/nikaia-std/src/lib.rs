@@ -583,6 +583,8 @@ pub mod prelude {
     pub use crate::bytes::Bytes;
     // The reads of a `Bytes` on a `&[u8]` (ADR-320 D11).
     pub use crate::bytes::ByteReads as _;
+    // A copy of bytes, from a `Bytes` or a `&[u8]` (ADR-320 D11).
+    pub use crate::bytes::ByteCopy as _;
     pub use crate::cli;
     pub use crate::collections;
     // **How a value goes into text both kinds flow into**

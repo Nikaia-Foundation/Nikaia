@@ -106,6 +106,26 @@ impl ByteReads for [u8] {
     }
 }
 
+/// **A copy of bytes is a `Bytes` of its own** (ADR-320 D11): `clone()` on a
+/// `Bytes` shares its buffer (ADR-283 D20), and on a `&[u8]` - a read-only
+/// `Bytes` parameter, a text's own bytes - copies the run into one.
+pub trait ByteCopy {
+    /// A `Bytes` of its own with these bytes.
+    fn copy_of(&self) -> Bytes;
+}
+
+impl ByteCopy for Bytes {
+    fn copy_of(&self) -> Bytes {
+        self.clone()
+    }
+}
+
+impl ByteCopy for [u8] {
+    fn copy_of(&self) -> Bytes {
+        Bytes::from(self)
+    }
+}
+
 impl std::ops::Deref for Bytes {
     type Target = [u8];
 

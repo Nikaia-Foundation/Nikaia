@@ -679,13 +679,20 @@ impl EmitState {
             }
         }
         let mut copies = walk.reached_copy
+        let mut byte_copy = false
         if receiver != null {
             let on = receiver ?? return
             copies = self.facts.owned_copies.contains(node_key(on))
+            byte_copy = self.facts.byte_copies.contains(node_key(on))
         }
         let mut written = name.clone()
         if name == "drain" && args.len() == 0 {
             written = "into_iter"
+        } else if name == "clone" && args.len() == 0 && byte_copy {
+            // **A copy of bytes is a `Bytes` of its own** (ADR-320 D11), from a
+            // `Bytes` or from a `&[u8]`, which a read-only `Bytes` parameter
+            // and `s.bytes` are: `.clone()` of a `&[u8]` is the reference.
+            written = "copy_of"
         } else if name == "clone" && args.len() == 0 && copies {
             // **A copy is `to_owned` below** (ADR-293 D24): `.clone()` of a `&str`
             // or a `&[T]` is the reference, and a read-only `String` parameter

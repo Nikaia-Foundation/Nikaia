@@ -336,6 +336,10 @@ pub fn check_core_returns[H: CheckHost](mut state: CheckState, world: ref CheckW
     }
     if value != null {
         let given = value ?? return
+        // **`s.bytes` handed back is kept beyond the text** (ADR-320 D11).
+        if !lending && !expected.is_a_view() {
+            state.a_text_bytes_kept(world, given)
+        }
         let want: Ty? = expected.clone()
         state.constant_fits(world, given, want, span)
         if in_an_expression {

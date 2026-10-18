@@ -379,9 +379,13 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
         let want = written_ty(world.words, world.here.aliases, t)
         element_view = check_core_stmt_element_view(state, world, value, found, want)
     }
+    // **A name bound to `s.bytes` is the view** (ADR-320 D11): nothing is
+    // handed over, and the name is copied where it is kept. A `let mut` keeps
+    // it, so it is copied there.
+    let bytes_view = !mutable && names.len() == 1 && shape.len() == 0 && state.a_text_bytes_view(world, value)
     if seen_through || element_view == 1 {
         check_core_stmt_lent_let(state, world, names, span)
-    } else if any_named {
+    } else if any_named && !bytes_view {
         let to = f"bound to `{bound_names.join("`, `")}` by a `let`"
         state.hands_over(world, value, found, to, span)
     }
@@ -392,7 +396,7 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
         }
     }
     // **A `let` over a place is a view of it** (ADR-094 D4).
-    if check_core_stmt_a_place(value) && state.takes_away(world, found) {
+    if check_core_stmt_a_place(value) && state.takes_away(world, found) && !state.facts.text_bytes.contains(node_key(value)) {
         check_core_stmt_lent_let(state, world, names, span)
     }
     // **A tuple of names takes the value apart** (ADR-291).
@@ -536,6 +540,9 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
         state.task_bindings[tasks - 1].push((name.clone(), bound.clone(), span.start as i64))
     }
     let id = state.a_new_binding()
+    if bytes_view {
+        state.text_bytes_lets.insert(id)
+    }
     if followed != null {
         state.flow.followed.insert(id, followed ?? return check_core_stmt_unit())
     }

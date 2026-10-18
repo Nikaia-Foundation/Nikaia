@@ -4934,6 +4934,15 @@ sync = true
 touches = []
 signature = "(ref self, byte: u8; from: i64 = 0) -> i64?"
 
+# A copy of the bytes, owned by whoever asked for it (ADR-320 D11): of a
+# `Bytes`, and of a text's own bytes, `s.bytes`, which is how they are kept
+# beyond the text.
+[fn."Bytes::clone"]
+pub = true
+sync = true
+touches = []
+signature = "(ref self) -> Bytes"
+
 # **`std::supervisor`'s policy** (`src/supervisor.nika`, ADR-328 D5): what a
 # program implements to say when a child is restarted, and the types it speaks
 # in.

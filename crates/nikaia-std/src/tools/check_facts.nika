@@ -212,6 +212,15 @@ pub struct CheckFacts {
     pub owned_texts: collections::BTreeSet[i64],
     /// `s.bytes` on text: the text's own bytes, borrowed (ADR-320 D11).
     pub text_bytes: collections::BTreeSet[i64],
+    /// `s.bytes`, or a name a `let` bound to it, where the program keeps it
+    /// beyond the text: copied into a `Bytes` of its own (ADR-320 D11).
+    pub kept_text_bytes: collections::BTreeSet[i64],
+    /// The receivers of a `Bytes`'s `clone()`: a `Bytes` or a `&[u8]` below,
+    /// copied into a `Bytes` of its own (ADR-320 D11).
+    pub byte_copies: collections::BTreeSet[i64],
+    /// `P { b }` over a name bound to `s.bytes`, by the struct literal and the
+    /// field: the name copied into a `Bytes` of its own (ADR-320 D11).
+    pub kept_byte_fields: collections::BTreeSet[(i64, String)],
     pub lent_list_reads: collections::BTreeSet[i64],
     /// **An arm that reads an element or a field off a place, lent** (#613).
     pub lent_reads: collections::BTreeSet[i64],
@@ -342,6 +351,9 @@ impl CheckFacts {
             byte_literals: collections::BTreeSet(),
             owned_texts: collections::BTreeSet(),
             text_bytes: collections::BTreeSet(),
+            kept_text_bytes: collections::BTreeSet(),
+            byte_copies: collections::BTreeSet(),
+            kept_byte_fields: collections::BTreeSet(),
             lent_list_reads: collections::BTreeSet(),
             lent_reads: collections::BTreeSet(),
             view_fallbacks: collections::BTreeSet(),

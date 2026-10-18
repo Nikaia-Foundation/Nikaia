@@ -38,6 +38,14 @@ fn check_core_method_str_view(ty: ref Ty) -> bool {
 }
 
 /// Whether a type is a plain `String`.
+/// `Bytes`, the language's run of bytes (ADR-283 D19).
+fn check_core_method_bytes(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Named { name, args, .. } => name == "Bytes" && args.len() == 0,
+        else => false,
+    }
+}
+
 fn check_core_method_string(ty: ref Ty) -> bool {
     return match ty {
         Ty::Named { name, args, view } => !view && name == "String" && args.len() == 0,
@@ -384,6 +392,11 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
             },
             else => {}
         }
+    }
+    // **A copy of bytes is a `Bytes` of its own** (ADR-320 D11), whether the
+    // bytes are a `Bytes` or a text's own, `s.bytes`.
+    if args.len() == 0 && name == "clone" && check_core_method_bytes(on) {
+        state.facts.byte_copies.insert(id_of(receiver) as i64)
     }
     if text && args.len() == 0 && name == "to_string" && ledger_candidates(world.own, "to_string").len() == 0 {
         state.facts.text_as_is.insert(id_of(receiver) as i64)

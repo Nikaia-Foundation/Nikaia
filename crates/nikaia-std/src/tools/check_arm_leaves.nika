@@ -189,6 +189,9 @@ impl CheckState {
     /// a field path read here is handed over; `name.to_string()` is `name`
     /// (ADR-282 D8).
     pub fn hands_over(ref mut self, world: ref CheckWorld, value: ref Expr, ty: ref Ty, to: ref String, span: ref Span) sync {
+        if self.a_text_bytes_kept(world, value) {
+            return
+        }
         match value {
             Expr::MethodCall { receiver, .. } => {
                 if self.facts.text_as_is.contains(node_key(receiver)) {
@@ -206,6 +209,35 @@ impl CheckState {
         let path = self.reads_on_paths[at].path.clone()
         let seq = self.reads_on_paths[at].seq
         self.hands_over_path(world, path, ty, seq, to, span)
+    }
+
+    /// **A text's own bytes, `s.bytes`, or a name a `let` bound to them**
+    /// (ADR-320 D11): a view of the text, whatever reads it.
+    pub fn a_text_bytes_view(ref self, world: ref CheckWorld, value: ref Expr) -> bool sync {
+        if self.facts.text_bytes.contains(node_key(value)) {
+            return true
+        }
+        return match value {
+            Expr::Variable(name, _) => self.a_text_bytes_name(world.words.resolve(name)),
+            else => false,
+        }
+    }
+
+    /// Whether `name` is bound by a `let` to a text's own bytes (ADR-320 D11).
+    pub fn a_text_bytes_name(ref self, name: ref String) -> bool sync {
+        let local = self.binding(name) ?? return false
+        return self.text_bytes_lets.contains(local.id)
+    }
+
+    /// **`s.bytes` kept beyond the text is copied** (ADR-320 D11): handed to
+    /// something that keeps it or handed back, the view
+    /// becomes a `Bytes` of its own, and the text is not given up.
+    pub fn a_text_bytes_kept(ref mut self, world: ref CheckWorld, value: ref Expr) -> bool sync {
+        if !self.a_text_bytes_view(world, value) {
+            return false
+        }
+        self.facts.kept_text_bytes.insert(node_key(value))
+        return true
     }
 
     /// **A key in a map's brackets** (issue #169, ADR-282): written, the map
