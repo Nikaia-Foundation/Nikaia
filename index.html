@@ -2,15 +2,14 @@
 layout: home
 title: Nikaia
 description: >-
-  A programming language where you write what should happen and the compiler
-  decides how: an assert is a contract, safe code comes within a tenth of tuned Rust,
-  no async/await, no garbage collector, data races refused before the
-  program runs.
+  A programming language that reads like a script and compiles to Rust. The
+  compiler catches what can be proven at compile time; an assert is a contract.
+  No async/await and no garbage collector.
 ---
 <!--
   The home page. The words are the README's "The idea", "An assert is a
-  proof", "Faster than the Rust you would write", "Hello, world" and "Built
-  in the open, at full speed", shortened for a first screen; the numbers in
+  contract", "Performance against tuned Rust", "Hello, world" and
+  "Progress", shortened for a first screen; the numbers in
   the last two are dated there and here, and change together; where the two disagree, the README is the
   one to fix first and this page follows it.
 -->
@@ -19,14 +18,13 @@ description: >-
   <div class="hero-inner">
     <div class="hero-text">
       <p class="hero-eyebrow">A programming language · pre-alpha</p>
-      <h1>Write what should happen.<br><span>The compiler proves the rest.</span></h1>
+      <h1>Write it like a script.<br><span>Catch what can be proven at compile time.</span></h1>
       <p class="hero-lead">
-        Nikaia reads like a scripting language and compiles like a systems language.
-        Formal verification is a plain <code>assert</code>: the compiler proves what it can
-        while it builds, refuses what it shows false, and checks the rest when the program
-        runs. On the One Billion Row Challenge, safe Nikaia comes within a tenth of the
-        instructions of tuned <code>unsafe</code> Rust. No <code>async</code>/<code>await</code>, no garbage
-        collector, and data races are refused before the program runs.
+        Nikaia reads like a scripting language and compiles to Rust. You state a rule with
+        <code>assert</code>, and a call that breaks it does not build. On the One Billion Row
+        Challenge, safe Nikaia uses about 10&nbsp;% more instructions than tuned
+        <code>unsafe</code> Rust. There is no <code>async</code>/<code>await</code> and no garbage
+        collector, and data races are refused at compile time.
       </p>
       <div class="hero-actions">
         <a class="button button-primary" href="{{ "/guide/getting-started.html" | relative_url }}">Get started</a>
@@ -44,30 +42,29 @@ description: >-
 <section class="home-section home-code-section" id="proofs">
   <div class="home-inner home-split">
     <div class="home-split-text">
-      <p class="home-eyebrow">Formal verification, without the ceremony</p>
+      <p class="home-eyebrow">Contracts</p>
       <h2>An <code>assert</code> is a contract.</h2>
       <p>
-        No specification language, no annotations, no <code>requires</code> clause. Write
-        <code>assert(whole &gt; 0)</code> where you would have written it anyway. The compiler
-        works out that it is a precondition, makes every caller prove it, and refuses to build
-        the call that breaks it, with the value that breaks it.
+        There is no separate specification language. You write
+        <code>assert(whole &gt; 0)</code>, and the compiler makes it a precondition that each
+        caller has to establish. A call that breaks it does not build, and the error shows the
+        value that breaks it.
       </p>
       <p>
-        A defect the compiler can prove never reaches production. A call it proves correct costs
-        nothing at run time, and a claim it cannot prove yet is checked when the program runs,
-        so a claim that is merely hard to prove never stops your build. Contracts cross package
-        boundaries, and every proof carries a certificate that is checked before a check is
+        A call the compiler proves correct has no check at run time. A claim it cannot prove yet
+        is checked when the program runs, so it does not stop the build. Contracts cross package
+        boundaries, and each proof carries a certificate that is checked before a check is
         dropped.
       </p>
       <p><a href="{{ "/docs/specification/adr/adr-269.html" | relative_url }}">How a claim becomes a contract →</a></p>
     </div>
     <div class="home-code markdown-body home-code-stack">
-<pre><code class="language-nika">fn percent(part: i64, whole: i64) -&gt; i64 {
+<pre><code class="language-nika">fn percent(part: int, whole: int) -&gt; int {
     assert(whole &gt; 0)              // the whole specification
     return part * 100 / whole
 }
 
-fn report(done: i64, total: i64) -&gt; i64 {
+fn report(done: int, total: int) -&gt; int {
     return 0 if total &lt;= 0         // proves it for this call
     return percent(done, total)
 }
@@ -94,13 +91,12 @@ fn main() {
 
 <section class="home-section home-section-alt" id="performance">
   <div class="home-inner">
-    <p class="home-eyebrow home-eyebrow-center">Safety that need not cost speed</p>
-    <h2 class="home-heading">Within a tenth of tuned Rust, without writing it</h2>
+    <p class="home-eyebrow home-eyebrow-center">Performance</p>
+    <h2 class="home-heading">Against tuned Rust</h2>
     <p class="home-intro">
-      Measured against the Rust a specialist tunes, <code>unsafe</code> included: a
-      One Billion Row Challenge entry that maps the file, skips UTF-8 validation and hashes a
-      word at a time. Release builds on both sides, one core, the same output, counted per row
-      with callgrind, never with a clock.
+      The Rust side is a One Billion Row Challenge entry that maps the file, skips UTF-8
+      validation and hashes a word at a time, with <code>unsafe</code>. Both are release builds
+      on one core with the same output. Instructions are counted per row with callgrind.
     </p>
     <div class="stats">
       <div class="stat">
@@ -111,12 +107,12 @@ fn main() {
       <div class="stat">
         <p class="stat-value">1.58&nbsp;/&nbsp;3.70</p>
         <p class="stat-label">mispredicted branches per row</p>
-        <p class="stat-detail">less than half</p>
+        <p class="stat-detail">fewer than half</p>
       </div>
       <div class="stat">
         <p class="stat-value">618&nbsp;/&nbsp;809</p>
         <p class="stat-label">tokens of source, and 0 against 1 <code>unsafe</code></p>
-        <p class="stat-detail">and the Nikaia file also runs on every core</p>
+        <p class="stat-detail">the Nikaia file also runs on every core</p>
       </div>
     </div>
     <p class="home-footnote">
@@ -130,11 +126,11 @@ fn main() {
 <section class="home-section home-code-section">
   <div class="home-inner home-split">
     <div class="home-split-text">
-      <h2>Two files at once. No <code>async</code> in sight.</h2>
+      <h2>Reading two files at once</h2>
       <p>
         Reading a file pauses the function without blocking the program, and you write it as
-        an ordinary call. Where you <em>want</em> things to happen together, you say so:
-        <code>overlap</code> runs its lines at the same time and waits for all of them.
+        an ordinary call. To run things at the same time, put them in an <code>overlap</code>
+        block. It runs its lines together and waits for all of them.
       </p>
       <p>
         Whether this runs on one core or on all of them is one line in
@@ -145,7 +141,7 @@ fn main() {
     <div class="home-code markdown-body">
 <pre><code class="language-nika">use std::fs
 
-fn size_of(path: ref String) -&gt; i64 throws {
+fn size_of(path: String) -&gt; int throws {
     let text = fs::read_to_string(path, fs::Root::Anywhere)
     return text.len()
 }
@@ -164,25 +160,25 @@ fn main() throws {
 
 <section class="home-section">
   <div class="home-inner">
-    <h2 class="home-heading">Most languages ask you to pick a side</h2>
+    <h2 class="home-heading">Where Nikaia fits</h2>
     <div class="compare">
       <div class="compare-card">
         <h3>Easy languages</h3>
         <p class="compare-examples">Python, JavaScript</p>
-        <p>You write what you mean, quickly, and pay later: slower programs, more machines, and
-        mistakes that show up in production, under load, at night.</p>
+        <p>Quick to write in. The programs are slower and need more memory, and some
+        mistakes only show up when the program runs.</p>
       </div>
       <div class="compare-card">
         <h3>Fast languages</h3>
         <p class="compare-examples">C++, Rust</p>
-        <p>You get the whole machine, and pay up front: much of every program explains to the
-        compiler how memory, waiting and sharing should work.</p>
+        <p>Fast programs. In exchange, much of each program tells the compiler how memory,
+        waiting and sharing should work.</p>
       </div>
       <div class="compare-card compare-card-nikaia">
         <h3>Nikaia</h3>
-        <p class="compare-examples">the explaining is the compiler's job</p>
-        <p>A compiler that sees the whole program can work that out itself. You write straight,
-        readable code; it translates to Rust and lets Rust's compiler guarantee the rest.</p>
+        <p class="compare-examples">compiles to Rust</p>
+        <p>A compiler that sees the whole program can work much of that out itself. You write
+        plain code, Nikaia translates it to Rust, and Rust's compiler checks memory safety.</p>
       </div>
     </div>
   </div>
@@ -194,39 +190,40 @@ fn main() throws {
     <div class="features">
       <div class="feature">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h12M6 22h12M7 2c0 5 5 6 5 10S7 17 7 22M17 2c0 5-5 6-5 10s5 5 5 10"/></svg>
-        <h3>Waiting is not your problem</h3>
-        <p>Code that reads files or talks to the network looks like any other code. No keyword
-        says "this might wait", and the program never sits idle while it does.</p>
+        <h3>No <code>async</code> or <code>await</code></h3>
+        <p>Code that reads files or talks to the network looks like any other code. A call
+        that waits pauses its function, and the program goes on with other work.</p>
       </div>
       <div class="feature">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l8 3v6c0 5-3.5 9-8 11-4.5-2-8-6-8-11V5z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></svg>
-        <h3>Mistakes caught before it runs</h3>
-        <p>Two tasks changing the same data, a value that might be missing, an error nobody
-        handles: refused at compile time, with a message that says what to write instead.</p>
+        <h3>Mistakes refused at compile time</h3>
+        <p>Two tasks changing the same data at once is refused, and so is an unchecked value
+        that may be missing or an error nobody handles. The message says what to write
+        instead.</p>
       </div>
       <div class="feature">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>
         <h3>No garbage collector, no <code>free</code></h3>
-        <p>Memory and files are released at a point you can see in the code. No pauses, and
-        nothing to clean up by hand.</p>
+        <p>Memory and files are released at a point you can see in the code, without
+        collector pauses.</p>
       </div>
       <div class="feature">
         <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></svg>
         <h3>One core or all of them</h3>
-        <p>Whether your code uses one core or every core is one line of configuration, not a
-        rewrite. The same source is correct either way.</p>
+        <p>Whether your code may run on several cores is one line in
+        <code>nikaia.toml</code>. The source stays the same.</p>
       </div>
       <div class="feature">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4c-2 0-3 1-3 3v2c0 2-1 3-2 3 1 0 2 1 2 3v2c0 2 1 3 3 3M16 4c2 0 3 1 3 3v2c0 2 1 3 2 3-1 0-2 1-2 3v2c0 2-1 3-3 3"/></svg>
         <h3>Formats are part of the language</h3>
-        <p>Logs, protocols, your own little language: describe the format as a grammar and get
-        a parser, instead of splitting strings by hand.</p>
+        <p>To parse a log, a protocol or a small language, describe the format as a grammar
+        and the compiler builds the parser.</p>
       </div>
       <div class="feature">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17l6-6-6-6M12 19h8"/></svg>
-        <h3>Errors in plain words</h3>
-        <p>A mistake is explained the way a colleague would: what you wrote, why it cannot
-        work, and what to write instead, with the places it is about underlined.
+        <h3>Readable errors</h3>
+        <p>An error says what you wrote, why it cannot work and what to write instead, with
+        the lines it is about underlined.
         <a href="#errors">See one below.</a></p>
       </div>
     </div>
@@ -236,15 +233,15 @@ fn main() throws {
 <section class="home-section home-code-section" id="errors">
   <div class="home-inner home-split">
     <div class="home-split-text">
-      <h2>When something is wrong, it says so like a person would.</h2>
+      <h2>Error messages</h2>
       <p>
         The compiler points at every place the explanation needs: <code>^</code> under the
         line with the mistake, <code>-</code> under the line that explains it. Then it says
         what to write instead.
       </p>
       <p>
-        No jargon about lifetimes or borrowing, and errors point at your <code>.nika</code>
-        line. The rare one that no line of yours explains says so, rather than guessing.
+        Errors point at your <code>.nika</code> line and do not talk about lifetimes or
+        borrowing. When no line of yours explains an error, the message says so.
       </p>
       <p><a href="{{ "/docs/specification/30-nikaia-tooling.html#appendix-c-the-diagnostics-contract" | relative_url }}">The rules every message follows →</a></p>
     </div>
@@ -265,8 +262,8 @@ fn main() throws {
 
 <section class="home-section home-section-alt" id="progress">
   <div class="home-inner">
-    <p class="home-eyebrow home-eyebrow-center">Built in the open, at full speed</p>
-    <h2 class="home-heading">The compiler is becoming Nikaia</h2>
+    <p class="home-eyebrow home-eyebrow-center">Progress</p>
+    <h2 class="home-heading">The compiler is moving into Nikaia</h2>
     <div class="progress">
       <figure class="bars" aria-labelledby="bars-title">
         <figcaption id="bars-title">
@@ -283,13 +280,13 @@ fn main() throws {
       </figure>
       <div class="progress-text">
         <p>
-          Sharing, pausing, what a function throws, which statements may overlap: the
-          analyses that make Nikaia Nikaia are already Nikaia code, <b>18 625 lines in 61
-          modules</b>, moved over at <b>about 4.8 percentage points a day</b>.
+          The analyses for sharing, pausing, what a function throws and which statements may
+          overlap are already Nikaia code: 18 625 lines in 61 modules, moved over at about
+          4.8 percentage points a day.
         </p>
         <p>
-          Since Claude Opus started writing the compiler on September 5, 2026, every design
-          decision argued in a public ADR and accepted by a human:
+          Claude Opus started writing the compiler on September 5, 2026. Each design
+          decision is argued in a public ADR and accepted by a human.
         </p>
         <div class="stats stats-compact">
           <div class="stat"><p class="stat-value">≈&nbsp;41</p><p class="stat-label">commits a day</p></div>
@@ -307,7 +304,7 @@ fn main() throws {
 <section class="home-section">
   <div class="home-inner home-status">
     <div>
-      <h2>Pre-alpha, and honest about it</h2>
+      <h2>Pre-alpha</h2>
       <p>
         The compiler builds real programs today: a calculator, a JSON parser, a log analyser, a
         small HTTP server, the One Billion Row Challenge. There is no package registry, formatter or
@@ -331,7 +328,7 @@ fn main() throws {
       <a class="next-card" href="{{ "/guide/syntax.html" | relative_url }}">
         <h3>A tour of the syntax</h3><p>The language on one page, for readers of other languages.</p></a>
       <a class="next-card" href="{{ "/manifesto.html" | relative_url }}">
-        <h3>Manifesto</h3><p>Why the project exists, and the case behind every claim.</p></a>
+        <h3>Manifesto</h3><p>Why the project exists, and the reasoning behind it.</p></a>
       <a class="next-card" href="{{ "/docs/specification/" | relative_url }}">
         <h3>Specification</h3><p>The full rules, from variables to the concurrency model.</p></a>
       <a class="next-card" href="{{ "/docs/specification/adr/" | relative_url }}">
