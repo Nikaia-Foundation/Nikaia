@@ -21,6 +21,12 @@ reentrancy-check = []
 trace = ["winnow-grammar/trace"]
 
 [dependencies]
+# **A map is `hashbrown`'s table, directly** (#420, #434): `std`'s `HashMap`
+# wraps the same table, but its `entry` reserves one slot on every call, which
+# cost 1BRC 27 of its 300 instructions a row. Both kinds of map, keyed and
+# trusted, are this one type with their hasher (`hash.rs`); no default hasher,
+# because the compiler always names one.
+hashbrown = { version = "0.17", default-features = false }
 # Views that outlive the scope that read their buffer (ADR-283); the `unsafe`
 # it takes lives there, with its own checks (ADR-218).
 tether = { path = "../unsafe/tether" }

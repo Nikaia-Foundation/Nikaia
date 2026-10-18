@@ -584,7 +584,11 @@ pub trait Slot<'a>: Sized {
     fn put(self, value: Self::Value) -> &'a mut Self::Value;
 }
 
-impl<'a, K, V> Slot<'a> for std::collections::hash_map::Entry<'a, K, V> {
+impl<'a, K, V, S> Slot<'a> for crate::hash::Entry<'a, K, V, S>
+where
+    K: std::hash::Hash,
+    S: std::hash::BuildHasher,
+{
     type Value = V;
     fn there(self) -> Result<&'a mut V, Self> {
         match self {
@@ -720,7 +724,7 @@ mod tests {
         run(sort_by_key(&mut xs, async |x: &i32| *x));
         assert_eq!(xs, vec![1, 2, 3]);
         assert_eq!(run(map_list(vec![1, 2], async |x| x + 1)), vec![2, 3]);
-        let mut m = std::collections::HashMap::new();
+        let mut m: crate::hash::HashMap<&str, i32> = Default::default();
         run(or_insert_with(m.entry("a"), async || 5));
         run(or_insert_with(m.entry("a"), async || 7));
         run(and_modify(m.entry("a"), async |v: &mut i32| *v += 1));

@@ -28,8 +28,20 @@
 
 use std::hash::{BuildHasherDefault, Hasher};
 
+/// **A map**: `hashbrown`'s table, with the keyed hasher unless the type names
+/// another (#420). `std`'s `HashMap` is the same table behind a wrapper whose
+/// `entry` reserves a slot on every call, found or not; this one does not.
+///
+/// It has no `new`, because `hashbrown` writes `new` only for a default hasher
+/// of its own: a map is made with `default()`, and the alias's default fills
+/// the hasher in where the type is not written.
+pub type HashMap<K, V, S = Keyed> = hashbrown::HashMap<K, V, S>;
+
+/// The place in a [`HashMap`] a key names, filled or not.
+pub use hashbrown::hash_map::Entry;
+
 /// A `HashMap` for keys the operator chose.
-pub type TrustedMap<K, V> = std::collections::HashMap<K, V, BuildHasherDefault<FxHasher>>;
+pub type TrustedMap<K, V> = HashMap<K, V, Fast>;
 
 /// A `HashSet` for keys the operator chose.
 pub type TrustedSet<K> = std::collections::HashSet<K, BuildHasherDefault<FxHasher>>;

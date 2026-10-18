@@ -656,7 +656,7 @@ pub mod prelude {
     // type the compiler writes as `scalar` is one here.
     #[allow(non_camel_case_types)]
     pub type scalar = char;
-    pub use std::collections::HashMap;
+    pub use crate::hash::HashMap;
 
     // **The modules a `.nika` file reaches through a prefix**
     // ([ADR-313](../../../docs/specification/adr/adr-313.md) D3, D8): `use
@@ -677,6 +677,6 @@ pub mod prelude {
 /// D5), so `collections::HashMap` in a trusted program is written
 /// `collections::TrustedMap` and has to resolve.
 pub mod collections {
-    pub use crate::hash::{TrustedMap, TrustedSet};
-    pub use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+    pub use crate::hash::{HashMap, TrustedMap, TrustedSet};
+    pub use std::collections::{BTreeMap, BTreeSet, HashSet};
 }

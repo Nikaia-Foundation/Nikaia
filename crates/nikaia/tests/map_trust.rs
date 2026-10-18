@@ -356,7 +356,7 @@ fn a_tools_struct_filled_in_another_file_is_one_type() {
     ] {
         let rust = tools_lowered("trusted", &files);
         assert!(!rust.contains("HashSet::new()"), "{rust}");
-        assert!(!rust.contains("HashMap::new()"), "{rust}");
+        assert!(!rust.contains("HashMap::<_, _>::default()"), "{rust}");
         assert!(rust.contains("TrustedSet"), "{rust}");
     }
 }
@@ -454,11 +454,11 @@ fn a_struct_shared_between_files_is_one_type_in_any_order() {
         let fast = tally_package(&format!("tally-fast-{at}"), names, false);
         // The struct is `pub`, so its maps are its hidden parameters (D9,
         // step 5): the package fills them with the fixed seed where it is
-        // trusted, and nothing in it is the keyed `HashMap::new()`.
+        // trusted, and nothing in it is the keyed `HashMap::<_, _>::default()`.
         assert!(fast.contains("nikaia_std::hash::Fast"), "{fast}");
         assert!(!fast.contains("Keyed>()"), "{fast}");
         assert!(
-            !fast.contains("HashMap::new()") && !fast.contains("HashSet::new()"),
+            !fast.contains("HashMap::<_, _>::default()") && !fast.contains("HashSet::new()"),
             "{fast}"
         );
     }

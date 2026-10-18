@@ -480,6 +480,7 @@ dependencies = [
  "c-text",
  "checked-text",
  "file-ring",
+ "hashbrown 0.17.1",
  "polled",
  "proven-index",
  "rayon",
@@ -791,6 +792,9 @@ dependencies = [
 [[package]]
 name = "tether"
 version = "0.1.0"
+dependencies = [
+ "hashbrown 0.17.1",
+]
 
 [[package]]
 name = "tinyvec"

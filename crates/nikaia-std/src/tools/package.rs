@@ -32174,6 +32174,7 @@ impl EmitState {
         if segments.len() == 2 && *nikaia_std::index::get(&segments, 1) == "new" {
             if unpinned && (*nikaia_std::index::get(&segments, 0) == "HashMap" || *nikaia_std::index::get(&segments, 0) == "HashSet") { return format!("{}::default", *nikaia_std::index::get(&segments, 0)); }
             let chosen = self.map_name(trusting, nikaia_std::index::get(&segments, 0));
+            if chosen == "HashMap" { return String::from("HashMap::<_, _>::default"); }
             if chosen != *nikaia_std::index::get(&segments, 0) { return format!("{}::default", chosen); }
         }
         let mut mapped: Vec<String> = vec![];
@@ -53390,6 +53391,13 @@ pub fn in_this_language(message: &str) -> String {
     out = replaced(&out, "lock::Local", "Locked");
     out = replaced(&out, "Crossing<", "Locked<");
     out = replaced(&out, "Local<", "Locked<");
+    out = replaced(&out, "hashbrown::hash_map::Entry", "Entry");
+    out = replaced(&out, "hashbrown::map::Entry", "Entry");
+    out = replaced(&out, "hashbrown::map::HashMap", "HashMap");
+    out = replaced(&out, "hashbrown::HashMap", "HashMap");
+    out = replaced(&out, "HashMap<_, _, _>", "HashMap<_, _>");
+    out = replaced(&out, ", std::hash::RandomState>", ">");
+    out = replaced(&out, ", RandomState>", ">");
     out = replaced(&out, ", BuildHasherDefault<FxHasher>>", ">");
     out = replaced(&out, "nikaia_std::hash::TrustedMap", "HashMap");
     out = replaced(&out, "nikaia_std::hash::TrustedSet", "HashSet");

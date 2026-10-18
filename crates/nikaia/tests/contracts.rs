@@ -1260,7 +1260,11 @@ fn the_provenance_chooses_the_map() {
         .expect("lowers")
         .rust;
     assert!(untrusted.contains("HashMap<&str, i64>"), "{untrusted}");
-    assert!(untrusted.contains("HashMap::new()"), "{untrusted}");
+    assert!(
+        untrusted.contains("HashMap::<_, _>::default()"),
+        "{untrusted}"
+    );
+    assert!(!untrusted.contains("TrustedMap"), "{untrusted}");
 }
 
 /// A call inside a hole is a call, and the **inference** has to see it.

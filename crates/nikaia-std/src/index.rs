@@ -430,7 +430,7 @@ impl<'a, V> std::ops::Deref for Found<'a, V> {
     }
 }
 
-impl<K, Q, V, S> Get<&Q> for std::collections::HashMap<K, V, S>
+impl<K, Q, V, S> Get<&Q> for crate::hash::HashMap<K, V, S>
 where
     K: std::cmp::Eq + std::hash::Hash + std::borrow::Borrow<Q>,
     Q: std::cmp::Eq + std::hash::Hash + ?Sized,
@@ -442,7 +442,7 @@ where
         Self: 'a;
 
     fn get(&self, key: &Q) -> Found<'_, V> {
-        Found(std::collections::HashMap::get(self, key))
+        Found(crate::hash::HashMap::get(self, key))
     }
 }
 
@@ -505,7 +505,7 @@ impl<T: ?Sized> AsKey for &T {
     }
 }
 
-impl<K, T, V, S> Get<Key<T>> for std::collections::HashMap<K, V, S>
+impl<K, T, V, S> Get<Key<T>> for crate::hash::HashMap<K, V, S>
 where
     T: AsKey,
     K: std::cmp::Eq + std::hash::Hash + std::borrow::Borrow<T::Q>,
@@ -518,7 +518,7 @@ where
         Self: 'a;
 
     fn get(&self, key: Key<T>) -> Found<'_, V> {
-        Found(std::collections::HashMap::get(self, key.0.as_key()))
+        Found(crate::hash::HashMap::get(self, key.0.as_key()))
     }
 }
 
@@ -711,7 +711,7 @@ where
     }
 }
 
-impl<K, V, S> Set<K, V> for std::collections::HashMap<K, V, S>
+impl<K, V, S> Set<K, V> for crate::hash::HashMap<K, V, S>
 where
     K: std::cmp::Eq + std::hash::Hash,
     S: std::hash::BuildHasher,
@@ -774,8 +774,8 @@ mod tests {
     /// because of this.
     #[test]
     fn a_key_goes_through_untouched() {
-        use std::collections::HashMap;
-        let mut counts: HashMap<&str, i64> = HashMap::new();
+        use crate::hash::HashMap;
+        let mut counts: HashMap<&str, i64> = HashMap::default();
         counts.insert("host", 7);
         assert_eq!(counts[at("host")], 7);
     }

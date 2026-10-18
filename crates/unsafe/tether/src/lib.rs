@@ -491,6 +491,23 @@ where
     }
 }
 
+/// The table Nikaia's maps are (`nikaia-std`'s `hash.rs`), rebased as `std`'s
+/// is.
+impl<'a, K, V, S> Rebase<'a> for hashbrown::HashMap<K, V, S>
+where
+    K: Rebase<'a>,
+    K::At: Eq + std::hash::Hash,
+    V: Rebase<'a>,
+    S: std::hash::BuildHasher + Default,
+{
+    type At = hashbrown::HashMap<K::At, V::At, S>;
+    fn rebase<const N: usize>(self, keeps: &Keeps<'a, N>) -> Self::At {
+        self.into_iter()
+            .map(|(key, value)| (key.rebase(keeps), value.rebase(keeps)))
+            .collect()
+    }
+}
+
 impl<'a, K, V> Rebase<'a> for std::collections::BTreeMap<K, V>
 where
     K: Rebase<'a>,
@@ -807,6 +824,41 @@ mod tests {
         let text = keep.put_viewed("a b a".to_string());
         let mut counts: std::collections::HashMap<&str, (i64, Vec<&str>)> =
             std::collections::HashMap::new();
+        for word in text.split(' ') {
+            let entry = counts.entry(word).or_insert((0, Vec::new()));
+            entry.0 += 1;
+            entry.1.push(word);
+        }
+        let held: Holding<CountViews> =
+            Holding::new([Arc::clone(&keep)], move |keeps| counts.rebase(&keeps));
+        // Found, not copied: the keep holds the one buffer it was given.
+        assert_eq!(keep.len(), 1);
+        drop(keep);
+        assert_eq!(held.get()["a"].0, 2);
+        assert_eq!(held.get()["b"].1, ["b"]);
+    }
+
+    /// **The same, in the table Nikaia's maps are** (#420).
+    #[test]
+    fn a_hashbrown_map_of_views_is_rebased_without_a_copy() {
+        enum CountViews {}
+        impl Views for CountViews {
+            type Of<'a> = hashbrown::HashMap<&'a str, (i64, Vec<&'a str>), std::hash::RandomState>;
+            fn shorten<'long: 's, 's>(
+                x: &'s hashbrown::HashMap<
+                    &'long str,
+                    (i64, Vec<&'long str>),
+                    std::hash::RandomState,
+                >,
+            ) -> &'s hashbrown::HashMap<&'s str, (i64, Vec<&'s str>), std::hash::RandomState>
+            {
+                x
+            }
+        }
+        let keep = Arc::new(Keep::new());
+        let text = keep.put_viewed("a b a".to_string());
+        let mut counts: hashbrown::HashMap<&str, (i64, Vec<&str>), std::hash::RandomState> =
+            hashbrown::HashMap::default();
         for word in text.split(' ') {
             let entry = counts.entry(word).or_insert((0, Vec::new()));
             entry.0 += 1;
