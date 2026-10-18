@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1038] — 2026-10-18
+
+**lower-std: five times faster, and seconds when nothing changed (#667)**
+- The checker reads what the package's other files declare once per file instead of at every written type, which makes NK1247/NK1188/NK1164/NK1249 linear in the package. `lower-std` runs the package's ledger pass once, lowers the tools files on every core with unchanged output, and caches its result in the user cache, keyed on the compiler and every source read (242 s to 40 s uncached, 0.15 s unchanged, on 4 cores).
+
 ## [0.0.1037] — 2026-10-18
 
 **A text is cut by a position it handed out (ADR-320 D5, #453)**
