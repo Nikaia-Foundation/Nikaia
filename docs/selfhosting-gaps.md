@@ -82,14 +82,15 @@ value in a block (R62). Left for it: `spec.clone()` on a `String?` as
 
 | form | n | Rust | probe today | by hand |
 | :--- | ---: | :--- | :--- | :--- |
-| `Seq::all` / `Seq::any` | 5 | `parts.iter().all(wholly_known)` | `NK1171` (`p07`, `p08`) | a helper fn with a `for` and an early `return` |
-| `Seq::find` / `Seq::find_map` | 3 | `items.iter().find_map(\|item\| match .. )` | `NK1171` (`p09`, `p10`) | nested `for` with `return` from a function of its own |
-| `str::rsplit`, `Seq::last` | 1 | `name.rsplit("::").next().unwrap_or(name)` | `NK1171` (`p23`, `p24`) | a helper `type_last_segment` |
-| `str::split_at` | 1 | `let (before, from) = rest.split_at(at)` | `NK1171` (`p22`) | the text as `Vec[scalar]` and index loops |
-| `Seq::take_while` | 1 | `from[1..].chars().take_while(\|c\| *c != '`').collect()` | `NK1171` (`p11`) | a `while` over indices |
+| `Seq::all` / `Seq::any` | 5 | `parts.iter().all(wholly_known)` | built | a helper fn with a `for` and an early `return`; **removed** in `wholly_known`, `a_copied_part` |
+| `Seq::find` / `Seq::find_map` | 3 | `items.iter().find_map(\|item\| match .. )` | built | nested `for` with `return` from a function of its own |
+| `str::rsplit`, `Seq::last` | 1 | `name.rsplit("::").next().unwrap_or(name)` | built | a helper `type_last_segment`; its body is `rsplit("::").next()` now |
+| `str::split_at` | 1 | `let (before, from) = rest.split_at(at)` | built | the text as `Vec[scalar]` and index loops |
+| `Seq::take_while` | 1 | `from[1..].chars().take_while(\|c\| *c != '`').collect()` | built | a `while` over indices |
 
-`Seq` has today `collect count nth next join map filter for_each rev zip take
-skip step_by` (`std.contracts`). The draft writes `.filter(!p).count() == 0`
+All five are `std` entries now (`std.contracts`: `Seq::any`, `all`, `find`,
+`position`, `filter_map`, `find_map`, `take_while`, `last`, `max`; `str::rsplit`,
+`split_at`); the sections below keep the reasons they were added for. The draft writes `.filter(!p).count() == 0`
 for `all`, which compiles but reads worse than the helper, so it was replaced.
 
 ### `Seq::any`, `Seq::all`
@@ -167,21 +168,20 @@ not as a gap: *as it is today, until someone needs more*.
 
 | defect | n | Rust | by hand |
 | :--- | ---: | :--- | :--- |
-| `starts_with([chars])` passes the checker, rustc E0277 (D17) | 1 | `ty.starts_with(['i', 'a', ..])` | `render::an_or_a` |
-| `match name { "i32" \| "i64" => .. }` on `ref String` (D19) | 1 | `matches!(name.as_str(), "i32" \| ..)` | `a_copied_scalar`, one arm per string; **removed (0.0.965)**: one or-pattern arm |
-| `mut e: ref E` reassigned in a loop and returned: rustc "missing lifetime" (new, probe `p25`) | 1 | `fn peeled(mut value: &Expr) -> &Expr { while let .. }` | recursion |
-| `map.get(k)?.clone() ?? x` on a `Ty` or `Span` value lowers to a `&T` (E0277 `&Ty == Ty`, E0308); on an `i64` an index by `&i64` (D31) | 3 | `self.arm_types.get(&k)?` | `check_arm_leaves.nika`: `arm_type_of` returning `Ty?`, plain `?? return` for the `i64`; D36 is built, and the two later loops of this kind (`check_core_places_bound`, `check_core_flow_part`) are **removed (0.0.965)** |
+| `starts_with([chars])` passes the checker, rustc E0277 | 1 | `ty.starts_with(['i', 'a', ..])` | `render::an_or_a`; **closed**: the checker refuses it (`NK1102`, one call per character) |
+| `match name { "i32" \| "i64" => .. }` on `ref String` | 1 | `matches!(name.as_str(), "i32" \| ..)` | `a_copied_scalar`, one arm per string; **removed (0.0.965)**: one or-pattern arm |
+| `mut e: ref E` reassigned in a loop and returned: rustc "missing lifetime" (new, probe `p25`) | 1 | `fn peeled(mut value: &Expr) -> &Expr { while let .. }` | recursion; **closed**: the loop runs with `v = ref inner[at]` (`NK1105` asks for the `ref`); `check_peeled` keeps the shorter recursion |
+| `map.get(k)?.clone() ?? x` on a `Ty` or `Span` value lowers to a `&T` (E0277 `&Ty == Ty`, E0308); on an `i64` an index by `&i64` | 3 | `self.arm_types.get(&k)?` | `check_arm_leaves.nika`: `arm_type_of` returning `Ty?`, plain `?? return` for the `i64`; the clone is built, and the two later loops of this kind (`check_core_places_bound`, `check_core_flow_part`) are **removed (0.0.965)** |
 | NK2302 on a method whose result holds `value`'s views and a `Ty` cloned out of `self`'s map | 1 | `fn arms_to_ask<'e>(&mut self, value: &'e Expr) -> Vec<(&'e Expr, Ty)>` | the clone moved into `arm_type_of` |
 | two `self.s` arms of a Rust closure kept across a `self.s` write (E0502) | 1 | `leaves(then_branch)` called again after `arm_types.insert` | the booleans computed once |
-| a guard over a `T?` scrutinee (`n if n > 3` on `i64?`) passes the checker, rustc E0308 (new, probe `p01`) | - | - | - |
-| `if o != null { o + 1 }` passes the checker, rustc cannot add to `Option<i64>` (new, probe `q13`) | - | - | - |
-| `-> (bool, String)?` and `-> (i64, Integer)?`: a nullable tuple as a result type does not parse ("Expected `{`") | 2 | `Option<(usize, Integer)>` in `arguments` | `check_arguments.nika`: an index (`-1` for none) and two helpers |
-| a struct field `ref Expr?` filled from `ref Vec[Expr]` or `ref CheckWorld` params is NK2302 (whose data) | 1 | `Vec<(usize, Option<&Expr>, Ty)>` in `arguments` | `CheckArgument` keeps the arm's index, the view is read back where it is used |
-| `if c { arm.tail } else { given[at] }` into `ref Expr?`: the plain arm is `Expr`, NK1103 | 1 | `given.get(at)` | helper `check_arguments_at` returning `ref Expr?` |
+| a guard over a `T?` scrutinee (`n if n > 3` on `i64?`) passes the checker, rustc E0308 | - | - | **closed**: the checker refuses it (`NK1102`) |
+| `if o != null { o + 1 }` passes the checker, rustc cannot add to `Option<i64>` | - | - | **closed**: the test narrows, it runs |
+| `-> (bool, String)?` and `-> (i64, Integer)?`: a nullable tuple as a result type does not parse ("Expected `{`") | 2 | `Option<(usize, Integer)>` in `arguments` | an index (`-1` for none) and a helper; **removed**: `(A, B)?` parses (ADR-364), `check_arguments` asks `keeps.iter().find` and `position` |
+| a struct field `ref Expr?` filled from `ref Vec[Expr]` or `ref CheckWorld` params is NK2302 (whose data) | 1 | `Vec<(usize, Option<&Expr>, Ty)>` in `arguments` | `CheckArgument` keeps the arm's index, the view is read back where it is used; still: `NK2302` on a struct literal pushed into a local `Vec` that never leaves the function |
+| `if c { arm.tail } else { given[at] }` into `ref Expr?`: the plain arm is `Expr`, NK1103 | 1 | `given.get(at)` | helper `check_arguments_at` returning `ref Expr?`; still: the checker takes it now, the lowering writes no `Some` on the plain arm (rustc E0308) |
 | `std::ptr::eq(whole, arm)` | 1 | `arguments` | the arm's index says it is an arm |
 
-The last three are GitHub issues; the last should be a
-checker refusal (`NK1125`) if `!= null` is not meant to narrow.
+What is still open here is filed as GitHub issues, not in this note.
 
 ## ADAPTER (4)
 
@@ -206,24 +206,24 @@ checker refusal (`NK1125`) if `!= null` is not meant to narrow.
 | `count(\|h\| matches!(h, Held::Proved))` x5 | counters by `how.starts_with(..)` | no; a typed lambda works (`q17b`) |
 | `from[1..]` byte slicing with `find` | the whole text as `Vec[scalar]` | partly: follows from no `split_at` |
 | `Item::Enum { .. } if text == ty =>` | `if` inside the arm | no (`q06`) |
-| U-c1 `match hole { V(n, _) => seen.insert(..), _ => {} }` | the insert in a block arm | no: the arm lowered without `;`, `Option` against `()` (D34) |
-| U-c1 `fn compares(op: BinaryOp)` called with a bound `op` | the comparison inline; **removed (0.0.965)**: `check_core_ops_equality(op) \|\| check_core_ops_ordering(op)` | no: param lowered `&BinaryOp`, call `*op` (D34) |
+| U-c1 `match hole { V(n, _) => seen.insert(..), _ => {} }` | the insert in a block arm | no: the arm lowered without `;`, `Option` against `()` |
+| U-c1 `fn compares(op: BinaryOp)` called with a bound `op` | the comparison inline; **removed (0.0.965)**: `check_core_ops_equality(op) \|\| check_core_ops_ordering(op)` | no: param lowered `&BinaryOp`, call `*op` |
 | U-c1 `spec.clone()` on a `String?` from a pattern | `spec?.clone()` | yes (NK1125) |
-| U-c1 `.or_else` chain of five literal kinds | `if x != null { return x }` per kind | no, but no lazy `??` chain exists |
+| U-c1 `.or_else` chain of five literal kinds | `if x != null { return x }` per kind; **removed**: one `??` chain (`check_core_literal_by_use`) | no: `??` is lazy |
 | U-c1 `let [condition] = args else {..}` | `if args.len() != 1` then `args[0]` | no slice patterns |
-| U-c1 `message = Some(&option.value)` | the index of the option | yes: no `ref Expr?` local from a loop |
+| U-c1 `message = Some(&option.value)` | the index of the option | no longer: `message = ref option.value` into a `ref T?` local runs |
 | U-c2 `match (&evaluated, is_growable(want))` | a shape number from a helper over `ref BuildValue?`, then `if`s | no: no tuple pattern over an option |
 | U-c2 `evaluated` read again after `evaluated ?? return` | `evaluated?.clone() ?? return` | yes (NK2105), at the cost of a clone |
-| U-c2 `.get(..).and_then(|c| c.signature.as_ref())` | a helper over `ref FnContract` | no: `c.signature ?? return` on a `get(..) ??` local moves out of the reference (D35) |
+| U-c2 `.get(..).and_then(|c| c.signature.as_ref())` | a helper over `ref FnContract`; **removed** (`check_core_comptime_result` read in place) | no: `c.signature ?? return` on a `get(..) ??` local runs |
 | U-c2 `self.declared(ty, span)` and the `payload_of` / `{f:?}` closures | host methods `declared` (hosted), `payload_of`, `float_text` | yes: `Ty::from_ast` and `a_key_with_no_order` stay Rust |
-| U-c2 `rust_constant_type(..).or_else(..).or_else(..)` | `if x != null { return x }` per step | no lazy `??` chain |
+| U-c2 `rust_constant_type(..).or_else(..).or_else(..)` | `if x != null { return x }` per step; **removed**: a `??` chain | no |
 | U-c3 `door: MultiLock` across the crossing | `writing: bool`, the two spellings as helpers | yes: the Rust enum stays for `call`'s dispatch |
 | U-c3 `methods.entry(k).or_insert_with(..).field = ..` | `remove(k) ?? empty()`, change, `insert` | no `entry` API on a map |
 | U-c3 `kind: Option<(String, String)>` matched with a guard | a `bool` and two `String`s | no tuple pattern over an option |
 | U-c3 `args.iter().map(\|(at, arg)\| match (arg, expected.get(at)) ..)` | a loop, a helper asking the pair, one function per arm | no tuple pattern over an option |
 | U-c3 `args.split_last()` | `args[args.len() - 1]` after a length check | no slice patterns |
 | U-c4 `MultiLock::named(name)` in `call` | the two spellings compared, `writing: bool` to `check_core_locks` | yes: `MultiLock` stays a Rust enum for the tests' ledger walk |
-| U-c4 `name.strip_prefix(f"{ty}::")` | a helper over `ref String`; **removed (0.0.965)**: written inline (D38 built) | an owned `String` as a pattern lowers by value (E0277) |
+| U-c4 `name.strip_prefix(f"{ty}::")` | a helper over `ref String`; **removed (0.0.965)**: written inline | an owned `String` as a pattern lowers by value (E0277) |
 | U-c4 `result: ref Ty?` handed a `Fn`'s field | the caller unwraps to `Ty` first | `ref T?` is `Option<&T>`, a bound field `&Option<T>` |
 | U-c4 `rsplit_once` / `split_once` | `split("::")` collected, a loop | no longer: `std` entries since #648 |
 | U-c4 `arguments`, `an_attribute_read`, `a_call_that_hands_its_number_back`, `a_standard_bound_not_met` | host methods (hosted) | yes: Rust until C-5h |
@@ -246,15 +246,15 @@ checker refusal (`NK1125`) if `!= null` is not meant to narrow.
 | U-c7 `fn …() -> (Expr, Expr)?` for a range's ends | the range's half of `for` is its own function over `match iter` | no longer: `(A, B)?` is a type since #648 (ADR-364) |
 | U-c7 `Local { .., ..self.local_free(..) }` | `CheckLocal::free` then field writes | yes: no struct update syntax |
 | U-c7 `frame.first_mut()` | `frame[0].open_number = …` behind `frame.len() > 0` | yes: no `if let` |
-| U-c9 `bound.get(p).cloned().unwrap_or(..)` | a loop over the map (`check_core_places_bound`); **removed (0.0.965)**: `bound.get(p)?.clone() ?? Ty::Unknown` | no: `bound.get(p)?.clone()`, which NK1185 names as the way, clones the reference (D36) |
-| U-c9 `match &self.s.flow.unrolling { Some(u) => .. }` | a helper over `ref CheckUnrolling?` | no: `state.flow.unrolling ?? return` moves out of `&mut` (E0507, D35's shape on a field of a `mut` parameter) |
+| U-c9 `bound.get(p).cloned().unwrap_or(..)` | a loop over the map (`check_core_places_bound`); **removed (0.0.965)**: `bound.get(p)?.clone() ?? Ty::Unknown` | no: `bound.get(p)?.clone()`, which NK1185 names as the way, cloned the reference |
+| U-c9 `match &self.s.flow.unrolling { Some(u) => .. }` | a helper over `ref CheckUnrolling?` | no: `state.flow.unrolling ?? return` moves out of `&mut` (E0507) on a field of a `mut` parameter of a type that does not copy; a `ref` parameter lowers `.as_ref()` and runs |
 | U-c9 `field.parse::<usize>()` | digits checked, then `text::parse_i64` | yes: no `usize` |
 | U-c9 `self.expect_at(..)` (a closure over `moved_to`) | `slots_waiting`, `expect_type`, `findings_moved` written out | yes: no `impl FnOnce(&mut Self)` |
 | U-c9 `crate::contracts::locks::free_calls(self.parsed, body)` | a host method `free_calls` | yes: it needs the emitter's `literal_expressions` |
 | U-c7 `Checker.got_past_a_jump`, `Checker.discarded` | moved into `CheckState` | no: Rust fields the moved code writes |
 | U-c8 `self.with_proved(&names, \|this\| this.block(b))` | host methods `proved_here` and `proved_from_here`; the frame pushed in Nikaia | yes: the proofs (`Checker.narrows`) stay Rust in `narrow.rs` while #621 works on it |
-| U-c8 `let outer = self.s.stamped_condition` and back | `?? -1`, then `null` or the value | no: a plain read of an `i64?` field is a move here |
-| U-c8 `scope.last_mut()` with `frame[at].ty = ..` for a guard | the frame rebuilt (`check_core_flow_viewed`, `_restored`) | untried: a write through two indices; one index write is used |
+| U-c8 `let outer = self.s.stamped_condition` and back | `?? -1`, then `null` or the value; **removed**: read and written back as the `i64?` | no |
+| U-c8 `scope.last_mut()` with `frame[at].ty = ..` for a guard | the frame rebuilt; **removed**: `state.scope[last][at].ty = ..` | no |
 | U-c8 `handed_over.as_mut().map(\|h\| mem::replace(..))` | `?.clone()`, the field set, the option written back | yes: no `as_mut` |
 | U-c10 `whole(side, ty) -> Option<Option<String>>` | two functions, a `bool` and a name with `""` for none | no: a `T??` is not written |
 | U-c10 `narrow::proved_names` + `with_proved` for `&&` / `\|\|` | `host.proved_here`, the frame pushed in Nikaia; `a_proof_taken_back` and `a_type_that_does_not_compare` are host methods | yes: narrowing stays in `narrow.rs` (#621); the parts beside stay Rust |
@@ -266,8 +266,8 @@ checker refusal (`NK1125`) if `!= null` is not meant to narrow.
 | U-d0 `enum Proved` and `Checker.narrows` keyed by `(usize, usize, i64)` | `CheckProved`, `CheckNarrowing` in `CheckState`, keys as `(i64, i64, i64)` | yes: the four fields travel with the baton |
 | U-d0 `let Some(..) = .. else { continue }` | `?? continue` after a `!= null` test | no |
 | U-d1 `stmts: &[&Stmt]` (the rest of a block after a `let`) | the block's `Vec[Spanned[Stmt]]` and a start index | no: no vector of references |
-| U-d1 `Stmt::Break \| Stmt::Continue if !in_loop` | one arm each, the guard as an `if` inside | no: no guard on an or-pattern was tried |
-| U-d1 `let x: ref T = map.get(k) ?? return` | the annotation left out | yes: `NK1103` calls the `get` of a map read through a `ref` a `T`, while a field's `T?` takes `ref T` |
+| U-d1 `Stmt::Break \| Stmt::Continue if !in_loop` | one arm each; **removed**: one or-pattern arm with the guard | no |
+| U-d1 `let x: ref T = map.get(k) ?? return` | the annotation left out | yes: `NK1103` asks for the `ref`, `ref (map.get(k) ?? return)` runs |
 | U-d1 `Checker.newly` (the build's `Newly`) | `CheckWorld.newly_throws`, `newly_keeps`; host `newly_throws` and `arguments` go | no |
 
 ## Method

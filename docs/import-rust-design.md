@@ -76,7 +76,7 @@ The command: `nikaia import rust <crate|file>` reads a crate and writes Nikaia. 
 | `thread::spawn`, `async`/`.await`, `join!`/`select!` | `spawn`, pauses by default, `overlap`/`select` | P | runtime APIs outside a table → R |
 | std calls | by a table against `std.contracts` | P | 409 entries, 24 on `Vec` **[V]**. Unmapped → R, or stays Rust |
 
-The 19 lowering defects known then: **none changes behaviour without a word.** 12 are rustc errors after the checker accepted (D1-D3, D8, D10, D11, D11b, D14, D15, D17-D19), which L2 catches. D7 is clippy only. D4 and D6 are refusals or unstable types. The rest are parse or by design. New from today's probes **[V]**, not yet filed then: `println!(..)` passes the checker, and `xs.iter().filter fn(x) { x % 2 == 0 }` passes the checker and fails rustc (`&&i64`). **The silent bugs are the converter's (ranges, format arguments), not the lowering's.**
+The 19 lowering defects known then: **none changes behaviour without a word.** 12 are rustc errors after the checker accepted (D1-D3, D8, D10, D11, D11b, D14, D15, D17-D19), which L2 catches. D7 is clippy only. D4 and D6 are refusals or unstable types. The rest are parse or by design. New from today's probes **[V]**, not yet filed then: `println!(..)` passes the checker, and `xs.iter().filter fn(x) { x % 2 == 0 }` passed the checker and failed rustc (`&&i64`); the `filter` runs today, `println!(..)` is still read as `println` and `!(..)` on one line, and `!`/`-` on text pass the checker. **The silent bugs are the converter's (ranges, format arguments), not the lowering's.**
 
 ### 2. Architecture
 
@@ -190,7 +190,7 @@ Each topic below goes into its own decision round. Nothing here blocks the self-
 * **To build:**
   1. `--report` prints the per-function table of §3, with an R reason from the table in §1 for every construct the script recognises and does not map. The names are provisional until decision G.
   2. Tests: one Rust snippet per R row produces that reason and no Nikaia for its function.
-  3. File `println!` and `.iter().filter fn(x)` as GitHub issues (C.1 defects, ADR-294 D3).
+  3. File `println!` (two statements on one line, `!` on text unchecked) as a GitHub issue (C.1 defect, ADR-294 D3); `.iter().filter fn(x)` runs.
 
 ### 7. Risks, honestly
 
