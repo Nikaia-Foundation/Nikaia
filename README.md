@@ -48,7 +48,7 @@ how.
 * **One core or many is one line** in `nikaia.toml`; the code stays the same.
 * **Formats are part of the language**: a log or a protocol is described as a grammar.
 
-Nikaia compiles to Rust, and Rust's compiler checks memory safety. The name comes from my
+Nikaia checks your program, and Rust's compiler checks memory safety again. The name comes from my
 daughter, **Nika**: in Persian, *nik* means *good*, so the motto is *good wins*. The longer
 story is in the [Manifesto](manifesto.md).
 
