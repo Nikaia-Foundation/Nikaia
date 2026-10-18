@@ -3922,7 +3922,15 @@ impl<'p> Emitter<'p> {
                 && !a.ty.is_nullable
                 && !a.ty.is_slice
                 && written.ends_with('>');
+            // **A `Bytes` the body only reads is a `&[u8]`**, as a `String`
+            // is a `&str` (ADR-320 D11): a buffer read whole and a text's own
+            // bytes (`s.bytes`) are both handed over without a copy.
+            let plain_bytes = self.text(a.ty.name) == "Bytes"
+                && a.ty.generics.is_empty()
+                && !a.ty.is_nullable
+                && !a.ty.is_slice;
             let written = match (reference, plain_text, plain_list) {
+                ("&" | "&'r " | "&'k ", _, _) if plain_bytes => "[u8]".to_string(),
                 ("&" | "&'r " | "&'k ", true, _) => "str".to_string(),
                 ("&" | "&'r " | "&'k ", _, true) if written.starts_with("Vec<") => {
                     format!("[{}]", &written[4..written.len() - 1])

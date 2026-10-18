@@ -581,6 +581,8 @@ pub mod prelude {
     // writes `.shown()` on each, and a method needs its trait in scope.
     pub use crate::abort::{ShownByDebug as _, ShownByNothing as _};
     pub use crate::bytes::Bytes;
+    // The reads of a `Bytes` on a `&[u8]` (ADR-320 D11).
+    pub use crate::bytes::ByteReads as _;
     pub use crate::cli;
     pub use crate::collections;
     // **How a value goes into text both kinds flow into**

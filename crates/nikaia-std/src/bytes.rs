@@ -59,22 +59,14 @@ impl Bytes {
     /// as the borrow does. `NotText` where the bytes are not UTF-8, the
     /// failure `fs::read_to_string` reports for the same bytes.
     pub fn text(&self) -> Result<&str, crate::io::IoError> {
-        std::str::from_utf8(&self.buffer).map_err(|at| {
-            crate::io::IoError::NotText(format!(
-                "bytes that are not UTF-8 from byte {}",
-                at.valid_up_to()
-            ))
-        })
+        ByteReads::text(&*self.buffer)
     }
 
     /// The first `byte` at or after the position `from`, or `None`
     /// (ADR-320 D6): a byte search of the kind `memchr` does. A `from` before
     /// the start searches from the start; one past the end finds nothing.
     pub fn find(&self, byte: u8, from: i64) -> Option<i64> {
-        let start = usize::try_from(from.max(0)).ok()?;
-        let rest = self.buffer.get(start..)?;
-        let at = rest.iter().position(|b| *b == byte)?;
-        i64::try_from(start + at).ok()
+        ByteReads::find(&*self.buffer, byte, from)
     }
 
     /// A copy of the bytes, owned by the caller.
@@ -83,6 +75,34 @@ impl Bytes {
     /// 6.6's promotion to `Owned` is never automatic.
     pub fn to_vec(&self) -> Vec<u8> {
         self.buffer.to_vec()
+    }
+}
+
+/// **The reads of a `Bytes` on any run of bytes** (ADR-320 D7, D11): a cut
+/// `b[a..<b]`, a read-only `Bytes` parameter and a text's own bytes
+/// (`s.bytes`) are all a `&[u8]`, and each is read as a `Bytes` is.
+pub trait ByteReads {
+    /// The bytes as text, where they are text: [`Bytes::text`].
+    fn text(&self) -> Result<&str, crate::io::IoError>;
+    /// The first `byte` at or after `from`, or `None`: [`Bytes::find`].
+    fn find(&self, byte: u8, from: i64) -> Option<i64>;
+}
+
+impl ByteReads for [u8] {
+    fn text(&self) -> Result<&str, crate::io::IoError> {
+        std::str::from_utf8(self).map_err(|at| {
+            crate::io::IoError::NotText(format!(
+                "bytes that are not UTF-8 from byte {}",
+                at.valid_up_to()
+            ))
+        })
+    }
+
+    fn find(&self, byte: u8, from: i64) -> Option<i64> {
+        let start = usize::try_from(from.max(0)).ok()?;
+        let rest = self.get(start..)?;
+        let at = rest.iter().position(|b| *b == byte)?;
+        i64::try_from(start + at).ok()
     }
 }
 

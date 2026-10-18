@@ -210,6 +210,8 @@ pub struct CheckFacts {
     pub array_literals: collections::BTreeSet[i64],
     pub byte_literals: collections::BTreeSet[i64],
     pub owned_texts: collections::BTreeSet[i64],
+    /// `s.bytes` on text: the text's own bytes, borrowed (ADR-320 D11).
+    pub text_bytes: collections::BTreeSet[i64],
     pub lent_list_reads: collections::BTreeSet[i64],
     /// **An arm that reads an element or a field off a place, lent** (#613).
     pub lent_reads: collections::BTreeSet[i64],
@@ -339,6 +341,7 @@ impl CheckFacts {
             array_literals: collections::BTreeSet(),
             byte_literals: collections::BTreeSet(),
             owned_texts: collections::BTreeSet(),
+            text_bytes: collections::BTreeSet(),
             lent_list_reads: collections::BTreeSet(),
             lent_reads: collections::BTreeSet(),
             view_fallbacks: collections::BTreeSet(),

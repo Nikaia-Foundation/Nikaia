@@ -227,7 +227,16 @@ impl EmitState {
         if self.facts.lent_returns.contains(at) {
             out.push("&")
         }
+        // **`s.bytes` handed back is kept beyond the text**, so it is copied
+        // into a `Bytes` of its own (ADR-320 D11), as a `String` is.
+        let kept = self.facts.text_bytes.contains(node_key(value))
+        if kept {
+            out.push("nikaia_std::bytes::Bytes::from(")
+        }
         host.expr(walk, out, value, depth, flow, scope)
+        if kept {
+            out.push(")")
+        }
         if either {
             out.push(")")
         }

@@ -124,6 +124,12 @@ fn check_core_places_tuple_part(mut state: CheckState, parts: ref Vec[Ty], field
 /// **A field of a type, by its declaration**: a boxed field, a handle, a
 /// reflected variant or field, a parameter, and the field itself.
 fn check_core_places_a_named_field(mut state: CheckState, world: ref CheckWorld, expr: ref Expr, on: ref Ty, ty: ref String, field: ref String, span: ref Span) -> Ty sync {
+    // **`s.bytes` is a `Bytes` over the text's own buffer, borrowed**
+    // (ADR-320 D11): every read of a `Bytes` works on it (D7).
+    if (ty == "String" || ty == "str") && field == "bytes" {
+        state.facts.text_bytes.insert(id_of(expr) as i64)
+        return check_core_places_named("Bytes")
+    }
     // **A boxed field is read through its box** (ADR-246 D2).
     let boxed = state.facts.boxed_members.get(ty)
     if boxed != null {

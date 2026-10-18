@@ -223,6 +223,13 @@ impl EmitState {
             out.push(self.emit_place_default(world, owner, field))
             return
         }
+        // **`s.bytes` is the text's own bytes, borrowed** (ADR-320 D11): a
+        // `&[u8]` every read of a `Bytes` takes, and no copy.
+        if self.facts.text_bytes.contains(node_key(node)) {
+            self.emit_core_postfix_base(world, walk, out, host, base, depth, flow, scope)
+            out.push(".as_bytes()")
+            return
+        }
         // **A boxed field is read through its box** (ADR-246 D2):
         // `(*base.field)` is a place that behaves as the unboxed field would.
         let boxed = self.facts.boxed_reads.contains(node_key(node))
@@ -469,10 +476,20 @@ impl EmitState {
                 out.push(": ")
                 out.push(before)
                 // **A value lent into a `ref` field** (D37).
-                if self.facts.lent_fields.contains(node_key(value)) {
+                let lent = self.facts.lent_fields.contains(node_key(value))
+                if lent {
                     out.push("&")
                 }
+                // **`s.bytes` stored in a field is kept beyond the text**, so
+                // it is copied into a `Bytes` of its own (ADR-320 D11).
+                let kept = !lent && self.facts.text_bytes.contains(node_key(value))
+                if kept {
+                    out.push("nikaia_std::bytes::Bytes::from(")
+                }
                 host.expr(walk, out, value, depth, flow, scope)
+                if kept {
+                    out.push(")")
+                }
                 out.push(after)
             } else if wrapped || boxed {
                 // `Counter { db }` is the shorthand for `db: db` (Part I 4.1),
