@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1036] — 2026-10-18
+
+**A position only literals flow into is a view of static text (#659)**
+- A field, a result (also an all-literal `if`/`match`), a `let`, a parameter or a list element into which only literals flow lowers to `&'static str`, with no `String::from` and no lifetime (ADR-282 D29); with text of its own beside them the literals are built as before. An empty local `Vec()` handed whole into a field takes the field's type and tier, so pushing literals into it no longer gives NK1106. Published positions and map keys and values still hold text of their own for now. `s.bytes` handed back from such a parameter is copied (ADR-320 D11).
+
 ## [0.0.1035] — 2026-10-18
 
 **a '…' is typed by its uses, also through a let (ADR-320 D8, #453)**
