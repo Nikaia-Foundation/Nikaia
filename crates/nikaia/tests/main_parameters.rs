@@ -253,6 +253,61 @@ fn asserts_reports_mains_precondition() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// D3, D4 (#651): an `assert` about an option is a precondition of `main` as
+/// one about a subject is - checked where the words arrive, in `--asserts`
+/// and in the help - and the default the prover proves it for.
+#[test]
+fn an_options_precondition_is_checked_where_the_words_arrive() {
+    let source = "fn main(total: i64; tip: i64 = 0) {\n\
+                  \x20   assert(tip <= 30)\n\
+                  \x20   println(f\"{total + total * tip / 100}\")\n\
+                  }\n";
+    let (dir, prog) = built("option-precondition", source);
+    assert_eq!(run(&prog, &["100"]).1, "100\n");
+    assert_eq!(run(&prog, &["100", "--tip", "10"]).1, "110\n");
+    let (status, out, err) = run(&prog, &["100", "--tip", "50"]);
+    assert_eq!((status, out.as_str()), (2, ""), "{err}");
+    assert!(
+        err.starts_with("error: `tip` is 50, which breaks `main`'s precondition `tip <= 30`."),
+        "{err}"
+    );
+    assert!(err.contains("usage: prog [--tip <i64>] <total>"), "{err}");
+    let (_, help, _) = run(&prog, &["--help"]);
+    assert!(
+        help.contains("--tip <i64>          i64, default 0; requires `tip <= 30`"),
+        "{help}"
+    );
+    let out = lower(&dir, source, &["--asserts"]);
+    let report = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        report.contains(
+            "prog.nika:2  assert(tip <= 30)  precondition of `main`, checked where the words arrive"
+        ),
+        "{report}"
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// D2 (#651): a usage error says the type with the article its sound takes.
+#[test]
+fn a_usage_error_says_a_u8_and_an_i64() {
+    let source = "fn main(a: u8; n: i64 = 0) {\n\
+                  \x20   println(f\"{a} {n}\")\n\
+                  }\n";
+    let (dir, prog) = built("article", source);
+    assert!(
+        run(&prog, &["x"])
+            .2
+            .starts_with("error: `a` is a `u8`, and `x` is not one.")
+    );
+    assert!(
+        run(&prog, &["1", "--n", "x"])
+            .2
+            .starts_with("error: `--n` is an `i64`, and `x` is not one.")
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// D2: what no word can be is `NK1273`; an option `help` is `NK1274`.
 #[test]
 fn a_parameter_no_word_can_be_is_refused() {
@@ -289,6 +344,10 @@ fn a_parameter_no_word_can_be_is_refused() {
             "NK1273",
             "a required word after `a`",
         ),
+        // Part I 2.2 (#651): Rust's other widths are no type, on `main` too.
+        ("fn main(a: i8) { }", "NK1135", "`i8`"),
+        ("fn main(a: i64; n: i16 = 0) { }", "NK1135", "`i16`"),
+        ("fn main(a: i64; n: u16 = 0) { }", "NK1135", "`u16`"),
     ] {
         let found = codes(source);
         assert!(

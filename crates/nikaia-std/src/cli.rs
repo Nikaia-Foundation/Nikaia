@@ -295,13 +295,21 @@ fn stop(interface: &Interface, program: &str, line: &str) -> ! {
     std::process::exit(2)
 }
 
-/// `an \`int\``, `a \`String\``.
+/// `an \`int\``, `a \`String\``, chosen by how the type is said: a letter
+/// before a width is said as its name (`an \`i64\``, `an \`f64\``, `a
+/// \`u8\``), a word as a word (`an \`int\``, `a \`bool\``, `a \`usize\``).
 fn an(ty: &str) -> String {
-    let base = ty.trim_start_matches("Vec[");
-    let article = match base.chars().next() {
-        Some('a' | 'e' | 'i' | 'o' | 'u' | 'A' | 'E' | 'I' | 'O' | 'U') => "an",
-        _ => "a",
+    let mut chars = ty.chars();
+    let first = chars.next().map(|c| c.to_ascii_lowercase());
+    let spelled = chars.next().is_some_and(|c| c.is_ascii_digit());
+    let vowel_sound = match first {
+        // The letters whose name starts with a vowel sound.
+        Some(c) if spelled => "aefhilmnorsx".contains(c),
+        // `u` is said `you` in the words a word can be (`usize`).
+        Some(c) => "aeio".contains(c),
+        None => false,
     };
+    let article = if vowel_sound { "an" } else { "a" };
     format!("{article} `{ty}`")
 }
 
@@ -554,6 +562,20 @@ mod tests {
         assert_eq!(f64::from_word("2.5"), Some(2.5));
         assert_eq!(bool::from_word("yes"), None);
         assert_eq!(<Option<i32>>::from_word("4"), Some(Some(4)));
+    }
+
+    /// The usage error says a type by how it sounds (#651).
+    #[test]
+    fn the_article_follows_the_sound() {
+        assert_eq!(super::an("u8"), "a `u8`");
+        assert_eq!(super::an("u64"), "a `u64`");
+        assert_eq!(super::an("usize"), "a `usize`");
+        assert_eq!(super::an("i64"), "an `i64`");
+        assert_eq!(super::an("i32"), "an `i32`");
+        assert_eq!(super::an("int"), "an `int`");
+        assert_eq!(super::an("f64"), "an `f64`");
+        assert_eq!(super::an("bool"), "a `bool`");
+        assert_eq!(super::an("String"), "a `String`");
     }
 
     /// `cli::args().nth(at)` takes the `i64` the language counts in.

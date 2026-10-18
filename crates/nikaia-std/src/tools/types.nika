@@ -226,12 +226,20 @@ fn a_symbols_text(names: ref winnow_grammar::InternerContext, name: winnow_gramm
 // Every type an item writes.
 fn item_types(names: ref winnow_grammar::InternerContext, item: ref Item, known: ref collections::BTreeSet[String], plain: ref collections::BTreeSet[String], span: ref Span, mut out: Vec[Finding]) {
     match item {
-        Item::Fn { args, ret_type, body, is_extern, .. } => {
+        Item::Fn { args, config, ret_type, body, is_extern, .. } => {
             for arg in args {
                 written_at(names, arg.ty, known, true, span, out)
                 widths_written(names, arg.ty, is_extern, span, out)
                 if !is_extern {
                     types_word_by_ref(names, arg.ty, plain, "parameter", span, out)
+                }
+            }
+            // An option is a parameter (Part I 5.1): its type is read as one.
+            for option in config {
+                written_at(names, option.ty, known, true, span, out)
+                widths_written(names, option.ty, is_extern, span, out)
+                if !is_extern {
+                    types_word_by_ref(names, option.ty, plain, "parameter", span, out)
                 }
             }
             maybe_written(names, ret_type, known, span, out)

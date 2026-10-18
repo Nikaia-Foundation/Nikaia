@@ -2006,7 +2006,8 @@ fn main(a: int; times: int = 4, verbose: bool = false) {
   is an option named `help` (`NK1274`).
 * **`main`'s preconditions are derived as every function's are** (Part III
   14.2): a claim carried back to `main`'s entry that reads only its parameters,
-  at least one of them; one that reads none the prover decides.
+  subjects or options, at least one of them; one that reads none the prover
+  decides.
   They are checked after the words are read and before the body runs, and in
   the body each is a fact.
 * **A wrong word ends the program with exit status 2**: a word missing, left

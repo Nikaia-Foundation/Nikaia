@@ -261,6 +261,7 @@ fn share(total: int, people: int) -> int {
 /// Splits a bill between people.
 fn main(total: int, people: int; tip: int = 0) {
     assert(total >= 0)
+    assert(tip <= 30)
     let each = share(total + total * tip / 100, people)
     println(f"each pays {each}")
 }
@@ -279,7 +280,17 @@ usage: split [--tip <int>] <total> <people>
 For more, try `split --help`.
 $ echo $?
 2
+$ nikaia run split.nika -- 120 4 --tip 50
+error: `tip` is 50, which breaks `main`'s precondition `tip <= 30`.
+usage: split [--tip <int>] <total> <people>
+For more, try `split --help`.
 ```
+
+An option is a parameter like the others: an `assert` about `tip` is a precondition of
+`main` and is checked with the words, as one about `total` is. The same holds in every
+function: if `fn round(n: int; step: int = 1)` starts with `assert(step > 0)`, the call
+`round(7; step: 0)` is refused while the program is built, and `round(7)` is proved with
+the default.
 
 The line names the parameter, the value given, the claim, and for a claim from another
 function the `assert` it came from. If `main` had called `share(total, extra + 1)`, the
@@ -288,8 +299,9 @@ compiler uses, as in any function. `nikaia build --asserts` lists them:
 
 ```text
 $ nikaia build --asserts
-asserts in …/src/main.nika: 3 - not proved 0 (refused 0, checked at run time 0, checked by a test 0); checked where the words arrive 2; proved 1 (proved 0, preconditions proved at every call 1)
+asserts in …/src/main.nika: 4 - not proved 0 (refused 0, checked at run time 0, checked by a test 0); checked where the words arrive 3; proved 1 (proved 0, preconditions proved at every call 1)
   …/src/main.nika:8  assert(total >= 0)  precondition of `main`, checked where the words arrive
+  …/src/main.nika:9  assert(tip <= 30)  precondition of `main`, checked where the words arrive
   …/src/main.nika  people > 0  precondition of `main` carried back from `assert(people > 0)`, checked where the words arrive
   …/src/main.nika:2  assert(people > 0)  precondition of `share`: proved at every call the compiler sees; any other reaches the entry that checks it
 ```
@@ -302,24 +314,10 @@ program accepts shows up there in review:
 sync = "inferred"
 locks = true
 touches = ["stdout write"]
-requires = ["total >= 0", "people > 0"]
-from = ["assert(total >= 0)", "assert(people > 0)"]
+requires = ["total >= 0", "tip <= 30", "people > 0"]
+from = ["assert(total >= 0)", "assert(tip <= 30)", "assert(people > 0)"]
 signature = "(total: i64, people: i64; tip: i64 = 0)"
 ```
-
-**Not built yet: an `assert` about an option.** The specification makes a claim about any of
-`main`'s parameters a precondition. Today the compiler does this for the positional ones
-only: an `assert` about an option is checked where it stands, in the body, and a breach
-stops the program with status 101:
-
-```text
-$ nikaia run tipcheck.nika -- 100 --tip 50
-tipcheck.nika:2: the program stopped: assertion failed
-    assert(tip <= 30)
-    tip is 50
-```
-
-Until that is built, check an option with an `if` and your own message.
 
 Words read from standard input or from a file are a different matter: they are not trusted,
 and an `assert` about them is refused. That is in [Contracts](contracts.md#data-from-outside-a-guard-not-an-assert).
@@ -342,7 +340,7 @@ arguments:
   <people>             int; requires `people > 0`, from `assert(people > 0)` in `share`
 
 options:
-  --tip <int>          int, default 0
+  --tip <int>          int, default 0; requires `tip <= 30`
   -h, --help           prints this help
 ```
 

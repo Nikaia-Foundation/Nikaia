@@ -541,6 +541,45 @@ fn a_call_that_always_breaks_a_precondition_is_refused() {
     assert_eq!(found[0].notes[0], "Here `whole` is 0.");
 }
 
+/// **A claim about an option is a precondition** (ADR-269 D5, #651), as one
+/// about a subject parameter is: the call proves it with the value it names,
+/// or with the default where it names none, and takes the unchecked entry; a
+/// call that breaks it is refused, and so is one whose default does.
+#[test]
+fn an_options_claim_is_a_precondition_the_caller_proves() {
+    let callee = "fn tipped(a: i64; t: i64 = 0) -> i64 {\n\
+                  \x20   assert(t <= 30)\n\
+                  \x20   return a + t\n\
+                  }\n\
+                  \n";
+    let (out, rust) = ran(
+        "prove-option-precondition",
+        &format!("{callee}fn main() {{\n    println(f\"{{tipped(1; t: 5)}} {{tipped(1)}}\")\n}}\n"),
+    );
+    assert_eq!(out, "6 1\n");
+    assert_eq!(call_checks(&rust), 0, "{rust}");
+    let found = shown_false(&format!(
+        "{callee}fn main() {{\n    println(f\"{{tipped(1; t: 50)}}\")\n}}\n"
+    ));
+    assert_eq!(found.len(), 1, "{found:#?}");
+    assert_eq!(
+        found[0].message,
+        "This call breaks `tipped`'s precondition `t <= 30` every time it is reached."
+    );
+    assert_eq!(found[0].notes[0], "Here `t` is 50.");
+    let found = shown_false(
+        "fn tipped(a: i64; t: i64 = 50) -> i64 {\n\
+         \x20   assert(t <= 30)\n\
+         \x20   return a + t\n\
+         }\n\
+         \n\
+         fn main() {\n\
+         \x20   println(f\"{tipped(1)}\")\n\
+         }\n",
+    );
+    assert_eq!(found.len(), 1, "{found:#?}");
+}
+
 /// **No refusal where a claim is only not proved**: `y > 0` after
 /// `let y = x * 2` can hold, and a value of `x` the facts allow is not a value
 /// the program is shown to reach.

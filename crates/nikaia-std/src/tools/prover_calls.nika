@@ -9,8 +9,11 @@ use std::collections
 
 /// What the prover reads of a free function of this program.
 pub struct FreeFunction {
-    /// Its parameters' names, in order.
+    /// Its parameters' names, in order: the subject parameters, then the
+    /// options (Part I 5.1) in the order they are declared.
     pub params: Vec[String],
+    /// Its options' names and defaults, in the order they are declared.
+    pub options: Vec[(String, Expr)],
     /// It `throws`.
     pub can_throw: bool,
     /// It hands back a whole number.
@@ -22,19 +25,42 @@ pub struct FreeFunction {
 pub fn free_function(program: ref Program, words: ref winnow_grammar::InternerContext, wanted: ref String) -> FreeFunction? {
     for item in program.items {
         match item.node {
-            Item::Fn { name, receiver, args, ret_type, can_throw, .. } => {
+            Item::Fn { name, receiver, args, config, ret_type, can_throw, .. } => {
                 if receiver == null && named_as(name, words, wanted) {
                     let mut params: Vec[String] = []
                     for arg in args {
                         params.push(words.resolve(arg.name).clone())
                     }
-                    return FreeFunction { params: params, can_throw: can_throw, whole_result: whole_type(ret_type, words) }
+                    let mut options: Vec[(String, Expr)] = []
+                    for option in config {
+                        params.push(words.resolve(option.name).clone())
+                        options.push((words.resolve(option.name).clone(), option.default.clone()))
+                    }
+                    return FreeFunction { params: params, options: options, can_throw: can_throw, whole_result: whole_type(ret_type, words) }
                 }
             },
             else => {},
         }
     }
     return null
+}
+
+/// **A call's arguments in the order of `function`'s parameters**: the
+/// positional ones as written, then each option as the call names it, or its
+/// default where the call leaves it out (ADR-318), so a claim about an option
+/// is proved at the call as one about a subject parameter is (ADR-269 D5).
+pub fn arguments_in_order(function: ref FreeFunction, args: ref Vec[Expr], config: ref Vec[ConfigArg], words: ref winnow_grammar::InternerContext) -> Vec[Expr] {
+    let mut all: Vec[Expr] = args.clone()
+    for (option, default) in function.options {
+        let mut value = default.clone()
+        for given in config {
+            if words.resolve(given.name) == option {
+                value = given.value.clone()
+            }
+        }
+        all.push(value)
+    }
+    return all
 }
 
 fn named_as(named: ref winnow_grammar::Symbol?, words: ref winnow_grammar::InternerContext, name: ref String) -> bool {

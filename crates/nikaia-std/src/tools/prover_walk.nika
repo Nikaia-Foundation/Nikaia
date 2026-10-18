@@ -64,7 +64,7 @@ fn prover_test(mut walk: ProverWalk, body: ref Block, program: ref Program, word
 /// `of_a_trait` says so.
 fn prover_function(mut walk: ProverWalk, item: ref Spanned[Item], owner: String?, of_a_trait: bool, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) {
     match item.node {
-        Item::Fn { name, receiver, args, body, can_throw, .. } => {
+        Item::Fn { name, receiver, args, config, body, can_throw, .. } => {
             let has_owner = owner != null
             // The ledger's key: `f`, or `Type::m` for a method.
             let mut key: String? = null
@@ -103,6 +103,30 @@ fn prover_function(mut walk: ProverWalk, item: ref Spanned[Item], owner: String?
                     scope.has_length(walk.arena, arg_name, null)
                     params.insert(arg_name.clone())
                     let length = length_of(arg_name)
+                    let at_entry = walk.arena.var(length)
+                    scope.entry.insert(length, at_entry)
+                }
+            }
+            // **An option is a parameter** (Part I 5.1): a claim about it is
+            // a precondition as one about a subject parameter is (#651).
+            for option in config {
+                let option_name = words.resolve(option.name).clone()
+                scope.locals.insert(option_name.clone())
+                let ty = words.resolve(option.ty.name)
+                if option.ty.generics.is_empty() && is_whole_number(ty) {
+                    scope.ints.insert(option_name.clone())
+                    scope.loose.insert(option_name.clone())
+                    params.insert(option_name.clone())
+                    let at_entry = walk.arena.var(option_name)
+                    scope.entry.insert(option_name.clone(), at_entry)
+                    if ty.starts_with("u") {
+                        scope.not_negative(walk.arena, option_name)
+                    }
+                }
+                if has_a_length(ty) {
+                    scope.has_length(walk.arena, option_name, null)
+                    params.insert(option_name.clone())
+                    let length = length_of(option_name)
                     let at_entry = walk.arena.var(length)
                     scope.entry.insert(length, at_entry)
                 }
@@ -315,14 +339,14 @@ fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], muta
     let mut called_summed: Vec[SummaryAlt]? = null
     if names.len() == 1 && !mutable {
         match value {
-            Expr::Call { func, args, .. } => {
+            Expr::Call { func, args, config, .. } => {
                 let callee = prover_bound_callee(func, scope, words, unaliased)
                 if callee != null {
                     let c = callee ?? ""
                     let bound = words.resolve(names[0]).clone()
-                    called_facts = prover_postconditions_of(walk, c, args, bound, scope, program, words, own, condition)
+                    called_facts = prover_postconditions_of(walk, c, args, config, bound, scope, program, words, own, condition)
                     called_whole = prover_returns_whole(walk, c, program, words, own, condition)
-                    called_summed = prover_summed(walk, c, args, bound, scope, program, words, written_of(value))
+                    called_summed = prover_summed(walk, c, args, config, bound, scope, program, words, written_of(value))
                     called = true
                 }
             },
@@ -408,7 +432,7 @@ fn prover_call_results(mut walk: ProverWalk, expr: ref Expr, top: bool, mut scop
         },
         Expr::Unary { expr, .. } => prover_call_results(walk, expr, false, scope, program, words, own, unaliased, condition, written_of),
         Expr::Cast { expr, .. } => prover_call_results(walk, expr, false, scope, program, words, own, unaliased, condition, written_of),
-        Expr::Call { func, args, .. } => {
+        Expr::Call { func, args, config, .. } => {
             for arg in args {
                 prover_call_results(walk, arg, false, scope, program, words, own, unaliased, condition, written_of)
             }
@@ -421,13 +445,13 @@ fn prover_call_results(mut walk: ProverWalk, expr: ref Expr, top: bool, mut scop
             }
             let name = call_result_name(expr)
             scope.rebind(walk.arena, name)
-            let facts = prover_postconditions_of(walk, callee, args, name, scope, program, words, own, condition)
+            let facts = prover_postconditions_of(walk, callee, args, config, name, scope, program, words, own, condition)
             scope.ints.insert(name.clone())
             scope.loose.insert(name.clone())
             for fact in facts {
                 scope.facts.push(fact)
             }
-            let alts = prover_summed(walk, callee, args, name, scope, program, words, written_of(expr))
+            let alts = prover_summed(walk, callee, args, config, name, scope, program, words, written_of(expr))
             if alts != null {
                 scope.summed.insert(name.clone(), alts ?? [])
             }
@@ -516,9 +540,10 @@ fn prover_pinned_value(mut arena: TermArena, facts: ref Vec[i64], d: i64, ask: f
 /// result summary with the call's arguments in place of its parameters.
 /// Nothing where the callee has none, an argument is not a term the prover
 /// reads, or one reads the name the result is bound to.
-fn prover_summed(mut walk: ProverWalk, callee: ref String, args: ref Vec[Expr], bound: ref String, scope: ref ProverScope, program: ref Program, words: ref winnow_grammar::InternerContext, call: String) -> Vec[SummaryAlt]? {
+fn prover_summed(mut walk: ProverWalk, callee: ref String, written: ref Vec[Expr], config: ref Vec[ConfigArg], bound: ref String, scope: ref ProverScope, program: ref Program, words: ref winnow_grammar::InternerContext, call: String) -> Vec[SummaryAlt]? {
     let exits = walk.state.summaries[callee] ?? return null
     let function = free_function(program, words, callee) ?? return null
+    let args = arguments_in_order(function, written, config, words)
     if function.params.len() != args.len() {
         return null
     }
@@ -1166,10 +1191,10 @@ fn prover_expr(mut walk: ProverWalk, expr: ref Expr, span: Span, scope: ref Prov
 /// into nested blocks, the holes of literals included.
 fn prover_calls_in(mut walk: ProverWalk, expr: ref Expr, span: Span, scope: ref ProverScope, at: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) {
     match expr {
-        Expr::Call { func, args, .. } => {
+        Expr::Call { func, args, config, .. } => {
             let callee = prover_called(func, words, unaliased)
             if callee != null {
-                prover_a_call(walk, callee ?? "", args, span, scope, at, program, words, own, ask, model, escape, written_of, condition)
+                prover_a_call(walk, callee ?? "", args, config, span, scope, at, program, words, own, ask, model, escape, written_of, condition)
             }
         },
         else => {},
@@ -1370,7 +1395,7 @@ fn prover_nested(mut walk: ProverWalk, block: ref Block, lambda: Vec[String]?, s
 /// **A call by name**: an edge of the call graph, and where the callee has a
 /// precondition - its own, as the walk before found it in the first pass, or
 /// another package's ledger's - what the call shows of it.
-fn prover_a_call(mut walk: ProverWalk, callee: ref String, args: ref Vec[Expr], span: Span, scope: ref ProverScope, at: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) {
+fn prover_a_call(mut walk: ProverWalk, callee: ref String, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: Span, scope: ref ProverScope, at: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) {
     if scope.locals.contains(callee) {
         return
     }
@@ -1384,7 +1409,8 @@ fn prover_a_call(mut walk: ProverWalk, callee: ref String, args: ref Vec[Expr], 
     if pre != null {
         let function = free_function(program, words, callee) ?? return
         let found = pre ?? Precondition::none()
-        prover_record_call(walk, callee, function.params, found.claims, args, span, scope, at, words, ask, model, escape, written_of)
+        let all = arguments_in_order(function, args, config, words)
+        prover_record_call(walk, callee, function.params, found.claims, all, span, scope, at, words, ask, model, escape, written_of)
         return
     }
     let foreign = prover_foreign_contract(walk, callee, own, condition) ?? return
@@ -1453,11 +1479,12 @@ fn prover_condition_term(mut arena: TermArena, text: ref String, names: ref coll
 
 /// What a call's postconditions say of the name its result is bound to: the
 /// callee's own, or another package's ledger's.
-fn prover_postconditions_of(mut walk: ProverWalk, callee: ref String, args: ref Vec[Expr], bound: ref String, scope: ref ProverScope, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) -> Vec[i64] {
+fn prover_postconditions_of(mut walk: ProverWalk, callee: ref String, args: ref Vec[Expr], config: ref Vec[ConfigArg], bound: ref String, scope: ref ProverScope, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) -> Vec[i64] {
     let posts = standing_posts(walk.state.postconditions, callee)
     if posts != null {
         let function = free_function(program, words, callee) ?? return []
-        return postconditions_for(walk.arena, posts ?? [], function.params, args, bound, scope, words, walk.state.pinned)
+        let all = arguments_in_order(function, args, config, words)
+        return postconditions_for(walk.arena, posts ?? [], function.params, all, bound, scope, words, walk.state.pinned)
     }
     let foreign = prover_foreign_contract(walk, callee, own, condition) ?? return []
     return postconditions_for(walk.arena, foreign.ensures, foreign.params, args, bound, scope, words, walk.state.pinned)
