@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1030] — 2026-10-18
+
+**s.bytes is a Bytes; a normal form is an argument; any over bytes**
+- `s.bytes` is a `Bytes` over the text's own buffer, a view wherever a view suffices (ADR-320 D11, #453).
+- Normalising is written `s.normalized(text::Form::Nfc)`; the form is an argument with its path, not an option (ADR-320 D10, #453).
+- In a grammar over `Bytes`, a lone `any` is a checked `scalar`; inside `bytes(...)` it is the raw byte (ADR-366 D2, #422).
+
 ## [0.0.1029] — 2026-10-18
 
 **A grammar reads Bytes (ADR-366)**

@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1029 (Draft)
+**Version:** 0.0.1030 (Draft)
 **Date:** 2026-10-18
 
 ---
@@ -732,7 +732,8 @@ it counts:
 | `s.scalars` | `scalar` | `take(n)`, `skip(n)`, `count()`, `for` |
 | `s.graphemes` | `ref String`, one grapheme | `take(n)`, `skip(n)`, `count()`, `for` |
 
-There is no `s.len()` and no `s[i]`. `s.is_empty()` needs no view. `split`,
+`s.bytes` is a `Bytes` (Part I 6.6) over the text's own buffer, borrowed: it
+costs no copy unless it is kept beyond the text. There is no `s.len()` and no `s[i]`. `s.is_empty()` needs no view. `split`,
 `lines`, `trim`, `starts_with`, `ends_with`, `contains`, `==` and `find` work
 on the text itself.
 
@@ -774,8 +775,8 @@ segmentation rules in the version of the `std` the program is built with. A
 grapheme is a `ref String`, compared with a text literal.
 
 **`==` compares bytes, and so does a hash.** A precomposed and a decomposed `ä`
-differ. `s.normalized(; form: nfc)` - or `nfd`, `nfkc`, `nfkd` - makes a text
-that compares as its form says.
+differ. `s.normalized(text::Form::Nfc)` - or `Nfd`, `Nfkc`, `Nfkd` - makes a
+text that compares as its form says.
 
 ---
 
