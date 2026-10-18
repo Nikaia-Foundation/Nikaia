@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1034 (Draft)
+**Version:** 0.0.1035 (Draft)
 **Date:** 2026-10-18
 
 ---
@@ -765,7 +765,10 @@ a scalar stops the program.
 
 **A `'…'` is a `u8` or a `scalar`, by its use.** One ASCII character is either;
 `'\xNN'` above `\x7F` is only a `u8`; one scalar that is not ASCII is only a
-`scalar`. A literal its uses do not type is a `scalar`. A surrogate is refused (`NK1184`).
+`scalar`. A literal its uses do not type is a `scalar`. A `let` of one without an
+annotation is typed by its uses, as a number's is (2.4): `let c = ';'` then
+`b.find(c)` is a `u8`, and uses that ask both are `NK1200`. A surrogate is
+refused (`NK1184`).
 Several scalars that normalise (NFC) to one are that one, with the warning
 `NK1213`; anything else is refused with `NK1212`, which hands over the text
 literal: `"👍🏽"`.

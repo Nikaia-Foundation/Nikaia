@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1035] — 2026-10-18
+
+**a '…' is typed by its uses, also through a let (ADR-320 D8, #453)**
+- `'\xNN'` above `\x7F` is a `u8`, and `NK1212` where a `scalar` is wanted; `'é'` where a `u8` is wanted is `NK1212`, with `"é".bytes` in the help.
+- A `let c = ';'` is a `u8` where its uses ask one (`b.find(c)`), as a number's `let` is typed by its uses; uses that ask both a `u8` and a `scalar` are `NK1200`.
+
 ## [0.0.1034] — 2026-10-18
 
 **s.normalized(text::Form::Nfc); a '…' of several scalars (ADR-320 D8, D10, #453)**
