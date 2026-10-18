@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1026] — 2026-10-18
+
+**An option is lent as a parameter is**
+- A `String` option the body only reads lowers as one written `ref String` does: `&str` in the declaration, its default and a literal passed as written, an owned value lent with `&`. Options join the `keeps` analysis, and a parameter handed to a kept option is kept. An option is listed in the ledger's `keeps` only when kept. An owned `String` passed to a `ref String` option is lent instead of refused (NK1106, #455) (#654).
+
 ## [0.0.1025] — 2026-10-18
 
 **An overflow rustc would refuse is NK1116 first: shifts of open numbers, a followed `let mut`, `<<=` and `-x`**
