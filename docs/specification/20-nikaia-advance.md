@@ -592,7 +592,7 @@ both ([ADR-366](adr/adr-366.md)). Over a `Bytes`, an element that yields text or
 a `scalar` checks what it covered as UTF-8; one that matches by comparison (a
 literal, `digit`, whitespace, a frame boundary, `dec[T]`) checks nothing. A
 byte that is not UTF-8 ends the parse there, with no alternative retried: the
-entry throws `ParseError` with `not UTF-8 at byte N`, `N` counted from the start
+entry throws `ParseError` with `invalid UTF-8 at byte N: 0xXX`, `N` counted from the start
 of the whole input. Over a `String` nothing is checked again.
 
 **Lexical and syntactic.** A rule whose name starts with an **uppercase**
