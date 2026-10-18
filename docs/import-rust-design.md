@@ -43,7 +43,7 @@ The command: `nikaia import rust <crate|file>` reads a crate and writes Nikaia. 
 | `&str`/`String`, `s.len()` | `ref String`/`String`, `s.len()` | E | **[V]** `"äb".len()` = 3 bytes in both (Part I 2.6 says *there is no `s.len()`*, and the checker accepts it: report it as a spec/compiler mismatch) |
 | `&s[a..b]` on text | `s[a..<b]` | P | `NK1214`: only positions the text handed out cut it |
 | `a..b`, `a..=b` | `a..<b`, `a..b` | E | ADR-291 D13. rs2nika R53 (was the silent bug above) |
-| `Option<T>`, `None`, `Some(x)` | `T?`, `null`, `x` | E | ADR-278. `(A, B)?` → a named struct (P, lowering defect D5) |
+| `Option<T>`, `None`, `Some(x)` | `T?`, `null`, `x` | E | ADR-278. `Option<(A, B)>` → `(A, B)?` (ADR-364) |
 | `Result<T,E>` returned, `?` | `-> T throws`, an error enum + `impl Error` | E | Part I 7.1 |
 | `Result` stored as a value | — | P | a program never holds a `Result` (ADR-290 D21): rewritten as an enum |
 | `Vec`, `BTreeMap/Set` | `Vec[T]`, `collections::BTree*` | E | |

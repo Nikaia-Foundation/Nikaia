@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1010] — 2026-10-18
+
+**a tuple may be nullable: (A, B)? is written (ADR-364, #648)**
+- Part I 2.3: `(A, B)?` is written as any `T?` is; `p?.0` reaches a part as a nullable and a fallback is a tuple. `NK1254` is retired. ADR-278 D1 changed by ADR-364. Decided; the parser, checker and `split_once`/`rsplit_once` follow in #648.
+
 ## [0.0.1009] — 2026-10-17
 
 **The prover follows a `let mut` through each assignment and branch (ADR-361 D9, #642)**

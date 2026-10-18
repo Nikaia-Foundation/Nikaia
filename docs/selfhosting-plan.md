@@ -25,7 +25,7 @@ come from rust-analyzer (ADR-001 D5, `crates/rs2nika/facts`).
 
 * No `i128`, `split_once` or integer `parse` is needed: `tools::integers::Integer`,
   `text::parse_i64/u32`, `splitn(2, sep).collect()`, `before_last`.
-* `(A, B)?` is not written (ADR-278 D1): use a named struct.
+* `(A, B)?` is written (ADR-364) once built; until then a named struct.
 * NK2302: a function with more than one view parameter cannot return a view;
   clone, or a free function with one view parameter.
 * A method's `fn` parameter lowers to `impl Fn` by value (recursion fails,

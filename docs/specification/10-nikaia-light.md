@@ -1,7 +1,7 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1009 (Draft)
-**Date:** 2026-10-17
+**Version:** 0.0.1010 (Draft)
+**Date:** 2026-10-18
 
 ---
 
@@ -545,7 +545,7 @@ view, and nothing is copied.
 **`T?` lowers to the backend's `Option<T>`**, the mapping Part III 15.2 writes
 the other way round, and `null` is a reserved word (2.1) that lowers to `None`.
 The `?` comes last, after the type's arguments: `Vec[i64]?` is a nullable list
-and `Vec[i64?]` is a list of nullables. `(A, B)?` is not written (`NK1254`): a struct names the parts and `Name?` is nullable, or the parts are, `(A?, B?)`.
+and `Vec[i64?]` is a list of nullables. A tuple takes it too: `(String, String)?` is a pair that may be missing, and `p?.0` is its first part as a nullable.
 
 **A plain value stands where a nullable one is wanted.** That is the one
 widening the language has, and the compiler writes the constructor. There is no
