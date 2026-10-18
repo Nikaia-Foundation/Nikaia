@@ -5404,6 +5404,8 @@ struct BtState {
     resolving: Vec<String>,
 }
 
+fn bt_not_folded(what: String) -> BtRefusal { BtRefusal::NotHere { what, why: BT_NOT_FOLDED.to_owned(), way_out: BT_FOLD_WAY_OUT.to_owned() } }
+
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn bt_evaluate<H: BtHost>(expr: &Expr, host: &H) -> Result<BuildValue, nikaia_std::error::Thrown<BtRefusal>> {
@@ -5474,7 +5476,7 @@ fn bt_expr<H: BtHost>(expr: &Expr, host: &H, state: &mut BtState) -> Result<Buil
         Expr::Field { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; bt_field(base, name, host, state)? },
         Expr::MethodCall { method, .. } => {
             let method = *method;
-            return Err(nikaia_std::error::throwing(BtRefusal::NotHere { what: format!(".{}()", host.text(state.unit, method)), why: BT_NOT_FOLDED.to_owned(), way_out: BT_FOLD_WAY_OUT.to_owned() }, &"bt_expr"))
+            return Err(nikaia_std::error::throwing(bt_not_folded(format!(".{}()", host.text(state.unit, method))), &"bt_expr"))
         },
         Expr::Call { func, args, config, .. } => { let func = nikaia_std::boxed::open(func); bt_call_expr(func, args, config, host, state)? },
         _ => { return Err(nikaia_std::error::throwing(BtRefusal::Unevaluable, &"bt_expr")) },
@@ -5535,10 +5537,10 @@ fn bt_if_value<H: BtHost>(cond: &Expr, then_branch: &Block, else_branch: Option<
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 fn bt_branch<H: BtHost>(block: &Block, host: &H, state: &mut BtState) -> Result<BuildValue, nikaia_std::error::Thrown<BtRefusal>> {
-    if block.stmts.len() != 1 { return Err(nikaia_std::error::throwing(BtRefusal::NotHere { what: "{ … }".to_owned(), why: BT_NOT_FOLDED.to_owned(), way_out: BT_FOLD_WAY_OUT.to_owned() }, &"bt_branch")); }
+    if block.stmts.len() != 1 { return Err(nikaia_std::error::throwing(bt_not_folded("{ … }".to_owned()), &"bt_branch")); }
     Ok(match &nikaia_std::index::get(&block.stmts, 0).node {
         Stmt::Expr(inner) => bt_expr(inner, host, state)?,
-        _ => { return Err(nikaia_std::error::throwing(BtRefusal::NotHere { what: "{ … }".to_owned(), why: BT_NOT_FOLDED.to_owned(), way_out: BT_FOLD_WAY_OUT.to_owned() }, &"bt_branch")) },
+        _ => { return Err(nikaia_std::error::throwing(bt_not_folded("{ … }".to_owned()), &"bt_branch")) },
     })
 }
 
@@ -5573,7 +5575,7 @@ fn bt_field<H: BtHost>(base: &Expr, name: winnow_grammar::Symbol, host: &H, stat
 fn bt_call_expr<H: BtHost>(func: &Expr, args: &[Expr], config: &[ConfigArg], host: &H, state: &mut BtState) -> Result<BuildValue, nikaia_std::error::Thrown<BtRefusal>> {
     Ok(match func {
         Expr::Path(path, _) => {
-            if !config.is_empty() || path.len() != 2 { return Err(nikaia_std::error::throwing(BtRefusal::NotHere { what: "a call".to_owned(), why: BT_NOT_FOLDED.to_owned(), way_out: BT_FOLD_WAY_OUT.to_owned() }, &"bt_call_expr")); }
+            if !config.is_empty() || path.len() != 2 { return Err(nikaia_std::error::throwing(bt_not_folded("a call".to_owned()), &"bt_call_expr")); }
             let parser = host.text(state.unit, *nikaia_std::index::get(&path, 0));
             let rule = host.text(state.unit, *nikaia_std::index::get(&path, 1));
             if host.variant_of(state.unit, &parser, &rule) {
@@ -5581,13 +5583,13 @@ fn bt_call_expr<H: BtHost>(func: &Expr, args: &[Expr], config: &[ConfigArg], hos
                 for arg in args.iter() { payload.push(bt_expr(arg, host, state)?); }
                 return Ok(BuildValue::Variant { ty: parser, variant: rule, payload });
             }
-            if args.len() != 1 { return Err(nikaia_std::error::throwing(BtRefusal::NotHere { what: format!("{}::{}(…)", parser, rule), why: BT_NOT_FOLDED.to_owned(), way_out: BT_FOLD_WAY_OUT.to_owned() }, &"bt_call_expr")); }
+            if args.len() != 1 { return Err(nikaia_std::error::throwing(bt_not_folded(format!("{}::{}(…)", parser, rule)), &"bt_call_expr")); }
             let input = match bt_expr(nikaia_std::index::get(&args, 0), host, state)? {
                 BuildValue::Text(held) => held,
                 _ => { return Err(nikaia_std::error::throwing(BtRefusal::Unevaluable, &"bt_call_expr")) },
             };
             let ran = host.run_grammar(state.unit, &parser, &rule, &input);
-            if !ran.found { return Err(nikaia_std::error::throwing(BtRefusal::NotHere { what: format!("{}::{}(…)", parser, rule), why: BT_NOT_FOLDED.to_owned(), way_out: BT_FOLD_WAY_OUT.to_owned() }, &"bt_call_expr")); }
+            if !ran.found { return Err(nikaia_std::error::throwing(bt_not_folded(format!("{}::{}(…)", parser, rule)), &"bt_call_expr")); }
             let value = match ran.value.as_ref() {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
@@ -5599,7 +5601,7 @@ fn bt_call_expr<H: BtHost>(func: &Expr, args: &[Expr], config: &[ConfigArg], hos
             let symbol = *symbol;
             let name = host.text(state.unit, symbol);
             if name == BT_ASSET { return Ok(bt_asset(args, host)?); }
-            return Err(nikaia_std::error::throwing(BtRefusal::NotHere { what: format!("{}(…)", name), why: BT_NOT_FOLDED.to_owned(), way_out: BT_FOLD_WAY_OUT.to_owned() }, &"bt_call_expr"))
+            return Err(nikaia_std::error::throwing(bt_not_folded(format!("{}(…)", name)), &"bt_call_expr"))
         },
         _ => { return Err(nikaia_std::error::throwing(BtRefusal::Unevaluable, &"bt_call_expr")) },
     })
@@ -7786,7 +7788,7 @@ impl CxNode {
         let call_text = format!("{}({})", symbol, args.join(", "));
         match found {
             CxResult::Made(ref out) => {
-                match out {
+                match *out {
                     CxOut::Buffer => {
                         locals.push(String::from("uint8_t small[256];"));
                         locals.push(String::from("uint8_t *room = small;"));
@@ -7825,7 +7827,7 @@ impl CxNode {
                     _ => {
                         let (c, back) = cx_node_back(out, ctx, constructor, &owner_text);
                         let mut zero: String = String::from("0");
-                        match out {
+                        match *out {
                             CxOut::Record(_) => { zero = String::from("{0}"); },
                             CxOut::AbsentRecord(_) => { zero = String::from("{0}"); },
                             _ => { },
@@ -8934,7 +8936,7 @@ impl CxPython {
         match found {
             CxResult::Made(ref out) => {
                 has_result = true;
-                match out {
+                match *out {
                     CxOut::Buffer => {
                         buffered = true;
                         argtypes.push(String::from("ctypes.POINTER(ctypes.c_uint8)"));
@@ -9912,7 +9914,7 @@ impl CheckState {
             _ => return,
         };
         let mut numeric: Vec<String> = vec![];
-        if kind == "struct" && self.structs.contains_key(&name) { numeric = arith_numeric_fields(&match *nikaia_std::index::get(&self.structs, &name) { Some(__nikaia_value) => __nikaia_value, None => return }); }
+        if kind == "struct" && self.structs.contains_key(&name) { numeric = arith_numeric_fields(match *nikaia_std::index::get(&self.structs, &name) { Some(__nikaia_value) => __nikaia_value, None => return }); }
         let mut field: Option<String> = None;
         if numeric.len() == 1 && declared_with_no_arithmetic(&world.here, other).is_none() {
             let bound = arith_a_variable(side, world);
@@ -12838,10 +12840,10 @@ pub fn check_core_a_called_field<H: CheckHost>(state: &mut CheckState, world: &C
                         check_core_args_a_field_called(state, &current, &key);
                     }
                     if world.own.code_locks.contains_key(&key) {
-                        let holds = match *nikaia_std::index::get(&world.own.code_locks, &key) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                        let holds = match (*nikaia_std::index::get(&world.own.code_locks, &key)).copied() { Some(__nikaia_value) => __nikaia_value, None => return None };
                         let own = state.inside_a_door;
                         state.inside_a_door = outer_inside;
-                        state.a_lock_inside_a_lock(&key, holds, span);
+                        state.a_lock_inside_a_lock(&key, &holds, span);
                         state.inside_a_door = own;
                     }
                     if world.own.code_throws.contains_key(&key) {
@@ -25165,7 +25167,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     fn an_open_comptime_named(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, name: winnow_grammar::Symbol) -> Option<CheckOpenComptime> {
         let local = match self.binding(world.words.resolve(name)) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        let at = match *nikaia_std::index::get(&self.open_comptimes, &local.id) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let at = match (*nikaia_std::index::get(&self.open_comptimes, &local.id)).copied() { Some(__nikaia_value) => __nikaia_value, None => return None };
         Some(CheckOpenComptime { name: local.name.to_owned(), at: at.clone() })
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -54013,7 +54015,7 @@ pub enum SolverTerm {
 
 // --- sources.nika ---
 
-pub async fn rust_sources(src: &str) -> Result<collections::BTreeMap<String, String>, nikaia_std::error::Thrown<io::IoError>> {
+pub async fn rust_sources(src: &str) -> Result<collections::BTreeMap<String, String>, nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
     let mut out = collections::BTreeMap::new();
     for name in fs::walk(std::path::Path::new(&(src)), &fs::Root::Anywhere).await? {
         if !nikaia_std::fs::path::ends_with(&(name), std::path::Path::new(&(".rs"))) { continue; }
@@ -55747,7 +55749,7 @@ fn bind_tier_local(name: String, local: TierLocal, walk: &mut TierWalk) {
 fn plain_local(kinds: Kinds) -> TierLocal { TierLocal { kinds, of: None, literal: -1, declared: None } }
 
 fn tier_at(word: &str, walk: &TierWalk) -> Tier {
-    let found = match *nikaia_std::index::get(&walk.tiers, word) { Some(__nikaia_value) => __nikaia_value, None => return Tier::Owned };
+    let found = match (*nikaia_std::index::get(&walk.tiers, word)).copied() { Some(__nikaia_value) => __nikaia_value, None => return Tier::Owned };
     found.clone()
 }
 
@@ -57201,6 +57203,7 @@ pub struct Contribution {
     pub given: Vec<String>,
     pub errors: Vec<String>,
     pub fatal: Vec<String>,
+    pub result: Option<String>,
 }
 
 pub fn thrown_by(body: &Block, names: &winnow_grammar::InternerContext, holes_of: &impl Fn(&Expr) -> Vec<Expr>, contribution_of: &impl Fn(&Expr) -> Contribution) -> Thrown {
@@ -57385,7 +57388,11 @@ fn a_contribution(expr: &Expr, names: &winnow_grammar::InternerContext, contribu
     match expr {
         Expr::Throw(thrown, _) => {
             let thrown = nikaia_std::boxed::open(thrown);
-            out.direct.insert(nikaia_std::index::or(error_type(names, thrown), || "?".into()));
+            let written: String = nikaia_std::index::or(error_type(names, thrown), || "".into());
+            if !written.is_empty() { out.direct.insert(written); } else {
+                let given = contribution_of(thrown);
+                out.direct.insert(nikaia_std::index::or(given.result, || "?".into()));
+            }
         },
         _ => {
             let given = contribution_of(expr);

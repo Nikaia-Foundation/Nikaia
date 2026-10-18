@@ -434,6 +434,9 @@ pub struct Contribution {
     pub errors: Vec[String],
     /// Those of `errors` that are fatal (ADR-345 D1).
     pub fatal: Vec[String],
+    /// The type the callee is declared to return, where the expression is a
+    /// call the compiler resolved: what `throw` of it throws.
+    pub result: String?,
 }
 
 /// What a function's body throws itself, and whom in this package it calls.
@@ -686,11 +689,18 @@ fn a_contribution(expr: ref Expr, names: ref winnow_grammar::InternerContext, co
         return
     }
     match expr {
-        // A `throw` that reached something this compiler cannot name - a
-        // value from a call, say - fails; with what is the absence of a claim
-        // rather than an answer.
+        // **A `throw` of a call throws the type the callee returns**: `throw
+        // made()` with `fn made() -> Bad` fails with `Bad`, as `throw Bad::No`
+        // does. One this compiler cannot name fails; with what is the absence
+        // of a claim rather than an answer.
         Expr::Throw(thrown, _) => {
-            out.direct.insert(error_type(names, thrown) ?? "?")
+            let written: String = error_type(names, thrown) ?? ""
+            if written.len() > 0 {
+                out.direct.insert(written)
+            } else {
+                let given = contribution_of(thrown)
+                out.direct.insert(given.result ?? "?")
+            }
         }
         else => {
             let given = contribution_of(expr)

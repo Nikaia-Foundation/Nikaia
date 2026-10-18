@@ -1649,3 +1649,38 @@ fn main() {
     );
     assert_eq!(said.trim(), "p r");
 }
+
+/// **`throw made()` throws the type `made` returns**, as `throw Bad::No` does:
+/// the error set names `Bad`, so the function lowers to `Thrown<Bad>` and not
+/// to `Box<dyn Error>`, which a caller that `split()`s it could not take
+/// (rustc E0599).
+#[test]
+fn a_throw_of_a_call_names_the_type_the_callee_returns() {
+    let (said, rust) = printed_and_lowered(
+        "throw-of-a-call",
+        r#"
+enum Bad { No }
+impl Error for Bad {
+    fn message(ref self) -> String {
+        return "bad"
+    }
+}
+fn made() -> Bad {
+    return Bad::No
+}
+fn f(fail: bool) -> i64 throws {
+    if fail {
+        throw made()
+    }
+    return 1
+}
+fn main() {
+    let a = f(false) catch { 7 }
+    let b = f(true) catch { 7 }
+    println(f"{a} {b}")
+}
+"#,
+    );
+    assert_eq!(said.trim(), "1 7");
+    assert!(rust.contains("nikaia_std::error::Thrown<Bad>"), "{rust}");
+}

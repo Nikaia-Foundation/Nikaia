@@ -141,7 +141,17 @@ fn contribution(
     fatal: &BTreeSet<String>,
 ) -> nikaia_std::tools::throws::Contribution {
     let mut given = Vec::new();
-    let (call, errors) = match reached(parsed, expr, own, library) {
+    let reach = reached(parsed, expr, own, library);
+    let callee = match &reach {
+        Some(Reached::Own(name)) => own.functions.get(name),
+        Some(Reached::Library { key, .. }) => library.functions.get(key),
+        _ => None,
+    };
+    let result = callee
+        .and_then(|contract| contract.signature.as_ref())
+        .and_then(|signature| signature.result.as_ref())
+        .map(|ty| ty.text());
+    let (call, errors) = match reach {
         Some(Reached::Own(name)) => (Some(name), Vec::new()),
         Some(Reached::Library { key, .. }) => (
             None,
@@ -167,6 +177,7 @@ fn contribution(
         given,
         errors,
         fatal,
+        result,
     }
 }
 

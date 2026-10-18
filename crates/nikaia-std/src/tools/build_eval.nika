@@ -98,6 +98,12 @@ struct BtState {
     resolving: Vec[String],
 }
 
+/// **What is not folded here**: `what`, refused with the way out of a
+/// `comptime` of its own.
+fn bt_not_folded(what: String) -> BtRefusal {
+    return BtRefusal::NotHere { what: what, why: BT_NOT_FOLDED.clone(), way_out: BT_FOLD_WAY_OUT.clone() }
+}
+
 /// What an initialiser comes to.
 pub fn bt_evaluate[H: BtHost](expr: ref Expr, host: ref H) -> BuildValue sync throws {
     let mut state = BtState { unit: 0, resolving: [] }
@@ -186,7 +192,7 @@ fn bt_expr[H: BtHost](expr: ref Expr, host: ref H, mut state: BtState) -> BuildV
         // **A method is a call**, compiled and run where it is computed at all
         // (ADR-321 D1).
         Expr::MethodCall { method, .. } => {
-            throw BtRefusal::NotHere { what: f".{host.text(state.unit, method)}()", why: BT_NOT_FOLDED.clone(), way_out: BT_FOLD_WAY_OUT.clone() }
+            throw bt_not_folded(f".{host.text(state.unit, method)}()")
         },
         Expr::Call { func, args, config, .. } => bt_call_expr(func, args, config, host, state),
         else => {
@@ -268,12 +274,12 @@ fn bt_if_value[H: BtHost](cond: ref Expr, then_branch: ref Block, else_branch: r
 /// code, compiled and run with the program (ADR-321 D1).
 fn bt_branch[H: BtHost](block: ref Block, host: ref H, mut state: BtState) -> BuildValue sync throws {
     if block.stmts.len() != 1 {
-        throw BtRefusal::NotHere { what: "{ … }".clone(), why: BT_NOT_FOLDED.clone(), way_out: BT_FOLD_WAY_OUT.clone() }
+        throw bt_not_folded("{ … }".clone())
     }
     return match block.stmts[0].node {
         Stmt::Expr(inner) => bt_expr(inner, host, state),
         else => {
-            throw BtRefusal::NotHere { what: "{ … }".clone(), why: BT_NOT_FOLDED.clone(), way_out: BT_FOLD_WAY_OUT.clone() }
+            throw bt_not_folded("{ … }".clone())
         },
     }
 }
@@ -314,7 +320,7 @@ fn bt_call_expr[H: BtHost](func: ref Expr, args: ref Vec[Expr], config: ref Vec[
         // Anything else called is code, which the folder does not run.
         Expr::Path(path, _) => {
             if config.len() > 0 || path.len() != 2 {
-                throw BtRefusal::NotHere { what: "a call".clone(), why: BT_NOT_FOLDED.clone(), way_out: BT_FOLD_WAY_OUT.clone() }
+                throw bt_not_folded("a call".clone())
             }
             let parser = host.text(state.unit, path[0])
             let rule = host.text(state.unit, path[1])
@@ -329,7 +335,7 @@ fn bt_call_expr[H: BtHost](func: ref Expr, args: ref Vec[Expr], config: ref Vec[
                 return BuildValue::Variant { ty: parser, variant: rule, payload: payload }
             }
             if args.len() != 1 {
-                throw BtRefusal::NotHere { what: f"{parser}::{rule}(…)", why: BT_NOT_FOLDED.clone(), way_out: BT_FOLD_WAY_OUT.clone() }
+                throw bt_not_folded(f"{parser}::{rule}(…)")
             }
             let input = match bt_expr(args[0], host, state) {
                 BuildValue::Text(held) => held,
@@ -339,7 +345,7 @@ fn bt_call_expr[H: BtHost](func: ref Expr, args: ref Vec[Expr], config: ref Vec[
             }
             let ran = host.run_grammar(state.unit, parser, rule, input)
             if !ran.found {
-                throw BtRefusal::NotHere { what: f"{parser}::{rule}(…)", why: BT_NOT_FOLDED.clone(), way_out: BT_FOLD_WAY_OUT.clone() }
+                throw bt_not_folded(f"{parser}::{rule}(…)")
             }
             let value = ran.value?.clone()
             if value == null {
@@ -356,7 +362,7 @@ fn bt_call_expr[H: BtHost](func: ref Expr, args: ref Vec[Expr], config: ref Vec[
             if name == BT_ASSET {
                 return bt_asset(args, host)
             }
-            throw BtRefusal::NotHere { what: f"{name}(…)", why: BT_NOT_FOLDED.clone(), way_out: BT_FOLD_WAY_OUT.clone() }
+            throw bt_not_folded(f"{name}(…)")
         },
         else => {
             throw BtRefusal::Unevaluable
