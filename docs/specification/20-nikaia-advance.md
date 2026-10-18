@@ -586,6 +586,15 @@ entered from a body that pauses; what is refused is a pause *inside* the parse.
 **An entry is therefore `sync`**, and `nikaia.contracts` says so. A function
 whose body is one `Json::value(text)` is `sync`.
 
+**Text or bytes.** An entry takes a `String` or a `Bytes`, and the argument
+decides which the grammar parses; a grammar called with both is compiled for
+both ([ADR-366](adr/adr-366.md)). Over a `Bytes`, an element that yields text or
+a `scalar` checks what it covered as UTF-8; one that matches by comparison (a
+literal, `digit`, whitespace, a frame boundary, `dec[T]`) checks nothing. A
+byte that is not UTF-8 ends the parse there, with no alternative retried: the
+entry throws `ParseError` with `not UTF-8 at byte N`, `N` counted from the start
+of the whole input. Over a `String` nothing is checked again.
+
 **Lexical and syntactic.** A rule whose name starts with an **uppercase**
 letter is lexical: nothing is skipped between its elements. A lowercase name
 is syntactic: the `WS` rule is matched between elements. `WS` defaults to any
@@ -608,6 +617,7 @@ and `rule WS = "" { }` skips nothing.
 | `peek(p)` | `p` without consuming it | as `p` |
 | `until(p)` | everything up to `p`, not consuming `p`; an error where `p` never comes | text |
 | `text(p)` | `p`, handing back the text it covered instead of its value | text |
+| `bytes(p)` | `p`, handing back the bytes it covered, unchecked | a view of the input's bytes |
 | `span(p)` | `p`, handing back the byte range it covered | a `Span` (two `u32`) |
 | `here` | the position, consuming nothing | a `u32` |
 | `same_line` | nothing; fails where the whitespace skipped just before this position held a line break | nothing |

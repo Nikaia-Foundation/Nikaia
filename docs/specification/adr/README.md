@@ -93,6 +93,7 @@ implementation.
 | [363](adr-363.md) | The toolchain's own Nikaia package (`src/tools`) is lowered at `user_parallelism = yes`, so the compiler may use `par_iter` and `task::scope`; `std`'s modules still lower the same at both settings; later the toolchain gets a crate of its own | Accepted | no |
 | [364](adr-364.md) | A tuple may be nullable: `(A, B)?` is written as any `T?` is, `?.0` reaches a part, a fallback is a tuple; `NK1254` retired | Accepted | no |
 | [365](adr-365.md) | Standard input and every file read while the program runs are untrusted unless marked `trusted: true`; only the project's own assets (`asset("…")`) are trusted without a marker | Accepted | no |
+| [366](adr-366.md) | A grammar reads `Bytes` as readily as text; what becomes text is checked as UTF-8 where it becomes text, a bad byte is a parse error at its offset | Accepted | no |
 | [243](adr-243.md) | `std::process::run` starts a program and waits for it on a thread of its own, and a non-zero exit is an answer, not a failure. | Accepted | yes |
 | [258](adr-258.md) | A design question is weighed by four weights: the special case pays, the compiler works for the developer, the common case costs nothing, and the language is consistent with itself. | Accepted | yes |
 | [001](adr-001.md) | The toolchain is stable Rust named in one file, the parser is generated from a grammar over bytes, and the build is staged with Stage 0 a transpiler. | Accepted | yes |

@@ -112,7 +112,7 @@ chose: the hasher, the UTF-8 check, and Nikaia's one-character pattern as a
 |---|---|---|
 | updating the stats: the `and_modify` / `or_insert_with` chain through the hash table | the lowering | [#420](https://github.com/Nikaia-Language/Nikaia/issues/420) |
 | a count per row and a sum over the file, bounded by the input's size, to prove the accumulator's two overflow checks away (2.1 a row) | the prover | [#432](https://github.com/Nikaia-Language/Nikaia/issues/432) |
-| a grammar over bytes, with only what becomes text checked as UTF-8 | language, `winnow-grammar`, `std` | [#422](https://github.com/Nikaia-Language/Nikaia/issues/422) |
+| no whole-file UTF-8 check: text checked only where it is new, a mapping as bytes, maybe a type for unchecked text (a grammar over `Bytes` is ADR-366, #422) | language, `winnow-grammar`, `std` | [#664](https://github.com/Nikaia-Foundation/Nikaia/issues/664) |
 
 ## What this does not claim
 
