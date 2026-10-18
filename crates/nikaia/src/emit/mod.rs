@@ -4749,10 +4749,31 @@ impl<'p> Emitter<'p> {
                     out.push(&format!("          {separator}"));
                     self.pattern(out, &alt.pattern)?;
                     out.push("\n            -> ");
+                    // In a text grammar the backend has no `bytes(p)`: it is
+                    // `text(p)` there, and the action sees its bytes (ADR-366
+                    // D4).
+                    let mut as_bytes = Vec::new();
+                    if !self.grammar_bytes.get() {
+                        bytes_bindings(
+                            &alt.pattern.node,
+                            &|s| self.text(s) == "bytes",
+                            &mut as_bytes,
+                        );
+                    }
+                    if !as_bytes.is_empty() {
+                        out.push("{ ");
+                        for name in &as_bytes {
+                            let name = self.text(*name);
+                            out.push(&format!("let {name} = {name}.as_bytes(); "));
+                        }
+                    }
                     // A grammar action is the rule's own body: what it ends
                     // in is what the rule hands back, so a `return` there is
                     // that value (ADR-296).
                     self.block(out, action, 3, Flow::PLAIN, Tail::Return)?;
+                    if !as_bytes.is_empty() {
+                        out.push(" }");
+                    }
                     out.push("\n");
                 }
                 None => {
@@ -4833,10 +4854,11 @@ impl<'p> Emitter<'p> {
                 name,
                 generics,
                 args,
-            } if self.grammar_bytes.get()
-                && generics.is_empty()
+            } if generics.is_empty()
                 && !args.is_empty()
-                && matches!(self.text(*name), "until" | "bytes" | "text") =>
+                && (self.text(*name) == "bytes"
+                    || self.grammar_bytes.get()
+                        && matches!(self.text(*name), "until" | "text")) =>
             {
                 // Over bytes `until(t)` is bytes to the backend and text to
                 // Nikaia: it is checked where it becomes text (ADR-366 D2).
@@ -4844,13 +4866,18 @@ impl<'p> Emitter<'p> {
                 // outer one's, so nothing below is wrapped again.
                 let called = self.text(*name);
                 let wrap = called == "until";
+                let called = if called == "bytes" && !self.grammar_bytes.get() {
+                    "text"
+                } else {
+                    called
+                };
                 out.push(if wrap { "text(until(" } else { called });
                 if !wrap {
                     out.push("(");
                 }
-                self.grammar_bytes.set(false);
+                let bytes = self.grammar_bytes.replace(false);
                 let written = self.patterns(out, args, ", ");
-                self.grammar_bytes.set(true);
+                self.grammar_bytes.set(bytes);
                 written?;
                 out.push(if wrap { "))" } else { ")" });
                 Ok(())
@@ -8051,6 +8078,30 @@ fn writes_a_list(parsed: &Parsed, pattern: &Spanned<Pattern>) -> bool {
                 || args.iter().any(|p| writes_a_list(parsed, p))
         }
         Pattern::Literal(_) | Pattern::Cut | Pattern::Fold(_) => false,
+    }
+}
+
+/// **The names bound to a `bytes(p)`** in a pattern, for a text grammar's
+/// action to see as bytes (ADR-366 D4).
+fn bytes_bindings(pattern: &Pattern, is_bytes: &dyn Fn(Symbol) -> bool, found: &mut Vec<Symbol>) {
+    match pattern {
+        Pattern::Bind { name, pat } => {
+            if let Pattern::Ref { name: called, .. } = &pat.node
+                && is_bytes(*called)
+            {
+                found.push(*name);
+            }
+            bytes_bindings(&pat.node, is_bytes, found);
+        }
+        Pattern::Seq(parts) | Pattern::Choice(parts) => {
+            for part in parts {
+                bytes_bindings(&part.node, is_bytes, found);
+            }
+        }
+        Pattern::Repeat { pat, .. } | Pattern::Group(pat) => {
+            bytes_bindings(&pat.node, is_bytes, found)
+        }
+        _ => {}
     }
 }
 

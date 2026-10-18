@@ -20936,6 +20936,7 @@ impl CheckState {
                 if called == "raw_ident" || called == "string" || called == "alpha1" || called == "multispace0" || called == "multispace1" { return pattern_text(); }
             }
             if (called == "until" || called == "text") && !args.is_empty() { return pattern_text(); }
+            if called == "bytes" && !args.is_empty() { return pattern_named("Bytes", false); }
             if called == "peek" && args.len() == 1 { return self.pattern_type(world, &nikaia_std::index::get(&args, 0).node, rules); }
             if called == "list" && args.len() == 2 { return list_of_known(self.pattern_type(world, &nikaia_std::index::get(&args, 0).node, rules)); }
         }

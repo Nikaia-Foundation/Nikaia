@@ -112,6 +112,11 @@ impl CheckState {
             if (called == "until" || called == "text") && args.len() >= 1 {
                 return pattern_text()
             }
+            // **`bytes(p)` is what `p` covered, as bytes** (ADR-366 D4), over
+            // either input.
+            if called == "bytes" && args.len() >= 1 {
+                return pattern_named("Bytes", false)
+            }
             if called == "peek" && args.len() == 1 {
                 return self.pattern_type(world, args[0].node, rules)
             }

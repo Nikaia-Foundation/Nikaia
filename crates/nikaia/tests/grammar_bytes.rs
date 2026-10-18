@@ -116,3 +116,21 @@ fn what_is_text_over_bytes_is_checked_text() {
     let out = run("grammar-bytes-text", &source, &[("d", "ab;cd".as_bytes())]);
     assert_eq!(out, "212 212");
 }
+
+const REC: &str = "grammar Rec {\n    entry rule rec -> i64 = n:dec[i64](digit+) \":\" body:bytes(any*) { n * 1000 + body.len() }\n}\n";
+
+/// `bytes(p)` hands back the bytes `p` covered, over either input (ADR-366
+/// D4): the backend's `bytes(p)` over bytes, `text(p)` seen as its bytes over
+/// text, where the backend has none.
+#[test]
+fn bytes_of_a_pattern_over_either_input() {
+    let source = format!(
+        "use std::fs\n\n{REC}\nfn main() {{\n    let raw = fs::read(\"d\", fs::Root::Anywhere) catch {{ return }}\n    let t = fs::read_to_string(\"d\", fs::Root::Anywhere) catch {{ return }}\n    let a = Rec::rec(raw) catch {{ -1 }}\n    let b = Rec::rec(t) catch {{ -1 }}\n    print(f\"{{a}} {{b}}\")\n}}\n"
+    );
+    let rust = emit(&source);
+    assert!(rust.contains("body:bytes(any*)"), "{rust}");
+    assert!(rust.contains("body:text(any*)"), "{rust}");
+    assert!(rust.contains("let body = body.as_bytes();"), "{rust}");
+    let out = run("grammar-bytes-of", &source, &[("d", "3:abc".as_bytes())]);
+    assert_eq!(out, "3003 3003");
+}
