@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1017] — 2026-10-18
+
+**`split_once` and `rsplit_once` on `String`**
+- `text.split_once(sep)` and `rsplit_once(sep)` cut the text at the first or last separator and return both halves as views of it, `(ref String, ref String)?`, or `null` where the separator does not occur (ADR-364). A plain value as the tail of a function declared `-> T?` is wrapped in `Some`, as a `return` value is; rustc refused it before. The converter writes `Option<(A, B)>` as `(A, B)?` and keeps a `let`'s `Option<T>` type whole.
+
 ## [0.0.1016] — 2026-10-18
 
 **`nikaia run` compiles a program that needs only `std` without Cargo**
