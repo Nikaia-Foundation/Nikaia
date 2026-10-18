@@ -8,6 +8,15 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1027] — 2026-10-18
+
+**A grammar reads Bytes (ADR-366); NK1116 once, a caret under a number, a tuple let over a lent item (#662, #602, #626)**
+- A grammar entry may take a `Bytes` as well as a `String`, the argument decides; over `Bytes`, what becomes text or a `scalar` is checked as UTF-8 where it is made, a bad byte is `ParseError` `not UTF-8 at byte N`, and `bytes(p)` yields the bytes it covered (Part II 10.8, ADR-366, #422). Specification only: the compiler follows in #422 after winnow-grammar#24.
+- A `let` whose constant value overflows is refused with `NK1116` where it is written; the name no longer carries that value forward, so its uses are not refused a second time (#662).
+- Number literals take a parse-order id and a span like every other parsed expression, so a diagnostic about one points at the number, not at the whole statement (#602).
+- `fn(pair) { let (name, v) = pair … }`, the form `NK1101`'s help recommends, reached rustc as `v > 1` over a `&i64`. A walk now records whether it lends its items (`Vec::iter`, and `filter`, `take` and the like over one that does); a tuple taken apart from such an item reads a number, `bool` or `char` as the value and keeps text a view, as a `for` head does (#626).
+- A `bool` bound in a nested `match` on a reference no longer reproduces as `&bool`; a test keeps it so (#578).
+
 ## [0.0.1026] — 2026-10-18
 
 **An option is lent as a parameter is**
