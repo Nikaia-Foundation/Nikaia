@@ -12,6 +12,34 @@
 /// type with the same meaning and nothing to say that the first one does not.
 pub use std::time::Duration;
 
+/// **A reading of the monotonic clock** ([ADR-368](../../../docs/specification/adr/adr-368.md)
+/// D1), the language below's own, re-exported as `Duration` is.
+///
+/// It never goes back, says nothing about the calendar, and means something
+/// only within the run that read it.
+pub use std::time::Instant;
+
+/// **`time::now()`** ([ADR-368](../../../docs/specification/adr/adr-368.md)
+/// D1): the monotonic clock, read. `i.elapsed()` is the language below's own
+/// method; `b.since(a)` is [`InstantSince`].
+pub fn now() -> Instant {
+    Instant::now()
+}
+
+/// **`b.since(a)`** ([ADR-368](../../../docs/specification/adr/adr-368.md)
+/// D1): the span from `a` to `b`, **zero where `b` is earlier** - the language
+/// below's `saturating_duration_since`, under the name Part III gives it.
+pub trait InstantSince {
+    /// The span from `earlier` to this reading, or zero where it is later.
+    fn since(self, earlier: Instant) -> Duration;
+}
+
+impl InstantSince for Instant {
+    fn since(self, earlier: Instant) -> Duration {
+        self.saturating_duration_since(earlier)
+    }
+}
+
 /// **`5.seconds()`** ([ADR-150](../../../docs/specification/adr/adr-150.md)
 /// D2), as a method on an integer.
 ///
@@ -87,6 +115,15 @@ pub trait DurationIn {
     fn in_millis(self) -> i64;
     /// How many whole millionths of a second.
     fn in_micros(self) -> i64;
+    /// **`d.as_nanos()`** ([ADR-368](../../../docs/specification/adr/adr-368.md)
+    /// D2): how many nanoseconds, an `i64` that stays at `i64::MAX` past it.
+    ///
+    /// The language below's own `as_nanos` is a `u128` and takes `&self`;
+    /// this one takes `self`, so a method call on a `Duration` finds it first
+    /// (by value before by reference). `d.as_secs_f64()` needs nothing here:
+    /// the language below's answers an `f64` already.
+    #[allow(clippy::wrong_self_convention)] // by value, to come before the `&self` one
+    fn as_nanos(self) -> i64;
 }
 
 impl DurationIn for Duration {
@@ -104,6 +141,9 @@ impl DurationIn for Duration {
     }
     fn in_micros(self) -> i64 {
         counted(self.as_micros())
+    }
+    fn as_nanos(self) -> i64 {
+        counted(Duration::as_nanos(&self))
     }
 }
 
@@ -217,5 +257,26 @@ mod tests {
         assert_eq!(ever.in_micros(), i64::MAX);
         assert_eq!(ever.in_millis(), i64::MAX);
         assert_eq!(i64::MAX.seconds().in_seconds(), i64::MAX);
+    }
+
+    /// **ADR-368 D2**: the trait's `as_nanos` is the one a call finds, an
+    /// `i64`, saturated; `as_secs_f64` is the language below's.
+    #[test]
+    fn a_span_reads_as_nanoseconds_and_as_seconds() {
+        let nanos: i64 = 1500.micros().as_nanos();
+        assert_eq!(nanos, 1_500_000);
+        assert_eq!(i64::MAX.hours().as_nanos(), i64::MAX);
+        assert_eq!(1500.millis().as_secs_f64(), 1.5);
+    }
+
+    /// **ADR-368 D1**: a later reading minus an earlier is what passed, and
+    /// the other way round is zero rather than an abort.
+    #[test]
+    fn since_is_zero_where_the_reading_is_earlier() {
+        let first = now();
+        let later = first + 5.millis();
+        assert_eq!(later.since(first), 5.millis());
+        assert_eq!(first.since(later), Duration::ZERO);
+        assert!(first.elapsed() >= Duration::ZERO);
     }
 }

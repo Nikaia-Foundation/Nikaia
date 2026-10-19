@@ -641,10 +641,11 @@ pub mod prelude {
     // so that `let deadline: Duration = 2.minutes()` can be written, the
     // extension because `5.seconds()` is a method call and a trait has to be
     // in scope for one, its mirror `timeout.in_seconds()` (D5) for the same
-    // reason, and `sleep` because Part II 12.4 writes it bare — the
-    // same way `digit_value` is written bare.
+    // reason, `b.since(a)` (ADR-368 D1) for the same reason again, and
+    // `sleep` because Part II 12.4 writes it bare — the same way
+    // `digit_value` is written bare.
     pub use crate::time;
-    pub use crate::time::{Duration, DurationExt, DurationIn, sleep};
+    pub use crate::time::{Duration, DurationExt, DurationIn, InstantSince, sleep};
     // `rt` is in the prelude so that the `fn main` the emitter writes can name
     // `rt::start` without a `use` the program did not ask for. Nothing in a
     // `.nika` file reaches it: ADR-303 D3's whole point is that a program says

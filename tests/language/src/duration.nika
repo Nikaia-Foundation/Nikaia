@@ -39,3 +39,26 @@ test "a span handed over is still there" {
     let millis = timeout.in_millis()
     assert(millis == 90)
 }
+
+// **ADR-368 D1: the clock read on either side of a wait** measures at least
+// the wait, by `as_nanos` (D2), and a reading copies as a span does: `started`
+// is read again after it was handed to `since`.
+test "a clock read around a sleep measures the sleep" {
+    let started = time::now()
+    time::sleep(20.millis())
+    let later = time::now()
+    let took = started.elapsed()
+    assert(took.as_nanos() >= 20000000)
+    assert(later.since(started).as_nanos() >= 20000000)
+    assert(started.since(later).as_nanos() == 0)
+}
+
+// **ADR-368 D2: a span as seconds with the fraction**, and as nanoseconds
+// saturated at the largest `i64`.
+test "a span reads as seconds and as nanoseconds" {
+    let half = 1500.millis()
+    assert(half.as_secs_f64() == 1.5)
+    assert(half.as_nanos() == 1500000000)
+    let ever: i64 = 9223372036854775807
+    assert(ever.hours().as_nanos() == ever)
+}

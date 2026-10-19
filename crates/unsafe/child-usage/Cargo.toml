@@ -1,0 +1,13 @@
+[package]
+name = "child-usage"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "Apache-2.0"
+description = "A child process waited for with wait4, so what it used - processor time in user and kernel mode, the most memory it held - is that one child's and nobody else's."
+publish = false
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[workspace]

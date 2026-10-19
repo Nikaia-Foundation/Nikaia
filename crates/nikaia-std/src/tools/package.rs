@@ -43606,7 +43606,7 @@ fn type_text(contract: &TypeContract) -> String {
 
 // --- lends.nika ---
 
-const COPIED: [&str; 19] = ["i8", "i16", "i32", "i64", "isize", "usize", "u8", "u16", "u32", "u64", "f32", "f64", "bool", "char", "scalar", "Duration", "Shared", "SharedMut", "Locked"];
+const COPIED: [&str; 20] = ["i8", "i16", "i32", "i64", "isize", "usize", "u8", "u16", "u32", "u64", "f32", "f64", "bool", "char", "scalar", "Duration", "Instant", "Shared", "SharedMut", "Locked"];
 
 pub fn lends_in(contract: &FnContract, at: i64, copying: &[&Ledger]) -> bool { lends_with(contract, at, copying, false) }
 

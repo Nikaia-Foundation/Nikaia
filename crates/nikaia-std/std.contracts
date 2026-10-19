@@ -4314,6 +4314,58 @@ sync = true
 touches = []
 signature = "(self) -> i64"
 
+# **A span read as a number** ([ADR-368](../../docs/specification/adr/adr-368.md)
+# D2), under the language below's names: the measuring half, where `in_*` is the
+# counting one. `touches = []` and `sync = true` for the arithmetic entries'
+# reason.
+# How many nanoseconds the span holds; past `i64::MAX` it stays there.
+[fn."time::Duration::as_nanos"]
+pub = true
+sync = true
+touches = []
+signature = "(self) -> i64"
+
+# The span in seconds, with the fraction.
+[fn."time::Duration::as_secs_f64"]
+pub = true
+sync = true
+touches = []
+signature = "(self) -> f64"
+
+# **A reading of the monotonic clock** ([ADR-368](../../docs/specification/adr/adr-368.md)
+# D1), the language below's `Instant` re-exported as `Duration` is. It crosses,
+# compares and copies for `Duration`'s reasons: a number of ticks and nothing
+# else. No `constant`: a reading belongs to the run that took it, so none is
+# made while the program is built.
+# A moment on the monotonic clock: it never goes back, says nothing about the
+# calendar, and means something only within the run that read it.
+[type."time::Instant"]
+pub = true
+crosses = true
+compares = true
+copies = true
+
+# **No `touches`**, the fail-closed answer: what a clock read orders against is
+# everything, because the point of it is to be read between two other things.
+# Read the monotonic clock.
+[fn."time::now"]
+pub = true
+sync = true
+signature = "() -> time::Instant"
+
+# How long ago the reading was: the span from it to now.
+[fn."time::Instant::elapsed"]
+pub = true
+sync = true
+signature = "(self) -> time::Duration"
+
+# The span from `earlier` to this reading, or zero where this one is earlier.
+[fn."time::Instant::since"]
+pub = true
+sync = true
+touches = []
+signature = "(self, earlier: time::Instant) -> time::Duration"
+
 # **In `std::time` and not in the prelude**
 # ([ADR-313](../../docs/specification/adr/adr-313.md) D2): the rule the list is
 # built from is that nothing in it pauses, and this is the one entry here that
@@ -4449,11 +4501,15 @@ pub = true
 #
 # `code` is its exit code, or `-1` where it was ended by a signal and has none;
 # `ok` is whether that code is `0`; `stdout` and `stderr` are everything it wrote
-# to each, as text.
+# to each, as text. `elapsed` is the time from just before it started to just
+# after it was waited for, on the monotonic clock; `user_time` and
+# `system_time` the processor time it used in user and in kernel mode;
+# `max_rss_kib` the most memory it held resident, in KiB, `null` where the
+# platform does not report it. Each is that one program's (ADR-368 D3).
 [type."process::Output"]
 pub = true
 crosses = true
-fields = ["pub code: i64", "pub ok: bool", "pub stdout: String", "pub stderr: String"]
+fields = ["pub code: i64", "pub ok: bool", "pub stdout: String", "pub stderr: String", "pub elapsed: time::Duration", "pub user_time: time::Duration", "pub system_time: time::Duration", "pub max_rss_kib: i64?"]
 
 # **`args: Vec[String]`, handed over**, and not `?`: an empty list has no
 # element type of its own, and a parameter that names none left `run("pwd", [])`

@@ -124,6 +124,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "child-usage"
+version = "0.1.0"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "clap"
 version = "4.5.59"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -479,6 +486,7 @@ dependencies = [
  "c-boundary",
  "c-text",
  "checked-text",
+ "child-usage",
  "file-ring",
  "hashbrown 0.17.1",
  "polled",

@@ -19,8 +19,16 @@
 // **The wait gives the thread up** (D3). The child is waited for on a thread
 // of its own and the calling task parks on the runtime's bell, so a program at
 // `user_parallelism = no` keeps serving its other tasks while a build runs.
+//
+// **What the run cost is that one program's** ([ADR-368](../../../docs/specification/adr/adr-368.md)
+// D3). The clock is read just before the start and just after the wait; the
+// wait is `wait4` on the child (crate `child-usage`, which holds the `unsafe`),
+// after both pipes are read to their end - waiting first would leave a child
+// that fills a pipe blocked for ever.
 
-use std::process::Command;
+use std::io::Read;
+use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
 
 use crate::io::IoError;
 
@@ -36,6 +44,65 @@ pub struct Output {
     pub stdout: String,
     /// Everything it wrote to standard error.
     pub stderr: String,
+    /// From just before it started to just after it was waited for, on the
+    /// monotonic clock.
+    pub elapsed: Duration,
+    /// The processor time it and everything it waited for used in user mode.
+    /// Zero where the platform is not Unix.
+    pub user_time: Duration,
+    /// The same in kernel mode. Zero where the platform is not Unix.
+    pub system_time: Duration,
+    /// The most memory it held resident, in KiB, as the operating system
+    /// reports it for that one program; `None` where the platform is not Unix.
+    pub max_rss_kib: Option<i64>,
+}
+
+/// What the thread beside the task hands back: the two streams' bytes, and
+/// how the program ended with what it used.
+struct Ran {
+    stdout: Vec<u8>,
+    stderr: Vec<u8>,
+    waited: child_usage::Waited,
+    elapsed: Duration,
+}
+
+/// Start the program, read both pipes to their end - standard error on a
+/// thread of its own, so that neither pipe fills while the other is read -
+/// and only then wait for it.
+fn started(program: &str, args: &[String], dir: &str) -> std::io::Result<Ran> {
+    let started = Instant::now();
+    let mut child = Command::new(program)
+        .args(args)
+        .current_dir(dir)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+    let mut errors = child.stderr.take();
+    let beside = std::thread::spawn(move || -> std::io::Result<Vec<u8>> {
+        let mut bytes = Vec::new();
+        if let Some(pipe) = errors.as_mut() {
+            pipe.read_to_end(&mut bytes)?;
+        }
+        Ok(bytes)
+    });
+    let mut stdout = Vec::new();
+    let read = match child.stdout.take() {
+        Some(mut pipe) => pipe.read_to_end(&mut stdout).map(|_| ()),
+        None => Ok(()),
+    };
+    let stderr = beside
+        .join()
+        .unwrap_or_else(|_| Err(std::io::Error::other("reading standard error panicked")));
+    let waited = child_usage::wait(child)?;
+    let elapsed = started.elapsed();
+    read?;
+    Ok(Ran {
+        stdout,
+        stderr: stderr?,
+        waited,
+        elapsed,
+    })
 }
 
 /// Start `program` with `args` in the directory `dir`, wait for it to finish,
@@ -49,24 +116,23 @@ pub async fn run(program: &str, args: Vec<String>, dir: &str) -> Result<Output, 
     let program = program.to_string();
     let dir = dir.to_string();
     let named = program.clone();
-    let finished = crate::rt::io::beside(move || {
-        Command::new(&program)
-            .args(&args)
-            .current_dir(&dir)
-            .stdin(std::process::Stdio::null())
-            .output()
-    })
-    .await
-    .map_err(|e| IoError::of(e, &named))?;
+    let finished = crate::rt::io::beside(move || started(&program, &args, &dir))
+        .await
+        .map_err(|e| IoError::of(e, &named))?;
     let stdout = String::from_utf8(finished.stdout)
         .map_err(|_| IoError::NotText(format!("{named}'s standard output")))?;
     let stderr = String::from_utf8(finished.stderr)
         .map_err(|_| IoError::NotText(format!("{named}'s standard error")))?;
+    let status = finished.waited.status;
     Ok(Output {
-        code: finished.status.code().map(i64::from).unwrap_or(-1),
-        ok: finished.status.success(),
+        code: status.code().map(i64::from).unwrap_or(-1),
+        ok: status.success(),
         stdout,
         stderr,
+        elapsed: finished.elapsed,
+        user_time: finished.waited.user_time,
+        system_time: finished.waited.system_time,
+        max_rss_kib: finished.waited.max_rss_kib,
     })
 }
 

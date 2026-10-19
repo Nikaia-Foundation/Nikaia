@@ -260,3 +260,52 @@ fn a_count_read_back_is_an_i64() {
          }\n";
     assert!(!findings(source).is_empty(), "the ledger types the answer");
 }
+
+/// **ADR-368: a reading and a span's readers are typed by the ledger**, so a
+/// clock reading is not a number, `as_secs_f64` is not an `i64`, and
+/// `since` takes another reading.
+#[test]
+fn a_reading_and_its_readers_are_typed() {
+    let program = |line: &str| {
+        format!("use std::time\n\nfn main() {{\n    {line}\n    println(f\"{{n}}\")\n}}\n")
+    };
+    for right in [
+        "let n: i64 = time::now().since(time::now()).as_nanos()",
+        "let n: f64 = 5.seconds().as_secs_f64()",
+    ] {
+        assert!(findings(&program(right)).is_empty(), "taken: {right}");
+    }
+    for wrong in [
+        "let n: i64 = time::now()",
+        "let n: i64 = 5.seconds().as_secs_f64()",
+        "let n: String = 5.seconds().as_nanos()",
+        "let n = time::now().since(5.seconds())",
+    ] {
+        assert!(!findings(&program(wrong)).is_empty(), "refused: {wrong}");
+    }
+}
+
+/// **ADR-368 D1, D2 as a program**: the clock read around a sleep measures at
+/// least the sleep, a reading handed to a function is still there after, and
+/// `as_nanos` is the `i64` reader, not the language below's `u128`.
+#[test]
+fn a_clock_reading_measures_a_sleep() {
+    let (printed, _) = output(
+        "duration-clock",
+        "use std::time\n\
+         \n\
+         fn since_start(at: time::Instant) -> i64 {\n\
+         \x20   return at.elapsed().as_nanos()\n\
+         }\n\
+         \n\
+         fn main() {\n\
+         \x20   let started = time::now()\n\
+         \x20   time::sleep(20.millis())\n\
+         \x20   let first = since_start(started)\n\
+         \x20   let took: i64 = started.elapsed().as_nanos()\n\
+         \x20   let back = started.since(time::now()).as_nanos()\n\
+         \x20   println(f\"{first >= 20000000} {took >= first} {back} {1500.millis().as_secs_f64()}\")\n\
+         }\n",
+    );
+    assert_eq!(printed, "true true 0 1.5");
+}
