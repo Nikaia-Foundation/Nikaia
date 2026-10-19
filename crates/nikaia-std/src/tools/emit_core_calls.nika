@@ -672,9 +672,14 @@ impl EmitState {
         // out owned ones, and leaves the list empty in the caller's hands.
         if name == "drain" && args.len() == 0 && receiver != null {
             let on = receiver ?? return
-            if self.stays_the_callers(world, scope.function, on) {
+            if self.stays_the_callers(world, scope.function, on) || self.facts.kept_drains.contains(node_key(on)) {
                 self.emit_core_postfix_base(world, walk, out, host, on, depth, flow, scope)
-                out.push(".drain(..)")
+                // A map's `drain` takes no range (#707).
+                if self.facts.map_drains.contains(node_key(on)) {
+                    out.push(".drain()")
+                } else {
+                    out.push(".drain(..)")
+                }
                 return
             }
         }

@@ -1,0 +1,13 @@
+// #707: a list `drain` took away is given a value again before it is read.
+
+fn main() {
+    let mut b: Vec[String] = []
+    b.push(f"x{1}")
+    let mut n = 0
+    for s in b.drain() {
+        n += s.len()
+    }
+    b = []
+    b.push(f"y{2}")
+    println(f"{n} {b.len()}")
+}

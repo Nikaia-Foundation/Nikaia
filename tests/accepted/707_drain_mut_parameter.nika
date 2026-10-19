@@ -1,0 +1,15 @@
+// #707: `drain` on a `mut` parameter empties the caller's list, which is read after.
+
+fn take(mut v: Vec[String]) -> i64 {
+    let mut n = 0
+    for s in v.drain() {
+        n += s.len()
+    }
+    return n + v.len()
+}
+
+fn main() {
+    let mut b: Vec[String] = []
+    b.push(f"x{1}")
+    println(f"{take(b)} {b.len()}")
+}

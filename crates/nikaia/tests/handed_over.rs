@@ -496,3 +496,69 @@ fn a_printed_value_is_only_read() {
     );
     assert!(found.iter().all(|f| f.code != "NK2105"), "{found:#?}");
 }
+
+/// **`drain` takes the list or the map away** (#707, ADR-094 D4): what the
+/// ledger says `drain` does to its receiver. A read after it was *borrow of
+/// moved value* below; it is refused here, and an assignment gives the name a
+/// value again.
+#[test]
+fn a_drained_container_is_taken_away() {
+    one_refusal(
+        "fn main() {\n\
+         \x20   let mut b: Vec[String] = []\n\
+         \x20   b.push(f\"x{1}\")\n\
+         \x20   let mut n = 0\n\
+         \x20   for s in b.drain() {\n\
+         \x20       n += s.len()\n\
+         \x20   }\n\
+         \x20   println(f\"{n} {b.len()}\")\n\
+         }\n",
+        "taken away by `drain`",
+    );
+    one_refusal(
+        "use std::collections\n\n\
+         fn main() {\n\
+         \x20   let mut m: collections::HashMap[String, i64] = collections::HashMap()\n\
+         \x20   m.insert(f\"x{1}\", 3)\n\
+         \x20   let mut n = 0\n\
+         \x20   for (k, v) in m.drain() {\n\
+         \x20       n += k.len() + v\n\
+         \x20   }\n\
+         \x20   println(f\"{n} {m.len()}\")\n\
+         }\n",
+        "taken away by `drain`",
+    );
+    let again = findings(
+        "fn main() {\n\
+         \x20   let mut b: Vec[String] = []\n\
+         \x20   b.push(f\"x{1}\")\n\
+         \x20   for s in b.drain() {\n\
+         \x20       println(s)\n\
+         \x20   }\n\
+         \x20   b = []\n\
+         \x20   println(b.len())\n\
+         }\n",
+    );
+    assert!(again.is_empty(), "{again:#?}");
+}
+
+/// **A `mut` parameter's `drain` empties it** (#564): the list stays the
+/// caller's, so reading it afterwards is not a read of something gone.
+#[test]
+fn a_drained_mut_parameter_stays_the_callers() {
+    let found = findings(
+        "fn take(mut v: Vec[String]) -> i64 {\n\
+         \x20   let mut n = 0\n\
+         \x20   for s in v.drain() {\n\
+         \x20       n += s.len()\n\
+         \x20   }\n\
+         \x20   return n + v.len()\n\
+         }\n\n\
+         fn main() {\n\
+         \x20   let mut b: Vec[String] = []\n\
+         \x20   b.push(f\"x{1}\")\n\
+         \x20   println(f\"{take(b)} {b.len()}\")\n\
+         }\n",
+    );
+    assert!(found.is_empty(), "{found:#?}");
+}

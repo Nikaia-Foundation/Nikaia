@@ -241,6 +241,12 @@ pub struct CheckFacts {
     /// The receivers of a `Bytes`'s `clone()`: a `Bytes` or a `&[u8]` below,
     /// copied into a `Bytes` of its own (ADR-320 D11).
     pub byte_copies: collections::BTreeSet[i64],
+    /// The receivers of a map's `drain()`: where the map stays the caller's,
+    /// it is emptied by Rust's `drain()`, which takes no range (#707).
+    pub map_drains: collections::BTreeSet[i64],
+    /// The receivers of a `drain()` that stay the caller's - rooted in a `mut`
+    /// parameter or in `self` under `ref mut self` - which it empties (#707).
+    pub kept_drains: collections::BTreeSet[i64],
     /// `P { b }` over a name bound to `s.bytes`, by the struct literal and the
     /// field: the name copied into a `Bytes` of its own (ADR-320 D11).
     pub kept_byte_fields: collections::BTreeSet[(i64, String)],
@@ -382,6 +388,8 @@ impl CheckFacts {
             text_graphemes: collections::BTreeSet(),
             kept_text_bytes: collections::BTreeSet(),
             byte_copies: collections::BTreeSet(),
+            map_drains: collections::BTreeSet(),
+            kept_drains: collections::BTreeSet(),
             kept_byte_fields: collections::BTreeSet(),
             lent_list_reads: collections::BTreeSet(),
             lent_reads: collections::BTreeSet(),

@@ -1,0 +1,28 @@
+// #707: `drain` on fields under `ref mut self` empties them.
+
+use std::collections
+
+struct Pile {
+    items: Vec[String],
+    counts: collections::HashMap[String, i64],
+}
+
+impl Pile {
+    fn empty_out(ref mut self) -> i64 {
+        let mut n = 0
+        for s in self.items.drain() {
+            n += s.len()
+        }
+        for (k, v) in self.counts.drain() {
+            n += k.len() + v
+        }
+        return n + self.items.len() + self.counts.len()
+    }
+}
+
+fn main() {
+    let mut p = Pile { items: [], counts: collections::HashMap() }
+    p.items.push(f"x{1}")
+    p.counts.insert(f"y{2}", 5)
+    println(f"{p.empty_out()} {p.items.len()} {p.counts.len()}")
+}

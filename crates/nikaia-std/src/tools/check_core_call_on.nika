@@ -470,6 +470,25 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
         let closed: String = state.flow.receiver_name?.clone() ?? ""
         state.hands_over_name(world, closed, "closed by `close`", span)
     }
+    // **`drain` takes the container away** (#707, ADR-094 D4): the elements
+    // go with what keeps them, and the list or map with them. One that stays
+    // the caller's - a `mut` parameter, a field under `ref mut self` - is
+    // emptied instead (#564), and the emitter is told so.
+    if key == "Vec::drain" || key == "collections::HashMap::drain" {
+        if key == "collections::HashMap::drain" {
+            state.facts.map_drains.insert(id_of(receiver) as i64)
+        }
+        let drained: String = dotted_path(world, receiver) ?? ""
+        if drained.len() > 0 {
+            let root = a_root_segment(drained)
+            let callers = (root == "self" && state.borrowing_self) || (state.binding(root)?.changing ?? false)
+            if callers {
+                state.facts.kept_drains.insert(id_of(receiver) as i64)
+            } else {
+                state.hands_over_path(world, drained, on, state.read_seq, "taken away by `drain`", span)
+            }
+        }
+    }
     // ADR-023 D8: the failure leaves at the call.
     state.method_options(world, method, contract, span)
     let fails = !known_text && (contract.fails_with.len() > 0 || state.walks_a_failing_sequence(on, contract))
