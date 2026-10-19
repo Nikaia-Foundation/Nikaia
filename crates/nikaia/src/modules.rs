@@ -451,23 +451,42 @@ fn package_ledger_noted(
     dependency: Option<&Dependency>,
     library: &crate::contracts::Ledger,
 ) -> (crate::contracts::Ledger, crate::contracts::sync::Noted) {
+    let (own, _, noted) = package_ledger_checked(units, dependency, library);
+    (own, noted)
+}
+
+/// [`package_ledger_noted`], with the ledger pass's checked units where it ran
+/// one (`None` for a shipped ledger).
+fn package_ledger_checked(
+    units: &[Unit],
+    dependency: Option<&Dependency>,
+    library: &crate::contracts::Ledger,
+) -> (
+    crate::contracts::Ledger,
+    Option<Vec<crate::check::Checked>>,
+    crate::contracts::sync::Noted,
+) {
     let sources = sources_of(units);
 
     if let Some(dependency) = dependency
         && let Some(shipped) = shipped_ledger(&dependency.root)
         && shipped.stale_against(&sources).is_empty()
     {
-        return (shipped.published(&dependency.reachable), Default::default());
+        return (
+            shipped.published(&dependency.reachable),
+            None,
+            Default::default(),
+        );
     }
 
     let parsed: Vec<&Parsed> = units.iter().map(|u| &u.parsed).collect();
-    let (mut own, _, noted) = crate::contracts::Ledger::infer_package_noted(&parsed, library);
+    let (mut own, checked, noted) = crate::contracts::Ledger::infer_package_noted(&parsed, library);
     // **What these entries are an answer about** (D3), recorded here because
     // this is the only place that has both the answer and the files it came
     // from - and recorded for every package, so that the ledger a dependency's
     // own build writes says what it was derived from.
     own.sources = sources;
-    (own, noted)
+    (own, Some(checked), noted)
 }
 
 /// **What another package may rely on about pausing**
@@ -557,6 +576,12 @@ pub struct Program {
     /// that lead to a statement that pauses, its unit an index into
     /// [`Program::units`].
     pub pauses: BTreeMap<String, crate::contracts::sync::Pause>,
+    /// **The ledger pass over the program's own files, against `std` alone**
+    /// (`Ledger::infer_package_checked`), kept where that is what it ran
+    /// against - no described crate, no dependency - so the trust join of
+    /// [`Program::emit_reading`] reads it rather than inferring the ledger a
+    /// second time (#727). `None` where the library held more.
+    pub own_checked: Option<Vec<crate::check::Checked>>,
 }
 
 /// One `test "…" { … }` of the program, as `nikaia test` names it.
@@ -748,12 +773,24 @@ impl Program {
 
         let mut paused_by_code = BTreeMap::new();
         let mut pauses = BTreeMap::new();
+        // The library is `std`'s exactly when nothing was added to it above.
+        let std_alone =
+            described.functions.is_empty() && described.types.is_empty() && plain.is_empty();
+        let mut own_checked = None;
+        let mut own_groups = 0;
         for group in groups(&units) {
             if units[group.start].package.is_some() {
                 continue;
             }
+            own_groups += 1;
             let renames = units[group.start].renames.clone();
-            let (own, noted) = package_ledger_noted(&units[group.clone()], None, &library);
+            let (own, checked, noted) =
+                package_ledger_checked(&units[group.clone()], None, &library);
+            // **Kept where it is the join's pass**: the one group of the
+            // program's own files, all of them, against `std` alone.
+            own_checked = checked.filter(|_| {
+                std_alone && group.len() == units.iter().filter(|u| u.package.is_none()).count()
+            });
             paused_by_code.extend(noted.by_code);
             pauses.extend(noted.why.into_iter().map(|(name, mut pause)| {
                 pause.unit += group.start;
@@ -772,6 +809,7 @@ impl Program {
             tests: Vec::new(),
             paused_by_code,
             pauses,
+            own_checked: own_checked.filter(|_| own_groups == 1),
         })
     }
 
@@ -967,8 +1005,11 @@ impl Program {
             .filter(|u| u.package.is_none())
             .map(|u| (u.path.clone(), u.source.clone()))
             .collect();
-        let mut trust = crate::proofs::with_units(files, || {
-            crate::contracts::trust::analyse_package(&package, std_ledger())
+        let mut trust = crate::proofs::with_units(files, || match &self.own_checked {
+            Some(checked) => {
+                crate::contracts::trust::analyse_package_checked(&package, std_ledger(), checked)
+            }
+            None => crate::contracts::trust::analyse_package(&package, std_ledger()),
         });
         // **A package whose `pub` items hold maps fills them with the hasher of
         // the program that uses it** (ADR-010 D9), and the ledger says what
