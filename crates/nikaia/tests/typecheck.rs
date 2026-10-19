@@ -1014,7 +1014,12 @@ fn a_lambda_that_reaches_for_a_withdrawn_name_is_refused() {
         "fn ids(xs: Vec[i64]) -> Vec[i64] { return xs.map fn { a + 1 } }",
         "fn total(xs: Vec[i64]) -> Vec[i64] { return xs.map fn { a + b } }",
     ] {
-        let found = findings(source);
+        // The lambda names no argument where `map` hands it one: `NK1101`
+        // beside it (Part I 5.3, #703).
+        let found: Vec<_> = findings(source)
+            .into_iter()
+            .filter(|f| f.code != "NK1101")
+            .collect();
         assert!(!found.is_empty(), "{source}");
         assert!(
             found.iter().all(|f| f.code == "NK1117"),
@@ -1042,20 +1047,20 @@ fn a_stray_a_outside_a_lambda_gets_the_general_note() {
     assert!(!notes.contains("no longer there automatically"), "{notes}");
 }
 
-/// **A lambda that names its arguments is fine**, and so is one that names none
-/// and reaches for none. The first is the form; the second is the zero-argument
-/// lambda `.or_insert_with fn { Stats(0) }` has always wanted.
+/// **A lambda that names its arguments is fine**, and so is one that names
+/// `_` and reaches for nothing it did not declare. A lambda that names none
+/// takes none (Part I 5.3), so `map`'s is written `fn(_) { 7 }` (#703).
 #[test]
 fn a_lambda_that_declares_what_it_uses_is_not_refused() {
     for source in [
         "fn ids(xs: Vec[i64]) -> Vec[i64] { return xs.map fn(x) { x + 1 } }",
         // The three letters are ordinary names once they are declared.
         "fn ids(xs: Vec[i64]) -> Vec[i64] { return xs.map fn(a) { a + 1 } }",
-        "fn sevens(xs: Vec[i64]) -> Vec[i64] { return xs.map fn { 7 } }",
-        "fn shout(xs: Vec[i64]) -> Vec[i64] { return xs.map fn { let n = 1\n n } }",
+        "fn sevens(xs: Vec[i64]) -> Vec[i64] { return xs.map fn(_) { 7 } }",
+        "fn shout(xs: Vec[i64]) -> Vec[i64] { return xs.map fn(_) { let n = 1\n n } }",
         // A local called `a` is a local now, which is the whole of what the
         // withdrawal bought.
-        "fn ids(xs: Vec[i64]) -> Vec[i64] { return xs.map fn { let a = 1\n a } }",
+        "fn ids(xs: Vec[i64]) -> Vec[i64] { return xs.map fn(_) { let a = 1\n a } }",
     ] {
         assert!(
             findings(source).is_empty(),

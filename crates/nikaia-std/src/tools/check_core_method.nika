@@ -517,6 +517,21 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
                         Expr::Closure { params, .. } => {
                             let handed: Ty? = Ty::Fn { params: [unviewed_type(item)], result: null, is_sync: true, can_throw: false }
                             check_core_ops_a_pair_split(state, world, handed, params, span)
+                            check_core_ops_none_named(state, handed, params, span)
+                        },
+                        else => {}
+                    }
+                }
+            }
+        },
+        // **And so does a list's** (#703): `xs.map fn { 7 }` names none.
+        Ty::Named { name: list, args: items, .. } => {
+            if (list == "Vec" || list == "Array" || list == "List") && items.len() >= 1 && check_core_method_one_item(name) {
+                for arg in args {
+                    match arg {
+                        Expr::Closure { params, .. } => {
+                            let handed: Ty? = Ty::Fn { params: [unviewed_type(items[0])], result: null, is_sync: true, can_throw: false }
+                            check_core_ops_none_named(state, handed, params, span)
                         },
                         else => {}
                     }

@@ -233,7 +233,11 @@ fn reaching_for_a_withdrawn_automatic_name_is_refused() {
     let own = nikaia::contracts::Ledger::infer(&parsed);
     let library =
         nikaia::contracts::Ledger::parse(nikaia::contracts::STD).expect("std's ledger parses");
-    let found = nikaia::check::check(&parsed, &own, &library).findings;
+    let all = nikaia::check::check(&parsed, &own, &library).findings;
+    // The lambda names no argument where `map` hands it one, which is
+    // `NK1101` beside this (Part I 5.3, #703).
+    assert!(all.iter().any(|f| f.code == "NK1101"), "{all:#?}");
+    let found: Vec<_> = all.into_iter().filter(|f| f.code != "NK1101").collect();
 
     assert_eq!(found.len(), 1, "{found:#?}");
     assert_eq!(found[0].code, "NK1117");

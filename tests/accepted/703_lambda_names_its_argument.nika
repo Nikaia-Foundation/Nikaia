@@ -1,0 +1,6 @@
+// A lambda that names its one argument, `_` where the body does not use it (#703).
+fn main() {
+    let xs = [1, 2, 3]
+    let ys = xs.map fn(_) { 7 }
+    println(f"{ys.len()} {ys[0]}")
+}
