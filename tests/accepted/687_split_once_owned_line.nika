@@ -5,7 +5,7 @@ use std::collections
 fn main() {
     let mut v: Vec[String] = []
     let mut m: collections::HashMap[String, String] = collections::HashMap()
-    for i in 0..2 {
+    for i in 0..<3 {
         let line = f"k{i}=v{i}"
         let (a, b) = line.split_once("=") ?? continue
         v.push(a)

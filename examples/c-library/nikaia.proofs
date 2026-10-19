@@ -3,4 +3,8 @@
 # question in normal form, and `proved` with its certificate,
 # `refuted` with its model, or `unknown` with the solver that gave up.
 # Every entry is checked when it is read; a wrong one is searched again.
+008cda463325ce521c6535d429e984d76a7f18ca6a625a4b09635dc829a3e5be proved R(h4)
+24c695516ff15f417dbbd7465b0a6d372625f3facf7c3c953b9dda12792430c7 proved R(h6)
 61e8c7a6fb520c2a664a5f8f94ec8e555e810a08a36677e9742dc87d86ab130a proved S0[R(h0)|R(h1)]
+9c77ca7731c6afbcc046894c37472e0bee67166474233a478b8ceda73ba1a845 refuted v0=1,v1=0,v2=4611686018427387904
+f4ec156c20ec8801701b51763afb8c65f150c81a33ccf76df3ffe0470eb15984 refuted v0=1,v1=0,v2=4611686018427387904
