@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1080] — 2026-10-19
+
+**A `Bytes` reads a word: `u32_le`, `u64_le`, `u32_be`, `u64_be` (#709)**
+- ADR-320 D12 built: `b.u32_le(i)` … `b.u64_be(i)` on `Bytes` and `s.bytes` read 4 or 8 bytes in the named order, checked as the cut and stopping with its message; under `0 <= i && i + n <= b.len()` the read is proved and lowers to one load through `proven::array`. A signed `i64` is the `u64` read through `truncating_i64()`. In the hand-written 1BRC steps it cuts 9-20 % of the instructions a row.
+
 ## [0.0.1079] — 2026-10-19
 
 **A type's invariant: an `assert` after a struct's fields, and found where none is written (ADR-369)**
