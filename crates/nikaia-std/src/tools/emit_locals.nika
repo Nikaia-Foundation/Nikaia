@@ -4,13 +4,15 @@
 // (ADR-294, #125, #558): a `let` of a literal that is not negative or a `for`
 // over a range that starts at one, declared once and only ever assigned a
 // literal added or multiplied, and never handed to a call (which may change it
-// as a `mut` parameter). The emitter writes such an index without a check.
+// as a `mut` parameter). A name declared more than once qualifies where every
+// declaration does (#685): two loops `for i in 0..<n` each bind an `i` that
+// is never negative. The emitter writes such an index without a check.
 
 use std::collections
 
 struct NnState {
     declared: collections::BTreeMap[winnow_grammar::Symbol, i64],
-    candidates: collections::BTreeSet[winnow_grammar::Symbol],
+    candidates: collections::BTreeMap[winnow_grammar::Symbol, i64],
     symbols: Vec[winnow_grammar::Symbol],
     spoiled: collections::BTreeSet[winnow_grammar::Symbol],
     seen: collections::BTreeSet[String],
@@ -18,7 +20,7 @@ struct NnState {
 
 /// The names of the body's locals that are never negative.
 pub fn nonnegative_locals(body: ref Block) -> Vec[winnow_grammar::Symbol] {
-    let mut state = NnState { declared: collections::BTreeMap(), candidates: collections::BTreeSet(), symbols: [], spoiled: collections::BTreeSet(), seen: collections::BTreeSet() }
+    let mut state = NnState { declared: collections::BTreeMap(), candidates: collections::BTreeMap(), symbols: [], spoiled: collections::BTreeSet(), seen: collections::BTreeSet() }
     nn_every(body, state)
     // A name handed to a call may be changed by it (`mut` parameters).
     for expr in visited_in_block(body) {
@@ -32,15 +34,17 @@ pub fn nonnegative_locals(body: ref Block) -> Vec[winnow_grammar::Symbol] {
     let mut out: Vec[winnow_grammar::Symbol] = []
     for at in 0..<state.symbols.len() {
         let symbol = state.symbols[at]
-        if state.candidates.contains(symbol) && nn_declared_once(state.declared, symbol) && !state.spoiled.contains(symbol) {
+        if nn_every_declaration(state, symbol) && !state.spoiled.contains(symbol) {
             out.push(symbol)
         }
     }
     return out
 }
 
-fn nn_declared_once(declared: ref collections::BTreeMap[winnow_grammar::Symbol, i64], name: winnow_grammar::Symbol) -> bool {
-    return (declared.get(name) ?? 0) == 1
+/// Whether every declaration of the name is one that is never negative.
+fn nn_every_declaration(state: ref NnState, name: winnow_grammar::Symbol) -> bool {
+    let declared = state.declared.get(name) ?? 0
+    return declared > 0 && (state.candidates.get(name) ?? 0) == declared
 }
 
 fn nn_spoil_all(args: ref Vec[Expr], mut state: NnState) {
@@ -57,8 +61,11 @@ fn nn_spoil(name: winnow_grammar::Symbol, mut state: NnState) {
 }
 
 fn nn_candidate(name: winnow_grammar::Symbol, mut state: NnState) {
-    state.candidates.insert(name.clone())
-    state.symbols.push(name)
+    let before = state.candidates.get(name) ?? 0
+    state.candidates.insert(name, before + 1)
+    if before == 0 {
+        state.symbols.push(name)
+    }
 }
 
 fn nn_declare(name: winnow_grammar::Symbol, mut state: NnState) {

@@ -9187,9 +9187,9 @@ impl CxPython {
             out.push_str("\n");
         }
         let mut at: i64 = 0;
-        while at < ctx.handles.len() as i64 {
-            if *nikaia_std::index::get(&held, nikaia_std::index::at(at)) {
-                let ty = nikaia_std::index::get(&ctx.handles, nikaia_std::index::at(at)).name.to_owned();
+        while ((at) as usize) < ctx.handles.len() {
+            if *nikaia_std::index::get(&held, (at) as usize) {
+                let ty = nikaia_std::index::get(&ctx.handles, (at) as usize).name.to_owned();
                 out.push_str(&format!("_lib.{}_{}_free.argtypes = [ctypes.c_void_p]\n_lib.{}_{}_free.restype = ctypes.c_int\n\n\nclass {}:\n    \"\"\"A handle (ADR-284 D5): `close()` frees it, as leaving a `with` does.\"\"\"\n\n    _ptr = None\n\n    @classmethod\n    def _from(cls, ptr):\n        made = cls.__new__(cls)\n        made._ptr = ptr\n        return made\n\n    def _live(self):\n        if not self._ptr:\n            raise ArgumentError(\"the handle is closed\")\n        return self._ptr\n\n    def close(self):\n        if self._ptr:\n            ptr, self._ptr = self._ptr, None\n            _check(_lib.{}_{}_free(ptr))\n\n    def __enter__(self):\n        return self\n\n    def __exit__(self, *_):\n        self.close()\n\n    def __del__(self):\n        try:\n            self.close()\n        except Exception:\n            pass\n\n", prefix, ty, prefix, ty, ty, prefix, ty));
                 let own = *nikaia_std::index::get(&self.classes, &ty);
                 if own.is_some() {
@@ -35717,7 +35717,7 @@ impl EmitState {
             if own && member == "supervisor::Handed" {
                 let mut k: i64 = 0;
                 for arm in arms.iter() {
-                    let at = *nikaia_std::index::get(&home, nikaia_std::index::at(k));
+                    let at = *nikaia_std::index::get(&home, (k) as usize);
                     k += 1;
                     let foreign = member_of(world.words, &self.declared_errors, world.library, &arm.pattern);
                     if at >= 0 || foreign.is_none() || arm.guard.is_some() { continue; }
@@ -35738,7 +35738,7 @@ impl EmitState {
             for pass in 0..2 {
                 let mut k: i64 = 0;
                 for arm in arms.iter() {
-                    let mine = if pass == 0 { *nikaia_std::index::get(&home, nikaia_std::index::at(k)) == m } else { *nikaia_std::index::get(&home, nikaia_std::index::at(k)) < 0 };
+                    let mine = if pass == 0 { *nikaia_std::index::get(&home, (k) as usize) == m } else { *nikaia_std::index::get(&home, (k) as usize) < 0 };
                     k += 1;
                     if !mine { continue; }
                     if pass == 1 && arm.guard.is_none() && member_of(world.words, &self.declared_errors, world.library, &arm.pattern).is_some() { continue; }
@@ -35816,7 +35816,7 @@ impl EmitState {
             for pass in 0..2 {
                 let mut k: i64 = 0;
                 for arm in arms.iter() {
-                    let mine = if pass == 0 { *nikaia_std::index::get(&home, nikaia_std::index::at(k)) == m && m < count } else { *nikaia_std::index::get(&home, nikaia_std::index::at(k)) < 0 };
+                    let mine = if pass == 0 { *nikaia_std::index::get(&home, (k) as usize) == m && m < count } else { *nikaia_std::index::get(&home, (k) as usize) < 0 };
                     k += 1;
                     if !mine { continue; }
                     out.push(&inner);
@@ -38209,14 +38209,14 @@ impl EmitScope {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct NnState {
     declared: collections::BTreeMap<winnow_grammar::Symbol, i64>,
-    candidates: collections::BTreeSet<winnow_grammar::Symbol>,
+    candidates: collections::BTreeMap<winnow_grammar::Symbol, i64>,
     symbols: Vec<winnow_grammar::Symbol>,
     spoiled: collections::BTreeSet<winnow_grammar::Symbol>,
     seen: collections::BTreeSet<String>,
 }
 
 pub fn nonnegative_locals(body: &Block) -> Vec<winnow_grammar::Symbol> {
-    let mut state = NnState { declared: collections::BTreeMap::new(), candidates: collections::BTreeSet::new(), symbols: vec![], spoiled: collections::BTreeSet::new(), seen: collections::BTreeSet::new() };
+    let mut state = NnState { declared: collections::BTreeMap::new(), candidates: collections::BTreeMap::new(), symbols: vec![], spoiled: collections::BTreeSet::new(), seen: collections::BTreeSet::new() };
     nn_every(body, &mut state);
     for expr in visited_in_block(body) {
         match expr {
@@ -38229,12 +38229,15 @@ pub fn nonnegative_locals(body: &Block) -> Vec<winnow_grammar::Symbol> {
     let mut out: Vec<winnow_grammar::Symbol> = vec![];
     for at in 0..state.symbols.len() as i64 {
         let symbol = *nikaia_std::index::get(&state.symbols, (at) as usize);
-        if state.candidates.contains(&symbol) && nn_declared_once(&state.declared, symbol) && !state.spoiled.contains(&symbol) { out.push(symbol); }
+        if nn_every_declaration(&state, symbol) && !state.spoiled.contains(&symbol) { out.push(symbol); }
     }
     out
 }
 
-fn nn_declared_once(declared: &collections::BTreeMap<winnow_grammar::Symbol, i64>, name: winnow_grammar::Symbol) -> bool { nikaia_std::index::or(declared.get(&name), || 0) == 1 }
+fn nn_every_declaration(state: &NnState, name: winnow_grammar::Symbol) -> bool {
+    let declared = nikaia_std::index::or(state.declared.get(&name), || 0);
+    declared > 0 && nikaia_std::index::or(state.candidates.get(&name), || 0) == declared
+}
 
 fn nn_spoil_all(args: &[Expr], state: &mut NnState) {
     for arg in args.iter() {
@@ -38248,8 +38251,9 @@ fn nn_spoil_all(args: &[Expr], state: &mut NnState) {
 fn nn_spoil(name: winnow_grammar::Symbol, state: &mut NnState) { state.spoiled.insert(name); }
 
 fn nn_candidate(name: winnow_grammar::Symbol, state: &mut NnState) {
-    state.candidates.insert(name.to_owned());
-    state.symbols.push(name);
+    let before = nikaia_std::index::or(state.candidates.get(&name), || 0);
+    state.candidates.insert(name, before + 1);
+    if before == 0 { state.symbols.push(name); }
 }
 
 fn nn_declare(name: winnow_grammar::Symbol, state: &mut NnState) {
@@ -38527,7 +38531,7 @@ impl EmitState {
         let mut inside: String = String::from("");
         if pieces.len() > 1 {
             let mut rest: Vec<String> = vec![];
-            for at in 1..pieces.len() as i64 { rest.push((*nikaia_std::index::get(&pieces, nikaia_std::index::at(at))).to_owned()); }
+            for at in 1..pieces.len() as i64 { rest.push((*nikaia_std::index::get(&pieces, (at) as usize)).to_owned()); }
             let joined = rest.join(" { ");
             let stripped = joined.strip_suffix(" }");
             if stripped.is_some() { inside = nikaia_std::index::or(stripped, || "").to_owned(); } else { inside = joined.to_owned(); }
@@ -38538,7 +38542,7 @@ impl EmitState {
             if halves.len() < 2 { continue; }
             let field = (*nikaia_std::index::get(&halves, 0)).to_owned();
             let mut value_parts: Vec<String> = vec![];
-            for at in 1..halves.len() as i64 { value_parts.push((*nikaia_std::index::get(&halves, nikaia_std::index::at(at))).to_owned()); }
+            for at in 1..halves.len() as i64 { value_parts.push((*nikaia_std::index::get(&halves, (at) as usize)).to_owned()); }
             let value = value_parts.join(": ");
             let ty = emit_field_type((self.field_contract(world, &name, &field)).as_ref());
             fields.push(format!("{}: {}", escaped_name(&field), held_literal(&value, &ty)));
@@ -42228,7 +42232,7 @@ fn type_key(entry: &mut TypeContract, key: &str, value: &str, n: i64) -> Result<
             if colon < 0 { return Err(nikaia_std::error::throwing(Refused::Because(format!("line {}: a variant's attribute is `Variant: Value {{ … }}`, not `{}`", n, one)), &"type_key")); }
             let named = slice(&c, 0, colon).trim().to_owned();
             let held = slice(&c, colon + 1, c.len() as i64).trim().to_owned();
-            for at in 0..entry.variants.len() as i64 { if nikaia_std::index::get(&entry.variants, nikaia_std::index::at(at)).name == named { entry.variants[nikaia_std::index::at(at)].attributes.push(held.to_owned()); } }
+            for at in 0..entry.variants.len() as i64 { if nikaia_std::index::get(&entry.variants, (at) as usize).name == named { entry.variants[nikaia_std::index::at(at)].attributes.push(held.to_owned()); } }
         }
     } else if key == "field_attributes" {
         for one in entries(value, n)? {
@@ -42238,7 +42242,7 @@ fn type_key(entry: &mut TypeContract, key: &str, value: &str, n: i64) -> Result<
             let field = slice(&c, 0, colon);
             let held = slice(&c, colon + 1, c.len() as i64);
             let named = field.trim().to_owned();
-            for at in 0..entry.fields.len() as i64 { if nikaia_std::index::get(&entry.fields, nikaia_std::index::at(at)).name == named { entry.fields[nikaia_std::index::at(at)].attributes.push(held.trim().to_owned()); } }
+            for at in 0..entry.fields.len() as i64 { if nikaia_std::index::get(&entry.fields, (at) as usize).name == named { entry.fields[nikaia_std::index::at(at)].attributes.push(held.trim().to_owned()); } }
         }
     } else { return Err(nikaia_std::error::throwing(Refused::Because(format!("line {}: unknown key `{}` on a type", n, key)), &"type_key")); }
     Ok(())
@@ -46389,7 +46393,7 @@ impl LgReader {
                 let mut acc = *nikaia_std::index::get(&args, 0);
                 let mut next: i64 = 1;
                 while next < n {
-                    if op == "+" { acc = self.arena.add(acc, *nikaia_std::index::get(&args, nikaia_std::index::at(next))); } else if op == "-" { acc = self.arena.sub(acc, *nikaia_std::index::get(&args, nikaia_std::index::at(next))); } else { acc = self.arena.mul(acc, *nikaia_std::index::get(&args, nikaia_std::index::at(next))); }
+                    if op == "+" { acc = self.arena.add(acc, *nikaia_std::index::get(&args, (next) as usize)); } else if op == "-" { acc = self.arena.sub(acc, *nikaia_std::index::get(&args, (next) as usize)); } else { acc = self.arena.mul(acc, *nikaia_std::index::get(&args, (next) as usize)); }
                     next += 1;
                 }
                 return LgTermRead::Term(acc);
@@ -46398,8 +46402,8 @@ impl LgReader {
                 let mut links: Vec<i64> = vec![];
                 let mut next: i64 = 0;
                 while next + 1 < n {
-                    let a = *nikaia_std::index::get(&args, nikaia_std::index::at(next));
-                    let b = *nikaia_std::index::get(&args, nikaia_std::index::at(next + 1));
+                    let a = *nikaia_std::index::get(&args, (next) as usize);
+                    let b = *nikaia_std::index::get(&args, (next + 1) as usize);
                     if op == "<=" { links.push(self.arena.le(a, b)); } else if op == "<" { links.push(self.arena.lt(a, b)); } else if op == ">=" { links.push(self.arena.ge(a, b)); } else if op == ">" { links.push(self.arena.gt(a, b)); } else { links.push(self.arena.equal(a, b)); }
                     next += 1;
                 }
@@ -55145,12 +55149,12 @@ fn split_at_the_first_statement(code: &str) -> Vec<String> {
     let mut head: i64 = 0;
     let mut depth: i64 = 0;
     for at in 0..lines.len() as i64 {
-        let trimmed = (*nikaia_std::index::get(&lines, nikaia_std::index::at(at))).trim();
+        let trimmed = (*nikaia_std::index::get(&lines, (at) as usize)).trim();
         if depth == 0 {
             if !(trimmed.is_empty() || trimmed.starts_with("//") || an_item(trimmed)) { break; }
             head = at + 1;
         }
-        depth += braces(nikaia_std::index::get(&lines, nikaia_std::index::at(at)));
+        depth += braces(nikaia_std::index::get(&lines, (at) as usize));
     }
     if head == 0 || head >= lines.len() as i64 { return vec![]; }
     let mut before: String = String::from("");
@@ -55158,10 +55162,10 @@ fn split_at_the_first_statement(code: &str) -> Vec<String> {
     for at in 0..lines.len() as i64 {
         if at < head {
             if at > 0 { before.push('\n'); }
-            before.push_str(nikaia_std::index::get(&lines, nikaia_std::index::at(at)));
+            before.push_str(nikaia_std::index::get(&lines, (at) as usize));
         } else {
             if at > head { after.push('\n'); }
-            after.push_str(nikaia_std::index::get(&lines, nikaia_std::index::at(at)));
+            after.push_str(nikaia_std::index::get(&lines, (at) as usize));
         }
     }
     vec![before, after]
@@ -64051,7 +64055,7 @@ fn rsrc_callee(asked: &Asked<'_, '_, '_>, known: &collections::BTreeMap<String, 
             let written = rsrc_param_of(entry);
             let borrowed = rsrc_bare(&written);
             let mut at: i64 = -1;
-            for i in 0..found.params.len() as i64 { if at < 0 && *nikaia_std::index::get(&found.params, nikaia_std::index::at(i)) == borrowed { at = i; } }
+            for i in 0..found.params.len() as i64 { if at < 0 && *nikaia_std::index::get(&found.params, (i) as usize) == borrowed { at = i; } }
             if at < 0 || at >= positional.len() as i64 { return everything.to_owned(); }
             let mapped = rsrc_under(&rsrc_path_of(entry), nikaia_std::index::get(&positional, nikaia_std::index::at(at)));
             if written.starts_with('~') { rsrc_join(&mut out, &rsrc_all_loose(&mapped)); } else { rsrc_join(&mut out, &mapped); }
@@ -64083,7 +64087,7 @@ fn rsrc_callee(asked: &Asked<'_, '_, '_>, known: &collections::BTreeMap<String, 
     let mut out = rsrc_none();
     for (path, borrowed) in rsrc_written_paths(&contract) {
         let mut at: i64 = -1;
-        for i in 0..signature.params.len() as i64 { if at < 0 && nikaia_std::index::get(&signature.params, nikaia_std::index::at(i)).0 == borrowed { at = i; } }
+        for i in 0..signature.params.len() as i64 { if at < 0 && nikaia_std::index::get(&signature.params, (i) as usize).0 == borrowed { at = i; } }
         if at < 0 || at >= positional.len() as i64 { return everything.to_owned(); }
         rsrc_join(&mut out, &rsrc_under(&path, nikaia_std::index::get(&positional, nikaia_std::index::at(at))));
     }
