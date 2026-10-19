@@ -372,7 +372,11 @@ impl EmitState {
                 }
             }
         }
-        if has_how && how != "" {
+        // **A boxed field is its own parentheses** (`(*code.result)`,
+        // ADR-246 D2): a second pair around it is `unused_parens`.
+        let boxed_alone = pointer == 0 && !count && self.facts.boxed_reads.contains(node)
+        let held = has_how && how != "" && !boxed_alone
+        if held {
             out.push("(")
         }
         if pointer == 3 {
@@ -411,8 +415,10 @@ impl EmitState {
         if pointer == 6 {
             out.push(".lent()")
         }
-        if has_how && how != "" {
+        if held {
             out.push(")")
+        }
+        if has_how && how != "" {
             out.push(how)
         }
         if count {

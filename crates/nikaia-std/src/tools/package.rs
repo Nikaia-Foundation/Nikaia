@@ -33374,7 +33374,9 @@ impl EmitState {
                 } else if lend && !self.facts.views_handed_on.contains(&node) { out.push("&"); }
             }
         }
-        if has_how && how != "" { out.push("("); }
+        let boxed_alone = pointer == 0 && !count && self.facts.boxed_reads.contains(&node);
+        let held = has_how && how != "" && !boxed_alone;
+        if held { out.push("("); }
         if pointer == 3 { out.push("&"); } else if pointer == 4 { out.push("&mut "); }
         if count { out.push("nikaia_std::count::of("); }
         let mut inside = flow;
@@ -33383,10 +33385,8 @@ impl EmitState {
         if future { self.emit_arg_future(world, walk, out, host, arg, i, depth, inside, scope)?; } else { self.emit_arg_value(world, walk, out, host, arg, i, depth, inside, scope)?; }
         if pointer == 1 { out.push(".as_ptr()"); } else if pointer == 2 { out.push(".as_mut_ptr()"); }
         if pointer == 6 { out.push(".lent()"); }
-        if has_how && how != "" {
-            out.push(")");
-            out.push(&how);
-        }
+        if held { out.push(")"); }
+        if has_how && how != "" { out.push(&how); }
         if count { out.push(")"); }
         if kept_here { out.push(")"); }
         if either { out.push(")"); }

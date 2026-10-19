@@ -256,3 +256,34 @@ fn a_guard_reads_a_name_bound_inside_a_box() {
         );
     }
 }
+
+/// **A boxed field lent inside its option is its own parentheses** (#703):
+/// `(*found.inner).as_ref()`, not `((*found.inner)).as_ref()`, which is
+/// `unused_parens` in a package that denies warnings.
+#[test]
+fn a_boxed_field_lent_as_an_option_is_written_once_parenthesised() {
+    let source = "struct Shape { inner: Wrap? }\n\
+                  struct Wrap { shape: Shape? }\n\
+                  \n\
+                  fn count(s: ref Shape?) -> i64 {\n\
+                  \x20   let found = s ?? return 0\n\
+                  \x20   return 1 + count_wrap(found.inner)\n\
+                  }\n\
+                  \n\
+                  fn count_wrap(w: ref Wrap?) -> i64 {\n\
+                  \x20   let found = w ?? return 0\n\
+                  \x20   return count(found.shape)\n\
+                  }\n\
+                  \n\
+                  fn main() {\n\
+                  \x20   let s: Shape? = Shape { inner: Wrap { shape: Shape { inner: null } } }\n\
+                  \x20   println(f\"{count(s)}\")\n\
+                  }\n";
+    assert!(findings(source).is_empty(), "{:#?}", findings(source));
+    let rust = lowered(source, Build::default());
+    assert!(
+        rust.contains("count_wrap((*found.inner).as_ref())"),
+        "{rust}"
+    );
+    assert!(!rust.contains("((*found.inner))"), "{rust}");
+}
