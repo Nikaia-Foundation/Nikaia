@@ -1301,6 +1301,100 @@ fn main() {
     assert!(rust.contains(".put(format!(\"own{}\", 1))"), "{rust}");
 }
 
+/// **A struct literal bound to a name handed back is handed back**
+/// ([ADR-282](../../../docs/specification/adr/adr-282.md) D2, D12, #678): `let
+/// t = Tag { label: s }` read through its fields and then `return t` lends
+/// `s` as `return Tag { label: s }` does, and lowers byte for byte as the
+/// `ref String` twin, given text of its own (`x`) and a view (`w`).
+const HANDED_BACK_THROUGH_A_LET: &str = r##"struct Tag { label: String }
+fn tag(s: String) -> Tag {
+    let t = Tag { label: s }
+    println(t.label.len())
+    return t
+}
+fn main() {
+    let x = f" x{1} "
+    let a = tag(x)
+    let w = x.trim()
+    let b = tag(w)
+    println(f"{a.label}|{b.label}|{x}")
+}
+"##;
+
+#[test]
+fn a_struct_bound_to_a_name_handed_back_lends_its_fields() {
+    runs(
+        "handed-back-through-a-let",
+        HANDED_BACK_THROUGH_A_LET,
+        "4\n2\n x1 |x1| x1",
+    );
+    let written = HANDED_BACK_THROUGH_A_LET
+        .replace("label: String }", "label: ref String }")
+        .replace("tag(s: String)", "tag(s: ref String)");
+    assert_eq!(
+        lowered(HANDED_BACK_THROUGH_A_LET, Build::default()),
+        lowered(&written, Build::default()),
+        "`String` lowers as `ref String` does"
+    );
+}
+
+/// **A parameter handed to one that only reads it, and then handed back, is
+/// lent** ([ADR-282](../../../docs/specification/adr/adr-282.md) D2, D5, D12,
+/// #678): `checked` lowers byte for byte as its `ref String` twin, also where
+/// the reader hands it on to another reader, given text of its own (`x`) and
+/// a view (`w`). One handed to a function that keeps it stays `String`.
+const HANDED_ON_AND_BACK: &str = r##"fn width(a: String) -> i64 { return a.len() as i64 }
+fn twice(a: String) -> i64 { return width(a) * 2 }
+fn checked(a: String) -> String {
+    let n = width(a)
+    println(twice(a) + n)
+    return a
+}
+fn main() {
+    let x = f" x{1} "
+    println(checked(x))
+    let w = x.trim()
+    println(checked(w))
+    println(x)
+}
+"##;
+
+#[test]
+fn a_parameter_handed_to_a_reader_and_back_is_lent() {
+    runs(
+        "handed-on-and-back",
+        HANDED_ON_AND_BACK,
+        "12\n x1 \n6\nx1\n x1",
+    );
+    let written = HANDED_ON_AND_BACK.replace(
+        "checked(a: String) -> String",
+        "checked(a: ref String) -> ref String",
+    );
+    assert_eq!(
+        lowered(HANDED_ON_AND_BACK, Build::default()),
+        lowered(&written, Build::default()),
+        "`String` lowers as `ref String` does"
+    );
+    let kept = r##"fn keep(a: String, mut v: Vec[String]) { v.push(a) }
+fn kept(a: String, mut v: Vec[String], c: bool) -> String {
+    if c {
+        keep(a, v)
+        return "none"
+    }
+    return a
+}
+fn main() {
+    let mut v: Vec[String] = []
+    println(kept(f"x{1}", v, true))
+    println(kept(f"y{2}", v, false))
+    println(v.len())
+}
+"##;
+    runs("handed-to-a-keeper", kept, "none\ny2\n1");
+    let rust = lowered(kept, Build::default());
+    assert!(rust.contains("fn kept(a: String,"), "{rust}");
+}
+
 // ---------------------------------------------------------------------------
 // What an enum's variant carries (#680)
 // ---------------------------------------------------------------------------

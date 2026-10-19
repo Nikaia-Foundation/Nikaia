@@ -56903,10 +56903,12 @@ struct Flows {
     lent_kinds: collections::BTreeMap<String, Kinds>,
     uses: collections::BTreeMap<String, i64>,
     lent_uses: collections::BTreeMap<String, i64>,
+    arg_into: collections::BTreeSet<(String, String)>,
+    arg_uses: collections::BTreeMap<String, i64>,
     changed: collections::BTreeSet<String>,
 }
 
-fn no_flows() -> Flows { Flows { positions: collections::BTreeMap::new(), known: collections::BTreeMap::new(), literal_lets: collections::BTreeMap::new(), wraps: collections::BTreeMap::new(), param_into: collections::BTreeSet::new(), hole_wraps: collections::BTreeMap::new(), links: collections::BTreeSet::new(), unwrappable: collections::BTreeSet::new(), viewed: collections::BTreeSet::new(), still_into: collections::BTreeSet::new(), adopted: collections::BTreeMap::new(), demoted: collections::BTreeSet::new(), in_maps: collections::BTreeSet::new(), lent_into: collections::BTreeSet::new(), lent_kinds: collections::BTreeMap::new(), uses: collections::BTreeMap::new(), lent_uses: collections::BTreeMap::new(), changed: collections::BTreeSet::new() } }
+fn no_flows() -> Flows { Flows { positions: collections::BTreeMap::new(), known: collections::BTreeMap::new(), literal_lets: collections::BTreeMap::new(), wraps: collections::BTreeMap::new(), param_into: collections::BTreeSet::new(), hole_wraps: collections::BTreeMap::new(), links: collections::BTreeSet::new(), unwrappable: collections::BTreeSet::new(), viewed: collections::BTreeSet::new(), still_into: collections::BTreeSet::new(), adopted: collections::BTreeMap::new(), demoted: collections::BTreeSet::new(), in_maps: collections::BTreeSet::new(), lent_into: collections::BTreeSet::new(), lent_kinds: collections::BTreeMap::new(), uses: collections::BTreeMap::new(), lent_uses: collections::BTreeMap::new(), arg_into: collections::BTreeSet::new(), arg_uses: collections::BTreeMap::new(), changed: collections::BTreeSet::new() } }
 
 #[derive(Debug, Clone, PartialEq)]
 struct TierWalk {
@@ -57651,12 +57653,23 @@ fn tier_block(block: &Block, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) -> 
     let mut tail = no_kinds();
     let mut k: i64 = 0;
     for stmt in block.stmts.iter() {
+        let before = walk.handed_back;
+        let bound = handed_by_name(&stmt.node, block, k, ask);
+        if bound >= 0 { walk.handed_back = bound; }
         let kinds = tier_statement(&stmt.node, stmt.span.start as i64, ask, walk);
-        if ((k + 1) as usize) == block.stmts.len() { tail = kinds; }
+        if bound >= 0 { walk.handed_back = before; }
+        if k + 1 == block.stmts.len() as i64 { tail = kinds; }
         k += 1;
     }
     close_tier_scope(walk);
     tail
+}
+
+fn handed_by_name(stmt: &Stmt, block: &Block, at: i64, ask: &TierAsk<'_, '_, '_>) -> i64 {
+    match stmt {
+        Stmt::Let { names, value, .. } => { if names.len() == 1 && handed_struct(value) >= 0 && local_struct_handed_back(ask.names, block, at, ask.names.resolve(*nikaia_std::index::get(&names, 0))) > 0 { handed_struct(value) } else { -1 } },
+        _ => -1,
+    }
 }
 
 fn tier_statement(stmt: &Stmt, at: i64, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) -> Kinds {
@@ -58022,6 +58035,8 @@ fn struct_of_local(name: &str, walk: &TierWalk) -> Option<String> {
     }
 }
 
+fn a_text_parameter(names: &winnow_grammar::InternerContext, ty: &Type) -> bool { names.resolve(ty.name) == "String" && ty.generics.is_empty() && !ty.is_nullable && !ty.is_tuple && !ty.is_slice && (*ty.code).is_none() }
+
 fn flow_args(key: &str, args: &[Expr], given: &[Kinds], ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) {
     let function = match match *nikaia_std::index::get(&walk.declared.fns, key) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -58035,7 +58050,24 @@ fn flow_args(key: &str, args: &[Expr], given: &[Kinds], ask: &TierAsk<'_, '_, '_
                 let word = seen(&owner, &no_path(), walk);
                 walk.unlent.insert(word);
             }
-            flow_value(&going_into(&owner, nikaia_std::index::get(&function.params, nikaia_std::index::at(at)), vec![], false), Some(nikaia_std::index::get(&args, nikaia_std::index::at(at))), nikaia_std::index::get(&given, nikaia_std::index::at(at)), ask, walk);
+            let mut kinds = (*nikaia_std::index::get(&given, nikaia_std::index::at(at))).clone();
+            if a_text_parameter(ask.names, nikaia_std::index::get(&function.params, nikaia_std::index::at(at))) {
+                let source = lendable_parameter(nikaia_std::index::get(&args, nikaia_std::index::at(at)), ask, walk);
+                if source.is_some() {
+                    let word: String = nikaia_std::index::or(source, || "".into());
+                    let to = seen(&owner, &no_path(), walk);
+                    let before = nikaia_std::index::or(match *nikaia_std::index::get(&walk.flows.lent_kinds, &word) {
+                        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                        None => None,
+                    }, || no_kinds().into());
+                    walk.flows.lent_kinds.insert(word.to_owned(), kinds_joined(&before, &kinds));
+                    let argued = nikaia_std::index::or(*nikaia_std::index::get(&walk.flows.arg_uses, &word), || 0);
+                    walk.flows.arg_uses.insert(word.to_owned(), argued + 1);
+                    walk.flows.arg_into.insert((word, to));
+                    kinds = no_kinds();
+                }
+            }
+            flow_value(&going_into(&owner, nikaia_std::index::get(&function.params, nikaia_std::index::at(at)), vec![], false), Some(nikaia_std::index::get(&args, nikaia_std::index::at(at))), &kinds, ask, walk);
             if at < function.changes.len() as i64 && *nikaia_std::index::get(&function.changes, nikaia_std::index::at(at)) { changed_in_place(nikaia_std::index::get(&args, nikaia_std::index::at(at)), ask, walk); }
         }
         at += 1;
@@ -58837,12 +58869,27 @@ fn lent_parameters(flows: &Flows, declared: &TextDeclared, unlent: &collections:
         }, || no_kinds().into());
         let named = nikaia_std::index::or(*nikaia_std::index::get(&flows.uses, from), || 0);
         let handed = nikaia_std::index::or(*nikaia_std::index::get(&flows.lent_uses, from), || 0);
-        if named == handed && !flows.changed.contains(from) && !unlent.contains(from) && !lasting_tier(tier_of_kinds(&given)) { lent.insert(from.to_owned()); }
+        let argued = nikaia_std::index::or(*nikaia_std::index::get(&flows.arg_uses, from), || 0);
+        if named == handed + argued && !flows.changed.contains(from) && !unlent.contains(from) && !lasting_tier(tier_of_kinds(&given)) { lent.insert(from.to_owned()); }
     }
     for (from, to) in flows.param_into.iter() { if lent.contains(from) && !flows.lent_into.contains(&(from.to_owned(), to.to_owned())) && !a_parameter_itself(to, flows) { lent.remove(from); } }
+    let mut reading: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for (_, to) in flows.arg_into.iter() {
+        let named = nikaia_std::index::or(*nikaia_std::index::get(&flows.uses, to), || 0);
+        let argued = nikaia_std::index::or(*nikaia_std::index::get(&flows.arg_uses, to), || 0);
+        if named == argued && !flows.changed.contains(to) && a_parameter_itself(to, flows) { reading.insert(to.to_owned()); }
+    }
     let mut dropping = true;
     while dropping {
         dropping = false;
+        for (from, to) in flows.arg_into.iter() {
+            let only_reads = reading.contains(to) || lent.contains(to) || a_view_parameter(to, flows, declared);
+            if !only_reads && (lent.contains(from) || reading.contains(from)) {
+                lent.remove(from);
+                reading.remove(from);
+                dropping = true;
+            }
+        }
         for (from, to) in flows.lent_into.iter() {
             if !lent.contains(from) { continue; }
             let into = nikaia_std::index::or(match *nikaia_std::index::get(&positions, to) {
@@ -58869,7 +58916,32 @@ fn lent_parameters(flows: &Flows, declared: &TextDeclared, unlent: &collections:
         }, || no_kinds().into());
         positions.insert(to.to_owned(), kinds_joined(&before, &kinds));
     }
+    for (from, to) in flows.arg_into.iter() {
+        let mut kinds = nikaia_std::index::or(match *nikaia_std::index::get(&flows.lent_kinds, from) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || owned_kinds().into());
+        if lent.contains(from) { kinds = view_kinds(); }
+        let before = nikaia_std::index::or(match *nikaia_std::index::get(&positions, to) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || no_kinds().into());
+        positions.insert(to.to_owned(), kinds_joined(&before, &kinds));
+    }
     lent
+}
+
+fn a_view_parameter(word: &str, flows: &Flows, declared: &TextDeclared) -> bool {
+    let position = match *nikaia_std::index::get(&flows.known, word) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    if !position.path.is_empty() { return false; }
+    match &position.owner {
+        TextOwner::Param(key, at) => {
+            let at = *at;
+            let function = match *nikaia_std::index::get(&declared.fns, key) { Some(__nikaia_value) => __nikaia_value, None => return false };
+            at < function.params.len() as i64 && nikaia_std::index::get(&function.params, nikaia_std::index::at(at)).is_view
+        },
+        _ => false,
+    }
 }
 
 fn fixed_by_publishing_field(word: &str, flows: &Flows, declared: &TextDeclared) -> bool {
@@ -63142,7 +63214,7 @@ fn walk_block(unit: &Unit, asked: &Asked<'_, '_, '_>, block: &Block, tail: bool,
                         here.carriers.insert(asked.names.resolve(name).to_owned());
                     }
                 }
-                if views_a_local_struct(asked, block, i, names, value) { descend(unit, asked, value, &span, own_buffer, here); } else { stores(unit, asked, value, &span, own_buffer, here); }
+                if views_a_local_struct(asked, block, i, names, value, (here.ours).as_deref()) { descend(unit, asked, value, &span, own_buffer, here); } else { stores(unit, asked, value, &span, own_buffer, here); }
             },
             Stmt::Comptime { name, value, .. } => {
                 let name = *name;
@@ -63184,37 +63256,61 @@ fn walk_block(unit: &Unit, asked: &Asked<'_, '_, '_>, block: &Block, tail: bool,
     }
 }
 
-fn views_a_local_struct(asked: &Asked<'_, '_, '_>, block: &Block, at: i64, names: &[winnow_grammar::Symbol], value: &Expr) -> bool {
-    let literal = matches!(value, Expr::StructLit { .. });
-    if !literal || names.len() != 1 { return false; }
-    let name = asked.names.resolve(*nikaia_std::index::get(&names, 0)).to_owned();
-    let mut uses = 0;
-    let mut through = 0;
+fn views_a_local_struct(asked: &Asked<'_, '_, '_>, block: &Block, at: i64, names: &[winnow_grammar::Symbol], value: &Expr, ours: Option<&str>) -> bool {
+    let literal = match value {
+        Expr::StructLit { name, .. } => { let name = *name; asked.names.resolve(name).to_owned() },
+        _ => return false,
+    };
+    if names.len() != 1 { return false; }
+    let handed = local_struct_handed_back(asked.names, block, at, asked.names.resolve(*nikaia_std::index::get(&names, 0)));
+    if handed == 0 { return true; }
+    let result = match ours { Some(__nikaia_value) => __nikaia_value, None => return false };
+    handed > 0 && result == literal
+}
+
+pub fn local_struct_handed_back(names: &winnow_grammar::InternerContext, block: &Block, at: i64, name: &str) -> i64 {
+    let mut uses: i64 = 0;
+    let mut through: i64 = 0;
+    let mut handed: i64 = 0;
     for j in at + 1..block.stmts.len() as i64 {
+        if returns_named(names, &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(j)).node, name) { handed += 1; }
         for each in visited_in_stmt(&nikaia_std::index::get(&block.stmts, nikaia_std::index::at(j)).node) {
             match each {
                 Expr::Variable(n, _) => {
                     let n = *n;
-                    if asked.names.resolve(n) == name { uses += 1; }
+                    if names.resolve(n) == name { uses += 1; }
                 },
                 Expr::Field { base, .. } => {
                     let base = nikaia_std::boxed::open(base);
-                    if views_names(asked, base, &name) { through += 1; }
+                    if a_variable_named(names, base, name) { through += 1; }
                 },
                 Expr::SafeField { base, .. } => {
                     let base = nikaia_std::boxed::open(base);
-                    if views_names(asked, base, &name) { through += 1; }
+                    if a_variable_named(names, base, name) { through += 1; }
                 },
                 _ => { },
             }
         }
     }
-    uses == through
+    if uses != through + handed { return -1; }
+    handed
 }
 
-fn views_names(asked: &Asked<'_, '_, '_>, expr: &Expr, name: &str) -> bool {
+fn returns_named(names: &winnow_grammar::InternerContext, stmt: &Stmt, name: &str) -> bool {
+    match stmt {
+        Stmt::Return(value) => returns_variable(names, (value).as_ref(), name),
+        _ => false,
+    }
+}
+
+fn returns_variable(names: &winnow_grammar::InternerContext, value: Option<&Expr>, name: &str) -> bool {
+    let back = match value { Some(__nikaia_value) => __nikaia_value, None => return false };
+    a_variable_named(names, back, name)
+}
+
+fn a_variable_named(names: &winnow_grammar::InternerContext, expr: &Expr, name: &str) -> bool {
     match expr {
-        Expr::Variable(n, _) => { let n = *n; asked.names.resolve(n) == name },
+        Expr::Variable(n, _) => { let n = *n; names.resolve(n) == name },
         _ => false,
     }
 }
@@ -65633,7 +65729,7 @@ pub mod types {
 }
 pub mod views {
     #[allow(unused_imports)]
-    pub use super::{Stored, Destination, Asked, views_stored, views_checked, holds_view, written_type, FieldsHeld, fields_held, carrying, ResultSource, result_sources};
+    pub use super::{Stored, Destination, Asked, views_stored, views_checked, holds_view, written_type, local_struct_handed_back, FieldsHeld, fields_held, carrying, ResultSource, result_sources};
 }
 pub mod written {
     #[allow(unused_imports)]

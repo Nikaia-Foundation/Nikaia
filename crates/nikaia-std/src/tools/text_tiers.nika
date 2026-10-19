@@ -500,13 +500,18 @@ struct Flows {
     /// be kept there, and is not lent.
     uses: collections::BTreeMap[String, i64],
     lent_uses: collections::BTreeMap[String, i64],
+    /// Such a parameter handed as it is to a `String` parameter of a function
+    /// of this program, and to which: lent where every function it goes to
+    /// only reads it (#678), and how often each is handed so.
+    arg_into: collections::BTreeSet[(String, String)],
+    arg_uses: collections::BTreeMap[String, i64],
     /// Positions changed in place, or read into a name that is assigned
     /// again: not handed back unchanged.
     changed: collections::BTreeSet[String],
 }
 
 fn no_flows() -> Flows {
-    return Flows { positions: collections::BTreeMap(), known: collections::BTreeMap(), literal_lets: collections::BTreeMap(), wraps: collections::BTreeMap(), param_into: collections::BTreeSet(), hole_wraps: collections::BTreeMap(), links: collections::BTreeSet(), unwrappable: collections::BTreeSet(), viewed: collections::BTreeSet(), still_into: collections::BTreeSet(), adopted: collections::BTreeMap(), demoted: collections::BTreeSet(), in_maps: collections::BTreeSet(), lent_into: collections::BTreeSet(), lent_kinds: collections::BTreeMap(), uses: collections::BTreeMap(), lent_uses: collections::BTreeMap(), changed: collections::BTreeSet() }
+    return Flows { positions: collections::BTreeMap(), known: collections::BTreeMap(), literal_lets: collections::BTreeMap(), wraps: collections::BTreeMap(), param_into: collections::BTreeSet(), hole_wraps: collections::BTreeMap(), links: collections::BTreeSet(), unwrappable: collections::BTreeSet(), viewed: collections::BTreeSet(), still_into: collections::BTreeSet(), adopted: collections::BTreeMap(), demoted: collections::BTreeSet(), in_maps: collections::BTreeSet(), lent_into: collections::BTreeSet(), lent_kinds: collections::BTreeMap(), uses: collections::BTreeMap(), lent_uses: collections::BTreeMap(), arg_into: collections::BTreeSet(), arg_uses: collections::BTreeMap(), changed: collections::BTreeSet() }
 }
 
 struct TierWalk {
@@ -1490,7 +1495,18 @@ fn tier_block(block: ref Block, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
     let mut tail = no_kinds()
     let mut k = 0
     for stmt in block.stmts {
+        // **A struct literal bound to a name handed back** is handed back as
+        // if written in the `return` (#678), where the name is read only
+        // through its fields besides (`local_struct_handed_back`).
+        let before = walk.handed_back
+        let bound = handed_by_name(stmt.node, block, k, ask)
+        if bound >= 0 {
+            walk.handed_back = bound
+        }
         let kinds = tier_statement(stmt.node, stmt.span.start as i64, ask, walk)
+        if bound >= 0 {
+            walk.handed_back = before
+        }
         if k + 1 == block.stmts.len() {
             tail = kinds
         }
@@ -1498,6 +1514,21 @@ fn tier_block(block: ref Block, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
     }
     close_tier_scope(walk)
     return tail
+}
+
+/// The id of a struct literal a `let` binds to a name the block hands back,
+/// and -1 for anything else.
+fn handed_by_name(stmt: ref Stmt, block: ref Block, at: i64, ask: ref TierAsk) -> i64 {
+    return match stmt {
+        Stmt::Let { names, value, .. } => {
+            if names.len() == 1 && handed_struct(value) >= 0 && local_struct_handed_back(ask.names, block, at, ask.names.resolve(names[0])) > 0 {
+                handed_struct(value)
+            } else {
+                -1
+            }
+        },
+        else => -1,
+    }
 }
 
 /// Walk a statement; what it is worth as a block's last value.
@@ -1935,6 +1966,11 @@ fn struct_of_local(name: ref String, walk: ref TierWalk) -> String? {
     return local.of?.clone()
 }
 
+/// A `String` or `ref String` parameter, not `String?`.
+fn a_text_parameter(names: ref winnow_grammar::InternerContext, ty: ref Type) -> bool {
+    return names.resolve(ty.name) == "String" && ty.generics.len() == 0 && !ty.is_nullable && !ty.is_tuple && !ty.is_slice && ty.code == null
+}
+
 /// Arguments handed to a function of this program: each goes into its
 /// parameter's position. The emitter wraps an argument to a mixed parameter
 /// itself (`Emitter::either_param`), in a hole as anywhere else.
@@ -1951,7 +1987,23 @@ fn flow_args(key: ref String, args: ref Vec[Expr], given: ref Vec[Kinds], ask: r
                 let word = seen(owner, no_path(), walk)
                 walk.unlent.insert(word)
             }
-            flow_value(going_into(owner, function.params[at], [], false), args[at], given[at], ask, walk)
+            // **A parameter handed on as it is to a `String` parameter**
+            // goes in as nothing yet: lent, it goes in as a view (#678).
+            let mut kinds = given[at].clone()
+            if a_text_parameter(ask.names, function.params[at]) {
+                let source = lendable_parameter(args[at], ask, walk)
+                if source != null {
+                    let word: String = source ?? ""
+                    let to = seen(owner, no_path(), walk)
+                    let before = walk.flows.lent_kinds[word]?.clone() ?? no_kinds()
+                    walk.flows.lent_kinds.insert(word.clone(), kinds_joined(before, kinds))
+                    let argued = walk.flows.arg_uses[word] ?? 0
+                    walk.flows.arg_uses.insert(word.clone(), argued + 1)
+                    walk.flows.arg_into.insert((word, to))
+                    kinds = no_kinds()
+                }
+            }
+            flow_value(going_into(owner, function.params[at], [], false), args[at], kinds, ask, walk)
             if at < function.changes.len() && function.changes[at] {
                 changed_in_place(args[at], ask, walk)
             }
@@ -2979,7 +3031,8 @@ fn lent_parameters(flows: ref Flows, declared: ref TextDeclared, unlent: ref col
         let given = positions[from]?.clone() ?? no_kinds()
         let named = flows.uses[from] ?? 0
         let handed = flows.lent_uses[from] ?? 0
-        if named == handed && !flows.changed.contains(from) && !unlent.contains(from) && !lasting_tier(tier_of_kinds(given)) {
+        let argued = flows.arg_uses[from] ?? 0
+        if named == handed + argued && !flows.changed.contains(from) && !unlent.contains(from) && !lasting_tier(tier_of_kinds(given)) {
             lent.insert(from.clone())
         }
     }
@@ -2988,9 +3041,28 @@ fn lent_parameters(flows: ref Flows, declared: ref TextDeclared, unlent: ref col
             lent.remove(from)
         }
     }
+    // **A parameter handed on to one that only reads it** stays lent (#678):
+    // one named nowhere but as an argument to such parameters, or a lent one,
+    // or one written `ref String`.
+    let mut reading: collections::BTreeSet[String] = collections::BTreeSet()
+    for (_, to) in flows.arg_into {
+        let named = flows.uses[to] ?? 0
+        let argued = flows.arg_uses[to] ?? 0
+        if named == argued && !flows.changed.contains(to) && a_parameter_itself(to, flows) {
+            reading.insert(to.clone())
+        }
+    }
     let mut dropping = true
     while dropping {
         dropping = false
+        for (from, to) in flows.arg_into {
+            let only_reads = reading.contains(to) || lent.contains(to) || a_view_parameter(to, flows, declared)
+            if !only_reads && (lent.contains(from) || reading.contains(from)) {
+                lent.remove(from)
+                reading.remove(from)
+                dropping = true
+            }
+        }
         for (from, to) in flows.lent_into {
             if !lent.contains(from) {
                 continue
@@ -3016,7 +3088,30 @@ fn lent_parameters(flows: ref Flows, declared: ref TextDeclared, unlent: ref col
         let before = positions[to]?.clone() ?? no_kinds()
         positions.insert(to.clone(), kinds_joined(before, kinds))
     }
+    for (from, to) in flows.arg_into {
+        let mut kinds = flows.lent_kinds[from]?.clone() ?? owned_kinds()
+        if lent.contains(from) {
+            kinds = view_kinds()
+        }
+        let before = positions[to]?.clone() ?? no_kinds()
+        positions.insert(to.clone(), kinds_joined(before, kinds))
+    }
     return lent
+}
+
+/// Whether a parameter is written `ref String`.
+fn a_view_parameter(word: ref String, flows: ref Flows, declared: ref TextDeclared) -> bool {
+    let position = flows.known[word] ?? return false
+    if position.path.len() > 0 {
+        return false
+    }
+    return match position.owner {
+        TextOwner::Param(key, at) => {
+            let function = declared.fns[key] ?? return false
+            at < function.params.len() && function.params[at].is_view
+        },
+        else => false,
+    }
 }
 
 /// A published field: what it holds is published as text of its own.
