@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1043] — 2026-10-19
+
+**A cached build says its warnings again**
+- `nikaia run`, `build` and `lower` reused a cached lowering without saying the check's warnings, so a warning appeared only on the first build of an unchanged source. The cache now keeps the warnings with the lowering and a hit says them again; older cache entries miss once.
+
 ## [0.0.1042] — 2026-10-19
 
 **Static views of text: a published list and build-time values own their text; winnow-grammar 3c50bc4 (#659, #453)**
