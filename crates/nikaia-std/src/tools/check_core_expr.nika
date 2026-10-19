@@ -331,6 +331,12 @@ fn check_core_expr_variable[H: CheckHost](mut state: CheckState, world: ref Chec
         state.a_read(expr, name, span)
         check_core_expr_an_open_char_read(state, expr, name, span)
         state.a_sequence_is_taken(name, ty, span)
+        // **An arm that is a name still read later is a view of it**, lent
+        // where it stands (ADR-282 D7, D13, #712): the tier pass found it.
+        if world.here.viewed_arms.contains(node_key(expr)) && ty == a_string_type() {
+            state.facts.lent_reads.insert(node_key(expr))
+            return Ty::Named { name: TEXT_VIEW.clone(), args: [], view: true }
+        }
         // What a test proves not `null` is read as the `T` (ADR-350).
         let nullable = match ty {
             Ty::Nullable(_) => true,

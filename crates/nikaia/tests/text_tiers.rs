@@ -1871,3 +1871,38 @@ fn a_method_result_viewing_a_kept_parameter_pushed_into_a_container_owns_its_tex
     let rust = lowered(&method, Build::default());
     assert!(rust.contains("label: String,"), "{rust}");
 }
+
+/// **An arm that is a name still read later is a view of it** (ADR-282 D7,
+/// D13, #712): read in the loop's next turn and after it, `s` is lent to an
+/// `EitherText` beside the arm that makes text of its own, and not moved. An
+/// arm naming a value nothing reads afterwards still moves it, and the choice
+/// stays a plain `String`. That both run is `tests/accepted/712_*.nika`.
+#[test]
+fn an_arm_naming_text_read_later_is_a_view_of_it() {
+    let later = r##"fn main() {
+    let s = f"x{1}"
+    for i in 0..<2 {
+        let c = if i == 1 { s } else { f"y{i}" }
+        println(c)
+    }
+    println(s)
+}
+"##;
+    let rust = lowered(later, Build::default());
+    assert!(
+        rust.contains("nikaia_std::either_text::either(&s)"),
+        "{rust}"
+    );
+    let moved = r##"fn main() {
+    let s = f"x{1}"
+    let c = if s.len() == 1 { s } else { f"y{2}" }
+    println(c)
+}
+"##;
+    let rust = lowered(moved, Build::default());
+    assert!(
+        rust.contains("let c = if s.len() == 1 { s } else { format!(\"y{}\", 2) };")
+            && !rust.contains("either"),
+        "{rust}"
+    );
+}

@@ -147,6 +147,7 @@ pub fn refine(parsed: &mut Parsed) {
         library,
     };
     let decided = text_tiers(&parsed.program, &ask);
+    parsed.viewed_arms = decided.viewed_arms.clone();
     let mut tiers: Tiers = decided
         .tiers
         .into_iter()

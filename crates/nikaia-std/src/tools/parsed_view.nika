@@ -19,6 +19,9 @@ pub struct ParsedView {
     pub package: ref String?,
     /// Where each expression the parser made was written, by its id (#107).
     pub spans: ref collections::BTreeMap[u32, Span],
+    /// **The arms the tier pass took as a view of the name they are**, by
+    /// their nodes (ADR-282 D13, #712).
+    pub viewed_arms: ref collections::BTreeSet[i64],
 }
 
 impl ParsedView {

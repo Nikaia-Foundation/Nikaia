@@ -11643,7 +11643,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    fn collect_types_beside(&mut self, other: &ParsedView<'_, '_, '_, '_, '_>, item: &Item) {
+    fn collect_types_beside(&mut self, other: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Item) {
         match item {
             Item::Enum { name, variants, .. } => {
                 let name = *name;
@@ -11919,7 +11919,7 @@ pub struct CompareDeclared {
     pub totally: Vec<String>,
 }
 
-pub fn compare_declared(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '_>, here: &ParsedView<'_, '_, '_, '_, '_>) -> CompareDeclared {
+pub fn compare_declared(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '_>, here: &ParsedView<'_, '_, '_, '_, '_, '_>) -> CompareDeclared {
     let mut declared: Vec<String> = vec![];
     for item in here.items.iter() {
         match &item.node {
@@ -12056,7 +12056,7 @@ fn compare_parameter_bounds(ty: &Ty, parameters: &collections::BTreeMap<String, 
     bounds.to_owned()
 }
 
-pub fn compare_language_impls(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '_>, here: &ParsedView<'_, '_, '_, '_, '_>) -> Vec<CheckFinding> {
+pub fn compare_language_impls(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '_>, here: &ParsedView<'_, '_, '_, '_, '_, '_>) -> Vec<CheckFinding> {
     let mut refused: Vec<CheckFinding> = vec![];
     for item in here.items.iter() {
         match &item.node {
@@ -12071,7 +12071,7 @@ pub fn compare_language_impls(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '
     refused
 }
 
-fn compare_language_impl(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '_>, here: &ParsedView<'_, '_, '_, '_, '_>, trait_name: Option<winnow_grammar::Symbol>, target: &Type, span: &Span) -> Option<CheckFinding> {
+fn compare_language_impl(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '_>, here: &ParsedView<'_, '_, '_, '_, '_, '_>, trait_name: Option<winnow_grammar::Symbol>, target: &Type, span: &Span) -> Option<CheckFinding> {
     let symbol = match trait_name { Some(__nikaia_value) => __nikaia_value, None => return None };
     let trait_text = here.text(symbol);
     if trait_text != "Eq" && trait_text != "Ord" || asking.own.traits.contains_key(&trait_text) { return None; }
@@ -12484,7 +12484,7 @@ impl CheckState {
 
 // --- check_copies.nika ---
 
-pub fn check_parts_beside(beside: &[ParsedView<'_, '_, '_, '_, '_>], here_at: i64) -> collections::BTreeMap<String, Vec<Ty>> {
+pub fn check_parts_beside(beside: &[ParsedView<'_, '_, '_, '_, '_, '_>], here_at: i64) -> collections::BTreeMap<String, Vec<Ty>> {
     let mut parts: collections::BTreeMap<String, Vec<Ty>> = collections::BTreeMap::new();
     let mut at: i64 = 0;
     for other in beside.iter() {
@@ -12494,7 +12494,7 @@ pub fn check_parts_beside(beside: &[ParsedView<'_, '_, '_, '_, '_>], here_at: i6
     parts
 }
 
-fn copies_parts_of(other: &ParsedView<'_, '_, '_, '_, '_>, item: &Item, parts: &mut collections::BTreeMap<String, Vec<Ty>>) {
+fn copies_parts_of(other: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Item, parts: &mut collections::BTreeMap<String, Vec<Ty>>) {
     match item {
         Item::Struct { name, generics, fields, .. } => {
             let name = *name;
@@ -12523,7 +12523,7 @@ fn copies_parts_of(other: &ParsedView<'_, '_, '_, '_, '_>, item: &Item, parts: &
     }
 }
 
-fn copies_declared_in(view: &ParsedView<'_, '_, '_, '_, '_>) -> Vec<String> {
+fn copies_declared_in(view: &ParsedView<'_, '_, '_, '_, '_, '_>) -> Vec<String> {
     let mut names: Vec<String> = vec![];
     for item in view.items.iter() {
         match &item.node {
@@ -12535,7 +12535,7 @@ fn copies_declared_in(view: &ParsedView<'_, '_, '_, '_, '_>) -> Vec<String> {
     names
 }
 
-fn copies_dropped_in(view: &ParsedView<'_, '_, '_, '_, '_>, dropped: &mut collections::BTreeSet<String>) {
+fn copies_dropped_in(view: &ParsedView<'_, '_, '_, '_, '_, '_>, dropped: &mut collections::BTreeSet<String>) {
     for item in view.items.iter() {
         match &item.node {
             Item::Impl { trait_name, target, .. } => {
@@ -14937,6 +14937,10 @@ fn check_core_expr_variable<H: CheckHost>(state: &mut CheckState, world: &CheckW
         state.a_read(expr, &name, span);
         check_core_expr_an_open_char_read(state, expr, &name, span);
         state.a_sequence_is_taken(&name, &ty, span);
+        if world.here.viewed_arms.contains(&node_key(expr)) && ty == a_string_type() {
+            state.facts.lent_reads.insert(node_key(expr));
+            return Ty::Named { name: TEXT_VIEW.to_owned(), args: vec![], view: true };
+        }
         let nullable = matches!(ty, Ty::Nullable(_));
         if !nullable || state.reading_only { return ty; }
         return check_narrow_read_as_proved(state, expr, &name, &ty, span);
@@ -21724,7 +21728,7 @@ fn host_branch_folds(world: &CheckWorld<'_, '_, '_, '_, '_>, block: &Block, enum
     }
 }
 
-fn host_enum_names(view: &ParsedView<'_, '_, '_, '_, '_>, out: &mut collections::BTreeSet<String>) {
+fn host_enum_names(view: &ParsedView<'_, '_, '_, '_, '_, '_>, out: &mut collections::BTreeSet<String>) {
     for item in view.items.iter() {
         let named: String = match &item.node {
             Item::Enum { name, .. } => { let name = *name; view.text(name) },
@@ -21734,7 +21738,7 @@ fn host_enum_names(view: &ParsedView<'_, '_, '_, '_, '_>, out: &mut collections:
     }
 }
 
-fn host_grammar_names(view: &ParsedView<'_, '_, '_, '_, '_>, out: &mut collections::BTreeSet<String>) {
+fn host_grammar_names(view: &ParsedView<'_, '_, '_, '_, '_, '_>, out: &mut collections::BTreeSet<String>) {
     for item in view.items.iter() {
         let named: String = match &item.node {
             Item::Grammar(def) => view.text(def.name),
@@ -21807,7 +21811,7 @@ fn host_assets_in<H: CheckHost>(world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H
     found
 }
 
-fn host_ring_names(view: &ParsedView<'_, '_, '_, '_, '_>, comptimes: &mut collections::BTreeSet<String>, options: &mut collections::BTreeMap<String, Vec<String>>) {
+fn host_ring_names(view: &ParsedView<'_, '_, '_, '_, '_, '_>, comptimes: &mut collections::BTreeSet<String>, options: &mut collections::BTreeMap<String, Vec<String>>) {
     for item in view.items.iter() {
         match &item.node {
             Item::Comptime { name, .. } => {
@@ -21827,7 +21831,7 @@ fn host_ring_names(view: &ParsedView<'_, '_, '_, '_, '_>, comptimes: &mut collec
     }
 }
 
-fn host_ring_edge(view: &ParsedView<'_, '_, '_, '_, '_>, expr: &Expr, comptimes: &collections::BTreeSet<String>, options: &collections::BTreeMap<String, Vec<String>>, out: &mut Vec<String>) {
+fn host_ring_edge(view: &ParsedView<'_, '_, '_, '_, '_, '_>, expr: &Expr, comptimes: &collections::BTreeSet<String>, options: &collections::BTreeMap<String, Vec<String>>, out: &mut Vec<String>) {
     match expr {
         Expr::Variable(name, _) => {
             let name = *name;
@@ -21856,7 +21860,7 @@ fn host_ring_edge(view: &ParsedView<'_, '_, '_, '_, '_>, expr: &Expr, comptimes:
     }
 }
 
-fn host_ring_graph(view: &ParsedView<'_, '_, '_, '_, '_>, comptimes: &collections::BTreeSet<String>, options: &collections::BTreeMap<String, Vec<String>>, graph: &mut collections::BTreeMap<String, Vec<String>>, labels: &mut collections::BTreeMap<String, String>) {
+fn host_ring_graph(view: &ParsedView<'_, '_, '_, '_, '_, '_>, comptimes: &collections::BTreeSet<String>, options: &collections::BTreeMap<String, Vec<String>>, graph: &mut collections::BTreeMap<String, Vec<String>>, labels: &mut collections::BTreeMap<String, String>) {
     for item in view.items.iter() {
         match &item.node {
             Item::Comptime { name, value, .. } => {
@@ -22319,7 +22323,7 @@ fn item_last_segment(written: &str) -> String {
     last
 }
 
-fn item_type_name(view: &ParsedView<'_, '_, '_, '_, '_>, item: &Item) -> String {
+fn item_type_name(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Item) -> String {
     match item {
         Item::Struct { name, .. } => { let name = *name; view.text(name) },
         Item::Enum { name, .. } => { let name = *name; view.text(name) },
@@ -22329,13 +22333,13 @@ fn item_type_name(view: &ParsedView<'_, '_, '_, '_, '_>, item: &Item) -> String 
     }
 }
 
-pub fn declares_a_type(view: &ParsedView<'_, '_, '_, '_, '_>, name: &str) -> bool {
+pub fn declares_a_type(view: &ParsedView<'_, '_, '_, '_, '_, '_>, name: &str) -> bool {
     if name == "" { return false; }
     for item in view.items.iter() { if item_type_name(view, &item.node) == name { return true; } }
     false
 }
 
-pub fn declared_with_no_arithmetic(view: &ParsedView<'_, '_, '_, '_, '_>, ty: &Ty) -> Option<String> {
+pub fn declared_with_no_arithmetic(view: &ParsedView<'_, '_, '_, '_, '_, '_>, ty: &Ty) -> Option<String> {
     let seen = ty.unseen();
     let name = match seen {
         Ty::Named { name, .. } => name,
@@ -22352,21 +22356,21 @@ pub fn declared_with_no_arithmetic(view: &ParsedView<'_, '_, '_, '_, '_>, ty: &T
     None
 }
 
-fn item_takes_either(view: &ParsedView<'_, '_, '_, '_, '_>, node: &Item, own: &str, at: i64) -> bool {
+fn item_takes_either(view: &ParsedView<'_, '_, '_, '_, '_, '_>, node: &Item, own: &str, at: i64) -> bool {
     match node {
         Item::Fn { name, args, .. } => { let name = *name; item_fn_takes_either(view, name, args, own, at) },
         _ => false,
     }
 }
 
-fn item_fn_takes_either(view: &ParsedView<'_, '_, '_, '_, '_>, name: Option<winnow_grammar::Symbol>, args: &[FnArg], own: &str, at: i64) -> bool {
+fn item_fn_takes_either(view: &ParsedView<'_, '_, '_, '_, '_, '_>, name: Option<winnow_grammar::Symbol>, args: &[FnArg], own: &str, at: i64) -> bool {
     let symbol = match name { Some(__nikaia_value) => __nikaia_value, None => return false };
     if view.text(symbol) != own { return false; }
     if at < 0 || at >= args.len() as i64 { return false; }
     nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.either
 }
 
-pub fn either_param(view: &ParsedView<'_, '_, '_, '_, '_>, key: &str, at: i64) -> bool {
+pub fn either_param(view: &ParsedView<'_, '_, '_, '_, '_, '_>, key: &str, at: i64) -> bool {
     let parts: Vec<&str> = key.split("::").collect::<Vec<_>>();
     let own = (*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_owned();
     let mut target: String = String::from("");
@@ -22383,13 +22387,13 @@ pub fn either_param(view: &ParsedView<'_, '_, '_, '_, '_>, key: &str, at: i64) -
     false
 }
 
-fn item_impl_takes_either(view: &ParsedView<'_, '_, '_, '_, '_>, t: &Type, methods: &[Spanned<Item>], target: &str, own: &str, at: i64) -> bool {
+fn item_impl_takes_either(view: &ParsedView<'_, '_, '_, '_, '_, '_>, t: &Type, methods: &[Spanned<Item>], target: &str, own: &str, at: i64) -> bool {
     if view.text(t.name) != target { return false; }
     for method in methods.iter() { if item_takes_either(view, &method.node, own, at) { return true; } }
     false
 }
 
-pub fn either_field(view: &ParsedView<'_, '_, '_, '_, '_>, owner: &str, field: &str) -> bool {
+pub fn either_field(view: &ParsedView<'_, '_, '_, '_, '_, '_>, owner: &str, field: &str) -> bool {
     let owner = item_last_segment(owner);
     for item in view.items.iter() {
         let found = match &item.node {
@@ -22401,12 +22405,12 @@ pub fn either_field(view: &ParsedView<'_, '_, '_, '_, '_>, owner: &str, field: &
     false
 }
 
-fn item_has_either_field(view: &ParsedView<'_, '_, '_, '_, '_>, fields: &[FieldDef], field: &str) -> bool {
+fn item_has_either_field(view: &ParsedView<'_, '_, '_, '_, '_, '_>, fields: &[FieldDef], field: &str) -> bool {
     for f in fields.iter() { if f.ty.either && view.text(f.name) == field { return true; } }
     false
 }
 
-pub fn imports_a_package(view: &ParsedView<'_, '_, '_, '_, '_>, name: &str) -> bool {
+pub fn imports_a_package(view: &ParsedView<'_, '_, '_, '_, '_, '_>, name: &str) -> bool {
     for item in view.items.iter() {
         let found = match &item.node {
             Item::Import { path, alias } => { let alias = *alias; item_import_is(view, path, alias, name) },
@@ -22417,13 +22421,13 @@ pub fn imports_a_package(view: &ParsedView<'_, '_, '_, '_, '_>, name: &str) -> b
     false
 }
 
-fn item_import_is(view: &ParsedView<'_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], alias: Option<winnow_grammar::Symbol>, name: &str) -> bool {
+fn item_import_is(view: &ParsedView<'_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], alias: Option<winnow_grammar::Symbol>, name: &str) -> bool {
     if alias.is_some() { return view.text(match alias { Some(__nikaia_value) => __nikaia_value, None => return false }) == name; }
     if path.is_empty() { return false; }
     view.text(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 1))) == name
 }
 
-pub fn imports_exactly(view: &ParsedView<'_, '_, '_, '_, '_>, head: &str) -> bool {
+pub fn imports_exactly(view: &ParsedView<'_, '_, '_, '_, '_, '_>, head: &str) -> bool {
     for item in view.items.iter() {
         let found = match &item.node {
             Item::Import { path, .. } => path.len() == 1 && view.text(*nikaia_std::index::get(&path, 0)) == head,
@@ -22434,7 +22438,7 @@ pub fn imports_exactly(view: &ParsedView<'_, '_, '_, '_, '_>, head: &str) -> boo
     false
 }
 
-pub fn a_field_of_static_text(view: &ParsedView<'_, '_, '_, '_, '_>, owner: &str, field: &str) -> bool {
+pub fn a_field_of_static_text(view: &ParsedView<'_, '_, '_, '_, '_, '_>, owner: &str, field: &str) -> bool {
     for item in view.items.iter() {
         match &item.node {
             Item::Struct { name, fields, .. } => {
@@ -22447,7 +22451,7 @@ pub fn a_field_of_static_text(view: &ParsedView<'_, '_, '_, '_, '_>, owner: &str
     false
 }
 
-pub fn an_extern_struct_named(view: &ParsedView<'_, '_, '_, '_, '_>, name: &str) -> bool {
+pub fn an_extern_struct_named(view: &ParsedView<'_, '_, '_, '_, '_, '_>, name: &str) -> bool {
     for item in view.items.iter() {
         let found = match &item.node {
             Item::Struct { name: declared, is_extern, .. } => { let declared = *declared; let is_extern = *is_extern; is_extern && view.text(declared) == name },
@@ -22459,7 +22463,7 @@ pub fn an_extern_struct_named(view: &ParsedView<'_, '_, '_, '_, '_>, name: &str)
     false
 }
 
-fn item_c_enum(view: &ParsedView<'_, '_, '_, '_, '_>, node: &Item, name: &str) -> bool {
+fn item_c_enum(view: &ParsedView<'_, '_, '_, '_, '_, '_>, node: &Item, name: &str) -> bool {
     match node {
         Item::Enum { name: declared, variants, is_extern, .. } => { let declared = *declared; let is_extern = *is_extern; view.text(declared) == name && (is_extern || item_all_unit(variants)) },
         Item::Struct { name: declared, is_extern, .. } => { let declared = *declared; let is_extern = *is_extern; is_extern && view.text(declared) == name },
@@ -22475,7 +22479,7 @@ fn item_all_unit(variants: &[EnumVariant]) -> bool {
     true
 }
 
-pub fn a_c_value(view: &ParsedView<'_, '_, '_, '_, '_>, ty: &Type) -> bool {
+pub fn a_c_value(view: &ParsedView<'_, '_, '_, '_, '_, '_>, ty: &Type) -> bool {
     if ty.is_view || ty.is_nullable || ty.is_tuple || (*ty.code).is_some() { return false; }
     let name = view.text(ty.name);
     if ty.generics.is_empty() {
@@ -22487,13 +22491,13 @@ pub fn a_c_value(view: &ParsedView<'_, '_, '_, '_, '_>, ty: &Type) -> bool {
     false
 }
 
-pub fn implements_error(here: &ParsedView<'_, '_, '_, '_, '_>, beside: &[ParsedView<'_, '_, '_, '_, '_>], ty: &str) -> bool {
+pub fn implements_error(here: &ParsedView<'_, '_, '_, '_, '_, '_>, beside: &[ParsedView<'_, '_, '_, '_, '_, '_>], ty: &str) -> bool {
     if item_implements_error(here, ty) { return true; }
     for unit in beside.iter() { if item_implements_error(unit, ty) { return true; } }
     false
 }
 
-fn item_implements_error(unit: &ParsedView<'_, '_, '_, '_, '_>, ty: &str) -> bool {
+fn item_implements_error(unit: &ParsedView<'_, '_, '_, '_, '_, '_>, ty: &str) -> bool {
     for item in unit.items.iter() {
         let found = match &item.node {
             Item::Impl { trait_name, target, .. } => { let trait_name = *trait_name; item_is_error_impl(unit, trait_name, target, ty) },
@@ -22504,20 +22508,20 @@ fn item_implements_error(unit: &ParsedView<'_, '_, '_, '_, '_>, ty: &str) -> boo
     false
 }
 
-fn item_is_error_impl(unit: &ParsedView<'_, '_, '_, '_, '_>, trait_name: Option<winnow_grammar::Symbol>, target: &Type, ty: &str) -> bool {
+fn item_is_error_impl(unit: &ParsedView<'_, '_, '_, '_, '_, '_>, trait_name: Option<winnow_grammar::Symbol>, target: &Type, ty: &str) -> bool {
     let symbol = match trait_name { Some(__nikaia_value) => __nikaia_value, None => return false };
     unit.text(symbol) == "Error" && unit.text(target.name) == ty
 }
 
 impl CheckState {
-    pub fn a_package_where_a_grammar_stands(&mut self, view: &ParsedView<'_, '_, '_, '_, '_>, target: winnow_grammar::Symbol, span: &Span) -> bool {
+    pub fn a_package_where_a_grammar_stands(&mut self, view: &ParsedView<'_, '_, '_, '_, '_, '_>, target: winnow_grammar::Symbol, span: &Span) -> bool {
         let name = view.text(target);
         if name == "html" || self.grammars.contains_key(&name) { return false; }
         if !imports_a_package(view, &name) { return false; }
         self.findings.push(check_refusal("NK1228", span, format!("`{}` is a package, and a `dsl` block names a grammar.", name), vec!["A grammar from a package is named with its package, as every name from one is.".to_owned()], Some(format!("Write `dsl {}::Grammar`, naming the grammar `{}` offers.", name, name))));
         true
     }
-    pub fn through_a_package_unread(&self, view: &ParsedView<'_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+    pub fn through_a_package_unread(&self, view: &ParsedView<'_, '_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         let func = match expr {
             Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); func },
             Expr::Path(_, _) => expr,
@@ -22586,7 +22590,7 @@ fn item_plain_name(subject: &Ty) -> Option<String> {
     }
 }
 
-pub fn check_payload_in(view: &ParsedView<'_, '_, '_, '_, '_>, ty: &str, variant: &str) -> Option<Vec<Ty>> {
+pub fn check_payload_in(view: &ParsedView<'_, '_, '_, '_, '_, '_>, ty: &str, variant: &str) -> Option<Vec<Ty>> {
     for item in view.items.iter() {
         match &item.node {
             Item::Enum { name, variants, .. } => {
@@ -22611,7 +22615,7 @@ pub fn check_payload_in(view: &ParsedView<'_, '_, '_, '_, '_>, ty: &str, variant
     None
 }
 
-fn item_placeholder_of_enum(view: &ParsedView<'_, '_, '_, '_, '_>, name: &str, variants: &[EnumVariant]) -> Option<String> {
+fn item_placeholder_of_enum(view: &ParsedView<'_, '_, '_, '_, '_, '_>, name: &str, variants: &[EnumVariant]) -> Option<String> {
     let mut best: Option<String> = None;
     let mut best_size: i64 = -1;
     for variant in variants.iter() {
@@ -22659,7 +22663,7 @@ fn item_placeholder_of_enum(view: &ParsedView<'_, '_, '_, '_, '_>, name: &str, v
     best
 }
 
-fn item_declared_variants(view: &ParsedView<'_, '_, '_, '_, '_>, on: &str) -> Option<Vec<String>> {
+fn item_declared_variants(view: &ParsedView<'_, '_, '_, '_, '_, '_>, on: &str) -> Option<Vec<String>> {
     for item in view.items.iter() {
         let found: Option<Vec<String>> = match &item.node {
             Item::Enum { name, variants, .. } => { let name = *name; if view.text(name) == on { Some(item_variant_names(view, variants)) } else { None } },
@@ -22670,14 +22674,14 @@ fn item_declared_variants(view: &ParsedView<'_, '_, '_, '_, '_>, on: &str) -> Op
     None
 }
 
-fn item_variant_names(view: &ParsedView<'_, '_, '_, '_, '_>, variants: &[EnumVariant]) -> Vec<String> {
+fn item_variant_names(view: &ParsedView<'_, '_, '_, '_, '_, '_>, variants: &[EnumVariant]) -> Vec<String> {
     let mut out: Vec<String> = vec![];
     for v in variants.iter() { out.push(view.text(v.name)); }
     out
 }
 
 impl CheckState {
-    pub fn a_placeholder(&self, view: &ParsedView<'_, '_, '_, '_, '_>, subject: &Ty) -> Option<String> {
+    pub fn a_placeholder(&self, view: &ParsedView<'_, '_, '_, '_, '_, '_>, subject: &Ty) -> Option<String> {
         let name = match item_plain_name(subject) { Some(__nikaia_value) => __nikaia_value, None => return None };
         for item in view.items.iter() {
             let found: Option<String> = match &item.node {
@@ -22703,7 +22707,7 @@ impl CheckState {
         let joined = holes.join(", ");
         Some(format!("{} {{ {} }}", name, joined))
     }
-    pub fn shape_of(&self, view: &ParsedView<'_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_>, on: &str) -> Option<Vec<FieldContract>> {
+    pub fn shape_of(&self, view: &ParsedView<'_, '_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_>, on: &str) -> Option<Vec<FieldContract>> {
         if !self.enums.contains_key(on) { return self.fields_of(world, on); }
         let known = match self.enums.get(on) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let mut variants: Vec<String> = vec![];
@@ -22723,7 +22727,7 @@ impl CheckState {
         for variant in variants.iter() { out.push(FieldContract { name: variant.to_owned(), ty: Ty::Named { name: String::from("$Variant"), args: vec![], view: false }, public: true, default: String::from(""), attributes: vec![] }); }
         Some(out)
     }
-    pub fn a_function_nothing_declares(&mut self, view: &ParsedView<'_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_>, name: &str, span: &Span) {
+    pub fn a_function_nothing_declares(&mut self, view: &ParsedView<'_, '_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_>, name: &str, span: &Span) {
         let declared = self.lookup(name).is_some() || self.structs.contains_key(name) || self.enums.contains_key(name) || world.own.types.contains_key(name) || self.modules.contains(name) || self.grammars.contains_key(name) || self.foreign_names.contains(name) || self.variant_parts.contains_key(name) || is_hull(name) || name == "access_all" || name == "update_all" || name == "panic" || name == "asset" || name == "assert" || imports_a_package(view, name);
         if declared { return; }
         let mut known: Vec<String> = vec![];
@@ -22738,7 +22742,7 @@ impl CheckState {
         }
         self.findings.push(check_refusal("NK1117", span, format!("There's no function called `{}`.", name), vec!["A function called by its name alone is one of yours or one that's always available. A function from a package is called with the package's name in front: `package::name(…)`.".to_owned()], Some(help)));
     }
-    pub fn a_trait_nothing_declares(&mut self, view: &ParsedView<'_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_>, written: &str, span: &Span) {
+    pub fn a_trait_nothing_declares(&mut self, view: &ParsedView<'_, '_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_>, written: &str, span: &Span) {
         let at = nikaia_std::search::find(&written, &"::", 0);
         if at.is_some() {
             let head = nikaia_std::index::get(&written, nikaia_std::index::at(0..match at { Some(__nikaia_value) => __nikaia_value, None => return })).to_owned();
@@ -22759,7 +22763,7 @@ impl CheckState {
         }
         self.findings.push(check_refusal("NK1117", span, format!("There's no trait called `{}`.", written), vec![because], Some(help)));
     }
-    pub fn a_head_nothing_declares(&mut self, view: &ParsedView<'_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_>, head: &str, written: &str, span: &Span) {
+    pub fn a_head_nothing_declares(&mut self, view: &ParsedView<'_, '_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_>, head: &str, written: &str, span: &Span) {
         let head = view.unaliased(head);
         let prefix = format!("{}::", head);
         let mut declared = self.structs.contains_key(&head) || self.enums.contains_key(&head);
@@ -22799,7 +22803,7 @@ fn item_contract_variants(contract: &TypeContract) -> Vec<String> {
 
 #[derive(Debug, Clone)]
 pub struct ItemGeneric<'a> {
-    pub file: ParsedView<'a, 'a, 'a, 'a, 'a>,
+    pub file: ParsedView<'a, 'a, 'a, 'a, 'a, 'a>,
     pub params: Vec<String>,
     pub members: Vec<Type>,
 }
@@ -22816,7 +22820,7 @@ struct ItemInline {
     inline: collections::BTreeSet<String>,
 }
 
-fn item_held_inline(parsed: &ParsedView<'_, '_, '_, '_, '_>, ty: &Type, generics: &collections::BTreeMap<String, ItemGeneric<'_>>, out: &mut collections::BTreeSet<String>) {
+fn item_held_inline(parsed: &ParsedView<'_, '_, '_, '_, '_, '_>, ty: &Type, generics: &collections::BTreeMap<String, ItemGeneric<'_>>, out: &mut collections::BTreeSet<String>) {
     if ty.is_view || (*ty.code).is_some() { return; }
     if ty.is_tuple {
         for part in ty.generics.iter() { item_held_inline(parsed, part, generics, out); }
@@ -22837,7 +22841,7 @@ fn item_held_inline(parsed: &ParsedView<'_, '_, '_, '_, '_>, ty: &Type, generics
     for member in generic.members.iter() { item_held_through(&generic, member, parsed, &ty.generics, generics, out); }
 }
 
-fn item_held_through(generic: &ItemGeneric<'_>, member: &Type, at: &ParsedView<'_, '_, '_, '_, '_>, arguments: &[Type], generics: &collections::BTreeMap<String, ItemGeneric<'_>>, out: &mut collections::BTreeSet<String>) {
+fn item_held_through(generic: &ItemGeneric<'_>, member: &Type, at: &ParsedView<'_, '_, '_, '_, '_, '_>, arguments: &[Type], generics: &collections::BTreeMap<String, ItemGeneric<'_>>, out: &mut collections::BTreeSet<String>) {
     if member.is_view || (*member.code).is_some() { return; }
     if member.is_tuple {
         for part in member.generics.iter() { item_held_through(generic, part, at, arguments, generics, out); }
@@ -22874,7 +22878,7 @@ fn item_reaches(from: &str, to: &str, holds: &collections::BTreeMap<String, coll
     false
 }
 
-fn item_members_of(file: &ParsedView<'_, '_, '_, '_, '_>, node: &Item) -> Vec<ItemMember> {
+fn item_members_of(file: &ParsedView<'_, '_, '_, '_, '_, '_>, node: &Item) -> Vec<ItemMember> {
     let mut out: Vec<ItemMember> = vec![];
     match node {
         Item::Struct { fields, .. } => { for f in fields.iter() { out.push(ItemMember { member: file.text(f.name), ty: f.ty.clone() }); } },
@@ -22893,7 +22897,7 @@ fn item_members_of(file: &ParsedView<'_, '_, '_, '_, '_>, node: &Item) -> Vec<It
     out
 }
 
-fn item_declared_type_name(file: &ParsedView<'_, '_, '_, '_, '_>, node: &Item) -> Option<String> {
+fn item_declared_type_name(file: &ParsedView<'_, '_, '_, '_, '_, '_>, node: &Item) -> Option<String> {
     match node {
         Item::Struct { name, .. } => { let name = *name; Some(file.text(name)) },
         Item::Enum { name, .. } => { let name = *name; Some(file.text(name)) },
@@ -22902,8 +22906,8 @@ fn item_declared_type_name(file: &ParsedView<'_, '_, '_, '_, '_>, node: &Item) -
 }
 
 impl CheckState {
-    pub fn types_that_contain_themselves(&mut self, here: &ParsedView<'_, '_, '_, '_, '_>, beside: &[ParsedView<'_, '_, '_, '_, '_>]) {
-        let mut files: Vec<ParsedView<'_, '_, '_, '_, '_>> = vec![here.clone()];
+    pub fn types_that_contain_themselves(&mut self, here: &ParsedView<'_, '_, '_, '_, '_, '_>, beside: &[ParsedView<'_, '_, '_, '_, '_, '_>]) {
+        let mut files: Vec<ParsedView<'_, '_, '_, '_, '_, '_>> = vec![here.clone()];
         for other in beside.iter() { files.push(other.clone()); }
         let mut generics: collections::BTreeMap<String, ItemGeneric<'_>> = collections::BTreeMap::new();
         for file in files.iter() {
@@ -23863,7 +23867,7 @@ fn mem_also(head: &str) -> Vec<String> {
 
 fn mem_a_said_code(code: &str) -> bool { code == "NK1189" || code == "NK1126" || code == "NK1210" }
 
-fn mem_unit_has_trait(unit: &ParsedView<'_, '_, '_, '_, '_>, name: &str) -> bool {
+fn mem_unit_has_trait(unit: &ParsedView<'_, '_, '_, '_, '_, '_>, name: &str) -> bool {
     for item in unit.items.iter() {
         let found = match &item.node {
             Item::Trait { name: declared, .. } => { let declared = *declared; unit.text(declared) == name },
@@ -23880,7 +23884,7 @@ fn mem_a_trait_is_declared(world: &CheckWorld<'_, '_, '_, '_, '_>, name: &str) -
     false
 }
 
-fn mem_unit_provides(world: &CheckWorld<'_, '_, '_, '_, '_>, unit: &ParsedView<'_, '_, '_, '_, '_>, head: &str, member: &str) -> bool {
+fn mem_unit_provides(world: &CheckWorld<'_, '_, '_, '_, '_>, unit: &ParsedView<'_, '_, '_, '_, '_, '_>, head: &str, member: &str) -> bool {
     for item in unit.items.iter() {
         let implemented = match &item.node {
             Item::Impl { trait_name, target, .. } => { let trait_name = *trait_name; mem_an_impl_provides(world, unit, trait_name, target, head, member) },
@@ -23891,7 +23895,7 @@ fn mem_unit_provides(world: &CheckWorld<'_, '_, '_, '_, '_>, unit: &ParsedView<'
     false
 }
 
-fn mem_an_impl_provides(world: &CheckWorld<'_, '_, '_, '_, '_>, unit: &ParsedView<'_, '_, '_, '_, '_>, trait_name: Option<winnow_grammar::Symbol>, target: &Type, head: &str, member: &str) -> bool {
+fn mem_an_impl_provides(world: &CheckWorld<'_, '_, '_, '_, '_>, unit: &ParsedView<'_, '_, '_, '_, '_, '_>, trait_name: Option<winnow_grammar::Symbol>, target: &Type, head: &str, member: &str) -> bool {
     let symbol = match trait_name { Some(__nikaia_value) => __nikaia_value, None => return false };
     if unit.text(target.name) != head { return false; }
     let written = unit.text(symbol);
@@ -28347,8 +28351,8 @@ pub struct CheckWorld<'a, 'a1, 'a2, 'a3, 'a4> {
     pub words: &'a winnow_grammar::InternerContext,
     pub own: &'a1 Ledger,
     pub library: &'a2 Ledger,
-    pub here: ParsedView<'a3, 'a3, 'a3, 'a3, 'a3>,
-    pub beside: Vec<ParsedView<'a4, 'a4, 'a4, 'a4, 'a4>>,
+    pub here: ParsedView<'a3, 'a3, 'a3, 'a3, 'a3, 'a3>,
+    pub beside: Vec<ParsedView<'a4, 'a4, 'a4, 'a4, 'a4, 'a4>>,
     pub here_at: i64,
     pub fields_by_base: collections::BTreeMap<String, Vec<Ty>>,
     pub parts_beside: collections::BTreeMap<String, Vec<Ty>>,
@@ -48556,15 +48560,16 @@ fn grown_variant(fields: &VariantFields, vec: winnow_grammar::Symbol) -> Variant
 // --- parsed_view.nika ---
 
 #[derive(Debug, Clone)]
-pub struct ParsedView<'a, 'a1, 'a2, 'a3, 'a4> {
+pub struct ParsedView<'a, 'a1, 'a2, 'a3, 'a4, 'a5> {
     pub words: &'a winnow_grammar::InternerContext,
     pub aliases: &'a1 collections::BTreeMap<String, String>,
     pub items: &'a2 Vec<Spanned<Item>>,
     pub package: Option<&'a3 str>,
     pub spans: &'a4 collections::BTreeMap<u32, Span>,
+    pub viewed_arms: &'a5 collections::BTreeSet<i64>,
 }
 
-impl<'a> ParsedView<'a, 'a, 'a, 'a, 'a> {
+impl<'a> ParsedView<'a, 'a, 'a, 'a, 'a, 'a> {
     pub fn text(&self, sym: winnow_grammar::Symbol) -> String { self.words.resolve(sym).to_owned() }
     pub fn unaliased(&self, name: &str) -> String { unaliased_in(self.aliases, name) }
 }
@@ -56983,6 +56988,7 @@ pub struct TextTiers {
     pub wraps: collections::BTreeMap<i64, Hand>,
     pub hole_wraps: collections::BTreeMap<i64, Vec<HoleWrap>>,
     pub adopted: collections::BTreeMap<i64, TierAdopted>,
+    pub viewed_arms: collections::BTreeSet<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -57188,9 +57194,10 @@ struct Flows {
     arg_into: collections::BTreeSet<(String, String)>,
     arg_uses: collections::BTreeMap<String, i64>,
     changed: collections::BTreeSet<String>,
+    viewed_arms: collections::BTreeSet<i64>,
 }
 
-fn no_flows() -> Flows { Flows { positions: collections::BTreeMap::new(), known: collections::BTreeMap::new(), literal_lets: collections::BTreeMap::new(), wraps: collections::BTreeMap::new(), param_into: collections::BTreeSet::new(), hole_wraps: collections::BTreeMap::new(), links: collections::BTreeSet::new(), unwrappable: collections::BTreeSet::new(), viewed: collections::BTreeSet::new(), still_into: collections::BTreeSet::new(), adopted: collections::BTreeMap::new(), demoted: collections::BTreeSet::new(), in_maps: collections::BTreeSet::new(), lent_into: collections::BTreeSet::new(), lent_kinds: collections::BTreeMap::new(), uses: collections::BTreeMap::new(), lent_uses: collections::BTreeMap::new(), arg_into: collections::BTreeSet::new(), arg_uses: collections::BTreeMap::new(), changed: collections::BTreeSet::new() } }
+fn no_flows() -> Flows { Flows { positions: collections::BTreeMap::new(), known: collections::BTreeMap::new(), literal_lets: collections::BTreeMap::new(), wraps: collections::BTreeMap::new(), param_into: collections::BTreeSet::new(), hole_wraps: collections::BTreeMap::new(), links: collections::BTreeSet::new(), unwrappable: collections::BTreeSet::new(), viewed: collections::BTreeSet::new(), still_into: collections::BTreeSet::new(), adopted: collections::BTreeMap::new(), demoted: collections::BTreeSet::new(), in_maps: collections::BTreeSet::new(), lent_into: collections::BTreeSet::new(), lent_kinds: collections::BTreeMap::new(), uses: collections::BTreeMap::new(), lent_uses: collections::BTreeMap::new(), arg_into: collections::BTreeSet::new(), arg_uses: collections::BTreeMap::new(), changed: collections::BTreeSet::new(), viewed_arms: collections::BTreeSet::new() } }
 
 #[derive(Debug, Clone, PartialEq)]
 struct TierWalk {
@@ -57210,6 +57217,7 @@ struct TierWalk {
     read_here: bool,
     tail_back: bool,
     ties: collections::BTreeMap<String, Vec<TextTie>>,
+    late: collections::BTreeSet<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -58523,6 +58531,349 @@ fn flow_args(key: &str, args: &[Expr], given: &[Kinds], ask: &TierAsk<'_, '_, '_
 
 fn tier_a_choice(value: &Expr) -> bool { matches!(value, Expr::If { .. } | Expr::Match { .. }) }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct TierLateArm {
+    at: i64,
+    name: String,
+    serial: i64,
+    loops: i64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct TierLateBinding {
+    serial: i64,
+    loops: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct TierLate {
+    bound: collections::BTreeMap<String, Vec<TierLateBinding>>,
+    frames: Vec<Vec<String>>,
+    serial: i64,
+    loops: i64,
+    leaving: i64,
+    leaves: Vec<TierLateArm>,
+    pending: Vec<TierLateArm>,
+    found: collections::BTreeSet<i64>,
+}
+
+fn late_arms(program: &Program, ask: &TierAsk<'_, '_, '_>) -> collections::BTreeSet<i64> {
+    let mut late = TierLate { bound: collections::BTreeMap::new(), frames: vec![], serial: 0, loops: 0, leaving: 0, leaves: vec![], pending: vec![], found: collections::BTreeSet::new() };
+    for item in program.items.iter() {
+        match &item.node {
+            Item::Fn { .. } => { late_function(&item.node, ask, &mut late); },
+            Item::Impl { methods, .. } => { for method in methods.iter() { late_function(&method.node, ask, &mut late); } },
+            Item::Test { body, .. } => { late_body(body, &vec![], ask, &mut late); },
+            Item::Bench { body, .. } => { late_body(body, &vec![], ask, &mut late); },
+            _ => { },
+        }
+    }
+    late.found
+}
+
+fn late_function(item: &Item, ask: &TierAsk<'_, '_, '_>, late: &mut TierLate) {
+    match item {
+        Item::Fn { args, body, .. } => {
+            let mut names: Vec<String> = vec!["self".to_owned()];
+            for arg in args.iter() { names.push(ask.names.resolve(arg.name).to_owned()); }
+            late_body(body, &names, ask, late);
+        },
+        _ => { },
+    }
+}
+
+fn late_body(body: &Block, names: &[String], ask: &TierAsk<'_, '_, '_>, late: &mut TierLate) {
+    late.bound = collections::BTreeMap::new();
+    late.frames = vec![];
+    late.loops = 0;
+    late.leaving = 0;
+    late.leaves = vec![];
+    late.pending = vec![];
+    late_open(late);
+    for name in names.iter() { late_bind(name.to_owned(), late); }
+    late_block(body, false, ask, late);
+    late_close(late);
+}
+
+fn late_open(late: &mut TierLate) { late.frames.push(vec![]); }
+
+fn late_close(late: &mut TierLate) {
+    let names = match late.frames.pop() { Some(__nikaia_value) => __nikaia_value, None => return };
+    for name in names.iter() {
+        let mut held = match late.bound.remove(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        held.pop();
+        if !held.is_empty() { late.bound.insert(name.to_owned(), held); }
+    }
+}
+
+fn late_bind(name: String, late: &mut TierLate) {
+    late.serial += 1;
+    let mut held = nikaia_std::index::or(late.bound.remove(&name), || vec![].into());
+    held.push(TierLateBinding { serial: late.serial, loops: late.loops });
+    late.bound.insert(name.to_owned(), held);
+    let mut frame = nikaia_std::index::or(late.frames.pop(), || vec![].into());
+    frame.push(name);
+    late.frames.push(frame);
+}
+
+fn late_serial(name: &str, late: &TierLate) -> i64 {
+    let held = match *nikaia_std::index::get(&late.bound, name) { Some(__nikaia_value) => __nikaia_value, None => return -1 };
+    if held.is_empty() { return -1; }
+    nikaia_std::index::get(&held, nikaia_std::index::at(held.len() as i64 - 1)).serial
+}
+
+fn late_loops(name: &str, late: &TierLate) -> i64 {
+    let held = match *nikaia_std::index::get(&late.bound, name) { Some(__nikaia_value) => __nikaia_value, None => return 0 };
+    if held.is_empty() { return 0; }
+    nikaia_std::index::get(&held, nikaia_std::index::at(held.len() as i64 - 1)).loops
+}
+
+fn late_read(name: &str, late: &mut TierLate) {
+    let serial = late_serial(name, &late);
+    if serial < 0 { return; }
+    let mut read: Vec<i64> = vec![];
+    for arm in late.pending.iter() { if arm.serial == serial && arm.name == name { read.push(arm.at); } }
+    for at in read.iter() {
+        let at = nikaia_std::num::value(at);
+        late.found.insert(at);
+    }
+}
+
+fn late_written(name: &str, late: &mut TierLate) {
+    let serial = late_serial(name, &late);
+    let mut kept: Vec<TierLateArm> = vec![];
+    for arm in late.pending.iter() { if arm.serial != serial || arm.name != name { kept.push(arm.clone()); } }
+    late.pending = kept;
+}
+
+fn late_block(block: &Block, leaf: bool, ask: &TierAsk<'_, '_, '_>, late: &mut TierLate) {
+    late_open(late);
+    let mut at: i64 = 0;
+    for stmt in block.stmts.iter() {
+        at += 1;
+        late_stmt(&stmt.node, leaf && ((at) as usize) == block.stmts.len(), ask, late);
+    }
+    late_close(late);
+}
+
+fn late_stmt(stmt: &Stmt, leaf: bool, ask: &TierAsk<'_, '_, '_>, late: &mut TierLate) {
+    match stmt {
+        Stmt::Let { names, value, .. } => {
+            late_expr(value, false, ask, late);
+            for name in names.iter() {
+                let name = *name;
+                late_bind(ask.names.resolve(name).to_owned(), late);
+            }
+        },
+        Stmt::Comptime { name, value, .. } => {
+            let name = *name;
+            late_expr(value, false, ask, late);
+            late_bind(ask.names.resolve(name).to_owned(), late);
+        },
+        Stmt::Assign { target, op, value } => {
+            late_expr(value, false, ask, late);
+            let assigned = match target {
+                Expr::Variable(name, _) => { let name = *name; ask.names.resolve(name).to_owned() },
+                _ => "".to_owned(),
+            };
+            if op.is_some() || assigned == "" { late_expr(target, false, ask, late); } else { late_written(&assigned, late); }
+        },
+        Stmt::For { bindings, iter, body, .. } => {
+            late_expr(iter, false, ask, late);
+            late.loops += 1;
+            late_open(late);
+            for name in bindings.iter() {
+                let name = *name;
+                late_bind(ask.names.resolve(name).to_owned(), late);
+            }
+            late_block(body, false, ask, late);
+            late_close(late);
+            late.loops -= 1;
+        },
+        Stmt::While { cond, body } => {
+            late.loops += 1;
+            late_expr(cond, false, ask, late);
+            late_block(body, false, ask, late);
+            late.loops -= 1;
+        },
+        Stmt::Return(value) => {
+            late.leaving += 1;
+            late_maybe((value).as_ref(), ask, late);
+            late.leaving -= 1;
+        },
+        Stmt::Expr(inner) => { late_expr(inner, leaf, ask, late); },
+        _ => { },
+    }
+}
+
+fn late_maybe(value: Option<&Expr>, ask: &TierAsk<'_, '_, '_>, late: &mut TierLate) { late_expr(match value { Some(__nikaia_value) => __nikaia_value, None => return }, false, ask, late); }
+
+fn late_all(values: &[Expr], ask: &TierAsk<'_, '_, '_>, late: &mut TierLate) { for value in values.iter() { late_expr(value, false, ask, late); } }
+
+fn late_pattern(pattern: &MatchPattern, ask: &TierAsk<'_, '_, '_>, late: &mut TierLate) {
+    match pattern {
+        MatchPattern::Path(segments) => { if segments.len() == 1 && !names_a_type(ask.names.resolve(*nikaia_std::index::get(&segments, 0))) { late_bind(ask.names.resolve(*nikaia_std::index::get(&segments, 0)).to_owned(), late); } },
+        MatchPattern::Tuple { parts, .. } => { for part in parts.iter() { late_pattern(part, ask, late); } },
+        MatchPattern::List(parts) => { for part in parts.iter() { late_pattern(part, ask, late); } },
+        MatchPattern::RestNamed(name) => { let name = *name; late_bind(ask.names.resolve(name).to_owned(), late); },
+        MatchPattern::Named { fields, .. } => { for field in fields.iter() { late_pattern(&field.pat, ask, late); } },
+        MatchPattern::Or(alternatives) => { if !alternatives.is_empty() { late_pattern(nikaia_std::index::get(&alternatives, 0), ask, late); } },
+        _ => { },
+    }
+}
+
+fn late_expr(expr: &Expr, leaf: bool, ask: &TierAsk<'_, '_, '_>, late: &mut TierLate) {
+    match expr {
+        Expr::Variable(name, _) => {
+            let name = *name;
+            let word = ask.names.resolve(name).to_owned();
+            late_read(&word, late);
+            let serial = late_serial(&word, &late);
+            if leaf && serial >= 0 { late.leaves.push(TierLateArm { at: node_key(expr), name: word.to_owned(), serial, loops: late_loops(&word, &late) }); }
+        },
+        Expr::If { cond, then_branch, else_branch, .. } => {
+            let cond = nikaia_std::boxed::open(cond);
+            late_expr(cond, false, ask, late);
+            if else_branch.is_none() {
+                late_block(then_branch, false, ask, late);
+                return;
+            }
+            let otherwise = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return };
+            let held = late_choice_opened(leaf, late);
+            late_block(then_branch, true, ask, late);
+            late_block(otherwise, true, ask, late);
+            late_choice_closed(leaf, held, late);
+        },
+        Expr::Match { value, arms, .. } => {
+            let value = nikaia_std::boxed::open(value);
+            late_expr(value, false, ask, late);
+            let held = late_choice_opened(leaf, late);
+            for arm in arms.iter() {
+                late_open(late);
+                late_pattern(&arm.pattern, ask, late);
+                if arm.guard.is_some() { late_maybe((arm.guard).as_ref(), ask, late); }
+                late_expr(&arm.body, true, ask, late);
+                late_close(late);
+            }
+            late_choice_closed(leaf, held, late);
+        },
+        Expr::Block(block, _) => { late_block(block, leaf, ask, late); },
+        Expr::Unsafe(block, _) => { late_block(block, false, ask, late); },
+        Expr::Overlap(block, _) => { late_block(block, false, ask, late); },
+        Expr::LitInterpolated { parts, .. } => {
+            for part in parts.iter() {
+                match part {
+                    FPart::Hole { expr: inner, .. } => { late_expr(inner, false, ask, late); },
+                    _ => { },
+                }
+            }
+        },
+        Expr::Call { func, args, .. } => {
+            let func = nikaia_std::boxed::open(func);
+            late_expr(func, false, ask, late);
+            late_all(args, ask, late);
+        },
+        Expr::MethodCall { receiver, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver);
+            late_expr(receiver, false, ask, late);
+            late_all(args, ask, late);
+        },
+        Expr::SafeMethod { receiver, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver);
+            late_expr(receiver, false, ask, late);
+            late_all(args, ask, late);
+        },
+        Expr::Tuple(parts, _) => { late_all(parts, ask, late); },
+        Expr::ListLit { items, .. } => { late_all(items, ask, late); },
+        Expr::ListRepeat { value, count, .. } => {
+            let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count);
+            late_expr(value, false, ask, late);
+            late_expr(count, false, ask, late);
+        },
+        Expr::Range { start, end, .. } => {
+            let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end);
+            late_expr(start, false, ask, late);
+            late_expr(end, false, ask, late);
+        },
+        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); late_expr(base, false, ask, late); },
+        Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); late_expr(base, false, ask, late); },
+        Expr::StructLit { fields, .. } => { for field in fields.iter() { late_maybe((field.value).as_ref(), ask, late); } },
+        Expr::With { base, fields, .. } => {
+            let base = nikaia_std::boxed::open(base);
+            late_expr(base, false, ask, late);
+            for field in fields.iter() { late_maybe((field.value).as_ref(), ask, late); }
+        },
+        Expr::Closure { params, body, .. } => {
+            late.leaving += 1;
+            late_open(late);
+            for name in params.iter() {
+                let name = *name;
+                late_bind(ask.names.resolve(name).to_owned(), late);
+            }
+            late_block(body, false, ask, late);
+            late_close(late);
+            late.leaving -= 1;
+        },
+        Expr::Spawn { body, .. } => {
+            let body = nikaia_std::boxed::open(body);
+            late.leaving += 1;
+            late_expr(body, false, ask, late);
+            late.leaving -= 1;
+        },
+        Expr::Unary { expr: inner, .. } => { let inner = nikaia_std::boxed::open(inner); late_expr(inner, false, ask, late); },
+        Expr::Binary { lhs, rhs, .. } => {
+            let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
+            late_expr(lhs, false, ask, late);
+            late_expr(rhs, false, ask, late);
+        },
+        Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); late_expr(inner, false, ask, late); },
+        Expr::Throw(inner, _) => {
+            let inner = nikaia_std::boxed::open(inner);
+            late.leaving += 1;
+            late_expr(inner, false, ask, late);
+            late.leaving -= 1;
+        },
+        Expr::Return(value, _) => {
+            let value = nikaia_std::boxed::open(value);
+            late.leaving += 1;
+            late_maybe((value).as_ref(), ask, late);
+            late.leaving -= 1;
+        },
+        Expr::Index { base, index, .. } => {
+            let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
+            late_expr(base, false, ask, late);
+            late_expr(index, false, ask, late);
+        },
+        Expr::Cast { expr: inner, .. } => { let inner = nikaia_std::boxed::open(inner); late_expr(inner, false, ask, late); },
+        Expr::Coalesce { value, fallback, .. } => {
+            let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback);
+            late_expr(value, false, ask, late);
+            late_expr(fallback, false, ask, late);
+        },
+        Expr::TryCatch { expr: inner, handler, .. } => {
+            let inner = nikaia_std::boxed::open(inner);
+            late_expr(inner, false, ask, late);
+            late_block(handler, false, ask, late);
+        },
+        _ => { },
+    }
+}
+
+fn late_choice_opened(leaf: bool, late: &mut TierLate) -> Vec<TierLateArm> {
+    if leaf { return vec![]; }
+    let held = late.leaves.to_owned();
+    late.leaves = vec![];
+    held
+}
+
+fn late_choice_closed(leaf: bool, held: Vec<TierLateArm>, late: &mut TierLate) {
+    if leaf { return; }
+    let arms = late.leaves.to_owned();
+    late.leaves = held;
+    if late.leaving > 0 { return; }
+    for arm in arms.iter() { if late.loops > arm.loops { late.found.insert(arm.at); } else { late.pending.push(arm.clone()); } }
+}
+
 fn tier_expr(expr: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) -> Kinds {
     let read = walk.read_here;
     walk.read_here = false;
@@ -58559,7 +58910,15 @@ fn tier_expr(expr: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) -> Kin
             walk.in_hole = outer;
             owned_kinds()
         },
-        Expr::Variable(name, _) => { let name = *name; kinds_of_local(ask.names.resolve(name), &walk) },
+        Expr::Variable(name, _) => {
+            let name = *name;
+            let kinds = kinds_of_local(ask.names.resolve(name), &walk);
+            if walk.late.contains(&node_key(expr)) && kinds.owned && !kinds.view && !kinds.either && !kinds.still {
+                walk.flows.viewed_arms.insert(node_key(expr));
+                return view_kinds();
+            }
+            kinds
+        },
         Expr::MethodCall { receiver, method, args, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; method_kinds(receiver, ask.names.resolve(method), args, ask, walk) },
         Expr::SafeMethod { receiver, method, args, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; method_kinds(receiver, ask.names.resolve(method), args, ask, walk) },
         Expr::Call { func, args, .. } => { let func = nikaia_std::boxed::open(func); call_kinds(func, args, ask, walk) },
@@ -59476,7 +59835,7 @@ fn tier_word(tier: Tier) -> &'static str {
 pub fn text_tiers(program: &Program, ask: &TierAsk<'_, '_, '_>) -> TextTiers {
     let declared = declared_of(program, ask.names);
     let text = string_type(&declared, ask.names);
-    let mut walk = TierWalk { declared, tiers: collections::BTreeMap::new(), flows: no_flows(), locals: collections::BTreeMap::new(), frames: vec![], result: None, in_hole: false, hole_text: -1, lent_self: false, adopted: collections::BTreeMap::new(), demoted: collections::BTreeSet::new(), handed_back: -1, unlent: collections::BTreeSet::new(), read_here: false, tail_back: false, ties: collections::BTreeMap::new() };
+    let mut walk = TierWalk { declared, tiers: collections::BTreeMap::new(), flows: no_flows(), locals: collections::BTreeMap::new(), frames: vec![], result: None, in_hole: false, hole_text: -1, lent_self: false, adopted: collections::BTreeMap::new(), demoted: collections::BTreeSet::new(), handed_back: -1, unlent: collections::BTreeSet::new(), read_here: false, tail_back: false, ties: collections::BTreeMap::new(), late: late_arms(program, ask) };
     for _ in 0..16 {
         walk.flows = no_flows();
         walk_program(program, ask, &mut walk);
@@ -59512,7 +59871,7 @@ pub fn text_tiers(program: &Program, ask: &TierAsk<'_, '_, '_>) -> TextTiers {
         let at = nikaia_std::num::value(at);
         adopted.insert(at.clone(), TierAdopted { owner: target.owner.clone(), ty: target.ty.clone() });
     }
-    TextTiers { tiers, lets, text, wraps: walk.flows.wraps.to_owned(), hole_wraps: walk.flows.hole_wraps.to_owned(), adopted }
+    TextTiers { tiers, lets, text, wraps: walk.flows.wraps.to_owned(), hole_wraps: walk.flows.hole_wraps.to_owned(), adopted, viewed_arms: walk.flows.viewed_arms.to_owned() }
 }
 
 fn same_adopted(a: &collections::BTreeMap<i64, Declaring>, b: &collections::BTreeMap<i64, Declaring>) -> bool {

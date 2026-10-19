@@ -1,0 +1,11 @@
+fn main() {
+    let s = f"x{1}"
+    for i in 0..<3 {
+        let c = match i {
+            1 => s,
+            else => f"y{i}",
+        }
+        println(c)
+    }
+    println(s)
+}

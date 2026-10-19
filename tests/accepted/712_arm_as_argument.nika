@@ -1,0 +1,12 @@
+fn longest(a: String, b: String) -> String {
+    if a.len() >= b.len() { return a }
+    return b
+}
+fn main() {
+    let s = f"base{1}"
+    for i in 0..<3 {
+        let r = longest(if i == 1 { s } else { f"n{i}" }, "ab")
+        println(r)
+    }
+    println(s)
+}

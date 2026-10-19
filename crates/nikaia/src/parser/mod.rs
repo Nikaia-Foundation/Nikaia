@@ -425,6 +425,11 @@ pub struct Parsed {
     /// copy is taken - [`crate::emit::literal_expressions`] - and every reader
     /// sees it.
     pub hole_wraps: std::collections::BTreeMap<u32, Vec<(usize, winnow_grammar::Symbol)>>,
+    /// **The arms [`crate::text_tiers`] took as a view of the name they are**:
+    /// a name still read after its choice, or in a later turn of a loop, by
+    /// their nodes ([ADR-282](../../../docs/specification/adr/adr-282.md) D13,
+    /// #712). The checker types each as a view and lends it.
+    pub viewed_arms: std::collections::BTreeSet<i64>,
     /// **Every hole this file's readers parsed, by its text**: what
     /// [`Parsed::hole`] answered before. Each analysis walks every literal and
     /// parses its holes again, which was a fifth of lowering a program with a
@@ -599,6 +604,7 @@ impl Parsed {
             text_views: self.text_views.clone(),
             package: self.package.clone(),
             hole_wraps: self.hole_wraps.clone(),
+            viewed_arms: self.viewed_arms.clone(),
             holes: Default::default(),
             kept_calls: Default::default(),
             next_id: std::sync::Mutex::new(*self.next_id.lock().expect("a hole parse panicked")),
@@ -638,6 +644,7 @@ impl Parsed {
             text_views: self.text_views.clone(),
             package: self.package.clone(),
             hole_wraps: self.hole_wraps.clone(),
+            viewed_arms: self.viewed_arms.clone(),
             holes: Default::default(),
             kept_calls: Default::default(),
             next_id: std::sync::Mutex::new(*self.next_id.lock().expect("a hole parse panicked")),
@@ -880,6 +887,7 @@ pub fn parse_to_ast(input: &str) -> Result<Parsed> {
         text_views: std::collections::BTreeSet::new(),
         package: None,
         hole_wraps: std::collections::BTreeMap::new(),
+        viewed_arms: std::collections::BTreeSet::new(),
         holes: Default::default(),
         kept_calls: Default::default(),
         next_id: std::sync::Mutex::new(after_ids),

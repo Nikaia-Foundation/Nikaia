@@ -221,6 +221,10 @@ pub struct TextTiers {
     /// position, by the byte they stand at: each is declared with that
     /// position's type and takes its tiers (ADR-282 D16).
     pub adopted: collections::BTreeMap[i64, TierAdopted],
+    /// **The arms that are a name of text of its own still read after their
+    /// choice, or in a later turn of a loop**, by their nodes: each is a view
+    /// of the name, and the name is not moved (ADR-282 D7, D13, #712).
+    pub viewed_arms: collections::BTreeSet[i64],
 }
 
 /// The position a `let` is linked to, and the type it is declared with.
@@ -508,10 +512,13 @@ struct Flows {
     /// Positions changed in place, or read into a name that is assigned
     /// again: not handed back unchanged.
     changed: collections::BTreeSet[String],
+    /// The arms that are a name of text of its own still read later, taken
+    /// as a view of it (#712).
+    viewed_arms: collections::BTreeSet[i64],
 }
 
 fn no_flows() -> Flows {
-    return Flows { positions: collections::BTreeMap(), known: collections::BTreeMap(), literal_lets: collections::BTreeMap(), wraps: collections::BTreeMap(), param_into: collections::BTreeSet(), hole_wraps: collections::BTreeMap(), links: collections::BTreeSet(), unwrappable: collections::BTreeSet(), viewed: collections::BTreeSet(), still_into: collections::BTreeSet(), adopted: collections::BTreeMap(), demoted: collections::BTreeSet(), in_maps: collections::BTreeSet(), lent_into: collections::BTreeSet(), lent_kinds: collections::BTreeMap(), uses: collections::BTreeMap(), lent_uses: collections::BTreeMap(), arg_into: collections::BTreeSet(), arg_uses: collections::BTreeMap(), changed: collections::BTreeSet() }
+    return Flows { positions: collections::BTreeMap(), known: collections::BTreeMap(), literal_lets: collections::BTreeMap(), wraps: collections::BTreeMap(), param_into: collections::BTreeSet(), hole_wraps: collections::BTreeMap(), links: collections::BTreeSet(), unwrappable: collections::BTreeSet(), viewed: collections::BTreeSet(), still_into: collections::BTreeSet(), adopted: collections::BTreeMap(), demoted: collections::BTreeSet(), in_maps: collections::BTreeSet(), lent_into: collections::BTreeSet(), lent_kinds: collections::BTreeMap(), uses: collections::BTreeMap(), lent_uses: collections::BTreeMap(), arg_into: collections::BTreeSet(), arg_uses: collections::BTreeMap(), changed: collections::BTreeSet(), viewed_arms: collections::BTreeSet() }
 }
 
 struct TierWalk {
@@ -550,6 +557,9 @@ struct TierWalk {
     /// The views of a caller's text each name of the function walked may
     /// hold through a call's result (#702).
     ties: collections::BTreeMap[String, Vec[TextTie]],
+    /// The arms that are a name still read after their choice, or in a later
+    /// turn of a loop (#712), by their nodes.
+    late: collections::BTreeSet[i64],
 }
 
 /// A view a call's result may hold of the caller's text (#702): the word of
@@ -2250,6 +2260,429 @@ fn tier_a_choice(value: ref Expr) -> bool {
     }
 }
 
+// --- An arm that is a name still read later (#712) ---
+
+/// An arm of a choice that is a name: the arm, the name, and the binding it
+/// reads - its serial, and the loops around that binding.
+struct TierLateArm {
+    at: i64,
+    name: String,
+    serial: i64,
+    loops: i64,
+}
+
+/// One binding of a name: its serial, and the loops around it.
+struct TierLateBinding {
+    serial: i64,
+    loops: i64,
+}
+
+/// **An arm that is a name still read after its choice, or in a later turn of
+/// a loop, is a view of it** (ADR-282 D7, D13, #712): the walk that finds such
+/// arms, in the order the program runs. Each binding is told apart from a
+/// name's others by a serial.
+struct TierLate {
+    /// Each name's bindings, innermost last: a serial and the loops around it.
+    bound: collections::BTreeMap[String, Vec[TierLateBinding]],
+    frames: Vec[Vec[String]],
+    serial: i64,
+    loops: i64,
+    /// Inside a `return`, a `throw`, a lambda or a `spawn`: a choice there
+    /// leaves with its value, which no view of a local can do.
+    leaving: i64,
+    /// The arms of the choice being walked.
+    leaves: Vec[TierLateArm],
+    /// Arms whose binding may still be read after their choice.
+    pending: Vec[TierLateArm],
+    found: collections::BTreeSet[i64],
+}
+
+/// The arms that are a name still read after their choice, or in a later turn
+/// of a loop around the choice but not around the name, by their nodes.
+fn late_arms(program: ref Program, ask: ref TierAsk) -> collections::BTreeSet[i64] {
+    let mut late = TierLate { bound: collections::BTreeMap(), frames: [], serial: 0, loops: 0, leaving: 0, leaves: [], pending: [], found: collections::BTreeSet() }
+    for item in program.items {
+        match item.node {
+            Item::Fn { .. } => late_function(item.node, ask, late),
+            Item::Impl { methods, .. } => {
+                for method in methods {
+                    late_function(method.node, ask, late)
+                }
+            }
+            Item::Test { body, .. } => late_body(body, [], ask, late),
+            Item::Bench { body, .. } => late_body(body, [], ask, late),
+            else => {}
+        }
+    }
+    return late.found
+}
+
+fn late_function(item: ref Item, ask: ref TierAsk, mut late: TierLate) {
+    match item {
+        Item::Fn { args, body, .. } => {
+            let mut names: Vec[String] = ["self".clone()]
+            for arg in args {
+                names.push(ask.names.resolve(arg.name).clone())
+            }
+            late_body(body, names, ask, late)
+        }
+        else => {}
+    }
+}
+
+fn late_body(body: ref Block, names: Vec[String], ask: ref TierAsk, mut late: TierLate) {
+    late.bound = collections::BTreeMap()
+    late.frames = []
+    late.loops = 0
+    late.leaving = 0
+    late.leaves = []
+    late.pending = []
+    late_open(late)
+    for name in names {
+        late_bind(name.clone(), late)
+    }
+    late_block(body, false, ask, late)
+    late_close(late)
+}
+
+fn late_open(mut late: TierLate) {
+    late.frames.push([])
+}
+
+fn late_close(mut late: TierLate) {
+    let names = late.frames.pop() ?? return
+    for name in names {
+        let mut held = late.bound.remove(name) ?? continue
+        held.pop()
+        if held.len() > 0 {
+            late.bound.insert(name.clone(), held)
+        }
+    }
+}
+
+fn late_bind(name: String, mut late: TierLate) {
+    late.serial += 1
+    let mut held = late.bound.remove(name) ?? []
+    held.push(TierLateBinding { serial: late.serial, loops: late.loops })
+    late.bound.insert(name.clone(), held)
+    let mut frame = late.frames.pop() ?? []
+    frame.push(name)
+    late.frames.push(frame)
+}
+
+/// The serial of the binding a name reads here, and -1 for none.
+fn late_serial(name: ref String, late: ref TierLate) -> i64 {
+    let held = late.bound[name] ?? return -1
+    if held.len() == 0 {
+        return -1
+    }
+    return held[held.len() - 1].serial
+}
+
+/// The loops around the binding a name reads here.
+fn late_loops(name: ref String, late: ref TierLate) -> i64 {
+    let held = late.bound[name] ?? return 0
+    if held.len() == 0 {
+        return 0
+    }
+    return held[held.len() - 1].loops
+}
+
+/// A read of a name: every arm that named the same binding before is read
+/// after its choice.
+fn late_read(name: ref String, mut late: TierLate) {
+    let serial = late_serial(name, late)
+    if serial < 0 {
+        return
+    }
+    let mut read: Vec[i64] = []
+    for arm in late.pending {
+        if arm.serial == serial && arm.name == name {
+            read.push(arm.at)
+        }
+    }
+    for at in read {
+        late.found.insert(at)
+    }
+}
+
+/// A name assigned anew: what an arm took of the old value is not read again.
+fn late_written(name: ref String, mut late: TierLate) {
+    let serial = late_serial(name, late)
+    let mut kept: Vec[TierLateArm] = []
+    for arm in late.pending {
+        if arm.serial != serial || arm.name != name {
+            kept.push(arm.clone())
+        }
+    }
+    late.pending = kept
+}
+
+fn late_block(block: ref Block, leaf: bool, ask: ref TierAsk, mut late: TierLate) {
+    late_open(late)
+    let mut at = 0
+    for stmt in block.stmts {
+        at += 1
+        late_stmt(stmt.node, leaf && at == block.stmts.len(), ask, late)
+    }
+    late_close(late)
+}
+
+fn late_stmt(stmt: ref Stmt, leaf: bool, ask: ref TierAsk, mut late: TierLate) {
+    match stmt {
+        Stmt::Let { names, value, .. } => {
+            late_expr(value, false, ask, late)
+            for name in names {
+                late_bind(ask.names.resolve(name).clone(), late)
+            }
+        }
+        Stmt::Comptime { name, value, .. } => {
+            late_expr(value, false, ask, late)
+            late_bind(ask.names.resolve(name).clone(), late)
+        }
+        Stmt::Assign { target, op, value } => {
+            late_expr(value, false, ask, late)
+            let assigned = match target {
+                Expr::Variable(name, _) => ask.names.resolve(name).clone(),
+                else => "".clone(),
+            }
+            if op != null || assigned == "" {
+                late_expr(target, false, ask, late)
+            } else {
+                late_written(assigned, late)
+            }
+        }
+        Stmt::For { bindings, iter, body, .. } => {
+            late_expr(iter, false, ask, late)
+            late.loops += 1
+            late_open(late)
+            for name in bindings {
+                late_bind(ask.names.resolve(name).clone(), late)
+            }
+            late_block(body, false, ask, late)
+            late_close(late)
+            late.loops -= 1
+        }
+        Stmt::While { cond, body } => {
+            late.loops += 1
+            late_expr(cond, false, ask, late)
+            late_block(body, false, ask, late)
+            late.loops -= 1
+        }
+        Stmt::Return(value) => {
+            late.leaving += 1
+            late_maybe(value, ask, late)
+            late.leaving -= 1
+        }
+        Stmt::Expr(inner) => late_expr(inner, leaf, ask, late),
+        else => {}
+    }
+}
+
+fn late_maybe(value: ref Expr?, ask: ref TierAsk, mut late: TierLate) {
+    late_expr(value ?? return, false, ask, late)
+}
+
+fn late_all(values: ref Vec[Expr], ask: ref TierAsk, mut late: TierLate) {
+    for value in values {
+        late_expr(value, false, ask, late)
+    }
+}
+
+fn late_pattern(pattern: ref MatchPattern, ask: ref TierAsk, mut late: TierLate) {
+    match pattern {
+        MatchPattern::Path(segments) => {
+            if segments.len() == 1 && !names_a_type(ask.names.resolve(segments[0])) {
+                late_bind(ask.names.resolve(segments[0]).clone(), late)
+            }
+        }
+        MatchPattern::Tuple { parts, .. } => {
+            for part in parts {
+                late_pattern(part, ask, late)
+            }
+        }
+        MatchPattern::List(parts) => {
+            for part in parts {
+                late_pattern(part, ask, late)
+            }
+        }
+        MatchPattern::RestNamed(name) => late_bind(ask.names.resolve(name).clone(), late),
+        MatchPattern::Named { fields, .. } => {
+            for field in fields {
+                late_pattern(field.pat, ask, late)
+            }
+        }
+        MatchPattern::Or(alternatives) => {
+            if alternatives.len() > 0 {
+                late_pattern(alternatives[0], ask, late)
+            }
+        }
+        else => {}
+    }
+}
+
+/// Walk a value; `leaf` where it is what an enclosing choice comes to.
+fn late_expr(expr: ref Expr, leaf: bool, ask: ref TierAsk, mut late: TierLate) {
+    match expr {
+        Expr::Variable(name, _) => {
+            let word = ask.names.resolve(name).clone()
+            late_read(word, late)
+            let serial = late_serial(word, late)
+            if leaf && serial >= 0 {
+                late.leaves.push(TierLateArm { at: node_key(expr), name: word.clone(), serial: serial, loops: late_loops(word, late) })
+            }
+        }
+        Expr::If { cond, then_branch, else_branch, .. } => {
+            late_expr(cond, false, ask, late)
+            if else_branch == null {
+                late_block(then_branch, false, ask, late)
+                return
+            }
+            let otherwise = else_branch ?? return
+            let held = late_choice_opened(leaf, late)
+            late_block(then_branch, true, ask, late)
+            late_block(otherwise, true, ask, late)
+            late_choice_closed(leaf, held, late)
+        }
+        Expr::Match { value, arms, .. } => {
+            late_expr(value, false, ask, late)
+            let held = late_choice_opened(leaf, late)
+            for arm in arms {
+                late_open(late)
+                late_pattern(arm.pattern, ask, late)
+                if arm.guard != null {
+                    late_maybe(arm.guard, ask, late)
+                }
+                late_expr(arm.body, true, ask, late)
+                late_close(late)
+            }
+            late_choice_closed(leaf, held, late)
+        }
+        Expr::Block(block, _) => late_block(block, leaf, ask, late),
+        Expr::Unsafe(block, _) => late_block(block, false, ask, late),
+        Expr::Overlap(block, _) => late_block(block, false, ask, late),
+        Expr::LitInterpolated { parts, .. } => {
+            for part in parts {
+                match part {
+                    FPart::Hole { expr: inner, .. } => late_expr(inner, false, ask, late),
+                    else => {}
+                }
+            }
+        }
+        Expr::Call { func, args, .. } => {
+            late_expr(func, false, ask, late)
+            late_all(args, ask, late)
+        }
+        Expr::MethodCall { receiver, args, .. } => {
+            late_expr(receiver, false, ask, late)
+            late_all(args, ask, late)
+        }
+        Expr::SafeMethod { receiver, args, .. } => {
+            late_expr(receiver, false, ask, late)
+            late_all(args, ask, late)
+        }
+        Expr::Tuple(parts, _) => late_all(parts, ask, late),
+        Expr::ListLit { items, .. } => late_all(items, ask, late),
+        Expr::ListRepeat { value, count, .. } => {
+            late_expr(value, false, ask, late)
+            late_expr(count, false, ask, late)
+        }
+        Expr::Range { start, end, .. } => {
+            late_expr(start, false, ask, late)
+            late_expr(end, false, ask, late)
+        }
+        Expr::Field { base, .. } => late_expr(base, false, ask, late),
+        Expr::SafeField { base, .. } => late_expr(base, false, ask, late),
+        Expr::StructLit { fields, .. } => {
+            for field in fields {
+                late_maybe(field.value, ask, late)
+            }
+        }
+        Expr::With { base, fields, .. } => {
+            late_expr(base, false, ask, late)
+            for field in fields {
+                late_maybe(field.value, ask, late)
+            }
+        }
+        Expr::Closure { params, body, .. } => {
+            late.leaving += 1
+            late_open(late)
+            for name in params {
+                late_bind(ask.names.resolve(name).clone(), late)
+            }
+            late_block(body, false, ask, late)
+            late_close(late)
+            late.leaving -= 1
+        }
+        Expr::Spawn { body, .. } => {
+            late.leaving += 1
+            late_expr(body, false, ask, late)
+            late.leaving -= 1
+        }
+        Expr::Unary { expr: inner, .. } => late_expr(inner, false, ask, late),
+        Expr::Binary { lhs, rhs, .. } => {
+            late_expr(lhs, false, ask, late)
+            late_expr(rhs, false, ask, late)
+        }
+        Expr::Try(inner, _) => late_expr(inner, false, ask, late),
+        Expr::Throw(inner, _) => {
+            late.leaving += 1
+            late_expr(inner, false, ask, late)
+            late.leaving -= 1
+        }
+        Expr::Return(value, _) => {
+            late.leaving += 1
+            late_maybe(value, ask, late)
+            late.leaving -= 1
+        }
+        Expr::Index { base, index, .. } => {
+            late_expr(base, false, ask, late)
+            late_expr(index, false, ask, late)
+        }
+        Expr::Cast { expr: inner, .. } => late_expr(inner, false, ask, late),
+        Expr::Coalesce { value, fallback, .. } => {
+            late_expr(value, false, ask, late)
+            late_expr(fallback, false, ask, late)
+        }
+        Expr::TryCatch { expr: inner, handler, .. } => {
+            late_expr(inner, false, ask, late)
+            late_block(handler, false, ask, late)
+        }
+        else => {}
+    }
+}
+
+/// A choice begins: the outermost one collects its arms afresh.
+fn late_choice_opened(leaf: bool, mut late: TierLate) -> Vec[TierLateArm] {
+    if leaf {
+        return []
+    }
+    let held = late.leaves.clone()
+    late.leaves = []
+    return held
+}
+
+/// **The outermost choice ends**: an arm naming a binding outside a loop the
+/// choice stands in is read again in the loop's next turn; any other waits
+/// for a read after the choice.
+fn late_choice_closed(leaf: bool, held: Vec[TierLateArm], mut late: TierLate) {
+    if leaf {
+        return
+    }
+    let arms = late.leaves.clone()
+    late.leaves = held
+    if late.leaving > 0 {
+        return
+    }
+    for arm in arms {
+        if late.loops > arm.loops {
+            late.found.insert(arm.at)
+        } else {
+            late.pending.push(arm.clone())
+        }
+    }
+}
+
 /// Walk an expression, recording what flows into the positions inside it;
 /// what kind of text its value is.
 fn tier_expr(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
@@ -2290,7 +2723,16 @@ fn tier_expr(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
             walk.in_hole = outer
             owned_kinds()
         }
-        Expr::Variable(name, _) => kinds_of_local(ask.names.resolve(name), walk),
+        Expr::Variable(name, _) => {
+            let kinds = kinds_of_local(ask.names.resolve(name), walk)
+            // **An arm that is a name still read later is a view of it**
+            // (ADR-282 D7, D13, #712): moving it would end what is read next.
+            if walk.late.contains(node_key(expr)) && kinds.owned && !kinds.view && !kinds.either && !kinds.still {
+                walk.flows.viewed_arms.insert(node_key(expr))
+                return view_kinds()
+            }
+            kinds
+        }
         Expr::MethodCall { receiver, method, args, .. } => method_kinds(receiver, ask.names.resolve(method), args, ask, walk),
         Expr::SafeMethod { receiver, method, args, .. } => method_kinds(receiver, ask.names.resolve(method), args, ask, walk),
         Expr::Call { func, args, .. } => call_kinds(func, args, ask, walk),
@@ -3451,7 +3893,7 @@ fn tier_word(tier: Tier) -> String {
 pub fn text_tiers(program: ref Program, ask: ref TierAsk) -> TextTiers {
     let declared = declared_of(program, ask.names)
     let text = string_type(declared, ask.names)
-    let mut walk = TierWalk { declared: declared, tiers: collections::BTreeMap(), flows: no_flows(), locals: collections::BTreeMap(), frames: [], result: null, in_hole: false, hole_text: -1, lent_self: false, adopted: collections::BTreeMap(), demoted: collections::BTreeSet(), handed_back: -1, unlent: collections::BTreeSet(), read_here: false, tail_back: false, ties: collections::BTreeMap() }
+    let mut walk = TierWalk { declared: declared, tiers: collections::BTreeMap(), flows: no_flows(), locals: collections::BTreeMap(), frames: [], result: null, in_hole: false, hole_text: -1, lent_self: false, adopted: collections::BTreeMap(), demoted: collections::BTreeSet(), handed_back: -1, unlent: collections::BTreeSet(), read_here: false, tail_back: false, ties: collections::BTreeMap(), late: late_arms(program, ask) }
     for _ in 0..<16 {
         walk.flows = no_flows()
         walk_program(program, ask, walk)
@@ -3485,7 +3927,7 @@ pub fn text_tiers(program: ref Program, ask: ref TierAsk) -> TextTiers {
     for (at, target) in walk.flows.adopted {
         adopted.insert(at.clone(), TierAdopted { owner: target.owner.clone(), ty: target.ty.clone() })
     }
-    return TextTiers { tiers: tiers, lets: lets, text: text, wraps: walk.flows.wraps.clone(), hole_wraps: walk.flows.hole_wraps.clone(), adopted: adopted }
+    return TextTiers { tiers: tiers, lets: lets, text: text, wraps: walk.flows.wraps.clone(), hole_wraps: walk.flows.hole_wraps.clone(), adopted: adopted, viewed_arms: walk.flows.viewed_arms.clone() }
 }
 
 fn same_adopted(a: ref collections::BTreeMap[i64, Declaring], b: ref collections::BTreeMap[i64, Declaring]) -> bool {

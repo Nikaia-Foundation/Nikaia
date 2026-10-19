@@ -2691,13 +2691,14 @@ fn grown_text(parsed: &Parsed, body: &Block) -> BTreeSet<String> {
 }
 
 /// What the checker reads of a parsed file, borrowed (`tools/parsed_view.nika`).
-fn parsed_view_of(parsed: &Parsed) -> ParsedView<'_, '_, '_, '_, '_> {
+fn parsed_view_of(parsed: &Parsed) -> ParsedView<'_, '_, '_, '_, '_, '_> {
     ParsedView {
         words: &parsed.interner,
         aliases: &parsed.aliases,
         items: &parsed.program.items,
         package: parsed.package.as_deref(),
         spans: &parsed.expr_spans,
+        viewed_arms: &parsed.viewed_arms,
     }
 }
 

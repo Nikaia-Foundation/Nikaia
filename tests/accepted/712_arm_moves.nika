@@ -1,0 +1,5 @@
+fn main() {
+    let s = f"x{1}"
+    let c = if s.len() == 2 { s } else { f"y{2}" }
+    println(c)
+}
