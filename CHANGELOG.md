@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1055] — 2026-10-19
+
+**a program can measure time and what another program used (ADR-368)**
+- ADR-368: `time::now()` reads a monotonic clock as a `time::Instant` (`elapsed()`, `since`); a `Duration` reads as `as_nanos()` (i64, saturated) and `as_secs_f64()`; `process::run`'s `Output` reports `elapsed`, `user_time`, `system_time` and `max_rss_kib` (`i64?`) for that one child. Decided, not yet built.
+
 ## [0.0.1054] — 2026-10-19
 
 **A `String` parameter handed back unchanged is lent (#678)**

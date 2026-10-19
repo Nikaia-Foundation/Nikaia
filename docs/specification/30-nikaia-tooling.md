@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part III: Tooling, Ecosystem & Interoperability**
-**Version:** 0.0.1054 (Draft)
+**Version:** 0.0.1055 (Draft)
 **Date:** 2026-10-19
 
 ---
@@ -1446,8 +1446,13 @@ Some modules are available, or behave restrictively, depending on the target and
 
 * **`std::process`**: starting another program and waiting for it
   ([ADR-243](adr/adr-243.md)). `process::run(program, args; dir: …)` runs it to
-  the end and hands back its exit `code`, whether it was `ok`, and its
-  `stdout` and `stderr` as text. A non-zero exit is an answer and not a
+  the end and hands back its exit `code`, whether it was `ok`, its
+  `stdout` and `stderr` as text, and what the run cost: `elapsed`, the
+  `Duration` from its start to its end on the monotonic clock; `user_time`
+  and `system_time`, the processor time it used; and `max_rss_kib`, the most
+  memory it held resident in KiB, an `i64?` that is `null` where the platform
+  does not report it. Each figure is that one program's
+  ([ADR-368](adr/adr-368.md)). A non-zero exit is an answer and not a
   failure; what throws `io::IoError` is a program that cannot be started, or
   output that is not UTF-8. The wait gives the thread up, so other tasks run
   while the program does.
@@ -1459,6 +1464,14 @@ Some modules are available, or behave restrictively, depending on the target and
   `code`. In a task it ends the task, and whoever joins the task receives it.
   A code outside the range is a panic; a constant outside it is refused with
   `NK1116`.
+* **`std::time`**: a span of time and a clock. `5.seconds()` (also `hours`,
+  `minutes`, `millis`) is a `time::Duration` ([ADR-150](adr/adr-150.md)), and
+  `time::sleep(d)` waits it out. `time::now()` reads a monotonic clock as a
+  `time::Instant`; `i.elapsed()` is the `Duration` since it, `b.since(a)` the
+  one from `a` to `b`, zero where `b` is earlier. An `Instant` never goes back,
+  says nothing about the calendar, and means something only within the run
+  that read it. A `Duration` reads as `d.as_nanos()`, an `i64` saturated at
+  its largest value, and `d.as_secs_f64()` ([ADR-368](adr/adr-368.md)).
 * **`std::thread` / `spawn`**:
     * **At `user_parallelism = yes`:** full concurrency. The primary mechanism is `spawn`.
         * **Strict implicit move:** ownership of the ordinary data used inside a `spawn` block is transferred to the new task. A handle on a shared value is the one exception and is duplicated instead, so the name outside keeps working (Part I 6.2).
