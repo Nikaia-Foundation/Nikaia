@@ -34485,9 +34485,9 @@ impl EmitState {
             return Ok(());
         }
         let inside_scope = EmitScope { changed: changed, tasks_channel: scope.tasks_channel.to_owned(), tasks_function: scope.tasks_function.to_owned(), ..EmitScope::plain() };
-        if copied { out.push(&format!("{{ let mut {} = *__nikaia_slot; (|| ", *nikaia_std::index::get(&names, 0))); }
+        if copied && pauses { out.push(&format!("{{ let mut {} = *__nikaia_slot; async ", *nikaia_std::index::get(&names, 0))); } else if copied { out.push(&format!("{{ let mut {} = *__nikaia_slot; (|| ", *nikaia_std::index::get(&names, 0))); }
         self.emit_core_block(world, walk, out, host, body, depth, inside, &inside_scope, EmitTail::Return)?;
-        if copied { out.push(&format!(")(); *__nikaia_slot = {}; }}", *nikaia_std::index::get(&names, 0))); }
+        if copied && pauses { out.push(&format!(".await; *__nikaia_slot = {}; }}", *nikaia_std::index::get(&names, 0))); } else if copied { out.push(&format!(")(); *__nikaia_slot = {}; }}", *nikaia_std::index::get(&names, 0))); }
         if a_task { out.push(")"); }
         Ok(())
     }

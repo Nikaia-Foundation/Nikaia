@@ -224,12 +224,18 @@ impl EmitState {
         let inside_scope = EmitScope::plain() with { changed: changed, tasks_channel: scope.tasks_channel.clone(), tasks_function: scope.tasks_function.clone() }
         // **`and_modify` handing a number** (#684): the value is copied out of
         // the slot, the body runs as a closure of its own (a `return` leaves
-        // only it), and the value is written back.
-        if copied {
+        // only it), and the value is written back. One that pauses runs its
+        // body as an `async` block awaited in place: a `return` leaves only the
+        // block, and the body may wait.
+        if copied && pauses {
+            out.push(f"{{ let mut {names[0]} = *__nikaia_slot; async ")
+        } else if copied {
             out.push(f"{{ let mut {names[0]} = *__nikaia_slot; (|| ")
         }
         self.emit_core_block(world, walk, out, host, body, depth, inside, inside_scope, EmitTail::Return)
-        if copied {
+        if copied && pauses {
+            out.push(f".await; *__nikaia_slot = {names[0]}; }}")
+        } else if copied {
             out.push(f")(); *__nikaia_slot = {names[0]}; }}")
         }
         if a_task {
