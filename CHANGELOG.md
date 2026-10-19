@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1091] — 2026-10-19
+
+**text tiers: a tie is held once; a place that reads itself no longer doubles its ties (#702)**
+- The tie walk of fe95684 appended a value's ties to the place it is stored into; where the value reads that place itself (`out.push(f(out))`) they doubled with every such statement, and checking crates/rs2nika/convert/src/main.nika ran out of memory. A tie already held is no longer added again; what is lent does not change.
+
 ## [0.0.1090] — 2026-10-19
 
 **A program's std no longer compiles the compiler (#723)**

@@ -2081,9 +2081,21 @@ fn tie_leaves(value: ref Expr, depth: i64, into: String?, back: bool, ask: ref T
     let name = into ?? return
     let mut all: Vec[TextTie] = walk.ties[name]?.clone() ?? []
     for tie in ties {
-        all.push(tie.clone())
+        tie_add(all, tie)
     }
     walk.ties.insert(name, all)
+}
+
+/// **A tie is held once.** A value stored into a place it reads itself
+/// (`out.push(f(out))`) carries the place's own ties: appended again, they
+/// doubled with every such statement, and a long function ran out of memory.
+fn tie_add(mut all: Vec[TextTie], tie: ref TextTie) {
+    for held in all {
+        if held.word == tie.word && held.depth == tie.depth && held.through_text == tie.through_text {
+            return
+        }
+    }
+    all.push(tie.clone())
 }
 
 /// `value` stored into the place `target`, or handed to a method of it.

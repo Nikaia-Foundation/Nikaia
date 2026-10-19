@@ -58677,8 +58677,13 @@ fn tie_leaves(value: &Expr, depth: i64, into: Option<String>, back: bool, ask: &
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     }, || vec![].into());
-    for tie in ties.iter() { all.push(tie.clone()); }
+    for tie in ties.iter() { tie_add(&mut all, tie); }
     walk.ties.insert(name, all);
+}
+
+fn tie_add(all: &mut Vec<TextTie>, tie: &TextTie) {
+    for held in all.iter() { if held.word == tie.word && held.depth == tie.depth && held.through_text == tie.through_text { return; } }
+    all.push(tie.clone());
 }
 
 fn tie_stored(target: &Expr, value: &Expr, ask: &TierAsk<'_, '_, '_>, walk: &mut TierWalk) {
