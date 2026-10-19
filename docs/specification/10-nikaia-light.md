@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1081 (Draft)
+**Version:** 0.0.1082 (Draft)
 **Date:** 2026-10-19
 
 ---
@@ -2063,6 +2063,24 @@ fn main(a: int; times: int = 4, verbose: bool = false) {
   `cli::args()` still returns every word the program was started with.
 
 ---
+
+### 5.6. Inlining
+
+**`@inline` asks that a function's body be copied to where it is called**
+([ADR-370](adr/adr-370.md)). It stands before a function or a method:
+`@inline` is a hint, and lets another package inline a `pub fn`;
+`@inline(always)` asks it of every call, and `@inline(never)` of none, for a
+cold path. None of them changes what a program means. A function that calls
+itself is never inlined into itself. Where the compiler sees a hot call the
+backend would leave out of line - what a `fold`'s or `par_fold`'s step calls
+(Part II 10.7) - it adds the hint itself; a written `@inline(never)` wins.
+
+```nika
+@inline
+fn digit(b: Bytes, i: i64) -> i64 {
+    return (b[i] as i64) - 48
+}
+```
 
 ## Chapter 6: Memory and Ownership
 

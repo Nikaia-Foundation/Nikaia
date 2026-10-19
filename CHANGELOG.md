@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1082] — 2026-10-19
+
+**`@inline` asks, the compiler adds the hint where it knows better (ADR-370)**
+- Decided, not yet built: `@inline`, `@inline(always)` and `@inline(never)` before a function or method; a hint that never changes meaning and lets another package inline a `pub fn`; the compiler adds the hint itself only in obvious, measured cases where the backend leaves a hot call out of line (ADR-296 D41 the first), and a written `@inline(never)` wins (ADR-370, Part I 5.6).
+
 ## [0.0.1081] — 2026-10-19
 
 **a view of a parameter kept in another parameter's place points into the caller's argument (ADR-283 D27, #706)**
