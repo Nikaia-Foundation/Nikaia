@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1069] — 2026-10-19
+
+**A `Bytes` read and `i + k` under a bound are proved (#698, #699)**
+- A `Bytes` read and cut are proved like a list's: `b[i]` and `b[i..<j]` are bounds candidates, a `Bytes` `len()` is a counted length (ADR-306 D12), and a proved cut lowers to `proven::cut`.
+- `i + k` under `i < len` is proved: with a literal `k >= 0`, `x + k` asks only the upper bound and `x - k` only the lower (ADR-306 D6); an untyped counter (`let mut i = 0`) is an arithmetic site once its type is known.
+
 ## [0.0.1068] — 2026-10-19
 
 **A struct viewing a kept `String` parameter, stored where it outlives it, owns its text (#702)**
