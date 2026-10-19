@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1076] — 2026-10-19
+
+**A field is a fact of the prover while nothing can change it (ADR-306 D17, #384)**
+- Decided, not yet built: a path of fields (`t.slots`, `p.end`, `self.at`) is a name of the bounds and overflow walk; a fact about it holds for the whole body through a parameter the function only borrows, and otherwise until a write to it, a call that may change its root, or a lambda or task that sees the root; a precondition (ADR-269 D5) may read a field of a parameter (ADR-306 D17, ADR-269 D9, Part III 3.9).
+
 ## [0.0.1075] — 2026-10-19
 
 **a view of a parameter kept in another parameter's place points into the caller's argument (ADR-283 D27, #706)**
