@@ -286,9 +286,9 @@ pub(crate) fn lowered_units(
     let home = &units[entry].package;
     let beside: Vec<&Parsed> = units.iter().filter(|u| &u.package == home).collect();
     let provenance = crate::contracts::trust::analyse_package(&beside, library).provenance;
-    let needs = units.iter().fold(Needs::default(), |acc, unit| {
-        acc.join(Needs::of(unit, build))
-    });
+    let needs = units
+        .iter()
+        .fold(Needs::default(), |acc, unit| acc.join(Needs::of(unit)));
     let mut rust = String::from("// Generated: a `comptime`'s program (ADR-321).\n\n");
     rust.push_str(&needs.preamble());
     rust.push('\n');

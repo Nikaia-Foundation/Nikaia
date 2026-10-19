@@ -1023,7 +1023,7 @@ impl Program {
                 &u.path,
                 &u.source,
                 u.package.is_some(),
-                || Needs::of(&u.parsed, build),
+                || Needs::of(&u.parsed),
             ))
         });
         // **Every file, for every file.** What a `comptime` came to is the

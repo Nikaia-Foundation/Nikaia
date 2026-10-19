@@ -32753,32 +32753,7 @@ impl EmitState {
         }
         false
     }
-    fn emit_enters_a_parallel_rule(&self, world: &EmitWorld<'_, '_, '_, '_>, expr: &Expr) -> bool {
-        match expr {
-            Expr::Call { func, .. } => {
-                let func = nikaia_std::boxed::open(func);
-                match func {
-                    Expr::Path(segments, _) => {
-                        if segments.len() != 2 { return false; }
-                        let def = match self.grammars.get(world.words.resolve(*nikaia_std::index::get(&segments, 0))) { Some(__nikaia_value) => __nikaia_value, None => return false };
-                        for rule in def.rules.iter() { if rule.is_entry && rule.name == *nikaia_std::index::get(&segments, 1) && emit_is_a_par_fold(rule) { return true; } }
-                    },
-                    _ => { },
-                }
-            },
-            _ => { },
-        }
-        false
-    }
-    pub fn uses_driver(&self, world: &EmitWorld<'_, '_, '_, '_>) -> bool {
-        for item in world.items.iter() {
-            match &item.node {
-                Item::Fn { body, .. } => { for expr in visited_in_block(body) { if self.emit_enters_a_parallel_rule(world, expr) { return true; } } },
-                _ => { },
-            }
-        }
-        false
-    }
+    pub fn uses_driver(&self, world: &EmitWorld<'_, '_, '_, '_>) -> bool { emit_uses_driver(world, &self.grammars) }
     pub fn either_param(&self, world: &EmitWorld<'_, '_, '_, '_>, callee: &str, at: i64) -> bool {
         let own = emit_base(callee);
         let mut seen = 0;
@@ -33000,6 +32975,34 @@ fn emit_below_an_enum_named(world: &EmitWorld<'_, '_, '_, '_>, wanted: &str) -> 
                 let name = *name;
                 if world.words.resolve(name) == wanted { return true; }
             },
+            _ => { },
+        }
+    }
+    false
+}
+
+fn emit_enters_a_parallel_rule(grammars: &collections::BTreeMap<String, GrammarDef>, world: &EmitWorld<'_, '_, '_, '_>, expr: &Expr) -> bool {
+    match expr {
+        Expr::Call { func, .. } => {
+            let func = nikaia_std::boxed::open(func);
+            match func {
+                Expr::Path(segments, _) => {
+                    if segments.len() != 2 { return false; }
+                    let def = match grammars.get(world.words.resolve(*nikaia_std::index::get(&segments, 0))) { Some(__nikaia_value) => __nikaia_value, None => return false };
+                    for rule in def.rules.iter() { if rule.is_entry && rule.name == *nikaia_std::index::get(&segments, 1) && emit_is_a_par_fold(rule) { return true; } }
+                },
+                _ => { },
+            }
+        },
+        _ => { },
+    }
+    false
+}
+
+pub fn emit_uses_driver(world: &EmitWorld<'_, '_, '_, '_>, grammars: &collections::BTreeMap<String, GrammarDef>) -> bool {
+    for item in world.items.iter() {
+        match &item.node {
+            Item::Fn { body, .. } => { for expr in visited_in_block(body) { if emit_enters_a_parallel_rule(grammars, world, expr) { return true; } } },
             _ => { },
         }
     }
@@ -67064,7 +67067,7 @@ pub mod dump {
 }
 pub mod emit_below {
     #[allow(unused_imports)]
-    pub use super::{emit_is_a_shape_bound, emit_bounded};
+    pub use super::{emit_is_a_shape_bound, emit_bounded, emit_uses_driver};
 }
 pub mod emit_calls {
     #[allow(unused_imports)]

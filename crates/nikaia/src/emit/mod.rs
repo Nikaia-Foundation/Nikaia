@@ -938,25 +938,38 @@ pub struct Needs {
 }
 
 impl Needs {
-    pub fn of(parsed: &Parsed, build: Build) -> Needs {
-        // What a program needs does not depend on which checks were proved,
-        // and proving them is the slowest thing an emitter is built with.
-        let build = Build {
-            bounds: crate::bounds::BoundsChecks::Kept,
-            overflow: crate::bounds::OverflowChecks::Kept,
-            leaves_values: true,
-            ..build
+    pub fn of(parsed: &Parsed) -> Needs {
+        // **Read off the items, with no emitter built** (#727): what a
+        // program needs is which items it declares and which grammar entries
+        // its functions enter, the same reading `Emitter::with_contracts`
+        // makes of them, and building an emitter for it inferred the ledger
+        // and ran the checker and the prover once more per file.
+        let mut grammars: std::collections::BTreeMap<String, GrammarDef> =
+            std::collections::BTreeMap::new();
+        let (mut std, mut fails) = (false, false);
+        for item in &parsed.program.items {
+            match &item.node {
+                Item::Grammar(def) => {
+                    grammars.insert(parsed.text(def.name).to_string(), def.clone());
+                }
+                Item::Import { .. } => std = true,
+                Item::Fn {
+                    can_throw: true, ..
+                } => fails = true,
+                _ => {}
+            }
+        }
+        let world = EmitWorld {
+            words: &parsed.interner,
+            aliases: &parsed.aliases,
+            items: &parsed.program.items,
+            library: std_ledger(),
         };
-        let emitter = Emitter::new(parsed, build, crate::contracts::Provenance::Trusted);
         Needs {
-            grammar: parsed
-                .program
-                .items
-                .iter()
-                .any(|i| matches!(i.node, Item::Grammar(_))),
-            driver: emitter.uses_driver(),
-            std: emitter.s.uses_std,
-            fails: emitter.s.fails,
+            grammar: !grammars.is_empty(),
+            driver: nikaia_std::tools::emit_below::emit_uses_driver(&world, &grammars),
+            std,
+            fails,
             foreign_traits: foreign_traits(parsed),
         }
     }
