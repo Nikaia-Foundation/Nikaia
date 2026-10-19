@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1045] — 2026-10-19
+
+**a grammar run takes in a small rule it calls**
+- A run of fixed shape in a grammar takes in a small lexical rule of fixed shape it calls (winnow-grammar ADR 24 §8d): one alternative, no rule call, bounded width, an action without return, ? or macros. A published rule keeps its own entry, and a mismatch still names the rule. 1BRC: 239.3 to 232.1 instructions a row.
+
 ## [0.0.1044] — 2026-10-19
 
 **std's map hash spreads integer keys**
