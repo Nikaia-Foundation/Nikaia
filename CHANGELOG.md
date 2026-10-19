@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1105] — 2026-10-19
+
+**Four checker gaps from the rustc sweep are refusals**
+- An empty body with a declared result is `NK1104`; a `catch` block whose replacement value is of another type than the value it guards is `NK1103`; a literal matched on a `T?` with no `null` arm is `NK1205`; a `SharedMut[T]` or `Locked[T]` in an `f"…"` hole is `NK1201` (#704).
+
 ## [0.0.1104] — 2026-10-19
 
 **An impl narrower than its trait's declaration is the type's own method and a bridge**
