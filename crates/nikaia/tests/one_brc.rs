@@ -77,6 +77,27 @@ fn the_1brc_example_compiles_and_prints_what_the_benchmark_asks_for() {
         "{Bulawayo=8.9/15.5/22.1, Hamburg=-3.4/2.9/12.0, Palembang=38.8/38.8/38.8}"
     );
 
+    // 3a. Rounding as the official baseline rounds, `Math.round(x * 10.0) / 10.0`:
+    // a tie goes toward +infinity, and `-0.0` is never printed. A: 0.25 -> 0.3;
+    // B: -0.05 -> 0.0; C: 0.15 -> 0.2; D: -1.25 -> -1.2; E: -0.04 -> 0.0;
+    // F: -0.3 alone; G: 16.65 -> 16.7.
+    std::fs::write(
+        &measurements,
+        "A;0.2\nA;0.3\nB;-0.1\nB;0.0\nC;0.1\nC;0.2\nD;-1.2\nD;-1.3\n\
+         E;-0.1\nE;0.0\nE;0.0\nE;-0.1\nE;0.0\nE;0.0\nE;0.0\nE;0.0\nE;0.0\nE;-0.2\n\
+         F;-0.3\nG;-12.3\nG;45.6\n",
+    )
+    .expect("write the input");
+    let ties = Command::new(&binary)
+        .arg(&measurements)
+        .output()
+        .expect("run the compiled example");
+    assert_eq!(
+        String::from_utf8_lossy(&ties.stdout).trim(),
+        "{A=0.2/0.3/0.3, B=-0.1/0.0/0.0, C=0.1/0.2/0.2, D=-1.3/-1.2/-1.2, \
+         E=-0.2/0.0/0.0, F=-0.3/-0.3/-0.3, G=-12.3/16.7/45.6}"
+    );
+
     // 3b. The format is one measurement per line and nothing between them
     // (`FILE` is lexical): a blank around a name is part of the name, and a
     // blank line is not a measurement.

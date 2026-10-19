@@ -109,8 +109,12 @@ impl Stats {
         self.count += other.count
     }
 
-    fn mean(ref self) -> f64 {
-        return ((self.sum as f64) / (self.count as f64)) / 10.0
+    // The mean in tenths, rounded as the challenge rounds: a tie goes up,
+    // toward +infinity (`Math.round` in the official Java baseline). Exact
+    // integer arithmetic, no float: `div_euclid` divides rounding down, also
+    // when the sum is negative.
+    fn mean(ref self) -> i64 {
+        return (2 * self.sum + self.count).div_euclid(2 * self.count)
     }
 }
 
@@ -172,11 +176,19 @@ fn main() throws {
             // A map lookup gives a `Stats?` that may be absent. `??` supplies
             // the other case; the key came from this map, so it cannot happen.
             let s = totals.stations[name] ?? panic(f"{name} was a key a moment ago")
-            // `:.1` after a value prints it with one decimal.
-            f"{name}={s.min as f64 / 10.0:.1}/{s.mean():.1}/{s.max as f64 / 10.0:.1}"
+            f"{name}={tenths(s.min as i64)}/{tenths(s.mean())}/{tenths(s.max as i64)}"
         }
         .join(", ")
 
     // In an f-string, `{{` and `}}` are literal braces.
     println(f"{{{body}}}")
+}
+
+// A value in tenths as the challenge prints it: one decimal, never `-0.0`.
+fn tenths(t: i64) -> String {
+    if t < 0 {
+        let a = -t
+        return f"-{a / 10}.{a % 10}"
+    }
+    return f"{t / 10}.{t % 10}"
 }

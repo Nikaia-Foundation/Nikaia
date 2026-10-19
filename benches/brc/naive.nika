@@ -48,8 +48,24 @@ fn main() throws {
     let body = names
         .map fn(name) {
             let s = stations[name] ?? panic("a key")
-            f"{name}={s.min as f64 / 10.0:.1}/{(s.sum as f64 / s.count as f64) / 10.0:.1}/{s.max as f64 / 10.0:.1}"
+            f"{name}={tenths(s.min as i64)}/{tenths(mean_tenths(s.sum, s.count))}/{tenths(s.max as i64)}"
         }
         .join(", ")
     println(f"{{{body}}}")
+}
+
+// The official rounding (the Java baseline's `Math.round(x * 10.0) / 10.0`): a
+// tie goes toward +infinity. The sum is in tenths, so the mean in tenths is
+// `floor((2 * sum + count) / (2 * count))`, exact and with no float.
+fn mean_tenths(sum: i64, count: i64) -> i64 {
+    return (2 * sum + count).div_euclid(2 * count)
+}
+
+// A value in tenths as the challenge prints it: one decimal, never `-0.0`.
+fn tenths(t: i64) -> String {
+    if t < 0 {
+        let a = -t
+        return f"-{a / 10}.{a % 10}"
+    }
+    return f"{t / 10}.{t % 10}"
 }

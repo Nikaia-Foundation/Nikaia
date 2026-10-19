@@ -121,13 +121,28 @@ fn report<'a>(rows: impl Iterator<Item = (&'a str, i64, i64, i64, i64)>) {
     let body: Vec<String> = rows
         .map(|(name, min, max, sum, count)| {
             format!(
-                "{}={:.1}/{:.1}/{:.1}",
+                "{}={}/{}/{}",
                 name,
-                min as f64 / 10.0,
-                (sum as f64 / count as f64) / 10.0,
-                max as f64 / 10.0
+                tenths(min),
+                tenths(mean_tenths(sum, count)),
+                tenths(max)
             )
         })
         .collect();
     println!("{{{}}}", body.join(", "));
+}
+
+/// The official rounding (the Java baseline's `Math.round(x * 10.0) / 10.0`):
+/// a tie goes toward +infinity. `sum` is in tenths, so the mean in tenths is
+/// `floor((2 * sum + count) / (2 * count))`, exact and with no float. With
+/// readings of at most 99.9 the numerator stays below 2^63 up to about 4.6e15
+/// rows, far past the challenge's 1e9.
+fn mean_tenths(sum: i64, count: i64) -> i64 {
+    (2 * sum + count).div_euclid(2 * count)
+}
+
+/// A value in tenths as the challenge prints it: one decimal, never `-0.0`.
+fn tenths(t: i64) -> String {
+    let a = t.unsigned_abs();
+    format!("{}{}.{}", if t < 0 { "-" } else { "" }, a / 10, a % 10)
 }

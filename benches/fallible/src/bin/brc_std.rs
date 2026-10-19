@@ -59,15 +59,37 @@ fn main() {
     let mut out = String::new();
     for name in names {
         let s = &stations[name];
-        let mean = s.sum as f64 / s.count as f64 / 10.0;
+        let mean = mean_tenths(s.sum, s.count);
         out.push_str(std::str::from_utf8(name).expect("UTF-8"));
         let _ = writeln!(
             out,
-            "={:.1}/{:.1}/{:.1}",
-            s.min as f64 / 10.0,
-            mean,
-            s.max as f64 / 10.0
+            "={}{}.{}/{}{}.{}/{}{}.{}",
+            sign(s.min),
+            s.min.unsigned_abs() / 10,
+            s.min.unsigned_abs() % 10,
+            sign(mean),
+            mean.unsigned_abs() / 10,
+            mean.unsigned_abs() % 10,
+            sign(s.max),
+            s.max.unsigned_abs() / 10,
+            s.max.unsigned_abs() % 10
         );
     }
     print!("{out}");
+}
+
+/// The official rounding (the Java baseline's `Math.round(x * 10.0) / 10.0`):
+/// a tie goes toward +infinity. `sum` is in tenths, so the mean in tenths is
+/// `floor((2 * sum + count) / (2 * count))`, exact and with no float.
+fn mean_tenths(sum: i64, count: i64) -> i64 {
+    (2 * sum + count).div_euclid(2 * count)
+}
+
+/// The sign of a value in tenths as printed: none for zero, so never `-0.0`.
+fn sign(t: i64) -> &'static str {
+    if t < 0 {
+        "-"
+    } else {
+        ""
+    }
 }
