@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1077] — 2026-10-19
+
+**programs without `ref` no longer refused for the text tiers' choice in three shapes (#708)**
+- A function ending in a nested `if`/`match` hands back each arm as a `return` does; a kept parameter handed back whole into a result of either kind is no NK2302; a parameter lowered as a view whose result keeps it no longer counts as handed over (NK2305).
+
 ## [0.0.1076] — 2026-10-19
 
 **A field is a fact of the prover while nothing can change it (ADR-306 D17, #384)**
