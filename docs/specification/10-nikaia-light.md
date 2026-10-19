@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1053 (Draft)
+**Version:** 0.0.1054 (Draft)
 **Date:** 2026-10-19
 
 ---
@@ -2603,13 +2603,13 @@ impl Checker {
     }
 }
 
-struct Pair { left: ref String, right: ref String }
+struct Pair { left: String, right: String }
 
-fn pair(a: ref String, b: ref String) -> Pair {
+fn pair(a: String, b: String) -> Pair {
     return Pair { left: a, right: b }   // `left` points into `a`, `right` into `b`
 }
 
-fn longest(a: ref String, b: ref String) -> ref String {
+fn longest(a: String, b: String) -> String {
     if a.len() >= b.len() {
         return a
     }

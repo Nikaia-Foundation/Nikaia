@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1054] — 2026-10-19
+
+**A `String` parameter handed back unchanged is lent (#678)**
+- A `String` parameter handed back as it came in is lent, and the result or the field of a struct literal handed back that it goes into is a view of it (ADR-282 D2, D5, D12; Part I 6.5): such code lowers as its `ref String` twin and the caller may use its argument again (was NK2105). It keeps its text where text of its own also goes there, where the field is published or filled elsewhere, and where the parameter is `mut`, `String?`, a trait method's, reassigned or changed in place. Also fixed: a call handing back views of an argument made in the call no longer drops that temporary (E0716), and two calls of one function in one statement no longer share an argument's keep. Part I 6.5's `Pair`, `pair` and `longest` write `String`.
+
 ## [0.0.1053] — 2026-10-19
 
 **The specification's examples write `String` where `ref` said nothing more (#654)**
