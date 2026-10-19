@@ -1,0 +1,56 @@
+// #725: a callee that declares `throws` and names nothing fails with the
+// unnamed error, and so does a caller that also throws a named one.
+
+enum Low { Bad(i64) }
+impl Error for Low { fn message(ref self) -> String { return "low" } }
+
+enum High { Empty }
+impl Error for High { fn message(ref self) -> String { return "high" } }
+
+struct Box2 { n: i64 }
+
+impl Box2 {
+    fn word(ref self) -> String throws {
+        if self.n < 0 { throw Low::Bad(self.n) }
+        return "word"
+    }
+}
+
+fn f(n: i64) -> String throws {
+    if n < 0 { throw Low::Bad(n) }
+    if n == 0 { return "" }
+    return "abc"
+}
+
+fn g(s: String) -> i64 throws {
+    if s.len() == 0 { throw High::Empty }
+    return s.len()
+}
+
+fn run(n: i64) -> i64 throws {
+    let a = g(f(n)) catch {
+        println(f"x {error}")
+        return -1
+    }
+    return a
+}
+
+impl Box2 {
+    fn counted(ref self) -> i64 throws {
+        if self.n < 0 { throw Low::Bad(self.n) }
+        return run(self.n)
+    }
+}
+
+fn both(n: i64) -> i64 throws {
+    if n < 0 { throw Low::Bad(n) }
+    return run(n)
+}
+
+fn main() throws {
+    println(f"{both(1)}")
+    let b = Box2 { n: 1 }
+    println(f"{b.counted()}")
+    let c = b.word() catch { "" }
+    println(f"{c}")
+}

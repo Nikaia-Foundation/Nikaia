@@ -484,11 +484,15 @@ pub struct CheckMethodCalls {
     pub code_fails: bool,
     pub fields_called: collections::BTreeSet[String],
     pub in_a_task: CheckCallsInATask,
+    /// **Those of `resolved` called only inside a `catch` that keeps what it
+    /// caught** (#725), with the fatal types its handler names: what they
+    /// throw reaches the function only where it is fatal and not named.
+    pub swallowed: collections::BTreeMap[String, collections::BTreeSet[String]],
 }
 
 impl CheckMethodCalls {
     pub fn empty() -> CheckMethodCalls {
-        return CheckMethodCalls { resolved: collections::BTreeSet(), unresolved: false, unanswered: 0, code_pauses: false, code_fails: false, fields_called: collections::BTreeSet(), in_a_task: CheckCallsInATask { resolved: collections::BTreeSet(), unresolved: false } }
+        return CheckMethodCalls { resolved: collections::BTreeSet(), unresolved: false, unanswered: 0, code_pauses: false, code_fails: false, fields_called: collections::BTreeSet(), in_a_task: CheckCallsInATask { resolved: collections::BTreeSet(), unresolved: false }, swallowed: collections::BTreeMap() }
     }
 }
 

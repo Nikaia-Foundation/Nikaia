@@ -34,6 +34,9 @@ pub struct MethodsCalled {
     pub unseen: bool,
     /// The function fields it calls through, as `Type.field` (ADR-351 D2).
     pub fields: collections::BTreeSet[String],
+    /// Those of `resolved` called only inside a `catch` that keeps what it
+    /// caught, with the fatal types its handler names (#725).
+    pub swallowed: collections::BTreeMap[String, collections::BTreeSet[String]],
 }
 
 /// The graph the walk builds - what each `throws` function throws itself and
@@ -48,6 +51,9 @@ pub struct ThrowsGraph {
     /// of this package called inside a `catch`, with the fatal types its
     /// handler names; the others of their fatal errors still reach the caller.
     pub fatal_calls: collections::BTreeMap[String, collections::BTreeMap[String, collections::BTreeSet[String]]],
+    /// The fatal error types (ADR-345 D1), for a library's method a `catch`
+    /// keeps.
+    pub fatal: collections::BTreeSet[String],
 }
 
 /// Every `throws` function and method of one unit, by the key the ledger
@@ -102,13 +108,17 @@ fn with_methods(key: ref String, thrown: ref Thrown, own: ref Ledger, library: r
             named.insert(UNNAMED.clone())
         }
     }
-    methods_into(graph.methods[key], own, library, named, called)
+    let mut fatal_calls = thrown.fatal_calls.clone()
+    methods_into(graph.methods[key], own, library, graph.fatal, named, called, fatal_calls)
     graph.direct.insert(key.clone(), named)
     graph.calls.insert(key.clone(), called)
-    graph.fatal_calls.insert(key.clone(), thrown.fatal_calls.clone())
+    graph.fatal_calls.insert(key.clone(), fatal_calls)
 }
 
-fn methods_into(resolved: ref MethodsCalled?, own: ref Ledger, library: ref Ledger, mut named: collections::BTreeSet[String], mut called: collections::BTreeSet[String]) {
+// **A method a `catch` keeps adds only the fatal errors its handler does not
+// name** (Part I 7.1, ADR-345 D2, #725): one of this package as a caught call,
+// one of a library by its ledger's set.
+fn methods_into(resolved: ref MethodsCalled?, own: ref Ledger, library: ref Ledger, fatal: ref collections::BTreeSet[String], mut named: collections::BTreeSet[String], mut called: collections::BTreeSet[String], mut fatal_calls: collections::BTreeMap[String, collections::BTreeSet[String]]) {
     let known = resolved ?? return
     for field in known.fields {
         called.insert(field.clone())
@@ -117,6 +127,21 @@ fn methods_into(resolved: ref MethodsCalled?, own: ref Ledger, library: ref Ledg
         named.insert(UNNAMED.clone())
     }
     for callee in known.resolved {
+        if known.swallowed.contains_key(callee) {
+            let taken: collections::BTreeSet[String] = known.swallowed[callee]?.clone() ?? collections::BTreeSet()
+            if own.functions.contains_key(callee) {
+                if !fatal_calls.contains_key(callee) {
+                    fatal_calls.insert(callee.clone(), taken)
+                }
+            } else {
+                for error in fails_with_of(library, callee) {
+                    if fatal.contains(error) && !taken.contains(error) {
+                        named.insert(error)
+                    }
+                }
+            }
+            continue
+        }
         if own.functions.contains_key(callee) {
             called.insert(callee.clone())
         } else {
@@ -149,8 +174,9 @@ pub fn stored_throws(field: ref String, resolved: ref collections::BTreeSet[Stri
             }
         }
     }
-    let known: MethodsCalled? = MethodsCalled { resolved: resolved.clone(), unseen: false, fields: collections::BTreeSet() }
-    methods_into(known, own, library, named, called)
+    let known: MethodsCalled? = MethodsCalled { resolved: resolved.clone(), unseen: false, fields: collections::BTreeSet(), swallowed: collections::BTreeMap() }
+    let mut fatal_calls: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
+    methods_into(known, own, library, graph.fatal, named, called, fatal_calls)
     graph.direct.insert(field.clone(), named)
     graph.calls.insert(field.clone(), called)
 }
@@ -254,30 +280,28 @@ fn fails_with_of(library: ref Ledger, callee: ref String) -> Vec[String] {
 /// is here to say more than it, never less.
 pub fn error_sets(direct: ref collections::BTreeMap[String, collections::BTreeSet[String]], calls: ref collections::BTreeMap[String, collections::BTreeSet[String]], fatal_calls: ref collections::BTreeMap[String, collections::BTreeMap[String, collections::BTreeSet[String]]], fatal: ref collections::BTreeSet[String], own: ref Ledger, places: ref collections::BTreeSet[String]) -> collections::BTreeMap[String, Vec[String]] {
     let mut sets = direct.clone()
-    let mut changed = true
-    while changed {
-        changed = false
-        for (name, callees) in calls {
-            let before = sets[name]?.clone() ?? collections::BTreeSet()
-            let mut grown = before.clone()
-            for callee in callees {
-                for error in theirs(sets, own, callee) {
-                    grown.insert(error)
-                }
-            }
-            let caught = fatal_calls[name]?.clone() ?? collections::BTreeMap()
-            for (callee, named) in caught {
-                for error in theirs(sets, own, callee) {
-                    if fatal.contains(error) && !named.contains(error) {
-                        grown.insert(error)
-                    }
-                }
-            }
-            if grown.len() != before.len() {
-                sets.insert(name.clone(), grown)
-                changed = true
-            }
+    throws_grow(sets, calls, fatal_calls, fatal, own)
+    // **A declared `throws` that names nothing fails with `?`, and so does
+    // whoever calls it** (#725): its set is `?` before its callers settle,
+    // not only in what it publishes, or a caller left with one named type
+    // could not hand on the unnamed error.
+    let mut unnamed: Vec[String] = []
+    for (name, set) in sets {
+        if set.len() > 0 || places.contains(name) {
+            continue
         }
+        let contract = own.functions[name] ?? continue
+        if contract.fails_with.len() > 0 {
+            unnamed.push(name.clone())
+        }
+    }
+    if unnamed.len() > 0 {
+        for name in unnamed {
+            let mut only: collections::BTreeSet[String] = collections::BTreeSet()
+            only.insert(UNNAMED.clone())
+            sets.insert(name.clone(), only)
+        }
+        throws_grow(sets, calls, fatal_calls, fatal, own)
     }
     let mut settled: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
     for (name, set) in sets {
@@ -326,6 +350,37 @@ pub fn error_sets(direct: ref collections::BTreeMap[String, collections::BTreeSe
         settled.insert(name.clone(), errors)
     }
     return settled
+}
+
+// The least fixpoint: each function's set grows by what its callees throw,
+// and by the fatal errors a `catch` around a callee does not name (ADR-345
+// D2), until nothing changes.
+fn throws_grow(mut sets: collections::BTreeMap[String, collections::BTreeSet[String]], calls: ref collections::BTreeMap[String, collections::BTreeSet[String]], fatal_calls: ref collections::BTreeMap[String, collections::BTreeMap[String, collections::BTreeSet[String]]], fatal: ref collections::BTreeSet[String], own: ref Ledger) {
+    let mut changed = true
+    while changed {
+        changed = false
+        for (name, callees) in calls {
+            let before = sets[name]?.clone() ?? collections::BTreeSet()
+            let mut grown = before.clone()
+            for callee in callees {
+                for error in theirs(sets, own, callee) {
+                    grown.insert(error)
+                }
+            }
+            let caught = fatal_calls[name]?.clone() ?? collections::BTreeMap()
+            for (callee, named) in caught {
+                for error in theirs(sets, own, callee) {
+                    if fatal.contains(error) && !named.contains(error) {
+                        grown.insert(error)
+                    }
+                }
+            }
+            if grown.len() != before.len() {
+                sets.insert(name.clone(), grown)
+                changed = true
+            }
+        }
+    }
 }
 
 /// What a callee fails with. **One the walk did not see still has a set**
@@ -735,6 +790,25 @@ fn passes_on(handler: ref Block, names: ref winnow_grammar::InternerContext, hol
     let mut seen = Thrown { direct: collections::BTreeSet(), calls: collections::BTreeSet(), passes_on: false, named: collections::BTreeSet(), fatal_calls: collections::BTreeMap() }
     thrown_in_block(handler, names, holes_of, contribution_of, false, seen)
     return seen.passes_on
+}
+
+/// **Whether a handler passes what it caught on**, read from the tree alone:
+/// `throw error` anywhere in it, its nested blocks included (ADR-280 D10). The
+/// checker asks it before the guarded half is walked (#725).
+pub fn throws_handler_passes_on(handler: ref Block, names: ref winnow_grammar::InternerContext) -> bool {
+    for stmt in handler.stmts {
+        for expr in check_visit_stmt(stmt.node) {
+            if the_caught_error(expr, names) {
+                return true
+            }
+        }
+        for block in check_visit_stmt_blocks(stmt.node) {
+            if throws_handler_passes_on(block, names) {
+                return true
+            }
+        }
+    }
+    return false
 }
 
 /// **The fatal types a handler takes** (ADR-345 D2): those whose variant a

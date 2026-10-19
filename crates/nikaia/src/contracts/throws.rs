@@ -56,6 +56,7 @@ pub fn infer(
                     resolved: calls.resolved.clone(),
                     unseen: calls.unresolved || calls.code_fails,
                     fields: calls.fields_called.clone(),
+                    swallowed: calls.swallowed.clone(),
                 };
                 (key.clone(), called)
             })
@@ -63,8 +64,9 @@ pub fn infer(
         direct: BTreeMap::new(),
         calls: BTreeMap::new(),
         fatal_calls: BTreeMap::new(),
+        fatal: fatal_types(ledger, library),
     };
-    let fatal = fatal_types(ledger, library);
+    let fatal = graph.fatal.clone();
     // **Each function field, name and parameter of code is a place of the
     // graph** (ADR-351 D1, D3, D4).
     let mut stored = stored.clone();

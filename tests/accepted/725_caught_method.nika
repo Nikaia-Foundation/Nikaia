@@ -1,0 +1,43 @@
+// #725: a method call a `catch` keeps adds nothing to the caller's error
+// channel; `main` fails only with what `run` does, the unnamed error.
+
+enum Low { Bad(i64) }
+impl Error for Low { fn message(ref self) -> String { return "low" } }
+
+enum High { Empty }
+impl Error for High { fn message(ref self) -> String { return "high" } }
+
+struct Box2 { n: i64 }
+
+impl Box2 {
+    fn word(ref self) -> String throws {
+        if self.n < 0 { throw Low::Bad(self.n) }
+        return "word"
+    }
+}
+
+fn f(n: i64) -> String throws {
+    if n < 0 { throw Low::Bad(n) }
+    if n == 0 { return "" }
+    return "abc"
+}
+
+fn g(s: String) -> i64 throws {
+    if s.len() == 0 { throw High::Empty }
+    return s.len()
+}
+
+fn run(n: i64) -> i64 throws {
+    let a = g(f(n)) catch {
+        println(f"x {error}")
+        return -1
+    }
+    return a
+}
+
+fn main() throws {
+    println(f"{run(1)}")
+    let b = Box2 { n: -1 }
+    let c = b.word() catch { "" }
+    println(f"{c}")
+}

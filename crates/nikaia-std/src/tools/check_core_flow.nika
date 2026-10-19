@@ -829,6 +829,12 @@ fn check_core_flow_handler_text(mut state: CheckState, world: ref CheckWorld, an
 pub fn check_core_flow_try_catch[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, guarded_expr: ref Expr, handler: ref Block, span: ref Span) -> Ty sync {
     let outer = state.flow.caught
     state.flow.caught = true
+    // **What a handler keeps is not the function's** (#725): the walk of
+    // `throws.nika` asks the same of the tree.
+    let swallowed_outer: collections::BTreeSet[String]? = state.flow.swallowed?.clone()
+    if swallowed_outer == null && !throws_handler_passes_on(handler, world.words) {
+        state.flow.swallowed = fatal_named(handler, world.words)
+    }
     let lambda_outer = check_core_flow_lambda_caught(state, true)
     // **A guard of its own, and the enclosing one set aside** (ADR-308).
     let enclosing: CheckGuarded? = state.flow.guarded?.clone()
@@ -840,6 +846,7 @@ pub fn check_core_flow_try_catch[H: CheckHost](mut state: CheckState, world: ref
         check_core_flow_no_answer(state)
     }
     state.flow.caught = outer
+    state.flow.swallowed = swallowed_outer
     if lambda_outer != null {
         check_core_flow_lambda_caught(state, lambda_outer ?? false)
     }

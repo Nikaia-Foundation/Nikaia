@@ -77,6 +77,28 @@ pub fn check_core_call_on_reached(mut state: CheckState, key: String?) sync {
     let inside_a_task = state.task_bindings.len() > 0
     let mut calls: CheckMethodCalls = state.methods.remove(current) ?? CheckMethodCalls::empty()
     if have {
+        // **A call a `catch` keeps adds nothing but its fatal errors** (#725):
+        // filed as swallowed while every call of it so far was; one call
+        // outside such a `catch` makes it a call like any other for good.
+        let fresh = !calls.resolved.contains(written)
+        let named: collections::BTreeSet[String]? = state.flow.swallowed?.clone()
+        if named == null {
+            calls.swallowed.remove(written)
+        } else if fresh || calls.swallowed.contains_key(written) {
+            let here: collections::BTreeSet[String] = named ?? collections::BTreeSet()
+            let mut kept: collections::BTreeSet[String] = collections::BTreeSet()
+            if fresh {
+                kept = here.clone()
+            } else {
+                let before: collections::BTreeSet[String] = calls.swallowed[written]?.clone() ?? collections::BTreeSet()
+                for error in before {
+                    if here.contains(error) {
+                        kept.insert(error.clone())
+                    }
+                }
+            }
+            calls.swallowed.insert(written.clone(), kept)
+        }
         calls.resolved.insert(written.clone())
         if inside_a_task {
             calls.in_a_task.resolved.insert(written.clone())

@@ -13934,6 +13934,23 @@ pub fn check_core_call_on_reached(state: &mut CheckState, key: Option<String>) {
     let inside_a_task = !state.task_bindings.is_empty();
     let mut calls: CheckMethodCalls = nikaia_std::index::or(state.methods.remove(&current), || CheckMethodCalls::empty());
     if have {
+        let fresh = !calls.resolved.contains(&written);
+        let named: Option<collections::BTreeSet<String>> = match state.flow.swallowed.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        };
+        if named.is_none() { calls.swallowed.remove(&written); } else if fresh || calls.swallowed.contains_key(&written) {
+            let here: collections::BTreeSet<String> = nikaia_std::index::or(named, || collections::BTreeSet::new().into());
+            let mut kept: collections::BTreeSet<String> = collections::BTreeSet::new();
+            if fresh { kept = here.to_owned(); } else {
+                let before: collections::BTreeSet<String> = nikaia_std::index::or(match *nikaia_std::index::get(&calls.swallowed, &written) {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                }, || collections::BTreeSet::new().into());
+                for error in before.iter() { if here.contains(error) { kept.insert(error.to_owned()); } }
+            }
+            calls.swallowed.insert(written.to_owned(), kept);
+        }
         calls.resolved.insert(written.to_owned());
         if inside_a_task { calls.in_a_task.resolved.insert(written.to_owned()); }
     } else {
@@ -15953,6 +15970,11 @@ fn check_core_flow_handler_text(state: &mut CheckState, world: &CheckWorld<'_, '
 pub fn check_core_flow_try_catch<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, host: &H, guarded_expr: &Expr, handler: &Block, span: &Span) -> Ty {
     let outer = state.flow.caught;
     state.flow.caught = true;
+    let swallowed_outer: Option<collections::BTreeSet<String>> = match state.flow.swallowed.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    };
+    if swallowed_outer.is_none() && !throws_handler_passes_on(handler, world.words) { state.flow.swallowed = Some(fatal_named(handler, world.words)); }
     let lambda_outer = check_core_flow_lambda_caught(state, true);
     let enclosing: Option<CheckGuarded> = match state.flow.guarded.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -15967,6 +15989,7 @@ pub fn check_core_flow_try_catch<H: CheckHost>(state: &mut CheckState, world: &C
     state.flow.guarded = enclosing;
     if state.flow.guarded.is_some() { check_core_flow_no_answer(state); }
     state.flow.caught = outer;
+    state.flow.swallowed = swallowed_outer;
     if lambda_outer.is_some() { check_core_flow_lambda_caught(state, nikaia_std::index::or(lambda_outer, || false)); }
     let guarded: CheckGuarded = nikaia_std::index::or(held, || CheckGuarded::nothing());
     state.a_fatal_error_passes(world, &guarded, handler, span);
@@ -21619,6 +21642,7 @@ pub struct CheckFlow {
     pub field_either: bool,
     pub throwing: bool,
     pub caught: bool,
+    pub swallowed: Option<collections::BTreeSet<String>>,
     pub caught_several: bool,
     pub caught_one: Option<Ty>,
     pub guarded: Option<CheckGuarded>,
@@ -21671,7 +21695,7 @@ pub struct CheckFlow {
 }
 
 impl CheckFlow {
-    pub fn start(computes: bool, harvesting: bool) -> CheckFlow { CheckFlow { raised: (None, None), computes, option_values: Vec::new(), option_literals: Vec::new(), unrolling: None, harvesting, inside_a_comptime: false, literal_receivers: Vec::new(), expected_either: false, field_either: false, throwing: false, caught: false, caught_several: false, caught_one: None, guarded: None, loops: 0, barrier: None, fallible_methods: collections::BTreeSet::new(), opaque_methods: collections::BTreeSet::new(), pausing_methods: collections::BTreeSet::new(), settled_methods: collections::BTreeSet::new(), paused_args: Vec::new(), next_choice: 0, read_index: collections::BTreeMap::new(), pending_coalesces: Vec::new(), writing_index: false, read_a_map: false, map_read_sites: collections::BTreeSet::new(), map_views: collections::BTreeSet::new(), last_resolved: None, receiver_name: None, receiver_from_text: false, text_paths: collections::BTreeSet::new(), empty_lists: collections::BTreeMap::new(), open_numbers: collections::BTreeMap::new(), open_chars: collections::BTreeMap::new(), high_bytes: collections::BTreeMap::new(), wide_chars: collections::BTreeMap::new(), chars_refused: collections::BTreeSet::new(), open_elements: collections::BTreeMap::new(), open_walks: collections::BTreeMap::new(), open_params: collections::BTreeMap::new(), walk_open: None, walk_view: false, lent_walks: collections::BTreeSet::new(), lent_params: collections::BTreeSet::new(), walk_lent: false, lambda_expected: None, open_calls: collections::BTreeMap::new(), unknown_bound: collections::BTreeSet::new(), unknown_said: 0, list_constants: collections::BTreeMap::new(), overflowed: collections::BTreeSet::new(), followed: collections::BTreeMap::new(), reaching: None, reached: None, grown_text: collections::BTreeSet::new(), widening_casts: collections::BTreeSet::new(), unsigned_slots: collections::BTreeMap::new(), at_a_write_door: false, pushed_into: None } }
+    pub fn start(computes: bool, harvesting: bool) -> CheckFlow { CheckFlow { raised: (None, None), computes, option_values: Vec::new(), option_literals: Vec::new(), unrolling: None, harvesting, inside_a_comptime: false, literal_receivers: Vec::new(), expected_either: false, field_either: false, throwing: false, caught: false, swallowed: None, caught_several: false, caught_one: None, guarded: None, loops: 0, barrier: None, fallible_methods: collections::BTreeSet::new(), opaque_methods: collections::BTreeSet::new(), pausing_methods: collections::BTreeSet::new(), settled_methods: collections::BTreeSet::new(), paused_args: Vec::new(), next_choice: 0, read_index: collections::BTreeMap::new(), pending_coalesces: Vec::new(), writing_index: false, read_a_map: false, map_read_sites: collections::BTreeSet::new(), map_views: collections::BTreeSet::new(), last_resolved: None, receiver_name: None, receiver_from_text: false, text_paths: collections::BTreeSet::new(), empty_lists: collections::BTreeMap::new(), open_numbers: collections::BTreeMap::new(), open_chars: collections::BTreeMap::new(), high_bytes: collections::BTreeMap::new(), wide_chars: collections::BTreeMap::new(), chars_refused: collections::BTreeSet::new(), open_elements: collections::BTreeMap::new(), open_walks: collections::BTreeMap::new(), open_params: collections::BTreeMap::new(), walk_open: None, walk_view: false, lent_walks: collections::BTreeSet::new(), lent_params: collections::BTreeSet::new(), walk_lent: false, lambda_expected: None, open_calls: collections::BTreeMap::new(), unknown_bound: collections::BTreeSet::new(), unknown_said: 0, list_constants: collections::BTreeMap::new(), overflowed: collections::BTreeSet::new(), followed: collections::BTreeMap::new(), reaching: None, reached: None, grown_text: collections::BTreeSet::new(), widening_casts: collections::BTreeSet::new(), unsigned_slots: collections::BTreeMap::new(), at_a_write_door: false, pushed_into: None } }
 }
 
 
@@ -28606,10 +28630,11 @@ pub struct CheckMethodCalls {
     pub code_fails: bool,
     pub fields_called: collections::BTreeSet<String>,
     pub in_a_task: CheckCallsInATask,
+    pub swallowed: collections::BTreeMap<String, collections::BTreeSet<String>>,
 }
 
 impl CheckMethodCalls {
-    pub fn empty() -> CheckMethodCalls { CheckMethodCalls { resolved: collections::BTreeSet::new(), unresolved: false, unanswered: 0, code_pauses: false, code_fails: false, fields_called: collections::BTreeSet::new(), in_a_task: CheckCallsInATask { resolved: collections::BTreeSet::new(), unresolved: false } } }
+    pub fn empty() -> CheckMethodCalls { CheckMethodCalls { resolved: collections::BTreeSet::new(), unresolved: false, unanswered: 0, code_pauses: false, code_fails: false, fields_called: collections::BTreeSet::new(), in_a_task: CheckCallsInATask { resolved: collections::BTreeSet::new(), unresolved: false }, swallowed: collections::BTreeMap::new() } }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -60600,6 +60625,7 @@ pub struct MethodsCalled {
     pub resolved: collections::BTreeSet<String>,
     pub unseen: bool,
     pub fields: collections::BTreeSet<String>,
+    pub swallowed: collections::BTreeMap<String, collections::BTreeSet<String>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -60608,6 +60634,7 @@ pub struct ThrowsGraph {
     pub direct: collections::BTreeMap<String, collections::BTreeSet<String>>,
     pub calls: collections::BTreeMap<String, collections::BTreeSet<String>>,
     pub fatal_calls: collections::BTreeMap<String, collections::BTreeMap<String, collections::BTreeSet<String>>>,
+    pub fatal: collections::BTreeSet<String>,
 }
 
 pub fn unit_throws(program: &Program, names: &winnow_grammar::InternerContext, holes_of: &impl Fn(&Expr) -> Vec<Expr>, contribution_of: &impl Fn(&Expr) -> Contribution, own: &Ledger, library: &Ledger, graph: &mut ThrowsGraph) {
@@ -60656,17 +60683,28 @@ fn with_methods(key: &str, thrown: &Thrown, own: &Ledger, library: &Ledger, grap
         let place = format!("{}::{}", key, local);
         if !fields.contains(&place) { named.insert(UNNAMED.to_owned()); }
     }
-    methods_into(*nikaia_std::index::get(&graph.methods, key), own, library, &mut named, &mut called);
+    let mut fatal_calls = thrown.fatal_calls.to_owned();
+    methods_into(*nikaia_std::index::get(&graph.methods, key), own, library, &graph.fatal, &mut named, &mut called, &mut fatal_calls);
     graph.direct.insert(key.to_owned(), named);
     graph.calls.insert(key.to_owned(), called);
-    graph.fatal_calls.insert(key.to_owned(), thrown.fatal_calls.to_owned());
+    graph.fatal_calls.insert(key.to_owned(), fatal_calls);
 }
 
-fn methods_into(resolved: Option<&MethodsCalled>, own: &Ledger, library: &Ledger, named: &mut collections::BTreeSet<String>, called: &mut collections::BTreeSet<String>) {
+fn methods_into(resolved: Option<&MethodsCalled>, own: &Ledger, library: &Ledger, fatal: &collections::BTreeSet<String>, named: &mut collections::BTreeSet<String>, called: &mut collections::BTreeSet<String>, fatal_calls: &mut collections::BTreeMap<String, collections::BTreeSet<String>>) {
     let known = match resolved { Some(__nikaia_value) => __nikaia_value, None => return };
     for field in known.fields.iter() { called.insert(field.to_owned()); }
     if known.unseen { named.insert(UNNAMED.to_owned()); }
-    for callee in known.resolved.iter() { if own.functions.contains_key(callee) { called.insert(callee.to_owned()); } else { for error in fails_with_of(library, callee) { named.insert(error); } } }
+    for callee in known.resolved.iter() {
+        if known.swallowed.contains_key(callee) {
+            let taken: collections::BTreeSet<String> = nikaia_std::index::or(match *nikaia_std::index::get(&known.swallowed, callee) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || collections::BTreeSet::new().into());
+            if own.functions.contains_key(callee) { if !fatal_calls.contains_key(callee) { fatal_calls.insert(callee.to_owned(), taken); } } else { for error in fails_with_of(library, callee) { if fatal.contains(&error) && !taken.contains(&error) { named.insert(error); } } }
+            continue;
+        }
+        if own.functions.contains_key(callee) { called.insert(callee.to_owned()); } else { for error in fails_with_of(library, callee) { named.insert(error); } }
+    }
 }
 
 pub fn stored_throws(field: &str, resolved: &collections::BTreeSet<String>, unresolved: bool, free: &collections::BTreeSet<String>, own: &Ledger, library: &Ledger, graph: &mut ThrowsGraph) {
@@ -60674,8 +60712,9 @@ pub fn stored_throws(field: &str, resolved: &collections::BTreeSet<String>, unre
     let mut called: collections::BTreeSet<String> = collections::BTreeSet::new();
     if unresolved { named.insert(UNNAMED.to_owned()); }
     for callee in free.iter() { if callee.starts_with('@') { called.insert(nikaia_std::index::or(callee.strip_prefix('@'), || "").to_owned()); } else if own.functions.contains_key(callee) { called.insert(callee.to_owned()); } else if library.functions.contains_key(callee) { for error in fails_with_of(library, callee) { named.insert(error); } } }
-    let known: Option<MethodsCalled> = Some(MethodsCalled { resolved: resolved.to_owned(), unseen: false, fields: collections::BTreeSet::new() });
-    methods_into((known).as_ref(), own, library, &mut named, &mut called);
+    let known: Option<MethodsCalled> = Some(MethodsCalled { resolved: resolved.to_owned(), unseen: false, fields: collections::BTreeSet::new(), swallowed: collections::BTreeMap::new() });
+    let mut fatal_calls: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
+    methods_into((known).as_ref(), own, library, &graph.fatal, &mut named, &mut called, &mut fatal_calls);
     graph.direct.insert(field.to_owned(), named);
     graph.calls.insert(field.to_owned(), called);
 }
@@ -60733,26 +60772,20 @@ fn fails_with_of(library: &Ledger, callee: &str) -> Vec<String> {
 
 pub fn error_sets(direct: &collections::BTreeMap<String, collections::BTreeSet<String>>, calls: &collections::BTreeMap<String, collections::BTreeSet<String>>, fatal_calls: &collections::BTreeMap<String, collections::BTreeMap<String, collections::BTreeSet<String>>>, fatal: &collections::BTreeSet<String>, own: &Ledger, places: &collections::BTreeSet<String>) -> collections::BTreeMap<String, Vec<String>> {
     let mut sets = direct.to_owned();
-    let mut changed = true;
-    while changed {
-        changed = false;
-        for (name, callees) in calls.iter() {
-            let before = nikaia_std::index::or(match *nikaia_std::index::get(&sets, name) {
-                Some(__nikaia_it) => Some(__nikaia_it.clone()),
-                None => None,
-            }, || collections::BTreeSet::new().into());
-            let mut grown = before.to_owned();
-            for callee in callees.iter() { for error in theirs(&sets, own, callee) { grown.insert(error); } }
-            let caught = nikaia_std::index::or(match *nikaia_std::index::get(&fatal_calls, name) {
-                Some(__nikaia_it) => Some(__nikaia_it.clone()),
-                None => None,
-            }, || collections::BTreeMap::new().into());
-            for (callee, named) in caught.iter() { for error in theirs(&sets, own, callee) { if fatal.contains(&error) && !named.contains(&error) { grown.insert(error); } } }
-            if (grown.len() as i64) != before.len() as i64 {
-                sets.insert(name.to_owned(), grown);
-                changed = true;
-            }
+    throws_grow(&mut sets, calls, fatal_calls, fatal, own);
+    let mut unnamed: Vec<String> = vec![];
+    for (name, set) in sets.iter() {
+        if !set.is_empty() || places.contains(name) { continue; }
+        let contract = match *nikaia_std::index::get(&own.functions, name) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if !contract.fails_with.is_empty() { unnamed.push(name.to_owned()); }
+    }
+    if !unnamed.is_empty() {
+        for name in unnamed.iter() {
+            let mut only: collections::BTreeSet<String> = collections::BTreeSet::new();
+            only.insert(UNNAMED.to_owned());
+            sets.insert(name.to_owned(), only);
         }
+        throws_grow(&mut sets, calls, fatal_calls, fatal, own);
     }
     let mut settled: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
     for (name, set) in sets.iter() {
@@ -60792,6 +60825,30 @@ pub fn error_sets(direct: &collections::BTreeMap<String, collections::BTreeSet<S
         settled.insert(name.to_owned(), errors);
     }
     settled
+}
+
+fn throws_grow(sets: &mut collections::BTreeMap<String, collections::BTreeSet<String>>, calls: &collections::BTreeMap<String, collections::BTreeSet<String>>, fatal_calls: &collections::BTreeMap<String, collections::BTreeMap<String, collections::BTreeSet<String>>>, fatal: &collections::BTreeSet<String>, own: &Ledger) {
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for (name, callees) in calls.iter() {
+            let before = nikaia_std::index::or(match *nikaia_std::index::get(&sets, name) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || collections::BTreeSet::new().into());
+            let mut grown = before.to_owned();
+            for callee in callees.iter() { for error in theirs(&sets, own, callee) { grown.insert(error); } }
+            let caught = nikaia_std::index::or(match *nikaia_std::index::get(&fatal_calls, name) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || collections::BTreeMap::new().into());
+            for (callee, named) in caught.iter() { for error in theirs(&sets, own, callee) { if fatal.contains(&error) && !named.contains(&error) { grown.insert(error); } } }
+            if (grown.len() as i64) != before.len() as i64 {
+                sets.insert(name.to_owned(), grown);
+                changed = true;
+            }
+        }
+    }
 }
 
 fn theirs(sets: &collections::BTreeMap<String, collections::BTreeSet<String>>, own: &Ledger, callee: &str) -> Vec<String> {
@@ -61068,6 +61125,14 @@ fn passes_on(handler: &Block, names: &winnow_grammar::InternerContext, holes_of:
     let mut seen = Thrown { direct: collections::BTreeSet::new(), calls: collections::BTreeSet::new(), passes_on: false, named: collections::BTreeSet::new(), fatal_calls: collections::BTreeMap::new() };
     thrown_in_block(handler, names, holes_of, contribution_of, false, &mut seen);
     seen.passes_on
+}
+
+pub fn throws_handler_passes_on(handler: &Block, names: &winnow_grammar::InternerContext) -> bool {
+    for stmt in handler.stmts.iter() {
+        for expr in check_visit_stmt(&stmt.node) { if the_caught_error(expr, names) { return true; } }
+        for block in check_visit_stmt_blocks(&stmt.node) { if throws_handler_passes_on(block, names) { return true; } }
+    }
+    false
 }
 
 pub fn fatal_named(handler: &Block, names: &winnow_grammar::InternerContext) -> collections::BTreeSet<String> {
@@ -67130,7 +67195,7 @@ pub mod threads {
 }
 pub mod throws {
     #[allow(unused_imports)]
-    pub use super::{AS_VALUE, MethodsCalled, ThrowsGraph, unit_throws, stored_throws, params_as_places, throws_given, throws_published, error_sets, error_type, Thrown, Contribution, thrown_by, fatal_named};
+    pub use super::{AS_VALUE, MethodsCalled, ThrowsGraph, unit_throws, stored_throws, params_as_places, throws_given, throws_published, error_sets, error_type, Thrown, Contribution, thrown_by, throws_handler_passes_on, fatal_named};
 }
 pub mod tiers {
     #[allow(unused_imports)]

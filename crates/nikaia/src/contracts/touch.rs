@@ -196,6 +196,7 @@ pub fn infer(
                     resolved: calls.resolved.clone(),
                     unseen: calls.unresolved,
                     fields: Default::default(),
+                    swallowed: Default::default(),
                 };
                 (key.clone(), called)
             })

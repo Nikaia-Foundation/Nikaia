@@ -129,6 +129,12 @@ pub struct CheckFlow {
     pub throwing: bool,
     /// Whether the expression being walked is the guarded half of a `catch`.
     pub caught: bool,
+    /// **Inside the guarded half of a `catch` that keeps what it caught**
+    /// (Part I 7.1, ADR-280 D10: its handler writes no `throw error`): the
+    /// fatal types the outermost such handler names (ADR-345 D2); `null`
+    /// outside one. A method resolved here adds nothing to the function's
+    /// error set but those fatal errors (#725).
+    pub swallowed: collections::BTreeSet[String]?,
     /// The handler being walked was handed an error that can be more than one
     /// type (ADR-280 D18).
     pub caught_several: bool,
@@ -262,6 +268,7 @@ impl CheckFlow {
             field_either: false,
             throwing: false,
             caught: false,
+            swallowed: null,
             caught_several: false,
             caught_one: null,
             guarded: null,
