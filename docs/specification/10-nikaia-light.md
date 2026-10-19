@@ -2548,7 +2548,10 @@ keep is read off the program:
 local, `fn d() -> ref String { let s = "x".clone(); return ref s }`, puts `s` in
 the caller's keep. **A view handed back from a parameter points into the
 caller's argument**, which lives as long as the result does; an argument made
-in the call itself, `let r = e(name.clone())`, lives in the caller's keep.
+in the call itself, `let r = e(name.clone())`, lives in the caller's keep. **A
+view of a parameter kept in a place another parameter holds**, such as a part of
+`s` pushed into `mut v: Vec[String]`, points into the caller's argument the same
+way, and that argument lives as long as the place's owner does.
 
 A struct built and consumed inside the scope that owns its buffer is borrowed,
 and costs nothing:
