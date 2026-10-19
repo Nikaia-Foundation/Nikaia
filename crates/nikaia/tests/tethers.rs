@@ -317,7 +317,11 @@ fn findings(source: &str) -> Vec<nikaia::check::Finding> {
     let parsed = parse_to_ast(source).expect("an `@` line parses (ADR-331)");
     let own = Ledger::infer(&parsed);
     let library = Ledger::parse(STD).expect("std's shipped ledger parses");
-    nikaia::check::check(&parsed, &own, &library).findings
+    nikaia::check::check(&parsed, &own, &library)
+        .findings
+        .into_iter()
+        .filter(|f| f.code != "NK1261")
+        .collect()
 }
 
 /// **A view of a buffer the body owns is tethered, not refused**, with no word

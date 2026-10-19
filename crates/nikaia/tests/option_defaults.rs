@@ -326,7 +326,11 @@ fn a_refused_default_offers_an_optional_not_a_let() {
     let parsed = parse_to_ast(source).expect("the source parses");
     let own = common::infer(&parsed);
     let library = Ledger::parse(STD).expect("std ships a ledger");
-    let found = common::checked(&parsed, &own, &library).findings;
+    let found = common::checked(&parsed, &own, &library)
+        .findings
+        .into_iter()
+        .filter(|f| f.code != "NK1261")
+        .collect::<Vec<_>>();
     assert_eq!(found.len(), 1, "{found:#?}");
     let finding = &found[0];
     assert_eq!(finding.code, "NK1127");
@@ -429,5 +433,6 @@ fn a_text_view_option_lends_an_owned_string() {
          \x20   println(joined(1; sep: v))\n\
          \x20   println(v)\n\
          }\n";
-    assert_eq!(codes(source), Vec::<String>::new());
+    // `ref` on the option is redundant (`NK1261`, a warning), not refused.
+    assert_eq!(codes(source), vec!["NK1261".to_string()]);
 }

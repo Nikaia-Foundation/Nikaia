@@ -30,7 +30,11 @@ fn findings(source: &str) -> Vec<Finding> {
     let parsed = parse_to_ast(source).expect("the source parses");
     let own = Ledger::infer(&parsed);
     let library = Ledger::parse(STD).expect("std's shipped ledger parses");
-    check::check(&parsed, &own, &library).findings
+    check::check(&parsed, &own, &library)
+        .findings
+        .into_iter()
+        .filter(|f| f.code != "NK1261")
+        .collect()
 }
 
 fn one(source: &str) -> Finding {

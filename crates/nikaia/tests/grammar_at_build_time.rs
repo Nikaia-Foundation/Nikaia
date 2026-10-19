@@ -52,6 +52,9 @@ fn findings_in(source: &str, reads: &Reads) -> Vec<Finding> {
         reads,
     )
     .findings
+    .into_iter()
+    .filter(|f| f.code != "NK1261")
+    .collect()
 }
 
 fn one(source: &str, reads: &Reads) -> Finding {

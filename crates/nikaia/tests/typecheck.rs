@@ -22,7 +22,11 @@ fn findings(source: &str) -> Vec<Finding> {
     let parsed = parse_to_ast(source).expect("the source parses");
     let own = Ledger::infer(&parsed);
     let library = Ledger::parse(STD).expect("std's shipped ledger parses");
-    check::check(&parsed, &own, &library).findings
+    check::check(&parsed, &own, &library)
+        .findings
+        .into_iter()
+        .filter(|f| f.code != "NK1261")
+        .collect()
 }
 
 /// The one finding a source is written to produce, with its code.
@@ -104,6 +108,8 @@ fn no_program_in_the_repository_has_a_type_error() {
                 .findings
                 .into_iter()
                 .filter(|finding| !(a_library && finding.code == "NK1238"))
+                // A warning is not a type error (`NK1261` and the rest).
+                .filter(|finding| finding.severity != check::Severity::Warning)
             {
                 reported.push_str(&nikaia::diagnostics::render_finding(
                     &finding, &name, &source,

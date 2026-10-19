@@ -41,6 +41,9 @@ fn findings(source: &str) -> Vec<nikaia::check::Finding> {
         &reads(),
     )
     .findings
+    .into_iter()
+    .filter(|f| f.code != "NK1261")
+    .collect()
 }
 
 fn lowered(source: &str) -> String {

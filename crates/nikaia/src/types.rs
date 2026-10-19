@@ -45,6 +45,7 @@ pub fn check(parsed: &Parsed, own: &Ledger, library: &Ledger) -> Vec<Finding> {
         library,
         &declared,
         &impl_parameters,
+        &parsed.text_views,
     )
     .into_iter()
     .map(crate::traits::from_nikaia)

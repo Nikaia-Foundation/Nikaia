@@ -73,6 +73,9 @@ fn findings(source: &str) -> Vec<nikaia::check::Finding> {
         nikaia::contracts::Ledger::parse(nikaia::contracts::STD).expect("std ships a ledger");
     nikaia::check::check_program(&parsed, &own, &library, &std::collections::BTreeSet::new())
         .findings
+        .into_iter()
+        .filter(|f| f.code != "NK1261")
+        .collect()
 }
 
 /// Every position that keeps what it is given, in one program.

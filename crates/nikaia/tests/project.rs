@@ -2245,7 +2245,10 @@ fn a_grammar_at_build_time_reaches_a_project_build() {
     // manifest declares it, so `rustc` has no unexpected `cfg` to warn about.
     let stderr = String::from_utf8_lossy(&ran.stderr);
     assert!(
-        !stderr.contains("unexpected `cfg`") && !stderr.contains("warning"),
+        // `NK1261` is this compiler's warning about the `ref String` written
+        // here, not the backend's.
+        !stderr.contains("unexpected `cfg`")
+            && !stderr.replace("warning[NK1261]", "").contains("warning"),
         "a correct program builds without the backend's words: {stderr}"
     );
 

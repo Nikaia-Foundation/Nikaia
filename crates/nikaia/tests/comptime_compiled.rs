@@ -42,6 +42,9 @@ fn findings(source: &str) -> Vec<Finding> {
         &reads(),
     )
     .findings
+    .into_iter()
+    .filter(|f| f.code != "NK1261")
+    .collect()
 }
 
 fn lowered(source: &str) -> String {
@@ -206,6 +209,9 @@ fn findings_bounded(source: &str, steps: u64, bytes: u64) -> Vec<Finding> {
         &reads,
     )
     .findings
+    .into_iter()
+    .filter(|f| f.code != "NK1261")
+    .collect()
 }
 
 /// The one run that stopped as the program would (ADR-321 D16): `NK1244`.
@@ -428,7 +434,11 @@ fn a_file_the_build_reads_is_handed_to_a_compiled_call() {
             &check::Newly::new(),
             &reads,
         )
-        .findings;
+        .findings
+        .into_iter()
+        // `ref String` here is redundant (`NK1261`), and only a warning.
+        .filter(|f| f.code != "NK1261")
+        .collect::<Vec<_>>();
         let rust = nikaia::emit::emit_program_reading(&parsed, Default::default(), &reads)
             .map(|lowered| lowered.rust)
             .unwrap_or_default();
@@ -719,7 +729,11 @@ fn findings_without_a_workshop(source: &str) -> Vec<Finding> {
     let parsed = parse_to_ast(source).expect("the source parses");
     let own = Ledger::infer(&parsed);
     let library = Ledger::parse(STD).expect("std's shipped ledger parses");
-    check::check_program(&parsed, &own, &library, &BTreeSet::new()).findings
+    check::check_program(&parsed, &own, &library, &BTreeSet::new())
+        .findings
+        .into_iter()
+        .filter(|f| f.code != "NK1261")
+        .collect()
 }
 
 const DIVIDED: &str = "fn example(n: i64) -> i64 {\n\

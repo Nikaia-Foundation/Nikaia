@@ -37,7 +37,11 @@ fn findings(source: &str) -> Vec<nikaia::check::Finding> {
     let parsed = parse_to_ast(source).expect("the source parses");
     let own = nikaia::contracts::Ledger::infer(&parsed);
     let library = nikaia::contracts::Ledger::parse(nikaia::contracts::STD).expect("std's ledger");
-    nikaia::check::check(&parsed, &own, &library).findings
+    nikaia::check::check(&parsed, &own, &library)
+        .findings
+        .into_iter()
+        .filter(|f| f.code != "NK1261")
+        .collect()
 }
 
 /// **The checker lets the driver use its spread**: `...args: Self::dsl` is a

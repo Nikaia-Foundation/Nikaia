@@ -266,3 +266,94 @@ fn a_kept_option_is_owned_and_listed_in_keeps() {
     assert!(rust.contains("fn hands(text: String)"), "{rust}");
     assert_eq!(ran("kept_option", source), "kept\n1;\nt\n");
 }
+
+/// The `NK1261` warnings of `source`, each message.
+fn redundant_refs(source: &str) -> Vec<String> {
+    use nikaia::contracts::LedgerOps;
+    let parsed = nikaia::parser::parse_to_ast(source).expect("the source parses");
+    let own = common::infer(&parsed);
+    let library =
+        nikaia::contracts::Ledger::parse(nikaia::contracts::STD).expect("std ships a ledger");
+    nikaia::check::check_program(&parsed, &own, &library, &std::collections::BTreeSet::new())
+        .findings
+        .into_iter()
+        .filter(|f| f.code == "NK1261")
+        .inspect(|f| assert_eq!(f.severity, nikaia::check::Severity::Warning))
+        .map(|f| f.message)
+        .collect()
+}
+
+/// **`ref String` inside Nikaia is the warning `NK1261`** (ADR-282 D2, #654
+/// step 1): on a parameter, an option, a field, a result and a `let`, each
+/// named in the message, and the program still runs as written.
+#[test]
+fn ref_string_outside_the_c_boundary_is_a_warning() {
+    let source = "struct Named {\n    name: ref String?,\n}\n\n\
+                  fn join(a: ref String; sep: ref String = \",\") -> String {\n\
+                  \x20   return f\"{a}{sep}\"\n\
+                  }\n\n\
+                  fn first(a: ref String) -> ref String {\n\
+                  \x20   let b: ref String = a\n\
+                  \x20   return b\n\
+                  }\n\n\
+                  fn main() {\n\
+                  \x20   let n = Named { name: null }\n\
+                  \x20   let j = join(\"x\")\n\
+                  \x20   println(f\"{first(j)}{n.name ?? \"-\"}\")\n\
+                  }\n";
+    let found = redundant_refs(source);
+    for (position, written) in [
+        ("field", "ref String?"),
+        ("parameter", "ref String"),
+        ("result", "ref String"),
+        ("`let`", "ref String"),
+    ] {
+        let wanted = format!("a {position} written `{written}`");
+        assert!(
+            found.iter().any(|m| m.contains(&wanted)),
+            "{wanted}: {found:#?}"
+        );
+    }
+    // The two parameters and the option.
+    assert_eq!(
+        found.iter().filter(|m| m.contains("a parameter")).count(),
+        3,
+        "{found:#?}"
+    );
+    assert_eq!(ran("redundant_ref", source), "x,-\n");
+}
+
+/// **Plain `String` that the tiers make a view is no warning** (#654 step 1):
+/// a field, a `let`, a result and a method's result written `String` are
+/// views where only literals flow into them, and the source wrote no `ref`.
+#[test]
+fn string_the_tiers_made_a_view_is_no_warning() {
+    let source = "struct User {\n    name: String,\n}\n\n\
+                  impl User {\n    fn title(ref self) -> String {\n        return \"user\"\n    }\n}\n\n\
+                  fn label() -> String {\n    return \"label\"\n}\n\n\
+                  fn main() {\n\
+                  \x20   let nobody: String = \"nobody\"\n\
+                  \x20   let u = User { name: \"ada\" }\n\
+                  \x20   println(f\"{nobody} {u.name} {u.title()} {label()}\")\n\
+                  }\n";
+    let views = nikaia::parser::parse_to_ast(source)
+        .expect("the source parses")
+        .text_views;
+    for wanted in ["field User name", "result label", "result User::title"] {
+        assert!(views.contains(wanted), "{wanted}: {views:?}");
+    }
+    assert!(views.iter().any(|v| v.starts_with("let ")), "{views:?}");
+    assert_eq!(redundant_refs(source), Vec::<String>::new());
+    assert_eq!(ran("tiered_views", source), "nobody ada user label\n");
+}
+
+/// **Not at the C boundary**, where `ref String` is the pointer C expects, nor
+/// inside a type argument or on plain `String`.
+#[test]
+fn ref_string_at_the_c_boundary_is_no_warning() {
+    let source = "extern \"C\" {\n    fn puts(s: ref String) -> i32\n}\n\n\
+                  pub extern fn greet(name: ref String) -> i64 sync {\n    return name.len()\n}\n\n\
+                  fn count(names: Vec[ref String], name: String) -> i64 {\n    return names.len() + name.len()\n}\n\n\
+                  fn main() {\n    println(f\"{count([\"a\"], \"b\")}\")\n}\n";
+    assert_eq!(redundant_refs(source), Vec::<String>::new());
+}

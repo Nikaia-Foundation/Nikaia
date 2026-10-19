@@ -39,7 +39,11 @@ fn compiled(purpose: &str, source: &str) -> String {
     let parsed = parse_to_ast(source).expect("the source parses");
     let own = Ledger::infer(&parsed);
     let library = Ledger::parse(STD).expect("std's shipped ledger parses");
-    let findings = check::check(&parsed, &own, &library).findings;
+    let findings = check::check(&parsed, &own, &library)
+        .findings
+        .into_iter()
+        .filter(|f| f.code != "NK1261")
+        .collect::<Vec<_>>();
     assert!(
         findings.is_empty(),
         "{purpose} is a correct program and the checker says otherwise: {findings:#?}"
@@ -81,7 +85,11 @@ fn ran(purpose: &str, source: &str) -> String {
     let parsed = parse_to_ast(source).expect("the source parses");
     let own = Ledger::infer(&parsed);
     let library = Ledger::parse(STD).expect("std's shipped ledger parses");
-    let found = check::check(&parsed, &own, &library).findings;
+    let found = check::check(&parsed, &own, &library)
+        .findings
+        .into_iter()
+        .filter(|f| f.code != "NK1261")
+        .collect::<Vec<_>>();
     assert!(
         found.is_empty(),
         "{purpose} is a correct program and the checker says otherwise: {found:#?}"
@@ -117,7 +125,11 @@ fn findings(source: &str) -> Vec<check::Finding> {
     let parsed = parse_to_ast(source).expect("the source parses");
     let own = Ledger::infer(&parsed);
     let library = Ledger::parse(STD).expect("std's shipped ledger parses");
-    check::check(&parsed, &own, &library).findings
+    check::check(&parsed, &own, &library)
+        .findings
+        .into_iter()
+        .filter(|f| f.code != "NK1261")
+        .collect()
 }
 
 /// **Part I 2.3's example, both lines.**
@@ -372,7 +384,11 @@ fn main() {
     let parsed = parse_to_ast(source).expect("parses");
     let own = Ledger::infer(&parsed);
     let library = Ledger::parse(STD).expect("std's shipped ledger parses");
-    let findings = check::check(&parsed, &own, &library).findings;
+    let findings = check::check(&parsed, &own, &library)
+        .findings
+        .into_iter()
+        .filter(|f| f.code != "NK1261")
+        .collect::<Vec<_>>();
     assert_eq!(findings.len(), 1, "{findings:#?}");
     let it = &findings[0];
     assert_eq!(

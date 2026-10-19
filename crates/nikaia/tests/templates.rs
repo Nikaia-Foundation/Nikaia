@@ -288,7 +288,12 @@ fn an_html_block_is_text_to_the_checker() {
         let parsed = parse_to_ast(source).expect("the source parses");
         let own = Ledger::infer(&parsed);
         let library = Ledger::parse(STD).expect("std's shipped ledger parses");
-        nikaia::check::check(&parsed, &own, &library).findings
+        // The helper writes `ref String` (`NK1261`, a warning).
+        nikaia::check::check(&parsed, &own, &library)
+            .findings
+            .into_iter()
+            .filter(|f| f.code != "NK1261")
+            .collect::<Vec<_>>()
     };
     let fine = template("<p>{name}</p>");
     assert!(findings(&fine).is_empty(), "{:#?}", findings(&fine));

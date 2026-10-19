@@ -406,6 +406,11 @@ pub struct Parsed {
     /// that is not text of its own below, one line each, for `--tethers`
     /// ([ADR-282](../../../docs/specification/adr/adr-282.md) D26).
     pub text_tiers: Vec<String>,
+    /// **The positions [`crate::text_tiers`] made a view**, by the word its
+    /// walk keys them with (`field T f`, `result f`, `param f 0`, `let 12`):
+    /// written `String`, not `ref String`, so `NK1261` passes them by
+    /// ([ADR-282](../../../docs/specification/adr/adr-282.md) D2).
+    pub text_views: std::collections::BTreeSet<String>,
     /// **The package this file is a part of**, where a build of several
     /// packages read it as a dependency's (`modules::Unit::package`), and
     /// `None` for the program's own. What a build-time run needs to write a
@@ -591,6 +596,7 @@ impl Parsed {
             interner: self.interner.clone(),
             aliases: self.aliases.clone(),
             text_tiers: self.text_tiers.clone(),
+            text_views: self.text_views.clone(),
             package: self.package.clone(),
             hole_wraps: self.hole_wraps.clone(),
             holes: Default::default(),
@@ -629,6 +635,7 @@ impl Parsed {
             interner: self.interner.clone(),
             aliases: self.aliases.clone(),
             text_tiers: self.text_tiers.clone(),
+            text_views: self.text_views.clone(),
             package: self.package.clone(),
             hole_wraps: self.hole_wraps.clone(),
             holes: Default::default(),
@@ -870,6 +877,7 @@ pub fn parse_to_ast(input: &str) -> Result<Parsed> {
         interner,
         aliases,
         text_tiers: Vec::new(),
+        text_views: std::collections::BTreeSet::new(),
         package: None,
         hole_wraps: std::collections::BTreeMap::new(),
         holes: Default::default(),

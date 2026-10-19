@@ -35,8 +35,11 @@ fn lowered(purpose: &str, source: &str) -> String {
     let parsed = parse_to_ast(source).expect("the source parses");
     let own = Ledger::infer(&parsed);
     let library = Ledger::parse(STD).expect("std's shipped ledger parses");
-    let found =
-        check::check_program(&parsed, &own, &library, &std::collections::BTreeSet::new()).findings;
+    let found = check::check_program(&parsed, &own, &library, &std::collections::BTreeSet::new())
+        .findings
+        .into_iter()
+        .filter(|f| f.code != "NK1261")
+        .collect::<Vec<_>>();
     assert!(
         found.is_empty(),
         "{purpose} is a correct program and the checker says otherwise: {found:#?}"

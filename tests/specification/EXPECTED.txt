@@ -1,12 +1,12 @@
 10-nikaia-light.md #1 lowered (a body)  let x = 10
 10-nikaia-light.md #2 lowered (a body)  let mut y = 10
 10-nikaia-light.md #3 refused (a body) [NK1117]  let h = h.wrapping_mul(31).wrapping_add(c)        // a …
-10-nikaia-light.md #4 lowered (as written)  fn fnv(key: ref String) -> u64 {
+10-nikaia-light.md #4 lowered (as written) [NK1261]  fn fnv(key: ref String) -> u64 {
 10-nikaia-light.md #5 refused (items, then a body) [NK1117]  fn area(x: i32, y: i32) -> i64 {
 10-nikaia-light.md #6 refused (a body) [NK1117]  let average = (total as f64) / (count as f64)     // wi…
 10-nikaia-light.md #7 refused (a body) [NK1117]  let small = big.truncating_i32()                  // ke…
 10-nikaia-light.md #8 refused (a body) [NK1117]  let sum = a.checked_add(b) ?? return null         // nu…
-10-nikaia-light.md #9 lowered (a body) [about-a-refusal]  let strictly_string: String = "Hello"
+10-nikaia-light.md #9 lowered (a body) [about-a-refusal NK1261]  let strictly_string: String = "Hello"
 10-nikaia-light.md #10 fragment (as written) [sketch]  if x != null && x > 3 { use(x + 1) }   // `x` is an i64…
 10-nikaia-light.md #11 lowered (a body)  let name = "Nikaia"  // Compiler knows this is a ref St…
 10-nikaia-light.md #12 refused (a body) [NK1117]  let count = 42          // an i32: nothing asks, and an…
@@ -75,9 +75,9 @@
 10-nikaia-light.md #75 refused (as written) [sketch NK1135]  use std::fs
 10-nikaia-light.md #76 lowered (as written)  struct Expr { n: i64 }
 10-nikaia-light.md #77 fragment (as written) [sketch]  struct Token {
-10-nikaia-light.md #78 lowered (as written)  struct Reading { name: ref String, temp: i32 }
+10-nikaia-light.md #78 lowered (as written) [NK1261]  struct Reading { name: ref String, temp: i32 }
 10-nikaia-light.md #79 fragment (as written) [sketch]  struct Reading { name: ref String, temp: i32 }
-10-nikaia-light.md #80 refused (as written) [NK1135]  impl Checker {
+10-nikaia-light.md #80 refused (as written) [NK1135,NK1261]  impl Checker {
 10-nikaia-light.md #81 refused (a body) [NK1117]  let mut y = "short".clone()
 10-nikaia-light.md #82 refused (a body) [about-a-refusal NK1117]  let mut y = "short".clone()
 10-nikaia-light.md #83 refused (a body) [NK1117]  let mut users = load_users()
@@ -155,7 +155,7 @@
 30-nikaia-tooling.md #22 refused (as written) [NK1127,NK1135]  use std::fs
 30-nikaia-tooling.md #23 refused (a body) [NK1117,NK1181]  // The request chose this name; the call says which dir…
 30-nikaia-tooling.md #24 fragment (as written)  pub fn escape(text: ref String) -> String        // for…
-30-nikaia-tooling.md #25 lowered (as written)  fn row(name: ref String, shade: ref String) -> String {
+30-nikaia-tooling.md #25 lowered (as written) [NK1261]  fn row(name: ref String, shade: ref String) -> String {
 30-nikaia-tooling.md #26 fragment (as written)  <table>
 30-nikaia-tooling.md #27 fragment (as written)  // Subject: the path, and the root it may not leave ; C…
 30-nikaia-tooling.md #28 fragment (as written) [sketch]  let data = fs::map(ref path, fs::Root::Anywhere)

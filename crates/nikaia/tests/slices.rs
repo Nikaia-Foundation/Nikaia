@@ -23,7 +23,11 @@ fn findings(source: &str) -> Vec<check::Finding> {
     let parsed = parse_to_ast(source).expect("the source parses");
     let own = Ledger::infer(&parsed);
     let library = Ledger::parse(STD).expect("std's shipped ledger parses");
-    check::check_program(&parsed, &own, &library, &std::collections::BTreeSet::new()).findings
+    check::check_program(&parsed, &own, &library, &std::collections::BTreeSet::new())
+        .findings
+        .into_iter()
+        .filter(|f| f.code != "NK1261")
+        .collect()
 }
 
 fn lowered(source: &str) -> String {

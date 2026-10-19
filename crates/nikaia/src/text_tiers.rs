@@ -239,6 +239,7 @@ pub fn refine(parsed: &mut Parsed) {
     });
     rewrite(parsed, &tiers, &lets, text, &adopted, &wraps, into);
     parsed.text_tiers = said;
+    parsed.text_views = views(&tiers);
 }
 
 fn mark(ty: &mut Type, path: &[usize], tier: Tier) {
@@ -667,6 +668,21 @@ fn mark_let_item(item: &mut Item, wanted: usize, path: &[usize], tier: Tier) {
 }
 
 /// The positions that are not text of its own, in the words `--tethers` uses.
+/// The positions made a view as a whole, by the walk's word for each
+/// (`owner_word` in `tools/text_tiers.nika`).
+fn views(tiers: &Tiers) -> BTreeSet<String> {
+    tiers
+        .iter()
+        .filter(|(position, tier)| position.path.is_empty() && **tier != Tier::Owned)
+        .map(|(position, _)| match &position.owner {
+            Owner::Field(of, field) => format!("field {of} {field}"),
+            Owner::Result(key) => format!("result {key}"),
+            Owner::Param(key, at) => format!("param {key} {at}"),
+            Owner::Let(at) => format!("let {at}"),
+        })
+        .collect()
+}
+
 fn said(tiers: &Tiers) -> Vec<String> {
     tiers
         .iter()

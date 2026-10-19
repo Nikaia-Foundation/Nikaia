@@ -29,7 +29,11 @@ fn library() -> Ledger {
 fn findings(source: &str) -> Vec<nikaia::check::Finding> {
     let parsed = parse_to_ast(source).expect("the source parses");
     let own = Ledger::infer(&parsed);
-    nikaia::check::check(&parsed, &own, &library()).findings
+    nikaia::check::check(&parsed, &own, &library())
+        .findings
+        .into_iter()
+        .filter(|f| f.code != "NK1261")
+        .collect()
 }
 
 /// **The two words parse, render and round-trip** (D1, D3).
@@ -443,6 +447,8 @@ fn no_loose_program_in_the_repository_is_refused() {
             .findings
             .iter()
             .filter(|finding| !(a_library && finding.code == "NK1238"))
+            // A warning refuses nothing (`NK1261` and the rest).
+            .filter(|finding| finding.severity != nikaia::check::Severity::Warning)
         {
             reported.push_str(&nikaia::diagnostics::render_finding(
                 finding, &name, &source,
