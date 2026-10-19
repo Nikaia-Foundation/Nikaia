@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1053] — 2026-10-19
+
+**The specification's examples write `String` where `ref` said nothing more (#654)**
+- Part I 2.2, 2.3, the options example and 6.5's `label`, and Part III's `html` `escape` and `row`, drop a `ref` the program means the same without (ADR-282 D2, NK1261). `Pair`/`pair` and `longest` keep it: without it the parameters are kept today, not lent.
+
 ## [0.0.1052] — 2026-10-19
 
 **`ref String` outside the C boundary is a warning (NK1261, #654)**

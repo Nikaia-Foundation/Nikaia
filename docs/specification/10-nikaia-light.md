@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1052 (Draft)
+**Version:** 0.0.1053 (Draft)
 **Date:** 2026-10-19
 
 ---
@@ -366,7 +366,7 @@ written beside a comparison is written in parentheses (`NK1197`), because C
 reads `a & mask == 0` the other way:
 
 ```nika
-fn fnv(key: ref String) -> u64 {
+fn fnv(key: String) -> u64 {
     let mut hash: u64 = 0xcbf29ce484222325
     for b in key.bytes() {
         hash ^= b as u64
@@ -528,7 +528,7 @@ absence of a value is written with a trailing question mark `?`.
 let strictly_string: String = "Hello"
 // strictly_string = null // Error!
 
-let mut maybe_string: ref String? = null // Valid
+let mut maybe_string: String? = null     // Valid
 maybe_string = "World"             // Valid (`mut`, as in 2.1)
 ```
 
@@ -1762,7 +1762,7 @@ Parameters *after* the semicolon are options, flags, or modifiers.
 
 ```nika
 // Definition
-fn request(url: ref String; timeout: time::Duration = 30.seconds(), method: ref String = "GET") { ... }
+fn request(url: String; timeout: time::Duration = 30.seconds(), method: String = "GET") { ... }
 
 // Valid calls
 request("https://api.com")                                        // both options defaulted
@@ -2598,7 +2598,7 @@ parameter reaches it, it points into nothing a caller passed.
 
 ```nika
 impl Checker {
-    fn label(ref self, world: ref World) -> ref String {
+    fn label(ref self, world: ref World) -> String {
         return world.names[self.at]     // points into `world`; `self` is free again
     }
 }

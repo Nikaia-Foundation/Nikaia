@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part III: Tooling, Ecosystem & Interoperability**
-**Version:** 0.0.1052 (Draft)
+**Version:** 0.0.1053 (Draft)
 **Date:** 2026-10-19
 
 ---
@@ -1182,7 +1182,7 @@ option chooses the executor and nothing else.
 HTML escaping, on which a template's contract rests.
 
 ```nika
-pub fn escape(text: ref String) -> String        // for a text node or a quoted attribute
+pub fn escape(text: String) -> String            // for a text node or a quoted attribute
 pub struct Raw                             // "this is already markup"
 impl Raw { pub fn(markup: String) -> Raw } // html::Raw(markup): the audit point, and the only constructor
 ```
@@ -1201,7 +1201,7 @@ written: the body is split into literal markup and holes at compile time, and th
 string building. The escaping is a compile-time property.
 
 ```nika
-fn row(name: ref String, shade: ref String) -> String {
+fn row(name: String, shade: String) -> String {
     return dsl html {
         <tr class="{shade}"><td>{name}</td></tr>
     } eod
