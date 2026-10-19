@@ -48,30 +48,32 @@ benches/brc/brc.sh 200000     # quicker
 
 ## The table
 
-Nikaia 0.0.1045, rustc 1.97.0, Intel Xeon @ 2.10 GHz; callgrind, 1 000 000 rows,
+Nikaia 0.0.1051, rustc 1.97.0, Intel Xeon @ 2.10 GHz; callgrind, 1 000 000 rows,
 per row:
 
 | | instructions | mispredictions | tokens |
 |---|---:|---:|---:|
-| Rust, `naive` | 860.9 | 8.64 | 486 |
-| **Nikaia**, `naive.nika` | **600.3** | **8.36** | **320** |
+| Rust, `naive` | 860.5 | 8.62 | 486 |
+| **Nikaia**, `naive.nika` | **600.3** | **8.29** | **320** |
 | Rust, `tuned` | 272.2 | 3.70 | 809 |
-| **Nikaia**, `examples/1brc.nika` | **233.6** | **1.09** | **618** |
+| **Nikaia**, `examples/1brc.nika` | **231.6** | **1.12** | **618** |
 | Nikaia, overflow checks off | 231.6 | 1.12 | |
 
 The naive programs: Nikaia's is a third shorter and runs 30 % fewer
 instructions, from the same algorithm (below).
 
-Against `tuned`, Nikaia runs 14 % fewer instructions and less than a third of
+Against `tuned`, Nikaia runs 15 % fewer instructions and less than a third of
 the mispredictions, from a quarter fewer tokens, with no `unsafe`, with UTF-8
 and every overflow checked or proved; the same file also runs on every core.
-The overflow checks cost 2.0 instructions a row, the accumulator's two checks,
-`sum += temp` and `count += 1`. The temperature's checks are proved (ADR-314)
-and cost nothing in either build.
+The temperature's checks are proved (ADR-314), and so are the counter's,
+`count += 1` and the merge's `count += other.count`, from the input's length
+(ADR-367): the counter is one `incq`. What is left is `sum += temp`, one `jo`
+after its `add`; the build without it runs one branch fewer a row and the same
+instructions, laid out differently.
 
 The mispredictions depend on where the code lies, the instructions do not:
 callgrind's simulated predictor is indexed by address. The build without
-overflow checks has 1.12, the table's row built with line tables 1.09; earlier
+overflow checks has 1.12, as the table's row has; earlier
 layouts of the same code reached 2.05, nearly all of the difference in
 `memcmp`, with the same instructions executed. Every build
 of `1brc.nika` stays below `tuned`'s 3.70.
@@ -79,8 +81,8 @@ of `1brc.nika` stays below `tuned`'s 3.70.
 ## Where Nikaia's instructions go
 
 Callgrind's attribution per row for the table's Nikaia row, built again with
-`debug = 1` (line tables) to have one: its instructions are the table's, its
-mispredictions total 1.09. Each instruction goes to
+`debug = 1` (line tables) to have one: its instructions and mispredictions are the
+table's. Each instruction goes to
 the innermost crate it was inlined from that is not `core`, `alloc` or `std`;
 what `core` inlines into the generated rule is its own row.
 
@@ -88,11 +90,11 @@ what `core` inlines into the generated rule is its own row.
 |---|---:|---:|
 | the byte reads, cuts, digit tests and arithmetic `core` inlines into the generated rules | 42.4 | 0.26 |
 | the hash table (`hashbrown`; `std`'s `HashMap` is its table, directly) | 39.3 | 0.05 |
-| the grammar's runtime (`winnow-grammar`, `winnow`) | 31.0 | 0.00 |
+| the grammar's runtime (`winnow-grammar`, `winnow`) | 32.0 | 0.00 |
 | comparing a name with the one in the table (`memcmp`, the slice comparison) | 27.8 | 0.20 |
-| the generated rules and actions, the stats' update among them | 27.6 | 0.03 |
 | finding the `;` and the line's end (`memchr`, with its SIMD intrinsics) | 27.0 | 0.00 |
-| hashing a name (`nikaia-std`'s byte hash) | 24.4 | 0.43 |
+| the generated rules and actions, the stats' update among them | 24.6 | 0.01 |
+| hashing a name (`nikaia-std`'s byte hash) | 24.4 | 0.49 |
 | the UTF-8 check (`simdutf8`) | 10.3 | 0.09 |
 | the rest: start-up, the output | 4.0 | 0.02 |
 
@@ -121,7 +123,7 @@ chose: the hasher, the UTF-8 check, and Nikaia's one-character pattern as a
 
 | what | where | issue |
 |---|---|---|
-| a count per row and a sum over the file, bounded by the input's size, to prove the accumulator's two overflow checks away (2.0 a row) | the prover | [#432](https://github.com/Nikaia-Foundation/Nikaia/issues/432) |
+| the sum's check, proved below a length checked once before the fold (ADR-367 D4; the count's is proved); one branch a row, no instruction in today's layout | the prover, the lowering | [#432](https://github.com/Nikaia-Foundation/Nikaia/issues/432) |
 | no whole-file UTF-8 check (10.3 a row): text checked only where it is new, a mapping as bytes, maybe a type for unchecked text (a grammar over `Bytes` is ADR-366, #422) | language, `winnow-grammar`, `std` | [#664](https://github.com/Nikaia-Foundation/Nikaia/issues/664) |
 
 ## What this does not claim
