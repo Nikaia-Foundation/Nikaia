@@ -93,8 +93,21 @@ fn check_core_stmt_a_named(ty: ref Ty) -> bool sync {
 /// A read through the brackets or a `get` whose fallback leaves.
 fn check_core_stmt_a_read_that_leaves(state: ref CheckState, world: ref CheckWorld, value: ref Expr) -> bool sync {
     return match value {
-        Expr::Coalesce { value: read, fallback, .. } => (check_core_stmt_an_index(read) || check_core_stmt_a_get(world, read)) && state.leaves(world, fallback),
+        Expr::Coalesce { value: read, fallback, .. } => (check_core_stmt_an_index(read) || check_core_stmt_a_get(world, read)) && (state.leaves(world, fallback) || check_core_stmt_a_read_that_leaves(state, world, fallback)),
         else => false,
+    }
+}
+
+/// **Each read of a chain `a[k] ?? b[k] ?? return x` is copied out** (#694):
+/// the read and every read its fallback chains to, so that each arm of the
+/// `match`es it lowers to hands back the number and not a view of it.
+fn check_core_stmt_copied_jump_reads(mut state: CheckState, value: ref Expr) sync {
+    match value {
+        Expr::Coalesce { fallback, .. } => {
+            state.facts.copied_jump_reads.insert(id_of(value) as i64)
+            check_core_stmt_copied_jump_reads(state, fallback)
+        },
+        else => {},
     }
 }
 
@@ -597,7 +610,7 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
     let jumped = check_core_stmt_read_through_a_jump(state, world, value)
     let copied_read = a_copy_by_value(bound) && check_core_stmt_a_read_that_leaves(state, world, value)
     if copied_read {
-        state.facts.copied_jump_reads.insert(id_of(value) as i64)
+        check_core_stmt_copied_jump_reads(state, value)
     }
     // **A map's read of a type of the package that copies, past a jump, is
     // copied out** (ADR-279 D8), as the typed `let x: T = m[k] ?? return`

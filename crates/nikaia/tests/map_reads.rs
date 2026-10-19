@@ -548,3 +548,27 @@ fn main() {
         findings(&own_value)
     );
 }
+
+/// **A chain of reads of a number past a jump is copied out at each link**
+/// (#694): `a[k] ?? b[k] ?? return x` over maps of `i64` hands back the
+/// number from either map, not a view of it; `rustc` refused the `return`
+/// before (mismatched types).
+#[test]
+fn a_chain_of_number_reads_past_a_jump_is_copied_out() {
+    let source = "use std::collections
+
+fn either(a: collections::BTreeMap[String, i64], b: collections::BTreeMap[String, i64], name: String) -> i64 {
+    let found = a[name] ?? b[name] ?? return -1
+    return found
+}
+
+fn main() {
+    let mut a: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    a.insert(\"j\", 4)
+    let mut b: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    b.insert(\"k\", 3)
+    println(f\"{either(a, b, \"j\")} {either(a, b, \"k\")} {either(a, b, \"z\")}\")
+}
+";
+    assert_eq!(ran("two-maps-of-numbers", source), "4 3 -1");
+}

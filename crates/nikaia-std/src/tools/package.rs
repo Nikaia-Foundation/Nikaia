@@ -18316,8 +18316,21 @@ fn check_core_stmt_a_named(ty: &Ty) -> bool { matches!(ty, Ty::Named { .. }) }
 // this was written - see `contracts::sync`.
 fn check_core_stmt_a_read_that_leaves(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, value: &Expr) -> bool {
     match value {
-        Expr::Coalesce { value: read, fallback, .. } => { let read = nikaia_std::boxed::open(read); let fallback = nikaia_std::boxed::open(fallback); (check_core_stmt_an_index(read) || check_core_stmt_a_get(world, read)) && state.leaves(world, fallback) },
+        Expr::Coalesce { value: read, fallback, .. } => { let read = nikaia_std::boxed::open(read); let fallback = nikaia_std::boxed::open(fallback); (check_core_stmt_an_index(read) || check_core_stmt_a_get(world, read)) && (state.leaves(world, fallback) || check_core_stmt_a_read_that_leaves(state, world, fallback)) },
         _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn check_core_stmt_copied_jump_reads(state: &mut CheckState, value: &Expr) {
+    match value {
+        Expr::Coalesce { fallback, .. } => {
+            let fallback = nikaia_std::boxed::open(fallback);
+            state.facts.copied_jump_reads.insert(id_of(value) as i64);
+            check_core_stmt_copied_jump_reads(state, fallback);
+        },
+        _ => { },
     }
 }
 
@@ -18684,7 +18697,7 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     }
     let jumped = check_core_stmt_read_through_a_jump(&state, world, value);
     let copied_read = a_copy_by_value(&bound) && check_core_stmt_a_read_that_leaves(&state, world, value);
-    if copied_read { state.facts.copied_jump_reads.insert(id_of(value) as i64); }
+    if copied_read { check_core_stmt_copied_jump_reads(state, value); }
     let copied_word = ty.is_none() && jumped && !copied_read && state.a_package_copy(world, &bound) && check_core_stmt_a_named(&bound);
     if copied_word { state.a_map_read_assigned(world, &bound, value, span); }
     let read_through_a_jump = jumped && !copied_read && !copied_word;
