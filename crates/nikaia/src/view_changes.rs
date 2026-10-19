@@ -25,8 +25,8 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 
 use crate::ast::{Block, Expr, Item, Span, Stmt};
 use crate::check::Finding;
-use crate::contracts::Ledger;
 use crate::contracts::sync::{visit_stmt, visit_stmt_blocks};
+use crate::contracts::{FnContract, Ledger};
 use crate::parser::Parsed;
 
 /// What the lowering does at a give-up: an assignment written as a binding of
@@ -69,6 +69,10 @@ struct Walk<'a> {
     give_ups: GiveUps,
     /// Each variable's `let`, by name, as the walk last met it.
     lets: HashMap<String, i64>,
+    /// Every method both ledgers know, by its name: what a key ending in
+    /// `::name` holds, looked up once per call rather than by a scan of
+    /// every function at each one.
+    methods: HashMap<&'a str, Vec<&'a FnContract>>,
 }
 
 /// The refusals (`NK2305`) and the give-ups of one unit.
@@ -78,6 +82,14 @@ pub fn analyse(
     library: &Ledger,
     lent: &BTreeSet<i64>,
 ) -> (Vec<Finding>, GiveUps) {
+    let mut methods: HashMap<&str, Vec<&FnContract>> = HashMap::new();
+    for ledger in [own, library] {
+        for (key, contract) in &ledger.functions {
+            if let Some((_, name)) = key.rsplit_once("::") {
+                methods.entry(name).or_default().push(contract);
+            }
+        }
+    }
     let mut walk = Walk {
         parsed,
         own,
@@ -86,6 +98,7 @@ pub fn analyse(
         findings: Vec::new(),
         give_ups: GiveUps::default(),
         lets: HashMap::new(),
+        methods,
     };
     for item in &parsed.program.items {
         match &item.node {
@@ -184,19 +197,9 @@ impl Walk<'_> {
 
     /// Whether every method of that name the ledgers know changes its subject.
     fn changing_method(&self, method: &str) -> bool {
-        let suffix = format!("::{method}");
-        let mut count = 0;
-        for ledger in [self.own, self.library] {
-            for (key, contract) in &ledger.functions {
-                if key.ends_with(&suffix) {
-                    count += 1;
-                    if !contract.mutates {
-                        return false;
-                    }
-                }
-            }
-        }
-        count > 0
+        self.methods
+            .get(method)
+            .is_some_and(|all| all.iter().all(|contract| contract.mutates))
     }
 
     /// The view a `let` binds: the roots it may point into, where it is one.
@@ -542,19 +545,9 @@ impl Walk<'_> {
 
     /// Whether every method of that name the ledgers know leaves its subject.
     fn reads_only(&self, method: &str) -> bool {
-        let suffix = format!("::{method}");
-        let mut count = 0;
-        for ledger in [self.own, self.library] {
-            for (key, contract) in &ledger.functions {
-                if key.ends_with(&suffix) {
-                    count += 1;
-                    if contract.mutates {
-                        return false;
-                    }
-                }
-            }
-        }
-        count > 0
+        self.methods
+            .get(method)
+            .is_some_and(|all| all.iter().all(|contract| !contract.mutates))
     }
 
     /// The changes in place among a statement's own expressions.
@@ -599,19 +592,17 @@ impl Walk<'_> {
             }
             Expr::MethodCall { method, args, .. } => {
                 let method = parsed.text(*method);
-                let suffix = format!("::{method}");
+                let known = self.methods.get(method).map_or(&[][..], Vec::as_slice);
                 for (index, arg) in args.iter().enumerate() {
                     let Expr::Variable(name, _) = arg else {
                         continue;
                     };
-                    let keeping = [self.own, self.library].iter().any(|ledger| {
-                        ledger.functions.iter().any(|(key, contract)| {
-                            key.ends_with(&suffix)
-                                && contract.signature.as_ref().is_some_and(|s| {
-                                    s.params.first().is_some_and(|p| p.0 == "self")
-                                })
-                                && owns(contract, index + 1)
-                        })
+                    let keeping = known.iter().any(|contract| {
+                        contract
+                            .signature
+                            .as_ref()
+                            .is_some_and(|s| s.params.first().is_some_and(|p| p.0 == "self"))
+                            && owns(contract, index + 1)
                     });
                     if keeping {
                         handed.push((parsed.text(*name).to_string(), method.to_string()));

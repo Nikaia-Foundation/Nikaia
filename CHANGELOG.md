@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1096] — 2026-10-19
+
+**view changes: methods are looked up by name, not by a scan of every function**
+- The view-change walk (NK2305) scanned every function of both ledgers for each method call it met; it now looks a method up in an index by name, built once per unit. What it decides does not change; lowering the tools package spends about 1 s less in its ledger phase.
+
 ## [0.0.1095] — 2026-10-19
 
 **a caught method call adds nothing to the caller's error channel (#725)**
