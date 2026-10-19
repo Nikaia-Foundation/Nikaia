@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part III: Tooling, Ecosystem & Interoperability**
-**Version:** 0.0.1082 (Draft)
+**Version:** 0.0.1083 (Draft)
 **Date:** 2026-10-19
 
 ---
@@ -839,6 +839,14 @@ fn main() {
 Hardware instructions are **not** part of the Nikaia core language. They are provided by
 library-defined DSLs, `dsl backend::x86`, `dsl backend::arm64` and `dsl backend::wasm`, each
 of which validates its own operands.
+
+**Before assembly: lanes and instructions as functions** ([ADR-371](adr/adr-371.md)). `std`
+offers a portable vector of lanes - loaded from a `Bytes` at a position, checked as that cut and
+proved as it is, compared into a mask whose first set lane is a position - with `crc32c` and a
+prefetch hint beside it; each has a meaning on every target, an instruction where there is one.
+An instruction of one architecture is a safe function of its module, `std::backend::x86::pext(x,
+mask)`, callable only in a build for a CPU level that has it and refused elsewhere at compile
+time. No `unsafe` is written for any of it; the assembly below is for what neither offers.
 
 ### 16.1. Why not a core construct
 

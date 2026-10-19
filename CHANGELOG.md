@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1083] — 2026-10-19
+
+**Vector lanes, `crc32c` and prefetch are portable `std`; an architecture's instruction is a safe function (ADR-371)**
+- Decided as a direction, the API to follow: `std` offers a portable vector of lanes loaded from a `Bytes` (checked and proved as the cut), masks and their first lane, `crc32c` and a prefetch hint, each meaningful on every target; an instruction of one architecture is a safe function of its backend module (`std::backend::x86::pext`), callable only in a build for a CPU level that has it; assembly stays the last way out (ADR-371, Part III 16).
+
 ## [0.0.1082] — 2026-10-19
 
 **`@inline` asks, the compiler adds the hint where it knows better (ADR-370)**
