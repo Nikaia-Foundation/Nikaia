@@ -27,20 +27,26 @@ benches/brc/brc.sh 200000     # quicker
   machine the same binaries swap places from one timed round to the next; a
   count does not move.
 * **The same answer first.** Every program's output is compared byte for byte
-  with `naive`'s, including Nikaia's at `user-parallelism = "yes"`, before
-  anything is counted.
+  with `naive`'s, at each setting, including Nikaia's at
+  `user-parallelism = "yes"`, before anything is counted.
 * **Release builds on both sides.** The Rust programs are `cargo build
   --release` (`opt-level = 3`, no overflow checks). Nikaia's is a project built
   with `nikaia build` at `opt-level = 3`, every `optimization` on
   (`remove-bounds-checks`, `remove-overflow-checks`, `skip-free-at-exit`), no
   debug assertions; it keeps the overflow checks the language promises. **Neither side
-  uses link-time optimisation.** **Both sides use one codegen unit**: the Rust
-  programs through `[profile.release.package.brc-bench]` in the workspace's
-  `Cargo.toml`, Nikaia's through `CARGO_PROFILE_DEV_CODEGEN_UNITS=1` (a project
-  cannot say it yet, #692). With release's 16, which unit rustc put `tuned`'s
-  hash-table `entry` in decided whether the hot loop inlined it: a change to the
-  output code alone moved it out and the count rose by 40 a row. Each Rust
-  program is a binary of its own, for the same reason.
+  uses link-time optimisation.**
+* **Two codegen-unit settings, the same on both sides each time: 1 and 16**
+  (release's default). Which unit rustc puts a function in decides whether
+  LLVM inlines it into the hot loop: `hashbrown`'s `entry` on both sides, and on
+  Nikaia's also the grammar runtime's `advance`. That moves a row by about 40
+  instructions, and not the same way on both sides: `tuned` inlines the entry
+  at 1 unit and not at 16, `1brc.nika` the other way round. One setting alone
+  would pick the winner, so the table shows both. Making Nikaia's side not
+  depend on the partition is #695. `brc.sh` sets the count per run:
+  `CARGO_PROFILE_RELEASE_CODEGEN_UNITS` for the Rust programs, each setting in
+  a target directory of its own, and `CARGO_PROFILE_DEV_CODEGEN_UNITS` for the
+  Nikaia project (a project cannot say it yet, #692). Each Rust program is a
+  binary of its own, for the same reason.
 * **Nikaia without overflow checks** is the same project built with
   `RUSTFLAGS="-C overflow-checks=off"`, to say what the checks cost.
 * **Length in tokens**, by [`scripts/tokens.nika`](../../scripts/tokens.nika), the
@@ -52,42 +58,42 @@ benches/brc/brc.sh 200000     # quicker
 
 ## The table
 
-Nikaia 0.0.1051, rustc 1.97.0, Intel Xeon @ 2.10 GHz; callgrind, 1 000 000 rows,
+Nikaia 0.0.1064, rustc 1.97.0, Intel Xeon @ 2.10 GHz; callgrind, 1 000 000 rows,
 per row:
 
-| | instructions | mispredictions | tokens |
-|---|---:|---:|---:|
-| Rust, `naive` | 860.5 | 8.62 | 486 |
-| **Nikaia**, `naive.nika` | **600.3** | **8.29** | **320** |
-| Rust, `tuned` | 272.2 | 3.70 | 809 |
-| **Nikaia**, `examples/1brc.nika` | **231.6** | **1.12** | **618** |
-| Nikaia, overflow checks off | 231.6 | 1.12 | |
+| | instructions, 1 unit | mispredictions, 1 unit | instructions, 16 units | mispredictions, 16 units | tokens |
+|---|---:|---:|---:|---:|---:|
+| Rust, `naive` | 840.9 | 9.25 | 859.8 | 8.65 | 556 |
+| **Nikaia**, `naive.nika` | **570.2** | **8.75** | **569.1** | **8.51** | **375** |
+| Rust, `tuned` | 270.9 | 3.70 | 312.4 | 3.61 | 879 |
+| **Nikaia**, `examples/1brc.nika` | **273.9** | **1.12** | **231.3** | **1.12** | **642** |
+| Nikaia, overflow checks off | 274.9 | 1.12 | 231.2 | 1.09 | |
 
-The naive programs: Nikaia's is a third shorter and runs 30 % fewer
-instructions, from the same algorithm (below).
+The naive programs: Nikaia's is a third shorter and runs a third fewer
+instructions at both settings, from the same algorithm (below).
 
-Against `tuned`, Nikaia runs 15 % fewer instructions and less than a third of
-the mispredictions, from a quarter fewer tokens, with no `unsafe`, with UTF-8
-and every overflow checked or proved; the same file also runs on every core.
-The temperature's checks are proved (ADR-314), and so are the counter's,
-`count += 1` and the merge's `count += other.count`, from the input's length
-(ADR-367): the counter is one `incq`. What is left is `sum += temp`, one `jo`
-after its `add`; the build without it runs one branch fewer a row and the same
-instructions, laid out differently.
+Against `tuned`, the instructions are level within what the inliner decides:
+Nikaia runs 26 % fewer at 16 units, `tuned` 1 % fewer at 1 unit. The
+mispredictions are a third of `tuned`'s at both settings. Nikaia's program is a
+quarter fewer tokens, with no `unsafe`, with UTF-8 and every overflow checked
+or proved; the same file also runs on every core. The temperature's checks are
+proved (ADR-314), and so are the counter's, `count += 1` and the merge's
+`count += other.count`, from the input's length (ADR-367): the counter is one
+`incq`. What is left is `sum += temp`, one `jo` after its `add`; the build
+without it runs one branch fewer a row at both settings and the same
+instructions within one, laid out differently.
 
 The mispredictions depend on where the code lies, the instructions do not:
-callgrind's simulated predictor is indexed by address. The build without
-overflow checks has 1.12, as the table's row has; earlier
-layouts of the same code reached 2.05, nearly all of the difference in
-`memcmp`, with the same instructions executed. Every build
-of `1brc.nika` stays below `tuned`'s 3.70.
+callgrind's simulated predictor is indexed by address. Every build of
+`1brc.nika` in the table stays at 1.09 to 1.12, a third of `tuned`'s 3.6 to
+3.7.
 
 ## Where Nikaia's instructions go
 
-Callgrind's attribution per row for the table's Nikaia row, built again with
-`debug = 1` (line tables) to have one: its instructions and mispredictions are the
-table's. Each instruction goes to
-the innermost crate it was inlined from that is not `core`, `alloc` or `std`;
+Callgrind's attribution per row for the table's Nikaia row **at 16 units**,
+built again with `debug = 1` (line tables) to have one: its instructions and
+mispredictions are the table's. Each instruction goes to the innermost crate it
+was inlined from that is not `core`, `alloc` or `std` (by `addr2line -i`);
 what `core` inlines into the generated rule is its own row.
 
 | | instructions | mispredictions |
@@ -100,23 +106,26 @@ what `core` inlines into the generated rule is its own row.
 | the generated rules and actions, the stats' update among them | 24.6 | 0.01 |
 | hashing a name (`nikaia-std`'s byte hash) | 24.4 | 0.49 |
 | the UTF-8 check (`simdutf8`) | 10.3 | 0.09 |
-| the rest: start-up, the output | 4.0 | 0.02 |
+| the rest: start-up, the output | 3.5 | 0.03 |
 
 `tuned` is one function after inlining, so callgrind cannot split it the same
 way.
 
 ## Where `naive.nika` differs from `naive.rs`
 
-Callgrind's attribution by function, per row:
+Callgrind's attribution per row at 16 units, by function. `naive.nika`'s loop
+has the table's entry inlined into it, so there its instructions are split by
+the crate they were inlined from, as above (built again with `debug = 1`, the
+same count as the table's).
 
 | | `naive.nika` | `naive.rs` |
 |---|---:|---:|
 | finding the line's end (`memchr`) | 147.7 | 147.7 |
 | finding the `;` (`CharSearcher`); `naive.rs` also finds the `.` | 163.7 | 247.6 |
-| hashing a name: Fx in the table's entry, SipHash in Rust's default | in the entry | 185.4 |
-| the hash table's entry | 91.9 | 75.0 |
+| hashing a name: Fx in Nikaia's `std`, SipHash in Rust's default | 24.4 | 185.3 |
+| the hash table's entry | 44.1 | 74.8 |
 | comparing a name with the one in the table (`memcmp`) | 39.7 | 49.8 |
-| the loop: cutting, the digits, the stats | 142.5 | 117.3 |
+| the loop: cutting, the digits, the stats | 136.5 | 116.3 |
 | the UTF-8 check: `simdutf8`, `str::from_utf8` | 10.3 | 35.5 |
 
 The same algorithm on both sides; what differs is the default each language
@@ -128,6 +137,7 @@ chose: the hasher, the UTF-8 check, and Nikaia's one-character pattern as a
 | what | where | issue |
 |---|---|---|
 | the sum's check, proved below a length checked once before the fold (ADR-367 D4; the count's is proved); one branch a row, no instruction in today's layout | the prover, the lowering | [#432](https://github.com/Nikaia-Foundation/Nikaia/issues/432) |
+| the hot loop's inlining not left to the codegen-unit partition: `hashbrown`'s `entry` and the grammar runtime's `advance` inlined at 1 unit as at 16 (about 40 a row) | the lowering or `winnow-grammar` | [#695](https://github.com/Nikaia-Foundation/Nikaia/issues/695) |
 | no whole-file UTF-8 check (10.3 a row): text checked only where it is new, a mapping as bytes, maybe a type for unchecked text (a grammar over `Bytes` is ADR-366, #422) | language, `winnow-grammar`, `std` | [#664](https://github.com/Nikaia-Foundation/Nikaia/issues/664) |
 
 ## What this does not claim

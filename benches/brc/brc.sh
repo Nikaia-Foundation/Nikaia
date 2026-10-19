@@ -19,18 +19,33 @@ mkdir -p "$work"
 
 command -v valgrind >/dev/null || { echo "brc.sh needs valgrind (callgrind)"; exit 1; }
 
-# Release builds on both sides: `cargo build --release` for the Rust programs,
-# and the compiler itself.
-cargo build --manifest-path "$root/Cargo.toml" --release --quiet -p brc-bench -p nikaia
-bin="$root/target/release"
-nikaia="$bin/nikaia"
+# The compiler, a release build of its own in `target/release`.
+cargo build --manifest-path "$root/Cargo.toml" --release --quiet -p nikaia
+nikaia="$root/target/release/nikaia"
 
-[ -s "$input" ] || "$bin/gen" "$rows" "$input" 2>/dev/null
+# Which codegen unit rustc puts a function in decides whether LLVM inlines it
+# into the hot loop (`hashbrown`'s `entry`; on Nikaia's side also the grammar
+# runtime's `advance`), and that moves a row by about 40 instructions either
+# way (README, #695). So every program is built and counted at two settings,
+# the same on both sides each time: one unit, and release's default of 16.
+units="1 16"
+
+# The Rust programs: `cargo build --release`, the unit count set per run, each
+# setting in a target directory of its own so the compiler's build in
+# `target/release` is left as it is.
+rustbin() { echo "$work/target-cu$1/release"; }
+for u in $units; do
+    CARGO_PROFILE_RELEASE_CODEGEN_UNITS=$u CARGO_TARGET_DIR="$work/target-cu$u" \
+        cargo build --manifest-path "$root/Cargo.toml" --release --quiet -p brc-bench
+done
+
+[ -s "$input" ] || "$(rustbin 16)/gen" "$rows" "$input" 2>/dev/null
 
 # A Nikaia program is built the way a user builds it: a project with a
 # `nikaia.toml`. `opt-level = 3` as Cargo's release profile has it, no LTO on
-# either side, every optimization the compiler offers on. One codegen unit, as
-# the Rust programs have (README); a project cannot say it yet (#692).
+# either side, every optimization the compiler offers on. The unit count goes
+# in through `CARGO_PROFILE_DEV_CODEGEN_UNITS`; a project cannot say it yet
+# (#692).
 proj="$work/project"
 mkdir -p "$proj/src"
 nikaia_toml() {
@@ -49,40 +64,44 @@ incremental = false
 TOML
 }
 
-# Builds `$3` (default `examples/1brc.nika`) in the project and copies the
-# binary out of it, where the next build would overwrite it.
+# Builds `$4` (default `examples/1brc.nika`) in the project at `$1` codegen
+# units and copies the binary out of it, where the next build would overwrite
+# it.
 build_nikaia() {
-    local name=$1 parallel=$2 source=${3:-$root/examples/1brc.nika}
+    local u=$1 name=$2 parallel=$3 source=${4:-$root/examples/1brc.nika}
     cp "$source" "$proj/src/main.nika"
     nikaia_toml "$parallel"
-    ( cd "$proj" && CARGO_PROFILE_DEV_CODEGEN_UNITS=1 "$nikaia" build >/dev/null 2>&1 ) || { echo "nikaia build failed ($name)"; exit 1; }
-    local built
-    cp "$proj/target/nikaia/bin/brc" "$work/nikaia.$name"
+    ( cd "$proj" && CARGO_PROFILE_DEV_CODEGEN_UNITS=$u "$nikaia" build >/dev/null 2>&1 ) \
+        || { echo "nikaia build failed ($name, $u units)"; exit 1; }
+    cp "$proj/target/nikaia/bin/brc" "$work/nikaia.$name.cu$u"
 }
 
-build_nikaia parallel yes
-build_nikaia checked no
-# The same program without the overflow checks the language keeps, to say what
-# they cost. `RUSTFLAGS` comes after the profile's flags, so it wins.
-RUSTFLAGS="-C overflow-checks=off" build_nikaia unchecked no
-build_nikaia checked no >/dev/null
-build_nikaia naive no "$root/benches/brc/naive.nika"
+for u in $units; do
+    build_nikaia "$u" parallel yes
+    build_nikaia "$u" checked no
+    # The same program without the overflow checks the language keeps, to say
+    # what they cost. `RUSTFLAGS` comes after the profile's flags, so it wins.
+    RUSTFLAGS="-C overflow-checks=off" build_nikaia "$u" unchecked no
+    build_nikaia "$u" naive no "$root/benches/brc/naive.nika"
+done
 
-# --- the same answer, first ------------------------------------------------
+# --- the same answer, first, at each setting ------------------------------
 
-"$bin/naive" "$input" > "$work/out.naive"
-for p in "$bin/tuned" "$work/nikaia.checked" "$work/nikaia.unchecked" "$work/nikaia.parallel" "$work/nikaia.naive"; do
-    "$p" "$input" | cmp -s - "$work/out.naive" || { echo "FAIL: $(basename "$p") disagrees with naive"; exit 1; }
+"$(rustbin 16)/naive" "$input" > "$work/out.naive"
+for u in $units; do
+    for p in "$(rustbin "$u")/naive" "$(rustbin "$u")/tuned" "$work/nikaia.checked.cu$u" \
+        "$work/nikaia.unchecked.cu$u" "$work/nikaia.parallel.cu$u" "$work/nikaia.naive.cu$u"; do
+        "$p" "$input" | cmp -s - "$work/out.naive" \
+            || { echo "FAIL: $p disagrees with naive"; exit 1; }
+    done
 done
 
 # --- then the counts -------------------------------------------------------
 
+# Instructions and mispredictions per row of one program, as two cells.
 count() {
-    local label=$1 tokens=$2
-    shift 2
     valgrind --tool=callgrind --branch-sim=yes --callgrind-out-file="$work/cg.out" "$@" >/dev/null 2>&1
-    awk -v r="$rows" -v l="$label" -v t="$tokens" '/^summary:/ {
-        printf "| %s | %.1f | %.2f | %s |\n", l, $2 / r, ($4 + $6) / r, t }' "$work/cg.out"
+    awk -v r="$rows" '/^summary:/ { printf "%.1f | %.2f", $2 / r, ($4 + $6) / r }' "$work/cg.out"
 }
 # Lengths by `scripts/tokens.nika`, one run for all four files.
 nikaia_tokens="$work/tokens.txt"
@@ -91,14 +110,26 @@ nikaia_tokens="$work/tokens.txt"
     || { echo "scripts/tokens.nika failed"; exit 1; }
 tokens() { awk -v f="$1" '$2 == f {print $1}' "$nikaia_tokens"; }
 
+# One row: the label, the tokens, then the program at each setting (`@` stands
+# for the unit count in its path).
+row() {
+    local label=$1 tokens=$2 line
+    shift 2
+    line="| $label"
+    for u in $units; do
+        line="$line | $(count "${1//@/$u}" "$input")"
+    done
+    echo "$line | $tokens |"
+}
+
 version=$(sed -n 's/^\*\*Version:\*\* \([0-9.]*\).*/\1/p' "$root/docs/specification/10-nikaia-light.md")
 echo "Nikaia $version, $(rustc --version | cut -d' ' -f1-2), $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2 | sed 's/^ //')"
-echo "callgrind, $rows rows, per row; every program prints the same, byte for byte"
+echo "callgrind, $rows rows, per row; every program prints the same, byte for byte, at each setting"
 echo
-echo "| | instructions | mispredictions | tokens |"
-echo "|---|---:|---:|---:|"
-count 'Rust, `naive`' "$(tokens benches/brc/src/bin/naive.rs)" "$bin/naive" "$input"
-count 'Nikaia, `naive.nika`' "$(tokens benches/brc/naive.nika)" "$work/nikaia.naive" "$input"
-count 'Rust, `tuned`' "$(tokens benches/brc/src/bin/tuned.rs)" "$bin/tuned" "$input"
-count '**Nikaia**, `examples/1brc.nika`' "$(tokens examples/1brc.nika)" "$work/nikaia.checked" "$input"
-count 'Nikaia, overflow checks off' '' "$work/nikaia.unchecked" "$input"
+echo "| | instructions, 1 unit | mispredictions, 1 unit | instructions, 16 units | mispredictions, 16 units | tokens |"
+echo "|---|---:|---:|---:|---:|---:|"
+row 'Rust, `naive`' "$(tokens benches/brc/src/bin/naive.rs)" "$work/target-cu@/release/naive"
+row 'Nikaia, `naive.nika`' "$(tokens benches/brc/naive.nika)" "$work/nikaia.naive.cu@"
+row 'Rust, `tuned`' "$(tokens benches/brc/src/bin/tuned.rs)" "$work/target-cu@/release/tuned"
+row '**Nikaia**, `examples/1brc.nika`' "$(tokens examples/1brc.nika)" "$work/nikaia.checked.cu@"
+row 'Nikaia, overflow checks off' '' "$work/nikaia.unchecked.cu@"
