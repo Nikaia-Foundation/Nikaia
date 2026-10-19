@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1101] — 2026-10-19
+
+**spec: u8 has every wrapping, saturating, checked and truncating name (ADR-285 D41, #729)**
+- `u8` gets `wrapping_`, `saturating_` and `checked_` arithmetic as `u32` has them, and `truncating_u8` / `checked_u8` out of a wider integer and an `f64` (Part I 2.2; ADR-285 D41, ADR-315 D1, D4).
+
 ## [0.0.1100] — 2026-10-19
 
 **A word is never a view inside a type either; TaskHandle and two-view function types lower**

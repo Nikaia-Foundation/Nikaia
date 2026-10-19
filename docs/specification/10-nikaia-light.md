@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1100 (Draft)
+**Version:** 0.0.1101 (Draft)
 **Date:** 2026-10-19
 
 ---
@@ -352,7 +352,7 @@ let n = a + b                                     // aborts if it does not fit
 The names are `wrapping_add`, `wrapping_sub`, `wrapping_mul`, `wrapping_div`,
 `wrapping_neg`, `wrapping_abs`, `wrapping_shl`, `wrapping_shr`, and the same
 names with `saturating_`, except that there is no `saturating_shl` and no
-`saturating_shr`. They exist for `i32`, `i64`, `u32` and `u64`; an unsigned
+`saturating_shr`. They exist for `i32`, `i64`, `u8`, `u32` and `u64`; an unsigned
 type has no `_neg` and no `_abs`. There is no operator for either.
 
 **The bits of an integer are reached with operators**
@@ -460,8 +460,8 @@ let floored = measurement.truncating_i32()        // a float, toward zero, clamp
 let n = text.bytes.len().truncating_i32()         // a count that may not fit
 ```
 
-The names are `truncating_i32`, `truncating_i64`, `truncating_u32` and
-`truncating_u64`. Each converts out of a wider integer and out of an `f64`.
+The names are `truncating_i32`, `truncating_i64`, `truncating_u8`,
+`truncating_u32` and `truncating_u64`. Each converts out of a wider integer and out of an `f64`.
 `rounding_f32` is the nearest `f32` out of an `f64`, and an infinity beyond
 the `f32` range.
 
@@ -474,10 +474,10 @@ let small = big.checked_i32() ?? 0                // null where an i32 does not 
 ```
 
 The arithmetic names are `checked_add`, `checked_sub`, `checked_mul`,
-`checked_div`, `checked_rem`, `checked_neg` and `checked_abs`, for the four
+`checked_div`, `checked_rem`, `checked_neg` and `checked_abs`, for the five
 types the wrapping names have and without `_neg` and `_abs` on an unsigned one;
 a division by zero is `null` too. The conversions are `checked_i32`,
-`checked_i64`, `checked_u32`, `checked_u64` and `checked_f32`, out of an
+`checked_i64`, `checked_u8`, `checked_u32`, `checked_u64` and `checked_f32`, out of an
 integer type that has values the destination lacks and out of an `f64`. A
 value that is not a number fits no integer; an infinity and a value that is
 not a number carry over into an `f32`.
