@@ -2138,6 +2138,12 @@ fn rsrc_callee(asked: ref Asked, known: ref collections::BTreeMap[String, Result
         let mut out = rsrc_none()
         for entry in found.reach {
             let written = rsrc_param_of(entry)
+            // **A parameter handed back whole into text of either kind** (`=a`,
+            // #720) moves in as text of its own: the result holds no view of
+            // the argument given there.
+            if written.starts_with("=") {
+                continue
+            }
             let borrowed = rsrc_bare(written)
             let mut at = -1
             for i in 0..<found.params.len() {

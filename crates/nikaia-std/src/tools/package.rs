@@ -65730,6 +65730,7 @@ fn rsrc_callee(asked: &Asked<'_, '_, '_>, known: &collections::BTreeMap<String, 
         let mut out = rsrc_none();
         for entry in found.reach.iter() {
             let written = rsrc_param_of(entry);
+            if written.starts_with('=') { continue; }
             let borrowed = rsrc_bare(&written);
             let mut at: i64 = -1;
             for i in 0..found.params.len() as i64 { if at < 0 && *nikaia_std::index::get(&found.params, (i) as usize) == borrowed { at = i; } }

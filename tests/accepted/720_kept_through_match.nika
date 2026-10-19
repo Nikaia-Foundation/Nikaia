@@ -1,0 +1,21 @@
+// #720: a returned `match` whose arms hand a parameter to `longest`, which
+// keeps it; called with an owned and with a literal argument.
+
+fn longest(a: String, b: String) -> String {
+    if a.len() >= b.len() { return a }
+    return b
+}
+
+fn pick(s: String, n: i64) -> String {
+    return match n {
+        0 => longest(s, "ab"),
+        else => longest(s, "abc"),
+    }
+}
+
+fn main() {
+    println(pick(f"base{1}", 0))
+    println(pick("x", 1))
+    let owned = f"y{2}"
+    println(pick(owned, 0))
+}

@@ -1,0 +1,16 @@
+// #720: `longest` keeps `a` (a literal flows into its result beside it), so
+// `show` keeps `s` and hands it on; no `ref` is written anywhere.
+
+fn longest(a: String, b: String) -> String {
+    if a.len() >= b.len() { return a }
+    return b
+}
+
+fn show(s: String) {
+    let r = longest(s, "ab")
+    println(r)
+}
+
+fn main() {
+    show(f"base{1}")
+}

@@ -702,6 +702,26 @@ impl LedgerOps for Ledger {
         // where the result leaves, and the walk asks the callee's `ref(..)`.
         write_result_sources(&mut ledger, units, library);
         keeps::infer(&mut ledger, units, library, &resolved);
+        // **And again, until `keeps` settles** (#720): a parameter `keeps`
+        // says is kept is moved in, not viewed, so the result no longer points
+        // into it, and a caller that hands its own parameter there keeps that
+        // too. The first pass knew no keeps and read every plain parameter as
+        // a view; `keeps` itself cannot tell a result that views a kept
+        // parameter (`tag(s) -> Tag`) from one that owns it beside a literal.
+        for _ in 0..8 {
+            let before: Vec<Vec<String>> =
+                ledger.functions.values().map(|c| c.keeps.clone()).collect();
+            write_result_sources(&mut ledger, units, library);
+            keeps::infer(&mut ledger, units, library, &resolved);
+            if ledger
+                .functions
+                .values()
+                .map(|c| &c.keeps)
+                .eq(before.iter())
+            {
+                break;
+            }
+        }
         // ADR-037 D7: which count each `Shared` class gets. After `keeps`,
         // because a lambda handed to a parameter the callee keeps is a kept one
         // (#532); and it resolves a callee's parameters against the
