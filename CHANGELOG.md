@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1098] — 2026-10-19
+
+**An integer literal is no float; a lambda takes what it names**
+- `let x: f64 = 2`, `half(3)`, `x * 2` and `[1.5, 2]` are refused (NK1103/1102/1104/1105/1106/1199/1154) instead of reaching `rustc`, as Part I 2.4 decides. `xs.map fn { 7 }` is NK1101 (Part I 5.3). An unused `String?` word of `main` compiles. A function with its own error channel passed as a `fn() throws` has its error put in the box (#703 items 1-4).
+
 ## [0.0.1097] — 2026-10-19
 
 **spec: a Bytes carries what owns its memory; a ref Bytes only read takes any run of bytes (ADR-373, #718)**
