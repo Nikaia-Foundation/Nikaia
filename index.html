@@ -52,10 +52,11 @@ description: >-
       <div class="feature">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l8 3v6c0 5-3.5 9-8 11-4.5-2-8-6-8-11V5z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></svg>
         <h3>Very safe</h3>
-        <p>Many mistakes are found before the program ever runs, not by the people who use it.
-        You write down what must always be true, and Nikaia checks that every part of the
-        program keeps to it. Where it does not, you are told where and why.
-        <a href="#proofs">How that works ↓</a></p>
+        <p>Catch mistakes before they become failures. Nikaia checks how tasks interact, how
+        much memory they can use, how errors are handled, and whether parts of your program keep
+        their promises. It catches problems at compile time wherever it can, showing you where
+        things can go wrong and why.
+        <a href="#limits">How it works — and where the limits are ↓</a></p>
       </div>
       <div class="feature">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>
@@ -238,6 +239,128 @@ fn main() {
   …/loop/src/main.nika:14  assert(base &gt;= 10)  precondition of `price`: proved at every call the compiler sees; any other reaches the entry that checks it
 <span class="d-gutter">$</span> <b>target/nikaia/bin/loop</b>
 10 7</code></pre>
+    </div>
+  </div>
+</section>
+
+<section class="home-section" id="limits">
+  <div class="home-inner">
+    <p class="home-eyebrow">What is checked</p>
+    <h2 class="home-heading">Five kinds of mistake, and how far Nikaia goes today.</h2>
+    <p class="limits-lead">
+      Contracts, the first of them, are shown above. Each kind below has one thing that is
+      checked today and one place where the check stops. Where it stops, the mistake is not
+      found while the program is built, so you should know.
+    </p>
+    <div class="limits-grid">
+
+      <div class="limit-class">
+        <h3>Conflicting actions</h3>
+        <p class="limit-what">Two things happen at once and leave the program in a state nobody planned.
+        <span class="limit-tech">Technically: race conditions, data races.</span></p>
+        <div class="limit-pair">
+          <div class="limit-today">
+            <h4>Works today</h4>
+            <p>A task runs on its own thread, so everything it uses has to be able to move
+            between threads. A task that uses a value which cannot, or that changes a name
+            declared outside it, does not build (<code>NK2501</code>, <code>NK2107</code>).
+            Assigning to shared state directly is refused too: <code>kasse = 42</code> says
+            <em>write <code>kasse.set(42)</code></em> (<code>NK2204</code>).</p>
+          </div>
+          <div class="limit-edge">
+            <h4>Where it stops</h4>
+            <p>Code from outside Nikaia may start threads of its own. The compiler cannot see
+            into it, so it assumes the worst and asks you to pass a copy instead of the shared
+            value (<code>NK2502</code>). For a type nothing describes, the final check is left
+            to Rust's compiler.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="limit-class">
+        <h3>Things get stuck</h3>
+        <p class="limit-what">Tasks wait for each other and never move on.
+        <span class="limit-tech">Technically: deadlocks.</span></p>
+        <div class="limit-pair">
+          <div class="limit-today">
+            <h4>Works today</h4>
+            <p>Taking a second lock while you hold one does not build
+            (<code>NK2203</code>: <em>this block runs while a lock is held, so taking a second
+            lock inside it can deadlock</em>). The way out is one line:
+            <code>update_all(a, b) fn(mut x, mut y) {…}</code> takes both locks in the same
+            order every time, which is how a transfer between two accounts is written.</p>
+          </div>
+          <div class="limit-edge">
+            <h4>Where it stops</h4>
+            <p>The analysis does not always reach an answer. Across the examples in this
+            repository it answers <em>undecided</em> for one function in sixty-one, a call
+            through a function handed in as a parameter. That is reported as undecided, not
+            guessed.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="limit-class">
+        <h3>Resources run out</h3>
+        <p class="limit-what">A task uses more memory than it was given.
+        <span class="limit-tech">Technically: out of memory, resource limits.</span></p>
+        <div class="limit-pair">
+          <div class="limit-today">
+            <h4>Works today</h4>
+            <p>Every task has a memory budget of its own. A task that fills it stops with a
+            panic, and the rest of the program goes on. A calculation that runs while the
+            program is built has a step limit and a memory limit too.</p>
+          </div>
+          <div class="limit-edge">
+            <h4>Where it stops</h4>
+            <p>This is a stop at run time. The compiler does not yet prove that a task stays
+            within its budget, so a task that is too hungry is not refused when you build.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="limit-class">
+        <h3>Errors go unhandled</h3>
+        <p class="limit-what">Something fails and nothing deals with it.
+        <span class="limit-tech">Technically: missing error handling, forgotten failure paths.</span></p>
+        <div class="limit-pair">
+          <div class="limit-today">
+            <h4>Works today</h4>
+            <p>A function that can fail says so with <code>throws</code>. What it can fail
+            with is worked out from its body, across the whole program. A body that fails
+            under a declaration without <code>throws</code> does not build
+            (<code>NK1140</code>).</p>
+          </div>
+          <div class="limit-edge">
+            <h4>Where it stops</h4>
+            <p>For a function from outside Nikaia that nothing describes, the compiler cannot
+            tell whether it fails, so it does not refuse on it. A description of the library
+            closes the gap.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="limit-class">
+        <h3>Promises get broken</h3>
+        <p class="limit-what">One part of the program does not do what another part was told to expect.
+        <span class="limit-tech">Technically: contracts, invariants, pre- and postconditions.</span></p>
+        <div class="limit-pair">
+          <div class="limit-today">
+            <h4>Works today</h4>
+            <p>The <code>assert</code> examples above: a call that breaks a precondition does
+            not build, and a claim about a result is a postcondition its callers can use. A
+            contract also crosses from one package to another.</p>
+          </div>
+          <div class="limit-edge">
+            <h4>Where it stops</h4>
+            <p>Nothing the compiler can see says what a value from outside holds, such as a
+            file, an argument or a network message. <code>assert(n == 41)</code> on such a
+            value is refused (<code>NK1202</code>): check it where it arrives and handle the
+            bad case, and after that line the claim is proved.</p>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 </section>
