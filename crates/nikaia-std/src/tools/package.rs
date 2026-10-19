@@ -5034,9 +5034,21 @@ fn made_arguments(contract: &FnContract, named: &str, args: &[Expr], ask: &Buffe
 
 fn a_struct_of_views(result: &Ty, ask: &BufferAsk<'_, '_, '_, '_, '_, '_>) -> bool {
     match result {
-        Ty::Named { name, .. } => ask.context.borrowing.contains(name) || ask.context.borrowing.contains(&last_segment(name)),
+        Ty::Named { name, .. } => ask.context.borrowing.contains(name) || ask.context.borrowing.contains(&last_segment(name)) || a_library_struct_of_views(name, ask),
         _ => false,
     }
+}
+
+fn a_library_struct_of_views(name: &str, ask: &BufferAsk<'_, '_, '_, '_, '_, '_>) -> bool {
+    if !name.contains("::") { return false; }
+    a_type_of_views(*nikaia_std::index::get(&ask.own.types, name)) || a_type_of_views(*nikaia_std::index::get(&ask.library.types, name))
+}
+
+fn a_type_of_views(entry: Option<&TypeContract>) -> bool {
+    let found = match entry { Some(__nikaia_value) => __nikaia_value, None => return false };
+    if !found.tethered.is_empty() { return true; }
+    for field in found.fields.iter() { if field.ty.is_a_view() { return true; } }
+    false
 }
 
 fn buffers_view_call(arg: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_>, unaliased: &impl Fn(&str) -> String) -> bool {

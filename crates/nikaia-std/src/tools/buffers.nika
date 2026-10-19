@@ -1217,12 +1217,34 @@ fn made_arguments(contract: ref FnContract, named: ref String, args: ref Vec[Exp
     }
 }
 
-/// A struct or enum of this unit that holds a view, by its ledger name.
+/// A struct or enum of this unit that holds a view, by its ledger name - or
+/// one of a package this unit uses, whose ledger says a field of it is a
+/// view (ADR-282 D23): `tags::tag(f"app")` hands back a `Tag` viewing it.
 fn a_struct_of_views(result: ref Ty, ask: ref BufferAsk) -> bool {
     return match result {
-        Ty::Named { name, .. } => ask.context.borrowing.contains(name) || ask.context.borrowing.contains(last_segment(name)),
+        Ty::Named { name, .. } => ask.context.borrowing.contains(name) || ask.context.borrowing.contains(last_segment(name)) || a_library_struct_of_views(name, ask),
         else => false,
     }
+}
+
+fn a_library_struct_of_views(name: ref String, ask: ref BufferAsk) -> bool {
+    if !name.contains("::") {
+        return false
+    }
+    return a_type_of_views(ask.own.types[name]) || a_type_of_views(ask.library.types[name])
+}
+
+fn a_type_of_views(entry: ref TypeContract?) -> bool {
+    let found = entry ?? return false
+    if found.tethered.len() > 0 {
+        return true
+    }
+    for field in found.fields {
+        if field.ty.is_a_view() {
+            return true
+        }
+    }
+    return false
 }
 
 // **A call that hands back a view of its arguments makes no buffer**
