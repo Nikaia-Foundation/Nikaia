@@ -95,6 +95,8 @@ pub struct AskedSoFar {
 thread_local! {
     static BOOK: RefCell<Option<Book>> = const { RefCell::new(None) };
     static IN_FILE: RefCell<Option<(PathBuf, String)>> = const { RefCell::new(None) };
+    /// Where each line break of the file being checked is, for [`here`].
+    static BREAKS: RefCell<Vec<usize>> = const { RefCell::new(Vec::new()) };
     static FUNCTION: RefCell<Option<(String, usize)>> = const { RefCell::new(None) };
     static UNITS: RefCell<Vec<(PathBuf, String)>> = const { RefCell::new(Vec::new()) };
 }
@@ -156,8 +158,16 @@ impl Place {
 /// `source`.
 pub fn in_file<R>(path: &Path, source: &str, run: impl FnOnce() -> R) -> R {
     let outer = IN_FILE.with(|held| held.replace(Some((path.to_path_buf(), source.to_string()))));
+    let breaks = source
+        .bytes()
+        .enumerate()
+        .filter(|(_, b)| *b == b'\n')
+        .map(|(at, _)| at)
+        .collect();
+    let outer_breaks = BREAKS.with(|held| held.replace(breaks));
     let out = run();
     IN_FILE.with(|held| held.replace(outer));
+    BREAKS.with(|held| held.replace(outer_breaks));
     out
 }
 
@@ -193,8 +203,8 @@ fn here() -> Place {
         let held = held.borrow();
         let line = match (&*held, &function) {
             (Some((_, source)), Some((_, at))) => {
-                let before = &source.as_bytes()[..(*at).min(source.len())];
-                Some(before.iter().filter(|b| **b == b'\n').count() + 1)
+                let at = (*at).min(source.len());
+                Some(BREAKS.with(|breaks| breaks.borrow().partition_point(|b| *b < at)) + 1)
             }
             _ => None,
         };
