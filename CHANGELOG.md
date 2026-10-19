@@ -8,6 +8,16 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1079] — 2026-10-19
+
+**A type's invariant: an `assert` after a struct's fields, and found where none is written (ADR-369)**
+- Decided, not yet built: an `assert(claim; message: …)` after a struct's fields is the type's invariant; it is proved or checked at every construction, at the end of every method that changes the value and after every outside write, and is a fact wherever a value of the type is read; where a struct with private fields writes none, the compiler may find one its package always keeps and uses it only as a fact (ADR-369, Part I 4.1).
+
+## [0.0.1078] — 2026-10-19
+
+**A field is a fact of the prover while nothing can change it (ADR-306 D17, #384)**
+- Decided, not yet built: a path of fields (`t.slots`, `p.end`, `self.at`) is a name of the bounds and overflow walk; a fact about it holds for the whole body through a parameter the function only borrows, and otherwise until a write to it, a call that may change its root, or a lambda or task that sees the root; a precondition (ADR-269 D5) may read a field of a parameter (ADR-306 D17, ADR-269 D9, Part III 14.2).
+
 ## [0.0.1077] — 2026-10-19
 
 **programs without `ref` no longer refused for the text tiers' choice in three shapes (#708)**

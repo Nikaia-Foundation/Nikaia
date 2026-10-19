@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1077 (Draft)
+**Version:** 0.0.1079 (Draft)
 **Date:** 2026-10-19
 
 ---
@@ -1249,6 +1249,27 @@ A struct literal may leave such a field out, and the field takes its default:
 `Page { cursor: null }` has a `size` of 50. A literal that leaves out a field
 without a default is refused with `NK1234`. The default is evaluated once,
 while the package that declares the struct is built.
+
+**A struct states its rule with an `assert` after its fields**
+([ADR-369](adr/adr-369.md)):
+
+```nika
+pub struct Piece {
+    start: i64,
+    end: i64,
+    assert(0 <= start && start <= end; message: "a piece ends after it starts")
+}
+```
+
+The claim reads the fields by name, and it is the type's **invariant**. It
+holds after every construction - a literal, a `with`, the constructor's
+result - at the end of every method that changes the value, and after every
+write to a field from outside such a method; inside a method it may be broken
+for a while. Each of these points is proved where the compiler can and checked
+where it cannot, as any `assert` is (Part III 14.2). Wherever a value of the
+type is read, the rule is a fact the compiler proves from. Where a struct with
+private fields writes no rule, the compiler may find one its package's code
+always keeps, and uses it only as a fact.
 
 ### 4.2. Constructors and Instantiation
 A struct literal `Type { field: value }` names fields, and a private field
