@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1089] — 2026-10-19
+
+**a `catch` also catches a failing call inside the expression it guards (#721)**
+- `g(f()) catch { … }` and `read(m.text()) catch { … }` failed in rustc because the inner call was left as a `Result`. The guarded expression is now a labelled block that each failing call in it leaves with its error, and the handler gets every error that arrives there (Part I 7.1).
+
 ## [0.0.1088] — 2026-10-19
 
 **A path of fields is a name of the bounds walk and the prover (ADR-306 D17, #711)**
