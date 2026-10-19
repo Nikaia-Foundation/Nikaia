@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1047] — 2026-10-19
+
+**A `String` parameter or option the body only reads is handed on as a view (#654)**
+- ADR-282 D2, D5: a `String` parameter or a lent `String` option that the body only reads is checked as the view it is below. Handing it on to another call or to `std` lends it as it is (`count(dna, k)`, `net::listen(at)`), with no `&` that a `ref String` parameter does not get, so dropping `ref` from such parameters lowers to the same Rust. Method parameters still take their argument (ADR-288).
+
 ## [0.0.1046] — 2026-10-19
 
 **A shift written only in literals is folded exactly (#661)**
