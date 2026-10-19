@@ -296,7 +296,7 @@ const MAPPED: &str = r##"use std::fs
 
 fn first_line(path: String) -> ref String throws {
     let file = fs::map(path, fs::Root::Anywhere)
-    for line in file.lines() {
+    for line in file.text().lines() {
         return line
     }
     return ""

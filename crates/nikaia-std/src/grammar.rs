@@ -51,6 +51,64 @@ impl std::fmt::Display for ParseError {
 
 impl std::error::Error for ParseError {}
 
+/// **What a grammar's text copy is entered with**: text, or a mapping
+/// ([ADR-016](../../../docs/specification/adr/adr-016.md) D5).
+///
+/// A mapping is bytes, and a grammar run over it checks the text it reads: its
+/// text is asked for once, through the check the mapping keeps (so a program
+/// that also called `m.text()` pays for one check, not two), and a byte that is
+/// not UTF-8 is a parse error at its position, said as the backend says it
+/// where a byte grammar makes text.
+pub trait Source {
+    /// The text, or the parse error a byte that is not UTF-8 is.
+    fn text(&self) -> Result<&str, ParseError>;
+}
+
+impl Source for str {
+    fn text(&self) -> Result<&str, ParseError> {
+        Ok(self)
+    }
+}
+
+impl Source for String {
+    fn text(&self) -> Result<&str, ParseError> {
+        Ok(self)
+    }
+}
+
+impl<T: Source + ?Sized> Source for &T {
+    fn text(&self) -> Result<&str, ParseError> {
+        (**self).text()
+    }
+}
+
+impl Source for crate::fs::Pages {
+    fn text(&self) -> Result<&str, ParseError> {
+        self.checked().map_err(|at| not_text(self, at))
+    }
+}
+
+impl Source for crate::fs::Mapped {
+    fn text(&self) -> Result<&str, ParseError> {
+        Source::text(&**self)
+    }
+}
+
+/// The backend's own error for a byte that is not UTF-8 at `at`, rendered
+/// against the bytes: its line, its column and the byte.
+fn not_text(bytes: &[u8], at: usize) -> ParseError {
+    use winnow::stream::Stream;
+    let mut stream = winnow_grammar::ParseBytes::<()> {
+        state: winnow_grammar::ParseContext::<()>::default(),
+        input: winnow::stream::LocatingSlice::new(bytes),
+    };
+    stream.next_slice(at);
+    let byte = bytes.get(at).copied().unwrap_or(0);
+    let error =
+        <winnow_grammar::ParseError as winnow_grammar::Diagnostics>::invalid_utf8(&stream, byte);
+    ParseError::of(error.render(bytes))
+}
+
 /// **`G::rule(text)`, lowered**: the entry rule run over the whole of `source`,
 /// and its failure rendered against it.
 ///
@@ -60,10 +118,14 @@ impl std::error::Error for ParseError {}
 /// (`blocks_in_conditions`). The input is read once and named here, because it
 /// is needed twice - to parse, and to say *where* a failure was: an offset
 /// becomes a line and a column only against the text.
-pub fn parse<'a, O>(
-    source: &'a str,
+pub fn parse<'a, S, O>(
+    source: &'a S,
     mut rule: impl winnow::Parser<winnow_grammar::ParseInput<'a, ()>, O, winnow_grammar::ParseError>,
-) -> Result<O, ParseError> {
+) -> Result<O, ParseError>
+where
+    S: Source + ?Sized,
+{
+    let source = source.text()?;
     let mut stream = winnow_grammar::ParseInput::<()> {
         state: winnow_grammar::ParseContext::<()>::default(),
         input: winnow::stream::LocatingSlice::new(source),
@@ -74,10 +136,14 @@ pub fn parse<'a, O>(
 
 /// [`parse`] for a `par_fold` rule, which is cut into pieces before it is
 /// parsed: `run` is the generated `parse_<rule>_pieces` applied to `source`.
-pub fn parse_pieces<'a, O>(
-    source: &'a str,
+pub fn parse_pieces<'a, S, O>(
+    source: &'a S,
     run: impl FnOnce(&'a str) -> Result<O, winnow_grammar::ParseError>,
-) -> Result<O, ParseError> {
+) -> Result<O, ParseError>
+where
+    S: Source + ?Sized,
+{
+    let source = source.text()?;
     run(source).map_err(|error| ParseError::of(error.render(source)))
 }
 

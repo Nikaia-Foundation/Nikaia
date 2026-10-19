@@ -7,7 +7,8 @@ not once per view. Optional features:
 * `rayon`: a large input is checked in chunks across the rayon pool, cut
   only where a character begins, and reports the same first bad byte a serial
   check would.
-* `map`: a file mapped and checked in one step.
+* `map`: a file mapped as bytes, to be checked as text when it is read as
+  text (`OnDemand`).
 * `simd`: each piece is checked with `simdutf8`, which gives the standard
   library's verdict and the same offset for a bad byte; a test holds it to
   `std::str::from_utf8` across the vector check's block edges.
@@ -28,6 +29,7 @@ assert_eq!(CheckedText::check(b"ok\xFFno".to_vec()).err(), Some(2));
 | :--- | :--- | :--- |
 | `as_str` (so `Deref`) | `str::from_utf8_unchecked` | `check` validated the bytes before the value existed, and they are reached only through `&self`: nothing hands out a way to change them |
 | `into_string` | `String::from_utf8_unchecked` | validated in `check`, owned here since |
+| `OnDemand::text` | `str::from_utf8_unchecked` | the `OnceLock` holds `Ok` only after the whole of the bytes was validated, and they are reached only through `&self` |
 | `map` (feature `map`) | `memmap2::Mmap::map` | a private, read-only mapping. **One caveat is accepted, not ruled out**: another process that truncates or rewrites the file while it is mapped changes what this value reads. That is true of every memory map, and it is why a program that maps a file must own it for the duration. |
 
 The chunked check's correctness is part of the argument. A cut walks forward

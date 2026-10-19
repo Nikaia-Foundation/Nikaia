@@ -1,9 +1,10 @@
 //! **Bytes checked as UTF-8 once, and text from then on.**
 //!
-//! A [`CheckedText`] owns (or maps) bytes that were validated when it was
-//! made, and hands them out as `&str` on every access without checking them
-//! again - which is the point: a 13 GB mapping is validated once, not per
-//! view. A large input is checked in chunks across the `rayon` pool (feature
+//! A [`CheckedText`] owns bytes that were validated when it was made, and an
+//! [`OnDemand`] holds bytes (a mapping, say) that are validated the first time
+//! they are read as text; both hand them out as `&str` from then on without
+//! checking them again - which is the point: a 13 GB mapping is validated once,
+//! not per view. A large input is checked in chunks across the `rayon` pool (feature
 //! `rayon`), cut only where a character begins.
 //!
 //! Every `unsafe` in this crate, and the argument for it, is listed in
@@ -64,21 +65,66 @@ impl<B: AsRef<[u8]>> AsRef<str> for CheckedText<B> {
 #[cfg(feature = "map")]
 pub use memmap2::Mmap;
 
-/// **A file's contents, mapped and checked as text** (feature `map`).
+/// **A file's contents, mapped and not checked** (feature `map`).
 ///
-/// `Ok(Err(at))` is a file that is not UTF-8 at byte `at`. A zero-length file
-/// cannot be mapped and is the caller's to handle.
+/// The pages are bytes until something reads them as text: [`OnDemand`] over
+/// them checks the whole mapping the first time its text is asked for. A
+/// zero-length file cannot be mapped and is the caller's to handle.
 ///
 /// The one caveat every memory map has holds here too, and is accepted rather
 /// than hidden: another process that truncates or rewrites the file while it is
 /// mapped changes what this value reads. `README.md` says so in full.
 #[cfg(feature = "map")]
-pub fn map(file: &std::fs::File) -> std::io::Result<Result<CheckedText<memmap2::Mmap>, usize>> {
+pub fn map(file: &std::fs::File) -> std::io::Result<memmap2::Mmap> {
     // SAFETY: a private, read-only mapping. The type system cannot rule out
     // another process changing the file underneath it, which is the documented
     // caveat of every memory map (README.md).
-    let pages = unsafe { memmap2::Mmap::map(file)? };
-    Ok(CheckedText::check(pages))
+    unsafe { memmap2::Mmap::map(file) }
+}
+
+/// **Bytes that are checked as UTF-8 the first time they are read as text**,
+/// and never again.
+///
+/// The bytes are reachable as bytes at once and without a check; [`text`]
+/// checks all of them on its first call (in chunks across the pool, as
+/// [`CheckedText::check`] does) and hands back the same view on every later
+/// one, or the same first bad byte.
+///
+/// [`text`]: OnDemand::text
+pub struct OnDemand<B: AsRef<[u8]>> {
+    bytes: B,
+    checked: std::sync::OnceLock<Result<(), usize>>,
+}
+
+impl<B: AsRef<[u8]>> OnDemand<B> {
+    /// The bytes, not yet checked.
+    pub fn new(bytes: B) -> Self {
+        OnDemand {
+            bytes,
+            checked: std::sync::OnceLock::new(),
+        }
+    }
+
+    /// The bytes, as they are.
+    pub fn bytes(&self) -> &[u8] {
+        self.bytes.as_ref()
+    }
+
+    /// The bytes as text, checked on the first call only; `Err(at)` is the
+    /// first byte where they stop being text.
+    pub fn text(&self) -> Result<&str, usize> {
+        let bytes = self.bytes.as_ref();
+        (*self.checked.get_or_init(|| validate(bytes)))?;
+        // SAFETY: `checked` holds `Ok` only once `validate` accepted these
+        // bytes, and `B` is only ever reached through `&self` - nothing here
+        // hands out a way to change them.
+        Ok(unsafe { std::str::from_utf8_unchecked(bytes) })
+    }
+
+    /// Whether [`text`](Self::text) has checked the bytes yet.
+    pub fn is_checked(&self) -> bool {
+        self.checked.get().is_some()
+    }
 }
 
 /// Below this, the pool costs more than the check does.
@@ -180,16 +226,32 @@ mod tests {
     #[test]
     #[cfg(feature = "map")]
     #[cfg_attr(miri, ignore = "Miri cannot map a file")]
-    fn a_mapped_file_is_checked_text() {
+    fn a_mapped_file_is_text_when_it_is_read_as_text() {
         let path = std::env::temp_dir().join(format!("checked-text-{}", std::process::id()));
         std::fs::write(&path, "Oslo;3\n").expect("write");
         let file = std::fs::File::open(&path).expect("open");
-        let text = super::map(&file).expect("map").expect("text");
-        assert_eq!(&*text, "Oslo;3\n");
+        let pages = super::OnDemand::new(super::map(&file).expect("map"));
+        assert_eq!(pages.text(), Ok("Oslo;3\n"));
         std::fs::write(&path, b"ok\xFF").expect("write");
         let file = std::fs::File::open(&path).expect("open");
-        assert_eq!(super::map(&file).expect("map").err(), Some(2));
+        let pages = super::OnDemand::new(super::map(&file).expect("map"));
+        assert_eq!(pages.bytes(), b"ok\xFF");
+        assert_eq!(pages.text(), Err(2));
         let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn bytes_on_demand_are_checked_once_and_only_when_asked() {
+        let pages = super::OnDemand::new(b"Oslo;3".to_vec());
+        assert_eq!(pages.bytes(), b"Oslo;3");
+        assert!(!pages.is_checked(), "reading the bytes checks nothing");
+        let first = pages.text().expect("text");
+        assert!(pages.is_checked());
+        let again = pages.text().expect("text");
+        assert!(std::ptr::eq(first, again), "the same view, not a new one");
+        let broken = super::OnDemand::new(b"ok\xFFno".to_vec());
+        assert_eq!(broken.text(), Err(2));
+        assert_eq!(broken.text(), Err(2));
     }
 
     #[test]

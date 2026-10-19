@@ -27,7 +27,7 @@ fn main() throws {
         return
     }
 
-    let mut entries = read(data) catch {
+    let mut entries = read(data.text()) catch {
         eprintln(f"{path}: {error}")
         return
     }

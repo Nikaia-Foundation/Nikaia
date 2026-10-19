@@ -437,42 +437,104 @@ pub fn read_dir(path: impl AsRef<FilePath>, root: &Root) -> Result<DirEntries, c
     Ok(names)
 }
 
-/// A file's bytes, addressable as text for as long as the value lives.
+/// A file's bytes, addressable for as long as the value lives.
 ///
 /// Part III, 17.1: a memory mapping. The pages *are* the buffer, so a 13 GB
 /// input costs no copy and every view a parser yields points straight into the
-/// file. The text is validated as UTF-8 once, when the map is made; after that
-/// a view of it is a view of the pages.
+/// file. **The pages are bytes** ([ADR-016](../../../docs/specification/adr/adr-016.md)
+/// D5): mapping checks nothing, and [`Mapped::text`] checks the whole of it
+/// as UTF-8 the first time it is asked for and never again.
 ///
 /// ADR-296 D15 allows a large read-only mapping to be left to the OS at process
 /// exit. Nothing here does that yet: the mapping is released when the value is
 /// dropped, and the drop is what `main` returning costs.
 pub struct Mapped {
+    pages: Pages,
+}
+
+/// **What a mapping derefs to**: its bytes, read as any `Bytes` is read
+/// (`b[i]`, a cut, `len`, `find`, `u64_le`), and its text, checked once.
+///
+/// A type of its own rather than `[u8]` so that a grammar entered with a
+/// mapping (`&*data`, [`crate::grammar::parse`]) still knows it holds a
+/// mapping, and asks for its text through the one check the mapping keeps.
+pub struct Pages {
     map: Backing,
+    /// What the program asked to map, for a `NotText` to name.
+    asked: std::path::PathBuf,
 }
 
 enum Backing {
-    Pages(checked_text::CheckedText<checked_text::Mmap>),
+    Pages(checked_text::OnDemand<checked_text::Mmap>),
     /// A zero-length file cannot be mapped, and an empty input is still an
     /// input.
     Empty,
 }
 
-impl Mapped {
-    /// **The mapped file, as text**: what the ledger's `fs::Mapped::deref`
-    /// names, written as a call (#452). The lowering writes `data.deref()`,
-    /// and the trait's method is reached only where `Deref` is in scope.
-    #[allow(clippy::should_implement_trait)]
-    pub fn deref(&self) -> &str {
-        self
+impl Pages {
+    /// The mapping as text, checked the first time only, or the first byte
+    /// that is not UTF-8.
+    pub(crate) fn checked(&self) -> Result<&str, usize> {
+        match &self.map {
+            Backing::Pages(pages) => pages.text(),
+            Backing::Empty => Ok(""),
+        }
+    }
+
+    /// The mapping as text: `NotText` naming the file and the earliest bad
+    /// byte, the failure `fs::read_to_string` reports for the same file.
+    pub fn text(&self) -> Result<&str, crate::io::IoError> {
+        self.checked().map_err(|at| {
+            crate::io::IoError::NotText(format!("{} (at byte {at})", self.asked.display()))
+        })
     }
 }
 
-/// **A mapped file is sliced as text is** (#452): `data[a..<b]` is a view of
-/// its text, by the same rule as a `String`'s.
+#[cfg(test)]
+impl Pages {
+    /// Whether the text was checked yet: the hook that shows a second
+    /// `text()` checks nothing.
+    fn is_checked_for_test(&self) -> bool {
+        match &self.map {
+            Backing::Pages(pages) => pages.is_checked(),
+            Backing::Empty => true,
+        }
+    }
+}
+
+impl std::ops::Deref for Pages {
+    type Target = [u8];
+
+    fn deref(&self) -> &[u8] {
+        match &self.map {
+            Backing::Pages(pages) => pages.bytes(),
+            Backing::Empty => &[],
+        }
+    }
+}
+
+impl Mapped {
+    /// **The mapped file, as bytes**: what the ledger's `fs::Mapped::deref`
+    /// names, written as a call (#452). The lowering writes `data.deref()`,
+    /// and the trait's method is reached only where `Deref` is in scope.
+    #[allow(clippy::should_implement_trait)]
+    pub fn deref(&self) -> &[u8] {
+        &self.pages
+    }
+
+    /// **The mapped file, as text** (`fs::Mapped::text`, ADR-016 D5): the
+    /// first call checks the whole mapping, in chunks across the pool, and
+    /// every later one hands back the same view without checking again.
+    pub fn text(&self) -> Result<&str, crate::io::IoError> {
+        self.pages.text()
+    }
+}
+
+/// **A mapped file is read as bytes are** (ADR-016 D5): `data[i]` is a `u8`
+/// and `data[a..<b]` a run of them, by the same rule as a `Bytes`'s.
 impl<I> crate::index::Get<I> for Mapped
 where
-    I: std::slice::SliceIndex<str> + 'static,
+    I: std::slice::SliceIndex<[u8]> + 'static,
 {
     type Out<'a>
         = &'a I::Output
@@ -481,41 +543,37 @@ where
 
     #[track_caller]
     fn get(&self, key: I) -> &I::Output {
-        &(**self)[key]
+        &self.deref()[key]
     }
 }
 
 impl std::ops::Deref for Mapped {
-    type Target = str;
+    type Target = Pages;
 
-    fn deref(&self) -> &str {
-        match &self.map {
-            Backing::Pages(pages) => pages,
-            Backing::Empty => "",
-        }
+    fn deref(&self) -> &Pages {
+        &self.pages
     }
 }
 
-impl AsRef<str> for Mapped {
-    fn as_ref(&self) -> &str {
-        self
+impl AsRef<[u8]> for Mapped {
+    fn as_ref(&self) -> &[u8] {
+        self.deref()
     }
 }
 
-/// A mapping is a buffer views of text are cut from, so a view of it kept by a
+/// A mapping is a buffer views are cut from, so a view of it kept by a
 /// container that drops entries is found in it again (ADR-283 D15).
 impl crate::tether::Viewed for Mapped {
     fn bytes(&self) -> &[u8] {
-        let text: &str = self;
-        text.as_bytes()
+        self.deref()
     }
 }
 
-/// Map a file and make its contents addressable as text.
+/// Map a file and make its contents addressable as bytes.
 ///
-/// Fails as the file system does, and additionally when the file is not
-/// UTF-8 - a parser handed such a mapping would find that out one byte at a
-/// time, and the boundary of a frame is a string, not a byte.
+/// Fails as the file system does, and only so: whether the bytes are text is
+/// asked where they are read as text ([`Mapped::text`], a grammar entered with
+/// the mapping), not here (ADR-016 D5).
 ///
 /// **`async` with nothing awaited inside it, and that costs nothing.** A
 /// mapping is an `open`, a `stat` and an `mmap` - a path walk and a page-table
@@ -537,26 +595,20 @@ pub async fn map(path: impl AsRef<FilePath>, root: &Root) -> Result<Mapped, crat
     let path = resolved.as_path();
     let named = |e| crate::io::IoError::of(e, asked);
     let file = std::fs::File::open(path).map_err(named)?;
-    if file.metadata().map_err(named)?.len() == 0 {
-        return Ok(Mapped {
-            map: Backing::Empty,
-        });
-    }
-
-    // Mapped and checked as text in one step, in the crate that holds what
-    // that takes (ADR-218), which says what a map cannot rule out.
-    let pages = match checked_text::map(&file).map_err(named)? {
-        Ok(pages) => pages,
-        Err(at) => {
-            return Err(crate::io::IoError::NotText(format!(
-                "{} (at byte {at})",
-                asked.display()
-            )));
-        }
+    let map = if file.metadata().map_err(named)?.len() == 0 {
+        Backing::Empty
+    } else {
+        // Mapped in the crate that holds what that takes (ADR-218), which
+        // says what a map cannot rule out.
+        Backing::Pages(checked_text::OnDemand::new(
+            checked_text::map(&file).map_err(named)?,
+        ))
     };
-
     Ok(Mapped {
-        map: Backing::Pages(pages),
+        pages: Pages {
+            map,
+            asked: asked.to_path_buf(),
+        },
     })
 }
 
@@ -567,7 +619,7 @@ pub async fn map(path: impl AsRef<FilePath>, root: &Root) -> Result<Mapped, crat
 /// `String` the caller owns, where `map` hands back pages it does not.
 ///
 /// Fails as the file system does, and additionally when the file is not
-/// UTF-8 - the same rule `map` follows, for the same reason.
+/// UTF-8 - the rule a mapping's `text()` follows, for the same reason.
 ///
 /// **The read goes through the runtime**
 /// ([ADR-303](../../../docs/specification/adr/adr-303.md) D3): the kernel
@@ -610,7 +662,7 @@ pub(crate) fn text(bytes: Vec<u8>, what: &str) -> Result<String, crate::io::IoEr
 
 /// [`text`], with the name asked for only when the bytes are not text.
 fn text_named(bytes: Vec<u8>, what: impl FnOnce() -> String) -> Result<String, crate::io::IoError> {
-    // The same check `map` makes, and the same reason: a parser handed bytes
+    // The same check a mapping's `text()` makes, and the same reason: a parser handed bytes
     // that are not text would find that out one view at a time.
     match checked_text::CheckedText::check(bytes) {
         Ok(text) => Ok(text.into_string()),
@@ -1057,6 +1109,45 @@ mod writer {
 #[cfg(test)]
 mod tests {
     use std::path::Path as FilePath;
+
+    /// **A mapping is bytes, and its text is checked once, when asked for**
+    /// (ADR-016 D5): a file with a byte that is not UTF-8 maps and reads as
+    /// bytes, a cut before the byte is text, and `text()` names the byte -
+    /// on every call, from the one check the first call made.
+    #[test]
+    fn a_mapping_is_bytes_and_its_text_is_checked_once() {
+        use crate::bytes::ByteReads;
+        let dir = std::env::temp_dir().join(format!("nikaia-mapped-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("scratch");
+        let root = super::Root::Dir(dir.clone());
+        std::fs::write(dir.join("bad"), b"ab\x01\0\0\0\0\0;\xff").expect("write");
+        std::fs::write(dir.join("good"), "Oslo;3\n").expect("write");
+        std::fs::write(dir.join("empty"), "").expect("write");
+        crate::rt::exec::block_on(async {
+            let bad = super::map("bad", &root).await.expect("maps unchecked");
+            assert_eq!(bad.len(), 10);
+            assert_eq!(*crate::index::get(&bad, 9), 0xff);
+            assert_eq!(bad.u64_le(0), u64::from_le_bytes(*b"ab\x01\0\0\0\0\0"));
+            assert_eq!(crate::index::get(&bad, 0..2).text().expect("a cut"), "ab");
+            assert!(!bad.pages.is_checked_for_test(), "nothing read it as text");
+            let failed = bad.text().expect_err("not text").to_string();
+            assert!(failed.contains("bad (at byte 9)"), "{failed}");
+            assert!(bad.pages.is_checked_for_test());
+            assert_eq!(bad.text().expect_err("still not text").to_string(), failed);
+
+            let good = super::map("good", &root).await.expect("maps");
+            let first = good.text().expect("text");
+            let again = good.text().expect("text");
+            assert_eq!(first, "Oslo;3\n");
+            assert!(std::ptr::eq(first, again), "the same view, checked once");
+
+            let empty = super::map("empty", &root).await.expect("maps");
+            assert_eq!(empty.len(), 0);
+            assert_eq!(empty.text().expect("text"), "");
+            assert!(crate::tether::Viewed::bytes(&empty).is_empty());
+        });
+        std::fs::remove_dir_all(&dir).ok();
+    }
 
     /// Half of a pair finished by `task::as_text` is finished exactly as
     /// `read_to_string` would have finished it (ADR-292 D6).

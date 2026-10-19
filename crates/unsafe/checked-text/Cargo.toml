@@ -11,7 +11,7 @@ publish = false
 default = []
 # Check a large input in chunks across the rayon pool.
 rayon = ["dep:rayon"]
-# Map a file and check it as text.
+# Map a file, as bytes to be checked as text on demand.
 map = ["dep:memmap2"]
 # Check with SIMD (`simdutf8`): the same answer, verdict and offset, as the
 # standard library's check, several times faster on text that is not all ASCII.

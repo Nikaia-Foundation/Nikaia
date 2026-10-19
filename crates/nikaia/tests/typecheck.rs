@@ -1093,19 +1093,19 @@ fn a_view_of_a_generic_type_fits_the_same_view() {
     );
 }
 
-/// **A transparent container is seen through.** Part III says of `fs::Mapped`
-/// that "a parser cannot tell the difference", and `std`'s ledger spells it:
-/// `fs::Mapped::deref` is `(&Mapped) -> &str`. Nothing consulted that entry, so
-/// a function taking a text view refused a mapped file.
+/// **A transparent container is seen through.** Part III says `fs::Mapped`
+/// derefs to `Bytes`, and `std`'s ledger spells it: `fs::Mapped::deref` is
+/// `(ref Mapped) -> ref(self) Bytes`. Nothing consulted that entry once, so a
+/// function taking a view refused a mapped file.
 #[test]
 fn a_view_of_a_transparent_container_fits_what_it_derefs_to() {
     assert!(
         findings(
-            "use std::fs\n\nfn count(text: ref String) -> i64 { return 1 }\n\
+            "use std::fs\n\nfn count(b: ref Bytes) -> i64 { return 1 }\n\
              fn probe() -> i64 throws { let m = fs::map(\"x\", fs::Root::Anywhere)\n return count(m) }"
         )
         .is_empty(),
-        "a mapped file must fit a text view"
+        "a mapped file must fit a view of bytes"
     );
 }
 

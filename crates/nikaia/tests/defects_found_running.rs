@@ -394,10 +394,11 @@ fn a_fallback_block_that_returns_takes_its_takings_with_it() {
     );
 }
 
-/// **A mapped file is text wherever text is read** (#452): sliced by a
-/// range, through its `deref`, as a `ref String` a `let` declares, and handed
-/// to a function that reads text - each the same as the file read whole.
-/// The three first ones passed the checker and failed in `rustc`.
+/// **A mapped file is text wherever its text is read** (#452, ADR-016 D5): a
+/// cut's text, its `text()`, as a `ref String` a `let` declares, and handed to
+/// a function that reads text - each the same as the file read whole. Before
+/// the mapping was bytes, three of them passed the checker and failed in
+/// `rustc`.
 #[test]
 fn a_mapped_file_is_read_as_text() {
     runs_in(
@@ -410,11 +411,11 @@ fn a_mapped_file_is_read_as_text() {
          \n\
          fn main() throws {\n\
          \x20   let data = fs::map(\"m.txt\", fs::Root::Anywhere)\n\
-         \x20   let a = data[0..<\"Hamburg\".len()]\n\
-         \x20   let b = data.deref()\n\
-         \x20   let c: ref String = data\n\
+         \x20   let a = data[0..<\"Hamburg\".len()].text()\n\
+         \x20   let b = data.text()\n\
+         \x20   let c: ref String = data.text()\n\
          \x20   let whole = fs::read_to_string(\"m.txt\", fs::Root::Anywhere)\n\
-         \x20   println(f\"{a}|{b == whole}|{c == whole}|{length(data)}\")\n\
+         \x20   println(f\"{a}|{b == whole}|{c == whole}|{length(data.text())}\")\n\
          }\n",
         "Hamburg|true|true|13\n",
         |dir| std::fs::write(dir.join("m.txt"), "Hamburg;12.3\n").expect("write the input"),
