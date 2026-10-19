@@ -748,6 +748,7 @@ pub fn emit_std_against(
         own.clone(),
         described,
         &Reads::none(),
+        None,
     )
     .for_std()
     .program()
@@ -773,7 +774,7 @@ pub fn emit_std_items_against(
         .chain(beside.iter().copied())
         .collect();
     let provenance = crate::contracts::trust::analyse_package(&package, &library).provenance;
-    emit_std_items_against_at(parsed, beside, own, described, build, provenance)
+    emit_std_items_against_at(parsed, beside, own, described, build, provenance, None)
 }
 
 /// The same at a given build, for the test that holds the package to lowering
@@ -785,6 +786,11 @@ pub fn emit_std_items_against_at(
     described: &crate::contracts::Ledger,
     build: Build,
     provenance: crate::contracts::Provenance,
+    // **The facts of the check that already ran on this file**, when it ran
+    // exactly as the emitter's own would (`check::propagation_against`: the
+    // same `beside`, `own`, library, no modules, nothing newly, no reads), so
+    // the checker walks the file once and not twice. `None` runs it here.
+    checked: Option<crate::check::CheckFacts>,
 ) -> Result<Lowered> {
     Emitter::with_contracts(
         parsed,
@@ -794,6 +800,7 @@ pub fn emit_std_items_against_at(
         own.clone(),
         described,
         &Reads::none(),
+        checked,
     )
     .for_std()
     .items_only()
@@ -858,6 +865,7 @@ pub fn emit_module_body_at(
         contracts.clone(),
         described,
         reads,
+        None,
     )
     .for_entry(entry)
     .items_only()
@@ -1800,11 +1808,13 @@ impl<'p> Emitter<'p> {
             own,
             &crate::contracts::Ledger::blank(),
             reads,
+            None,
         )
     }
 
     /// The same, against contracts that already exist - a program's rather than
     /// a file's.
+    #[allow(clippy::too_many_arguments)]
     fn with_contracts(
         parsed: &'p Parsed,
         beside: &[&Parsed],
@@ -1815,6 +1825,9 @@ impl<'p> Emitter<'p> {
         // one can fail, and what it keeps, which the propagation below asks.
         described: &crate::contracts::Ledger,
         reads: &Reads,
+        // The facts of a check already run as `propagation_against` would run
+        // it (`emit_std_items_against_at`).
+        checked: Option<crate::check::CheckFacts>,
     ) -> Self {
         let seeds_of = {
             let mut all: Vec<&Parsed> = beside.to_vec();
@@ -1897,6 +1910,7 @@ impl<'p> Emitter<'p> {
         // method calls: a receiver's type is the type checker's to know, and
         // there is one type checker (ADR-288).
         let propagation = match build.leaves_values {
+            false if let Some(facts) = checked => facts,
             true => crate::check::propagation_leaving_values(
                 parsed,
                 beside,
@@ -8704,6 +8718,7 @@ pub fn branch_starts_first<'p>(
         // This asks whether a branch pauses, which no file a build read can
         // change — so D1's default is the honest answer here.
         &Reads::none(),
+        None,
     );
     move |stmt| emitter.branch_pauses(stmt, Flow::PLAIN)
 }

@@ -423,6 +423,16 @@ pub fn lower_tools_files_on(
     let mut library = crate::contracts::std_library();
     library.types.extend(described.types.clone());
     library.functions.extend(described.functions.clone());
+    // **The file check's facts serve the emitter** when its library is the
+    // one `check::propagation_against` builds: there `std` wins a collision
+    // with a described name, here the described one does, so the two are the
+    // same ledger exactly when no name is in both.
+    let std = crate::contracts::std_ledger();
+    let facts_reusable = !described
+        .functions
+        .keys()
+        .any(|k| std.functions.contains_key(k))
+        && !described.types.keys().any(|k| std.types.contains_key(k));
     let units: Vec<&crate::parser::Parsed> = parsed.iter().collect();
     let (own, checked) = crate::contracts::Ledger::infer_package_checked(&units, &library);
     timer.lap("ledger");
@@ -474,8 +484,9 @@ pub fn lower_tools_files_on(
             return (refused, started.elapsed(), std::time::Duration::ZERO);
         }
         let checking = started.elapsed();
+        let facts = facts_reusable.then_some(checked.facts);
         let lowered = crate::emit::emit_std_items_against_at(
-            unit, &beside, &own, &described, build, provenance,
+            unit, &beside, &own, &described, build, provenance, facts,
         )
         .map(|lowered| lowered.rust)
         .map_err(|e| anyhow::anyhow!("{}: {e}", path.display()));
