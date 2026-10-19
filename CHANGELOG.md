@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1067] — 2026-10-19
+
+**A struct of views read through a local does not keep the argument it views (#697)**
+- A call whose result points into an argument (`returns = "...: ref(s)"`) keeps that argument only where the result leaves: returned, stored in a field or container, or handed to a keeping parameter. `fn shout(v: String) { let a = tag(v); println(a.label) }` now lends `v`, and the caller may use its text again (ADR-094 D2).
+
 ## [0.0.1066] — 2026-10-19
 
 **A struct handed back through a `let`, and a parameter handed to a reader, lend their `String` parameter (#678)**
