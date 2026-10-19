@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1074] — 2026-10-19
+
+**`fs::map` hands back bytes; `m.text()` checks them once (ADR-016 D5)**
+- Decided, not yet built: `fs::map` checks nothing and `Mapped` derefs to `Bytes`; `m.text()` checks UTF-8 over the whole mapping the first time, throws `io::IoError::NotText` with the earliest bad byte, and hands back the same view after; a cut `m[a..<b].text()` checks only that cut; a grammar run over a mapping checks the text it reads (ADR-016 D5, Part III 17.2). ADR-283 D22 is superseded.
+
 ## [0.0.1073] — 2026-10-19
 
 **A `Bytes` reads a word in the order its name says (ADR-320 D12)**

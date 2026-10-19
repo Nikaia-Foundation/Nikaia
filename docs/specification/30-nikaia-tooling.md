@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part III: Tooling, Ecosystem & Interoperability**
-**Version:** 0.0.1073 (Draft)
+**Version:** 0.0.1074 (Draft)
 **Date:** 2026-10-19
 
 ---
@@ -1297,11 +1297,11 @@ a `spawn`, never by the compiler.
 
 **Reading a large file: `map`, and the grammar**
 
-There is no `fs::lines` and no `fs::bytes`. A program maps the file and walks the mapping's lines. `fs::map(path, root)` owns the pages and `.lines()` borrows views of them: tethered `ref String`, no allocation per line, constant memory.
+There is no `fs::lines` and no `fs::bytes`. A program maps the file and walks the lines of its text. `fs::map(path, root)` owns the pages, `.text()` checks them once, and `.lines()` borrows views of them: tethered `ref String`, no allocation per line, constant memory.
 
 ```nika
 let data = fs::map(ref path, fs::Root::Anywhere)
-for line in data.lines() { … }
+for line in data.text().lines() { … }
 ```
 
 A file that is a **record per line** is read with the grammar protocol: `@frame(boundary: "\n")` says so, and the grammar drives itself over the pages, in parallel where `user_parallelism` allows (Part II, 10.7).
@@ -1334,7 +1334,7 @@ impl File {
 pub fn map(path: Path, root: Root) -> Mapped throws     // read-only memory map
 ```
 
-`Mapped` derefs to `Bytes`, so a mapped file is a tethered buffer like any other. The pages are the buffer, and nothing is copied ([ADR-283](adr/adr-283.md) D22).
+`Mapped` derefs to `Bytes`, so a mapped file is a tethered buffer like any other. The pages are the buffer, nothing is copied, and `fs::map` checks nothing. **`m.text()` is the mapping as text:** the first call checks UTF-8 over the whole of it and throws `io::IoError::NotText` with the earliest bad byte; later calls hand back the same view without checking again. A cut, `m[a..<b].text()`, checks only that cut. A grammar run over a mapping checks the text it reads, and a byte that is not UTF-8 is an error at its position ([ADR-016](adr/adr-016.md) D5).
 
 **Retention.** A slice that escapes the mapping's scope tethers to it, and a tether keeps the whole map alive. The compiler warns where a small extract outlives a large buffer and suggests `.clone()` ([ADR-283](adr/adr-283.md) D6). The mapping is released once the last tether is gone, which may be later than the end of the block that created it. Slices that never leave that scope cost nothing and hold nothing. At process exit a read-only mapping with nothing observable attached to it is left to the operating system rather than unmapped page by page.
 
