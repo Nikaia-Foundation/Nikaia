@@ -123,7 +123,6 @@ chose: the hasher, the UTF-8 check, and Nikaia's one-character pattern as a
 |---|---|---|
 | a count per row and a sum over the file, bounded by the input's size, to prove the accumulator's two overflow checks away (2.0 a row) | the prover | [#432](https://github.com/Nikaia-Foundation/Nikaia/issues/432) |
 | no whole-file UTF-8 check (10.3 a row): text checked only where it is new, a mapping as bytes, maybe a type for unchecked text (a grammar over `Bytes` is ADR-366, #422) | language, `winnow-grammar`, `std` | [#664](https://github.com/Nikaia-Foundation/Nikaia/issues/664) |
-| an insert-only table for a map nothing removes from; decision pending | `std` | [#434](https://github.com/Nikaia-Foundation/Nikaia/issues/434) |
 
 ## What this does not claim
 
