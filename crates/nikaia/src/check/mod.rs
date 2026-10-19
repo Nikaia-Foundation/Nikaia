@@ -1127,7 +1127,7 @@ impl<'a> Checker<'a> {
                     // **`main`'s parameters are the command line**
                     // ([ADR-360](../../docs/specification/adr/adr-360.md) D2).
                     self.s.main_parameters(self.world, &item.node, &item.span);
-                    self.function(&item.node, None)
+                    self.function(&item.node, &item.span, None)
                 }
                 Item::Struct { fields, .. } => {
                     for field in fields {
@@ -1195,7 +1195,7 @@ impl<'a> Checker<'a> {
                     for method in methods {
                         self.s.enclosing = outer.clone();
                         self.s.subject_arguments = arguments.clone();
-                        self.function(&method.node, Some(&target));
+                        self.function(&method.node, &method.span, Some(&target));
                     }
                     self.s.enclosing = BTreeMap::new();
                     self.s.subject_arguments = Vec::new();
@@ -1403,7 +1403,7 @@ impl<'a> Checker<'a> {
             .a_named_fold_part_that_may_pause(self.world, part, span)
     }
 
-    fn function(&mut self, item: &Item, target: Option<&str>) {
+    fn function(&mut self, item: &Item, at: &Span, target: Option<&str>) {
         let Item::Fn {
             name,
             generics,
@@ -1416,6 +1416,7 @@ impl<'a> Checker<'a> {
             can_throw: throws,
             is_sync,
             sync_by,
+            is_extern,
             ..
         } = item
         else {
@@ -1695,6 +1696,23 @@ impl<'a> Checker<'a> {
         // body **cannot get there**
         // ([ADR-276](../../../docs/specification/adr/adr-276.md)).
         let ends = !a_body_never_ends(body);
+        // **An empty body hands back nothing** (#704): `fn me(ref self) -> Row
+        // { }` is told as a body whose last statement is not a value is.
+        if let Some(expected) = &expected
+            && body.stmts.is_empty()
+            && !is_extern
+        {
+            let want = expected.text();
+            self.s.findings.push(Finding {
+                severity: Severity::Error,
+                code: "NK1104".to_string(),
+                span: *at,
+                message: format!("This function returns `()`, but it's declared to return `{want}`."),
+                notes: vec!["Its body is empty, so it hands nothing back.".to_string()],
+                help: Some(format!("Write the `{want}` it returns as the body's last expression, or remove `-> {want}`.")),
+                labels: Vec::new(),
+            });
+        }
         if let (Some(expected), Some(span)) = (&expected, tail_span.filter(|_| ends)) {
             // **A tail is a `return` written without the word**, so it owes the
             // same `&`: `fn text(ref self) -> ref String { self.text }` and the
@@ -2484,7 +2502,7 @@ impl<'a> Checker<'a> {
                     on: on.clone(),
                     field: field.clone(),
                 });
-                self.function(&item.node, None);
+                self.function(&item.node, &item.span, None);
                 self.s.flow.unrolling = outer;
                 // **What the generic walk already said is not said again.**
                 // The same body was walked once with nothing known, and a

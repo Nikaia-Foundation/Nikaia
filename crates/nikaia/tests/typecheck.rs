@@ -2188,3 +2188,20 @@ fn a_name_of_an_open_number_as_an_arm_is_refused() {
                   let y: String = if c { \"a\".clone() } else { n }\n    return y\n}\n";
     assert_eq!(one(source).0, "NK1103");
 }
+
+/// **An empty body hands back nothing** (#704): `fn me(ref self) -> Row { }`
+/// was accepted, and `rustc` said *mismatched types*. It is told as a body
+/// whose last statement is not a value.
+#[test]
+fn an_empty_body_with_a_result_is_refused() {
+    let (code, message) = one("struct Row { n: i64 }\n\
+         impl Row {\n\
+         \x20   fn me(ref self) -> Row { }\n\
+         }\n\
+         fn main() { }\n");
+    assert_eq!(code, "NK1104");
+    assert_eq!(
+        message,
+        "This function returns `()`, but it's declared to return `Row`."
+    );
+}
