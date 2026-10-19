@@ -23,6 +23,7 @@ pub mod dsl;
 pub mod emit;
 pub mod fixed;
 pub mod fold;
+pub mod fold_bound;
 pub mod foreign;
 pub mod grammar_run;
 pub mod interpreter;
