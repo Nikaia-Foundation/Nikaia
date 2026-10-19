@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1086] — 2026-10-19
+
+**fs::map maps bytes; m.text() checks the mapping once (ADR-016 D5, #710)**
+- `fs::map` checks nothing and `Mapped` derefs to `Bytes`. New `fs::Mapped::text`: the first call checks the whole mapping in parallel and throws `io::IoError::NotText` at the earliest bad byte, later calls return the same view. A cut's `text()` checks only the cut. A grammar run over a mapping checks its text once and reports a byte that is not UTF-8 as a parse error at its line and column.
+
 ## [0.0.1085] — 2026-10-19
 
 **spec: parallel folding without a grammar (ADR-372, #717)**
