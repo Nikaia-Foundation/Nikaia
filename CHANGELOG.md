@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1072] — 2026-10-19
+
+**`Bytes::find` searches with memchr; range indexes inline (#701)**
+- `Bytes::find` and `find` on a run of bytes search with `memchr`, word-wide, as ADR-320 D6 promises, not one byte at a time; indexing with a range or a kept `Span` is inlined like a scalar index.
+
 ## [0.0.1071] — 2026-10-19
 
 **`drain` takes its container away (#707)**
