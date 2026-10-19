@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1051] — 2026-10-19
+
+**a fold's counters proved from the input's length**
+- ADR-367 D1-D3 built: in a `fold` or `par_fold` over a grammar's input, a whole-number accumulator field that each step changes by a fixed literal amount outside any loop, and that the merge sums, is proved not to overflow where k·2^60/max(w,1) fits its type (w the element rule's least width), and is written without its check under `remove-overflow-checks:on`. The proof starts only from an input whose length is known (text, `Bytes`); a streaming input is unbounded (D2). 1BRC's `count` loses both checks; `sum` keeps its checks until D4. `--bounds` lists `x.f += d` and a fold's lambdas.
+
 ## [0.0.1050] — 2026-10-19
 
 **A list repeat keeps what it repeats (#654)**
