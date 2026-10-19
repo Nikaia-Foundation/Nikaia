@@ -1233,11 +1233,7 @@ fn a_library_struct_of_views(name: ref String, ask: ref BufferAsk) -> bool {
     if !name.contains("::") {
         return false
     }
-    return a_type_of_views(ask.own.types[name]) || a_type_of_views(ask.library.types[name])
-}
-
-fn a_type_of_views(entry: ref TypeContract?) -> bool {
-    let found = entry ?? return false
+    let found = ask.own.types[name] ?? ask.library.types[name] ?? return false
     if found.tethered.len() > 0 {
         return true
     }

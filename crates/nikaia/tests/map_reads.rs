@@ -418,3 +418,133 @@ fn an_empty_map_takes_its_types_from_its_first_write() {
         assert!(found[0].message.contains("i64"), "{}", found[0].message);
     }
 }
+
+/// Compile the lowering of `source` and run it; what it printed.
+fn ran(purpose: &str, source: &str) -> String {
+    assert!(
+        findings(source).is_empty(),
+        "{purpose}: {:#?}",
+        findings(source)
+    );
+    let rust = lowered(source);
+    let dir = common::scratch_dir(purpose);
+    let file = dir.join("main.rs");
+    std::fs::write(&file, &rust).expect("write the Rust");
+    let binary = dir.join("program");
+    let out = common::compile(&file, &["-o", binary.to_str().expect("utf-8 path")]);
+    assert!(
+        out.status.success(),
+        "{purpose} did not compile:\n{}\n--- the Rust ---\n{rust}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let ran = std::process::Command::new(&binary)
+        .output()
+        .expect("run the program");
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(ran.status.success(), "{purpose} failed");
+    String::from_utf8_lossy(&ran.stdout).trim().to_string()
+}
+
+const TWO_MAPS: &str = "use std::collections
+
+struct E {
+    n: i64,
+    tags: Vec[String],
+}
+
+struct L {
+    types: collections::BTreeMap[String, E],
+}
+
+struct Ask {
+    own: L,
+    library: L,
+}
+
+fn either(ask: ref Ask, name: String) -> bool {
+    let found = ask.own.types[name] ?? ask.library.types[name] ?? return false
+    return found.tags.len() > 0
+}
+
+fn main() {
+    let mut b: collections::BTreeMap[String, E] = collections::BTreeMap()
+    b.insert(\"k\", E { n: 3, tags: [\"x\".clone()] })
+    let ask = Ask { own: L { types: collections::BTreeMap() }, library: L { types: b } }
+    println(f\"{either(ask, \"k\")}\")
+}
+";
+
+/// **`a[k] ?? b[k] ?? return x` is a view of what one of the maps keeps**
+/// (#694): the fallback `b[k] ?? return x` reads a map as `b[k]` does, so it
+/// is not a value of its own, and `NK1185` does not apply - over maps reached
+/// through fields of a `ref` parameter, over plain map parameters, and with
+/// `?? continue`; whichever map holds the key.
+#[test]
+fn a_map_read_past_a_jump_is_a_view_beside_another_map_read() {
+    assert_eq!(ran("two-maps-library", TWO_MAPS), "true");
+    let own = TWO_MAPS.replace(
+        "Ask { own: L { types: collections::BTreeMap() }, library: L { types: b } }",
+        "Ask { own: L { types: b }, library: L { types: collections::BTreeMap() } }",
+    );
+    assert_eq!(ran("two-maps-own", &own), "true");
+    let plain = "use std::collections
+
+struct E {
+    n: i64,
+    tags: Vec[String],
+}
+
+fn either(a: ref collections::BTreeMap[String, E], b: ref collections::BTreeMap[String, E], name: String) -> bool {
+    let found = a[name] ?? b[name] ?? return false
+    return found.tags.len() > 0
+}
+
+fn main() {
+    let mut b: collections::BTreeMap[String, E] = collections::BTreeMap()
+    b.insert(\"k\", E { n: 3, tags: [\"x\".clone()] })
+    let a: collections::BTreeMap[String, E] = collections::BTreeMap()
+    println(f\"{either(a, b, \"k\")} {either(a, b, \"z\")}\")
+}
+";
+    assert_eq!(ran("two-maps-plain", plain), "true false");
+    let skips = "use std::collections
+
+struct E {
+    n: i64,
+    tags: Vec[String],
+}
+
+struct L {
+    types: collections::BTreeMap[String, E],
+}
+
+fn total(own: ref L, library: ref L, names: ref Vec[String]) -> i64 {
+    let mut sum = 0
+    for name in names {
+        let found = own.types[name] ?? library.types[name] ?? continue
+        sum += found.n
+    }
+    return sum
+}
+
+fn main() {
+    let mut a: collections::BTreeMap[String, E] = collections::BTreeMap()
+    a.insert(\"j\", E { n: 4, tags: [] })
+    let mut b: collections::BTreeMap[String, E] = collections::BTreeMap()
+    b.insert(\"k\", E { n: 3, tags: [\"x\".clone()] })
+    let names: Vec[String] = [\"j\".clone(), \"k\".clone(), \"z\".clone()]
+    println(f\"{total(L { types: a }, L { types: b }, names)}\")
+}
+";
+    assert_eq!(ran("two-maps-continue", skips), "7");
+    // A fallback that is a value of its own is still refused.
+    let own_value = TWO_MAPS.replace(
+        "ask.library.types[name] ?? return false",
+        "E { n: 0, tags: [] }",
+    );
+    assert!(
+        findings(&own_value).iter().any(|f| f.code == "NK1185"),
+        "{:#?}",
+        findings(&own_value)
+    );
+}

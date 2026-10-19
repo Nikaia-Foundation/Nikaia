@@ -411,6 +411,15 @@ fn check_core_ops_from_a_map(state: ref CheckState, world: ref CheckWorld, value
     }
 }
 
+/// A `??` that reads a map and jumps where it finds nothing - `b[k] ?? return
+/// …`, or a chain of them: a view of what the map keeps, as `b[k]` is (#694).
+fn check_core_ops_a_map_read_past_a_jump(state: ref CheckState, world: ref CheckWorld, expr: ref Expr) -> bool sync {
+    return match expr {
+        Expr::Coalesce { value, fallback, .. } => state.flow.map_read_sites.contains(id_of(value) as i64) && (state.jumps(world, fallback) || check_core_ops_a_map_read_past_a_jump(state, world, fallback)),
+        else => false,
+    }
+}
+
 /// Whether the binding `name` is a view of what a map keeps.
 fn check_core_ops_a_map_view(state: ref CheckState, name: ref String) -> bool sync {
     let local = state.binding(name) ?? return false
@@ -586,7 +595,11 @@ pub fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref C
         if from_a_map {
             // **What a map holds has its own sentence** (#297).
             let held = check_core_ops_held(inner)
-            state.a_fallback_beside_what_a_map_holds(world, value, held, other, span)
+            // **A fallback that reads a map past a jump is a view too** (#694):
+            // `a[k] ?? b[k] ?? return …` gives a view of what one of them keeps.
+            if !check_core_ops_a_map_read_past_a_jump(state, world, fallback) {
+                state.a_fallback_beside_what_a_map_holds(world, value, held, other, span)
+            }
             if held == check_core_ops_named(TEXT) {
                 state.a_fallback_that_owns_what_the_left_side_views(world, inner, other, fallback, span)
             }

@@ -5041,11 +5041,7 @@ fn a_struct_of_views(result: &Ty, ask: &BufferAsk<'_, '_, '_, '_, '_, '_>) -> bo
 
 fn a_library_struct_of_views(name: &str, ask: &BufferAsk<'_, '_, '_, '_, '_, '_>) -> bool {
     if !name.contains("::") { return false; }
-    a_type_of_views(*nikaia_std::index::get(&ask.own.types, name)) || a_type_of_views(*nikaia_std::index::get(&ask.library.types, name))
-}
-
-fn a_type_of_views(entry: Option<&TypeContract>) -> bool {
-    let found = match entry { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let found = match *nikaia_std::index::get(&ask.own.types, name) { Some(__nikaia_value) => __nikaia_value, None => match *nikaia_std::index::get(&ask.library.types, name) { Some(__nikaia_value) => __nikaia_value, None => return false } };
     if !found.tethered.is_empty() { return true; }
     for field in found.fields.iter() { if field.ty.is_a_view() { return true; } }
     false
@@ -16985,6 +16981,15 @@ fn check_core_ops_from_a_map(state: &CheckState, world: &CheckWorld<'_, '_, '_, 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+fn check_core_ops_a_map_read_past_a_jump(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+    match expr {
+        Expr::Coalesce { value, fallback, .. } => { let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback); state.flow.map_read_sites.contains(&(id_of(value) as i64)) && (state.jumps(world, fallback) || check_core_ops_a_map_read_past_a_jump(state, world, fallback)) },
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 fn check_core_ops_a_map_view(state: &CheckState, name: &str) -> bool {
     let local = match state.binding(name) { Some(__nikaia_value) => __nikaia_value, None => return false };
     state.flow.map_views.contains(&local.id)
@@ -17121,7 +17126,7 @@ pub fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, world: &Che
     if nullable {
         if from_a_map {
             let held = check_core_ops_held(&inner);
-            state.a_fallback_beside_what_a_map_holds(world, value, &held, &other, span);
+            if !check_core_ops_a_map_read_past_a_jump(&state, world, fallback) { state.a_fallback_beside_what_a_map_holds(world, value, &held, &other, span); }
             if held == check_core_ops_named(TEXT) { state.a_fallback_that_owns_what_the_left_side_views(world, &inner, &other, fallback, span); }
         } else { state.a_fallback_that_owns_what_the_left_side_views(world, &inner, &other, fallback, span); }
     }
