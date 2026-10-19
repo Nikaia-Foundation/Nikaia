@@ -13843,7 +13843,7 @@ fn check_core_call_on_pushed(state: &mut CheckState, world: &CheckWorld<'_, '_, 
         let local = match state.binding(&pushed_name) { Some(__nikaia_value) => __nikaia_value, None => return };
         let id = local.id;
         let at = span.start as i64;
-        state.flow.open_numbers.insert(at, CheckOpenNumber { name: pushed_name.to_owned(), element: true, at: span.clone(), joined: at, asks: vec![], given: vec![], derived: vec![], written: vec![], casts: vec![], shifts: vec![], typed: false });
+        state.flow.open_numbers.insert(at, CheckOpenNumber { name: pushed_name.to_owned(), element: true, at: span.clone(), joined: at, asks: vec![], given: vec![], shifted: vec![], derived: vec![], written: vec![], casts: vec![], shifts: vec![], typed: false });
         state.open_number_given(world, at, nikaia_std::index::get(&args, 0), span);
         state.flow.open_elements.insert(id, at);
     } else if open >= 0 && one_pushed {
@@ -18239,7 +18239,7 @@ fn check_core_stmt_a_path(ty: &Ty) -> bool {
     }
 }
 
-fn check_core_stmt_open_number(name: &str, element: bool, span: &Span) -> CheckOpenNumber { CheckOpenNumber { name: name.to_owned(), element, at: Span { start: span.start, end: span.end }, joined: span.start as i64, asks: vec![], given: vec![], derived: vec![], written: vec![], casts: vec![], shifts: vec![], typed: false } }
+fn check_core_stmt_open_number(name: &str, element: bool, span: &Span) -> CheckOpenNumber { CheckOpenNumber { name: name.to_owned(), element, at: Span { start: span.start, end: span.end }, joined: span.start as i64, asks: vec![], given: vec![], shifted: vec![], derived: vec![], written: vec![], casts: vec![], shifts: vec![], typed: false } }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
@@ -18509,7 +18509,8 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     let mut constant: Option<Integer> = None;
     let mut followed: Option<Integer> = None;
     let c = state.constant_of(world, value);
-    if c.is_some() && !check_core_stmt_overflowed_since(&state, findings_before) {
+    let typed_shift = ty.is_some() && (shifts_literals(value) || state.an_open_shift_in(world, value));
+    if c.is_some() && !typed_shift && !check_core_stmt_overflowed_since(&state, findings_before) {
         let held: CheckConstant = match c { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_unit() };
         if !mutable { constant = Some(held.value); } else if !held.beyond { followed = Some(held.value); }
     }
@@ -19773,6 +19774,8 @@ impl CheckState {
         if value.is_some() {
             let given = match value { Some(__nikaia_value) => __nikaia_value, None => return };
             self.number_asked(world, given, want, span, true);
+            let asked = integer_named(&value_of_a_copy(&want.unseen()));
+            if asked.is_some() && shifts_literals(given) { self.a_shift_asked_as(world, given, &match asked { Some(__nikaia_value) => __nikaia_value, None => return }, span); }
             if self.an_open_number_where_none_fits(world, found, want, given, span, what, &message) { return; }
         }
         if self.a_name_in_text(world, want, value, span) { return; }
@@ -21108,6 +21111,7 @@ pub struct CheckOpenNumber {
     pub joined: i64,
     pub asks: Vec<(String, Span, bool)>,
     pub given: Vec<(CheckConstant, Span, bool)>,
+    pub shifted: Vec<CheckConstant>,
     pub derived: Vec<(CheckConstant, Span)>,
     pub written: Vec<(i64, Vec<(i64, Integer)>, bool)>,
     pub casts: Vec<(i64, String)>,
@@ -24975,7 +24979,12 @@ impl CheckState {
             let mut decided: Option<String> = None;
             if !types.is_empty() { decided = Some(nikaia_std::index::get(&types, 0).0.to_owned()); } else if indexed { decided = Some("i64".to_owned()); }
             let mut held: String = String::from("i32");
-            if decided.is_some() { held = nikaia_std::index::or(decided.as_deref(), || "").to_owned(); } else { for member in members.iter() { for given in member.1.given.iter() { if given.0.beyond || !integer_fits(&given.0.value, "i32") { held = String::from("i64"); } } } }
+            if decided.is_some() { held = nikaia_std::index::or(decided.as_deref(), || "").to_owned(); } else {
+                for member in members.iter() {
+                    for given in member.1.given.iter() { if given.0.beyond || !integer_fits(&given.0.value, "i32") { held = String::from("i64"); } }
+                    for shifted in member.1.shifted.iter() { if shifted.beyond || !integer_fits(&shifted.value, "i32") { held = String::from("i64"); } }
+                }
+            }
             let mut why: Option<String> = None;
             if decided.is_some() {
                 let ty = nikaia_std::index::or(decided.as_deref(), || "").to_owned();
@@ -24990,7 +24999,9 @@ impl CheckState {
                     });
                 }
             }
-            if (self.findings.len() as i64) == before {
+            let mut shifted = false;
+            for member in members.iter() { shifted = shifted || !member.1.shifted.is_empty(); }
+            if (self.findings.len() as i64) == before && !(decided.is_some() && shifted) {
                 for member in members.iter() {
                     for derived in member.1.derived.iter() {
                         let mut reported = false;
@@ -25714,11 +25725,57 @@ impl CheckState {
         if self.flow.overflowed.contains(&here) { return; }
         let named = named_beside(want);
         self.unsigned_literals_beside(world, value, want, (named).as_deref(), span);
+        if named.is_some() && (shifts_literals(value) || self.an_open_shift_in(world, value)) {
+            if shifts_literals(value) { self.a_shift_asked_as(world, value, &match named { Some(__nikaia_value) => __nikaia_value, None => return }, span); }
+            return;
+        }
         let folded = match self.constant_of(world, value) { Some(__nikaia_value) => __nikaia_value, None => return };
         let ty = match self.type_it_answers_to((named).as_deref(), &folded) { Some(__nikaia_value) => __nikaia_value, None => return };
         let before = self.findings.len() as i64;
         self.a_number_not_fitting(&folded, a_lit_int(value), &ty, span, None);
         if (self.findings.len() as i64) > before { self.labelled_with_its_comptime(world, value, &ty, span); }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn literal_shifts_as(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, value: &Expr, ty: &str, span: &Span) {
+        match value {
+            Expr::Binary { op, lhs, rhs, .. } => {
+                let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
+                if (*op == BinaryOp::Shl || *op == BinaryOp::Shr) && written_in_literals(lhs) && written_in_literals(rhs) {
+                    let count = self.constant_of(world, rhs);
+                    if count.is_some() {
+                        let found = match count { Some(__nikaia_value) => __nikaia_value, None => return };
+                        if !found.beyond && !found.value.negative && found.value.magnitude < 64u64 { self.a_shift_too_far(ty, &found, span); }
+                    }
+                }
+                self.literal_shifts_as(world, lhs, ty, span);
+                self.literal_shifts_as(world, rhs, ty, span);
+            },
+            Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); self.literal_shifts_as(world, expr, ty, span); },
+            _ => { },
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn an_open_shift_in(&self, world: &CheckWorld<'_, '_, '_, '_, '_>, value: &Expr) -> bool {
+        for number in self.open_numbers_in(world, value) {
+            let root = self.open_root(number);
+            for (at, entry) in self.flow.open_numbers.iter() {
+                let at = nikaia_std::num::value(at);
+                if !entry.shifted.is_empty() && self.open_root(at) == root { return true; }
+            }
+        }
+        false
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_shift_asked_as(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_>, value: &Expr, ty: &str, span: &Span) {
+        let literals = literals_in(value);
+        let mut done = !literals.is_empty();
+        for literal in literals.iter() { if nikaia_std::index::or(self.facts.unsigned_literals.get(&literal.0), || "") != ty { done = false; } }
+        if done { return; }
+        self.literal_shifts_as(world, value, ty, span);
+        for literal in literals.iter() { self.facts.unsigned_literals.insert(literal.0, ty.to_owned()); }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -25787,7 +25844,7 @@ impl CheckState {
     fn given_to(&self, entry: &mut CheckOpenNumber, known: Option<CheckConstant>, derived: Option<CheckConstant>, value: &Expr, span: &Span) {
         if known.is_some() {
             let folded = match known { Some(__nikaia_value) => __nikaia_value, None => return };
-            entry.given.push((folded, span.clone(), a_lit_int(value)));
+            if shifts_literals(value) { entry.shifted.push(folded); } else { entry.given.push((folded, span.clone(), a_lit_int(value))); }
         }
         if derived.is_some() {
             let folded = match derived { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -40003,6 +40060,7 @@ fn combined(op: &BinaryOp, lhs: &Expr, rhs: &Expr, name_is: &impl Fn(winnow_gram
     };
     if !a.pinned.is_empty() && !b.pinned.is_empty() && a.pinned != b.pinned { return Folded::Nothing; }
     let pinned = if a.pinned.is_empty() { b.pinned.to_owned() } else { a.pinned.to_owned() };
+    if !pinned.is_empty() && (shifts_literals(lhs) || shifts_literals(rhs)) { return Folded::Nothing; }
     let x = a.value;
     let y = b.value;
     let folded = match op {
@@ -40011,6 +40069,8 @@ fn combined(op: &BinaryOp, lhs: &Expr, rhs: &Expr, name_is: &impl Fn(winnow_gram
         BinaryOp::Mul => stepped(integer_product(&x, &y), x.negative != y.negative, pinned),
         BinaryOp::Div => divided(integer_quotient(&x, &y, false), pinned),
         BinaryOp::Rem => divided(integer_quotient(&x, &y, true), pinned),
+        BinaryOp::Shl => fold_shifted(lhs, rhs, &x, &y, true),
+        BinaryOp::Shr => fold_shifted(lhs, rhs, &x, &y, false),
         _ => Folded::Nothing,
     };
     match folded {
@@ -40022,6 +40082,34 @@ fn combined(op: &BinaryOp, lhs: &Expr, rhs: &Expr, name_is: &impl Fn(winnow_gram
 fn divided(n: Option<Integer>, pinned: String) -> Folded {
     let found = match n { Some(__nikaia_value) => __nikaia_value, None => return Folded::Nothing };
     Folded::Value(Constant { value: found, pinned })
+}
+
+fn fold_shifted(lhs: &Expr, rhs: &Expr, x: &Integer, y: &Integer, left: bool) -> Folded {
+    if !written_in_literals(lhs) || !written_in_literals(rhs) { return Folded::Nothing; }
+    if y.negative || y.magnitude >= 64u64 { return Folded::Nothing; }
+    let found = match integer_shifted(x, y, left) { Some(__nikaia_value) => __nikaia_value, None => return Folded::TooLarge(x.negative) };
+    Folded::Value(Constant { value: found, pinned: String::from("") })
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn written_in_literals(expr: &Expr) -> bool {
+    match expr {
+        Expr::LitInt { .. } => true,
+        Expr::Unary { op, expr, .. } => { let expr = nikaia_std::boxed::open(expr); *op == UnaryOp::Neg && written_in_literals(expr) },
+        Expr::Binary { lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); written_in_literals(lhs) && written_in_literals(rhs) },
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn shifts_literals(expr: &Expr) -> bool {
+    match expr {
+        Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); shifts_literals(expr) },
+        Expr::Binary { op, lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); (*op == BinaryOp::Shl || *op == BinaryOp::Shr) && written_in_literals(lhs) && written_in_literals(rhs) || shifts_literals(lhs) || shifts_literals(rhs) },
+        _ => false,
+    }
 }
 
 pub fn wants_widening(folded: &Folded) -> bool {
@@ -64715,7 +64803,7 @@ pub mod fixed {
 }
 pub mod fold {
     #[allow(unused_imports)]
-    pub use super::{Constant, Folded, fits, integer_fits, constant_of, wants_widening};
+    pub use super::{Constant, Folded, fits, integer_fits, constant_of, written_in_literals, shifts_literals, wants_widening};
 }
 pub mod foreign {
     #[allow(unused_imports)]

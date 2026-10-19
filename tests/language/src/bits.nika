@@ -49,3 +49,31 @@ test "a large constant is an i64 and mixes with nothing else" {
     let line = f"{c}"
     assert(line == "3000000001")
 }
+
+// A shift written only in literals is folded exactly and takes the first type
+// that holds it (ADR-285 D40); where a use asks for an `i32` - a `let`'s type,
+// a parameter, a field - the shift is that type's and loses the bits it moves
+// out.
+struct BitsLow {
+    x: i32,
+}
+
+fn bits_low(x: i32) -> i32 {
+    return x
+}
+
+test "a shift of literals comes to its exact value" {
+    let m = 1 << 40
+    let top = 1 << 31
+    let bit: i32 = 1 << 31
+    let line = f"{1 << 40} {1 << 31} {1 << 30} {-(1 << 31)} {m} {top} {bit}"
+    assert(line == "1099511627776 2147483648 1073741824 -2147483648 1099511627776 2147483648 -2147483648")
+    let field = BitsLow { x: 1 << 31 }
+    let asked = f"{bits_low(1 << 31)} {field.x}"
+    assert(asked == "-2147483648 -2147483648")
+    let mut big = false
+    if (1 << 40) > 0 {
+        big = true
+    }
+    assert(big)
+}

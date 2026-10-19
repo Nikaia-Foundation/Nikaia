@@ -134,6 +134,15 @@ impl CheckState {
         }
         let named = named_beside(want)
         self.unsigned_literals_beside(world, value, want, named, span)
+        // **A type a use asks for is the shift's** (ADR-285 D40): a shift of
+        // literals loses there the bits it moves out, so its exact value is
+        // not held to that type; its count is.
+        if named != null && (shifts_literals(value) || self.an_open_shift_in(world, value)) {
+            if shifts_literals(value) {
+                self.a_shift_asked_as(world, value, named ?? return, span)
+            }
+            return
+        }
         let folded = self.constant_of(world, value) ?? return
         let ty = self.type_it_answers_to(named, folded) ?? return
         let before = self.findings.len()
@@ -142,6 +151,65 @@ impl CheckState {
         // shown beside it** (ADR-287 D21).
         if self.findings.len() > before {
             self.labelled_with_its_comptime(world, value, ty, span)
+        }
+    }
+
+    /// `NK1116` for each shift of literals alone in `value` whose count the
+    /// type `ty` a use asks for is not as wide as (Part I 2.2). A count no
+    /// type holds is refused at the shift already, against an `i64`.
+    fn literal_shifts_as(ref mut self, world: ref CheckWorld, value: ref Expr, ty: ref String, span: ref Span) sync {
+        match value {
+            Expr::Binary { op, lhs, rhs, .. } => {
+                if (op == BinaryOp::Shl || op == BinaryOp::Shr) && written_in_literals(lhs) && written_in_literals(rhs) {
+                    let count = self.constant_of(world, rhs)
+                    if count != null {
+                        let found = count ?? return
+                        if !found.beyond && !found.value.negative && found.value.magnitude < 64 {
+                            self.a_shift_too_far(ty, found, span)
+                        }
+                    }
+                }
+                self.literal_shifts_as(world, lhs, ty, span)
+                self.literal_shifts_as(world, rhs, ty, span)
+            },
+            Expr::Unary { expr, .. } => self.literal_shifts_as(world, expr, ty, span),
+            else => {},
+        }
+    }
+
+    /// Whether an open number in `value`, or one joined with it, was given a
+    /// shift of literals (ADR-285 D40).
+    pub fn an_open_shift_in(ref self, world: ref CheckWorld, value: ref Expr) -> bool sync {
+        for number in self.open_numbers_in(world, value) {
+            let root = self.open_root(number)
+            for (at, entry) in self.flow.open_numbers {
+                if entry.shifted.len() > 0 && self.open_root(at) == root {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
+    /// **A shift of literals put where a use asks for the integer type `ty`**
+    /// (ADR-285 D40): the shift is that type's, so its count is measured
+    /// against it and its literals are written as it, ahead of the widening
+    /// their exact value would ask for. Said once for a value, however many
+    /// of the checks that see a type beside it ask.
+    pub fn a_shift_asked_as(ref mut self, world: ref CheckWorld, value: ref Expr, ty: ref String, span: ref Span) sync {
+        let literals = literals_in(value)
+        let mut done = literals.len() > 0
+        for literal in literals {
+            if (self.facts.unsigned_literals.get(literal.0) ?? "") != ty {
+                done = false
+            }
+        }
+        if done {
+            return
+        }
+        self.literal_shifts_as(world, value, ty, span)
+        for literal in literals {
+            self.facts.unsigned_literals.insert(literal.0, ty.clone())
         }
     }
 
@@ -235,7 +303,14 @@ impl CheckState {
     fn given_to(ref self, mut entry: CheckOpenNumber, known: CheckConstant?, derived: CheckConstant?, value: ref Expr, span: ref Span) sync {
         if known != null {
             let folded = known ?? return
-            entry.given.push((folded, span.clone(), a_lit_int(value)))
+            // **A shift of literals is exact only where no use asks** (ADR-285
+            // D40): its value decides the first type that holds it, and is
+            // not held to a type a use asks for, where the shift loses bits.
+            if shifts_literals(value) {
+                entry.shifted.push(folded)
+            } else {
+                entry.given.push((folded, span.clone(), a_lit_int(value)))
+            }
         }
         if derived != null {
             let folded = derived ?? return

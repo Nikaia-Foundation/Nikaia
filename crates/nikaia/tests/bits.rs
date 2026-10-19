@@ -168,14 +168,14 @@ fn a_shift_past_the_width_is_refused() {
 
 /// **An open number is shifted as the type its uses decide** (#656, Part I
 /// 2.4): `let n = 1` is an `i32` where nothing asks, so `n << 40` is
-/// `NK1116`, and so is `1 << 40` given to a name nothing asks of; where a use
-/// asks for an `i64`, both shift by 40 places.
+/// `NK1116`, and so is `1 << 40` given to a name an `i32` use asks for; where
+/// a use asks for an `i64`, both shift by 40 places.
 #[test]
 fn an_open_number_is_shifted_as_the_type_it_gets() {
     for source in [
         "fn main() {\n    let n = 1\n    let m = n << 40\n    println(f\"{m}\")\n}\n",
-        "fn main() {\n    let m = 1 << 40\n    println(f\"{m}\")\n}\n",
-        "fn main() {\n    let m = (1 << 40) + 2\n    println(f\"{m}\")\n}\n",
+        "fn main() {\n    let m = 1 << 40\n    let w: i32 = m\n    println(f\"{w}\")\n}\n",
+        "fn main() {\n    let m: i32 = 1 << 40\n    println(f\"{m}\")\n}\n",
     ] {
         let found = findings(source);
         let message = "This shifts an `i32` by 40 places, and it has 32 bits.";
@@ -195,5 +195,56 @@ fn an_open_number_is_shifted_as_the_type_it_gets() {
     ] {
         let found = findings(source);
         assert!(found.is_empty(), "{source}: {found:#?}");
+    }
+}
+
+/// **A shift written only in literals is folded exactly** (#661, ADR-285
+/// D40): it takes the first type that holds its value, so `1 << 40` and
+/// `1 << 31` given to nothing, or to a name nothing asks of, are `i64`s and
+/// pass; `1 << 63` no type holds, and it is `NK1116` in this language's words
+/// rather than the language below's. Where a use asks for an `i32`, the shift
+/// is that type's: `1 << 31` passes, and its bits are lost there.
+#[test]
+fn a_shift_of_literals_is_folded_exactly() {
+    for source in [
+        "fn main() {\n    println(1 << 40)\n}\n",
+        "fn main() {\n    if (1 << 40) > 0 {\n        println(\"big\")\n    }\n}\n",
+        "fn main() {\n    println(1 << 31)\n}\n",
+        "fn main() {\n    println(-(1 << 31))\n}\n",
+        "fn main() {\n    let m = 1 << 40\n    println(m)\n}\n",
+        "fn main() {\n    let m = (1 << 40) + 2\n    println(f\"{m}\")\n}\n",
+        "fn main() {\n    let m: i32 = 1 << 31\n    println(m)\n}\n",
+        "fn main() {\n    let m = 1 << 31\n    let w: i32 = m\n    println(w)\n}\n",
+        "fn main() {\n    let m: i64 = 1 << 63\n    println(m)\n}\n",
+    ] {
+        let found = findings(source);
+        assert!(found.is_empty(), "{source}: {found:#?}");
+    }
+    for (source, message) in [
+        (
+            "fn main() {\n    println(1 << 63)\n}\n",
+            "This comes to 9223372036854775808, which doesn't fit in an `i64`.",
+        ),
+        (
+            "fn main() {\n    let m = 1 << 63\n    println(m)\n}\n",
+            "This comes to 9223372036854775808, which doesn't fit in an `i64`.",
+        ),
+        (
+            "fn main() {\n    println(1 << 70)\n}\n",
+            "This shifts an `i64` by 70 places, and it has 64 bits.",
+        ),
+        (
+            "fn main() {\n    let m: u8 = 1 << 8\n    println(m)\n}\n",
+            "This shifts a `u8` by 8 places, and it has 8 bits.",
+        ),
+    ] {
+        let found = findings(source);
+        assert!(
+            found
+                .iter()
+                .any(|f| f.code == "NK1116" && f.message == message),
+            "{source}: {found:#?}"
+        );
+        assert_eq!(found.len(), 1, "{source}: {found:#?}");
     }
 }

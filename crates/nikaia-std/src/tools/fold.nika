@@ -124,7 +124,7 @@ fn pinned_step(c: Constant) -> Folded {
     return if fits(c, c.pinned) { Folded::Value(c) } else { Folded::Overflows(c) }
 }
 
-/// `lhs op rhs`, for the five operators the fold knows.
+/// `lhs op rhs`, for the seven operators the fold knows.
 fn combined(op: ref BinaryOp, lhs: ref Expr, rhs: ref Expr, name_is: fn(winnow_grammar::Symbol) -> Folded sync) -> Folded {
     let a = match constant_of(lhs, name_is) {
         Folded::Value(c) => c,
@@ -141,6 +141,12 @@ fn combined(op: ref BinaryOp, lhs: ref Expr, rhs: ref Expr, name_is: fn(winnow_g
         return Folded::Nothing
     }
     let pinned = if a.pinned.is_empty() { b.pinned.clone() } else { a.pinned.clone() }
+    // **A shift loses bits only in a type** (ADR-285 D40): beside an operand
+    // a declaration pinned, a shift of literals is that type's, and its exact
+    // value claims nothing.
+    if !pinned.is_empty() && (shifts_literals(lhs) || shifts_literals(rhs)) {
+        return Folded::Nothing
+    }
     // A sum and a difference leave the 65 bits only heading the way `a`
     // does, and a product the way the signs together do.
     let x = a.value
@@ -151,6 +157,8 @@ fn combined(op: ref BinaryOp, lhs: ref Expr, rhs: ref Expr, name_is: fn(winnow_g
         BinaryOp::Mul => stepped(integer_product(x, y), x.negative != y.negative, pinned),
         BinaryOp::Div => divided(integer_quotient(x, y, false), pinned),
         BinaryOp::Rem => divided(integer_quotient(x, y, true), pinned),
+        BinaryOp::Shl => fold_shifted(lhs, rhs, x, y, true),
+        BinaryOp::Shr => fold_shifted(lhs, rhs, x, y, false),
         else => Folded::Nothing,
     }
     return match folded {
@@ -164,6 +172,40 @@ fn combined(op: ref BinaryOp, lhs: ref Expr, rhs: ref Expr, name_is: fn(winnow_g
 fn divided(n: Integer?, pinned: String) -> Folded {
     let found = n ?? return Folded::Nothing
     return Folded::Value(Constant { value: found, pinned: pinned })
+}
+
+/// **A shift written only in literals comes to its exact value** (ADR-285
+/// D40), as a sum does (D22); one with a name in it claims nothing, since the
+/// name's type is the shift's and the bits it moves out are lost there. A
+/// count below 0 or of 64 and more claims nothing either: it is the shift's
+/// own refusal (`NK1116`), not a number's.
+fn fold_shifted(lhs: ref Expr, rhs: ref Expr, x: ref Integer, y: ref Integer, left: bool) -> Folded {
+    return Folded::Nothing if !written_in_literals(lhs) || !written_in_literals(rhs)
+    return Folded::Nothing if y.negative || y.magnitude >= 64
+    let found = integer_shifted(x, y, left) ?? return Folded::TooLarge(x.negative)
+    return Folded::Value(Constant { value: found, pinned: "" })
+}
+
+/// Whether an expression is literals alone, through the operators the fold
+/// knows.
+pub fn written_in_literals(expr: ref Expr) -> bool sync {
+    return match expr {
+        Expr::LitInt { .. } => true,
+        Expr::Unary { op, expr, .. } => op == UnaryOp::Neg && written_in_literals(expr),
+        Expr::Binary { lhs, rhs, .. } => written_in_literals(lhs) && written_in_literals(rhs),
+        else => false,
+    }
+}
+
+/// **Whether a shift of literals alone stands in an expression** (ADR-285
+/// D40), through a negation and the arithmetic and bit operators: the
+/// expressions whose exact value a type a use asks for does not hold to.
+pub fn shifts_literals(expr: ref Expr) -> bool sync {
+    return match expr {
+        Expr::Unary { expr, .. } => shifts_literals(expr),
+        Expr::Binary { op, lhs, rhs, .. } => ((op == BinaryOp::Shl || op == BinaryOp::Shr) && written_in_literals(lhs) && written_in_literals(rhs)) || shifts_literals(lhs) || shifts_literals(rhs),
+        else => false,
+    }
 }
 
 /// **Does this constant need the wider type, and may it have it?** (ADR-285

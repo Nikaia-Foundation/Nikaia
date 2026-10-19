@@ -117,6 +117,11 @@ impl CheckState {
                             held = "i64"
                         }
                     }
+                    for shifted in member.1.shifted {
+                        if shifted.beyond || !integer_fits(shifted.value, "i32") {
+                            held = "i64"
+                        }
+                    }
                 }
             }
             let mut why: String? = null
@@ -136,7 +141,13 @@ impl CheckState {
                     self.a_number_not_fitting(given.0, given.2, held, given.1, why?.clone())
                 }
             }
-            if self.findings.len() == before {
+            // **What an operation over a shift of literals comes to** is
+            // exact only where no use asks (ADR-285 D40).
+            let mut shifted = false
+            for member in members {
+                shifted = shifted || member.1.shifted.len() > 0
+            }
+            if self.findings.len() == before && !(decided != null && shifted) {
                 for member in members {
                     for derived in member.1.derived {
                         let mut reported = false

@@ -40,6 +40,10 @@ pub struct CheckOpenNumber {
     /// The numbers it is given as written, with the statement and whether it
     /// is a bare literal.
     pub given: Vec[(CheckConstant, Span, bool)],
+    /// What a shift of literals alone it is given comes to (ADR-285 D40):
+    /// where no use asks, the first type that holds it is the number's; a
+    /// type a use asks for is the shift's, and does not have to hold it.
+    pub shifted: Vec[CheckConstant],
     /// What an operation over it comes to, where that folds.
     pub derived: Vec[(CheckConstant, Span)],
     /// The statements that give it a number, by the byte they start at, and

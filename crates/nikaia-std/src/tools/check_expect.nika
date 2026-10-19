@@ -118,6 +118,10 @@ impl CheckState {
         if value != null {
             let given = value ?? return
             self.number_asked(world, given, want, span, true)
+            let asked = integer_named(value_of_a_copy(want.unseen()))
+            if asked != null && shifts_literals(given) {
+                self.a_shift_asked_as(world, given, asked ?? return, span)
+            }
             if self.an_open_number_where_none_fits(world, found, want, given, span, what, message) {
                 return
             }
