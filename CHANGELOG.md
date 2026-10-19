@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1085] — 2026-10-19
+
+**spec: parallel folding without a grammar (ADR-372, #717)**
+- `task::cores()`, `Par::fold(init, step, merge)`, `b.par_pieces(sep)`; `par_fold` and `Par::fold` claim pieces while they run and keep input order unless `order: par::Order::Any` gives it up; `workers:` and `piece:` options (Part II 10.7, 12.6; ADR-372, ADR-296 D11 changed)
+
 ## [0.0.1084] — 2026-10-19
 
 **an arm that is a name still read later is a view of it (#712, #708)**

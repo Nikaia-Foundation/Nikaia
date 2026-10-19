@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part II: Advanced Features & Metaprogramming**
-**Version:** 0.0.1084 (Draft)
+**Version:** 0.0.1085 (Draft)
 **Date:** 2026-10-19
 
 ---
@@ -550,7 +550,7 @@ entry rule file -> Summary =
     par_fold(MEASUREMENT, Summary, fn(acc, m) { acc.record(m) }, Summary::merge)
 ```
 
-`par_fold` is `fold` plus that merge, and it must be the whole body of its rule. The compiler cuts the file into one piece per core. Each piece repairs its own start to the next boundary, so every frame belongs to exactly one worker. Each worker folds into its own accumulator with nothing shared. The accumulators are merged at the end. A failing piece reports its error at its position in the whole file. Nothing about chunks appears in user code:
+`par_fold` is `fold` plus that merge, and it must be the whole body of its rule. The input is cut into pieces while the work runs: a worker that is done claims the next one. Each piece repairs its own start to the next boundary, so every frame belongs to exactly one piece. Each accumulator is folded by one worker with nothing shared, and the accumulators are merged at the end. Where pieces go and how accumulators are kept is the fold's `order:` (12.6), `Kept` by default: each accumulator folds input that lies together, and they are merged in input order. A failing input reports the failure at its smallest position in the whole file, under either order. Nothing about pieces appears in user code:
 
 ```nika
 let data = fs::map(path, fs::Root::Anywhere)
@@ -560,6 +560,8 @@ let totals = Measurements::file(data)
 **Pieces and the whole agree.** A `par_fold` rule's parser skips no whitespace at its entry, unlike every other rule. A frame that begins with a space keeps it. Whitespace-only text between two frames is an error, in pieces and in one go alike. The number of cores does not change the answer, on inputs the grammar accepts and on inputs it rejects.
 
 **`par_fold` is written, never inferred.** The compiler does not turn a `fold` into a `par_fold`, even where the step looks associative. A written `par_fold` states that a different chunk count gives the same result.
+
+`par_fold` takes the options of `Par::fold` after a `;`: `order:`, `workers:`, and `piece:` in bytes (12.6). `par_fold(MEASUREMENT, Summary, fn(acc, m) { acc.record(m) }, Summary::merge; order: par::Order::Any)` keeps one accumulator per worker.
 
 At `user_parallelism = no`, `par_fold` runs as an ordinary sequential `fold`: same accumulator, same merge, same result, no threads. A grammar written this way compiles unchanged for `wasm32`.
 
@@ -639,7 +641,7 @@ and `rule WS = "" { }` skips nothing.
 | `recover(p, sync)` | `p`, and where `p` fails, skips to `sync` and reports the failure without stopping the parse | `p`'s value or the report |
 | `list(item, sep)` | `item`, separated by `sep`, zero or more | a list |
 | `fold(p, init, step)` | `p` repeated, each value folded into an accumulator started from `init`; nothing is collected | the accumulator |
-| `par_fold(F, init, step, merge)` | `fold` over the `@frame` rule `F`, cut into pieces and joined with `merge`; the whole body of its rule (10.7) | the accumulator |
+| `par_fold(F, init, step, merge; order:, workers:, piece:)` | `fold` over the `@frame` rule `F`, cut into pieces while it runs and joined with `merge`; the whole body of its rule (10.7, 12.6) | the accumulator |
 
 **Doc comments are a rule.** A grammar has no state of its own and no rule
 written outside it. `"///" until(line_ending)` is a rule like any other, used
@@ -1035,6 +1037,38 @@ let bright_pixels = pixels.par_iter()
     .filter fn(value) { value > 0.5 }
     .collect()
 ```
+
+**`fold` combines with nothing shared.** `xs.par_iter().fold(init, step, merge)` folds the elements into accumulators and merges them into one, which it returns. `init` is a type, called with no arguments, or a function `fn { … }`; it is called once per accumulator. `step` takes an accumulator and an element and returns the accumulator, `merge` takes two and returns one; both are lambdas of the walk and are asked what any other is (`NK2209`, `NK2107`). An accumulator is folded by one worker at a time, so `step` changes it without a lock. Over no elements the result is one made by `init`.
+
+```nika
+let summary = rows.par_iter().fold(Summary, fn(acc, r) { acc.record(r) }, Summary::merge)
+```
+
+**Pieces are claimed while the work runs.** A worker that is done takes the next piece; nothing is cut into one piece per worker in advance.
+
+**The order is kept unless the program gives it up.** The option `order:` takes `par::Order`, `Kept | Any`, `Kept` by default:
+
+* **`Kept`:** each accumulator folds elements that lie together, in order, and accumulators are merged in input order. The result is the sequential fold's where `merge` is associative and `init` is its identity.
+* **`Any`:** one accumulator per worker, for every piece it claims wherever it lies, merged in the order workers finish. The program states that the result does not depend on the order in which elements reach `step` and accumulators reach `merge`. The compiler does not check it; where it is false, the result may differ from run to run.
+
+| Option | On | Default | Meaning |
+| :--- | :--- | :--- | :--- |
+| `order: par::Order` | `fold`, `par_fold` | `Kept` | as above |
+| `workers: i64` | `fold`, `par_fold` | `task::cores()` | at most this many accumulators are folded at once |
+| `piece: i64` | `par_iter`, `par_pieces`, `par_fold` | the runtime's | the size a piece is cut near: elements of a list, bytes of `Bytes` or of a grammar's input |
+
+`workers:` and `piece:` change no result of a fold that keeps its order's promise. A value below `1` panics, naming the option.
+
+**`Bytes` is cut at a separator.** `b.par_pieces(sep)` is a `Par[Bytes]` over `b` in pieces that each end just after a byte `sep`, the last at `b`'s end. Every byte is in exactly one piece and no piece is empty. A scan written by hand folds over them:
+
+```nika
+let table = b.par_pieces(b'\n').fold(Table, fn(t, piece) { scan(t, piece) }, Table::merge;
+                                     order: par::Order::Any)
+```
+
+**`task::cores()`** is the number of workers parallel work uses: at `user_parallelism = yes` the size of the user pool (`user-pool`, Part III 13.3b), where `0` means the threads the process may run on, its affinity and quota counted; at `no`, `1`. It is at least `1`.
+
+At `user_parallelism = no`, `fold` is one sequential fold: one accumulator, every element in order, `merge` never called. The options are read and do nothing.
 
 ### 12.7. Scoped Tasks (@immediate Parallelism)
 
