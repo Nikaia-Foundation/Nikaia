@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1103] — 2026-10-19
+
+**A binding may shadow a comptime; a part of a mut parameter is handed on in place**
+- A parameter, `let`, `for` or lambda binding named like a `comptime` is written under its own name below, and the constant keeps its name. A part a `match` over a `mut` parameter binds goes on to a `mut` parameter as `&mut *part`. A member of a lambda parameter whose value has no known type is NK1245 (#703 items 7, 9, 10).
+
 ## [0.0.1102] — 2026-10-19
 
 **Lowering runs each analysis once (#727)**
