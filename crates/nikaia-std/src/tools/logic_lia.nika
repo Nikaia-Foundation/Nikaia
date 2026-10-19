@@ -649,23 +649,8 @@ fn lg_tighten_step(bound: ref LgLin, mut steps: Vec[LgStep]) -> LgHeld {
 
 /// Of the bounds on one form only the strongest counts: `form + c <= 0` with the
 /// largest `c`. Sorted by form, then by constant, largest first - stably.
-fn lg_sorted(held: ref Vec[LgHeld]) -> Vec[LgHeld] {
-    let mut places: Vec[i64] = []
-    let mut at = 0
-    while at < held.len() {
-        places.push(at)
-        at += 1
-    }
-    let order = lg_sorted_places(held, places)
-    let mut out: Vec[LgHeld] = []
-    for place in order {
-        out.push(held[place].clone())
-    }
-    return out
-}
-
-/// The places of `held` named by `places`, in `lg_sorted`'s order: a merge
-/// sort that moves numbers, not bounds.
+/// Of `held`, the places `places` names: a merge sort that moves numbers,
+/// not bounds.
 fn lg_sorted_places(held: ref Vec[LgHeld], places: ref Vec[i64]) -> Vec[i64] {
     if places.len() < 2 {
         return places.clone()
@@ -742,20 +727,23 @@ fn lg_contradictory(bounds: ref Vec[LgLin], budget: ref LgBudget) -> LgClosed {
                 return LgClosed::Refuted(lg_traced(steps, one.step))
             }
         }
-        let mut live: Vec[LgHeld] = []
-        for one in held {
-            if one.lin.terms.len() > 0 {
-                live.push(one.clone())
+        let mut live: Vec[i64] = []
+        let mut at = 0
+        while at < held.len() {
+            if held[at].lin.terms.len() > 0 {
+                live.push(at)
             }
+            at += 1
         }
-        let ordered = lg_sorted(live)
+        let ordered = lg_sorted_places(held, live)
         let mut bounds_now: Vec[LgHeld] = []
-        for one in ordered {
-            let last = bounds_now.len()
-            if last > 0 && lg_terms_cmp(bounds_now[last - 1].lin.terms, one.lin.terms) == 0 {
+        let mut kept = -1
+        for place in ordered {
+            if kept >= 0 && lg_terms_cmp(held[kept].lin.terms, held[place].lin.terms) == 0 {
                 continue
             }
-            bounds_now.push(one.clone())
+            bounds_now.push(held[place].clone())
+            kept = place
         }
         let mut names: collections::BTreeSet[String] = collections::BTreeSet()
         for one in bounds_now {

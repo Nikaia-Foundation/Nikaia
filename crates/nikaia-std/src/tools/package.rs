@@ -46062,23 +46062,7 @@ fn lg_tighten_step(bound: &LgLin, steps: &mut Vec<LgStep>) -> LgHeld {
     LgHeld { lin: tight, step: steps.len() as i64 - 1 }
 }
 
-fn lg_sorted(held: &[LgHeld]) -> Vec<LgHeld> {
-    let mut places: Vec<i64> = vec![];
-    let mut at: i64 = 0;
-    while at < held.len() as i64 {
-        places.push(at);
-        at += 1;
-    }
-    let order = lg_sorted_places(held, &places);
-    let mut out: Vec<LgHeld> = vec![];
-    for place in order.iter() {
-        let place = nikaia_std::num::value(place);
-        out.push((*nikaia_std::index::get(&held, nikaia_std::index::at(place))).clone());
-    }
-    out
-}
-
-fn lg_sorted_places(held: &[LgHeld], places: &[i64]) -> Vec<i64> {
+fn lg_sorted_places(keys: &[String], places: &[i64]) -> Vec<i64> {
     if places.len() < 2 { return places.to_owned(); }
     let middle = places.len() as i64 / 2;
     let mut left: Vec<i64> = vec![];
@@ -46088,15 +46072,13 @@ fn lg_sorted_places(held: &[LgHeld], places: &[i64]) -> Vec<i64> {
         if at < middle { left.push(*nikaia_std::index::get(&places, (at) as usize)); } else { right.push(*nikaia_std::index::get(&places, (at) as usize)); }
         at += 1;
     }
-    let a = lg_sorted_places(held, &left);
-    let b = lg_sorted_places(held, &right);
+    let a = lg_sorted_places(keys, &left);
+    let b = lg_sorted_places(keys, &right);
     let mut out: Vec<i64> = vec![];
     let mut i: i64 = 0;
     let mut j: i64 = 0;
     while ((i) as usize) < a.len() && ((j) as usize) < b.len() {
-        let mut order = lg_terms_cmp(&nikaia_std::index::get(&held, nikaia_std::index::at(*nikaia_std::index::get(&b, (j) as usize))).lin.terms, &nikaia_std::index::get(&held, nikaia_std::index::at(*nikaia_std::index::get(&a, (i) as usize))).lin.terms);
-        if order == 0 { if nikaia_std::index::get(&held, nikaia_std::index::at(*nikaia_std::index::get(&a, (i) as usize))).lin.constant < nikaia_std::index::get(&held, nikaia_std::index::at(*nikaia_std::index::get(&b, (j) as usize))).lin.constant { order = -1; } else if nikaia_std::index::get(&held, nikaia_std::index::at(*nikaia_std::index::get(&b, (j) as usize))).lin.constant < nikaia_std::index::get(&held, nikaia_std::index::at(*nikaia_std::index::get(&a, (i) as usize))).lin.constant { order = 1; } }
-        if order < 0 {
+        if *nikaia_std::index::get(&keys, nikaia_std::index::at(*nikaia_std::index::get(&b, (j) as usize))) < *nikaia_std::index::get(&keys, nikaia_std::index::at(*nikaia_std::index::get(&a, (i) as usize))) {
             out.push(*nikaia_std::index::get(&b, (j) as usize));
             j += 1;
         } else {
@@ -46115,6 +46097,44 @@ fn lg_sorted_places(held: &[LgHeld], places: &[i64]) -> Vec<i64> {
     out
 }
 
+fn lg_order_key(lin: &LgLin) -> String {
+    let mut key: String = String::from("");
+    for (name, k) in lin.terms.iter() {
+        let k = nikaia_std::num::value(k);
+        key.push_str(name);
+        key.push_str("\0");
+        if k < 0 {
+            key.push_str("0");
+            key.push_str(&lg_padded(k + 9223372036854775807i64 + 1));
+        } else {
+            key.push_str("1");
+            key.push_str(&lg_padded(k));
+        }
+    }
+    key.push_str("\u{1}");
+    let c = lin.constant;
+    if c >= 0 {
+        key.push_str("0");
+        key.push_str(&lg_padded(9223372036854775807i64 - c));
+    } else {
+        key.push_str("1");
+        key.push_str(&lg_padded(-(c + 1)));
+    }
+    key
+}
+
+fn lg_padded(n: i64) -> String {
+    let digits = format!("{}", n);
+    let mut out: String = String::from("");
+    let mut at = digits.len() as i64;
+    while at < 19 {
+        out.push_str("0");
+        at += 1;
+    }
+    out.push_str(&digits);
+    out
+}
+
 fn lg_contradictory(bounds: &[LgLin], budget: &LgBudget) -> LgClosed {
     let mut steps: Vec<LgStep> = vec![];
     let mut round_names: Vec<String> = vec![];
@@ -46128,14 +46148,24 @@ fn lg_contradictory(bounds: &[LgLin], budget: &LgBudget) -> LgClosed {
     }
     loop {
         for one in held.iter() { if one.lin.terms.is_empty() && one.lin.constant > 0 { return LgClosed::Refuted(lg_traced(&steps, one.step)); } }
-        let mut live: Vec<LgHeld> = vec![];
-        for one in held.iter() { if !one.lin.terms.is_empty() { live.push(one.clone()); } }
-        let ordered = lg_sorted(&live);
+        let mut live: Vec<i64> = vec![];
+        let mut keys: Vec<String> = vec![];
+        let mut at: i64 = 0;
+        while at < held.len() as i64 {
+            if !nikaia_std::index::get(&held, nikaia_std::index::at(at)).lin.terms.is_empty() {
+                live.push(at);
+                keys.push(lg_order_key(&nikaia_std::index::get(&held, nikaia_std::index::at(at)).lin));
+            } else { keys.push(String::from("")); }
+            at += 1;
+        }
+        let ordered = lg_sorted_places(&keys, &live);
         let mut bounds_now: Vec<LgHeld> = vec![];
-        for one in ordered.iter() {
-            let last = bounds_now.len() as i64;
-            if last > 0 && lg_terms_cmp(&nikaia_std::index::get(&bounds_now, nikaia_std::index::at(last - 1)).lin.terms, &one.lin.terms) == 0 { continue; }
-            bounds_now.push(one.clone());
+        let mut kept: i64 = -1;
+        for place in ordered.iter() {
+            let place = nikaia_std::num::value(place);
+            if kept >= 0 && lg_terms_cmp(&nikaia_std::index::get(&held, nikaia_std::index::at(kept)).lin.terms, &nikaia_std::index::get(&held, nikaia_std::index::at(place)).lin.terms) == 0 { continue; }
+            bounds_now.push((*nikaia_std::index::get(&held, nikaia_std::index::at(place))).clone());
+            kept = place;
         }
         let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
         for one in bounds_now.iter() { for (name, _) in one.lin.terms.iter() { names.insert(name.to_owned()); } }
