@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1092] — 2026-10-19
+
+**a parameter handed to a position the callee keeps is kept, even where the callee's result could point into it (#720)**
+- A function that hands its parameter to a callee which keeps it, such as `longest(s, "ab")` where a literal can also come back, keeps that parameter instead of lending it; before, this was refused with NK1102, or NK2302 when the call was returned. What each result points into is worked out again until `keeps` settles, and text moved whole into a result of either kind is no longer read as a view of the argument.
+
 ## [0.0.1091] — 2026-10-19
 
 **text tiers: a tie is held once; a place that reads itself no longer doubles its ties (#702)**
