@@ -51,13 +51,18 @@ fn a_parameter_that_is_only_read_is_not_kept() {
 }
 
 /// **Handed back by value, it is kept** — the value outlives the call by
-/// definition.
+/// definition. Text is the exception: a `String` handed back unchanged is
+/// lent, and the result is a view of it (ADR-282 D5, D12; #678).
 #[test]
 fn a_parameter_returned_by_value_is_kept() {
     assert_eq!(
-        keeps("fn label(text: String) -> String { return text }", "label"),
+        keeps(
+            "fn label(text: Vec[i64]) -> Vec[i64] { return text }",
+            "label"
+        ),
         ["text"]
     );
+    assert!(keeps("fn label(text: String) -> String { return text }", "label").is_empty());
 }
 
 /// **And handed back as a view, it is not.** `-> &str` points into the
@@ -122,8 +127,8 @@ fn a_parameter_assigned_into_a_place_is_kept() {
 /// only because `label` does.
 #[test]
 fn keeping_travels_up_the_call_graph() {
-    let source = "fn label(text: String) -> String { return text }\n\
-                  fn shout(text: String) -> String { return label(text) }\n\
+    let source = "fn label(text: Vec[i64]) -> Vec[i64] { return text }\n\
+                  fn shout(text: Vec[i64]) -> Vec[i64] { return label(text) }\n\
                   fn width(text: String) -> i64 { return text.len() as i64 }\n\
                   fn measure(text: String) -> i64 { return width(text) }";
 
@@ -414,7 +419,7 @@ fn a_field_of_a_type_this_file_does_not_declare_keeps() {
 #[test]
 fn a_parameter_that_leaves_by_any_way_out_is_kept() {
     assert_eq!(
-        keeps("fn same(name: String) -> String { name }", "same"),
+        keeps("fn same(name: Vec[i64]) -> Vec[i64] { name }", "same"),
         ["name"]
     );
     assert_eq!(
