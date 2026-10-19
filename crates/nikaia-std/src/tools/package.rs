@@ -37736,6 +37736,26 @@ impl EmitState {
                 if code.can_throw { outcome = format!("Result<{}, Box<dyn std::error::Error>>", inner); } else { outcome = inner; }
             } else if code.can_throw { outcome = String::from("Result<(), Box<dyn std::error::Error>>"); }
             let runs = walk.in_parameter && walk.code_parameter_runs;
+            if code.is_sync && (*code.result).is_some() {
+                let result = match (*code.result).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
+                let mut lent = 0;
+                for part in ty.generics.iter() {
+                    let written = self.emit_core_ty_counted(world, walk, crossings, overlaps, part, EmitLifetimes::Elided, count);
+                    if written.contains('&') || written.contains("'_") { lent += 1; }
+                }
+                let back = self.emit_core_ty_counted(world, walk, crossings, overlaps, result, EmitLifetimes::Elided, count);
+                if lent > 1 && (back.contains('&') || back.contains("'_")) {
+                    let mut called: Vec<String> = vec![];
+                    for part in ty.generics.iter() { called.push(a_list_read_as_a_slice(self.emit_core_ty_counted(world, walk, crossings, overlaps, part, EmitLifetimes::Call, count))); }
+                    let inner = self.emit_core_ty_counted(world, walk, crossings, overlaps, result, EmitLifetimes::Call, count);
+                    let mut each = inner.to_owned();
+                    if code.can_throw { each = format!("Result<{}, Box<dyn std::error::Error>>", inner); }
+                    if runs { return format!("impl for<'call> Fn({}) -> {}", called.join(", "), each); }
+                    let mut crossing: &'static str = "";
+                    if overlaps { crossing = " + Send + Sync"; }
+                    return format!("nikaia_std::func::Kept<dyn for<'call> Fn({}) -> {}{}>", called.join(", "), each, crossing);
+                }
+            }
             if !runs {
                 let mut crossing: &'static str = "";
                 if overlaps { crossing = " + Send + Sync"; }

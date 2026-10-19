@@ -148,6 +148,43 @@ impl EmitState {
                 outcome = "Result<(), Box<dyn std::error::Error>>"
             }
             let runs = walk.in_parameter && walk.code_parameter_runs
+            // **A view handed back from two views or none says which it is
+            // in one lifetime** (#703): the language below elides the result's
+            // lifetime only from exactly one lent parameter, so
+            // `fn(ref String, ref String) -> ref String` is written
+            // `for<'call> Fn(&'call str, &'call str) -> &'call str`. Where the
+            // result is a view, the code may hand back either; the caller's
+            // result lives as long as the shorter of the two.
+            if code.is_sync && code.result != null {
+                let result = code.result ?? return ""
+                let mut lent = 0
+                for part in ty.generics {
+                    let written = self.emit_core_ty_counted(world, walk, crossings, overlaps, part, EmitLifetimes::Elided, count)
+                    if written.contains("&") || written.contains("'_") {
+                        lent += 1
+                    }
+                }
+                let back = self.emit_core_ty_counted(world, walk, crossings, overlaps, result, EmitLifetimes::Elided, count)
+                if lent > 1 && (back.contains("&") || back.contains("'_")) {
+                    let mut called: Vec[String] = []
+                    for part in ty.generics {
+                        called.push(a_list_read_as_a_slice(self.emit_core_ty_counted(world, walk, crossings, overlaps, part, EmitLifetimes::Call, count)))
+                    }
+                    let inner = self.emit_core_ty_counted(world, walk, crossings, overlaps, result, EmitLifetimes::Call, count)
+                    let mut each = inner.clone()
+                    if code.can_throw {
+                        each = f"Result<{inner}, Box<dyn std::error::Error>>"
+                    }
+                    if runs {
+                        return f"impl for<'call> Fn({called.join(", ")}) -> {each}"
+                    }
+                    let mut crossing: String = ""
+                    if overlaps {
+                        crossing = " + Send + Sync"
+                    }
+                    return f"nikaia_std::func::Kept<dyn for<'call> Fn({called.join(", ")}) -> {each}{crossing}>"
+                }
+            }
             if !runs {
                 let mut crossing: String = ""
                 if overlaps {

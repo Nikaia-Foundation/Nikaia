@@ -1,0 +1,16 @@
+// A function type handing back a view of one of two views (#703).
+fn pick(f: fn(ref String, ref String) -> ref String sync, a: String, b: String) -> i64 {
+    return f(a, b).len()
+}
+
+fn longer(a: String, b: String) -> String {
+    if a.len() >= b.len() {
+        return a
+    }
+    return b
+}
+
+fn main() {
+    println(f"{pick(fn(a, _) { a }, "one", "three")}")
+    println(f"{pick(longer, "one", "three")}")
+}
