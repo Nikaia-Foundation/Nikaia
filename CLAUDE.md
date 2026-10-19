@@ -176,14 +176,20 @@ Rules from the sessions that moved the most; they save tokens, not just time.
 * **Copy a pattern, do not invent one.** `libraries.nika` + `libraries.rs`
   (small), `assets.nika`, `parse_numbers.nika` (callbacks), `interpreter.nika`.
   The Rust module stays as the adapter that calls `nikaia_std::tools::<m>::f`.
-* **Builds are the cost.** A first release build is 10-30 minutes on these
-  shared machines, later ones 2-7. `nikaia lower-std` needs a built
-  `target/release/nikaia` and takes seconds. Keep the Rust compiling until the
-  binary exists. Loop on `cargo check --release -p nikaia --message-format
-  short` (under a minute); build once at the end. Run the touched tests as one
-  `cargo test --release -p nikaia --test a --test b` (grep the NK codes you
-  touched in `crates/nikaia/tests/*.rs`), in the background. No foreground
-  `sleep`; poll with a bounded loop.
+* **Builds are the cost. Build and test with `--profile fast`** (#724):
+  release's optimisation, incremental. After a one-file change the `nikaia`
+  binary takes about 18 s instead of 70 s (a fifth of the CPU), a test binary
+  relinks in under a second, and the tests run as fast as at release. A first
+  `fast` build is about 2 minutes. `cargo build --profile fast -p nikaia`, then
+  `target/fast/nikaia lower-std` (seconds; it lowers the checkout the binary
+  was built in). Keep the Rust compiling until the binary exists: loop on
+  `cargo check --release -p nikaia --message-format short` (under a minute);
+  build once at the end. Run the touched tests as one `cargo test --profile
+  fast -p nikaia --test a --test b` (grep the NK codes you touched in
+  `crates/nikaia/tests/*.rs`), in the background. `--release` is CI's and the
+  benchmarks'. No foreground `sleep`; poll with a bounded loop. The linker is
+  already LLD (rustc's own `rust-lld`, the default on x86-64 Linux since Rust
+  1.90).
 * **One namespace for all `tools/*.nika`.** Type and function names are global
   (`Decision` clashed): prefix them with the module.
 * **Syntax gaps** (each cost a build cycle):

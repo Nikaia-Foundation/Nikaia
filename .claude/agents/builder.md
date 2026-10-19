@@ -17,8 +17,11 @@ You build one small slice of an issue in the Nikaia repository and end.
 * **Wait in one call.** Run a build or a test in the foreground with a long
   timeout, or with `run_in_background` and let its end wake you. Never poll
   with repeated `tail`, `ps` or `sleep` calls.
-* **Few release builds: finish first, then build once.** A release build
-  costs about 2.5 minutes, `lower-std` about 40 s (cached: under a second
+* **Few builds: finish first, then build once.** Build and test with
+  `--profile fast` (`cargo build --profile fast -p nikaia`, `cargo test
+  --profile fast -p nikaia --test a --test b`, binary `target/fast/nikaia`):
+  after a one-file change about 20 s instead of 70 s, the tests as fast as at
+  release; `--release` is CI's. A build still costs, `lower-std` about 40 s (cached: under a second
   when no `.nika` changed), and the touched tests often 10 minutes more. Before the first one, write down the
   whole probe matrix: every case the step must handle (own field, getter of
   a getter, `std` methods, the example programs the issue names). Then
@@ -27,8 +30,8 @@ You build one small slice of an issue in the Nikaia repository and end.
   `.nika` files in seconds, and `cargo check --release -p nikaia
   --message-format short` reports the Rust errors in under a minute. After
   the build, run every probe and the touched tests in one go, and fix
-  everything they show before the next build. A release build only to try
-  out a single case is a wasted cycle.
+  everything they show before the next build. A build only to try out a
+  single case is a wasted cycle.
 * **Small reads.** `grep -n -m 20` first, then `sed -n` of at most 80 lines.
   Filter cargo and test output to the errors and failures
   (`--message-format short`, `| grep -E 'error|FAILED|panicked' | head -40`).

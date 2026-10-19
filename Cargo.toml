@@ -55,3 +55,15 @@ debug = 0
 [profile.release]
 opt-level = 3
 debug = false
+
+# **The edit loop** (#724): `release`'s optimisation, built incrementally in
+# many small units. After a one-file change in `crates/nikaia/src`, measured on
+# four cores: the `nikaia` binary in 18 s wall / 38 s CPU against release's 70 s
+# / 195 s, a test binary relinked in 0.4 s against 1.8 s; the heavy test
+# binaries (prove, sysroot, typecheck, contracts, comptime) run as fast as at
+# release. `cargo build --profile fast -p nikaia`, `cargo test --profile fast
+# ...`; the binary is `target/fast/nikaia`. CI and measurements stay on release.
+[profile.fast]
+inherits = "release"
+incremental = true
+codegen-units = 256
