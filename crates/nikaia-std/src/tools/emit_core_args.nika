@@ -325,7 +325,10 @@ impl EmitState {
             if change {
                 out.push("&mut ")
             } else {
-                let keep = if lend { self.argument_keep(walk, scope.function, flow.statement, callee, i) ?? "" } else { "" }
+                // **Only an argument made in the call is put into a keep**
+                // (ADR-283 D24): the plan keys it by statement, callee and
+                // place, which a second call of the callee there shares (#678).
+                let keep = if lend && made_in_the_call(arg) { self.argument_keep(walk, scope.function, flow.statement, callee, i) ?? "" } else { "" }
                 if lend && keep != "" {
                     out.push(f"({keep}).put(")
                     kept_here = true

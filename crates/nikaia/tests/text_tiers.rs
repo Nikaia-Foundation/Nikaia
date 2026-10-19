@@ -377,8 +377,8 @@ fn main() throws {
         all.push(f"#{all.len()}")
     }
     let loud = shout(last)
-    // A parameter that only reads is lent either kind; one that keeps is
-    // handed each as it is, from inside a hole as anywhere else.
+    // A parameter that only reads, or hands back what it was given, is lent
+    // either kind, from inside a hole as anywhere else.
     println(f"{loud} {shout(f"x")} {tag(last).s} {tag(f"y").s} {all.len()} {all[1]}")
 }
 "##;
@@ -397,7 +397,11 @@ fn both_kinds_into_a_parameter_a_let_and_a_list_each_as_it_is() {
     );
     assert!(rust.contains(".into_either()"), "{rust}");
     assert!(rust.contains("fn shout(s: &str)"), "{rust}");
-    assert!(rust.contains("either_text::either(last)"), "{rust}");
+    // `tag` hands its parameter back in the `Tag` it returns, so it lends
+    // it (#678): the `Tag` is a view of either kind, the literal kept beside
+    // the call.
+    assert!(rust.contains("fn tag(s: &str) -> Tag<'_>"), "{rust}");
+    assert!(rust.contains("tag(&last).s"), "{rust}");
 }
 
 /// **A `String?` is a position too** ([ADR-282](../../../docs/specification/adr/adr-282.md)
@@ -1121,4 +1125,178 @@ fn main() {
 }
 "##;
     runs("changed-in-place", source, "a bc d! lble w1 Bo Ada");
+}
+
+// ---------------------------------------------------------------------------
+/// **A `String` parameter handed back unchanged is lent**
+/// ([ADR-282](../../../docs/specification/adr/adr-282.md) D2, D5, D12, #678):
+/// a result into which only parameters flow as they came in is a view of
+/// them, and so is a field of a struct literal handed back that only such
+/// parameters fill. `x` is lent, not kept, and used again.
+const HANDED_BACK: &str = r##"struct Pair { left: String, right: String }
+fn pair(a: String, b: String) -> Pair { return Pair { left: a, right: b } }
+fn longest(a: String, b: String) -> String {
+    if a.len() >= b.len() { return a }
+    return b
+}
+fn main() {
+    let x = f"x{1}"
+    let y = f"yy{2}"
+    println(longest(x, y))
+    println(pair(x, y).left)
+    println(x)
+}
+"##;
+
+#[test]
+fn a_parameter_handed_back_unchanged_is_lent() {
+    runs("handed-back", HANDED_BACK, "yy2\nx1\nx1");
+    let written = HANDED_BACK
+        .replace(
+            "left: String, right: String",
+            "left: ref String, right: ref String",
+        )
+        .replace("(a: String, b: String)", "(a: ref String, b: ref String)")
+        .replace("-> String {", "-> ref String {");
+    assert_eq!(
+        lowered(HANDED_BACK, Build::default()),
+        lowered(&written, Build::default()),
+        "`String` lowers as `ref String` does"
+    );
+}
+
+/// The same through a name bound to the parameter, beside a literal, on a
+/// `ref self` method, from a `pub fn`, and through a call of one.
+const HANDED_BACK_SHAPES: &str = r##"struct Doc { name: String }
+impl Doc {
+    fn pick(ref self, other: String) -> String { return other }
+}
+pub fn first(a: String, b: String) -> String { return a }
+fn via_let(a: String) -> String {
+    let t = a
+    return t
+}
+fn or_none(a: String, c: bool) -> String {
+    if c { return a }
+    return "none"
+}
+fn outer(a: String, b: String) -> String { return first(b, a) }
+fn main() {
+    let x = f"x{1}"
+    let y = f"y{2}"
+    let d = Doc { name: f"d{2}" }
+    println(d.pick(x))
+    println(first(x, y))
+    println(via_let(x))
+    println(or_none(x, false))
+    println(outer(x, y))
+    let mut v: Vec[String] = []
+    v.push(first(x, y))
+    println(f"{v[0]} {x} {d.name}")
+}
+"##;
+
+#[test]
+fn a_parameter_handed_back_unchanged_is_lent_in_every_shape() {
+    runs(
+        "handed-back-shapes",
+        HANDED_BACK_SHAPES,
+        "x1\nx1\nx1\nnone\ny2\nx1 x1 d2",
+    );
+    let written = HANDED_BACK_SHAPES
+        .replace(
+            "other: String) -> String",
+            "other: ref String) -> ref String",
+        )
+        .replace(
+            "(a: String, b: String) -> String",
+            "(a: ref String, b: ref String) -> ref String",
+        )
+        .replace("(a: String) -> String", "(a: ref String) -> ref String")
+        .replace(
+            "(a: String, c: bool) -> String",
+            "(a: ref String, c: bool) -> ref String",
+        );
+    assert_eq!(
+        lowered(HANDED_BACK_SHAPES, Build::default()),
+        lowered(&written, Build::default()),
+        "`String` lowers as `ref String` does"
+    );
+}
+
+/// **Beside text of its own, the parameter is kept as before**: a result that
+/// also hands back text of its own, a name assigned again, a `String?`, a
+/// field another literal fills with text of its own, and a parameter also put
+/// into an error stay `String`, and the caller hands each its argument.
+#[test]
+fn a_parameter_handed_back_beside_text_of_its_own_is_kept() {
+    let source = r##"fn mixed(a: String, b: bool) -> String {
+    if b { return a }
+    return f"own{1}"
+}
+fn relet(a: String, c: bool) -> String {
+    let mut t = a
+    if c { t = f"z{1}" }
+    return t
+}
+fn maybe(a: String?) -> String? { return a }
+struct P { left: String }
+fn p(a: String) -> P { return P { left: a } }
+fn q() -> P { return P { left: f"own{3}" } }
+enum LoadError { Missing(String) }
+impl Error for LoadError {
+    fn message(ref self) -> String {
+        match self {
+            LoadError::Missing(w) => { return f"{w} is missing" }
+        }
+    }
+}
+fn load(which: String) -> String throws {
+    if which == "a" {
+        throw LoadError::Missing(which)
+    }
+    return which
+}
+fn main() throws {
+    println(load(f"b{1}"))
+    println(mixed(f"x{1}", true))
+    println(relet(f"x{1}", true))
+    println(maybe(f"x{1}") ?? "")
+    println(p(f"x{1}").left)
+    println(q().left)
+}
+"##;
+    runs("handed-back-kept", source, "b1\nx1\nz1\nx1\nx1\nown3");
+    let rust = lowered(source, Build::default());
+    for kept in [
+        "fn mixed(a: String, b: bool) -> String {",
+        "fn relet(a: String, c: bool) -> String {",
+        "fn p(a: String) -> P {",
+        "fn load(which: String) -> ",
+    ] {
+        assert!(rust.contains(kept), "{kept}\n{rust}");
+    }
+    let reused = "fn mixed(a: String, b: bool) -> String {\n    if b { return a }\n    return f\"own{1}\"\n}\nfn main() {\n    let x = f\"x{1}\"\n    println(mixed(x, true))\n    println(x)\n}\n";
+    let found = findings(reused);
+    assert!(found.iter().any(|f| f.code == "NK2105"), "{found:#?}");
+}
+
+/// **An argument made in the call lives as long as the struct of views handed
+/// back** ([ADR-283](../../../docs/specification/adr/adr-283.md) D24, #678): a
+/// `let` bound to `tag(f"own{1}")` keeps the text beside the call, as one
+/// bound to a view result does. `rustc` refused it before (E0716).
+#[test]
+fn an_argument_made_in_the_call_lives_as_long_as_the_struct_handed_back() {
+    let source = r##"struct Tag { s: String }
+fn tag(s: String) -> Tag { return Tag { s: s } }
+fn main() {
+    let x = f"x{1}"
+    let a = tag(x)
+    let b = tag(f"own{1}")
+    println(f"{a.s} {b.s} {x}")
+}
+"##;
+    runs("struct-of-views-argument", source, "x1 own1 x1");
+    let rust = lowered(source, Build::default());
+    assert!(rust.contains(".put(format!(\"own{}\", 1))"), "{rust}");
 }

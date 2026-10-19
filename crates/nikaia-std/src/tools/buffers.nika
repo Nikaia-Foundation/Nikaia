@@ -1190,7 +1190,8 @@ fn answered_by(contract: ref FnContract, named: ref String, args: ref Vec[Expr],
 }
 
 // **An argument made in the call** (ADR-283 D24): lent to a callee that hands
-// back a view and takes no keep of its own, the view may point into it, so it
+// back a view - or a struct of this unit's that holds one, `Pair { left: a }`
+// (#678) - and takes no keep of its own, the view may point into it, so it
 // is a source - kept beside the call, or in the keep this function is given
 // where the view leaves through its result.
 fn made_arguments(contract: ref FnContract, named: ref String, args: ref Vec[Expr], ask: ref BufferAsk, unaliased: fn(ref String) -> String sync, mut out: collections::BTreeSet[(i64, String)], mut walk: BufferWalk) {
@@ -1199,7 +1200,7 @@ fn made_arguments(contract: ref FnContract, named: ref String, args: ref Vec[Exp
     }
     let signature = contract.signature ?? return
     let result = signature.result ?? return
-    if !result.is_a_view() {
+    if !result.is_a_view() && !a_struct_of_views(result, ask) {
         return
     }
     let copying: Vec[ref Ledger] = [ask.own, ask.library]
@@ -1213,6 +1214,14 @@ fn made_arguments(contract: ref FnContract, named: ref String, args: ref Vec[Exp
             walk.sources.insert(id.clone(), Sourced { source: source, path: walk.path.clone() })
         }
         out.insert(id)
+    }
+}
+
+/// A struct or enum of this unit that holds a view, by its ledger name.
+fn a_struct_of_views(result: ref Ty, ask: ref BufferAsk) -> bool {
+    return match result {
+        Ty::Named { name, .. } => ask.context.borrowing.contains(name) || ask.context.borrowing.contains(last_segment(name)),
+        else => false,
     }
 }
 
