@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1060] — 2026-10-19
+
+**A map's text keys and values are views where only views go in (#659)**
+- A `HashMap[String, V]` key or value is decided by what flows into it: views make it a view, only literals make it static text, text of its own makes it `String`, both make it `EitherText`. A loop over a map binds its key and value separately, each with the kind of its own position. Any text can look up a map keyed by views. `examples/1brc.nika`, `access-log` and `k-nucleotide` drop `ref` from their map keys and lower byte for byte as before.
+
 ## [0.0.1059] — 2026-10-19
 
 **Four lowering defects found by the 1BRC programs (#683, #684, #685, #676)**
