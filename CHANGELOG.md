@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1049] — 2026-10-19
+
+**a fold's counters proved from the input's length (ADR-367)**
+- ADR-367: a `fold` or `par_fold` over a grammar's input takes at most len / max(w, 1) steps (w the element rule's least width); a whole-number field of the accumulator that each step changes by at most k, with an additive merge, is within ±k·steps: its check is proved where k·2^60/max(w,1) fits, else checked once against the input's length before the fold. Only for an input whose length is known at the start (text, `Bytes`), never over a stream. Decided, not yet built.
+
 ## [0.0.1048] — 2026-10-19
 
 **A shift written only in literals is folded exactly (#661)**
