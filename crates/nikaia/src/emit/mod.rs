@@ -1703,6 +1703,10 @@ struct Flow<'a> {
     /// exactly the constructs that are a function below: each of them starts
     /// from [`Flow::PLAIN`], where this is false.
     in_loop: bool,
+    /// **The `catch` a failing call breaks out to** (#721,
+    /// `EmitFlow::breaks_to`): the node of the expression it guards, `-1`
+    /// where none is around.
+    breaks_to: i64,
     /// The channel a `task::scope`'s tasks fail in, and whose it is
     /// (`EmitScope::tasks_channel`, ADR-346 D7).
     tasks_channel: &'a str,
@@ -1732,6 +1736,7 @@ impl<'a> Flow<'a> {
         widen: false,
         inferred: false,
         in_loop: false,
+        breaks_to: -1,
     };
 
     /// The same surroundings, for the body of a loop.
@@ -4543,6 +4548,8 @@ impl<'p> Emitter<'p> {
             inferred: false,
             // And no loop encloses a function's first statement.
             in_loop: false,
+            // Nor a `catch` a call in it could break out to.
+            breaks_to: -1,
         };
 
         // A function body's last statement is the *function's* value, which is
@@ -7027,6 +7034,30 @@ impl<'p> Emitter<'p> {
         self.expr_as_written(out, expr, depth, flow)
     }
 
+    /// **A call that can fail inside the expression a `catch` guards leaves
+    /// it with its error** (#721, Part I 7.1: the handler gets every error
+    /// that arrives there): `match call { Ok(value) => value, Err(error) =>
+    /// break 'label Err(error.into()) }`, to the labelled block the `catch`
+    /// opened (`emit_core_try_catch`).
+    fn breaking_out(
+        &self,
+        out: &mut Out,
+        expr: &Expr,
+        flow: Flow<'_>,
+        write: impl FnOnce(&mut Out) -> Result<()>,
+    ) -> Result<()> {
+        if flow.breaks_to < 0 || !self.s.emit_call_fails(&self.world, expr) {
+            return write(out);
+        }
+        out.push("match ");
+        write(out)?;
+        out.push(&format!(
+            " {{ Ok(value) => value, Err(error) => break '__nikaia_caught_{} Err(error.into()) }}",
+            flow.breaks_to
+        ));
+        Ok(())
+    }
+
     /// [`Emitter::expr`], without the wrap an arm beside a `null` takes.
     fn expr_as_written(
         &self,
@@ -7317,7 +7348,9 @@ impl<'p> Emitter<'p> {
             )?,
             Expr::Call {
                 func, args, config, ..
-            } => self.call(out, func, args, config, depth, flow)?,
+            } => self.breaking_out(out, expr, flow, |out| {
+                self.call(out, func, args, config, depth, flow)
+            })?,
             // **A `?.` after a value that cannot be absent is the plain call**
             // (ADR-279 D13, `check::Checked::plain_reaches`).
             Expr::MethodCall {
@@ -7340,7 +7373,9 @@ impl<'p> Emitter<'p> {
                     .plain_reaches
                     .contains(&crate::check::value_node(expr)) =>
             {
-                self.method_arm(out, expr, receiver, *method, args, config, depth, flow)?
+                self.breaking_out(out, expr, flow, |out| {
+                    self.method_arm(out, expr, receiver, *method, args, config, depth, flow)
+                })?
             }
             // Part I 3.5 onto a **method** (ADR-278): `emit_core_safe_method`.
             Expr::SafeMethod {

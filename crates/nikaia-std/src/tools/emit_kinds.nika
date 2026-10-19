@@ -274,7 +274,8 @@ pub struct EmitBuild {
 }
 
 /// What surrounds the statements being emitted, the parts that are flags: 11
-/// booleans and the statement they are about. Passed by value; `Copy`.
+/// booleans, the statement they are about, and the `catch` a call breaks
+/// out to. Passed by value; `Copy`.
 pub struct EmitFlow {
     pub can_throw: bool,
     pub caught: bool,
@@ -287,12 +288,17 @@ pub struct EmitFlow {
     pub widen: bool,
     pub inferred: bool,
     pub in_loop: bool,
+    /// **The `catch` a failing call breaks out to** (#721): the node of the
+    /// expression it guards, whose labelled block the call leaves with its
+    /// error; `-1` where no such block is around. A `catch` sets it for the
+    /// expression it guards, a function below starts without it.
+    pub breaks_to: i64,
 }
 
 impl EmitFlow {
     /// Nothing around: no statement, no flag.
     pub fn plain() -> EmitFlow {
-        return EmitFlow { can_throw: false, caught: false, caught_named: false, in_a_place: false, arms_are_statements: false, statement: -1, handled_here: false, in_lambda: false, widen: false, inferred: false, in_loop: false }
+        return EmitFlow { can_throw: false, caught: false, caught_named: false, in_a_place: false, arms_are_statements: false, statement: -1, handled_here: false, in_lambda: false, widen: false, inferred: false, in_loop: false, breaks_to: -1 }
     }
 
     pub fn inside_a_loop(self) -> EmitFlow {

@@ -679,14 +679,30 @@ impl EmitState {
         if a_scope_call {
             guarded = flow.joined_here()
         }
+        let mut joined = a_scope_call
         match guarded_expr {
             Expr::Overlap(_, _) => {
                 guarded = flow.joined_here()
+                joined = true
             },
             Expr::Select(_, _) => {
                 guarded = flow.joined_here()
+                joined = true
             },
             else => {}
+        }
+        // **A call that can fail inside the guarded expression is caught here
+        // too** (Part I 7.1, #721): the guarded expression is a labelled block
+        // every failing call in it leaves with its error, in the box, which
+        // the handler opens by the type each arm names. A `catch` around this
+        // one is no longer where they go.
+        let nested = !joined && self.emit_catch_nests_a_failure(world, guarded_expr)
+        let at = node_key(guarded_expr)
+        if nested {
+            guarded = guarded with { breaks_to: at }
+            out.push(f"'__nikaia_caught_{at}: {{ Ok::<_, Box<dyn std::error::Error>>(")
+        } else {
+            guarded = guarded with { breaks_to: -1 }
         }
         walk.boxed_scope = false
         let bracketed = emit_flow_struct_headed(guarded_expr)
@@ -696,6 +712,9 @@ impl EmitState {
         host.expr(walk, out, guarded_expr, depth, guarded, scope)
         if bracketed {
             out.push(")")
+        }
+        if nested {
+            out.push(") }")
         }
         // Whether the scope's tasks failed in the box, or `Crashed` came alone.
         let a_scope = a_scope_call && walk.boxed_scope
@@ -747,6 +766,11 @@ impl EmitState {
             sum = "".clone()
             boxed = true
         }
+        if caught && nested {
+            sum = "".clone()
+            boxed = true
+            named = false
+        }
         let inside = flow.handling(named)
         let inside_scope = scope.clone() with { caught_sum: sum }
         // **The envelope is opened as the handler's first statement** (ADR-292
@@ -790,6 +814,14 @@ impl EmitState {
                     if !ty.contains("::") && !named.contains(ty) && emit_is_fatal(self.own_contracts, ty) {
                         out.push(f"{pad}Err(nikaia_std::task::Boxed(error)) if nikaia_std::error::holds::<{ty}>(&*error) => return Err(nikaia_std::error::reopened::<{ty}>(error).into()),\n")
                     }
+                }
+            }
+        } else if nested && passing.len() > 0 {
+            // **In the box, a fatal error is told by its type** (ADR-345 D2):
+            // one the handler does not name passes as itself.
+            for ty in passing {
+                if !ty.contains("::") {
+                    out.push(f"{pad}Err(error) if nikaia_std::error::holds::<{ty}>(&*error) => return Err(nikaia_std::error::reopened::<{ty}>(error).into()),\n")
                 }
             }
         } else if passing.len() > 0 {

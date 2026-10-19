@@ -81,6 +81,55 @@ impl EmitState {
         return self.facts.fallible_methods.contains(on)
     }
 
+    /// Whether a call can fail, the way its `?` is decided: a function's by
+    /// its contract or what the checker found the code it runs can do, a kept
+    /// function value's by what it holds, a method's by what the checker
+    /// found (#721).
+    pub fn emit_call_fails(ref self, world: ref EmitWorld, expr: ref Expr) -> bool {
+        match expr {
+            Expr::Call { func, .. } => {
+                let kept = self.facts.kept_calls.get(node_key(func))
+                if kept != null {
+                    let pair = kept ?? return false
+                    return pair.1
+                }
+                return self.facts.run_code_fails.contains(node_key(func)) || call_can_fail(world.words, self.own_contracts, world.library, self.described, func)
+            },
+            Expr::MethodCall { receiver, .. } => return self.method_can_fail(node_key(receiver)),
+            else => return false,
+        }
+    }
+
+    /// Whether a call inside the expression a `catch` guards can fail, the
+    /// expression itself not counted: a lambda's calls are its own, and so
+    /// are a `catch`'s inside it (#721).
+    pub fn emit_catch_nests_a_failure(ref self, world: ref EmitWorld, guarded: ref Expr) -> bool {
+        let mut apart: collections::BTreeSet[i64] = collections::BTreeSet()
+        for each in visited_in_expr(guarded) {
+            match each {
+                Expr::Closure { .. } => {
+                    for inner in visited_in_expr(each) {
+                        apart.insert(node_key(inner))
+                    }
+                },
+                Expr::TryCatch { .. } => {
+                    for inner in visited_in_expr(each) {
+                        apart.insert(node_key(inner))
+                    }
+                },
+                else => {},
+            }
+        }
+        let top = node_key(guarded)
+        for each in visited_in_expr(guarded) {
+            let key = node_key(each)
+            if key != top && !apart.contains(key) && self.emit_call_fails(world, each) {
+                return true
+            }
+        }
+        return false
+    }
+
     /// Whether the function's `sync` is decided by what it is passed.
     pub fn lambda_decides(ref self, key: ref String) -> bool {
         let contract = self.own_contracts.functions.get(key) ?? return false

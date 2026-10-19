@@ -47,6 +47,7 @@ impl<'a> Flow<'a> {
                 widen: self.widen,
                 inferred: self.inferred,
                 in_loop: self.in_loop,
+                breaks_to: self.breaks_to,
             },
             EmitScope {
                 origin: self.origin.to_string(),
@@ -90,6 +91,7 @@ impl<'a> Flow<'a> {
             widen: flow.widen,
             inferred: flow.inferred,
             in_loop: flow.in_loop,
+            breaks_to: flow.breaks_to,
         }
     }
 }

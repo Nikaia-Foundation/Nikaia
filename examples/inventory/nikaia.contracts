@@ -18,7 +18,7 @@ views = ["input: borrowed", "<result>: borrowed"]
 signature = "(input: ?) -> Vec[Entry]"
 
 [fn."main"]
-throws = ["?"]
+throws = ["io::IoError"]
 locks = true
 signature = "()"
 

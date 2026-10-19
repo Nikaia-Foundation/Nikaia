@@ -35190,16 +35190,30 @@ impl EmitState {
         let mut guarded = flow.guarded();
         let a_scope_call = emit_catch_is_a_scope(world, guarded_expr);
         if a_scope_call { guarded = flow.joined_here(); }
+        let mut joined = a_scope_call;
         match guarded_expr {
-            Expr::Overlap(_, _) => { guarded = flow.joined_here(); },
-            Expr::Select(_, _) => { guarded = flow.joined_here(); },
+            Expr::Overlap(_, _) => {
+                guarded = flow.joined_here();
+                joined = true;
+            },
+            Expr::Select(_, _) => {
+                guarded = flow.joined_here();
+                joined = true;
+            },
             _ => { },
         }
+        let nested = !joined && self.emit_catch_nests_a_failure(world, guarded_expr);
+        let at = node_key(guarded_expr);
+        if nested {
+            guarded = EmitFlow { breaks_to: at, ..guarded };
+            out.push(&format!("'__nikaia_caught_{}: {{ Ok::<_, Box<dyn std::error::Error>>(", at));
+        } else { guarded = EmitFlow { breaks_to: -1, ..guarded }; }
         walk.boxed_scope = false;
         let bracketed = emit_flow_struct_headed(guarded_expr);
         if bracketed { out.push("("); }
         host.expr(walk, out, guarded_expr, depth, guarded, scope)?;
         if bracketed { out.push(")"); }
+        if nested { out.push(") }"); }
         let a_scope = a_scope_call && walk.boxed_scope;
         walk.boxed_scope = false;
         let pad = "    ".repeat(nikaia_std::count::of(depth + 1));
@@ -35227,6 +35241,11 @@ impl EmitState {
             sum = Some("".to_owned());
             boxed = true;
         }
+        if caught && nested {
+            sum = Some("".to_owned());
+            boxed = true;
+            named = false;
+        }
         let inside = flow.handling(named);
         let inside_scope = EmitScope { caught_sum: sum, ..scope.clone() };
         let mut opening: Option<String> = None;
@@ -35248,7 +35267,7 @@ impl EmitState {
                 let contract = match own { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
                 for ty in contract.fails_with.iter() { if !ty.contains("::") && !named.contains(ty) && emit_is_fatal(&self.own_contracts, ty) { out.push(&format!("{}Err(nikaia_std::task::Boxed(error)) if nikaia_std::error::holds::<{}>(&*error) => return Err(nikaia_std::error::reopened::<{}>(error).into()),\n", pad, ty, ty)); } }
             }
-        } else if !passing.is_empty() {
+        } else if nested && !passing.is_empty() { for ty in passing.iter() { if !ty.contains("::") { out.push(&format!("{}Err(error) if nikaia_std::error::holds::<{}>(&*error) => return Err(nikaia_std::error::reopened::<{}>(error).into()),\n", pad, ty, ty)); } } } else if !passing.is_empty() {
             let caught_in = self.caught_sum(world, guarded_expr);
             if caught_in.is_none() {
                 out.push(&format!("{}Err(error) => return Err(error.into()),\n", pad));
@@ -38714,10 +38733,11 @@ pub struct EmitFlow {
     pub widen: bool,
     pub inferred: bool,
     pub in_loop: bool,
+    pub breaks_to: i64,
 }
 
 impl EmitFlow {
-    pub fn plain() -> EmitFlow { EmitFlow { can_throw: false, caught: false, caught_named: false, in_a_place: false, arms_are_statements: false, statement: -1, handled_here: false, in_lambda: false, widen: false, inferred: false, in_loop: false } }
+    pub fn plain() -> EmitFlow { EmitFlow { can_throw: false, caught: false, caught_named: false, in_a_place: false, arms_are_statements: false, statement: -1, handled_here: false, in_lambda: false, widen: false, inferred: false, in_loop: false, breaks_to: -1 } }
     pub fn inside_a_loop(self) -> EmitFlow { EmitFlow { in_loop: true, ..self } }
     pub fn guarded(self) -> EmitFlow { EmitFlow { caught: true, ..self } }
     pub fn joined_here(self) -> EmitFlow { EmitFlow { caught: true, handled_here: true, ..self } }
@@ -38952,6 +38972,37 @@ fn emit_field_type(contract: Option<&FieldContract>) -> Ty {
 impl EmitState {
     pub fn method_pauses(&self, on: i64) -> bool { self.facts.pausing_methods.contains(&on) }
     pub fn method_can_fail(&self, on: i64) -> bool { self.facts.fallible_methods.contains(&on) }
+    pub fn emit_call_fails(&self, world: &EmitWorld<'_, '_, '_, '_>, expr: &Expr) -> bool {
+        match expr {
+            Expr::Call { func, .. } => {
+                let func = nikaia_std::boxed::open(func);
+                let kept = self.facts.kept_calls.get(&node_key(func));
+                if kept.is_some() {
+                    let pair = match kept { Some(__nikaia_value) => __nikaia_value, None => return false };
+                    return pair.1;
+                }
+                return self.facts.run_code_fails.contains(&node_key(func)) || call_can_fail(world.words, &self.own_contracts, world.library, &self.described, func);
+            },
+            Expr::MethodCall { receiver, .. } => { let receiver = nikaia_std::boxed::open(receiver); return self.method_can_fail(node_key(receiver)) },
+            _ => return false,
+        }
+    }
+    pub fn emit_catch_nests_a_failure(&self, world: &EmitWorld<'_, '_, '_, '_>, guarded: &Expr) -> bool {
+        let mut apart: collections::BTreeSet<i64> = collections::BTreeSet::new();
+        for each in visited_in_expr(guarded) {
+            match each {
+                Expr::Closure { .. } => { for inner in visited_in_expr(each) { apart.insert(node_key(inner)); } },
+                Expr::TryCatch { .. } => { for inner in visited_in_expr(each) { apart.insert(node_key(inner)); } },
+                _ => { },
+            }
+        }
+        let top = node_key(guarded);
+        for each in visited_in_expr(guarded) {
+            let key = node_key(each);
+            if key != top && !apart.contains(&key) && self.emit_call_fails(world, each) { return true; }
+        }
+        false
+    }
     pub fn lambda_decides(&self, key: &str) -> bool {
         let contract = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return false };
         matches!(contract.sync_claim, Sync::From(_))
