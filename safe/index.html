@@ -1,0 +1,121 @@
+---
+layout: home
+title: Very safe
+description: >-
+  Many bugs follow patterns. Nikaia checks for those patterns before they reach your users, and says where it cannot.
+---
+<!--
+  Level 2 of the home page's "Very safe": every topic a little more fully,
+  each with a link to its own page. The tiles on the home page jump to the
+  anchors here.
+-->
+
+<section class="home-section" id="top">
+  <div class="home-inner">
+    <p class="home-eyebrow home-eyebrow-center"><a href="{{ "/#safe" | relative_url }}">Nikaia</a></p>
+    <h1 class="home-heading">Very safe</h1>
+    <p class="safe-lead home-intro">Many bugs follow patterns. Nikaia checks for those patterns before they reach your users, and says where it cannot.</p>
+    <p class="safe-lead home-intro">Five kinds of mistake, each with the problem, what Nikaia checks and where the check stops. Every one has a page with the whole program and the message the compiler gives.</p>
+    <p class="safe-others">Also: <a href="{{ "/fast/" | relative_url }}">Very fast</a><a href="{{ "/easy/" | relative_url }}">Easy to understand</a><a href="{{ "/good/" | relative_url }}">Made for good</a></p>
+  </div>
+</section>
+
+<section class="home-section home-code-section" id="conflicts">
+  <div class="home-inner home-split">
+    <div class="home-split-text">
+      <span class="safe-chip safe-chip-build">Refused when built</span>
+      <h2>Conflicting actions</h2>
+      <p><strong><strong>When tasks interfere with each other, results can go wrong.</strong></strong></p>
+      <p><span class="lead-in">What Nikaia checks.</span> Nikaia restricts how tasks access and change shared data. A task that changes a value the other tasks also use is rejected when the program is built, with the way out named: give each task a value of its own, or keep the value in shared state that is changed through a lock.</p>
+      <p><span class="lead-in">The limit.</span> Code outside Nikaia can create its own threads. When Nikaia cannot establish the necessary guarantees, you provide a safe boundary, such as passing a copy instead of shared data. The rules reject unsafe constructions; they are not a proof that every conceivable race is found.</p>
+      <p><a class="safe-in-depth" href="{{ "/safe/conflicting-actions.html" | relative_url }}">In depth →</a></p>
+    </div>
+    <div class="home-code-side">
+<div class="home-code markdown-body"><pre><code class="language-nika">task::scope fn(s) {
+    s.spawn fn { balance = balance + 50 }
+    s.spawn fn { balance = balance - 30 }
+}</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-error">error</span><b>: You're changing `balance` in a task of `task::scope`, and the scope's tasks all share `balance`.</b></code></pre></div>
+        
+    </div>
+  </div>
+</section>
+
+<section class="home-section home-section-alt home-code-section" id="stuck">
+  <div class="home-inner home-split">
+    <div class="home-split-text">
+      <span class="safe-chip safe-chip-part">Partly checked</span>
+      <h2>Tasks that get stuck</h2>
+      <p><strong><strong>Sometimes tasks wait for each other forever.</strong></strong></p>
+      <p><span class="lead-in">What Nikaia checks.</span> A task that pauses while it holds a lock is rejected, since everyone who needs that value would wait too. For several locks at once, <code>update_all</code> takes them in one fixed order, so two transfers cannot hold one each and wait for the other.</p>
+      <p><span class="lead-in">The limit.</span> Nikaia does not yet reject a lock taken inside another lock when you write it by hand, so using <code>update_all</code> for several locks is up to you. And not every possible deadlock can be ruled out in every situation; where the analysis cannot decide, it does not claim the problem is solved.</p>
+      <p><a class="safe-in-depth" href="{{ "/safe/stuck-tasks.html" | relative_url }}">In depth →</a></p>
+    </div>
+    <div class="home-code-side">
+<div class="home-code markdown-body"><pre><code class="language-nika">a.update fn(mut acc) {
+    acc.balance -= 30
+    time::sleep(5.millis())
+}</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-error">error</span><b>: `time::sleep` can pause, but you're holding a lock here.</b></code></pre></div>
+        
+    </div>
+  </div>
+</section>
+
+<section class="home-section home-code-section" id="memory">
+  <div class="home-inner home-split">
+    <div class="home-split-text">
+      <span class="safe-chip safe-chip-run">Specified, not built yet</span>
+      <h2>One task cannot take all your memory</h2>
+      <p><strong><strong>A single runaway task can use up all the memory and bring down the whole program, including the parts that were working fine.</strong> In most languages nothing stands in its way. Erlang and Elixir are known for isolating work so that this cannot happen; Nikaia is specified to do the same.</strong></p>
+      <p><span class="lead-in">What Nikaia checks.</span> Every task gets a memory budget of its own. A task that spends it ends on its own, and the rest of the program, your main application included, runs on. A shared value has a budget of its own too. This is decided and written into the specification. A calculation that runs while the program is built is already bounded in steps and in memory.</p>
+      <p><span class="lead-in">The limit.</span> <strong>The per-task budget is not built yet.</strong> Today a task that takes too much memory can still take it from the whole program. Once built, it is a protection while the program runs, not a proof: Nikaia will not show at build time that a task stays within its budget, it makes sure that a task which does not can only end itself.</p>
+      <p><a class="safe-in-depth" href="{{ "/safe/memory.html" | relative_url }}">In depth →</a></p>
+    </div>
+    <div class="home-code-side">
+        <p class="safe-note">Decided and specified, not built yet: today a task can still take memory from the whole program.</p>
+
+        
+    </div>
+  </div>
+</section>
+
+<section class="home-section home-section-alt home-code-section" id="errors">
+  <div class="home-inner home-split">
+    <div class="home-split-text">
+      <span class="safe-chip safe-chip-build">Refused when built</span>
+      <h2>Errors that go unhandled</h2>
+      <p><strong><strong>When something fails, the program needs a way to deal with it.</strong></strong></p>
+      <p><span class="lead-in">What Nikaia checks.</span> Functions declare when they can fail, and what they can fail with is worked out from their bodies. A function that calls something that can fail, and neither declares it nor handles it, is rejected when the program is built.</p>
+      <p><span class="lead-in">The limit.</span> For functions from outside Nikaia that nothing describes, Nikaia cannot know every way they fail. A description of the library closes that gap. The check shows where failures are not accounted for; it does not make the handling itself correct.</p>
+      <p><a class="safe-in-depth" href="{{ "/safe/unhandled-errors.html" | relative_url }}">In depth →</a></p>
+    </div>
+    <div class="home-code-side">
+<div class="home-code markdown-body"><pre><code class="language-nika">fn load() -&gt; String {
+    return fs::read_to_string("config.txt", fs::Root::Anywhere)
+}</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-error">error</span><b>: This function can fail, because `fs::read_to_string` can fail.</b></code></pre></div>
+        
+    </div>
+  </div>
+</section>
+
+<section class="home-section home-code-section" id="promises">
+  <div class="home-inner home-split">
+    <div class="home-split-text">
+      <span class="safe-chip safe-chip-build">Refused when built</span>
+      <h2>Broken promises</h2>
+      <p><strong><strong>Every part of a program should be able to rely on what the other parts promise.</strong></strong></p>
+      <p><span class="lead-in">What Nikaia checks.</span> You write the expectation as an <code>assert</code> and it becomes a contract. A call that breaks it is rejected when the program is built, a promise about a result is available to the callers, and a contract carries across package boundaries.</p>
+      <p><span class="lead-in">The limit.</span> A compiler cannot know whether data from files, arguments or the network is valid. Check it where it enters the program; once checked, the rest of the code can rely on it.</p>
+      <p><a class="safe-in-depth" href="{{ "/safe/broken-promises.html" | relative_url }}">In depth →</a></p>
+    </div>
+    <div class="home-code-side">
+<div class="home-code markdown-body"><pre><code class="language-nika">fn percent(n: int) -&gt; int {
+    assert(n &gt;= 0 &amp;&amp; n &lt;= 100)
+    return n
+}
+
+percent(140)</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-error">error</span><b>: This call breaks `percent`'s precondition `n &gt;= 0 &amp;&amp; n &lt;= 100` every time it is reached.</b></code></pre></div>
+        
+    </div>
+  </div>
+</section>
+

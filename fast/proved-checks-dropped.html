@@ -1,0 +1,38 @@
+---
+layout: home
+title: Checks that are proved are dropped
+description: >-
+  An index or overflow check that cannot fail is not written, where you ask for it.
+---
+<!--
+  Level 3: the topic in full. It links on to the specification, the decisions and
+  the issues. Every program and message here was run with a built compiler or is
+  taken from a file in the repository.
+-->
+
+<section class="home-section" id="check">
+  <div class="home-inner">
+    <p class="home-eyebrow home-eyebrow-center"><a href="{{ "/fast/#checks" | relative_url }}">Very fast</a></p>
+    <h1 class="home-heading">Checks that are proved are dropped</h1>
+    <div class="limit-class">
+        <dl class="limit-steps">
+          <dt>The problem</dt>
+          <dd><strong>Safety checks cost time: an index check on every access, an overflow check on every <code>+</code>.</strong></dd>
+          <dt>An example</dt>
+          <dd>A loop that reads <code>xs[i]</code> for every <code>i</code> from 0 up to <code>xs.len()</code>. The check on each read can never fail.</dd>
+          <dt>What Nikaia checks</dt>
+          <dd>Nikaia keeps the checks, and drops one only where it has proved it cannot fail. <code>remove-bounds-checks:on</code> writes an index without its check where the compiler has proved <code>0 &lt;= i &lt; xs.len()</code>. <code>remove-overflow-checks:on</code> does the same for a <code>+</code>, <code>-</code> or <code>*</code> whose result stays inside its type. A check that is not proved is not dropped.</dd>
+          <dt>The limit</dt>
+          <dd>Both are off by default: you ask for them in <code>nikaia.toml</code>. What is proved does not depend on them; they only choose what is written.</dd>
+        </dl>
+
+
+      </div>
+    <div class="safe-reading">
+      <h2>Go deeper</h2>
+      <ul><li><a href="{{ "/docs/specification/30-nikaia-tooling.html" | relative_url }}">Specification, Part III: build options</a></li><li><a href="{{ "/docs/specification/adr/adr-306.html" | relative_url }}">ADR-306: dropping overflow checks</a></li><li><a href="{{ "/docs/specification/adr/adr-314.html" | relative_url }}">ADR-314: what the prover knows</a></li><li><a href="{{ "/docs/specification/adr/adr-270.html" | relative_url }}">ADR-270: the prover</a></li></ul>
+    </div>
+    <p class="safe-others">More under Very fast: <a href="{{ "/fast/against-tuned-rust.html" | relative_url }}">Against tuned Rust</a><a href="{{ "/fast/one-core-or-all.html" | relative_url }}">One core or all of them</a><a href="{{ "/fast/no-garbage-collector.html" | relative_url }}">No garbage collector, no free</a></p>
+  </div>
+</section>
+

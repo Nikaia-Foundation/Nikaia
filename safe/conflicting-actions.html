@@ -2,22 +2,22 @@
 layout: home
 title: Conflicting actions
 description: >-
-  Two tasks change the same value at once, and one update overwrites the other. What Nikaia checks, an example, and where the check stops.
+  Two tasks change the same value at once. One update overwrites the other.
 ---
 <!--
-  One of the five "Very safe" pages the tiles on the home page lead to. Every
-  program and message in it was run with a built compiler; where a check does
-  not exist yet, the text says so.
+  Level 3: the topic in full. It links on to the specification, the decisions and
+  the issues. Every program and message here was run with a built compiler or is
+  taken from a file in the repository.
 -->
 
 <section class="home-section" id="check">
   <div class="home-inner">
-    <p class="home-eyebrow home-eyebrow-center"><a href="{{ "/#safe" | relative_url }}">Very safe</a></p>
+    <p class="home-eyebrow home-eyebrow-center"><a href="{{ "/safe/#conflicts" | relative_url }}">Very safe</a></p>
     <h1 class="home-heading">Conflicting actions</h1>
     <div class="limit-class">
-                <dl class="limit-steps">
+        <dl class="limit-steps">
           <dt>The problem</dt>
-          <dd><strong>When tasks interfere with each other, results can go wrong.</strong></dd>
+          <dd><strong><strong>When tasks interfere with each other, results can go wrong.</strong></strong></dd>
           <dt>An example</dt>
           <dd>Two tasks update the same account balance. One update can overwrite the other, and money appears to disappear.</dd>
           <dt>What Nikaia checks</dt>
@@ -25,6 +25,7 @@ description: >-
           <dt>The limit</dt>
           <dd>Code outside Nikaia can create its own threads. When Nikaia cannot establish the necessary guarantees, you provide a safe boundary, such as passing a copy instead of shared data. The rules reject unsafe constructions; they are not a proof that every conceivable race is found.</dd>
         </dl>
+
         <details class="limit-details home-code markdown-body" open>
           <summary>Show the program and what Nikaia says</summary>
 <pre><code class="language-nika">use std::task
@@ -49,7 +50,11 @@ fn main() throws {
 <span class="d-gutter">   =</span> <span class="d-help">help:</span> Give each task a value of its own and combine them after the scope, or keep `balance` in a `SharedMut` and change it through `update`.</code></pre>
         </details>
       </div>
-    <p class="safe-others">The other four: <a href="{{ "/safe/stuck-tasks.html" | relative_url }}">Tasks that get stuck</a><a href="{{ "/safe/memory.html" | relative_url }}">One task cannot take all your memory</a><a href="{{ "/safe/unhandled-errors.html" | relative_url }}">Errors that go unhandled</a><a href="{{ "/safe/broken-promises.html" | relative_url }}">Broken promises</a></p>
+    <div class="safe-reading">
+      <h2>Go deeper</h2>
+      <ul><li><a href="{{ "/docs/specification/20-nikaia-advance.html" | relative_url }}">Specification, Part II: running at once</a></li><li><a href="{{ "/docs/specification/adr/adr-328.html" | relative_url }}">ADR-328: tasks and scopes</a></li><li><a href="{{ "/docs/specification/30-nikaia-tooling.html" | relative_url }}">Specification, Part III: what a refused crossing looks like</a></li></ul>
+    </div>
+    <p class="safe-others">More under Very safe: <a href="{{ "/safe/stuck-tasks.html" | relative_url }}">Tasks that get stuck</a><a href="{{ "/safe/memory.html" | relative_url }}">One task cannot take all your memory</a><a href="{{ "/safe/unhandled-errors.html" | relative_url }}">Errors that go unhandled</a><a href="{{ "/safe/broken-promises.html" | relative_url }}">Broken promises</a></p>
   </div>
 </section>
 

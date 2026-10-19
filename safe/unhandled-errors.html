@@ -2,22 +2,22 @@
 layout: home
 title: Errors that go unhandled
 description: >-
-  Something fails and nothing deals with it. What Nikaia checks, an example, and where the check stops.
+  Something fails and nothing deals with it.
 ---
 <!--
-  One of the five "Very safe" pages the tiles on the home page lead to. Every
-  program and message in it was run with a built compiler; where a check does
-  not exist yet, the text says so.
+  Level 3: the topic in full. It links on to the specification, the decisions and
+  the issues. Every program and message here was run with a built compiler or is
+  taken from a file in the repository.
 -->
 
 <section class="home-section" id="check">
   <div class="home-inner">
-    <p class="home-eyebrow home-eyebrow-center"><a href="{{ "/#safe" | relative_url }}">Very safe</a></p>
+    <p class="home-eyebrow home-eyebrow-center"><a href="{{ "/safe/#errors" | relative_url }}">Very safe</a></p>
     <h1 class="home-heading">Errors that go unhandled</h1>
     <div class="limit-class">
-                <dl class="limit-steps">
+        <dl class="limit-steps">
           <dt>The problem</dt>
-          <dd><strong>When something fails, the program needs a way to deal with it.</strong></dd>
+          <dd><strong><strong>When something fails, the program needs a way to deal with it.</strong></strong></dd>
           <dt>An example</dt>
           <dd>A program reads its configuration file. The file is missing, but the calling code assumes the read succeeded.</dd>
           <dt>What Nikaia checks</dt>
@@ -25,6 +25,7 @@ description: >-
           <dt>The limit</dt>
           <dd>For functions from outside Nikaia that nothing describes, Nikaia cannot know every way they fail. A description of the library closes that gap. The check shows where failures are not accounted for; it does not make the handling itself correct.</dd>
         </dl>
+
         <details class="limit-details home-code markdown-body" open>
           <summary>Show the program and what Nikaia says</summary>
 <pre><code class="language-nika">use std::fs
@@ -49,7 +50,11 @@ fn main() {
 <span class="d-gutter">   =</span> <span class="d-help">help:</span> Add `throws` to `load`, or handle it at the call: `… catch { … }`.</code></pre>
         </details>
       </div>
-    <p class="safe-others">The other four: <a href="{{ "/safe/conflicting-actions.html" | relative_url }}">Conflicting actions</a><a href="{{ "/safe/stuck-tasks.html" | relative_url }}">Tasks that get stuck</a><a href="{{ "/safe/memory.html" | relative_url }}">One task cannot take all your memory</a><a href="{{ "/safe/broken-promises.html" | relative_url }}">Broken promises</a></p>
+    <div class="safe-reading">
+      <h2>Go deeper</h2>
+      <ul><li><a href="{{ "/docs/specification/10-nikaia-light.html" | relative_url }}">Specification, Part I 7.1: recoverable errors</a></li><li><a href="{{ "/docs/specification/adr/adr-351.html" | relative_url }}">ADR-351: what a function value can fail with</a></li><li><a href="{{ "/docs/specification/adr/adr-288.html" | relative_url }}">ADR-288: the standard library</a></li></ul>
+    </div>
+    <p class="safe-others">More under Very safe: <a href="{{ "/safe/conflicting-actions.html" | relative_url }}">Conflicting actions</a><a href="{{ "/safe/stuck-tasks.html" | relative_url }}">Tasks that get stuck</a><a href="{{ "/safe/memory.html" | relative_url }}">One task cannot take all your memory</a><a href="{{ "/safe/broken-promises.html" | relative_url }}">Broken promises</a></p>
   </div>
 </section>
 

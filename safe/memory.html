@@ -2,22 +2,22 @@
 layout: home
 title: One task cannot take all your memory
 description: >-
-  A runaway task cannot use up all the memory and crash your program: every task gets a budget of its own. What is specified, an example, and what is not built yet.
+  A runaway task cannot crash your whole program. Every task gets a memory budget of its own, as in Erlang and Elixir.
 ---
 <!--
-  One of the five "Very safe" pages the tiles on the home page lead to. Every
-  program and message in it was run with a built compiler; where a check does
-  not exist yet, the text says so.
+  Level 3: the topic in full. It links on to the specification, the decisions and
+  the issues. Every program and message here was run with a built compiler or is
+  taken from a file in the repository.
 -->
 
 <section class="home-section" id="check">
   <div class="home-inner">
-    <p class="home-eyebrow home-eyebrow-center"><a href="{{ "/#safe" | relative_url }}">Very safe</a></p>
+    <p class="home-eyebrow home-eyebrow-center"><a href="{{ "/safe/#memory" | relative_url }}">Very safe</a></p>
     <h1 class="home-heading">One task cannot take all your memory</h1>
     <div class="limit-class">
-                <dl class="limit-steps">
+        <dl class="limit-steps">
           <dt>The problem</dt>
-          <dd><strong>A single runaway task can use up all the memory and bring down the whole program, including the parts that were working fine.</strong> In most languages nothing stands in its way. Erlang and Elixir are known for isolating work so that this cannot happen; Nikaia is specified to do the same.</dd>
+          <dd><strong><strong>A single runaway task can use up all the memory and bring down the whole program, including the parts that were working fine.</strong> In most languages nothing stands in its way. Erlang and Elixir are known for isolating work so that this cannot happen; Nikaia is specified to do the same.</strong></dd>
           <dt>An example</dt>
           <dd>A background task reads a large upload into memory, and keeps reading. Your main application, which was serving requests, runs out of memory with it.</dd>
           <dt>What Nikaia checks</dt>
@@ -26,8 +26,13 @@ description: >-
           <dd><strong>The per-task budget is not built yet.</strong> Today a task that takes too much memory can still take it from the whole program. Once built, it is a protection while the program runs, not a proof: Nikaia will not show at build time that a task stays within its budget, it makes sure that a task which does not can only end itself.</dd>
         </dl>
 
+
       </div>
-    <p class="safe-others">The other four: <a href="{{ "/safe/conflicting-actions.html" | relative_url }}">Conflicting actions</a><a href="{{ "/safe/stuck-tasks.html" | relative_url }}">Tasks that get stuck</a><a href="{{ "/safe/unhandled-errors.html" | relative_url }}">Errors that go unhandled</a><a href="{{ "/safe/broken-promises.html" | relative_url }}">Broken promises</a></p>
+    <div class="safe-reading">
+      <h2>Go deeper</h2>
+      <ul><li><a href="{{ "/docs/specification/adr/adr-327.html" | relative_url }}">ADR-327: shared state after a panic, and memory budgets</a></li><li><a href="{{ "/docs/specification/adr/adr-326.html" | relative_url }}">ADR-326: a panic ends only its task</a></li><li><a href="https://github.com/Nikaia-Foundation/Nikaia/issues/490">Issue #490: build the memory budgets</a></li></ul>
+    </div>
+    <p class="safe-others">More under Very safe: <a href="{{ "/safe/conflicting-actions.html" | relative_url }}">Conflicting actions</a><a href="{{ "/safe/stuck-tasks.html" | relative_url }}">Tasks that get stuck</a><a href="{{ "/safe/unhandled-errors.html" | relative_url }}">Errors that go unhandled</a><a href="{{ "/safe/broken-promises.html" | relative_url }}">Broken promises</a></p>
   </div>
 </section>
 

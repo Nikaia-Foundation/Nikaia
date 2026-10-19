@@ -1,0 +1,81 @@
+---
+layout: home
+title: Easy to understand
+description: >-
+  You write what should happen, and Nikaia works out the technical details other fast languages make you spell out. When something is wrong, it tells you in plain words what to change.
+---
+<!--
+  Level 2 of the home page's "Easy to understand": every topic a little more fully,
+  each with a link to its own page. The tiles on the home page jump to the
+  anchors here.
+-->
+
+<section class="home-section" id="top">
+  <div class="home-inner">
+    <p class="home-eyebrow home-eyebrow-center"><a href="{{ "/#easy" | relative_url }}">Nikaia</a></p>
+    <h1 class="home-heading">Easy to understand</h1>
+    <p class="safe-lead home-intro">You write what should happen, and Nikaia works out the technical details other fast languages make you spell out. When something is wrong, it tells you in plain words what to change.</p>
+    <p class="safe-lead home-intro">Three ways the language stays out of your way.</p>
+    <p class="safe-others">Also: <a href="{{ "/safe/" | relative_url }}">Very safe</a><a href="{{ "/fast/" | relative_url }}">Very fast</a><a href="{{ "/good/" | relative_url }}">Made for good</a></p>
+  </div>
+</section>
+
+<section class="home-section home-code-section" id="async">
+  <div class="home-inner home-split">
+    <div class="home-split-text">
+      <span class="safe-chip safe-chip-build">Plain calls</span>
+      <h2>No <code>async</code>, no <code>await</code></h2>
+      <p><strong>In many languages, code that waits has to be marked everywhere it touches: <code>async</code> here, <code>await</code> there.</strong></p>
+      <p><span class="lead-in">What Nikaia checks.</span> A call that waits pauses its function, and the program goes on with other work. You write it as an ordinary call. To run things at the same time, put them in an <code>overlap</code> block: it runs its lines together and waits for all of them.</p>
+      <p><span class="lead-in">The limit.</span> Every function may pause unless it says otherwise. A function marked <code>sync</code> never pauses and may call only other <code>sync</code> functions, which is how you say that a piece of code must not wait.</p>
+      <p><a class="safe-in-depth" href="{{ "/easy/no-async-await.html" | relative_url }}">In depth →</a></p>
+    </div>
+    <div class="home-code-side">
+<div class="home-code markdown-body"><pre><code class="language-nika">let (a, b) = overlap {
+    size_of(&quot;a.txt&quot;)
+    size_of(&quot;b.txt&quot;)
+}</code></pre></div>
+    </div>
+  </div>
+</section>
+
+<section class="home-section home-section-alt home-code-section" id="errors">
+  <div class="home-inner home-split">
+    <div class="home-split-text">
+      <span class="safe-chip safe-chip-build">Says what to write</span>
+      <h2>Readable errors</h2>
+      <p><strong>A compiler message that talks about lifetimes and borrowing sends you away from your own code.</strong></p>
+      <p><span class="lead-in">What Nikaia checks.</span> The compiler points at every place the explanation needs: <code>^</code> under the line with the mistake, <code>-</code> under the line that explains it. Then it says what to write instead. Errors point at your <code>.nika</code> line and do not talk about lifetimes or borrowing.</p>
+      <p><span class="lead-in">The limit.</span> When no line of yours explains an error, the message says so. Where a check passes a problem on to the Rust compiler underneath, the error it raises is reported against your <code>.nika</code> line.</p>
+      <p><a class="safe-in-depth" href="{{ "/easy/readable-errors.html" | relative_url }}">In depth →</a></p>
+    </div>
+    <div class="home-code-side">
+<div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-error">error[NK1139]</span><b>: You're changing `count`, but it wasn't declared as mutable.</b>
+<span class="d-help">help:</span> Add `mut` where it's declared: `let mut count`.</code></pre></div>
+    </div>
+  </div>
+</section>
+
+<section class="home-section home-code-section" id="grammar">
+  <div class="home-inner home-split">
+    <div class="home-split-text">
+      <span class="safe-chip safe-chip-build">A grammar, not a parser</span>
+      <h2>Formats are part of the language</h2>
+      <p><strong>Reading a log, a protocol or a small language usually means a parsing library, or a parser written by hand.</strong></p>
+      <p><span class="lead-in">What Nikaia checks.</span> You describe the format as a <code>grammar</code>, and the compiler builds the parser. Precedence and recursion are rules: the order of the rules is the order of binding. The whole calculator is about 100 lines.</p>
+      <p><span class="lead-in">The limit.</span> A grammar is a large topic, and this page shows only the idea. The full rules are in Part II, chapter 10.</p>
+      <p><a class="safe-in-depth" href="{{ "/easy/formats-as-grammar.html" | relative_url }}">In depth →</a></p>
+    </div>
+    <div class="home-code-side">
+<div class="home-code markdown-body"><pre><code class="language-nika">grammar Calc {
+    entry rule expr -&gt; i64 =
+        head:term tail:add_tail* { … }
+
+    rule add_tail -&gt; i64 =
+          "+" t:term { t }
+        | "-" t:term { -t }
+}</code></pre></div>
+    </div>
+  </div>
+</section>
+

@@ -64,7 +64,7 @@ description: >-
         <h3>Very fast</h3>
         <p>Fast as lightning. Programs written in Nikaia run faster than most of what you know,
         in the league of the fastest languages there are.
-        <a href="#performance">The measurements ↓</a></p>
+        <a href="#fast">The measurements ↓</a></p>
       </div>
       <div class="feature">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5c3-1 6-1 9 1 3-2 6-2 9-1v14c-3-1-6-1-9 1-3-2-6-2-9-1zM12 6v14"/></svg>
@@ -72,7 +72,7 @@ description: >-
         <p>Nikaia code is short and reads like a plain script. You write what should happen,
         and Nikaia works out the technical details other fast languages make you spell out.
         When something is wrong, it tells you in plain words what to change.
-        <a href="#errors">An error message ↓</a></p>
+        <a href="#easy">What it looks like ↓</a></p>
       </div>
       <div class="feature">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-8-5-8-11a4.5 4.5 0 018-3 4.5 4.5 0 018 3c0 6-8 11-8 11z"/></svg>
@@ -80,7 +80,7 @@ description: >-
         <p>Software that fails less hurts fewer people. Programs that do more with less
         hardware use less energy. And a language anyone can read lets more people build.
         That is why Nikaia exists.
-        <a href="{{ "/manifesto.html" | relative_url }}">The manifesto →</a></p>
+        <a href="#good">Why it exists ↓</a></p>
       </div>
     </div>
   </div>
@@ -90,12 +90,9 @@ description: >-
   <div class="home-inner">
     <p class="home-eyebrow home-eyebrow-center">Very safe</p>
     <h2 class="home-heading">Catch mistakes before they become failures.</h2>
-    <p class="safe-lead home-intro">
-      Many bugs follow patterns. Nikaia checks for those patterns before they reach your users,
-      and says where it cannot. Here are five of them, as they look in a program.
-    </p>
+    <p class="safe-lead home-intro">Many bugs follow patterns. Nikaia checks for those patterns before they reach your users, and says where it cannot.</p>
     <div class="safe-tiles">
-      <a class="safe-tile safe-tile-a" href="{{ "/safe/conflicting-actions.html" | relative_url }}">
+      <a class="safe-tile safe-tile-b" href="{{ "/safe/#conflicts" | relative_url }}">
         <span class="safe-chip safe-chip-build">Refused when built</span>
         <h3>Conflicting actions</h3>
         <p>Two tasks change the same value at once. One update overwrites the other.</p>
@@ -103,9 +100,10 @@ description: >-
     s.spawn fn { balance = balance + 50 }
     s.spawn fn { balance = balance - 30 }
 }</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-error">error</span><b>: You're changing `balance` in a task of `task::scope`, and the scope's tasks all share `balance`.</b></code></pre></div>
+        
         <span class="safe-more">Read more →</span>
       </a>
-      <a class="safe-tile safe-tile-a" href="{{ "/safe/stuck-tasks.html" | relative_url }}">
+      <a class="safe-tile safe-tile-b" href="{{ "/safe/#stuck" | relative_url }}">
         <span class="safe-chip safe-chip-part">Partly checked</span>
         <h3>Tasks that get stuck</h3>
         <p>Tasks wait for each other forever, or one holds up everyone.</p>
@@ -113,26 +111,29 @@ description: >-
     acc.balance -= 30
     time::sleep(5.millis())
 }</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-error">error</span><b>: `time::sleep` can pause, but you're holding a lock here.</b></code></pre></div>
+        
         <span class="safe-more">Read more →</span>
       </a>
-      <a class="safe-tile safe-tile-a" href="{{ "/safe/memory.html" | relative_url }}">
+      <a class="safe-tile safe-tile-b" href="{{ "/safe/#memory" | relative_url }}">
         <span class="safe-chip safe-chip-run">Specified, not built yet</span>
         <h3>One task cannot take all your memory</h3>
         <p>A runaway task cannot crash your whole program. Every task gets a memory budget of its own, as in Erlang and Elixir.</p>
         <p class="safe-note">Decided and specified, not built yet: today a task can still take memory from the whole program.</p>
 
+        
         <span class="safe-more">Read more →</span>
       </a>
-      <a class="safe-tile safe-tile-b" href="{{ "/safe/unhandled-errors.html" | relative_url }}">
+      <a class="safe-tile safe-tile-b" href="{{ "/safe/#errors" | relative_url }}">
         <span class="safe-chip safe-chip-build">Refused when built</span>
         <h3>Errors that go unhandled</h3>
         <p>Something fails and nothing deals with it.</p>
 <div class="home-code markdown-body"><pre><code class="language-nika">fn load() -&gt; String {
     return fs::read_to_string("config.txt", fs::Root::Anywhere)
 }</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-error">error</span><b>: This function can fail, because `fs::read_to_string` can fail.</b></code></pre></div>
+        
         <span class="safe-more">Read more →</span>
       </a>
-      <a class="safe-tile safe-tile-b" href="{{ "/safe/broken-promises.html" | relative_url }}">
+      <a class="safe-tile safe-tile-b" href="{{ "/safe/#promises" | relative_url }}">
         <span class="safe-chip safe-chip-build">Refused when built</span>
         <h3>Broken promises</h3>
         <p>A part of the program is called outside what it was told to expect.</p>
@@ -142,77 +143,122 @@ description: >-
 }
 
 percent(140)</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-error">error</span><b>: This call breaks `percent`'s precondition `n &gt;= 0 &amp;&amp; n &lt;= 100` every time it is reached.</b></code></pre></div>
+        
         <span class="safe-more">Read more →</span>
       </a>
     </div>
   </div>
 </section>
 
-<section class="home-section home-section-alt" id="performance">
+<section class="home-section home-section-alt" id="fast">
   <div class="home-inner">
-    <p class="home-eyebrow home-eyebrow-center">Performance</p>
-    <h2 class="home-heading">Against tuned Rust</h2>
-    <p class="home-intro">
-      The Rust side is a One Billion Row Challenge entry that maps the file, skips UTF-8
-      validation and hashes a word at a time, with <code>unsafe</code>. Both are release builds
-      on one core with the same output. Instructions are counted per row with callgrind.
-    </p>
-    <div class="stats">
-      <div class="stat">
-        <p class="stat-value">300&nbsp;/&nbsp;272</p>
-        <p class="stat-label">instructions per row, Nikaia against tuned Rust</p>
-        <p class="stat-detail">with UTF-8 and every overflow checked</p>
-      </div>
-      <div class="stat">
-        <p class="stat-value">1.58&nbsp;/&nbsp;3.70</p>
-        <p class="stat-label">mispredicted branches per row</p>
-        <p class="stat-detail">fewer than half</p>
-      </div>
-      <div class="stat">
-        <p class="stat-value">618&nbsp;/&nbsp;809</p>
-        <p class="stat-label">tokens of source, and 0 against 1 <code>unsafe</code></p>
-        <p class="stat-detail">the Nikaia file also runs on every core</p>
-      </div>
+    <p class="home-eyebrow home-eyebrow-center">Very fast</p>
+    <h2 class="home-heading">Fast, and counted.</h2>
+    <p class="safe-lead home-intro">Programs written in Nikaia run in the league of the fastest languages there are. This is where that comes from, and how it is measured.</p>
+    <div class="safe-tiles">
+      <a class="safe-tile safe-tile-b" href="{{ "/fast/#tuned" | relative_url }}">
+        <span class="safe-chip safe-chip-build">Measured</span>
+        <h3>Against tuned Rust</h3>
+        <p>A plain Nikaia program, counted against a Rust program tuned by hand, <code>unsafe</code> and all.</p>
+<div class="safe-stat"><p class="stat-value">300&nbsp;/&nbsp;272</p><p class="stat-label">instructions per row, Nikaia against tuned Rust, with UTF-8 and every overflow checked</p></div>
+        <span class="safe-more">Read more →</span>
+      </a>
+      <a class="safe-tile safe-tile-b" href="{{ "/fast/#cores" | relative_url }}">
+        <span class="safe-chip safe-chip-build">One line</span>
+        <h3>One core or all of them</h3>
+        <p>Whether your code may run on several cores is one line. The code does not change.</p>
+<div class="home-code markdown-body"><pre><code class="language-toml">[build]
+user-parallelism = "no"    # or "yes"</code></pre></div>
+        <span class="safe-more">Read more →</span>
+      </a>
+      <a class="safe-tile safe-tile-b" href="{{ "/fast/#memory" | relative_url }}">
+        <span class="safe-chip safe-chip-build">By design</span>
+        <h3>No garbage collector, no <code>free</code></h3>
+        <p>Memory is released at a point you can see in the code, without collector pauses.</p>
+<p class="safe-note">You write no <code>free</code> and no lifetimes. The compiler works out when memory can be released, and the release is a point you can see.</p>
+        <span class="safe-more">Read more →</span>
+      </a>
+      <a class="safe-tile safe-tile-b" href="{{ "/fast/#checks" | relative_url }}">
+        <span class="safe-chip safe-chip-part">On request</span>
+        <h3>Checks that are proved are dropped</h3>
+        <p>An index or overflow check that cannot fail is not written, where you ask for it.</p>
+<div class="home-code markdown-body"><pre><code class="language-toml">[build]
+optimization = "remove-bounds-checks:on,remove-overflow-checks:on"</code></pre></div>
+        <span class="safe-more">Read more →</span>
+      </a>
     </div>
-    <p class="home-footnote">
-      Where a proof shows an index or overflow check cannot fail, a build that asks for it drops
-      the check.
-      <a href="https://github.com/Nikaia-Language/Nikaia/tree/main/benches/brc">Method and full tables →</a>
-    </p>
   </div>
 </section>
 
-<section class="home-section home-code-section">
-  <div class="home-inner home-split">
-    <div class="home-split-text">
-      <h2>Reading two files at once</h2>
-      <p>
-        Reading a file pauses the function without blocking the program, and you write it as
-        an ordinary call. To run things at the same time, put them in an <code>overlap</code>
-        block. It runs its lines together and waits for all of them.
-      </p>
-      <p>
-        Whether this runs on one core or on all of them is one line in
-        <code>nikaia.toml</code>. The code does not change.
-      </p>
-      <p><a href="{{ "/guide/syntax.html" | relative_url }}">The whole language on one page →</a></p>
+<section class="home-section" id="easy">
+  <div class="home-inner">
+    <p class="home-eyebrow home-eyebrow-center">Easy to understand</p>
+    <h2 class="home-heading">Short code that reads like a script.</h2>
+    <p class="safe-lead home-intro">You write what should happen, and Nikaia works out the technical details other fast languages make you spell out. When something is wrong, it tells you in plain words what to change.</p>
+    <div class="safe-tiles">
+      <a class="safe-tile safe-tile-a" href="{{ "/easy/#async" | relative_url }}">
+        <span class="safe-chip safe-chip-build">Plain calls</span>
+        <h3>No <code>async</code>, no <code>await</code></h3>
+        <p>Code that waits looks like any other code.</p>
+<div class="home-code markdown-body"><pre><code class="language-nika">let (a, b) = overlap {
+    size_of(&quot;a.txt&quot;)
+    size_of(&quot;b.txt&quot;)
+}</code></pre></div>
+        <span class="safe-more">Read more →</span>
+      </a>
+      <a class="safe-tile safe-tile-a" href="{{ "/easy/#errors" | relative_url }}">
+        <span class="safe-chip safe-chip-build">Says what to write</span>
+        <h3>Readable errors</h3>
+        <p>An error says what you wrote, why it cannot work and what to write instead.</p>
+<div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-error">error[NK1139]</span><b>: You're changing `count`, but it wasn't declared as mutable.</b>
+<span class="d-help">help:</span> Add `mut` where it's declared: `let mut count`.</code></pre></div>
+        <span class="safe-more">Read more →</span>
+      </a>
+      <a class="safe-tile safe-tile-a" href="{{ "/easy/#grammar" | relative_url }}">
+        <span class="safe-chip safe-chip-build">A grammar, not a parser</span>
+        <h3>Formats are part of the language</h3>
+        <p>Describe a format as a grammar and the compiler builds the parser.</p>
+<div class="home-code markdown-body"><pre><code class="language-nika">grammar Calc {
+    entry rule expr -&gt; i64 =
+        head:term tail:add_tail* { … }
+
+    rule add_tail -&gt; i64 =
+          "+" t:term { t }
+        | "-" t:term { -t }
+}</code></pre></div>
+        <span class="safe-more">Read more →</span>
+      </a>
     </div>
-    <div class="home-code markdown-body">
-<pre><code class="language-nika">use std::fs
+  </div>
+</section>
 
-fn size_of(path: String) -&gt; int throws {
-    let text = fs::read_to_string(path, fs::Root::Anywhere)
-    return text.len()
-}
-
-fn main() throws {
-    let (a, b) = overlap {
-        size_of("a.txt")
-        size_of("b.txt")
-    }
-    println(f"{a + b} characters in both files")
-}
-</code></pre>
+<section class="home-section home-section-alt" id="good">
+  <div class="home-inner">
+    <p class="home-eyebrow home-eyebrow-center">Made for good</p>
+    <h2 class="home-heading">Why Nikaia exists.</h2>
+    <p class="safe-lead home-intro">Software that fails less hurts fewer people. Programs that do more with less hardware use less energy. And a language anyone can read lets more people build.</p>
+    <div class="safe-tiles">
+      <a class="safe-tile safe-tile-a" href="{{ "/good/#open" | relative_url }}">
+        <span class="safe-chip safe-chip-build">Public record</span>
+        <h3>Built in the open</h3>
+        <p>The compiler is moving into Nikaia itself, and every design decision is argued in a public record.</p>
+<p class="safe-note">Each decision is argued in an ADR and accepted by a human. The compiler is being rewritten, part by part, in the language it compiles.</p>
+        <span class="safe-more">Read more →</span>
+      </a>
+      <a class="safe-tile safe-tile-a" href="{{ "/good/#prealpha" | relative_url }}">
+        <span class="safe-chip safe-chip-part">Honest status</span>
+        <h3>Pre-alpha: what to expect</h3>
+        <p>The compiler builds real programs today. A package registry, formatter and language server do not exist yet.</p>
+<p class="safe-note">A calculator, a JSON parser, a log analyser, a small HTTP server and the One Billion Row Challenge build today.</p>
+        <span class="safe-more">Read more →</span>
+      </a>
+      <a class="safe-tile safe-tile-a" href="{{ "/good/#why" | relative_url }}">
+        <span class="safe-chip safe-chip-build">The manifesto</span>
+        <h3>Why Nikaia exists</h3>
+        <p>Good and fast are not opposites. Nikaia is named for Nika, and <em>nik</em> means good.</p>
+<p class="safe-note">&ldquo;Good wins.&rdquo; Not over anyone: it denies that good and fast are opposites, and that being decent to the person writing the code has to be paid for at runtime.</p>
+        <span class="safe-more">Read more →</span>
+      </a>
     </div>
   </div>
 </section>
@@ -240,141 +286,6 @@ fn main() throws {
         plain code and Nikaia turns it into optimised machine code. Nikaia checks your program,
         and Rust's compiler checks memory safety again.</p>
       </div>
-    </div>
-  </div>
-</section>
-
-<section class="home-section home-section-alt">
-  <div class="home-inner">
-    <h2 class="home-heading">What that looks like</h2>
-    <div class="features">
-      <div class="feature">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h12M6 22h12M7 2c0 5 5 6 5 10S7 17 7 22M17 2c0 5-5 6-5 10s5 5 5 10"/></svg>
-        <h3>No <code>async</code> or <code>await</code></h3>
-        <p>Code that reads files or talks to the network looks like any other code. A call
-        that waits pauses its function, and the program goes on with other work.</p>
-      </div>
-      <div class="feature">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l8 3v6c0 5-3.5 9-8 11-4.5-2-8-6-8-11V5z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></svg>
-        <h3>Mistakes refused at compile time</h3>
-        <p>Two tasks changing the same data at once is refused, and so is an unchecked value
-        that may be missing or an error nobody handles. The message says what to write
-        instead.</p>
-      </div>
-      <div class="feature">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>
-        <h3>No garbage collector, no <code>free</code></h3>
-        <p>Memory and files are released at a point you can see in the code, without
-        collector pauses.</p>
-      </div>
-      <div class="feature">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></svg>
-        <h3>One core or all of them</h3>
-        <p>Whether your code may run on several cores is one line in
-        <code>nikaia.toml</code>. The source stays the same.</p>
-      </div>
-      <div class="feature">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4c-2 0-3 1-3 3v2c0 2-1 3-2 3 1 0 2 1 2 3v2c0 2 1 3 3 3M16 4c2 0 3 1 3 3v2c0 2 1 3 2 3-1 0-2 1-2 3v2c0 2-1 3-3 3"/></svg>
-        <h3>Formats are part of the language</h3>
-        <p>To parse a log, a protocol or a small language, describe the format as a grammar
-        and the compiler builds the parser.</p>
-      </div>
-      <div class="feature">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17l6-6-6-6M12 19h8"/></svg>
-        <h3>Readable errors</h3>
-        <p>An error says what you wrote, why it cannot work and what to write instead, with
-        the lines it is about underlined.
-        <a href="#errors">See one below.</a></p>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section class="home-section home-code-section" id="errors">
-  <div class="home-inner home-split">
-    <div class="home-split-text">
-      <h2>Error messages</h2>
-      <p>
-        The compiler points at every place the explanation needs: <code>^</code> under the
-        line with the mistake, <code>-</code> under the line that explains it. Then it says
-        what to write instead.
-      </p>
-      <p>
-        Errors point at your <code>.nika</code> line and do not talk about lifetimes or
-        borrowing. When no line of yours explains an error, the message says so.
-      </p>
-      <p><a href="{{ "/docs/specification/30-nikaia-tooling.html#appendix-c-the-diagnostics-contract" | relative_url }}">The rules every message follows →</a></p>
-    </div>
-    <div class="home-code markdown-body">
-<pre class="diagnostic"><code><span class="d-error">error[NK1139]</span><b>: You're changing `count`, but it wasn't declared as mutable.</b>
-<span class="d-gutter">  --&gt;</span> app.nika:4:9
-<span class="d-gutter">   |</span>
-<span class="d-gutter"> 2 |</span>     let count = 0
-<span class="d-gutter">   |</span>         <span class="d-note">----- declared here without `mut`</span>
-<span class="d-gutter">   ...</span>
-<span class="d-gutter"> 4 |</span>         count += n
-<span class="d-gutter">   |</span>         <span class="d-error">^^^^^ changed here</span>
-<span class="d-gutter">   |</span>
-<span class="d-gutter">   =</span> <span class="d-help">help:</span> Add `mut` where it's declared: `let mut count`.</code></pre>
-    </div>
-  </div>
-</section>
-
-<section class="home-section home-section-alt" id="progress">
-  <div class="home-inner">
-    <p class="home-eyebrow home-eyebrow-center">Progress</p>
-    <h2 class="home-heading">The compiler is moving into Nikaia</h2>
-    <div class="progress">
-      <figure class="bars" aria-labelledby="bars-title">
-        <figcaption id="bars-title">
-          <b>Self-hosted share of the toolchain</b>
-          <span>lines of compiler code written in Nikaia, end of each day; the bars run to 40 %</span>
-        </figcaption>
-        <div class="bar-row" title="September 28: 2.0 %"><span class="bar-day">Sep 28</span><span class="bar-track"><span class="bar" style="--v: 2.0"></span></span><span class="bar-value">2.0&nbsp;%</span></div>
-        <div class="bar-row" title="September 29: 2.4 %"><span class="bar-day">Sep 29</span><span class="bar-track"><span class="bar" style="--v: 2.4"></span></span><span class="bar-value">2.4&nbsp;%</span></div>
-        <div class="bar-row" title="September 30: 8.4 %"><span class="bar-day">Sep 30</span><span class="bar-track"><span class="bar" style="--v: 8.4"></span></span><span class="bar-value">8.4&nbsp;%</span></div>
-        <div class="bar-row" title="October 1: 10.2 %"><span class="bar-day">Oct 1</span><span class="bar-track"><span class="bar" style="--v: 10.2"></span></span><span class="bar-value">10.2&nbsp;%</span></div>
-        <div class="bar-row" title="October 2: 17.6 %"><span class="bar-day">Oct 2</span><span class="bar-track"><span class="bar" style="--v: 17.6"></span></span><span class="bar-value">17.6&nbsp;%</span></div>
-        <div class="bar-row" title="October 3: 19.7 %"><span class="bar-day">Oct 3</span><span class="bar-track"><span class="bar" style="--v: 19.7"></span></span><span class="bar-value">19.7&nbsp;%</span></div>
-        <div class="bar-row" title="October 4: 30.6 %"><span class="bar-day">Oct 4</span><span class="bar-track"><span class="bar" style="--v: 30.6"></span></span><span class="bar-value"><b>30.6&nbsp;%</b></span></div>
-      </figure>
-      <div class="progress-text">
-        <p>
-          The analyses for sharing, pausing, what a function throws and which statements may
-          overlap are already Nikaia code: 18 625 lines in 61 modules, moved over at about
-          4.8 percentage points a day.
-        </p>
-        <p>
-          Claude Opus started writing the compiler on September 5, 2026. Each design
-          decision is argued in a public ADR and accepted by a human.
-        </p>
-        <div class="stats stats-compact">
-          <div class="stat"><p class="stat-value">≈&nbsp;41</p><p class="stat-label">commits a day</p></div>
-          <div class="stat"><p class="stat-value">≈&nbsp;2&nbsp;000</p><p class="stat-label">lines of compiler code a day</p></div>
-          <div class="stat"><p class="stat-value">≈&nbsp;28</p><p class="stat-label">CHANGELOG entries a day</p></div>
-        </div>
-        <p class="home-footnote">As of 0.0.454, October 4, 2026, counted from <code>git log</code> and
-          <code>scripts/self_hosting.py</code>.
-          <a href="{{ "/CHANGELOG.html" | relative_url }}">Every change, one entry each →</a></p>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section class="home-section">
-  <div class="home-inner home-status">
-    <div>
-      <h2>Pre-alpha</h2>
-      <p>
-        The compiler builds real programs today: a calculator, a JSON parser, a log analyser, a
-        small HTTP server, the One Billion Row Challenge. There is no package registry, formatter or
-        language server yet. The roadmap lists what works, the walls you will hit,
-        and where a bug report helps most.
-      </p>
-    </div>
-    <div class="home-status-actions">
-      <a class="button button-secondary" href="{{ "/docs/project_status_and_roadmap.html#where-the-project-actually-stands" | relative_url }}">Status &amp; roadmap</a>
-      <a class="button button-ghost" href="{{ "/examples/" | relative_url }}">See the examples</a>
     </div>
   </div>
 </section>

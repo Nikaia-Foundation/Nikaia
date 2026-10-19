@@ -1,0 +1,46 @@
+---
+layout: home
+title: Against tuned Rust
+description: >-
+  A plain Nikaia program, counted against a Rust program tuned by hand, unsafe and all.
+---
+<!--
+  Level 3: the topic in full. It links on to the specification, the decisions and
+  the issues. Every program and message here was run with a built compiler or is
+  taken from a file in the repository.
+-->
+
+<section class="home-section" id="check">
+  <div class="home-inner">
+    <p class="home-eyebrow home-eyebrow-center"><a href="{{ "/fast/#tuned" | relative_url }}">Very fast</a></p>
+    <h1 class="home-heading">Against tuned Rust</h1>
+    <div class="limit-class">
+        <dl class="limit-steps">
+          <dt>The problem</dt>
+          <dd><strong>Fast languages usually ask you to spell out how memory, waiting and sharing should work. Plain code should not cost you speed.</strong></dd>
+          <dt>An example</dt>
+          <dd>The One Billion Row Challenge: read a very large file of measurements and aggregate them. The Rust side is a tuned entry that maps the file, skips UTF-8 validation and hashes a word at a time, with <code>unsafe</code>. The Nikaia side describes the file as a grammar.</dd>
+          <dt>What Nikaia checks</dt>
+          <dd>Both are release builds on one core with the same output. Counted in instructions per row, not in seconds: Nikaia needs 300 where tuned Rust needs 272, with UTF-8 and every overflow checked, and about half the mispredicted branches. The Nikaia source is shorter and has no <code>unsafe</code>.</dd>
+          <dt>The limit</dt>
+          <dd>This is one program on one workload. It shows what the compiler can do for that program, not that every program is this fast. The method and the current tables are in the repository, and the numbers there are the ones to quote.</dd>
+        </dl>
+
+        <details class="limit-details home-code markdown-body" open>
+          <summary>The figures</summary>
+          <div class="stats">
+            <div class="stat"><p class="stat-value">300&nbsp;/&nbsp;272</p><p class="stat-label">instructions per row, Nikaia against tuned Rust</p><p class="stat-detail">with UTF-8 and every overflow checked</p></div>
+            <div class="stat"><p class="stat-value">1.58&nbsp;/&nbsp;3.70</p><p class="stat-label">mispredicted branches per row</p><p class="stat-detail">fewer than half</p></div>
+            <div class="stat"><p class="stat-value">618&nbsp;/&nbsp;809</p><p class="stat-label">tokens of source, and 0 against 1 <code>unsafe</code></p><p class="stat-detail">the Nikaia file also runs on every core</p></div>
+          </div>
+          <p>Counted with callgrind. Where a proof shows an index or overflow check cannot fail, a build that asks for it drops the check.</p>
+        </details>
+      </div>
+    <div class="safe-reading">
+      <h2>Go deeper</h2>
+      <ul><li><a href="https://github.com/Nikaia-Language/Nikaia/tree/main/benches/brc">Method and full tables (benches/brc)</a></li><li><a href="https://github.com/Nikaia-Language/Nikaia/blob/main/examples/1brc.nika">The program: examples/1brc.nika</a></li></ul>
+    </div>
+    <p class="safe-others">More under Very fast: <a href="{{ "/fast/one-core-or-all.html" | relative_url }}">One core or all of them</a><a href="{{ "/fast/no-garbage-collector.html" | relative_url }}">No garbage collector, no free</a><a href="{{ "/fast/proved-checks-dropped.html" | relative_url }}">Checks that are proved are dropped</a></p>
+  </div>
+</section>
+

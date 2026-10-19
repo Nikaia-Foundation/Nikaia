@@ -2,22 +2,22 @@
 layout: home
 title: Broken promises
 description: >-
-  A part of the program is used outside what it was told to expect. What Nikaia checks, an example, and where the check stops.
+  A part of the program is called outside what it was told to expect.
 ---
 <!--
-  One of the five "Very safe" pages the tiles on the home page lead to. Every
-  program and message in it was run with a built compiler; where a check does
-  not exist yet, the text says so.
+  Level 3: the topic in full. It links on to the specification, the decisions and
+  the issues. Every program and message here was run with a built compiler or is
+  taken from a file in the repository.
 -->
 
 <section class="home-section" id="check">
   <div class="home-inner">
-    <p class="home-eyebrow home-eyebrow-center"><a href="{{ "/#safe" | relative_url }}">Very safe</a></p>
+    <p class="home-eyebrow home-eyebrow-center"><a href="{{ "/safe/#promises" | relative_url }}">Very safe</a></p>
     <h1 class="home-heading">Broken promises</h1>
     <div class="limit-class">
-                <dl class="limit-steps">
+        <dl class="limit-steps">
           <dt>The problem</dt>
-          <dd><strong>Every part of a program should be able to rely on what the other parts promise.</strong></dd>
+          <dd><strong><strong>Every part of a program should be able to rely on what the other parts promise.</strong></strong></dd>
           <dt>An example</dt>
           <dd>A function expects a percentage between 0 and 100 but is called with 140.</dd>
           <dt>What Nikaia checks</dt>
@@ -25,6 +25,7 @@ description: >-
           <dt>The limit</dt>
           <dd>A compiler cannot know whether data from files, arguments or the network is valid. Check it where it enters the program; once checked, the rest of the code can rely on it.</dd>
         </dl>
+
         <details class="limit-details home-code markdown-body" open>
           <summary>Show the program and what Nikaia says</summary>
 <pre><code class="language-nika">fn percent(n: int) -&gt; int {
@@ -56,7 +57,11 @@ assert(n == 41)     // proved: the guard above handled the other case
 </code></pre>
         </details>
       </div>
-    <p class="safe-others">The other four: <a href="{{ "/safe/conflicting-actions.html" | relative_url }}">Conflicting actions</a><a href="{{ "/safe/stuck-tasks.html" | relative_url }}">Tasks that get stuck</a><a href="{{ "/safe/memory.html" | relative_url }}">One task cannot take all your memory</a><a href="{{ "/safe/unhandled-errors.html" | relative_url }}">Errors that go unhandled</a></p>
+    <div class="safe-reading">
+      <h2>Go deeper</h2>
+      <ul><li><a href="{{ "/guide/contracts.html" | relative_url }}">Guide: an assert the compiler checks</a></li><li><a href="{{ "/docs/specification/adr/adr-269.html" | relative_url }}">ADR-269: how a claim becomes a contract</a></li><li><a href="{{ "/docs/specification/adr/adr-270.html" | relative_url }}">ADR-270: the prover</a></li><li><a href="{{ "/docs/specification/adr/adr-361.html" | relative_url }}">ADR-361: loops and their invariants</a></li></ul>
+    </div>
+    <p class="safe-others">More under Very safe: <a href="{{ "/safe/conflicting-actions.html" | relative_url }}">Conflicting actions</a><a href="{{ "/safe/stuck-tasks.html" | relative_url }}">Tasks that get stuck</a><a href="{{ "/safe/memory.html" | relative_url }}">One task cannot take all your memory</a><a href="{{ "/safe/unhandled-errors.html" | relative_url }}">Errors that go unhandled</a></p>
   </div>
 </section>
 

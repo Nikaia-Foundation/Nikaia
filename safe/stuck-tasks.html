@@ -2,22 +2,22 @@
 layout: home
 title: Tasks that get stuck
 description: >-
-  Tasks that wait for each other forever, or one that holds up everyone. What Nikaia checks, an example, and where the check stops.
+  Tasks wait for each other forever, or one holds up everyone.
 ---
 <!--
-  One of the five "Very safe" pages the tiles on the home page lead to. Every
-  program and message in it was run with a built compiler; where a check does
-  not exist yet, the text says so.
+  Level 3: the topic in full. It links on to the specification, the decisions and
+  the issues. Every program and message here was run with a built compiler or is
+  taken from a file in the repository.
 -->
 
 <section class="home-section" id="check">
   <div class="home-inner">
-    <p class="home-eyebrow home-eyebrow-center"><a href="{{ "/#safe" | relative_url }}">Very safe</a></p>
+    <p class="home-eyebrow home-eyebrow-center"><a href="{{ "/safe/#stuck" | relative_url }}">Very safe</a></p>
     <h1 class="home-heading">Tasks that get stuck</h1>
     <div class="limit-class">
-                <dl class="limit-steps">
+        <dl class="limit-steps">
           <dt>The problem</dt>
-          <dd><strong>Sometimes tasks wait for each other forever.</strong></dd>
+          <dd><strong><strong>Sometimes tasks wait for each other forever.</strong></strong></dd>
           <dt>An example</dt>
           <dd>Two account transfers each hold a lock the other needs. Neither can continue.</dd>
           <dt>What Nikaia checks</dt>
@@ -25,6 +25,7 @@ description: >-
           <dt>The limit</dt>
           <dd>Nikaia does not yet reject a lock taken inside another lock when you write it by hand, so using <code>update_all</code> for several locks is up to you. And not every possible deadlock can be ruled out in every situation; where the analysis cannot decide, it does not claim the problem is solved.</dd>
         </dl>
+
         <details class="limit-details home-code markdown-body" open>
           <summary>Show the program and what Nikaia says</summary>
 <pre><code class="language-nika">use std::time
@@ -58,7 +59,11 @@ fn main() throws {
 </code></pre>
         </details>
       </div>
-    <p class="safe-others">The other four: <a href="{{ "/safe/conflicting-actions.html" | relative_url }}">Conflicting actions</a><a href="{{ "/safe/memory.html" | relative_url }}">One task cannot take all your memory</a><a href="{{ "/safe/unhandled-errors.html" | relative_url }}">Errors that go unhandled</a><a href="{{ "/safe/broken-promises.html" | relative_url }}">Broken promises</a></p>
+    <div class="safe-reading">
+      <h2>Go deeper</h2>
+      <ul><li><a href="{{ "/docs/specification/adr/adr-281.html" | relative_url }}">ADR-281: locks without deadlocks</a></li><li><a href="{{ "/docs/specification/20-nikaia-advance.html" | relative_url }}">Specification, Part II 12.3: atomic composition</a></li><li><a href="https://github.com/Nikaia-Foundation/Nikaia/issues/677">Issue #677: a lock inside a lock is not refused yet</a></li></ul>
+    </div>
+    <p class="safe-others">More under Very safe: <a href="{{ "/safe/conflicting-actions.html" | relative_url }}">Conflicting actions</a><a href="{{ "/safe/memory.html" | relative_url }}">One task cannot take all your memory</a><a href="{{ "/safe/unhandled-errors.html" | relative_url }}">Errors that go unhandled</a><a href="{{ "/safe/broken-promises.html" | relative_url }}">Broken promises</a></p>
   </div>
 </section>
 

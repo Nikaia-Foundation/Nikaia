@@ -1,0 +1,55 @@
+---
+layout: home
+title: No async, no await
+description: >-
+  Code that waits looks like any other code.
+---
+<!--
+  Level 3: the topic in full. It links on to the specification, the decisions and
+  the issues. Every program and message here was run with a built compiler or is
+  taken from a file in the repository.
+-->
+
+<section class="home-section" id="check">
+  <div class="home-inner">
+    <p class="home-eyebrow home-eyebrow-center"><a href="{{ "/easy/#async" | relative_url }}">Easy to understand</a></p>
+    <h1 class="home-heading">No <code>async</code>, no <code>await</code></h1>
+    <div class="limit-class">
+        <dl class="limit-steps">
+          <dt>The problem</dt>
+          <dd><strong>In many languages, code that waits has to be marked everywhere it touches: <code>async</code> here, <code>await</code> there.</strong></dd>
+          <dt>An example</dt>
+          <dd>Read two files and add up their sizes. Reading a file waits for the disk.</dd>
+          <dt>What Nikaia checks</dt>
+          <dd>A call that waits pauses its function, and the program goes on with other work. You write it as an ordinary call. To run things at the same time, put them in an <code>overlap</code> block: it runs its lines together and waits for all of them.</dd>
+          <dt>The limit</dt>
+          <dd>Every function may pause unless it says otherwise. A function marked <code>sync</code> never pauses and may call only other <code>sync</code> functions, which is how you say that a piece of code must not wait.</dd>
+        </dl>
+
+        <details class="limit-details home-code markdown-body" open>
+          <summary>Reading two files at once</summary>
+<pre><code class="language-nika">use std::fs
+
+fn size_of(path: String) -&gt; int throws {
+    let text = fs::read_to_string(path, fs::Root::Anywhere)
+    return text.len()
+}
+
+fn main() throws {
+    let (a, b) = overlap {
+        size_of("a.txt")
+        size_of("b.txt")
+    }
+    println(f"{a + b} characters in both files")
+}
+</code></pre>
+        </details>
+      </div>
+    <div class="safe-reading">
+      <h2>Go deeper</h2>
+      <ul><li><a href="{{ "/guide/syntax.html" | relative_url }}">Guide: a tour of the syntax</a></li><li><a href="{{ "/docs/specification/20-nikaia-advance.html" | relative_url }}">Specification, Part II: running at once</a></li></ul>
+    </div>
+    <p class="safe-others">More under Easy to understand: <a href="{{ "/easy/readable-errors.html" | relative_url }}">Readable errors</a><a href="{{ "/easy/formats-as-grammar.html" | relative_url }}">Formats are part of the language</a></p>
+  </div>
+</section>
+

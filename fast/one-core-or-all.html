@@ -1,0 +1,43 @@
+---
+layout: home
+title: One core or all of them
+description: >-
+  Whether your code may run on several cores is one line. The code does not change.
+---
+<!--
+  Level 3: the topic in full. It links on to the specification, the decisions and
+  the issues. Every program and message here was run with a built compiler or is
+  taken from a file in the repository.
+-->
+
+<section class="home-section" id="check">
+  <div class="home-inner">
+    <p class="home-eyebrow home-eyebrow-center"><a href="{{ "/fast/#cores" | relative_url }}">Very fast</a></p>
+    <h1 class="home-heading">One core or all of them</h1>
+    <div class="limit-class">
+        <dl class="limit-steps">
+          <dt>The problem</dt>
+          <dd><strong>Code written for one core usually has to be rewritten, or at least re-checked, to use several.</strong></dd>
+          <dt>An example</dt>
+          <dd>A web service starts on one core. When the load grows, it should use all of them without a rewrite.</dd>
+          <dt>What Nikaia checks</dt>
+          <dd>The choice is one line in <code>nikaia.toml</code>: <code>user-parallelism = "no"</code> (the default) or <code>"yes"</code>. At <code>no</code>, two pieces of your code are never running at the same moment. At <code>yes</code>, a multi-threaded runtime spreads the work over the cores, and thread safety is checked at compile time. A library built at <code>no</code> is still checked against the rules parallel code needs, so it also works when a program built at <code>yes</code> uses it.</dd>
+          <dt>The limit</dt>
+          <dd>The setting allows parallelism; it does not set a thread count. How many threads serve <code>yes</code> is the runtime&rsquo;s choice, because it depends on the machine. At <code>no</code>, only your own code is limited to one thread: waiting for I/O happens on the runtime&rsquo;s own threads, and the standard library may still use every core.</dd>
+        </dl>
+
+        <details class="limit-details home-code markdown-body" open>
+          <summary>The setting</summary>
+<pre><code class="language-toml">[build]
+user-parallelism = "no"    # the default; "yes" for the multi-threaded runtime
+</code></pre>
+        </details>
+      </div>
+    <div class="safe-reading">
+      <h2>Go deeper</h2>
+      <ul><li><a href="{{ "/guide/getting-started.html" | relative_url }}">Guide: getting started, <code>user_parallelism</code></a></li><li><a href="{{ "/docs/specification/adr/adr-016.html" | relative_url }}">ADR-016: the standard library and the cores</a></li><li><a href="{{ "/docs/specification/20-nikaia-advance.html" | relative_url }}">Specification, Part II: running at once</a></li></ul>
+    </div>
+    <p class="safe-others">More under Very fast: <a href="{{ "/fast/against-tuned-rust.html" | relative_url }}">Against tuned Rust</a><a href="{{ "/fast/no-garbage-collector.html" | relative_url }}">No garbage collector, no free</a><a href="{{ "/fast/proved-checks-dropped.html" | relative_url }}">Checks that are proved are dropped</a></p>
+  </div>
+</section>
+

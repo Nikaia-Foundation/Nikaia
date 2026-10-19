@@ -1,0 +1,77 @@
+---
+layout: home
+title: Built in the open
+description: >-
+  The compiler is moving into Nikaia itself, and every design decision is argued in a public record.
+---
+<!--
+  Level 3: the topic in full. It links on to the specification, the decisions and
+  the issues. Every program and message here was run with a built compiler or is
+  taken from a file in the repository.
+-->
+
+<section class="home-section" id="check">
+  <div class="home-inner">
+    <p class="home-eyebrow home-eyebrow-center"><a href="{{ "/good/#open" | relative_url }}">Made for good</a></p>
+    <h1 class="home-heading">Built in the open</h1>
+    <div class="limit-class">
+        <dl class="limit-steps">
+          <dt>The problem</dt>
+          <dd><strong>A language that asks you to trust it should show how it was made.</strong></dd>
+          <dt>An example</dt>
+          <dd>Why does <code>assert</code> become a contract? The answer is an ADR, with the options that were rejected.</dd>
+          <dt>What Nikaia checks</dt>
+          <dd>Every design decision is a public ADR with the evidence that settled it. Every change has one entry in the changelog. The compiler is moving into Nikaia: the analyses for sharing, pausing, what a function throws and which statements may overlap are already Nikaia code.</dd>
+          <dt>The limit</dt>
+          <dd>The figures below are dated. The changelog and the repository are the current record.</dd>
+        </dl>
+
+        <div class="limit-details home-code markdown-body">
+  <div class="home-inner">
+    
+    
+    <div class="progress">
+      <figure class="bars" aria-labelledby="bars-title">
+        <figcaption id="bars-title">
+          <b>Self-hosted share of the toolchain</b>
+          <span>lines of compiler code written in Nikaia, end of each day; the bars run to 40 %</span>
+        </figcaption>
+        <div class="bar-row" title="September 28: 2.0 %"><span class="bar-day">Sep 28</span><span class="bar-track"><span class="bar" style="--v: 2.0"></span></span><span class="bar-value">2.0&nbsp;%</span></div>
+        <div class="bar-row" title="September 29: 2.4 %"><span class="bar-day">Sep 29</span><span class="bar-track"><span class="bar" style="--v: 2.4"></span></span><span class="bar-value">2.4&nbsp;%</span></div>
+        <div class="bar-row" title="September 30: 8.4 %"><span class="bar-day">Sep 30</span><span class="bar-track"><span class="bar" style="--v: 8.4"></span></span><span class="bar-value">8.4&nbsp;%</span></div>
+        <div class="bar-row" title="October 1: 10.2 %"><span class="bar-day">Oct 1</span><span class="bar-track"><span class="bar" style="--v: 10.2"></span></span><span class="bar-value">10.2&nbsp;%</span></div>
+        <div class="bar-row" title="October 2: 17.6 %"><span class="bar-day">Oct 2</span><span class="bar-track"><span class="bar" style="--v: 17.6"></span></span><span class="bar-value">17.6&nbsp;%</span></div>
+        <div class="bar-row" title="October 3: 19.7 %"><span class="bar-day">Oct 3</span><span class="bar-track"><span class="bar" style="--v: 19.7"></span></span><span class="bar-value">19.7&nbsp;%</span></div>
+        <div class="bar-row" title="October 4: 30.6 %"><span class="bar-day">Oct 4</span><span class="bar-track"><span class="bar" style="--v: 30.6"></span></span><span class="bar-value"><b>30.6&nbsp;%</b></span></div>
+      </figure>
+      <div class="progress-text">
+        <p>
+          The analyses for sharing, pausing, what a function throws and which statements may
+          overlap are already Nikaia code: 18 625 lines in 61 modules, moved over at about
+          4.8 percentage points a day.
+        </p>
+        <p>
+          Claude Opus started writing the compiler on September 5, 2026. Each design
+          decision is argued in a public ADR and accepted by a human.
+        </p>
+        <div class="stats stats-compact">
+          <div class="stat"><p class="stat-value">≈&nbsp;41</p><p class="stat-label">commits a day</p></div>
+          <div class="stat"><p class="stat-value">≈&nbsp;2&nbsp;000</p><p class="stat-label">lines of compiler code a day</p></div>
+          <div class="stat"><p class="stat-value">≈&nbsp;28</p><p class="stat-label">CHANGELOG entries a day</p></div>
+        </div>
+        <p class="home-footnote">As of 0.0.454, October 4, 2026, counted from <code>git log</code> and
+          <code>scripts/self_hosting.py</code>.
+          <a href="{{ "/CHANGELOG.html" | relative_url }}">Every change, one entry each →</a></p>
+      </div>
+    </div>
+  </div>
+</div>
+      </div>
+    <div class="safe-reading">
+      <h2>Go deeper</h2>
+      <ul><li><a href="{{ "/docs/specification/adr/" | relative_url }}">Decisions: every ADR</a></li><li><a href="{{ "/CHANGELOG.html" | relative_url }}">Changelog</a></li><li><a href="{{ "/docs/project_status_and_roadmap.html" | relative_url }}">Roadmap and status</a></li><li><a href="https://github.com/Nikaia-Foundation/Nikaia/issues">Issues on GitHub</a></li></ul>
+    </div>
+    <p class="safe-others">More under Made for good: <a href="{{ "/good/pre-alpha.html" | relative_url }}">Pre-alpha: what to expect</a><a href="{{ "/manifesto.html" | relative_url }}">Why Nikaia exists</a></p>
+  </div>
+</section>
+

@@ -1,0 +1,71 @@
+---
+layout: home
+title: Made for good
+description: >-
+  Software that fails less hurts fewer people. Programs that do more with less hardware use less energy. And a language anyone can read lets more people build.
+---
+<!--
+  Level 2 of the home page's "Made for good": every topic a little more fully,
+  each with a link to its own page. The tiles on the home page jump to the
+  anchors here.
+-->
+
+<section class="home-section" id="top">
+  <div class="home-inner">
+    <p class="home-eyebrow home-eyebrow-center"><a href="{{ "/#good" | relative_url }}">Nikaia</a></p>
+    <h1 class="home-heading">Made for good</h1>
+    <p class="safe-lead home-intro">Software that fails less hurts fewer people. Programs that do more with less hardware use less energy. And a language anyone can read lets more people build.</p>
+    <p class="safe-lead home-intro">What that means for the language, and how the project is run.</p>
+    <p class="safe-others">Also: <a href="{{ "/safe/" | relative_url }}">Very safe</a><a href="{{ "/fast/" | relative_url }}">Very fast</a><a href="{{ "/easy/" | relative_url }}">Easy to understand</a></p>
+  </div>
+</section>
+
+<section class="home-section home-code-section" id="open">
+  <div class="home-inner home-split">
+    <div class="home-split-text">
+      <span class="safe-chip safe-chip-build">Public record</span>
+      <h2>Built in the open</h2>
+      <p><strong>A language that asks you to trust it should show how it was made.</strong></p>
+      <p><span class="lead-in">What Nikaia checks.</span> Every design decision is a public ADR with the evidence that settled it. Every change has one entry in the changelog. The compiler is moving into Nikaia: the analyses for sharing, pausing, what a function throws and which statements may overlap are already Nikaia code.</p>
+      <p><span class="lead-in">The limit.</span> The figures below are dated. The changelog and the repository are the current record.</p>
+      <p><a class="safe-in-depth" href="{{ "/good/built-in-the-open.html" | relative_url }}">In depth →</a></p>
+    </div>
+    <div class="home-code-side">
+<p class="safe-note">Each decision is argued in an ADR and accepted by a human. The compiler is being rewritten, part by part, in the language it compiles.</p>
+    </div>
+  </div>
+</section>
+
+<section class="home-section home-section-alt home-code-section" id="prealpha">
+  <div class="home-inner home-split">
+    <div class="home-split-text">
+      <span class="safe-chip safe-chip-part">Honest status</span>
+      <h2>Pre-alpha: what to expect</h2>
+      <p><strong>A new language is easy to promise and hard to use. You should know where it stands before you start.</strong></p>
+      <p><span class="lead-in">What Nikaia checks.</span> The compiler builds real programs today: a calculator, a JSON parser, a log analyser, a
+        small HTTP server, the One Billion Row Challenge. There is no package registry, formatter or
+        language server yet. The roadmap lists what works, the walls you will hit,
+        and where a bug report helps most.</p>
+      <p><span class="lead-in">The limit.</span> Pre-alpha means walls: things that do not work yet, and rules that will still change. The roadmap lists them.</p>
+      <p><a class="safe-in-depth" href="{{ "/good/pre-alpha.html" | relative_url }}">In depth →</a></p>
+    </div>
+    <div class="home-code-side">
+<p class="safe-note">A calculator, a JSON parser, a log analyser, a small HTTP server and the One Billion Row Challenge build today.</p>
+    </div>
+  </div>
+</section>
+
+<section class="home-section home-code-section" id="why">
+  <div class="home-inner home-split">
+    <div class="home-split-text">
+      <span class="safe-chip safe-chip-build">The manifesto</span>
+      <h2>Why Nikaia exists</h2>
+      <p>Good and fast are not opposites. Nikaia is named for Nika, and <em>nik</em> means good.</p>
+      <p><a class="safe-in-depth" href="{{ "/manifesto.html" | relative_url }}">Read the manifesto →</a></p>
+    </div>
+    <div class="home-code-side">
+<p class="safe-note">&ldquo;Good wins.&rdquo; Not over anyone: it denies that good and fast are opposites, and that being decent to the person writing the code has to be paid for at runtime.</p>
+    </div>
+  </div>
+</section>
+

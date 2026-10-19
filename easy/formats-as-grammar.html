@@ -1,0 +1,67 @@
+---
+layout: home
+title: Formats are part of the language
+description: >-
+  Describe a format as a grammar and the compiler builds the parser.
+---
+<!--
+  Level 3: the topic in full. It links on to the specification, the decisions and
+  the issues. Every program and message here was run with a built compiler or is
+  taken from a file in the repository.
+-->
+
+<section class="home-section" id="check">
+  <div class="home-inner">
+    <p class="home-eyebrow home-eyebrow-center"><a href="{{ "/easy/#grammar" | relative_url }}">Easy to understand</a></p>
+    <h1 class="home-heading">Formats are part of the language</h1>
+    <div class="limit-class">
+        <dl class="limit-steps">
+          <dt>The problem</dt>
+          <dd><strong>Reading a log, a protocol or a small language usually means a parsing library, or a parser written by hand.</strong></dd>
+          <dt>An example</dt>
+          <dd>A four-function calculator that reads <code>2 + 3 * (10 - 4) / 2</code>.</dd>
+          <dt>What Nikaia checks</dt>
+          <dd>You describe the format as a <code>grammar</code>, and the compiler builds the parser. Precedence and recursion are rules: the order of the rules is the order of binding. The whole calculator is about 100 lines.</dd>
+          <dt>The limit</dt>
+          <dd>A grammar is a large topic, and this page shows only the idea. The full rules are in Part II, chapter 10.</dd>
+        </dl>
+
+        <details class="limit-details home-code markdown-body" open>
+          <summary>The start of the calculator</summary>
+<pre><code class="language-nika">
+grammar Calc {
+
+    // A lowercase rule is *syntactic*: whitespace between its parts is skipped,
+    // so &quot;2+3&quot; and &quot;2 + 3&quot; both parse and no rule mentions blanks.
+    //
+    // `a - b - c` means `(a - b) - c`: the tails are collected and folded left to
+    // right in the action. (`expr = expr &quot;-&quot; term` would never terminate.)
+    entry rule expr -&gt; i64 =
+        head:term tail:add_tail* {
+            let mut value = head
+            for t in tail { value = value + t }
+            value
+        }
+
+    // Subtraction is addition of a negation, so the fold above needs no operator.
+    rule add_tail -&gt; i64 =
+          &quot;+&quot; t:term { t }
+        | &quot;-&quot; t:term { -t }
+
+    // Division cannot be folded that way, so each operand travels with its
+    // operator as a pair `(Op, i64)`, and `match` takes the pair apart.
+    // `term` sits between `expr` and `factor`, which is why `*` binds tighter
+    // than `+`: precedence is the order of the rules, not a table.
+    rule term -&gt; i64 =
+        head:factor tail:mul_tail* {
+</code></pre>
+        </details>
+      </div>
+    <div class="safe-reading">
+      <h2>Go deeper</h2>
+      <ul><li><a href="https://github.com/Nikaia-Language/Nikaia/blob/main/examples/calc/src/main.nika">The whole calculator: examples/calc</a></li><li><a href="{{ "/docs/specification/20-nikaia-advance.html#chapter-10-metaprogramming-code-that-writes-code" | relative_url }}">Specification, Part II, chapter 10: metaprogramming</a></li><li><a href="{{ "/guide/syntax.html" | relative_url }}">Guide: grammars</a></li></ul>
+    </div>
+    <p class="safe-others">More under Easy to understand: <a href="{{ "/easy/no-async-await.html" | relative_url }}">No async, no await</a><a href="{{ "/easy/readable-errors.html" | relative_url }}">Readable errors</a></p>
+  </div>
+</section>
+
