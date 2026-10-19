@@ -1,0 +1,22 @@
+// A part an arm over a `mut` parameter binds is handed on to a `mut`
+// parameter as the reference it is (ADR-094 D3, #703).
+enum E {
+    Num(i64),
+    Add(E, E),
+    Wrap(E),
+}
+fn deeper(mut e: E) throws {
+    match e {
+        E::Num(n) => {}
+        E::Add(a, b) => {
+            deeper(a)
+            deeper(b)
+        }
+        E::Wrap(x) => { deeper(x) }
+    }
+}
+fn main() throws {
+    let mut e = E::Add(E::Num(1), E::Wrap(E::Num(2)))
+    deeper(e)
+    println("ok")
+}

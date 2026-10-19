@@ -355,7 +355,9 @@ impl EmitState {
         }
         let mut kept_here = false
         if pointer == 0 {
-            if change {
+            if change && self.facts.reborrowed_args.contains(node) {
+                out.push("&mut *")
+            } else if change {
                 out.push("&mut ")
             } else {
                 // **Only an argument made in the call is put into a keep**

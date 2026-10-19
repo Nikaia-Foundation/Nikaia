@@ -234,6 +234,12 @@ pub struct CheckFacts {
     pub reaches: collections::BTreeMap[(String, String), CallReach],
     pub published: collections::BTreeMap[String, Published],
     pub mut_args: collections::BTreeSet[i64],
+    /// The binding each argument of `mut_args` names, by the argument's node.
+    pub mut_arg_bindings: collections::BTreeMap[i64, i64],
+    /// **A `mut` argument that is a reference already** (#703): a part an
+    /// arm over a `mut` parameter bound in place, handed on to a `mut`
+    /// parameter, is lent on as `&mut *part` (ADR-094 D3, D7).
+    pub reborrowed_args: collections::BTreeSet[i64],
     pub copied_args: collections::BTreeSet[i64],
     pub settle_fns: collections::BTreeMap[String, bool],
     pub settle_lets: collections::BTreeMap[i64, bool],
@@ -393,6 +399,8 @@ impl CheckFacts {
             reaches: collections::BTreeMap(),
             published: collections::BTreeMap(),
             mut_args: collections::BTreeSet(),
+            mut_arg_bindings: collections::BTreeMap(),
+            reborrowed_args: collections::BTreeSet(),
             copied_args: collections::BTreeSet(),
             settle_fns: collections::BTreeMap(),
             settle_lets: collections::BTreeMap(),

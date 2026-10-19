@@ -141,6 +141,13 @@ impl CheckState {
                 return true
             }
             self.facts.mut_args.insert(id_of(given_expr) as i64)
+            let bound = match given_expr {
+                Expr::Variable(symbol, _) => self.binding(world.words.resolve(symbol))?.id ?? -1,
+                else => -1,
+            }
+            if bound >= 0 {
+                self.facts.mut_arg_bindings.insert(id_of(given_expr) as i64, bound)
+            }
             return true
         }
         let lends = if own { lends_in_own(contract, position, [world.library]) } else { lends_in(contract, position, [world.library]) }

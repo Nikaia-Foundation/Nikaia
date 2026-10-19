@@ -618,6 +618,24 @@ fn check_core_flow_lent_parts[H: CheckHost](mut state: CheckState, world: ref Ch
     }
 }
 
+/// **A part an arm over a `mut` parameter bound in place is a `&mut`
+/// already** (#703, ADR-094 D3): handed on to a `mut` parameter it is lent on
+/// as it is. Not in an arm that takes the parts out, where they are values.
+fn check_core_flow_parts_handed_on_in_place(mut state: CheckState, body: ref Expr, in_place: ref collections::BTreeSet[i64]) sync {
+    if state.facts.taking_arms.contains_key(id_of(body) as i64) {
+        return
+    }
+    let mut handed: Vec[i64] = []
+    for (node, binding) in state.facts.mut_arg_bindings {
+        if in_place.contains(binding) {
+            handed.push(node)
+        }
+    }
+    for node in handed {
+        state.facts.reborrowed_args.insert(node)
+    }
+}
+
 /// **One arm of a `match`**: its type, or `null` where it jumps (ADR-276 D1).
 fn check_core_flow_arm[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr, on: ref Ty, arm: ref MatchArm, typed: ref Ty, lendable: bool, through_the_reference: bool, mut_subject: ref String?, choice: i64, taken: i64, span: ref Span) -> Ty? sync {
     // **Every alternative of an or-pattern binds the same names** (ADR-291 D1).
@@ -636,6 +654,12 @@ fn check_core_flow_arm[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         owned_text = check_core_flow_owned_texts(state, world, arm.pattern, typed)
     }
     let frame = check_core_flow_frame(state, world, arm.pattern, id_of(arm.body) as i64, parts, lent_parts, owned_text)
+    let mut in_place: collections::BTreeSet[i64] = collections::BTreeSet()
+    for local in frame {
+        if !state.copied(world, local.ty) {
+            in_place.insert(local.id)
+        }
+    }
     state.scope.push(frame)
     state.branch.push((choice, taken))
     let from = state.taken_so_far()
@@ -651,6 +675,7 @@ fn check_core_flow_arm[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     state.a_branch_that_leaves(from, leaves, span)
     if mut_subject != null {
         state.parts_taken_out_of_a_mut_parameter(world, mut_subject ?? "", arm.body, typed, parts, handed_from)
+        check_core_flow_parts_handed_on_in_place(state, arm.body, in_place)
     }
     state.branch.pop()
     state.scope.pop()
