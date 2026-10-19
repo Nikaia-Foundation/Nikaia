@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1094] — 2026-10-19
+
+**check: an open number is handed on once; a + a + … + a checks in linear time**
+- `open_numbers_in` handed back a number once for each place it stood in a value, so every operation of `a + a + … + a` asked, joined and marked each copy and cloned the number's entry each time: 500 terms took about six minutes. It now hands each number back once; what is asked and decided does not change.
+
 ## [0.0.1093] — 2026-10-19
 
 **The user cache is bounded by size, least recently used first (#724)**

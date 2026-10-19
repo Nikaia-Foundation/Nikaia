@@ -25672,7 +25672,12 @@ impl CheckState {
             },
             _ => { },
         }
-        out
+        let mut distinct: Vec<i64> = vec![];
+        for number in out.iter() {
+            let number = nikaia_std::num::value(number);
+            if !distinct.contains(&number) { distinct.push(number); }
+        }
+        distinct
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

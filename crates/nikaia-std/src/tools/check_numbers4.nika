@@ -175,7 +175,8 @@ impl CheckState {
     /// operations whose result is of their operands' type - arithmetic, a bit
     /// operation, a negation. A call, a cast and a comparison make a value of a
     /// type of their own and stop it; so does a shift's count, which is any
-    /// integer (ADR-285 D9).
+    /// integer (ADR-285 D9). Each number once: `a + a + … + a` is one number,
+    /// and every caller acts on each it is handed.
     pub fn open_numbers_in(ref self, world: ref CheckWorld, expr: ref Expr) -> Vec[i64] sync {
         let mut out: Vec[i64] = []
         match expr {
@@ -234,7 +235,13 @@ impl CheckState {
             },
             else => {},
         }
-        return out
+        let mut distinct: Vec[i64] = []
+        for number in out {
+            if !distinct.contains(number) {
+                distinct.push(number)
+            }
+        }
+        return distinct
     }
 
     /// **A value that is nothing but numbers**: literals and open numbers, joined
