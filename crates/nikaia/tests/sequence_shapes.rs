@@ -224,7 +224,7 @@ fn a_filter_keeps_the_back_end_and_loses_the_length() {
         codes(
             "fn main() {\n\
              \x20   let xs = [1, 2, 3]\n\
-             \x20   let back: Vec[ref i64] = xs.iter().filter(fn(x) { x > 1 }).rev().collect()\n\
+             \x20   let back: Vec[i64] = xs.iter().filter(fn(x) { x > 1 }).rev().collect()\n\
              }\n"
         ),
         Vec::<&str>::new()

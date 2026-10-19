@@ -2505,8 +2505,10 @@ fn pick(given: ref Vec[Expr], tail: ref Expr, c: bool) -> i64 {
 A value that is a word by its kind - a number, a `bool`, a `scalar`, an enum
 whose variants hold nothing - is copied at a read, so there is no view of it to
 declare: `ref` on such a type is refused with `NK1257` on a `let`, a parameter,
-a field and a result. `let n: ref i64 = counts[0]` is refused, and
-`let n = counts[0]` is the program. In an `extern "C"` declaration `ref i32`
+a field and a result, and anywhere inside their types: a type argument, a part
+of a tuple, a parameter or the result of a function type. `let n: ref i64 = counts[0]` is refused, and
+`let n = counts[0]` is the program; `Vec[ref i64]` is refused, and `Vec[i64]`
+is the program. In an `extern "C"` declaration `ref i32`
 and `ref mut i32` are the pointers C expects and stay (Part III 15.1). A `ref T` in a body generic over `T` is a
 view whatever `T` becomes.
 

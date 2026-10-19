@@ -1,0 +1,7 @@
+// A walk over numbers yields the numbers, so what it collects is a `Vec[i64]`;
+// `Vec[ref i64]` is `NK1257` (#703).
+fn main() {
+    let xs = [1, 2, 3]
+    let back: Vec[i64] = xs.iter().filter(fn(x) { x > 1 }).collect()
+    println(f"{back.len()} {back[0]}")
+}

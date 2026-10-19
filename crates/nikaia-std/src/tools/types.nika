@@ -259,7 +259,7 @@ fn item_types(names: ref winnow_grammar::InternerContext, item: ref Item, known:
                 types_word_by_ref_maybe(names, ret_type, plain, span, out)
                 types_text_by_ref_maybe(names, ret_type, "result", views, f"result {key}", span, out)
             }
-            block_types(names, body, known, views, out)
+            block_types(names, body, known, views, plain, out)
         }
         Item::Struct { name, fields, is_extern, .. } => {
             let of = names.resolve(name).clone()
@@ -344,7 +344,25 @@ fn item_types(names: ref winnow_grammar::InternerContext, item: ref Item, known:
 // `bool` or a `scalar` is copied at a read, so a parameter, a field or a
 // result written `ref i64` is `NK1257` outside the C boundary. A `let` is
 // refused where its value is read (`check_core_stmt`).
+//
+// **And inside the type, at any depth** (#703): a type argument, a part of a
+// tuple and a parameter or the result of a code type are positions of the
+// same declaration, so `Vec[ref i64]` says nothing `Vec[i64]` does not. A
+// walk over copied values yields the values (ADR-231 D1), and a list of views
+// of them would be written in the language below as one the walk never made.
 fn types_word_by_ref(names: ref winnow_grammar::InternerContext, ty: ref Type, plain: ref collections::BTreeSet[String], position: ref String, span: ref Span, mut out: Vec[Finding]) {
+    for inner in ty.generics {
+        types_word_by_ref(names, inner, plain, "type argument", span, out)
+    }
+    if ty.code != null {
+        let code = ty.code ?? return
+        types_word_by_ref_maybe(names, code.result, plain, span, out)
+    }
+    types_word_by_ref_here(names, ty, plain, position, span, out)
+}
+
+// The type itself, not its arguments.
+fn types_word_by_ref_here(names: ref winnow_grammar::InternerContext, ty: ref Type, plain: ref collections::BTreeSet[String], position: ref String, span: ref Span, mut out: Vec[Finding]) {
     if !ty.is_view || ty.is_mut || ty.is_slice || ty.is_tuple || ty.generics.len() > 0 {
         return
     }
@@ -455,79 +473,87 @@ fn maybe_written_foreign(names: ref winnow_grammar::InternerContext, ty: ref Typ
 }
 
 // The types a body writes on its `let`s, its nested blocks included.
-fn block_types(names: ref winnow_grammar::InternerContext, block: ref Block, known: ref collections::BTreeSet[String], views: ref collections::BTreeSet[String], mut out: Vec[Finding]) {
+fn block_types(names: ref winnow_grammar::InternerContext, block: ref Block, known: ref collections::BTreeSet[String], views: ref collections::BTreeSet[String], plain: ref collections::BTreeSet[String], mut out: Vec[Finding]) {
     for stmt in block.stmts {
         match stmt.node {
             Stmt::Let { ty, value, .. } => {
                 maybe_written(names, ty, known, stmt.span, out)
                 types_text_by_ref_maybe(names, ty, "`let`", views, f"let {stmt.span.start}", stmt.span, out)
                 widths_written_maybe(names, ty, false, stmt.span, out)
-                blocks_types(names, value, known, views, out)
+                // The annotation's own `ref` is refused where the value is
+                // read (`check_core_stmt`); its arguments are refused here.
+                if ty != null {
+                    let annotated: ref Type = ty ?? continue
+                    for inner in annotated.generics {
+                        types_word_by_ref(names, inner, plain, "type argument", stmt.span, out)
+                    }
+                }
+                blocks_types(names, value, known, views, plain, out)
             }
-            Stmt::Comptime { value, .. } => blocks_types(names, value, known, views, out),
-            Stmt::Expr(value) => blocks_types(names, value, known, views, out),
-            Stmt::Return(value) => blocks_types(names, value ?? continue, known, views, out),
+            Stmt::Comptime { value, .. } => blocks_types(names, value, known, views, plain, out),
+            Stmt::Expr(value) => blocks_types(names, value, known, views, plain, out),
+            Stmt::Return(value) => blocks_types(names, value ?? continue, known, views, plain, out),
             Stmt::Assign { target, value, .. } => {
-                blocks_types(names, target, known, views, out)
-                blocks_types(names, value, known, views, out)
+                blocks_types(names, target, known, views, plain, out)
+                blocks_types(names, value, known, views, plain, out)
             }
-            Stmt::For { body, .. } => block_types(names, body, known, views, out),
-            Stmt::While { body, .. } => block_types(names, body, known, views, out),
+            Stmt::For { body, .. } => block_types(names, body, known, views, plain, out),
+            Stmt::While { body, .. } => block_types(names, body, known, views, plain, out),
             else => {}
         }
     }
 }
 
 // The blocks an expression holds, a lambda passed as an argument included.
-fn blocks_types(names: ref winnow_grammar::InternerContext, expr: ref Expr, known: ref collections::BTreeSet[String], views: ref collections::BTreeSet[String], mut out: Vec[Finding]) {
+fn blocks_types(names: ref winnow_grammar::InternerContext, expr: ref Expr, known: ref collections::BTreeSet[String], views: ref collections::BTreeSet[String], plain: ref collections::BTreeSet[String], mut out: Vec[Finding]) {
     match expr {
-        Expr::Block(block, _) => block_types(names, block, known, views, out),
-        Expr::Unsafe(block, _) => block_types(names, block, known, views, out),
-        Expr::Overlap(block, _) => block_types(names, block, known, views, out),
-        Expr::Closure { body, .. } => block_types(names, body, known, views, out),
+        Expr::Block(block, _) => block_types(names, block, known, views, plain, out),
+        Expr::Unsafe(block, _) => block_types(names, block, known, views, plain, out),
+        Expr::Overlap(block, _) => block_types(names, block, known, views, plain, out),
+        Expr::Closure { body, .. } => block_types(names, body, known, views, plain, out),
         Expr::Call { func, args, config, .. } => {
-            blocks_types(names, func, known, views, out)
+            blocks_types(names, func, known, views, plain, out)
             for arg in args {
-                blocks_types(names, arg, known, views, out)
+                blocks_types(names, arg, known, views, plain, out)
             }
             for setting in config {
-                blocks_types(names, setting.value, known, views, out)
+                blocks_types(names, setting.value, known, views, plain, out)
             }
         }
         Expr::MethodCall { receiver, args, config, .. } => {
-            blocks_types(names, receiver, known, views, out)
+            blocks_types(names, receiver, known, views, plain, out)
             for arg in args {
-                blocks_types(names, arg, known, views, out)
+                blocks_types(names, arg, known, views, plain, out)
             }
             for setting in config {
-                blocks_types(names, setting.value, known, views, out)
+                blocks_types(names, setting.value, known, views, plain, out)
             }
         }
         Expr::SafeMethod { receiver, args, config, .. } => {
-            blocks_types(names, receiver, known, views, out)
+            blocks_types(names, receiver, known, views, plain, out)
             for arg in args {
-                blocks_types(names, arg, known, views, out)
+                blocks_types(names, arg, known, views, plain, out)
             }
             for setting in config {
-                blocks_types(names, setting.value, known, views, out)
+                blocks_types(names, setting.value, known, views, plain, out)
             }
         }
         Expr::If { then_branch, else_branch, .. } => {
-            block_types(names, then_branch, known, views, out)
-            block_types(names, else_branch ?? return, known, views, out)
+            block_types(names, then_branch, known, views, plain, out)
+            block_types(names, else_branch ?? return, known, views, plain, out)
         }
         Expr::TryCatch { expr, handler, .. } => {
-            blocks_types(names, expr, known, views, out)
-            block_types(names, handler, known, views, out)
+            blocks_types(names, expr, known, views, plain, out)
+            block_types(names, handler, known, views, plain, out)
         }
         Expr::Match { arms, .. } => {
             for arm in arms {
-                blocks_types(names, arm.body, known, views, out)
+                blocks_types(names, arm.body, known, views, plain, out)
             }
         }
         Expr::Select(arms, _) => {
             for arm in arms {
-                block_types(names, arm.body, known, views, out)
+                block_types(names, arm.body, known, views, plain, out)
             }
         }
         else => {}

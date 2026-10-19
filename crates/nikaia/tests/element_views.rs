@@ -154,6 +154,45 @@ fn ref_int_is_refused_as_a_word() {
     }
 }
 
+/// D2 inside a type (#703): a type argument, a tuple's part and a code type's
+/// parameter or result are positions of the declaration, at a `let` too. A walk
+/// over numbers yields the numbers (ADR-231 D1), so `Vec[ref i64]` collected
+/// from one was a list of views `rustc` refused.
+#[test]
+fn a_word_declared_ref_inside_a_type_is_refused() {
+    for program in [
+        "fn main() {\n\
+         \x20   let xs = [1, 2, 3]\n\
+         \x20   let back: Vec[ref i64] = xs.iter().filter(fn(x) { x > 1 }).collect()\n\
+         \x20   println(f\"{back.len()}\")\n\
+         }\n",
+        "fn f(v: Vec[ref i64]) -> i64 { return 1 }\n\nfn main() { println(\"x\") }\n",
+        "struct S { xs: Vec[ref bool] }\n\nfn main() { println(\"x\") }\n",
+        "fn f() -> (String, ref u8)? { return null }\n\nfn main() { println(\"x\") }\n",
+        "fn f(g: fn(ref i64) -> i64 sync) -> i64 { return 1 }\n\nfn main() { println(\"x\") }\n",
+        "fn f(g: fn(i64) -> ref i64 sync) -> i64 { return 1 }\n\nfn main() { println(\"x\") }\n",
+    ] {
+        let found = findings(program);
+        let f = found
+            .iter()
+            .find(|f| f.code == "NK1257")
+            .unwrap_or_else(|| panic!("{program}\n{found:#?}"));
+        assert!(
+            f.help.as_deref().unwrap_or("").contains("without `ref`"),
+            "{f:#?}"
+        );
+    }
+    // Without `ref` the same `let` is the program.
+    let found = findings(
+        "fn main() {\n\
+         \x20   let xs = [1, 2, 3]\n\
+         \x20   let back: Vec[i64] = xs.iter().filter(fn(x) { x > 1 }).collect()\n\
+         \x20   println(f\"{back.len()}\")\n\
+         }\n",
+    );
+    assert!(found.is_empty(), "{found:#?}");
+}
+
 /// D2's exception: at the C boundary `ref i32` and `ref mut i32` are the
 /// pointers C expects, and stay.
 #[test]
