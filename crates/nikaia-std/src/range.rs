@@ -166,6 +166,7 @@ macro_rules! slices {
         $(
             impl crate::index::At for Span<$t> {
                 type Out = Range<usize>;
+                #[inline]
                 #[track_caller]
                 fn at(self) -> Range<usize> {
                     crate::index::at(self.start..self.end)
@@ -183,6 +184,7 @@ macro_rules! slices_through {
         $(
             impl crate::index::At for Through<$t> {
                 type Out = RangeInclusive<usize>;
+                #[inline]
                 #[track_caller]
                 fn at(self) -> RangeInclusive<usize> {
                     crate::index::at(self.start..=self.end)

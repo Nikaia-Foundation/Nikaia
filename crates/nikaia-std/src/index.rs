@@ -67,6 +67,7 @@ macro_rules! signed {
 
             impl At for std::ops::Range<$t> {
                 type Out = std::ops::Range<usize>;
+                #[inline]
                 #[track_caller]
                 fn at(self) -> std::ops::Range<usize> {
                     std::ops::Range { start: self.start.at(), end: self.end.at() }
@@ -76,6 +77,7 @@ macro_rules! signed {
             /// `xs[a..]` (#527): from `a` to the end.
             impl At for std::ops::RangeFrom<$t> {
                 type Out = std::ops::RangeFrom<usize>;
+                #[inline]
                 #[track_caller]
                 fn at(self) -> std::ops::RangeFrom<usize> {
                     self.start.at()..
@@ -84,6 +86,7 @@ macro_rules! signed {
 
             impl At for std::ops::RangeInclusive<$t> {
                 type Out = std::ops::RangeInclusive<usize>;
+                #[inline]
                 #[track_caller]
                 fn at(self) -> std::ops::RangeInclusive<usize> {
                     let (start, end) = self.into_inner();
@@ -109,6 +112,7 @@ macro_rules! unsigned {
 
             impl At for std::ops::Range<$t> {
                 type Out = std::ops::Range<usize>;
+                #[inline]
                 fn at(self) -> std::ops::Range<usize> {
                     std::ops::Range { start: self.start.at(), end: self.end.at() }
                 }
@@ -116,6 +120,7 @@ macro_rules! unsigned {
 
             impl At for std::ops::RangeFrom<$t> {
                 type Out = std::ops::RangeFrom<usize>;
+                #[inline]
                 fn at(self) -> std::ops::RangeFrom<usize> {
                     self.start.at()..
                 }

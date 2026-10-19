@@ -65,6 +65,7 @@ impl Bytes {
     /// The first `byte` at or after the position `from`, or `None`
     /// (ADR-320 D6): a byte search of the kind `memchr` does. A `from` before
     /// the start searches from the start; one past the end finds nothing.
+    #[inline]
     pub fn find(&self, byte: u8, from: i64) -> Option<i64> {
         ByteReads::find(&*self.buffer, byte, from)
     }
@@ -98,10 +99,11 @@ impl ByteReads for [u8] {
         })
     }
 
+    #[inline]
     fn find(&self, byte: u8, from: i64) -> Option<i64> {
         let start = usize::try_from(from.max(0)).ok()?;
         let rest = self.get(start..)?;
-        let at = rest.iter().position(|b| *b == byte)?;
+        let at = memchr::memchr(byte, rest)?;
         i64::try_from(start + at).ok()
     }
 }
@@ -220,6 +222,25 @@ mod tests {
         assert_eq!(b.find(b';', 2), Some(3));
         assert_eq!(b.find(b';', 4), None);
         assert_eq!(b.find(b';', 9), None);
+    }
+
+    /// **`find` finds a byte wherever it is** (#701): at every offset of a
+    /// 64-byte buffer, from every start, where `memchr`'s word-wide search
+    /// and its tail meet; and nothing where it is absent or there are no bytes.
+    #[test]
+    fn find_at_every_offset() {
+        for at in 0..64usize {
+            let mut v = vec![b'.'; 64];
+            v[at] = b';';
+            let b = Bytes::from(v);
+            for from in -1..=65i64 {
+                let want = (from <= at as i64).then_some(at as i64);
+                assert_eq!(b.find(b';', from), want, "needle {at}, from {from}");
+            }
+            assert_eq!(b.find(b'x', 0), None);
+        }
+        assert_eq!(Bytes::new().find(b';', 0), None);
+        assert_eq!(Bytes::from(vec![b';'; 64]).find(b';', 63), Some(63));
     }
 
     /// **And a copy is asked for**, never taken.

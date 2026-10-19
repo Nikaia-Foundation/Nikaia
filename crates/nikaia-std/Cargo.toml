@@ -27,6 +27,9 @@ trace = ["winnow-grammar/trace"]
 # trusted, are this one type with their hasher (`hash.rs`); no default hasher,
 # because the compiler always names one.
 hashbrown = { version = "0.17", default-features = false }
+# **`Bytes::find` is `memchr`** (ADR-320 D6, #701): a word-wide search for one
+# byte, never a loop over them. Already in every build through `winnow`.
+memchr = "2"
 # Views that outlive the scope that read their buffer (ADR-283); the `unsafe`
 # it takes lives there, with its own checks (ADR-218).
 tether = { path = "../unsafe/tether" }

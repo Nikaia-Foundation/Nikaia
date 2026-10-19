@@ -489,6 +489,7 @@ dependencies = [
  "child-usage",
  "file-ring",
  "hashbrown 0.17.1",
+ "memchr",
  "polled",
  "proven-index",
  "rayon",
