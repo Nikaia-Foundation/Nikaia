@@ -1,0 +1,27 @@
+// #708: a parameter the body keeps, handed back whole beside a parameter of
+// static text, goes into the result of either kind as text of its own: no
+// view of it is handed back. One read out of it would be (NK2302).
+
+fn pick(a: String, b: String) -> String {
+    let mut c = a
+    c.push_str("!")
+    if c.len() > 3 {
+        return c
+    }
+    return b
+}
+
+fn keepit(a: String, b: String) -> String {
+    let mut all: Vec[String] = []
+    all.push(a.clone())
+    if all.len() > 1 {
+        return b
+    }
+    return a
+}
+
+fn main() {
+    println(pick(f"xy{1}", "lit"))
+    println(pick(f"x{1}", "lit"))
+    println(keepit(f"y{1}", "lit"))
+}

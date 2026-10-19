@@ -64401,6 +64401,20 @@ fn rsrc_any_ty_holds_view(asked: &Asked<'_, '_, '_>, types: &[Ty]) -> bool {
 }
 
 fn rsrc_eval(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, node: &Expr, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
+    let reach = rsrc_eval_node(unit, asked, here, known, own_buffer, node, flow);
+    if rsrc_passes_whole(node) { return reach; }
+    rsrc_derived(&reach)
+}
+
+fn rsrc_passes_whole(node: &Expr) -> bool { matches!(node, Expr::Variable(_, _) | Expr::Block(_, _) | Expr::Unsafe(_, _) | Expr::Overlap(_, _) | Expr::If { .. } | Expr::Match { .. } | Expr::Coalesce { .. } | Expr::Return(_, _)) }
+
+fn rsrc_derived(reach: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {
+    let mut out = rsrc_none();
+    for entry in reach.iter() { if entry.starts_with('=') { out.insert(format!("!{}", nikaia_std::index::or(entry.strip_prefix('='), || ""))); } else { out.insert(entry.to_owned()); } }
+    out
+}
+
+fn rsrc_eval_node(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &impl Fn(&Expr) -> bool, node: &Expr, flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
     match node {
         Expr::Variable(name, _) => { let name = *name; rsrc_of_name(&flow, asked.names.resolve(name)) },
         Expr::Field { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; rsrc_field(unit, asked, here, known, own_buffer, base, asked.names.resolve(name), flow) },
@@ -65014,7 +65028,7 @@ fn rsrc_function(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Option<&Type>,
                 let owned = asked.names.resolve(arg.name).to_owned();
                 if (*arg.ty.code).is_none() && !arg.mutable && !nikaia_std::list::contains(&sources, &owned) && !rsrc_scalar(asked, &arg.ty) {
                     let mut marked = rsrc_none();
-                    marked.insert(format!("!{}", owned));
+                    if rsrc_either_text(asked, (ret_type).as_ref()) && rsrc_plain_text(asked, &arg.ty) { marked.insert(format!("={}", owned)); } else { marked.insert(format!("!{}", owned)); }
                     flow.env.insert(owned, marked);
                 }
             }
@@ -65055,6 +65069,13 @@ fn rsrc_function(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Option<&Type>,
     }
     false
 }
+
+fn rsrc_either_text(asked: &Asked<'_, '_, '_>, ty: Option<&Type>) -> bool {
+    let result = match ty { Some(__nikaia_value) => __nikaia_value, None => return false };
+    result.either && rsrc_plain_text(asked, result)
+}
+
+fn rsrc_plain_text(asked: &Asked<'_, '_, '_>, ty: &Type) -> bool { (*ty.code).is_none() && !ty.is_nullable && ty.generics.is_empty() && asked.names.resolve(ty.name) == "String" }
 
 fn rsrc_tail(body: &Block, tail: &collections::BTreeSet<String>, flow: &mut ResultSrcFlow) {
     let count = body.stmts.len() as i64;

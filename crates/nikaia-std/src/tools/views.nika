@@ -1606,6 +1606,45 @@ fn rsrc_any_ty_holds_view(asked: ref Asked, types: ref Vec[Ty]) -> bool {
 // What the expression's value points into. Anything nested that is a way out
 // is recorded in `flow`.
 fn rsrc_eval(unit: ref Unit, asked: ref Asked, here: ref Here, known: ref collections::BTreeMap[String, ResultSrcKnown], own_buffer: fn(ref Expr) -> bool sync, node: ref Expr, mut flow: ResultSrcFlow) -> collections::BTreeSet[String] {
+    let reach = rsrc_eval_node(unit, asked, here, known, own_buffer, node, flow)
+    if rsrc_passes_whole(node) {
+        return reach
+    }
+    return rsrc_derived(reach)
+}
+
+// **A value handed on as it is**: a name, or a choice, block or fallback
+// whose value is one of its own ways (#708). Anything else made of a
+// parameter taken by value is a view of it.
+fn rsrc_passes_whole(node: ref Expr) -> bool {
+    return match node {
+        Expr::Variable(_, _) => true,
+        Expr::Block(_, _) => true,
+        Expr::Unsafe(_, _) => true,
+        Expr::Overlap(_, _) => true,
+        Expr::If { .. } => true,
+        Expr::Match { .. } => true,
+        Expr::Coalesce { .. } => true,
+        Expr::Return(_, _) => true,
+        else => false,
+    }
+}
+
+// A parameter taken by value and handed on whole (`=a`) becomes a view of it
+// (`!a`) once anything is read out of it.
+fn rsrc_derived(reach: ref collections::BTreeSet[String]) -> collections::BTreeSet[String] {
+    let mut out = rsrc_none()
+    for entry in reach {
+        if entry.starts_with("=") {
+            out.insert(f"!{entry.strip_prefix("=") ?? ""}")
+        } else {
+            out.insert(entry.clone())
+        }
+    }
+    return out
+}
+
+fn rsrc_eval_node(unit: ref Unit, asked: ref Asked, here: ref Here, known: ref collections::BTreeMap[String, ResultSrcKnown], own_buffer: fn(ref Expr) -> bool sync, node: ref Expr, mut flow: ResultSrcFlow) -> collections::BTreeSet[String] {
     return match node {
         Expr::Variable(name, _) => rsrc_of_name(flow, asked.names.resolve(name)),
         Expr::Field { base, name, .. } => rsrc_field(unit, asked, here, known, own_buffer, base, asked.names.resolve(name), flow),
@@ -2311,11 +2350,18 @@ fn rsrc_function(unit: ref Unit, asked: ref Asked, subject: ref Type?, trait_nam
             // **A parameter the body owns** (taken by value, not lent): a view
             // of it dies with the call, and nothing keeps it. Marked with a
             // `!`, which is refused where a way out reaches it.
+            // **One handed back whole into text of either kind** (ADR-282 D12,
+            // #708) moves in as text of its own, no view: marked with a `=`,
+            // which becomes a `!` once anything is read out of it.
             for arg in args {
                 let owned = asked.names.resolve(arg.name).clone()
                 if arg.ty.code == null && !arg.mutable && !sources.contains(owned) && !rsrc_scalar(asked, arg.ty) {
                     let mut marked = rsrc_none()
-                    marked.insert(f"!{owned}")
+                    if rsrc_either_text(asked, ret_type) && rsrc_plain_text(asked, arg.ty) {
+                        marked.insert(f"={owned}")
+                    } else {
+                        marked.insert(f"!{owned}")
+                    }
                     flow.env.insert(owned, marked)
                 }
             }
@@ -2361,6 +2407,17 @@ fn rsrc_function(unit: ref Unit, asked: ref Asked, subject: ref Type?, trait_nam
         else => {}
     }
     return false
+}
+
+// A result of text of either kind (ADR-282 D12): `String` the text tiers made
+// mixed.
+fn rsrc_either_text(asked: ref Asked, ty: ref Type?) -> bool {
+    let result = ty ?? return false
+    return result.either && rsrc_plain_text(asked, result)
+}
+
+fn rsrc_plain_text(asked: ref Asked, ty: ref Type) -> bool {
+    return ty.code == null && !ty.is_nullable && ty.generics.len() == 0 && asked.names.resolve(ty.name) == "String"
 }
 
 // The last expression of a body is a way out too.
