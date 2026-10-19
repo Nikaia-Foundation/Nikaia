@@ -1273,6 +1273,16 @@ body {
   .safe-tile-b { grid-column: 1 / -1; }
 }
 
+.safe-others {
+  margin: 24px 0 0;
+  color: var(--nk-fg-muted);
+  font-size: 15px;
+}
+
+.safe-others a {
+  margin-right: 14px;
+}
+
 .limit-class {
   padding: 24px;
   border: 1px solid var(--nk-border);

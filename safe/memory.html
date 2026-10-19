@@ -1,0 +1,33 @@
+---
+layout: home
+title: Tasks that use too much memory
+description: >-
+  One task should not be able to consume unlimited memory. What Nikaia checks, an example, and where the check stops.
+---
+<!--
+  One of the five "Very safe" pages the tiles on the home page lead to. Every
+  program and message in it was run with a built compiler; where a check does
+  not exist yet, the text says so.
+-->
+
+<section class="home-section" id="check">
+  <div class="home-inner">
+    <p class="home-eyebrow home-eyebrow-center"><a href="{{ "/#safe" | relative_url }}">Very safe</a></p>
+    <h1 class="home-heading">Tasks that use too much memory</h1>
+    <div class="limit-class">
+                <dl class="limit-steps">
+          <dt>The problem</dt>
+          <dd><strong>One task should not be able to consume unlimited memory.</strong></dd>
+          <dt>An example</dt>
+          <dd>A task processes a large file and exhausts the memory available to it.</dd>
+          <dt>What Nikaia checks</dt>
+          <dd>A calculation that runs while the program is built has a limit on its steps and its memory, and stops with a message when it passes them. The language is specified so that each task at run time gets a memory budget of its own, and a task that exceeds it stops without taking the rest of the program down.</dd>
+          <dt>The limit</dt>
+          <dd>This is a protection, not a proof. Nikaia does not prove at build time that a task stays within its budget, and the run-time budget is not yet part of what the toolchain enforces.</dd>
+        </dl>
+
+      </div>
+    <p class="safe-others">The other four: <a href="{{ "/safe/conflicting-actions.html" | relative_url }}">Conflicting actions</a><a href="{{ "/safe/stuck-tasks.html" | relative_url }}">Tasks that get stuck</a><a href="{{ "/safe/unhandled-errors.html" | relative_url }}">Errors that go unhandled</a><a href="{{ "/safe/broken-promises.html" | relative_url }}">Broken promises</a></p>
+  </div>
+</section>
+

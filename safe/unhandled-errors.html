@@ -1,0 +1,55 @@
+---
+layout: home
+title: Errors that go unhandled
+description: >-
+  Something fails and nothing deals with it. What Nikaia checks, an example, and where the check stops.
+---
+<!--
+  One of the five "Very safe" pages the tiles on the home page lead to. Every
+  program and message in it was run with a built compiler; where a check does
+  not exist yet, the text says so.
+-->
+
+<section class="home-section" id="check">
+  <div class="home-inner">
+    <p class="home-eyebrow home-eyebrow-center"><a href="{{ "/#safe" | relative_url }}">Very safe</a></p>
+    <h1 class="home-heading">Errors that go unhandled</h1>
+    <div class="limit-class">
+                <dl class="limit-steps">
+          <dt>The problem</dt>
+          <dd><strong>When something fails, the program needs a way to deal with it.</strong></dd>
+          <dt>An example</dt>
+          <dd>A program reads its configuration file. The file is missing, but the calling code assumes the read succeeded.</dd>
+          <dt>What Nikaia checks</dt>
+          <dd>Functions declare when they can fail, and what they can fail with is worked out from their bodies. A function that calls something that can fail, and neither declares it nor handles it, is rejected when the program is built.</dd>
+          <dt>The limit</dt>
+          <dd>For functions from outside Nikaia that nothing describes, Nikaia cannot know every way they fail. A description of the library closes that gap. The check shows where failures are not accounted for; it does not make the handling itself correct.</dd>
+        </dl>
+        <details class="limit-details home-code markdown-body" open>
+          <summary>Show the program and what Nikaia says</summary>
+<pre><code class="language-nika">use std::fs
+
+fn load() -&gt; String {
+    return fs::read_to_string("config.txt", fs::Root::Anywhere)
+}
+
+fn main() {
+    println(load())
+}
+</code></pre>
+<pre class="diagnostic"><code><span class="d-gutter">$</span> <b>nikaia check main.nika</b>
+<span class="d-error">error[NK2605]</span><b>: This function can fail, because `fs::read_to_string` can fail.</b>
+<span class="d-gutter">  --&gt;</span> main.nika:4:5
+<span class="d-gutter">   |</span>
+<span class="d-gutter"> 4 |</span>     return fs::read_to_string("config.txt", fs::Root::Anywhere)
+<span class="d-gutter">   |</span>     <span class="d-error">^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span>
+<span class="d-gutter">   |</span>
+<span class="d-gutter">   =</span> <span class="d-note">note:</span> `fs::read_to_string` can fail with `io::IoError`.
+<span class="d-gutter">   =</span> <span class="d-note">note:</span> A call that can fail looks like any other call, so its failure passes straight through this function unless you handle it.
+<span class="d-gutter">   =</span> <span class="d-help">help:</span> Add `throws` to `load`, or handle it at the call: `… catch { … }`.</code></pre>
+        </details>
+      </div>
+    <p class="safe-others">The other four: <a href="{{ "/safe/conflicting-actions.html" | relative_url }}">Conflicting actions</a><a href="{{ "/safe/stuck-tasks.html" | relative_url }}">Tasks that get stuck</a><a href="{{ "/safe/memory.html" | relative_url }}">Tasks that use too much memory</a><a href="{{ "/safe/broken-promises.html" | relative_url }}">Broken promises</a></p>
+  </div>
+</section>
+

@@ -1,0 +1,55 @@
+---
+layout: home
+title: Conflicting actions
+description: >-
+  Two tasks change the same value at once, and one update overwrites the other. What Nikaia checks, an example, and where the check stops.
+---
+<!--
+  One of the five "Very safe" pages the tiles on the home page lead to. Every
+  program and message in it was run with a built compiler; where a check does
+  not exist yet, the text says so.
+-->
+
+<section class="home-section" id="check">
+  <div class="home-inner">
+    <p class="home-eyebrow home-eyebrow-center"><a href="{{ "/#safe" | relative_url }}">Very safe</a></p>
+    <h1 class="home-heading">Conflicting actions</h1>
+    <div class="limit-class">
+                <dl class="limit-steps">
+          <dt>The problem</dt>
+          <dd><strong>When tasks interfere with each other, results can go wrong.</strong></dd>
+          <dt>An example</dt>
+          <dd>Two tasks update the same account balance. One update can overwrite the other, and money appears to disappear.</dd>
+          <dt>What Nikaia checks</dt>
+          <dd>Nikaia restricts how tasks access and change shared data. A task that changes a value the other tasks also use is rejected when the program is built, with the way out named: give each task a value of its own, or keep the value in shared state that is changed through a lock.</dd>
+          <dt>The limit</dt>
+          <dd>Code outside Nikaia can create its own threads. When Nikaia cannot establish the necessary guarantees, you provide a safe boundary, such as passing a copy instead of shared data. The rules reject unsafe constructions; they are not a proof that every conceivable race is found.</dd>
+        </dl>
+        <details class="limit-details home-code markdown-body" open>
+          <summary>Show the program and what Nikaia says</summary>
+<pre><code class="language-nika">use std::task
+
+fn main() throws {
+    let mut balance = 100
+    task::scope fn(s) {
+        s.spawn fn { balance = balance + 50 }
+        s.spawn fn { balance = balance - 30 }
+    }
+    println(f"{balance}")
+}
+</code></pre>
+<pre class="diagnostic"><code><span class="d-gutter">$</span> <b>nikaia check main.nika</b>
+<span class="d-error">error[NK2107]</span><b>: You're changing `balance` in a task of `task::scope`, and the scope's tasks all share `balance`.</b>
+<span class="d-gutter">  --&gt;</span> main.nika:6:22
+<span class="d-gutter">   |</span>
+<span class="d-gutter"> 6 |</span>         s.spawn fn { balance = balance + 50 }
+<span class="d-gutter">   |</span>                      <span class="d-error">^^^^^^^^^^^^^^^^^^^^^^</span>
+<span class="d-gutter">   |</span>
+<span class="d-gutter">   =</span> <span class="d-note">note:</span> A scope's tasks run at the same time, each on a core of its own, so they would write `balance` at once.
+<span class="d-gutter">   =</span> <span class="d-help">help:</span> Give each task a value of its own and combine them after the scope, or keep `balance` in a `SharedMut` and change it through `update`.</code></pre>
+        </details>
+      </div>
+    <p class="safe-others">The other four: <a href="{{ "/safe/stuck-tasks.html" | relative_url }}">Tasks that get stuck</a><a href="{{ "/safe/memory.html" | relative_url }}">Tasks that use too much memory</a><a href="{{ "/safe/unhandled-errors.html" | relative_url }}">Errors that go unhandled</a><a href="{{ "/safe/broken-promises.html" | relative_url }}">Broken promises</a></p>
+  </div>
+</section>
+

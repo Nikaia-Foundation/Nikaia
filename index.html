@@ -94,7 +94,7 @@ description: >-
       and says where it cannot. Here are five of them, as they look in a program.
     </p>
     <div class="safe-tiles">
-      <a class="safe-tile safe-tile-a" href="{{ "/very-safe.html" | relative_url }}#conflicts">
+      <a class="safe-tile safe-tile-a" href="{{ "/safe/conflicting-actions.html" | relative_url }}">
         <span class="safe-chip safe-chip-build">Refused when built</span>
         <h3>Conflicting actions</h3>
         <p>Two tasks change the same value at once. One update overwrites the other.</p>
@@ -102,9 +102,9 @@ description: >-
     s.spawn fn { balance = balance + 50 }
     s.spawn fn { balance = balance - 30 }
 }</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-error">error</span><b>: You're changing `balance` in a task of `task::scope`, and the scope's tasks all share `balance`.</b></code></pre></div>
-        <span class="safe-more">Details and limits →</span>
+        <span class="safe-more">Read more →</span>
       </a>
-      <a class="safe-tile safe-tile-a" href="{{ "/very-safe.html" | relative_url }}#stuck">
+      <a class="safe-tile safe-tile-a" href="{{ "/safe/stuck-tasks.html" | relative_url }}">
         <span class="safe-chip safe-chip-part">Partly checked</span>
         <h3>Tasks that get stuck</h3>
         <p>Tasks wait for each other forever, or one holds up everyone.</p>
@@ -112,26 +112,26 @@ description: >-
     acc.balance -= 30
     time::sleep(5.millis())
 }</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-error">error</span><b>: `time::sleep` can pause, but you're holding a lock here.</b></code></pre></div>
-        <span class="safe-more">Details and limits →</span>
+        <span class="safe-more">Read more →</span>
       </a>
-      <a class="safe-tile safe-tile-a" href="{{ "/very-safe.html" | relative_url }}#memory">
+      <a class="safe-tile safe-tile-a" href="{{ "/safe/memory.html" | relative_url }}">
         <span class="safe-chip safe-chip-run">Run-time protection</span>
         <h3>Too much memory</h3>
         <p>One task should not be able to use up memory without limit.</p>
         <p class="safe-note">Every task is meant to get a budget of its own and stop when it is spent, taking nothing else down. This is a protection while the program runs, not something the compiler proves.</p>
 
-        <span class="safe-more">Details and limits →</span>
+        <span class="safe-more">Read more →</span>
       </a>
-      <a class="safe-tile safe-tile-b" href="{{ "/very-safe.html" | relative_url }}#errors">
+      <a class="safe-tile safe-tile-b" href="{{ "/safe/unhandled-errors.html" | relative_url }}">
         <span class="safe-chip safe-chip-build">Refused when built</span>
         <h3>Errors that go unhandled</h3>
         <p>Something fails and nothing deals with it.</p>
 <div class="home-code markdown-body"><pre><code class="language-nika">fn load() -&gt; String {
     return fs::read_to_string("config.txt", fs::Root::Anywhere)
 }</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-error">error</span><b>: This function can fail, because `fs::read_to_string` can fail.</b></code></pre></div>
-        <span class="safe-more">Details and limits →</span>
+        <span class="safe-more">Read more →</span>
       </a>
-      <a class="safe-tile safe-tile-b" href="{{ "/very-safe.html" | relative_url }}#promises">
+      <a class="safe-tile safe-tile-b" href="{{ "/safe/broken-promises.html" | relative_url }}">
         <span class="safe-chip safe-chip-build">Refused when built</span>
         <h3>Broken promises</h3>
         <p>A part of the program is called outside what it was told to expect.</p>
@@ -141,168 +141,8 @@ description: >-
 }
 
 percent(140)</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-error">error</span><b>: This call breaks `percent`'s precondition `n &gt;= 0 &amp;&amp; n &lt;= 100` every time it is reached.</b></code></pre></div>
-        <span class="safe-more">Details and limits →</span>
+        <span class="safe-more">Read more →</span>
       </a>
-    </div>
-    <p class="safe-below">Broken promises are contracts; how they work, and how they reach into loops, is shown in full below.
-    <a href="{{ "/very-safe.html" | relative_url }}">All five, with what each check covers and where it stops →</a></p>
-  </div>
-</section>
-
-<section class="home-section home-code-section" id="proofs">
-  <div class="home-inner home-split">
-    <div class="home-split-text">
-      <p class="home-eyebrow">Very safe · Contracts</p>
-      <h2>An <code>assert</code> is a contract.</h2>
-      <p>
-        There is no separate specification language. You write
-        <code>assert(whole &gt; 0)</code> at the top of <code>percent</code>, and it becomes a
-        precondition: each caller has to show that <code>whole</code> is positive.
-      </p>
-      <p>
-        <code>share</code> only passes its <code>total</code> on, so the duty passes on with it.
-        The call with <code>0</code> two functions up is refused, and the error names the value
-        and the <code>assert</code> it came from.
-      </p>
-      <p>
-        An <code>assert</code> about the value a function returns is a postcondition.
-        <code>at_least_zero</code> never returns less than 0, so <code>per_row</code> knows that
-        <code>r</code> is at least 1 and its call to <code>percent</code> needs no check.
-      </p>
-      <p>
-        A call whose arguments are all known is run while the program is built. So
-        <code>assert(fib(10) == 54)</code> does not build: <code>fib(10)</code> is 55.
-      </p>
-      <p><a href="{{ "/docs/specification/adr/adr-269.html" | relative_url }}">How a claim becomes a contract →</a></p>
-    </div>
-    <div class="home-code markdown-body home-code-stack">
-<pre><code class="language-nika">fn percent(part: int, whole: int) -&gt; int {
-    assert(whole &gt; 0)
-    return part * 100 / whole
-}
-
-fn share(done: int, total: int) -&gt; int {
-    return percent(done, total)     // hands the duty on to its caller
-}
-
-fn at_least_zero(n: int) -&gt; int {
-    return 0 if n &lt; 0
-    assert(n &gt;= 0)                  // a claim about the result
-    return n
-}
-
-fn per_row(rows: int) -&gt; int {
-    let r = at_least_zero(rows) + 1
-    return percent(50, r)           // r &gt;= 1: proved, no check
-}
-
-fn main() {
-    println(f"{per_row(4)}% {share(3, 4)}%")
-    // and this call breaks it:
-    println(f"{share(1, 0)}%")
-}
-</code></pre>
-<pre class="diagnostic"><code><span class="d-gutter">$</span> <b>nikaia build</b>
-<span class="d-error">error[NK1207]</span><b>: This call breaks `share`'s precondition `total &gt; 0` every time it is reached.</b>
-<span class="d-gutter">   --&gt;</span> …/pre/src/main.nika:24:5
-<span class="d-gutter">    |</span>
-<span class="d-gutter"> 24 |</span>     println(f"{share(1, 0)}%")
-<span class="d-gutter">    |</span>     <span class="d-error">^^^^^^^^^^^^^^^^^^^^^^^^^^</span>
-<span class="d-gutter">    |</span>
-<span class="d-gutter">    =</span> <span class="d-note">note:</span> Here `total` is 0.
-<span class="d-gutter">    =</span> <span class="d-note">note:</span> The precondition is `assert(whole &gt; 0)` in `percent`, carried back to `share`'s entry.
-<span class="d-gutter">    =</span> <span class="d-help">help:</span> Pass `share` arguments for which `total &gt; 0` holds, or check them with a guard before the call.
-1 claim shown false</code></pre>
-<pre><code class="language-nika">fn fib(n: int) -&gt; int {
-    let mut a = 0
-    let mut b = 1
-    for _ in 0..&lt;n {
-        let next = a + b
-        a = b
-        b = next
-    }
-    return a
-}
-
-fn main() {
-    assert(fib(10) == 54)
-    println(f"{fib(10)}")
-}
-</code></pre>
-<pre class="diagnostic"><code><span class="d-gutter">$</span> <b>nikaia build</b>
-<span class="d-error">error[NK1207]</span><b>: `fib(10) == 54` is false every time it is reached.</b>
-<span class="d-gutter">   --&gt;</span> …/fib/src/main.nika:13:5
-<span class="d-gutter">    |</span>
-<span class="d-gutter"> 13 |</span>     assert(fib(10) == 54)
-<span class="d-gutter">    |</span>     <span class="d-error">^^^^^^^^^^^^^^^^^^^^^</span>
-<span class="d-gutter">    |</span>
-<span class="d-gutter">    =</span> <span class="d-note">note:</span> What is known before it rules the claim out: no value of its own; the claim is false as written.
-<span class="d-gutter">    =</span> <span class="d-note">note:</span> `fib(10)` is 55, run while the program was built.
-<span class="d-gutter">    =</span> <span class="d-help">help:</span> If the claim is right, the code before it is wrong; if the code is right, the claim is.
-1 claim shown false</code></pre>
-    </div>
-  </div>
-</section>
-
-<section class="home-section home-section-alt home-code-section" id="loops">
-  <div class="home-inner home-split">
-    <div class="home-split-text">
-      <p class="home-eyebrow">Very safe · Loops</p>
-      <h2>A loop needs no invariant.</h2>
-      <p>
-        The <code>assert</code> after the loop in <code>steps</code> reads <code>total</code>,
-        which the loop changes. Usually a proof tool wants you to write what holds on every turn.
-        Here nobody did.
-      </p>
-      <p>
-        The compiler looks for such a fact itself, then checks it three times: it holds before
-        the first turn, each turn keeps it, and when the loop ends it gives the claim.
-        <code>--asserts</code> prints the fact it found and how it found it.
-      </p>
-      <p>
-        In <code>price</code>, <code>p</code> is followed through each assignment and both sides
-        of the <code>if</code>. Every claim here is proved, so none of them costs anything when
-        the program runs.
-      </p>
-      <p><a href="{{ "/docs/specification/adr/adr-361.html" | relative_url }}">How a loop is proved →</a></p>
-    </div>
-    <div class="home-code markdown-body home-code-stack">
-<pre><code class="language-nika">fn steps(n: int) -&gt; int {
-    assert(n &gt;= 0)
-    let mut i = 0
-    let mut total = 0
-    while i &lt; n {
-        i = i + 1
-        total = total + 2
-    }
-    assert(total == 2 * n)          // no invariant written
-    return total
-}
-
-fn price(base: int, member: bool) -&gt; int {
-    assert(base &gt;= 10)
-    let mut p = base
-    if member {
-        p = p - 5
-    } else {
-        p = p + 1
-    }
-    assert(p &gt;= 5)                  // followed through both branches
-    return p
-}
-
-fn main() {
-    println(f"{steps(5)} {price(12, true)}")
-}
-</code></pre>
-<pre class="diagnostic"><code><span class="d-gutter">$</span> <b>nikaia build --asserts</b>
-<b>asserts in …/loop/src/main.nika: 4 - not proved 0 (refused 0, checked at run time 0, checked by a test 0); checked where the words arrive 0; proved 4 (proved 2, through a loop 1, preconditions proved at every call 2)</b>
-  …/loop/src/main.nika:9  assert(total == 2 * n)  proved through the loop that changes `i`, `total`, with the invariant `i &gt;= 0 &amp;&amp; total &gt;= 0 &amp;&amp; 2 * i == total &amp;&amp; i &lt; n + 1`, found by closed forms and checked by three queries
-  …/loop/src/main.nika:21  assert(p &gt;= 5)  proved
-  …/loop/src/main.nika:2  assert(n &gt;= 0)  precondition of `steps`: proved at every call the compiler sees; any other reaches the entry that checks it
-  …/loop/src/main.nika:14  assert(base &gt;= 10)  precondition of `price`: proved at every call the compiler sees; any other reaches the entry that checks it
-<span class="d-gutter">$</span> <b>target/nikaia/bin/loop</b>
-10 7</code></pre>
     </div>
   </div>
 </section>

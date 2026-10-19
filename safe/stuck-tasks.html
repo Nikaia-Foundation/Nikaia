@@ -1,0 +1,64 @@
+---
+layout: home
+title: Tasks that get stuck
+description: >-
+  Tasks that wait for each other forever, or one that holds up everyone. What Nikaia checks, an example, and where the check stops.
+---
+<!--
+  One of the five "Very safe" pages the tiles on the home page lead to. Every
+  program and message in it was run with a built compiler; where a check does
+  not exist yet, the text says so.
+-->
+
+<section class="home-section" id="check">
+  <div class="home-inner">
+    <p class="home-eyebrow home-eyebrow-center"><a href="{{ "/#safe" | relative_url }}">Very safe</a></p>
+    <h1 class="home-heading">Tasks that get stuck</h1>
+    <div class="limit-class">
+                <dl class="limit-steps">
+          <dt>The problem</dt>
+          <dd><strong>Sometimes tasks wait for each other forever.</strong></dd>
+          <dt>An example</dt>
+          <dd>Two account transfers each hold a lock the other needs. Neither can continue.</dd>
+          <dt>What Nikaia checks</dt>
+          <dd>A task that pauses while it holds a lock is rejected, since everyone who needs that value would wait too. For several locks at once, <code>update_all</code> takes them in one fixed order, so two transfers cannot hold one each and wait for the other.</dd>
+          <dt>The limit</dt>
+          <dd>Nikaia does not yet reject a lock taken inside another lock when you write it by hand, so using <code>update_all</code> for several locks is up to you. And not every possible deadlock can be ruled out in every situation; where the analysis cannot decide, it does not claim the problem is solved.</dd>
+        </dl>
+        <details class="limit-details home-code markdown-body" open>
+          <summary>Show the program and what Nikaia says</summary>
+<pre><code class="language-nika">use std::time
+
+struct Account {
+    balance: i64,
+}
+
+fn main() throws {
+    let a = SharedMut(Account { balance: 100 })
+    a.update fn(mut acc) {
+        acc.balance -= 30
+        time::sleep(5.millis())
+    }
+}
+</code></pre>
+<pre class="diagnostic"><code><span class="d-gutter">$</span> <b>nikaia check main.nika</b>
+<span class="d-error">error[NK2202]</span><b>: `time::sleep` can pause, but you're holding a lock here.</b>
+<span class="d-gutter">   --&gt;</span> main.nika:11:9
+<span class="d-gutter">    |</span>
+<span class="d-gutter"> 11 |</span>         time::sleep(5.millis())
+<span class="d-gutter">    |</span>         <span class="d-error">^^^^^^^^^^^^^^^^^^^^^^^</span>
+<span class="d-gutter">    |</span>
+<span class="d-gutter">    =</span> <span class="d-note">note:</span> While the lock is held, every other task that needs the value waits, so a pause here makes all of them wait too.
+<span class="d-gutter">    =</span> <span class="d-help">help:</span> Call `time::sleep` before taking the lock and pass its value in, or after it with what the block returned.</code></pre>
+<p>Moving money between two accounts takes both locks at once, always in the same order:</p>
+<pre><code class="language-nika">update_all(a, b) fn(mut from, mut to) {
+    from.balance -= 30
+    to.balance += 30
+}
+</code></pre>
+        </details>
+      </div>
+    <p class="safe-others">The other four: <a href="{{ "/safe/conflicting-actions.html" | relative_url }}">Conflicting actions</a><a href="{{ "/safe/memory.html" | relative_url }}">Tasks that use too much memory</a><a href="{{ "/safe/unhandled-errors.html" | relative_url }}">Errors that go unhandled</a><a href="{{ "/safe/broken-promises.html" | relative_url }}">Broken promises</a></p>
+  </div>
+</section>
+
